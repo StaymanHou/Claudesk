@@ -1,10 +1,11 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-05-19
+updated: 2026-05-22
 ---
 
 > Revision 2026-05-19: Added cross-window CC status indicator to Phase 2 headlines (WP9b probe + WP10b indicator WP). Phase 1 decomposition is unchanged.
+> Revision 2026-05-22: Added two Phase 2 additions. (1) Replaced the original auto-resume bullet (WP11) with a three-branch smart auto-resume; added WP9c probe to confirm CC's resumability-per-cwd surface. (2) Added WP10c drive-mode selector + indicator. Phase 1 decomposition still unchanged.
 
 # Work Breakdown Structure
 
@@ -164,14 +165,16 @@ Sketched at WP headline only — full decomposition deferred until Phase 1 ships
 
 - **WP9: Probe — `workflow/.session.md` write semantics** (probe): confirm whether `/session-pause` writes the file atomically or in stages; what marker indicates "done writing"; how `/session-resume` reads it.
 - **WP9b: Probe — CC hook channel for idle/running detection** (probe): confirm the exact payload shape and timing of `UserPromptSubmit` / `Stop` / `Notification` hook events; verify a wrapper-installed hook can coexist with `claude-time`'s hook entries in `~/.claude/settings.json`; decide whether the hook script writes to a shared file or to a Unix socket the wrapper listens on; verify the events fire reliably on real interactive sessions (slash commands, multi-turn conversations, tool-use loops, permission prompts).
+- **WP9c: Probe — CC's resumable-conversation surface per project dir** (probe): confirm the exact CC CLI shape for "is there a resumable conversation for this cwd". Test cases: (a) prior session cleanly exited via Ctrl+D, (b) prior session killed by SIGKILL (simulates wrapper crash / power-off), (c) prior session ended after `/session-pause` wrote `.session.md`, (d) project dir never had a CC session. For each, verify whether `claude --resume --list` (or the actual mechanism) reports a resumable session-id, and whether the answer is keyed by cwd or by session-id. Decision: the exact probe expression the wrapper uses on project open. Required by WP11.
 - **WP10: WorkflowStateWatcher** (notify-based file watcher; debounced events)
 - **WP10b: Cross-window CC status indicator** (the always-visible per-window indicator showing idle/running of *every* open wrapper instance): includes the hook-installer routine (write entry into `~/.claude/settings.json` on first launch, with idempotency check + uninstall on app removal), the small hook script (Perl or POSIX shell, no runtime deps), the shared `instances.json` reader/writer (atomic writes, ~3s heartbeat, ~10s staleness threshold), the file-watcher-driven indicator React component, and the click-to-focus cross-window IPC. Depends on WP9b. **Includes a dogfood requirement:** 2+ wrapper windows open simultaneously across 2+ real projects for at least one full work session before WP marked complete.
-- **WP11: Auto-resume/start on project open** (uses WP10; rules per arch.md data flow)
+- **WP10c: Drive-mode selector + indicator (header)** — small UI control in the wrapper window header showing the current drive mode (1/2/3/4) and changing it with one click. Implementation: extend the `Project` struct in `projects.json` with `default_drive_mode: Option<DriveMode>`; add Tauri commands `get_drive_mode(project_path)` (read precedence: active WIP file frontmatter → `projects.json` → global default `autopilot`) and `set_drive_mode(project_path, mode)` (write to all active WIP files' `drive_mode:` frontmatter + `projects.json`). React header component subscribes to a file-watcher event for `projects.json` updates. **Includes a dogfood requirement:** at least one full session where the user changes drive mode mid-feature via the UI and verifies the workflow orchestrator picks up the change at the next pause-policy check.
+- **WP11: Smart auto-resume on project open** — three-branch decision tree per `arch.md` "Phase 2 smart auto-resume on project open architecture". On `cc_spawn`, compute `(session_md_exists, cc_has_resumable)` and inject the corresponding slash command via `CcSession::send_input` once CC is ready. Depends on WP9c (probe must answer the resumability-per-cwd question). Edge cases verified during dogfood: (a) `.session.md` exists + resumable CC → `/session-resume` (workflow context wins), (b) clean Ctrl+D exit with no `.session.md` → `/resume`, (c) SIGKILL'd prior session with no `.session.md` → behavior depends on WP9c probe result, (d) terminal-close case (just ran `/feature-finalize`) → `/session-start`.
 - **WP12: SkillRegistry** (scan `~/.claude/skills/` + `<proj>/.claude/skills/`; expose to UI)
 - **WP13: Skill buttons in UI** (Phase 2 right-half panel is still a placeholder, so the skill buttons live in a left-pane toolbar or a slide-in drawer — decision pulled into Phase 2 decomposition)
 - **WP14: Recycle Session state machine** (Rust state machine: `Pausing → WaitingForSessionFile → SendingCtrlD → WaitingForExit → Respawning → Resuming`; UI button; cancel handling). Uses WP10b's hook channel to detect when CC has actually exited and when the fresh CC is idle and ready — replaces any "wait for prompt glyph" PTY-scraping anti-pattern.
 - **WP15: Hotkey for Sublime Merge pop** (parallels WP7)
-- **WP16: Phase 2 polish + dogfood + exit-criteria verification** (all four vision success metrics confirmed, including the <1s cross-window scan target)
+- **WP16: Phase 2 polish + dogfood + exit-criteria verification** (all five vision success metrics confirmed, including the <1s cross-window scan target and the one-click correct-resumption target)
 
 ## Phase 3: Lite Editor + Diff Viewer (NOT decomposed)
 

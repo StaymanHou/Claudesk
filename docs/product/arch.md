@@ -1,10 +1,11 @@
 ---
 stage: arch
 state: complete
-updated: 2026-05-19
+updated: 2026-05-22
 ---
 
 > Revision 2026-05-19: Added cross-window CC status indicator (Phase 2) — see "Phase 2 / Phase 3 forward-look" section. No Phase 1 components affected; the indicator is a Phase 2 forward-look only.
+> Revision 2026-05-22: Added two Phase 2 forward-look sub-sections — Smart auto-resume on project open (three-branch decision tree replacing the original "two-branch heuristic") and Drive-mode selector + indicator (header chrome + WIP-frontmatter persistence). Both are Phase 2 only; Phase 1 components unaffected.
 
 # Architecture
 
@@ -159,5 +160,32 @@ flowchart LR
   - **Render = file-watcher.** Every wrapper window's frontend gets a stream of `instances.json` updates via a Rust-side `notify`-backed watcher (debounced ~100ms). The indicator UI component is a horizontal strip of dots/badges, one per known instance, with the current window's instance highlighted. Click another instance's badge → focus that window via macOS window-server APIs (or via a tiny IPC nudge to the target wrapper process).
   - **Extends `CcSession` trait.** Add a `state_events()` stream: `Running` / `Idle` / `Exited` enum. `PtyCcSession` translates incoming hook-channel events (read off the shared file or a hook-side socket — decision in WP9b probe) into `CcSession::state_events`. Cross-window aggregation is a layer above this, reading the instances file directly.
   - **What is NOT done:** no parsing of CC's stdout/stderr to infer state; no PTY screen-buffer regex matching; no model-output sniffing. If the hook channel ever fails, the badge shows `unknown` (greyed out) rather than guessing.
+- **Phase 2 smart auto-resume on project open architecture:**
+  - **Decision logic = pure function of two signals**, evaluated on project-open in the Rust backend:
+    1. `session_md_exists = fs::exists("<project>/workflow/.session.md")`
+    2. `cc_has_resumable = check via Claude Code's resume mechanism whether a prior conversation is available for cwd=<project>` — exact probe shape decided in WP9c probe (likely `claude --resume --list` or equivalent, capturing whether any session-id is associated with the project path).
+  - **Branch table** (matches the vision-level decision tree):
+    | `session_md_exists` | `cc_has_resumable` | Action |
+    |---|---|---|
+    | true | * | inject `/session-resume\n` into the PTY (workflow context wins over raw history) |
+    | false | true | inject `/resume\n` into the PTY |
+    | false | false | inject `/session-start\n` into the PTY |
+  - **No persisted "next-command" state.** The wrapper never writes a sidecar file like `last-action.json` recording "next time fire `/resume`." Source-of-truth files (`workflow/.session.md` + CC's own session-list) are authoritative; the wrapper rereads them on every project-open. This keeps the wrapper stateless on this axis and avoids drift between wrapper-cached state and reality.
+  - **Probe gates the implementation.** A new **WP9c probe** (sibling to WP9b) confirms the exact CC CLI surface for "is there a resumable conversation for this cwd" — including whether the answer is reliable when the prior CC was killed by SIGKILL vs cleanly via Ctrl+D, and whether CC tracks resumability per-cwd or per-session-id. Implementation WP (**WP11**, already in the headlines) extends to use the probe's findings.
+  - **Injection mechanism reuses existing seam.** The slash command is sent via the same PTY byte-injection path used by skill buttons and Recycle Session — `CcSession::send_input(b"/session-resume\n")`. No new IPC, no new trait method. The decision is computed once in Rust on `cc_spawn`, before the injection.
+  - **What is NOT done:** no staleness check on `.session.md` (trust it); no scraping of CC's output to confirm the command was understood; no fallback retry logic if the wrong command was sent — the user can manually correct via the prompt. The branch table is deterministic given the two signals; a wrong action is a probe-result bug, not a runtime-recovery problem.
+
+- **Phase 2 drive-mode selector + indicator architecture:**
+  - **UI surface = window header chrome.** A small 4-position selector (radio-group or segmented control) lives in the wrapper window's header strip, alongside the cross-window CC status indicator. Default position = current drive mode for this project. One click changes it; no confirmation dialog.
+  - **Persistence layers, in order of precedence (write-down, read-up):**
+    1. **Active WIP file's `drive_mode:` frontmatter** — the workflow's source of truth. If a WIP file is active for the current project (anything in `workflow/wip/`), this is the canonical value and what the workflow orchestrator reads.
+    2. **`projects.json` per-project `default_drive_mode`** — fallback for the gap between sessions, when no WIP file is active (e.g., right after `feature-finalize` archived the WIP). Added as an optional field on the existing `Project` struct: `default_drive_mode: Option<DriveMode>`.
+    3. **Global default = `autopilot` (Mode 3)** — when neither (1) nor (2) is present.
+  - **Read path on project open:** check (1), fall back to (2), fall back to (3). Render the current mode in the header indicator.
+  - **Write path on user click:** if a WIP file is active, edit its frontmatter to update `drive_mode:` (atomic write — read, parse YAML frontmatter, replace value, write back). Always update `projects.json` `default_drive_mode` as well, so future sessions without an active WIP file still remember the user's preference. If multiple WIP files exist (rare), update all of them.
+  - **No new Rust module.** This is a thin layer: a Tauri command `set_drive_mode(project_path, mode)` that does the WIP-file + projects.json writes; a `get_drive_mode(project_path)` that does the read. Lives in `config_store/`.
+  - **Cross-window consistency.** If two wrapper windows open the same project (out of scope per "one project per window," but cheap to defend against), `set_drive_mode` is the single writer; the second window's indicator updates on its next `projects.json` watcher tick (already wired for the cross-window CC status indicator's file-watch infrastructure).
+  - **What is NOT done:** no in-memory drive-mode cache in the frontend (always read from disk on mount to avoid stale UI); no separate drive-mode-history log; no global keyboard shortcut to cycle modes (Phase 4 settings UI may add one); no enforcement that the WIP file's `drive_mode:` matches what skills observed at runtime — the workflow skills trust the frontmatter they read.
+
 - **Phase 3 will add:** Right-pane Monaco or CodeMirror 6 editor; libgit2-backed (or `git2` Rust crate) diff viewer; a second `PtyCcSession`-equivalent for the "ad-hoc terminal" mode; a panel-host component on the right that swaps between editor / diff / terminal.
 - **Future hedge:** `SdkCcSession` impl of `CcSession` (using `@anthropic-ai/claude-agent-sdk`) is documented in research as a potential migration path if PTY-based control ever becomes untenable.

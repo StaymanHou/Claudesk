@@ -1,8 +1,10 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-05-19
+updated: 2026-05-22
 ---
+
+> Revision 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone (`.session.md` → `/session-resume`; no `.session.md` + resumable CC conversation → `/resume`; otherwise → `/session-start`). Added a drive-mode selector + indicator milestone to Phase 2. Both are additive to Phase 2; Phase 1 unchanged.
 
 # Roadmap
 
@@ -28,13 +30,19 @@ Each phase is independently usable — the wrapper grows in dogfood-able increme
 **Milestones:**
 - [ ] CC process lifecycle ownership: spawn, detect idle vs running via CC's official hook channel (`UserPromptSubmit` / `Stop` / `Notification` events written to `~/.claude/settings.json`), detect exit, support clean re-spawn
 - [ ] File-watcher for `workflow/.session.md` (debounced write detection)
-- [ ] On project open: if `workflow/.session.md` exists → auto-send `/session-resume`; if absent and the project isn't fresh → auto-send `/session-start`; if the project is genuinely fresh → do nothing
+- [ ] **Smart auto-resume on project open** — three-branch decision tree using two source-of-truth signals (presence of `workflow/.session.md` + whether CC has a resumable conversation for the project dir):
+  - `workflow/.session.md` exists → auto-send `/session-resume`
+  - No `.session.md` but CC has a resumable conversation for the project dir → auto-send `/resume` (CC native)
+  - Neither, OR last action was a terminal-close (ship/finalize/resolve) → auto-send `/session-start`
+
+  Edge case: both signals present → prefer `/session-resume` (workflow context richer than raw history). No staleness heuristic on `.session.md`; trust it.
+- [ ] **Drive-mode selector + indicator in window header** — small UI control showing the current drive mode (1 step-by-step / 2 orchestrated / 3 autopilot / 4 full-autopilot) and letting the user change it with one click. Persisted per-project; mirrored to the active WIP file's `drive_mode:` frontmatter so the wrapper UI and the workflow's pause-policy logic share a single source of truth.
 - [ ] Skill registry: scan `~/.claude/skills/` (global) + `<project>/.claude/skills/` (project-local), render each skill as a clickable button that sends the matching slash command to the active CC pane
 - [ ] "Recycle Session" one-click button: send `/session-pause` → wait for `.session.md` write completion → send Ctrl+D → wait for CC exit → spawn fresh CC → send `/session-resume`. Manually triggered only; never automatic.
 - [ ] **Always-visible cross-window CC status indicator.** Each wrapper window's header shows a compact list of all open wrapper instances (project name + idle/running dot per instance), updated in real time. State is shared between processes via a small file in the app-support dir (`instances.json` with last-heartbeat + state per pid; stale entries dropped). Detection is driven by the wrapper's CC hook handler registered in `~/.claude/settings.json` — NEVER PTY scraping. Clicking another instance's row focuses that window.
 - [ ] Hotkey to pop Sublime Merge at the project root
 
-**Exit Criteria:** All four vision-level success metrics hold: (1) time-to-productive <10s, (2) Recycle Session is one click, (3) no slash-command typing for common skills, (4) cross-window idle/running visible in every header without clicking. The wrapper is a viable daily driver even with the right half still empty.
+**Exit Criteria:** All five vision-level success metrics hold: (1) time-to-productive <10s, (2) Recycle Session is one click, (3) no slash-command typing for common skills, (4) cross-window idle/running visible in every header without clicking, (5) project-open always lands on the right resumption command (`/session-resume`, `/resume`, or `/session-start`) without manual selection AND the active drive mode is visible in the header at all times. The wrapper is a viable daily driver even with the right half still empty.
 
 ### Phase 3: Lite Editor + Diff Viewer (Right Half)
 

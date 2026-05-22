@@ -1,8 +1,10 @@
 ---
 stage: context
 state: complete
-updated: 2026-05-19
+updated: 2026-05-22
 ---
+
+> Revision 2026-05-22: Resynced root `CLAUDE.md` with two new Phase 2 features added to vision/roadmap/arch/wbs — Smart auto-resume on project open (three-branch decision tree) and Drive-mode selector + indicator in window header. Active phase + first feature unchanged.
 
 # Context
 
