@@ -1,31 +1,37 @@
 ---
 stage: arch
 state: complete
-updated: 2026-05-22
+updated: 2026-06-15
 ---
 
 > Revision 2026-05-19: Added cross-window CC status indicator (Phase 2) — see "Phase 2 / Phase 3 forward-look" section. No Phase 1 components affected; the indicator is a Phase 2 forward-look only.
 > Revision 2026-05-22: Added two Phase 2 forward-look sub-sections — Smart auto-resume on project open (three-branch decision tree replacing the original "two-branch heuristic") and Drive-mode selector + indicator (header chrome + WIP-frontmatter persistence). Both are Phase 2 only; Phase 1 components unaffected.
+> Revision 2026-06-15: Major revision following the vision pivot (multi-window → single-window with tabbed workspaces) and the research findings that resolved four open design questions. **Phase 1 now ships the tab-shell substrate** (single-workspace use is N=1 of the tab model) and a new **thumbnail-rendering probe** that gates Phase 2's filmstrip-rendering strategy. **xterm.js: DOM renderer only** — WebGL addon dropped after the WebGL-context cap finding. The prior "Phase 2 cross-window CC status indicator" sub-section is **replaced** by three status surfaces (filmstrip / menu-bar / PiP) coordinated by a single Rust-side status broadcaster fed by a Unix-socket hook channel. The earlier "WP9b probe" (shared file vs Unix socket) is resolved: socket wins. Phase 1 component diagram and data-flow tables updated below; Phase 2 forward-look sub-sections rewritten.
 
 # Architecture
 
-**Phase:** Phase 1 (Bare Shell PoC). YAGNI applied — only the components needed to satisfy Phase 1 exit criteria are designed in detail. Forward-compatibility seams for Phase 2 (stateful CC controller, file-watcher, skill registry, Recycle Session) and Phase 3 (lite editor, diff viewer, right-half panel swap) are explicitly identified as **extension points**, not built.
+**Phase:** Phase 1 (Bare Shell + Tab Substrate). YAGNI applied — only the components needed to satisfy Phase 1 exit criteria are designed in detail. Phase 1 introduces the **tab-shell substrate** even though only one workspace is ever open in Phase 1, because Phase 2's filmstrip / PiP / menu-bar surfaces all assume the substrate exists. Phase 2 (stateful CC controller, file-watcher, status broadcaster, skill registry, Recycle Session, three status surfaces) and Phase 3 (lite editor, diff viewer, right-half panel swap) are explicitly identified as **extension points**, not built.
 
 ### Tech Stack
 
-- **Language (backend):** Rust (stable, ≥1.77) — required by Tauri 2; owns the CC process, PTY, filesystem, global shortcuts, project config persistence. Rust is also a deliberate fit for Phase 2's stateful-controller work (process lifecycle, file watching, async I/O).
+- **Language (backend):** Rust (stable, ≥1.77) — required by Tauri 2; owns the CC process, PTY, filesystem, global shortcuts, project config persistence, **status broadcaster (Phase 2)**, **Unix-socket hook listener (Phase 2)**. Rust is also a deliberate fit for Phase 2's stateful-controller work (process lifecycle, file watching, async I/O).
 - **Language (frontend):** TypeScript + React 19 — community consensus for Tauri 2 in 2026 (matches the Terax reference project); the lite-editor work in Phase 3 (Monaco or CodeMirror 6) needs this stack regardless, so we pay the cost once.
 - **Build / bundler:** Vite — fast HMR for dev; Tauri's `beforeDevCommand` / `beforeBuildCommand` hooks plug into Vite's CLI cleanly.
-- **Framework:** Tauri 2 (2.9.x line) — native WebView (WKWebView on macOS); ~3MB bundle; Rust backend with IPC to a web frontend.
+- **Framework:** Tauri 2 (2.9.x line) — native WebView (WKWebView on macOS); ~3MB bundle; Rust backend with IPC to a web frontend. **Single `WebviewWindow`**, all workspaces are React components in one webview (research decision: no multi-webview).
 - **Embedded terminal:**
-  - Backend: `tauri-plugin-pty` (wraps `portable-pty`) — registered in the Tauri builder; spawns `claude` in a real pty inside the Rust core. **Course-correction from roadmap.md text** (which said "node-pty via Tauri sidecar pattern"): node-pty would require shipping a Node runtime in the bundle, defeating the bundle-size advantage. portable-pty runs natively in Rust. Roadmap *milestone text* will be amended via a minor edit during WBS prep, not via a P4 back-loop (phase structure, exit criteria, and intent are unchanged).
-  - Frontend: `@xterm/xterm` + `@xterm/addon-fit` + `@xterm/addon-webgl` — render the terminal, fit to container, GPU-accelerate.
+  - Backend: `tauri-plugin-pty` (wraps `portable-pty`) — registered in the Tauri builder; spawns `claude` in a real pty inside the Rust core. **Course-correction from roadmap.md text** (which said "node-pty via Tauri sidecar pattern"): node-pty would require shipping a Node runtime in the bundle, defeating the bundle-size advantage. portable-pty runs natively in Rust.
+  - Frontend: `@xterm/xterm` + `@xterm/addon-fit` — render the terminal, fit to container. **DOM renderer only — `@xterm/addon-webgl` is NOT used** (2026-06-15 decision; see Key Decisions below). The 2026 DOM renderer is fast enough for the foreground workspace.
   - Bridge: `tauri-pty` (JS bindings shipped with `tauri-plugin-pty`) — `spawn()` returns a handle whose `onData` / `write` / `resize` mirror node-pty's API closely enough that xterm.js wiring is straight-line.
 - **Global shortcuts:** `tauri-plugin-global-shortcut` — for Sublime Text hotkey-pop. Requires macOS Accessibility permission flow; app must prompt on first launch.
 - **External tools invoked via shell:** `subl` (Sublime Text), `smerge` (Sublime Merge — Phase 2). Wrapper invokes them via Tauri's `tauri-plugin-shell` `Command` API; no embedding.
-- **Persistence:** flat JSON file at `~/Library/Application Support/stayman-cc-wrapper/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()`. No DB; project list is a list of `{path, last_opened_at, display_name?}` records. Matches the "no per-project config burden" vision principle (no `.wrapper.json` per repo).
+- **Persistence:** flat JSON file at `~/Library/Application Support/stayman-cc-wrapper/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()`. No DB; project list is a list of `{path, last_opened_at, display_name?, default_drive_mode?}` records. Matches the "no per-project config burden" vision principle (no `.wrapper.json` per repo).
 - **Database:** none — Phase 1 has no relational data, and the only durable state is the project list (handled above).
 - **Infrastructure:** none — this is a single-user desktop app; no servers, no cloud, no telemetry.
+
+**Phase 2 additions (forward-look, not built in Phase 1):**
+- `tauri-nspanel` v2.1 — `NSPanel` wrapper for the PiP window (display-only floating panel, all-Spaces, fullscreen-aux, non-activating).
+- `tauri-plugin-positioner` (with `tray-icon` feature) — positions the menu-bar popover under the tray icon.
+- `tauri-plugin-fs-watch` / `notify` — debounced file-watcher for `workflow/.session.md`.
 
 ### Dev Environment
 
@@ -61,13 +67,16 @@ pnpm tauri dev          # development run (Vite + Tauri together)
 
 ```mermaid
 flowchart LR
-  subgraph TauriApp["Tauri App (single macOS window)"]
+  subgraph TauriApp["Tauri App (single macOS window, single WebviewWindow)"]
     subgraph Frontend["Frontend (React + xterm.js + TypeScript)"]
       Picker[Project Picker UI]
-      LeftPane[Left half: xterm.js terminal]
+      WorkspaceList["WorkspaceList (React state, all workspaces stay mounted)"]
+      CenterStage["Center Stage (focused workspace: xterm.js DOM renderer)"]
+      Filmstrip["Filmstrip (P1: empty placeholder; P2: live tiles or status tiles)"]
       RightPlaceholder[Right half: placeholder]
-      Picker -.click project.-> AppState
-      AppState[App State - Zustand or React state]
+      Picker -.click project.-> WorkspaceList
+      WorkspaceList --> CenterStage
+      WorkspaceList --> Filmstrip
     end
 
     subgraph Backend["Backend (Rust core, src-tauri)"]
@@ -78,7 +87,7 @@ flowchart LR
       ShortcutMgr[Global Shortcut Manager]
     end
 
-    AppState <-- Tauri IPC --> Backend
+    Frontend <-- Tauri IPC --> Backend
     CcSessionTrait <--> PtyImpl
   end
 
@@ -92,12 +101,13 @@ flowchart LR
 
 | Component | Layer | Responsibility |
 |-----------|-------|---------------|
-| Project Picker UI | Frontend | List recents from config; "Open Folder" via Tauri dialog; emit `open_project(path)` |
-| App State | Frontend | Current project, terminal connection state, panel layout (placeholder in P1) |
-| Left pane terminal | Frontend | xterm.js instance; bidirectional stream with `CcSession` via IPC |
-| Right pane placeholder | Frontend | Static "Coming in Phase 3" panel; reserved real-estate |
-| Project Config Store | Backend | Read/write `projects.json`; debounced writes on update |
-| `CcSession` trait | Backend | **Forward-compat seam.** Abstract interface: `send_input(bytes)`, `on_output(callback)`, `resize(cols, rows)`, `wait_for_exit()`, `kill()`. Phase 1 has one impl (`PtyCcSession`); Phase 2 may add `recycle()` and richer state events; future could add an `SdkCcSession` if we ever migrate to the Agent SDK. |
+| Project Picker UI | Frontend | List recents from config; "Open Folder" via Tauri dialog; emit `open_workspace(path)` (Phase 1: opens the single workspace; Phase 2: opens a new workspace into the list) |
+| **WorkspaceList** | Frontend | Authoritative array of `Workspace { id, project_path, cc_session_id, status, xterm_ref }`. All workspaces stay mounted; switching center stage is `display: none` / `display: block`, never unmount. Phase 1: length always 1. Phase 2: length N. |
+| **Center Stage** | Frontend | Renders the focused workspace at full size. Hosts the xterm.js terminal pane (left) and the right-half placeholder. |
+| **Filmstrip** | Frontend | Phase 1: empty placeholder container (so Phase 2 doesn't have to introduce a new layout slot). Phase 2: one tile per non-focused workspace (live ~1 fps mirror OR static status tile, per probe outcome). |
+| Right pane placeholder | Frontend | Static "Coming in Phase 3" panel; reserved real-estate inside each workspace. |
+| Project Config Store | Backend | Read/write `projects.json`; debounced writes on update. |
+| `CcSession` trait | Backend | **Forward-compat seam.** Abstract interface: `send_input(bytes)`, `on_output(callback)`, `resize(cols, rows)`, `wait_for_exit()`, `kill()`. Phase 1 has one impl (`PtyCcSession`); Phase 2 will add `recycle()`, `state_events()`, and per-session status fan-out. Future could add an `SdkCcSession` if we ever migrate to the Agent SDK. |
 | `PtyCcSession` | Backend | Concrete impl using `portable-pty` to spawn `claude --dangerously-skip-permissions` with the project dir as cwd; bridges to frontend xterm.js via Tauri events. |
 | Shell launcher | Backend | Spawns `subl <path>` (or `subl --project <file>` if a `.sublime-project` exists); spawns `smerge <path>` (Phase 2). Uses `tauri-plugin-shell`. |
 | Global Shortcut Manager | Backend | Registers user-configured hotkeys (Phase 1: Sublime-pop) via `tauri-plugin-global-shortcut`. |
@@ -105,35 +115,58 @@ flowchart LR
 **Forward-compatibility seams (NOT built in Phase 1, only reserved):**
 
 - `CcSession` trait is the seam for Phase 2's stateful controller (extra methods for ready-state detection, recycle, file-watcher integration) and any future Agent-SDK-backed implementation.
-- A `WorkflowStateWatcher` module is *not* created in Phase 1 — it will be added in Phase 2 alongside the file-watcher.
-- A `SkillRegistry` module is *not* created in Phase 1 — Phase 2 work.
-- The right pane is a placeholder component; Phase 3 will replace it with a tabbed/swappable panel host. No premature panel-swap abstraction in Phase 1.
-- The frontend keeps a single `AppState` slice per project; multi-project tabs in the same window are **out of scope** for all current phases (the launcher opens one project per window — if users want multiple projects simultaneously, they open multiple wrapper windows).
+- **WorkspaceList holds many workspaces in Phase 2; in Phase 1 it always holds exactly one.** The data shape is the same; the only Phase 1 invariant is N=1 enforced by the picker's "open project" handler.
+- The Filmstrip slot exists in Phase 1 layout but is empty — Phase 2 populates it.
+- A `WorkflowStateWatcher` module is *not* created in Phase 1 — Phase 2.
+- A `StatusBroadcaster` module is *not* created in Phase 1 — Phase 2.
+- A `SkillRegistry` module is *not* created in Phase 1 — Phase 2.
+- The right pane inside each workspace is a placeholder component; Phase 3 will replace it with a tabbed/swappable panel host. No premature panel-swap abstraction in Phase 1.
+
+### Phase 1 thumbnail-rendering probe (gating for Phase 2)
+
+A new Phase 1 work package: a synthetic harness measuring whether ~1 fps live terminal mirrors are cheap enough at N=8 workspaces. **Pass → Phase 2 ships live mirrors. Fail → Phase 2 ships status tiles in v1**, leave live mirrors as a Future Possibility.
+
+**Harness shape:**
+- 8 xterm.js instances, DOM renderer only, full-size rendering, each mounted in an off-screen container.
+- Each xterm fed a representative CC output stream (canned recording of a typical Claude Code session, looped).
+- Filmstrip thumbnails are CSS-transformed (`scale(0.15)`) live mirrors of those off-screen full-size xterms — the same strategy that Phase 2 would ship.
+- Mirror update rate throttled to ~1 fps.
+- One workspace simultaneously active (rendering normally at full speed) to simulate the center-stage workload.
+
+**Measurements:**
+- CPU usage at idle (all 8 workspaces "idle"; no PTY output flowing): target **<10%**.
+- CPU usage during one active CC session (center-stage workspace receiving real output; 7 backgrounds idle): target **<20%**.
+- RAM total: target **<300 MB**.
+- Frame time on the center-stage workspace: target **<16ms** (no visible jank from background-mirror work).
+
+Thresholds above are the proposed defaults. The probe's own implementation plan (when picked up as a Phase 1 WP) finalises them.
+
+**Output:** a one-page report appended to this `arch.md` as a `### Phase 1 thumbnail-probe outcome` sub-section (or as a sibling doc, decided when the probe runs). The report records: measurements, pass/fail per metric, the resulting recommendation (live mirrors vs status tiles), and any architectural deltas that flow into Phase 2's filmstrip and PiP milestones.
 
 ### Data Flow
 
 **Phase 1 happy path — project open:**
 
 1. User clicks a project in the picker (or selects "Open Folder").
-2. Frontend invokes Tauri command `open_project(path)`.
+2. Frontend invokes Tauri command `open_workspace(path)`.
 3. Backend updates `projects.json` (`last_opened_at`, optionally adds new project).
 4. Backend instantiates a `PtyCcSession` with cwd=`path`, command=`claude`, args=`["--dangerously-skip-permissions"]`.
 5. Backend emits `cc-session-ready` event with a session handle ID.
-6. Frontend receives the event, mounts xterm.js, subscribes to `cc-output-<sid>` events, wires xterm.js `onData` → Tauri command `cc-input(sid, bytes)`, and `xterm fit addon resize` → `cc-resize(sid, cols, rows)`.
+6. Frontend receives the event, **adds a Workspace record to `WorkspaceList`** (Phase 1: list now has length 1), mounts xterm.js inside the center stage, subscribes to `cc-output-<sid>` events, wires xterm.js `onData` → Tauri command `cc-input(sid, bytes)`, and `xterm fit addon resize` → `cc-resize(sid, cols, rows)`.
 7. CC's TUI renders inside xterm.js. User interacts as in a normal terminal.
 
 **Phase 1 happy path — Sublime hotkey:**
 
 1. User presses configured global hotkey (e.g., `Cmd+Shift+E`).
 2. `tauri-plugin-global-shortcut` handler fires in Rust.
-3. Handler reads current project's path from app state.
+3. Handler reads the focused workspace's project path from app state (Phase 1: there's only one).
 4. Spawns `subl <path>` (or `subl --project <file>` when a `.sublime-project` exists at the root) via `tauri-plugin-shell`.
 5. macOS focuses the Sublime Text window.
 
 **Phase 1 shutdown / window close:**
 
-1. Frontend signals `close_project` (or window close event).
-2. Backend calls `CcSession::kill()` — sends SIGTERM to the CC process, then SIGKILL after timeout.
+1. Frontend signals `close_workspace` (or window close event).
+2. For each workspace in `WorkspaceList`, backend calls `CcSession::kill()` — sends SIGTERM to the CC process, then SIGKILL after timeout.
 3. Backend persists `projects.json` final state.
 4. App quits.
 
@@ -141,51 +174,105 @@ flowchart LR
 
 - **Tauri over Electron.** Aligned with vision principle 1 ("lite over featureful"). Research established 25x smaller bundle, ~50% lower RAM, faster startup. The "less mature packaging ecosystem" tradeoff is acceptable for a single-user tool.
 - **`tauri-plugin-pty` / `portable-pty` over node-pty + sidecar.** node-pty requires a Node runtime; portable-pty runs natively in Rust. Bundle-size and architectural cleanliness win.
-- **PTY byte-injection over Agent SDK for v1.** The vision requires the familiar interactive CC TUI in the left pane. PTY byte-injection means we treat the wrapper as a legitimate terminal-front-end — typing slash commands as a human would. We avoid the "PTY scraping" anti-pattern (parsing CC's output text to infer state) by using **file watching** (Phase 2) for state detection. The `CcSession` trait is the seam that lets us swap to an Agent SDK backend later without UI changes.
-- **One project per window.** No multi-project tabs. Simpler app state; multiple projects = multiple wrapper windows. Matches how the user described "3–4 active at a time" — separate windows let the OS window manager handle layout.
+- **PTY byte-injection over Agent SDK for v1.** The vision requires the familiar interactive CC TUI in the foreground workspace. PTY byte-injection means we treat the wrapper as a legitimate terminal-front-end — typing slash commands as a human would. We avoid the "PTY scraping" anti-pattern (parsing CC's output text to infer state) by using **file watching** (Phase 2) for state detection. The `CcSession` trait is the seam that lets us swap to an Agent SDK backend later without UI changes.
+- **Single window, many workspaces (NEW 2026-06-15).** Reversed from "one project per window." Multiple projects = workspaces inside one window, switched via filmstrip thumbnails (Phase 2). Aligned with the revised vision and the way the user actually juggles 3–4 projects.
+- **xterm.js DOM renderer only — no WebGL (NEW 2026-06-15).** Research established the browser-wide WebGL-context cap of ~16/page. With a tab shell hosting many xterm instances, the WebGL renderer either hits the cap or forces a swap-on-focus complexity that gives marginal benefit on top of the modern DOM renderer. Verdict: DOM-only is simpler and good enough for the foreground workspace. If a single-workspace user one day proves the DOM renderer can't keep up, we re-add the WebGL addon for the center stage only — a one-line addon load. Decision is reversible.
+- **Single `WebviewWindow`, no multi-webview (NEW 2026-06-15).** Tauri 2's multi-webview API is `unstable`-flagged and offers webview isolation we don't need (all workspaces share the wrapper's trust boundary). React-managed tabs in one webview is the stable choice.
+- **Tab-shell substrate ships in Phase 1 (NEW 2026-06-15).** The WorkspaceList + Center Stage + Filmstrip slot are built in Phase 1 even though Phase 1 only ever opens one workspace. This is "design for N=1 with N>1 in mind" — Phase 2 plugs into existing structure rather than reshaping the foundation.
+- **Thumbnail-rendering probe gates Phase 2's filmstrip + PiP rendering (NEW 2026-06-15).** Decision recorded in the dedicated section above. Probe pass → live ~1 fps mirrors. Probe fail → status tiles in v1.
+- **Menu-bar status item ships BEFORE PiP in Phase 2 (NEW 2026-06-15).** Cheaper to build, covers the "wrapper hidden" case PiP can't, and includes a dogfooding gate that may defer PiP to Phase 4 entirely.
+- **CC hook channel via Unix socket, not shared file (NEW 2026-06-15).** Resolves the previously deferred WP9b probe. With three concurrent status-surface consumers (filmstrip / menu-bar / PiP), Unix-socket multi-consumer concurrency wins decisively over shared-file locking and debounce-write juggling.
 - **Flat JSON for project list.** No SQLite, no app-managed DB. The list is ≤100 entries with read-on-open and write-on-update; JSON is appropriate.
 - **No per-project config file in the project itself.** Project list lives in `~/Library/Application Support/...`, not in `.wrapper.json` files inside each repo. Aligned with vision principle 5.
 - **Host-based dev environment, not Docker.** Tauri targets host WKWebView and native windowing; Docker on macOS cannot provide them. Industry standard for Tauri.
 - **`--dangerously-skip-permissions` (yolo mode) by default.** Vision explicit. A Phase 4 setting will let users opt out.
 - **macOS Accessibility permission for global shortcuts.** Required by `tauri-plugin-global-shortcut` on macOS. The app must surface a permission-grant flow on first launch — added as a Phase 1 task.
 
-### Phase 2 / Phase 3 forward-look (informational, not built)
+### Phase 2 forward-look (informational, not built)
 
-- **Phase 2 will add:** `WorkflowStateWatcher` (notify-based file watcher for `workflow/.session.md`), `SkillRegistry` (scan `~/.claude/skills/` + `<project>/.claude/skills/`), Recycle Session orchestration (state machine in Rust: `Pausing → WaitingForSessionFile → SendingCtrlD → WaitingForExit → Respawning → Resuming`), and extend `CcSession` with `readiness` and `recycle` methods.
+The Phase 2 forward-look is reorganised around four architectural deltas: (a) **status broadcaster** as the central nervous system, (b) **three status surfaces** that subscribe to it, (c) **smart auto-resume on workspace open**, (d) **drive-mode selector**. The prior 2026-05-19 "cross-window CC status indicator" sub-section is fully replaced by (a) + (b). The 2026-05-22 "smart auto-resume" and "drive-mode selector" sub-sections are preserved in spirit but updated for the workspace-not-window model.
 
-- **Phase 2 cross-window CC status indicator architecture:**
-  - **Detection source = CC's hook channel, not the PTY.** On first launch (or via a Phase 4 setting), the wrapper installs an entry into `~/.claude/settings.json`'s `hooks` block for `UserPromptSubmit` (→ "running"), `Stop` (→ "idle"), and `Notification` (→ "running" + may include a "needs human input" sub-state if useful). The hook is a tiny script (Perl or POSIX shell, no runtime deps) that writes the event + pid + cwd + timestamp to the shared instances file. This is the same hook channel `claude-time` uses — coexistence is by side-by-side hook entries, not by sharing a single script.
-  - **Cross-window state file = `~/Library/Application Support/stayman-cc-wrapper/instances.json`.** One record per running wrapper instance: `{ pid, project_path, project_display_name, cc_state: "idle"|"running"|"exited"|"unknown", last_event_at, last_heartbeat_at, window_id }`. Each wrapper process owns its own record (writes own pid+state) and reads everyone else's. Records older than ~10s with no heartbeat are treated as `stale` and dimmed/dropped. Atomic writes (write-temp-rename) prevent torn reads.
-  - **Heartbeat = wrapper-side, not hook-side.** Each wrapper process refreshes its own `last_heartbeat_at` every ~3s while running, so a crashed wrapper falls out of the indicator within ~10s even if the hook never fired a Stop. The hook only writes the *state* fields; the wrapper writes the heartbeat.
-  - **Render = file-watcher.** Every wrapper window's frontend gets a stream of `instances.json` updates via a Rust-side `notify`-backed watcher (debounced ~100ms). The indicator UI component is a horizontal strip of dots/badges, one per known instance, with the current window's instance highlighted. Click another instance's badge → focus that window via macOS window-server APIs (or via a tiny IPC nudge to the target wrapper process).
-  - **Extends `CcSession` trait.** Add a `state_events()` stream: `Running` / `Idle` / `Exited` enum. `PtyCcSession` translates incoming hook-channel events (read off the shared file or a hook-side socket — decision in WP9b probe) into `CcSession::state_events`. Cross-window aggregation is a layer above this, reading the instances file directly.
-  - **What is NOT done:** no parsing of CC's stdout/stderr to infer state; no PTY screen-buffer regex matching; no model-output sniffing. If the hook channel ever fails, the badge shows `unknown` (greyed out) rather than guessing.
-- **Phase 2 smart auto-resume on project open architecture:**
-  - **Decision logic = pure function of two signals**, evaluated on project-open in the Rust backend:
-    1. `session_md_exists = fs::exists("<project>/workflow/.session.md")`
-    2. `cc_has_resumable = check via Claude Code's resume mechanism whether a prior conversation is available for cwd=<project>` — exact probe shape decided in WP9c probe (likely `claude --resume --list` or equivalent, capturing whether any session-id is associated with the project path).
-  - **Branch table** (matches the vision-level decision tree):
-    | `session_md_exists` | `cc_has_resumable` | Action |
-    |---|---|---|
-    | true | * | inject `/session-resume\n` into the PTY (workflow context wins over raw history) |
-    | false | true | inject `/resume\n` into the PTY |
-    | false | false | inject `/session-start\n` into the PTY |
-  - **No persisted "next-command" state.** The wrapper never writes a sidecar file like `last-action.json` recording "next time fire `/resume`." Source-of-truth files (`workflow/.session.md` + CC's own session-list) are authoritative; the wrapper rereads them on every project-open. This keeps the wrapper stateless on this axis and avoids drift between wrapper-cached state and reality.
-  - **Probe gates the implementation.** A new **WP9c probe** (sibling to WP9b) confirms the exact CC CLI surface for "is there a resumable conversation for this cwd" — including whether the answer is reliable when the prior CC was killed by SIGKILL vs cleanly via Ctrl+D, and whether CC tracks resumability per-cwd or per-session-id. Implementation WP (**WP11**, already in the headlines) extends to use the probe's findings.
-  - **Injection mechanism reuses existing seam.** The slash command is sent via the same PTY byte-injection path used by skill buttons and Recycle Session — `CcSession::send_input(b"/session-resume\n")`. No new IPC, no new trait method. The decision is computed once in Rust on `cc_spawn`, before the injection.
-  - **What is NOT done:** no staleness check on `.session.md` (trust it); no scraping of CC's output to confirm the command was understood; no fallback retry logic if the wrong command was sent — the user can manually correct via the prompt. The branch table is deterministic given the two signals; a wrong action is a probe-result bug, not a runtime-recovery problem.
+#### A. Status broadcaster + Unix-socket hook channel
 
-- **Phase 2 drive-mode selector + indicator architecture:**
-  - **UI surface = window header chrome.** A small 4-position selector (radio-group or segmented control) lives in the wrapper window's header strip, alongside the cross-window CC status indicator. Default position = current drive mode for this project. One click changes it; no confirmation dialog.
-  - **Persistence layers, in order of precedence (write-down, read-up):**
-    1. **Active WIP file's `drive_mode:` frontmatter** — the workflow's source of truth. If a WIP file is active for the current project (anything in `workflow/wip/`), this is the canonical value and what the workflow orchestrator reads.
-    2. **`projects.json` per-project `default_drive_mode`** — fallback for the gap between sessions, when no WIP file is active (e.g., right after `feature-finalize` archived the WIP). Added as an optional field on the existing `Project` struct: `default_drive_mode: Option<DriveMode>`.
-    3. **Global default = `autopilot` (Mode 3)** — when neither (1) nor (2) is present.
-  - **Read path on project open:** check (1), fall back to (2), fall back to (3). Render the current mode in the header indicator.
-  - **Write path on user click:** if a WIP file is active, edit its frontmatter to update `drive_mode:` (atomic write — read, parse YAML frontmatter, replace value, write back). Always update `projects.json` `default_drive_mode` as well, so future sessions without an active WIP file still remember the user's preference. If multiple WIP files exist (rare), update all of them.
-  - **No new Rust module.** This is a thin layer: a Tauri command `set_drive_mode(project_path, mode)` that does the WIP-file + projects.json writes; a `get_drive_mode(project_path)` that does the read. Lives in `config_store/`.
-  - **Cross-window consistency.** If two wrapper windows open the same project (out of scope per "one project per window," but cheap to defend against), `set_drive_mode` is the single writer; the second window's indicator updates on its next `projects.json` watcher tick (already wired for the cross-window CC status indicator's file-watch infrastructure).
-  - **What is NOT done:** no in-memory drive-mode cache in the frontend (always read from disk on mount to avoid stale UI); no separate drive-mode-history log; no global keyboard shortcut to cycle modes (Phase 4 settings UI may add one); no enforcement that the WIP file's `drive_mode:` matches what skills observed at runtime — the workflow skills trust the frontmatter they read.
+```mermaid
+flowchart LR
+  CcHook["CC hook handler (~/.claude/settings.json)"] -- JSON line --> UnixSocket["Unix socket (wrapper-owned)"]
+  UnixSocket --> Broadcaster["Status Broadcaster (Rust core)"]
+  Broadcaster -- "WorkspaceStatusUpdate event" --> MainWebview["Main webview (filmstrip)"]
+  Broadcaster -- "WorkspaceStatusUpdate event" --> PiPWebview["PiP webview (tauri-nspanel)"]
+  Broadcaster -- "WorkspaceStatusUpdate event" --> TrayWebview["Menu-bar popover webview"]
+```
 
-- **Phase 3 will add:** Right-pane Monaco or CodeMirror 6 editor; libgit2-backed (or `git2` Rust crate) diff viewer; a second `PtyCcSession`-equivalent for the "ad-hoc terminal" mode; a panel-host component on the right that swaps between editor / diff / terminal.
-- **Future hedge:** `SdkCcSession` impl of `CcSession` (using `@anthropic-ai/claude-agent-sdk`) is documented in research as a potential migration path if PTY-based control ever becomes untenable.
+- **CC hook registration.** On first launch (or via a Phase 4 setting), the wrapper installs entries in `~/.claude/settings.json`'s `hooks` block for `UserPromptSubmit` (→ "running"), `Stop` (→ "idle"), and `Notification` (→ "awaiting-input"). The hook is a tiny POSIX shell script (no runtime deps) that writes a JSON line — `{ event, pid, cwd, timestamp }` — to the wrapper's Unix socket at a stable path (e.g., `~/Library/Application Support/stayman-cc-wrapper/hook.sock`).
+- **Unix socket vs shared file.** Decided: socket. The wrapper's Rust core opens the socket on app launch and accepts a stream of JSON lines from any CC instance whose `cwd` matches a known workspace's project path. No file lock contention, no debounce-write juggling, no torn reads. The hook script is small enough to write the socket synchronously in <1ms; CC does not block waiting for the hook.
+- **Status broadcaster.** Normalizes incoming hook events into `WorkspaceStatusUpdate { workspace_id, state: Idle|Running|AwaitingInput, last_event_at, last_output_snippet? }` and emits via Tauri's event channel (`app_handle.emit("workspace-status", ...)`). All three webviews subscribe; they re-render their local UI on each event.
+- **Coexistence with `claude-time`.** `claude-time` (from the `my-claude-code-customization` project) already taps the same hook events. Hook entries in `~/.claude/settings.json` are a JSON array — both subscribers register side-by-side; no need to share a script.
+- **Failure mode.** If the socket is missing or the hook script can't connect, the workspace status defaults to `Unknown`. The wrapper does not infer state from PTY output; an unknown badge is honest, a guessed badge is not.
+
+#### B. Three status surfaces (subscribers)
+
+**B.1 — Filmstrip + Center Stage (in-window).**
+- Lives in the main React webview. Subscribes to `workspace-status` events from the broadcaster.
+- Center Stage renders the focused workspace's xterm.js at full size, DOM renderer.
+- Filmstrip renders one tile per non-focused workspace. Tile content depends on **probe outcome**:
+  - **Probe pass:** Each background workspace's xterm.js renders at full size in an off-screen container; the filmstrip tile is a CSS-transformed (`scale(0.15)`) live mirror of that off-screen DOM, throttled to ~1 fps update rate.
+  - **Probe fail:** Status tile only — project name, status dot, optional last-line-of-CC-output snippet from the broadcaster.
+- Clicking a tile swaps which workspace is the center stage (CSS `display: none` / `display: block`; no remount). Workspace state and PTY connection persist.
+- **Filmstrip collapse:** A chrome button toggles between "full filmstrip" (tiles with thumbnails or status) and "collapsed strip" (one-line row of project-name + status-dot pills). Collapsed workspaces use `display: none` on their off-screen xterm to suppress the render loop; PTY output still buffers in xterm's scrollback.
+
+**B.2 — Menu-bar status item.**
+- Native Tauri tray icon via `tauri::tray::TrayIconBuilder`. `setIconAsTemplate(true)` for light/dark adaptation.
+- Icon shows an aggregate status dot:
+  - **Green** = all workspaces `Idle`
+  - **Blue** = any workspace `Running`
+  - **Amber** = any workspace `AwaitingInput`
+- Left-click opens a popover (positioned via `tauri-plugin-positioner` with the `tray-icon` feature → `Position::TrayBottomCenter`). Popover is its own `WebviewWindow`, subscribes to `workspace-status`, renders a one-row-per-workspace list with status dot + project name. Clicking a row sends an IPC command to the main wrapper window: bring forward + switch center stage to that workspace.
+- Right-click opens a native menu: Show wrapper window / Toggle PiP / Quit.
+- **Ships BEFORE PiP** in Phase 2 (roadmap milestone 2.5). Dogfooding gate: at least one daily-driver week using the menu-bar item alone. If sufficient, **PiP defers to Phase 4**.
+
+**B.3 — PiP NSPanel (conditional).**
+- `tauri-nspanel` v2.1: `PanelBuilder` with `no_activate(true)` + `PanelLevel::Floating`.
+- Underlying `NSWindow` collection behavior: `NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorStationary`. Visible on every Space, draws over fullscreen apps, doesn't steal focus on click.
+- User-toggled (right-click menu-bar item → Toggle PiP, or in-wrapper button). **Display-only in v1** — clicking a tile does NOT bring the workspace forward. Click-to-focus is a Future Possibility.
+- Content mirrors filmstrip rendering: live ~1 fps mirrors if probe passed; status tiles if probe failed.
+- **Bus-factor risk:** `tauri-nspanel` is single-maintainer. Mitigation: pin v2.1; monitor `tauri-apps/tauri#13034` for first-party NSPanel support and migrate when it lands.
+
+#### C. Smart auto-resume on workspace open (preserved from 2026-05-22, updated for workspaces)
+
+- **Decision logic = pure function of two signals**, evaluated on workspace-open in the Rust backend:
+  1. `session_md_exists = fs::exists("<project>/workflow/.session.md")`
+  2. `cc_has_resumable = check via Claude Code's resume mechanism whether a prior conversation is available for cwd=<project>` — exact probe shape decided in **WP9c probe** (still pending; not affected by the 2026-06-15 revision).
+- **Branch table:**
+  | `session_md_exists` | `cc_has_resumable` | Action |
+  |---|---|---|
+  | true | * | inject `/session-resume\n` into the PTY (workflow context wins over raw history) |
+  | false | true | inject `/resume\n` into the PTY |
+  | false | false | inject `/session-start\n` into the PTY |
+- **No persisted "next-command" state.** The wrapper never writes a sidecar file like `last-action.json`. Source-of-truth files (`workflow/.session.md` + CC's own session-list) are authoritative; rereads on every workspace-open.
+- **WP9c probe still required.** Sibling to the thumbnail probe, gating the smart-auto-resume implementation. Confirms the exact CC CLI surface for "is there a resumable conversation for this cwd."
+- **Injection mechanism reuses existing seam.** Slash command via `CcSession::send_input(b"/session-resume\n")`. No new IPC, no new trait method.
+- **Multiple workspaces in flight at the same time** is handled trivially — auto-resume runs per-workspace on workspace-open, never globally.
+
+#### D. Drive-mode selector + indicator (preserved from 2026-05-22, updated for workspaces)
+
+- **UI surface = workspace header chrome** (on the center-stage workspace). A small 4-position selector (radio-group or segmented control). Filmstrip tiles do NOT show drive mode — it's a center-stage concern only.
+- **Persistence layers, in order of precedence (write-down, read-up):**
+  1. **Active WIP file's `drive_mode:` frontmatter** — workflow's source of truth.
+  2. **`projects.json` per-project `default_drive_mode`** — fallback for the gap between sessions.
+  3. **Global default = `autopilot` (Mode 3)**.
+- **Read path on workspace open:** check (1), fall back to (2), fall back to (3). Render in the center-stage header.
+- **Write path on user click:** update WIP frontmatter (if active) AND `projects.json` (always).
+- **Cross-workspace consistency** is no longer a concern (no multi-window setup; only one workspace per project at a time in v1).
+- **No new Rust module.** Thin layer in `config_store/`.
+
+### Phase 3 forward-look (informational, not built)
+
+- Right-pane Monaco or CodeMirror 6 editor (decision in next research pass).
+- libgit2-backed (or `git2` Rust crate) diff viewer.
+- A second `PtyCcSession`-equivalent for the "ad-hoc terminal" mode within a workspace.
+- A panel-host component on the right that swaps between editor / diff / terminal — one per workspace, so each workspace has its own panel state.
+
+### Future hedge
+
+- `SdkCcSession` impl of `CcSession` (using `@anthropic-ai/claude-agent-sdk`) is documented in research as a potential migration path if PTY-based control ever becomes untenable.
+- **PiP click-to-focus** — promote a workspace from a PiP tile click. Defer until display-only PiP has been used long enough (or PiP has been replaced by menu-bar) to confirm the limitation is real.
