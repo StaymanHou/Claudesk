@@ -1,6 +1,6 @@
 ---
 workflow: feature
-state: plan (complete)
+state: ship (complete)
 created: 2026-06-16
 drive_mode: autopilot
 ---
@@ -164,3 +164,45 @@ The harness is not test code — it's not invoked by `cargo test`. It's a manual
 - **CC's `/help` output text.** The exact marker string for assertion (b) is unknown until first run. P1.4 captures it inline; if the output is highly variable, fall back to "any non-empty output containing `Command` or `command` within 5s" and note the looseness.
 - **Resize visibility.** Whether the 120↔80 column resize produces an *unambiguously visible* redraw depends on CC's current TUI layout. If CC's banner is narrower than 80, the resize might be invisible. The fallback is to call `resize()` with both narrower (40 cols) and wider (200 cols) widths; CC's banner is known to wrap.
 - **Yolo auth carry-over.** If CC's auth state lives in `~/.claude/` and the harness inherits the parent's HOME, this should "just work." If it doesn't, that's the most important finding of the probe — and gates WP7's design.
+
+## Code-Quality Review — wp2-cc-pty-probe
+
+### Strengths
+- Probe scope is correctly disciplined: `portable-pty` lands in `[dev-dependencies]` only (`src-tauri/Cargo.toml:26-27`), production dependency surface is unchanged, matching the WBS criterion "no production code lands."
+- The writeup carries its weight as the deliverable — all five WBS checks (a)-(e) have CONFIRMED/NOT-CONFIRMED labels, exact captured-byte evidence (banner unicode, escape-sequence prefixes, version line), and a per-finding WP7 implication.
+- The most consequential surprise (single Ctrl+D / Ctrl+C does NOT exit) is captured BOTH inline in the writeup AND mirrored to `workflow/backlog.md` as SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES with priority=high and a concrete reference to `run_exit_via` — exactly the WP7 hand-off shape the workflow expects.
+- The harness uses a `mode` arg dispatch with eight named modes all enumerated in the `unknown mode` error message — re-runnable for behavioral-drift detection later, with friendly UX for a throwaway.
+- The "Code shape that worked" section extracts the ~40-line core idiom (`drop(pair.slave)`, `try_clone_reader`, `take_writer`) into a copy-pastable skeleton for WP7 with the load-bearing API contracts called out.
+
+### Issues
+
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [`src-tauri/examples/cc_pty_probe.rs:169` and `:309`] Identical 6-line "CC requires Ctrl+D twice" cleanup block is duplicated verbatim between `run_inject` and `run_resize`. A `shutdown_cc(writer, child)` helper would make the load-bearing shutdown idiom single-source for WP7.
+- [`src-tauri/examples/cc_pty_probe.rs:79, 133, 189, 257`] Reader threads inconsistently joined (`_reader_thread` dropped in three modes; `drain.join()` used in `run_exit_via`). A one-line "reader thread terminates on PTY EOF" comment at first spawn would document the invariant.
+- [`workflow/wip/wp2-cc-pty-probe.md:3` vs body `**State:** plan (complete)`] Frontmatter `state: ship (complete)` contradicts a body line. Frontmatter is canonical per project convention; body line is the stale one.
+- [`src-tauri/examples/cc_pty_probe.rs:78, 131, 188, 255`] Four near-identical reader-thread bodies (Stdout / Channel / CountBytes sinks). `enum ReaderSink { Stdout, Channel(mpsc::Sender<Vec<u8>>), CountBytes }` + a `spawn_reader(reader, sink)` helper would single-source the "reader thread pattern" question for WP7 readers.
+
+### Assessment
+Well-executed probe. The deliverable shape (writeup as primary, harness as secondary) matches the WBS contract exactly. The most consequential finding (two-keystroke exit) is captured with the right urgency in both the WIP and the backlog with a concrete WP7 hand-off. The harness is small, readable, and re-runnable. The probe correctly resists over-engineering (no `thiserror`, no unit tests, `Box<dyn Error>` throughout) — appropriate for `examples/` code. The MINOR findings are all about polishing the kept-in-tree harness slightly for its WP7-reference role, not about correctness.
+
+### If you disagree
+Edit any line in this section and append `[DISMISSED]` before `feature-finalize` archives the WIP — the orchestrator will skip dismissed findings.
+
+## Retrospect
+
+- **What changed in our understanding:** Claude Code's TUI does NOT respect single-keystroke `Ctrl+D` or `Ctrl+C` for exit — both require two presses ~500ms apart. `/exit\n` (LF-terminated) also doesn't exit (likely needs CR or a different command name). This is the most consequential surprise of the probe and a direct WP7 design constraint that the workflow surfaces formally as SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES.
+- **Assumptions that held:** `portable-pty` 0.9 builds cleanly on Apple Silicon; `CommandBuilder` inherits `TERM` / `HOME` / `PATH` and CC reads `~/.claude/` so yolo-mode auth carries over with zero extra plumbing; `pty.resize()` propagates SIGWINCH implicitly and CC redraws; 24-bit ANSI flows intact through the PTY. The architectural decision in research/arch (portable-pty + byte-injection + hook-channel for state) survives the probe unscathed.
+- **Assumptions that were wrong:** Single `Ctrl+D` would terminate (it doesn't — CC traps it as a confirm-step). Plan worded `/exit\n` as a viable alternative path (it isn't, at least with LF — needs further investigation if we ever care, but Ctrl+D x2 is sufficient for WP7).
+- **Approach delta:** Plan called for a `--ctrl-d` mode probing single-keystroke. After the first run revealed CC ignored it, the harness was extended in-flight to add `ctrl-d-twice`, `ctrl-c`, `ctrl-c-twice`, `slash-exit` — five exit modes instead of one — so the writeup could report the matrix rather than a single failure. The plan's verify-codify-as-writeup intent matched the actual delivery shape; no scope creep beyond the exit-mode expansion that the original observation forced.
+
+## Communicate
+
+> **Feature complete:** WP2 (Claude Code PTY-byte-injection probe) has shipped (commit `875e161`). The probe confirms `portable-pty` + Rust gives a normal CC TUI inside a parent-driven PTY — ANSI colors, slash-command byte-injection (`/help\n`), `pty.resize()` SIGWINCH, and yolo-mode auth carry-over all work as required for WP7. The load-bearing surprise: CC's TUI requires `Ctrl+D` (or `Ctrl+C`) **twice** to exit; logged as SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES (high) for WP7's `CcSession::shutdown()` design. The harness `src-tauri/examples/cc_pty_probe.rs` stays in-tree as the WP7 reference; re-run via `cargo run --example cc_pty_probe -- <mode>` (modes: interactive / inject / ctrl-d / ctrl-c / ctrl-d-twice / ctrl-c-twice / slash-exit / resize).
+>
+> Requester = operator — closure notice for self-record.

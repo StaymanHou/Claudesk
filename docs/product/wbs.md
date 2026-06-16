@@ -44,7 +44,7 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - [x] Verify `.gitignore` still ignores `_ref/` after scaffold-merge
 - [x] Commit baseline; `CHANGELOG.md` first entry deferred to first `feature-finalize` run
 
-### WP2: Probe — Claude Code under host-driven PTY byte-injection
+### WP2: Probe — Claude Code under host-driven PTY byte-injection ✅ SHIPPED 2026-06-16 (commit 875e161)
 
 **Type:** probe
 **Phase:** Phase 1
@@ -54,13 +54,13 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 **Timebox:** Half-day
 **Success criterion:** A short writeup in `workflow/wip/wp2-cc-pty-probe.md` documenting: each of (a)–(e) confirmed or not, any surprises (TTY env var, SIGWINCH quirks, prompt-detection details), and the exact code shape that worked. The writeup is the deliverable; no production code lands.
 **Tasks:**
-- [ ] Write a minimal Rust binary (or `examples/` in src-tauri) that spawns `claude` via `portable-pty`
-- [ ] Pipe its output to stdout; pipe stdin to its input (manual interactive verification)
-- [ ] Verify ANSI/color is rendered correctly when stdout is a terminal
-- [ ] Write a programmatic input variant: send `/help\n` and capture the response
-- [ ] Write a `Ctrl+D` test: confirm the child exits cleanly within a reasonable timeout
-- [ ] Test resize: send `pty.resize(cols, rows)` and confirm CC redraws
-- [ ] Record findings in the probe writeup
+- [x] Write a minimal Rust binary (or `examples/` in src-tauri) that spawns `claude` via `portable-pty`
+- [x] Pipe its output to stdout; pipe stdin to its input (manual interactive verification)
+- [x] Verify ANSI/color is rendered correctly when stdout is a terminal
+- [x] Write a programmatic input variant: send `/help\n` and capture the response
+- [x] Write a `Ctrl+D` test: confirm the child exits cleanly within a reasonable timeout
+- [x] Test resize: send `pty.resize(cols, rows)` and confirm CC redraws
+- [x] Record findings in the probe writeup
 
 ### WP3: Probe — Sublime Text / Sublime Merge CLI shapes across project styles
 

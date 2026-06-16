@@ -15,3 +15,9 @@
 - **Priority:** medium (MAJORs) + low (MINORs)
 - **Status:** pending
 - **Pickup shape:** run `/feature-refactor` against this feature to clean up scaffold-debt; ideally before WP5's UI lands on top. To dismiss specific findings, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.
+
+## Code-quality findings — wp2-cc-pty-probe (2026-06-16)
+- **Pointer:** 4 MINOR findings from `feature-review-quality` on commit `875e161`. Polish for the kept-in-tree probe harness (shutdown duplication, reader-thread lifecycle comment, WIP state marker drift, ReaderSink enum). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp2-cc-pty-probe — 2026-06-16` section.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** run `/feature-refactor` against this feature when WP7 starts using the harness as a reference. To dismiss specific findings, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.

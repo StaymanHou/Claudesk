@@ -77,3 +77,37 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Fix shape:** replace the `@ts-expect-error` line with the proper import.
 - **Priority:** low
 - **Status:** pending
+
+# wp2-cc-pty-probe — 2026-06-16
+
+## SURFACE-2026-06-16-QUALITY-WP2-SHUTDOWN-DUPLICATION
+- **File:** `src-tauri/examples/cc_pty_probe.rs:169` and `:309`
+- **Severity:** MINOR
+- **Finding:** The 6-line "CC requires Ctrl+D twice" cleanup block is duplicated verbatim between `run_inject` and `run_resize`.
+- **Fix shape:** extract a `shutdown_cc(writer, child)` helper so the "send-twice with 300ms gap then drop writer" pattern is grep-able as one canonical reference for WP7.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-16-QUALITY-WP2-READER-THREAD-LIFECYCLE-COMMENT
+- **File:** `src-tauri/examples/cc_pty_probe.rs:79, 133, 189, 257`
+- **Severity:** MINOR
+- **Finding:** Reader threads spawn but are inconsistently joined (`_reader_thread` dropped in 3 modes; `drain.join()` used in `run_exit_via`). Lifecycle invariant ("reader thread terminates on PTY EOF when child exits and drops the slave") is load-bearing but not documented in the code.
+- **Fix shape:** add a one-line comment at the first reader spawn explaining the EOF-termination invariant.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-16-QUALITY-WP2-WIP-STATE-MARKER-DRIFT
+- **File:** `workflow/wip/wp2-cc-pty-probe.md:3` vs `:10-11`
+- **Severity:** MINOR
+- **Finding:** Frontmatter `state: ship (complete)` but body `**State:** plan (complete)` — staleness between the two markers. Frontmatter is canonical per project convention; body line is stale.
+- **Fix shape:** drop the redundant body `**State:** ...` line; rely on frontmatter as the single source. (Will be archived by feature-finalize regardless.)
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-16-QUALITY-WP2-READER-SINK-ENUM
+- **File:** `src-tauri/examples/cc_pty_probe.rs:78, 131, 188, 255`
+- **Severity:** MINOR
+- **Finding:** Four near-identical reader-thread bodies (Stdout / Channel / CountBytes sinks) — consolidating into a `ReaderSink` enum would single-source the "reader thread pattern" question for WP7 readers.
+- **Fix shape:** add `enum ReaderSink { Stdout, Channel(mpsc::Sender<Vec<u8>>), CountBytes }` + one `spawn_reader(reader, sink)` helper.
+- **Priority:** low
+- **Status:** pending
