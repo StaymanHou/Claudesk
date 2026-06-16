@@ -258,6 +258,3 @@ Sketched only.
 ## SURFACE-IN history
 
 (none yet)
-
-## Session Pause — 2026-06-15 21:30
-Paused. See `workflow/.session.md` to resume.
