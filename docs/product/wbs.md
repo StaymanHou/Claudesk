@@ -62,7 +62,7 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - [x] Test resize: send `pty.resize(cols, rows)` and confirm CC redraws
 - [x] Record findings in the probe writeup
 
-### WP3: Probe — Sublime Text / Sublime Merge CLI shapes across project styles
+### WP3: Probe — Sublime Text / Sublime Merge CLI shapes across project styles ✅ SHIPPED 2026-06-16 (commit cc72c4d)
 
 **Type:** probe
 **Phase:** Phase 1
@@ -72,11 +72,11 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 **Timebox:** 1 hour
 **Success criterion:** A short table in `workflow/wip/wp3-sublime-cli-probe.md` mapping (project state × user intent) → exact command. Decision: do we require `subl`/`smerge` on PATH, or fall back to `open -a "Sublime Text" <path>` when absent?
 **Tasks:**
-- [ ] Test `subl <dir>` (no project file) vs `subl --project <dir>/foo.sublime-project` (with file)
-- [ ] Test `subl --new-window` and `subl --background` combinations
-- [ ] Test `smerge <dir>` and `smerge --new-window <dir>`
-- [ ] Test `open -a "Sublime Text" <dir>` as a no-PATH fallback
-- [ ] Record findings in the probe writeup
+- [x] Test `subl <dir>` (no project file) vs `subl --project <dir>/foo.sublime-project` (with file)
+- [x] Test `subl --new-window` and `subl --background` combinations
+- [x] Test `smerge <dir>` and `smerge --new-window <dir>`
+- [x] Test `open -a "Sublime Text" <dir>` as a no-PATH fallback
+- [x] Record findings in the probe writeup
 
 ### WP4: Probe — Thumbnail-rendering cost at N=8 workspaces (gates Phase 2 filmstrip strategy)
 

@@ -111,3 +111,53 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Fix shape:** add `enum ReaderSink { Stdout, Channel(mpsc::Sender<Vec<u8>>), CountBytes }` + one `spawn_reader(reader, sink)` helper.
 - **Priority:** low
 - **Status:** pending
+
+# wp3-sublime-cli-probe — 2026-06-16
+
+## SURFACE-2026-06-16-QUALITY-WP3-STUCK-SURFACED-LEAF
+- **File:** `workflow/wip/wp3-sublime-cli-probe.md` (Work Tree, leaf below P1.4)
+- **Severity:** MAJOR
+- **Finding:** Work Tree contains an unchecked leaf `- [ ] SURFACED — ST 'osascript activate' …` under Phase 1, but Phase 1's parent is `[x]`. Violates the global "parent's checkbox may only be `[x]` when ALL children are `[x]`" invariant. The discovery is correctly logged in §Discoveries and the feedback memory exists; the leaf should either be marked `[x]` (closed via the memory artifact) or removed from the tree (SURFACED belongs in §Discoveries, not as a perpetually-open child).
+- **Fix shape:** delete the leaf line from the Work Tree (the §Discoveries entry already captures the lesson; no work-item action remains).
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-16-QUALITY-WP3-OBSERVATION-VS-INFERENCE-FLATTENING
+- **File:** `workflow/wip/wp3-sublime-cli-probe.md` (Invocation matrix tables, T8/T9/T11 rows)
+- **Severity:** MAJOR
+- **Finding:** T8/T9/T11 rows present inference-grade data (footnoted inconclusive, race-affected, or derived from `--help`) in the same shape as observation-grade rows (T7, T10). A future contributor cannot tell at-a-glance which rows are runtime-reproducible vs. documentation-derived; this asymmetry is load-bearing because the §Decision relies on the matrix.
+- **Fix shape:** add a column "Source" with values `observed | inferred` (or a leading row-prefix marker like ⚠️/†), and a one-line legend above the table.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-16-QUALITY-WP3-STATE-PROSE-DRIFT
+- **File:** `workflow/wip/wp3-sublime-cli-probe.md:15`
+- **Severity:** MINOR
+- **Finding:** Frontmatter says `state: ship (complete)` but the H2-equivalent prose line on line 15 says `**State:** plan (complete)`. Dual-source state representations drift; the prose line should mirror frontmatter or be removed.
+- **Fix shape:** remove the duplicated `**State:**` prose line (frontmatter is canonical), or align it.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-16-QUALITY-WP3-FOOTNOTE-MARKERS
+- **File:** `workflow/wip/wp3-sublime-cli-probe.md` (Invocation matrix footnotes)
+- **Severity:** MINOR
+- **Finding:** Superscript ¹/² footnote markers force readers to scroll; table headers don't carry the numbers. Grep-unfriendly.
+- **Fix shape:** use `[note 1]` style or inline parenthetical at the row, or move the inconclusive notes into the "Notes" column directly.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-16-QUALITY-WP3-UNVISITED-STALE
+- **File:** `workflow/wip/wp3-sublime-cli-probe.md:50` (Current Node block)
+- **Severity:** MINOR
+- **Finding:** `Unvisited:` lists `ship → review-quality → finalize` but ship is already complete (per frontmatter + `ship_commit: cc72c4d`). The sequence-of-execution field wasn't refreshed when the state advanced. Per SURFACE-2026-05-06-FINALIZE-BEFORE-SHIP-ORDER-FLIP rationale, stale `Unvisited:` is a small confabulation channel for downstream skills.
+- **Fix shape:** finalize will overwrite this anyway; the discipline of updating `Unvisited:` on every state exit is the load-bearing rule worth noting.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-16-QUALITY-WP3-RUNTIMES-TIMEOUT-FORMULA
+- **File:** `runtimes.md` (multiple entries)
+- **Severity:** MINOR
+- **Finding:** All four sub-3s entries (`pnpm install`, `pnpm test`, `pnpm lint`, `cargo test`) record `**Use timeout:** 120000` instead of the formula's `ceil(observed * 1.5 + 60) * 1000` (which would yield ~62000–65000 ms). The 120000 matches the Bash tool's default; the registry is recording a constant rather than computing from data.
+- **Fix shape:** either apply the formula consistently to all entries, or document the override policy (e.g., "clamp small values to a 120s safety floor") in `~/.claude/CLAUDE.md`'s registry rules.
+- **Priority:** low
+- **Status:** pending

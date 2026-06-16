@@ -4,3 +4,7 @@
 - [PTY-byte-injection probes — mirror PTY output by default](pty-probe-observable-default.md) — reader-thread pattern for all Claudesk PTY probe harnesses; silent byte-counting hides diagnostic symptoms.
 - [Observable Outcomes — execution evidence, not just typing evidence](observable-outcomes-execution-evidence.md) — feature-plan discipline: execution checks require both typing-side AND side-effect evidence.
 - [Raw-mode TTYs — CR (0x0d) is Enter, not LF (0x0a)](raw-mode-cr-is-enter.md) — POSIX line-discipline fact; CR is Enter whenever a TUI is in raw mode.
+- [Never activate/launch/quit Sublime Text during dev without consent](feedback_no_sublime_activate.md) — dev-time only; the Claudesk app's runtime ST activation (WP8 hotkey-pop) is NOT constrained.
+- [osascript activate is side-effecting on macOS Spaces, not a read](feedback_osascript_activate_side_effects.md) — gathers app windows onto current Desktop; generalized version of the Sublime-specific rule.
+- [Read tool --help before designing a CLI test matrix](feedback_read_help_before_cli_matrix.md) — five-second upstream check collapses redundant matrix rows and surfaces native flags upstream research may have missed.
+- [SURFACED items go in ## Discoveries, NOT as Work Tree leaves](feedback_surfaced_in_discoveries_not_worktree.md) — leaves are work, discoveries are notices; mixing creates parent-completion-invariant violations.

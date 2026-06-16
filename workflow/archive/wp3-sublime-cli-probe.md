@@ -1,11 +1,12 @@
 ---
 workflow: feature
-state: verify-codify (all phases complete)
+state: ship (complete)
 created: 2026-06-16
 drive_mode: autopilot
 wbs_ref: WP3 (Phase 1, docs/product/wbs.md)
 size: XS
 timebox: 1 hour
+ship_commit: cc72c4d
 ---
 
 # Feature: WP3 — Sublime Text / Sublime Merge CLI shapes probe
@@ -42,10 +43,10 @@ This is a documentation/writeup probe. Per WBS WP3 success criterion: the delive
   - [x] verify-codify  <!-- status: complete; no new Claudesk tests written — probe deliverable is the writeup itself (WBS criterion). Test ideas for WP8 captured in Findings → "Test ideas to hand off to WP8". Full suite re-run: pnpm test 1/1 pass, pnpm lint clean, cargo test 1/1 pass. -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 (complete) > Ship
-- **Active scope:** ship (all phases done; ready for /feature-ship)
+- **Path:** Feature > Phase 1 (complete) > review-quality (complete) > finalize
+- **Active scope:** finalize (review-quality auto-backlogged 2 MAJOR + 4 MINOR; ready for /feature-finalize)
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** finalize
 - **Open discoveries:** ST-activate-pulls-windows-across-Spaces (captured as feedback memory; no WBS/arch action needed — purely operational discipline)
 
 ## Discoveries
@@ -168,3 +169,51 @@ Codified at verify-codify time. Per WBS WP3 success criterion ("the writeup is t
 - **`subl --project` does NOT activate Sublime Text** even when ST is launching cold. The flag name suggests "open this project file like the IDE does," but the focus behavior is closer to `--background`. If a future Claudesk feature wants "load a project file in background," this is the magic invocation. For hotkey-pop, **never use it**.
 - **`-b/--background` is a native, supported flag on both tools** (confirmed via `--help`). We do not need to rely on macOS's `open -a -g` quirk to control focus. This is cleaner than the pre-probe assumption that `open -a` was the only background-launch path.
 - **No `--wait` semantics planned in Claudesk's invocation path.** ST supports `-w/--wait` for "wait until file is closed before returning"; Claudesk's hotkey handler is fire-and-forget, never waits. Documented here so future contributors don't add it.
+
+## Code-Quality Review — wp3-sublime-cli-probe
+
+### Strengths
+- Problem statement frames the probe with a load-bearing observation (PATH absence is the *default* on the maintainer's machine), which directly justifies the matrix's design — argument-from-data rather than argument-from-template.
+- Invocation matrix uses a tight, scannable schema (Invocation / Cold-Warm / exit / Focus stolen / App launched / Notes); footnotes ¹ and ² honestly mark inconclusive measurements (T8, T9) rather than papering them over.
+- The WP8 hand-off contract is genuinely consumable: discovery-rule pseudocode, explicit anti-patterns (no `--project`, no `--new-window`), and a fire-and-forget note on `--wait` semantics — a future WP8 author can build from this without re-doing the probe.
+- Test-ideas section correctly scopes E2E away from automated suites with two concrete justifications (consent rule + Spaces side-effect) rather than vague hand-waving; deferral to verify-human is principled.
+- The "Surprises" section captures the `--project` non-activation finding and the `-b/--background` native-flag confirmation — both are exactly the kind of one-line insight a future Claudesk feature author will grep for.
+
+### Issues
+
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [workflow/wip/wp3-sublime-cli-probe.md, Work Tree:39] The Work Tree contains an unchecked leaf `- [ ] SURFACED — ST 'osascript activate' …` under Phase 1, but Phase 1's parent is `[x]` on line 28. Per the global Work Tree rule "a parent's checkbox may only be `[x]` when ALL children are `[x]`," this violates the invariant. The discovery is correctly logged in §Discoveries and the feedback memory exists, so the leaf should either be marked `[x]` (closed via the memory artifact) or removed from the tree — the SURFACED tag belongs in `## Discoveries`, not as a perpetually-open Work Tree child. — *Why it matters: Work Tree integrity is mechanically verifiable; a perpetually-open child under a `[x]` parent is a latent confabulation channel for any future skill that reads this tree (e.g., feature-finalize, session-resume).*
+- [workflow/wip/wp3-sublime-cli-probe.md, Invocation matrix:99-101] T8, T9, T11 are recorded as cold-start tests but their "Focus stolen" cells contain conjecture rather than observation: T8 is footnoted as inconclusive, T9 is footnoted as a race, T11's "no (per `--help`)" is documentation-derived not runtime-observed. The matrix presents these in the same shape as actually-observed rows (T7, T10), which conflates measured data with inferred data. The reviewer note explicitly calls out that ST shapes are UNVERIFIED at runtime per the consent rule, but the writeup itself doesn't carry a header banner flagging which rows are observation-grade vs. inference-grade. — *Why it matters: a future contributor reading the matrix six months from now cannot tell at-a-glance which findings are reproducible by re-running the command vs. which are derived from `--help` text; this asymmetry is load-bearing for the §Decision's reliance on the matrix.*
+
+**MINOR**
+- [workflow/wip/wp3-sublime-cli-probe.md:15] Frontmatter line 3 says `state: ship (complete)` but the H2-equivalent header on line 15 says `**State:** plan (complete)`. The frontmatter is the up-to-date value; the duplicated prose line is stale-on-arrival. — *Why it matters: dual-source state representations drift; the prose line should match the frontmatter or be removed (frontmatter is canonical).*
+- [workflow/wip/wp3-sublime-cli-probe.md, footnotes:103-104] Footnotes ¹ and ² use superscript markers but the matrix headers don't number footnotes — readers must scroll down to find what `¹` references. A `[note 1]` style or inline parenthetical would be more grep-friendly. Cosmetic.
+- [workflow/wip/wp3-sublime-cli-probe.md, Current Node:50] `Unvisited:` lists `ship → review-quality → finalize`, but at the time this WIP is being reviewed (the review-quality pass), ship is already complete (frontmatter `state: ship (complete)`, `ship_commit: cc72c4d` set). The `Unvisited:` ordering was authored at ship time and the field wasn't refreshed when the state advanced. — *Why it matters: `Unvisited:` is documented as sequence-of-execution and is read by downstream skills; a stale value is a small confabulation channel (per SURFACE-2026-05-06-FINALIZE-BEFORE-SHIP-ORDER-FLIP rationale).*
+- [runtimes.md:8-13 and new entries] The `pnpm install` entry uses `120000` ms timeout for a 3s observation. Per the registry's documented formula `ceil(observed_seconds * 1.5 + 60) * 1000`, the computed value would be `ceil(3 * 1.5 + 60) * 1000 = 65000` ms. The 120000 value matches the Bash tool's default rather than the formula. Same arithmetic discrepancy applies to pnpm test (1s → should be ~62000ms, recorded 120000), pnpm lint (same), cargo test (2s → ~63000ms, recorded 120000). — *Why it matters: the registry's formula exists to keep the timeout reflective of the measurement; defaulting to 120000 for every sub-2s command is harmless in practice but means the registry is recording a constant rather than computing from data. If the intent is "clamp small values to a 120s floor for safety," that policy belongs in CLAUDE.md's registry rules rather than as an unwritten override.*
+
+### Assessment
+This is a well-built probe writeup. The deliverable matches the WBS criterion (writeup IS the artifact), the §Decision section follows tightly from the §Invocation matrix data, and the §WP8 hand-off contract is concrete enough that a future WP8 author could implement without re-running the probe. The "Surprises" section captures durable insights (`--project` non-activation, native `-b` support) that would otherwise need re-discovery. The honest annotation of the ST consent rule and the Spaces side-effect — both in §Discoveries and again in §Test ideas — shows good discipline about not papering over operational ugliness. Debt accrued is small: the Work Tree's stuck-SURFACED leaf and the matrix's observation-vs-inference flattening are the two items worth fixing in a quick follow-up; everything else is cosmetic. Future readers will find this writeup clear and reproducible for WP8 consumption.
+
+### If you disagree
+Operator: dismiss any finding by editing this section in the WIP file and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP. The finding will be skipped by the orchestrator's severity-tier action matrix.
+
+## Retrospect
+
+- **What changed in our understanding:**
+  - The `.app`-bundle fallback is the *default* state on the canonical dev machine, not a corner case. The maintainer never symlinked `subl`/`smerge` to PATH. This reshapes WP8's discovery logic from "expect PATH, fall back if missing" to "expect bundle, augment via PATH if present."
+  - Both `subl` and `smerge` ship a native `-b/--background` flag (per `--help`). The pre-probe assumption was that `open -a -g` would be the only "open without focus theft" lever; the native flag is cleaner and removes a layer of macOS quirk dependency.
+  - `subl --project <foo>.sublime-project` does NOT activate Sublime Text even on cold start. The flag name implies "open like the IDE" but the focus behavior is closer to `--background`. WP8 should never use `--project` for hotkey-pop.
+
+- **Assumptions that held:**
+  - Hotkey-pop should steal focus by default. (The user pressed the hotkey because they want to be in Sublime; this is explicit consent.)
+  - The deliverable is the writeup itself — no production code lands at WP3 time. (WBS criterion held.)
+  - `open -a` works as a no-PATH fallback regardless of install location, via Launch Services. (Confirmed during T9/T10.)
+
+- **Assumptions that were wrong:**
+  - The pre-probe sanity check assumed measurement via `osascript activate` was a harmless read. It is not — it is a side-effecting operation on macOS Spaces state. Cost: yanked the user's live Sublime Text windows across Desktops mid-probe. Captured as project-scope feedback memory (`.claude/projects/-Users-stayman-Personal-projects-claudesk/memory/feedback_no_sublime_activate.md`); ST is now consent-gated for all future probes. SM remains exempt (no live-window pattern).
+  - The plan listed 8 probe invocations in the Observable outcomes; in practice the matrix grew to 14 rows (9 ST + 5 SM, including warm + cold variants) because cold-vs-warm focus behavior differed materially for some flags. Outcome threshold (≥8) was still met; the plan just under-specified.
+
+- **Approach delta:** Implementation matched the plan's task-ordering exactly (P1.1 → P1.2 → P1.3 → P1.4). The user-disruption mid-P1.2 (Sublime Text windows pulled to current Space) was not in the plan — it became a `## Discoveries` entry and a project-scope feedback memory, but did not back-loop or revise the WBS. The probe itself completed on its original timebox (~30 min of probe work + ~10 min of disruption recovery and memory authoring).

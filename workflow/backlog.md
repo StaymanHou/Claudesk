@@ -25,3 +25,9 @@
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** run `/feature-refactor` against this feature when WP7 starts using the harness as a reference. To dismiss specific findings, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.
+
+## Code-quality findings — wp3-sublime-cli-probe (2026-06-16)
+- **Pointer:** 2 MAJOR + 4 MINOR findings from `feature-review-quality` on commit `cc72c4d`. MAJORs: stuck SURFACED leaf under a `[x]` Phase 1 parent (Work Tree invariant violation), and observation-vs-inference flattening in the invocation matrix (T8/T9/T11 inference-grade rows look identical to T7/T10 observation-grade rows). MINORs: stale state-prose drift, superscript footnote markers, stale `Unvisited:` sequence, runtimes.md timeout-formula deviation. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp3-sublime-cli-probe — 2026-06-16` section.
+- **Priority:** medium (MAJORs) + low (MINORs)
+- **Status:** pending
+- **Pickup shape:** run `/feature-refactor` against this feature when polishing probe writeups; the two MAJORs are quick wins (one delete-leaf, one column-add). To dismiss specific findings, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.
