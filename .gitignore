@@ -1,6 +1,9 @@
 # Read-only reference symlinks to companion repos
 _ref/
 
+# Global-scope learning drafts (hand-curated, never auto-committed)
+.claude/learnings/
+
 # Logs
 logs
 *.log
