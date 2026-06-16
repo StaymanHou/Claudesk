@@ -20,7 +20,7 @@ updated: 2026-06-15
 - **React 19 + TypeScript + Vite** for the frontend — matches the Tauri 2026 community consensus (e.g., the Terax reference project ships this exact stack) and is what the lite editor in Phase 3 (likely Monaco or CodeMirror 6) will need anyway.
 - **`tauri-plugin-global-shortcut`** for the Sublime Text / Sublime Merge hotkey-pop — official plugin, supports macOS, registers via `Shortcut::new()` in Rust or `register()` in JS.
 - **Sublime invocation:** `subl` for Sublime Text, `smerge` for Sublime Merge. For Sublime Text: prefer passing the project root dir (`subl <project-path>`) for projects without a `.sublime-project` file, or `subl --project <path>.sublime-project` when one exists; flags `--new-window` and `--background` available. For Sublime Merge: `smerge <project-path>` opens the repo at that path.
-- **Project picker persistence:** flat JSON file at `~/Library/Application Support/stayman-cc-wrapper/projects.json` (Tauri's `tauri-plugin-fs` + `path::app_data_dir()`). No per-project config file in the project itself — matches the "no per-project config burden" principle.
+- **Project picker persistence:** flat JSON file at `~/Library/Application Support/Claudesk/projects.json` (Tauri's `tauri-plugin-fs` + `path::app_data_dir()`). No per-project config file in the project itself — matches the "no per-project config burden" principle.
 
 ### Trade-offs
 
@@ -28,22 +28,22 @@ updated: 2026-06-15
 - **WKWebView vs. Chromium.** Native WebView means slightly different CSS/font rendering than Electron's bundled Chromium. For a single-user macOS-only tool this is a non-issue (we test on one engine; cross-platform parity isn't a goal). Verdict: accepted.
 - **portable-pty pre-1.0 + bus factor (1 owner, 2.8K dependents).** API may change between versions; long-term support has a single point of failure. Mitigated by pinning a version and by the fact that the core PTY API surface we need (spawn, read, write, resize, wait) is small and stable. Verdict: accepted; pin and monitor.
 - **xterm.js bundle weight.** xterm.js + addons is the heaviest single piece of frontend JS we'll ship. No real alternative — the only competitive terminal renderer is a custom one, far out of scope. Verdict: accepted.
-- **Sublime CLI shape difference.** `subl` takes either a dir, files, or `--project <project-file>`; `smerge` takes a dir. Wrapper must handle both shapes per app. Verdict: small CLI-shim layer in Rust, not a real cost.
+- **Sublime CLI shape difference.** `subl` takes either a dir, files, or `--project <project-file>`; `smerge` takes a dir. Claudesk must handle both shapes per app. Verdict: small CLI-shim layer in Rust, not a real cost.
 
 ### Cross-phase finding (Phase 2 architecture-relevant; do NOT defer to next research cycle)
 
-**How the wrapper actually drives Claude Code is decided here, not in Phase 2.** The roadmap implies a single approach ("send `/session-resume` to the active CC pane"). Research surfaces two architecturally different paths, and the choice affects Phase 1 (which we're building first):
+**How Claudesk actually drives Claude Code is decided here, not in Phase 2.** The roadmap implies a single approach ("send `/session-resume` to the active CC pane"). Research surfaces two architecturally different paths, and the choice affects Phase 1 (which we're building first):
 
-1. **PTY-driven interactive TUI (CHOSEN).** Spawn `claude` inside a pty via `portable-pty`, render output via xterm.js, and write bytes back into the pty for human-style input — including slash commands typed as `/session-resume\n`. The wrapper *is* the terminal, so injecting bytes is no more illegitimate than a human typing them. For *state detection* (knowing when `/session-pause` finished writing `.session.md`), use **file watching** (`tauri-plugin-fs-watch` or `notify` in Rust), NOT PTY output parsing. This is the architectural line: byte-injection for input is fine; output-text-scraping for state is forbidden. The 2026 ACP/acpx criticism of "PTY scraping" is specifically about parsing CC's output to infer state — file-watching sidesteps that entirely.
+1. **PTY-driven interactive TUI (CHOSEN).** Spawn `claude` inside a pty via `portable-pty`, render output via xterm.js, and write bytes back into the pty for human-style input — including slash commands typed as `/session-resume\n`. Claudesk *is* the terminal, so injecting bytes is no more illegitimate than a human typing them. For *state detection* (knowing when `/session-pause` finished writing `.session.md`), use **file watching** (`tauri-plugin-fs-watch` or `notify` in Rust), NOT PTY output parsing. This is the architectural line: byte-injection for input is fine; output-text-scraping for state is forbidden. The 2026 ACP/acpx criticism of "PTY scraping" is specifically about parsing CC's output to infer state — file-watching sidesteps that entirely.
 
 2. **Agent SDK / `@anthropic-ai/claude-agent-sdk` (REJECTED for primary path; HEDGED for future).** TypeScript SDK with `query()`-style structured calls and streamed JSON message events. Avoids PTY entirely. The Q1 2026 Dispatch / Channels / Remote Control primitives extend this. But: the SDK doesn't render the familiar interactive TUI, and not all slash commands are dispatchable through it (notably `/clear` is not; built-ins like `/compact` are). Our vision is explicit: left half is **the familiar CC TUI in yolo mode**, so we need the TUI. Verdict: stay PTY-driven for v1.
 
-**Hedge for the future.** The Agent SDK + Remote Control direction is clearly Anthropic's strategic future. Build the wrapper's "send command to CC" code path behind a thin Rust interface (`trait CcSession { fn send_input(&self, bytes: &[u8]); fn on_output(...); fn wait_for_exit(...); }` or similar) so we can swap in an SDK-backed implementation later without touching the UI. Note also: the **`/rc` (remote-control) command exposed in the live CC TUI** in Q1 2026 makes a session available to claude.ai for remote drive — this is a parallel capability we may want to expose in the wrapper UI down the line, separate from our own byte-injection path.
+**Hedge for the future.** The Agent SDK + Remote Control direction is clearly Anthropic's strategic future. Build Claudesk's "send command to CC" code path behind a thin Rust interface (`trait CcSession { fn send_input(&self, bytes: &[u8]); fn on_output(...); fn wait_for_exit(...); }` or similar) so we can swap in an SDK-backed implementation later without touching the UI. Note also: the **`/rc` (remote-control) command exposed in the live CC TUI** in Q1 2026 makes a session available to claude.ai for remote drive — this is a parallel capability we may want to expose in the Claudesk UI down the line, separate from our own byte-injection path.
 
 ### Risks
 
-- **Claude Code CLI changes break us.** CC is on an active release cadence. PTY shape, slash command set, and even auth flows have shifted between versions. Mitigation: pin a CC version in development; treat the wrapper-to-CC integration as a stable seam to be re-tested on each CC upgrade.
-- **Claude Code subscription auth + headless/wrappers policy.** Anthropic has scoped Max subscription usage to first-party Claude Code invocations in past policy changes. We are wrapping the *interactive CLI itself* (not the SDK / not the API), so the wrapper sees a normal subscription session — but a future policy change could require API-key auth for wrapper-driven sessions. Mitigation: design assumes the user authenticates `claude` independently before launching the wrapper; we never touch credentials.
+- **Claude Code CLI changes break us.** CC is on an active release cadence. PTY shape, slash command set, and even auth flows have shifted between versions. Mitigation: pin a CC version in development; treat the Claudesk-to-CC integration as a stable seam to be re-tested on each CC upgrade.
+- **Claude Code subscription auth + headless/wrappers policy.** Anthropic has scoped Max subscription usage to first-party Claude Code invocations in past policy changes. Claudesk wraps the *interactive CLI itself* (not the SDK / not the API), so Claudesk sees a normal subscription session — but a future policy change could require API-key auth for Claudesk-driven sessions. Mitigation: design assumes the user authenticates `claude` independently before launching Claudesk; Claudesk never touches credentials.
 - **macOS code-signing / notarization cost for distribution.** Required for Phase 4 release. Apple Developer Program is $99/year. Single-user dev unsigned build is fine for personal use; this becomes a Phase 4 problem, not now.
 - **portable-pty single-owner bus factor** (see Trade-offs).
 - **WKWebView CSS quirks vs. Chromium.** Phase 3 lite-editor work (Monaco/CodeMirror 6) is where this would bite if at all. Mitigation: dogfood early on actual macOS, don't develop against Chromium in a browser tab and discover WebKit issues at the end.
@@ -57,7 +57,7 @@ updated: 2026-06-15
 
 ## 2026-06-15 revision — Tabbed workspace model
 
-The vision pivoted from N independent wrapper windows (one per project) to a single window hosting N workspaces (one per project), with a Mission Control-inspired layout: center-stage workspace + top filmstrip of live thumbnails (collapsible to mini status tiles) + a user-toggled, display-only picture-in-picture mini player for when the wrapper window is out of focus. Four open design questions were flagged in the revised `vision.md`; the next four subsections answer them.
+The vision pivoted from N independent Claudesk windows (one per project) to a single window hosting N workspaces (one per project), with a Mission Control-inspired layout: center-stage workspace + top filmstrip of live thumbnails (collapsible to mini status tiles) + a user-toggled, display-only picture-in-picture mini player for when the Claudesk window is out of focus. Four open design questions were flagged in the revised `vision.md`; the next four subsections answer them.
 
 ### Q1: Live thumbnail cost — what's the cheapest faithful filmstrip rendering?
 
@@ -115,19 +115,19 @@ Combined with `NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBe
 
 **Recommendation: YES, build a menu-bar status item, but keep it minimal.**
 
-The argument from the vision: "wrapper hidden / minimized / on a different Space, and PiP is toggled off" → neither the filmstrip nor a display-only PiP is visible → the user is back to context-switching to find the awaiting-input project. The menu-bar item solves this case for the cost of about a day's work.
+The argument from the vision: "Claudesk hidden / minimized / on a different Space, and PiP is toggled off" → neither the filmstrip nor a display-only PiP is visible → the user is back to context-switching to find the awaiting-input project. The menu-bar item solves this case for the cost of about a day's work.
 
 Tauri 2 has **first-class built-in tray-icon support** (`tauri::tray::TrayIconBuilder`) — no third-party plugin needed for the basics. The macOS-specific bits are well-documented:
 
 - `setIconAsTemplate` for proper macOS template-image styling (auto-adapts to light/dark menu bar).
 - `tauri-plugin-positioner` with the `tray-icon` feature for popover-style "click the menu-bar icon → small status window appears below it" UX (`Position::TrayBottomCenter`).
-- `LSUIElement` Info.plist toggle to *hide* an app from the Dock — **we don't want this**, since the wrapper is also a regular Dock app. Tauri supports having both a Dock app *and* a menu-bar icon simultaneously.
+- `LSUIElement` Info.plist toggle to *hide* an app from the Dock — **we don't want this**, since Claudesk is also a regular Dock app. Tauri supports having both a Dock app *and* a menu-bar icon simultaneously.
 
 **Scope for the v1 menu-bar item.** Display-only, same shape as PiP:
 
 - Icon in the menu bar shows an **aggregate status dot** — green if all workspaces are idle, blue if any is running, amber if any is awaiting-input. (Three-state dot matches CC's `Stop` / `UserPromptSubmit` / `Notification` hook events.)
-- **Left-click** opens a small popover (positioned via `tauri-plugin-positioner`) listing every open workspace with per-workspace status dot + project name. Clicking a row brings the wrapper window forward AND switches center stage to that workspace.
-- **Right-click** opens a native menu: Show wrapper window / Toggle PiP / Quit.
+- **Left-click** opens a small popover (positioned via `tauri-plugin-positioner`) listing every open workspace with per-workspace status dot + project name. Clicking a row brings the Claudesk window forward AND switches center stage to that workspace.
+- **Right-click** opens a native menu: Show Claudesk window / Toggle PiP / Quit.
 
 This menu-bar item makes the PiP optional rather than mandatory. PiP is for "I want to keep an eye on it while I work in another app"; menu-bar is for "I forgot to keep an eye on it." Both surfaces draw from the same status broadcast (see Q5 below).
 
@@ -148,7 +148,7 @@ Tauri 2 supports two patterns:
 
 For our use case Pattern 1 is unambiguously the right choice:
 
-- All workspaces share the same domain (the wrapper app itself) — no untrusted content, no need for webview-level isolation.
+- All workspaces share the same domain (Claudesk itself) — no untrusted content, no need for webview-level isolation.
 - xterm.js handles many concurrent terminal instances in a single document fine (with the renderer-tier swap from Q1). Multi-webview wouldn't make this easier.
 - We need *cross-workspace* state (filmstrip, PiP, menu-bar) to read every workspace's status simultaneously. In Pattern 1 it's just shared React state. In Pattern 2 each webview is isolated and we'd need to round-trip through the Rust backend for every status update — strictly worse.
 - Pattern 2 is `unstable`, which means upgrade pain on every Tauri release.
@@ -167,15 +167,15 @@ Three surfaces consume CC idle/running/awaiting status: **filmstrip** (in-window
 [CC hook handler in ~/.claude/settings.json]
         │
         ▼
-[wrapper Rust process — status broadcaster (Tauri event channel)]
+[Claudesk Rust process — status broadcaster (Tauri event channel)]
         │           ├──► filmstrip React state (main webview)
         │           ├──► PiP webview (NSPanel)
         │           └──► menu-bar tray icon + popover webview
 ```
 
-- Hook events from CC (`UserPromptSubmit` / `Stop` / `Notification`) write a single JSON line to a Unix socket the wrapper listens on (preferred) OR a shared status file the wrapper polls/watches.
-- The wrapper's Rust core normalises this into a `WorkspaceStatusUpdate { workspace_id, state: Idle|Running|AwaitingInput, last_event_at }` event.
-- The wrapper broadcasts the update via Tauri's event channel (`app_handle.emit("workspace-status", ...)`); the main React webview, PiP webview, and menu-bar popover webview each subscribe.
+- Hook events from CC (`UserPromptSubmit` / `Stop` / `Notification`) write a single JSON line to a Unix socket Claudesk listens on (preferred) OR a shared status file Claudesk polls/watches.
+- Claudesk's Rust core normalises this into a `WorkspaceStatusUpdate { workspace_id, state: Idle|Running|AwaitingInput, last_event_at }` event.
+- Claudesk broadcasts the update via Tauri's event channel (`app_handle.emit("workspace-status", ...)`); the main React webview, PiP webview, and menu-bar popover webview each subscribe.
 
 The Unix-socket vs shared-file question that was tagged "deferred to WP9b probe" in the prior session pause now has more weight — with three concurrent consumers, the Unix socket's cleaner concurrency (no file-lock contention, no debounce-write-completion juggling) wins decisively. **Recommend Unix socket from day one of Phase 2** (no need to probe; the multi-surface broadcaster makes the decision for us).
 
@@ -202,10 +202,10 @@ Summarizing the four answers above into the architecture deltas that need to lan
 
 This revision changes both Phase 1 and Phase 2 enough that the roadmap needs to be re-written, not just edited:
 
-- **Phase 1 must include the tab shell.** The original Phase 1 milestone "Tauri app skeleton (macOS bundle, launches, shows one window)" stays, but the embedded-terminal milestone now ships with the tab-shell substrate. A workspace is one tab; Phase 1's exit criterion of "Click a project → working CC session in the project dir <10s" is updated to "Click a project → workspace opens *in the current wrapper window* with working CC session <10s." Multi-workspace switching is still Phase 2 work, but the *substrate* must exist in Phase 1 so Phase 2 doesn't reshape the foundation. (Single-workspace usage in Phase 1 is just N=1 of the tab model.)
+- **Phase 1 must include the tab shell.** The original Phase 1 milestone "Tauri app skeleton (macOS bundle, launches, shows one window)" stays, but the embedded-terminal milestone now ships with the tab-shell substrate. A workspace is one tab; Phase 1's exit criterion of "Click a project → working CC session in the project dir <10s" is updated to "Click a project → workspace opens *in the current Claudesk window* with working CC session <10s." Multi-workspace switching is still Phase 2 work, but the *substrate* must exist in Phase 1 so Phase 2 doesn't reshape the foundation. (Single-workspace usage in Phase 1 is just N=1 of the tab model.)
 - **Phase 2 "Always-visible cross-window CC status indicator" milestone is REPLACED** by three milestones: (a) filmstrip + center-stage with renderer-tier swap, (b) menu-bar status item with popover, (c) PiP NSPanel (display-only).
 - **WP9b "hook script writes to shared file vs Unix socket — decision deferred"** is RESOLVED: Unix socket from day one. Update WBS during roadmap.
-- **The CC hook handler that was a Phase 2 wrapper component now serves three consumers** instead of one. Architecturally cleaner if introduced via a Rust-side broadcaster from the start of Phase 2.
+- **The CC hook handler that was a Phase 2 Claudesk component now serves three consumers** instead of one. Architecturally cleaner if introduced via a Rust-side broadcaster from the start of Phase 2.
 
 The roadmap skill needs to rewrite Phase 1's third milestone, Phase 2's status-indicator and surrounding milestones, and the Phase 2 exit criteria to reflect three status surfaces (filmstrip / menu-bar / PiP) instead of one (cross-window indicator). Exit via **P4 → roadmap (back-loop)**.
 

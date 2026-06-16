@@ -23,8 +23,8 @@ updated: 2026-06-15
   - Frontend: `@xterm/xterm` + `@xterm/addon-fit` — render the terminal, fit to container. **DOM renderer only — `@xterm/addon-webgl` is NOT used** (2026-06-15 decision; see Key Decisions below). The 2026 DOM renderer is fast enough for the foreground workspace.
   - Bridge: `tauri-pty` (JS bindings shipped with `tauri-plugin-pty`) — `spawn()` returns a handle whose `onData` / `write` / `resize` mirror node-pty's API closely enough that xterm.js wiring is straight-line.
 - **Global shortcuts:** `tauri-plugin-global-shortcut` — for Sublime Text hotkey-pop. Requires macOS Accessibility permission flow; app must prompt on first launch.
-- **External tools invoked via shell:** `subl` (Sublime Text), `smerge` (Sublime Merge — Phase 2). Wrapper invokes them via Tauri's `tauri-plugin-shell` `Command` API; no embedding.
-- **Persistence:** flat JSON file at `~/Library/Application Support/stayman-cc-wrapper/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()`. No DB; project list is a list of `{path, last_opened_at, display_name?, default_drive_mode?}` records. Matches the "no per-project config burden" vision principle (no `.wrapper.json` per repo).
+- **External tools invoked via shell:** `subl` (Sublime Text), `smerge` (Sublime Merge — Phase 2). Claudesk invokes them via Tauri's `tauri-plugin-shell` `Command` API; no embedding.
+- **Persistence:** flat JSON file at `~/Library/Application Support/Claudesk/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()`. No DB; project list is a list of `{path, last_opened_at, display_name?, default_drive_mode?}` records. Matches the "no per-project config burden" vision principle (no `.claudesk.json` per repo).
 - **Database:** none — Phase 1 has no relational data, and the only durable state is the project list (handled above).
 - **Infrastructure:** none — this is a single-user desktop app; no servers, no cloud, no telemetry.
 
@@ -44,7 +44,7 @@ This is a desktop application targeting macOS. Tauri development requires direct
 - Node 20 LTS or newer via `nvm` / `fnm` / system install
 - Xcode Command Line Tools (`xcode-select --install`) — provides the C compiler, `codesign`, and macOS SDK headers
 - `pnpm` (preferred) or `npm` for frontend deps
-- Sublime Text and Sublime Merge installed locally; `subl` and `smerge` available on `PATH` (the wrapper invokes them but does NOT install them)
+- Sublime Text and Sublime Merge installed locally; `subl` and `smerge` available on `PATH` (Claudesk invokes them but does NOT install them)
 - Claude Code CLI installed and authenticated independently (`claude` on `PATH`)
 
 **First-run bootstrap:**
@@ -94,7 +94,7 @@ flowchart LR
   PtyImpl -- spawns --> ClaudeCLI["claude (CC CLI in PTY)"]
   ShellLauncher -- spawns --> Sublime[Sublime Text]
   ShortcutMgr -- global hotkey --> ShellLauncher
-  ConfigStore -- read/write --> AppDataDir["~/Library/Application Support/stayman-cc-wrapper/projects.json"]
+  ConfigStore -- read/write --> AppDataDir["~/Library/Application Support/Claudesk/projects.json"]
 ```
 
 **Component responsibilities:**
@@ -174,16 +174,16 @@ Thresholds above are the proposed defaults. The probe's own implementation plan 
 
 - **Tauri over Electron.** Aligned with vision principle 1 ("lite over featureful"). Research established 25x smaller bundle, ~50% lower RAM, faster startup. The "less mature packaging ecosystem" tradeoff is acceptable for a single-user tool.
 - **`tauri-plugin-pty` / `portable-pty` over node-pty + sidecar.** node-pty requires a Node runtime; portable-pty runs natively in Rust. Bundle-size and architectural cleanliness win.
-- **PTY byte-injection over Agent SDK for v1.** The vision requires the familiar interactive CC TUI in the foreground workspace. PTY byte-injection means we treat the wrapper as a legitimate terminal-front-end — typing slash commands as a human would. We avoid the "PTY scraping" anti-pattern (parsing CC's output text to infer state) by using **file watching** (Phase 2) for state detection. The `CcSession` trait is the seam that lets us swap to an Agent SDK backend later without UI changes.
+- **PTY byte-injection over Agent SDK for v1.** The vision requires the familiar interactive CC TUI in the foreground workspace. PTY byte-injection means we treat Claudesk as a legitimate terminal-front-end — typing slash commands as a human would. We avoid the "PTY scraping" anti-pattern (parsing CC's output text to infer state) by using **file watching** (Phase 2) for state detection. The `CcSession` trait is the seam that lets us swap to an Agent SDK backend later without UI changes.
 - **Single window, many workspaces (NEW 2026-06-15).** Reversed from "one project per window." Multiple projects = workspaces inside one window, switched via filmstrip thumbnails (Phase 2). Aligned with the revised vision and the way the user actually juggles 3–4 projects.
 - **xterm.js DOM renderer only — no WebGL (NEW 2026-06-15).** Research established the browser-wide WebGL-context cap of ~16/page. With a tab shell hosting many xterm instances, the WebGL renderer either hits the cap or forces a swap-on-focus complexity that gives marginal benefit on top of the modern DOM renderer. Verdict: DOM-only is simpler and good enough for the foreground workspace. If a single-workspace user one day proves the DOM renderer can't keep up, we re-add the WebGL addon for the center stage only — a one-line addon load. Decision is reversible.
-- **Single `WebviewWindow`, no multi-webview (NEW 2026-06-15).** Tauri 2's multi-webview API is `unstable`-flagged and offers webview isolation we don't need (all workspaces share the wrapper's trust boundary). React-managed tabs in one webview is the stable choice.
+- **Single `WebviewWindow`, no multi-webview (NEW 2026-06-15).** Tauri 2's multi-webview API is `unstable`-flagged and offers webview isolation we don't need (all workspaces share Claudesk's trust boundary). React-managed tabs in one webview is the stable choice.
 - **Tab-shell substrate ships in Phase 1 (NEW 2026-06-15).** The WorkspaceList + Center Stage + Filmstrip slot are built in Phase 1 even though Phase 1 only ever opens one workspace. This is "design for N=1 with N>1 in mind" — Phase 2 plugs into existing structure rather than reshaping the foundation.
 - **Thumbnail-rendering probe gates Phase 2's filmstrip + PiP rendering (NEW 2026-06-15).** Decision recorded in the dedicated section above. Probe pass → live ~1 fps mirrors. Probe fail → status tiles in v1.
-- **Menu-bar status item ships BEFORE PiP in Phase 2 (NEW 2026-06-15).** Cheaper to build, covers the "wrapper hidden" case PiP can't, and includes a dogfooding gate that may defer PiP to Phase 4 entirely.
+- **Menu-bar status item ships BEFORE PiP in Phase 2 (NEW 2026-06-15).** Cheaper to build, covers the "Claudesk hidden" case PiP can't, and includes a dogfooding gate that may defer PiP to Phase 4 entirely.
 - **CC hook channel via Unix socket, not shared file (NEW 2026-06-15).** Resolves the previously deferred WP9b probe. With three concurrent status-surface consumers (filmstrip / menu-bar / PiP), Unix-socket multi-consumer concurrency wins decisively over shared-file locking and debounce-write juggling.
 - **Flat JSON for project list.** No SQLite, no app-managed DB. The list is ≤100 entries with read-on-open and write-on-update; JSON is appropriate.
-- **No per-project config file in the project itself.** Project list lives in `~/Library/Application Support/...`, not in `.wrapper.json` files inside each repo. Aligned with vision principle 5.
+- **No per-project config file in the project itself.** Project list lives in `~/Library/Application Support/...`, not in `.claudesk.json` files inside each repo. Aligned with vision principle 5.
 - **Host-based dev environment, not Docker.** Tauri targets host WKWebView and native windowing; Docker on macOS cannot provide them. Industry standard for Tauri.
 - **`--dangerously-skip-permissions` (yolo mode) by default.** Vision explicit. A Phase 4 setting will let users opt out.
 - **macOS Accessibility permission for global shortcuts.** Required by `tauri-plugin-global-shortcut` on macOS. The app must surface a permission-grant flow on first launch — added as a Phase 1 task.
@@ -196,18 +196,18 @@ The Phase 2 forward-look is reorganised around four architectural deltas: (a) **
 
 ```mermaid
 flowchart LR
-  CcHook["CC hook handler (~/.claude/settings.json)"] -- JSON line --> UnixSocket["Unix socket (wrapper-owned)"]
+  CcHook["CC hook handler (~/.claude/settings.json)"] -- JSON line --> UnixSocket["Unix socket (Claudesk-owned)"]
   UnixSocket --> Broadcaster["Status Broadcaster (Rust core)"]
   Broadcaster -- "WorkspaceStatusUpdate event" --> MainWebview["Main webview (filmstrip)"]
   Broadcaster -- "WorkspaceStatusUpdate event" --> PiPWebview["PiP webview (tauri-nspanel)"]
   Broadcaster -- "WorkspaceStatusUpdate event" --> TrayWebview["Menu-bar popover webview"]
 ```
 
-- **CC hook registration.** On first launch (or via a Phase 4 setting), the wrapper installs entries in `~/.claude/settings.json`'s `hooks` block for `UserPromptSubmit` (→ "running"), `Stop` (→ "idle"), and `Notification` (→ "awaiting-input"). The hook is a tiny POSIX shell script (no runtime deps) that writes a JSON line — `{ event, pid, cwd, timestamp }` — to the wrapper's Unix socket at a stable path (e.g., `~/Library/Application Support/stayman-cc-wrapper/hook.sock`).
-- **Unix socket vs shared file.** Decided: socket. The wrapper's Rust core opens the socket on app launch and accepts a stream of JSON lines from any CC instance whose `cwd` matches a known workspace's project path. No file lock contention, no debounce-write juggling, no torn reads. The hook script is small enough to write the socket synchronously in <1ms; CC does not block waiting for the hook.
+- **CC hook registration.** On first launch (or via a Phase 4 setting), Claudesk installs entries in `~/.claude/settings.json`'s `hooks` block for `UserPromptSubmit` (→ "running"), `Stop` (→ "idle"), and `Notification` (→ "awaiting-input"). The hook is a tiny POSIX shell script (no runtime deps) that writes a JSON line — `{ event, pid, cwd, timestamp }` — to Claudesk's Unix socket at a stable path (e.g., `~/Library/Application Support/Claudesk/hook.sock`).
+- **Unix socket vs shared file.** Decided: socket. Claudesk's Rust core opens the socket on app launch and accepts a stream of JSON lines from any CC instance whose `cwd` matches a known workspace's project path. No file lock contention, no debounce-write juggling, no torn reads. The hook script is small enough to write the socket synchronously in <1ms; CC does not block waiting for the hook.
 - **Status broadcaster.** Normalizes incoming hook events into `WorkspaceStatusUpdate { workspace_id, state: Idle|Running|AwaitingInput, last_event_at, last_output_snippet? }` and emits via Tauri's event channel (`app_handle.emit("workspace-status", ...)`). All three webviews subscribe; they re-render their local UI on each event.
 - **Coexistence with `claude-time`.** `claude-time` (from the `my-claude-code-customization` project) already taps the same hook events. Hook entries in `~/.claude/settings.json` are a JSON array — both subscribers register side-by-side; no need to share a script.
-- **Failure mode.** If the socket is missing or the hook script can't connect, the workspace status defaults to `Unknown`. The wrapper does not infer state from PTY output; an unknown badge is honest, a guessed badge is not.
+- **Failure mode.** If the socket is missing or the hook script can't connect, the workspace status defaults to `Unknown`. Claudesk does not infer state from PTY output; an unknown badge is honest, a guessed badge is not.
 
 #### B. Three status surfaces (subscribers)
 
@@ -226,14 +226,14 @@ flowchart LR
   - **Green** = all workspaces `Idle`
   - **Blue** = any workspace `Running`
   - **Amber** = any workspace `AwaitingInput`
-- Left-click opens a popover (positioned via `tauri-plugin-positioner` with the `tray-icon` feature → `Position::TrayBottomCenter`). Popover is its own `WebviewWindow`, subscribes to `workspace-status`, renders a one-row-per-workspace list with status dot + project name. Clicking a row sends an IPC command to the main wrapper window: bring forward + switch center stage to that workspace.
-- Right-click opens a native menu: Show wrapper window / Toggle PiP / Quit.
+- Left-click opens a popover (positioned via `tauri-plugin-positioner` with the `tray-icon` feature → `Position::TrayBottomCenter`). Popover is its own `WebviewWindow`, subscribes to `workspace-status`, renders a one-row-per-workspace list with status dot + project name. Clicking a row sends an IPC command to the main Claudesk window: bring forward + switch center stage to that workspace.
+- Right-click opens a native menu: Show Claudesk window / Toggle PiP / Quit.
 - **Ships BEFORE PiP** in Phase 2 (roadmap milestone 2.5). Dogfooding gate: at least one daily-driver week using the menu-bar item alone. If sufficient, **PiP defers to Phase 4**.
 
 **B.3 — PiP NSPanel (conditional).**
 - `tauri-nspanel` v2.1: `PanelBuilder` with `no_activate(true)` + `PanelLevel::Floating`.
 - Underlying `NSWindow` collection behavior: `NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorStationary`. Visible on every Space, draws over fullscreen apps, doesn't steal focus on click.
-- User-toggled (right-click menu-bar item → Toggle PiP, or in-wrapper button). **Display-only in v1** — clicking a tile does NOT bring the workspace forward. Click-to-focus is a Future Possibility.
+- User-toggled (right-click menu-bar item → Toggle PiP, or in-Claudesk button). **Display-only in v1** — clicking a tile does NOT bring the workspace forward. Click-to-focus is a Future Possibility.
 - Content mirrors filmstrip rendering: live ~1 fps mirrors if probe passed; status tiles if probe failed.
 - **Bus-factor risk:** `tauri-nspanel` is single-maintainer. Mitigation: pin v2.1; monitor `tauri-apps/tauri#13034` for first-party NSPanel support and migrate when it lands.
 
@@ -248,7 +248,7 @@ flowchart LR
   | true | * | inject `/session-resume\n` into the PTY (workflow context wins over raw history) |
   | false | true | inject `/resume\n` into the PTY |
   | false | false | inject `/session-start\n` into the PTY |
-- **No persisted "next-command" state.** The wrapper never writes a sidecar file like `last-action.json`. Source-of-truth files (`workflow/.session.md` + CC's own session-list) are authoritative; rereads on every workspace-open.
+- **No persisted "next-command" state.** Claudesk never writes a sidecar file like `last-action.json`. Source-of-truth files (`workflow/.session.md` + CC's own session-list) are authoritative; rereads on every workspace-open.
 - **WP9c probe still required.** Sibling to the thumbnail probe, gating the smart-auto-resume implementation. Confirms the exact CC CLI surface for "is there a resumable conversation for this cwd."
 - **Injection mechanism reuses existing seam.** Slash command via `CcSession::send_input(b"/session-resume\n")`. No new IPC, no new trait method.
 - **Multiple workspaces in flight at the same time** is handled trivially — auto-resume runs per-workspace on workspace-open, never globally.

@@ -25,7 +25,7 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 5. **Backend synchronous path (WP6, WP7, WP8)** — project config store, PTY-backed CC session via the `CcSession` trait, global shortcut for Sublime-pop. Each is a self-contained synchronous slice.
 6. **No orchestration in Phase 1.** Phase 1 has one workspace open at a time; no async event bus beyond what Tauri IPC gives for free. Multi-workspace orchestration starts in Phase 2.
 
-**Phase 1 → Phase 2 rationale:** Phase 1 ships when (a) we can launch a project and get CC running in <10s inside a workspace within the wrapper window, (b) Sublime hotkey-pop works, and (c) the thumbnail-rendering probe has produced a documented pass/fail outcome that selects Phase 2's filmstrip rendering strategy. Phase 2 work depends on this decision plus dogfooding of the single-workspace shell.
+**Phase 1 → Phase 2 rationale:** Phase 1 ships when (a) we can launch a project and get CC running in <10s inside a workspace within the Claudesk window, (b) Sublime hotkey-pop works, and (c) the thumbnail-rendering probe has produced a documented pass/fail outcome that selects Phase 2's filmstrip rendering strategy. Phase 2 work depends on this decision plus dogfooding of the single-workspace shell.
 
 ### WP1: Tauri 2 project scaffold + dev environment
 
@@ -68,7 +68,7 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 **Phase:** Phase 1
 **Dependencies:** none
 **Size:** XS
-**Learning objective:** Pin down the exact `subl` and `smerge` invocations to use for: (a) a project root containing a `.sublime-project` file, (b) one that does not, (c) what happens with `--new-window` vs default, (d) whether `--background` is needed to avoid stealing focus from the wrapper window, (e) how `open -a` behaves differently from direct `subl` invocation (for users without `subl` on PATH).
+**Learning objective:** Pin down the exact `subl` and `smerge` invocations to use for: (a) a project root containing a `.sublime-project` file, (b) one that does not, (c) what happens with `--new-window` vs default, (d) whether `--background` is needed to avoid stealing focus from the Claudesk window, (e) how `open -a` behaves differently from direct `subl` invocation (for users without `subl` on PATH).
 **Timebox:** 1 hour
 **Success criterion:** A short table in `workflow/wip/wp3-sublime-cli-probe.md` mapping (project state × user intent) → exact command. Decision: do we require `subl`/`smerge` on PATH, or fall back to `open -a "Sublime Text" <path>` when absent?
 **Tasks:**
@@ -84,7 +84,7 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 **Phase:** Phase 1
 **Dependencies:** WP1
 **Size:** M
-**Learning objective:** Validate whether the wrapper can sustain ~1 fps live terminal mirrors of 8 backgrounded xterm.js instances on real macOS hardware, alongside one foreground active xterm.js, while staying within performance targets. **The outcome gates Phase 2's filmstrip and PiP rendering strategy:** pass → live mirrors; fail → static status tiles in v1, live mirrors deferred to Future Possibility.
+**Learning objective:** Validate whether Claudesk can sustain ~1 fps live terminal mirrors of 8 backgrounded xterm.js instances on real macOS hardware, alongside one foreground active xterm.js, while staying within performance targets. **The outcome gates Phase 2's filmstrip and PiP rendering strategy:** pass → live mirrors; fail → static status tiles in v1, live mirrors deferred to Future Possibility.
 **Timebox:** 1–2 days
 **Success criterion:** A report appended to `docs/product/arch.md` as a `### Phase 1 thumbnail-probe outcome` sub-section (or sibling doc) recording: measurements, pass/fail per metric, the resulting recommendation (live mirrors vs status tiles), and any architectural deltas that flow into Phase 2.
 
@@ -216,7 +216,7 @@ WP1 ──► WP2 ──┐
 Sketched at WP headline only — full decomposition deferred until Phase 1 ships and dogfooding surfaces real constraints.
 
 - **WP10: Probe — `workflow/.session.md` write semantics** (probe): confirm whether `/session-pause` writes the file atomically or in stages; what marker indicates "done writing"; how `/session-resume` reads it.
-- **WP10b: Probe — CC hook channel for idle/running/awaiting-input detection** (probe): confirm the exact payload shape and timing of `UserPromptSubmit` / `Stop` / `Notification` hook events; verify a wrapper-installed hook can coexist with `claude-time`'s hook entries in `~/.claude/settings.json`; verify the events fire reliably on real interactive sessions (slash commands, multi-turn conversations, tool-use loops, permission prompts). **Note (2026-06-15):** the prior "shared file vs Unix socket" sub-question of this probe is **RESOLVED by research — Unix socket from day one** (three concurrent consumers force the decision). The probe still verifies hook firing reliability but no longer decides the transport.
+- **WP10b: Probe — CC hook channel for idle/running/awaiting-input detection** (probe): confirm the exact payload shape and timing of `UserPromptSubmit` / `Stop` / `Notification` hook events; verify a Claudesk-installed hook can coexist with `claude-time`'s hook entries in `~/.claude/settings.json`; verify the events fire reliably on real interactive sessions (slash commands, multi-turn conversations, tool-use loops, permission prompts). **Note (2026-06-15):** the prior "shared file vs Unix socket" sub-question of this probe is **RESOLVED by research — Unix socket from day one** (three concurrent consumers force the decision). The probe still verifies hook firing reliability but no longer decides the transport.
 - **WP10c: Probe — CC's resumable-conversation surface per project dir** (probe): confirm the exact CC CLI shape for "is there a resumable conversation for this cwd". Test cases: (a) prior session cleanly exited via Ctrl+D, (b) prior session killed by SIGKILL, (c) prior session ended after `/session-pause` wrote `.session.md`, (d) project dir never had a CC session. For each, verify whether the answer is keyed by cwd or by session-id. Required by WP14.
 - **WP11: WorkflowStateWatcher** (notify-based file watcher for `workflow/.session.md`; debounced events)
 - **WP12: Status Broadcaster + Unix-socket hook channel** (Rust core: open socket on launch, accept JSON lines from CC hook scripts, normalize to `WorkspaceStatusUpdate`, emit via Tauri event channel to all subscribed webviews). Includes the hook-installer routine (write entry into `~/.claude/settings.json` on first launch, with idempotency check + uninstall on app removal), the small POSIX shell hook script (no runtime deps), and the heartbeat/staleness handling. Depends on WP10b.
@@ -225,13 +225,13 @@ Sketched at WP headline only — full decomposition deferred until Phase 1 ships
 - **WP15: Drive-mode selector + indicator (header)** — per arch §D. Extends `Project` struct (already reserved in WP6 — just populate it now); Tauri commands `get_drive_mode` / `set_drive_mode`; React header component on the center-stage workspace.
 - **WP16: Filmstrip + Center Stage (rendering)** — populate the empty Filmstrip slot from WP5. **Rendering mode determined by WP4's probe report:** live ~1 fps mirrors OR static status tiles. Includes filmstrip-collapse toggle (collapsed = mini status tiles only).
 - **WP17: Menu-bar status item** (Tauri `TrayIconBuilder` + `tauri-plugin-positioner` with `tray-icon` feature + popover webview). Aggregate status dot (green/blue/amber); left-click → popover; right-click → native menu. **Ships BEFORE WP18.**
-- **WP18: Menu-bar dogfooding gate** (1-week minimum). If menu-bar alone covers the "wrapper hidden" case sufficiently, **WP19 (PiP) defers to Phase 4**. Otherwise, proceed to WP19.
+- **WP18: Menu-bar dogfooding gate** (1-week minimum). If menu-bar alone covers the "Claudesk hidden" case sufficiently, **WP19 (PiP) defers to Phase 4**. Otherwise, proceed to WP19.
 - **WP19: PiP NSPanel** (conditional on WP18 outcome) — `tauri-nspanel` v2.1, `PanelBuilder` with `no_activate(true)` + `PanelLevel::Floating` + collection behavior `CanJoinAllSpaces | FullScreenAuxiliary | Stationary`. User-toggled, display-only.
 - **WP20: SkillRegistry** (scan `~/.claude/skills/` + `<proj>/.claude/skills/`; expose to UI)
 - **WP21: Skill buttons in UI** (toolbar or slide-in drawer on the center-stage workspace)
 - **WP22: Recycle Session state machine** (Rust state machine: `Pausing → WaitingForSessionFile → SendingCtrlD → WaitingForExit → Respawning → Resuming`; UI button; cancel handling). Uses the Status Broadcaster (WP12) to detect when CC has actually exited and when the fresh CC is idle.
 - **WP23: Hotkey for Sublime Merge pop**
-- **WP24: Phase 2 polish + dogfood + exit-criteria verification** (all six vision success metrics confirmed, including the wrapper-not-in-focus metric)
+- **WP24: Phase 2 polish + dogfood + exit-criteria verification** (all six vision success metrics confirmed, including the Claudesk-not-in-focus metric)
 
 ## Phase 3: Lite Editor + Diff Viewer (NOT decomposed)
 
@@ -258,3 +258,6 @@ Sketched only.
 ## SURFACE-IN history
 
 (none yet)
+
+## Session Pause — 2026-06-15 21:30
+Paused. See `workflow/.session.md` to resume.
