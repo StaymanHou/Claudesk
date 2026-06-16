@@ -1,0 +1,2 @@
+- [Bash subshells need explicit cargo PATH](bash-cargo-env.md) — every cargo invocation in this session needs `export PATH="$HOME/.cargo/bin:$PATH"` prefix.
+- [Tauri scaffold-and-merge recipe](tauri-scaffold-recipe.md) — exact non-interactive `pnpm create tauri-app` flags + sibling-dir merge pattern used in WP1.

@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-15
+updated: 2026-06-16
 ---
 
 > Revision 2026-05-19: Added cross-window CC status indicator to Phase 2 headlines (WP9b probe + WP10b indicator WP). Phase 1 decomposition is unchanged.
@@ -27,7 +27,7 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 
 **Phase 1 → Phase 2 rationale:** Phase 1 ships when (a) we can launch a project and get CC running in <10s inside a workspace within the Claudesk window, (b) Sublime hotkey-pop works, and (c) the thumbnail-rendering probe has produced a documented pass/fail outcome that selects Phase 2's filmstrip rendering strategy. Phase 2 work depends on this decision plus dogfooding of the single-workspace shell.
 
-### WP1: Tauri 2 project scaffold + dev environment
+### WP1: Tauri 2 project scaffold + dev environment ✅ SHIPPED 2026-06-16 (commit c50a785)
 
 **Description:** Initialize the Tauri 2 + React 19 + TypeScript + Vite project. Get `pnpm tauri dev` running with an empty window on macOS. Establish lint/format/test baselines.
 
@@ -35,14 +35,14 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 **Dependencies:** none
 **Size:** S
 **Tasks:**
-- [ ] Run `pnpm create tauri-app` with React+TypeScript+Vite template (**pre-risky-action checklist:** target dir is the existing repo root containing strategic docs `docs/product/`, `CLAUDE.md`, `_ref/`. Confirm git is clean. **Scaffold into a temporary sibling dir then merge** — do NOT run the scaffolder in-place. The `_ref/` symlink must survive)
-- [ ] Verify `pnpm tauri dev` opens an empty window on this macOS machine
-- [ ] Verify `pnpm tauri build` produces a `.app` bundle
-- [ ] Add ESLint + Prettier (frontend); confirm `cargo clippy` and `cargo fmt` pass on the scaffolded `src-tauri/`
-- [ ] Add Vitest scaffold (frontend) and a single passing test
-- [ ] Add a single passing `#[test]` in `src-tauri/`
-- [ ] Verify `.gitignore` still ignores `_ref/` after scaffold-merge
-- [ ] Commit baseline; `CHANGELOG.md` first entry deferred to first `feature-finalize` run
+- [x] Run `pnpm create tauri-app` with React+TypeScript+Vite template (**pre-risky-action checklist:** target dir is the existing repo root containing strategic docs `docs/product/`, `CLAUDE.md`, `_ref/`. Confirm git is clean. **Scaffold into a temporary sibling dir then merge** — do NOT run the scaffolder in-place. The `_ref/` symlink must survive)
+- [x] Verify `pnpm tauri dev` opens an empty window on this macOS machine
+- [x] Verify `pnpm tauri build` produces a `.app` bundle
+- [x] Add ESLint + Prettier (frontend); confirm `cargo clippy` and `cargo fmt` pass on the scaffolded `src-tauri/`
+- [x] Add Vitest scaffold (frontend) and a single passing test
+- [x] Add a single passing `#[test]` in `src-tauri/`
+- [x] Verify `.gitignore` still ignores `_ref/` after scaffold-merge
+- [x] Commit baseline; `CHANGELOG.md` first entry deferred to first `feature-finalize` run
 
 ### WP2: Probe — Claude Code under host-driven PTY byte-injection
 

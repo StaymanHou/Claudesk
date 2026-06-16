@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-15
+updated: 2026-06-16
 ---
 
 ## Revision 2026-06-15
@@ -27,7 +27,7 @@ Each phase is independently usable — Claudesk grows in dogfood-able increments
 **Goal:** Prove the Tauri shell + embedded terminal + project picker + tab-shell substrate work together. Replaces *only* the "open terminal + cd + run claude" step at the user-visible level. The biggest reported pain point (launch friction) is solved before any editor work begins. The tab substrate is shipped now (even though Phase 1 only ever shows one workspace) so Phase 2's filmstrip and PiP build on top of an existing foundation rather than reshaping it.
 
 **Milestones:**
-- [ ] **Tauri 2 app skeleton** (macOS bundle, launches, shows one window). Single `WebviewWindow` per the research decision — no multi-webview.
+- [x] **Tauri 2 app skeleton** (macOS bundle, launches, shows one window). Single `WebviewWindow` per the research decision — no multi-webview. *(WP1 shipped 2026-06-16, commit c50a785.)*
 - [ ] **Project picker UI** (recents list, "Open Folder" button), persisted to `~/Library/Application Support/Claudesk/projects.json` via `tauri-plugin-fs`.
 - [ ] **Tab-shell substrate** — a workspace-list React component holds an array of workspace records; the center-stage area mounts the focused workspace. Filmstrip area exists but is empty (Phase 2 populates it). Background workspaces stay mounted (`display: none`), never unmounted on switch. **Phase 1 only ever opens one workspace at a time, but the substrate must already be in place.**
 - [ ] **Embedded terminal pane** (xterm.js + `tauri-plugin-pty` / `portable-pty`), **DOM renderer only — no WebGL addon**, auto-runs `claude --dangerously-skip-permissions` in the selected project dir, full-size in the center stage.
