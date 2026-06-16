@@ -1,14 +1,21 @@
 // WP2 probe harness — Claude Code under host-driven PTY byte-injection.
 //
 // Usage (run from src-tauri/):
-//   cargo run --example cc_pty_probe                   # interactive (eyeball ANSI, auth, resize)
-//   cargo run --example cc_pty_probe -- inject         # write `/help\n`, collect 5s, dump
-//   cargo run --example cc_pty_probe -- ctrl-d         # send 0x04 once, await exit
-//   cargo run --example cc_pty_probe -- ctrl-c         # send 0x03 once, await exit
-//   cargo run --example cc_pty_probe -- ctrl-d-twice   # send 0x04 twice, await exit
-//   cargo run --example cc_pty_probe -- ctrl-c-twice   # send 0x03 twice, await exit
-//   cargo run --example cc_pty_probe -- slash-exit     # send "/exit\n", await exit
-//   cargo run --example cc_pty_probe -- resize         # cycle resize, dump output
+//   cargo run --example cc_pty_probe                       # interactive (eyeball ANSI, auth, resize)
+//   cargo run --example cc_pty_probe -- inject             # write `/help\n` (LF — typeahead only)
+//   cargo run --example cc_pty_probe -- inject-cr          # write `/help\r` (CR — actually executes)
+//   cargo run --example cc_pty_probe -- ctrl-d             # send 0x04 once, await exit (KNOWN-NOT-EXIT)
+//   cargo run --example cc_pty_probe -- ctrl-c             # send 0x03 once, await exit (KNOWN-NOT-EXIT)
+//   cargo run --example cc_pty_probe -- ctrl-d-twice       # send 0x04 twice, clean exit
+//   cargo run --example cc_pty_probe -- ctrl-c-twice       # send 0x03 twice, clean exit
+//   cargo run --example cc_pty_probe -- slash-exit         # send "/exit\n" (LF — KNOWN-NOT-EXIT)
+//   cargo run --example cc_pty_probe -- slash-exit-slow    # "/exit\n" w/ 8s settle (still KNOWN-NOT-EXIT)
+//   cargo run --example cc_pty_probe -- slash-exit-cr      # send "/exit\r" — CLEANEST EXIT PATH
+//   cargo run --example cc_pty_probe -- slash-exit-crlf    # send "/exit\r\n"
+//   cargo run --example cc_pty_probe -- resize             # cycle resize, dump output
+//
+// Key finding: CC's TUI runs in raw mode. `\n` (LF, 0x0a) is a literal character;
+// `\r` (CR, 0x0d) is Enter. EVERY slash-command byte-injection in WP7 MUST end in `\r`.
 //
 // Probe deliverable, not production code. portable-pty lives in [dev-dependencies] only.
 
@@ -27,17 +34,61 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "interactive".to_string());
     match mode.as_str() {
         "interactive" => run_interactive(),
-        "inject" => run_inject(),
-        "ctrl-d" => run_exit_via(&[&[0x04]], "Ctrl+D"),
-        "ctrl-c" => run_exit_via(&[&[0x03]], "Ctrl+C"),
-        "ctrl-d-twice" => run_exit_via(&[&[0x04], &[0x04]], "Ctrl+D x2"),
-        "ctrl-c-twice" => run_exit_via(&[&[0x03], &[0x03]], "Ctrl+C x2"),
-        "slash-exit" => run_exit_via(&[b"/exit\n"], "/exit"),
+        "inject" => run_inject(b"/help\n", "/help\\n"),
+        "inject-cr" => run_inject(b"/help\r", "/help\\r"),
+        "ctrl-d" => run_exit_via(
+            &[&[0x04]],
+            "Ctrl+D",
+            Duration::from_secs(2),
+            Duration::from_secs(5),
+        ),
+        "ctrl-c" => run_exit_via(
+            &[&[0x03]],
+            "Ctrl+C",
+            Duration::from_secs(2),
+            Duration::from_secs(5),
+        ),
+        "ctrl-d-twice" => run_exit_via(
+            &[&[0x04], &[0x04]],
+            "Ctrl+D x2",
+            Duration::from_secs(2),
+            Duration::from_secs(5),
+        ),
+        "ctrl-c-twice" => run_exit_via(
+            &[&[0x03], &[0x03]],
+            "Ctrl+C x2",
+            Duration::from_secs(2),
+            Duration::from_secs(5),
+        ),
+        "slash-exit" => run_exit_via(
+            &[b"/exit\n"],
+            "/exit",
+            Duration::from_secs(2),
+            Duration::from_secs(5),
+        ),
+        "slash-exit-slow" => run_exit_via(
+            &[b"/exit\n"],
+            "/exit (slow settle)",
+            Duration::from_secs(8),
+            Duration::from_secs(10),
+        ),
+        "slash-exit-cr" => run_exit_via(
+            &[b"/exit\r"],
+            "/exit\\r",
+            Duration::from_secs(2),
+            Duration::from_secs(5),
+        ),
+        "slash-exit-crlf" => run_exit_via(
+            &[b"/exit\r\n"],
+            "/exit\\r\\n",
+            Duration::from_secs(2),
+            Duration::from_secs(5),
+        ),
         "resize" => run_resize(),
         other => {
             eprintln!("unknown mode: {other}");
             eprintln!(
-                "modes: interactive | inject | ctrl-d | ctrl-c | ctrl-d-twice | ctrl-c-twice | slash-exit | resize"
+                "modes: interactive | inject | inject-cr | ctrl-d | ctrl-c | ctrl-d-twice | ctrl-c-twice | slash-exit | slash-exit-slow | slash-exit-cr | slash-exit-crlf | resize"
             );
             std::process::exit(2);
         }
@@ -119,7 +170,7 @@ fn run_interactive() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_inject() -> Result<(), Box<dyn std::error::Error>> {
+fn run_inject(payload: &[u8], label: &str) -> Result<(), Box<dyn std::error::Error>> {
     let (master, mut child) = open_cc(PtySize {
         rows: 40,
         cols: 120,
@@ -142,12 +193,12 @@ fn run_inject() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Let CC settle, then inject /help.
+    // Let CC settle, then inject the payload.
     thread::sleep(Duration::from_millis(1500));
     let mut writer = master.take_writer()?;
-    writer.write_all(b"/help\n")?;
+    writer.write_all(payload)?;
     writer.flush()?;
-    eprintln!("[probe] wrote /help\\n");
+    eprintln!("[probe] wrote {label} ({} bytes)", payload.len());
 
     // Collect for 5s.
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -166,18 +217,21 @@ fn run_inject() -> Result<(), Box<dyn std::error::Error>> {
     std::io::stdout().write_all(&captured)?;
     println!();
 
-    // Clean up: CC requires Ctrl+D twice to exit (single Ctrl+D is ignored; finding from P1.5).
-    let _ = writer.write_all(&[0x04]);
-    let _ = writer.flush();
-    thread::sleep(Duration::from_millis(300));
-    let _ = writer.write_all(&[0x04]);
+    // Clean up: `/exit\r` is the cleanest exit path. CR is Enter in CC's raw-mode TUI;
+    // LF would be typed as text. See top-of-file note + revised WP2 finding (b/c).
+    let _ = writer.write_all(b"/exit\r");
     let _ = writer.flush();
     drop(writer);
     let _ = child.wait();
     Ok(())
 }
 
-fn run_exit_via(keystrokes: &[&[u8]], label: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn run_exit_via(
+    keystrokes: &[&[u8]],
+    label: &str,
+    settle: Duration,
+    exit_wait: Duration,
+) -> Result<(), Box<dyn std::error::Error>> {
     let (master, mut child) = open_cc(PtySize {
         rows: 24,
         cols: 80,
@@ -185,21 +239,27 @@ fn run_exit_via(keystrokes: &[&[u8]], label: &str) -> Result<(), Box<dyn std::er
         pixel_height: 0,
     })?;
 
+    // Mirror PTY output to stdout so the operator can observe CC's TUI live,
+    // while also counting bytes for the success-path log line.
     let mut reader = master.try_clone_reader()?;
     let drain = thread::spawn(move || {
         let mut buf = [0u8; 4096];
         let mut total = 0usize;
+        let stdout = std::io::stdout();
         while let Ok(n) = reader.read(&mut buf) {
             if n == 0 {
                 break;
             }
             total += n;
+            let mut out = stdout.lock();
+            let _ = out.write_all(&buf[..n]);
+            let _ = out.flush();
         }
         total
     });
 
-    // Let CC come up.
-    thread::sleep(Duration::from_secs(2));
+    eprintln!("[probe] settling {settle:?} before sending {label}");
+    thread::sleep(settle);
     let mut writer = master.take_writer()?;
     for (i, bytes) in keystrokes.iter().enumerate() {
         if i > 0 {
@@ -215,8 +275,8 @@ fn run_exit_via(keystrokes: &[&[u8]], label: &str) -> Result<(), Box<dyn std::er
     }
     drop(writer);
 
-    // Wait up to 5s for exit by polling try_wait.
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // Wait up to exit_wait for exit by polling try_wait.
+    let deadline = Instant::now() + exit_wait;
     let mut status_opt = None;
     while Instant::now() < deadline {
         match child.try_wait()? {
@@ -230,7 +290,7 @@ fn run_exit_via(keystrokes: &[&[u8]], label: &str) -> Result<(), Box<dyn std::er
 
     match status_opt {
         Some(s) => {
-            eprintln!("[probe] child exited within 5s of {label}: {s:?}");
+            eprintln!("[probe] child exited within {exit_wait:?} of {label}: {s:?}");
             let bytes = drain.join().unwrap_or(0);
             eprintln!("[probe] drained {bytes} bytes from PTY");
             Ok(())
@@ -238,7 +298,9 @@ fn run_exit_via(keystrokes: &[&[u8]], label: &str) -> Result<(), Box<dyn std::er
         None => {
             let _ = child.kill();
             let _ = child.wait();
-            eprintln!("[probe] FAILED: child did not exit within 5s of {label} — killed");
+            eprintln!(
+                "[probe] FAILED: child did not exit within {exit_wait:?} of {label} — killed"
+            );
             std::process::exit(1);
         }
     }

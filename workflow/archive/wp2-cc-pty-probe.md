@@ -55,6 +55,8 @@ Before WP7 (PtyCcSession) commits production code that drives Claude Code via an
 
 **Probe run:** 2026-06-16, host macOS arm64, Claude Code CLI v2.1.114, Rust 1.96.0, `portable-pty` 0.9.0.
 
+> **Revision 2026-06-16 (post-archive):** Findings (b) and (c) were corrected after a follow-up observable probe (the operator ran `slash-exit-slow` with the harness's stdout-mirror enabled and observed `/exit\n` typing as text with the autocomplete dropdown, but not executing). The corrected finding is that **CC's TUI in raw mode treats `\n` as a literal newline character and `\r` (CR, byte `0x0d`) as Enter** — the standard raw-mode line-discipline behavior. The harness gained four new modes (`slash-exit-slow`, `slash-exit-cr`, `slash-exit-crlf`, `inject-cr`) and an observable-by-default reader thread (PTY output mirrors to stdout instead of being silently byte-counted). The corrected findings supersede the original (b) and (c) below. See `## Findings — revised` below for the post-revision text. The `Ctrl+D x2` path still works; `/exit\r` is the cleaner one-byte-sequence shutdown.
+
 ### (a) ANSI rendering — CONFIRMED
 
 CC renders its full color TUI inside the `portable-pty` master/slave pair. Captured output (saved at `/tmp/wp2-inject.out.saved`, 2732 bytes from one inject run) contains:
@@ -94,6 +96,39 @@ Calling `master.resize(PtySize { rows: 40, cols: 120, .. })` from the parent cau
 With the host user's `claude` already authenticated, spawning `claude --dangerously-skip-permissions` inside the child PTY produces zero auth prompts. CC enters its TUI directly, shows the user's account branding (`Claude Team` in this case), and reports the active model (`Opus 4.7 (1M context) with xhigh effort`). CC inherits the parent's HOME and reads `~/.claude/` directly — no special env handling needed in the harness. The TUI banner also shows `⏵⏵ bypass permissions on`, confirming the `--dangerously-skip-permissions` flag was respected.
 
 For WP7, this means Claudesk doesn't need to manage CC auth at all. The user authenticates `claude` once via the normal CLI; Claudesk's child PTYs inherit it.
+
+## Findings — revised (2026-06-16 follow-up)
+
+A follow-up observable probe showed the original (b) and (c) findings missed a load-bearing detail: **CC's TUI runs in raw mode, so `\n` (LF) is treated as a literal character, not Enter. `\r` (CR, byte `0x0d`) is the Enter key.** This was discovered when the operator ran `slash-exit-slow` with the harness's reader thread mirroring PTY output to stdout (the original `run_exit_via` was silently byte-counting, hiding the visible evidence). The corrected findings:
+
+### (b) Slash-command byte-injection — CORRECTED
+
+Two distinct paths, each with different semantics:
+
+| Byte sequence | Behavior | Use case |
+|---|---|---|
+| `/help\n` (LF) | CC sees `/help` as typed text; the autocomplete dropdown appears with the command suggestion — but the command is NOT executed | typeahead UI exercise only |
+| **`/help\r` (CR)** | **CC executes `/help` — the actual command output (keyboard shortcuts, doc link) appears** | real command invocation |
+
+The same rule applies to every other slash command. The original (b) finding's claim that `\n` was sufficient was correct for the *autocomplete-shows-up* check but wrong for the *command-actually-runs* check. The probe's P1.4 inject test passed because it asserted "`/help` marker appears in output stream" — and the autocomplete dropdown contains that marker. Re-running with `\r` shows CC's actual `/help` body.
+
+**WP7 implication:** every slash-command byte-injection MUST end in `\r`, not `\n`. The `CcSession` trait's command-send method should write `b"/<cmd>\r"` (or equivalently `&[0x0d]` appended to the command bytes). Mixing `\n` would silently produce typed-but-not-executed bytes — invisible to a naive caller and a debug nightmare.
+
+### (c) Termination — CORRECTED
+
+The Ctrl+D x2 path still works exactly as the original finding said. But `/exit\r` is a cleaner alternative:
+
+| Byte sequence | Result | Exit code |
+|---|---|---|
+| Single `Ctrl+D` (`0x04`) | hung — CC traps as "press again" | n/a |
+| Single `Ctrl+C` (`0x03`) | hung — CC traps as "press again" | n/a |
+| `Ctrl+D` x2 (~500ms apart) | clean exit within 5s | 0 |
+| `Ctrl+C` x2 (~500ms apart) | clean exit within 5s | 0 |
+| `/exit\n` (LF) | typed as text, autocomplete shown, NOT executed | n/a |
+| **`/exit\r` (CR)** | **clean exit within 5s — one-byte-sequence shutdown** | **0** |
+| `/exit\r\n` (CRLF) | (not exercised in this revision — `\r` alone suffices) | — |
+
+**WP7 implication (revised):** `CcSession::shutdown()` should prefer the `/exit\r` path: one deterministic write, no grace window between two keystrokes, no race condition. Fall back to `Ctrl+D x2` only if the `/exit\r` path stops working in a future CC version. The harness's `run_exit_via` with `&[b"/exit\r"]` is the canonical reference shape.
 
 ## Code shape that worked
 

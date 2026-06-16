@@ -1,14 +1,18 @@
 # Backlog
 
-## SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES
-- **Source:** feature:build (WP2 probe)
+## SURFACE-2026-06-16-CC-SLASH-COMMANDS-NEED-CR-NOT-LF
+- **Source:** feature:build (WP2 probe — original surface SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES, superseded after a 2026-06-16 follow-up observable probe)
 - **Target level:** product:wbs (WP7 — PtyCcSession)
-- **Type:** new-work (WP7 design constraint)
-- **Summary:** Claude Code's TUI does NOT exit on a single `Ctrl+D` (0x04) or single `Ctrl+C` (0x03). Termination requires the keystroke **twice** within ~500ms. `/exit\n` (LF-terminated) also doesn't exit.
-- **Context:** WP2 probe verified that `Ctrl+D x2` and `Ctrl+C x2` both produce clean exit code 0 within 5s. Single keystrokes hang past a 5s deadline. WP7's `CcSession::shutdown()` must implement the two-keystroke pattern with a grace window before falling back to SIGTERM/kill.
-- **Suggested action:** WP7's `PtyCcSession::shutdown()` sends Ctrl+D twice (~500ms apart), polls `try_wait()` for ~5s, then `child.kill()` if still alive. Reference code shape: `src-tauri/examples/cc_pty_probe.rs::run_exit_via`.
-- **Priority:** high (blocks clean session lifecycle in WP7)
+- **Type:** new-work (WP7 design constraint — load-bearing)
+- **Summary:** Claude Code's TUI runs in raw mode. `\n` (LF) is treated as a literal character, NOT as Enter. **`\r` (CR, byte `0x0d`) is the Enter key.** Every slash-command byte-injection MUST end in `\r` to actually execute. Writing `/cmd\n` silently produces typed-but-not-executed bytes — autocomplete may appear but the command never runs.
+- **Context:** WP2's original (b) finding claimed `/help\n` worked because the autocomplete dropdown appeared in the output. The follow-up probe showed the dropdown is a typeahead UI side-effect, NOT command execution. Comparing `/help\n` vs `/help\r` proves it: LF gives the dropdown; CR gives `/help`'s actual body (keyboard-shortcut list + doc link). Same rule for `/exit`: `/exit\n` types-but-doesn't-execute; `/exit\r` cleanly exits with code 0 in <5s.
+- **Suggested action:** WP7's `CcSession::send_slash_command(cmd)` writes `format!("{cmd}\r").as_bytes()` to the PTY. Shutdown path can use either `Ctrl+D x2` (still works, the original finding) OR the cleaner `/exit\r` (one deterministic byte sequence, no race window). Reference code shapes: `src-tauri/examples/cc_pty_probe.rs::run_exit_via` with `&[b"/exit\r"]` (cleanest), or with `&[&[0x04], &[0x04]]` (control-char fallback). The harness now has both paths and the `inject` vs `inject-cr` modes demonstrate the LF/CR distinction directly.
+- **Priority:** high (load-bearing for all of WP7's byte-injection paths, not just shutdown)
 - **Status:** open
+
+## SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES (SUPERSEDED by SURFACE-2026-06-16-CC-SLASH-COMMANDS-NEED-CR-NOT-LF)
+- **Status:** superseded
+- **Note:** The original finding (Ctrl+D x2 required, `/exit\n` doesn't exit) was correct as far as it went, but the follow-up probe revealed the root cause (raw-mode LF vs CR) and a cleaner shutdown path (`/exit\r`). Kept here as a pointer; live finding is the entry above.
 
 ## Code-quality findings — wp1-tauri-scaffold (2026-06-16)
 - **Pointer:** 4 MAJOR + 5 MINOR findings from `feature-review-quality` on commit `c50a785`. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp1-tauri-scaffold — 2026-06-16` section.

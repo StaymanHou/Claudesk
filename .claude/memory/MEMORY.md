@@ -1,2 +1,6 @@
 - [Bash subshells need explicit cargo PATH](bash-cargo-env.md) — every cargo invocation in this session needs `export PATH="$HOME/.cargo/bin:$PATH"` prefix.
 - [Tauri scaffold-and-merge recipe](tauri-scaffold-recipe.md) — exact non-interactive `pnpm create tauri-app` flags + sibling-dir merge pattern used in WP1.
+- [CC TUI requires CR (\r) not LF (\n) for slash commands](cc-tui-cr-not-lf.md) — every CC slash-command byte-injection must end in `\r` (0x0d); `\n` only triggers autocomplete typeahead.
+- [PTY-byte-injection probes — mirror PTY output by default](pty-probe-observable-default.md) — reader-thread pattern for all Claudesk PTY probe harnesses; silent byte-counting hides diagnostic symptoms.
+- [Observable Outcomes — execution evidence, not just typing evidence](observable-outcomes-execution-evidence.md) — feature-plan discipline: execution checks require both typing-side AND side-effect evidence.
+- [Raw-mode TTYs — CR (0x0d) is Enter, not LF (0x0a)](raw-mode-cr-is-enter.md) — POSIX line-discipline fact; CR is Enter whenever a TUI is in raw mode.
