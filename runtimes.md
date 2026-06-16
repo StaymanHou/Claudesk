@@ -25,3 +25,24 @@ updated: 2026-06-16
 - **Use timeout:** 600000
 - **History:**
   - 40s — 2026-06-16
+
+## pnpm test
+
+- **Last:** 1s (2026-06-16)
+- **Use timeout:** 120000
+- **History:**
+  - 1s — 2026-06-16
+
+## pnpm lint
+
+- **Last:** 1s (2026-06-16)
+- **Use timeout:** 120000
+- **History:**
+  - 1s — 2026-06-16
+
+## cargo test
+
+- **Last:** 2s (2026-06-16)
+- **Use timeout:** 120000
+- **History:**
+  - 2s — 2026-06-16
