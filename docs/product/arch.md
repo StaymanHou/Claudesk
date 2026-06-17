@@ -127,11 +127,12 @@ flowchart LR
 A new Phase 1 work package: a synthetic harness measuring whether ~1 fps live terminal mirrors are cheap enough at N=8 workspaces. **Pass → Phase 2 ships live mirrors. Fail → Phase 2 ships status tiles in v1**, leave live mirrors as a Future Possibility.
 
 **Harness shape:**
-- 8 xterm.js instances, DOM renderer only, full-size rendering, each mounted in an off-screen container.
+- 8 xterm.js instances, DOM renderer only, full-size rendering.
 - Each xterm fed a representative CC output stream (canned recording of a typical Claude Code session, looped).
-- Filmstrip thumbnails are CSS-transformed (`scale(0.15)`) live mirrors of those off-screen full-size xterms — the same strategy that Phase 2 would ship.
-- Mirror update rate throttled to ~1 fps.
+- Filmstrip thumbnails are `scale(0.15)` CSS-transformed tiles mirroring each background terminal, throttled to ~1 fps.
 - One workspace simultaneously active (rendering normally at full speed) to simulate the center-stage workload.
+
+> **CORRECTION (2026-06-17, from WP4 outcome).** The original text above said "live mirrors of those **off-screen** full-size xterms." That mechanism is **non-viable** and was corrected during WP4 (see `wp4-thumbnail-probe-outcome.md`): (1) a DOM node has exactly one parent, so one xterm subtree cannot appear in both an off-screen container and a filmstrip tile; (2) xterm.js's `RenderService` registers an `IntersectionObserver({threshold:0})` that **pauses the renderer for off-viewport terminals** — so an off-screen (`left:-99999px`) terminal's DOM goes stale and there is nothing live to mirror. The viable mechanism, validated by the probe, is **`@xterm/addon-serialize` `serializeAsHTML()` from the buffer** (the buffer updates via `write()` even while the renderer is paused), rendered into the tile at ~1 fps. Background workspaces are deliberately kept off-viewport so the renderer pauses for free; the serialized snapshot stays current. (`cloneNode`-per-frame of the live DOM also works but is more expensive and forces backgrounds on-viewport — rejected.)
 
 **Measurements:**
 - CPU usage at idle (all 8 workspaces "idle"; no PTY output flowing): target **<10%**.
@@ -141,7 +142,9 @@ A new Phase 1 work package: a synthetic harness measuring whether ~1 fps live te
 
 Thresholds above are the proposed defaults. The probe's own implementation plan (when picked up as a Phase 1 WP) finalises them.
 
-**Output:** a one-page report appended to this `arch.md` as a `### Phase 1 thumbnail-probe outcome` sub-section (or as a sibling doc, decided when the probe runs). The report records: measurements, pass/fail per metric, the resulting recommendation (live mirrors vs status tiles), and any architectural deltas that flow into Phase 2's filmstrip and PiP milestones.
+**Output:** a one-page report. **Decided as a sibling doc:** [`wp4-thumbnail-probe-outcome.md`](./wp4-thumbnail-probe-outcome.md) (kept separate to avoid bloating this file).
+
+> **OUTCOME (2026-06-17): PASS → Phase 2 ships live ~1 fps mirrors, using `serializeAsHTML()`.** On Apple M4 / macOS 26.5.1 against a real-CC-transcript-reconstructed fixture: idle webview CPU 4.5% (<10% ✅), active median 13.3% (<20% ✅; p95 ~30% on bursts — caveat + mitigations in the report), RAM 240 MB (<300 ✅), center frame time p95 18 ms with **0 dropped frames** (✅). The `serialize` arm beat `cloneNode`. Full measurements, arm comparison, caveats (frame-time measured in Chromium; CPU via `top`), and Phase 2 deltas → `wp4-thumbnail-probe-outcome.md`.
 
 ### Data Flow
 
@@ -214,9 +217,10 @@ flowchart LR
 **B.1 — Filmstrip + Center Stage (in-window).**
 - Lives in the main React webview. Subscribes to `workspace-status` events from the broadcaster.
 - Center Stage renders the focused workspace's xterm.js at full size, DOM renderer.
-- Filmstrip renders one tile per non-focused workspace. Tile content depends on **probe outcome**:
-  - **Probe pass:** Each background workspace's xterm.js renders at full size in an off-screen container; the filmstrip tile is a CSS-transformed (`scale(0.15)`) live mirror of that off-screen DOM, throttled to ~1 fps update rate.
-  - **Probe fail:** Status tile only — project name, status dot, optional last-line-of-CC-output snippet from the broadcaster.
+- Filmstrip renders one tile per non-focused workspace. Tile content per the **WP4 probe outcome (PASS, 2026-06-17 — live mirrors):**
+  - Each background workspace's xterm.js is mounted **off-viewport** (`left:-99999px`) so xterm pauses its renderer (the buffer still updates via `write()`). The filmstrip tile is built from **`@xterm/addon-serialize` `serializeAsHTML()`** read off that buffer, rendered into a `scale(0.15)` tile, throttled to ~1 fps. (NOT a live mirror of off-screen DOM — that mechanism is non-viable; see the probe outcome doc and the §"Phase 1 thumbnail-rendering probe" correction.)
+  - Active-CPU p95 caveat (~30% on output bursts) → mitigations available (sub-1fps background rate, coalesced serialize, mirror only visible tiles) if dogfooding shows it matters.
+  - (Status-tile-only fallback was the probe-fail branch; not taken.)
 - Clicking a tile swaps which workspace is the center stage (CSS `display: none` / `display: block`; no remount). Workspace state and PTY connection persist.
 - **Filmstrip collapse:** A chrome button toggles between "full filmstrip" (tiles with thumbnails or status) and "collapsed strip" (one-line row of project-name + status-dot pills). Collapsed workspaces use `display: none` on their off-screen xterm to suppress the render loop; PTY output still buffers in xterm's scrollback.
 

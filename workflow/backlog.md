@@ -1,5 +1,14 @@
 # Backlog
 
+## SURFACE-2026-06-16-ARCH-THUMBNAIL-MECHANISM-NONVIABLE
+- **Source:** feature:research (WP4 thumbnail-rendering probe)
+- **Target level:** docs/product/arch.md §"Phase 1 thumbnail-rendering probe" (+ Phase 2 §B.1 filmstrip)
+- **Type:** doc-correction (load-bearing for Phase 2 filmstrip/PiP design)
+- **Summary:** arch.md describes the thumbnail mechanism as "mount each background xterm full-size off-screen (`left:-99999px`) and render the filmstrip tile as a `scale(0.15)` live mirror of that off-screen DOM." This is **non-viable**: (1) a DOM node has one parent, so one xterm subtree can't appear in both an off-screen container and a filmstrip tile; (2) xterm.js `RenderService` registers an `IntersectionObserver({threshold:0})` that auto-pauses the renderer for off-viewport terminals — so the off-screen DOM you'd mirror is stale anyway (PR xtermjs/xterm.js#1144).
+- **Suggested action:** WP4's decision report (P3.4/P3.5) corrects the arch.md text. Real mirror mechanisms are: relocate the single element (focused tile only), `cloneNode` per frame, or — recommended — `@xterm/addon-serialize` `serializeAsHTML()` from the buffer (works while renderer paused). Also note the architectural gift: off-viewport/collapsed workspaces get renderer-pause for free in Phase 2.
+- **Priority:** medium (resolved by WP4 report; not blocking any Phase 1 build)
+- **Status:** open
+
 ## SURFACE-2026-06-16-CC-SLASH-COMMANDS-NEED-CR-NOT-LF
 - **Source:** feature:build (WP2 probe — original surface SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES, superseded after a 2026-06-16 follow-up observable probe)
 - **Target level:** product:wbs (WP7 — PtyCcSession)

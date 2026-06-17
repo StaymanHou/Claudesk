@@ -35,4 +35,13 @@ export default tseslint.config(
       "react/jsx-uses-react": "off",
     },
   },
+  {
+    // WP4 probe — standalone Node measurement/fixture scripts (run by hand, not bundled).
+    files: ["probe/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.node },
+    },
+  },
 );
