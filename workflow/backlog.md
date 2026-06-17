@@ -7,7 +7,7 @@
 - **Summary:** arch.md describes the thumbnail mechanism as "mount each background xterm full-size off-screen (`left:-99999px`) and render the filmstrip tile as a `scale(0.15)` live mirror of that off-screen DOM." This is **non-viable**: (1) a DOM node has one parent, so one xterm subtree can't appear in both an off-screen container and a filmstrip tile; (2) xterm.js `RenderService` registers an `IntersectionObserver({threshold:0})` that auto-pauses the renderer for off-viewport terminals — so the off-screen DOM you'd mirror is stale anyway (PR xtermjs/xterm.js#1144).
 - **Suggested action:** WP4's decision report (P3.4/P3.5) corrects the arch.md text. Real mirror mechanisms are: relocate the single element (focused tile only), `cloneNode` per frame, or — recommended — `@xterm/addon-serialize` `serializeAsHTML()` from the buffer (works while renderer paused). Also note the architectural gift: off-viewport/collapsed workspaces get renderer-pause for free in Phase 2.
 - **Priority:** medium (resolved by WP4 report; not blocking any Phase 1 build)
-- **Status:** open
+- **Status:** RESOLVED 2026-06-17 — WP4 (commit 3ae90eb) corrected arch.md §"Phase 1 thumbnail-rendering probe" (CORRECTION + OUTCOME blocks) and §B.1 filmstrip text, and proved `serializeAsHTML()` viable + beating cloneNode. See `docs/product/wp4-thumbnail-probe-outcome.md`.
 
 ## SURFACE-2026-06-16-CC-SLASH-COMMANDS-NEED-CR-NOT-LF
 - **Source:** feature:build (WP2 probe — original surface SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES, superseded after a 2026-06-16 follow-up observable probe)
@@ -40,3 +40,9 @@
 - **Priority:** medium (MAJORs) + low (MINORs)
 - **Status:** pending
 - **Pickup shape:** run `/feature-refactor` against this feature when polishing probe writeups; the two MAJORs are quick wins (one delete-leaf, one column-add). To dismiss specific findings, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.
+
+## Code-quality findings — wp4-thumbnail-rendering-probe (2026-06-17)
+- **Pointer:** 2 MINOR findings from `feature-review-quality` on commit `3ae90eb` (0 CRITICAL, 0 MAJOR; a 3rd MINOR — stale Phase-3 tree header — was fixed in-place). Polish on the durable probe pieces: a missing clarifying comment on the center terminal's no-serializer choice, and a `void duration;` scaffolding no-op in `replay.ts`. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp4-thumbnail-rendering-probe — 2026-06-17` section.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** address when lifting `replay.ts`/`frameStats.ts` into Phase 2's filmstrip (those are the reusable pieces). To dismiss, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.

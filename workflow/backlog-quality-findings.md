@@ -161,3 +161,19 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Fix shape:** either apply the formula consistently to all entries, or document the override policy (e.g., "clamp small values to a 120s safety floor") in `~/.claude/CLAUDE.md`'s registry rules.
 - **Priority:** low
 - **Status:** pending
+
+# wp4-thumbnail-rendering-probe — 2026-06-17
+
+## SURFACE-2026-06-17-QUALITY-WP4-CENTER-SERIALIZER-COMMENT
+- **Severity:** MINOR (low)
+- **Location:** src/probe/Harness.tsx (center terminal build, ~L84-101)
+- **Finding:** The center (active) terminal is built without a `SerializeAddon` while every background terminal loads one. This is correct (the center is rendered normally, never serialized into a tile) but silent — a one-line comment ("center renders normally; no serializer needed") would save the next reader a double-take.
+- **Suggested action:** Add the clarifying comment. Throwaway-code polish; trivial.
+
+## SURFACE-2026-06-17-QUALITY-WP4-REPLAY-VOID-DURATION
+- **Severity:** MINOR (low)
+- **Location:** src/probe/replay.ts (~L99-103)
+- **Finding:** The `if (events.length === 0) return {stop}` early-out followed by `void duration;` with a "touch duration" comment reads as leftover scaffolding rather than load-bearing logic — minor dead-code smell in otherwise clean durable code.
+- **Suggested action:** Drop the `void duration;` no-op (and its comment), or fold the empty-events guard more cleanly. `replay.ts` is the durable piece Phase 2 may lift, so worth a quick tidy then.
+
+(Note: a third MINOR — Phase 3 Work Tree header stale at NOT-STARTED — was RESOLVED in-place at review time, not backlogged.)

@@ -1,7 +1,7 @@
 ---
 stage: arch
 state: complete
-updated: 2026-06-15
+updated: 2026-06-17
 ---
 
 > Revision 2026-05-19: Added cross-window CC status indicator (Phase 2) — see "Phase 2 / Phase 3 forward-look" section. No Phase 1 components affected; the indicator is a Phase 2 forward-look only.

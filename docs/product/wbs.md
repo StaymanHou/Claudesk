@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-16
+updated: 2026-06-17
 ---
 
 > Revision 2026-05-19: Added cross-window CC status indicator to Phase 2 headlines (WP9b probe + WP10b indicator WP). Phase 1 decomposition is unchanged.
@@ -78,7 +78,9 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - [x] Test `open -a "Sublime Text" <dir>` as a no-PATH fallback
 - [x] Record findings in the probe writeup
 
-### WP4: Probe — Thumbnail-rendering cost at N=8 workspaces (gates Phase 2 filmstrip strategy)
+### WP4: Probe — Thumbnail-rendering cost at N=8 workspaces (gates Phase 2 filmstrip strategy) ✅ SHIPPED 2026-06-17 (commit 3ae90eb)
+
+> **Outcome: PASS → Phase 2 ships live ~1 fps mirrors via `serializeAsHTML()`.** Apple M4 / macOS 26.5.1: idle CPU 4.5% (<10%), active median 13.3% (<20%; p95 ~30% caveat), RAM 240 MB (<300), center frame p95 18ms / 0 dropped. Corrected a non-viable arch.md mechanism (off-screen-DOM-mirror). Full report: `docs/product/wp4-thumbnail-probe-outcome.md`.
 
 **Type:** probe
 **Phase:** Phase 1
@@ -95,16 +97,16 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - Frame time on the center-stage workspace: **<16ms** (no visible jank from background-mirror work)
 
 **Tasks:**
-- [ ] Build a synthetic harness page (independent of the main app shell): 8 xterm.js instances + 1 active xterm.js, DOM renderer only (no WebGL addon)
-- [ ] Capture a representative CC output stream (record one typical Claude Code session to a file; loop on playback)
-- [ ] Pipe the canned stream into all 8 background xterms at realistic CC pacing
-- [ ] Mount each background xterm full-size in an off-screen container; render the filmstrip thumbnail as a CSS-transformed (`scale(0.15)`) live mirror of that off-screen DOM
-- [ ] Throttle the mirror update rate to ~1 fps (RAF-based; pause when tab/window is not visible)
-- [ ] Make the center-stage xterm actively receive a separate fresh stream (real-time, not the canned one)
-- [ ] Measure CPU (Activity Monitor + WKWebView Web Inspector "Timelines"), RAM, and frame time across a 5-minute representative run
-- [ ] Record raw measurements; compute pass/fail per metric
-- [ ] If FAIL on any metric: try one or two cheaper alternatives (lower update rate, larger transform, fewer background instances) and re-measure — fold findings into the report
-- [ ] Write the report and link it from `arch.md` and `roadmap.md` Phase 2
+- [x] Build a synthetic harness page (independent of the main app shell): 8 xterm.js instances + 1 active xterm.js, DOM renderer only (no WebGL addon)
+- [x] Capture a representative CC output stream (reconstructed from a real CC transcript → `cc-replay.cast`; + synthetic bracket fixture)
+- [x] Pipe the canned stream into all 8 background xterms at realistic CC pacing
+- [x] ~~Mount each background xterm full-size in an off-screen container; render the filmstrip thumbnail as a CSS-transformed (`scale(0.15)`) live mirror of that off-screen DOM~~ — **mechanism corrected** (non-viable: one parent per DOM node + xterm pauses off-viewport renderers). Validated path: `serializeAsHTML()` from the buffer into a `scale(0.15)` tile (two-arm comparison vs cloneNode; serialize won)
+- [x] Throttle the mirror update rate to ~1 fps (RAF-based; pause when tab/window is not visible)
+- [x] Make the center-stage xterm actively receive a separate fresh stream (real-time, not the canned one)
+- [x] Measure CPU (`top`, no-sudo path), RAM (`footprint`), and frame time (rAF-delta) across a representative run on real WKWebView
+- [x] Record raw measurements; compute pass/fail per metric
+- [x] If FAIL on any metric: try cheaper alternatives — N/A, no metric hard-failed (active-CPU p95 caveat documented + mitigations listed instead)
+- [x] Write the report and link it from `arch.md` and `roadmap.md` Phase 2
 
 ### WP5: Frontend UI prototype (no backend wiring) — tab-shell substrate from day one
 

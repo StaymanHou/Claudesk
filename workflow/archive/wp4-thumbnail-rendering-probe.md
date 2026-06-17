@@ -1,7 +1,7 @@
 # Feature: WP4 — Thumbnail-rendering probe (N=8 workspaces)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) → ship
+**State:** COMPLETED 2026-06-17 — shipped 3ae90eb, finalized. WP4 verdict PASS → Phase 2 ships live mirrors.
 **Created:** 2026-06-16
 **Entry:** spec (complex feature — probe)
 **drive_mode:** autopilot
@@ -48,7 +48,8 @@
   - [x] verify-human  <!-- status: [x] — AUTO-SKIPPED (Mode 3: no integration boundary + verify-self all-PASS). The real human-in-loop moment for WP4 is the operator measurement gate at P3.1, recorded separately. -->
   - [x] verify-codify  <!-- status: [x] — No new tests. Durable logic (parser/replay/frameStats) already covered by 7 unit tests; Harness.tsx is throwaway probe UI whose value is the live measured behavior (observed by verify-self Playwright). Component tests for throwaway code = disproportionate + brittle. Full suite 8/8 green, no regressions. No integration boundary. -->
 
-- [ ] Phase 3: Measure + decision report  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [x] Phase 3: Measure + decision report  <!-- status: [x] — all impl (P3.1–P3.5) + verify nodes complete; PASS verdict shipped to report + arch.md + roadmap.md -->
+  <!-- (MINOR review finding 1 resolved: header was stale NOT-STARTED while children were [x]) -->
   **Observable outcomes:**
   - CLI: `/tmp/wp4-cpu.txt` exists from a `powermetrics --samplers tasks --show-process-coalition --show-process-gpu -i 5000 -n 60` run; per-sample (WebContent + GPU) `%CPU` median + p95 computed for both idle and active scenarios.
   - CLI: `footprint Claudesk` (or the dev process name) captured; total phys_footprint recorded and compared to <300 MB.
@@ -92,11 +93,43 @@
   - [x] verify-codify  <!-- status: [x] — No new tests. Phase 3 added a decision report (prose) + throwaway one-shot measurement scripts (measure.sh, parse-top.mjs, parse-powermetrics.mjs, gen-cc-replay-cast.mjs); none is regression-guarded product behavior. Durable logic already covered by 7 tests incl. v2-guard + fixture-validity. Full suite 8/8 green. No integration boundary. -->
 
 ## Current Node
-- **Path:** Feature > (all phases complete) → ship
+- **Path:** Feature > review-quality (complete) → finalize
 - **Active scope:** Phases 1–3 ALL COMPLETE. WP4 verdict: PASS → Phase 2 ships live ~1 fps mirrors via serializeAsHTML. Report + arch.md + roadmap.md updated. tsc/eslint/8-tests green; temp config reverted. → feature-ship next.
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize → reflect
+- **Unvisited:** finalize → reflect
+- **Code-quality review:** 0 CRITICAL, 0 MAJOR, 3 MINOR (1 fixed in-place: Phase-3 tree header; 2 auto-backlogged)
 - **Open discoveries:** asciinema-v3-default (handled, logged); arch-thumbnail-mechanism-nonviable (resolved by this WP's report, backlog entry can close at finalize); silent-fixture-fallback bug (caught + fixed in P3)
+
+## Retrospect
+- **What changed in our understanding:** The arch.md-assumed thumbnail mechanism (off-screen full-size xterm + `scale()` live mirror of that DOM) is **non-viable** — research caught it before any code: a DOM node has one parent (can't appear in two places), and xterm.js's `IntersectionObserver` pauses the renderer for off-viewport terminals (so the DOM you'd mirror is stale). The viable, cheaper path is `serializeAsHTML()` from the buffer. Also learned: asciinema 3.x defaults to asciicast-v3 (not v2), and CC transcripts store structured content (not rendered ANSI) — so the "real" fixture had to be *reconstructed* from a transcript rather than recorded or extracted.
+- **Assumptions that held:** DOM-renderer-only is fine (no WebGL needed); live ~1 fps mirrors are within budget at N=8 on M4; serialize beats clone (research predicted, measurement confirmed); the probe is cleanly isolatable behind `?probe` with zero app-bundle leakage.
+- **Assumptions that were wrong:** the mechanism (above). Also the active-CPU threshold is the one soft spot — p95 ~30% on bursts vs the <20% target (median 13.3% passes); the harness over-streamed (8 concurrent backgrounds) vs the realistic 1-active-7-idle, so production p95 will be lower.
+- **Approach delta:** vs plan — (a) headline fixture became a transcript-*reconstruction* (`cc-replay.cast`) rather than a live `asciinema rec` (operator preference; no re-auth, faithful on content+cadence); (b) CPU measured via no-sudo `top` not `powermetrics` (unattended run, no password); (c) frame-time measured in Chromium not WKWebView (inspector not CDP-scriptable) — engine-equivalent rAF check, CPU/RAM on real WKWebView; (d) caught + fixed a silent fixture-fallback bug mid-build that would have corrupted the measurement.
+
+## Code-Quality Review — wp4-thumbnail-rendering-probe
+
+_Reviewed against ship commit 3ae90eb (drive_mode=autopilot/Mode 3). 0 CRITICAL, 0 MAJOR, 3 MINOR._
+
+### Strengths
+- Isolation seam is exactly right: `src/main.tsx` gates the probe behind `?probe` with a dynamic `import("./probe/ProbeApp")` — xterm.js and all probe code stay out of the normal app chunk (grep-confirmed zero probe refs in non-probe `src/`).
+- Durable logic (`replay.ts` parser/scheduler, `frameStats.ts`) cleanly separated from throwaway UI (`Harness.tsx`); only the durable part carries unit tests — correct instinct.
+- `startReplay` injectable `getNow`/`raf`/`caf` → deterministic tests (verbatim-write ordering, input-event dropping, loop+reset wrap).
+- asciicast-v2 guard + committed-fixture validity test pin the asciinema-3.x-default-v3 regression.
+- arch.md correction handled with discipline (dated CORRECTION block + §B.1 consumer update + backlog SURFACE, atomic in one commit).
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [workflow/wip/…:Phase 3 header] Work Tree marked Phase 3 NOT-STARTED while children were `[x]` and the report was written — tree/reality drift. **[RESOLVED in-place at review time — header flipped to [x].]**
+- [src/probe/Harness.tsx:84-101] Center terminal built without a SerializeAddon while backgrounds load one — correct (center is never serialized) but silent; a one-line comment would save a double-take. → backlog (low).
+- [src/probe/replay.ts:99-103] `if (events.length === 0) return` + `void duration;` reads as leftover scaffolding rather than load-bearing logic. → backlog (low).
+
+### Assessment
+Well-built probe that takes its throwaway-ness seriously: disposable scaffolding, but the two reusable pieces (asciicast parser/replay, frame-stats collector) are cleanly factored, tested, and DI-friendly. Isolation seam correct (nothing leaks into the app bundle). Decision artifact is the real deliverable and is honest about its caveats. No refactor warranted; the one tree-status MINOR was fixed in-place, the other two backlogged.
+
+### If you disagree
+Edit this section and mark a finding `[DISMISSED]` before finalize archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

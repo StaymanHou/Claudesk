@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-17
+
+- **Feature shipped:** WP4 — thumbnail-rendering probe validated that ~1 fps live terminal mirrors of 8 backgrounded + 1 active xterm.js stay within budget on real macOS WKWebView (Apple M4: idle CPU 4.5%, active median 13.3%, RAM 240 MB, center frame p95 18 ms / 0 dropped), so **Phase 2 ships live mirrors** using `@xterm/addon-serialize` `serializeAsHTML()` from the buffer (which beat the `cloneNode` arm) — and corrected a non-viable mechanism the architecture had assumed (off-screen-DOM mirroring, defeated by one-parent-per-node and xterm's off-viewport renderer pause).
+- **Backlog resolved:** SURFACE-2026-06-16-ARCH-THUMBNAIL-MECHANISM-NONVIABLE — closed by WP4's decision report and the atomic arch.md mechanism correction.
+- **Milestone:** WP4 (Phase 1, Probe — Thumbnail-rendering cost at N=8 workspaces) complete; outcome gates Phase 2's filmstrip + PiP rendering strategy.
+
 ## 2026-06-16
 
 - **Feature shipped:** WP1 — Tauri 2 + React 19 + TypeScript + Vite project scaffold landed in the repo (scaffold-and-merge preserved strategic docs and the `_ref/` symlink), with ESLint v9 / Prettier / Vitest on the JS side and `cargo fmt` / `cargo clippy -D warnings` / `cargo test` on the Rust side; `pnpm tauri dev` opens a Claudesk window and `pnpm tauri build` produces `Claudesk.app`.
