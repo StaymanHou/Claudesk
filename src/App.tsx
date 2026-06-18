@@ -1,27 +1,33 @@
-import reactLogo from "./assets/react.svg";
 import "./App.css";
+import { useWorkspaceList } from "./state/useWorkspaceList";
+import { CenterStage } from "./components/workspace/CenterStage";
+import { Filmstrip } from "./components/workspace/Filmstrip";
+import { ProjectPicker } from "./components/picker/ProjectPicker";
 
-// Scaffold landing page — replaced by the WorkspaceList / Center Stage /
-// Filmstrip tab-shell in WP5. The demo `greet` Tauri command was removed in
-// the 2026-06-17 refactor pass (the real command surface lands in WP7).
+// WP5 app shell. The view is a state machine over WorkspaceList:
+//   - "picker"         → Project Picker (no workspace open)
+//   - "workspace-open" → Filmstrip slot + Center Stage (a workspace is focused)
+//
+// Opening a project from the picker calls openWorkspace(path), which adds a
+// workspace and focuses it; the derived `view` flips to "workspace-open".
+//
+// Phase 1's mock workspace + xterm mount, and the empty Filmstrip slot, ride
+// underneath unchanged. WP6 swaps the picker's mock data for the real config
+// store; WP7 swaps the mock terminal for a PTY-backed CC session.
 function App() {
-  return (
-    <main className="container">
-      <h1>Claudesk</h1>
+  const { workspaces, focusedId, view, openWorkspace } = useWorkspaceList();
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank" rel="noreferrer">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank" rel="noreferrer">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank" rel="noreferrer">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Bare shell — the workspace UI arrives in WP5.</p>
-    </main>
+  return (
+    <div className="app-shell" data-testid="app-shell">
+      {view === "picker" ? (
+        <ProjectPicker onOpen={openWorkspace} />
+      ) : (
+        <>
+          <Filmstrip />
+          <CenterStage workspaces={workspaces} focusedId={focusedId} />
+        </>
+      )}
+    </div>
   );
 }
 

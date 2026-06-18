@@ -122,6 +122,7 @@ pnpm tauri build
 - **Code style.**
   - Frontend: ESLint + Prettier. TypeScript strict mode on. React 19 function components only.
   - Backend: `cargo fmt` + `cargo clippy -- -D warnings`. No `unwrap()` outside of tests; use `?` with typed error returns (`thiserror`).
+- **Dark mode only.** Claudesk's UI is **always dark** — it never follows the OS theme. Do NOT add `@media (prefers-color-scheme: light)` blocks or any light-theme tokens. `:root` in `src/App.css` sets `color-scheme: dark` and unconditionally dark color tokens; keep it that way. A light/theme toggle is explicitly out of scope (not even a Phase 4 setting).
 - **Tests.**
   - Backend: `cargo test` for unit tests; integration tests in `src-tauri/tests/`.
   - Frontend: Vitest for unit tests; component tests where state logic is non-trivial.
