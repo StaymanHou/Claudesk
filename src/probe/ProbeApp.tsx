@@ -20,7 +20,10 @@ function fixtureUrl(which: string): string {
   return `/probe-fixtures/${which}.cast`;
 }
 
-function useCast(which: string): { cast: CastData | null; error: string | null } {
+function useCast(which: string): {
+  cast: CastData | null;
+  error: string | null;
+} {
   const [cast, setCast] = useState<CastData | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -28,7 +31,10 @@ function useCast(which: string): { cast: CastData | null; error: string | null }
     const url = fixtureUrl(which);
     fetch(url)
       .then((r) => {
-        if (!r.ok) throw new Error(`fetch ${url} → ${r.status} (fixture "${which}" not found)`);
+        if (!r.ok)
+          throw new Error(
+            `fetch ${url} → ${r.status} (fixture "${which}" not found)`,
+          );
         return r.text();
       })
       .then((text) => {
@@ -74,12 +80,20 @@ function SingleReplay({ which }: { which: string }) {
     };
   }, [cast]);
 
-  if (error) return <pre style={{ color: "salmon", padding: 16 }}>cast load error: {error}</pre>;
+  if (error)
+    return (
+      <pre style={{ color: "salmon", padding: 16 }}>
+        cast load error: {error}
+      </pre>
+    );
   if (!cast) return <p style={{ padding: 16 }}>loading {which} cast…</p>;
   return (
     <div>
-      <div style={{ font: "12px monospace", color: "#9cf", padding: "4px 8px" }}>
-        single-replay · fixture={which} · {cast.events.length} events · {cast.duration.toFixed(1)}s loop
+      <div
+        style={{ font: "12px monospace", color: "#9cf", padding: "4px 8px" }}
+      >
+        single-replay · fixture={which} · {cast.events.length} events ·{" "}
+        {cast.duration.toFixed(1)}s loop
       </div>
       <div ref={hostRef} style={{ height: "80vh" }} />
     </div>
@@ -98,7 +112,9 @@ export default function ProbeApp() {
 
   return (
     <div style={{ background: "#111", color: "#eee", minHeight: "100vh" }}>
-      <h3 style={{ margin: 0, padding: "8px 12px", font: "600 14px system-ui" }}>
+      <h3
+        style={{ margin: 0, padding: "8px 12px", font: "600 14px system-ui" }}
+      >
         WP4 thumbnail probe — mode={mode}
       </h3>
       {mode === "single" ? (
@@ -106,7 +122,9 @@ export default function ProbeApp() {
       ) : mode === "harness" ? (
         <Harness fixture={fixture} />
       ) : (
-        <p style={{ padding: 16 }}>unknown mode &quot;{mode}&quot; — use mode=single or mode=harness</p>
+        <p style={{ padding: 16 }}>
+          unknown mode &quot;{mode}&quot; — use mode=single or mode=harness
+        </p>
       )}
     </div>
   );

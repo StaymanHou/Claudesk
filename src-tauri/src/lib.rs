@@ -1,14 +1,10 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Command surface is intentionally empty until WP7 defines the CcSession
+    // command set. Add commands to generate_handler![] as they land.
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -17,6 +13,6 @@ pub fn run() {
 mod tests {
     #[test]
     fn smoke() {
-        assert_eq!(2 + 2, 4);
+        assert_eq!(1 + 1, 2);
     }
 }

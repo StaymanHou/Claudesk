@@ -8,7 +8,6 @@ drive_mode: autopilot
 # Feature: WP2 — Probe: Claude Code under host-driven PTY byte-injection
 
 **Workflow:** feature
-**State:** plan (complete)
 **Created:** 2026-06-16
 **WBS reference:** Phase 1 WP2 (`docs/product/wbs.md`)
 **Type:** probe — writeup deliverable, no production code
@@ -218,10 +217,10 @@ The harness is not test code — it's not invoked by `cargo test`. It's a manual
 - (none)
 
 **MINOR**
-- [`src-tauri/examples/cc_pty_probe.rs:169` and `:309`] Identical 6-line "CC requires Ctrl+D twice" cleanup block is duplicated verbatim between `run_inject` and `run_resize`. A `shutdown_cc(writer, child)` helper would make the load-bearing shutdown idiom single-source for WP7.
-- [`src-tauri/examples/cc_pty_probe.rs:79, 133, 189, 257`] Reader threads inconsistently joined (`_reader_thread` dropped in three modes; `drain.join()` used in `run_exit_via`). A one-line "reader thread terminates on PTY EOF" comment at first spawn would document the invariant.
-- [`workflow/wip/wp2-cc-pty-probe.md:3` vs body `**State:** plan (complete)`] Frontmatter `state: ship (complete)` contradicts a body line. Frontmatter is canonical per project convention; body line is the stale one.
-- [`src-tauri/examples/cc_pty_probe.rs:78, 131, 188, 255`] Four near-identical reader-thread bodies (Stdout / Channel / CountBytes sinks). `enum ReaderSink { Stdout, Channel(mpsc::Sender<Vec<u8>>), CountBytes }` + a `spawn_reader(reader, sink)` helper would single-source the "reader thread pattern" question for WP7 readers.
+- [RESOLVED 2026-06-17, refactor] The two shutdown paths have since diverged (`run_inject` uses the canonical `/exit\r`; `run_resize` keeps the Ctrl+D-twice control-char fallback), so they are no longer "duplicated verbatim." Rather than force a misleading unified helper, added a clarifying comment on `run_resize`'s block pointing at `/exit\r` as the WP7-canonical path.
+- [RESOLVED 2026-06-17, refactor] Added a reader-thread lifecycle comment at the first spawn (`run_interactive`) documenting the EOF-on-child-exit invariant that all four reader threads (and WP7's PtyCcSession reader) rely on.
+- [RESOLVED 2026-06-17, refactor] Dropped the stale `**State:** plan (complete)` body line; frontmatter `state:` is now the single source.
+- [DISMISSED 2026-06-17, refactor] `ReaderSink` enum / `spawn_reader` consolidation. For reference/`examples/` code whose value is being read as a standalone WP7 template, four explicit inline reader bodies are clearer than an enum indirection. The load-bearing knowledge (the EOF-termination invariant) is now single-sourced by the lifecycle comment, which captures the actual reusable lesson without obscuring the per-mode reader shapes.
 
 ### Assessment
 Well-executed probe. The deliverable shape (writeup as primary, harness as secondary) matches the WBS contract exactly. The most consequential finding (two-keystroke exit) is captured with the right urgency in both the WIP and the backlog with a concrete WP7 hand-off. The harness is small, readable, and re-runnable. The probe correctly resists over-engineering (no `thiserror`, no unit tests, `Box<dyn Error>` throughout) — appropriate for `examples/` code. The MINOR findings are all about polishing the kept-in-tree harness slightly for its WP7-reference role, not about correctness.

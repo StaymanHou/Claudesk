@@ -21,7 +21,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Terminal } from "@xterm/xterm";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import "@xterm/xterm/css/xterm.css";
-import { parseCast, startReplay, type CastData, type ReplayHandle } from "./replay";
+import {
+  parseCast,
+  startReplay,
+  type CastData,
+  type ReplayHandle,
+} from "./replay";
 
 const N_BG = 8;
 const SCALE = 0.15;
@@ -46,7 +51,8 @@ export default function Harness({ fixture }: { fixture: string }) {
   // URL-controllable initial state so an unattended measurement driver can set
   // each scenario by navigation: &arm=serialize|clone  &scenario=active|idle
   const initParams = new URLSearchParams(window.location.search);
-  const initArm: Arm = initParams.get("arm") === "clone" ? "clone" : "serialize";
+  const initArm: Arm =
+    initParams.get("arm") === "clone" ? "clone" : "serialize";
   const initStreaming = initParams.get("scenario") !== "idle"; // default active
   const [arm, setArm] = useState<Arm>(initArm);
   const [streaming, setStreaming] = useState(initStreaming); // active vs idle scenario
@@ -58,7 +64,10 @@ export default function Harness({ fixture }: { fixture: string }) {
   const centerHostRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef<(HTMLDivElement | null)[]>([]);
   const bgInstancesRef = useRef<BgInstance[]>([]);
-  const centerRef = useRef<{ term: Terminal; replay: ReplayHandle | null } | null>(null);
+  const centerRef = useRef<{
+    term: Terminal;
+    replay: ReplayHandle | null;
+  } | null>(null);
   const castRef = useRef<CastData | null>(null);
   const mirrorTimerRef = useRef<number | null>(null);
   const armRef = useRef<Arm>(arm);
@@ -80,10 +89,19 @@ export default function Harness({ fixture }: { fixture: string }) {
         castRef.current = cast;
 
         // Center (active) terminal — replays at full speed in the foreground.
+        // No SerializeAddon here (unlike the background pool below): the center
+        // is rendered normally to the DOM and never serialized into a tile.
         if (centerHostRef.current) {
-          const term = new Terminal({ cols: cast.width, rows: cast.height, scrollback: 500, fontSize: 12 });
+          const term = new Terminal({
+            cols: cast.width,
+            rows: cast.height,
+            scrollback: 500,
+            fontSize: 12,
+          });
           term.open(centerHostRef.current);
-          const replay = streamingRef.current ? startReplay(term, cast, { loop: true }) : null;
+          const replay = streamingRef.current
+            ? startReplay(term, cast, { loop: true })
+            : null;
           centerRef.current = { term, replay };
         }
 
@@ -96,11 +114,18 @@ export default function Harness({ fixture }: { fixture: string }) {
           host.style.width = "720px";
           host.style.height = "400px";
           pool.appendChild(host);
-          const term = new Terminal({ cols: cast.width, rows: cast.height, scrollback: 200, fontSize: 12 });
+          const term = new Terminal({
+            cols: cast.width,
+            rows: cast.height,
+            scrollback: 200,
+            fontSize: 12,
+          });
           const serializer = new SerializeAddon();
           term.loadAddon(serializer);
           term.open(host);
-          const replay = streamingRef.current ? startReplay(term, cast, { loop: true }) : null;
+          const replay = streamingRef.current
+            ? startReplay(term, cast, { loop: true })
+            : null;
           instances.push({ term, serializer, host, replay });
         }
         bgInstancesRef.current = instances;
@@ -112,7 +137,8 @@ export default function Harness({ fixture }: { fixture: string }) {
 
     return () => {
       cancelled = true;
-      if (mirrorTimerRef.current != null) cancelAnimationFrame(mirrorTimerRef.current);
+      if (mirrorTimerRef.current != null)
+        cancelAnimationFrame(mirrorTimerRef.current);
       bgInstancesRef.current.forEach((b) => {
         b.replay?.stop();
         b.term.dispose();
@@ -157,7 +183,9 @@ export default function Harness({ fixture }: { fixture: string }) {
         if (!b.replay) b.replay = startReplay(b.term, cast, { loop: true });
       });
       if (centerRef.current && !centerRef.current.replay) {
-        centerRef.current.replay = startReplay(centerRef.current.term, cast, { loop: true });
+        centerRef.current.replay = startReplay(centerRef.current.term, cast, {
+          loop: true,
+        });
       }
     } else {
       bgInstancesRef.current.forEach((b) => {
@@ -184,7 +212,9 @@ export default function Harness({ fixture }: { fixture: string }) {
           tile.replaceChildren(clone);
         }
       } else {
-        tile.innerHTML = instances[i].serializer.serializeAsHTML({ scrollback: 0 });
+        tile.innerHTML = instances[i].serializer.serializeAsHTML({
+          scrollback: 0,
+        });
       }
     }
   }, []);
@@ -203,23 +233,45 @@ export default function Harness({ fixture }: { fixture: string }) {
     };
     mirrorTimerRef.current = requestAnimationFrame(loop);
     return () => {
-      if (mirrorTimerRef.current != null) cancelAnimationFrame(mirrorTimerRef.current);
+      if (mirrorTimerRef.current != null)
+        cancelAnimationFrame(mirrorTimerRef.current);
     };
   }, [ready, mirrorTick]);
 
-  if (error) return <pre style={{ color: "salmon", padding: 16 }}>harness error: {error}</pre>;
+  if (error)
+    return (
+      <pre style={{ color: "salmon", padding: 16 }}>harness error: {error}</pre>
+    );
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "6px 12px", font: "12px monospace", color: "#9cf" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          padding: "6px 12px",
+          font: "12px monospace",
+          color: "#9cf",
+        }}
+      >
         <span>
-          harness · {N_BG} bg + 1 active · arm=<b>{arm}</b> · {streaming ? "ACTIVE (streaming)" : "IDLE (streams stopped)"}
+          harness · {N_BG} bg + 1 active · arm=<b>{arm}</b> ·{" "}
+          {streaming ? "ACTIVE (streaming)" : "IDLE (streams stopped)"}
         </span>
-        <button onClick={() => setArm((a) => (a === "clone" ? "serialize" : "clone"))}>
+        <button
+          onClick={() => setArm((a) => (a === "clone" ? "serialize" : "clone"))}
+        >
           toggle arm → {arm === "clone" ? "serialize" : "clone"}
         </button>
-        <button onClick={() => setStreaming((s) => !s)}>{streaming ? "go idle" : "go active"}</button>
-        <button onClick={() => console.log("probeStats", window.__probeStats?.())}>log __probeStats()</button>
+        <button onClick={() => setStreaming((s) => !s)}>
+          {streaming ? "go idle" : "go active"}
+        </button>
+        <button
+          onClick={() => console.log("probeStats", window.__probeStats?.())}
+        >
+          log __probeStats()
+        </button>
         <button onClick={() => window.__probeReset?.()}>reset stats</button>
         {!ready && <span>building terminals…</span>}
       </div>
@@ -228,7 +280,14 @@ export default function Harness({ fixture }: { fixture: string }) {
       <div ref={bgPoolRef} aria-hidden />
 
       {/* filmstrip of 8 thumbnail tiles */}
-      <div style={{ display: "flex", gap: 6, padding: "6px 12px", flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          padding: "6px 12px",
+          flexWrap: "wrap",
+        }}
+      >
         {Array.from({ length: N_BG }, (_, i) => (
           <div
             key={i}
@@ -244,7 +303,12 @@ export default function Harness({ fixture }: { fixture: string }) {
               ref={(el) => {
                 tileRefs.current[i] = el;
               }}
-              style={{ transform: `scale(${SCALE})`, transformOrigin: "top left", width: 720, height: 400 }}
+              style={{
+                transform: `scale(${SCALE})`,
+                transformOrigin: "top left",
+                width: 720,
+                height: 400,
+              }}
             />
           </div>
         ))}
@@ -252,7 +316,9 @@ export default function Harness({ fixture }: { fixture: string }) {
 
       {/* active center stage */}
       <div style={{ padding: "6px 12px" }}>
-        <div style={{ font: "11px monospace", color: "#6c6" }}>active center stage (full-speed):</div>
+        <div style={{ font: "11px monospace", color: "#6c6" }}>
+          active center stage (full-speed):
+        </div>
         <div ref={centerHostRef} style={{ height: "55vh" }} />
       </div>
     </div>

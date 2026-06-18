@@ -1,2 +1,5 @@
+# pnpm v11+ moved the postinstall-script allowlist here from package.json's
+# `pnpm.onlyBuiltDependencies`. First install auto-generates a stub with the
+# literal placeholder "set this to true or false"; replace it per dependency.
 allowBuilds:
   esbuild: true

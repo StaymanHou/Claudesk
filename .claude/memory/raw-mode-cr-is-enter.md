@@ -13,6 +13,7 @@ In a raw-mode TTY, the Enter key is `\r` (CR, byte `0x0d`), not `\n` (LF, byte `
 **Rule for Claudesk PTY-driven subprocesses:** when injecting input bytes into any TUI process via `portable-pty` (or node-pty, or any direct-PTY library), input lines MUST end in `\r`. If you write `\n`, the receiving TUI will treat it as a literal character and the input won't register as Enter.
 
 **Applies to:**
+
 - WP7 PtyCcSession production code (every slash-command injection)
 - Any future Claudesk probe that drives a TUI subprocess
 - Any debug harness that needs to "type Enter" into a PTY-attached child

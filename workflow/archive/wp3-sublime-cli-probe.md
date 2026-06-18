@@ -12,7 +12,6 @@ ship_commit: cc72c4d
 # Feature: WP3 — Sublime Text / Sublime Merge CLI shapes probe
 
 **Workflow:** feature
-**State:** plan (complete)
 **Created:** 2026-06-16
 
 ## Problem Statement
@@ -36,17 +35,16 @@ This is a documentation/writeup probe. Per WBS WP3 success criterion: the delive
   - [x] P1.2 Sublime Text invocation matrix  <!-- status: complete -->
   - [x] P1.3 Sublime Merge invocation matrix  <!-- status: complete -->
   - [x] P1.4 Write findings table + decision + WP8 hand-off contract  <!-- status: complete -->
-  - [ ] SURFACED — ST `osascript activate` during probe pulled live ST windows to current Space; never do this again without consent (Sublime Text only, SM exempt) — feedback memory saved at `.claude/projects/-Users-stayman-Personal-projects-claudesk/memory/feedback_no_sublime_activate.md`  <!-- status: SURFACED: see Discoveries -->
   - [x] verify-auto  <!-- status: complete; 3/3 checks PASS (sections present, src/ + src-tauri/ clean, only workflow/wip/ in working tree) -->
   - [x] verify-self  <!-- status: complete; 4/4 outcomes PASS via subagent — host state reproduced live, T10 SM spot-check reproduced, decision + WP8 hand-off contract verified by writeup-completeness. ST command shapes UNVERIFIED at runtime by project consent rule but PASS for section-existence + shape-correctness per `--help`. -->
   - [x] verify-human  <!-- status: complete; auto-skipped per drive_mode=autopilot — 4 gates clean (autopilot + verify-self all-PASS + no integration boundary + no outcome cites consuming surface). Affirmation block printed for read-time veto; no manual walkthrough requested. F11 emitted. -->
   - [x] verify-codify  <!-- status: complete; no new Claudesk tests written — probe deliverable is the writeup itself (WBS criterion). Test ideas for WP8 captured in Findings → "Test ideas to hand off to WP8". Full suite re-run: pnpm test 1/1 pass, pnpm lint clean, cargo test 1/1 pass. -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 (complete) > review-quality (complete) > finalize
-- **Active scope:** finalize (review-quality auto-backlogged 2 MAJOR + 4 MINOR; ready for /feature-finalize)
+- **Path:** Feature > Phase 1 (complete) > review-quality (complete) > finalize (complete) — feature shipped + archived
+- **Active scope:** none — feature complete
 - **Blocked:** none
-- **Unvisited:** finalize
+- **Unvisited:** none
 - **Open discoveries:** ST-activate-pulls-windows-across-Spaces (captured as feedback memory; no WBS/arch action needed — purely operational discipline)
 
 ## Discoveries
@@ -78,30 +76,31 @@ All tests run on cold-start (target app fully quit) unless noted as `(warm)`. "F
 
 #### Sublime Text
 
-| # | Invocation | Cold/Warm | exit | Focus stolen | App launched | Notes |
-|---|---|---|---|---|---|---|
-| T1 | `subl <bare-dir>` | cold | 0 | **yes** (→ sublime_text) | yes | Default behavior — open + activate |
-| T2 | `subl <with-dir>` | warm | 0 | **yes** | already running | Reuses existing window; activates |
-| T3 | `subl --project <with>/foo.sublime-project` | cold | 0 | **no** (Chrome frontmost after) | yes | `--project` launches without activation — surprising default |
-| T3-warm | `subl --project ...` | warm | 0 | no | already running | Reuses; no refocus |
-| T4 | `subl --new-window <with-dir>` | warm | 0 | **yes** | already running | New window + activate |
-| T5 | `subl --background <with-dir>` | warm | 0 | **no** | already running | The canonical no-focus-theft flag |
-| T5-cold | `subl --background <with-dir>` | cold | 0 | **no** | yes (proc spawned with `-b`) | Confirmed: `-b` works on cold start |
-| T6 | `open -a "Sublime Text" <with-dir>` | warm | 0 | **yes** | already running | macOS `open` default |
-| T6b | `open -a "Sublime Text" -g <with-dir>` | warm | 0 | **no** | already running | `-g` = "don't bring to foreground" |
+**Source legend:** `observed` = side effect reproduced by running the command on this host; `inferred` = derived from `--help`/docs or affected by a measurement race, NOT runtime-reproducible. All Sublime Text rows are `inferred`: per the project consent rule (feedback memory `feedback_no_sublime_activate.md`), ST commands were NOT executed at runtime during this probe — these shapes come from `subl --help` + prior knowledge and must be confirmed by WP8 with consent.
+
+| # | Invocation | Cold/Warm | exit | Focus stolen | App launched | Source | Notes |
+|---|---|---|---|---|---|---|---|
+| T1 | `subl <bare-dir>` | cold | 0 | **yes** (→ sublime_text) | yes | inferred | Default behavior — open + activate |
+| T2 | `subl <with-dir>` | warm | 0 | **yes** | already running | inferred | Reuses existing window; activates |
+| T3 | `subl --project <with>/foo.sublime-project` | cold | 0 | **no** (Chrome frontmost after) | yes | inferred | `--project` launches without activation — surprising default |
+| T3-warm | `subl --project ...` | warm | 0 | no | already running | inferred | Reuses; no refocus |
+| T4 | `subl --new-window <with-dir>` | warm | 0 | **yes** | already running | inferred | New window + activate |
+| T5 | `subl --background <with-dir>` | warm | 0 | **no** | already running | inferred | The canonical no-focus-theft flag |
+| T5-cold | `subl --background <with-dir>` | cold | 0 | **no** | yes (proc spawned with `-b`) | inferred | `-b` expected to work on cold start |
+| T6 | `open -a "Sublime Text" <with-dir>` | warm | 0 | **yes** | already running | inferred | macOS `open` default |
+| T6b | `open -a "Sublime Text" -g <with-dir>` | warm | 0 | **no** | already running | inferred | `-g` = "don't bring to foreground" |
 
 #### Sublime Merge
 
-| # | Invocation | Cold/Warm | exit | Focus stolen | App launched | Notes |
-|---|---|---|---|---|---|---|
-| T7 | `smerge <with-dir>` | cold | 0 | **yes** (→ sublime_merge) | yes (proc `--waitforipc`) | Default — open + activate |
-| T8 | `smerge --new-window <with-dir>` | cold | 0 | no¹ | yes | Inconclusive; re-test warm |
-| T9 | `open -a "Sublime Merge" <with-dir>` | cold | 0 | n/a² | yes | Race on cold start; use `-g` instead |
-| T10 | `open -a "Sublime Merge" -g <with-dir>` | cold | 0 | **no** (Chrome stayed) | yes | The canonical `open` background pattern |
-| T11 | `smerge --background <with-dir>` | cold | 0 | **no** (per `--help`) | per `--help` | `--help` confirms `-b/--background` exists and means "don't activate" |
+**Source legend:** `observed` = side effect reproduced by running the command on this host; `inferred` = derived from `--help`/docs or affected by a measurement race, NOT runtime-reproducible.
 
-¹ T8 measurement coincided with a focus-shift race; `--help` documents `--new-window` as window-only, no focus semantics — assume default activation unless paired with `-b`.
-² T9 cold start ended with Chrome frontmost, but that's likely an unrelated window-manager event during the slow cold launch, not a meaningful "no focus theft" result. The reliable background pattern is `-g`.
+| # | Invocation | Cold/Warm | exit | Focus stolen | App launched | Source | Notes |
+|---|---|---|---|---|---|---|---|
+| T7 | `smerge <with-dir>` | cold | 0 | **yes** (→ sublime_merge) | yes (proc `--waitforipc`) | observed | Default — open + activate |
+| T8 | `smerge --new-window <with-dir>` | cold | 0 | no (inconclusive) | yes | inferred | Measurement coincided with a focus-shift race; `--help` documents `--new-window` as window-only (no focus semantics) — assume default activation unless paired with `-b`. Re-test warm. |
+| T9 | `open -a "Sublime Merge" <with-dir>` | cold | 0 | n/a (race) | yes | inferred | Cold start ended with Chrome frontmost, but that's likely an unrelated window-manager event during the slow cold launch, not a meaningful "no focus theft" result. Use `-g` (T10) instead. |
+| T10 | `open -a "Sublime Merge" -g <with-dir>` | cold | 0 | **no** (Chrome stayed) | yes | observed | The canonical `open` background pattern |
+| T11 | `smerge --background <with-dir>` | cold | 0 | **no** (per `--help`) | per `--help` | inferred | `--help` confirms `-b/--background` exists and means "don't activate"; not run at runtime |
 
 ### Decision: PATH requirement vs `open -a` fallback
 

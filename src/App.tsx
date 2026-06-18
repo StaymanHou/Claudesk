@@ -1,20 +1,13 @@
-import { useState } from "react";
 import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
+// Scaffold landing page — replaced by the WorkspaceList / Center Stage /
+// Filmstrip tab-shell in WP5. The demo `greet` Tauri command was removed in
+// the 2026-06-17 refactor pass (the real command surface lands in WP7).
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
-
   return (
     <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+      <h1>Claudesk</h1>
 
       <div className="row">
         <a href="https://vite.dev" target="_blank" rel="noreferrer">
@@ -27,23 +20,7 @@ function App() {
           <img src={reactLogo} className="logo react" alt="React logo" />
         </a>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+      <p>Bare shell — the workspace UI arrives in WP5.</p>
     </main>
   );
 }

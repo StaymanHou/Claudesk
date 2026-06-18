@@ -4,7 +4,7 @@ description: feature-plan discipline in Claudesk. Outcomes that test command exe
 type: project
 ---
 
-When writing Observable Outcomes for `feature-plan` in this project, distinguish *visibility/UI* checks from *execution* checks:
+When writing Observable Outcomes for `feature-plan` in this project, distinguish _visibility/UI_ checks from _execution_ checks:
 
 - **Visibility/UI check:** "marker M appears in output stream within Ns" is fine. Examples: a banner renders, an autocomplete shows up, a UI element appears.
 - **Execution check:** the same wording is too weak. A command can produce a marker via typeahead/autocomplete without executing. Require BOTH the typing-side evidence AND the execution-side evidence: command's actual body output, an exit code, a state change in a file, an HTTP response shape.

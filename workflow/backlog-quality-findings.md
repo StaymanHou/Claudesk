@@ -6,6 +6,8 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # wp1-tauri-scaffold — 2026-06-16
 
+> **ALL RESOLVED 2026-06-17 (refactor pass).** All 9 findings fixed. See `workflow/backlog.md` → wp1 pointer for the per-fix summary.
+
 ## SURFACE-2026-06-16-QUALITY-WP1-HTML-TITLE
 - **File:** `index.html:7`
 - **Severity:** MAJOR
@@ -80,6 +82,8 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # wp2-cc-pty-probe — 2026-06-16
 
+> **RESOLVED 2026-06-17 (refactor pass):** 3 fixed (shutdown-divergence comment, reader-thread EOF lifecycle comment, stale `**State:**` line). 1 DISMISSED: `ReaderSink` enum — explicit inline readers are clearer for reference/`examples/` code; the EOF invariant is now single-sourced by the lifecycle comment.
+
 ## SURFACE-2026-06-16-QUALITY-WP2-SHUTDOWN-DUPLICATION
 - **File:** `src-tauri/examples/cc_pty_probe.rs:169` and `:309`
 - **Severity:** MINOR
@@ -113,6 +117,8 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Status:** pending
 
 # wp3-sublime-cli-probe — 2026-06-16
+
+> **ALL RESOLVED 2026-06-17 (refactor pass).** All 6 findings fixed (2 MAJOR + 4 MINOR). See `workflow/backlog.md` → wp3 pointer for the per-fix summary.
 
 ## SURFACE-2026-06-16-QUALITY-WP3-STUCK-SURFACED-LEAF
 - **File:** `workflow/wip/wp3-sublime-cli-probe.md` (Work Tree, leaf below P1.4)
@@ -163,6 +169,8 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Status:** pending
 
 # wp4-thumbnail-rendering-probe — 2026-06-17
+
+> **ALL RESOLVED 2026-06-17 (refactor pass).** Both MINOR findings fixed. See `workflow/backlog.md` → wp4 pointer for the per-fix summary.
 
 ## SURFACE-2026-06-17-QUALITY-WP4-CENTER-SERIALIZER-COMMENT
 - **Severity:** MINOR (low)

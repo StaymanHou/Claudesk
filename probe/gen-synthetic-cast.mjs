@@ -64,7 +64,9 @@ randInt._s = 1234567;
 
 // ── Generate the stream ────────────────────────────────────────────────────
 push(clearScreen());
-push(`${color(213)}● Synthetic CC-like session (WP4 probe fixture)${RESET}\r\n\r\n`);
+push(
+  `${color(213)}● Synthetic CC-like session (WP4 probe fixture)${RESET}\r\n\r\n`,
+);
 
 let line = 0;
 while (t < DURATION_S) {
@@ -86,7 +88,9 @@ while (t < DURATION_S) {
     // TOOL OUTPUT: a box + a few lines of fixed text, emitted as one chunk-ish burst
     push("\r\n" + drawBox(`tool: read_file (call ${line})`));
     for (let i = 0; i < 6 + randInt(10); i++) {
-      push(`${color(82)}  ${i.toString().padStart(3)}${RESET}  some source line content here\r\n`);
+      push(
+        `${color(82)}  ${i.toString().padStart(3)}${RESET}  some source line content here\r\n`,
+      );
       wait(0.002);
     }
     line++;
@@ -105,7 +109,10 @@ while (t < DURATION_S) {
     push(clearScreen());
     for (let r = 1; r <= ROWS; r++) {
       const c = COLORS[r % COLORS.length];
-      push(moveTo(r, 1) + `${color(c)}${`row ${r} `.repeat(Math.ceil(COLS / 8)).slice(0, COLS)}${RESET}`);
+      push(
+        moveTo(r, 1) +
+          `${color(c)}${`row ${r} `.repeat(Math.ceil(COLS / 8)).slice(0, COLS)}${RESET}`,
+      );
       wait(0.0015);
     }
     wait(0.4 + randInt(10) / 10);
@@ -124,4 +131,6 @@ const header = {
 const out = [JSON.stringify(header)];
 for (const e of events) out.push(JSON.stringify(e));
 process.stdout.write(out.join("\n") + "\n");
-process.stderr.write(`generated ${events.length} events over ${DURATION_S}s → asciicast-v2\n`);
+process.stderr.write(
+  `generated ${events.length} events over ${DURATION_S}s → asciicast-v2\n`,
+);

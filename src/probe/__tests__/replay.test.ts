@@ -24,7 +24,10 @@ describe("parseCast", () => {
   });
 
   it("rejects a non-v2 header (asciicast-v3 guard)", () => {
-    const v3 = JSON.stringify({ version: 3, width: 80, height: 24 }) + "\n" + JSON.stringify([0, "o", "x"]);
+    const v3 =
+      JSON.stringify({ version: 3, width: 80, height: 24 }) +
+      "\n" +
+      JSON.stringify([0, "o", "x"]);
     expect(() => parseCast(v3)).toThrow(/asciicast v2/);
   });
 });

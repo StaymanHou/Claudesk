@@ -125,7 +125,11 @@ fn run_interactive() -> Result<(), Box<dyn std::error::Error>> {
         pixel_height: 0,
     })?;
 
-    // PTY -> stdout
+    // PTY -> stdout. Reader-thread lifecycle invariant (holds for every reader
+    // thread in this file): the loop terminates on read() == 0 (EOF), which the
+    // PTY master delivers once the child exits and the last slave handle is
+    // dropped. No explicit join is needed — the thread self-terminates. WP7's
+    // PtyCcSession reader relies on this same EOF-on-child-exit guarantee.
     let mut reader = master.try_clone_reader()?;
     let pty_to_stdout = thread::spawn(move || {
         let mut buf = [0u8; 4096];
@@ -368,7 +372,10 @@ fn run_resize() -> Result<(), Box<dyn std::error::Error>> {
     std::io::stdout().write_all(&captured)?;
     println!();
 
-    // Clean up: CC requires Ctrl+D twice to exit (single Ctrl+D is ignored; finding from P1.5).
+    // Clean up via the Ctrl+D-twice control-char fallback (single Ctrl+D is
+    // ignored; finding from P1.5). WP7's canonical shutdown is the cleaner
+    // `/exit\r` path used in run_inject — this mode keeps the control-char
+    // sequence so the fallback stays exercised and grep-able for reference.
     let mut writer = master.take_writer()?;
     let _ = writer.write_all(&[0x04]);
     let _ = writer.flush();

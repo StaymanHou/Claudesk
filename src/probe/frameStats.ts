@@ -21,7 +21,9 @@ export interface FrameStats {
 
 function pct(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+  return sorted[
+    Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))
+  ];
 }
 
 export function computeStats(deltas: number[]): FrameStats {

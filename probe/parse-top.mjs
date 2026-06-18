@@ -13,7 +13,9 @@ import { readFileSync } from "node:fs";
 
 const [, , file, mainPid, wcPid, gpuPid] = process.argv;
 if (!file || !mainPid || !wcPid || !gpuPid) {
-  console.error("usage: node parse-top.mjs <file> <mainPid> <wcPid> <gpuPid> [--warmup N]");
+  console.error(
+    "usage: node parse-top.mjs <file> <mainPid> <wcPid> <gpuPid> [--warmup N]",
+  );
   process.exit(1);
 }
 const warmupIdx = process.argv.indexOf("--warmup");
@@ -56,15 +58,24 @@ const keptMain = main.slice(warmup);
 
 function stats(arr) {
   const s = [...arr].sort((a, b) => a - b);
-  const pct = (p) => s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];
+  const pct = (p) =>
+    s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];
   const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-  return { n: s.length, median: pct(50), p95: pct(95), max: s[s.length - 1], mean };
+  return {
+    n: s.length,
+    median: pct(50),
+    p95: pct(95),
+    max: s[s.length - 1],
+    mean,
+  };
 }
 
 const w = stats(keptWebview);
 const m = stats(keptMain);
 console.log(`file: ${file}`);
-console.log(`samples: ${n} total, ${keptWebview.length} after ${warmup} warm-up discarded`);
+console.log(
+  `samples: ${n} total, ${keptWebview.length} after ${warmup} warm-up discarded`,
+);
 console.log(
   `webview (WebContent+GPU) %CPU:  median=${w.median.toFixed(1)}  mean=${w.mean.toFixed(1)}  p95=${w.p95.toFixed(1)}  max=${w.max.toFixed(1)}`,
 );

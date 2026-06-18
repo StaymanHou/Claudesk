@@ -29,9 +29,15 @@ export interface CastData {
 export function parseCast(text: string): CastData {
   const lines = text.trim().split("\n");
   if (lines.length === 0) throw new Error("empty cast");
-  const header = JSON.parse(lines[0]) as { version: number; width: number; height: number };
+  const header = JSON.parse(lines[0]) as {
+    version: number;
+    width: number;
+    height: number;
+  };
   if (header.version !== 2) {
-    throw new Error(`expected asciicast v2, got v${header.version} — re-record with 'asciinema rec -f asciicast-v2'`);
+    throw new Error(
+      `expected asciicast v2, got v${header.version} — re-record with 'asciinema rec -f asciicast-v2'`,
+    );
   }
   const events: CastEvent[] = [];
   for (let i = 1; i < lines.length; i++) {
@@ -70,7 +76,7 @@ export function startReplay(
   const raf = opts.raf ?? ((cb) => requestAnimationFrame(cb));
   const caf = opts.caf ?? ((id) => cancelAnimationFrame(id));
 
-  const { events, duration } = cast;
+  const { events } = cast;
   let i = 0;
   let start = getNow();
   let rafId = 0;
@@ -96,11 +102,11 @@ export function startReplay(
     rafId = raf(tick);
   };
 
-  // touch duration so a zero-event cast doesn't busy-loop meaninglessly
+  // A zero-event cast has nothing to replay — return a no-op handle rather
+  // than scheduling a rAF loop that does nothing.
   if (events.length === 0) {
     return { stop: () => {} };
   }
-  void duration;
 
   rafId = raf(tick);
   return {

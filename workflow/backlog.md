@@ -1,5 +1,7 @@
 # Backlog
 
+> **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md). Next up: **WP5 (frontend UI prototype — tab-shell substrate)**, the Phase 1 critical-path build start.
+
 ## SURFACE-2026-06-16-ARCH-THUMBNAIL-MECHANISM-NONVIABLE
 - **Source:** feature:research (WP4 thumbnail-rendering probe)
 - **Target level:** docs/product/arch.md §"Phase 1 thumbnail-rendering probe" (+ Phase 2 §B.1 filmstrip)
@@ -26,23 +28,19 @@
 ## Code-quality findings — wp1-tauri-scaffold (2026-06-16)
 - **Pointer:** 4 MAJOR + 5 MINOR findings from `feature-review-quality` on commit `c50a785`. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp1-tauri-scaffold — 2026-06-16` section.
 - **Priority:** medium (MAJORs) + low (MINORs)
-- **Status:** pending
-- **Pickup shape:** run `/feature-refactor` against this feature to clean up scaffold-debt; ideally before WP5's UI lands on top. To dismiss specific findings, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.
+- **Status:** RESOLVED 2026-06-17 (refactor pass) — all 9 fixed: HTML title → Claudesk, README scaffold text replaced, window 800x600→1280x800, demo `greet` command + handler removed, `.prettierrc.json` given explicit `trailingComma: "all"`, eslint flat-config comment added, smoke values aligned (1+1 both sides), pnpm-workspace migration comment added, `vite.config.ts` `@ts-expect-error` → `import process from "node:process"`.
 
 ## Code-quality findings — wp2-cc-pty-probe (2026-06-16)
 - **Pointer:** 4 MINOR findings from `feature-review-quality` on commit `875e161`. Polish for the kept-in-tree probe harness (shutdown duplication, reader-thread lifecycle comment, WIP state marker drift, ReaderSink enum). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp2-cc-pty-probe — 2026-06-16` section.
 - **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** run `/feature-refactor` against this feature when WP7 starts using the harness as a reference. To dismiss specific findings, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.
+- **Status:** RESOLVED 2026-06-17 (refactor pass) — 3 fixed (shutdown-paths-diverged clarifying comment, reader-thread EOF lifecycle comment, stale `**State:**` body line dropped); 1 DISMISSED (`ReaderSink` enum — explicit inline readers are clearer for reference/`examples/` code; the EOF invariant is now single-sourced by the lifecycle comment). Rationale in the WIP's Code-Quality Review section.
 
 ## Code-quality findings — wp3-sublime-cli-probe (2026-06-16)
 - **Pointer:** 2 MAJOR + 4 MINOR findings from `feature-review-quality` on commit `cc72c4d`. MAJORs: stuck SURFACED leaf under a `[x]` Phase 1 parent (Work Tree invariant violation), and observation-vs-inference flattening in the invocation matrix (T8/T9/T11 inference-grade rows look identical to T7/T10 observation-grade rows). MINORs: stale state-prose drift, superscript footnote markers, stale `Unvisited:` sequence, runtimes.md timeout-formula deviation. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp3-sublime-cli-probe — 2026-06-16` section.
 - **Priority:** medium (MAJORs) + low (MINORs)
-- **Status:** pending
-- **Pickup shape:** run `/feature-refactor` against this feature when polishing probe writeups; the two MAJORs are quick wins (one delete-leaf, one column-add). To dismiss specific findings, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.
+- **Status:** RESOLVED 2026-06-17 (refactor pass) — all 6 fixed: stuck SURFACED leaf deleted from Work Tree, both invocation matrices gained a `Source: observed|inferred` column + legend (all ST rows correctly marked `inferred` per the consent rule), footnotes folded inline (superscripts removed), stale `**State:**` body line dropped, `Unvisited:`/Current Node updated to complete, runtimes.md 120s-safety-floor policy documented as an intentional clamp.
 
 ## Code-quality findings — wp4-thumbnail-rendering-probe (2026-06-17)
 - **Pointer:** 2 MINOR findings from `feature-review-quality` on commit `3ae90eb` (0 CRITICAL, 0 MAJOR; a 3rd MINOR — stale Phase-3 tree header — was fixed in-place). Polish on the durable probe pieces: a missing clarifying comment on the center terminal's no-serializer choice, and a `void duration;` scaffolding no-op in `replay.ts`. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp4-thumbnail-rendering-probe — 2026-06-17` section.
 - **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** address when lifting `replay.ts`/`frameStats.ts` into Phase 2's filmstrip (those are the reusable pieces). To dismiss, edit the WIP's `## Code-Quality Review` section and mark `[DISMISSED]`.
+- **Status:** RESOLVED 2026-06-17 (refactor pass) — both fixed: center-terminal no-serializer clarifying comment added in `Harness.tsx`; `void duration;` no-op removed from `replay.ts` (dropped the unused local destructure; `CastData.duration` field retained).

@@ -25,7 +25,9 @@ import { readFileSync } from "node:fs";
 
 const src = process.argv[2];
 if (!src) {
-  console.error("usage: node gen-cc-replay-cast.mjs <transcript.jsonl> > out.cast");
+  console.error(
+    "usage: node gen-cc-replay-cast.mjs <transcript.jsonl> > out.cast",
+  );
   process.exit(1);
 }
 
@@ -56,13 +58,21 @@ for (const line of lines) {
   const msg = o.message;
   if (o.type === "assistant" && msg && Array.isArray(msg.content)) {
     for (const b of msg.content) {
-      if (b.type === "text" && b.text) records.push({ ts, kind: "text", text: b.text });
-      else if (b.type === "tool_use") records.push({ ts, kind: "tool_use", name: b.name || "tool", input: b.input });
+      if (b.type === "text" && b.text)
+        records.push({ ts, kind: "text", text: b.text });
+      else if (b.type === "tool_use")
+        records.push({
+          ts,
+          kind: "tool_use",
+          name: b.name || "tool",
+          input: b.input,
+        });
     }
   } else if (msg && Array.isArray(msg.content)) {
     for (const b of msg.content) {
       if (b.type === "tool_result") {
-        const t = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
+        const t =
+          typeof b.content === "string" ? b.content : JSON.stringify(b.content);
         records.push({ ts, kind: "tool_result", text: t });
       }
     }
@@ -85,13 +95,18 @@ const wait = (s) => {
 };
 
 // truncate very long tool output to a screenful-ish chunk (a TUI wouldn't paint 20KB at once)
-const clip = (s, n = 1600) => (s.length > n ? s.slice(0, n) + `\n${DIM}… (+${s.length - n} more chars)${RESET}` : s);
+const clip = (s, n = 1600) =>
+  s.length > n
+    ? s.slice(0, n) + `\n${DIM}… (+${s.length - n} more chars)${RESET}`
+    : s;
 // strip any stray ESC from transcript content; we add our own ANSI deliberately.
 // eslint-disable-next-line no-control-regex -- matching the ESC control char is the intent here
 const sanitize = (s) => s.replace(/\x1b/g, "");
 
 push(CLEAR);
-push(`${c(213)}${BOLD}● Claude Code session (WP4 probe fixture — reconstructed from transcript)${RESET}\r\n\r\n`);
+push(
+  `${c(213)}${BOLD}● Claude Code session (WP4 probe fixture — reconstructed from transcript)${RESET}\r\n\r\n`,
+);
 
 let prevTs = records[0].ts;
 let lineCount = 0;
@@ -102,7 +117,9 @@ for (const r of records) {
   prevTs = r.ts || prevTs;
 
   if (r.kind === "user") {
-    push(`\r\n${c(45)}${BOLD}❯${RESET} ${c(252)}${sanitize(r.text).slice(0, COLS - 4)}${RESET}\r\n`);
+    push(
+      `\r\n${c(45)}${BOLD}❯${RESET} ${c(252)}${sanitize(r.text).slice(0, COLS - 4)}${RESET}\r\n`,
+    );
     wait(0.15);
   } else if (r.kind === "text") {
     // assistant prose streamed in word-ish chunks (token streaming feel)
@@ -120,10 +137,14 @@ for (const r of records) {
     lineCount++;
   } else if (r.kind === "tool_use") {
     // colored tool-call header + a short spinner animation (CC shows a working spinner)
-    push(`\r\n${c(220)}⏺${RESET} ${c(51)}${r.name}${RESET}${DIM}(${objPreview(r.input)})${RESET}\r\n`);
+    push(
+      `\r\n${c(220)}⏺${RESET} ${c(51)}${r.name}${RESET}${DIM}(${objPreview(r.input)})${RESET}\r\n`,
+    );
     const frames = 8 + (lineCount % 12);
     for (let i = 0; i < frames; i++) {
-      push(`\r${c(226)}${SPINNER[i % SPINNER.length]}${RESET} ${DIM}running…${RESET}`);
+      push(
+        `\r${c(226)}${SPINNER[i % SPINNER.length]}${RESET} ${DIM}running…${RESET}`,
+      );
       wait(0.08);
     }
     push(`\r${" ".repeat(20)}\r`);

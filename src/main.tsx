@@ -7,7 +7,9 @@ import App from "./App";
 // normal app bundle. THROWAWAY probe path.
 const isProbe = new URLSearchParams(window.location.search).has("probe");
 
-const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+const root = ReactDOM.createRoot(
+  document.getElementById("root") as HTMLElement,
+);
 
 if (isProbe) {
   import("./probe/ProbeApp").then(({ default: ProbeApp }) => {
