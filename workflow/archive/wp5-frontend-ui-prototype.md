@@ -1,7 +1,7 @@
 # Feature: WP5 — Frontend UI Prototype (tab-shell substrate)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** Completed 2026-06-18 — shipped 777c0b8, finalized. Archived.
 **Created:** 2026-06-18
 **drive_mode:** autopilot
 
@@ -59,8 +59,8 @@ Source: `docs/product/wbs.md` → WP5 (fully specified task list + `Workspace` t
 - verify-self re-run DONE — subagent PASS x5: 8 recents w/ open+× buttons; × delete 8→7 (stays on picker); dark mode confirmed (:root bg rgb(30,30,30), colorScheme=dark); open→workspace-open still works; 0 console errors.
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** All WP5 phases complete (Phase 1 + Phase 2, all verify nodes [x]). Ready to ship.
+- **Path:** Feature > finalize
+- **Active scope:** Shipped (777c0b8) + review-quality done (0 CRITICAL, 0 MAJOR, 3 MINOR auto-backlogged). Ready to finalize.
 - **Blocked:** none
 - **Relevance check (before Phase 2):** Requester still needs: yes. Requirements unchanged: yes. Solution still feasible: yes (Phase 1 proved the substrate renders). No superior alternative: yes. **Verdict: proceed.**
 - **Unvisited:** ship → review-quality → finalize
@@ -78,6 +78,43 @@ Source: `docs/product/wbs.md` → WP5 (fully specified task list + `Workspace` t
 - xterm id minting uses a monotonic counter (not Date.now/Math.random) — deterministic + test-friendly; WP7 swaps for backend session id.
 - Note (not surfaced): main JS chunk ~528kB (xterm.js) triggers Vite's 500kB chunk-size *warning*. Expected for a desktop app; no action (premature to manualChunks a single-window app).
 
+## Code-Quality Review — WP5 Frontend UI Prototype (tab-shell substrate)
+
+### Strengths
+- Clean seam discipline: pure reducer (`workspace.ts`) split from its React binding (`useWorkspaceList.ts`) keeps state logic unit-testable without a DOM, and comments name which later WP (WP6/WP7/WP13) lifts each Phase 1 clamp.
+- App-shell view is *derived* from `WorkspaceList` (`viewFor`) rather than stored separately — eliminates picker/list-disagreement bugs; right single-source-of-truth call, carried to Phase 2.
+- Mock-vs-real boundaries labeled precisely at every stub (`MOCK_BANNER`, `mockOpenFolderDialog`, `MOCK_RECENTS`, monotonic `idCounter`) with the replacing WP named.
+- "All workspaces stay mounted" honored structurally (CenterStage maps all; `display:none` toggle); the `display:none`→`fit()`-throws hazard pre-empted with the `offsetParent` guard.
+- Tests cover the load-bearing pure logic (N≤1 replace-not-append, focus no-op, view transitions) at the right granularity; the jsdom-skip decision is correctly reasoned.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [src/App.css:88] `.filmstrip` declares `flex-shrink: 0`, but its parent `.app-shell` is `display: grid` (not flex) — the property is inert; grid row sizing reserves the strip. Dead/misleading style in a substrate file Phase 2 builds on.
+- [src/components/workspace/XtermPane.tsx:60] mount `useEffect` keys on `[workspaceId]`, but CenterStage uses `key={ws.id}` so an id change already forces a fresh instance — `[]` would express once-per-mount intent more honestly.
+- [src/components/picker/ProjectPicker.tsx:91] global `h1 { text-align:center }` now has a single consumer (the picker heading); reads as leftover scaffold generality.
+
+### Assessment
+Well-built prototype that takes its "substrate, not feature" mandate seriously. The reducer/binding/view split is the kind of seam Phase 2 plugs into without reshaping; every mock is labeled with its real-data successor; load-bearing CLAUDE.md invariants (stay-mounted, DOM-only, single-source-of-truth, dark-only) honored structurally and in tests. Dark-mode change request landed atomically with its CLAUDE.md bullet + a backlog SURFACE for deferred real-data work. Only findings are cosmetic stylesheet nits with zero correctness impact; none warrant a refactor pass.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The app-shell view is cleaner *derived* from WorkspaceList (`viewFor`) than stored as a separate field — decided during build, not plan. Also confirmed the integration-boundary distinction between phases: Phase 1 (new isolated artifacts) auto-skipped verify-human; Phase 2 (App.tsx user-visible behavior changed) correctly did NOT — the one forced human pause landed exactly where it mattered (the real picker→workspace flow + the WKWebView eyeball).
+- **Assumptions that held:** Mock-data-only frontend was the right call — layout/CSS settled with zero backend coupling. The proven probe-Harness xterm mount pattern transferred directly. jsdom-free testing (pure reducers unit-tested; rendering live-observed) was sufficient and honest.
+- **Assumptions that were wrong:** The plan's picker was a static list; the operator's real 20+-project workflow surfaced at verify-human and reshaped it (scroll + manual delete) — and surfaced the dark-mode-only mandate. Neither was in the plan; both are now landed (UI) + documented (CLAUDE.md convention + WP6 backlog SURFACE). Good argument for keeping the verify-human pause non-skippable when there's a real integration boundary.
+- **Approach delta:** Two phases as planned; one mid-feature F12-style build extension for the verify-human change request (picker scroll/delete + dark mode), re-verified before approval. Otherwise implementation matched plan.
+
+## Closure
+**Feature complete:** WP5 (frontend UI prototype — tab-shell substrate) has shipped. It puts the VSCode-style project picker + the WorkspaceList / Center Stage / empty Filmstrip substrate (50/50 xterm + placeholder, dark-mode only) in the Claudesk window with mock data. Requester = operator — closure notice for self-record; see it via `pnpm tauri dev` (picker → click a recent → mock workspace). Real config store + PTY-backed CC arrive in WP6/WP7.
+
 ## Discoveries
+[SURFACED-2026-06-18] product:wbs (WP6) — SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS: picker real-data delete/recency-ordering/search at 20+ projects. Logged to workflow/backlog.md. Left open (targets WP6).
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->

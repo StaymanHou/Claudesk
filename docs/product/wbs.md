@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-17
+updated: 2026-06-18
 ---
 
 > Revision 2026-05-19: Added cross-window CC status indicator to Phase 2 headlines (WP9b probe + WP10b indicator WP). Phase 1 decomposition is unchanged.
@@ -108,7 +108,9 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - [x] If FAIL on any metric: try cheaper alternatives — N/A, no metric hard-failed (active-CPU p95 caveat documented + mitigations listed instead)
 - [x] Write the report and link it from `arch.md` and `roadmap.md` Phase 2
 
-### WP5: Frontend UI prototype (no backend wiring) — tab-shell substrate from day one
+### WP5: Frontend UI prototype (no backend wiring) — tab-shell substrate from day one ✅ SHIPPED 2026-06-18 (commit 777c0b8)
+
+> **Outcome: tab-shell substrate built + operator-approved.** WorkspaceList (pure reducer + N≤1 invariant) / Center Stage / empty Filmstrip slot + 50/50 Workspace (xterm.js DOM renderer w/ mock data, "Coming in Phase 3" card) + Project Picker (scrollable mock recents w/ per-row delete, mocked Open-Folder) + derived `picker | workspace-open` view machine. Two operator change-requests landed during verify-human: (1) picker keeps every project / manual-delete-only / scales to 20+ (UI here; real-data delete/ordering/search → WP6, SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS); (2) **dark-mode only**, enforced in CSS + a new CLAUDE.md convention. Gate green (tsc/eslint/prettier/vitest 21/21/vite build); review-quality 0 CRITICAL / 0 MAJOR / 3 MINOR (cosmetic, backlogged).
 
 **Description:** Build the static React UI: project picker (recents list + "Open Folder" button), 2-pane main view (left half: xterm.js component mounted with mock data; right half: placeholder card), and the **tab-shell substrate** (WorkspaceList + Center Stage + empty Filmstrip slot). No real IPC yet — use mock data so the layout/CSS work is settled before Rust wiring. In Phase 1 the WorkspaceList only ever holds one workspace, but the data shape and rendering structure are the Phase 2-ready shape.
 
@@ -116,17 +118,17 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 **Dependencies:** WP1
 **Size:** M
 **Tasks:**
-- [ ] Define the `Workspace` TypeScript type: `{ id: string, project_path: string, cc_session_id: string | null, status: 'idle'|'running'|'awaiting-input'|'unknown', display_name: string }`
-- [ ] `WorkspaceList` React state (`useState<Workspace[]>` or Zustand store) — holds the array of all open workspaces; Phase 1 invariant: length ≤ 1
-- [ ] Workspace component (one per array element): contains the 50/50 horizontal split (CSS grid; resizable divider deferred). Left half mounts `@xterm/xterm` with `@xterm/addon-fit` (NO `@xterm/addon-webgl`); right half is the placeholder card ("Coming in Phase 3")
-- [ ] All workspaces stay mounted; non-focused ones use `display: none` (Phase 1: trivially N=1 so always visible, but the pattern is wired)
-- [ ] Center Stage: renders the focused workspace at full size
-- [ ] **Filmstrip slot:** empty container above (or below) the Center Stage, sized as if it could host tiles. Comment in code: "Phase 2 populates this." This reserves the layout real-estate so Phase 2 doesn't have to reshape the foundation.
-- [ ] Project Picker component: list of recents (mocked), "Open Folder" button (mocked dialog), click handler stub that emits `open_workspace(path)`
-- [ ] App shell: state machine for `picker` vs `workspace-open` view (Phase 1: workspace-open shows the single workspace; Phase 2: shows the multi-workspace UI)
-- [ ] Mount xterm.js in the left half with mock data via direct `term.write("Hello, mock CC\r\n")`
-- [ ] Verify in `pnpm tauri dev` on actual macOS (NOT just `vite dev` in a browser tab — WKWebView vs Chromium rendering differences must be caught here)
-- [ ] Lint + tests pass
+- [x] Define the `Workspace` TypeScript type: `{ id: string, project_path: string, cc_session_id: string | null, status: 'idle'|'running'|'awaiting-input'|'unknown', display_name: string }`
+- [x] `WorkspaceList` React state (`useState<Workspace[]>` or Zustand store) — holds the array of all open workspaces; Phase 1 invariant: length ≤ 1
+- [x] Workspace component (one per array element): contains the 50/50 horizontal split (CSS grid; resizable divider deferred). Left half mounts `@xterm/xterm` with `@xterm/addon-fit` (NO `@xterm/addon-webgl`); right half is the placeholder card ("Coming in Phase 3")
+- [x] All workspaces stay mounted; non-focused ones use `display: none` (Phase 1: trivially N=1 so always visible, but the pattern is wired)
+- [x] Center Stage: renders the focused workspace at full size
+- [x] **Filmstrip slot:** empty container above (or below) the Center Stage, sized as if it could host tiles. Comment in code: "Phase 2 populates this." This reserves the layout real-estate so Phase 2 doesn't have to reshape the foundation.
+- [x] Project Picker component: list of recents (mocked), "Open Folder" button (mocked dialog), click handler stub that emits `open_workspace(path)`
+- [x] App shell: state machine for `picker` vs `workspace-open` view (Phase 1: workspace-open shows the single workspace; Phase 2: shows the multi-workspace UI)
+- [x] Mount xterm.js in the left half with mock data via direct `term.write("Hello, mock CC\r\n")`
+- [x] Verify in `pnpm tauri dev` on actual macOS (NOT just `vite dev` in a browser tab — WKWebView vs Chromium rendering differences must be caught here) — operator-approved at verify-human (Chromium verify-self + human WKWebView eyeball)
+- [x] Lint + tests pass
 
 ### WP6: Project config store (Rust backend)
 

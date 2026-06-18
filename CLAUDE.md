@@ -166,7 +166,7 @@ Work packages (see `docs/product/wbs.md` for detail):
 
 Critical path: WP1 → WP5 → WP6 → WP7 → WP9. WP2 / WP3 / WP4 are probes that run in parallel as soon as WP1 unblocks them.
 
-**First feature to pick up:** WP1 — Tauri 2 project scaffold + dev environment.
+**Status:** WP1–WP5 shipped (scaffold + 3 probes + frontend UI prototype). **First feature to pick up next:** WP6 — Project config store (Rust `projects.json` persistence + wire the real Project Picker; also lands the deferred picker-at-scale work, SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS).
 
 ## Key Decisions
 

@@ -4,6 +4,31 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# wp5-frontend-ui-prototype — 2026-06-18
+
+3 MINOR findings from `feature-review-quality` on ship commit `777c0b8` (0 CRITICAL, 0 MAJOR). All cosmetic stylesheet/intent-clarity nits, zero correctness impact. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-18-QUALITY-WP5-FILMSTRIP-FLEX-SHRINK
+- **File:** `src/App.css:88`
+- **Finding:** `.filmstrip` declares `flex-shrink: 0`, but its parent `.app-shell` is `display: grid` (not flex) — the property is inert. The grid row sizing (`grid-template-rows: auto 1fr`) is what reserves the strip.
+- **Why it matters:** dead/misleading style declaration in a substrate file Phase 2 (WP16 filmstrip) will build on; a reader may infer a flex layout that doesn't exist.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-18-QUALITY-WP5-XTERMPANE-EFFECT-DEP
+- **File:** `src/components/workspace/XtermPane.tsx:60`
+- **Finding:** the xterm mount `useEffect` keys on `[workspaceId]`, but CenterStage uses `key={ws.id}` so a changed id already forces a fresh component instance. `[]` would express once-per-mount intent more honestly.
+- **Why it matters:** slight intent-obscuring; a maintainer may think id-change-driven re-mount is a supported path when component identity already guarantees it.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-18-QUALITY-WP5-GLOBAL-H1-RULE
+- **File:** `src/components/picker/ProjectPicker.tsx:91` (+ `src/App.css` global `h1`)
+- **Finding:** the global `h1 { text-align: center }` rule now has a single consumer (the picker heading); reads as leftover scaffold generality.
+- **Why it matters:** trivial; cosmetic clarity of the stylesheet's global section.
+- **Priority:** low
+- **Status:** pending
+
 # wp1-tauri-scaffold — 2026-06-16
 
 > **ALL RESOLVED 2026-06-17 (refactor pass).** All 9 findings fixed. See `workflow/backlog.md` → wp1 pointer for the per-fix summary.
