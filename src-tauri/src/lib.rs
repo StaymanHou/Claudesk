@@ -20,6 +20,8 @@ pub fn run() {
             config_store::commands::add_project,
             config_store::commands::record_open,
             config_store::commands::remove_project,
+            // WP9: prune projects whose folder was deleted between sessions.
+            config_store::commands::prune_missing_projects,
             cc_session::commands::cc_spawn,
             cc_session::commands::cc_input,
             cc_session::commands::cc_resize,

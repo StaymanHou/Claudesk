@@ -44,10 +44,21 @@ const CC_ARG_YOLO: &str = "--dangerously-skip-permissions";
 /// Chunk size for the PTY reader. WP2 saw multi-KB redraws; 4 KB matches the probe.
 const READ_CHUNK: usize = 4096;
 
+/// User-facing guidance shown when `claude` is not on `PATH`. The frontend overlay
+/// renders this verbatim, so it must read as actionable help, not an OS error code.
+const CC_NOT_FOUND_MSG: &str = "Claude Code (`claude`) was not found on your PATH. \
+Install it and make sure `claude` runs in your shell, then click Retry. \
+Install docs: https://docs.claude.com/en/docs/claude-code/setup";
+
 /// Errors crossing the `cc_session` boundary. Tauri commands map these to `String`.
 #[derive(Debug, Error)]
 pub enum CcError {
-    /// `claude` could not be spawned (e.g. not on `PATH`, or pty open failed).
+    /// `claude` is not on `PATH`. Carries the friendly, actionable guidance the
+    /// frontend overlay shows verbatim (NOT a raw `os error 2`). The single
+    /// most-common spawn failure on a fresh machine, so it gets its own variant.
+    #[error("{0}")]
+    CcNotFound(String),
+    /// `claude` could not be spawned for some other reason (pty open failed, etc.).
     #[error("failed to spawn Claude Code: {0}")]
     Spawn(String),
     /// No live session with the given id (already exited, or never existed).
@@ -59,6 +70,29 @@ pub enum CcError {
     /// The registry mutex was poisoned (a holder panicked).
     #[error("session registry lock poisoned")]
     Lock,
+}
+
+/// Map a raw spawn-failure string to the right [`CcError`].
+///
+/// `portable_pty::spawn_command` surfaces a missing binary as an opaque error whose
+/// message embeds the underlying OS "not found" text (on macOS: `No such file or
+/// directory (os error 2)`). Showing that raw string to the user is useless; this
+/// classifier promotes the not-found case to [`CcError::CcNotFound`] with actionable
+/// guidance, and leaves every other spawn failure as [`CcError::Spawn`]. Pure (string
+/// in, error out) so it is unit-testable without spawning a real `claude`.
+fn classify_spawn_error(raw: &str) -> CcError {
+    let lower = raw.to_lowercase();
+    // macOS/Linux: "No such file or directory" / "os error 2"; be liberal so a
+    // portable-pty message-shape change doesn't silently regress to the raw string.
+    if lower.contains("no such file or directory")
+        || lower.contains("os error 2")
+        || lower.contains("not found")
+        || lower.contains("cannot find")
+    {
+        CcError::CcNotFound(CC_NOT_FOUND_MSG.to_string())
+    } else {
+        CcError::Spawn(raw.to_string())
+    }
 }
 
 /// Compose the bytes for a slash command, enforcing the CR-not-LF rule.
@@ -129,7 +163,9 @@ impl PtyCcSession {
         let child = pair
             .slave
             .spawn_command(cmd)
-            .map_err(|e| CcError::Spawn(e.to_string()))?;
+            // The "claude not on PATH" case lands here — classify so the user sees
+            // actionable guidance, not a bare `os error 2`.
+            .map_err(|e| classify_spawn_error(&e.to_string()))?;
         // The child owns the slave end now; drop ours so EOF propagates on exit.
         drop(pair.slave);
 
@@ -349,6 +385,70 @@ mod tests {
     fn slash_command_preserves_arguments() {
         assert_eq!(slash_command_bytes("/session-resume"), b"/session-resume\r");
         assert_eq!(slash_command_bytes("/model opus"), b"/model opus\r");
+    }
+
+    // --- classify_spawn_error: friendly "claude not on PATH" mapping (P1.1) ---
+
+    #[test]
+    fn not_found_spawn_error_maps_to_cc_not_found() {
+        // The exact shape portable-pty surfaces on macOS when `claude` is absent.
+        let err = classify_spawn_error("No such file or directory (os error 2)");
+        assert!(matches!(err, CcError::CcNotFound(_)));
+        // The message must name Claude Code and point at install guidance — NOT the
+        // raw OS string the user can't act on.
+        let msg = err.to_string();
+        assert!(msg.contains("claude"), "message should name claude: {msg}");
+        assert!(msg.contains("PATH"), "message should mention PATH: {msg}");
+        assert!(
+            msg.contains("docs.claude.com"),
+            "message should link install docs: {msg}"
+        );
+        assert!(
+            !msg.contains("os error 2"),
+            "the raw OS error must not leak through: {msg}"
+        );
+    }
+
+    #[test]
+    fn not_found_classification_is_case_insensitive_and_liberal() {
+        // Guard against a portable-pty message-shape drift: any of these markers
+        // should still be recognized as the not-found case.
+        for raw in [
+            "No such file or directory",
+            "os error 2",
+            "command not found: claude",
+            "cannot find the file specified",
+        ] {
+            assert!(
+                matches!(classify_spawn_error(raw), CcError::CcNotFound(_)),
+                "expected CcNotFound for {raw:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn other_spawn_errors_stay_generic_spawn() {
+        // A genuine, non-not-found failure keeps the raw detail under Spawn so we
+        // don't mislabel (e.g.) a permission or pty-open failure as "not on PATH".
+        let err = classify_spawn_error("permission denied (os error 13)");
+        assert!(matches!(err, CcError::Spawn(_)));
+        assert!(err.to_string().contains("permission denied"));
+    }
+
+    #[test]
+    fn cc_not_found_ipc_string_is_the_friendly_message_verbatim() {
+        // IPC contract: the command layer maps CcError → String via `to_string()`,
+        // and XtermPane's error overlay renders that string verbatim. So the
+        // CcNotFound `to_string()` must equal the friendly guidance with NO wrapping
+        // prefix (the `#[error("{0}")]` derive guarantees this today; a future
+        // `#[error("cc error: {0}")]` slip would silently reintroduce noise in the
+        // overlay — this test is the guard for that user-facing invariant).
+        let ipc_string = classify_spawn_error("os error 2").to_string();
+        assert_eq!(ipc_string, CC_NOT_FOUND_MSG);
+        // And the generic Spawn variant DOES carry its descriptive prefix (the two
+        // variants are intentionally shaped differently for the overlay).
+        let spawn_string = classify_spawn_error("permission denied").to_string();
+        assert!(spawn_string.starts_with("failed to spawn Claude Code:"));
     }
 
     // --- SessionRegistry: id minting + map ops, with a fake session (no real PTY) ---

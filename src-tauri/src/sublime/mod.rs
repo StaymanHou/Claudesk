@@ -102,9 +102,10 @@ pub fn find_subl() -> SublTool {
 ///   come forward, not a duplicate on every press.
 pub fn subl_command(tool: &SublTool, project_dir: &str) -> (String, Vec<String>) {
     match tool {
-        SublTool::Path(p) | SublTool::Bundle(p) => {
-            (p.to_string_lossy().into_owned(), vec![project_dir.to_string()])
-        }
+        SublTool::Path(p) | SublTool::Bundle(p) => (
+            p.to_string_lossy().into_owned(),
+            vec![project_dir.to_string()],
+        ),
         SublTool::OpenA => (
             "open".to_string(),
             vec![

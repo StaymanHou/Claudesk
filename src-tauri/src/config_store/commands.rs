@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Manager};
 
-use super::{add_or_touch, read_projects, remove as remove_project_inner, Project};
+use super::{add_or_touch, prune_missing, read_projects, remove as remove_project_inner, Project};
 
 /// Resolve `~/Library/Application Support/Claudesk/` and ensure it exists.
 fn resolve_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -59,4 +59,14 @@ pub fn record_open(app: AppHandle, path: String) -> Result<Project, String> {
 pub fn remove_project(app: AppHandle, path: String) -> Result<(), String> {
     let dir = resolve_data_dir(&app)?;
     remove_project_inner(&dir, Path::new(&path)).map_err(|e| e.to_string())
+}
+
+/// Drop projects whose folder no longer exists on disk, returning the dropped
+/// records so the picker can show a toast naming how many were removed. Called on
+/// picker mount (WP9): a project deleted between sessions otherwise lingers as a
+/// dead click.
+#[tauri::command]
+pub fn prune_missing_projects(app: AppHandle) -> Result<Vec<Project>, String> {
+    let dir = resolve_data_dir(&app)?;
+    prune_missing(&dir).map_err(|e| e.to_string())
 }

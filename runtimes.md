@@ -52,9 +52,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 8s (2026-06-19, cold rebuild after adding tauri-plugin-global-shortcut + which for WP8)
+- **Last:** 6s (2026-06-19, warm rebuild for WP9 error-handling edits; 35 tests pass)
 - **Use timeout:** 120000
 - **History:**
+  - 6s — 2026-06-19 (warm rebuild, WP9 P1.1/P1.3: +6 tests → 35 pass; test run itself ~0s)
   - 8s — 2026-06-19 (cold build of WP8 global-shortcut dep tree: 31 tests pass; test run itself ~0s)
   - 11s — 2026-06-19 (cold build of WP7 cc_session dep tree; test run itself ~0s warm)
   - 17s — 2026-06-18 (cold; new dep tree from WP6 — incremental runs are ~2s)

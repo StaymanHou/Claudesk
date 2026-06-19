@@ -19,6 +19,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { pruneToastMessage } from "./pruneToast";
 
 // Mirrors the Rust `Project` serialization (`path` serializes as `project_path`).
 // Only the fields the picker reads are typed here; `last_opened_at` /
@@ -50,16 +51,30 @@ interface ProjectPickerProps {
 export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [filter, setFilter] = useState("");
+  // WP9: toast shown when projects were pruned on mount because their folder is
+  // gone. `null` = no toast (the common case).
+  const [pruneToast, setPruneToast] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load recents from the config store on mount. A `cancelled` guard avoids a
-    // state update if the picker unmounts before the IPC resolves. A failed load
-    // leaves the list empty (first run has no projects.json yet — the backend
-    // returns []).
+    // Load recents on mount. First prune any project whose folder was deleted
+    // between sessions (`prune_missing_projects` returns the dropped records), then
+    // list the survivors. A `cancelled` guard avoids a state update if the picker
+    // unmounts before the IPC resolves. Failures leave the list empty (first run has
+    // no projects.json yet — the backend returns []); the prune is a no-op then.
     let cancelled = false;
     void (async () => {
-      const projects = await invoke<RecentProject[]>("list_projects");
-      if (!cancelled) setRecents(projects);
+      try {
+        const dropped =
+          await invoke<RecentProject[]>("prune_missing_projects");
+        if (cancelled) return;
+        setPruneToast(pruneToastMessage(dropped));
+        const projects = await invoke<RecentProject[]>("list_projects");
+        if (!cancelled) setRecents(projects);
+      } catch {
+        // A failed prune/list is non-fatal — the picker shows whatever it has
+        // (empty on first run). Surfacing IPC errors in the picker is tracked
+        // separately (SURFACE-2026-06-18-QUALITY-* picker IPC error-surfacing).
+      }
     })();
     return () => {
       cancelled = true;
@@ -89,6 +104,20 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   return (
     <div className="picker" data-testid="picker">
       <h1>Claudesk</h1>
+      {pruneToast !== null && (
+        <div className="picker-toast" role="status" data-testid="picker-toast">
+          <span>{pruneToast}</span>
+          <button
+            type="button"
+            className="picker-toast-dismiss"
+            aria-label="Dismiss"
+            title="Dismiss"
+            onClick={() => setPruneToast(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
       <input
         type="search"
         className="picker-filter"

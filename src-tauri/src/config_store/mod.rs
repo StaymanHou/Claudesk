@@ -134,6 +134,27 @@ pub fn remove(data_dir: &Path, path: &Path) -> Result<(), ConfigError> {
     Ok(())
 }
 
+/// Drop projects whose directory no longer exists on disk.
+///
+/// A project's folder can be deleted, renamed, or unmounted between sessions; such
+/// an entry is a dead click in the picker. This reads the list, partitions it into
+/// survivors (path still exists) and dropped (path gone), persists the survivors
+/// **only if any were dropped** (no needless write on the common all-present case),
+/// and returns the dropped records so the caller can name them in a toast.
+///
+/// Existence is tested with [`Path::exists`], which follows symlinks and treats any
+/// stat error (including permission denied) as "does not exist". For the picker that
+/// is the right call: an entry we cannot stat is one we cannot open either.
+pub fn prune_missing(data_dir: &Path) -> Result<Vec<Project>, ConfigError> {
+    let projects = read_projects(data_dir)?;
+    let (kept, dropped): (Vec<Project>, Vec<Project>) =
+        projects.into_iter().partition(|p| p.path.exists());
+    if !dropped.is_empty() {
+        write_projects(data_dir, &kept)?;
+    }
+    Ok(dropped)
+}
+
 /// Sort most-recently-opened first (descending `last_opened_at`).
 fn sort_by_recency(projects: &mut [Project]) {
     projects.sort_by_key(|p| std::cmp::Reverse(p.last_opened_at));
@@ -315,6 +336,59 @@ mod tests {
         assert_eq!(touched.last_opened_at, 500);
         // display_name is preserved across a touch, not re-derived/cleared.
         assert_eq!(touched.display_name.as_deref(), Some("proj"));
+    }
+
+    #[test]
+    fn prune_missing_drops_gone_paths_keeps_present_and_returns_dropped() {
+        let dir = TempDir::new().unwrap();
+        // Two real subdirectories that exist on disk, one path that does not.
+        let alive_a = dir.path().join("alive-a");
+        let alive_b = dir.path().join("alive-b");
+        std::fs::create_dir(&alive_a).unwrap();
+        std::fs::create_dir(&alive_b).unwrap();
+        let gone = dir.path().join("deleted-since");
+
+        write_projects(
+            dir.path(),
+            &[
+                p(alive_a.to_str().unwrap(), 100),
+                p(gone.to_str().unwrap(), 200),
+                p(alive_b.to_str().unwrap(), 300),
+            ],
+        )
+        .unwrap();
+
+        let dropped = prune_missing(dir.path()).unwrap();
+        // The one missing path is returned as dropped...
+        assert_eq!(dropped.len(), 1);
+        assert_eq!(dropped[0].path, gone);
+        // ...and the persisted list now holds only the two that exist.
+        let remaining = read_projects(dir.path()).unwrap();
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.iter().all(|r| r.path != gone));
+    }
+
+    #[test]
+    fn prune_missing_is_noop_when_all_present() {
+        let dir = TempDir::new().unwrap();
+        let alive = dir.path().join("alive");
+        std::fs::create_dir(&alive).unwrap();
+        write_projects(dir.path(), &[p(alive.to_str().unwrap(), 100)]).unwrap();
+
+        // Capture the file's bytes; a no-drop prune must not rewrite the file.
+        let before = std::fs::read(dir.path().join(PROJECTS_FILE)).unwrap();
+        let dropped = prune_missing(dir.path()).unwrap();
+        assert!(dropped.is_empty());
+        let after = std::fs::read(dir.path().join(PROJECTS_FILE)).unwrap();
+        assert_eq!(before, after, "no drops → no rewrite");
+    }
+
+    #[test]
+    fn prune_missing_on_empty_store_is_empty_and_ok() {
+        let dir = TempDir::new().unwrap();
+        // No projects.json yet (first run) — prune returns nothing, no error.
+        let dropped = prune_missing(dir.path()).unwrap();
+        assert!(dropped.is_empty());
     }
 
     #[test]
