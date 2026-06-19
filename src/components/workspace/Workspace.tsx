@@ -1,8 +1,8 @@
 // WP5/WP7 — Workspace: one project's pane. 50/50 horizontal split.
 //
 // Left half: the xterm.js terminal — a real PTY-backed CC session as of WP7.
-// Right half: a placeholder card. The built-in lite editor + git diff viewer
-// arrive in Phase 3 (WP26/WP27).
+// Right half: a small Sublime toolbar (WP8) above a placeholder card. The built-in
+// lite editor + git diff viewer arrive in Phase 3 (WP26/WP27).
 //
 // CRITICAL invariant (CLAUDE.md "All workspaces stay mounted"): this component
 // is NEVER unmounted to switch the center stage. When not focused it is hidden
@@ -11,6 +11,7 @@
 
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
 import { XtermPane } from "./XtermPane";
+import { SublimeToolbar } from "./SublimeToolbar";
 
 interface WorkspaceProps {
   workspace: WorkspaceModel;
@@ -35,6 +36,10 @@ export function Workspace({ workspace, visible, onSessionId }: WorkspaceProps) {
         />
       </div>
       <div className="workspace-right">
+        <SublimeToolbar
+          projectPath={workspace.project_path}
+          active={visible}
+        />
         <div className="placeholder-card">
           <h2>{workspace.display_name}</h2>
           <p className="placeholder-coming">Coming in Phase 3</p>

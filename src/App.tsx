@@ -11,9 +11,9 @@ import { ProjectPicker } from "./components/picker/ProjectPicker";
 // Opening a project from the picker calls openWorkspace(path), which adds a
 // workspace and focuses it; the derived `view` flips to "workspace-open".
 //
-// Phase 1's mock workspace + xterm mount, and the empty Filmstrip slot, ride
-// underneath unchanged. WP6 swaps the picker's mock data for the real config
-// store; WP7 swaps the mock terminal for a PTY-backed CC session.
+// WP8's Sublime hotkey + button live inside each Workspace's right panel
+// (SublimeToolbar), not here — the focused workspace owns its own in-app ⌘⇧E
+// handler, so the app shell stays unchanged from WP5/WP7.
 function App() {
   const { workspaces, focusedId, view, openWorkspace, setSessionId } =
     useWorkspaceList();

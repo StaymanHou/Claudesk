@@ -14,6 +14,26 @@
 - **Status:** pending
 - **Pickup shape:** address the IPC error-handling MAJOR in a `/feature-refactor` pass or fold into the Phase 2 picker work; the MINORs are low-effort polish. Dismiss any via the WIP's `## Code-Quality Review` section if not worth it.
 
+## SURFACE-2026-06-19-ARCH-SUBLIME-LAUNCH-MECHANISM
+- **Source:** feature:build (WP8 Phase 1)
+- **Target level:** product:arch
+- **Type:** tech-debt
+- **Summary:** WP8 launches Sublime via `std::process::Command`, not `tauri-plugin-shell` as arch.md:27,113 state.
+- **Context:** The shell plugin is the IPC-callable shell API for the frontend; WP8's launch is backend-initiated from the global-shortcut handler, so a direct std spawn is the natural fit (consistent with cc_session spawning `claude`) and avoids an unneeded plugin + capability surface. Same class of as-built delta as WP7's portable-pty-vs-tauri-plugin-pty.
+- **Suggested action:** Resync arch.md:27,113 at WP8 finalize to reflect the std-process launch.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-ARCH-SUBL-PROJECT-FLAG-SUPERSEDED
+- **Source:** feature:build (WP8 Phase 1)
+- **Target level:** product:arch
+- **Type:** tech-debt
+- **Summary:** arch.md:113,167 still say hotkey-pop uses `subl --project <file>` when a `.sublime-project` exists; the WP3 probe superseded this.
+- **Context:** WP3 found `subl --project` does NOT activate Sublime Text on cold start, which contradicts the hotkey-pop intent. The correct invocation is `subl <dir>` (ST auto-loads any project file in the folder). WP8 follows the WP3 contract; arch.md was never updated.
+- **Suggested action:** Resync arch.md:113,167 at WP8 finalize to drop the `--project` mention.
+- **Priority:** low
+- **Status:** pending
+
 ## SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS
 - **Source:** feature:build (WP6 Phase 2 — gate run)
 - **Target level:** product:wbs (housekeeping; no WP)

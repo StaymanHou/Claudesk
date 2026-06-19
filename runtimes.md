@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-18
+updated: 2026-06-19
 ---
 
 # Runtime Registry
@@ -52,9 +52,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 11s (2026-06-19, cold rebuild after promoting portable-pty + adding base64 for WP7)
+- **Last:** 8s (2026-06-19, cold rebuild after adding tauri-plugin-global-shortcut + which for WP8)
 - **Use timeout:** 120000
 - **History:**
+  - 8s — 2026-06-19 (cold build of WP8 global-shortcut dep tree: 31 tests pass; test run itself ~0s)
   - 11s — 2026-06-19 (cold build of WP7 cc_session dep tree; test run itself ~0s warm)
   - 17s — 2026-06-18 (cold; new dep tree from WP6 — incremental runs are ~2s)
   - 2s — 2026-06-16

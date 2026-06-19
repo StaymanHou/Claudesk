@@ -1,5 +1,6 @@
 mod cc_session;
 mod config_store;
+mod sublime;
 
 use std::sync::Mutex;
 
@@ -23,6 +24,9 @@ pub fn run() {
             cc_session::commands::cc_input,
             cc_session::commands::cc_resize,
             cc_session::commands::cc_kill,
+            // WP8: Sublime Text pop. Invoked from the frontend (right-panel button
+            // and the in-app ⌘⇧E keybinding) with the focused workspace's path.
+            sublime::commands::sublime_open,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an

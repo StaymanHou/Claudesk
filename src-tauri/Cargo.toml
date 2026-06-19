@@ -30,6 +30,11 @@ thiserror = "2"
 # number array; base64 string is ~4x cheaper and atob-decodes on the frontend).
 portable-pty = "0.9"
 base64 = "0.22"
+# WP8: Sublime Text pop. `which` resolves `subl` on PATH for the discovery rule
+# (PATH → .app bundle → `open -a`), per the WP3 probe hand-off contract. The hotkey
+# is an in-app webview keybinding (not an OS-global shortcut), so no
+# tauri-plugin-global-shortcut / macOS Accessibility machinery is needed.
+which = "8"
 
 [dev-dependencies]
 tempfile = "3"
