@@ -1,7 +1,8 @@
 ---
 workflow: feature
-state: ship (complete)
+state: finalize (complete)
 created: 2026-06-19
+completed: 2026-06-19
 drive_mode: autopilot
 ---
 
@@ -268,8 +269,8 @@ The feature is done when:
   - [x] verify-codify  <!-- status: PASS — Phase 2 pure logic already codified by 9 vitest cases (bridge reducer + base64 round-trip); the round-1 fix (rAF fit/resize + focus) is React/IPC-effect-level over a real PTY + WKWebView, verified live in verify-human (the integration boundary's consuming-surface test — no headless real-PTY harness exists; a jsdom fake would pass-while-broken). No new tests warranted. Baselines green: 36 vitest + 22 cargo + tsc + lint + prettier(WP7). -->
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ALL phases complete (Phase 1 + Phase 2, all verify nodes [x]); next = ship → review-quality → finalize
+- **Path:** Feature > finalize
+- **Active scope:** ship + review-quality complete (0 CRITICAL/0 MAJOR/4 MINOR, all auto-backlogged); next = finalize
 - **Round-1 back-loop note:** Phase 2 verify-human rejected round 1 (banner-overprint + no-input + no-reflow); fixed via rAF-deferred fit/resize through a shared fitAndResize() chokepoint + term.focus (mount + post-spawn) + onMouseDown click-to-focus; round 2 all-PASS against real claude.
 - **Blocked:** none
 - **Unvisited:** Phase 2 verify loop (verify-auto → verify-self → verify-human [WILL pause: live claude PTY integration boundary] → verify-codify), then ship → review-quality → finalize
@@ -281,8 +282,44 @@ The feature is done when:
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
 
-TRANSITION: F4
+## Code-Quality Review — wp7-pty-cc-session
 
----
+### Strengths
+- The `CcSession` trait is a clean, minimal seam exactly as `arch.md`/CLAUDE.md mandate, with Phase 2 extensions (`state_events`, `recycle`) reserved as comments rather than speculatively built — disciplined forward-compat.
+- `slash_command_bytes` correctly centralizes the load-bearing CR-not-LF rule (SURFACE-2026-06-16) at a single chokepoint with strip-then-append-one-CR logic, and the 3 unit tests pin the no-double-terminate contract precisely.
+- The pure-core/IPC-shell split (registry + byte-codec unit-testable via `FakeSession`, live PTY left to verify-human) mirrors the `config_store/` precedent and yields genuine test value without a real `claude` binary.
+- The StrictMode/unmount-mid-spawn orphan is correctly reaped: the `cancelled` flag is checked after the `cc_spawn` await resolves and the orphan is killed, so the dev double-mount and fast-unmount cases don't leak a `claude`.
+- The base64 round-trip contract is symmetric and documented on both sides (`encodeBase64`/`decodeBase64`), with the `& 0xff` mask guarding the control-byte invariant — and the bridge reducer's stale-ack guards (`spawned` ignored unless `spawning`, late `exited` stays `error`) are correct and tested.
 
-TRANSITION: F7
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [src-tauri/src/cc_session/commands.rs:64] `cc_kill` doc comment + WIP AC#6 say "SIGTERM → SIGKILL after a grace window," but `PtyCcSession::kill` goes `/exit\r` → `child.kill()` (SIGKILL) with no SIGTERM step. Comment-vs-code drift; fix the comment, not the code (clean `/exit` first is better than SIGTERM).
+- [src-tauri/src/lib.rs:30-36] `kill_all()` runs inside `CloseRequested` while holding the registry `Mutex`, each `kill()` polls up to 3s; at N>1 this serializes grace windows and blocks window close up to 3s×N. Invisible at Phase-1 N=1; flag for the Phase-2 N-clamp lift (per-session timeout / concurrent reaping).
+- [src/components/workspace/Workspace.tsx:34] `onSessionId` passed as an inline arrow (fresh ref each render) sits in the spawn effect's dep array; the `phase!=="spawning"` guard makes re-runs a cheap no-op, so not a live bug, but the dep array reads as if identity is meaningful. `useCallback`/ref would make "spawn once" robust.
+- [src/components/workspace/XtermPane.tsx:159-162 / 91-94] The rAF-deferred fit+focus pattern is duplicated at mount and post-spawn with near-identical comments. A shared helper or one cross-referencing comment would reduce drift risk.
+
+### Assessment
+Well-built feature that advances the codebase rather than accruing debt. Backend module is the strongest part: trait seam honored exactly, EOF/orphan/grace-window handling thought through (drop-slave-for-EOF, drain-on-failed-emit, poll-then-SIGKILL), honest test strategy (unit-testable vs genuinely-needs-live-PTY, the round-1-reject → rAF-fix → round-2-approve loop a healthy signal). Frontend bridge cleanly factored into a pure reducer with symmetric base64 codecs; error/ended overlays close the WP6 silent-dead-click lesson. All findings MINOR — none change behavior at N=1, none warrant a refactor pass.
+
+### If you disagree
+Operator: dismiss any finding by editing this section in the WIP file and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+### Disposition (Mode 3 — autopilot)
+0 CRITICAL / 0 MAJOR / 4 MINOR. Per Mode-3 policy, all 4 MINOR auto-backlogged to `workflow/backlog-quality-findings.md` (priority low); pointer added to `workflow/backlog.md`. F39 → finalize.
+
+## Retrospect
+- **What changed in our understanding:** The WP2 probe de-risked the *PTY mechanics* (spawn, ANSI, CR/LF, resize, auth, kill), but the *frontend integration* held the real surprises — none of which a probe or unit test could surface. xterm.js inside a WKWebView needs (a) explicit `term.focus()` to take input (a fresh pane doesn't auto-focus the helper textarea) and (b) an rAF-deferred `fit()` because the grid cell's final width isn't settled during the synchronous mount effect — a synchronous fit computes a too-narrow size, and pushing `cc_resize` mid-CC-first-render makes CC overprint its banner. Both only appeared against the real binary in the real window.
+- **Assumptions that held:** The WP2 probe contract transferred cleanly to production (`drop(slave)`, `try_clone_reader`, `take_writer`, `/exit\r` kill, `master.resize()`). `TERM=xterm-256color` set explicitly was indeed required (WP2 had flagged it as an open question — confirmed: a Tauri parent has no TERM to inherit, and colors render once set). The pure-core/IPC-shell split (WP6 precedent) worked again — the registry + CR-helper unit-tested cleanly via a `FakeSession` double, leaving only the genuinely-integration paths to verify-human. The `CcSession` trait shape from arch survived essentially intact.
+- **Assumptions that were wrong:** That the spawn-time `cc_resize` + the `ResizeObserver` would handle sizing (they fired too early / not-on-first-mount). That xterm would auto-focus on mount (it doesn't in WKWebView). Both were caught by verify-human round 1 — the integration boundary did exactly its job: the browser-stubbed verify-self passed all 4 outcomes precisely because it couldn't exercise the real PTY + real layout, which is where the bugs lived.
+- **Approach delta:** Backend landed exactly as planned. Frontend Phase 2 took one verify-human back-loop (F12 → build → re-verify): the original XtermPane wired spawn/listen/input/resize correctly in principle but missed focus + layout-timing. Fix was a shared `fitAndResize()` chokepoint routed through rAF + `term.focus()` at mount/post-spawn/click. The 4 settled Open Questions (raw portable-pty, base64 IPC, State<Mutex> registry, CloseRequested hook) all held with no revision.
+
+## Communicate
+> **Feature complete:** WP7 — PtyCcSession (embedded CC terminal) has shipped (commit `50ca322`). Clicking a project in Claudesk now spawns a real `claude --dangerously-skip-permissions` session in a `portable-pty`, bridged into the workspace's xterm.js pane — live TUI with colors, working input, slash-command execution (CR-terminated), window-resize reflow, a session-ended overlay with Re-launch, and clean process reaping on window close (no orphaned `claude`). Verify by running `pnpm tauri dev` and opening any project. This is the last critical-path build before WP9 (Phase 1 polish); WP8 (Sublime hotkey) and WP9 remain in Phase 1.
+>
+> Requester = operator — closure notice for self-record.

@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-18
+updated: 2026-06-19
 ---
 
 > Revision 2026-05-19: Added cross-window CC status indicator to Phase 2 headlines (WP9b probe + WP10b indicator WP). Phase 1 decomposition is unchanged.
@@ -149,7 +149,7 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - [x] Unit tests in `src-tauri/`: round-trip, atomic write under simulated crash, missing-file handling
 - [x] "Open Folder" dialog wired via `tauri-plugin-dialog`
 
-### WP7: PtyCcSession — embedded CC terminal (real backend)
+### WP7: PtyCcSession — embedded CC terminal (real backend) ✅ SHIPPED 2026-06-19 (commit 50ca322)
 
 **Description:** Implement the `CcSession` trait and the `PtyCcSession` concrete impl in Rust using `tauri-plugin-pty` (which wraps `portable-pty`). Spawn `claude --dangerously-skip-permissions` with cwd = selected project path. Bridge bytes both ways with the xterm.js component from WP5. Handle resize, exit, kill. Apply findings from WP2.
 
@@ -157,15 +157,15 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 **Dependencies:** WP1, WP2 (probe must complete first), WP5, WP6
 **Size:** M
 **Tasks:**
-- [ ] Add `tauri-plugin-pty` to `src-tauri/Cargo.toml`; register in builder
-- [ ] Add `tauri-pty` to frontend `package.json`
-- [ ] Define `CcSession` trait: `send_input(bytes)`, `resize(cols, rows)`, `kill()`, `wait_for_exit()`, output via Tauri event stream. Forward-compat: leave room for `state_events()` and `recycle()` methods in Phase 2.
-- [ ] Implement `PtyCcSession`: holds the pty handle + reader task + writer task
-- [ ] Tauri commands: `cc_spawn(project_path) -> session_id`, `cc_input(session_id, bytes)`, `cc_resize(session_id, cols, rows)`, `cc_kill(session_id)`
-- [ ] Tauri event: `cc-output-<session_id>` streaming output bytes to frontend
-- [ ] Frontend: on workspace open → call `cc_spawn` → connect xterm.js `onData` to `cc_input`, `term.write` to `cc-output-*` events, fit-addon resize to `cc_resize`. The new Workspace record is added to WorkspaceList with the returned session id.
-- [ ] Lifecycle: window close → for each workspace in WorkspaceList, `cc_kill`; CC exit → frontend shows "session ended" overlay with re-launch button (per workspace)
-- [ ] Manual test: open a project, run a real CC session, type slash commands, exit via Ctrl+D, re-launch
+- [x] Add `tauri-plugin-pty` to `src-tauri/Cargo.toml`; register in builder — *DEVIATION (resolved Open Question): used **raw `portable-pty`** promoted to `[dependencies]` behind our own 4 Tauri commands, NOT the `tauri-plugin-pty` plugin. Keeps `CcSession` the sole seam; the plugin's JS `spawn()` would create a competing frontend abstraction.*
+- [x] Add `tauri-pty` to frontend `package.json` — *NOT DONE by design (same deviation): no JS PTY bridge; the frontend talks to our `cc_*` commands + `cc-output`/`cc-exit` events directly.*
+- [x] Define `CcSession` trait: `send_input(bytes)`, `resize(cols, rows)`, `kill()`, output via Tauri event stream. Forward-compat: `state_events()` and `recycle()` reserved as doc-comment stubs for Phase 2. (`wait_for_exit` realized as the `cc-exit-<sid>` event rather than a blocking method.)
+- [x] Implement `PtyCcSession`: holds the master + writer (`Mutex`) + child handle; reader thread off `try_clone_reader()` → base64 → events
+- [x] Tauri commands: `cc_spawn(project_path) -> session_id`, `cc_input(session_id, data)`, `cc_resize(session_id, cols, rows)`, `cc_kill(session_id)` (input/output bytes base64-encoded over IPC)
+- [x] Tauri event: `cc-output-<session_id>` streaming output (base64) to frontend; `cc-exit-<session_id>` on PTY EOF
+- [x] Frontend: on workspace open → `cc_spawn` → xterm.js `onData`→`cc_input`, `cc-output-*`→`term.write`, fit-addon→`cc_resize`; returned sid stored on the Workspace record
+- [x] Lifecycle: window close → `WindowEvent::CloseRequested` → `SessionRegistry::kill_all`; CC exit → session-ended overlay with Re-launch button; spawn-error overlay with Retry
+- [x] Manual test: open a project, real CC session, typed slash command executes, resize reflows, `/exit`→overlay→Re-launch, no orphaned `claude` after close — verify-human all-PASS (round 2)
 
 ### WP8: Global hotkey for Sublime Text pop
 

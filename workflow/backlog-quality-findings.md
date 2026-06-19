@@ -4,6 +4,42 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# wp7-pty-cc-session — 2026-06-19
+
+4 MINOR findings from `feature-review-quality` on ship commit `50ca322` (0 CRITICAL, 0 MAJOR). Backend module rated the strongest part of the diff; all findings are low-stakes comment/framing drift + one incidental effect-dep robustness gap. Auto-backlogged per drive_mode=autopilot (MINOR).
+
+## SURFACE-2026-06-19-QUALITY-CC-KILL-SIGTERM-COMMENT-DRIFT
+- **File:** `src-tauri/src/cc_session/commands.rs:64` (+ WIP AC#6)
+- **Finding:** The `cc_kill` doc comment and the WIP acceptance criterion both say "SIGTERM → SIGKILL after a grace window," but `PtyCcSession::kill` actually goes `/exit\r` → poll `try_wait` ~3s → `child.kill()` (SIGKILL via portable-pty) — there is no SIGTERM step.
+- **Why it matters:** comment-vs-code drift; a future maintainer will look for a SIGTERM path that doesn't exist. The behavior is correct (clean `/exit\r` first is better than SIGTERM); the fix is to the comment wording, not the code.
+- **Suggested action:** reword the `cc_kill` doc comment to "`/exit\r` graceful, then SIGKILL after a grace window." Trivial.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-KILL-ALL-N-SCALING
+- **File:** `src-tauri/src/lib.rs:30-36` + `cc_session/mod.rs` `kill_all`/`kill`
+- **Finding:** `kill_all()` runs inside the `CloseRequested` handler while holding the registry `Mutex`, and each `kill()` polls `try_wait` for up to 3s. At Phase-1 N=1 this is invisible, but the loop is explicitly written "for N" — at N>1 it serializes 3s grace windows and can block window close for up to 3s×N.
+- **Why it matters:** the N-ready framing invites a future reader to assume `kill_all` scales; it doesn't. Surfaces when the Phase-2 N-clamp lifts.
+- **Suggested action:** at the N-clamp lift (Phase 2 multi-workspace), reap sessions concurrently or use a per-session timeout so window close isn't serialized. Tie to the WP13 multi-workspace work.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-ONSESSIONID-INLINE-ARROW-DEP
+- **File:** `src/components/workspace/Workspace.tsx:34` + `XtermPane.tsx` spawn-effect dep array
+- **Finding:** `onSessionId` is passed to `XtermPane` as an inline arrow (`(sid) => onSessionId?.(workspace.id, sid)`), a fresh reference every render, yet it sits in the spawn effect's dependency array. The `if (bridge.phase !== "spawning") return` guard makes the re-run a cheap no-op today, so this is NOT a live bug — but the dep array reads as if `onSessionId` identity is meaningful when the "spawn exactly once" safety is incidental (the phase guard), not structural.
+- **Why it matters:** a future edit weakening the phase guard could turn this into a double-spawn. Make the intent robust.
+- **Suggested action:** wrap the inline arrow in `useCallback` (memoized on `workspace.id` + the stable `onSessionId`) or read `onSessionId` from a ref in the effect. Fold into a `/feature-refactor` pass or Phase-2 picker/workspace work.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-RAF-FOCUS-DUPLICATION
+- **File:** `src/components/workspace/XtermPane.tsx:159-162 / 91-94`
+- **Finding:** The rAF-deferred `fitAndResize` + `focus` pattern is duplicated at mount and post-spawn with near-identical inline comments explaining the 80-col layout-timing rationale.
+- **Why it matters:** low-stakes, but the doubled prose comment restates the same WHY twice; drift risk if the rAF rationale ever changes.
+- **Suggested action:** extract a tiny `rafFitFocus()` helper or have one comment cross-reference the other. Cleanup-only.
+- **Priority:** low
+- **Status:** pending
+
 # wp6-project-config-store — 2026-06-18
 
 2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `525b7e8` (0 CRITICAL). Backend rated exemplary; all findings are on the frontend picker's IPC boundary + two small backend nits. Auto-backlogged per drive_mode=autopilot (MAJOR + MINOR).

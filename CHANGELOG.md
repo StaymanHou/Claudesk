@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-19
+
+- **Feature shipped:** WP7 — PtyCcSession (embedded CC terminal): clicking a project spawns a real `claude --dangerously-skip-permissions` session in a `portable-pty` (the WP2-proven mechanism) behind the `CcSession` trait seam and four Tauri commands (`cc_spawn`/`cc_input`/`cc_resize`/`cc_kill`), streaming PTY output as base64 over a `cc-output-<sid>` event into the workspace's xterm.js pane and piping keystrokes back, with a session-ended overlay + Re-launch, a spawn-error overlay + Retry, window-resize reflow, `TERM=xterm-256color` set explicitly for color, and clean process reaping (`/exit\r` then SIGKILL; `CloseRequested` → `kill_all`) so no orphaned `claude` survives a window close.
+- **Backlog resolved:** SURFACE-2026-06-16-CC-SLASH-COMMANDS-NEED-CR-NOT-LF — closed by `cc_session::slash_command_bytes`, the single chokepoint that appends exactly one `\r` (CR, not LF) to every Claudesk-originated slash command, codified by three cargo tests and confirmed live against the real `claude` binary.
+- **Milestone:** WP7 (Phase 1, PtyCcSession — embedded CC terminal) complete — the last critical-path build before WP9 polish; WP8 (Sublime hotkey) and WP9 (exit-criteria verification) remain in Phase 1.
+
 ## 2026-06-18
 
 - **Feature shipped:** WP5 — frontend UI prototype: the VSCode-style Project Picker (scrollable mock recents with per-row delete, mocked Open-Folder) plus the tab-shell substrate (WorkspaceList with a Phase 1 N≤1 invariant, Center Stage, empty Filmstrip slot, 50/50 Workspace with an xterm.js DOM-renderer terminal on mock data and a "Coming in Phase 3" placeholder), driven by a `picker | workspace-open` view machine derived from state — all dark-mode only, with no backend wiring yet.
