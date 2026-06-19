@@ -169,3 +169,6 @@ Tracked in [`roadmap.md`](roadmap.md) (Milestones 3–9: stateful CC controller,
 ## SURFACE-IN history
 
 (none yet)
+
+## Session Pause — 2026-06-19 15:30
+Paused (Milestone 2 planned; research + arch + WBS all complete). Next = build **WP1** (CM6 integration probe, the first M2 WP). See `workflow/.session.md` to resume.
