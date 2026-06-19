@@ -155,6 +155,15 @@ body,
   margin-bottom: 1.5rem;
 }
 
+/* Always-present filter over the recents list (substring match on name + path).
+   Inherits the dark input base; just needs to span the picker width. */
+.picker-filter {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 1rem;
+}
+
 .picker-recents {
   list-style: none;
   padding: 0;

@@ -1,10 +1,18 @@
+mod config_store;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Command surface is intentionally empty until WP7 defines the CcSession
-    // command set. Add commands to generate_handler![] as they land.
+    // WP6 lands the project config store command surface (projects.json
+    // persistence). WP7 will add the CcSession command set alongside it.
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            config_store::commands::list_projects,
+            config_store::commands::add_project,
+            config_store::commands::record_open,
+            config_store::commands::remove_project,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

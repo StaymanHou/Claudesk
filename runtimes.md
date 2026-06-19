@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-16
+updated: 2026-06-18
 ---
 
 # Runtime Registry
@@ -52,7 +52,8 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 2s (2026-06-16)
+- **Last:** 17s (2026-06-18, cold rebuild after adding tauri-plugin-dialog + thiserror + tempfile)
 - **Use timeout:** 120000
 - **History:**
+  - 17s — 2026-06-18 (cold; new dep tree from WP6 — incremental runs are ~2s)
   - 2s — 2026-06-16

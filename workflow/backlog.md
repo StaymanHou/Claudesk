@@ -2,6 +2,16 @@
 
 > **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md). Next up: **WP5 (frontend UI prototype — tab-shell substrate)**, the Phase 1 critical-path build start.
 
+## SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS
+- **Source:** feature:build (WP6 Phase 2 — gate run)
+- **Target level:** product:wbs (housekeeping; no WP)
+- **Type:** tech-debt
+- **Summary:** `pnpm format:check` flags two tracked files as not Prettier-clean: `.claude/memory/macos-tcc-permissions-granted.md` and `.claude/memory/tauri-command-removal-needs-invoke-sweep.md`. Pre-existing (last touched in commit `90ae5ef`, before WP5); unrelated to WP6 source.
+- **Context:** `.prettierignore` lists `docs/`, `workflow/`, `CLAUDE.md`, `runtimes.md` as hand-authored prose exempt from Prettier, but NOT `.claude/memory/`. These memory files are likewise hand-authored prose and arguably belong in the ignore list — or should be one-shot `prettier --write`-formatted. Either way, not WP6's job.
+- **Suggested action:** Either add `.claude/memory/` to `.prettierignore` (consistent with the other hand-authored-prose exemptions) OR run `pnpm format` once to normalize them. Decide in a housekeeping pass.
+- **Priority:** low
+- **Status:** open
+
 ## SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS
 - **Source:** feature:build (WP5 Phase 2 verify-human — operator request)
 - **Target level:** product:wbs (WP6 — Project config store + picker wiring)
