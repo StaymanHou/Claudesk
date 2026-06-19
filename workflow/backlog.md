@@ -2,6 +2,12 @@
 
 > **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md). Next up: **WP5 (frontend UI prototype — tab-shell substrate)**, the Phase 1 critical-path build start.
 
+## Code-quality findings — wp8-sublime-hotkey (2026-06-19)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `74dfc2c` (0 CRITICAL, 0 MAJOR). MINOR #1 (stale "global-shortcut handler" rationale in the WIP Discoveries + the SURFACE-...-ARCH-SUBLIME-LAUNCH-MECHANISM entry) was FIXED IN-PLACE — the launch is frontend-initiated via `sublime_open`, not from a global-shortcut handler. The 2 remaining are cosmetic doc nits (inconsistent WP3 probe-section citation shorthand in `sublime/mod.rs`; `chord.ts` "Phase 2" header tag reads oddly standalone). The feature survived a mid-flight OS-global→in-app spec reversal with no live remnants. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp8-sublime-hotkey — 2026-06-19` section.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** both remaining MINORs are 1-line comment edits — fold into the WP8 arch-resync at finalize, a `/feature-refactor` pass, or leave. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — wp7-pty-cc-session (2026-06-19)
 - **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `50ca322` (0 CRITICAL, 0 MAJOR). Low-stakes: (1) `cc_kill` comment says SIGTERM but code does `/exit\r`→SIGKILL (comment drift); (2) `kill_all` serializes 3s grace windows under the registry lock — blocks window close at N>1 (Phase-2 N-clamp concern); (3) `onSessionId` inline-arrow in the spawn-effect dep array (safety is incidental via the phase guard, not structural); (4) rAF fit+focus pattern duplicated mount/post-spawn. Backend module rated the strongest part of the diff. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp7-pty-cc-session — 2026-06-19` section.
 - **Priority:** low (all)
@@ -19,10 +25,10 @@
 - **Target level:** product:arch
 - **Type:** tech-debt
 - **Summary:** WP8 launches Sublime via `std::process::Command`, not `tauri-plugin-shell` as arch.md:27,113 state.
-- **Context:** The shell plugin is the IPC-callable shell API for the frontend; WP8's launch is backend-initiated from the global-shortcut handler, so a direct std spawn is the natural fit (consistent with cc_session spawning `claude`) and avoids an unneeded plugin + capability surface. Same class of as-built delta as WP7's portable-pty-vs-tauri-plugin-pty.
-- **Suggested action:** Resync arch.md:27,113 at WP8 finalize to reflect the std-process launch.
+- **Context:** WP8's `sublime_open` command (called from the frontend button + in-app ⌘⇧E handler) spawns `subl`/`open` directly; a std spawn is the natural fit (consistent with cc_session spawning `claude`) and avoids an unneeded plugin + capability surface. [Corrected 2026-06-19 per review-quality: original said "backend-initiated from the global-shortcut handler" — that handler was torn out; the launch is frontend-initiated.] Same class of as-built delta as WP7's portable-pty-vs-tauri-plugin-pty.
+- **Suggested action:** Resync arch.md:27,113 at WP8 finalize to reflect the std-process launch. Note arch.md's OS-global global-shortcut + Accessibility flow (arch.md:26,88,96,97,114,162-168,193) is ALSO superseded by WP8's in-app-keybinding spec — resync those lines too.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-19 (WP8 finalize) — arch.md resynced (tech-stack, diagram, component table, happy-path, Key Decision, PATH prereq) + CLAUDE.md resynced (tech stack, project tree, prereqs, Key Decisions, WP8 headline, status line). Launch now documented as `std::process::Command` via `sublime_open`; OS-global + Accessibility flow removed.
 
 ## SURFACE-2026-06-19-ARCH-SUBL-PROJECT-FLAG-SUPERSEDED
 - **Source:** feature:build (WP8 Phase 1)
@@ -32,7 +38,7 @@
 - **Context:** WP3 found `subl --project` does NOT activate Sublime Text on cold start, which contradicts the hotkey-pop intent. The correct invocation is `subl <dir>` (ST auto-loads any project file in the folder). WP8 follows the WP3 contract; arch.md was never updated.
 - **Suggested action:** Resync arch.md:113,167 at WP8 finalize to drop the `--project` mention.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-19 (WP8 finalize) — arch.md component table + happy-path now say `subl <dir>` / "never `--project`/`--new-window`"; the `subl --project` mention is gone.
 
 ## SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS
 - **Source:** feature:build (WP6 Phase 2 — gate run)

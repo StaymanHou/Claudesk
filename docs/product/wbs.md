@@ -167,21 +167,21 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - [x] Lifecycle: window close → `WindowEvent::CloseRequested` → `SessionRegistry::kill_all`; CC exit → session-ended overlay with Re-launch button; spawn-error overlay with Retry
 - [x] Manual test: open a project, real CC session, typed slash command executes, resize reflows, `/exit`→overlay→Re-launch, no orphaned `claude` after close — verify-human all-PASS (round 2)
 
-### WP8: Global hotkey for Sublime Text pop
+### WP8: In-app hotkey + button for Sublime Text pop ✅ SHIPPED 2026-06-19 (commit 74dfc2c)
 
-**Description:** Register a configurable global hotkey that opens Sublime Text at the **focused workspace's** project path. Single hotkey, hardcoded default in Phase 1 (settings UI lands in Phase 4). Surface a macOS Accessibility permission flow on first launch.
+**Description:** Open Sublime Text at the **focused (active-tab) workspace's** project path via two **in-app** affordances: an `⌘⇧E` keybinding (fires only while Claudesk is focused — NOT an OS-global shortcut) and an "Open in Sublime" button in each workspace's right-panel toolbar (labeled with the combo). Hardcoded default in Phase 1 (settings UI lands in Phase 4). **No macOS Accessibility permission needed** (in-app keybinding, not a system shortcut).
+
+> **As-built note (2026-06-19):** The original WP8 spec was an OS-global hotkey via `tauri-plugin-global-shortcut` + a macOS Accessibility onboarding flow. That was built then rejected at verify-human (operator clarified the hotkey must be in-app only) and torn out in the same feature; the final design is the in-app keybinding + button below. Tasks rewritten to as-built.
 
 **Phase:** Phase 1
-**Dependencies:** WP1, WP3 (probe must complete), WP6
+**Dependencies:** WP1, WP3 (probe complete), WP6, WP7 (right-panel toolbar lives in the Workspace)
 **Size:** S
 **Tasks:**
-- [ ] Add `tauri-plugin-global-shortcut`; add required permissions to `capabilities/`
-- [ ] Define default hotkey (e.g., `Cmd+Shift+E`); document it
-- [ ] On app start: register hotkey; handler reads **focused workspace's** project path from app state (Phase 1: there's only one workspace ever, so the read is trivial; the API is workspace-aware for Phase 2)
-- [ ] Implement Sublime launcher in Rust using `tauri-plugin-shell`, applying WP3 decision (subl + --project when applicable; `open -a` fallback)
-- [ ] On macOS: detect Accessibility permission status; show a one-time onboarding dialog if missing, linking to System Settings → Privacy & Security → Accessibility
-- [ ] Manual test: open project → press hotkey → Sublime Text opens at project root
-- [ ] Manual test: hotkey when no workspace is open → no-op (or surface a tray notification)
+- [x] `sublime` Rust module: `find_subl` discovery (PATH → `.app` bundle → `open -a`, per WP3), pure `subl_command` builder (`subl <dir>`; never `--project`/`--new-window`), `launch()` via `std::process::Command`, thin `sublime_open` Tauri command (8→7 pure unit tests)
+- [x] In-app `⌘⇧E` keybinding: webview `keydown` handler owned by the focused (visible) workspace; pure `isSublimeChord` matcher (5 vitest)
+- [x] "Open in Sublime" button in a right-panel toolbar (`SublimeToolbar.tsx`), labeled with the `⌘⇧E` combo; `onClick` → `sublime_open` with surfaced error
+- [x] ~~macOS Accessibility onboarding~~ — N/A; in-app keybinding needs no OS permission (OS-global approach scrapped)
+- [x] Manual test (verify-human): open project → click button / press `⌘⇧E` → Sublime opens at the active tab's project dir; `⌘⇧E` is in-app-only (no-op when another app focused) — all PASS
 
 ### WP9: Phase 1 polish + exit-criteria verification
 

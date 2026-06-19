@@ -33,12 +33,12 @@ The companion workflow-system project (`my-claude-code-customization`) is symlin
 ## Tech Stack
 
 - **Tauri 2** (2.9.x line) — Rust desktop framework with native WKWebView on macOS; ~3MB bundle, ~30–40MB RAM idle. Single `WebviewWindow` hosts all workspaces (no multi-webview).
-- **Rust** (stable, ≥1.77) — backend: process lifecycle, PTY, filesystem, global shortcuts, project config persistence. Phase 2 also: Unix-socket hook listener + status broadcaster.
+- **Rust** (stable, ≥1.77) — backend: process lifecycle, PTY, filesystem, external-tool launch (Sublime via `sublime_open`), project config persistence. Phase 2 also: Unix-socket hook listener + status broadcaster.
 - **TypeScript + React 19 + Vite** — frontend. WorkspaceList in React state; all workspaces stay mounted, switching center stage is `display: none` toggling.
 - **xterm.js** (`@xterm/xterm` + `@xterm/addon-fit`) — terminal renderer. **DOM renderer only — no `@xterm/addon-webgl`.** Research established that WebGL contexts cap at ~16 per browser page; with a multi-workspace tab shell, the DOM renderer is simpler and good enough for the foreground.
 - **`tauri-plugin-pty`** (wraps `portable-pty`) — embedded PTY in the Rust core (NOT node-pty + sidecar).
-- **`tauri-plugin-global-shortcut`** — global hotkeys for Sublime-pop (requires macOS Accessibility permission).
-- **`tauri-plugin-fs`** / **`tauri-plugin-dialog`** / **`tauri-plugin-shell`** — file IO, file dialogs, external process launch.
+- **In-app Sublime-pop hotkey** — a webview `⌘⇧E` `keydown` handler owned by the focused workspace (WP8). NOT an OS-global shortcut: no `tauri-plugin-global-shortcut`, no macOS Accessibility permission. (The OS-global approach was built then rejected at verify-human 2026-06-19 — see WP8 in the wbs.md archive.)
+- **`tauri-plugin-fs`** / **`tauri-plugin-dialog`** — file IO, file dialogs. (The Sublime launch uses `std::process::Command` directly, not `tauri-plugin-shell`.)
 - **Phase 2 additions:** `tauri-nspanel` v2.1 (PiP NSPanel), `tauri-plugin-positioner` with `tray-icon` feature (menu-bar popover positioning), `tauri-plugin-fs-watch` / `notify` (`workflow/.session.md` file-watcher).
 - **No database** — project list is a flat JSON file at `~/Library/Application Support/Claudesk/projects.json`.
 - **No backend infrastructure** — single-user desktop app.
@@ -69,7 +69,7 @@ claudesk/
 │   ├── src/
 │   │   ├── cc_session/        # CcSession trait + PtyCcSession impl
 │   │   ├── config_store/      # projects.json persistence
-│   │   ├── shortcuts/         # global hotkey registration
+│   │   ├── sublime/           # find_subl discovery + sublime_open command (WP8)
 │   │   └── main.rs
 │   ├── Cargo.toml
 │   ├── tauri.conf.json
@@ -97,7 +97,7 @@ Commands run directly on the host. Standard setup and tooling apply.
 - **Sublime Text** with `subl` on `PATH` (or fallback to `open -a "Sublime Text"`)
 - **Sublime Merge** with `smerge` on `PATH` — Phase 2 only
 - **Claude Code CLI** (`claude`) installed and authenticated independently before launching Claudesk
-- **macOS Accessibility permission** for Claudesk (required for global shortcuts; the app prompts on first launch)
+- _(No macOS Accessibility permission needed — the Sublime hotkey is an in-app `⌘⇧E` keybinding, not an OS-global shortcut.)_
 
 ### Setup
 
@@ -161,12 +161,12 @@ Work packages (see `docs/product/wbs.md` for detail):
 - **WP5** Frontend UI prototype (tab-shell substrate from day one)
 - **WP6** Project config store
 - **WP7** PtyCcSession — embedded CC terminal
-- **WP8** Global hotkey for Sublime Text pop
+- **WP8** In-app hotkey (⌘⇧E) + right-panel button for Sublime Text pop
 - **WP9** Phase 1 polish + exit-criteria verification
 
 Critical path: WP1 → WP5 → WP6 → WP7 → WP9. WP2 / WP3 / WP4 are probes that run in parallel as soon as WP1 unblocks them.
 
-**Status:** WP1–WP6 shipped (scaffold + 3 probes + frontend UI prototype + project config store). **First feature to pick up next:** WP7 — PtyCcSession (embedded CC terminal): `CcSession` trait + `PtyCcSession` impl via `tauri-plugin-pty`, spawn `claude --dangerously-skip-permissions` cwd=project, bridge bytes ↔ xterm.js. **Load-bearing constraint for WP7:** slash-command byte-injection must end in `\r` (CR), not `\n` — see SURFACE-2026-06-16-CC-SLASH-COMMANDS-NEED-CR-NOT-LF.
+**Status:** WP1–WP8 shipped (scaffold + 3 probes + frontend UI prototype + project config store + embedded CC terminal + in-app Sublime hotkey/button). **First feature to pick up next:** WP9 — Phase 1 polish + exit-criteria verification (Size S): time-to-productive <10s measurement, error handling (claude not on PATH, project path deleted), verify the WP4 thumbnail-probe report is linked from arch/roadmap, confirm tab-shell substrate in place, README placeholder, 3-day dogfood. When WP9 ships, Phase 1 is complete → `/product-finalize`. **WP9 has NO Accessibility task** — WP8's hotkey is in-app, so the old "Accessibility permission denied → hotkey no-op" error case in the WBS WP9 task list is moot (note for whoever picks up WP9).
 
 ## Key Decisions
 
@@ -184,7 +184,7 @@ Critical path: WP1 → WP5 → WP6 → WP7 → WP9. WP2 / WP3 / WP4 are probes t
 - **No per-project config file in the project itself.** Centralized list in app support dir aligns with the "no per-project config burden" principle.
 - **Host-based dev environment, not Docker.** Tauri targets host WKWebView and native windowing; Docker on macOS cannot provide them.
 - **`--dangerously-skip-permissions` (yolo) by default.** Vision-explicit. Phase 4 setting will let users opt out.
-- **macOS Accessibility permission flow on first launch.** Required by `tauri-plugin-global-shortcut`; surfaced as part of WP8.
+- **Sublime hotkey is in-app, not OS-global (WP8, 2026-06-19).** `⌘⇧E` is a webview `keydown` handler on the focused workspace + an "Open in Sublime" right-panel button — both call the backend `sublime_open` command. The original OS-global `tauri-plugin-global-shortcut` design (with a macOS Accessibility onboarding flow) was built then rejected at verify-human in favor of in-app. No Accessibility permission required.
 - **Phases 2–4 not decomposed yet.** Phase 1 decomposition is full; Phases 2–4 are WP-headline only. Premature decomposition would force decisions about later-phase internals before Phase 1 surfaces real constraints.
 - **PiP click-to-focus is a Future Possibility, not v1.** Display-only PiP first; promote-on-click deferred until dogfooding confirms the limitation is real.
 - **Workflow state-machine enforcement & claude-time integration are future possibilities, NOT in the initial roadmap.** Architecturally we leave room for them (see `docs/product/vision.md` → "Future Possibilities") but don't build toward them in Phases 1–4.

@@ -4,6 +4,26 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# wp8-sublime-hotkey — 2026-06-19
+
+3 MINOR findings from `feature-review-quality` on ship commit `74dfc2c` (0 CRITICAL, 0 MAJOR). The feature survived a mid-flight OS-global→in-app spec reversal with no live remnants; findings are all doc-accuracy/cosmetic. MINOR #1 (stale "global-shortcut handler" rationale) was FIXED IN-PLACE at finalize-prep time in both the WIP Discoveries and the backlog SURFACE entry — not pending. The 2 below are the remaining cosmetic nits. Auto-backlogged per drive_mode=autopilot (MINOR).
+
+## SURFACE-2026-06-19-QUALITY-WP3-PROBE-SECTION-SHORTHAND
+- **File:** `src-tauri/src/sublime/mod.rs:46-47` vs `:99`
+- **Finding:** `ST_BUNDLE_BIN`'s doc cites "WP3 probe §Decision point 2" while the module header cites "WP3 T3" for the `--project` finding — inconsistent shorthand for the same archived probe source.
+- **Why it matters:** trivial cross-reference polish; a reader can't tell if they're distinct citations. Both point at `workflow/archive/wp3-sublime-cli-probe.md`.
+- **Suggested action:** normalize both to one citation style. Trivial.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-CHORD-TS-PHASE-TAG
+- **File:** `src/sublime/chord.ts:1`
+- **Finding:** Header tagged "WP8 Phase 2" reads oddly standalone now the tree collapsed to 2 phases (Rust core / frontend). Accurate, just stylistically loose.
+- **Why it matters:** cosmetic; no functional impact.
+- **Suggested action:** drop the "Phase 2" qualifier or leave as-is. Lowest priority.
+- **Priority:** low
+- **Status:** pending
+
 # wp7-pty-cc-session — 2026-06-19
 
 4 MINOR findings from `feature-review-quality` on ship commit `50ca322` (0 CRITICAL, 0 MAJOR). Backend module rated the strongest part of the diff; all findings are low-stakes comment/framing drift + one incidental effect-dep robustness gap. Auto-backlogged per drive_mode=autopilot (MINOR).

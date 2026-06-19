@@ -1,8 +1,9 @@
 ---
 workflow: feature
-state: verify-codify (all phases complete)
+state: finalize (complete) — COMPLETED 2026-06-19
 created: 2026-06-19
 drive_mode: autopilot
+ship_commit: 74dfc2c
 wbs_ref: WP8 (Phase 1, docs/product/wbs.md:170)
 size: S
 ---
@@ -81,16 +82,47 @@ The exact Sublime invocation is **already decided** by the completed WP3 probe (
   **Relevance check (before this final-phase close):** Requester still needs this: yes (operator just approved the corrected spec). Requirements unchanged: yes (in-app hotkey + button, as corrected). Solution still feasible: yes (shipped + verified). No superior alternative: yes. **Verdict: proceed to ship.**
 
 ## Current Node
-- **Path:** Feature > ship (all phases complete)
-- **Active scope:** none — both phases complete (Rust core + sublime_open; frontend button + in-app ⌘⇧E). Ready to ship.
+- **Path:** Feature > finalize
+- **Active scope:** none — shipped (74dfc2c) + review-quality done (0C/0M/3 MINOR; #1 fixed in-place, 2 cosmetic auto-backlogged). Ready to finalize.
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** finalize → reflect
 - **Open discoveries:** 1 arch-resync note survives (subl --project superseded). The std-process-vs-shell-plugin note also survives. The OS-global/Accessibility arch drift is NEW (added to Problem Statement; also needs finalize resync). All low priority, for finalize.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
 
-[SURFACED-2026-06-19] product:arch — WP8 launches Sublime via `std::process::Command`, NOT `tauri-plugin-shell` as arch.md:27,113 state. The shell plugin is the IPC-callable shell API for the *frontend*; WP8's launch is backend-initiated from the global-shortcut handler, so a direct std spawn is the natural fit (consistent with cc_session spawning `claude`) and avoids an unneeded plugin + capability. Same kind of as-built delta as WP7's portable-pty-vs-tauri-plugin-pty. Resync arch.md at finalize.
+[SURFACED-2026-06-19] product:arch — WP8 launches Sublime via `std::process::Command`, NOT `tauri-plugin-shell` as arch.md:27,113 state. The `sublime_open` command (called from the frontend button + in-app ⌘⇧E handler) spawns `subl`/`open` directly; a std spawn is the natural fit (consistent with cc_session spawning `claude`) and avoids an unneeded plugin + capability. [Corrected 2026-06-19 per review-quality MINOR #1: the original rationale said "backend-initiated from the global-shortcut handler" — stale; that handler was torn out, the launch is frontend-initiated.] Same class of as-built delta as WP7's portable-pty-vs-tauri-plugin-pty. Resync arch.md at finalize.
 
 [SURFACED-2026-06-19] product:arch — arch.md:113,167 still say hotkey-pop uses `subl --project <file>` when a `.sublime-project` exists. The WP3 probe SUPERSEDED this: `--project` does not activate ST on cold start, so hotkey-pop must use `subl <dir>` (which auto-loads any project file in the folder). WP8 follows the WP3 contract. Resync arch.md at finalize.
+
+## Code-Quality Review — wp8-sublime-hotkey
+
+Ship commit `74dfc2c`. drive_mode autopilot → 0 CRITICAL / 0 MAJOR / 3 MINOR (Case C: MINORs auto-backlogged; MINOR #1 fixed in-place at the source). F39 → finalize.
+
+### Strengths
+- Clean pure-core / IPC-shell split (`resolve`/`subl_command` pure, `find_subl`/`launch` impure, `commands::sublime_open` thin) mirrors the established `cc_session/` layout — consistent and unit-testable without a real FS.
+- The WP3 invocation contract (PATH→bundle→open-a; `subl <dir>`, never `--project`/`--new-window`) is encoded as code AND pinned by a dedicated negative test (`never_passes_project_or_new_window_flags`) across all three branches — the load-bearing constraint can't silently regress.
+- The mid-feature scope correction (OS-global → in-app) was torn out cleanly: no `global_shortcut`/`FocusedProject`/`AccessibilityOnboarding` remnants survive; `lib.rs`/`Cargo.toml`/capabilities correspondingly trimmed.
+- Keydown ownership correct by construction: only the `active` (visible) workspace binds the `window` listener, `[active, projectPath]` deps + unmount cleanup → the chord always targets the focused tab, no stale-closure/multi-listener race.
+- Error path surfaced not swallowed (`SublimeError`→`String`, frontend `.catch` logs) — carries the WP6 "don't dead-click" lesson.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [workflow/backlog.md / WIP Discoveries] The surviving SURFACE-...-ARCH-SUBLIME-LAUNCH-MECHANISM rationale justified `std::process::Command` as natural because the launch is "backend-initiated from the global-shortcut handler" — stale; the as-built launch is frontend-initiated via `sublime_open`. Conclusion still sound, rationale misleading for the arch-resync reader. — **FIXED in-place 2026-06-19** (corrected the WIP Discoveries entry; backlog entry corrected too — see below).
+- [src-tauri/src/sublime/mod.rs:46-47 vs :99] `ST_BUNDLE_BIN` doc cites "WP3 probe §Decision point 2" while the header cites "WP3 T3" for the `--project` finding — inconsistent probe-section shorthand for the same archived source. Cosmetic.
+- [src/sublime/chord.ts:1] `chord.ts` header tagged "WP8 Phase 2" reads oddly standalone now the tree collapsed to 2 phases. Cosmetic, accurate.
+
+### Assessment
+A well-built small feature that survived a disruptive mid-flight spec reversal without accruing debt. The discovery core is properly factored and the tests pin exactly the constraints that matter (WP3 anti-patterns + three-way precedence) rather than trivia. The frontend keydown-ownership model — gating the listener on `active` — is the subtle part and is done right for an all-mounted workspace shell. The torn-out OS-global machinery left no live remnants (the main risk in a rejected-then-rebuilt feature). The only real wart was doc drift in the surviving rationale, now corrected. Net: advances the codebase; no refactor-worthy findings.
+
+### If you disagree
+Operator: dismiss any finding by editing this section in the WIP and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The feature's *spec* was wrong, not its plan — "hotkey for Sublime" was implemented as an OS-global shortcut (the literal WBS/arch wording) when the operator actually wanted an in-app keybinding scoped to the focused Claudesk window. The correction came only at verify-human, after a full OS-global build (plugin + Accessibility onboarding + backend focus-mirror) was complete. The in-app design turned out *simpler*: no permission, no plugin, no mirror cell — the frontend already knows the focused path.
+- **Assumptions that held:** The WP3 probe's discovery contract (PATH → `.app` bundle → `open -a`; `subl <dir>`, never `--project`/`--new-window`; steal focus) was exactly right and survived the rewrite untouched — the `sublime` core + its 7 pure tests carried over verbatim. The pure-core / IPC-shell split (mirroring `cc_session`) made the teardown clean.
+- **Assumptions that were wrong:** That "global hotkey" in the WBS/arch meant *OS-global*. It meant "a hotkey," and the operator's mental model was always in-app (works while using Claudesk). The arch.md happy-path + the WBS task list both encoded the OS-global reading, so the agent built to the doc — but the doc was a confabulation of the real intent. Cost: ~one full phase of build + the global-shortcut/Accessibility/focus-mirror machinery, all torn out. Net still small (Size S), but the rework was avoidable with one clarifying question at plan time about *where* the hotkey should fire.
+- **Approach delta:** Plan → build → verify-self auto-skip (Phase 1 + first Phase 2) ran smoothly until the **verify-human pause caught the spec error** — exactly the gate's purpose. The F12 reject → F23 re-plan → rebuild loop worked as designed; the in-app rebuild then passed verify-human cleanly. Verify-human was the load-bearing human gate here: every automated step (tests, clippy, build, self-verify) PASSED on the *wrong* feature, because the code correctly implemented the wrong spec. Only a human pressing the key surfaced it. Reinforces [[verify-self-stub-cannot-cross-subprocess-boundary]] and the broader lesson that verify-human is non-negotiable at a real integration/UX boundary.

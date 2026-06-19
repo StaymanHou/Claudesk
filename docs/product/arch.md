@@ -23,8 +23,8 @@ updated: 2026-06-19
   - Backend: `tauri-plugin-pty` (wraps `portable-pty`) — registered in the Tauri builder; spawns `claude` in a real pty inside the Rust core. **Course-correction from roadmap.md text** (which said "node-pty via Tauri sidecar pattern"): node-pty would require shipping a Node runtime in the bundle, defeating the bundle-size advantage. portable-pty runs natively in Rust.
   - Frontend: `@xterm/xterm` + `@xterm/addon-fit` — render the terminal, fit to container. **DOM renderer only — `@xterm/addon-webgl` is NOT used** (2026-06-15 decision; see Key Decisions below). The 2026 DOM renderer is fast enough for the foreground workspace.
   - Bridge: `tauri-pty` (JS bindings shipped with `tauri-plugin-pty`) — `spawn()` returns a handle whose `onData` / `write` / `resize` mirror node-pty's API closely enough that xterm.js wiring is straight-line.
-- **Global shortcuts:** `tauri-plugin-global-shortcut` — for Sublime Text hotkey-pop. Requires macOS Accessibility permission flow; app must prompt on first launch.
-- **External tools invoked via shell:** `subl` (Sublime Text), `smerge` (Sublime Merge — Phase 2). Claudesk invokes them via Tauri's `tauri-plugin-shell` `Command` API; no embedding.
+- **Sublime-pop hotkey:** an **in-app** keybinding — a webview `keydown` handler (`⌘⇧E`) owned by the focused workspace. NOT an OS-global shortcut, so **no `tauri-plugin-global-shortcut` and no macOS Accessibility permission** are required. (As-built 2026-06-19, WP8: the OS-global approach was built then rejected at verify-human in favor of in-app — see WP8 in the `wbs.md` archive.)
+- **External tools invoked via shell:** `subl` (Sublime Text), `smerge` (Sublime Merge — Phase 2). Claudesk launches `subl` from the backend `sublime_open` command via **`std::process::Command`** (consistent with `cc_session` spawning `claude`; the original `tauri-plugin-shell` plan was dropped as-built — the launch is backend code, not a frontend-callable shell). No embedding.
 - **Persistence:** flat JSON file at `~/Library/Application Support/Claudesk/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()`. No DB; project list is a list of `{path, last_opened_at, display_name?, default_drive_mode?}` records. Matches the "no per-project config burden" vision principle (no `.claudesk.json` per repo).
 - **Database:** none — Phase 1 has no relational data, and the only durable state is the project list (handled above).
 - **Infrastructure:** none — this is a single-user desktop app; no servers, no cloud, no telemetry.
@@ -45,7 +45,7 @@ This is a desktop application targeting macOS. Tauri development requires direct
 - Node 20 LTS or newer via `nvm` / `fnm` / system install
 - Xcode Command Line Tools (`xcode-select --install`) — provides the C compiler, `codesign`, and macOS SDK headers
 - `pnpm` (preferred) or `npm` for frontend deps
-- Sublime Text and Sublime Merge installed locally; `subl` and `smerge` available on `PATH` (Claudesk invokes them but does NOT install them)
+- Sublime Text installed locally (Sublime Merge too, for Phase 2). `subl`/`smerge` on `PATH` is **optional** — Claudesk discovers the binary via PATH → `.app` bundle (`/Applications/Sublime Text.app/.../bin/subl`) → `open -a` fallback (WP3 probe), so the maintainer's no-symlink setup works out of the box. Claudesk invokes Sublime but does NOT install it.
 - Claude Code CLI installed and authenticated independently (`claude` on `PATH`)
 
 **First-run bootstrap:**
@@ -84,8 +84,7 @@ flowchart LR
       ConfigStore[Project Config Store - projects.json]
       CcSessionTrait[CcSession trait - swappable impl]
       PtyImpl[PtyCcSession - portable-pty]
-      ShellLauncher[Shell launcher - subl, smerge]
-      ShortcutMgr[Global Shortcut Manager]
+      SublimeOpen[sublime_open command - find_subl + std::process::Command]
     end
 
     Frontend <-- Tauri IPC --> Backend
@@ -93,8 +92,8 @@ flowchart LR
   end
 
   PtyImpl -- spawns --> ClaudeCLI["claude (CC CLI in PTY)"]
-  ShellLauncher -- spawns --> Sublime[Sublime Text]
-  ShortcutMgr -- global hotkey --> ShellLauncher
+  SublimeToolbar["SublimeToolbar - in-app ⌘⇧E + button (frontend)"] -- "invoke(sublime_open)" --> SublimeOpen
+  SublimeOpen -- spawns --> Sublime[Sublime Text]
   ConfigStore -- read/write --> AppDataDir["~/Library/Application Support/Claudesk/projects.json"]
 ```
 
@@ -110,8 +109,8 @@ flowchart LR
 | Project Config Store | Backend | Read/write `projects.json`; debounced writes on update. |
 | `CcSession` trait | Backend | **Forward-compat seam.** Abstract interface: `send_input(bytes)`, `on_output(callback)`, `resize(cols, rows)`, `wait_for_exit()`, `kill()`. Phase 1 has one impl (`PtyCcSession`); Phase 2 will add `recycle()`, `state_events()`, and per-session status fan-out. Future could add an `SdkCcSession` if we ever migrate to the Agent SDK. |
 | `PtyCcSession` | Backend | Concrete impl using `portable-pty` to spawn `claude --dangerously-skip-permissions` with the project dir as cwd; bridges to frontend xterm.js via Tauri events. |
-| Shell launcher | Backend | Spawns `subl <path>` (or `subl --project <file>` if a `.sublime-project` exists); spawns `smerge <path>` (Phase 2). Uses `tauri-plugin-shell`. |
-| Global Shortcut Manager | Backend | Registers user-configured hotkeys (Phase 1: Sublime-pop) via `tauri-plugin-global-shortcut`. |
+| `sublime` module / `sublime_open` command | Backend | Resolves `subl` (PATH → `.app` bundle → `open -a`, per WP3) and spawns `subl <path>` via `std::process::Command` (steal focus; never `--project`/`--new-window`). Frontend-invoked. `smerge` is Phase 2. |
+| In-app Sublime hotkey + button | Frontend | `SublimeToolbar` in each workspace's right panel: an "Open in Sublime" button (labeled `⌘⇧E`) and a `keydown` handler bound only on the focused workspace. Both `invoke("sublime_open", {projectPath})`. No OS-global shortcut, no Accessibility permission. |
 
 **Forward-compatibility seams (NOT built in Phase 1, only reserved):**
 
@@ -159,13 +158,13 @@ Thresholds above are the proposed defaults. The probe's own implementation plan 
 6. Frontend receives the event, **adds a Workspace record to `WorkspaceList`** (Phase 1: list now has length 1), mounts xterm.js inside the center stage, subscribes to `cc-output-<sid>` events, wires xterm.js `onData` → Tauri command `cc-input(sid, bytes)`, and `xterm fit addon resize` → `cc-resize(sid, cols, rows)`.
 7. CC's TUI renders inside xterm.js. User interacts as in a normal terminal.
 
-**Phase 1 happy path — Sublime hotkey:**
+**Phase 1 happy path — Sublime hotkey/button (in-app):**
 
-1. User presses configured global hotkey (e.g., `Cmd+Shift+E`).
-2. `tauri-plugin-global-shortcut` handler fires in Rust.
-3. Handler reads the focused workspace's project path from app state (Phase 1: there's only one).
-4. Spawns `subl <path>` (or `subl --project <file>` when a `.sublime-project` exists at the root) via `tauri-plugin-shell`.
-5. macOS focuses the Sublime Text window.
+1. With Claudesk focused, the user presses `⌘⇧E` (an in-app webview keybinding) OR clicks the "Open in Sublime" button in the focused workspace's right-panel toolbar.
+2. The focused workspace's `SublimeToolbar` reads its own `project_path` (frontend React state) and calls `invoke("sublime_open", { projectPath })`.
+3. The backend `sublime_open` command resolves `subl` (PATH → `.app` bundle → `open -a`) and spawns `subl <path>` via `std::process::Command` (`open -a "Sublime Text" <path>` on the fallback). Never `--project`/`--new-window` (WP3).
+4. macOS focuses the Sublime Text window (steal-focus is intended — the user explicitly asked for Sublime).
+5. `⌘⇧E` does nothing when Claudesk is not the focused app (in-app keybinding, not OS-global) — no Accessibility permission needed.
 
 **Phase 1 shutdown / window close:**
 
@@ -190,7 +189,7 @@ Thresholds above are the proposed defaults. The probe's own implementation plan 
 - **No per-project config file in the project itself.** Project list lives in `~/Library/Application Support/...`, not in `.claudesk.json` files inside each repo. Aligned with vision principle 5.
 - **Host-based dev environment, not Docker.** Tauri targets host WKWebView and native windowing; Docker on macOS cannot provide them. Industry standard for Tauri.
 - **`--dangerously-skip-permissions` (yolo mode) by default.** Vision explicit. A Phase 4 setting will let users opt out.
-- **macOS Accessibility permission for global shortcuts.** Required by `tauri-plugin-global-shortcut` on macOS. The app must surface a permission-grant flow on first launch — added as a Phase 1 task.
+- **Sublime hotkey is in-app, not OS-global (revised 2026-06-19, WP8).** The original design used `tauri-plugin-global-shortcut` (which needs a macOS Accessibility grant + first-launch onboarding flow). That was built then rejected at verify-human — the operator clarified the hotkey should fire only while Claudesk is focused, not system-wide. As-built: a webview `⌘⇧E` `keydown` handler owned by the focused workspace, plus a right-panel "Open in Sublime" button. No `tauri-plugin-global-shortcut`, no Accessibility permission, no onboarding dialog.
 
 ### Phase 2 forward-look (informational, not built)
 
