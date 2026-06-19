@@ -37,7 +37,7 @@ The companion workflow-system project (`my-claude-code-customization`) is symlin
 - **TypeScript + React 19 + Vite** — frontend. WorkspaceList in React state; all workspaces stay mounted, switching center stage is `display: none` toggling.
 - **xterm.js** (`@xterm/xterm` + `@xterm/addon-fit`) — terminal renderer. **DOM renderer only — no `@xterm/addon-webgl`.** Research established that WebGL contexts cap at ~16 per browser page; with a multi-workspace tab shell, the DOM renderer is simpler and good enough for the foreground.
 - **`tauri-plugin-pty`** (wraps `portable-pty`) — embedded PTY in the Rust core (NOT node-pty + sidecar).
-- **In-app Sublime-pop hotkey** — a webview `⌘⇧E` `keydown` handler owned by the focused workspace (WP8). NOT an OS-global shortcut: no `tauri-plugin-global-shortcut`, no macOS Accessibility permission. (The OS-global approach was built then rejected at verify-human 2026-06-19 — see WP8 in the wbs.md archive.)
+- **In-app Sublime-pop hotkey** — a webview `⌘⇧E` `keydown` handler owned by the focused workspace (WP8). NOT an OS-global shortcut: no `tauri-plugin-global-shortcut`, no macOS Accessibility permission. (The OS-global approach was built then rejected at verify-human 2026-06-19 — see WP8 in `docs/product/archive/phase-1-bare-shell-poc/wbs.md`.)
 - **`tauri-plugin-fs`** / **`tauri-plugin-dialog`** — file IO, file dialogs. (The Sublime launch uses `std::process::Command` directly, not `tauri-plugin-shell`.)
 - **Phase 2 additions:** `tauri-nspanel` v2.1 (PiP NSPanel), `tauri-plugin-positioner` with `tray-icon` feature (menu-bar popover positioning), `tauri-plugin-fs-watch` / `notify` (`workflow/.session.md` file-watcher).
 - **No database** — project list is a flat JSON file at `~/Library/Application Support/Claudesk/projects.json`.
@@ -153,7 +153,7 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 **Phase 1: Bare Shell + Tab Substrate (PoC).** Goal: prove the Tauri shell + embedded terminal + project picker + tab-shell substrate work together; replace the "open terminal + cd + run claude" step at the user-visible level, while shipping the WorkspaceList / Center Stage / (empty) Filmstrip layout that Phase 2 will populate. Exit criteria: click a project → working CC session running in the project dir inside a workspace within the Claudesk window, in <10s; Sublime Text pops via hotkey when needed; the WP4 thumbnail-rendering probe has produced a documented pass/fail outcome that selects Phase 2's filmstrip rendering strategy (live ~1 fps mirrors or status tiles).
 
-Work packages (see `docs/product/wbs.md` for detail):
+Work packages (Phase 1 — full decomposition archived at `docs/product/archive/phase-1-bare-shell-poc/wbs.md`):
 - **WP1** Tauri 2 scaffold + dev environment
 - **WP2** Probe — CC under host-driven PTY byte-injection
 - **WP3** Probe — Sublime Text / Sublime Merge CLI shapes
@@ -166,7 +166,7 @@ Work packages (see `docs/product/wbs.md` for detail):
 
 Critical path: WP1 → WP5 → WP6 → WP7 → WP9. WP2 / WP3 / WP4 are probes that run in parallel as soon as WP1 unblocks them.
 
-**Status:** **Phase 1 COMPLETE — all WP1–WP9 shipped** (scaffold + 3 probes + frontend UI prototype + project config store + embedded CC terminal + in-app Sublime hotkey/button + Phase-1 polish/exit-criteria). WP9 (commit 91fae7f) added the two unhappy-path fixes — friendly "claude not on PATH" error (`CcError::CcNotFound`) and deleted-project prune-on-mount + toast — plus the README placeholder and exit-criteria confirmations (WP4 report linked, tab-shell substrate in place; time-to-productive accepted on feel, 3-day dogfood operator-waived). **Next:** `/product-finalize` (F30) — resync durable docs, sweep backlog, archive the Phase 1 cycle. Phases 2–4 remain headline-only in `wbs.md` (decomposed only when Phase 2 starts).
+**Status:** **Phase 1 COMPLETE — all WP1–WP9 shipped** (scaffold + 3 probes + frontend UI prototype + project config store + embedded CC terminal + in-app Sublime hotkey/button + Phase-1 polish/exit-criteria). WP9 (commit 91fae7f) added the two unhappy-path fixes — friendly "claude not on PATH" error (`CcError::CcNotFound`) and deleted-project prune-on-mount + toast — plus the README placeholder and exit-criteria confirmations (WP4 report linked, tab-shell substrate in place; time-to-productive accepted on feel, 3-day dogfood operator-waived). **Phase 1 cycle CLOSED** 2026-06-19 via `/product-finalize` (commit 02fb44e): durable docs resynced, backlog swept (open items deferred to Phase 2), Phase 1 WBS + research archived to `docs/product/archive/phase-1-bare-shell-poc/`. There is **no live `docs/product/wbs.md`** until the next cycle's `/product-wbs` writes one. **Next cycle:** Phase 2 (Stateful CC Controller + Multi-Workspace + Status Surfaces) — its WP headlines (WP10–WP24) live in the archived snapshot + `roadmap.md`; run `/product-wbs` (or `/product-vision`→…) to decompose them, grounding in `arch.md`'s Phase-2 forward-look + the carried-forward backlog (esp. the wp6 picker IPC error-surfacing MAJORs).
 
 ## Key Decisions
 
