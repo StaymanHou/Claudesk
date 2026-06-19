@@ -6,7 +6,7 @@ updated: 2026-06-19
 
 # Roadmap
 
-Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes second (Milestones 2–8); **the lite editor** third (Milestone 9); **release polish** fourth (Milestone 10).
+Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the in-app lite editor + diff viewer** comes second (Milestone 2) — a must-have, not a nice-to-have, now that projects live in tabs (see the resequencing rationale in the 2026-06-19 revision below); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes third (Milestones 3–9); **release polish** comes fourth (Milestone 10).
 
 Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). The `## Group` headings below are **cosmetic clustering only** — they carry no numbering or dependency semantics; they just organize the flat list for readability. Dependencies, where they exist, are stated in each milestone's prose.
 
@@ -24,16 +24,32 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 - [x] **Tab-shell substrate** — a workspace-list React component holds an array of workspace records; the center stage mounts the focused workspace; the filmstrip area exists but is empty. Background workspaces stay mounted (`display: none`), never unmounted on switch. **Only one workspace ever opens here, but the substrate is already in place.** *(WP5 777c0b8; confirmed at WP9.)*
 - [x] **Embedded terminal pane** (xterm.js + `portable-pty`), **DOM renderer only — no WebGL addon**, auto-runs `claude --dangerously-skip-permissions` in the selected project dir, full-size in the center stage. *(WP7 50ca322 — raw `portable-pty` behind our own Tauri commands; WP9 added a friendly "claude not on PATH" error.)*
 - [x] **Thumbnail-rendering probe** (gating for the later filmstrip strategy). **PASS** — Apple M4 / macOS 26.5.1: idle CPU 4.5% (<10% ✅), active median 13.3% (<20% ✅; p95 ~30% on bursts — caveat), RAM 240 MB (<300 ✅), center frame p95 18 ms / 0 dropped (✅). Validated path: `@xterm/addon-serialize` `serializeAsHTML()` from the buffer at ~1 fps (beat `cloneNode`; off-screen-DOM-mirror non-viable). **→ live ~1 fps mirrors are viable.** *(WP4, commit 3ae90eb; full outcome [`wp4-thumbnail-probe-outcome.md`](wp4-thumbnail-probe-outcome.md).)*
-- [x] **Right half: empty placeholder** (reserved for the lite editor, Milestone 9). *(WP5 "Coming in Phase 3" card 777c0b8; WP8 added the in-app Sublime toolbar/button in the right panel.)*
+- [x] **Right half: empty placeholder** (reserved for the lite editor, Milestone 2). *(WP5 "Coming in Phase 3" card 777c0b8; WP8 added the in-app Sublime toolbar/button in the right panel.)*
 - [x] **Hotkey to pop Sublime Text** at the project root (`subl <project-path>`). *(WP8 74dfc2c — in-app `⌘⇧E` webview keydown handler + right-panel button, NOT OS-global `tauri-plugin-global-shortcut`; that approach was built then rejected at verify-human in favor of in-app, no Accessibility permission.)*
 
 **Exit Criteria (met):** Click a project in the picker → working CC session running in the project dir, in <10s, **inside a workspace in the existing Claudesk window** (not a new OS window). Sublime Text pops via hotkey when manual editing is needed. The tab-shell substrate is in place even though only one workspace ever opens. The thumbnail-rendering probe produced a documented pass/fail outcome selecting the filmstrip-rendering strategy (→ live mirrors). Sublime Merge still launched manually.
 
-## Group B — Stateful CC controller, multi-workspace & status surfaces
+## Group B — Lite editor & diff viewer (right half)
 
-> The architectural heart of the product: stop treating CC as a black box, and light up the full multi-workspace UX (filmstrip with live thumbnails, menu-bar status item, optional PiP). This is what makes Claudesk genuinely *aware* of CC, the workflow system, and the user's project-juggling pattern. **Milestone 8 (menu-bar status item) ships before the PiP work in Milestone 9's group… see each milestone's dependency note.**
+> **Resequenced to second, 2026-06-19.** With the pivot from one-project-per-window to one-project-per-tab, the right half can no longer stay a placeholder behind an external Sublime pop-up: popping a separate Sublime/Sublime-Merge window per tab fragments the workflow across OS windows and reintroduces the exact window-juggling tax the tab model exists to remove. The in-app editor + diff viewer is therefore a **must-have**, built before the multi-workspace/status-surface work — so the right half is real the moment more than one tab is in play.
 
-### Milestone 2: CC lifecycle & state plumbing
+### Milestone 2: Lite Editor + Diff Viewer
+
+**Goal:** Cover the daily-use Sublime Text features inside Claudesk so the right half stops being a placeholder. With projects in tabs, in-app editing/diffing is the difference between a coherent single-window workflow and a window-juggling mess. After this, a full working day without opening Sublime Text or Sublime Merge externally is the target.
+
+**Deliverables:**
+- [ ] **Lite editor** (Monaco or CodeMirror 6 — decided in a research pass) covering: multi-cursor / column selection, Cmd+P fuzzy file finder, command palette for syntax selection, project-wide find/replace, split panes, minimap.
+- [ ] **Git diff viewer** for unstaged + staged changes (file list + per-file diff view, comparable to Sublime Merge's basics; `git2` crate).
+- [ ] **Right-half panel swapping:** one keybind cycles editor ↔ diff viewer ↔ second terminal (per-workspace, not global). *(Builds on Milestone 1's right-half placeholder + the per-workspace right panel.)*
+- [ ] **Hotkey-pop to real Sublime Text and Sublime Merge still works** (escape hatch for cases the built-in tools don't cover; the Sublime Merge hotkey itself lands in Milestone 9).
+
+**Exit Criteria:** A full working day completes without externally launching Sublime Text or Sublime Merge for routine work; the hotkey-pop becomes a rarely-used escape hatch, not the default.
+
+## Group C — Stateful CC controller, multi-workspace & status surfaces
+
+> The architectural heart of the product: stop treating CC as a black box, and light up the full multi-workspace UX (filmstrip with live thumbnails, menu-bar status item, optional PiP). This is what makes Claudesk genuinely *aware* of CC, the workflow system, and the user's project-juggling pattern. **Milestone 7 (menu-bar status item) ships before the PiP work in Milestone 8 — see each milestone's dependency note.**
+
+### Milestone 3: CC lifecycle & state plumbing
 
 **Goal:** Claudesk owns each workspace's CC process lifecycle and knows its idle/running/awaiting-input state from CC's official signals — never by scraping PTY output.
 
@@ -45,7 +61,7 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** A workspace's CC state transitions (idle→running→awaiting-input→exit) are observed in Claudesk solely from the hook channel + file-watcher, broadcast to all subscribers, with no PTY-output parsing.
 
-### Milestone 3: Smart auto-resume + drive mode
+### Milestone 4: Smart auto-resume + drive mode
 
 **Goal:** Opening a workspace lands on the correct resumption command automatically, and the active drive mode is always visible and one-click changeable.
 
@@ -60,7 +76,7 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Workspace open always fires the right resumption command without manual selection; the active drive mode is visible in the header and switchable in one click.
 
-### Milestone 4: Skill orchestration
+### Milestone 5: Skill orchestration
 
 **Goal:** Common workflow operations are clicks, not typed slash commands.
 
@@ -70,9 +86,9 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** No slash-command typing for common skills; Recycle Session is a single click.
 
-### Milestone 5: Multi-workspace UX (filmstrip + center stage)
+### Milestone 6: Multi-workspace UX (filmstrip + center stage)
 
-**Goal:** N projects open concurrently as workspaces in one window, switched via the filmstrip. *(Depends on Milestone 2's status broadcaster for tile status dots, and Milestone 1's tab-shell substrate.)*
+**Goal:** N projects open concurrently as workspaces in one window, switched via the filmstrip. *(Depends on Milestone 3's status broadcaster for tile status dots, and Milestone 1's tab-shell substrate.)*
 
 **Deliverables:**
 - [ ] **Multi-workspace UX:** opening a project from the picker adds a new workspace tab rather than reusing the existing one; the focused one is center-stage, the others render in the filmstrip.
@@ -81,18 +97,18 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Idle/running/awaiting-input of every workspace is visible from inside the Claudesk window without clicking (filmstrip or collapsed-tile row); clicking a tile switches the center stage.
 
-### Milestone 6: Menu-bar status item
+### Milestone 7: Menu-bar status item
 
-**Goal:** Workspace status is visible system-wide, even when the Claudesk window is hidden or on another Space. *(Ships **before** the PiP work in Milestone 7 — see Milestone 7's gate.)*
+**Goal:** Workspace status is visible system-wide, even when the Claudesk window is hidden or on another Space. *(Ships **before** the PiP work in Milestone 8 — see Milestone 8's gate.)*
 
 **Deliverables:**
 - [ ] **Menu-bar status item** via `tauri::tray::TrayIconBuilder`. Icon shows an aggregate status dot (green: all idle, blue: any running, amber: any awaiting input), `setIconAsTemplate` for light/dark adaptation. Left-click opens a popover (positioned via `tauri-plugin-positioner` with the `tray-icon` feature) listing every open workspace with status dot + project name; clicking a row brings Claudesk forward AND switches the center stage. Right-click opens a native menu: Show Claudesk window / Toggle PiP / Quit.
 
 **Exit Criteria:** Idle/running of every workspace is visible when the Claudesk window is NOT in focus, via the menu-bar item.
 
-### Milestone 7: Picture-in-picture (conditional)
+### Milestone 8: Picture-in-picture (conditional)
 
-**Goal:** An always-on-top floating status surface for when the Claudesk window is out of focus — *if* the menu-bar item proves insufficient. **Gating dependency:** after Milestone 6 ships, dogfood the menu-bar item alone for at least one daily-driver week. If it covers the "Claudesk hidden / not in focus" case sufficiently, **this milestone defers to Group D (Milestone 10)**; otherwise build it now.
+**Goal:** An always-on-top floating status surface for when the Claudesk window is out of focus — *if* the menu-bar item proves insufficient. **Gating dependency:** after Milestone 7 ships, dogfood the menu-bar item alone for at least one daily-driver week. If it covers the "Claudesk hidden / not in focus" case sufficiently, **this milestone defers to Group D (Milestone 10)**; otherwise build it now.
 
 **Deliverables:**
 - [ ] **PiP NSPanel** via `tauri-nspanel` v2.1: `PanelBuilder` with `no_activate(true)` + `PanelLevel::Floating` + `CanJoinAllSpaces | FullScreenAuxiliary | Stationary`. User-toggled (menu-bar right-click or in-Claudesk button). Display-only — clicking a tile does NOT bring the workspace forward (that's a Future Possibility).
@@ -100,52 +116,44 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Either the dogfooding gate defers PiP to Milestone 10 (documented), or the PiP panel ships and mirrors the same status surface as the filmstrip.
 
-### Milestone 8: Sublime Merge hotkey
+### Milestone 9: Sublime Merge hotkey
 
-**Goal:** Sublime Merge is one keystroke away, completing the external-tool escape hatches for this group.
+**Goal:** Sublime Merge is one keystroke away, completing the external-tool escape hatches. *(The in-app diff viewer landed in Milestone 2; this is the escape hatch for cases it doesn't cover.)*
 
 **Deliverables:**
 - [ ] **Hotkey to pop Sublime Merge** at the project root (`smerge <project-path>`).
 
 **Exit Criteria:** Sublime Merge pops at the active workspace's project root via hotkey.
 
-> **Group B exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (menu-bar item, and PiP if shipped). Claudesk is a viable daily driver even with the right half still empty.
-
-## Group C — Lite editor & diff viewer (right half)
-
-### Milestone 9: Lite Editor + Diff Viewer
-
-**Goal:** Cover the daily-use Sublime Text features inside Claudesk so the right half stops being a placeholder. After this, a full working day without opening Sublime Text or Sublime Merge externally is the target.
-
-**Deliverables:**
-- [ ] **Lite editor** (Monaco or CodeMirror 6 — decided in a research pass) covering: multi-cursor / column selection, Cmd+P fuzzy file finder, command palette for syntax selection, project-wide find/replace, split panes, minimap.
-- [ ] **Git diff viewer** for unstaged + staged changes (file list + per-file diff view, comparable to Sublime Merge's basics; `git2` crate).
-- [ ] **Right-half panel swapping:** one keybind cycles editor ↔ diff viewer ↔ second terminal (per-workspace, not global).
-- [ ] **Hotkey-pop to real Sublime Text and Sublime Merge still works** (escape hatch for cases the built-in tools don't cover).
-
-**Exit Criteria:** A full working day completes without externally launching Sublime Text or Sublime Merge for routine work; the hotkey-pop becomes a rarely-used escape hatch, not the default.
+> **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (menu-bar item, and PiP if shipped). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling.
 
 ## Group D — Polish & open-source release
 
 ### Milestone 10: Polish & Open-Source Release
 
-**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. Also the home for PiP if it deferred from Milestone 7.
+**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. Also the home for PiP if it deferred from Milestone 8.
 
 **Deliverables:**
 - [ ] **Settings UI:** project list management, hotkeys, default CLI args for `claude` (e.g. yolo-mode toggle), menu-bar / PiP visibility toggles.
-- [ ] **PiP NSPanel (if deferred from Milestone 7)** — same shape as Milestone 7. Drop if Milestone 6's menu-bar-only dogfooding proved sufficient long-term.
+- [ ] **PiP NSPanel (if deferred from Milestone 8)** — same shape as Milestone 8. Drop if Milestone 7's menu-bar-only dogfooding proved sufficient long-term.
 - [ ] **macOS app bundle + DMG;** code-signing / notarization strategy decided and documented.
 - [ ] **README + minimum setup docs** (assumes the workflow system is installed; no hand-holding for users who don't share that assumption).
 - [ ] **Public repo + open-source license** chosen and added.
 
 **Exit Criteria:** A stranger with the workflow system installed at `~/.claude/skills/` can clone the repo, build Claudesk, and use it on their own macOS machine without further help from the author.
 
-## Revision 2026-06-19
+## Revision 2026-06-19 (b) — Lite editor resequenced to second
+
+**Moved the lite editor + diff viewer from last-before-polish to immediately after the PoC** (now Group B / Milestone 2; was Group C / Milestone 9). The stateful-CC-controller + multi-workspace + status-surface block slid down one (now Group C / Milestones 3–9); polish stays Milestone 10. No deliverables changed — only ordering and the resulting renumbering.
+
+**Why:** the product pivoted from one-project-per-**window** to one-project-per-**tab**. Under tabs, leaving the right half a placeholder and relying on the external Sublime pop-up means a separate Sublime/Sublime-Merge OS window per project — which fragments the workflow back across windows and reintroduces the exact window-juggling tax the tab model exists to eliminate. So the in-app editor/diff viewer is now a **must-have**, sequenced before the multi-workspace build-out so the right half is real the moment a second tab opens. Cross-references updated (Milestone 1's right-half "reserved for Milestone 2"; the Milestone 2 editor no longer claims the Sublime Merge hotkey, which stays in Milestone 9; PiP-defer target unchanged at Milestone 10).
+
+## Revision 2026-06-19 (a) — Structural re-format
 
 **Structural re-format to the current `product-roadmap` skill conventions** (no scope or content change — same deliverables, same status, same exit criteria; only the structure and terminology were updated):
 
 - **"Phase" → "Milestone", flat single-integer numbering.** The four phases + Phase 2's dotted sub-milestones (`2.1`–`2.7`) flattened into one continuous list, `Milestone 1` … `Milestone 10`. Dotted hierarchical numbering removed per the skill's flat-numbering rule (the feature Work Tree's `P1.1` dotted IDs are a different artifact and keep their form). Old "Phase N" references elsewhere remain valid as read-aliases.
-- **Phases became cosmetic `## Group` headings.** Group A (launch friction / Milestone 1), Group B (stateful CC controller + multi-workspace + status surfaces / Milestones 2–8), Group C (lite editor / Milestone 9), Group D (polish + release / Milestone 10). Groups carry no numbering or dependency semantics; cross-milestone dependencies (e.g. Milestone 5 needs Milestone 2's broadcaster; Milestone 7's PiP gates on Milestone 6 dogfooding) are now stated in each milestone's prose.
+- **Phases became cosmetic `## Group` headings.** As originally re-formatted: Group A (launch friction), Group B (stateful CC controller + multi-workspace + status surfaces), Group C (lite editor), Group D (polish + release). *(Superseded the same day by revision (b), which moved the lite editor to Group B and slid the CC-controller block to Group C — see above for the current mapping.)* Groups carry no numbering or dependency semantics; cross-milestone dependencies are stated in each milestone's prose.
 - **Standardized milestone shape** to Goal / Deliverables / Exit Criteria. The Phase 1 completion status, ship commits, and the WP4 probe outcome are preserved verbatim under Milestone 1.
 
 ### Prior revisions
