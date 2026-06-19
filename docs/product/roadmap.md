@@ -6,7 +6,7 @@ updated: 2026-06-19
 
 # Roadmap
 
-Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the in-app lite editor + diff viewer** comes second (Milestone 2) — a must-have, not a nice-to-have, now that projects live in tabs (see the resequencing rationale in the 2026-06-19 revision below); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes third (Milestones 3–9); **release polish** comes fourth (Milestone 10).
+Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the in-app lite editor + diff viewer** comes second (Milestone 2) — a must-have, not a nice-to-have, now that projects live in tabs (see the resequencing rationale in the 2026-06-19 revision below); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes third (Milestones 3–8); **release polish** comes fourth (Milestone 9).
 
 Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). The `## Group` headings below are **cosmetic clustering only** — they carry no numbering or dependency semantics; they just organize the flat list for readability. Dependencies, where they exist, are stated in each milestone's prose.
 
@@ -41,7 +41,7 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 - [ ] **Lite editor** (Monaco or CodeMirror 6 — decided in a research pass) covering: multi-cursor / column selection, Cmd+P fuzzy file finder, command palette for syntax selection, project-wide find/replace, split panes, minimap.
 - [ ] **Git diff viewer** for unstaged + staged changes (file list + per-file diff view, comparable to Sublime Merge's basics; `git2` crate).
 - [ ] **Right-half panel swapping:** one keybind cycles editor ↔ diff viewer ↔ second terminal (per-workspace, not global). *(Builds on Milestone 1's right-half placeholder + the per-workspace right panel.)*
-- [ ] **Hotkey-pop to real Sublime Text and Sublime Merge still works** (escape hatch for cases the built-in tools don't cover; the Sublime Merge hotkey itself lands in Milestone 9).
+- [ ] **Hotkey-pop to real Sublime Text still works** (escape hatch for cases the in-app editor/diff viewer doesn't cover; the Sublime Text `⌘⇧E` hotkey already shipped in Milestone 1). *(A dedicated Sublime **Merge** hotkey is intentionally NOT a roadmap milestone — the in-app diff viewer covers the day-to-day, and a `smerge` escape hatch can be added as low-effort polish later if the diff viewer proves insufficient.)*
 
 **Exit Criteria:** A full working day completes without externally launching Sublime Text or Sublime Merge for routine work; the hotkey-pop becomes a rarely-used escape hatch, not the default.
 
@@ -108,28 +108,19 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 ### Milestone 8: Picture-in-picture (conditional)
 
-**Goal:** An always-on-top floating status surface for when the Claudesk window is out of focus — *if* the menu-bar item proves insufficient. **Gating dependency:** after Milestone 7 ships, dogfood the menu-bar item alone for at least one daily-driver week. If it covers the "Claudesk hidden / not in focus" case sufficiently, **this milestone defers to Group D (Milestone 10)**; otherwise build it now.
+**Goal:** An always-on-top floating status surface for when the Claudesk window is out of focus — *if* the menu-bar item proves insufficient. **Gating dependency:** after Milestone 7 ships, dogfood the menu-bar item alone for at least one daily-driver week. If it covers the "Claudesk hidden / not in focus" case sufficiently, **this milestone defers to Group D (Milestone 9)**; otherwise build it now.
 
 **Deliverables:**
 - [ ] **PiP NSPanel** via `tauri-nspanel` v2.1: `PanelBuilder` with `no_activate(true)` + `PanelLevel::Floating` + `CanJoinAllSpaces | FullScreenAuxiliary | Stationary`. User-toggled (menu-bar right-click or in-Claudesk button). Display-only — clicking a tile does NOT bring the workspace forward (that's a Future Possibility).
 - [ ] **PiP rendering mode** matches the filmstrip outcome: live ~1 fps mirrors (probe PASSED).
 
-**Exit Criteria:** Either the dogfooding gate defers PiP to Milestone 10 (documented), or the PiP panel ships and mirrors the same status surface as the filmstrip.
-
-### Milestone 9: Sublime Merge hotkey
-
-**Goal:** Sublime Merge is one keystroke away, completing the external-tool escape hatches. *(The in-app diff viewer landed in Milestone 2; this is the escape hatch for cases it doesn't cover.)*
-
-**Deliverables:**
-- [ ] **Hotkey to pop Sublime Merge** at the project root (`smerge <project-path>`).
-
-**Exit Criteria:** Sublime Merge pops at the active workspace's project root via hotkey.
+**Exit Criteria:** Either the dogfooding gate defers PiP to Milestone 9 (documented), or the PiP panel ships and mirrors the same status surface as the filmstrip.
 
 > **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (menu-bar item, and PiP if shipped). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling.
 
 ## Group D — Polish & open-source release
 
-### Milestone 10: Polish & Open-Source Release
+### Milestone 9: Polish & Open-Source Release
 
 **Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. Also the home for PiP if it deferred from Milestone 8.
 
@@ -141,6 +132,12 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 - [ ] **Public repo + open-source license** chosen and added.
 
 **Exit Criteria:** A stranger with the workflow system installed at `~/.claude/skills/` can clone the repo, build Claudesk, and use it on their own macOS machine without further help from the author.
+
+## Revision 2026-06-19 (c) — Dropped the Sublime Merge hotkey milestone
+
+**Removed the standalone "Sublime Merge hotkey" milestone** (was Milestone 9 after revision (b)). Polish & Open-Source Release moved up to Milestone 9; the roadmap is now 9 milestones.
+
+**Why:** the in-app **git diff viewer** shipped in Milestone 2 covers the day-to-day git review need that a Sublime Merge pop-up used to serve. The remaining external-Sublime-Merge use cases (interactive staging, rebase, blame, conflict resolution) don't justify a dedicated roadmap milestone — they can be served, if needed, by a low-effort `smerge <path>` escape hatch added during Milestone 9 polish, mirroring the already-shipped Sublime **Text** `⌘⇧E` hotkey. The Sublime Text escape hatch stays (it pairs with the lite editor); the Sublime Merge one is demoted from a milestone to "optional later polish" and noted as such in Milestone 2's deliverables. No other milestone numbers changed (Milestones 1–8 unaffected; only the old M9→dropped, old M10→M9).
 
 ## Revision 2026-06-19 (b) — Lite editor resequenced to second
 
