@@ -22,7 +22,9 @@ Major rewrite driven by the vision pivot (multi-window → single-window with ta
 
 Each phase is independently usable — Claudesk grows in dogfood-able increments. **Launch-friction relief comes first** (Phase 1 also lays down the tab-shell substrate, even though only one workspace is open at a time); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes second (Phase 2); **the lite editor** third (Phase 3); **release polish** fourth (Phase 4).
 
-### Phase 1: Bare Shell + Tab Substrate (PoC)
+### Phase 1: Bare Shell + Tab Substrate (PoC) ✅ COMPLETE 2026-06-19
+
+> **Cycle closed 2026-06-19.** All 9 WPs shipped (WP1–WP9); exit criteria met — click a project → working CC session in a workspace inside the Claudesk window, Sublime pops via in-app `⌘⇧E`, tab-shell substrate in place, WP4 thumbnail probe documented (PASS → live ~1 fps mirrors for Phase 2). The Phase 1 WBS is archived under `docs/product/archive/phase-1-bare-shell-poc/`. Next cycle: Phase 2 (decompose its headline WPs via `/product-vision`→`/product-wbs` or a fresh WBS pass).
 
 **Goal:** Prove the Tauri shell + embedded terminal + project picker + tab-shell substrate work together. Replaces *only* the "open terminal + cd + run claude" step at the user-visible level. The biggest reported pain point (launch friction) is solved before any editor work begins. The tab substrate is shipped now (even though Phase 1 only ever shows one workspace) so Phase 2's filmstrip and PiP build on top of an existing foundation rather than reshaping it.
 

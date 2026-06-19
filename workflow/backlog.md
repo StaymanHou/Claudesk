@@ -1,6 +1,8 @@
 # Backlog
 
-> **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md). Next up: **WP5 (frontend UI prototype — tab-shell substrate)**, the Phase 1 critical-path build start.
+> **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md).
+
+> **Phase 1 cycle-close backlog sweep — 2026-06-19 (`/product-finalize`).** Phase 1 (Bare Shell + Tab Substrate PoC) closed; all 9 WPs shipped. Sweep disposition of the items still pending at close: **all DEFERRED → carry to the Phase 2 cycle** (none escalated, none newly resolved by the close itself). Carried forward: wp5/wp6/wp7/wp8/wp9 code-quality findings (the **wp6 picker IPC error-surfacing MAJORs are the most load-bearing** — they pair with Phase 2's multi-workspace picker work, WP13/WP16) + `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS` (housekeeping). These remain in this file (not archived) so the next cycle inherits them.
 
 ## Code-quality findings — wp9-phase1-polish (2026-06-19)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). All low-stakes: (1) picker mount effect's empty `catch {}` over prune+list has a partial-failure window (fold into the existing picker IPC error-surfacing item, `SURFACE-2026-06-18-QUALITY-*`); (2) plan-text/impl drift — plan said `CcError::Spawn`, code shipped the cleaner dedicated `CcError::CcNotFound` (informational, no change); (3) `classify_spawn_error` would benefit from a one-line `to_lowercase()` case-folding comment. Reviewer rated the feature well-built, no debt accrued. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp9-phase1-polish — 2026-06-19` section.
@@ -54,7 +56,7 @@
 - **Context:** `.prettierignore` lists `docs/`, `workflow/`, `CLAUDE.md`, `runtimes.md` as hand-authored prose exempt from Prettier, but NOT `.claude/memory/`. These memory files are likewise hand-authored prose and arguably belong in the ignore list — or should be one-shot `prettier --write`-formatted. Either way, not WP6's job.
 - **Suggested action:** Either add `.claude/memory/` to `.prettierignore` (consistent with the other hand-authored-prose exemptions) OR run `pnpm format` once to normalize them. Decide in a housekeeping pass.
 - **Priority:** low
-- **Status:** open
+- **Status:** deferred — carry to next cycle (Phase 2); housekeeping, not Phase 1 scope (Phase 1 cycle-close sweep 2026-06-19)
 
 ## SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS
 - **Source:** feature:build (WP5 Phase 2 verify-human — operator request)
