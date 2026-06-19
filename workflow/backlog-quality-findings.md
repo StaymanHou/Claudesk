@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# wp9-phase1-polish — 2026-06-19
+
+3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). The feature is well-built; findings are a partial-failure window already triaged elsewhere, a plan/impl drift note, and a missing clarifying comment. Auto-backlogged per drive_mode=autopilot (MINOR).
+
+## SURFACE-2026-06-19-QUALITY-WP9-PICKER-PARTIAL-FAILURE-WINDOW
+- **File:** `src/components/picker/ProjectPicker.tsx` (mount effect: prune + list)
+- **Finding:** `prune_missing_projects` + `list_projects` share one `try { } catch {}` with an empty body; a prune-succeeds-then-list-throws window would leave the toast set while recents stay empty (transient inconsistent state).
+- **Why it matters:** both IPC calls realistically succeed/fail together and empty-recents is an acceptable fallback, so it's low-risk — but the partial-failure ordering isn't visible to a future reader. The inline comment already points at the broader picker IPC error-surfacing item.
+- **Suggested action:** Fold into the existing picker IPC error-surfacing work (`SURFACE-2026-06-18-QUALITY-*`, the wp6 picker MAJORs) rather than a standalone fix — surface IPC failures to the user there. Trivial alone.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-WP9-PLAN-IMPL-DRIFT-CCNOTFOUND
+- **File:** `workflow/archive/wp9-phase1-polish.md` P1.1 outcome line vs `src-tauri/src/cc_session/mod.rs`
+- **Finding:** The Phase-1 observable-outcome text said the not-found case maps to "a friendly `CcError::Spawn` variant/message"; the shipped code introduces a dedicated `CcError::CcNotFound` variant instead (cleaner than overloading `Spawn`).
+- **Why it matters:** Pure plan-text/impl drift note — the implementation choice is better than the planned one; recorded only so the divergence is on file. No code change wanted.
+- **Suggested action:** None (informational). Resolve by acknowledging the better-than-planned choice.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-WP9-CLASSIFY-CASEFOLD-COMMENT
+- **File:** `src-tauri/src/cc_session/mod.rs` (`classify_spawn_error`)
+- **Finding:** The classifier lowercases the raw message then matches lowercase literal markers; a one-line comment noting the `to_lowercase()` is what makes the literals safe (vs the markers being pre-lowered by coincidence) would help a future editor. Existing comment explains liberality but not the case-folding contract.
+- **Why it matters:** Readability only; logic is correct.
+- **Suggested action:** Add the one-line comment in a future touch of this fn. Trivial.
+- **Priority:** low
+- **Status:** pending
+
 # wp8-sublime-hotkey — 2026-06-19
 
 3 MINOR findings from `feature-review-quality` on ship commit `74dfc2c` (0 CRITICAL, 0 MAJOR). The feature survived a mid-flight OS-global→in-app spec reversal with no live remnants; findings are all doc-accuracy/cosmetic. MINOR #1 (stale "global-shortcut handler" rationale) was FIXED IN-PLACE at finalize-prep time in both the WIP Discoveries and the backlog SURFACE entry — not pending. The 2 below are the remaining cosmetic nits. Auto-backlogged per drive_mode=autopilot (MINOR).

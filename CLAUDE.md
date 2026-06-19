@@ -166,7 +166,7 @@ Work packages (see `docs/product/wbs.md` for detail):
 
 Critical path: WP1 → WP5 → WP6 → WP7 → WP9. WP2 / WP3 / WP4 are probes that run in parallel as soon as WP1 unblocks them.
 
-**Status:** WP1–WP8 shipped (scaffold + 3 probes + frontend UI prototype + project config store + embedded CC terminal + in-app Sublime hotkey/button). **First feature to pick up next:** WP9 — Phase 1 polish + exit-criteria verification (Size S): time-to-productive <10s measurement, error handling (claude not on PATH, project path deleted), verify the WP4 thumbnail-probe report is linked from arch/roadmap, confirm tab-shell substrate in place, README placeholder, 3-day dogfood. When WP9 ships, Phase 1 is complete → `/product-finalize`. **WP9 has NO Accessibility task** — WP8's hotkey is in-app, so the old "Accessibility permission denied → hotkey no-op" error case in the WBS WP9 task list is moot (note for whoever picks up WP9).
+**Status:** **Phase 1 COMPLETE — all WP1–WP9 shipped** (scaffold + 3 probes + frontend UI prototype + project config store + embedded CC terminal + in-app Sublime hotkey/button + Phase-1 polish/exit-criteria). WP9 (commit 91fae7f) added the two unhappy-path fixes — friendly "claude not on PATH" error (`CcError::CcNotFound`) and deleted-project prune-on-mount + toast — plus the README placeholder and exit-criteria confirmations (WP4 report linked, tab-shell substrate in place; time-to-productive accepted on feel, 3-day dogfood operator-waived). **Next:** `/product-finalize` (F30) — resync durable docs, sweep backlog, archive the Phase 1 cycle. Phases 2–4 remain headline-only in `wbs.md` (decomposed only when Phase 2 starts).
 
 ## Key Decisions
 

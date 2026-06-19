@@ -183,7 +183,9 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - [x] ~~macOS Accessibility onboarding~~ — N/A; in-app keybinding needs no OS permission (OS-global approach scrapped)
 - [x] Manual test (verify-human): open project → click button / press `⌘⇧E` → Sublime opens at the active tab's project dir; `⌘⇧E` is in-app-only (no-op when another app focused) — all PASS
 
-### WP9: Phase 1 polish + exit-criteria verification
+### WP9: Phase 1 polish + exit-criteria verification ✅ SHIPPED 2026-06-19 (commit 91fae7f)
+
+> **Outcome:** Two unhappy-path fixes + exit-criteria verification. **Error handling:** `CcError::CcNotFound` + pure `classify_spawn_error` promotes the "claude not on PATH" spawn failure to an actionable message (names Claude Code + install-docs link, shown verbatim in the xterm error overlay, no raw `os error 2`); `config_store::prune_missing` + `prune_missing_projects` command drops projects whose folder was deleted between sessions, picker prunes on mount + shows a dismissible toast. **Exit criteria:** README rewritten from scaffold stub to a real Phase-1 placeholder; `wp9-timing.md` records the <10s time-to-productive method (operator-accepted on feel); confirmed WP4 thumbnail report linked from arch.md + roadmap.md and the tab-shell substrate in place. Dropped the moot "Accessibility permission denied" task (WP8 hotkey is in-app, no OS permission). 3-day dogfood operator-waived. Verify: 36 cargo + 44 vitest, clippy -D warnings/fmt/lint/vite-build clean; verify-human PASS (friendly error + prune toast in native shell). review-quality: 0 CRITICAL / 0 MAJOR / 3 MINOR (auto-backlogged). **WP9 ships → Phase 1 complete.**
 
 **Description:** Final pass on Phase 1: end-to-end timing check (<10s from picker click to ready CC), edge cases (CC binary missing, project path no longer exists, permission denied), basic error handling, README placeholder. Confirm WP4 thumbnail-probe report is written and linked. NOT a release — Phase 4 covers distribution.
 
@@ -191,14 +193,14 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 **Dependencies:** WP4, WP6, WP7, WP8
 **Size:** S
 **Tasks:**
-- [ ] Time-to-productive measurement: cold launch → picker click → CC ready inside a workspace. Target <10s. Record in `workflow/wip/wp9-timing.md`
-- [ ] Error: `claude` not on PATH → friendly message in xterm.js pane with link to install docs
-- [ ] Error: project path deleted between sessions → remove from picker on next launch with toast
-- [ ] Error: Accessibility permission denied → hotkey no-op + non-fatal warning
-- [ ] Verify the WP4 thumbnail-probe report is appended/linked from `arch.md` and `roadmap.md` Phase 2; verify its recommendation (live mirrors vs status tiles) is recorded
-- [ ] Verify the tab-shell substrate components (WorkspaceList, Center Stage, empty Filmstrip slot) are in place even though Phase 1 only ever opens one workspace
-- [ ] Basic README in repo root (just enough for the author; full docs in Phase 4)
-- [ ] Dogfood for 3+ days on real projects before marking complete
+- [x] Time-to-productive measurement: cold launch → picker click → CC ready inside a workspace. Target <10s. Record in `workflow/wip/wp9-timing.md` — method + <10s criterion recorded; operator accepted on feel (no stopwatch number)
+- [x] Error: `claude` not on PATH → friendly message in xterm.js pane with link to install docs — `CcError::CcNotFound` + `classify_spawn_error`, shown verbatim in the error overlay
+- [x] Error: project path deleted between sessions → remove from picker on next launch with toast — `prune_missing` + `prune_missing_projects` command + picker prune-on-mount toast
+- [x] ~~Error: Accessibility permission denied → hotkey no-op + non-fatal warning~~ — DROPPED (moot): WP8 shipped the Sublime hotkey as an in-app `⌘⇧E` webview keydown handler, not an OS-global shortcut, so no macOS Accessibility permission is involved
+- [x] Verify the WP4 thumbnail-probe report is appended/linked from `arch.md` and `roadmap.md` Phase 2; verify its recommendation (live mirrors vs status tiles) is recorded — confirmed linked from both docs; live-~1fps-mirrors recommendation recorded
+- [x] Verify the tab-shell substrate components (WorkspaceList, Center Stage, empty Filmstrip slot) are in place even though Phase 1 only ever opens one workspace — confirmed (useWorkspaceList/workspace.ts, CenterStage.tsx, empty Filmstrip.tsx)
+- [x] Basic README in repo root (just enough for the author; full docs in Phase 4) — rewritten from scaffold stub to a real Phase-1 placeholder (51 lines)
+- [x] Dogfood for 3+ days on real projects before marking complete — operator-WAIVED ("we can skip the 3-day for now"); experience accepted as right
 
 ## Phase 1 critical path
 

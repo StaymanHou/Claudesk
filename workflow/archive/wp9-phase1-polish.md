@@ -1,7 +1,7 @@
 # Feature: WP9 — Phase 1 polish + exit-criteria verification
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** Completed 2026-06-19 — shipped local commit 91fae7f (not pushed, solo no-remote repo). Phase 1 complete on this WP.
 **Created:** 2026-06-19
 **drive_mode:** autopilot
 
@@ -52,15 +52,46 @@ WP9 is the last Phase 1 work package: a polish + exit-criteria pass that takes t
   - [x] verify-codify  <!-- status: done — no new tests: Phase 2 changed only README.md + a new WIP doc (no source code, no integration boundary); verified outcomes are doc/file-state facts with no runtime behavior to regress (a grep-the-doc test would be brittle, low-value). Full suite re-run confirms no regression: 36 cargo + 44 vitest green. -->
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ship (both phases complete; all verify nodes done)
+- **Path:** Feature > finalize
+- **Active scope:** finalize (shipped 91fae7f; review-quality done — 0C/0M/3 MINOR auto-backlogged)
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize. WP9 ship = Phase 1 complete → /product-finalize (F30) becomes available afterward.
+- **Unvisited:** finalize → reflect. WP9 finalize completes Phase 1 → /product-finalize (F30) available afterward.
 - **Open discoveries:** none
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
+
+## Code-Quality Review — wp9-phase1-polish
+
+(Reviewed against ship commit 91fae7f. drive_mode=autopilot → 0 CRITICAL / 0 MAJOR / 3 MINOR; MINORs auto-backlogged to `workflow/backlog-quality-findings.md`.)
+
+### Strengths
+- `classify_spawn_error` is a pure (string-in, error-out) function split from the spawn call site so it is unit-testable without spawning a real `claude` — the right seam, with a doc comment saying why.
+- The `cc_not_found_ipc_string_is_the_friendly_message_verbatim` test pins the user-facing IPC contract (`to_string()` == friendly message, no prefix slip) across Rust → Tauri → XtermPane — an invariant no type-checker would catch.
+- `prune_missing` avoids a needless write on the all-present case, verified by a byte-compare before/after.
+- `pruneToastMessage` extracted to its own module mirrors the established frontend posture (pure logic unit-tested, live DOM at verify-human).
+- The not-found classifier is liberal-by-design with a comment explaining it hedges against portable-pty message-shape drift.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [src/components/picker/ProjectPicker.tsx mount effect] prune + list wrapped in a single empty `catch {}`; a prune-succeeds-then-list-throws window leaves the toast set while recents stay empty. Both IPC calls realistically succeed/fail together; the inline comment already points at SURFACE-2026-06-18-QUALITY picker IPC error-surfacing (correct disposition).
+- [WIP P1.1 outcome line vs cc_session/mod.rs] Plan text said the not-found case maps to a "friendly `CcError::Spawn` variant"; shipped code uses a dedicated `CcError::CcNotFound` variant (better than planned). Plan/impl drift note, not a defect.
+- [src-tauri/src/cc_session/mod.rs classify_spawn_error] A one-line comment noting the `to_lowercase()` is what makes the lowercase literal markers safe would help a future editor (the existing comment explains liberality but not the case-folding contract).
+
+### Assessment
+A well-built, appropriately-scoped polish feature. Both unhappy-path fixes are isolated behind pure functions with focused unit tests, wired through a single call site, and the error path's cross-layer IPC contract is pinned by a test. No debt accrued; new Tauri command follows the established command → pure-fn → typed-error → String shape; toast respects dark-only convention. Only residue is the empty-catch partial-failure window, already triaged to an existing backlog item.
+
+### If you disagree
+Operator: dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** Tasks 4 & 5 (WP4-link + substrate verification) and the bulk of the exit criteria were already-satisfied facts by the time WP9 ran — the real new work was the two error-handling paths. Framing WP9 as "verify + two fixes" rather than "build a polish phase" matched reality. Also confirmed: the friendly-error path has no browser-reachable surface (Tauri IPC only), so its live verification legitimately lives at verify-human in the native shell, not verify-self.
+- **Assumptions that held:** The existing `cc-error-overlay` already rendered `bridge.errorMsg` verbatim, so P1.2 was a no-code confirmation — the WP5/WP7 overlay design absorbed the new friendly string with zero frontend change. The config_store pure-fn/command split made `prune_missing` a clean ~10-line addition with 3 TempDir tests.
+- **Assumptions that were wrong:** The plan said the not-found case would map to a "friendly `CcError::Spawn` variant"; in build a dedicated `CcError::CcNotFound` variant proved cleaner (don't overload `Spawn`). Minor, better-than-planned — logged as a quality finding for the record.
+- **Approach delta:** Two operator calls at the final gate: time-to-productive accepted on feel (no stopwatch number recorded) and the 3-day dogfood explicitly waived. Both recorded honestly in `wp9-timing.md` and the WIP rather than confabulating a measurement. The moot "Accessibility permission denied" task was dropped (WP8's hotkey is in-app). One incidental `cargo fmt` normalization of a pre-existing WP8 `sublime/mod.rs` block rode along — noted, not a WP9 logic change.
 
 ## Notes
 - **Dropped from WBS WP9 task list:** "Error: Accessibility permission denied → hotkey no-op" — moot. WP8 shipped the Sublime hotkey as an in-app `⌘⇧E` webview keydown handler (not OS-global `tauri-plugin-global-shortcut`), so no macOS Accessibility permission is involved and there is no permission-denied path to handle.

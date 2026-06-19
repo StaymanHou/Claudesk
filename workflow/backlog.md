@@ -2,6 +2,12 @@
 
 > **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md). Next up: **WP5 (frontend UI prototype — tab-shell substrate)**, the Phase 1 critical-path build start.
 
+## Code-quality findings — wp9-phase1-polish (2026-06-19)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). All low-stakes: (1) picker mount effect's empty `catch {}` over prune+list has a partial-failure window (fold into the existing picker IPC error-surfacing item, `SURFACE-2026-06-18-QUALITY-*`); (2) plan-text/impl drift — plan said `CcError::Spawn`, code shipped the cleaner dedicated `CcError::CcNotFound` (informational, no change); (3) `classify_spawn_error` would benefit from a one-line `to_lowercase()` case-folding comment. Reviewer rated the feature well-built, no debt accrued. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp9-phase1-polish — 2026-06-19` section.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** #1 belongs with the broader picker IPC error-surfacing work (wp6 MAJORs); #2 is informational (dismiss/ack); #3 is a 1-line comment. Fold into a `/feature-refactor` pass or leave. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — wp8-sublime-hotkey (2026-06-19)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `74dfc2c` (0 CRITICAL, 0 MAJOR). MINOR #1 (stale "global-shortcut handler" rationale in the WIP Discoveries + the SURFACE-...-ARCH-SUBLIME-LAUNCH-MECHANISM entry) was FIXED IN-PLACE — the launch is frontend-initiated via `sublime_open`, not from a global-shortcut handler. The 2 remaining are cosmetic doc nits (inconsistent WP3 probe-section citation shorthand in `sublime/mod.rs`; `chord.ts` "Phase 2" header tag reads oddly standalone). The feature survived a mid-flight OS-global→in-app spec reversal with no live remnants. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp8-sublime-hotkey — 2026-06-19` section.
 - **Priority:** low (all)

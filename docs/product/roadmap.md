@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-17
+updated: 2026-06-19
 ---
 
 ## Revision 2026-06-15
@@ -28,12 +28,12 @@ Each phase is independently usable — Claudesk grows in dogfood-able increments
 
 **Milestones:**
 - [x] **Tauri 2 app skeleton** (macOS bundle, launches, shows one window). Single `WebviewWindow` per the research decision — no multi-webview. *(WP1 shipped 2026-06-16, commit c50a785.)*
-- [ ] **Project picker UI** (recents list, "Open Folder" button), persisted to `~/Library/Application Support/Claudesk/projects.json` via `tauri-plugin-fs`.
-- [ ] **Tab-shell substrate** — a workspace-list React component holds an array of workspace records; the center-stage area mounts the focused workspace. Filmstrip area exists but is empty (Phase 2 populates it). Background workspaces stay mounted (`display: none`), never unmounted on switch. **Phase 1 only ever opens one workspace at a time, but the substrate must already be in place.**
-- [ ] **Embedded terminal pane** (xterm.js + `tauri-plugin-pty` / `portable-pty`), **DOM renderer only — no WebGL addon**, auto-runs `claude --dangerously-skip-permissions` in the selected project dir, full-size in the center stage.
+- [x] **Project picker UI** (recents list, "Open Folder" button), persisted to `~/Library/Application Support/Claudesk/projects.json`. *(WP5 prototype shipped 2026-06-18 commit 777c0b8; WP6 real config store + filter/search shipped 2026-06-18 commit 525b7e8; WP9 added prune-missing-on-mount + toast, commit 91fae7f.)*
+- [x] **Tab-shell substrate** — a workspace-list React component holds an array of workspace records; the center-stage area mounts the focused workspace. Filmstrip area exists but is empty (Phase 2 populates it). Background workspaces stay mounted (`display: none`), never unmounted on switch. **Phase 1 only ever opens one workspace at a time, but the substrate must already be in place.** *(WP5 shipped 2026-06-18 commit 777c0b8; confirmed in place at WP9.)*
+- [x] **Embedded terminal pane** (xterm.js + `portable-pty`), **DOM renderer only — no WebGL addon**, auto-runs `claude --dangerously-skip-permissions` in the selected project dir, full-size in the center stage. *(WP7 shipped 2026-06-19 commit 50ca322 — raw `portable-pty` behind our own Tauri commands, not the plugin; WP9 added a friendly "claude not on PATH" error.)*
 - [x] **Thumbnail-rendering probe** (research output, gating for Phase 2). **DONE 2026-06-17 → PASS.** Synthetic harness (8 background + 1 active xterm.js, DOM renderer) measured on Apple M4 / macOS 26.5.1 against a real-CC-transcript-reconstructed fixture: idle CPU 4.5% (<10% ✅), active median 13.3% (<20% ✅; p95 ~30% on bursts — caveat documented), RAM 240 MB (<300 ✅), center frame p95 18 ms / 0 dropped frames (✅). **Mechanism corrected:** off-screen-DOM-mirror is non-viable (one parent per node + xterm pauses off-viewport renderers); the validated path is `@xterm/addon-serialize` `serializeAsHTML()` from the buffer at ~1 fps (beat `cloneNode`). **→ Phase 2 ships live ~1 fps mirrors.** Full outcome: [`docs/product/wp4-thumbnail-probe-outcome.md`](wp4-thumbnail-probe-outcome.md).
-- [ ] **Right half: empty placeholder** (reserved for Phase 3 lite editor).
-- [ ] **Hotkey to pop Sublime Text** at the project root using `tauri-plugin-global-shortcut` + `subl <project-path>`.
+- [x] **Right half: empty placeholder** (reserved for Phase 3 lite editor). *(WP5 "Coming in Phase 3" card shipped 2026-06-18 commit 777c0b8; WP8 added the in-app Sublime toolbar/button in the right panel.)*
+- [x] **Hotkey to pop Sublime Text** at the project root + `subl <project-path>`. *(WP8 shipped 2026-06-19 commit 74dfc2c — in-app `⌘⇧E` webview keydown handler + right-panel button, NOT OS-global `tauri-plugin-global-shortcut` (that approach was built then rejected at verify-human in favor of in-app, no Accessibility permission).)*
 
 **Exit Criteria:** Click a project in the picker → working CC session running in the project dir, in <10s, **inside a workspace in the existing Claudesk window** (not a new OS window). Sublime Text pops via hotkey when manual editing is needed. The tab-shell substrate is in place even though only one workspace ever opens. The thumbnail-rendering probe has produced a documented pass/fail outcome that selects Phase 2's filmstrip-rendering strategy (live mirrors or status tiles). Sublime Merge still launched manually (out of scope for this phase).
 
