@@ -9,6 +9,7 @@ import {
   emptyWorkspaceList,
   focusWorkspace as focusReducer,
   openWorkspace as openReducer,
+  setSessionId as setSessionIdReducer,
   type Workspace,
   type WorkspaceListState,
 } from "./workspace";
@@ -22,6 +23,8 @@ export interface WorkspaceListApi {
   view: AppView;
   openWorkspace: (projectPath: string) => void;
   focusWorkspace: (id: string) => void;
+  /** Store the backend CC session id on a workspace once cc_spawn resolves (WP7). */
+  setSessionId: (id: string, ccSessionId: string) => void;
 }
 
 export function useWorkspaceList(
@@ -37,6 +40,10 @@ export function useWorkspaceList(
     setState((s) => focusReducer(s, id));
   }, []);
 
+  const setSessionId = useCallback((id: string, ccSessionId: string) => {
+    setState((s) => setSessionIdReducer(s, id, ccSessionId));
+  }, []);
+
   const focused = useMemo(
     () => state.workspaces.find((w) => w.id === state.focusedId) ?? null,
     [state.workspaces, state.focusedId],
@@ -49,5 +56,6 @@ export function useWorkspaceList(
     view: viewFor(state),
     openWorkspace,
     focusWorkspace,
+    setSessionId,
   };
 }

@@ -1,18 +1,40 @@
+mod cc_session;
 mod config_store;
+
+use std::sync::Mutex;
+
+use tauri::{Manager, WindowEvent};
+
+use cc_session::SessionRegistry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // WP6 lands the project config store command surface (projects.json
-    // persistence). WP7 will add the CcSession command set alongside it.
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // WP7: the live CC sessions live here, reachable from the cc_* commands.
+        .manage(Mutex::new(SessionRegistry::new()))
         .invoke_handler(tauri::generate_handler![
             config_store::commands::list_projects,
             config_store::commands::add_project,
             config_store::commands::record_open,
             config_store::commands::remove_project,
+            cc_session::commands::cc_spawn,
+            cc_session::commands::cc_input,
+            cc_session::commands::cc_resize,
+            cc_session::commands::cc_kill,
         ])
+        .on_window_event(|window, event| {
+            // WP7 shutdown: kill every CC child on window close so we never leak an
+            // orphaned `claude`. Backend-driven (robust against a frozen webview).
+            if let WindowEvent::CloseRequested { .. } = event {
+                if let Some(registry) = window.try_state::<Mutex<SessionRegistry>>() {
+                    if let Ok(mut reg) = registry.lock() {
+                        reg.kill_all();
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

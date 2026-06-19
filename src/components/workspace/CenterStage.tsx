@@ -11,13 +11,24 @@ import type { Workspace as WorkspaceModel } from "../../state/workspace";
 interface CenterStageProps {
   workspaces: WorkspaceModel[];
   focusedId: string | null;
+  /** Forwarded to each Workspace so cc_spawn's session id reaches WorkspaceList (WP7). */
+  onSessionId?: (workspaceId: string, ccSessionId: string) => void;
 }
 
-export function CenterStage({ workspaces, focusedId }: CenterStageProps) {
+export function CenterStage({
+  workspaces,
+  focusedId,
+  onSessionId,
+}: CenterStageProps) {
   return (
     <div className="center-stage" data-testid="center-stage">
       {workspaces.map((ws) => (
-        <Workspace key={ws.id} workspace={ws} visible={ws.id === focusedId} />
+        <Workspace
+          key={ws.id}
+          workspace={ws}
+          visible={ws.id === focusedId}
+          onSessionId={onSessionId}
+        />
       ))}
     </div>
   );

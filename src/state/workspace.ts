@@ -87,3 +87,21 @@ export function focusWorkspace(
   if (!state.workspaces.some((w) => w.id === id)) return state;
   return { ...state, focusedId: id };
 }
+
+/**
+ * Record the backend-issued CC session id on a workspace (WP7). Called when
+ * `cc_spawn` resolves. No-op if the workspace id is unknown.
+ */
+export function setSessionId(
+  state: WorkspaceListState,
+  id: string,
+  ccSessionId: string,
+): WorkspaceListState {
+  if (!state.workspaces.some((w) => w.id === id)) return state;
+  return {
+    ...state,
+    workspaces: state.workspaces.map((w) =>
+      w.id === id ? { ...w, cc_session_id: ccSessionId } : w,
+    ),
+  };
+}

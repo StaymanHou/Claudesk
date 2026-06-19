@@ -15,7 +15,8 @@ import { ProjectPicker } from "./components/picker/ProjectPicker";
 // underneath unchanged. WP6 swaps the picker's mock data for the real config
 // store; WP7 swaps the mock terminal for a PTY-backed CC session.
 function App() {
-  const { workspaces, focusedId, view, openWorkspace } = useWorkspaceList();
+  const { workspaces, focusedId, view, openWorkspace, setSessionId } =
+    useWorkspaceList();
 
   return (
     <div className="app-shell" data-testid="app-shell">
@@ -24,7 +25,11 @@ function App() {
       ) : (
         <>
           <Filmstrip />
-          <CenterStage workspaces={workspaces} focusedId={focusedId} />
+          <CenterStage
+            workspaces={workspaces}
+            focusedId={focusedId}
+            onSessionId={setSessionId}
+          />
         </>
       )}
     </div>

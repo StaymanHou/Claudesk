@@ -52,8 +52,9 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 17s (2026-06-18, cold rebuild after adding tauri-plugin-dialog + thiserror + tempfile)
+- **Last:** 11s (2026-06-19, cold rebuild after promoting portable-pty + adding base64 for WP7)
 - **Use timeout:** 120000
 - **History:**
+  - 11s — 2026-06-19 (cold build of WP7 cc_session dep tree; test run itself ~0s warm)
   - 17s — 2026-06-18 (cold; new dep tree from WP6 — incremental runs are ~2s)
   - 2s — 2026-06-16

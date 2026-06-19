@@ -24,8 +24,13 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+# WP7: PtyCcSession. Promoted from [dev-dependencies] (WP2 probe) to a production
+# dependency now that the embedded CC terminal ships. base64 encodes PTY output
+# bytes for the cc-output-<sid> event payload (Vec<u8> over IPC is a heavy JSON
+# number array; base64 string is ~4x cheaper and atob-decodes on the frontend).
+portable-pty = "0.9"
+base64 = "0.22"
 
 [dev-dependencies]
-portable-pty = "0.9"
 tempfile = "3"
 
