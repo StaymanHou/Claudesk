@@ -1,5 +1,6 @@
 mod cc_session;
 mod config_store;
+mod editor_fs;
 mod sublime;
 
 use std::sync::Mutex;
@@ -29,6 +30,10 @@ pub fn run() {
             // WP8: Sublime Text pop. Invoked from the frontend (right-panel button
             // and the in-app ⌘⇧E keybinding) with the focused workspace's path.
             sublime::commands::sublime_open,
+            // WP2: lite-editor file IO, confined to the workspace project root.
+            // (write_file is exercised by the save keybinding in Phase 2.)
+            editor_fs::commands::read_file,
+            editor_fs::commands::write_file,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an

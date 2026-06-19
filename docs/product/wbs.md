@@ -56,7 +56,7 @@ Learning-sequence ordering, riskiest-unknown-first:
 
 ### WP3: Editor feature set — Sublime parity
 
-**Description:** Layer the daily-use Sublime features onto the WP2 shell: multi-cursor / column selection, find/replace within a file, command palette for syntax selection, split panes, minimap. Each is a CM6 extension or small custom UI per `research.md`.
+**Description:** Layer the daily-use Sublime features onto the WP2 shell: multi-cursor / column selection, find/replace within a file, command palette for syntax selection, split panes, minimap, **font-size zoom**. Each is a CM6 extension or small custom UI per `research.md`.
 **Milestone:** Milestone 2
 **Dependencies:** WP2
 **Size:** M
@@ -64,6 +64,7 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [ ] Multi-cursor / multiple selections (`allowMultipleSelections` + `drawSelection`; add the VS-Code-style alt-drag binding which is not default)
 - [ ] In-file find/replace (`@codemirror/search`; optionally the `@rigstech/codemirror-vscodeSearch` VS-Code-look panel)
 - [ ] Command palette for syntax/mode selection (thin React palette over CM6 commands; honor the WP1 focus/keymap finding)
+- [ ] **Font-size zoom** (Cmd+= / Cmd+- / Cmd+0 reset, Sublime parity) — drives the editor `fontSize` (currently hardcoded 13px in WP2's `theme.ts`); make it a reactive/compartment-swapped value + persist per-project or globally. Operator-requested at WP2 verify-human (2026-06-19).
 - [ ] Split panes within the editor (multiple `EditorView`s)
 - [ ] Minimap (`@replit/codemirror-minimap`) — **optional/deferrable** per research risk; ship without it if it fights the CM6 version
 - [ ] Confirm the feature set covers the operator's daily Sublime usage (this is the parity evidence WP8's removal gate depends on)
@@ -118,6 +119,18 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [ ] Project-wide *replace* (scope decided at build — at minimum a per-result/per-file apply)
 - [ ] Unit tests on the search core (TempDir fixture with known matches)
 
+### WP10: File-tree navigator (app-layer)
+
+**Description:** **App-layer subsystem** — a persistent left-side file-tree explorer of the workspace's project dir (VS Code/Sublime-sidebar model), in addition to WP6's Cmd+P fuzzy-open. Operator-designated **must-have** (added 2026-06-19 at WP2 verify-human: the path-input stopgap and Cmd+P alone don't cover browsing an unfamiliar tree). Renders a collapsible directory tree; clicking a file opens it into the EditorPanel; honors `.gitignore`. Lives in the workspace's right-half panel chrome (it browses *into* the editor) — exact placement (left rail of the right half vs. a togglable overlay) decided at build, mindful of the 50/50 split's horizontal budget.
+**Milestone:** Milestone 2
+**Dependencies:** WP2 (clicking a node opens into the editor), WP6 (**reuses the `fs_index` fs-walk/.gitignore infrastructure** — do WP6 first; WP10 consumes the same backend, adding directory structure to the flat index or a `list_dir` command), WP5 (the tree is part of the RightPanelHost chrome / a panel)
+**Size:** M
+**Tasks:**
+- [ ] Backend: extend `fs_index` (WP6) to return directory structure, or add a lazy `list_dir(path)` Tauri command (pure-fn core + command; honor `.gitignore`) — decide eager-tree vs. lazy-expand at build based on project size
+- [ ] React `FileTree` component: collapsible directory tree, keyboard nav, click-to-open → EditorPanel; reflects the active file
+- [ ] Placement in the right-half chrome (left rail vs. togglable), respecting the horizontal budget of the 50/50 workspace split; collapsible to reclaim width
+- [ ] Unit tests on the tree-building / gitignore-honoring walk (pure core, TempDir fixture)
+
 ### WP8: Remove the Sublime Text pop (gated on editor parity) — LAST build WP
 
 **Description:** Delete the Milestone 1 Sublime Text stopgap once the in-app editor proves daily-use parity (vision Core Principle 3): the `sublime` Rust module + `sublime_open` command, the `⌘⇧E` `keydown` handler, and the right-panel "Open in Sublime" toolbar button. Frees the `⌘⇧E` chord. **Gate:** do not start until the operator confirms (at WP3/WP9 dogfooding) that the in-app editor covers their daily Sublime usage — if a relied-on gesture is hard in CM6, this gate surfaces it and the removal waits.
@@ -152,15 +165,15 @@ WP1 (probe) ──► WP2 (editor shell) ──► WP3 (editor features) ──�
                       ├──► WP4 (diff viewer) ───────────────────┤
                       └──► WP5 (panel host) ────────────────────┤
                               ▲                                  │
-                   WP6 (file finder) ──┐                         │
+                   WP6 (file finder) ──┬──► WP10 (file-tree) ────┤
                    WP7 (project search)┴─(app-layer, parallel)───┘
 ```
 
-- **Critical path:** WP1 → WP2 → WP3 → WP8 → WP9.
-- **Parallelizable after WP2:** WP4 (diff), WP6 (file finder), WP7 (search) are largely independent backend+frontend slices that can proceed in parallel once the editor shell (WP2) exists; WP5 (panel host) needs WP2 + WP4. WP6/WP7 share fs-walk infrastructure (do WP6's index first, WP7 reuses it).
+- **Critical path:** WP1 → WP2 → WP3 → WP8 → WP9. (WP10 is parallel app-layer work, not on the critical path.)
+- **Parallelizable after WP2:** WP4 (diff), WP6 (file finder), WP7 (search), WP10 (file-tree) are largely independent backend+frontend slices that can proceed in parallel once the editor shell (WP2) exists; WP5 (panel host) needs WP2 + WP4. WP6/WP7/WP10 share fs-walk infrastructure (do WP6's index first; WP7 and WP10 reuse it).
 - **WP1 gates the panel-host + finder hotkeys.** Don't design WP5/WP6's hotkeys before WP1 settles the CM6-focus question.
-- **WP8 is gated and last** (before polish) — editor parity must be proven first.
-- **App-layer callout:** WP6 (fuzzy finder) and WP7 (project-wide search) are Rust+React subsystems, not editor configuration — the single biggest scoping point from `research.md`. They are sized as full WPs, not editor sub-tasks.
+- **WP8 is gated and last** (before polish) — editor parity must be proven first. WP9's exit-criteria/dogfood should include the file-tree (WP10) in the daily-use parity check.
+- **App-layer callout:** WP6 (fuzzy finder), WP7 (project-wide search), and WP10 (file-tree navigator) are Rust+React subsystems, not editor configuration — the single biggest scoping point from `research.md`. They are sized as full WPs, not editor sub-tasks. WP10 was added 2026-06-19 (operator must-have at WP2 verify-human).
 
 ## Future milestones
 
@@ -168,7 +181,4 @@ Tracked in [`roadmap.md`](roadmap.md) (Milestones 3–9: stateful CC controller,
 
 ## SURFACE-IN history
 
-(none yet)
-
-## Session Pause — 2026-06-19 15:30
-Paused (Milestone 2 planned; research + arch + WBS all complete). Next = build **WP1** (CM6 integration probe, the first M2 WP). See `workflow/.session.md` to resume.
+- [2026-06-19] **WP10 (file-tree navigator) added** — operator designated it a must-have at WP2 Phase-1 verify-human. App-layer subsystem reusing WP6's `fs_index` infrastructure; parallel to the critical path. Source: feature:build (WP2) → product:wbs.

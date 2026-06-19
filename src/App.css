@@ -236,6 +236,102 @@ body,
   opacity: 0.7;
 }
 
+/* ── WP2 lite editor (right-half EditorPanel) ────────────────────────── */
+/* Temporary open-file bar (the real Cmd+P fuzzy finder is WP6). */
+.editor-open-bar {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.editor-open-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid rgba(160, 160, 160, 0.4);
+  border-radius: 4px;
+  background-color: #1a1a1a;
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+/* The CodeMirror host fills the remaining right-half height. The panel is a
+   column: status bar (fixed) + optional save-error banner (fixed) + editor (fills). */
+.editor-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-panel .cm-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+/* WP2 P2.2 — save status bar (path + saving/saved/unsaved indicator). */
+.editor-statusbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  color: #9b9b9b;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  background-color: #1a1a1a;
+}
+
+.editor-status-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-status-state {
+  flex-shrink: 0;
+}
+
+/* Save failure banner — inline, never swallowed (carry-forward error lesson). */
+.editor-save-error {
+  flex-shrink: 0;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+  color: #ff8a7a;
+  background-color: rgba(179, 64, 47, 0.15);
+  border-bottom: 1px solid #b3402f;
+}
+
+.editor-empty {
+  margin: auto;
+  text-align: center;
+  opacity: 0.7;
+  padding: 2rem;
+}
+
+.editor-error {
+  margin: auto;
+  text-align: center;
+  padding: 2rem;
+  color: #ff8a7a;
+}
+
+.editor-error-title {
+  font-weight: 600;
+}
+
+.editor-error-detail {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* ── WP5 Project Picker (Phase 2 of WP5) ─────────────────────────────── */
 .picker {
   max-width: 640px;

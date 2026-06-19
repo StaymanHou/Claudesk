@@ -116,3 +116,13 @@
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** address in a `/feature-refactor` pass (or fold into WP16 filmstrip work for the `.filmstrip` nit); dismiss via the WIP's `## Code-Quality Review` section if not worth it.
+
+## SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD
+- **Source:** feature:build (WP2 Phase 1)
+- **Target level:** product:wbs
+- **Type:** tech-debt
+- **Summary:** Production vite build emits the 500 KB chunk-size warning — the main bundle is ~348 KB gzipped once CM6 + language packs are statically imported by `Workspace`.
+- **Context:** Benign for a local-disk Tauri app (no network fetch on load), but it grows app startup parse time. Background workspaces don't need the editor until focused.
+- **Suggested action:** If a future milestone targets startup trimming, lazy-load the EditorPanel (`React.lazy`) so CM6 loads on first editor focus rather than at app boot. Reassess after WP9 dogfooding shows whether startup feels slow.
+- **Priority:** low
+- **Status:** pending
