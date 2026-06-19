@@ -4,6 +4,9 @@
 
 - **Feature shipped:** WP5 — frontend UI prototype: the VSCode-style Project Picker (scrollable mock recents with per-row delete, mocked Open-Folder) plus the tab-shell substrate (WorkspaceList with a Phase 1 N≤1 invariant, Center Stage, empty Filmstrip slot, 50/50 Workspace with an xterm.js DOM-renderer terminal on mock data and a "Coming in Phase 3" placeholder), driven by a `picker | workspace-open` view machine derived from state — all dark-mode only, with no backend wiring yet.
 - **Milestone:** WP5 (Phase 1, Frontend UI prototype — tab-shell substrate) complete — the first critical-path build after the scaffold + probes; Phase 2/WP6/WP7 plug into this substrate rather than reshaping it.
+- **Feature shipped:** WP6 — project config store: a Rust `config_store` module persists the project list to `~/Library/Application Support/Claudesk/projects.json` (atomic `.tmp`+rename writes, missing-file→empty, malformed→typed error) behind four Tauri commands (`list_projects` recency-ordered / `add_project` / `record_open` / `remove_project`), and the Project Picker is rewired off mock data to real IPC with a native folder dialog and an always-present name+path filter box.
+- **Backlog resolved:** SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS — closed by WP6 wiring persistence-backed delete, `last_opened_at`-desc recency ordering, and the filter/search input over the recents.
+- **Milestone:** WP6 (Phase 1, Project config store — Rust backend) complete; the first backend build on the critical path, with the `Project` struct reserving `default_drive_mode` for the Phase 2 drive-mode selector.
 
 ## 2026-06-17
 

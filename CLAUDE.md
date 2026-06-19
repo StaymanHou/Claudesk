@@ -166,7 +166,7 @@ Work packages (see `docs/product/wbs.md` for detail):
 
 Critical path: WP1 → WP5 → WP6 → WP7 → WP9. WP2 / WP3 / WP4 are probes that run in parallel as soon as WP1 unblocks them.
 
-**Status:** WP1–WP5 shipped (scaffold + 3 probes + frontend UI prototype). **First feature to pick up next:** WP6 — Project config store (Rust `projects.json` persistence + wire the real Project Picker; also lands the deferred picker-at-scale work, SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS).
+**Status:** WP1–WP6 shipped (scaffold + 3 probes + frontend UI prototype + project config store). **First feature to pick up next:** WP7 — PtyCcSession (embedded CC terminal): `CcSession` trait + `PtyCcSession` impl via `tauri-plugin-pty`, spawn `claude --dangerously-skip-permissions` cwd=project, bridge bytes ↔ xterm.js. **Load-bearing constraint for WP7:** slash-command byte-injection must end in `\r` (CR), not `\n` — see SURFACE-2026-06-16-CC-SLASH-COMMANDS-NEED-CR-NOT-LF.
 
 ## Key Decisions
 

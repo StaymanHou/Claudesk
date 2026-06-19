@@ -4,6 +4,39 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# wp6-project-config-store — 2026-06-18
+
+2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `525b7e8` (0 CRITICAL). Backend rated exemplary; all findings are on the frontend picker's IPC boundary + two small backend nits. Auto-backlogged per drive_mode=autopilot (MAJOR + MINOR).
+
+## SURFACE-2026-06-18-QUALITY-PICKER-IPC-NO-ERROR-HANDLING
+- **File:** `src/components/picker/ProjectPicker.tsx:60-63` (mount loader) + `:69-85` (handlers)
+- **Finding:** Every `await invoke(...)` in the picker assumes success. (1) The mount `useEffect` loader has no `.catch` — its comment claims "a failed load leaves the list empty," but a rejected `list_projects` (e.g. backend `ConfigError::Parse` on a malformed `projects.json`, mapped to a `String` error) throws inside the async IIFE and is silently swallowed, so corruption presents as an empty recents list rather than a surfaced error. (2) `handleOpenRecent` / `handleOpenFolder` / `handleRemove` `await invoke(...)` with no error handling, dispatched via `onClick={() => void handle...()}` — a rejected command becomes an unhandled promise rejection with no user feedback (a dead click). ESLint config does not enable type-checked rules, so `no-floating-promises` does not catch it.
+- **Why it matters:** the backend's deliberate no-silent-wipe / typed-error posture is partially neutralized at the UI boundary where every failure path is dropped. Load-bearing for the Phase 2 multi-workspace shell where the picker stays mounted and errors must surface.
+- **Suggested action:** add a shared error-surfacing path (toast / inline message) and `.catch` on the mount loader that realizes the documented graceful-empty fallback while distinguishing it from a real error. Fold into a `/feature-refactor` pass or the Phase 2 picker work.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-18-QUALITY-PICKER-ADD-NO-REFRESH
+- **File:** `src/components/picker/ProjectPicker.tsx:78-79`
+- **Finding:** `handleOpenFolder` calls `add_project` then `onOpen(picked)` but never refreshes local `recents` state (unlike `handleRemove`, which does). A newly added folder doesn't appear in the list until the picker remounts. State-sync asymmetry between the two mutation paths.
+- **Why it matters:** minor in Phase 1 (picker likely unmounts on open), but a reader will trip over the asymmetry when the picker stays mounted in the multi-workspace shell.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-18-QUALITY-CMD-ADD-RECORD-IDENTICAL
+- **File:** `src-tauri/src/config_store/commands.rs:42-55`
+- **Finding:** `add_project` and `record_open` have byte-identical bodies (both delegate to `add_or_touch(&dir, ..., now_ms())`). The distinction is purely nominal at the IPC surface.
+- **Why it matters:** harmless and arguably intentional for frontend readability, but two identical implementations invite drift (a future maintainer "fixes" one, not the other). A one-line doc note that they are deliberately aliased — or collapsing to one command — would prevent it.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-18-QUALITY-NOW-MS-EPOCH-SENTINEL
+- **File:** `src-tauri/src/config_store/commands.rs:28-33`
+- **Finding:** `now_ms()` swallows a pre-1970 `SystemTime` error with `.unwrap_or(0)`. A timestamp of `0` would silently sort that record last forever rather than surfacing the anomaly — `0` collides with the recency-ordering invariant if it ever fires.
+- **Why it matters:** trivial in practice (clock-before-epoch is not real); flagged only because `0` is a sentinel colliding with an invariant.
+- **Priority:** low
+- **Status:** pending
+
 # wp5-frontend-ui-prototype — 2026-06-18
 
 3 MINOR findings from `feature-review-quality` on ship commit `777c0b8` (0 CRITICAL, 0 MAJOR). All cosmetic stylesheet/intent-clarity nits, zero correctness impact. Auto-backlogged per drive_mode=autopilot.

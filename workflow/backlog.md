@@ -2,6 +2,12 @@
 
 > **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md). Next up: **WP5 (frontend UI prototype — tab-shell substrate)**, the Phase 1 critical-path build start.
 
+## Code-quality findings — wp6-project-config-store (2026-06-18)
+- **Pointer:** 2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `525b7e8` (0 CRITICAL). MAJORs: the picker's IPC boundary has no error handling (mount loader silently swallows a rejected `list_projects`, masking a malformed `projects.json` as empty; mutation handlers drop rejections as unhandled promise rejections). MINORs: `add_project` doesn't refresh recents (asymmetry vs `handleRemove`), `add_project`/`record_open` byte-identical bodies, `now_ms()` `unwrap_or(0)` sentinel collides with recency ordering. Backend rated exemplary. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp6-project-config-store — 2026-06-18` section.
+- **Priority:** medium (MAJORs — picker error-surfacing, load-bearing for Phase 2 multi-workspace shell) + low (MINORs)
+- **Status:** pending
+- **Pickup shape:** address the IPC error-handling MAJOR in a `/feature-refactor` pass or fold into the Phase 2 picker work; the MINORs are low-effort polish. Dismiss any via the WIP's `## Code-Quality Review` section if not worth it.
+
 ## SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS
 - **Source:** feature:build (WP6 Phase 2 — gate run)
 - **Target level:** product:wbs (housekeeping; no WP)
@@ -20,7 +26,7 @@
 - **Context:** The keep-everything/manual-delete semantics are already the design intent (CLAUDE.md: flat `projects.json`, ≤100 entries, read-on-open). WP5's mock proves the layout; WP6 has the real store to wire delete + ordering + (new) search against.
 - **Suggested action:** In WP6: wire `remove_project` to the × button; order the list by `last_opened_at` desc; add a filter/search input above the recents list (incremental substring match on display_name + path) gated on the list being long enough to warrant it.
 - **Priority:** medium (load-bearing for WP6 picker usability at the operator's real project count)
-- **Status:** open
+- **Status:** RESOLVED 2026-06-18 — WP6 (commit 525b7e8) wired `remove_project` to the × (real persistence), ordered recents by `last_opened_at` desc, and added an always-present filter/search input (case-insensitive substring on `display_name` + `project_path`; pure `matchesFilter`, 6 vitest cases). Operator-approved in native shell.
 
 ## SURFACE-2026-06-16-ARCH-THUMBNAIL-MECHANISM-NONVIABLE
 - **Source:** feature:research (WP4 thumbnail-rendering probe)

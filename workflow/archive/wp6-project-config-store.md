@@ -1,7 +1,7 @@
 # Feature: WP6 — Project config store (Rust backend)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** COMPLETED 2026-06-18 — shipped 525b7e8, finalized (local; no remote)
 **Created:** 2026-06-18
 **Entry:** spec (complex feature)
 **drive_mode:** autopilot
@@ -181,12 +181,48 @@ The feature is done when:
   - [x] verify-codify  <!-- status: done — matchesFilter 6 vitest cases are sufficient (only new pure logic); per WP5 test posture, DOM behavior stays a live/Playwright concern (no RTL standup in codify scope). Full suite 27 vitest + 14 cargo green, no regression. -->
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ALL phases complete (Phase 1 + Phase 2, full verify loops). Next: ship → review-quality → finalize.
+- **Path:** Feature > finalize
+- **Active scope:** Shipped (525b7e8) + review-quality complete (0 CRITICAL, 2 MAJOR + 3 MINOR auto-backlogged). Next: finalize.
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
+- **Unvisited:** finalize → reflect
 - **Open discoveries:** SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS (low, pre-existing, out of scope)
 
 ## Discoveries
 <!-- [SURFACED-<date>] <target node> — <summary> -->
 [SURFACED-2026-06-18] Phase 2 — `pnpm format:check` flags two pre-existing `.claude/memory/*.md` files (untouched by WP6, last in commit 90ae5ef). Logged as SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS (low). Out of WP6 scope; WP6 source files are Prettier-clean.
+
+## Code-Quality Review — wp6-project-config-store
+
+Reviewer subagent against ship commit `525b7e8`. drive_mode=autopilot (Mode 3): 0 CRITICAL, 2 MAJOR (auto-backlogged), 3 MINOR (auto-backlogged).
+
+### Strengths
+- Pure-core / IPC-shell split: store fns take injected `&Path`, unit-test against `TempDir` with zero Tauri runtime; `commands.rs` is genuinely thin. Sets the precedent WP7's `cc_session/` mirrors.
+- Atomic-write discipline (`.tmp` → `fs::rename`) correct, documented, and pinned by a crash-before-rename test.
+- Failure-mode coverage: missing→empty-vec vs malformed→typed-error vs explicit-empty-list are three distinct tested paths.
+- Load-bearing `project_path` serde rename pinned by a dedicated test (asserts presence + absence of `"path"`).
+- Module docs encode WHY (durability, testability seam, IPC string-mapping), not WHAT.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [ProjectPicker.tsx:60-63] Mount loader's `await invoke("list_projects")` has no `.catch`; the comment claims "a failed load leaves the list empty" but a rejected IPC throws inside the async IIFE and is silently swallowed — a malformed `projects.json` (backend `ConfigError::Parse`) presents as zero recents, masking the corruption the backend deliberately refused to silently wipe. → SURFACE-2026-06-18-QUALITY-PICKER-IPC-NO-ERROR-HANDLING
+- [ProjectPicker.tsx:69-85] `handleOpenRecent`/`handleOpenFolder`/`handleRemove` `await invoke(...)` with no error handling, dispatched via `() => void handle...()`. A rejected command → unhandled promise rejection, no user feedback. ESLint config has no type-checked rules (`no-floating-promises` off) so it's not lint-caught. → same SURFACE (one entry covers both — the picker error-surfacing pass).
+
+**MINOR**
+- [ProjectPicker.tsx:78-79] `handleOpenFolder` adds via `add_project` but never refreshes `recents` (unlike `handleRemove`); a newly added folder doesn't appear until remount. State-sync asymmetry. → SURFACE-2026-06-18-QUALITY-PICKER-ADD-NO-REFRESH
+- [commands.rs:42-55] `add_project` and `record_open` have byte-identical bodies; nominal-only IPC distinction invites drift. A doc note (deliberate alias) or collapse would help. → SURFACE-2026-06-18-QUALITY-CMD-ADD-RECORD-IDENTICAL
+- [commands.rs:28-33] `now_ms()` swallows pre-epoch `SystemTime` error with `.unwrap_or(0)`; `0` is a sentinel that collides with recency ordering if it ever fires. → SURFACE-2026-06-18-QUALITY-NOW-MS-EPOCH-SENTINEL
+
+### Assessment
+Well-built feature that advances the codebase. Backend is the strongest part (pure-core/IPC-shell separation, correct+tested atomic-write and read-failure semantics, contract pins). Conventions hold (no unwrap outside tests, thiserror, dark-only CSS, project_path rename, vitest-pure/Playwright-DOM posture). The one real soft spot: the frontend IPC error-handling boundary partially neutralizes the careful no-silent-wipe backend behavior at the UI. The Rust module is exemplary; the picker needs an error-surfacing pass + recents-refresh fix before the Phase 2 multi-workspace shell.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** Nothing structural — the spec/plan mapped the implementation cleanly. Minor course-corrections: `thiserror` is at v2 now (spec said v1; derive API identical), and the WP5 frontend's set-state-in-effect pattern triggered `eslint-plugin-react-hooks` v7's `set-state-in-effect` rule, forcing the idiomatic async-IIFE-with-cancelled-guard shape (which is genuinely more correct anyway).
+- **Assumptions that held:** The injected-`&Path` testability seam worked exactly as designed (10 backend tests run against `TempDir`, zero Tauri runtime). The `project_path` serde-rename reconciliation to the existing frontend `RecentProject` shape avoided any frontend type rename. The 2-phase split (backend-then-frontend) kept each phase independently verifiable — Phase 1's verify-human auto-skipped (no boundary), Phase 2's correctly paused (UI boundary).
+- **Assumptions that were wrong:** None material. The Tauri-IPC-in-Chromium constraint for verify-self was anticipated (stubbing `__TAURI_INTERNALS__`) and worked.
+- **Approach delta:** Implementation matched the plan. The one addition beyond the plan: 3 extra codify tests (empty-list round-trip, returned-record contract, `project_path` serde-rename pin) — the rename pin is the highest-value guard since Phase 2's frontend depends on that exact field name.

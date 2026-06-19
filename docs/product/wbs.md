@@ -130,22 +130,24 @@ Within Phase 1, the learning-sequence ordering applies as follows:
 - [x] Verify in `pnpm tauri dev` on actual macOS (NOT just `vite dev` in a browser tab — WKWebView vs Chromium rendering differences must be caught here) — operator-approved at verify-human (Chromium verify-self + human WKWebView eyeball)
 - [x] Lint + tests pass
 
-### WP6: Project config store (Rust backend)
+### WP6: Project config store (Rust backend) ✅ SHIPPED 2026-06-18 (commit 525b7e8)
 
 **Description:** Implement the `projects.json` persistence layer in Rust. Tauri commands: `list_projects`, `add_project(path)`, `record_open(path)`, `remove_project(path)`. Atomic file writes (write to `.tmp`, rename) to survive crashes. Wire to the (now real) Project Picker UI.
+
+> **Outcome:** Backend `config_store/` module (pure store fns taking injected `&Path` for TempDir-testability + thin Tauri command wrappers) + frontend picker rewired to real IPC + native `tauri-plugin-dialog` folder picker + always-present filter/search box. Resolves SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS (real-data delete + recency ordering + search). `default_drive_mode` field reserved on `Project` for Phase 2 (WP15). Verify: 13 cargo + 6 vitest (matchesFilter) green, clippy -D warnings/fmt clean; operator-approved in native shell (persistence across restart, recency reorder, persistent delete, projects.json contract). review-quality: 0 CRITICAL, 2 MAJOR + 3 MINOR auto-backlogged (picker IPC error-surfacing → SURFACE-2026-06-18-QUALITY-*, folded into Phase 2 picker work).
 
 **Phase:** Phase 1
 **Dependencies:** WP1, WP5
 **Size:** S
 **Tasks:**
-- [ ] Define the `Project` struct: `path: PathBuf`, `last_opened_at: i64 (unix ms)`, `display_name: Option<String>`, `default_drive_mode: Option<DriveMode>` (last field is Phase 2 but cheap to reserve now)
-- [ ] Resolve app data dir via `tauri::path::app_data_dir()`; ensure dir exists on first run
-- [ ] Implement read: JSON file → `Vec<Project>` (empty vec if file absent)
-- [ ] Implement atomic write: serialize → `projects.json.tmp` → `rename`
-- [ ] Wire Tauri commands: `list_projects`, `add_project`, `record_open`, `remove_project`
-- [ ] Frontend: replace mocked picker data with real IPC calls
-- [ ] Unit tests in `src-tauri/`: round-trip, atomic write under simulated crash, missing-file handling
-- [ ] "Open Folder" dialog wired via `tauri-plugin-dialog`
+- [x] Define the `Project` struct: `path: PathBuf`, `last_opened_at: i64 (unix ms)`, `display_name: Option<String>`, `default_drive_mode: Option<DriveMode>` (last field is Phase 2 but cheap to reserve now)
+- [x] Resolve app data dir via `tauri::path::app_data_dir()`; ensure dir exists on first run
+- [x] Implement read: JSON file → `Vec<Project>` (empty vec if file absent)
+- [x] Implement atomic write: serialize → `projects.json.tmp` → `rename`
+- [x] Wire Tauri commands: `list_projects`, `add_project`, `record_open`, `remove_project`
+- [x] Frontend: replace mocked picker data with real IPC calls
+- [x] Unit tests in `src-tauri/`: round-trip, atomic write under simulated crash, missing-file handling
+- [x] "Open Folder" dialog wired via `tauri-plugin-dialog`
 
 ### WP7: PtyCcSession — embedded CC terminal (real backend)
 
