@@ -9,6 +9,7 @@ phase-1-archived: docs/product/archive/phase-1-bare-shell-poc/
 > Revision 2026-05-22: Added two Phase 2 forward-look sub-sections — Smart auto-resume on project open (three-branch decision tree replacing the original "two-branch heuristic") and Drive-mode selector + indicator (header chrome + WIP-frontmatter persistence). Both are Phase 2 only; Phase 1 components unaffected.
 > Revision 2026-06-15: Major revision following the vision pivot (multi-window → single-window with tabbed workspaces) and the research findings that resolved four open design questions. **Phase 1 now ships the tab-shell substrate** (single-workspace use is N=1 of the tab model) and a new **thumbnail-rendering probe** that gates Phase 2's filmstrip-rendering strategy. **xterm.js: DOM renderer only** — WebGL addon dropped after the WebGL-context cap finding. The prior "Phase 2 cross-window CC status indicator" sub-section is **replaced** by three status surfaces (filmstrip / menu-bar / PiP) coordinated by a single Rust-side status broadcaster fed by a Unix-socket hook channel. The earlier "WP9b probe" (shared file vs Unix socket) is resolved: socket wins. Phase 1 component diagram and data-flow tables updated below; Phase 2 forward-look sub-sections rewritten.
 > Revision 2026-06-19 (WP7 shipped, commit `50ca322`): The `CcSession` trait + `PtyCcSession` impl now exist as built. Three as-built deltas from the design above: (1) **raw `portable-pty` behind our own 4 Tauri commands** (`cc_spawn`/`cc_input`/`cc_resize`/`cc_kill`), NOT the `tauri-plugin-pty` JS bridge — keeps `CcSession` the sole "drive CC" seam (the plugin's JS `spawn()` would compete with it). (2) **Output/exit are event streams, not trait methods**: `on_output(callback)` is realized as the `cc-output-<sid>` Tauri event and `wait_for_exit()` as the `cc-exit-<sid>` event (emitted on PTY EOF); the trait's concrete methods are `send_input`/`resize`/`kill`. (3) **PTY bytes cross IPC as base64 strings** (both directions) — `Vec<u8>` serializes as a heavy JSON number array, base64 is ~4× cheaper. Also as-built: spawn sets `TERM=xterm-256color`+`COLORTERM=truecolor` explicitly (the WP2-flagged no-inherited-TERM-under-Tauri case — confirmed needed), `kill()` is `/exit\r`-then-SIGKILL, and window-close reaping is `WindowEvent::CloseRequested` → `SessionRegistry::kill_all`. xterm wiring needed rAF-deferred fit/resize + explicit `term.focus()` (mount + post-spawn + click) for correct sizing/input under WKWebView (verify-human round-1 finding).
+> Revision 2026-06-19 (Milestone 2 architecture — Lite Editor + Diff Viewer): Folded the `research.md` M2 findings into a new **"Milestone 2 architecture"** section below (promoting the old Phase-3-forward-look editor stub to a designed milestone). Decisions: **CodeMirror 6** (not Monaco) as the right-half editor (`@uiw/react-codemirror` binding, dark-only theme); the diff viewer splits **`git2` (Rust: changed-file list + base blobs) + `@codemirror/merge` (JS: rendering)**; the **Cmd+P fuzzy file finder and project-wide find/replace are app-layer Rust+React subsystems**, NOT editor config (the load-bearing scoping correction — neither editor manages a project tree); the right-half placeholder grows into a per-workspace **panel host** (editor / diff / second terminal) with a **panel-switch hotkey** that must coexist with CM6's keymap; and the in-app Sublime Text pop (`⌘⇧E`) is **removed** at M2 once editor parity is proven (vision Core Principle 3, 2026-06-19). Component table "Right pane placeholder" row updated + new M2 components added; a Key Decision added. Milestone 1 (Phase 1) components unchanged. NOTE: this file predates the roadmap's Phase→Milestone rename; "Phase N" headings below remain valid read-aliases for "Milestone N" and are not swept here.
 > Revision 2026-06-19 (WP9 shipped, commit `91fae7f` — **Phase 1 COMPLETE**): Two polish additions within the existing surfaces, no architecture change. (1) **Friendly "claude not on PATH" error:** a pure `classify_spawn_error` maps the not-found spawn failure to a dedicated `CcError::CcNotFound` variant carrying actionable guidance (names Claude Code + install-docs link); the existing `cc-error-overlay` renders the IPC string verbatim (pinned by a cross-layer test). (2) **Deleted-project pruning:** `config_store::prune_missing` + a `prune_missing_projects` command drop projects whose folder no longer exists; the picker calls it on mount and shows a dismissible toast. This closes Phase 1 (Bare Shell + Tab Substrate PoC) — all WP1–WP9 shipped; the WBS for the Phase 1 cycle is archived under `docs/product/archive/phase-1-bare-shell-poc/`. Phases 2–4 remain headline-only, to be decomposed when Phase 2 opens.
 
 # Architecture
@@ -35,6 +36,14 @@ phase-1-archived: docs/product/archive/phase-1-bare-shell-poc/
 - `tauri-nspanel` v2.1 — `NSPanel` wrapper for the PiP window (display-only floating panel, all-Spaces, fullscreen-aux, non-activating).
 - `tauri-plugin-positioner` (with `tray-icon` feature) — positions the menu-bar popover under the tray icon.
 - `tauri-plugin-fs-watch` / `notify` — debounced file-watcher for `workflow/.session.md`.
+
+**Milestone 2 additions (Lite Editor + Diff Viewer — designed below, not yet built):** *(versions verified against npm registry 2026-06-19; see `research.md`)*
+- **CodeMirror 6** — the right-half editor engine (decided over Monaco in `research.md`: ~1.26 MB gzipped vs ~5 MB, no web-worker config, composes as an embedded panel, native-webview-friendly). Granular `@codemirror/{state,view,commands,language,search}` (state 6.6.0 / view 6.43.1 / search 6.7.1) or the `codemirror` 6.0.2 meta-package.
+- **`@uiw/react-codemirror`** 4.25.10 — the modern CM6 React binding (NOT legacy `react-codemirror2`).
+- **`@codemirror/merge`** 6.12.2 — diff/merge **rendering** (side-by-side `MergeView` or inline `unifiedMergeView`; computes its own diff). Fed `(base_text, current_text)` per file.
+- **`@replit/codemirror-minimap`** (community) — minimap; treated as an **optional/deferrable** M2 feature (lowest-confidence dep, see Risks in `research.md`).
+- **`git2`** (libgit2 Rust binding) — backend git data: the changed-file list (unstaged/staged) + base-content blobs (HEAD / index). Does NOT render the diff (CM6 does); supplies the inputs. Behind Tauri commands in the established `command → pure-fn → typed-error → String` shape.
+- File read/write reuses the existing `tauri-plugin-fs` (no new IO plumbing). Dark-only CM6 theme extension (no light variant).
 
 ### Dev Environment
 
@@ -107,11 +116,11 @@ flowchart LR
 | **WorkspaceList** | Frontend | Authoritative array of `Workspace { id, project_path, cc_session_id, status, xterm_ref }`. All workspaces stay mounted; switching center stage is `display: none` / `display: block`, never unmount. Phase 1: length always 1. Phase 2: length N. |
 | **Center Stage** | Frontend | Renders the focused workspace at full size. Hosts the xterm.js terminal pane (left) and the right-half placeholder. |
 | **Filmstrip** | Frontend | Phase 1: empty placeholder container (so Phase 2 doesn't have to introduce a new layout slot). Phase 2: one tile per non-focused workspace (live ~1 fps mirror OR static status tile, per probe outcome). |
-| Right pane placeholder | Frontend | Static "Coming in Phase 3" panel; reserved real-estate inside each workspace. |
+| Right pane placeholder | Frontend | **Milestone 1:** static "Coming soon" panel; reserved real-estate inside each workspace. **Milestone 2:** grows into the per-workspace **RightPanelHost** (editor / diff / second-terminal swap) — see Milestone 2 architecture below. |
 | Project Config Store | Backend | Read/write `projects.json`; debounced writes on update. |
 | `CcSession` trait | Backend | **Forward-compat seam.** Abstract interface: `send_input(bytes)`, `on_output(callback)`, `resize(cols, rows)`, `wait_for_exit()`, `kill()`. Phase 1 has one impl (`PtyCcSession`); Phase 2 will add `recycle()`, `state_events()`, and per-session status fan-out. Future could add an `SdkCcSession` if we ever migrate to the Agent SDK. |
 | `PtyCcSession` | Backend | Concrete impl using `portable-pty` to spawn `claude --dangerously-skip-permissions` with the project dir as cwd; bridges to frontend xterm.js via Tauri events. |
-| `sublime` module / `sublime_open` command | Backend | Resolves `subl` (PATH → `.app` bundle → `open -a`, per WP3) and spawns `subl <path>` via `std::process::Command` (steal focus; never `--project`/`--new-window`). Frontend-invoked. `smerge` is Phase 2. |
+| `sublime` module / `sublime_open` command | Backend | Resolves `subl` (PATH → `.app` bundle → `open -a`, per WP3) and spawns `subl <path>` via `std::process::Command` (steal focus; never `--project`/`--new-window`). Frontend-invoked. **Temporary (Milestone 1 stopgap): this module + command are REMOVED at Milestone 2** once the in-app editor proves parity (vision Core Principle 3, 2026-06-19). A `smerge` Sublime Merge pop is NOT planned — the in-app diff viewer covers it. |
 | In-app Sublime hotkey + button | Frontend | `SublimeToolbar` in each workspace's right panel: an "Open in Sublime" button (labeled `⌘⇧E`) and a `keydown` handler bound only on the focused workspace. Both `invoke("sublime_open", {projectPath})`. No OS-global shortcut, no Accessibility permission. |
 
 **Forward-compatibility seams (NOT built in Phase 1, only reserved):**
@@ -191,7 +200,9 @@ Thresholds above are the proposed defaults. The probe's own implementation plan 
 - **No per-project config file in the project itself.** Project list lives in `~/Library/Application Support/...`, not in `.claudesk.json` files inside each repo. Aligned with vision principle 5.
 - **Host-based dev environment, not Docker.** Tauri targets host WKWebView and native windowing; Docker on macOS cannot provide them. Industry standard for Tauri.
 - **`--dangerously-skip-permissions` (yolo mode) by default.** Vision explicit. A Phase 4 setting will let users opt out.
-- **Sublime hotkey is in-app, not OS-global (revised 2026-06-19, WP8).** The original design used `tauri-plugin-global-shortcut` (which needs a macOS Accessibility grant + first-launch onboarding flow). That was built then rejected at verify-human — the operator clarified the hotkey should fire only while Claudesk is focused, not system-wide. As-built: a webview `⌘⇧E` `keydown` handler owned by the focused workspace, plus a right-panel "Open in Sublime" button. No `tauri-plugin-global-shortcut`, no Accessibility permission, no onboarding dialog.
+- **Sublime hotkey is in-app, not OS-global (revised 2026-06-19, WP8).** The original design used `tauri-plugin-global-shortcut` (which needs a macOS Accessibility grant + first-launch onboarding flow). That was built then rejected at verify-human — the operator clarified the hotkey should fire only while Claudesk is focused, not system-wide. As-built: a webview `⌘⇧E` `keydown` handler owned by the focused workspace, plus a right-panel "Open in Sublime" button. No `tauri-plugin-global-shortcut`, no Accessibility permission, no onboarding dialog. **Temporary:** removed at Milestone 2 once the in-app editor proves parity (see below).
+- **CodeMirror 6 over Monaco for the in-app editor (Milestone 2, decided 2026-06-19 from `research.md`).** For an editor *embedded* as one panel among several in a ~3 MB Tauri app, CM6 wins decisively: ~1.26 MB gzipped vs Monaco's ~5 MB, no web-worker configuration (fiddly in WKWebView), composes as a component, native-webview/serializable pedigree fits Tauri IPC. Monaco's advantage (VS-Code-grade IntelliSense / language servers) doesn't apply — Claude Code is the intelligence layer, the editor is a Sublime-feature-parity *lite* editor. React binding: `@uiw/react-codemirror` (not legacy `react-codemirror2`). Reversible if a hard CM6 limitation surfaces, but the bundle/worker wins are structural.
+- **The editor edits a document; the project is app-layer (Milestone 2).** Cmd+P fuzzy file finder and project-wide find/replace are Rust+React subsystems, not editor config — true for Monaco too (neither manages a project tree). The WBS budgets them as their own work, not sub-tasks of "wire up the editor." The diff viewer is `git2` (file list + base blobs) + `@codemirror/merge` (rendering), not `git2` computing the rendered diff.
 
 ### Phase 2 forward-look (informational, not built)
 
@@ -271,12 +282,66 @@ flowchart LR
 - **Cross-workspace consistency** is no longer a concern (no multi-window setup; only one workspace per project at a time in v1).
 - **No new Rust module.** Thin layer in `config_store/`.
 
-### Phase 3 forward-look (informational, not built)
+## Milestone 2 architecture — Lite Editor + Diff Viewer (designed; next to build)
 
-- Right-pane Monaco or CodeMirror 6 editor (decision in next research pass).
-- libgit2-backed (or `git2` Rust crate) diff viewer.
-- A second `PtyCcSession`-equivalent for the "ad-hoc terminal" mode within a workspace.
-- A panel-host component on the right that swaps between editor / diff / terminal — one per workspace, so each workspace has its own panel state.
+> **Scope (Milestone 2, roadmap):** the right half stops being a placeholder and becomes a real per-workspace editing surface that *replaces* Sublime Text for routine work. Grounded in `research.md` (2026-06-19). YAGNI still applies — this designs M2 only; Milestones 3–9 (stateful CC controller, multi-workspace, status surfaces, polish) stay forward-look.
+
+### Component shape
+
+The Milestone 1 "right-half placeholder" inside each workspace becomes a **`RightPanelHost`** — a per-workspace React component that owns the right half and swaps between three panels: **Editor** (CodeMirror 6), **Diff** (`@codemirror/merge`), and **Second terminal** (a second `PtyCcSession`, reusing the WP7 seam). One host instance per workspace; each workspace keeps its own panel state (which panel is active, open file, scroll), mirroring the "all workspaces stay mounted" rule from Milestone 1.
+
+| Component | Layer | Responsibility |
+|-----------|-------|---------------|
+| **RightPanelHost** | Frontend | Per-workspace owner of the right half. Holds the active-panel state (editor \| diff \| terminal); the **panel-switch hotkey** cycles them. Replaces the M1 placeholder. |
+| **EditorPanel** | Frontend | CodeMirror 6 via `@uiw/react-codemirror`. Multi-cursor (core), `@codemirror/search` find/replace, language modes (per-file), optional minimap, dark theme. Reads/writes files via `tauri-plugin-fs`. |
+| **DiffPanel** | Frontend | `@codemirror/merge` (`MergeView` side-by-side or `unifiedMergeView` inline — config flip). Renders `(base_text, current_text)` per file; CM6 computes the chunks. Shows the changed-file list (from the backend) + the selected file's diff. |
+| **FileFinder** (Cmd+P) | Frontend + Backend | **App-layer, not an editor feature.** A React fuzzy-picker overlay over a backend-provided file index of the workspace's project dir; selecting opens the file into the EditorPanel. |
+| **ProjectSearch** | Frontend + Backend | **App-layer.** Backend ripgrep-style search over the project dir → results list; opening a result loads the file + highlights the match in CM6 (`@codemirror/search` does the in-document highlight). |
+| **`git_diff` command(s)** | Backend | `git2`-backed: list changed files (unstaged vs staged) + return base-content blobs (HEAD blob for working-tree diffs, index blob for staged). Pure-fn core + thin Tauri command wrappers (the WP6/WP7 shape). Does NOT compute the rendered diff — supplies inputs to DiffPanel. |
+| **`fs_index` / `project_search` command(s)** | Backend | Walk the workspace project dir for the FileFinder index; ripgrep-style content search for ProjectSearch. Honors `.gitignore`. |
+| **Second-terminal panel** | Frontend + Backend | A second `PtyCcSession`-equivalent for an ad-hoc shell in the right half (reuses the `CcSession` trait + `cc_*` command pattern; not `claude` — a plain shell). |
+
+### Data flow (Milestone 2)
+
+```mermaid
+flowchart LR
+  subgraph WS["Workspace (one per project tab)"]
+    Left["Left: CC terminal (xterm.js) — Milestone 1"]
+    subgraph RPH["RightPanelHost (M2)"]
+      Editor["EditorPanel (CodeMirror 6)"]
+      Diff["DiffPanel (@codemirror/merge)"]
+      Term2["Second terminal (PtyCcSession)"]
+    end
+  end
+  Editor <-- "read/write file (tauri-plugin-fs)" --> Backend
+  Diff <-- "git_diff: file list + base blobs (git2)" --> Backend
+  FileFinder["Cmd+P FileFinder (overlay)"] -- "fs_index" --> Backend
+  ProjectSearch -- "project_search (ripgrep-style)" --> Backend
+  PanelSwitch["Panel-switch hotkey"] -. cycles .-> RPH
+  Backend["Rust core (git2 + fs walk/search + tauri-plugin-fs)"]
+```
+
+### Key M2 design constraints
+
+- **The editor engine edits a *document*; the *project* is ours.** This is the load-bearing finding (`research.md`): Cmd+P fuzzy file finder and project-wide find/replace are **app-layer subsystems** (Rust file-index + ripgrep-style search + React overlays), not CM6 (or Monaco) configuration. The WBS must budget them as their own work, distinct from "wire up CodeMirror." Roughly 2 of the 6 Sublime-parity "editor" features are actually backend features.
+- **Diff = `git2` (data) + `@codemirror/merge` (render).** `git2` supplies the changed-file list and base blobs; CM6 computes + renders the diff. No git-hunk format marshaled over IPC. Side-by-side vs unified is a config choice (side-by-side = Sublime Merge mental model; unified = better for the narrow half-width panel) — decide at build, not a dependency change. Interactive staging / rebase / blame / conflict-resolution are explicitly out of M2 scope.
+- **Panel-switch hotkey must coexist with CM6's keymap.** When focus is inside a CM6 editor, CM6 can swallow app-level chords. The right-half panel-switch hotkey (and Cmd+P / the command palette) must be registered so they fire *even while editing* — as CM6 keybindings that bubble, or with app key handling scoped to let the chord through. This is the same class of issue WP8 hit with `⌘⇧E`; design it deliberately, do not rely on a naive document-level listener.
+- **N mounted editors.** Per the tab model (Milestone 6+), N workspaces each may hold a CM6 EditorPanel plus a DiffPanel (`MergeView` = 2 more CM6 instances), all mounted (`display:none` when backgrounded). CM6 is far lighter than Monaco, but the WP4-style "cost at N" concern applies to editors too — the WP4 probe covered terminals only. A cheap sanity check during M2 build that N mounted editors stay within the RAM/CPU envelope is warranted (not a separate probe milestone, but a build-time guard).
+- **Sublime Text pop removed at M2 — gated, last.** The `sublime` module + `sublime_open` command + the `⌘⇧E` keydown handler + toolbar button (all Milestone 1 / WP8) are **deleted** once the in-app editor proves daily-use parity. This is the *last* M2 step, after dogfooding the editor — if a relied-on Sublime gesture turns out hard in CM6, that gate surfaces it. The in-app `⌘⇧E` chord is freed up; the panel-switch hotkey is the surviving right-half binding.
+- **Dark-mode only.** CM6 theme is a single dark theme extension; no light variant (project convention).
+
+### M2 forward-compat / seam reuse
+
+- **`CcSession` trait reused** for the second-terminal panel (a plain shell, not `claude`) — no new process-spawning abstraction.
+- **`tauri-plugin-fs` reused** for file read/write — already a dependency from Milestone 1's config store.
+- **Backend command shape reused** — `git_diff` / `fs_index` / `project_search` follow the `command → pure-fn (injected paths, TempDir-testable) → typed error → String` pattern from `config_store` (WP6) and `cc_session` (WP7).
+
+### Phase 3+ forward-look (informational, not built — superseded scope note)
+
+> The former "Phase 3" lite-editor work is now **Milestone 2** (designed above). What remains genuinely forward-look beyond M2:
+
+- A richer git surface (interactive staging / blame / history) beyond M2's diff-viewer basics — only if the in-app diff viewer proves insufficient in dogfooding.
+- Editor LSP-style features (completions/diagnostics) via a language server behind CM6 — explicitly out of vision scope (Claude Code is the intelligence layer), noted only as a known CM6-extensibility path.
 
 ### Future hedge
 
