@@ -1,6 +1,6 @@
 ---
 stage: wbs
-state: complete
+state: in-progress
 updated: 2026-06-19
 milestone: 2
 ---
@@ -25,7 +25,7 @@ Learning-sequence ordering, riskiest-unknown-first:
 
 ## Milestone 2
 
-### WP1: Probe — CodeMirror 6 integration unknowns (hotkey-focus + N-editor cost)
+### WP1: Probe — CodeMirror 6 integration unknowns (hotkey-focus + N-editor cost) ✅ SHIPPED 2026-06-19 (commit a84f3e9)
 
 **Type:** probe
 **Milestone:** Milestone 2
@@ -35,24 +35,24 @@ Learning-sequence ordering, riskiest-unknown-first:
 **Timebox:** 1 day
 **Success criterion:** A short writeup in `workflow/wip/m2-wp1-cm6-probe.md` recording: (a) the working hotkey-while-focused registration pattern (with the code shape that worked), and whether Cmd+P / panel-switch can coexist with CM6's keymap; (b) raw CPU/RAM numbers at N mounted editors + pass/fail vs the envelope, and any mitigation (e.g. lazy-mount backgrounded editors) if it fails. The writeup is the deliverable; no production code lands.
 **Tasks:**
-- [ ] Mount a CM6 editor (via `@uiw/react-codemirror`) in a throwaway harness; bind an app-level chord and test whether it fires while the editor has focus; find the registration that works (bubbling CM6 keybinding vs. capture-phase listener)
-- [ ] Confirm Cmd+P and a panel-switch chord can both coexist with CM6's default keymap (no swallow)
-- [ ] Mount N (≈8) CM6 editors + 2 `@codemirror/merge` MergeViews; background most with `display:none`; measure CPU (idle + active typing) and RAM (`footprint`), mirroring WP4's method
-- [ ] Record findings + pass/fail + any mitigation in the probe writeup
+- [x] Mount a CM6 editor (via `@uiw/react-codemirror`) in a throwaway harness; bind an app-level chord and test whether it fires while the editor has focus; find the registration that works (bubbling CM6 keybinding vs. capture-phase listener)
+- [x] Confirm Cmd+P and a panel-switch chord can both coexist with CM6's default keymap (no swallow)
+- [x] Mount N (≈8) CM6 editors + 2 `@codemirror/merge` MergeViews; background most with `display:none`; measure CPU (idle + active typing) and RAM (`footprint`), mirroring WP4's method
+- [x] Record findings + pass/fail + any mitigation in the probe writeup
 
-### WP2: Editor shell — CodeMirror 6 mounted in the right half (open/save)
+### WP2: Editor shell — CodeMirror 6 mounted in the right half (open/save) ✅ SHIPPED 2026-06-19 (commit a84f3e9)
 
 **Description:** Mount CodeMirror 6 (via `@uiw/react-codemirror`) as an `EditorPanel` inside each workspace's right half, replacing the Milestone 1 placeholder card for the editor case. Open a file (read via `tauri-plugin-fs`), edit, save (write-back). Dark-only theme. No feature layering yet — this is the working shell the rest builds on.
 **Milestone:** Milestone 2
 **Dependencies:** WP1 (probe settles the mount + focus pattern)
 **Size:** M
 **Tasks:**
-- [ ] Add CM6 deps (`@uiw/react-codemirror` + granular `@codemirror/*`) to `package.json`; pin to the research-verified versions
-- [ ] `EditorPanel` React component: mounts a CM6 `EditorView` in the right half; dark theme extension (no light variant)
-- [ ] Open file: backend `read_file(path)` (or reuse `tauri-plugin-fs`) → load contents into the editor with the right language mode by extension
-- [ ] Save file: write-back on a save keybinding; surface write errors (the WP6/WP7 IPC-error-surfacing lesson)
-- [ ] Language-mode loading per file extension (import only the language packages used)
-- [ ] Verify in `pnpm tauri dev` on real macOS (WKWebView), not just vite dev
+- [x] Add CM6 deps (`@uiw/react-codemirror` + granular `@codemirror/*`) to `package.json`; pin to the research-verified versions (+ `@codemirror/lang-markdown`, `@lezer/highlight` added at verify-human)
+- [x] `EditorPanel` React component: mounts a CM6 `EditorView` in the right half; dark theme extension (no light variant) — VS Code Dark+ syntax style
+- [x] Open file: backend `read_file(root, path)` (dedicated `editor_fs` Rust module, NOT tauri-plugin-fs) → load contents with the right language mode by extension
+- [x] Save file: Cmd+S write-back; surface write errors inline (the WP6/WP7 IPC-error-surfacing lesson)
+- [x] Language-mode loading per file extension (granular imports — js/ts/jsx/tsx/rust/markdown + plaintext fallback)
+- [x] Verify in `pnpm tauri dev` on real macOS (WKWebView), not just vite dev — verify-human confirmed open/edit/save/theme/markdown
 
 ### WP3: Editor feature set — Sublime parity
 

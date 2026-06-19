@@ -1,7 +1,7 @@
 ---
 type: feature
 workflow: feature
-state: plan (complete)
+state: finalize (complete)
 milestone: 2
 wp: WP2
 drive_mode: autopilot
@@ -75,12 +75,41 @@ Milestone 2's right-half lite editor needs a working shell before any Sublime-pa
      advance to the next work package requires a human green-light. -->
 
 ## Current Node
-- **Path:** Feature > ship (both phases COMPLETE)
-- **Active scope:** WP2 ready to ship (all phases + all verify nodes done)
+- **Path:** Feature > COMPLETE (archived)
+- **Active scope:** none — WP2 finalized & archived 2026-06-19
 - **Blocked:** none
-- **Unvisited:** ship → finalize. **Then HALT per operator directive — do not start WP3 without explicit go-ahead.**
-- **Open discoveries:** none blocking
-- **State:** verify-codify (all phases complete)
+- **Unvisited:** none. WP2 done. **HALT per operator directive — do not start WP3 without explicit go-ahead.**
+- **Open discoveries:** 2 MAJOR + 3 MINOR quality findings backlogged (not blocking); WP10 + font-zoom added to WBS
+- **State:** finalize (complete)
+
+## Code-Quality Review — m2-wp2-editor-shell
+
+Reviewed against ship commit a84f3e9 (2026-06-19, autopilot). 0 CRITICAL, 2 MAJOR, 3 MINOR — auto-backlogged per drive_mode=autopilot (Case B). Feature rated "advances the codebase rather than accruing debt."
+
+### Strengths
+- `editor_fs` faithfully follows the repo seam (command → pure-fn → typed-error → String-over-IPC), mirrors config_store's atomic write, exhaustively TempDir-tested.
+- Error-surfacing honored end to end (read + write failures → String → inline banners, never swallowed).
+- Pure logic extracted into no-React sidecars (editorLoad/editorSave/language) unit-tested under vitest, respecting the no-RTL posture.
+- Dark-only theme with explicit anti-light-variant comment.
+- Doc comments encode WHY (security boundary, durability, reducer-vs-effect rationale).
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR**
+- [src-tauri/src/editor_fs/mod.rs:45-90] `resolve_within` canonicalizes only the target's *parent* and re-attaches the leaf un-canonicalized, but the doc claims "a symlink inside root pointing outside is rejected." A symlink whose *leaf* points outside root is NOT caught (read/write follow it). Doc/behavior mismatch on a security invariant. Low exploitability (single-user local tool, user picks in-project files), but the overclaim is the debt. Fix: canonicalize the resolved target when it exists and re-check `starts_with(root_canon)`, or downgrade the doc claim. → backlogged.
+- [src-tauri/src/editor_fs/commands.rs:18-26] `read_file`/`write_file` take `root: String` straight from the frontend (unlike config_store resolving `app_data_dir()` server-side). The "confined to the open project" guarantee rests on the renderer passing a correct projectPath — trust boundary lives in the webview. Worth hardening before Phase 2 multiplies callers. → backlogged.
+
+**MINOR**
+- [EditorPanel.tsx:73-87] `doSave` depends on `save.kind` (to enable retry-after-error) → rebuilds saveKeymap → reconfigures the CM6 view on every save-status transition. Correct (WP1 confirmed reconfigure works) but non-obvious churn; a comment or decoupling the retry path would help. → backlogged.
+- [editorLoad.ts:24] reducer param named `_state` (signals unused) but IS used in the default branch; editorSave.ts:26 correctly names it `state`. Inconsistent; rename to `state`. → backlogged.
+- [language.test.ts:73] speculative "WP3 may add" comment on the json-plaintext assertion; drop the parenthetical. → backlogged.
+
+### Assessment
+Well-built feature that advances the codebase. Backend module is the strongest part — a deliberate extension of config_store, fully testable without Tauri, with useful WHY-comments. Frontend reducer-sidecar split respects the vitest-only posture and keeps IPC error-surfacing honest. The finding not to lose: the `resolve_within` leaf-symlink gap vs. its own doc claim, and the backend trusting a frontend-supplied root — the seam to harden before Phase 2. Neither refactor-blocking; both clean backlog candidates.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
@@ -88,3 +117,14 @@ Milestone 2's right-half lite editor needs a working shell before any Sublime-pa
 - [SURFACED-2026-06-19] Phase 2 — `write_file` (P2.1) was implemented during Phase 1 (alongside `read_file`) to avoid a dead-code warning under `cargo clippy -D warnings`; P2.1 collapses to a confirmation, P2.2 (Cmd+S wiring) is the real Phase 2 work. Not a backlog item — phase-internal note.
 - [SURFACED-2026-06-19] WP2 verify-human — operator requests (handled): (1) **syntax theme** → applied VS Code Dark+ HighlightStyle (`theme.ts` + `@lezer/highlight` dep); (2) **markdown highlighting** → added `@codemirror/lang-markdown` + `.md/.markdown/.mdx` rows in `language.ts` (3 new tests, 27 total); (3) **file-tree navigator** → added to WBS as WP10 (operator must-have, app-layer, reuses WP6 fs_index); (4) **font-size +/- zoom** → added to WBS WP3 task list (Sublime parity, drives the currently-hardcoded 13px fontSize); (5) path-box autofill → declined (throwaway stopgap WP6's Cmd+P replaces).
 - [SURFACED-2026-06-19] WP9/build-note — production vite build emits the 500 KB chunk-size warning: the main bundle is ~348 KB gzipped now that CM6 + language packs are statically imported by `Workspace`. Benign for a local-disk Tauri app (no network fetch), but if a future milestone wants to trim startup, the editor could be lazy-loaded (`React.lazy`) since background workspaces don't need it until focused. Logged to backlog as low priority.
+
+## Retrospect
+- **What changed in our understanding:** The "reuse `tauri-plugin-fs`" plan from research didn't survive contact — the plugin isn't registered in `lib.rs`, and a dedicated `editor_fs` Rust module (mirroring `config_store`) was the better fit: it matches the repo's command→pure-fn→typed-error→String seam and gives explicit IPC error-surfacing for free. Also learned the live editor open/save is genuinely Tauri-IPC-gated — unobservable in plain vite/Chromium — so verify-self could only cover the bundle/mount/wiring layer and the live behavior fell to verify-human in the WKWebView (a pattern that will repeat for every IPC-backed UI in this project).
+- **Assumptions that held:** WP1's carry-forward was exactly right — the capture-phase / CM6-Prec.highest chord pattern worked for Cmd+S (suppressed the browser save dialog cleanly); N mounted editors with `display:none` stayed cheap; granular `@codemirror/*` imports tree-shook. The repo's pure-sidecar-reducer + no-RTL testing posture transferred cleanly (editorLoad/editorSave mirror cc/bridge.ts).
+- **Assumptions that were wrong:** `react-hooks/set-state-in-effect` and `react-hooks/refs` lint rules fired harder than expected on idiomatic async-effect + ref-at-event-time patterns; resolved structurally (useReducer for load state, doSave-in-extensions-array instead of a ref) rather than with disables — cleaner than the WP1 probe's file-level disable. The plan's "P2.1 = write backend" was pulled forward into P1 to avoid a dead-code warning, so Phase 2 was mostly the save *wiring*.
+- **Approach delta:** Plan was 2 phases (read path / write path); actual matched, but verify-human surfaced 4 scope additions handled live — VS Code Dark+ theme + markdown shipped in-feature, file-tree (WP10) + font-zoom (WP3) deferred to the WBS. The editor lands one commit (a84f3e9) bundling WP1 probe + WP2.
+
+## Completion
+- **Status:** COMPLETED 2026-06-19
+- **Ship commit:** a84f3e9 (local on `main`, not pushed)
+- **Review:** 0 CRITICAL, 2 MAJOR + 3 MINOR — auto-backlogged (see `## Code-Quality Review`)

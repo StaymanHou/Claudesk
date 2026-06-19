@@ -126,3 +126,9 @@
 - **Suggested action:** If a future milestone targets startup trimming, lazy-load the EditorPanel (`React.lazy`) so CM6 loads on first editor focus rather than at app boot. Reassess after WP9 dogfooding shows whether startup feels slow.
 - **Priority:** low
 - **Status:** pending
+
+## Code-quality findings — m2-wp2-editor-shell (2026-06-19)
+- **Pointer:** 2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `a84f3e9` (0 CRITICAL). MAJORs (medium): `editor_fs::resolve_within` leaf-symlink gap vs. its doc's security-invariant claim, and the backend trusting a frontend-supplied workspace `root` (trust boundary in the renderer — Phase-2 hardening seam; pair the two, same module). MINORs (low): save-status-driven CM6 keymap churn, `_state` param misnamed in editorLoad.ts, a speculative test comment. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp2-editor-shell — 2026-06-19`.
+- **Priority:** medium (the two MAJOR backend-hardening items) + low (MINORs)
+- **Status:** pending
+- **Pickup shape:** the two MAJORs pair into one `editor_fs` hardening pass (validate `root` server-side + close the leaf-symlink gap) — natural to fold into Phase-2 multi-workspace IPC work; the MINORs are a quick `/feature-refactor` sweep. Dismiss any via the WIP's `## Code-Quality Review` section.

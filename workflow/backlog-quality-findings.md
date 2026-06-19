@@ -327,3 +327,44 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** Drop the `void duration;` no-op (and its comment), or fold the empty-events guard more cleanly. `replay.ts` is the durable piece Phase 2 may lift, so worth a quick tidy then.
 
 (Note: a third MINOR — Phase 3 Work Tree header stale at NOT-STARTED — was RESOLVED in-place at review time, not backlogged.)
+
+# m2-wp2-editor-shell — 2026-06-19
+
+2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `a84f3e9` (0 CRITICAL). Feature rated "advances the codebase rather than accruing debt." Auto-backlogged per drive_mode=autopilot (MAJOR → Case B, MINOR → low). The two MAJORs are the load-bearing ones (backend root-trust seam + a doc/behavior security-invariant mismatch), both flagged as Phase-2-hardening candidates, neither refactor-blocking.
+
+## SURFACE-2026-06-19-QUALITY-WP2-RESOLVE-WITHIN-LEAF-SYMLINK
+- **File:** `src-tauri/src/editor_fs/mod.rs:45-90` (`resolve_within`)
+- **Finding:** Canonicalizes only the target's *parent* and re-attaches the leaf un-canonicalized; a symlink whose *leaf* points outside the workspace root is NOT rejected (read/write follow it), yet the module doc (lines 17-22, 50-52) claims "a symlink inside root pointing outside is also rejected." Doc overclaims an invariant the code doesn't fully enforce.
+- **Why it matters:** A future reader trusts "invariant not convention" and won't re-audit. Low exploitability (single-user local tool, user picks in-project files) but the doc/behavior mismatch is the debt.
+- **Suggested action:** Canonicalize the resolved target when it exists and re-check `starts_with(root_canon)`; OR downgrade the doc claim to match. Pairs with the Phase-2 backend-hardening item below.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-WP2-BACKEND-TRUSTS-FRONTEND-ROOT
+- **File:** `src-tauri/src/editor_fs/commands.rs:18-26` (`read_file`/`write_file`)
+- **Finding:** Both commands take `root: String` straight from the frontend with no app-side derivation, unlike `config_store`'s commands which resolve `app_data_dir()` server-side. The "confined to the open project" guarantee rests entirely on the renderer passing a correct `projectPath` — the trust boundary for the root guard lives in the webview, not the backend.
+- **Why it matters:** Phase 2 (multi-workspace) multiplies the IPC callers and surface; this is the seam to tighten before more callers depend on it. Acceptable for the single-user PoC today.
+- **Suggested action:** Consider having the backend validate `root` against the known project list (config_store) before honoring it, so a malformed/hostile root can't widen the guard. Pairs with the leaf-symlink item above (same module, same Phase-2 hardening pass).
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-WP2-SAVEKEYMAP-CHURN
+- **File:** `src/components/workspace/editor/EditorPanel.tsx:73-87`
+- **Finding:** `doSave` depends on `save.kind` (to enable retry-after-error) → rebuilds `saveKeymap` → reconfigures the CM6 view on every save-status transition. Functionally correct (WP1 confirmed reconfigure-on-identity-change works) but the status-driven keymap churn is a non-obvious cost.
+- **Suggested action:** Add a short comment, or decouple the retry path so `doSave`'s identity doesn't depend on save status. Low effort.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-WP2-EDITORLOAD-UNDERSCORE-PARAM
+- **File:** `src/components/workspace/editor/editorLoad.ts:24`
+- **Finding:** Reducer parameter named `_state` (underscore signals "unused") but it IS used in the `default` branch (`return _state`); `editorSave.ts:26` correctly names the same param `state`. Inconsistent within the same feature.
+- **Suggested action:** Rename `_state` → `state` in `editorLoad.ts`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-19-QUALITY-WP2-LANGUAGE-TEST-SPECULATIVE-COMMENT
+- **File:** `src/components/workspace/editor/__tests__/language.test.ts:73`
+- **Finding:** Test comment "json ... not wired yet (WP3 may add)" — speculative forward-guess that ages into noise.
+- **Suggested action:** Drop the parenthetical; the assertion (json → plaintext) stands on its own.
+- **Priority:** low
+- **Status:** pending
