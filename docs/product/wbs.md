@@ -54,20 +54,39 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Language-mode loading per file extension (granular imports — js/ts/jsx/tsx/rust/markdown + plaintext fallback)
 - [x] Verify in `pnpm tauri dev` on real macOS (WKWebView), not just vite dev — verify-human confirmed open/edit/save/theme/markdown
 
-### WP3: Editor feature set — Sublime parity
+### WP3a: Editor core-editing parity (multi-cursor, find/replace, font-zoom)
 
-**Description:** Layer the daily-use Sublime features onto the WP2 shell: multi-cursor / column selection, find/replace within a file, command palette for syntax selection, split panes, minimap, **font-size zoom**. Each is a CM6 extension or small custom UI per `research.md`.
+**Description:** The daily-must-have editing features on top of the WP2 shell — the ones the operator uses constantly in Sublime. Each is a CM6 extension or small keybinding/config per `research.md`. Minimap rides along as a deferrable extra (lowest-confidence dep). Split from the original packed WP3 on 2026-06-19 (operator: "too much packed into it").
 **Milestone:** Milestone 2
 **Dependencies:** WP2
 **Size:** M
 **Tasks:**
 - [ ] Multi-cursor / multiple selections (`allowMultipleSelections` + `drawSelection`; add the VS-Code-style alt-drag binding which is not default)
 - [ ] In-file find/replace (`@codemirror/search`; optionally the `@rigstech/codemirror-vscodeSearch` VS-Code-look panel)
-- [ ] Command palette for syntax/mode selection (thin React palette over CM6 commands; honor the WP1 focus/keymap finding)
 - [ ] **Font-size zoom** (Cmd+= / Cmd+- / Cmd+0 reset, Sublime parity) — drives the editor `fontSize` (currently hardcoded 13px in WP2's `theme.ts`); make it a reactive/compartment-swapped value + persist per-project or globally. Operator-requested at WP2 verify-human (2026-06-19).
-- [ ] Split panes within the editor (multiple `EditorView`s)
-- [ ] Minimap (`@replit/codemirror-minimap`) — **optional/deferrable** per research risk; ship without it if it fights the CM6 version
-- [ ] Confirm the feature set covers the operator's daily Sublime usage (this is the parity evidence WP8's removal gate depends on)
+- [ ] Minimap (`@replit/codemirror-minimap`) — **optional/deferrable** per research risk; ship without it if it fights the CM6 version. Do NOT let it block the must-haves above.
+
+### WP3b: Editor command palette
+
+**Description:** A net-new React command-palette overlay over CM6's command set (syntax/mode selection to start; an extension point for more commands later). CM6 has no turnkey palette, so this is a small custom subsystem, not a config flip — which is why it's its own WP. Must honor the WP1 capture-phase focus pattern so the palette hotkey fires while the cursor is in the editor.
+**Milestone:** Milestone 2
+**Dependencies:** WP2, WP1 (focus/keymap pattern)
+**Size:** M
+**Tasks:**
+- [ ] Command-palette React overlay (Cmd+Shift+P) over CM6 commands; keyboard nav; honor the WP1 capture-phase registration so it fires with focus inside CM6
+- [ ] Syntax/mode selection as the first command set; structure so more commands slot in
+- [ ] Coexists with the WP5 panel-switch hotkey + WP6 Cmd+P (no chord collisions)
+
+### WP3c: Editor split panes
+
+**Description:** Split the editor into multiple `EditorView`s within the right-half panel — the riskiest of the old WP3's features (focus management, per-pane state, layout in a half-width panel). Isolated into its own WP so a hard layout/focus problem here can't block shipping the core-editing must-haves (WP3a).
+**Milestone:** Milestone 2
+**Dependencies:** WP2 (WP3a not strictly required, but land WP3a first so split panes inherit the finished editing feature set)
+**Size:** M
+**Tasks:**
+- [ ] Split panes within the editor (multiple `EditorView`s sharing or mirroring the document); decide split direction(s) at build, mindful of the half-width right panel
+- [ ] Per-pane focus + active-pane tracking; the panel-switch / save / palette hotkeys act on the focused pane
+- [ ] Decide at build whether panes share one document state or are independent views; handle close-pane / last-pane edge cases
 
 ### WP4: Git diff viewer — `git2` data + `@codemirror/merge` rendering
 
@@ -133,12 +152,12 @@ Learning-sequence ordering, riskiest-unknown-first:
 
 ### WP8: Remove the Sublime Text pop (gated on editor parity) — LAST build WP
 
-**Description:** Delete the Milestone 1 Sublime Text stopgap once the in-app editor proves daily-use parity (vision Core Principle 3): the `sublime` Rust module + `sublime_open` command, the `⌘⇧E` `keydown` handler, and the right-panel "Open in Sublime" toolbar button. Frees the `⌘⇧E` chord. **Gate:** do not start until the operator confirms (at WP3/WP9 dogfooding) that the in-app editor covers their daily Sublime usage — if a relied-on gesture is hard in CM6, this gate surfaces it and the removal waits.
+**Description:** Delete the Milestone 1 Sublime Text stopgap once the in-app editor proves daily-use parity (vision Core Principle 3): the `sublime` Rust module + `sublime_open` command, the `⌘⇧E` `keydown` handler, and the right-panel "Open in Sublime" toolbar button. Frees the `⌘⇧E` chord. **Gate:** do not start until **WP9's parity gate passes** (the daily-Sublime-usage check now lives in WP9 dogfooding, not WP3) — if a relied-on gesture is hard in CM6, that gate surfaces it and the removal waits.
 **Milestone:** Milestone 2
-**Dependencies:** WP2, WP3 (editor parity must be proven first), WP5 (panel-switch hotkey is the surviving right-half binding)
+**Dependencies:** WP3a/3b/3c (editor features built), WP9 parity gate (parity proven), WP5 (panel-switch hotkey is the surviving right-half binding)
 **Size:** S
 **Tasks:**
-- [ ] **Gate check:** operator confirms the in-app editor covers daily Sublime usage (parity evidence from WP3 + dogfooding)
+- [ ] **Gate check:** WP9's parity gate has passed — operator confirmed the in-app editor covers daily Sublime usage
 - [ ] Remove the frontend `SublimeToolbar` (button + `⌘⇧E` keydown handler) and its `chord.ts` helper
 - [ ] Remove the backend `sublime` module + `sublime_open` command + its registration in `lib.rs`; drop the `which`/Sublime-discovery code
 - [ ] Drop the `subl`-on-PATH prerequisite from `CLAUDE.md` / README; resync arch.md component table (remove the sublime row)
@@ -148,31 +167,33 @@ Learning-sequence ordering, riskiest-unknown-first:
 
 **Description:** Add the ad-hoc second-terminal panel to the RightPanelHost (a plain shell via the `CcSession` seam, not `claude`), then the Milestone 2 polish + exit-criteria pass: a full editing+diff day inside the right half, dogfood, error handling, and confirm the exit criteria.
 **Milestone:** Milestone 2
-**Dependencies:** WP5 (panel host), WP3 + WP4 (editor + diff working)
+**Dependencies:** WP5 (panel host), WP3a/3b/3c + WP4 (editor features + diff working)
 **Size:** M
 **Tasks:**
 - [ ] Second-terminal panel: a `PtyCcSession`-equivalent spawning the user's shell (not `claude`) in the workspace dir, mounted as a RightPanelHost panel; reuse the `cc_*` command + event pattern
 - [ ] N-mounted-editors sanity check in the real app (apply the WP1 probe finding + any mitigation; not a separate probe)
 - [ ] Error handling: file open/save failures, non-git dir for the diff panel, empty search
 - [ ] Dogfood: a full working day of editing + diff review entirely inside Claudesk's right half
+- [ ] **PARITY GATE (owns the daily-Sublime-usage check; was buried in old WP3, pulled here 2026-06-19):** during dogfooding, confirm the in-app editor covers the operator's daily Sublime feature set (multi-cursor, find/replace, font-zoom, palette, split panes as needed). This is the **parity evidence WP8's Sublime-pop removal is gated on** — if a relied-on gesture is missing/hard, it surfaces here and WP8 waits. Record the verdict explicitly.
 - [ ] Confirm exit criteria: editing + diff review complete inside the right half with the panel-switch hotkey; the Sublime Text pop is removed (WP8); `subl` is no longer a routine-work dependency
 
 ## Milestone 2 critical path
 
 ```
-WP1 (probe) ──► WP2 (editor shell) ──► WP3 (editor features) ──┐
-                      │                                         ├─► WP8 (remove Sublime pop, gated) ──► WP9 (2nd term + polish)
-                      ├──► WP4 (diff viewer) ───────────────────┤
-                      └──► WP5 (panel host) ────────────────────┤
-                              ▲                                  │
-                   WP6 (file finder) ──┬──► WP10 (file-tree) ────┤
-                   WP7 (project search)┴─(app-layer, parallel)───┘
+WP1 ✅─► WP2 ✅─► WP3a (core editing) ──► WP3b (palette) ──► WP3c (split) ──┐
+              │                                                              │
+              ├──► WP4 (diff viewer) ──────────────────────────────────────►├─► WP9 dogfood + PARITY GATE ─► WP8 (remove Sublime pop) ─► WP9 exit-criteria
+              ├──► WP5 (panel host) ───────────────────────────────────────►│
+              │       ▲                                                      │
+              ├──► WP6 (file finder) ──┬──► WP10 (file-tree) ───────────────►│
+              └──► WP7 (project search)┴──(app-layer, parallel)─────────────►┘
 ```
 
-- **Critical path:** WP1 → WP2 → WP3 → WP8 → WP9. (WP10 is parallel app-layer work, not on the critical path.)
-- **Parallelizable after WP2:** WP4 (diff), WP6 (file finder), WP7 (search), WP10 (file-tree) are largely independent backend+frontend slices that can proceed in parallel once the editor shell (WP2) exists; WP5 (panel host) needs WP2 + WP4. WP6/WP7/WP10 share fs-walk infrastructure (do WP6's index first; WP7 and WP10 reuse it).
-- **WP1 gates the panel-host + finder hotkeys.** Don't design WP5/WP6's hotkeys before WP1 settles the CM6-focus question.
-- **WP8 is gated and last** (before polish) — editor parity must be proven first. WP9's exit-criteria/dogfood should include the file-tree (WP10) in the daily-use parity check.
+- **Critical path:** WP1 ✅ → WP2 ✅ → WP3a → WP3b → WP3c → WP9 (dogfood + parity gate) → WP8 (Sublime-pop removal) → WP9 (exit-criteria). The parity gate inside WP9 dogfooding now *unblocks* WP8, so WP8 sits between WP9's dogfood and its final exit-criteria confirmation.
+- **WP3 was split 2026-06-19** (operator: "too much packed in") into **WP3a** (core editing — multi-cursor/find-replace/font-zoom/minimap), **WP3b** (command palette), **WP3c** (split panes). WP3a is the must-have; 3b/3c are independent and can be sequenced or parallelized after 3a. The old WP3's "daily-parity confirmation" task moved to WP9 as the explicit parity gate.
+- **Parallelizable after WP2 (✅ shipped):** WP3a, WP4 (diff), WP6 (file finder), WP7 (search), WP10 (file-tree) are largely independent slices; WP5 (panel host) needs WP2 + WP4. WP6/WP7/WP10 share fs-walk infrastructure (do WP6's index first; WP7 and WP10 reuse it). WP3b/3c depend on WP3a landing first (inherit the finished editing set).
+- **WP1 gates the panel-host + finder + palette hotkeys.** ✅ settled — capture-phase listener pattern. WP3b/WP5/WP6 apply it.
+- **WP8 is gated and last** (before WP9's final exit-criteria) — parity must be proven at WP9's gate first. The gate's daily-use check should include the file-tree (WP10).
 - **App-layer callout:** WP6 (fuzzy finder), WP7 (project-wide search), and WP10 (file-tree navigator) are Rust+React subsystems, not editor configuration — the single biggest scoping point from `research.md`. They are sized as full WPs, not editor sub-tasks. WP10 was added 2026-06-19 (operator must-have at WP2 verify-human).
 
 ## Future milestones
@@ -182,3 +203,4 @@ Tracked in [`roadmap.md`](roadmap.md) (Milestones 3–9: stateful CC controller,
 ## SURFACE-IN history
 
 - [2026-06-19] **WP10 (file-tree navigator) added** — operator designated it a must-have at WP2 Phase-1 verify-human. App-layer subsystem reusing WP6's `fs_index` infrastructure; parallel to the critical path. Source: feature:build (WP2) → product:wbs.
+- [2026-06-19] **WP3 split into WP3a/WP3b/WP3c** — operator flagged the original WP3 as over-packed (6 features under one "M"). Split into WP3a (core editing: multi-cursor / find-replace / font-zoom / minimap), WP3b (command palette — net-new overlay subsystem), WP3c (split panes — riskiest layout work). The old WP3's "daily-Sublime-parity confirmation" task was pulled out and relocated to **WP9** as an explicit parity gate that unblocks WP8's Sublime-pop removal. Source: operator review → product:wbs.
