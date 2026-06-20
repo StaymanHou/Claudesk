@@ -14,7 +14,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** the compartment wrapper adds no behavior the array rebuild doesn't already provide (vestigial), and a maintainer extending syntax-switching will hunt for a live `reconfigure` call that doesn't exist. Comment-vs-code drift is the actively-misleading kind.
 - **Suggested action:** Either (a) drop the compartment and seed the language directly in the array (simplest — the rebuild already does the work), OR (b) actually live-`reconfigure` `languageCompartment` from the palette command and stop rebuilding the array on `languageOverrideId` change (mirrors `applyZoom`, avoids a full reconfigure per syntax pick). Reconcile the theme.ts + editorExtensions.ts comments to the chosen mechanism either way. Lean (a) for simplicity unless the per-switch full-reconfigure cost ever shows up.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-20 (`/feature-refactor`) — took fix (a): `languageCompartment` removed from theme.ts, the resolved language placed directly in the `buildEditorExtensions` array (the openPath/languageOverrideId memo rebuild already swaps it via @uiw's full reconfigure), and the theme.ts + editorExtensions.ts + EditorPanel.tsx comments reconciled to that mechanism. `fontSizeCompartment` kept (it IS genuinely live-reconfigured). 118/118 tests, language-facet assertions still green.
 
 ## SURFACE-2026-06-20-QUALITY-WP3B-DUP-LANGUAGE-SWITCH
 - **File:** `src/components/workspace/editor/language.ts:80-97` (`languageForId`) vs `:16-39` (`languageForExtension`)
@@ -22,7 +22,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** adding or retuning a language requires editing both switches; the "single source of truth" comment overstates the design.
 - **Suggested action:** Route both through a shared id→Extension map keyed off a canonical mode id (extensionOf → id, then one id→Extension lookup). Low-cost; makes the comment true.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-20 (`/feature-refactor`) — `languageForId` is now the SINGLE id→Extension switch (the only place pack constructors live); `languageForExtension` maps extension→canonical id via a new private `idForExtension` then delegates to `languageForId`. No duplicated pack arms; header comment rewritten to a single-source-of-truth note. 39/39 language+extensions tests green.
 
 ## SURFACE-2026-06-20-QUALITY-WP3B-ACTIVE-PROP-ASYMMETRY
 - **File:** `src/components/workspace/editor/EditorPanel.tsx:36` vs `src/components/workspace/SublimeToolbar.tsx:22`
@@ -30,7 +30,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** trades a compile-time gating guard for standalone-mount convenience on a multi-workspace gating prop; not load-bearing at N=1 but a latent multi-workspace foot-gun.
 - **Suggested action:** Consider making `active` required (drop the default) and pass it explicitly everywhere, or document why the default is safe. Pairs naturally with any Phase-2-milestone multi-workspace wiring.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-20 (`/feature-refactor`) — `EditorPanel.active` made required (dropped the `= true` default), now a compile-time obligation mirroring `SublimeToolbar.active`. The sole caller (`Workspace.tsx`) already passes `active={visible}`; tsc confirms no caller omits it.
 
 # wp9-phase1-polish — 2026-06-19
 

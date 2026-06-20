@@ -169,14 +169,3 @@ export function fontSizeTheme(px: number): Extension {
     ".cm-gutters": { fontSize },
   });
 }
-
-/**
- * WP3b — runtime-swappable editor LANGUAGE (syntax mode). The active language
- * lives in its own Compartment so the command palette's "Set Syntax: …" commands
- * can `reconfigure` it without rebuilding the editor — same pattern as
- * `fontSizeCompartment`. EditorPanel seeds it at mount from the file extension
- * (`languageForPath`) and the palette overrides it (see setLanguageById in
- * language.ts); the override resets to the extension default when the open file
- * changes.
- */
-export const languageCompartment = new Compartment();

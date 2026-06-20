@@ -34,11 +34,7 @@ import {
 } from "@codemirror/search";
 import { showMinimap } from "@replit/codemirror-minimap";
 import { languageForPath, languageForId } from "./language";
-import {
-  fontSizeCompartment,
-  fontSizeTheme,
-  languageCompartment,
-} from "./theme";
+import { fontSizeCompartment, fontSizeTheme } from "./theme";
 import { nextFontSize, DEFAULT_FONT_PX } from "./fontZoom";
 
 export interface EditorExtensionOptions {
@@ -60,9 +56,14 @@ export interface EditorExtensionOptions {
   /**
    * WP3b — palette syntax override. null = derive the mode from the file
    * extension (`languageForPath`); a syntax id = force that mode (`languageForId`).
-   * Seeds the language compartment at mount; the palette reconfigures the override
-   * by rebuilding the extensions with a new value (array identity changes → @uiw
-   * reconfigures the view), the same mechanism the font-size seed uses.
+   * The language is placed DIRECTLY in the extensions array — no compartment.
+   * When the palette changes the override (or the file changes), EditorPanel's
+   * `useMemo` rebuilds this array with the new value; `@uiw/react-codemirror`
+   * applies the new-identity array as a full CM6 reconfigure, which swaps the
+   * language. (Unlike `fontSizeCompartment`, which is live-`reconfigure`d in the
+   * Cmd+=/-/0 keybindings WITHOUT an array rebuild, the language only ever
+   * changes via a React dep already in the memo — so a compartment would be
+   * vestigial. See memory `cm6-dont-copy-compartment-by-analogy`.)
    */
   languageOverrideId: string | null;
 }
@@ -186,8 +187,8 @@ export function buildEditorExtensions(
   opts: EditorExtensionOptions,
 ): Extension[] {
   // WP3b: the active language is the palette override if set, else the
-  // extension-derived default. It lives in a compartment so the palette can swap
-  // it; we seed the compartment here at the resolved value.
+  // extension-derived default. Placed directly in the array (no compartment) —
+  // the memo rebuild on openPath/languageOverrideId change re-applies it.
   const activeLanguage =
     opts.languageOverrideId == null
       ? languageForPath(opts.openPath)
@@ -199,7 +200,7 @@ export function buildEditorExtensions(
     // Panel at the top of the editor (VS-Code-like). basicSetup ships the search
     // KEYMAP but not this placement config; adding search() is idempotent with it.
     search({ top: true }),
-    languageCompartment.of(activeLanguage),
+    activeLanguage,
     // Font size in its own compartment, seeded at the current size — Cmd+=/-/0
     // reconfigure it at runtime (see coreKeymap.applyZoom).
     fontSizeCompartment.of(fontSizeTheme(opts.fontSize)),

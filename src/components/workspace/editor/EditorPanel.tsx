@@ -30,16 +30,18 @@ interface EditorPanelProps {
   openPath: string | null;
   /**
    * True when this workspace is the focused/visible tab — gates the Cmd+Shift+P
-   * palette chord so only the active tab's editor opens the palette (mirrors
-   * SublimeToolbar's `active`). Defaults true so a standalone mount still works.
+   * palette chord so only the active tab's editor opens the palette. REQUIRED
+   * (not optional-with-default) so a caller can't silently mount an
+   * always-listening palette in a backgrounded tab — mirrors SublimeToolbar's
+   * required `active` (the gating prop must be a compile-time obligation).
    */
-  active?: boolean;
+  active: boolean;
 }
 
 export function EditorPanel({
   projectPath,
   openPath,
-  active = true,
+  active,
 }: EditorPanelProps) {
   const [doc, setDoc] = useState("");
   // The last-persisted snapshot of the buffer — `dirty` is derived from it.
@@ -129,11 +131,11 @@ export function EditorPanel({
 
   // WP3b — the syntax-selection command set: the first set of palette commands.
   // Each "Set Syntax: …" command forces the editor's language via the override
-  // (the language compartment is reconfigured because the extensions array is
-  // rebuilt with the new override — see the useMemo below). Built from the shared
-  // SYNTAX_MODES list so adding a mode is one row in language.ts. The set is
-  // assembled here (not in CommandPalette) so future WPs add commands without
-  // touching the overlay component.
+  // (setLanguageOverrideId → the extensions useMemo below rebuilds with the new
+  // language, which @uiw applies as a full CM6 reconfigure — no compartment).
+  // Built from the shared SYNTAX_MODES list so adding a mode is one row in
+  // language.ts. The set is assembled here (not in CommandPalette) so future WPs
+  // add commands without touching the overlay component.
   const commands = useMemo<PaletteCommand[]>(
     () =>
       SYNTAX_MODES.map((mode) => ({
