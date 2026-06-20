@@ -526,6 +526,386 @@ body,
   color: #858585;
 }
 
+/* ── WP4 git diff viewer (right-half DiffPanel + Editor↔Diff toggle) ──── */
+/* Editor↔Diff segmented toggle (WP4 stopgap; WP5's panel-switch hotkey replaces
+   it). Dark-only, palette-aligned to the editor status bar. */
+.right-panel-toggle {
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.panel-tab {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.78rem;
+  color: #9b9b9b;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.panel-tab:hover {
+  color: #d4d4d4;
+}
+.panel-tab.is-active {
+  color: #d4d4d4;
+  border-color: #6ea8ff;
+  background-color: #252526;
+}
+
+/* Each panel slot fills the remaining right-half height; both stay mounted and
+   are display-toggled (column flex so the inner editor/diff flex chain bounds). */
+.right-panel-slot {
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* The diff panel itself: status bar (fixed) + body (fills). Mirrors .editor-panel
+   so the two panels read as siblings. */
+.diff-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-statusbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  color: #9b9b9b;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  background-color: #1a1a1a;
+}
+
+.diff-refresh-btn {
+  padding: 0 6px;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: #9b9b9b;
+  background-color: #2a2a2a;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.diff-refresh-btn:hover {
+  color: #d4d4d4;
+  border-color: #6ea8ff;
+}
+
+/* The whole panel scrolls as one column: collapsible Commits section on top, the
+   changed-files (or selected-commit) area below (Sublime-Merge "Working Directory"
+   model, operator-confirmed 2026-06-20). */
+.diff-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+/* Shared collapse chevron for the Commits section + each file section header. */
+.diff-chevron {
+  flex-shrink: 0;
+  width: 1em;
+  color: #858585;
+}
+
+/* ── Commits section (collapsible top region) ── */
+.diff-commits {
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+.diff-commits-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 5px 10px;
+  background-color: #1a1a1a;
+  border: none;
+  color: #d4d4d4;
+  font-family: inherit;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+}
+.diff-commits-header:hover {
+  background-color: #232323;
+}
+.diff-commits-title {
+  font-weight: 600;
+}
+.diff-commits-count {
+  color: #858585;
+}
+.diff-commits-body {
+  max-height: 33vh;
+  overflow-y: auto;
+}
+.diff-commit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.diff-commit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 4px 10px 4px 28px;
+  background: transparent;
+  border: none;
+  color: #d4d4d4;
+  font-family: inherit;
+  font-size: 0.76rem;
+  text-align: left;
+  cursor: pointer;
+}
+.diff-commit-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+.diff-commit-row.is-selected {
+  background-color: #094771;
+}
+.diff-commit-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diff-commit-meta {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.68rem;
+  color: #858585;
+}
+.diff-commit-head {
+  color: #6ea8ff;
+  border: 1px solid #6ea8ff;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 0.62rem;
+}
+.diff-commit-sha {
+  color: #c98fe0;
+}
+.diff-commit-author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+.diff-commits-empty,
+.diff-commits-loading {
+  padding: 6px 10px 6px 28px;
+  color: #858585;
+  font-size: 0.74rem;
+}
+.diff-load-more {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 4px 10px 6px;
+  padding: 4px;
+  color: #9b9b9b;
+  background-color: #2a2a2a;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.diff-load-more:hover {
+  color: #d4d4d4;
+  border-color: #6ea8ff;
+}
+
+/* ── Changed-files area + per-file collapsible sections ── */
+.diff-files-area {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A commit-view banner with a "back to working directory" button. */
+.diff-commit-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 5px 10px;
+  background-color: #18233a;
+  border-bottom: 1px solid rgba(110, 168, 255, 0.3);
+}
+.diff-back-btn {
+  flex-shrink: 0;
+  color: #6ea8ff;
+  background: transparent;
+  border: 1px solid #6ea8ff;
+  border-radius: 3px;
+  padding: 1px 8px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.diff-commit-banner-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #d4d4d4;
+}
+
+.diff-file-section {
+  border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+}
+.diff-file-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 4px 10px;
+  background-color: #202020;
+  border: none;
+  color: #d4d4d4;
+  font-family: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+  position: sticky;
+  top: 0;
+}
+.diff-file-header:hover {
+  background-color: #262626;
+}
+
+/* One-char git-status badge, color per status (VS Code SCM palette). */
+.diff-badge {
+  flex-shrink: 0;
+  width: 1.1em;
+  text-align: center;
+  font-weight: 600;
+}
+.diff-badge-added,
+.diff-badge-untracked {
+  color: #7bc97b;
+}
+.diff-badge-modified,
+.diff-badge-renamed {
+  color: #e2c08d;
+}
+.diff-badge-deleted {
+  color: #ff8a7a;
+}
+
+.diff-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-staged-tag {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  color: #858585;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.diff-file-body {
+  background-color: #1e1e1e;
+}
+.diff-file-loading,
+.diff-binary-notice {
+  padding: 6px 12px;
+  color: #858585;
+  font-size: 0.74rem;
+}
+
+/* ── Hunks: header + styled +/- lines ── */
+.diff-hunk {
+  border-top: 1px solid rgba(128, 128, 128, 0.1);
+}
+.diff-hunk-header {
+  padding: 2px 12px;
+  color: #6ea8ff;
+  background-color: rgba(110, 168, 255, 0.07);
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+}
+.diff-line {
+  display: flex;
+  align-items: baseline;
+  padding-right: 8px;
+  white-space: pre;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+.diff-line.is-add {
+  background-color: rgba(46, 160, 67, 0.16);
+}
+.diff-line.is-remove {
+  background-color: rgba(248, 81, 73, 0.16);
+}
+.diff-lineno {
+  flex-shrink: 0;
+  width: 3.2em;
+  text-align: right;
+  padding-right: 6px;
+  color: #6b6b6b;
+  user-select: none;
+}
+.diff-line-sign {
+  flex-shrink: 0;
+  width: 1em;
+  text-align: center;
+  color: #858585;
+  user-select: none;
+}
+.diff-line.is-add .diff-line-sign {
+  color: #7bc97b;
+}
+.diff-line.is-remove .diff-line-sign {
+  color: #ff8a7a;
+}
+.diff-line-content {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  color: #d4d4d4;
+}
+
+.diff-empty {
+  margin: auto;
+  text-align: center;
+  opacity: 0.7;
+  padding: 2rem;
+}
+
+.diff-error {
+  text-align: center;
+  padding: 1.2rem;
+  color: #ff8a7a;
+}
+.diff-error-title {
+  font-weight: 600;
+}
+.diff-error-detail {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* ── WP5 Project Picker (Phase 2 of WP5) ─────────────────────────────── */
 .picker {
   max-width: 640px;

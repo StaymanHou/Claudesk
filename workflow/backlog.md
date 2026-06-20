@@ -170,3 +170,38 @@
 - **Suggested action:** Decompose as a follow-up WP after M2 (or a later editor-polish milestone): per-pane file state + independent-vs-shared toggle. Reuse WP6's fs_index / Cmd+P to pick the second pane's file.
 - **Priority:** medium
 - **Status:** pending
+
+## SURFACE-2026-06-20-WP4-VERIFY-SELF-DIALOG-STUB-WEDGE
+- **Source:** feature:build (WP4 Phase 2 verify-self)
+- **Target level:** product:wbs
+- **Type:** tech-debt
+- **Summary:** Stubbed-browser verify-self for workspace-level UI (editor/diff panels) is blocked when the only entry to a workspace is the picker's "Open Folder", which routes through the Tauri dialog plugin (`plugin:dialog|open`) rather than the `invoke` stub. Faking the dialog return hangs a promise and wedges the tab (reproduced 3×, incl. across a system reboot).
+- **Context:** Distinct from the known reload-clobber gotcha. Editor WPs (WP2/3*) reached the editor via the open-bar (a plain `invoke` path) so verify-self worked; WP4's DiffPanel lives in a workspace only reachable via the folder dialog. The workaround used for WP4 was operator-driven verify-human in the real `pnpm tauri dev` app (a stronger check — real git_diff vs a real repo).
+- **Suggested action:** Add a test-only seam to reach a workspace without the dialog — e.g. a `?ws=<path>` query param or a `window.__seedWorkspace(path)` dev hook gated to dev builds — so future editor/diff/panel WPs have a stub-friendly verify-self entry. Alternatively, stub the dialog plugin's invoke channel correctly (investigate the exact `plugin:dialog|open` request/response shape so the promise resolves).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-WP4-COMMIT-LOG-SCOPE-EXPANSION
+- **Source:** feature:spec (WP4 diff-viewer redesign)
+- **Target level:** product:wbs
+- **Type:** new-work
+- **Summary:** WP4's diff viewer is expanding from "working-tree diff (file list + base blobs)" to a Sublime-Merge-style viewer that ALSO includes a recent-commits list + per-commit diff (commit vs first-parent). This adds NEW backend (git2 revwalk + diff_tree_to_tree) beyond the original WP4 headline.
+- **Context:** Surfaced at the verify-human rejection of WP4's first frontend attempt; operator's actual need is the full Sublime Merge experience. View-only is preserved (no staging) so no arch back-loop. WP4 size grows M→L.
+- **Suggested action:** Annotate the wbs.md WP4 entry to reflect the commit-history addition + the M→L size; the spec (workflow/wip/m2-wp4-git-diff-viewer.md) captures the full scope. No new WP needed — it stays within WP4's "diff viewer" boundary, just larger.
+- **Priority:** medium (load-bearing for WP4 acceptance; already in active build)
+- **Status:** pending
+
+## SURFACE-2026-06-20-WP4-DIFF-VIEWER-POLISH-FOLLOWUPS
+- **Source:** feature:verify-human (WP4 Phase B, operator-approved with deferred polish)
+- **Target level:** product:wbs
+- **Type:** new-work
+- **Summary:** Four operator-requested enhancements to the WP4 diff viewer, deferred to a follow-up WP (operator: "these can be in another WP"). The core Sublime-Merge viewer shipped + approved; these are additive polish.
+- **Items:**
+  1. **Collapse/expand-all button** — a control to collapse (or expand) ALL file-diff sections at once. The collapse model (`toggleCollapsed`/`isCollapsed` keyed by fileKey in diffModel.ts) already supports it; needs a "collapse all" that adds every current file key to the set + an "expand all" that clears it.
+  2. **Sticky Working Directory + Commits headers** — the `.diff-statusbar` ("Working Directory") and the `.diff-commits-header` should stay pinned at the top of `.diff-scroll` while the files area scrolls. (Currently only `.diff-file-header` is `position:sticky`; the panel-level header + commits header scroll away.)
+  3. **"Open file in editor" badge per file row** — a per-file affordance that opens the file into the EditorPanel (the easy version = open the CURRENT working-tree file). NOTE (operator's sharp catch): when viewing a COMMIT's diff, this should ideally open the file's content AT THAT COMMIT, which needs a NEW backend path (read a blob at a rev — `git2` tree-at-commit → blob), not just `read_file`. Decide scope at plan: current-file-only (cheap) vs. blob-at-rev (new backend).
+  4. **Changed-line highlighting too faint / washed out** — HIGHEST PRIORITY of the four. In the shipped CSS the add/remove line backgrounds (`rgba(46,160,67,.16)` / `rgba(248,81,73,.16)`) read as a faint full-width wash that makes the actual change hard to see (operator screenshot 2026-06-20). Investigate: bump the add/remove bg opacity/saturation, OR highlight only the changed text span rather than the full line, OR add a left accent bar per changed line. Verify it's not a stray selection/`::selection` artifact.
+- **Context:** WP4 grew M→L via the Sublime-Merge redesign; these were explicitly deferred to keep WP4 shippable. Item 4 is a readability issue worth doing soon; items 1–3 are enhancements.
+- **Suggested action:** A small follow-up WP after M2's critical path (or fold into WP5 RightPanelHost work, since the panel chrome is adjacent). Item 4 could even be a quick standalone task.
+- **Priority:** medium (item 4 = readability; items 1-3 = enhancement)
+- **Status:** pending

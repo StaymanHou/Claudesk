@@ -35,6 +35,13 @@ base64 = "0.22"
 # is an in-app webview keybinding (not an OS-global shortcut), so no
 # tauri-plugin-global-shortcut / macOS Accessibility machinery is needed.
 which = "8"
+# WP4: Git diff viewer. libgit2 binding — supplies the changed-file list
+# (unstaged + staged) and per-file base-content blobs (HEAD/index) that the
+# frontend feeds to @codemirror/merge for rendering. libgit2-sys vendors libgit2
+# from source, so no system libgit2 dependency. default-features=false drops the
+# SSH/HTTPS transport we never use (we only open local on-disk repos). We use
+# git2 for *data* only; @codemirror/merge computes + renders the diff itself.
+git2 = { version = "0.21", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

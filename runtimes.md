@@ -24,9 +24,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri dev
 
-- **Last:** 29s (2026-06-16, first compile from clean target/)
+- **Last:** 15s (2026-06-20, warm rebuild incl. git2 dep for WP4; window launched)
 - **Use timeout:** 600000
 - **History:**
+  - 15s — 2026-06-20 (warm rebuild after WP4 git2 add; cargo recompiled claudesk + plugins, ~14.8s)
   - 29s — 2026-06-16 (first compile; incremental rebuilds will be faster)
 
 ## pnpm tauri build
@@ -52,9 +53,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 6s (2026-06-19, warm rebuild for WP9 error-handling edits; 35 tests pass)
+- **Last:** 7s (2026-06-20, warm rebuild WP4 Phase A hunks/commit-log; 72 tests pass, run ~0.4s)
 - **Use timeout:** 120000
 - **History:**
+  - 7s — 2026-06-20 (warm, WP4 Phase A: +12 tests → 72 pass; git_diff hunks + commit log/diff)
+  - 21s — 2026-06-20 (cold build, WP4 git_diff: +13 tests → 60 pass; git2 0.21 linked fast, no slow C compile)
   - 6s — 2026-06-19 (warm rebuild, WP9 P1.1/P1.3: +6 tests → 35 pass; test run itself ~0s)
   - 8s — 2026-06-19 (cold build of WP8 global-shortcut dep tree: 31 tests pass; test run itself ~0s)
   - 11s — 2026-06-19 (cold build of WP7 cc_session dep tree; test run itself ~0s warm)

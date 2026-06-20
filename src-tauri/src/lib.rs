@@ -1,6 +1,7 @@
 mod cc_session;
 mod config_store;
 mod editor_fs;
+mod git_diff;
 mod sublime;
 
 use std::sync::Mutex;
@@ -34,6 +35,15 @@ pub fn run() {
             // (write_file is exercised by the save keybinding in Phase 2.)
             editor_fs::commands::read_file,
             editor_fs::commands::write_file,
+            // WP4: git diff viewer data (Sublime-Merge-style). The backend computes
+            // the real git hunks + commit history; the frontend renders styled +/-
+            // lines (no @codemirror/merge). (The superseded git_file_base command
+            // from WP4's first attempt was removed in PB.7 once the old DiffPanel
+            // that called it was deleted — tauri-command-removal-needs-invoke-sweep.)
+            git_diff::commands::git_changed_files,
+            git_diff::commands::git_file_hunks,
+            git_diff::commands::git_recent_commits,
+            git_diff::commands::git_commit_diff,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an
