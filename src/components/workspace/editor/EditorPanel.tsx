@@ -1,17 +1,32 @@
-// WP2 — EditorPanel: the lite editor mounted in a workspace's right half.
+// WP2/WP3c — EditorPanel: the lite editor mounted in a workspace's right half.
 //
-// Mounts a CodeMirror 6 view (via @uiw/react-codemirror) and drives the file
-// lifecycle: open (read_file via IPC) → edit (local buffer) → save (Cmd+S →
-// write_file via IPC). Dark-only theme + language mode by extension. A read OR
-// write failure is rendered inline, never swallowed (the WP6/WP7 IPC-error-
-// surfacing lesson).
+// Mounts CodeMirror 6 (via @uiw/react-codemirror) and drives the file lifecycle:
+// open (read_file via IPC) → edit (local buffer) → save (Cmd+S → write_file via
+// IPC). Dark-only theme + language mode by extension. A read OR write failure is
+// rendered inline, never swallowed (the WP6/WP7 IPC-error-surfacing lesson).
 //
-// Per WP5 this becomes one panel the RightPanelHost swaps; for WP2 it sits
-// directly in the right half. Background workspaces stay mounted (display:none),
-// and WP1's probe confirmed N mounted CM6 editors stay within the perf envelope,
-// so there is no unmount-on-blur here.
+// WP3c — SPLIT PANES (shared-document model, P1.1 decision 2026-06-20): the panel
+// can show N vertically-stacked editor panes that are all VIEWPORTS ONTO THE SAME
+// document. The buffer (doc/savedDoc), language override, font size, and the
+// load/save lifecycle are ALL panel-level state here; a "pane" (editorPanes.ts) is
+// just an id + which one is focused. Each pane is its own <CodeMirror> bound to the
+// same `value`/`onChange`/`extensions`, so an edit in one pane is reflected in the
+// others (React re-renders all panes from the shared `doc`). The focused pane drives
+// where chords land — but because the doc is shared, save/palette are pane-agnostic;
+// the active pane id is tracked for the WP5 panel-switch hotkey and per-pane close.
+//
+// Per WP5 this becomes one panel the RightPanelHost swaps; for WP2 it sits directly
+// in the right half. Background workspaces stay mounted (display:none), and WP1's
+// probe confirmed N mounted CM6 editors stay within the perf envelope.
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { invoke } from "@tauri-apps/api/core";
 import { buildEditorExtensions } from "./editorExtensions";
@@ -19,6 +34,7 @@ import { editorDarkTheme } from "./theme";
 import { loadFontSize, saveFontSize } from "./fontZoom";
 import { initialLoadState, loadReducer } from "./editorLoad";
 import { initialSaveState, saveReducer } from "./editorSave";
+import { initialPanesState, panesReducer } from "./editorPanes";
 import { CommandPalette } from "./CommandPalette";
 import { isPaletteChord, type PaletteCommand } from "./paletteCommands";
 import { SYNTAX_MODES } from "./language";
@@ -74,6 +90,16 @@ export function EditorPanel({
   // WP3b — whether the Cmd+Shift+P command palette is open.
   const [paletteOpen, setPaletteOpen] = useState(false);
 
+  // WP3c — pane/focus model (shared-document). Monotonic counter for stable pane
+  // ids (no Date/random); seeded so the first pane is "pane-0".
+  const paneSeq = useRef(0);
+  const nextPaneId = useCallback(() => `pane-${++paneSeq.current}`, []);
+  const [panes, dispatchPanes] = useReducer(
+    panesReducer,
+    "pane-0",
+    initialPanesState,
+  );
+
   const onFontSizeChange = useCallback((px: number) => {
     setFontSize(px);
     saveFontSize(px);
@@ -82,11 +108,16 @@ export function EditorPanel({
   // Load the file whenever openPath changes. read_file errors (missing file,
   // binary content, path outside the workspace) surface into `load`. The effect
   // only runs the async read; the null case is handled by the render guard.
+  // WP3c: a file change also collapses split panes back to a single pane — the
+  // shared-document model means the split was a view onto the OLD file; the new
+  // file starts single (P2.2). `collapse keepId: activePaneId` keeps the focused
+  // pane and drops the rest in one dispatch.
   useEffect(() => {
     if (openPath == null) return;
     let cancelled = false;
     dispatch({ type: "load-start", path: openPath });
     dispatchSave({ type: "reset" }); // clear any stale save status from the prior file
+    dispatchPanes({ type: "collapse", keepId: panes.activePaneId });
     // (Language override resets automatically on file change — see `override`
     // state, which is path-scoped and computed during render.)
     invoke<string>("read_file", { root: projectPath, path: openPath })
@@ -105,6 +136,9 @@ export function EditorPanel({
     return () => {
       cancelled = true;
     };
+    // panes.activePaneId is intentionally excluded: the collapse should fire on
+    // file change, not on every focus switch (which would unsplit on a click).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectPath, openPath]);
 
   const onChange = useCallback((value: string) => setDoc(value), []);
@@ -112,7 +146,8 @@ export function EditorPanel({
   const dirty = doc !== savedDoc;
 
   // The save action — a stable-identity callback over the live values. No-op when
-  // no file is open or nothing changed.
+  // no file is open or nothing changed. Pane-agnostic: the doc is shared across
+  // panes, so saving from any pane persists the same buffer.
   const doSave = useCallback(() => {
     if (openPath == null) return;
     if (!dirty && save.kind !== "error") return; // nothing to persist
@@ -148,10 +183,10 @@ export function EditorPanel({
 
   // WP3b — open the palette on Cmd+Shift+P. Registered as a CAPTURE-phase document
   // listener (the WP1-proven pattern): it fires before CM6's contentEditable
-  // handler, so the chord works while focus is inside the editor. Gated on `active`
-  // so only the focused workspace's editor responds (mirrors SublimeToolbar).
-  // preventDefault suppresses any browser default and keeps the literal "P" out of
-  // the document. Cmd+P (bare, WP6's finder) is intentionally NOT matched here.
+  // handler, so the chord works while focus is inside the editor (any pane). Gated
+  // on `active` so only the focused workspace's editor responds (mirrors
+  // SublimeToolbar). preventDefault suppresses any browser default and keeps the
+  // literal "P" out of the document. Cmd+P (bare, WP6's finder) is NOT matched here.
   const hasFile = openPath != null;
   useEffect(() => {
     if (!active) return;
@@ -174,7 +209,8 @@ export function EditorPanel({
   // the in-file find/replace panel. The save chord closes over the live `doSave`,
   // so the array is rebuilt when doSave's deps change; @uiw/react-codemirror
   // reconfigures the view when the extensions array identity changes, so the
-  // binding always calls the current closure — no ref-in-render needed.
+  // binding always calls the current closure — no ref-in-render needed. Shared
+  // across panes: every pane mounts the same extension set (same shared doc).
   const extensions = useMemo(
     () =>
       buildEditorExtensions({
@@ -185,6 +221,20 @@ export function EditorPanel({
         languageOverrideId,
       }),
     [openPath, doSave, fontSize, onFontSizeChange, languageOverrideId],
+  );
+
+  // WP3c — split/close/focus handlers over the pane reducer.
+  const splitPane = useCallback(
+    () => dispatchPanes({ type: "split", id: nextPaneId() }),
+    [nextPaneId],
+  );
+  const closePane = useCallback(
+    (id: string) => dispatchPanes({ type: "close", id }),
+    [],
+  );
+  const focusPane = useCallback(
+    (id: string) => dispatchPanes({ type: "focus", id }),
+    [],
   );
 
   // No file open is derived from the prop — not stored in `load`.
@@ -206,20 +256,34 @@ export function EditorPanel({
     );
   }
 
+  const splitable = panes.panes.length > 1;
+
   return (
     <div className="editor-panel" data-testid="editor-panel">
       <div className="editor-statusbar" data-testid="editor-statusbar">
         <span className="editor-status-path">{openPath}</span>
-        <span className="editor-status-state">
-          {save.kind === "saving"
-            ? "saving…"
-            : save.kind === "error"
-              ? "save failed"
-              : dirty
-                ? "● unsaved"
-                : save.kind === "saved"
-                  ? "saved"
-                  : ""}
+        <span className="editor-statusbar-right">
+          <span className="editor-status-state">
+            {save.kind === "saving"
+              ? "saving…"
+              : save.kind === "error"
+                ? "save failed"
+                : dirty
+                  ? "● unsaved"
+                  : save.kind === "saved"
+                    ? "saved"
+                    : ""}
+          </span>
+          {/* WP3c — split control. One click adds a viewport onto the same file. */}
+          <button
+            type="button"
+            className="editor-split-btn"
+            data-testid="editor-split-btn"
+            onClick={splitPane}
+            title="Split editor (new viewport onto the same file)"
+          >
+            Split
+          </button>
         </span>
       </div>
       {save.kind === "error" && (
@@ -227,13 +291,48 @@ export function EditorPanel({
           Could not save {save.path}: {save.message}
         </div>
       )}
-      <CodeMirror
-        value={doc}
-        onChange={onChange}
-        theme={editorDarkTheme}
-        extensions={extensions}
-        basicSetup={{ lineNumbers: true, foldGutter: false }}
-      />
+      {/* WP3c — vertical stack of panes. N=1 → a single pane, visually identical
+          to the pre-split editor. Each pane is a viewport onto the shared doc. */}
+      <div className="editor-panes" data-testid="editor-panes">
+        {panes.panes.map((pane) => (
+          <div
+            key={pane.id}
+            className="editor-pane"
+            data-testid="editor-pane"
+            data-pane-id={pane.id}
+            data-active-pane={pane.id === panes.activePaneId}
+            // focus-within: a click/focus landing inside this pane's CM6 view makes
+            // it the active pane. Capture so it fires before CM6's own handlers.
+            onFocusCapture={() => focusPane(pane.id)}
+          >
+            {splitable && (
+              <button
+                type="button"
+                className="editor-pane-close"
+                data-testid="editor-pane-close"
+                // Close on mousedown-prevent so the click doesn't first focus the
+                // pane we're removing; stopPropagation keeps it off the pane focus.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closePane(pane.id);
+                }}
+                title="Close this pane"
+                aria-label="Close pane"
+              >
+                ✕
+              </button>
+            )}
+            <CodeMirror
+              value={doc}
+              onChange={onChange}
+              theme={editorDarkTheme}
+              extensions={extensions}
+              basicSetup={{ lineNumbers: true, foldGutter: false }}
+            />
+          </div>
+        ))}
+      </div>
       {paletteOpen && (
         <CommandPalette
           commands={commands}

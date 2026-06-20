@@ -144,3 +144,23 @@
 - **Priority:** medium (the two MAJOR backend-hardening items) + low (MINORs)
 - **Status:** pending
 - **Pickup shape:** the two MAJORs pair into one `editor_fs` hardening pass (validate `root` server-side + close the leaf-symlink gap) — natural to fold into Phase-2 multi-workspace IPC work; the MINORs are a quick `/feature-refactor` sweep. Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET
+- **Source:** feature:build (WP3c Phase 1)
+- **Target level:** product:wbs
+- **Type:** tech-debt
+- **Summary:** Split-pane editor uses shared-document with N independent `<CodeMirror>` (`@uiw`) instances bound to one `value`/`onChange`. Typing in one pane fires `setDoc` → all panes re-render with the new `value`, which can reset the OTHER pane's cursor/selection on each keystroke.
+- **Context:** Acceptable for v1 — panes are viewports (the high-value gesture is *viewing* two regions of a long file; edits typically happen in one pane). A true fix is a single shared CM6 `EditorState` across views (dropping the `@uiw/react-codemirror` wrapper for raw `EditorView`s), which is a larger refactor that would also touch WP2/3a/3b wiring.
+- **Suggested action:** Observe at WP3c verify-self/verify-human and during WP9 dogfooding. If the cursor-reset is annoying in practice, schedule a raw-`EditorView` shared-state refactor (post-M2, or fold into a later editor-polish WP). Otherwise dismiss.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT
+- **Source:** feature:verify-human (WP3c Phase 1)
+- **Target level:** product:wbs
+- **Type:** new-work
+- **Summary:** WP3c ships the SHARED-DOCUMENT split model (both panes are viewports onto the same file). Operator wants the option to open a DIFFERENT file in each pane (Sublime/VS Code "split with two files") as a follow-up.
+- **Context:** At WP3c verify-human the operator asked how to open different files per pane and, on learning it was scoped out at P1.1, chose "ship shared now, schedule independent later." Independent-file panes need per-pane load/save/dirty/path/language state and likely a move from N controlled `<CodeMirror>` instances to raw shared/independent `EditorView`s — a meaningfully larger rebuild than the shared-doc viewport model. Pairs naturally with SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET (the raw-EditorView refactor would address both).
+- **Suggested action:** Decompose as a follow-up WP after M2 (or a later editor-polish milestone): per-pane file state + independent-vs-shared toggle. Reuse WP6's fs_index / Cmd+P to pick the second pane's file.
+- **Priority:** medium
+- **Status:** pending
