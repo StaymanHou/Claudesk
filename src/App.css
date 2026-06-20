@@ -194,11 +194,14 @@ body,
   flex-direction: column;
 }
 
-/* WP8 — Sublime toolbar pinned to the top of the right panel. */
+/* WP8 + WP5 — Sublime launch toolbar pinned to the top of the right panel.
+   Two buttons: "Open in Sublime" (Text, transitional) + "Open in Sublime Merge"
+   (permanent, WP5). The gap separates them when both are present. */
 .sublime-toolbar {
   flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
 }

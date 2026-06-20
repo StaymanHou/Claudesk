@@ -29,8 +29,12 @@ pub fn run() {
             cc_session::commands::cc_resize,
             cc_session::commands::cc_kill,
             // WP8: Sublime Text pop. Invoked from the frontend (right-panel button
-            // and the in-app ⌘⇧E keybinding) with the focused workspace's path.
+            // and the in-app ⌘⇧O keybinding — was ⌘⇧E pre-WP5) with the focused
+            // workspace's path. Transitional — removed at WP8 once editor parity.
             sublime::commands::sublime_open,
+            // WP5: Sublime Merge open. Permanent companion surface (NOT removed by
+            // WP8) — staging/blame/history/blob-at-rev the inline diff viewer omits.
+            sublime::commands::smerge_open,
             // WP2: lite-editor file IO, confined to the workspace project root.
             // (write_file is exercised by the save keybinding in Phase 2.)
             editor_fs::commands::read_file,

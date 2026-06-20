@@ -53,9 +53,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 7s (2026-06-20, warm rebuild WP4 Phase A hunks/commit-log; 72 tests pass, run ~0.4s)
+- **Last:** 6s (2026-06-20, warm rebuild WP5 P1 smerge_open; 71 tests pass, run ~0.35s)
 - **Use timeout:** 120000
 - **History:**
+  - 6s — 2026-06-20 (warm, WP5 P1: +4 merge_command tests → 71 pass; sublime module generalized for Sublime Merge)
   - 7s — 2026-06-20 (warm, WP4 Phase A: +12 tests → 72 pass; git_diff hunks + commit log/diff)
   - 21s — 2026-06-20 (cold build, WP4 git_diff: +13 tests → 60 pass; git2 0.21 linked fast, no slow C compile)
   - 6s — 2026-06-19 (warm rebuild, WP9 P1.1/P1.3: +6 tests → 35 pass; test run itself ~0s)

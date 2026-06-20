@@ -4,6 +4,8 @@ import {
   isPaletteChord,
   type PaletteCommand,
 } from "../paletteCommands";
+import { isSublimeChord } from "../../../../sublime/chord";
+import { panelForChord } from "../../panelHost";
 
 const cmd = (id: string, title: string): PaletteCommand => ({
   id,
@@ -36,18 +38,18 @@ describe("isPaletteChord", () => {
     );
   });
 
-  it("does not match a different key (e.g. Cmd+Shift+E, the Sublime chord)", () => {
+  it("does not match a different ⌘⇧ key (e.g. ⌘⇧E, the WP5 Editor-panel chord)", () => {
     expect(isPaletteChord({ metaKey: true, shiftKey: true, key: "e" })).toBe(
       false,
     );
   });
 
-  // WP3b Phase 2 — chord-exclusivity guarantee. The palette listener is a
-  // capture-phase document handler that returns early for any chord where
+  // WP3b Phase 2 (extended WP5) — chord-exclusivity guarantee. The palette listener
+  // is a capture-phase document handler that returns early for any chord where
   // isPaletteChord is false (so the editor's CM6 chords pass through untouched).
-  // This matrix is the codified contract that ⌘⇧P collides with none of the
-  // chords the editor / app already own — so WP5 (panel-switch), WP6 (⌘P), the
-  // CM6 editing chords, and WP8 (⌘⇧E) all coexist with the palette.
+  // This matrix is the codified contract that ⌘⇧P collides with none of the chords
+  // the editor / app already own — so WP5 (panel-select ⌘⇧E/D/T), WP6 (⌘P), the CM6
+  // editing chords, and the Sublime pop (⌘⇧O) all coexist with the palette.
   it("rejects every other editor/app chord (no collision)", () => {
     const otherChords = [
       {
@@ -69,8 +71,20 @@ describe("isPaletteChord", () => {
         e: { metaKey: true, shiftKey: false, key: "=" },
       },
       {
-        name: "Cmd+Shift+E (WP8 Sublime)",
+        name: "Cmd+Shift+E (WP5 Editor panel)",
         e: { metaKey: true, shiftKey: true, key: "e" },
+      },
+      {
+        name: "Cmd+Shift+D (WP5 Diff panel)",
+        e: { metaKey: true, shiftKey: true, key: "d" },
+      },
+      {
+        name: "Cmd+Shift+T (WP5 Terminal panel)",
+        e: { metaKey: true, shiftKey: true, key: "t" },
+      },
+      {
+        name: "Cmd+Shift+O (Sublime Text pop)",
+        e: { metaKey: true, shiftKey: true, key: "o" },
       },
       {
         name: "plain p (typing)",
@@ -87,6 +101,32 @@ describe("isPaletteChord", () => {
       );
     }
   });
+});
+
+// WP5 — cross-predicate exclusivity: the four app-level ⌘⇧ chords (palette, Sublime
+// pop, and the three panel-select chords) must partition cleanly — no single keydown
+// is claimed by more than one predicate. This is the codified contract that the
+// RightPanelHost capture-phase listener, the palette listener, and the Sublime
+// keydown handler never double-fire on the same event.
+describe("app-level ⌘⇧ chord exclusivity (WP5)", () => {
+  const chords = [
+    { name: "⌘⇧P palette", e: { metaKey: true, shiftKey: true, key: "p" } },
+    { name: "⌘⇧O Sublime", e: { metaKey: true, shiftKey: true, key: "o" } },
+    { name: "⌘⇧E Editor", e: { metaKey: true, shiftKey: true, key: "e" } },
+    { name: "⌘⇧D Diff", e: { metaKey: true, shiftKey: true, key: "d" } },
+    { name: "⌘⇧T Terminal", e: { metaKey: true, shiftKey: true, key: "t" } },
+  ];
+
+  for (const { name, e } of chords) {
+    it(`${name} is claimed by exactly one predicate`, () => {
+      const claims = [
+        isPaletteChord(e),
+        isSublimeChord(e),
+        panelForChord(e) !== null,
+      ].filter(Boolean).length;
+      expect(claims, `${name} must be owned by exactly one handler`).toBe(1);
+    });
+  }
 });
 
 describe("filterCommands", () => {

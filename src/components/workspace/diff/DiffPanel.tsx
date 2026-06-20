@@ -47,10 +47,12 @@ interface DiffPanelProps {
   /**
    * Open a file in the workspace's editor (the parent flips the right panel to the
    * Editor tab + sets its open path). Always opens the CURRENT working-tree content
-   * via the editor's `read_file` path — even from a commit's diff row. Opening a
-   * commit-row file AT THAT COMMIT (blob-at-rev fidelity) is deferred to WP5's
-   * RightPanelHost, where the editor↔diff plumbing is reworked
-   * (SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV).
+   * via the editor's `read_file` path — even from a commit's diff row. This is BY
+   * DESIGN, not a limitation: "open" always means the live editable working-tree
+   * file regardless of which view it was clicked from. Inspecting a file's content
+   * AT a past commit (blob-at-rev) is intentionally out of scope — that's what
+   * Sublime Merge is for (the permanent "Open in Sublime Merge" button). Decided at
+   * WP5 spec; SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV dismissed as WAI.
    */
   onOpenInEditor?: (path: string) => void;
 }

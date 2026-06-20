@@ -105,15 +105,16 @@ Learning-sequence ordering, riskiest-unknown-first:
 
 ### WP5: RightPanelHost + panel-switch hotkey
 
-**Description:** The per-workspace `RightPanelHost` that owns the right half and swaps between Editor (WP2/3), Diff (WP4), and the second terminal (WP9 — wired in when present). The panel-switch hotkey cycles the active panel; per-workspace panel state (active panel, open file). This is where the WP1 hotkey-while-focused finding is applied for real.
+**Description:** The per-workspace `RightPanelHost` that owns the right half and swaps between Editor (WP2/3), Diff (WP4), and the second terminal (WP9 — wired in when present). **Per-panel DIRECT-SELECT hotkeys** (⌘⇧E Editor / ⌘⇧D Diff / ⌘⇧T Terminal — NOT cycling) + clickable tabs select the active panel; per-workspace panel state (active panel, open file). This is where the WP1 hotkey-while-focused finding is applied for real. Also folds in the permanent "Open in Sublime Merge" button (`smerge_open`) and reassigns the Sublime *Text* pop chord ⌘⇧E→⌘⇧O. ✅ SHIPPED 2026-06-20.
 **Milestone:** Milestone 2
 **Dependencies:** WP1 (hotkey/focus pattern), WP2 (editor panel), WP4 (diff panel)
 **Size:** M
 **Tasks:**
-- [ ] `RightPanelHost` component: holds active-panel state per workspace; renders Editor / Diff / (second terminal) and toggles visibility
-- [ ] Panel-switch hotkey cycling editor ↔ diff (↔ terminal), using the WP1-validated registration so it fires while focus is inside CM6
-- [ ] Per-workspace panel state preserved across center-stage switches (panels stay mounted, mirroring the workspace-stays-mounted rule)
-- [ ] Wire the right half from the M1 placeholder to RightPanelHost (the placeholder card is now only the empty/no-file state)
+- [x] `RightPanelHost` component: holds active-panel state per workspace; renders Editor / Diff / (second terminal) and toggles visibility (extracted from the inline WP4 stopgap in Workspace.tsx)
+- [x] Per-panel **direct-select** hotkeys ⌘⇧E/⌘⇧D/⌘⇧T (NOT cycling) + clickable tabs, using the WP1-validated capture-phase registration so they fire while focus is inside CM6; ⌘⇧T reserved/no-op until WP9 mounts the terminal panel
+- [x] Per-workspace panel state preserved across center-stage switches (panels stay mounted, mirroring the workspace-stays-mounted rule)
+- [x] Wire the right half from the M1 placeholder to RightPanelHost (the placeholder card is now only the empty/no-file state)
+- [x] (folded in) Permanent "Open in Sublime Merge" button + `smerge_open` backend command; Sublime Text pop chord ⌘⇧E→⌘⇧O (transitional)
 
 ### WP6: Cmd+P fuzzy file finder (app-layer)
 
@@ -151,17 +152,17 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [ ] Placement in the right-half chrome (left rail vs. togglable), respecting the horizontal budget of the 50/50 workspace split; collapsible to reclaim width
 - [ ] Unit tests on the tree-building / gitignore-honoring walk (pure core, TempDir fixture)
 
-### WP8: Remove the Sublime Text pop (gated on editor parity) — LAST build WP
+### WP8: Remove the Sublime *Text* pop (gated on editor parity) — LAST build WP
 
-**Description:** Delete the Milestone 1 Sublime Text stopgap once the in-app editor proves daily-use parity (vision Core Principle 3): the `sublime` Rust module + `sublime_open` command, the `⌘⇧E` `keydown` handler, and the right-panel "Open in Sublime" toolbar button. Frees the `⌘⇧E` chord. **Gate:** do not start until **WP9's parity gate passes** (the daily-Sublime-usage check now lives in WP9 dogfooding, not WP3) — if a relied-on gesture is hard in CM6, that gate surfaces it and the removal waits.
+**Description:** Delete the Milestone 1 Sublime **Text** stopgap once the in-app editor proves daily-use parity (vision Core Principle 3): the `sublime_open` command, the `⌘⇧O` `keydown` handler (was `⌘⇧E` pre-WP5), and the "Open in Sublime" toolbar button. Frees the `⌘⇧O` chord. **Sublime *Merge* is KEPT (WP5 decision)** — the `smerge_open` command + "Open in Sublime Merge" button stay, so the `sublime` Rust module, its `find_*`/`tool_command`/`spawn` resolver, and `SublimeToolbar` are NOT deleted wholesale: WP8 removes only the *Text* half (the `find_subl`/`subl_command`/`launch`/`sublime_open` paths + the ⌘⇧O handler + the "Open in Sublime" button), leaving the Merge paths intact. `chord.ts` (the ⌘⇧O matcher) is Text-only → removed; the panel-select chords in `panelHost.ts` survive. **Gate:** do not start until **WP9's parity gate passes** — if a relied-on gesture is hard in CM6, that gate surfaces it and the removal waits.
 **Milestone:** Milestone 2
-**Dependencies:** WP3a/3b/3c (editor features built), WP9 parity gate (parity proven), WP5 (panel-switch hotkey is the surviving right-half binding)
+**Dependencies:** WP3a/3b/3c (editor features built), WP9 parity gate (parity proven), WP5 (panel-select hotkeys are the surviving right-half binding; Merge button shipped)
 **Size:** S
 **Tasks:**
 - [ ] **Gate check:** WP9's parity gate has passed — operator confirmed the in-app editor covers daily Sublime usage
-- [ ] Remove the frontend `SublimeToolbar` (button + `⌘⇧E` keydown handler) and its `chord.ts` helper
-- [ ] Remove the backend `sublime` module + `sublime_open` command + its registration in `lib.rs`; drop the `which`/Sublime-discovery code
-- [ ] Drop the `subl`-on-PATH prerequisite from `CLAUDE.md` / README; resync arch.md component table (remove the sublime row)
+- [ ] Remove the frontend "Open in Sublime" button + the `⌘⇧O` keydown handler from `SublimeToolbar` + delete `chord.ts` (Text-only); **KEEP the "Open in Sublime Merge" button** (rename `SublimeToolbar`→e.g. `MergeToolbar` if the Text half is fully gone)
+- [ ] Remove the backend Text paths — `sublime_open` command + its `lib.rs` registration, `find_subl`/`subl_command`/`launch` + the `ST_*` consts; **KEEP `smerge_open`/`find_smerge`/`merge_command`/`launch_merge` + the shared `resolve`/`tool_command`/`spawn` + `SM_*` consts**
+- [ ] Drop the `subl`-on-PATH prerequisite from `CLAUDE.md` / README (keep `smerge`); resync arch.md component table (drop the Sublime *Text* row, keep Merge)
 - [ ] Confirm no orphaned references (cargo + tsc + lint clean after removal)
 
 ### WP9: Second-terminal panel + Milestone 2 polish & exit-criteria

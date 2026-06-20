@@ -18,16 +18,24 @@
 // the filter matches on).
 //
 // CHORD-OWNERSHIP MAP (so the downstream WPs land without collision — the
-// isPaletteChord exclusivity matrix in paletteCommands.test.ts codifies this):
-//   ⌘⇧P  → command palette   (THIS WP — WP3b; opens the overlay)
-//   ⌘P   → fuzzy file finder  (WP6; bare meta, NO shift — distinct from ⌘⇧P)
-//   ⌘⇧E  → Sublime Text pop   (WP8; src/sublime/chord.ts — removed once the in-app
-//                              editor reaches parity, WBS WP8)
-//   panel-switch hotkey       (WP5; chord TBD, must not be ⌘⇧P/⌘P/⌘⇧E)
-//   ⌘F ⌘R ⌘S ⌘D ⌘=/-/0        → CM6 editor chords (editorExtensions coreKeymap)
-// All APP-level chords (⌘⇧P here, ⌘P / panel-switch later) use the WP1-proven
-// capture-phase document listener; editor-internal chords use the Prec.highest
-// CM6 keymap. See workflow/archive/m2-wp1-cm6-probe.md → Objective (a).
+// isPaletteChord exclusivity matrix in paletteCommands.test.ts codifies this;
+// the panel-select chords are codified in panelHost.test.ts):
+//   ⌘⇧P  → command palette        (WP3b — THIS module; opens the overlay)
+//   ⌘P   → fuzzy file finder       (WP6; bare meta, NO shift — distinct from ⌘⇧P)
+//   ⌘⇧E  → Editor panel-select     (WP5; RightPanelHost — panelHost.panelForChord)
+//   ⌘⇧D  → Diff panel-select       (WP5; RightPanelHost)
+//   ⌘⇧T  → Terminal panel-select   (WP5 scheme; live binding lands with WP9)
+//   ⌘⇧O  → Sublime Text pop        (WP5 reassigned ⌘⇧E→⌘⇧O; src/sublime/chord.ts —
+//                                   transitional, removed once the in-app editor
+//                                   reaches parity, WBS WP8)
+//   (Sublime Merge → button only, NO chord — permanent, SublimeToolbar)
+//   ⌘F ⌘R ⌘S ⌘D ⌘=/-/0            → CM6 editor chords (editorExtensions coreKeymap)
+// NOTE: ⌘⇧D (panel-select Diff) is APP-level + capture-phase, distinct from the
+// editor-internal bare ⌘D (Cmd-D select-next, CM6 keymap, no Shift) — the Shift
+// disambiguates, same as ⌘⇧P vs ⌘P.
+// All APP-level chords (⌘⇧P, ⌘P, ⌘⇧E/D/T, ⌘⇧O) use the WP1-proven capture-phase
+// document listener; editor-internal chords use the Prec.highest CM6 keymap.
+// See workflow/archive/m2-wp1-cm6-probe.md → Objective (a).
 
 /** Human-facing label for the palette chord, shown in hints. */
 export const PALETTE_CHORD_LABEL = "⌘⇧P";

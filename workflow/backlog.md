@@ -220,6 +220,25 @@
 - **Context:** Doing it right needs a new backend path (git2 `commit.tree()` → tree-entry(path) → blob → utf8 — the plumbing already exists in `commit_diff_core`) plus a read-only / at-rev load mode in EditorPanel (today's editor is working-tree read/write only). The editor↔diff plumbing is being reworked in WP5 (RightPanelHost), which is the natural home.
 - **Suggested action:** Fold into WP5: add `git_file_at_commit(root, sha, path)` + a read-only editor buffer; route commit-row "Open in editor" through it. Code note left at `DiffPanel.tsx` DiffPanelProps.onOpenInEditor.
 - **Priority:** low (current behavior is useful; this is a fidelity enhancement)
+- **Status:** DISMISSED 2026-06-20 (WP5 spec) — **working-as-intended, not a bug.** Operator confirmed "open" always opens the live working-tree file regardless of which view (working-dir or commit) it was clicked from. Inspecting a file's content at a past commit is what Sublime Merge is for — and Sublime Merge is now a permanent surface (see SURFACE-2026-06-20-WP5-SUBLIME-MERGE-PERMANENT). The only code change is correcting the stale "deferred to WP5" comment at `DiffPanel.tsx:47-55` during WP5.
+
+## SURFACE-2026-06-20-WP5-SUBLIME-MERGE-PERMANENT
+- **Source:** feature:spec (WP5 RightPanelHost)
+- **Target level:** product:finalize (durable-doc resync)
+- **Type:** decision-reversal
+- **Summary:** **Sublime Merge is kept as a permanent companion surface; only Sublime *Text* is replaced/removed.** Supersedes the prior blanket framing that "the in-app editor + diff viewer replace Sublime and WP8 removes the Sublime pop." Corrected split: Sublime *Text* → replaced by the in-app CM6 editor, `sublime_open` + `⌘⇧E`/`⌘⇧O` pop removed by WP8 (unchanged); Sublime *Merge* → permanent, with its own `smerge_open` toolbar button (folded into WP5), for staging/blame/history/blob-at-rev work the inline DiffPanel doesn't do.
+- **Context:** Surfaced at WP5 spec when the operator confirmed the blob-at-rev dismissal and added: "we are not letting go of Sublime Merge; we'll still need an open-in-Sublime-Merge button like the Sublime Text one." The in-app diff viewer is for inline *viewing*; richer git work stays in Sublime Merge.
+- **Suggested action:** At next `/product-finalize`, resync `CLAUDE.md` (Key Decisions + Project Overview), `docs/product/vision.md` Core Principle 3, and `docs/product/arch.md` M2 section to the Text-vs-Merge split. WP5 fixes the WBS WP8 task wording + the DiffPanel comment in-place.
+- **Priority:** medium (a load-bearing scope/vision correction; affects WP8's deletion list and the product narrative)
+- **Status:** RESOLVED 2026-06-20 (resynced eagerly during WP5 spec, operator-requested) — `vision.md` (top revision note + Core Principle 3 + right-half feature bullet), `arch.md` (top revision note + RightPanelHost row + data-flow mermaid + "Sublime pop removed" constraint), and `CLAUDE.md` (Project Overview Sublime-pop bullet, "One window" convention, Sublime Key Decision) all now carry the Text-replaced / Merge-permanent split. WBS WP8 task wording + DiffPanel comment still fixed in-place during WP5 build.
+
+## SURFACE-2026-06-20-WP5-PANEL-HOTKEY-DIRECT-SELECT
+- **Source:** feature:spec (WP5 RightPanelHost)
+- **Target level:** product:finalize (durable-doc resync)
+- **Type:** doc-drift
+- **Summary:** The panel-switch hotkey is **per-panel direct-select** (⌘⇧E Editor / ⌘⇧D Diff / ⌘⇧T Terminal), NOT cycling. `arch.md` (~L295 "cycles them", ~L320 mermaid ".cycles.") and the WBS WP5 task wording describe cycling.
+- **Suggested action:** WP5 fixes the WBS WP5 task wording in-place; arch.md prose resync at next `/product-finalize`.
+- **Priority:** low (doc-drift; the as-built is the source of truth)
 - **Status:** pending
 
 ## Code-quality findings — m2-wp4-diff-viewer-polish (2026-06-20)
