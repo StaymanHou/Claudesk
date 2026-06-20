@@ -179,6 +179,15 @@ body,
 
 .workspace-right {
   min-width: 0;
+  /* min-height:0 is load-bearing: .workspace-right is a GRID ITEM of .workspace,
+     and a grid item's default min-height:auto lets it grow to fit content,
+     overflowing the (viewport-bounded) grid track. Without this, a tall file
+     stretched .workspace-right to the document height (3711px observed) so the
+     editor's .cm-scroller never overflowed → no vertical scroll, and the
+     horizontal scrollbar sat far below the viewport. min-height:0 pins it to the
+     track height so the editor's flex chain bounds correctly (WP3a verify-human,
+     2026-06-20, diagnosed via the ?scrollprobe harness in the browser). */
+  min-height: 0;
   height: 100%;
   border-left: 1px solid rgba(128, 128, 128, 0.3);
   display: flex;
@@ -264,6 +273,24 @@ body,
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* @uiw/react-codemirror nests its EditorView in a `.cm-theme` WRAPPER div, and
+   THAT div is the flex child of .editor-panel (verified in-browser via
+   ?scrollprobe). The wrapper defaults to flex:0 1 auto / min-height:auto, so it
+   grew to the full content height (3679px observed) and the editor inside it was
+   never bounded → .cm-scroller never overflowed → no vertical scroll. The
+   wrapper must be the flex-fill column, and .cm-editor fills it; then CM6's
+   .cm-scroller (overflow:auto, height:100% of the editor) scrolls BOTH axes —
+   vertical for tall files, horizontal for long lines (wrap is off). Neither
+   element may carry height:100% (it fights flex:1) — see the `&` note in
+   theme.ts and the removed height props in EditorPanel. (WP3a verify-human,
+   2026-06-20.) */
+.editor-panel .cm-theme {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }

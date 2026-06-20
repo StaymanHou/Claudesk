@@ -13,11 +13,10 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { EditorView, keymap } from "@codemirror/view";
-import { Prec } from "@codemirror/state";
 import { invoke } from "@tauri-apps/api/core";
-import { languageForPath } from "./language";
+import { buildEditorExtensions } from "./editorExtensions";
 import { editorDarkTheme } from "./theme";
+import { loadFontSize, saveFontSize } from "./fontZoom";
 import { initialLoadState, loadReducer } from "./editorLoad";
 import { initialSaveState, saveReducer } from "./editorSave";
 
@@ -37,6 +36,15 @@ export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
   // setState out of raw effect bodies). "no file open" is derived from openPath.
   const [load, dispatch] = useReducer(loadReducer, initialLoadState);
   const [save, dispatchSave] = useReducer(saveReducer, initialSaveState);
+  // Font size seeded from the persisted global value (lazy init so localStorage
+  // is read once on mount, not every render). Cmd+=/-/0 update it; onFontSizeChange
+  // mirrors the keybinding's live compartment reconfigure into state + persistence.
+  const [fontSize, setFontSize] = useState(() => loadFontSize());
+
+  const onFontSizeChange = useCallback((px: number) => {
+    setFontSize(px);
+    saveFontSize(px);
+  }, []);
 
   // Load the file whenever openPath changes. read_file errors (missing file,
   // binary content, path outside the workspace) surface into `load`. The effect
@@ -86,37 +94,23 @@ export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
       });
   }, [openPath, dirty, save.kind, doc, projectPath]);
 
-  // Cmd/Ctrl+S → save. Prec.highest + return true consumes the event so the
-  // browser/OS "save page" default never fires while focus is in the editor
-  // (WP1 finding: a CM6 keybinding owning the chord is the clean suppressor).
-  // The keymap closes over `doSave` directly and is rebuilt when doSave's deps
-  // change; @uiw/react-codemirror reconfigures the view when the extensions array
-  // identity changes, so the binding always calls the current save closure — no
-  // ref-in-render needed.
-  const saveKeymap = useMemo(
-    () =>
-      Prec.highest(
-        keymap.of([
-          {
-            key: "Mod-s",
-            preventDefault: true,
-            run: () => {
-              doSave();
-              return true;
-            },
-          },
-        ]),
-      ),
-    [doSave],
-  );
-
+  // The full extension set is built by the pure editorExtensions builder: the
+  // core keymap (Mod-s save, Mod-d select-next, search keymap — all at
+  // Prec.highest so they beat CM6 + the browser/OS default; the WP1 lesson for
+  // editor-focused chords), multi-cursor / rectangular (alt-drag) selection, and
+  // the in-file find/replace panel. The save chord closes over the live `doSave`,
+  // so the array is rebuilt when doSave's deps change; @uiw/react-codemirror
+  // reconfigures the view when the extensions array identity changes, so the
+  // binding always calls the current closure — no ref-in-render needed.
   const extensions = useMemo(
-    () => [
-      saveKeymap,
-      languageForPath(openPath ?? ""),
-      EditorView.lineWrapping,
-    ],
-    [saveKeymap, openPath],
+    () =>
+      buildEditorExtensions({
+        openPath: openPath ?? "",
+        onSave: doSave,
+        fontSize,
+        onFontSizeChange,
+      }),
+    [openPath, doSave, fontSize, onFontSizeChange],
   );
 
   // No file open is derived from the prop — not stored in `load`.
@@ -164,8 +158,6 @@ export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
         onChange={onChange}
         theme={editorDarkTheme}
         extensions={extensions}
-        height="100%"
-        style={{ height: "100%" }}
         basicSetup={{ lineNumbers: true, foldGutter: false }}
       />
     </div>

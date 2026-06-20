@@ -13,20 +13,28 @@
 import { EditorView } from "@codemirror/view";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
-import type { Extension } from "@codemirror/state";
+import { Compartment, type Extension } from "@codemirror/state";
 
 /** Editor chrome: background, gutter, cursor, selection. */
 const editorChromeTheme = EditorView.theme(
   {
+    // No `height` here: the editor's height is owned by the flex chain in
+    // App.css (.editor-panel > .cm-editor is flex:1; min-height:0). A `height:
+    // 100%` on the editor `&` fights flex:1 — it resolves to the FULL panel
+    // height, ignoring the status bar above it, so the editor overflows the
+    // (overflow:hidden) panel and content below the clip can't be scrolled to.
+    // Dropping it lets flex bound the editor correctly and .cm-scroller scroll
+    // both axes (WP3a verify-human, 2026-06-20).
     "&": {
       color: "#d4d4d4",
       backgroundColor: "#1e1e1e",
-      height: "100%",
     },
     ".cm-content": {
       caretColor: "#aeafad",
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-      fontSize: "13px",
+      // fontSize is NOT set here — it lives in the font-size COMPARTMENT below so
+      // Cmd+= / Cmd+- / Cmd+0 can reconfigure it at runtime (WP3a Phase 2). The
+      // gutter font-size is tied to it too (fontSizeTheme) so line numbers scale.
     },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: "#aeafad" },
     "&.cm-focused .cm-cursor": { borderLeftColor: "#aeafad" },
@@ -45,7 +53,57 @@ const editorChromeTheme = EditorView.theme(
       color: "#c6c6c6",
     },
     ".cm-lineNumbers .cm-gutterElement": { padding: "0 8px 0 6px" },
+    // The scroller owns BOTH axes: vertical scroll for tall files, and — now that
+    // line-wrapping is off (operator choice, WP3a verify-human) — a horizontal
+    // scrollbar when a long line overflows the panel width. `overflow: auto`
+    // shows each scrollbar only when needed. For vertical scroll to engage, the
+    // editor's height must be bounded by its container (see .editor-panel height
+    // chain in App.css), not shrink-wrapped to content.
     ".cm-scroller": { overflow: "auto" },
+    // Search/replace panel (@codemirror/search, WP3a) — dark-only, palette-aligned
+    // to App.css so the find UI reads as part of Claudesk (no light variant, per
+    // CLAUDE.md "Dark mode only").
+    ".cm-panels": {
+      backgroundColor: "#252526",
+      color: "#d4d4d4",
+    },
+    ".cm-panels.cm-panels-top": { borderBottom: "1px solid #333" },
+    ".cm-panels.cm-panels-bottom": { borderTop: "1px solid #333" },
+    ".cm-search": { padding: "6px 8px" },
+    ".cm-search input, .cm-search button, .cm-search label": {
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+      fontSize: "12px",
+    },
+    ".cm-search input[type=text]": {
+      backgroundColor: "#1e1e1e",
+      color: "#d4d4d4",
+      border: "1px solid #3c3c3c",
+      borderRadius: "3px",
+      padding: "2px 6px",
+    },
+    ".cm-search input[type=text]:focus": {
+      outline: "none",
+      borderColor: "#6ea8ff",
+    },
+    ".cm-search button": {
+      backgroundColor: "#3a3d41",
+      color: "#d4d4d4",
+      border: "1px solid #3c3c3c",
+      borderRadius: "3px",
+      padding: "2px 8px",
+      cursor: "pointer",
+    },
+    ".cm-search button:hover": { backgroundColor: "#45494e" },
+    ".cm-button": {
+      backgroundColor: "#3a3d41",
+      backgroundImage: "none",
+      color: "#d4d4d4",
+    },
+    ".cm-textfield": {
+      backgroundColor: "#1e1e1e",
+      color: "#d4d4d4",
+      border: "1px solid #3c3c3c",
+    },
   },
   { dark: true },
 );
@@ -94,3 +152,20 @@ export const editorDarkTheme: Extension = [
   editorChromeTheme,
   syntaxHighlighting(editorHighlightStyle),
 ];
+
+/**
+ * WP3a Phase 2 — runtime-swappable editor font size. The size lives in its own
+ * Compartment so the Cmd+= / Cmd+- / Cmd+0 keybindings can `reconfigure` it
+ * without rebuilding the whole editor. Both the content and the gutter (line
+ * numbers) scale together so the layout stays aligned at any zoom.
+ */
+export const fontSizeCompartment = new Compartment();
+
+/** The font-size theme extension for a given px — fed into the compartment. */
+export function fontSizeTheme(px: number): Extension {
+  const fontSize = `${px}px`;
+  return EditorView.theme({
+    ".cm-content": { fontSize },
+    ".cm-gutters": { fontSize },
+  });
+}

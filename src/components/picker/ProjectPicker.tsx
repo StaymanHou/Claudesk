@@ -64,8 +64,7 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     let cancelled = false;
     void (async () => {
       try {
-        const dropped =
-          await invoke<RecentProject[]>("prune_missing_projects");
+        const dropped = await invoke<RecentProject[]>("prune_missing_projects");
         if (cancelled) return;
         setPruneToast(pruneToastMessage(dropped));
         const projects = await invoke<RecentProject[]>("list_projects");
