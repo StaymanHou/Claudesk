@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-20
 milestone: 2
-# WP1, WP2, WP3a, WP3b, WP3c, WP4 shipped; WP5/WP6/WP7/WP10/WP8/WP9 remain
+# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5 shipped; WP6/WP7/WP10/WP8/WP9 remain
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -103,7 +103,7 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Handle the common states: clean tree (No changes), staged + unstaged, new/deleted/binary, non-git dir (inline error), commit-vs-parent + root commit
 - [x] Unit tests on the `git_diff` pure cores (TempDir git fixture: hunks/commit-log/commit-diff + edges) + frontend `diffModel` reducers/helpers
 
-### WP5: RightPanelHost + panel-switch hotkey
+### WP5: RightPanelHost + panel-switch hotkey ✅ SHIPPED 2026-06-20 (commit 4546ffb)
 
 **Description:** The per-workspace `RightPanelHost` that owns the right half and swaps between Editor (WP2/3), Diff (WP4), and the second terminal (WP9 — wired in when present). **Per-panel DIRECT-SELECT hotkeys** (⌘⇧E Editor / ⌘⇧D Diff / ⌘⇧T Terminal — NOT cycling) + clickable tabs select the active panel; per-workspace panel state (active panel, open file). This is where the WP1 hotkey-while-focused finding is applied for real. Also folds in the permanent "Open in Sublime Merge" button (`smerge_open`) and reassigns the Sublime *Text* pop chord ⌘⇧E→⌘⇧O. ✅ SHIPPED 2026-06-20.
 **Milestone:** Milestone 2
@@ -185,7 +185,7 @@ Learning-sequence ordering, riskiest-unknown-first:
 WP1 ✅─► WP2 ✅─► WP3a ✅ (core editing) ──► WP3b ✅ (palette) ──► WP3c ✅ (split) ──┐
               │                                                              │
               ├──► WP4 ✅ (diff viewer) ───────────────────────────────────►├─► WP9 dogfood + PARITY GATE ─► WP8 (remove Sublime pop) ─► WP9 exit-criteria
-              ├──► WP5 (panel host) ───────────────────────────────────────►│
+              ├──► WP5 ✅ (panel host) ────────────────────────────────────►│
               │       ▲                                                      │
               ├──► WP6 (file finder) ──┬──► WP10 (file-tree) ───────────────►│
               └──► WP7 (project search)┴──(app-layer, parallel)─────────────►┘

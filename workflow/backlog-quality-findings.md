@@ -517,3 +517,31 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Suggested action:** None required. If a visual-regression harness is ever added (Phase 4 polish?), pin this invariant.
 - **Priority:** low
 - **Status:** pending
+
+# m2-wp5-right-panel-host — 2026-06-20
+
+1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `4546ffb` (0 CRITICAL). Reviewer: well-built refactor-plus-feature — faithful Workspace→RightPanelHost extraction, root-cause item-7 resolver fix with targeted regression guards, standout cross-predicate chord-exclusivity test, above-average chord-ownership doc discipline. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-20-QUALITY-WP5-TERMINAL-SEAM-UNTESTED
+- **File:** `src/components/workspace/panelHost.ts:34-40` (`selectPanel` terminal guard) + `src/components/workspace/RightPanelHost.tsx` (JSX renders only editor + diff slots)
+- **Finding:** The `"terminal"` panel is reachable from `panelForChord` (⌘⇧T → `"terminal"`) but swallowed by `selectPanel`'s static `!AVAILABLE_PANELS.includes("terminal")` guard (always-true today). When WP9 adds `"terminal"` to `AVAILABLE_PANELS`, the guard flips and `RightPanelHost` will set `panel="terminal"` — but the JSX renders only editor + diff slots, so the right half goes **blank**. No test pins the "what renders when terminal is selected" side, so the regression lands silently at WP9.
+- **Why it matters:** a reserved-but-unreachable path that flips reachable on a one-line future edit, with no test guarding the slot-rendering side, is the latent gap that bites the downstream WP. *(Not a WP5 defect — ⌘⇧T correctly no-ops today; this is a WP9-handoff guard.)*
+- **Suggested action:** WP9, when enabling terminal: add the terminal slot to RightPanelHost's JSX in the SAME change that adds `"terminal"` to `AVAILABLE_PANELS`, and add a test that selecting `"terminal"` renders the terminal slot (not a blank). Optionally, until then, add a render-time guard/fallback in RightPanelHost (if `panel` has no slot, fall back to editor) + a test. Cheapest pickup: a one-line note in `panelHost.ts` AVAILABLE_PANELS pointing WP9 at the JSX-slot coupling.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP5-SPLIT-LISTENER-CROSSPOINTER
+- **File:** `src/components/workspace/RightPanelHost.tsx:30-36` (document+capture, ⌘⇧E/D/T) vs `src/components/workspace/SublimeToolbar.tsx:35-45` (window+bubble, ⌘⇧O)
+- **Finding:** Two separate keydown listeners now exist per visible workspace with split chord-ownership (host owns the panel chords on document+capture; toolbar owns the Sublime-Text pop on window+bubble). Functionally disjoint by chord letter (no conflict — confirmed), but the partition is only discoverable by reading both files.
+- **Why it matters:** low-cost clarity for a deliberately partitioned listener set; a maintainer touching one may not realize the other exists.
+- **Suggested action:** a one-line comment in RightPanelHost noting "SublimeToolbar owns ⌘⇧O separately (window+bubble)". Trivial `/feature-refactor` nit.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP5-WP2-OPENBAR-STOPGAP-RELOCATED
+- **File:** `src/components/workspace/RightPanelHost.tsx:38-44` (`pathInput`/`openPath` open-bar)
+- **Finding:** The WP2 temporary open-file path-box was lifted verbatim into RightPanelHost and still carries its "temporary until WP6 finder" comment, now one layer from where WP6 will replace it. Correctly out of scope to remove in WP5.
+- **Why it matters:** trivial; flagged only to confirm the stopgap wasn't accidentally promoted to permanent during the lift. No new debt — just relocated.
+- **Suggested action:** WP6 removes it when the Cmd+P finder lands. No action now.
+- **Priority:** low
+- **Status:** pending

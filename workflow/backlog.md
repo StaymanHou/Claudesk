@@ -239,10 +239,16 @@
 - **Summary:** The panel-switch hotkey is **per-panel direct-select** (⌘⇧E Editor / ⌘⇧D Diff / ⌘⇧T Terminal), NOT cycling. `arch.md` (~L295 "cycles them", ~L320 mermaid ".cycles.") and the WBS WP5 task wording describe cycling.
 - **Suggested action:** WP5 fixes the WBS WP5 task wording in-place; arch.md prose resync at next `/product-finalize`.
 - **Priority:** low (doc-drift; the as-built is the source of truth)
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-20 (WP5 finalize) — WBS WP5 wording fixed to "direct-select" in-place during WP5 build (P3.2); arch.md (RightPanelHost row + mermaid + revision note) also resynced eagerly this session. The as-built (per-panel ⌘⇧+mnemonic direct-select) is now documented everywhere.
 
 ## Code-quality findings — m2-wp4-diff-viewer-polish (2026-06-20)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `5051bd4` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, appropriately-scoped, no refactor warranted. All micro-readability/posture: a deliberate double-predicate eval in `toggleAllCollapsed`, a broad `visibleKeys` useMemo dep, and the sticky-layout z-index coupling (no visual-regression harness to guard it). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp4-diff-viewer-polish — 2026-06-20`.
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** all three are optional — none affect correctness; the useMemo dep narrowing is the only one with any (negligible) runtime effect. Dismiss via the WIP's `## Code-Quality Review` section if not worth a `/feature-refactor`.
+
+## Code-quality findings — m2-wp5-right-panel-host (2026-06-20)
+- **Pointer:** 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `4546ffb` (0 CRITICAL). Reviewer: well-built refactor-plus-feature (faithful Workspace→RightPanelHost extraction, root-cause item-7 resolver fix + targeted regression guards, standout cross-predicate chord-exclusivity test). MAJOR: the `"terminal"` panel seam is reachable from `panelForChord` (⌘⇧T) but swallowed by `selectPanel`'s static guard — when WP9 adds `"terminal"` to `AVAILABLE_PANELS` the right half goes blank (no slot in JSX), untested. MINORs: split-listener cross-pointer comment; WP2 open-bar stopgap relocated (WP6 removes). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp5-right-panel-host — 2026-06-20`.
+- **Priority:** medium (the WP9-handoff terminal-seam guard) + low (MINORs)
+- **Status:** pending
+- **Pickup shape:** the MAJOR is a **WP9 pickup** — when WP9 enables the terminal panel, add the JSX slot + a render test in the same change that adds `"terminal"` to `AVAILABLE_PANELS` (or add a render-time fallback-to-editor guard now). The MINORs are trivial `/feature-refactor` nits. Dismiss any via the WIP's `## Code-Quality Review` section.

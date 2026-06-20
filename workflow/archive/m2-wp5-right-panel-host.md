@@ -1,7 +1,7 @@
 # Feature: WP5 — RightPanelHost + panel-switch hotkeys
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready to ship
+**State:** COMPLETED 2026-06-20 — shipped 4546ffb on main, WBS WP5 ticked, archived
 **Created:** 2026-06-20
 **Entry:** spec (complex feature)
 **Milestone:** 2
@@ -145,8 +145,8 @@ The feature is done when:
   **Verdict:** proceed
 
 ## Current Node
-- **Path:** Feature > COMPLETE — ready to ship
-- **Active scope:** none — all 3 phases [x], all verify groups [x]. Next: `/feature-ship`.
+- **Path:** Feature > review-quality complete — ready to finalize
+- **Active scope:** none — shipped (4546ffb), code-quality review done (0 CRITICAL / 1 MAJOR / 2 MINOR, all auto-backlogged). Next: `/feature-finalize`.
 - **Blocked:** none
 - **Note:** verify-human APPROVED 2026-06-20 (operator). Item-7 Merge-button bug found + fixed in-place during verify-human (backend resolve() hardcoded-bundle-path; parameterized + 2 regression guards; cargo 73/73). This was the genuine load-bearing value of operator verify-human — verify-self could not reach the workspace UI to catch it. Backend 73/73, frontend 168/168, tsc/eslint/clippy/fmt clean.
 - **Note on P1 verify-human/codify:** Phase 1 is backend-only with NO UI surface — `smerge_open` has no caller until Phase 2's button. Its human-facing verification is deferred to **Phase 3 verify-human** (operator launches Sublime Merge via the button in the real app); verify-codify is already satisfied by the 4 cargo tests in P1.3. These two P1 leaves are intentionally carried as deferred-into-P3 rather than run as empty no-op checks now. (Drive mode autopilot — proceeding to Phase 2 build per the plan's routing of P1's live check into P3.)
@@ -166,3 +166,36 @@ The feature is done when:
 - [SURFACED-2026-06-20] CLOSED at spec — `SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV` dismissed as working-as-intended (open = live working-tree file, by design). No code change; the stale "deferred to WP5" DiffPanel comment gets corrected in WP5.
 - [SHORTCUT-2026-06-20] P3.1 — the capture-phase panel-select listener was built into `RightPanelHost` during Phase 2 rather than as a separate Phase 3 leaf, because it is structurally part of the host component (the host owns the listener; shipping the host without it would mean a half-wired component with dead tabs-only navigation). Pure chord logic (`panelForChord`) is vitest-covered (11 cases) + the cross-predicate exclusivity matrix; the fire-while-CM6-focused behavior is verified at the consolidated P3 operator verify-human. Phase 3 reduces to P3.2 doc fixes + that verify-human.
 - [BUGFIX-2026-06-20] verify-human item 7 — **the "Open in Sublime Merge" button opened Sublime *Text*.** Root cause: the shared pure `resolve(on_path, bundle_exists)` discovery fn **hardcoded `ST_BUNDLE_BIN`** in its `Bundle` arm (correct when WP8 wrote it Text-only; wrong once `find_smerge` reused it). So `smerge_open → launch_merge → find_smerge → resolve` returned `Bundle(.../Sublime Text.app/.../subl)` and spawned `subl`. **Missed by the unit tests** because they fed `merge_command` a hand-built `SM Bundle` directly — never exercising the `find_smerge → resolve → merge_command` seam (each unit correct, the wiring wrong). Diagnosed empirically: per-command + per-spawn `eprintln!` telemetry in the live dev binary showed `commands::smerge_open ENTERED` followed by `spawn program=".../subl"`, then a runtime probe printed `find_smerge() = Bundle(".../Sublime Text.app/.../subl")`. **Fix:** parameterized `resolve(on_path, bundle_bin, bundle_exists)` — `find_subl` passes `ST_BUNDLE_BIN`, `find_smerge` passes `SM_BUNDLE_BIN`. **Regression guards added:** `resolve_bundle_uses_the_given_bundle_bin_not_a_hardcoded_one` + `merge_command_through_bundle_resolution_targets_smerge_not_subl` (the seam the old tests skipped). cargo 73/73, clippy/fmt clean, debug telemetry removed. Operator re-confirmed Merge opens.
+
+## Code-Quality Review — m2-wp5-right-panel-host
+
+Reviewer: `code-quality-reviewer` subagent against ship commit `4546ffb`. Verdict: well-built; 0 CRITICAL, 1 MAJOR, 2 MINOR. Per drive_mode=autopilot: MAJOR auto-backlogged (prominent surface), MINORs auto-backlogged. Findings persisted to `workflow/backlog-quality-findings.md` → `# m2-wp5-right-panel-host — 2026-06-20`.
+
+### Strengths
+- Pure-core extraction (`panelHost.ts`: `selectPanel`/`panelForChord`) follows the repo's pure-logic→vitest posture, keeping `RightPanelHost` a thin shell.
+- `resolve(on_path, bundle_bin, bundle_exists)` parameterization is the *root-cause* fix for item-7 (not a surface patch on `find_smerge`); the 2 regression guards hit the exact untested seam.
+- The `app-level ⌘⇧ chord exclusivity` matrix test is standout defensive design — asserts each of the 5 chords is claimed by exactly one predicate.
+- Chord-ownership docs kept synchronized across `panelHost.ts` / `paletteCommands.ts` / `chord.ts` on the ⌘⇧E→⌘⇧O move.
+- Workspace.tsx→RightPanelHost lift is faithful — no behavioral drift; the stays-mounted invariant comment travelled with the code.
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR**
+- [panelHost.ts:34-40 / RightPanelHost.tsx JSX] The `"terminal"` panel seam is reachable from `panelForChord` (⌘⇧T → `"terminal"`) but swallowed by `selectPanel`'s static `!AVAILABLE_PANELS.includes("terminal")` guard. When WP9 adds `"terminal"` to `AVAILABLE_PANELS`, the guard flips and `RightPanelHost` will set `panel="terminal"` — but the JSX renders only editor + diff slots, so the right half goes **blank**, with no test pinning the slot-rendering side. Latent blank-slot risk that lands silently at WP9. *(Not a WP5 defect — ⌘⇧T correctly no-ops today; this is a WP9-handoff guard gap.)*
+
+**MINOR**
+- [RightPanelHost.tsx:30-36] Two separate keydown listeners per visible workspace now exist with split chord-ownership (SublimeToolbar owns ⌘⇧O on window+bubble; RightPanelHost owns ⌘⇧E/D/T on document+capture). Functionally disjoint, but a one-line cross-pointer in RightPanelHost would save the next reader a cross-file hunt.
+- [RightPanelHost.tsx:38-44] The WP2 temporary open-file path-box (`pathInput`/`openPath`) was lifted verbatim and now lives one layer from where WP6's finder replaces it. Correctly out of scope to remove; flagged only to confirm the stopgap wasn't promoted to permanent.
+
+### Assessment
+Well-built refactor-plus-feature: faithful extraction, correctly-shaped resolver generalization, root-cause item-7 fix with targeted guards, above-average chord-ownership documentation discipline. The one real concern is the untested `"terminal"` seam inherited by WP9. No new debt beyond that flagged seam.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The big one — **Sublime Merge is a permanent companion surface, not something the in-app diff viewer replaces.** This surfaced mid-spec when the operator dismissed the blob-at-rev item ("it's a feature, not a bug — open always = live working-tree file") and then added "we're not letting go of Sublime Merge." That reversed a standing vision/arch/WBS decision and turned a frontend-only WP into one with a backend command + a 3-doc resync. Also reconfirmed: complex/UX features earn a `feature-spec` regardless of autopilot, and the spec's job here was mostly *surfacing decisions* (chord scheme, Merge, blob-at-rev) rather than resolving unknowns.
+- **Assumptions that held:** The WP1 capture-phase listener pattern worked exactly as the probe promised (chords fire while CM6-focused, no per-editor keymap wiring). The panel-mount mechanics already existed in the WP4 stopgap, so the extraction was a clean lift with no behavioral drift. The `sublime` resolver was genuinely "tool-parameterized so find_smerge is a one-liner" — *almost*.
+- **Assumptions that were wrong:** "The resolver is tool-parameterized" was only 90% true — `resolve()` hardcoded `ST_BUNDLE_BIN` in its Bundle arm, so `find_smerge` resolved to Sublime *Text*'s binary and the Merge button launched Text. The unit tests "covered" `merge_command` and `resolve` individually but fed `merge_command` a hand-built SM Bundle, never exercising the `find_smerge → resolve → merge_command` seam — classic each-unit-correct, wiring-wrong. **verify-self could not catch it** (dialog stub-wedge blocks the workspace UI); **operator verify-human did** — the load-bearing value of that gate. Empirical telemetry (per-command + per-spawn eprintln in the live binary) localized it in one click-cycle after static reading kept saying "the code is correct."
+- **Approach delta:** Plan was 3 phases (backend → frontend extraction → hotkeys+docs). P3.1 (the capture-phase listener) got folded into Phase 2's RightPanelHost because it's structurally inseparable from the host — logged as a SHORTCUT. Phase 3 reduced to doc fixes + the consolidated operator verify-human. One verify-human back-loop (item-7 Merge bug) → in-place fix (gated: trivial root-cause fix + fresh operator re-verify + audit trail) rather than a full F9b build loop, plus 2 regression guards on the previously-untested seam.
