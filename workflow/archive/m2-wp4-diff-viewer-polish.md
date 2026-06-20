@@ -1,7 +1,7 @@
 # Feature: WP4 Diff-Viewer Polish Follow-up
 
 **Workflow:** feature
-**State:** ship (complete) — review-quality next
+**State:** COMPLETED 2026-06-20 (shipped 5051bd4, review-quality clean, finalized)
 **Created:** 2026-06-20
 **Drive mode:** autopilot (standing directive: halt at WBS-level WP boundaries; this is a follow-up to the shipped WP4, not a new WBS WP)
 
@@ -53,16 +53,49 @@ The WP4 Sublime-Merge-style git diff viewer shipped + was operator-approved (com
   - [x] verify-codify  <!-- status: done — codify-worthy logic (collapseAll/expandAll/allCollapsed) already covered by 6 build-added vitest cases (real behavioral assertions incl. empty-view & stale-key edges); CSS (accent bar/word-wrap/sticky) + item-3 prop-wiring are non-logic, verified live by operator (no CSS/component-test harness in repo — matches WP4's own posture). Integration boundary (existing UI surfaces) verified end-to-end by operator in the real app; no render-test harness introduced for a polish WP. Full suites green: frontend 151/151, backend 67/67. No F14 issues. -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > COMPLETE → ship
-- **Active scope:** none — Phase 1 (the only phase) done; all verify nodes [x]; ready for /feature-ship
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** none — shipped (5051bd4), review-quality clean (3 MINOR auto-backlogged); ready for /feature-finalize
 - **Blocked:** none
-- **Unvisited:** ship
+- **Unvisited:** finalize
 - **Operator verdict (2026-06-20):** items 2 & 3 APPROVED. Item 4's accent-bar+wash WORKS, but the "grey highlighting" is actually a per-line horizontal scrollbar → fix = word-wrap diff lines. Item 1 sticky is too narrow → pin the whole Commits section. Editor must remain wrap:false (diff-only change).
 - **Open discoveries:** SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV (low)
 - **Open discoveries:** SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV (low; commit-row open-in-editor opens working-tree content, not blob-at-rev — deferred to WP5)
 
 ## Verification notes (read by verify-self / verify-human)
 - **NO stubbed-browser mount.** The Playwright/stubbed-browser path WEDGES on the Tauri dialog plugin for workspace-level UI (`SURFACE-2026-06-20-WP4-VERIFY-SELF-DIALOG-STUB-WEDGE`, reproduced 3×). verify-self's mechanical checks run via `cargo test`/`pnpm vitest`/tsc/lint; the live-observation outcomes are confirmed at **verify-human in the real `pnpm tauri dev` app opened on THIS repo** (gives real changes + commits to exercise the diff panel). Kill any lingering `:1420` process before relaunching; warm rebuild ~15s.
+
+## Code-Quality Review — m2-wp4-diff-viewer-polish
+
+### Strengths
+- Pure-fn extraction (`collapseAll`/`expandAll`/`allCollapsed` in `diffModel.ts`) keeps the bulk-collapse logic testable and out of the component, matching the repo's pure-fn vitest posture exactly.
+- New vitest cases assert the genuinely tricky edges (empty-view ≠ all-collapsed, stale-key carryover) rather than just the happy path.
+- The button-in-button HTML-validity fix (`.diff-file-header` `<button>` → flex `<div>` wrapper) is the correct structural resolution, with `stopPropagation()` on the nested action and a clear inline comment.
+- Every non-obvious CSS choice carries a WHY comment grounded in a real observation (transparent base `border-left` to prevent context-row shift; word-wrap to kill the per-line scrollbar).
+- The deferred-scope boundary (commit-row open-in-editor opens working-tree content, not blob-at-rev) is documented at the prop docstring, the panel docstring, and a logged SURFACE.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [DiffPanel.tsx:~340-355] `toggleAllCollapsed` recomputes `allCollapsed(prev, visibleKeys)` in the setter while `everyCollapsed` holds an independent eval of the same predicate — both correct (setter reads fresh `prev`), but two call sites could drift.
+- [DiffPanel.tsx:~347] `visibleKeys` useMemo deps on the whole `list` reducer object rather than `list.kind`/`list.files` — correct (new object per dispatch) but re-derives on list-state transitions that don't change the key set.
+- [App.css:~629-639] Whole-commits-sticky relies on z-index ordering (2 vs 2 vs 1) across `.diff-commits` / `.diff-commit-banner` / `.diff-file-header` all at `top:0`; no mechanical guard (no CSS/visual-regression harness per repo posture) — a future top/z-index edit could silently restack. Comments document the coupling.
+
+### Assessment
+Well-built, appropriately-scoped polish. Pure-model-helpers (tested) vs presentational CSS/prop-wiring (operator-verified live) matches the repo's verification posture. The button-in-button restructure is the right fix, documented at every layer. No meaningful debt; findings are micro-readability + the inherent fragility of sticky-layout invariants no test harness in this repo can pin. **No refactor warranted.**
+
+### If you disagree
+Dismiss any finding by marking the line `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** Item 4 ("faint highlight") had a second, misdiagnosed cause: the grey full-width bars the operator saw weren't weak highlighting at all — they were per-line horizontal scrollbars from `white-space:pre` + `overflow-x:auto`. The accent-bar + wash fix was correct but invisible behind the scrollbars. The real fix was word-wrapping diff lines. Lesson: a CSS "it looks wrong" report needs a live look before assuming the diagnosis in the ticket — the operator's screenshot reframed the whole item.
+- **Assumptions that held:** The collapse-set model already supported bulk ops (only needed pure helpers); the open-in-editor plumbing (openPath + rightPanel in Workspace) was exactly the seam expected; CSS-only changes needed no new test type (repo posture: pure-fn vitest + live verify-human).
+- **Assumptions that were wrong:** (1) The item-4 highlight diagnosis (see above). (2) Item 1's sticky scope — I first pinned only `.diff-commits-header`; the operator wanted the WHOLE `.diff-commits` section pinned. Both surfaced at verify-human, both cheap CSS fixes. (3) Item 3 forced an unplanned structural change: `.diff-file-header` had to go from `<button>` to a flex `<div>` because a button can't legally nest the open-in-editor button.
+- **Approach delta:** Plan was one phase, five tasks; executed as planned, with one verify-human back-loop (items 4b word-wrap + 1b whole-commits-sticky) that the spec hadn't anticipated. The back-loop was the load-bearing value of verify-human here — verify-self couldn't reach the UI (Tauri dialog stub-wedge), so the operator's live look was the only place those two issues could surface. Validates the "diff/editor WPs verify in the real app" pattern.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

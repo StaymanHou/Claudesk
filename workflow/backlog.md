@@ -209,8 +209,8 @@
 ## Code-quality findings — m2-wp4-git-diff-viewer (2026-06-20)
 - **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `4e2d742` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, no refactor warranted. Doc-comment drift from the PB.7 removal sweep (stale `[file_base_core]` doc-link + wrong `diff_*` API name) + dead untracked-opts on the staged path + a 3-ternary commit-diff gate. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp4-git-diff-viewer — 2026-06-20`.
 - **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** the two mod.rs doc fixes are a 2-minute `/feature-refactor` (highest value — actively-misleading comments); the dead-opts + ternary nits are trivial polish. All pair naturally with the deferred WP4-polish follow-up WP.
+- **Status:** PARTIALLY RESOLVED 2026-06-20 — the **2 git_diff/mod.rs doc-drift MINORs** (stale `[file_base_core]` link → `[file_hunks_core]`; wrong `diff_*` API name → `diff_index_to_workdir`/`diff_tree_to_index`) were **fixed by m2-wp4-diff-viewer-polish P1.5** (commit 5051bd4). REMAINING pending: the dead untracked-opts on the staged path + the 3-ternary commit-diff gate in DiffPanel.tsx (both trivial polish).
+- **Pickup shape:** the 2 highest-value doc fixes are DONE; the dead-opts + ternary nits remain as trivial `/feature-refactor` polish.
 
 ## SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV
 - **Source:** feature:build (WP4 diff-viewer polish, item 3)
@@ -221,3 +221,9 @@
 - **Suggested action:** Fold into WP5: add `git_file_at_commit(root, sha, path)` + a read-only editor buffer; route commit-row "Open in editor" through it. Code note left at `DiffPanel.tsx` DiffPanelProps.onOpenInEditor.
 - **Priority:** low (current behavior is useful; this is a fidelity enhancement)
 - **Status:** pending
+
+## Code-quality findings — m2-wp4-diff-viewer-polish (2026-06-20)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `5051bd4` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, appropriately-scoped, no refactor warranted. All micro-readability/posture: a deliberate double-predicate eval in `toggleAllCollapsed`, a broad `visibleKeys` useMemo dep, and the sticky-layout z-index coupling (no visual-regression harness to guard it). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp4-diff-viewer-polish — 2026-06-20`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** all three are optional — none affect correctness; the useMemo dep narrowing is the only one with any (negligible) runtime effect. Dismiss via the WIP's `## Code-Quality Review` section if not worth a `/feature-refactor`.

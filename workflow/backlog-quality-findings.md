@@ -488,3 +488,32 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** derive a single `commitReady`/`commitStale` flag above the return; collapse the three branches to loading-vs-loaded-vs-error.
 - **Priority:** low
 - **Status:** pending
+
+# m2-wp4-diff-viewer-polish — 2026-06-20
+
+Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 MINOR. Verdict: well-built, appropriately-scoped polish; no refactor warranted. All three are micro-readability / posture notes.
+
+## SURFACE-2026-06-20-QUALITY-WP4POLISH-DOUBLE-PREDICATE
+- **Source:** feature:review-quality (m2-wp4-diff-viewer-polish)
+- **Type:** tech-debt
+- **Summary:** In `DiffPanel.tsx` `toggleAllCollapsed`, `allCollapsed(prev, visibleKeys)` is recomputed inside the setter while `everyCollapsed` already holds an independent evaluation of the same predicate one line above. Both correct (the setter must read fresh `prev`), but the two call sites could drift if someone edits one predicate.
+- **Suggested action:** Optional — leave as-is (the in-setter fresh-`prev` read is intentional), or add a one-line comment noting the deliberate duplication.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP4POLISH-USEMEMO-DEP
+- **Source:** feature:review-quality (m2-wp4-diff-viewer-polish)
+- **Type:** tech-debt
+- **Summary:** `visibleKeys` useMemo deps on the whole `list` reducer state object rather than `list.kind`/`list.files`. Correct (listReducer returns a new object per dispatch) but re-derives on list-state transitions (idle→loading) that don't change the key set.
+- **Suggested action:** Optional micro-opt — narrow the dep to `list.kind` + `list.files`. Negligible perf impact.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP4POLISH-STICKY-ZINDEX-COUPLING
+- **Source:** feature:review-quality (m2-wp4-diff-viewer-polish)
+- **Type:** tech-debt
+- **Summary:** The whole-commits-sticky layout relies on z-index ordering (2 vs 2 vs 1) across `.diff-commits` / `.diff-commit-banner` / `.diff-file-header`, all pinning at `top:0` in `.diff-scroll`. No mechanical guard (no CSS/visual-regression harness per repo posture) — a future top/z-index edit could silently restack. Comments document the coupling.
+- **Context:** Inherent to UI polish in a repo whose posture is pure-fn vitest + live operator verify-human; not a defect, a fragility note.
+- **Suggested action:** None required. If a visual-regression harness is ever added (Phase 4 polish?), pin this invariant.
+- **Priority:** low
+- **Status:** pending
