@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m2-wp3b-command-palette — 2026-06-20
+
+1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `3699a22` (0 CRITICAL). The feature is well-built (registry seam genuinely extensible, render-time override derivation idiomatic, well-aimed tests). Findings are comment-vs-code drift around a vestigial language Compartment (MAJOR), a duplicated language-pack switch (MINOR), and an optional-vs-required `active` prop asymmetry (MINOR). Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-20-QUALITY-WP3B-VESTIGIAL-LANGUAGE-COMPARTMENT
+- **File:** `src/components/workspace/editor/theme.ts:176` (`languageCompartment`) + `editorExtensions.ts:60-65, 188-194`
+- **Finding:** `languageCompartment` is `.of()`-seeded but never `.reconfigure()`d — the palette syntax swap happens purely via the `languageOverrideId` useMemo dep forcing an array-identity rebuild (which `@uiw/react-codemirror` applies as a full reconfigure). The WHY-comments claim two contradictory mechanisms ("reconfigure it without rebuilding the editor — same pattern as `fontSizeCompartment`" vs "the palette reconfigures the override by rebuilding the extensions"), and neither matches: the font-size compartment IS live-`reconfigure`d in `applyZoom`, the language one is not.
+- **Why it matters:** the compartment wrapper adds no behavior the array rebuild doesn't already provide (vestigial), and a maintainer extending syntax-switching will hunt for a live `reconfigure` call that doesn't exist. Comment-vs-code drift is the actively-misleading kind.
+- **Suggested action:** Either (a) drop the compartment and seed the language directly in the array (simplest — the rebuild already does the work), OR (b) actually live-`reconfigure` `languageCompartment` from the palette command and stop rebuilding the array on `languageOverrideId` change (mirrors `applyZoom`, avoids a full reconfigure per syntax pick). Reconcile the theme.ts + editorExtensions.ts comments to the chosen mechanism either way. Lean (a) for simplicity unless the per-switch full-reconfigure cost ever shows up.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP3B-DUP-LANGUAGE-SWITCH
+- **File:** `src/components/workspace/editor/language.ts:80-97` (`languageForId`) vs `:16-39` (`languageForExtension`)
+- **Finding:** `languageForId`'s switch duplicates `languageForExtension`'s pack-mapping arms (`javascript({jsx:true})`, `javascript({typescript:true})`, `rust()`, `markdown()`). The header comment claims "the same packs back both paths, so there's no second source of truth," but there are two parallel switches that can drift — the extension path maps `js/cjs/mjs`, the id path only `javascript`.
+- **Why it matters:** adding or retuning a language requires editing both switches; the "single source of truth" comment overstates the design.
+- **Suggested action:** Route both through a shared id→Extension map keyed off a canonical mode id (extensionOf → id, then one id→Extension lookup). Low-cost; makes the comment true.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP3B-ACTIVE-PROP-ASYMMETRY
+- **File:** `src/components/workspace/editor/EditorPanel.tsx:36` vs `src/components/workspace/SublimeToolbar.tsx:22`
+- **Finding:** `EditorPanel.active` is optional with a `true` default while the mirrored `SublimeToolbar.active` is a required boolean. A future caller can forget to pass `active` to `EditorPanel` and silently get an always-listening palette in a backgrounded tab, whereas the same mistake on `SublimeToolbar` is a compile-time type error.
+- **Why it matters:** trades a compile-time gating guard for standalone-mount convenience on a multi-workspace gating prop; not load-bearing at N=1 but a latent multi-workspace foot-gun.
+- **Suggested action:** Consider making `active` required (drop the default) and pass it explicitly everywhere, or document why the default is safe. Pairs naturally with any Phase-2-milestone multi-workspace wiring.
+- **Priority:** low
+- **Status:** pending
+
 # wp9-phase1-polish — 2026-06-19
 
 3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). The feature is well-built; findings are a partial-failure window already triaged elsewhere, a plan/impl drift note, and a missing clarifying comment. Auto-backlogged per drive_mode=autopilot (MINOR).

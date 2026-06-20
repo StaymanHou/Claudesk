@@ -3,6 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-20
 milestone: 2
+# WP1, WP2, WP3a, WP3b shipped; WP3c/WP4/WP5/WP6/WP7/WP10/WP8/WP9 remain
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -66,16 +67,16 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] **Font-size zoom** (Cmd+= / Cmd+- / Cmd+0 reset, Sublime parity) — `Compartment`-swapped `fontSizeTheme` (replaced the hardcoded 13px); pure `fontZoom.ts` (clamp 8–32px); persisted **globally** in localStorage.
 - [x] Minimap (`@replit/codemirror-minimap`) — **SHIPPED** (not deferred): peer-deps all cleared against pinned CM6, browser-confirmed render. + scroll-past-end (`scrollPastEnd()`) added on operator request.
 
-### WP3b: Editor command palette
+### WP3b: Editor command palette ✅ SHIPPED 2026-06-20 (commit 3699a22)
 
 **Description:** A net-new React command-palette overlay over CM6's command set (syntax/mode selection to start; an extension point for more commands later). CM6 has no turnkey palette, so this is a small custom subsystem, not a config flip — which is why it's its own WP. Must honor the WP1 capture-phase focus pattern so the palette hotkey fires while the cursor is in the editor.
 **Milestone:** Milestone 2
 **Dependencies:** WP2, WP1 (focus/keymap pattern)
 **Size:** M
 **Tasks:**
-- [ ] Command-palette React overlay (Cmd+Shift+P) over CM6 commands; keyboard nav; honor the WP1 capture-phase registration so it fires with focus inside CM6
-- [ ] Syntax/mode selection as the first command set; structure so more commands slot in
-- [ ] Coexists with the WP5 panel-switch hotkey + WP6 Cmd+P (no chord collisions)
+- [x] Command-palette React overlay (Cmd+Shift+P) over CM6 commands; keyboard nav (↓/↑/Enter/Esc, dark overlay); honors the WP1 capture-phase document-keydown registration so it fires with focus inside CM6 (active-gated to the focused workspace)
+- [x] Syntax/mode selection as the first command set (Set Syntax: JS/JSX/TS/TSX/Rust/Markdown/Plain Text via a language-override `Compartment`, default derived from extension, resets on file change); structured as an extensible `{id,title,run}` registry composed in EditorPanel + passed into the overlay
+- [x] Coexists with the WP5 panel-switch hotkey + WP6 Cmd+P (no chord collisions) — Shift-required predicate distinct from bare ⌘P; codified by a chord-exclusivity matrix; chord-ownership map documented in `paletteCommands.ts` for WP5/WP6/WP8
 
 ### WP3c: Editor split panes
 

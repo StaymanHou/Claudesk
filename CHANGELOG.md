@@ -4,6 +4,8 @@
 
 - **Feature shipped:** WP3a — editor core-editing parity: layered the daily Sublime-parity editing features onto the WP2 editor shell via a new pure `editorExtensions.ts` builder — multi-cursor with Cmd-drag rectangular/column select and Cmd-D select-next, in-file find (Cmd+F) / replace (Cmd+R) via a dark-styled `@codemirror/search` panel, font-size zoom (Cmd+= / Cmd+- / Cmd+0) via a Compartment-swapped `fontSizeTheme` persisted globally in localStorage, a `@replit/codemirror-minimap`, and `scrollPastEnd()`; plus a flex/grid height-chain fix (`.workspace-right` grid-item `min-height:0` + the `@uiw` `.cm-theme` wrapper) so the editor scrolls both axes with word-wrap off.
 - **Milestone:** WP3a (Milestone 2, editor core-editing parity) complete — the 3rd of Milestone 2's 12 WPs (after WP1 + WP2); WP3b/3c and WP4–WP10 remain.
+- **Feature shipped:** WP3b — editor command palette: a net-new Cmd+Shift+P React overlay over CodeMirror 6's command set whose first command set is syntax/mode selection (Set Syntax: JS/JSX/TS/TSX/Rust/Markdown/Plain Text, overriding the extension-derived language for the open file and resetting on file change), built on an extensible `{id,title,run}` registry composed in EditorPanel and passed into the overlay, opened via the WP1-proven capture-phase document-keydown listener so the chord fires while focus is inside the editor (active-gated to the focused workspace) and a Shift-required predicate that stays distinct from WP6's bare Cmd+P — with a chord-exclusivity matrix and chord-ownership map locking in coexistence for WP5/WP6/WP8.
+- **Milestone:** WP3b (Milestone 2, editor command palette) complete — the 4th of Milestone 2's 12 WPs (after WP1 + WP2 + WP3a); WP3c, WP4–WP7, WP10, WP8, WP9 remain.
 
 ## 2026-06-19
 
