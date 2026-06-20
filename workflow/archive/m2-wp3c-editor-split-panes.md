@@ -1,7 +1,7 @@
 # Feature: WP3c — Editor split panes
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete) — commit b72ed30 (local on main; no remote)
 **Created:** 2026-06-20
 
 ## Problem Statement
@@ -77,8 +77,8 @@ WP3a/WP3b must-haves.
   - [x] verify-codify  <!-- status: COMPLETE 2026-06-20 — No new tests: Phase-2 logic (close/last-pane-guard/focus-reassign/collapse) already codified by the 14 editorPanes.test.ts cases (would fail on a reducer regression). Net-new code is CSS-only (active-pane ::before) + save-error-panel-level is a live-DOM render property — neither has a pure-logic surface; covered by Playwright/manual per repo posture (no jsdom harness), same as WP3a/3b/P1. DELIBERATELY did NOT add a computed-style test for the accent: the occlusion bug proved such a test passes on the BROKEN version (see SHORTCUT-2026-06-20 lesson). No integration-boundary durable-test gap (consuming surface = EditorPanel UI, live-DOM-covered). Full suite 132/132, tsc 0, lint 0, prettier clean. No test failures → no triage. -->
 
 ## Current Node
-- **Path:** Feature > WP3c COMPLETE — ready to ship
-- **Active scope:** none. Both phases complete (Phase 1: split substrate + focused-pane chord routing; Phase 2: close/collapse lifecycle + edge cases). All verify gates passed; active-pane accent occlusion bug found & fixed at verify-human. Next: `/feature-ship`.
+- **Path:** Feature > review-quality COMPLETE — ready to finalize
+- **Active scope:** none. Shipped (b72ed30); code-quality review clean (0 CRITICAL/0 MAJOR/3 MINOR, all auto-backlogged to backlog-quality-findings.md + pointer in backlog.md). Next: `/feature-finalize`.
 - **Blocked:** none
 - **Unvisited:** none — all phases done
 - **Open discoveries:** SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET (low; accepted for v1); SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT (medium; follow-up WP after M2)
@@ -88,3 +88,37 @@ WP3a/WP3b must-haves.
      Each entry is also logged to workflow/backlog.md -->
 - [SURFACED-2026-06-20] Phase 1 / P1.5 — shared-doc + N `<CodeMirror>` instances may reset the non-focused pane's cursor/selection on each keystroke (each view reconciles the shared `value`). Acceptable for v1 (viewports). Fix = single shared `EditorState` (raw `EditorView`, drop `@uiw` wrapper) if dogfooding finds it annoying. Logged as SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET (product:wbs, low).
 - [SHORTCUT-2026-06-20] P2.verify-human.2 — active-pane accent was invisible (operator-reported). Root cause: the P2.3 `inset box-shadow` on `.editor-pane` was occluded by CM6's opaque `#1e1e1e` `.cm-editor` sitting flush at the pane's left edge (offset 0). Fixed in-place (trivial CSS extension of the P2.3 leaf): replaced the box-shadow with an absolutely-positioned `::before` strip at `z-index:6` (above the editor). Re-verified by the orchestrator via fresh Playwright run + screenshot (blue strip painted on the focused pane, absent on the inactive pane, flips on focus); 132/132, tsc/lint clean. LESSON: a `getComputedStyle().boxShadow`-equals-expected check does NOT prove a decoration is VISIBLE — an opaque sibling/child can paint over it; verify painted pixels (screenshot) for visual indicators, not just computed style.
+
+## Code-Quality Review — m2-wp3c-editor-split-panes
+
+Reviewed against ship commit b72ed30 (drive_mode: autopilot). **0 CRITICAL, 0 MAJOR, 3 MINOR** — reviewer rated it "well-built, low-debt work that fits the codebase's grain." MINORs auto-backlogged (Case C); pointer in `workflow/backlog.md` → `workflow/backlog-quality-findings.md`.
+
+### Strengths
+- Clean pure-logic/React separation (`editorPanes.ts` reducer) matching the `editorLoad.ts`/`editorSave.ts`/`paletteCommands.ts` posture; 14 vitest cases.
+- Identity-preserving no-ops (`focus` same/unknown id, duplicate `split`) tested with `toBe` — avoids React re-render churn.
+- Shared-document invariant documented once at the load-bearing seam and genuinely upheld (reducer never mentions path/content).
+- Stable pane ids via `useRef` counter (not Date/random) — correct for keys + keeps the reducer pure.
+- The `::before` accent fix carries a precise WHY comment (CM6 opaque bg occluding the inset shadow), preserving the verify-human finding.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [editorPanes.ts:69-72] Middle-close focus-reassign (`panes[Math.min(idx, panes.length-1)]`) is correct + tested but relies on the post-filter index shift; a one-line comment naming the index-shift assumption would lower future-reader cost.
+- [EditorPanel.tsx:294-296 / App.css] The "is-split" predicate is encoded twice (JS `splitable` const vs. CSS `:has(.editor-pane + .editor-pane)`) — agree today, a drift pair if the threshold changes; a single `data-split` attribute the CSS keys off would collapse it.
+- [EditorPanel.tsx:295] Inline JSX comment restates the shared-doc rationale already stated authoritatively in the file header + `editorPanes.ts` (WHAT-not-WHY redundancy).
+
+### Assessment
+Well-built, low-debt; fits the codebase grain. Shared-document is a defensible scope decision, implemented honestly (pure minimal reducer, panel-level buffer boundary respected end-to-end, pane-agnostic chords correctly explained). Test coverage proportionate (asserts reference identity for no-ops — the property that matters for React). CSS mechanical + justified; `::before` fix preserves a real lesson. Nothing refactor-worthy; MINORs are backlog-or-dismiss material.
+
+### If you disagree
+Dismiss any finding by marking the line `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The Phase 1/Phase 2 split turned out lopsided — building the pure `editorPanes.ts` reducer in Phase 1 naturally pulled close/last-pane-guard/collapse forward, so Phase 2's only net-new *code* was the active-pane CSS indicator. That's a clean front-load (the reducer is the natural home for all the lifecycle transitions), not a planning miss — but it's worth noting that "edge cases" phases often collapse into the substrate phase when the substrate is a pure state machine.
+- **Assumptions that held:** Shared-document (P1.1) was the right call for a half-width column — verify-human confirmed the viewport-on-one-file gesture is what's wanted, and the operator deferred independent-file split rather than rejecting shared-doc. The WP1 capture-phase chord pattern carried over with zero friction (palette fires from either pane). CM6 composing N views "cleanly" (research.md) held.
+- **Assumptions that were wrong:** The active-pane indicator. I assumed an `inset box-shadow` on `.editor-pane` would be visible; it was occluded by CM6's opaque `#1e1e1e` `.cm-editor` flush at the pane edge. More importantly, the *automated* `getComputedStyle().boxShadow` check PASSED on the broken version — a computed-style assertion does not prove a decoration is painted. The operator's native eyeball caught it; a screenshot confirmed the fix. Lesson stored (SHORTCUT-2026-06-20).
+- **Approach delta:** Plan matched the build closely. The one deviation was the active-pane-accent occlusion bug surfacing at verify-human (not verify-self) and being fixed in-place via the §3.1 shortcut (trivial CSS extension + fresh Playwright re-verify + audit-trail) rather than a full F12 back-loop — which is exactly the case that exception exists for.
+
+## Closure
+**Feature complete:** WP3c — Editor split panes has shipped (commit b72ed30, local on main). The right-half editor can now split into N vertically-stacked CodeMirror panes that are viewports onto the same file, with a focused-pane indicator, per-pane close, and collapse-on-file-change; chords (Cmd+S, Cmd+Shift+P) act on the shared document. To see it: `pnpm tauri dev`, open a project + file in the right half, click "Split". Requester = operator — closure notice for self-record.

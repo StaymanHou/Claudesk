@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-20
 milestone: 2
-# WP1, WP2, WP3a, WP3b shipped; WP3c/WP4/WP5/WP6/WP7/WP10/WP8/WP9 remain
+# WP1, WP2, WP3a, WP3b, WP3c shipped; WP4/WP5/WP6/WP7/WP10/WP8/WP9 remain
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -78,16 +78,16 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Syntax/mode selection as the first command set (Set Syntax: JS/JSX/TS/TSX/Rust/Markdown/Plain Text via a language-override `Compartment`, default derived from extension, resets on file change); structured as an extensible `{id,title,run}` registry composed in EditorPanel + passed into the overlay
 - [x] Coexists with the WP5 panel-switch hotkey + WP6 Cmd+P (no chord collisions) — Shift-required predicate distinct from bare ⌘P; codified by a chord-exclusivity matrix; chord-ownership map documented in `paletteCommands.ts` for WP5/WP6/WP8
 
-### WP3c: Editor split panes
+### WP3c: Editor split panes ✅ SHIPPED 2026-06-20 (commit b72ed30)
 
 **Description:** Split the editor into multiple `EditorView`s within the right-half panel — the riskiest of the old WP3's features (focus management, per-pane state, layout in a half-width panel). Isolated into its own WP so a hard layout/focus problem here can't block shipping the core-editing must-haves (WP3a).
 **Milestone:** Milestone 2
 **Dependencies:** WP2 (WP3a not strictly required, but land WP3a first so split panes inherit the finished editing feature set)
 **Size:** M
 **Tasks:**
-- [ ] Split panes within the editor (multiple `EditorView`s sharing or mirroring the document); decide split direction(s) at build, mindful of the half-width right panel
-- [ ] Per-pane focus + active-pane tracking; the panel-switch / save / palette hotkeys act on the focused pane
-- [ ] Decide at build whether panes share one document state or are independent views; handle close-pane / last-pane edge cases
+- [x] Split panes within the editor (multiple `EditorView`s sharing or mirroring the document); decide split direction(s) at build, mindful of the half-width right panel — **SHARED-DOCUMENT model** (panes = viewports onto one file), vertical stack; N `<CodeMirror>` over one panel-level buffer
+- [x] Per-pane focus + active-pane tracking; the panel-switch / save / palette hotkeys act on the focused pane — `onFocusCapture`→`focusPane`; save/palette are pane-agnostic (shared doc); `activePaneId` exposed for the WP5 panel-switch hotkey
+- [x] Decide at build whether panes share one document state or are independent views; handle close-pane / last-pane edge cases — SHARED (P1.1 decision; independent-file split deferred → SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT); close-pane + last-pane guard + focus-reassign + file-change-collapse in `editorPanes.ts` (pure reducer, 14 tests)
 
 ### WP4: Git diff viewer — `git2` data + `@codemirror/merge` rendering
 
@@ -181,7 +181,7 @@ Learning-sequence ordering, riskiest-unknown-first:
 ## Milestone 2 critical path
 
 ```
-WP1 ✅─► WP2 ✅─► WP3a (core editing) ──► WP3b (palette) ──► WP3c (split) ──┐
+WP1 ✅─► WP2 ✅─► WP3a ✅ (core editing) ──► WP3b ✅ (palette) ──► WP3c ✅ (split) ──┐
               │                                                              │
               ├──► WP4 (diff viewer) ──────────────────────────────────────►├─► WP9 dogfood + PARITY GATE ─► WP8 (remove Sublime pop) ─► WP9 exit-criteria
               ├──► WP5 (panel host) ───────────────────────────────────────►│

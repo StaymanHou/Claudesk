@@ -424,3 +424,31 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** Consolidate to one canonical note and reference it from the others.
 - **Priority:** low
 - **Status:** pending
+
+# m2-wp3c-editor-split-panes — 2026-06-20
+
+3 MINOR findings from `feature-review-quality` on ship commit `b72ed30` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built, low-debt, fitting the codebase grain (pure minimal pane reducer, panel-level shared-document boundary respected end-to-end, proportionate tests asserting reference identity for no-ops). All three are cosmetic comment/duplication nits. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-20-QUALITY-WP3C-MIDDLE-CLOSE-INDEX-COMMENT
+- **File:** `src/components/workspace/editor/editorPanes.ts:69-72` (the `close` focus-reassign)
+- **Finding:** The middle-close focus-reassign `panes[Math.min(idx, panes.length - 1)]` is correct and tested, but relies on `idx` being the PRE-filter index while `panes` is the POST-filter array — so after filtering, `idx` points at the element that slid up into the closed slot. The current comment ("prefer the pane that took its slot") states the intent but not the index-shift mechanism.
+- **Why it matters:** the off-by-one surface here is exactly where a future edit could silently break focus reassignment; the test guards the behavior but not the reasoning. A one-line comment naming the index-shift assumption lowers future-reader cost.
+- **Suggested action:** Add a one-line comment: "idx is the pre-filter index; after filtering it points at the element that slid up into the closed slot." No code change.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP3C-IS-SPLIT-PREDICATE-DUP
+- **File:** `src/components/workspace/editor/EditorPanel.tsx` (`splitable = panes.panes.length > 1`) vs `src/App.css` (`.editor-panes:has(.editor-pane + .editor-pane)`)
+- **Finding:** The "is-split" condition is encoded in two languages — the JS `splitable` const (gates the close ✕) and the CSS `:has(.editor-pane + .editor-pane)` selector (gates the active-pane accent). They agree today but are a drift pair if the split-threshold ever changes.
+- **Why it matters:** low cost now; a single source (e.g. a `data-split` attribute on the `.editor-panes` container that the CSS keys off) would collapse the duplication.
+- **Suggested action:** Optionally set `data-split={splitable}` on `.editor-panes` and change the CSS to `.editor-panes[data-split="true"] .editor-pane[data-active-pane="true"]::before`. Low priority / discipline only.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP3C-REDUNDANT-JSX-COMMENT
+- **File:** `src/components/workspace/editor/EditorPanel.tsx:295` (the `.editor-panes` inline comment)
+- **Finding:** The inline JSX comment restates the shared-doc rationale ("vertical stack of panes… each pane is a viewport onto the shared doc") that is already stated authoritatively in the file header and in `editorPanes.ts` — WHAT-not-WHY redundancy.
+- **Why it matters:** minor comment redundancy; the canonical explanation lives in two better places.
+- **Suggested action:** Trim the inline comment to a brief pointer or drop it. No code change.
+- **Priority:** low
+- **Status:** pending
