@@ -19,15 +19,28 @@ import { editorDarkTheme } from "./theme";
 import { loadFontSize, saveFontSize } from "./fontZoom";
 import { initialLoadState, loadReducer } from "./editorLoad";
 import { initialSaveState, saveReducer } from "./editorSave";
+import { CommandPalette } from "./CommandPalette";
+import { isPaletteChord, type PaletteCommand } from "./paletteCommands";
+import { SYNTAX_MODES } from "./language";
 
 interface EditorPanelProps {
   /** Workspace project dir — the root the backend confines file IO to. */
   projectPath: string;
   /** File to open, relative to projectPath (or absolute inside it). Null = no file. */
   openPath: string | null;
+  /**
+   * True when this workspace is the focused/visible tab — gates the Cmd+Shift+P
+   * palette chord so only the active tab's editor opens the palette (mirrors
+   * SublimeToolbar's `active`). Defaults true so a standalone mount still works.
+   */
+  active?: boolean;
 }
 
-export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
+export function EditorPanel({
+  projectPath,
+  openPath,
+  active = true,
+}: EditorPanelProps) {
   const [doc, setDoc] = useState("");
   // The last-persisted snapshot of the buffer — `dirty` is derived from it.
   const [savedDoc, setSavedDoc] = useState("");
@@ -40,6 +53,24 @@ export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
   // is read once on mount, not every render). Cmd+=/-/0 update it; onFontSizeChange
   // mirrors the keybinding's live compartment reconfigure into state + persistence.
   const [fontSize, setFontSize] = useState(() => loadFontSize());
+  // WP3b — palette syntax override, paired with the path it applies to. null id
+  // = derive the mode from the file extension; a syntax id forces that mode. The
+  // override is scoped to a single openPath so a newly-opened file re-derives
+  // from its extension WITHOUT a reset effect (the React "adjust state during
+  // render when a prop changed" pattern — see effectiveOverrideId below).
+  const [override, setOverride] = useState<{
+    path: string | null;
+    id: string | null;
+  }>({ path: null, id: null });
+  // The override only counts for the file it was set on; otherwise it's null
+  // (the new file uses its extension default). Computed during render — no effect.
+  const languageOverrideId = override.path === openPath ? override.id : null;
+  const setLanguageOverrideId = useCallback(
+    (id: string) => setOverride({ path: openPath, id }),
+    [openPath],
+  );
+  // WP3b — whether the Cmd+Shift+P command palette is open.
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const onFontSizeChange = useCallback((px: number) => {
     setFontSize(px);
@@ -54,6 +85,8 @@ export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
     let cancelled = false;
     dispatch({ type: "load-start", path: openPath });
     dispatchSave({ type: "reset" }); // clear any stale save status from the prior file
+    // (Language override resets automatically on file change — see `override`
+    // state, which is path-scoped and computed during render.)
     invoke<string>("read_file", { root: projectPath, path: openPath })
       .then((contents) => {
         if (cancelled) return;
@@ -94,6 +127,44 @@ export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
       });
   }, [openPath, dirty, save.kind, doc, projectPath]);
 
+  // WP3b — the syntax-selection command set: the first set of palette commands.
+  // Each "Set Syntax: …" command forces the editor's language via the override
+  // (the language compartment is reconfigured because the extensions array is
+  // rebuilt with the new override — see the useMemo below). Built from the shared
+  // SYNTAX_MODES list so adding a mode is one row in language.ts. The set is
+  // assembled here (not in CommandPalette) so future WPs add commands without
+  // touching the overlay component.
+  const commands = useMemo<PaletteCommand[]>(
+    () =>
+      SYNTAX_MODES.map((mode) => ({
+        id: `syntax.${mode.id}`,
+        title: `Set Syntax: ${mode.label}`,
+        run: () => setLanguageOverrideId(mode.id),
+      })),
+    [setLanguageOverrideId],
+  );
+
+  // WP3b — open the palette on Cmd+Shift+P. Registered as a CAPTURE-phase document
+  // listener (the WP1-proven pattern): it fires before CM6's contentEditable
+  // handler, so the chord works while focus is inside the editor. Gated on `active`
+  // so only the focused workspace's editor responds (mirrors SublimeToolbar).
+  // preventDefault suppresses any browser default and keeps the literal "P" out of
+  // the document. Cmd+P (bare, WP6's finder) is intentionally NOT matched here.
+  const hasFile = openPath != null;
+  useEffect(() => {
+    if (!active) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isPaletteChord(e)) {
+        e.preventDefault();
+        // The current command set acts on the open editor; inert with no file.
+        if (!hasFile) return;
+        setPaletteOpen((open) => !open); // toggle: re-press closes
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true); // capture phase
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [active, hasFile]);
+
   // The full extension set is built by the pure editorExtensions builder: the
   // core keymap (Mod-s save, Mod-d select-next, search keymap — all at
   // Prec.highest so they beat CM6 + the browser/OS default; the WP1 lesson for
@@ -109,8 +180,9 @@ export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
         onSave: doSave,
         fontSize,
         onFontSizeChange,
+        languageOverrideId,
       }),
-    [openPath, doSave, fontSize, onFontSizeChange],
+    [openPath, doSave, fontSize, onFontSizeChange, languageOverrideId],
   );
 
   // No file open is derived from the prop — not stored in `load`.
@@ -160,6 +232,12 @@ export function EditorPanel({ projectPath, openPath }: EditorPanelProps) {
         extensions={extensions}
         basicSetup={{ lineNumbers: true, foldGutter: false }}
       />
+      {paletteOpen && (
+        <CommandPalette
+          commands={commands}
+          onClose={() => setPaletteOpen(false)}
+        />
+      )}
     </div>
   );
 }

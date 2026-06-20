@@ -52,3 +52,46 @@ export function extensionOf(pathOrName: string): string {
 export function languageForPath(pathOrName: string): Extension {
   return languageForExtension(extensionOf(pathOrName));
 }
+
+// WP3b — explicit language selection by id (the command palette's "Set Syntax: …"
+// targets). Distinct from extensionOf: the palette OVERRIDES the extension-derived
+// mode, so it needs a stable id → extension map that doesn't go through a filename.
+// Each entry is one palette command; adding a language = one row here + the pack
+// import above. The same packs back both paths, so there's no second source of truth.
+
+/** A selectable syntax mode for the palette: stable id + display label. */
+export interface SyntaxMode {
+  id: string;
+  label: string;
+}
+
+/** The ordered syntax modes the palette offers (display order = this order). */
+export const SYNTAX_MODES: readonly SyntaxMode[] = [
+  { id: "javascript", label: "JavaScript" },
+  { id: "jsx", label: "JavaScript (JSX)" },
+  { id: "typescript", label: "TypeScript" },
+  { id: "tsx", label: "TypeScript (TSX)" },
+  { id: "rust", label: "Rust" },
+  { id: "markdown", label: "Markdown" },
+  { id: "plaintext", label: "Plain Text" },
+];
+
+/** Language extension for a palette syntax id. Unknown id → plaintext ([]). */
+export function languageForId(id: string): Extension {
+  switch (id) {
+    case "javascript":
+      return javascript();
+    case "jsx":
+      return javascript({ jsx: true });
+    case "typescript":
+      return javascript({ typescript: true });
+    case "tsx":
+      return javascript({ jsx: true, typescript: true });
+    case "rust":
+      return rust();
+    case "markdown":
+      return markdown();
+    default:
+      return []; // "plaintext" + any unknown id
+  }
+}

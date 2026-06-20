@@ -33,8 +33,12 @@ import {
   openSearchPanel,
 } from "@codemirror/search";
 import { showMinimap } from "@replit/codemirror-minimap";
-import { languageForPath } from "./language";
-import { fontSizeCompartment, fontSizeTheme } from "./theme";
+import { languageForPath, languageForId } from "./language";
+import {
+  fontSizeCompartment,
+  fontSizeTheme,
+  languageCompartment,
+} from "./theme";
 import { nextFontSize, DEFAULT_FONT_PX } from "./fontZoom";
 
 export interface EditorExtensionOptions {
@@ -53,6 +57,14 @@ export interface EditorExtensionOptions {
    * live compartment reconfigure via the view; this just syncs the outside world.
    */
   onFontSizeChange: (px: number) => void;
+  /**
+   * WP3b — palette syntax override. null = derive the mode from the file
+   * extension (`languageForPath`); a syntax id = force that mode (`languageForId`).
+   * Seeds the language compartment at mount; the palette reconfigures the override
+   * by rebuilding the extensions with a new value (array identity changes → @uiw
+   * reconfigures the view), the same mechanism the font-size seed uses.
+   */
+  languageOverrideId: string | null;
 }
 
 /**
@@ -173,13 +185,21 @@ function minimap(): Extension {
 export function buildEditorExtensions(
   opts: EditorExtensionOptions,
 ): Extension[] {
+  // WP3b: the active language is the palette override if set, else the
+  // extension-derived default. It lives in a compartment so the palette can swap
+  // it; we seed the compartment here at the resolved value.
+  const activeLanguage =
+    opts.languageOverrideId == null
+      ? languageForPath(opts.openPath)
+      : languageForId(opts.languageOverrideId);
+
   return [
     coreKeymap(opts),
     multiSelection(),
     // Panel at the top of the editor (VS-Code-like). basicSetup ships the search
     // KEYMAP but not this placement config; adding search() is idempotent with it.
     search({ top: true }),
-    languageForPath(opts.openPath),
+    languageCompartment.of(activeLanguage),
     // Font size in its own compartment, seeded at the current size — Cmd+=/-/0
     // reconfigure it at runtime (see coreKeymap.applyZoom).
     fontSizeCompartment.of(fontSizeTheme(opts.fontSize)),

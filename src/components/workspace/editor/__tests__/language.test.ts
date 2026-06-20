@@ -3,6 +3,8 @@ import {
   extensionOf,
   languageForExtension,
   languageForPath,
+  languageForId,
+  SYNTAX_MODES,
 } from "../language";
 
 describe("extensionOf", () => {
@@ -83,5 +85,44 @@ describe("languageForPath", () => {
   it("derives the language from a full path", () => {
     expect(languageForPath("src/lib.rs")).toBeTruthy();
     expect(languageForPath("/x/y/notes.txt")).toEqual([]);
+  });
+});
+
+// WP3b — the palette syntax-selection targets.
+describe("SYNTAX_MODES + languageForId", () => {
+  it("offers exactly the supported modes, in order", () => {
+    expect(SYNTAX_MODES.map((m) => m.id)).toEqual([
+      "javascript",
+      "jsx",
+      "typescript",
+      "tsx",
+      "rust",
+      "markdown",
+      "plaintext",
+    ]);
+  });
+
+  it("every mode has a human label", () => {
+    for (const m of SYNTAX_MODES) {
+      expect(typeof m.label).toBe("string");
+      expect(m.label.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("returns a non-empty language extension for every non-plaintext mode id", () => {
+    for (const m of SYNTAX_MODES) {
+      const result = languageForId(m.id);
+      if (m.id === "plaintext") {
+        expect(result).toEqual([]);
+      } else {
+        expect(result).toBeTruthy();
+        expect(Array.isArray(result) && result.length === 0).toBe(false);
+      }
+    }
+  });
+
+  it("falls back to plaintext ([]) for an unknown id", () => {
+    expect(languageForId("totally-unknown")).toEqual([]);
+    expect(languageForId("")).toEqual([]);
   });
 });

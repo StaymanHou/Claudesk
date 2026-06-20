@@ -275,6 +275,9 @@ body,
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* Positioning context for the WP3b command-palette overlay (absolute, pinned
+     to the top of the editor like VS Code / Sublime). */
+  position: relative;
 }
 
 /* @uiw/react-codemirror nests its EditorView in a `.cm-theme` WRAPPER div, and
@@ -357,6 +360,75 @@ body,
   font-size: 0.85rem;
   opacity: 0.85;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* WP3b — command palette (Cmd+Shift+P). Dark-only, palette-aligned to the app
+   (#252526 panel / #6ea8ff accent — same tokens as the search panel in theme.ts).
+   The backdrop covers the editor panel and centers the palette near the top
+   (Sublime/VS Code placement); a click on the backdrop closes it. */
+.command-palette-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 8%;
+  background-color: rgba(0, 0, 0, 0.35);
+}
+
+.command-palette {
+  width: min(92%, 520px);
+  max-height: 70%;
+  display: flex;
+  flex-direction: column;
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.command-palette-input {
+  flex-shrink: 0;
+  margin: 8px;
+  padding: 6px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: #d4d4d4;
+  background-color: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+}
+
+.command-palette-input:focus {
+  outline: none;
+  border-color: #6ea8ff;
+}
+
+.command-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 6px;
+  overflow-y: auto;
+}
+
+.command-palette-item {
+  padding: 6px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: #d4d4d4;
+  cursor: pointer;
+}
+
+.command-palette-item-active {
+  background-color: #094771;
+}
+
+.command-palette-empty {
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #858585;
 }
 
 /* ── WP5 Project Picker (Phase 2 of WP5) ─────────────────────────────── */

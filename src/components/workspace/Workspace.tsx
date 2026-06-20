@@ -64,7 +64,11 @@ export function Workspace({ workspace, visible, onSessionId }: WorkspaceProps) {
           />
           <button type="submit">Open</button>
         </form>
-        <EditorPanel projectPath={workspace.project_path} openPath={openPath} />
+        <EditorPanel
+          projectPath={workspace.project_path}
+          openPath={openPath}
+          active={visible}
+        />
       </div>
     </div>
   );
