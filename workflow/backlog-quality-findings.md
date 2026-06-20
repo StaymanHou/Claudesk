@@ -452,3 +452,39 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** Trim the inline comment to a brief pointer or drop it. No code change.
 - **Priority:** low
 - **Status:** pending
+
+# m2-wp4-git-diff-viewer — 2026-06-20
+
+4 MINOR findings from `feature-review-quality` on ship commit `4e2d742` (0 CRITICAL, 0 MAJOR). Reviewer verdict: well-built, advances the codebase, no refactor warranted. Findings are doc-comment drift left by the PB.7 removal sweep (2) + dead diff-option config (1) + a frontend clarity nit (1). All low priority. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-20-QUALITY-WP4-STALE-FILE-BASE-DOCLINK
+- **File:** `src-tauri/src/git_diff/mod.rs:49` (`ChangedFile.path` rustdoc)
+- **Finding:** rustdoc links to `[file_base_core]`, which was deleted in PB.7. Dangling intra-doc link (rustdoc::broken-intra-doc-links isn't in the clippy gate, so it slipped the green baseline).
+- **Why it matters:** future reader follows a link to a function that no longer exists; the WP's own removal-sweep discipline missed its own doc reference.
+- **Suggested action:** drop the `[file_base_core]` reference from the doc-comment (the path is the key passed to `git_file_hunks` + `read_file` now).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP4-WRONG-DIFF-API-COMMENT
+- **File:** `src-tauri/src/git_diff/mod.rs:327` (`file_hunks_core` doc-comment)
+- **Finding:** doc describes the unstaged path as `diff_tree_to_workdir_with_index`, but the code (line ~352) calls `diff_index_to_workdir` (working-tree-vs-index). Different diff semantics; the comment names the wrong API on the subtle staged/unstaged split.
+- **Why it matters:** a maintainer reasoning about staged/unstaged correctness from the comment would be misled — and that split is the trickiest part of the module.
+- **Suggested action:** correct the comment to `diff_index_to_workdir` (or, if vs-HEAD-merged was actually intended, change the code — but the tests pin the current `diff_index_to_workdir` behavior, so fix the comment).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP4-DEAD-UNTRACKED-OPTS-STAGED
+- **File:** `src-tauri/src/git_diff/mod.rs:338-344` (`file_hunks_core` DiffOptions)
+- **Finding:** `include_untracked`/`recurse_untracked_dirs`/`show_untracked_content` are set on the shared `opts` used by both branches, but they're only meaningful on the unstaged `diff_index_to_workdir` path — the staged `diff_tree_to_index` branch can never see an untracked file. Harmless dead config on the staged path.
+- **Why it matters:** minor confusion cost; the shared-`opts` construction obscures that the two branches want different options.
+- **Suggested action:** build the untracked options only on the unstaged branch (or note inline that they're no-ops on the staged path).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP4-COMMIT-DIFF-GATE-TERNARIES
+- **File:** `src/components/workspace/diff/DiffPanel.tsx:368-379` (commit-diff render gate)
+- **Finding:** the "is this commit diff for the currently-selected commit?" gate is 3 sibling JSX ternaries (`commitDiff?.sha === selectedSha` / `!== selectedSha` + error branch) over the same two values.
+- **Why it matters:** low-effort clarity win in the one part of the component with non-obvious async-staleness handling.
+- **Suggested action:** derive a single `commitReady`/`commitStale` flag above the return; collapse the three branches to loading-vs-loaded-vs-error.
+- **Priority:** low
+- **Status:** pending

@@ -1,7 +1,7 @@
 # Feature: M2 WP4 — Git diff viewer (Sublime-Merge-style)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete — ready to ship)
+**State:** COMPLETED 2026-06-20 (shipped commit 4e2d742; finalized + archived)
 **Created:** 2026-06-20 (spec); originally planned 2026-06-20, redesigned after verify-human rejection
 **Entry:** spec (complex feature — redesign after verify-human F12 reject)
 **Drive mode:** autopilot (PAUSE for operator spec sign-off — this entry IS the pause)
@@ -128,12 +128,44 @@ The feature is done when, in the real Tauri app against a real repo:
   - [x] verify-codify  <!-- status: done; 13 diffModel tests codify the pure interaction logic; frontend 145/145 + backend 67/67 green, no regressions. Live UI is operator-verified (consuming surface unautomatable via the wedging stub path). -->
 
 ## Current Node
-- **Path:** Feature > (all phases complete) → ship
-- **Active scope:** WP4 COMPLETE — Phase A (backend) + Phase B (frontend) both shipped + verified + codified. Next = `/feature-ship`.
+- **Path:** Feature > review-quality (complete) → finalize
+- **Active scope:** Ship + code-quality review done (0 CRITICAL/MAJOR, 4 MINOR auto-backlogged). Next = `/feature-finalize`.
 - **Blocked:** none
 - **Open discoveries:** WP4-DIFF-VIEWER-POLISH-FOLLOWUPS (4 deferred items, backlog); WP4-COMMIT-LOG-SCOPE-EXPANSION + DIALOG-STUB-WEDGE (logged earlier)
 - **Unvisited:** Phase B verify group. NOTE: Phase B's verify-human is the REAL operator UI check (the WP's load-bearing gate, the one that rejected the first attempt) — autopilot PAUSES there.
 - **Open discoveries:** commit-log = WBS expansion (SURFACE-2026-06-20-WP4-COMMIT-LOG-SCOPE-EXPANSION, logged); dialog-stub verify-self wedge (SURFACE-2026-06-20-WP4-VERIFY-SELF-DIALOG-STUB-WEDGE, logged)
+
+## Retrospect
+- **What changed in our understanding:** "git diff viewer" was specified at the wrong altitude. The first attempt (file-list + single-file `@codemirror/merge`) was a *reasonable reading of the WBS* but not what the operator actually wanted — a Sublime Merge "Working Directory" experience (stacked collapsible files + inline hunks + commit history). The real requirement only surfaced when the operator saw running UI at verify-human. Also learned: letting `git2` compute the hunks and shipping structured hunk data (vs. shipping `(base,current)` to `@codemirror/merge`) is both lighter AND closer to the desired flat +/- look — the research-era "git2 for data, CM6 for render" split was over-engineered for this UX.
+- **Assumptions that held:** the pure-core/thin-command backend seam (the reviewer's top strength); the reducer-driven-IPC frontend pattern; view-only scope; `git2` as the right backend; the WP1 capture-phase/`active`-gating conventions carried over cleanly.
+- **Assumptions that were wrong:** (1) that a UX-heavy "viewer" could go down the lightweight `feature-plan` path — it was `feature-spec`-worthy, and autopilot auto-chaining plan→build with no review pause is what let an unconfirmed UX reach ~700 LOC before the operator saw it. (2) That `@codemirror/merge` was load-bearing — it was dropped entirely. (3) That stubbed-browser verify-self would work for this panel — the dialog-plugin wedge blocked it (3×, incl. a reboot); the real-Tauri-app operator verify-human is the actual gate for workspace-level UI.
+- **Approach delta:** plan → build×2 → verify-human REJECT → **spec** → re-plan → build×2 (Phase A backend / Phase B frontend) → operator-approved. The redesign discarded the first frontend wholesale but *kept and extended* the Phase-1 backend (changed-files), adding hunks + commit log/diff. Process correction codified in the WIP + retrospect: complex/UX features get a spec regardless of drive mode; autopilot ≠ skip-spec.
+
+## Code-Quality Review — m2-wp4-git-diff-viewer
+
+(Reviewer: code-quality-reviewer subagent vs ship commit 4e2d742, 2026-06-20. 0 CRITICAL, 0 MAJOR, 4 MINOR. Verdict: well-built, advances the codebase, no refactor warranted — fixes are backlog-tier. Auto-backlogged per drive_mode=autopilot.)
+
+### Strengths
+- Pure-core/thin-command split applied consistently — the seam that makes the TempDir tests possible without a Tauri runtime.
+- Thorough behavioral test coverage (pagination, unborn HEAD, root-commit, binary, malformed-vs-unknown SHA) against a real `git` binary.
+- Binary-detection belt-and-suspenders correctly defends a real libgit2 footgun (flag not set before patch construction), with explaining comment.
+- Reducer-driven IPC keeps every async write a `dispatch` (honors react-hooks/set-state-in-effect); disciplined `cancelled` guards.
+- View-only enforced structurally (no index-mutating call exists) — the M2 constraint lives in the absence of code.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [mod.rs:49] `ChangedFile.path` rustdoc links to `[file_base_core]`, deleted in PB.7 — dangling intra-doc link (not in the clippy gate, slipped the baseline).
+- [mod.rs:327] `file_hunks_core` doc says unstaged path uses `diff_tree_to_workdir_with_index` but the code calls `diff_index_to_workdir` — comment names the wrong API on the subtle staged/unstaged split.
+- [mod.rs:338-344] `include_untracked`/`recurse_untracked_dirs`/`show_untracked_content` set on the shared `opts` for both branches, but only meaningful on the unstaged `diff_index_to_workdir` path — dead config on the staged branch.
+- [DiffPanel.tsx:368-379] The commit-diff "is-this-the-selected-commit?" gate is 3 sibling ternaries over the same 2 values; a derived `commitReady` flag would clarify the loading/loaded/stale states.
+
+### Assessment
+Well-built feature that advances the codebase. Backend is the strongest part (clean seam, faithful libgit2 with subtleties handled + explained, behavioral tests pin every outcome). Frontend mirrors the editor-panel patterns so it reads idiomatic. All findings are MINOR and concentrated in doc-comment drift left by the PB.7 removal sweep. No refactor pass warranted.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary> -->

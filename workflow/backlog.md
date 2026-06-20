@@ -205,3 +205,9 @@
 - **Suggested action:** A small follow-up WP after M2's critical path (or fold into WP5 RightPanelHost work, since the panel chrome is adjacent). Item 4 could even be a quick standalone task.
 - **Priority:** medium (item 4 = readability; items 1-3 = enhancement)
 - **Status:** pending
+
+## Code-quality findings — m2-wp4-git-diff-viewer (2026-06-20)
+- **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `4e2d742` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, no refactor warranted. Doc-comment drift from the PB.7 removal sweep (stale `[file_base_core]` doc-link + wrong `diff_*` API name) + dead untracked-opts on the staged path + a 3-ternary commit-diff gate. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp4-git-diff-viewer — 2026-06-20`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** the two mod.rs doc fixes are a 2-minute `/feature-refactor` (highest value — actively-misleading comments); the dead-opts + ternary nits are trivial polish. All pair naturally with the deferred WP4-polish follow-up WP.

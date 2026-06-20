@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-20
 milestone: 2
-# WP1, WP2, WP3a, WP3b, WP3c shipped; WP4/WP5/WP6/WP7/WP10/WP8/WP9 remain
+# WP1, WP2, WP3a, WP3b, WP3c, WP4 shipped; WP5/WP6/WP7/WP10/WP8/WP9 remain
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -89,19 +89,19 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Per-pane focus + active-pane tracking; the panel-switch / save / palette hotkeys act on the focused pane — `onFocusCapture`→`focusPane`; save/palette are pane-agnostic (shared doc); `activePaneId` exposed for the WP5 panel-switch hotkey
 - [x] Decide at build whether panes share one document state or are independent views; handle close-pane / last-pane edge cases — SHARED (P1.1 decision; independent-file split deferred → SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT); close-pane + last-pane guard + focus-reassign + file-change-collapse in `editorPanes.ts` (pure reducer, 14 tests)
 
-### WP4: Git diff viewer — `git2` data + `@codemirror/merge` rendering
+### WP4: Git diff viewer — `git2` data + styled-line hunk rendering ✅ SHIPPED 2026-06-20 (commit 4e2d742)
 
-**Description:** The `DiffPanel`: show the workspace project's changed files (unstaged + staged) and a per-file diff. `git2` (Rust) supplies the changed-file list + base-content blobs (HEAD blob for working-tree diffs, index blob for staged); `@codemirror/merge` renders the diff (it computes its own chunks from `(base, current)`). Comparable to Sublime Merge's basics — viewing only; no interactive staging/rebase/blame (out of M2 scope).
+**Description:** The `DiffPanel`: a **Sublime-Merge-style** view-only git diff viewer — a collapsible Commits section on top + a scrolling column of collapsible per-file sections showing inline +/- hunks. `git2` (Rust) computes the real diff hunks + paginated commit history + per-commit diffs; the frontend renders styled +/- lines directly (NO `@codemirror/merge` — superseded at build). Comparable to Sublime Merge's basics — viewing only; no interactive staging/rebase/blame (out of M2 scope).
 **Milestone:** Milestone 2
-**Dependencies:** WP2 (CM6 in place; `@codemirror/merge` is CM6-based)
-**Size:** M
+**Dependencies:** WP2 (CM6 in place)
+**Size:** L (grew M→L: the first attempt's file-list+single-diff UX was rejected at verify-human; redesigned via full spec→plan→build×2 to the Sublime-Merge model, adding the commit-history view — SURFACE-2026-06-20-WP4-COMMIT-LOG-SCOPE-EXPANSION)
 **Tasks:**
-- [ ] Add `git2` to `src-tauri/Cargo.toml`
-- [ ] Backend `git_diff` module: pure-fn core (injected repo `&Path`, TempDir-testable) — list changed files (unstaged vs staged) + return base-content blob per file; thin Tauri command wrapper(s) mapping errors to `String` (WP6/WP7 shape)
-- [ ] Add `@codemirror/merge` to `package.json`
-- [ ] `DiffPanel` React component: changed-file list + selected-file diff via `MergeView` (side-by-side) or `unifiedMergeView` (inline) — pick one (unified likely better for the half-width panel; decide at build)
-- [ ] Handle the common states: clean tree (no changes), file with both staged + unstaged hunks, new/deleted files
-- [ ] Unit tests on the `git_diff` pure core (a TempDir git repo fixture: stage a change, assert file list + base blob)
+- [x] Add `git2` to `src-tauri/Cargo.toml` (v0.21, default-features=false)
+- [x] Backend `git_diff` module: pure-fn cores (injected repo `&Path`, TempDir-testable) — `changed_files` (unstaged vs staged) + `file_hunks` (structured hunks) + `recent_commits` (paginated revwalk) + `commit_diff` (vs first-parent); thin Tauri command wrappers mapping errors to `String` (WP6/WP7 shape)
+- [x] ~~Add `@codemirror/merge`~~ — SUPERSEDED: backend computes hunks, frontend renders styled +/- lines (no CM6 merge); lighter + exact Sublime-Merge look
+- [x] `DiffPanel` React component: collapsible Commits section (Load-more) + stacked collapsible `FileDiffSection`s with inline `HunkView`s; unified styled-line render (operator-confirmed for the half-width panel)
+- [x] Handle the common states: clean tree (No changes), staged + unstaged, new/deleted/binary, non-git dir (inline error), commit-vs-parent + root commit
+- [x] Unit tests on the `git_diff` pure cores (TempDir git fixture: hunks/commit-log/commit-diff + edges) + frontend `diffModel` reducers/helpers
 
 ### WP5: RightPanelHost + panel-switch hotkey
 
@@ -183,7 +183,7 @@ Learning-sequence ordering, riskiest-unknown-first:
 ```
 WP1 ✅─► WP2 ✅─► WP3a ✅ (core editing) ──► WP3b ✅ (palette) ──► WP3c ✅ (split) ──┐
               │                                                              │
-              ├──► WP4 (diff viewer) ──────────────────────────────────────►├─► WP9 dogfood + PARITY GATE ─► WP8 (remove Sublime pop) ─► WP9 exit-criteria
+              ├──► WP4 ✅ (diff viewer) ───────────────────────────────────►├─► WP9 dogfood + PARITY GATE ─► WP8 (remove Sublime pop) ─► WP9 exit-criteria
               ├──► WP5 (panel host) ───────────────────────────────────────►│
               │       ▲                                                      │
               ├──► WP6 (file finder) ──┬──► WP10 (file-tree) ───────────────►│
