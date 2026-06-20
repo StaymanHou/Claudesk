@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-20
+
+- **Feature shipped:** WP3a — editor core-editing parity: layered the daily Sublime-parity editing features onto the WP2 editor shell via a new pure `editorExtensions.ts` builder — multi-cursor with Cmd-drag rectangular/column select and Cmd-D select-next, in-file find (Cmd+F) / replace (Cmd+R) via a dark-styled `@codemirror/search` panel, font-size zoom (Cmd+= / Cmd+- / Cmd+0) via a Compartment-swapped `fontSizeTheme` persisted globally in localStorage, a `@replit/codemirror-minimap`, and `scrollPastEnd()`; plus a flex/grid height-chain fix (`.workspace-right` grid-item `min-height:0` + the `@uiw` `.cm-theme` wrapper) so the editor scrolls both axes with word-wrap off.
+- **Milestone:** WP3a (Milestone 2, editor core-editing parity) complete — the 3rd of Milestone 2's 12 WPs (after WP1 + WP2); WP3b/3c and WP4–WP10 remain.
+
 ## 2026-06-19
 
 - **Feature shipped:** WP7 — PtyCcSession (embedded CC terminal): clicking a project spawns a real `claude --dangerously-skip-permissions` session in a `portable-pty` (the WP2-proven mechanism) behind the `CcSession` trait seam and four Tauri commands (`cc_spawn`/`cc_input`/`cc_resize`/`cc_kill`), streaming PTY output as base64 over a `cc-output-<sid>` event into the workspace's xterm.js pane and piping keystrokes back, with a session-ended overlay + Re-launch, a spawn-error overlay + Retry, window-resize reflow, `TERM=xterm-256color` set explicitly for color, and clean process reaping (`/exit\r` then SIGKILL; `CloseRequested` → `kill_all`) so no orphaned `claude` survives a window close.

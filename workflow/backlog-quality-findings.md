@@ -368,3 +368,31 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** Drop the parenthetical; the assertion (json → plaintext) stands on its own.
 - **Priority:** low
 - **Status:** pending
+
+# m2-wp3a-editor-core-editing — 2026-06-20
+
+3 MINOR findings from `feature-review-quality` on ship commit `59cc324` (0 CRITICAL, 0 MAJOR). The feature is well-built and low-debt; findings are cosmetic comment-triplication and a benign self-flagged double-bind. Auto-backlogged per drive_mode=autopilot (MINOR).
+
+## SURFACE-2026-06-20-QUALITY-WP3A-MOD-D-DOUBLE-BIND
+- **File:** `src/components/workspace/editor/editorExtensions.ts:92,125`
+- **Finding:** `Mod-d` (`selectNextOccurrence`) is bound explicitly at `Prec.highest` AND is also present in the spread `...searchKeymap`, so the binding appears twice in the same keymap.
+- **Why it matters:** CM6 resolves first-match-wins so behavior is correct; the author flagged it in-line as intentional belt-and-suspenders. Mild dead weight only.
+- **Suggested action:** Optionally drop the explicit `Mod-d` line (rely on searchKeymap) OR keep with the existing comment. Trivial.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP3A-MOD-R-COMMENT-OVERSELL
+- **File:** `src/components/workspace/editor/editorExtensions.ts:97`
+- **Finding:** `Mod-r` runs `openSearchPanel`, which opens the same panel as Cmd+F (the replace row is visible by default). The comment frames it as "the replace chord," slightly overselling a functional distinction from find.
+- **Why it matters:** Behavior satisfies the operator's intent (replace fields present), but the comment could mislead a future reader into thinking Cmd+R does something Cmd+F doesn't. Trivial.
+- **Suggested action:** Soften the comment, or add `replace`-focus behavior if a real distinction is wanted later.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP3A-COMMENT-TRIPLICATION
+- **File:** `src/components/workspace/editor/editorExtensions.ts:1-19` + `EditorPanel.tsx:97-104`
+- **Finding:** The `Prec.highest` / `@uiw reconfigures on array-identity` rationale is restated across three prose blocks (builder header, `coreKeymap` doc, EditorPanel `useMemo`).
+- **Why it matters:** Accurate and WHY-focused, but a future edit to the precedence story must touch three places — a mild maintenance smell.
+- **Suggested action:** Consolidate to one canonical note and reference it from the others.
+- **Priority:** low
+- **Status:** pending

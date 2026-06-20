@@ -4,6 +4,12 @@
 
 > **Phase 1 cycle-close backlog sweep — 2026-06-19 (`/product-finalize`).** Phase 1 (Bare Shell + Tab Substrate PoC) closed; all 9 WPs shipped. Sweep disposition of the items still pending at close: **all DEFERRED → carry to the Phase 2 cycle** (none escalated, none newly resolved by the close itself). Carried forward: wp5/wp6/wp7/wp8/wp9 code-quality findings (the **wp6 picker IPC error-surfacing MAJORs are the most load-bearing** — they pair with Phase 2's multi-workspace picker work, WP13/WP16) + `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS` (housekeeping). These remain in this file (not archived) so the next cycle inherits them.
 
+## Code-quality findings — m2-wp3a-editor-core-editing (2026-06-20)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `59cc324` (0 CRITICAL, 0 MAJOR). All cosmetic: (1) `Mod-d` double-bound (explicit + in spread `searchKeymap`) — behavior correct, author-flagged belt-and-suspenders; (2) `Mod-r` comment slightly oversells the replace-vs-find distinction (same panel, replace row visible by default); (3) the `Prec.highest`/`@uiw array-identity` rationale is triplicated across editorExtensions.ts + EditorPanel.tsx. Reviewer rated the feature well-built, low-debt. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp3a-editor-core-editing — 2026-06-20` section.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** all three are trivial tidy-ups (drop a line / soften a comment / consolidate prose). Fold into a `/feature-refactor` pass or leave. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — wp9-phase1-polish (2026-06-19)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). All low-stakes: (1) picker mount effect's empty `catch {}` over prune+list has a partial-failure window (fold into the existing picker IPC error-surfacing item, `SURFACE-2026-06-18-QUALITY-*`); (2) plan-text/impl drift — plan said `CcError::Spawn`, code shipped the cleaner dedicated `CcError::CcNotFound` (informational, no change); (3) `classify_spawn_error` would benefit from a one-line `to_lowercase()` case-folding comment. Reviewer rated the feature well-built, no debt accrued. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp9-phase1-polish — 2026-06-19` section.
 - **Priority:** low (all)

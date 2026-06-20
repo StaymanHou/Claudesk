@@ -1,7 +1,7 @@
 # Feature: WP3a — Editor core-editing parity (multi-cursor, find/replace, font-zoom)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete) — Completed 2026-06-20
 **Created:** 2026-06-20
 **Milestone:** 2
 **WBS:** `docs/product/wbs.md` → WP3a
@@ -70,8 +70,8 @@ The WP2 editor shell (`src/components/workspace/editor/EditorPanel.tsx`) mounts 
   - [x] verify-codify  <!-- status: done — minimap render + scroll-past-end are view-level visual behaviors (human-verified in WKWebView + minimap browser-probe-confirmed); both are facets created at view-mount, not EditorState-introspectable, so a unit test would need jsdom + a brittle live view asserting only import-identity (anti-pattern) — not added. Full suite: frontend 97/97, backend 47/47. -->
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** none — all 3 phases [x]; next = /feature-ship
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** none — shipped (59cc324), review-quality clean (0 CRIT/0 MAJOR, 3 MINOR auto-backlogged); next = /feature-finalize
 - **Phase 2 impl complete (2026-06-20):** font-zoom Cmd+=/-/0 via compartment; pure fontZoom.ts (13 tests); EditorPanel seeds from localStorage. Editor module 53/53, tsc/eslint clean.
 - **Blocked:** none
 - **Unvisited:** Phase 1 verify (verify-auto → verify-self → verify-human → verify-codify), then Phase 2 (font-zoom: P2.1 → P2.2 → P2.3 → P2.4 → verify group), then Phase 3 (minimap, OPTIONAL: P3.1 → P3.2 → verify group)
@@ -99,3 +99,34 @@ The WP2 editor shell (`src/components/workspace/editor/EditorPanel.tsx`) mounts 
   (a) `.workspace-right` is a GRID ITEM of `.workspace` and lacked `min-height:0` → grid items default to min-height:auto, so a tall file stretched it to document height (3711px observed) escaping the viewport bound. Fixed: added `min-height:0`.
   (b) `@uiw/react-codemirror` nests the editor in a REAL `.cm-theme` wrapper div (earlier source-read was wrong — it is NOT the same element as `.cm-editor`), defaulting to `flex:0 1 auto` so it grew to content height and never bounded the editor. Fixed: `.editor-panel .cm-theme { flex:1; min-height:0; display:flex; flex-direction:column }`.
   Also removed the conflicting `height:100%` on the editor `&` (theme.ts) + the `height`/`style` props on <CodeMirror> (EditorPanel) — they fight flex:1. Browser-confirmed: cm-scroller clientH 815 < scrollH 3664 (vScrolls), clientW 584 < scrollW 10368 (hScrolls); both scrollTop/scrollLeft move; screenshot showed both scrollbars. LESSON: should have inspected the live DOM before the first two CSS guesses.
+
+## Code-Quality Review — m2-wp3a-editor-core-editing
+
+Reviewed against ship commit 59cc324 (autopilot, drive_mode=autopilot). Verdict: **0 CRITICAL, 0 MAJOR, 3 MINOR** — well-built, low-debt. MINORs auto-backlogged per Mode 3 (Case C); see `workflow/backlog-quality-findings.md` → `# m2-wp3a-editor-core-editing — 2026-06-20`.
+
+### Strengths
+- Clean pure/impure split: `editorExtensions.ts` + `fontZoom.ts` are view-free/DOM-free, unit-testable via `EditorState.create` (matches the editorLoad/editorSave posture).
+- Extraction into a single `buildEditorExtensions` builder reduces EditorPanel complexity and centralizes the `Prec.highest` chord discipline in one auditable place.
+- Comments encode WHY (the App.css `min-height:0` grid-item note + theme.ts "no height on &" note capture the hard-won flex/grid scroll diagnosis).
+- Persistence defensively correct — clamp on read+write, swallow storage errors, injected `Storage` for tests (no jsdom).
+- Dark-only upheld (search-panel styling, no prefers-color-scheme).
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [editorExtensions.ts:92,125] `Mod-d` bound explicitly AND present in the spread `searchKeymap` → double-bind (first-match-wins, behavior correct; author flagged it in-line as belt-and-suspenders). Tidy-up only.
+- [editorExtensions.ts:97] `Mod-r` opens the same panel as Cmd+F (replace row visible by default); the comment slightly oversells the "replace chord" distinction. Trivial.
+- [editorExtensions.ts:1-19 / EditorPanel.tsx:97-104] Comment triplication of the `Prec.highest` / `@uiw reconfigures on array identity` rationale across 3 blocks — a future edit must touch all three. Cosmetic; consider consolidating.
+
+### Assessment
+Well-built, low-debt. The pure injectable builder is the right call for this repo; the 20 new tests exercise the observable contract, not internals. The flex/grid scroll-chain fix (riskiest part) is landed with precise in-browser-diagnosed comments and the dead height props removed cleanly. No convention violations (dark-only preserved, CcSession/state seams untouched, ProjectPicker change is a Prettier reflow). Advances editor toward Sublime parity without structural debt.
+
+### If you disagree
+Dismiss any finding by marking the line `[DISMISSED]` in this section before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The editor height/scroll chain had TWO non-obvious unbounded links that only surfaced under a tall file: (a) `.workspace-right` is a CSS grid item and needed `min-height:0` (grid items default to min-height:auto and grow to content), and (b) `@uiw/react-codemirror` nests the EditorView in a real `.cm-theme` wrapper div (NOT the same element as `.cm-editor`, contrary to a first source-read) that defaulted to `flex:0 1 auto`. Also learned that `@uiw`'s `height="100%"` prop injects a `&{height:100%}` theme that fights `flex:1`.
+- **Assumptions that held:** The WP1 chord lesson (editor-internal chords via `Prec.highest` keymap) applied cleanly to every new binding. The pure-builder extraction (editorExtensions.ts/fontZoom.ts) matched the editorLoad/editorSave posture and stayed fully unit-testable without a live view. Minimap peer-deps cleared with no version fight (the deferral path never triggered). All Phase 1/2 CM6 deps were already installed — only the deferrable minimap was net-new.
+- **Assumptions that were wrong:** The scroll bug was NOT in the editor config (where I first guessed twice) — it was the surrounding flex/grid height chain. Three CSS guesses failed before I stopped and inspected the live DOM via a throwaway `?scrollprobe` + Playwright; the empirical measurement found the real cause in one pass. LESSON: for layout/scroll bugs, inspect computed styles in the browser BEFORE editing CSS.
+- **Approach delta:** Plan was 3 phases (multi-cursor+find/replace, font-zoom, minimap); all landed as planned. Beyond plan, operator added at verify-human: Cmd+R replace chord (not CM6 default), Cmd-drag multi-cursor (not Alt), no auto word-wrap, and scroll-past-end — all folded into the relevant phases via verify-human back-loops. Minimap shipped rather than deferred.

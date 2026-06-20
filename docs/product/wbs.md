@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: in-progress
-updated: 2026-06-19
+updated: 2026-06-20
 milestone: 2
 ---
 
@@ -54,17 +54,17 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Language-mode loading per file extension (granular imports — js/ts/jsx/tsx/rust/markdown + plaintext fallback)
 - [x] Verify in `pnpm tauri dev` on real macOS (WKWebView), not just vite dev — verify-human confirmed open/edit/save/theme/markdown
 
-### WP3a: Editor core-editing parity (multi-cursor, find/replace, font-zoom)
+### WP3a: Editor core-editing parity (multi-cursor, find/replace, font-zoom) ✅ SHIPPED 2026-06-20 (commit 59cc324)
 
 **Description:** The daily-must-have editing features on top of the WP2 shell — the ones the operator uses constantly in Sublime. Each is a CM6 extension or small keybinding/config per `research.md`. Minimap rides along as a deferrable extra (lowest-confidence dep). Split from the original packed WP3 on 2026-06-19 (operator: "too much packed into it").
 **Milestone:** Milestone 2
 **Dependencies:** WP2
 **Size:** M
 **Tasks:**
-- [ ] Multi-cursor / multiple selections (`allowMultipleSelections` + `drawSelection`; add the VS-Code-style alt-drag binding which is not default)
-- [ ] In-file find/replace (`@codemirror/search`; optionally the `@rigstech/codemirror-vscodeSearch` VS-Code-look panel)
-- [ ] **Font-size zoom** (Cmd+= / Cmd+- / Cmd+0 reset, Sublime parity) — drives the editor `fontSize` (currently hardcoded 13px in WP2's `theme.ts`); make it a reactive/compartment-swapped value + persist per-project or globally. Operator-requested at WP2 verify-human (2026-06-19).
-- [ ] Minimap (`@replit/codemirror-minimap`) — **optional/deferrable** per research risk; ship without it if it fights the CM6 version. Do NOT let it block the must-haves above.
+- [x] Multi-cursor / multiple selections (`allowMultipleSelections` + `rectangularSelection` + `crosshairCursor`; operator chose **Cmd-drag** over CM6's Alt default; + Cmd-D select-next)
+- [x] In-file find/replace (`@codemirror/search`, top panel, dark-styled; find = Cmd+F, replace = **Cmd+R** per operator). Built-in panel used — the `@rigstech` VS-Code panel was not needed.
+- [x] **Font-size zoom** (Cmd+= / Cmd+- / Cmd+0 reset, Sublime parity) — `Compartment`-swapped `fontSizeTheme` (replaced the hardcoded 13px); pure `fontZoom.ts` (clamp 8–32px); persisted **globally** in localStorage.
+- [x] Minimap (`@replit/codemirror-minimap`) — **SHIPPED** (not deferred): peer-deps all cleared against pinned CM6, browser-confirmed render. + scroll-past-end (`scrollPastEnd()`) added on operator request.
 
 ### WP3b: Editor command palette
 
