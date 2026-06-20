@@ -587,7 +587,13 @@ body,
   background-color: #1a1a1a;
 }
 
-.diff-refresh-btn {
+.diff-statusbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.diff-statusbar-btn {
   padding: 0 6px;
   font-size: 0.7rem;
   line-height: 1.5;
@@ -597,7 +603,7 @@ body,
   border-radius: 3px;
   cursor: pointer;
 }
-.diff-refresh-btn:hover {
+.diff-statusbar-btn:hover {
   color: #d4d4d4;
   border-color: #6ea8ff;
 }
@@ -621,8 +627,16 @@ body,
 }
 
 /* ── Commits section (collapsible top region) ── */
+/* Pin the WHOLE commits section (header + the bounded, scrollable commit list)
+   at the top of .diff-scroll so the files area scrolls underneath it. The body is
+   max-height:33vh;overflow-y:auto, so the pinned panel stays a bounded region.
+   z-index above the file headers (z-index: 1) so they tuck under it. */
 .diff-commits {
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  background-color: #1a1a1a;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .diff-commits-header {
   display: flex;
@@ -744,6 +758,12 @@ body,
   padding: 5px 10px;
   background-color: #18233a;
   border-bottom: 1px solid rgba(110, 168, 255, 0.3);
+  /* Pin the "← Working Directory" banner while a commit's files scroll. Above the
+     file headers; the Commits header sits above the files area, so within the
+     files area this is the topmost sticky element. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 .diff-back-btn {
   flex-shrink: 0;
@@ -766,24 +786,53 @@ body,
 .diff-file-section {
   border-bottom: 1px solid rgba(128, 128, 128, 0.12);
 }
+/* The header row: a flex container holding the toggle button + (optional) the
+   open-in-editor button. Owns the sticky + background; the toggle is a transparent
+   button filling most of the row. z-index 1 so it tucks UNDER the sticky Commits
+   header / commit banner (z-index 2). */
 .diff-file-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 4px 10px;
   background-color: #202020;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.diff-file-header:hover {
+  background-color: #262626;
+}
+.diff-file-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 4px 10px;
+  background: none;
   border: none;
   color: #d4d4d4;
   font-family: inherit;
   font-size: 0.78rem;
   text-align: left;
   cursor: pointer;
-  position: sticky;
-  top: 0;
 }
-.diff-file-header:hover {
-  background-color: #262626;
+/* Per-file "open in editor" affordance. Stops propagation in JS so it never
+   toggles the section; sits at the end of the header row. */
+.diff-open-in-editor {
+  flex-shrink: 0;
+  margin-right: 8px;
+  padding: 0 6px;
+  font-size: 0.65rem;
+  line-height: 1.6;
+  color: #9b9b9b;
+  background-color: #2a2a2a;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.diff-open-in-editor:hover {
+  color: #d4d4d4;
+  border-color: #6ea8ff;
 }
 
 /* One-char git-status badge, color per status (VS Code SCM palette). */
@@ -845,17 +894,25 @@ body,
 }
 .diff-line {
   display: flex;
-  align-items: baseline;
+  /* flex-start (not baseline) so when the content span wraps to multiple lines,
+     the line-number gutter + sign align to the FIRST wrapped row, not the last. */
+  align-items: flex-start;
   padding-right: 8px;
-  white-space: pre;
   font-size: 0.74rem;
   line-height: 1.45;
+  /* Transparent accent gutter on every line so add/remove rows (which paint it
+     a saturated color) don't shift the content of context rows. */
+  border-left: 3px solid transparent;
 }
+/* Stronger row wash + a saturated left accent bar so the change reads at a glance
+   (the .16 wash alone was too faint — operator screenshot 2026-06-20). */
 .diff-line.is-add {
-  background-color: rgba(46, 160, 67, 0.16);
+  background-color: rgba(46, 160, 67, 0.24);
+  border-left-color: #3fb950;
 }
 .diff-line.is-remove {
-  background-color: rgba(248, 81, 73, 0.16);
+  background-color: rgba(248, 81, 73, 0.24);
+  border-left-color: #f85149;
 }
 .diff-lineno {
   flex-shrink: 0;
@@ -881,7 +938,14 @@ body,
 .diff-line-content {
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
+  /* Word-wrap long diff lines instead of giving each line its own horizontal
+     scrollbar (the grey bars an operator mistook for highlighting, 2026-06-20).
+     pre-wrap preserves the line's own leading indentation + internal spacing but
+     wraps at the panel edge; break-word handles unbroken long tokens (paths,
+     URLs, minified). This is DIFF-VIEW ONLY — the CM6 editor stays wrap:false. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
   color: #d4d4d4;
 }
 

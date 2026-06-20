@@ -9,6 +9,9 @@ import {
   diffViewReducer,
   toggleCollapsed,
   isCollapsed,
+  collapseAll,
+  expandAll,
+  allCollapsed,
   appendPage,
   hasMore,
   COMMIT_PAGE_SIZE,
@@ -102,6 +105,44 @@ describe("toggleCollapsed / isCollapsed", () => {
     s = toggleCollapsed(s, "unstaged:a.ts");
     expect(isCollapsed(s, "unstaged:a.ts")).toBe(false);
     expect(isCollapsed(s, "staged:b.ts")).toBe(true);
+  });
+});
+
+describe("collapseAll / expandAll / allCollapsed", () => {
+  const keys = ["unstaged:a.ts", "staged:b.ts", "commit:c.ts"];
+
+  it("collapseAll returns a set of exactly the given keys", () => {
+    const s = collapseAll(keys);
+    expect(s.size).toBe(3);
+    keys.forEach((k) => expect(isCollapsed(s, k)).toBe(true));
+  });
+
+  it("collapseAll on empty keys yields an empty set", () => {
+    expect(collapseAll([]).size).toBe(0);
+  });
+
+  it("expandAll returns an empty set", () => {
+    expect(expandAll().size).toBe(0);
+  });
+
+  it("allCollapsed: true only when every visible key is collapsed", () => {
+    expect(allCollapsed(collapseAll(keys), keys)).toBe(true);
+    expect(allCollapsed(new Set(["unstaged:a.ts"]), keys)).toBe(false);
+    expect(allCollapsed(expandAll(), keys)).toBe(false);
+  });
+
+  it("allCollapsed is false for an empty view (nothing to collapse)", () => {
+    // An empty file list is not "all collapsed" — the control should read
+    // "Collapse all", not flip to "Expand all" when there are zero files.
+    expect(allCollapsed(new Set(), [])).toBe(false);
+    expect(allCollapsed(collapseAll(keys), [])).toBe(false);
+  });
+
+  it("allCollapsed ignores stale keys not in the current view", () => {
+    // A collapse set carried over from a previous view (extra keys) still counts
+    // as all-collapsed as long as every CURRENT key is present.
+    const stale = collapseAll([...keys, "unstaged:gone.ts"]);
+    expect(allCollapsed(stale, keys)).toBe(true);
   });
 });
 

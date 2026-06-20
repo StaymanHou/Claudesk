@@ -211,3 +211,13 @@
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** the two mod.rs doc fixes are a 2-minute `/feature-refactor` (highest value — actively-misleading comments); the dead-opts + ternary nits are trivial polish. All pair naturally with the deferred WP4-polish follow-up WP.
+
+## SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV
+- **Source:** feature:build (WP4 diff-viewer polish, item 3)
+- **Target level:** product:wbs
+- **Type:** new-work
+- **Summary:** The diff-viewer's per-file "Open in editor" (Edit) affordance always opens the CURRENT working-tree content via the editor's `read_file` path — even when the row belongs to a COMMIT's diff. Opening a commit-row file's content AT THAT COMMIT (blob-at-rev fidelity) was deferred per operator's plan-time scope decision.
+- **Context:** Doing it right needs a new backend path (git2 `commit.tree()` → tree-entry(path) → blob → utf8 — the plumbing already exists in `commit_diff_core`) plus a read-only / at-rev load mode in EditorPanel (today's editor is working-tree read/write only). The editor↔diff plumbing is being reworked in WP5 (RightPanelHost), which is the natural home.
+- **Suggested action:** Fold into WP5: add `git_file_at_commit(root, sha, path)` + a read-only editor buffer; route commit-row "Open in editor" through it. Code note left at `DiffPanel.tsx` DiffPanelProps.onOpenInEditor.
+- **Priority:** low (current behavior is useful; this is a fidelity enhancement)
+- **Status:** pending

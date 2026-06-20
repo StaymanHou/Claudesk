@@ -169,6 +169,32 @@ export function isCollapsed(
   return collapsed.has(key);
 }
 
+/**
+ * Collapse-all: the new collapse set holding every currently-visible file key.
+ * `keys` is the fileKey of every file in the active view (working-dir or commit).
+ */
+export function collapseAll(keys: readonly string[]): Set<string> {
+  return new Set(keys);
+}
+
+/** Expand-all: the empty collapse set (files default to expanded). */
+export function expandAll(): Set<string> {
+  return new Set();
+}
+
+/**
+ * Whether every visible file is currently collapsed — drives the
+ * collapse-all/expand-all control's label + action. True only when there is at
+ * least one file and all of them are in the collapsed set (an empty view is not
+ * "all collapsed").
+ */
+export function allCollapsed(
+  collapsed: ReadonlySet<string>,
+  keys: readonly string[],
+): boolean {
+  return keys.length > 0 && keys.every((k) => collapsed.has(k));
+}
+
 // ── Commit pagination accumulator ─────────────────────────────────────────────
 //
 // The commit list loads in pages (`git_recent_commits(offset, limit)`); "Load

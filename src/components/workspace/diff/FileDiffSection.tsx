@@ -26,6 +26,13 @@ interface FileDiffSectionProps {
   collapsed: boolean;
   load: HunkLoad;
   onToggle: () => void;
+  /**
+   * Open this file in the workspace editor. Always opens the CURRENT working-tree
+   * content — even when this section is part of a commit's diff (commit-row
+   * blob-at-rev fidelity is deferred to WP5; see DiffPanel). Omitted → no
+   * open-in-editor affordance.
+   */
+  onOpenInEditor?: (path: string) => void;
 }
 
 export const FileDiffSection = memo(function FileDiffSection({
@@ -35,30 +42,52 @@ export const FileDiffSection = memo(function FileDiffSection({
   collapsed,
   load,
   onToggle,
+  onOpenInEditor,
 }: FileDiffSectionProps) {
   const meta = statusMeta(status);
   return (
     <div className="diff-file-section" data-testid="diff-file-section">
-      <button
-        type="button"
-        className="diff-file-header"
-        data-testid="diff-file-header"
-        aria-expanded={!collapsed}
-        onClick={onToggle}
-        title={`${meta.label}${staged ? " (staged)" : ""}: ${path}`}
-      >
-        <span className="diff-chevron" aria-hidden>
-          {collapsed ? "▸" : "▾"}
-        </span>
-        <span
-          className={`diff-badge diff-badge-${status}`}
-          aria-label={meta.label}
+      {/* The header is a flex row of two controls (not one <button> wrapping
+          another — invalid HTML): the toggle covers most of the row; the
+          open-in-editor button sits at the end and stops propagation so it never
+          toggles collapse. */}
+      <div className="diff-file-header" data-testid="diff-file-header">
+        <button
+          type="button"
+          className="diff-file-toggle"
+          data-testid="diff-file-toggle"
+          aria-expanded={!collapsed}
+          onClick={onToggle}
+          title={`${meta.label}${staged ? " (staged)" : ""}: ${path}`}
         >
-          {meta.badge}
-        </span>
-        <span className="diff-file-path">{path}</span>
-        {staged && <span className="diff-staged-tag">staged</span>}
-      </button>
+          <span className="diff-chevron" aria-hidden>
+            {collapsed ? "▸" : "▾"}
+          </span>
+          <span
+            className={`diff-badge diff-badge-${status}`}
+            aria-label={meta.label}
+          >
+            {meta.badge}
+          </span>
+          <span className="diff-file-path">{path}</span>
+          {staged && <span className="diff-staged-tag">staged</span>}
+        </button>
+        {onOpenInEditor && (
+          <button
+            type="button"
+            className="diff-open-in-editor"
+            data-testid="diff-open-in-editor"
+            title="Open in editor"
+            aria-label={`Open ${path} in editor`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenInEditor(path);
+            }}
+          >
+            Edit
+          </button>
+        )}
+      </div>
 
       {!collapsed && (
         <div className="diff-file-body" data-testid="diff-file-body">

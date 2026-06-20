@@ -46,7 +46,7 @@ pub enum GitDiffError {
 
 /// One changed file in the working tree or index, as the diff viewer's file list
 /// needs it. `path` is repo-root-relative (the same key the frontend passes back
-/// to [`file_base_core`] and to `read_file`).
+/// to [`file_hunks_core`] and to the editor's `read_file`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ChangedFile {
     /// Repo-root-relative path (forward-slashed, as libgit2 reports it).
@@ -324,10 +324,10 @@ fn patch_to_hunks(patch: &Patch) -> Result<Vec<Hunk>, GitDiffError> {
 }
 
 /// The diff hunks for a single working-tree file. `staged == false` diffs the
-/// working tree against the index (`diff_tree_to_workdir_with_index` filtered to
-/// `path`, then the working-vs-index side); `staged == true` diffs the index
-/// against HEAD (`diff_tree_to_index`). Returns one [`FileDiff`]; a path with no
-/// changes on that side yields an empty-hunks FileDiff (status Modified).
+/// index against the working dir (`diff_index_to_workdir`, filtered to `path` via
+/// the pathspec); `staged == true` diffs HEAD's tree against the index
+/// (`diff_tree_to_index`). Returns one [`FileDiff`]; a path with no changes on that
+/// side yields an empty-hunks FileDiff (status Modified).
 pub fn file_hunks_core(
     repo_root: &Path,
     path: &str,

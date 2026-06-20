@@ -14,7 +14,7 @@
 // here mutates the repo. Every IPC failure renders inline, never swallowed
 // (the WP6/WP7 error-surfacing lesson).
 
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CommitList } from "./CommitList";
 import { FileDiffSection, type HunkLoad } from "./FileDiffSection";
@@ -23,8 +23,11 @@ import {
   type CommitSummary,
   type FileDiff,
   COMMIT_PAGE_SIZE,
+  allCollapsed,
   appendPage,
+  collapseAll,
   diffViewReducer,
+  expandAll,
   fileKey,
   hasMore,
   initialDiffView,
@@ -41,6 +44,15 @@ interface DiffPanelProps {
    * spend IPC. REQUIRED (mirrors EditorPanel's `active`).
    */
   active: boolean;
+  /**
+   * Open a file in the workspace's editor (the parent flips the right panel to the
+   * Editor tab + sets its open path). Always opens the CURRENT working-tree content
+   * via the editor's `read_file` path — even from a commit's diff row. Opening a
+   * commit-row file AT THAT COMMIT (blob-at-rev fidelity) is deferred to WP5's
+   * RightPanelHost, where the editor↔diff plumbing is reworked
+   * (SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV).
+   */
+  onOpenInEditor?: (path: string) => void;
 }
 
 // Working-dir changed-file LIST fetch lifecycle.
@@ -145,7 +157,11 @@ function commitsReducer(state: CommitsState, e: CommitsEvent): CommitsState {
   }
 }
 
-export function DiffPanel({ projectPath, active }: DiffPanelProps) {
+export function DiffPanel({
+  projectPath,
+  active,
+  onOpenInEditor,
+}: DiffPanelProps) {
   // ── working-dir file list ──
   const [list, dispatchList] = useReducer(listReducer, { kind: "idle" });
   const [refreshSeq, setRefreshSeq] = useState(0);
@@ -312,21 +328,64 @@ export function DiffPanel({ projectPath, active }: DiffPanelProps) {
   const showLoadMore =
     lastPageLen != null && hasMore(lastPageLen, COMMIT_PAGE_SIZE);
 
+  // The fileKeys of the files in the ACTIVE view (working-dir or the selected
+  // commit's loaded diff). Drives the collapse-all/expand-all control. Commit-view
+  // files key as `commit:<path>` (matching CommitFiles); working-dir files via
+  // fileKey. Empty until the active view's files have loaded. Memoized so the
+  // array identity is stable across renders (it's a useCallback dep below).
+  const commitFilesLoaded =
+    view.kind === "commit" && commitDiff?.sha === selectedSha
+      ? commitDiff.files
+      : null;
+  const visibleKeys = useMemo(
+    () =>
+      commitFilesLoaded != null
+        ? commitFilesLoaded.map((d) => `commit:${d.path}`)
+        : list.kind === "loaded"
+          ? list.files.map(fileKey)
+          : [],
+    [commitFilesLoaded, list],
+  );
+
+  const everyCollapsed = allCollapsed(collapsed, visibleKeys);
+  const toggleAllCollapsed = useCallback(() => {
+    setCollapsed((prev) =>
+      allCollapsed(prev, visibleKeys) ? expandAll() : collapseAll(visibleKeys),
+    );
+  }, [visibleKeys]);
+
   return (
     <div className="diff-panel" data-testid="diff-panel">
       <div className="diff-statusbar" data-testid="diff-statusbar">
         <span className="diff-status-title">
           {view.kind === "commit" ? "Viewing commit" : "Working Directory"}
         </span>
-        <button
-          type="button"
-          className="diff-refresh-btn"
-          data-testid="diff-refresh-btn"
-          onClick={refresh}
-          title="Re-scan the working tree + reload commits"
-        >
-          Refresh
-        </button>
+        <div className="diff-statusbar-actions">
+          {visibleKeys.length > 0 && (
+            <button
+              type="button"
+              className="diff-statusbar-btn"
+              data-testid="diff-collapse-all"
+              onClick={toggleAllCollapsed}
+              title={
+                everyCollapsed
+                  ? "Expand all file sections"
+                  : "Collapse all file sections"
+              }
+            >
+              {everyCollapsed ? "Expand all" : "Collapse all"}
+            </button>
+          )}
+          <button
+            type="button"
+            className="diff-statusbar-btn diff-refresh-btn"
+            data-testid="diff-refresh-btn"
+            onClick={refresh}
+            title="Re-scan the working tree + reload commits"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="diff-scroll" data-testid="diff-scroll">
@@ -372,6 +431,7 @@ export function DiffPanel({ projectPath, active }: DiffPanelProps) {
                 onToggleKey={(key) =>
                   setCollapsed((prev) => toggleCollapsed(prev, key))
                 }
+                onOpenInEditor={onOpenInEditor}
               />
             )}
             {!commitDiffError && commitDiff?.sha !== selectedSha && (
@@ -406,6 +466,7 @@ export function DiffPanel({ projectPath, active }: DiffPanelProps) {
                     collapsed={isCollapsed(collapsed, key)}
                     load={hunkLoads[key] ?? { kind: "idle" }}
                     onToggle={() => toggleFile(file)}
+                    onOpenInEditor={onOpenInEditor}
                   />
                 );
               })}
@@ -424,10 +485,12 @@ function CommitFiles({
   files,
   collapsed,
   onToggleKey,
+  onOpenInEditor,
 }: {
   files: FileDiff[];
   collapsed: ReadonlySet<string>;
   onToggleKey: (key: string) => void;
+  onOpenInEditor?: (path: string) => void;
 }) {
   if (files.length === 0) {
     return (
@@ -449,6 +512,7 @@ function CommitFiles({
             collapsed={isCollapsed(collapsed, key)}
             load={{ kind: "loaded", diff }}
             onToggle={() => onToggleKey(key)}
+            onOpenInEditor={onOpenInEditor}
           />
         );
       })}

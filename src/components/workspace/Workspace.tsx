@@ -123,6 +123,10 @@ export function Workspace({ workspace, visible, onSessionId }: WorkspaceProps) {
           <DiffPanel
             projectPath={workspace.project_path}
             active={visible && rightPanel === "diff"}
+            onOpenInEditor={(path) => {
+              setOpenPath(path);
+              setRightPanel("editor");
+            }}
           />
         </div>
       </div>
