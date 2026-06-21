@@ -613,7 +613,7 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Why it matters:** the authoritative replace count is thrown away and reconstructed via a racy second pass. Low-probability for a single-user app, but the read-after-write-across-two-walks assumption is unrecorded.
 - **Suggested action:** use the returned `ReplaceSummary` for the post-replace count surface; if a refreshed result LIST is still wanted, accept it's a best-effort re-walk (document that) OR have `project_replace` return the post-replace matches in one pass. Pairs with any future replace-scope work (the deferred per-result/per-file item).
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — documented the two walks as deliberate: the re-search IS the tab-refresh mechanism (the tab shows the post-replace result SET, not just a count), explicitly best-effort for this single-user app (the disk-change-between-walks case is the deferred-watcher's domain), and surfacing the `ReplaceSummary` count as a toast is intentionally out-of-scope-for-v1 NEW UX. Comment added in `RightPanelHost.onReplaceConfirm`. No behavior change (a summary toast would be a feature, not cleanup).
 
 ## SURFACE-2026-06-21-QUALITY-WP7-PERLINE-COUNT-VS-MULTILINE-REPLACE
 - **Severity:** MAJOR (priority: medium)
@@ -622,7 +622,7 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Why it matters:** the count the operator approves in the confirm is not guaranteed to equal what replace mutates under a multiline regex; the blast-radius number could mislead.
 - **Suggested action:** either count from the `replace_all` result so count == effect, OR explicitly reject/guard multiline patterns in replace with a clear error. Tie to whichever lands first.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — took the count-from-whole-file fix: `replace_core` now counts `re.find_iter(&contents).count()` over the SAME whole-file string `replace_all` mutates (was a per-line sum). For a line-oriented pattern this equals the per-line count (so it still agrees with search for today's queries); under a multiline `(?s)` pattern count == effect, no divergence. Pinned by a new test `replace_count_matches_whole_file_effect_under_multiline_regex` (cargo 121, +1). No behavior change for current inputs.
 
 ## SURFACE-2026-06-21-QUALITY-WP7-SYNTHETIC-FONT-NOT-LIVE
 - **Severity:** MINOR (priority: low)
@@ -631,7 +631,7 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Why it matters:** small UX inconsistency vs the editor's live zoom; the WP7 verify-human fix targeted open-time parity, so it's likely acceptable, but the divergence is undocumented at the call site. (NB: the global memory `cm6-dont-copy-compartment-by-analogy` warns against reflexively adding a live compartment — so a one-shot read may be the deliberate choice; this is a doc/clarity nit, NOT a directive to add the compartment.)
 - **Suggested action:** add a one-line comment noting the synthetic view reads zoom at render-time (not live, by design), or wire a live re-read if a future cycle wants the tab to track zoom. Lowest priority.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — added a comment at the `fontSizeTheme(loadFontSize())` call in `SyntheticView` explaining it's read ONCE by design (not live like EditorPanel's compartment), why (read-only result buffer; a live compartment here would be the [[cm6-dont-copy-compartment-by-analogy]] trap), and that a re-render (e.g. re-search) is when it updates. Comment-only.
 
 ## SURFACE-2026-06-21-QUALITY-WP7-PLURAL-DUP
 - **Severity:** MINOR (priority: low)
@@ -640,4 +640,4 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Why it matters:** low-cost dedup; two copies drift independently if a third noun is ever added.
 - **Suggested action:** hoist one shared `plural()` into `searchModel.ts` (where `totalMatchCount` already lives) and import it in both. Trivial `/feature-refactor`.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — hoisted to `searchModel.ts` as exported `pluralCount(n, "file"|"match")`; `findResultsBuffer.ts` + `replaceConfirm.ts` both import it; the two local copies deleted. vitest 308 still green (the existing formatter/confirm tests cover the output).

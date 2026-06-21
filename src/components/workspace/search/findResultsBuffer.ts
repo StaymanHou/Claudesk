@@ -33,6 +33,7 @@
 
 import {
   byteOffsetToCharIndex,
+  pluralCount,
   totalMatchCount,
   type FileMatches,
   type LineMatch,
@@ -74,15 +75,6 @@ export interface FindResultsBuffer {
 }
 
 /**
- * Count + pluralized noun — "1 file" / "2 files", "1 match" / "2 matches". Handles the
- * two nouns this buffer needs (file → files, match → matches); not a general pluralizer.
- */
-function plural(n: number, noun: "file" | "match"): string {
-  if (n === 1) return `${n} ${noun}`;
-  return `${n} ${noun === "match" ? "matches" : `${noun}s`}`;
-}
-
-/**
  * Format grouped search results into the Find Results tab buffer + its line→match map.
  *
  * `query.pattern` is echoed in the header so the operator sees what was searched. An
@@ -118,7 +110,10 @@ export function formatFindResults(
   const matchCount = totalMatchCount(results);
 
   // Header — echoes the pattern + the searched-file count (Sublime parity).
-  push(`Searching ${plural(fileCount, "file")} for "${query.pattern}"`, null);
+  push(
+    `Searching ${pluralCount(fileCount, "file")} for "${query.pattern}"`,
+    null,
+  );
   push("", null);
 
   if (fileCount === 0) {
@@ -157,7 +152,7 @@ export function formatFindResults(
 
   // Footer — total match/file summary (also drives the overlay-free count).
   push(
-    `${plural(matchCount, "match")} across ${plural(fileCount, "file")}`,
+    `${pluralCount(matchCount, "match")} across ${pluralCount(fileCount, "file")}`,
     null,
   );
 

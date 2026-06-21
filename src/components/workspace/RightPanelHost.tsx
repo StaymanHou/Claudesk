@@ -171,6 +171,15 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
   // search to refresh the Find Results tab (replaced matches drop out). On "cancel",
   // close the dialog and change nothing. A write/IPC failure surfaces in the overlay's
   // inline error row (never silently swallowed — the WP6 IPC-error lesson).
+  //
+  // TWO WALKS BY DESIGN: project_replace returns a {files_changed, matches_replaced}
+  // summary, but we deliberately DON'T use it to mutate the tab — we re-run the SEARCH,
+  // because the tab shows the post-replace *result set* (which rows remain), not just a
+  // count. The re-search is the refresh mechanism, and it is best-effort: for this
+  // single-user local app a file changing on disk between the replace walk and the
+  // re-search walk is not guarded against (acceptable; a live watcher is a deferred
+  // backlog item). Surfacing the summary count as a toast would be new UX — intentionally
+  // out of scope for v1 (see SURFACE-2026-06-21-QUALITY-WP7-REPLACE-THEN-RESEARCH-TWO-WALKS).
   const onReplaceConfirm = (choice: ReplaceAllChoice) => {
     setReplaceConfirmOpen(false);
     if (choice !== "replace") return;

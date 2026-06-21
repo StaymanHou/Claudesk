@@ -109,3 +109,15 @@ export function matchTargetFor(m: LineMatch): HighlightTarget {
 export function totalMatchCount(results: FileMatches[]): number {
   return results.reduce((sum, f) => sum + f.matches.length, 0);
 }
+
+/**
+ * Count + pluralized noun for the search/replace surfaces — "1 file" / "2 files",
+ * "1 match" / "2 matches". Handles only the two nouns these surfaces need (file →
+ * files, match → matches); NOT a general pluralizer. Shared by findResultsBuffer (the
+ * Find Results header/footer) + replaceConfirm (the Replace-All blast-radius message)
+ * so the two don't keep parallel copies.
+ */
+export function pluralCount(n: number, noun: "file" | "match"): string {
+  if (n === 1) return `${n} ${noun}`;
+  return `${n} ${noun === "match" ? "matches" : `${noun}s`}`;
+}

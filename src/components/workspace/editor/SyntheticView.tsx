@@ -70,6 +70,12 @@ export function SyntheticView({
       // Match the editor's CURRENT (persisted, global) zoom — a freshly opened file
       // editor seeds from the same loadFontSize(), so the result tab reads as part of
       // the editor at whatever zoom the operator set (WP7 verify-human).
+      // BY DESIGN this is read ONCE here (at render of this memo), NOT live: unlike
+      // EditorPanel — which live-reconfigures `fontSizeCompartment` on ⌘=/⌘-/⌘0 — a
+      // synthetic tab picks up a zoom change only on its next (re)render (e.g. a
+      // re-search rebuilds it). Zooming the file editor while this tab is the active
+      // view won't update it until then. Acceptable for a read-only result buffer; a
+      // live compartment here would be the "copy a Compartment by analogy" trap.
       fontSizeTheme(loadFontSize()),
       buildHighlightExtension(highlights ?? []),
       EditorView.domEventHandlers({

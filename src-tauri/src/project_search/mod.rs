@@ -265,9 +265,13 @@ pub fn replace_core(
             continue;
         };
 
-        // Count matches the same way search does (per line) so the summary's
-        // matches_replaced equals the search's match count for this query.
-        let count: usize = contents.lines().map(|l| re.find_iter(l).count()).sum();
+        // Count over the WHOLE file string — the same span `replace_all` mutates below
+        // — so `matches_replaced` equals what replace actually changes, even if a future
+        // regex matches across line boundaries (`(?s)…`, explicit `\n`). For a line-
+        // oriented pattern this equals the per-line sum (a `.`-default regex never
+        // crosses `\n`), so it agrees with search's per-line count for today's queries
+        // while staying exact under a multiline pattern (count-vs-effect can't diverge).
+        let count = re.find_iter(&contents).count();
         if count == 0 {
             continue;
         }
@@ -669,6 +673,28 @@ mod tests {
             matches!(result, Err(ProjectSearchError::BadRoot { .. })),
             "{result:?}"
         );
+    }
+
+    #[test]
+    fn replace_count_matches_whole_file_effect_under_multiline_regex() {
+        // A cross-line regex (the `s` flag lets `.` match `\n`) replaces a span the OLD
+        // per-line counter never counted. The whole-file find_iter count must equal the
+        // number of spans replace_all actually mutates — no count-vs-effect divergence.
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.txt"), "foo\nbar\nfoo\nbar\n").unwrap();
+        // The `(?s)` flag lets `.` match `\n`, so `foo.bar` spans the foo\nbar boundary.
+        let q = SearchQuery {
+            pattern: r"(?s)foo.bar".to_string(),
+            regex: true,
+            case_sensitive: false,
+            whole_word: false,
+        };
+        let summary = replace_core(dir.path(), &q, "X").unwrap();
+        // "foo\nbar" appears twice (lines 1-2 and 3-4). replace_all mutates both spans.
+        assert_eq!(summary.matches_replaced, 2, "{summary:?}");
+        assert_eq!(summary.files_changed, 1);
+        let out = fs::read_to_string(dir.path().join("a.txt")).unwrap();
+        assert_eq!(out, "X\nX\n");
     }
 
     #[test]

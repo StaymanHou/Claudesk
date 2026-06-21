@@ -7,15 +7,10 @@
 // Pure → vitest (repo posture: pure logic → vitest, live DOM → Playwright).
 
 import type { ConfirmSpec } from "../editor/confirmDialog";
+import { pluralCount } from "./searchModel";
 
 /** The two outcomes of the Replace-All confirm. */
 export type ReplaceAllChoice = "replace" | "cancel";
-
-/** Count + pluralized noun for the confirm message ("1 match" / "2 matches"). */
-function plural(n: number, noun: "file" | "match"): string {
-  if (n === 1) return `${n} ${noun}`;
-  return `${n} ${noun === "match" ? "matches" : `${noun}s`}`;
-}
 
 /**
  * The Replace-All confirm dialog: Replace (danger — it rewrites files) / Cancel
@@ -34,7 +29,7 @@ export function replaceAllSpec(
       : `with "${replacement}"`;
   return {
     title: "Replace across project",
-    message: `Replace ${plural(matches, "match")} in ${plural(files, "file")} ${into}? This rewrites files on disk and cannot be undone here.`,
+    message: `Replace ${pluralCount(matches, "match")} in ${pluralCount(files, "file")} ${into}? This rewrites files on disk and cannot be undone here.`,
     buttons: [
       { id: "cancel", label: "Cancel", value: "cancel", variant: "primary" },
       {
