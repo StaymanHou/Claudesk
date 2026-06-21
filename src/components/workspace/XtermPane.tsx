@@ -84,29 +84,10 @@ export function XtermPane({
     onSessionIdRef.current = onSessionId;
   }, [onSessionId]);
 
-  // Session-listener disposers, held in a ref so they live until TRUE unmount or
-  // relaunch — NOT torn down on the spawn effect's re-runs. The spawn effect re-runs
-  // when `bridge.phase` flips spawning→live (it dispatches that itself); coupling the
-  // unlisten to the effect cleanup tore the listener down one tick after spawning, so a
-  // shell's prompt (which arrives ~100ms later, after the cleanup) was emitted to no
-  // listener and lost — while CC survived only because its output flushed synchronously
-  // before that cleanup. This decouples listener lifetime from effect re-runs.
-  const unlistenersRef = useRef<UnlistenFn[]>([]);
-  const disposeListeners = () => {
-    for (const un of unlistenersRef.current) un();
-    unlistenersRef.current = [];
-  };
-  // In-flight unmount guard: a spawn whose awaits resolve after a true unmount must not
-  // attach to a dead pane. Reset at the top of the mount effect (handles StrictMode + a
-  // future remount); set in the mount-effect cleanup.
-  const unmountedRef = useRef(false);
-
-  // Re-launch / Retry: tear the old (ended/failed) session down — dispose its listeners,
-  // kill any lingering backend session — then flip the bridge to "spawning" so the spawn
-  // effect fires a fresh single spawn. (Listeners aren't disposed by the spawn effect's
-  // re-runs, so relaunch must do it explicitly here.)
+  // Re-launch / Retry: kill any lingering backend session, then flip the bridge to
+  // "spawning" so the spawn effect fires a fresh spawn. The ended/failed run's listeners
+  // were already disposed by that run's effect cleanup, so we only kill the backend here.
   const handleRelaunch = () => {
-    disposeListeners();
     const sid = sessionIdRef.current;
     if (sid) void invoke("cc_kill", { sessionId: sid }).catch(() => {});
     sessionIdRef.current = null;
@@ -138,10 +119,6 @@ export function XtermPane({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-
-    // Fresh terminal → reset the in-flight unmount guard (handles a remount, incl.
-    // StrictMode's dev mount→cleanup→remount). The session is born with this terminal.
-    unmountedRef.current = false;
 
     const term = new Terminal({
       fontSize: 13,
@@ -188,65 +165,78 @@ export function XtermPane({
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
-      // True unmount: tear the session down (listeners + backend process) so we don't
-      // leak an orphan. The spawn effect deliberately does NOT do this on its re-runs —
-      // only real unmount ends the session. (Window-close is also covered by the backend
-      // kill_all; this covers a single pane unmounting.)
-      unmountedRef.current = true;
-      disposeListeners();
-      const sid = sessionIdRef.current;
-      sessionIdRef.current = null;
-      if (sid) void invoke("cc_kill", { sessionId: sid }).catch(() => {});
+      // Note: the backend session is reaped on window close via SessionRegistry::kill_all
+      // (robust against a frozen webview). A single pane unmounting mid-run is handled by
+      // the spawn effect's `cancelled` self-kill; a live session outliving its pane only
+      // happens at app shutdown, which kill_all covers. (No per-pane kill here, matching
+      // the proven WP7 lifecycle — multi-workspace pane-close will revisit this.)
     };
   }, [workspaceId, fitAndResize]);
 
-  // Spawn (and re-spawn on relaunch) the session. Keyed on the bridge phase flipping to
-  // "spawning" — the initial mount and every "relaunch" both land here. Gated on
-  // `active`: the WP9 terminal panel mounts hidden (display:none until its tab is front)
-  // and passes active=false, DEFERRING its spawn until first revealed — so the shell
-  // never starts into a zero-size xterm and an unopened terminal panel costs no shell.
-  // The CC pane is always active=true → spawns at mount, as before.
+  // Spawn (and re-spawn on relaunch) the session. Keyed on the bridge phase being
+  // "spawning" — the initial mount and every "relaunch" land here. Gated on `active`:
+  // the WP9 terminal panel mounts hidden (display:none until its tab is front) and
+  // passes active=false, DEFERRING its spawn until first revealed — so the shell never
+  // starts into a zero-size xterm and an unopened terminal panel costs no shell. The CC
+  // pane is always active=true → spawns at mount, as before.
   //
-  // The closure `cancelled` flag (NOT a ref) is load-bearing for de-duping: each effect
-  // re-run (incl. React StrictMode's dev mount→cleanup→remount, and any `active`/dep
-  // churn) gets its own `cancelled`; the prior run's cleanup sets ITS cancelled=true, so
-  // a spawn whose `await` resolves after that cleanup kills its orphan and attaches
-  // nothing. Net: exactly one live session survives. (Reverting a WP9 ref-based rewrite
-  // that broke this and spawned duplicates — see WIP F12 re-entry #2 telemetry.)
+  // LIFECYCLE (this file's back-loops were all about this — read before editing):
+  //  - The per-run closure `cancelled` flag is the de-dup primitive and MUST stay a
+  //    closure var, not a ref: each effect run captures its own `cancelled`; its cleanup
+  //    sets THAT run's flag, so a spawn whose `await` resolves after its run was torn
+  //    down (StrictMode mount→cleanup→remount, an `active`-churn re-run, or a real
+  //    unmount) self-kills its orphan and attaches nothing — exactly one session
+  //    survives. A ref-based latch was tried and leaked 2 live sessions per pane (a later
+  //    run reset the ref before the first spawn resolved). Do not "simplify" to a ref.
+  //  - The shell's one-shot prompt is not lost despite the cleanup unlisten-on-re-run:
+  //    the backend BUFFERS output until `cc_ready`, and we call `cc_ready` here while
+  //    this run's listener is still attached, so the buffered prompt flushes to a live
+  //    listener before the spawning→live re-run's cleanup tears it down. (Backend buffer-
+  //    and-flush is the real prompt-race fix; see cc_session::mark_ready + WIP telemetry.)
   useEffect(() => {
     if (bridge.phase !== "spawning" || !active) return;
+    let unlistenOutput: UnlistenFn | undefined;
+    let unlistenExit: UnlistenFn | undefined;
+    let cancelled = false;
 
     async function spawn() {
       try {
         const sessionId = await invoke<string>(spawnCommand, { projectPath });
-        if (unmountedRef.current) {
-          // Unmounted while spawning — kill the orphan, attach nothing.
+        if (cancelled) {
+          // This effect run was torn down (unmount, or a dep/`active` re-run) before the
+          // spawn resolved — kill the orphan we just created and attach nothing. This
+          // per-run closure flag is the StrictMode-correct de-dup primitive (WP7): run 1
+          // spawns S1, its cleanup sets cancelled1=true, so when S1 resolves it self-kills
+          // and only the surviving run's session lives. A ref cannot do this (run 2 would
+          // reset it before S1 resolves) — that mistake leaked 2 live sessions per pane.
           void invoke("cc_kill", { sessionId }).catch(() => {});
           return;
         }
         sessionIdRef.current = sessionId;
         onSessionIdRef.current?.(sessionId);
 
-        // Listeners live in unlistenersRef → disposed only on true unmount / relaunch,
-        // NOT on this effect's phase-flip re-run (that was the prompt-loss bug).
-        unlistenersRef.current.push(
-          await listen<string>(`cc-output-${sessionId}`, (event) => {
+        unlistenOutput = await listen<string>(
+          `cc-output-${sessionId}`,
+          (event) => {
             termRef.current?.write(decodeBase64(event.payload));
-          }),
+          },
         );
-        unlistenersRef.current.push(
-          await listen(`cc-exit-${sessionId}`, () => {
-            dispatch({ type: "exited" });
-          }),
-        );
+        unlistenExit = await listen(`cc-exit-${sessionId}`, () => {
+          dispatch({ type: "exited" });
+        });
 
-        if (unmountedRef.current) {
-          disposeListeners();
+        if (cancelled) {
+          // Torn down between the awaits — dispose what we attached + kill.
+          unlistenOutput?.();
+          unlistenExit?.();
           void invoke("cc_kill", { sessionId }).catch(() => {});
           return;
         }
 
-        // Listeners attached — flush the backend's pre-subscription backlog + go live.
+        // Listeners attached — flush the backend's pre-subscription backlog (the shell's
+        // one-shot prompt was buffered since spawn) + switch to live. The flush happens
+        // NOW, while this run's listener is attached, so the prompt lands even though the
+        // cleanup below will unlisten on the imminent spawning→live re-run.
         void invoke("cc_ready", { sessionId }).catch(() => {});
 
         dispatch({ type: "spawned", sessionId });
@@ -259,14 +249,17 @@ export function XtermPane({
           termRef.current?.focus();
         });
       } catch (err) {
-        if (unmountedRef.current) return;
+        if (cancelled) return;
         dispatch({ type: "spawn-failed", errorMsg: String(err) });
       }
     }
     void spawn();
 
-    // NOTE: no listener teardown here on purpose — see unlistenersRef. This effect's
-    // re-run (e.g. on the spawning→live phase flip) must NOT dispose the live listener.
+    return () => {
+      cancelled = true;
+      unlistenOutput?.();
+      unlistenExit?.();
+    };
   }, [bridge.phase, projectPath, fitAndResize, spawnCommand, active]);
 
   // Repaint on becoming active. A pane hidden with display:none has zero size, so xterm
