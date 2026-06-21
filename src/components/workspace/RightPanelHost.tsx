@@ -14,13 +14,21 @@
 // (the editor's open file + scroll, the diff's selected file) across a panel switch
 // AND across a center-stage switch. `visible` gates the active panel's liveness.
 
-import { useEffect, useState } from "react";
-import { EditorPanel } from "./editor/EditorPanel";
+import { useEffect, useRef, useState } from "react";
+import { EditorSplit, type EditorSplitHandle } from "./editor/EditorSplit";
+import { tabSwitchIndex } from "./editor/tabSwitchChord";
 import { DiffPanel } from "./diff/DiffPanel";
 import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
 import { FileTree } from "./filetree/FileTree";
+import { ProjectSearch } from "./search/ProjectSearch";
+import { isSearchChord } from "./search/searchChord";
+import type {
+  FileMatches,
+  HighlightTarget,
+  SearchQuery,
+} from "./search/searchModel";
 import { openSublime, openSublimeMerge } from "../../sublime/sublimeLaunch";
 import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
 import { SublimeMergeIcon } from "../../sublime/icons/SublimeMergeIcon";
@@ -33,12 +41,37 @@ interface RightPanelHostProps {
 }
 
 export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
-  // The file currently open in the editor. Set by the Cmd+P finder (WP6) and by
-  // the diff panel's "Open" action; null = no file (the editor shows its empty state).
-  const [openPath, setOpenPath] = useState<string | null>(null);
+  // WP12 — open files live in PER-PANE TAB STRIPS (EditorSplit owns the pane model;
+  // each pane has its own tab strip + open-file set). The open seams (finder, tree,
+  // diff "Open", WP7 search) call `openFile`, which drives EditorSplit via this
+  // imperative handle → the FOCUSED pane's open-or-activate. `activePath` mirrors the
+  // focused pane's active file here only so the FileTree can highlight the open file.
+  const editorSplitRef = useRef<EditorSplitHandle>(null);
+  const [activePath, setActivePath] = useState<string | null>(null);
 
   // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.
   const [finderOpen, setFinderOpen] = useState(false);
+
+  // WP7 — the match to scroll-to + highlight in the editor after a search-result
+  // open (null for a plain open via the finder/tree/diff). Threaded to EditorPanel.
+  const [highlightTarget, setHighlightTarget] =
+    useState<HighlightTarget | null>(null);
+
+  // WP7 — project-search overlay state. `searchOpen` toggles the overlay; the last
+  // query + results live HERE (not inside the overlay) so re-opening ⌘⇧F restores
+  // them — the overlay stays usable for click-through-many-matches (opening a result
+  // doesn't lose the result set). null results = "never searched yet" this session.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<SearchQuery>({
+    pattern: "",
+    regex: false,
+    caseSensitive: false,
+    wholeWord: false,
+  });
+  const [searchResults, setSearchResults] = useState<FileMatches[] | null>(
+    null,
+  );
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // WP10 — whether the FileTree left rail is collapsed (to a strip) to reclaim the
   // editor's horizontal width in the 50/50 split. State lives here so it persists
@@ -49,14 +82,21 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
   // stay mounted (display:none toggle) so each keeps its state across switches.
   const [panel, setPanel] = useState<RightPanel>("editor");
 
-  // Open a file into the editor: load it + flip the editor panel to the front so
-  // the focused pane becomes the viewport on it (active-pane semantics within the
-  // WP3c shared-document model — see EditorPanel). Shared by the Cmd+P finder and
-  // the diff panel's "Open". Does NOT change the pane model (independent-per-pane
-  // files remain a deferred follow-up: SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT).
-  const openFile = (path: string) => {
-    setOpenPath(path);
+  // Open a file into the editor: add-or-activate its TAB (WP12) + flip the editor
+  // panel to the front. Shared by the Cmd+P finder, the file tree, the diff panel's
+  // "Open", and (WP7) a project-search result.
+  //
+  // WP7 — the optional `target` carries a search match's line + char range; when
+  // present the active tab's EditorPanel scrolls to + selects it after the file loads.
+  // The finder/tree/diff callers pass no target (backward-compatible — a plain open
+  // clears any prior highlight so a subsequent plain open doesn't re-scroll). Per-tab
+  // panes (WP3c reused per tab) live inside each EditorPanel; opening an already-open
+  // file activates its existing tab (no duplicate) — this also realizes the deferred
+  // SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT (each tab is its own file).
+  const openFile = (path: string, target: HighlightTarget | null = null) => {
+    setHighlightTarget(target);
     setPanel((cur) => selectPanel(cur, "editor"));
+    editorSplitRef.current?.openFile(path);
   };
 
   // P3 — panel-select hotkeys (⌘⇧E/⌘⇧D/⌘⇧T) AND the ⌘P file-finder, registered as a
@@ -71,6 +111,19 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
       if (isFinderChord(e)) {
         e.preventDefault();
         setFinderOpen((open) => !open); // toggle: re-press closes
+        return;
+      }
+      if (isSearchChord(e)) {
+        e.preventDefault();
+        setSearchOpen((open) => !open); // WP7 — toggle the Find-in-Files overlay
+        return;
+      }
+      // WP12 — ⌘1..⌘9 activates the Nth open-file tab (n past the end → last tab).
+      // Bare ⌘+digit, disjoint from every ⌘⇧ chord and the bare-⌘P finder.
+      const tabN = tabSwitchIndex(e);
+      if (tabN !== null) {
+        e.preventDefault();
+        editorSplitRef.current?.activateIndex(tabN);
         return;
       }
       const target = panelForChord(e);
@@ -108,7 +161,7 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
               fs_tree walk on every collapse→expand cycle. */}
           <FileTree
             projectPath={projectPath}
-            openPath={openPath}
+            openPath={activePath}
             onOpen={openFile}
           />
         </div>
@@ -174,17 +227,22 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
             </button>
           </div>
 
-          {/* Editor panel — kept mounted; hidden (not unmounted) when Diff is front
-              so the open file + scroll survive the switch. Files are opened via the
-              Cmd+P finder (WP6) or the WP10 file tree. */}
+          {/* Editor split (WP12) — kept mounted; hidden (not unmounted) when Diff is
+              front so every pane's tabs + buffers + scroll survive the switch.
+              EditorSplit owns the pane model; each pane has its own tab strip +
+              open-file set (PaneTabs). Files open via the Cmd+P finder (WP6), the
+              WP10 file tree, the diff "Open", or (WP7) a search result — all through
+              `openFile` → the focused pane. */}
           <div
             className="right-panel-slot"
             style={{ display: panel === "editor" ? "flex" : "none" }}
           >
-            <EditorPanel
+            <EditorSplit
+              ref={editorSplitRef}
               projectPath={projectPath}
-              openPath={openPath}
               active={visible && panel === "editor"}
+              highlightTarget={highlightTarget}
+              onActivePathChange={setActivePath}
             />
           </div>
 
@@ -214,6 +272,26 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
           projectPath={projectPath}
           onOpen={openFile}
           onClose={() => setFinderOpen(false)}
+        />
+      )}
+
+      {/* WP7 — project-wide search ("Find in Files") overlay. Like the finder, only
+          the focused workspace mounts it. The query + results are LIFTED here (not
+          overlay-local) so closing then re-opening ⌘⇧F restores the last search —
+          opening a result doesn't clear the list, so the operator can click through
+          many matches. Selecting a result opens the file at the match (openFile with
+          a highlight target). */}
+      {visible && searchOpen && (
+        <ProjectSearch
+          projectPath={projectPath}
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          results={searchResults}
+          error={searchError}
+          onResults={setSearchResults}
+          onError={setSearchError}
+          onOpen={openFile}
+          onClose={() => setSearchOpen(false)}
         />
       )}
     </div>

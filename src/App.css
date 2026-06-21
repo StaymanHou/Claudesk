@@ -476,6 +476,128 @@ body,
   color: #858585;
 }
 
+/* ── WP7 project-wide search ("Find in Files", ⌘⇧F) overlay ──────────── */
+/* Reuses .command-palette-backdrop + .command-palette shell; widened for results
+   and given a controls row (query + regex/case/word toggles + Search). Dark-only,
+   palette-aligned tokens (matches the finder + command palette). */
+.command-palette.project-search {
+  width: min(94%, 720px);
+  max-height: 78%;
+}
+
+.project-search-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #3c3c3c;
+  padding-bottom: 8px;
+}
+
+.project-search-toggles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 8px;
+}
+
+.project-search-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #b5b5b5;
+  cursor: pointer;
+  user-select: none;
+}
+
+.project-search-go {
+  margin-left: auto;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #d4d4d4;
+  background-color: #0e639c;
+  border: 1px solid #1177bb;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.project-search-go:disabled {
+  background-color: #3c3c3c;
+  border-color: #3c3c3c;
+  color: #858585;
+  cursor: default;
+}
+
+.project-search-summary {
+  flex-shrink: 0;
+  padding: 4px 14px;
+  font-size: 11px;
+  color: #858585;
+}
+
+.project-search-list {
+  padding-bottom: 6px;
+}
+
+.project-search-group {
+  list-style: none;
+}
+
+.project-search-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #9cdcfe;
+  background-color: #2d2d2d;
+  position: sticky;
+  top: 0;
+}
+
+.project-search-file-count {
+  color: #858585;
+}
+
+.project-search-matches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.project-search-match {
+  display: flex;
+  gap: 10px;
+  padding: 3px 14px 3px 22px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: #d4d4d4;
+  cursor: pointer;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.project-search-line-no {
+  flex-shrink: 0;
+  min-width: 3em;
+  text-align: right;
+  color: #858585;
+}
+
+.project-search-line-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-search-hit {
+  background-color: #613a00;
+  color: #ffd596;
+  border-radius: 2px;
+}
+
 /* ── WP4 git diff viewer (right-half DiffPanel + Editor↔Diff toggle) ──── */
 /* Editor↔Diff segmented toggle (WP4 stopgap; WP5's panel-switch hotkey replaces
    it). Dark-only, palette-aligned to the editor status bar. */
@@ -538,6 +660,224 @@ body,
   flex: 1;
   min-height: 0;
   flex-direction: column;
+}
+
+/* ── WP12 editor per-pane tab strips (VS Code split-editor-group model) ──── */
+/* EditorSplit fills the editor slot: a thin split bar on top + a vertical stack of
+   panes. Each pane (PaneTabs) has its OWN tab strip + active EditorPanel. Column flex
+   so the inner editor flex/scroll chain stays bounded (the WP3a height-chain lesson). */
+.editor-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* The split bar holds the Split control (adds a pane with its own tabs). */
+.editor-split-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.2rem 0.5rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  background-color: #181818;
+}
+/* The panes stack vertically and share the remaining height. */
+.editor-split-panes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* One pane: a relative box (positioning context for its confirm-dialog overlay +
+   the pane-close ✕), flex column so its PaneTabs fills it. Panes after the first get
+   a top divider; the focused pane gets a subtle accent. */
+.editor-split-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.editor-split-pane + .editor-split-pane {
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+}
+.editor-split-pane.is-active {
+  box-shadow: inset 2px 0 0 rgba(110, 168, 255, 0.5);
+}
+/* The pane-close ✕ floats at the pane's top-right (only shown when >1 pane). */
+.editor-split-pane > .editor-pane-close {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  z-index: 5;
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  font-size: 0.7rem;
+  color: #7a7a7a;
+  background-color: rgba(24, 24, 24, 0.85);
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.editor-split-pane > .editor-pane-close:hover {
+  color: #f6f6f6;
+  background-color: rgba(128, 128, 128, 0.3);
+}
+/* PaneTabs fills its pane: its tab strip on top + the active EditorPanel below.
+   Relative so its dirty-close confirm overlay anchors to the pane, not the window. */
+.pane-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* The open-file tab row — distinct from the .right-panel-toggle panel-select row
+   above it (Editor/Diff). Horizontal scroll on overflow (v1 — no dropdown). */
+.editor-tab-strip {
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+  padding: 0.3rem 0.5rem;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  background-color: #181818;
+}
+
+.editor-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 16rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.6rem;
+  font-size: 0.76rem;
+  color: #9b9b9b;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.editor-tab:hover {
+  color: #d4d4d4;
+}
+.editor-tab.is-active {
+  color: #d4d4d4;
+  border-color: #6ea8ff;
+  background-color: #252526;
+}
+
+.editor-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The ● unsaved indicator sits left of the label. */
+.editor-tab-dirty {
+  color: #e2c08d;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.editor-tab-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  padding: 0;
+  font-size: 0.7rem;
+  color: #7a7a7a;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1;
+}
+.editor-tab-close:hover {
+  color: #f6f6f6;
+  background-color: rgba(128, 128, 128, 0.25);
+}
+
+/* The active tab's EditorPanel renders here; siblings are display:none. */
+.editor-tab-bodies {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.editor-tab-body {
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* ── WP12 confirm dialog (dirty-close guard + disk-change conflict) ─────── */
+.confirm-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+.confirm-dialog {
+  width: min(26rem, 90%);
+  padding: 1rem 1.1rem;
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+.confirm-dialog-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #f6f6f6;
+}
+.confirm-dialog-message {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  color: #c4c4c4;
+  line-height: 1.4;
+}
+.confirm-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.confirm-dialog-btn {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.8rem;
+  color: #d4d4d4;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.confirm-dialog-btn:hover {
+  background-color: #2d2d2d;
+}
+.confirm-dialog-btn-primary {
+  color: #ffffff;
+  border-color: #6ea8ff;
+  background-color: #2a4a78;
+}
+.confirm-dialog-btn-primary:hover {
+  background-color: #35588c;
+}
+.confirm-dialog-btn-danger {
+  color: #ffb4ab;
+  border-color: #5a2d2d;
+}
+.confirm-dialog-btn-danger:hover {
+  background-color: #4a2020;
 }
 
 /* ── WP10 file-tree left rail + right-half restructure ────────────────── */

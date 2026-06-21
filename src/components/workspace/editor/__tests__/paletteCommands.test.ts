@@ -5,6 +5,9 @@ import {
   type PaletteCommand,
 } from "../paletteCommands";
 import { panelForChord } from "../../panelHost";
+import { isFinderChord } from "../../finder/finderChord";
+import { isSearchChord } from "../../search/searchChord";
+import { tabSwitchIndex } from "../tabSwitchChord";
 
 const cmd = (id: string, title: string): PaletteCommand => ({
   id,
@@ -131,6 +134,53 @@ describe("app-level ⌘⇧ chord exclusivity (WP5/WP8)", () => {
       Boolean,
     ).length;
     expect(claims, "⌘⇧O must be unclaimed after WP8").toBe(0);
+  });
+});
+
+// WP12 — the ⌘1..⌘9 editor-tab-switch chord must be claimed by EXACTLY ONE handler
+// across the whole app-level chord set (palette + panel-select + finder + search +
+// tab-switch). Bare ⌘+digit is disjoint from every ⌘⇧ chord and from bare ⌘P/F/etc.,
+// so a digit keydown fires only tabSwitchIndex and a letter keydown never fires it.
+describe("⌘1..⌘9 tab-switch chord exclusivity (WP12)", () => {
+  // Every predicate that the RightPanelHost capture-phase listener consults, plus the
+  // palette listener. tabSwitchIndex !== null is its "claims" test.
+  const claimCount = (e: {
+    metaKey: boolean;
+    shiftKey: boolean;
+    key: string;
+  }) =>
+    [
+      isPaletteChord(e),
+      panelForChord(e) !== null,
+      isFinderChord(e),
+      isSearchChord(e),
+      tabSwitchIndex(e) !== null,
+    ].filter(Boolean).length;
+
+  for (let n = 1; n <= 9; n++) {
+    it(`⌘${n} is claimed by exactly one handler (tab-switch) and yields ${n}`, () => {
+      const e = { metaKey: true, shiftKey: false, key: String(n) };
+      expect(tabSwitchIndex(e)).toBe(n);
+      expect(claimCount(e), `⌘${n} must be owned by exactly one handler`).toBe(
+        1,
+      );
+    });
+  }
+
+  it("⌘0 is NOT a tab chord (stays the CM6 font-reset) — claimed by no app predicate", () => {
+    const e = { metaKey: true, shiftKey: false, key: "0" };
+    expect(tabSwitchIndex(e)).toBeNull();
+    expect(claimCount(e)).toBe(0);
+  });
+
+  it("the app letter chords do NOT fire tab-switch", () => {
+    const letters = [
+      { metaKey: true, shiftKey: false, key: "p" }, // finder
+      { metaKey: true, shiftKey: true, key: "p" }, // palette
+      { metaKey: true, shiftKey: true, key: "e" }, // editor panel
+      { metaKey: true, shiftKey: true, key: "f" }, // search
+    ];
+    for (const e of letters) expect(tabSwitchIndex(e)).toBeNull();
   });
 });
 

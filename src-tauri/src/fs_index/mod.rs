@@ -58,7 +58,12 @@ pub struct TreeEntry {
 
 /// Reject a root that is not a readable directory (the surfaced-not-swallowed error
 /// case shared by both walks). On success the caller proceeds to walk.
-fn check_root(root: &Path) -> Result<(), FsIndexError> {
+///
+/// `pub(crate)` so sibling app-layer modules reuse the one root-validation contract
+/// rather than forking it — WP7's `project_search` walks the same way the finder and
+/// tree do (gitignore on, `.git/` excluded), so search/Cmd+P/tree never disagree
+/// about what's in the project.
+pub(crate) fn check_root(root: &Path) -> Result<(), FsIndexError> {
     if root.is_dir() {
         return Ok(());
     }
@@ -79,7 +84,11 @@ fn check_root(root: &Path) -> Result<(), FsIndexError> {
 /// don't cover it). Both `walk_index_core` (files-only) and `walk_tree_core`
 /// (files + dirs) build on this identical exclusion set so the finder and the tree
 /// never disagree about what's in the project.
-fn project_walker(root: &Path) -> ignore::Walk {
+///
+/// `pub(crate)` so WP7's `project_search` content search walks the identical file set
+/// (same gitignore/`.git`/dotfile contract) — the single biggest reason `ignore` was
+/// chosen over a hand-rolled walker (see `Cargo.toml`).
+pub(crate) fn project_walker(root: &Path) -> ignore::Walk {
     ignore::WalkBuilder::new(root)
         .hidden(false)
         .filter_entry(|entry| entry.file_name() != ".git")
@@ -88,7 +97,10 @@ fn project_walker(root: &Path) -> ignore::Walk {
 
 /// Convert an absolute walk entry path to a project-relative POSIX string, or `None`
 /// if it is the root itself (empty relative path) or escapes `root`.
-fn rel_posix(root: &Path, path: &Path) -> Option<String> {
+///
+/// `pub(crate)` so sibling modules (WP7 `project_search`) report match locations with
+/// the same project-relative POSIX paths the finder and tree use.
+pub(crate) fn rel_posix(root: &Path, path: &Path) -> Option<String> {
     let rel = path.strip_prefix(root).ok()?;
     // POSIX separators for display consistency (macOS is already `/`, but normalize
     // so the contract is platform-independent and test-stable).

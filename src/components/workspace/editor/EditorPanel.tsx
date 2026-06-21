@@ -1,176 +1,121 @@
-// WP2/WP3c — EditorPanel: the lite editor mounted in a workspace's right half.
+// WP2/WP3a/WP3b — EditorPanel: a VIEW onto one shared document, mounted in a pane.
 //
-// Mounts CodeMirror 6 (via @uiw/react-codemirror) and drives the file lifecycle:
-// open (read_file via IPC) → edit (local buffer) → save (Cmd+S → write_file via
-// IPC). Dark-only theme + language mode by extension. A read OR write failure is
-// rendered inline, never swallowed (the WP6/WP7 IPC-error-surfacing lesson).
+// Phase 2S (2026-06-21) — the buffer/load/save/override no longer live HERE. They live
+// in the per-workspace shared document store (editorDocs.ts) owned by EditorSplit, so
+// the SAME file open in two panes is ONE document (edit in pane 1 mirrors live in pane
+// 2; dirty + save are document-level — operator P2.vh.9). This component is now a VIEW:
+// it reads its document from the `entry` prop and writes edits via `onDocChange` / saves
+// via `onSave` / syntax via `onSetOverride`. What stays PER-VIEW (one per EditorPanel
+// instance): the CM6 EditorView itself, cursor + scroll, the WP7 open-at-match highlight,
+// and the command palette. Two views of one path bind to the same `entry.doc` → live
+// mirror (the known WP3c shared-doc cursor-reset applies to that case; the proper fix is
+// a shared CM6 EditorState — a follow-up).
 //
-// WP3c — SPLIT PANES (shared-document model, P1.1 decision 2026-06-20): the panel
-// can show N vertically-stacked editor panes that are all VIEWPORTS ONTO THE SAME
-// document. The buffer (doc/savedDoc), language override, font size, and the
-// load/save lifecycle are ALL panel-level state here; a "pane" (editorPanes.ts) is
-// just an id + which one is focused. Each pane is its own <CodeMirror> bound to the
-// same `value`/`onChange`/`extensions`, so an edit in one pane is reflected in the
-// others (React re-renders all panes from the shared `doc`). The focused pane drives
-// where chords land — but because the doc is shared, save/palette are pane-agnostic;
-// the active pane id is tracked for the WP5 panel-switch hotkey and per-pane close.
-//
-// Per WP5 this becomes one panel the RightPanelHost swaps; for WP2 it sits directly
-// in the right half. Background workspaces stay mounted (display:none), and WP1's
-// probe confirmed N mounted CM6 editors stay within the perf envelope.
+// Renders the WP3a/3b feature set (multi-cursor, find/replace, font-zoom, palette) +
+// dark theme + language mode by extension. A read/write failure (from the store's load/
+// save state) is rendered inline, never swallowed (the WP6/WP7 IPC-error lesson).
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { invoke } from "@tauri-apps/api/core";
+import { EditorView } from "@codemirror/view";
+import { EditorSelection } from "@codemirror/state";
+import type { HighlightTarget } from "../search/searchModel";
+import type { DocEntry } from "./editorDocs";
 import { buildEditorExtensions } from "./editorExtensions";
 import { editorDarkTheme } from "./theme";
 import { loadFontSize, saveFontSize } from "./fontZoom";
-import { initialLoadState, loadReducer } from "./editorLoad";
-import { initialSaveState, saveReducer } from "./editorSave";
-import { initialPanesState, panesReducer } from "./editorPanes";
 import { CommandPalette } from "./CommandPalette";
 import { isPaletteChord, type PaletteCommand } from "./paletteCommands";
 import { SYNTAX_MODES } from "./language";
 
 interface EditorPanelProps {
-  /** Workspace project dir — the root the backend confines file IO to. */
-  projectPath: string;
   /** File to open, relative to projectPath (or absolute inside it). Null = no file. */
   openPath: string | null;
   /**
-   * True when this workspace is the focused/visible tab — gates the Cmd+Shift+P
-   * palette chord so only the active tab's editor opens the palette. REQUIRED
-   * (not optional-with-default) so a caller can't silently mount an
-   * always-listening palette in a backgrounded tab (the gating prop must be a
-   * compile-time obligation, not optional-with-default).
+   * True when this workspace is the focused/visible tab AND this is the focused pane's
+   * active tab — gates the Cmd+Shift+P palette chord so only the one live editor opens
+   * the palette. REQUIRED (not optional-with-default).
    */
   active: boolean;
+  /**
+   * WP7 — when a file is opened from a project-search result, the match to scroll to +
+   * highlight (1-based line + within-line char range). Null for a plain open. A new
+   * non-null value re-runs the scroll+select once the document is loaded.
+   */
+  highlightTarget?: HighlightTarget | null;
+  /**
+   * Phase 2S — this view's shared document entry from the store (undefined briefly
+   * before the open-doc dispatch lands). The buffer, dirty, load/save state, and the
+   * language override all come from here. Omitted/undefined for the empty (no-file) view.
+   */
+  entry?: DocEntry;
+  /** An edit → update the shared buffer for `openPath` (all views re-render). */
+  onDocChange?: (path: string, doc: string) => void;
+  /** Save `openPath` (⌘S). */
+  onSave?: (path: string) => void;
+  /** Set the palette syntax override for `openPath`. */
+  onSetOverride?: (path: string, id: string | null) => void;
+  /**
+   * Phase 3 — called when this view becomes the FRONT view (active) AND its document is
+   * loaded, so the owner can run the disk-change check (stat + reload/conflict). Fires on
+   * the active→true transition and when a load completes while already active.
+   */
+  onActivated?: (path: string) => void;
 }
 
 export function EditorPanel({
-  projectPath,
   openPath,
   active,
+  highlightTarget = null,
+  entry,
+  onDocChange,
+  onSave,
+  onSetOverride,
+  onActivated,
 }: EditorPanelProps) {
-  const [doc, setDoc] = useState("");
-  // The last-persisted snapshot of the buffer — `dirty` is derived from it.
-  const [savedDoc, setSavedDoc] = useState("");
-  // `load`/`save` track the open and write lifecycles via useReducer so the
-  // IPC dispatches are stable functions (mirrors XtermPane/cc bridge; keeps
-  // setState out of raw effect bodies). "no file open" is derived from openPath.
-  const [load, dispatch] = useReducer(loadReducer, initialLoadState);
-  const [save, dispatchSave] = useReducer(saveReducer, initialSaveState);
-  // Font size seeded from the persisted global value (lazy init so localStorage
-  // is read once on mount, not every render). Cmd+=/-/0 update it; onFontSizeChange
-  // mirrors the keybinding's live compartment reconfigure into state + persistence.
+  // Font size seeded from the persisted global value (lazy init so localStorage is read
+  // once on mount). Cmd+=/-/0 update it; onFontSizeChange mirrors the keybinding's live
+  // compartment reconfigure into state + persistence. Stays per-view (a view preference).
   const [fontSize, setFontSize] = useState(() => loadFontSize());
-  // WP3b — palette syntax override, paired with the path it applies to. null id
-  // = derive the mode from the file extension; a syntax id forces that mode. The
-  // override is scoped to a single openPath so a newly-opened file re-derives
-  // from its extension WITHOUT a reset effect (the React "adjust state during
-  // render when a prop changed" pattern — see effectiveOverrideId below).
-  const [override, setOverride] = useState<{
-    path: string | null;
-    id: string | null;
-  }>({ path: null, id: null });
-  // The override only counts for the file it was set on; otherwise it's null
-  // (the new file uses its extension default). Computed during render — no effect.
-  const languageOverrideId = override.path === openPath ? override.id : null;
-  const setLanguageOverrideId = useCallback(
-    (id: string) => setOverride({ path: openPath, id }),
-    [openPath],
-  );
-  // WP3b — whether the Cmd+Shift+P command palette is open.
+  // WP3b — whether the Cmd+Shift+P command palette is open (per-view).
   const [paletteOpen, setPaletteOpen] = useState(false);
-
-  // WP3c — pane/focus model (shared-document). Monotonic counter for stable pane
-  // ids (no Date/random); seeded so the first pane is "pane-0".
-  const paneSeq = useRef(0);
-  const nextPaneId = useCallback(() => `pane-${++paneSeq.current}`, []);
-  const [panes, dispatchPanes] = useReducer(
-    panesReducer,
-    "pane-0",
-    initialPanesState,
-  );
+  // WP7 — the live EditorView, captured via @uiw's onCreateEditor, so a project-search
+  // result can scroll-to + select its match. One view per EditorPanel.
+  const viewRef = useRef<EditorView | null>(null);
 
   const onFontSizeChange = useCallback((px: number) => {
     setFontSize(px);
     saveFontSize(px);
   }, []);
 
-  // Load the file whenever openPath changes. read_file errors (missing file,
-  // binary content, path outside the workspace) surface into `load`. The effect
-  // only runs the async read; the null case is handled by the render guard.
-  // WP3c: a file change also collapses split panes back to a single pane — the
-  // shared-document model means the split was a view onto the OLD file; the new
-  // file starts single (P2.2). `collapse keepId: activePaneId` keeps the focused
-  // pane and drops the rest in one dispatch.
-  useEffect(() => {
-    if (openPath == null) return;
-    let cancelled = false;
-    dispatch({ type: "load-start", path: openPath });
-    dispatchSave({ type: "reset" }); // clear any stale save status from the prior file
-    dispatchPanes({ type: "collapse", keepId: panes.activePaneId });
-    // (Language override resets automatically on file change — see `override`
-    // state, which is path-scoped and computed during render.)
-    invoke<string>("read_file", { root: projectPath, path: openPath })
-      .then((contents) => {
-        if (cancelled) return;
-        setDoc(contents);
-        setSavedDoc(contents);
-        dispatch({ type: "load-ok", path: openPath });
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        dispatch({ type: "load-fail", path: openPath, message: String(e) });
-        setDoc("");
-        setSavedDoc("");
-      });
-    return () => {
-      cancelled = true;
-    };
-    // panes.activePaneId is intentionally excluded: the collapse should fire on
-    // file change, not on every focus switch (which would unsplit on a click).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectPath, openPath]);
+  // The shared document fields (from the store entry). Fall back to empty/idle while the
+  // entry is briefly absent (between the tab render and the open-doc dispatch).
+  const doc = entry?.doc ?? "";
+  const load = entry?.load ?? { kind: "idle" as const };
+  const save = entry?.save ?? { kind: "idle" as const };
+  const dirty = entry != null && entry.doc !== entry.savedDoc;
+  const languageOverrideId = entry?.languageOverrideId ?? null;
 
-  const onChange = useCallback((value: string) => setDoc(value), []);
+  const onChange = useCallback(
+    (value: string) => {
+      if (openPath != null) onDocChange?.(openPath, value);
+    },
+    [openPath, onDocChange],
+  );
 
-  const dirty = doc !== savedDoc;
-
-  // The save action — a stable-identity callback over the live values. No-op when
-  // no file is open or nothing changed. Pane-agnostic: the doc is shared across
-  // panes, so saving from any pane persists the same buffer.
+  // The save action — persists the shared document. No-op without a file.
   const doSave = useCallback(() => {
-    if (openPath == null) return;
-    if (!dirty && save.kind !== "error") return; // nothing to persist
-    const path = openPath;
-    const contents = doc;
-    dispatchSave({ type: "save-start", path });
-    invoke<void>("write_file", { root: projectPath, path, contents })
-      .then(() => {
-        setSavedDoc(contents);
-        dispatchSave({ type: "save-ok", path });
-      })
-      .catch((e: unknown) => {
-        dispatchSave({ type: "save-fail", path, message: String(e) });
-      });
-  }, [openPath, dirty, save.kind, doc, projectPath]);
+    if (openPath != null) onSave?.(openPath);
+  }, [openPath, onSave]);
 
-  // WP3b — the syntax-selection command set: the first set of palette commands.
-  // Each "Set Syntax: …" command forces the editor's language via the override
-  // (setLanguageOverrideId → the extensions useMemo below rebuilds with the new
-  // language, which @uiw applies as a full CM6 reconfigure — no compartment).
-  // Built from the shared SYNTAX_MODES list so adding a mode is one row in
-  // language.ts. The set is assembled here (not in CommandPalette) so future WPs
-  // add commands without touching the overlay component.
+  // WP3b — the syntax-selection command set. Each "Set Syntax: …" sets the document's
+  // override in the store (so it's consistent across views of the file).
+  const setLanguageOverrideId = useCallback(
+    (id: string) => {
+      if (openPath != null) onSetOverride?.(openPath, id);
+    },
+    [openPath, onSetOverride],
+  );
   const commands = useMemo<PaletteCommand[]>(
     () =>
       SYNTAX_MODES.map((mode) => ({
@@ -181,36 +126,27 @@ export function EditorPanel({
     [setLanguageOverrideId],
   );
 
-  // WP3b — open the palette on Cmd+Shift+P. Registered as a CAPTURE-phase document
-  // listener (the WP1-proven pattern): it fires before CM6's contentEditable
-  // handler, so the chord works while focus is inside the editor (any pane). Gated
-  // on `active` so only the focused workspace's editor responds (same gating
-  // pattern as the host's chords). preventDefault suppresses any browser default and keeps the
-  // literal "P" out of the document. Cmd+P (bare, WP6's finder) is NOT matched here.
+  // WP3b — open the palette on Cmd+Shift+P. CAPTURE-phase document listener (WP1
+  // pattern): fires before CM6's handler, so the chord works with focus inside the
+  // editor. Gated on `active` so only the one live editor responds.
   const hasFile = openPath != null;
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (isPaletteChord(e)) {
         e.preventDefault();
-        // The current command set acts on the open editor; inert with no file.
-        if (!hasFile) return;
-        setPaletteOpen((open) => !open); // toggle: re-press closes
+        if (!hasFile) return; // inert with no file
+        setPaletteOpen((open) => !open);
       }
     };
     document.addEventListener("keydown", onKeyDown, true); // capture phase
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [active, hasFile]);
 
-  // The full extension set is built by the pure editorExtensions builder: the
-  // core keymap (Mod-s save, Mod-d select-next, search keymap — all at
-  // Prec.highest so they beat CM6 + the browser/OS default; the WP1 lesson for
-  // editor-focused chords), multi-cursor / rectangular (alt-drag) selection, and
-  // the in-file find/replace panel. The save chord closes over the live `doSave`,
-  // so the array is rebuilt when doSave's deps change; @uiw/react-codemirror
-  // reconfigures the view when the extensions array identity changes, so the
-  // binding always calls the current closure — no ref-in-render needed. Shared
-  // across panes: every pane mounts the same extension set (same shared doc).
+  // The full extension set (core keymap incl. Mod-s save → doSave, multi-cursor,
+  // find/replace, font-zoom). Rebuilt when doSave / fontSize / override / openPath
+  // change; @uiw reconfigures the view on array-identity change so the binding always
+  // calls the current closure.
   const extensions = useMemo(
     () =>
       buildEditorExtensions({
@@ -223,21 +159,45 @@ export function EditorPanel({
     [openPath, doSave, fontSize, onFontSizeChange, languageOverrideId],
   );
 
-  // WP3c — split/close/focus handlers over the pane reducer.
-  const splitPane = useCallback(
-    () => dispatchPanes({ type: "split", id: nextPaneId() }),
-    [nextPaneId],
-  );
-  const closePane = useCallback(
-    (id: string) => dispatchPanes({ type: "close", id }),
-    [],
-  );
-  const focusPane = useCallback(
-    (id: string) => dispatchPanes({ type: "focus", id }),
-    [],
-  );
+  // WP7 — scroll to + select a project-search match once the document is loaded.
+  const loadedPath = load.kind === "loaded" ? load.path : null;
 
-  // No file open is derived from the prop — not stored in `load`.
+  // Phase 3 — fire onActivated when this view becomes the FRONT view (active) AND its
+  // doc is loaded, so the owner runs the disk-change check. The `wasFrontLoaded` ref
+  // (written only inside the effect) guards the (active && loaded) EDGE so we fire only
+  // on a genuine transition into front+loaded — not on every render (onActivated is a
+  // fresh closure each EditorSplit render). The owner's checkDisk is itself idempotent.
+  const frontAndLoaded =
+    active && loadedPath != null && loadedPath === openPath;
+  const wasFrontLoaded = useRef(false);
+  useEffect(() => {
+    if (frontAndLoaded && !wasFrontLoaded.current && openPath != null) {
+      onActivated?.(openPath);
+    }
+    wasFrontLoaded.current = frontAndLoaded;
+  }, [frontAndLoaded, openPath, onActivated]);
+  useEffect(() => {
+    if (highlightTarget == null) return;
+    if (loadedPath == null || loadedPath !== openPath) return;
+    const view = viewRef.current;
+    if (!view) return;
+    const { doc: cmDoc } = view.state;
+    if (highlightTarget.line < 1 || highlightTarget.line > cmDoc.lines) return;
+    const lineInfo = cmDoc.line(highlightTarget.line);
+    const from =
+      lineInfo.from + Math.min(highlightTarget.startCol, lineInfo.length);
+    const to =
+      lineInfo.from + Math.min(highlightTarget.endCol, lineInfo.length);
+    view.dispatch({
+      selection: EditorSelection.range(from, to),
+      effects: EditorView.scrollIntoView(EditorSelection.range(from, to), {
+        y: "center",
+      }),
+    });
+    view.focus();
+  }, [highlightTarget, loadedPath, openPath]);
+
+  // No file open is derived from the prop.
   if (openPath == null) {
     return (
       <div className="editor-empty" data-testid="editor-empty">
@@ -256,8 +216,6 @@ export function EditorPanel({
     );
   }
 
-  const splitable = panes.panes.length > 1;
-
   return (
     <div className="editor-panel" data-testid="editor-panel">
       <div className="editor-statusbar" data-testid="editor-statusbar">
@@ -274,16 +232,6 @@ export function EditorPanel({
                     ? "saved"
                     : ""}
           </span>
-          {/* WP3c — split control. One click adds a viewport onto the same file. */}
-          <button
-            type="button"
-            className="editor-split-btn"
-            data-testid="editor-split-btn"
-            onClick={splitPane}
-            title="Split editor (new viewport onto the same file)"
-          >
-            Split
-          </button>
         </span>
       </div>
       {save.kind === "error" && (
@@ -291,47 +239,20 @@ export function EditorPanel({
           Could not save {save.path}: {save.message}
         </div>
       )}
-      {/* WP3c — vertical stack of panes. N=1 → a single pane, visually identical
-          to the pre-split editor. Each pane is a viewport onto the shared doc. */}
       <div className="editor-panes" data-testid="editor-panes">
-        {panes.panes.map((pane) => (
-          <div
-            key={pane.id}
-            className="editor-pane"
-            data-testid="editor-pane"
-            data-pane-id={pane.id}
-            data-active-pane={pane.id === panes.activePaneId}
-            // focus-within: a click/focus landing inside this pane's CM6 view makes
-            // it the active pane. Capture so it fires before CM6's own handlers.
-            onFocusCapture={() => focusPane(pane.id)}
-          >
-            {splitable && (
-              <button
-                type="button"
-                className="editor-pane-close"
-                data-testid="editor-pane-close"
-                // Close on mousedown-prevent so the click doesn't first focus the
-                // pane we're removing; stopPropagation keeps it off the pane focus.
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closePane(pane.id);
-                }}
-                title="Close this pane"
-                aria-label="Close pane"
-              >
-                ✕
-              </button>
-            )}
-            <CodeMirror
-              value={doc}
-              onChange={onChange}
-              theme={editorDarkTheme}
-              extensions={extensions}
-              basicSetup={{ lineNumbers: true, foldGutter: false }}
-            />
-          </div>
-        ))}
+        <div className="editor-pane" data-testid="editor-pane">
+          <CodeMirror
+            value={doc}
+            onChange={onChange}
+            theme={editorDarkTheme}
+            extensions={extensions}
+            basicSetup={{ lineNumbers: true, foldGutter: false }}
+            // WP7 — capture the view so a search result can scroll to + select its match.
+            onCreateEditor={(view) => {
+              viewRef.current = view;
+            }}
+          />
+        </div>
       </div>
       {paletteOpen && (
         <CommandPalette

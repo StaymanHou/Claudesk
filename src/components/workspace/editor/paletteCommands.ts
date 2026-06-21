@@ -29,11 +29,25 @@
 //   ⌘⇧O  → FREED (WP8 deleted the Sublime-Text chord; both Sublime launchers are
 //                                   now click-only icon buttons in the panel tab row
 //                                   — see sublime/sublimeLaunch.ts + RightPanelHost)
+//   ⌘⇧F  → project-wide search     (WP7 — LIVE; opens the Find-in-Files overlay;
+//                                   search/searchChord.ts isSearchChord. Shift
+//                                   REQUIRED — distinct from CM6's bare ⌘F in-file
+//                                   find below)
+//   ⌘1..⌘9 → editor tab switch     (WP12 — LIVE; activate the Nth open-file tab in
+//                                   the FOCUSED pane, ⌘9 = last; editor/tabSwitchChord.ts
+//                                   tabSwitchIndex. Bare ⌘+DIGIT — disjoint from every
+//                                   ⌘⇧ chord and from bare ⌘P/F/R/S/D (those are letters).
+//                                   ⌘0 is NOT a tab chord — it stays the CM6 font-reset.)
+//   ⌘⇧1..⌘⇧9 → RESERVED            (operator 2026-06-21: future workspace/filmstrip
+//                                   switching — a later milestone. Do NOT claim ⌘⇧+digit
+//                                   for anything else. Distinct from WP12's bare ⌘+digit
+//                                   tab switch by the required Shift.)
 //   ⌘F ⌘R ⌘S ⌘D ⌘=/-/0            → CM6 editor chords (editorExtensions coreKeymap)
 // NOTE: ⌘⇧D (panel-select Diff) is APP-level + capture-phase, distinct from the
 // editor-internal bare ⌘D (Cmd-D select-next, CM6 keymap, no Shift) — the Shift
-// disambiguates, same as ⌘⇧P vs ⌘P.
-// All APP-level chords (⌘⇧P, ⌘P, ⌘⇧E/D/T, ⌘⇧O) use the WP1-proven capture-phase
+// disambiguates, same as ⌘⇧P vs ⌘P. Likewise ⌘⇧F (project search, APP-level) is
+// distinct from bare ⌘F (CM6 in-file find) by the required Shift.
+// All APP-level chords (⌘⇧P, ⌘P, ⌘⇧E/D/T, ⌘⇧F) use the WP1-proven capture-phase
 // document listener; editor-internal chords use the Prec.highest CM6 keymap.
 // See workflow/archive/m2-wp1-cm6-probe.md → Objective (a).
 

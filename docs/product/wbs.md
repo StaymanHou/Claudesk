@@ -1,9 +1,9 @@
 ---
 stage: wbs
 state: in-progress
-updated: 2026-06-20
+updated: 2026-06-21
 milestone: 2
-# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5, WP6, WP8, WP10 shipped (10/12); WP7/WP9/WP11 remain
+# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5, WP6, WP8, WP10 shipped (10/13); WP7 PAUSED (backend shipped, UX blocked on WP12); WP9, WP11, WP12 remain. WP12 (editor tab strip) added 2026-06-21, gates WP7's resume.
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -129,17 +129,19 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Unit tests on the fuzzy-match predicate (pure) + the gitignore-honoring walk (21 frontend finder tests + 9 backend fs_index tests)
 - [x] (folded in) Dev-only `?ws=`/`window.__seedWorkspace` seed seam (DEV-gated, reuses `openWorkspace`) — unwedges verify-self; 7 `parseSeedParam` tests
 
-### WP7: Project-wide find/replace (app-layer)
+### WP7: Project-wide find/replace (app-layer) — ⏸ PAUSED (blocked on WP12)
 
-**Description:** **App-layer subsystem** (`research.md` correction — `@codemirror/search` is single-document only). A backend ripgrep-style content search over the project dir → results list; opening a result loads the file + highlights the match via `@codemirror/search`. Replace-across-files is in scope to the extent Sublime's project find/replace is (decide replace depth at build; search-first is the must-have).
+> **PAUSED 2026-06-21 (F26 escalation).** WP7's backend (`project_search`) shipped and the search/overlay/open-at-match-highlight all work, but at Phase-2 verify-human the operator redirected the result UX from a floating overlay to the **Sublime "Find Results" tab** model — results in a temp result *tab* in the editor you click through. That UX depends on the **editor multi-file tab strip (WP12)**, which did not exist. WP7 is paused mid-Phase-2 until WP12 ships, then resumes to redefine the result surface (overlay result-list → Find Results tab). The Phase-1 backend + searchModel (byte→char) + ⌘⇧F chord + the EditorPanel open-at-match highlight seam are all **reusable forward** (no rework). Live WIP: `workflow/wip/m2-wp7-project-search.md`.
+
+**Description:** **App-layer subsystem** (`research.md` correction — `@codemirror/search` is single-document only). A backend ripgrep-style content search over the project dir → results; opening a result loads the file + highlights the match. **Result UX (revised 2026-06-21):** results render into a **Sublime-style "Find Results" tab** in the editor (a synthetic read-only buffer/tab), NOT a floating overlay; clicking a result line opens the file at the match. The small ⌘⇧F query input may stay as an overlay; only the *results* move to a tab. Replace-across-files is in scope (decide replace depth at build; full project replace-all chosen at WP7 spec; search-first is the must-have).
 **Milestone:** Milestone 2
-**Dependencies:** WP2 (open+highlight result), WP6 (shares the fs-walk/index infrastructure)
-**Size:** M
+**Dependencies:** WP2 (open+highlight result), WP6 (shares the fs-walk/index infrastructure), **WP12 (editor multi-file tab strip — the Find Results tab is a tab in it; added 2026-06-21)**
+**Size:** M (backend done; remaining is the Find-Results-tab frontend redefinition + replace)
 **Tasks:**
-- [ ] Backend `project_search` module: ripgrep-style content search over the project dir (honor `.gitignore`); return file + line + match-range results (pure-fn core + Tauri command)
-- [ ] React results panel: grouped-by-file results, open-on-click → EditorPanel + in-document highlight (`@codemirror/search` `SearchQuery`)
-- [ ] Project-wide *replace* (scope decided at build — at minimum a per-result/per-file apply)
-- [ ] Unit tests on the search core (TempDir fixture with known matches)
+- [x] Backend `project_search` module: ripgrep-style content search over the project dir (honor `.gitignore`); return file + line + match-range results (pure-fn core + Tauri command) — SHIPPED (Phase 1, 17 tests; reuses WP6's `ignore` walker; in-process `regex`, no `rg` binary)
+- [ ] ~~React results *overlay*~~ → **REDEFINED 2026-06-21:** render results into a **Find Results tab** (WP12) — grouped-by-file, open-on-click → EditorPanel + in-document highlight (the open-at-match seam already built). The overlay built in Phase 2 is superseded by the tab on resume.
+- [ ] Project-wide *replace* — full depth (per-result + per-file + confirmed replace-all-across-project; chosen at WP7 spec 2026-06-21)
+- [x] Unit tests on the search core (TempDir fixture with known matches) — SHIPPED (Phase 1)
 
 ### WP10: File-tree navigator (app-layer) ✅ SHIPPED 2026-06-20 (commit 348376b)
 
@@ -197,6 +199,22 @@ Learning-sequence ordering, riskiest-unknown-first:
 
 **Source:** operator request at WP10 verify-human, 2026-06-20 (reference image: Sublime sidebar status dots). Originally captured as SURFACE-2026-06-20-WP10-FOLLOWUP-TREE-EDITOR-POLISH; promoted to this WP at operator direction.
 
+### WP12: Editor multi-file tab strip (Sublime-style open-file tabs)
+
+**Description:** A new editor subsystem: a **row of open-file tabs** across the top of the editor panel (Sublime/VS-Code model — e.g. `wbs.md | roadmap.md | Find Results`), each a switchable, closable tab with its own editor state. Today's editor opens **one file at a time** (`openPath: string` — opening a new file replaces the current); WP3c split panes are viewports onto the *same* file (shared-document; independent-file-per-pane was deferred). This WP introduces the concept of **multiple files open at once**, each addressable as a tab. It also adds a **synthetic read-only buffer** hook — a tab whose content is supplied programmatically rather than read from disk — which is exactly what WP7's "Find Results" tab needs (and a foundation for future synthetic views). The dependency surfaced when WP7's operator-chosen Sublime "Find Results" UX turned out to require this tab strip first (SURFACE-2026-06-21-EDITOR-MULTI-FILE-TAB-STRIP).
+**Milestone:** Milestone 2
+**Dependencies:** WP2 (the EditorPanel this wraps), WP5 (RightPanelHost — the editor panel lives inside it; the file-tab strip is distinct from the panel-select tab row), WP3c (the shared-document pane model the open-file model extends/coexists with). Folds in the deferred **SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT** (independent-file panes).
+**Size:** L (a real new state model + UI + per-file editor state; not a small slice)
+**Tasks:**
+- [ ] Open-files state model: replace the single `openPath` with an ordered set of open files + an active-file pointer (pure reducer, vitest-testable — mirrors `editorPanes.ts`/`treeState.ts` posture). Open-existing-file = activate-or-add; close-file + close-active + last-file edge cases.
+- [ ] Per-file editor state: each open file keeps its own buffer/dirty/cursor/scroll (decide at build how much survives a tab switch vs re-read). Reconcile with the WP3c shared-document split-pane model (panes are viewports onto the *active* file).
+- [ ] Tab-strip UI: a clickable, closable tab row above the editor (dark tokens; distinct from the `right-panel-toggle` panel-select row). Active-tab highlight; close (×) per tab; overflow handling decided at build. Keyboard switch (⌘1..⌘9 / ⌘⇧[ ] decided at build, honoring the chord-ownership map).
+- [ ] Synthetic read-only buffer hook: a tab whose content is provided in-memory (not via `read_file`), read-only, with a programmatic API to (re)set its content + a click-line→callback hook. (This is the seam WP7's Find Results tab plugs into; build it generic.)
+- [ ] Wire the existing open seams (Cmd+P finder, file tree, diff "Open", WP7 search open-at-match) through the new open-files model — opening a file adds/activates its tab; the open-at-match highlight target still applies to the activated file's view.
+- [ ] Unit tests: the open-files reducer (add/activate/close/last-file/active-close) + any pure tab-overflow/ordering helper + the synthetic-buffer state.
+
+**Source:** SURFACE-2026-06-21-EDITOR-MULTI-FILE-TAB-STRIP (high) — surfaced from WP7 Phase-2 verify-human when the operator chose the Sublime "Find Results" tab UX, which depends on an editor open-file tab strip not previously planned. Operator decision 2026-06-21: build WP12 first, then resume WP7 to render Find Results into a WP12 tab.
+
 ## Milestone 2 critical path
 
 ```
@@ -206,10 +224,12 @@ WP1 ✅─► WP2 ✅─► WP3a ✅ (core editing) ──► WP3b ✅ (palette)
               ├──► WP5 ✅ (panel host) ─┬──► WP8 ✅ (Sublime icon buttons) ──►│
               │       ▲                 └──(frontend-only, parallel)─────────►│
               ├──► WP6 ✅ (file finder)┬──► WP10 ✅ (file-tree) ─────────────►│
-              └──► WP7 (project search)┴──(app-layer, parallel)─────────────►┘
+              │                        └──► WP12 (editor tab strip) ──► WP7 (project search: Find Results tab) ──►│
+              └──► WP7 backend ✅ (search core shipped; UX paused on WP12)────────────────────────────────────►┘
 ```
 
-- **Critical path:** WP1 ✅ → WP2 ✅ → WP3a → WP3b → WP3c → WP9 (dogfood + exit-criteria). WP8 is **no longer on the critical path** — its 2026-06-20 redefinition made it a small frontend-only UI consolidation (relocate the Sublime launchers into the tab row + drop the ⌘⇧O hotkey) that depends only on WP5's tab row and is **not gated on WP9's dogfood**. WP4/5/6/7/8/10 are parallel slices feeding WP9's final dogfood + exit-criteria.
+- **Critical path:** WP1 ✅ → WP2 ✅ → WP3a → WP3b → WP3c → WP9 (dogfood + exit-criteria). WP8 is **no longer on the critical path** — its 2026-06-20 redefinition made it a small frontend-only UI consolidation that depends only on WP5's tab row. WP4/5/6/8/10 are parallel slices feeding WP9's final dogfood + exit-criteria.
+- **WP12 → WP7 (added 2026-06-21):** WP7's backend search core shipped, but its result UX (operator-chosen Sublime "Find Results" tab) depends on **WP12 (editor multi-file tab strip)**, which is new. So WP7 is **paused** and now has a hard dependency on WP12: build WP12, then resume WP7 to render results into a Find Results tab. WP12 itself depends on WP2/WP5/WP3c (it extends the editor's single-file model into multi-file open tabs) and folds in the deferred independent-file-split SURFACE.
 - **WP3 was split 2026-06-19** (operator: "too much packed in") into **WP3a** (core editing — multi-cursor/find-replace/font-zoom/minimap), **WP3b** (command palette), **WP3c** (split panes). WP3a is the must-have; 3b/3c are independent and can be sequenced or parallelized after 3a. The old WP3's "daily-parity confirmation" task moved to WP9 as a dogfood checkpoint (it no longer gates anything since WP8's redefinition).
 - **Parallelizable after WP2 (✅ shipped):** WP3a, WP4 (diff), WP6 (file finder), WP7 (search), WP8 (Sublime icon buttons), WP10 (file-tree) are largely independent slices; WP5 (panel host) needs WP2 + WP4; WP8 needs WP5's tab row. WP6/WP7/WP10 share fs-walk infrastructure (do WP6's index first; WP7 and WP10 reuse it). WP3b/3c depend on WP3a landing first (inherit the finished editing set).
 - **WP1 gates the panel-host + finder + palette hotkeys.** ✅ settled — capture-phase listener pattern. WP3b/WP5/WP6 apply it.
@@ -222,6 +242,7 @@ Tracked in [`roadmap.md`](roadmap.md) (Milestones 3–9: stateful CC controller,
 
 ## SURFACE-IN history
 
+- [2026-06-21] **WP12 (editor multi-file tab strip) added + WP7 paused** — at WP7 Phase-2 verify-human the operator confirmed search works but redirected the result UX from a floating overlay to the Sublime "Find Results" **tab** model, which depends on an editor open-file tab strip (`wbs.md | roadmap.md | Find Results`) that didn't exist and wasn't planned (today's editor opens one file; WP3c panes are same-file viewports). Added **WP12** (editor multi-file tab strip + synthetic read-only buffer hook; folds in the deferred SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT), made **WP7 depend on WP12**, and **paused WP7** mid-Phase-2 (its backend + searchModel + highlight seam are reusable forward). Operator decision: build WP12 first, then resume WP7 to render Find Results into a WP12 tab. Source: SURFACE-2026-06-21-EDITOR-MULTI-FILE-TAB-STRIP → feature:build (WP7) → product:wbs (P11 SURFACE-IN).
 - [2026-06-20] **WP8 REDEFINED + shipped** — operator reversed WP8's scope: it is **no longer a removal WP** (both Sublime launchers are KEPT) and the **parity gate is dropped** (WP8 is no longer gated on WP9). New scope: relocate both Sublime launchers into the `right-panel-toggle` tab row as inlined-SVG icon buttons + delete the redundant `⌘⇧O` Sublime-Text hotkey; backend untouched. Shipped same day. The WP8 section, the M2 critical-path diagram + notes, and WP9's parity-gate task were all resynced to the new scope. Source: operator directive → feature workflow (WP8).
 - [2026-06-19] **WP10 (file-tree navigator) added** — operator designated it a must-have at WP2 Phase-1 verify-human. App-layer subsystem reusing WP6's `fs_index` infrastructure; parallel to the critical path. Source: feature:build (WP2) → product:wbs.
 - [2026-06-19] **WP3 split into WP3a/WP3b/WP3c** — operator flagged the original WP3 as over-packed (6 features under one "M"). Split into WP3a (core editing: multi-cursor / find-replace / font-zoom / minimap), WP3b (command palette — net-new overlay subsystem), WP3c (split panes — riskiest layout work). The old WP3's "daily-Sublime-parity confirmation" task was pulled out and relocated to **WP9** as an explicit parity gate that unblocks WP8's Sublime-pop removal. Source: operator review → product:wbs.

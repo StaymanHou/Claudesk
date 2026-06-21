@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use super::{read_file_core, write_file_core};
+use super::{read_file_core, stat_file_core, write_file_core, FileMarker};
 
 /// Read a UTF-8 text file under the workspace `root`. Errors (missing file, binary
 /// content, path escaping the workspace) come back as a `String` for the UI to
@@ -24,4 +24,14 @@ pub fn read_file(root: String, path: String) -> Result<String, String> {
 #[tauri::command]
 pub fn write_file(root: String, path: String, contents: String) -> Result<(), String> {
     write_file_core(Path::new(&root), Path::new(&path), &contents).map_err(|e| e.to_string())
+}
+
+/// Read a file's on-disk marker (mtime + size) under the workspace `root`, for the
+/// WP12 tab strip's disk-change detection. Errors (missing file, path escaping the
+/// workspace) come back as a `String` so the UI treats a failed stat as a real error
+/// rather than silently as "unchanged". Returns [`FileMarker`] (snake_case fields —
+/// the TS mirror reads `mtime_ms` / `size` verbatim; Tauri does not camelCase these).
+#[tauri::command]
+pub fn stat_file(root: String, path: String) -> Result<FileMarker, String> {
+    stat_file_core(Path::new(&root), Path::new(&path)).map_err(|e| e.to_string())
 }

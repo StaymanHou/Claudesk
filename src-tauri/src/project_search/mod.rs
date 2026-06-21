@@ -1,0 +1,464 @@
+//! Project-wide content search — the ripgrep-style "Find in Files" backend (WP7).
+//!
+//! Backs the Milestone-2 ⌘⇧F overlay. The finder (WP6) matches file *names*; this
+//! module matches file *contents* across the whole workspace project dir. It is
+//! **app-layer** infrastructure, not an editor feature — `@codemirror/search` is
+//! single-document only (the load-bearing `research.md` correction); multi-file
+//! search has to be a backend that produces results the React overlay renders.
+//!
+//! ## Layout (mirrors [`crate::fs_index`] / [`crate::editor_fs`])
+//! - **Pure core** ([`search_core`]) takes an injected `root: &Path` + a
+//!   [`SearchQuery`], so it is unit-testable against a `TempDir` with no Tauri
+//!   runtime.
+//! - **Tauri command wrapper** ([`commands`]) is the only IPC surface; it maps
+//!   [`ProjectSearchError`] to a `String`.
+//!
+//! ## Shared walker contract (no forked walk)
+//! The walk goes through [`crate::fs_index`]'s `project_walker` / `check_root` /
+//! `rel_posix` helpers — the SAME exclusion set the Cmd+P finder and the file tree
+//! use (gitignore / `.ignore` / global gitignore honored, `.git/` excluded, dotfiles
+//! shown). So search, Cmd+P, and the tree provably agree about what is "in the
+//! project" — there is deliberately no second `WalkBuilder` here.
+//!
+//! ## In-process, line-oriented matching
+//! Matching uses the `regex` crate (ripgrep's own engine), per line. The four search
+//! modes compose into one regex: substring escapes the pattern, regex passes it
+//! through, case-sensitivity toggles the `(?i)` flag, whole-word wraps in `\b…\b`.
+//! Non-UTF-8 (binary) files are skipped — they have no meaningful line text to show.
+//!
+//! ## Errors are surfaced, never swallowed
+//! A bad root or an invalid regex returns a typed [`ProjectSearchError`] the command
+//! maps to a `String`; the overlay shows it rather than a silently-empty list (the
+//! WP6 picker IPC error-surfacing lesson). A *no-match* search is a legitimate empty
+//! result, distinct from an error.
+
+pub mod commands;
+
+use std::path::Path;
+
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::fs_index::{check_root, project_walker, rel_posix};
+
+/// Errors from a project search. IPC-facing wrappers map this to a `String`.
+#[derive(Debug, Error)]
+pub enum ProjectSearchError {
+    /// The workspace root does not exist or is not a directory.
+    #[error("workspace root {root} is not a readable directory: {reason}")]
+    BadRoot { root: String, reason: String },
+
+    /// The query is regex mode and the pattern did not compile (or whole-word/case
+    /// wrapping produced an invalid pattern). The overlay surfaces this inline so the
+    /// operator can fix the pattern, rather than seeing an empty result list.
+    #[error("invalid search pattern: {0}")]
+    BadPattern(String),
+}
+
+/// The search request: the pattern plus the four mode toggles. Deserialized from the
+/// IPC call (the overlay's query field + regex / case / whole-word checkboxes).
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchQuery {
+    /// The raw text the operator typed.
+    pub pattern: String,
+    /// Treat `pattern` as a regular expression. When false it is matched literally
+    /// (the pattern is regex-escaped before compiling).
+    pub regex: bool,
+    /// Case-sensitive match. When false, the `(?i)` flag is added.
+    pub case_sensitive: bool,
+    /// Whole-word match — wrap the (escaped or raw) pattern in `\b…\b`.
+    pub whole_word: bool,
+}
+
+/// One match within a file: its 1-based line number, the byte range of the match
+/// within that line (`[start, end)`, suitable for the frontend to mark the span and
+/// to seed the editor's selection on open), and the full text of the line.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct LineMatch {
+    /// 1-based line number (editors and humans count from 1).
+    pub line: u32,
+    /// Byte offset of the match start within `line_text` (0-based).
+    pub start: usize,
+    /// Byte offset one past the match end within `line_text`.
+    pub end: usize,
+    /// The full text of the matched line (no trailing newline).
+    pub line_text: String,
+}
+
+/// All matches in a single file, grouped under its project-relative POSIX path. Files
+/// with no matches are omitted from results entirely.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct FileMatches {
+    /// Project-relative POSIX path (same shape `fs_index` returns).
+    pub file: String,
+    /// Every match in this file, in document order.
+    pub matches: Vec<LineMatch>,
+}
+
+/// Compile a [`SearchQuery`] into a [`Regex`], composing the four modes.
+///
+/// Order matters: escape-or-not first (substring vs regex), then whole-word wrapping
+/// (`\b` around the unit), then the case flag as a prefix. An empty pattern is treated
+/// as a bad pattern so we never return a match on every line.
+fn build_regex(query: &SearchQuery) -> Result<Regex, ProjectSearchError> {
+    if query.pattern.is_empty() {
+        return Err(ProjectSearchError::BadPattern(
+            "pattern is empty".to_string(),
+        ));
+    }
+
+    let base = if query.regex {
+        query.pattern.clone()
+    } else {
+        regex::escape(&query.pattern)
+    };
+
+    // Whole-word: wrap in a non-capturing group so `\b` binds to the whole unit even
+    // when the pattern is an alternation (e.g. `foo|bar` → `\b(?:foo|bar)\b`).
+    let bounded = if query.whole_word {
+        format!(r"\b(?:{base})\b")
+    } else {
+        base
+    };
+
+    let pattern = if query.case_sensitive {
+        bounded
+    } else {
+        format!("(?i){bounded}")
+    };
+
+    Regex::new(&pattern).map_err(|e| ProjectSearchError::BadPattern(e.to_string()))
+}
+
+/// Search `root` for `query` and return per-file matches.
+///
+/// Walks the project via the shared [`project_walker`] (gitignore honored, `.git/`
+/// excluded — identical to the finder/tree), reads each file as UTF-8, and records
+/// every line containing a match. Non-UTF-8 (binary) files and unreadable entries are
+/// skipped. Results are sorted by file path for a deterministic order; matches within
+/// a file are in document order. Files with zero matches are omitted.
+///
+/// # Errors
+/// - [`ProjectSearchError::BadRoot`] if `root` does not exist or is not a directory.
+/// - [`ProjectSearchError::BadPattern`] if the (composed) pattern is empty or, in
+///   regex mode, does not compile.
+pub fn search_core(
+    root: &Path,
+    query: &SearchQuery,
+) -> Result<Vec<FileMatches>, ProjectSearchError> {
+    check_root(root).map_err(|e| match e {
+        crate::fs_index::FsIndexError::BadRoot { root, reason } => {
+            ProjectSearchError::BadRoot { root, reason }
+        }
+    })?;
+
+    let re = build_regex(query)?;
+
+    let mut results: Vec<FileMatches> = Vec::new();
+    for entry in project_walker(root) {
+        // Per-entry walk failures (e.g. a permission-denied subdir) are skipped — a
+        // partial result beats none (mirrors fs_index). A root-level failure was
+        // already caught by check_root above.
+        let Ok(entry) = entry else { continue };
+        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
+            continue;
+        }
+        let path = entry.path();
+
+        // Non-UTF-8 (binary) files are skipped: there is no meaningful line text to
+        // show, and ripgrep-style search is a text-search tool. Read errors (e.g.
+        // a file deleted mid-walk) are likewise skipped rather than failing the run.
+        let Ok(contents) = std::fs::read_to_string(path) else {
+            continue;
+        };
+
+        let mut matches: Vec<LineMatch> = Vec::new();
+        for (idx, line_text) in contents.lines().enumerate() {
+            for m in re.find_iter(line_text) {
+                matches.push(LineMatch {
+                    line: (idx as u32) + 1,
+                    start: m.start(),
+                    end: m.end(),
+                    line_text: line_text.to_string(),
+                });
+            }
+        }
+
+        if matches.is_empty() {
+            continue;
+        }
+        if let Some(file) = rel_posix(root, path) {
+            results.push(FileMatches { file, matches });
+        }
+    }
+
+    results.sort_by(|a, b| a.file.cmp(&b.file));
+    Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// A query in the most common mode: substring, case-insensitive, not whole-word.
+    fn substring(pattern: &str) -> SearchQuery {
+        SearchQuery {
+            pattern: pattern.to_string(),
+            regex: false,
+            case_sensitive: false,
+            whole_word: false,
+        }
+    }
+
+    /// Build a small project tree with known content matches.
+    /// Layout:
+    ///   src/main.rs        contains "let foo = 1;" and "foo(bar)"
+    ///   src/lib.rs         contains "pub fn foobar() {}"
+    ///   README.md          contains "Foo Bar Baz"
+    ///   ignored.txt        contains "foo" (gitignored)
+    ///   .git/config        (always excluded; also makes `ignore` treat the dir as a
+    ///                       git repo so `.gitignore` rules apply — mirrors the
+    ///                       fs_index fixture)
+    ///   .gitignore         lists ignored.txt
+    fn fixture() -> TempDir {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        fs::create_dir(root.join("src")).unwrap();
+        fs::write(root.join("src/main.rs"), "let foo = 1;\nfoo(bar)\n").unwrap();
+        fs::write(root.join("src/lib.rs"), "pub fn foobar() {}\n").unwrap();
+        fs::write(root.join("README.md"), "Foo Bar Baz\n").unwrap();
+        fs::write(root.join("ignored.txt"), "foo here\n").unwrap();
+        // The `ignore` crate applies `.gitignore` only inside a git repo; the `.git`
+        // dir provides that context (and is itself always excluded from the walk).
+        fs::create_dir(root.join(".git")).unwrap();
+        fs::write(root.join(".git/config"), "[core]").unwrap();
+        fs::write(root.join(".gitignore"), "ignored.txt\n").unwrap();
+        dir
+    }
+
+    /// Total match count across all files.
+    fn total(results: &[FileMatches]) -> usize {
+        results.iter().map(|f| f.matches.len()).sum()
+    }
+
+    #[test]
+    fn substring_matches_across_files_case_insensitive() {
+        let dir = fixture();
+        let results = search_core(dir.path(), &substring("foo")).unwrap();
+        // src/main.rs: "let foo = 1;" (1) + "foo(bar)" (1) = 2
+        // src/lib.rs:  "foobar" (1)
+        // README.md:   "Foo Bar Baz" → "Foo" (1, case-insensitive)
+        // ignored.txt: gitignored → 0
+        assert_eq!(total(&results), 4, "{results:?}");
+        let files: Vec<&str> = results.iter().map(|f| f.file.as_str()).collect();
+        assert_eq!(files, vec!["README.md", "src/lib.rs", "src/main.rs"]);
+    }
+
+    #[test]
+    fn case_sensitive_excludes_differing_case() {
+        let dir = fixture();
+        let q = SearchQuery {
+            pattern: "Foo".to_string(),
+            regex: false,
+            case_sensitive: true,
+            whole_word: false,
+        };
+        let results = search_core(dir.path(), &q).unwrap();
+        // Only README.md's "Foo" matches; lowercase "foo" in src/ does not.
+        assert_eq!(total(&results), 1, "{results:?}");
+        assert_eq!(results[0].file, "README.md");
+    }
+
+    #[test]
+    fn whole_word_excludes_substring_hits() {
+        let dir = fixture();
+        let q = SearchQuery {
+            pattern: "foo".to_string(),
+            regex: false,
+            case_sensitive: false,
+            whole_word: true,
+        };
+        let results = search_core(dir.path(), &q).unwrap();
+        // Whole-word "foo": matches "let foo = 1;" and "foo(bar)" (foo is its own
+        // word there), and "Foo" in README; does NOT match "foobar" in lib.rs.
+        assert!(
+            !results.iter().any(|f| f.file == "src/lib.rs"),
+            "foobar must not match whole-word foo: {results:?}"
+        );
+        assert_eq!(total(&results), 3, "{results:?}");
+    }
+
+    #[test]
+    fn regex_mode_matches_pattern() {
+        let dir = fixture();
+        let q = SearchQuery {
+            pattern: r"foo\w+".to_string(),
+            regex: true,
+            case_sensitive: false,
+            whole_word: false,
+        };
+        let results = search_core(dir.path(), &q).unwrap();
+        // foo\w+ matches "foobar" (lib.rs) and "foo" followed by word chars? "foo(bar)"
+        // → 'foo' then '(' is non-word, so foo\w+ needs ≥1 word char after foo:
+        // "foobar" matches; "let foo = 1;" → "foo" then space, no match; "Foo Bar"
+        // → "Foo" then space, no match. So exactly 1 match in lib.rs.
+        assert_eq!(total(&results), 1, "{results:?}");
+        assert_eq!(results[0].file, "src/lib.rs");
+    }
+
+    #[test]
+    fn match_range_and_line_number_are_recorded() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.txt"), "zero\nhas needle here\n").unwrap();
+        let results = search_core(dir.path(), &substring("needle")).unwrap();
+        assert_eq!(results.len(), 1);
+        let m = &results[0].matches[0];
+        assert_eq!(m.line, 2, "1-based line number");
+        assert_eq!(m.line_text, "has needle here");
+        assert_eq!(&m.line_text[m.start..m.end], "needle");
+    }
+
+    #[test]
+    fn multiple_matches_on_one_line_are_all_recorded() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.txt"), "x x x\n").unwrap();
+        let results = search_core(dir.path(), &substring("x")).unwrap();
+        assert_eq!(total(&results), 3, "{results:?}");
+    }
+
+    #[test]
+    fn gitignored_files_are_not_searched() {
+        let dir = fixture();
+        let results = search_core(dir.path(), &substring("foo")).unwrap();
+        assert!(
+            !results.iter().any(|f| f.file == "ignored.txt"),
+            "gitignored file must not be searched: {results:?}"
+        );
+    }
+
+    #[test]
+    fn binary_file_is_skipped() {
+        let dir = TempDir::new().unwrap();
+        // A NUL byte makes this invalid UTF-8 → read_to_string fails → skipped.
+        fs::write(dir.path().join("bin.dat"), [0xff, 0xfe, 0x00, 0x66]).unwrap();
+        fs::write(dir.path().join("text.txt"), "foo\n").unwrap();
+        let results = search_core(dir.path(), &substring("foo")).unwrap();
+        // Only the text file is searched; the binary file is silently skipped.
+        assert_eq!(results.len(), 1, "{results:?}");
+        assert_eq!(results[0].file, "text.txt");
+    }
+
+    #[test]
+    fn no_match_is_empty_result_not_error() {
+        let dir = fixture();
+        let results = search_core(dir.path(), &substring("zzz-not-present")).unwrap();
+        assert!(results.is_empty(), "{results:?}");
+    }
+
+    #[test]
+    fn invalid_regex_is_typed_error() {
+        let dir = fixture();
+        let q = SearchQuery {
+            pattern: "(unterminated".to_string(),
+            regex: true,
+            case_sensitive: false,
+            whole_word: false,
+        };
+        let result = search_core(dir.path(), &q);
+        assert!(
+            matches!(result, Err(ProjectSearchError::BadPattern(_))),
+            "an invalid regex must surface as an error, not an empty list: {result:?}"
+        );
+    }
+
+    #[test]
+    fn empty_pattern_is_typed_error() {
+        let dir = fixture();
+        let result = search_core(dir.path(), &substring(""));
+        assert!(
+            matches!(result, Err(ProjectSearchError::BadPattern(_))),
+            "an empty pattern must not match every line: {result:?}"
+        );
+    }
+
+    #[test]
+    fn nonexistent_root_is_typed_error() {
+        let dir = TempDir::new().unwrap();
+        let missing = dir.path().join("no-such-subdir");
+        let result = search_core(&missing, &substring("foo"));
+        assert!(
+            matches!(result, Err(ProjectSearchError::BadRoot { .. })),
+            "a missing root must surface as an error: {result:?}"
+        );
+    }
+
+    #[test]
+    fn file_as_root_is_bad_root_error() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("notadir.txt");
+        fs::write(&file, "foo").unwrap();
+        let result = search_core(&file, &substring("foo"));
+        assert!(
+            matches!(result, Err(ProjectSearchError::BadRoot { .. })),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn substring_pattern_with_regex_metachars_is_literal() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.txt"), "a.b\naXb\n").unwrap();
+        // In substring mode, "a.b" is literal — the '.' must NOT match 'X'.
+        let results = search_core(dir.path(), &substring("a.b")).unwrap();
+        assert_eq!(total(&results), 1, "{results:?}");
+        assert_eq!(results[0].matches[0].line_text, "a.b");
+    }
+
+    #[test]
+    fn results_sorted_by_file_path() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("zebra.txt"), "foo\n").unwrap();
+        fs::write(dir.path().join("alpha.txt"), "foo\n").unwrap();
+        let results = search_core(dir.path(), &substring("foo")).unwrap();
+        let files: Vec<&str> = results.iter().map(|f| f.file.as_str()).collect();
+        assert_eq!(files, vec!["alpha.txt", "zebra.txt"]);
+    }
+
+    // ── Error Display contract (what commands.rs surfaces to the overlay) ────────
+    // The command wrapper maps these errors to a `String` via `to_string()` (the WP6
+    // IPC-error-surfacing lesson — the overlay shows the message, never an empty list).
+    // These pin the human-meaningful content of that string for both variants.
+
+    #[test]
+    fn bad_pattern_display_names_the_pattern_problem() {
+        let dir = fixture();
+        let q = SearchQuery {
+            pattern: "(unterminated".to_string(),
+            regex: true,
+            case_sensitive: false,
+            whole_word: false,
+        };
+        let msg = search_core(dir.path(), &q).unwrap_err().to_string();
+        assert!(
+            msg.contains("invalid search pattern"),
+            "the overlay-facing string must explain the pattern is bad: {msg:?}"
+        );
+        assert!(!msg.is_empty());
+    }
+
+    #[test]
+    fn bad_root_display_names_the_root_and_reason() {
+        let dir = TempDir::new().unwrap();
+        let missing = dir.path().join("no-such-subdir");
+        let msg = search_core(&missing, &substring("foo"))
+            .unwrap_err()
+            .to_string();
+        // The string carries the offending root path + a reason so the overlay shows
+        // something actionable rather than a silently-empty result list.
+        assert!(msg.contains("no-such-subdir"), "{msg:?}");
+        assert!(msg.contains("does not exist"), "{msg:?}");
+    }
+}

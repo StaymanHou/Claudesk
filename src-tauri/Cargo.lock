@@ -491,6 +491,7 @@ dependencies = [
  "git2",
  "ignore",
  "portable-pty",
+ "regex",
  "serde",
  "serde_json",
  "tauri",

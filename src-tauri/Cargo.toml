@@ -49,6 +49,14 @@ git2 = { version = "0.21", default-features = false }
 # content search REUSES the same walker (same ecosystem). Data only — the React
 # overlay does the fuzzy match + render.
 ignore = "0.4"
+# WP7: project-wide content search. The `regex` crate (ripgrep's own matching engine,
+# same ecosystem as `ignore`/`grep`) drives all four search modes — substring (the
+# pattern is regex-escaped), regex, case-sensitivity (the `(?i)` flag), and whole-word
+# (`\b…\b` wrapping). Chosen over shelling out to the `rg` binary so search reuses
+# fs_index's `ignore` walker (one shared .gitignore contract with the finder + tree),
+# needs no user-installed binary, and stays a pure-fn TempDir-testable core. Search is
+# in-process and line-oriented; `regex` gives byte match ranges per line directly.
+regex = "1"
 
 [dev-dependencies]
 tempfile = "3"

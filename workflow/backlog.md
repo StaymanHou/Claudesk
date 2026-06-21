@@ -169,7 +169,7 @@
 - **Context:** At WP3c verify-human the operator asked how to open different files per pane and, on learning it was scoped out at P1.1, chose "ship shared now, schedule independent later." Independent-file panes need per-pane load/save/dirty/path/language state and likely a move from N controlled `<CodeMirror>` instances to raw shared/independent `EditorView`s — a meaningfully larger rebuild than the shared-doc viewport model. Pairs naturally with SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET (the raw-EditorView refactor would address both).
 - **Suggested action:** Decompose as a follow-up WP after M2 (or a later editor-polish milestone): per-pane file state + independent-vs-shared toggle. Reuse WP6's fs_index / Cmd+P to pick the second pane's file.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-21 (WP12 Phase 2, per-pane tab strips) — the F23 re-plan to the VS Code split-editor-group model makes each pane own its own tab strip + open-file set, so a DIFFERENT file (or the SAME file with an independent buffer) can be open per pane. Supersedes the shared-doc viewport model. Confirm at WP12 verify-human; close at WP12 finalize.
 
 ## SURFACE-2026-06-20-WP4-VERIFY-SELF-DIALOG-STUB-WEDGE
 - **Source:** feature:build (WP4 Phase 2 verify-self)
@@ -267,4 +267,34 @@
 - **Context:** Sublime/VS Code sidebars support keyboard tree nav; some operators prefer it. The treeState reducer + recursive TreeRow are structured to add it (a focused-index + keydown handler on the rail).
 - **Suggested action:** Add a focused-node index + a keydown handler on `.file-tree-rail` (↑/↓ over the flattened visible-node list, →/← expand/collapse, Enter = onOpen). Pure flatten-visible helper is vitest-testable. NOTE: WP10 finalize trimmed the unused `expand`/`collapse`/`collapse-all` reducer actions (now `toggle`-only) — re-add the `expand`/`collapse` actions when wiring →/← keys. Pick up in a later editor-polish pass or on request.
 - **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE
+- **Source:** feature:build (WP7 Phase 2 verify-human BLOCKING)
+- **Target level:** product:arch (cross-cutting test-shape lesson for all IPC DTOs)
+- **Type:** tech-debt
+- **Summary:** WP7 Phase 2 white-screened in the native app on first search: the Rust `LineMatch` serializes snake_case `line_text` (codebase convention — git_diff/fs_index serialize snake_case, frontend reads the snake_case keys directly; Tauri does NOT camelCase-convert command RETURN values), but the frontend TS type read camelCase `lineText` → undefined → uncaught TypeError in render. The 19 frontend unit tests missed it entirely because they construct `LineMatch`/`FileMatches` objects in TS by hand (camelCase), never exercising the real serde JSON that crosses IPC.
+- **Context:** This is a general hazard for every Tauri command that returns a multi-word-field struct. Pure-TS unit tests over hand-built DTOs validate logic but cannot catch a frontend↔backend field-name/shape drift. The convention IS snake_case end-to-end (git_diff `old_lineno`/`short_sha`/`is_head`, fs_index `is_dir`) — WP7 deviated by typing camelCase on the frontend, which the tests couldn't see.
+- **Suggested action:** (a) WP7 fix: rename the frontend field to `line_text` (done in the F12 build re-entry). (b) Cross-cutting: when adding a Tauri command that returns a struct, add ONE test that pins the exact JSON key shape — e.g. a Rust `#[test]` asserting `serde_json::to_value(&dto)` has the expected keys, OR a frontend test that feeds a realistic snake_case JSON literal (as it arrives over IPC) through the consuming code path. Consider a shared convention note in arch.md: "IPC DTOs are snake_case end-to-end; frontend types mirror the serde field names verbatim."
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-21-EDITOR-MULTI-FILE-TAB-STRIP
+- **Source:** feature:build (WP7 Phase 2 verify-human — operator UX direction)
+- **Target level:** product:wbs (NEW work package, M2)
+- **Type:** new-work
+- **Summary:** The editor has NO multi-file tab strip — it opens ONE file at a time (`openPath: string`; opening a new file replaces the current). WP3c split panes are viewports onto the SAME file (shared-document; independent-file split was deferred → SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT). The operator wants the Sublime model: a row of open-file tabs across the top of the editor (e.g. `wbs.md | roadmap.md | Find Results`), each a switchable/closable tab, INCLUDING a "Find Results" buffer tab. This requires a new editor multi-file tab-strip subsystem that is NOT in the M2 WBS or roadmap. (NOTE: the existing `right-panel-toggle` "tab row" is the PANEL selector — Editor/Diff/Sublime — NOT open-file tabs; distinct concept.)
+- **Context:** This is the dependency WP7's Sublime "Find Results" UX sits on top of. WP7 backend (project_search, shipped) + the search overlay + the open-at-match highlight seam (searchModel byte→char, EditorPanel scroll+select) all REUSE forward into the tab-strip world — none is wasted. But "Find Results as a tab among editor file-tabs" can't be built until the tab strip exists. Operator chose (2026-06-21): PAUSE WP7 mid-Phase-2, build the tab strip first (its own spec→build cycle), THEN redefine WP7 Phase 2 to render Find Results into a tab.
+- **Suggested action:** Decompose a new M2 WP — "Editor multi-file tab strip": multiple open files (state model beyond single `openPath`), a clickable/closable tab row above the editor, switch-active-file, close-tab/last-tab edge cases, per-file editor state (cursor/scroll), and a hook for synthetic read-only buffers (the Find Results tab is one). Folds in the deferred SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT (independent-file panes). Then redefine WP7 Phase 2 (overlay → Find Results tab) + keep Phase 3 (replace) layered after. Sequence/priority vs WP9/WP11: operator to set at WBS decomposition.
+- **Priority:** high
+- **Status:** PROMOTED to **WP12** in `docs/product/wbs.md` (2026-06-21, P11 SURFACE-IN). WP7 now hard-depends on WP12.
+
+## SURFACE-2026-06-21-EDITOR-FILE-WATCHER
+- **Source:** feature:build (WP12 Phase 3 verify-human — operator directive)
+- **Target level:** product:roadmap (later-milestone work; the watcher is already named in the Phase-2 status-surface roadmap, this extends it to the editor)
+- **Type:** new-work
+- **Summary:** WP12 Phase 3 ships SYNCHRONOUS disk-change detection only — a `stat_file` (mtime+size) check on tab-activate + pre-save (silent reload when clean, conflict popup when dirty). There is NO live filesystem watcher: a file changed on disk while its tab is backgrounded + untouched is caught only when you next activate it, not in real time. Operator confirmed (2026-06-21, WP12 Phase 3 verify-human "all pass") that a live watcher is wanted **later down the line**.
+- **Context:** The synchronous check is the right v1 for a single-user local tool and was explicitly scoped that way in the WP12 spec (Out of Scope: "A live filesystem watcher — disk-change detection is the synchronous on-activate/on-save check only"). A watcher would give real-time reload/conflict surfacing without a tab switch, and is the same `notify`/`tauri-plugin-fs-watch` capability the Phase-2 status-surface milestone already plans for `workflow/.session.md`. The editor's `editorDocs` store + `diskConflict` decision fn are watcher-ready: a watcher event would feed the same `checkDisk`/`reloadFromDisk`/conflict path keyed by `DocEntry.marker`.
+- **Suggested action:** When a later milestone adds the `notify`/`tauri-plugin-fs-watch` watcher (or the Phase-2 status-surface milestone lands it), extend it to watch open editor documents: on a watched-file change event, run the existing `diskDecision` against the store entry (reload-when-clean / conflict-when-dirty) WITHOUT requiring a tab activation. Reuse `editorDocs` (`set-marker`/`load-ok`) + the Phase-3 conflict popup — no new decision logic needed, just the event source. Debounce rapid writes (editors/formatters write-then-rename).
+- **Priority:** low (deferred to a later milestone; the synchronous check covers the operator's daily flow)
 - **Status:** pending

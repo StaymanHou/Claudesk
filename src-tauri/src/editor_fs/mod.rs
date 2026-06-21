@@ -28,8 +28,29 @@
 pub mod commands;
 
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
+use serde::Serialize;
 use thiserror::Error;
+
+/// A file's on-disk state marker, used by the WP12 tab strip to detect a file that
+/// changed on disk (e.g. Claude Code edited it) since the tab loaded it. We compare
+/// `mtime_ms` + `size` for equality on tab-activate and before save — a change in
+/// either means the disk copy differs. No content hash (it would cost a full read on
+/// every activation); for a single-user local tool whose external writer is CC, a
+/// same-mtime+same-size silent edit is a non-case. `mtime_ms` is f64 ms-since-epoch
+/// (avoids `SystemTime` serde-shape friction); the frontend only ever compares
+/// markers for equality, never interprets the absolute value.
+///
+/// snake_case end-to-end — Tauri does NOT camelCase command return values, so the TS
+/// mirror must read `mtime_ms` / `size` verbatim (the WP7 IPC-DTO-field-case lesson).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct FileMarker {
+    /// Modification time as milliseconds since the Unix epoch.
+    pub mtime_ms: f64,
+    /// File size in bytes.
+    pub size: u64,
+}
 
 /// Errors from editor file IO. IPC-facing wrappers map this to a `String`.
 #[derive(Debug, Error)]
@@ -109,6 +130,27 @@ pub fn write_file_core(root: &Path, requested: &Path, contents: &str) -> Result<
     std::fs::write(&tmp, contents.as_bytes())?;
     std::fs::rename(&tmp, &target)?;
     Ok(())
+}
+
+/// Read a file's [`FileMarker`] (mtime + size) under `root`. Rejects paths escaping
+/// the workspace; a missing file is an [`EditorFsError::Io`] (so the frontend treats
+/// "can't stat" as a real error, not silently as "unchanged"). Does NOT read the
+/// file contents — just `metadata`, so it is cheap to call on every tab activation.
+pub fn stat_file_core(root: &Path, requested: &Path) -> Result<FileMarker, EditorFsError> {
+    let target = resolve_within(root, requested)?;
+    let meta = std::fs::metadata(&target)?;
+    // mtime → ms since epoch. A clock-before-epoch mtime (shouldn't happen on a real
+    // file) yields a negative duration; treat its magnitude as negative ms so the
+    // marker is still a well-defined comparable value rather than an error.
+    let mtime = meta.modified()?;
+    let mtime_ms = match mtime.duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_secs_f64() * 1000.0,
+        Err(e) => -(e.duration().as_secs_f64() * 1000.0),
+    };
+    Ok(FileMarker {
+        mtime_ms,
+        size: meta.len(),
+    })
 }
 
 #[cfg(test)]
@@ -228,5 +270,47 @@ mod tests {
         write_file_core(dir.path(), Path::new("src/lib.rs"), "fn main() {}").unwrap();
         let out = read_file_core(dir.path(), Path::new("src/lib.rs")).unwrap();
         assert_eq!(out, "fn main() {}");
+    }
+
+    #[test]
+    fn stat_returns_size_and_a_positive_mtime() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("f.txt"), "hello").unwrap();
+        let m = stat_file_core(dir.path(), Path::new("f.txt")).unwrap();
+        assert_eq!(m.size, 5);
+        assert!(m.mtime_ms > 0.0, "mtime should be a real epoch time");
+    }
+
+    #[test]
+    fn stat_marker_changes_when_the_file_is_rewritten_larger() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("f.txt"), "abc").unwrap();
+        let before = stat_file_core(dir.path(), Path::new("f.txt")).unwrap();
+        // A size change alone is enough to make the markers unequal (the common case
+        // when CC edits a file). mtime may also change, but size proves the contract
+        // without depending on filesystem mtime resolution.
+        std::fs::write(dir.path().join("f.txt"), "abcdef").unwrap();
+        let after = stat_file_core(dir.path(), Path::new("f.txt")).unwrap();
+        assert_ne!(before, after);
+        assert_eq!(after.size, 6);
+    }
+
+    #[test]
+    fn stat_missing_file_is_io_error() {
+        let dir = TempDir::new().unwrap();
+        let result = stat_file_core(dir.path(), Path::new("nope.txt"));
+        assert!(matches!(result, Err(EditorFsError::Io(_))));
+    }
+
+    #[test]
+    fn stat_path_escaping_root_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir(&ws).unwrap();
+        let result = stat_file_core(&ws, Path::new("../escapee.txt"));
+        assert!(matches!(
+            result,
+            Err(EditorFsError::OutsideWorkspace { .. })
+        ));
     }
 }
