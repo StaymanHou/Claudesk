@@ -7,7 +7,7 @@ wbs: M2-WP8
 # Feature: WP8 — Relocate Sublime launchers into the panel tab row as icon buttons; drop the Text hotkey
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-20 — shipped 62869de + cleanup 2940004 (local on main); finalized.
 **Created:** 2026-06-20
 **Entry:** spec (complex feature — redefined WP, multiple spec-time decisions + asset sourcing)
 **Drive mode:** autopilot
@@ -178,8 +178,8 @@ The feature is done when:
   - [x] verify-codify  <!-- status: done — no new tests warranted: docs-only phase, no executable behavior to codify; resync correctness grep-verified in verify-auto + verify-self. A string-grep test would be brittle (breaks on next legit doc edit) and isn't the repo convention. Full suite green: vitest 206/206, cargo 90/90. -->【all impl + verify nodes complete】
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** Phase 1 + Phase 2 both fully complete (all impl + verify nodes [x]). State = verify-codify (all phases complete). Ready for `/feature-ship`.
+- **Path:** Feature > review-quality complete → finalize
+- **Active scope:** Shipped (62869de) + review-quality done (0 CRITICAL/0 MAJOR/3 MINOR, all 3 fixed inline → 2940004). Ready for `/feature-finalize`.
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
@@ -188,6 +188,37 @@ The feature is done when:
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary> ; each also logged to workflow/backlog.md -->
 - none yet
+
+## Code-Quality Review — m2-wp8-sublime-buttons-into-tab-row
+
+*Reviewed against ship commit `62869de` (autopilot). 0 CRITICAL, 0 MAJOR, 3 MINOR.*
+
+### Strengths
+- Clean `sublimeLaunch.ts` extraction with an injectable `Invoker` (defaulting to real `invoke`) — unit-testable without `vi.mock`, matching the repo's pure-core convention; test covers happy + surfaced-rejection paths.
+- Inlined `currentColor` SVG icons (no raster asset, no dependency on the user's local `.app`) — right call for dark-only tab-tinted buttons, well-documented WHY.
+- Accessibility correct: `aria-label`+`title` on the button, `aria-hidden`/`focusable="false"` on the SVGs; buttons deliberately NOT `role="tab"` (actions, not selectable tabs).
+- The chord-exclusivity test was *updated* (⌘⇧O row removed + a dedicated "⌘⇧O is freed" assertion added), codifying the freed-chord invariant rather than silently dropping it.
+- Thorough deletion: `chord.ts`/`chord.test.ts`/`SublimeToolbar.tsx` gone with no dangling imports.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR** (all 3 FIXED INLINE during review — see note below)
+- [src/App.css:200-202] Orphaned `.sublime-toolbar` comment block (body deleted, header survived). — FIXED (removed).
+- [src/App.css:547] CSS comment said "beneath the Sublime toolbar" (no longer exists). — FIXED ("beneath the panel tab row").
+- [RightPanelHost.tsx:29 + Workspace.tsx:5] `projectPath`/header comments referenced "the toolbar(s)". — FIXED (now name the Sublime launch buttons / panel tab row).
+
+### Assessment
+Well-built, tightly-scoped frontend consolidation that does exactly what the redefined spec asked with good hygiene (testable helper, re-codified invariant, a11y + dark-mode respected). Net +473/-244 with two whole modules deleted — advances the codebase, no debt. Only blemishes were 3 stale comments left by the toolbar deletion; reviewer said "no refactor warranted, appropriate to auto-backlog." **Decision: fixed all 3 inline before finalize** (trivial 1-line comment edits directly caused by this diff — cleaner than backlogging cosmetic rot). prettier clean post-fix; no live "Sublime toolbar" refs remain (only the intentional historical note in `sublimeLaunch.ts`).
+
+### If you disagree
+Operator: dismiss any finding by marking it `[DISMISSED]` in this section before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The biggest realization was the *blast radius* of a vision-level reversal. WP8 itself was a small, clean frontend job — but "keep Sublime Text instead of removing it" contradicted a Core Principle that had been propagated into 6 docs (wbs, arch, roadmap, CLAUDE.md, vision, + the WP8 plan). Most of the work-by-volume was doc reconciliation, not code.
+- **Assumptions that held:** The injectable-`Invoker` pattern for `sublimeLaunch.ts` fit the repo's "pure-core, no `vi.mock`" convention exactly; inlined SVG icons were the right call (no `.app`-bundle dependency); the capture-phase chord scheme was untouched and the `⌘⇧O`-freed invariant codified cleanly in the existing exclusivity matrix.
+- **Assumptions that were wrong:** I initially scoped the WBS resync to "the WP8 section + critical path" — but verify-auto caught a stale line in the *M2 ordering-rationale* list (item 6) that I'd missed. The grep-based observable outcomes earned their keep. Also under-estimated the durable-doc reach: the plan named arch.md but not CLAUDE.md/vision.md/roadmap.md, which surfaced at finalize.
+- **Approach delta:** Two phases as planned (frontend + doc resync). Deltas: (1) `paletteCommands.test.ts` needed an in-scope fix not in the plan (it imported the deleted `isSublimeChord`); (2) the 3 review-quality MINOR nits were fixed inline rather than auto-backlogged (trivial stale comments from this diff); (3) CLAUDE.md + vision.md durable-doc resync was done at finalize per operator decision (the plan had deferred them implicitly to /product-finalize).
 
 ## Notes
 - No git remote — commits land local on `main`.
