@@ -14,6 +14,12 @@
 - **Priority:** medium
 - **Status:** pending
 
+## Code-quality findings — m2-wp7-project-search (2026-06-21)
+- **Pointer:** 2 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `8a788bf` (0 CRITICAL). Reviewer: well-built, advances the codebase more than it accrues debt; no refactor pass warranted. MAJORs are latent single-user-app design seams: (1) Replace All does replace-then-a-SEPARATE-research (two unsynchronized tree walks; the returned `ReplaceSummary` is discarded for a racy second walk); (2) `matches_replaced` is a per-line count but the mutation is whole-file `replace_all`, so a multiline regex can diverge count-vs-effect. MINORs: synthetic-tab font size isn't live (read once at render, unlike the editor's compartment); the `plural()` helper is duplicated across findResultsBuffer.ts + replaceConfirm.ts. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp7-project-search — 2026-06-21`.
+- **Priority:** medium (2 MAJOR) + low (2 MINOR)
+- **Status:** pending
+- **Pickup shape:** MAJOR (1) — use the returned `ReplaceSummary` for the count, treat the result-list refresh as best-effort (or return post-replace matches in one pass); MAJOR (2) — count from the `replace_all` result, or guard/reject multiline patterns in replace. MINORs are quick `/feature-refactor` nits (a one-line "reads zoom at render-time, by design" comment; hoist `plural()` into `searchModel.ts`). Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — m2-wp3c-editor-split-panes (2026-06-20)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `b72ed30` (0 CRITICAL, 0 MAJOR). All cosmetic: (1) the middle-close focus-reassign in `editorPanes.ts` relies on a pre-filter-index shift that's correct + tested but under-commented; (2) the "is-split" predicate is encoded twice (JS `splitable` const vs CSS `:has(.editor-pane + .editor-pane)`) — a drift pair; (3) a redundant inline JSX comment restating the shared-doc rationale already stated in the file header. Reviewer rated the feature well-built, low-debt, fitting the codebase grain. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp3c-editor-split-panes — 2026-06-20`.
 - **Priority:** low (all)

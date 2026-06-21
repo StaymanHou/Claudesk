@@ -601,3 +601,43 @@ _From `feature-review-quality` on ship commit `f2c86d7`. 0 CRITICAL, 0 MAJOR, 3 
 - **Why it matters:** trivial, but the inconsistent intra-feature phase labels age poorly; a single "WP12" prefix would be self-explanatory.
 - **Pickup:** s/Phase 2S|3|4/WP12/ in the affected file-header comments. Trivial `/feature-refactor` or leave.
 - **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — stripped all intra-feature `Phase 2S/3/4` build-phase tags from the comments in `EditorSplit.tsx`, `PaneTabs.tsx`, `confirmDialog.ts`, `diskConflict.ts`, and `editorDocs.ts` (the `WP12` feature prefix on the file-header lines is kept; the dangling sub-phase qualifiers are gone). No code change; tsc/eslint/prettier clean.
+
+# m2-wp7-project-search — 2026-06-21
+
+_From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`. 0 CRITICAL, 2 MAJOR, 2 MINOR. Reviewer rated the feature well-built, advancing the codebase more than it accrues debt; no refactor pass warranted. The 2 MAJORs are latent design seams for a single-user app (auto-backlogged per drive_mode=autopilot, Case B); the 2 MINORs are polish (auto-backlogged). WP7 = project-wide find/replace: Phase 2 (search → Find Results synthetic tab) + Phase 3 (project-wide Replace All)._
+
+## SURFACE-2026-06-21-QUALITY-WP7-REPLACE-THEN-RESEARCH-TWO-WALKS
+- **Severity:** MAJOR (priority: medium)
+- **Location:** `src-tauri/src/project_search/mod.rs` `replace_core` + `src/components/workspace/RightPanelHost.tsx` `onReplaceConfirm`
+- **Finding:** Replace All runs `project_replace` then issues a SEPARATE `project_search` to refresh the Find Results tab — two independent, unsynchronized full-tree walks with no locking between them. A file changing on disk between the two walks (CC writing in the workspace, the open editor saving) can make the refreshed tab + the `lastCounts` gate disagree with what was actually written. The `ReplaceSummary` the backend already computes + returns is discarded in favor of the second walk.
+- **Why it matters:** the authoritative replace count is thrown away and reconstructed via a racy second pass. Low-probability for a single-user app, but the read-after-write-across-two-walks assumption is unrecorded.
+- **Suggested action:** use the returned `ReplaceSummary` for the post-replace count surface; if a refreshed result LIST is still wanted, accept it's a best-effort re-walk (document that) OR have `project_replace` return the post-replace matches in one pass. Pairs with any future replace-scope work (the deferred per-result/per-file item).
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-21-QUALITY-WP7-PERLINE-COUNT-VS-MULTILINE-REPLACE
+- **Severity:** MAJOR (priority: medium)
+- **Location:** `src-tauri/src/project_search/mod.rs:246-262` (`replace_core` match-count loop)
+- **Finding:** `matches_replaced` is computed by a per-line `re.find_iter(l).count()` sum, but the actual mutation is whole-file `re.replace_all(&contents, …)`. In regex mode an operator can supply a cross-line pattern (`(?s)…`, explicit `\n`) where `replace_all` mutates spans the per-line counter never counted — so the confirm's "Replace N matches" count under-reports vs the on-disk effect. Search shares the per-line limitation (so the Find Results tab stays self-consistent with the count), but the summary count and the on-disk mutation can silently diverge once multiline regex is in play. No test/guard covers the cross-line case.
+- **Why it matters:** the count the operator approves in the confirm is not guaranteed to equal what replace mutates under a multiline regex; the blast-radius number could mislead.
+- **Suggested action:** either count from the `replace_all` result so count == effect, OR explicitly reject/guard multiline patterns in replace with a clear error. Tie to whichever lands first.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-21-QUALITY-WP7-SYNTHETIC-FONT-NOT-LIVE
+- **Severity:** MINOR (priority: low)
+- **Location:** `src/components/workspace/editor/SyntheticView.tsx:60-78`
+- **Finding:** `loadFontSize()` is captured once inside a `useMemo` keyed on `[onLineClick, highlights]`, so the Find Results tab only picks up the persisted zoom when those deps change (e.g. a re-search) — unlike `EditorPanel`, which reconfigures font size LIVE via the `fontSizeCompartment`. Zooming the file editor while the Find Results tab is the active view (no re-search) won't update the tab until the next search.
+- **Why it matters:** small UX inconsistency vs the editor's live zoom; the WP7 verify-human fix targeted open-time parity, so it's likely acceptable, but the divergence is undocumented at the call site. (NB: the global memory `cm6-dont-copy-compartment-by-analogy` warns against reflexively adding a live compartment — so a one-shot read may be the deliberate choice; this is a doc/clarity nit, NOT a directive to add the compartment.)
+- **Suggested action:** add a one-line comment noting the synthetic view reads zoom at render-time (not live, by design), or wire a live re-read if a future cycle wants the tab to track zoom. Lowest priority.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-21-QUALITY-WP7-PLURAL-DUP
+- **Severity:** MINOR (priority: low)
+- **Location:** `src/components/workspace/search/findResultsBuffer.ts:96` & `src/components/workspace/search/replaceConfirm.ts:14`
+- **Finding:** The two-noun `plural()` helper (identical body, identical `"file" | "match"` union) is duplicated verbatim across both new modules.
+- **Why it matters:** low-cost dedup; two copies drift independently if a third noun is ever added.
+- **Suggested action:** hoist one shared `plural()` into `searchModel.ts` (where `totalMatchCount` already lives) and import it in both. Trivial `/feature-refactor`.
+- **Priority:** low
+- **Status:** pending

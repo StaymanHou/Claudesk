@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: WP7 — Project-wide find/replace (app-layer)
 
 **Workflow:** feature
-**State:** verify-codify (ALL phases complete) — Phase 1 (backend search) + Phase 2 (search → Find Results tab) + Phase 3 (project-wide Replace All) all shipped-quality; ready for ship
+**State:** finalize (complete) — commit `8a788bf` on `main` (local, unpushed; no remote). All 3 phases shipped; review-quality 0C/2M/2m auto-backlogged; archived.
 **Created:** 2026-06-21
 **Entry:** spec (complex feature)
 **Milestone:** Milestone 2 (Lite Editor + Diff Viewer)
@@ -179,10 +179,10 @@ Problem statement unchanged (F12 re-entry 2026-06-21) — the root problem (proj
 **Verdict:** proceed
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ALL THREE PHASES COMPLETE (Phase 1 backend search, Phase 2 search→Find Results tab, Phase 3 Replace All) — every impl + verify node [x]. Ready for `/feature-ship`. This is the WP7 close = the WBS-WP boundary the standing autopilot directive halts at (after ship → review-quality → finalize).
+- **Path:** Feature > finalize
+- **Active scope:** review-quality COMPLETE — 0 CRITICAL / 2 MAJOR / 2 MINOR, all auto-backlogged (Mode 3, Case B: MAJORs auto-backlog with chat surface; MINORs auto-backlog). No refactor warranted. Ready for `/feature-finalize` (the WP7 close = the WBS-WP boundary the standing autopilot directive halts at).
 - **Blocked:** none.
-- **Unvisited:** ship → review-quality → finalize (WP7 close).
+- **Unvisited:** finalize (WP7 close).
 - **Open discoveries:** SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE (deferred replace scopes — logged to backlog).
 - **Blocked:** none.
 - **Unvisited:** Phase 3 verify-auto → verify-self → verify-human → verify-codify → ship → finalize (the WP7 close = the WBS-WP boundary the standing directive halts at).
@@ -194,6 +194,40 @@ Problem statement unchanged (F12 re-entry 2026-06-21) — the root problem (proj
 - **Phase 2 (redefined) build notes:** (1) NEW pure `findResultsBuffer.ts` (`formatFindResults` → `{text, lineMap}`) is the testable core that replaced the overlay's grouped-render logic; the synthetic tab's click reports a 1-based buffer line → `lineMap[line-1]` → `openFile(file, matchTargetFor(match))`. (2) The synthetic-tab click callback is registered ONCE (`findResultsAdded` ref guard, since `EditorSplit.addSynthetic` only stores the cb on first add) and reads the LATEST map from `findResultsLineMap` (a ref, not state) so a re-search updates the map without re-registering. (3) `ProjectSearch` shrank to a query box (input + 3 toggles + Search + inline error); dropped the result `<ul>`, flat-row nav, and `searchResults` lifted state. (4) Dead result-list CSS removed; `.project-search-query-only` hugs the controls. Gates: vitest 301 (+4 formatter), tsc/eslint/prettier clean. Real-backend results-render + click-to-open need native `pnpm tauri dev` (verify-human).
 - **Phase 1 build notes:** Two as-built deltas, both improvements: (1) used `regex = "1"` directly rather than the `grep-searcher` sink API; (2) the Tauri command takes a single `SearchQuery` object instead of 4 positional args. Fixture gotcha: the `ignore` crate applies `.gitignore` only inside a git repo, so the test fixture creates a `.git/` dir (mirrors `fs_index`).
 - **Phase 2 build notes:** (1) Naming gotcha: the helper module was renamed `projectSearch.ts` → `searchModel.ts` because it collided (case-insensitive macOS FS) with the `ProjectSearch.tsx` component — tsc flagged it. (2) Search is explicit-submit (Enter / Search button), NOT as-you-type — project-wide content search is heavier than the in-memory fuzzy finder. (3) `byteOffsetToCharIndex` (TextEncoder) bridges the backend's `regex`-crate BYTE match offsets to CM6's UTF-16 positions, so highlight is exact for multi-byte lines (é/→/emoji), no-op for ASCII. (4) The open-with-highlight seam is additive: `openFile(path, target=null)` — finder/tree/diff pass nothing and behave as before. Gates: vitest 225 (206+19), tsc/eslint/prettier clean.
+
+## Retrospect
+- **What changed in our understanding:** The Phase-1 backend + the open-at-match highlight seam carried forward into the redefined UX with ZERO rework — the F26 redirect (overlay → Find Results tab) only touched the result-rendering layer, never the search engine or the highlight machinery. The WP12 synthetic-tab seam (`addSynthetic`/`setSyntheticContent` + click-line→callback) was exactly the right shape; the Find Results tab needed only a pure formatter (`formatFindResults` → text + lineMap + highlights) on top of it.
+- **Assumptions that held:** the pure-fn/vitest + operator-verify-human split scaled cleanly across both phases; the synthetic-tab click-line→callback resolved to file/match via a plain index map; `editor_fs::write_file_core` was the right write seam for replace (inherited atomicity + root-confinement); the WP12 disk-change check covered "open file reflects replace" with no new code.
+- **Assumptions that were wrong:** (1) Phase 3's original plan (per-result/per-file/replace-all on clickable result rows) was stale the moment Phase 2 made the result surface a READ-ONLY tab — the relevance gate caught it and the operator narrowed v1 to Replace All. (2) The font-size + match-highlight in the tab weren't free — verify-human rejected the first Phase-2 cut (static font, plain text) and an F12 fix added `fontSizeTheme(loadFontSize())` + `Decoration.mark` highlights. (3) Keeping the overlay open after search (needed so Replace All is reachable) superseded the Phase-2 close-on-search behavior.
+- **Approach delta:** Two operator-driven scope changes mid-feature — the Phase-2 F23 re-plan (overlay→tab) on resume, and the Phase-3 F23 narrowing (full-depth→Replace-All-only). One F12 verify-human back-loop (font/highlight). One test-bug triage (an over-broad assertion, not a code fault). Otherwise the build matched the revised plans.
+
+## Code-Quality Review — m2-wp7-project-search (Find Results tab + Replace All)
+
+_From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`. 0 CRITICAL, 2 MAJOR, 2 MINOR. Verdict: well-built, advances the codebase more than it accrues debt; no refactor pass warranted. MAJORs are latent design seams for a single-user app → auto-backlogged (Mode 3); MINORs → auto-backlogged. To dismiss a finding, mark it `[DISMISSED]` here before finalize archives the WIP._
+
+### Strengths
+- `replace_core` reuses the exact composed regex + `project_walker` as `search_core` (one match definition), pinned by `replace_count_equals_search_count_for_same_query`.
+- Regex-mode `$1` expansion vs substring-mode literal (`regex::NoExpand`), with paired tests — the subtle bug most implementations miss.
+- Disciplined pure/impure split matching repo posture; highlight offset math co-located with the buffer layout (single source of truth for the row prefix).
+- Destructive Replace All gated behind a blast-radius confirm (reused `ConfirmModal`); empty-replacement-deletes called out.
+- IPC errors surfaced inline (replace failure → `setSearchError`), never swallowed; `WriteFailed` names the first failing file.
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR**
+- [src-tauri/src/project_search/mod.rs `replace_core` + RightPanelHost.tsx `onReplaceConfirm`] Replace All runs `project_replace` then a SEPARATE `project_search` to refresh — two unsynchronized full-tree walks. A file changing on disk between them can make the refreshed tab / `lastCounts` disagree with what was written. The `ReplaceSummary` the backend already returns is discarded in favor of the second walk. Low-probability single-user, but the read-after-write assumption across two walks is unrecorded. → SURFACE-2026-06-21-QUALITY-WP7-REPLACE-THEN-RESEARCH-TWO-WALKS
+- [src-tauri/src/project_search/mod.rs:246-262] `matches_replaced` is a per-line `re.find_iter().count()` sum, but the mutation is whole-file `re.replace_all`. A cross-line regex (`(?s)…`, explicit `\n`) would have `replace_all` mutate spans the per-line counter never counted → the confirm's count under-reports vs the on-disk effect. Search shares the per-line limit (so the tab stays self-consistent), but count vs effect can diverge once multiline regex is allowed; no guard/test covers it. → SURFACE-2026-06-21-QUALITY-WP7-PERLINE-COUNT-VS-MULTILINE-REPLACE
+
+**MINOR**
+- [SyntheticView.tsx:60-78] `loadFontSize()` captured once in a `useMemo` keyed on `[onLineClick, highlights]` — the Find Results tab picks up zoom at (re)render of those deps, not live like `EditorPanel`'s compartment. Zooming the editor while the tab is active (no re-search) won't follow until the next search. Verify-human targeted open-time parity, so likely acceptable; the divergence is undocumented at the call site. → SURFACE-2026-06-21-QUALITY-WP7-SYNTHETIC-FONT-NOT-LIVE
+- [findResultsBuffer.ts:96 & replaceConfirm.ts:14] The two-noun `plural()` helper is duplicated verbatim across both modules; a shared one-liner in `searchModel` (where `totalMatchCount` lives) would remove the copy. → SURFACE-2026-06-21-QUALITY-WP7-PLURAL-DUP
+
+### Assessment
+Well-built feature that advances the codebase more than it accrues debt. The Rust replace core is the standout — genuine reuse of the search machinery (not re-derived), tests pinning the reuse + regex-vs-literal + no-op-skip + gitignore edges. The frontend cleanly collapses the old in-overlay result list into a thin query box + synthetic-tab renderer; the pure-formatter split keeps testable logic out of React. Doc comments are load-bearing (the buffer-layout diagram, the offset-tracking rationale, the ref-vs-state explanation). The two MAJORs are design seams (latent for a single-user app), not bugs the green baseline missed — backlog so the assumption is recorded. Nothing warrants a refactor pass.
+
+### If you disagree
+Mark any finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
 
 ## Test Triage — replaceAllSpec "singularizes 1 match / 1 file"
 Classification: Incorrect test assertion (the test, not the code, is wrong) — an obsolete-test case.

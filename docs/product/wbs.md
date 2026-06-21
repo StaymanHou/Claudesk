@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-21
 milestone: 2
-# WP1,2,3a,3b,3c,4,5,6,8,10,12 shipped (11/13); WP7 PAUSED-but-now-UNBLOCKED (WP12 shipped 2026-06-21 — its synthetic-buffer + tab-strip seam is the Find-Results host WP7 was waiting on; resume WP7 to render results into a WP12 tab); WP9, WP11 remain.
+# WP1,2,3a,3b,3c,4,5,6,7,8,10,12 shipped (12/13); WP7 SHIPPED 2026-06-21 (commit 8a788bf — search→Find Results tab + project-wide Replace All; per-result/per-file replace deferred to backlog). WP9, WP11 remain.
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -129,19 +129,19 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Unit tests on the fuzzy-match predicate (pure) + the gitignore-honoring walk (21 frontend finder tests + 9 backend fs_index tests)
 - [x] (folded in) Dev-only `?ws=`/`window.__seedWorkspace` seed seam (DEV-gated, reuses `openWorkspace`) — unwedges verify-self; 7 `parseSeedParam` tests
 
-### WP7: Project-wide find/replace (app-layer) — ⏸ PAUSED (blocked on WP12)
+### WP7: Project-wide find/replace (app-layer) ✅ SHIPPED 2026-06-21 (commit 8a788bf)
 
-> **PAUSED 2026-06-21 — NOW UNBLOCKED (WP12 shipped 2026-06-21, commit f2c86d7).** WP7's backend (`project_search`) shipped and the search/overlay/open-at-match-highlight all work, but at Phase-2 verify-human the operator redirected the result UX to the **Sublime "Find Results" tab** model, which depended on the editor multi-file tab strip (WP12). **WP12 now provides exactly that seam:** a synthetic read-only buffer tab (`SyntheticView` + `EditorSplit.addSynthetic`/`setSyntheticContent` + click-line→callback) that renders in a pane's tab strip. **Resume plan:** redefine WP7 Phase 2 (floating overlay result-list → render results into a WP12 synthetic "Find Results" tab; map a clicked result line via the synthetic click-line→callback to `openFile(path, highlightTarget)`), then Phase 3 (replace). The Phase-1 backend + searchModel (byte→char) + ⌘⇧F chord + the open-at-match highlight seam are all reusable (no rework). Live WIP: `workflow/wip/m2-wp7-project-search.md`.
+> **SHIPPED 2026-06-21 (commit 8a788bf).** Phase 1 (backend `project_search`, earlier cycle) + Phase 2 (search → Sublime-style "Find Results" synthetic tab, redefined after the F26 UX redirect) + Phase 3 (project-wide Replace All). The ⌘⇧F overlay is a query+replace input box; results render into a read-only WP12 synthetic tab (file-path headers + `   <line>:  <text>` rows + highlighted matched text, font matching the editor zoom); clicking a match row opens the file at the match. Replace All is gated on a search with matches, behind a blast-radius confirm; the backend `project_replace` reuses the same composed regex + walk as search (regex `$1` / substring-literal), writes atomically via `editor_fs`. **Deferred:** per-result + per-file replace (the read-only tab has no per-row affordance) → backlog SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE. Review-quality: 0 CRITICAL / 2 MAJOR / 2 MINOR (auto-backlogged). Archived WIP: `workflow/archive/m2-wp7-project-search.md`.
 
-**Description:** **App-layer subsystem** (`research.md` correction — `@codemirror/search` is single-document only). A backend ripgrep-style content search over the project dir → results; opening a result loads the file + highlights the match. **Result UX (revised 2026-06-21):** results render into a **Sublime-style "Find Results" tab** in the editor (a synthetic read-only buffer/tab), NOT a floating overlay; clicking a result line opens the file at the match. The small ⌘⇧F query input may stay as an overlay; only the *results* move to a tab. Replace-across-files is in scope (decide replace depth at build; full project replace-all chosen at WP7 spec; search-first is the must-have).
+**Description:** **App-layer subsystem** (`research.md` correction — `@codemirror/search` is single-document only). A backend ripgrep-style content search over the project dir → results; opening a result loads the file + highlights the match. **Result UX (revised 2026-06-21):** results render into a **Sublime-style "Find Results" tab** in the editor (a synthetic read-only buffer/tab), NOT a floating overlay; clicking a result line opens the file at the match. The small ⌘⇧F query input stays as an overlay; only the *results* move to a tab. Replace shipped as project-wide Replace All (per-result/per-file deferred).
 **Milestone:** Milestone 2
 **Dependencies:** WP2 (open+highlight result), WP6 (shares the fs-walk/index infrastructure), **WP12 (editor multi-file tab strip — the Find Results tab is a tab in it; added 2026-06-21)**
-**Size:** M (backend done; remaining is the Find-Results-tab frontend redefinition + replace)
+**Size:** M
 **Tasks:**
 - [x] Backend `project_search` module: ripgrep-style content search over the project dir (honor `.gitignore`); return file + line + match-range results (pure-fn core + Tauri command) — SHIPPED (Phase 1, 17 tests; reuses WP6's `ignore` walker; in-process `regex`, no `rg` binary)
-- [ ] ~~React results *overlay*~~ → **REDEFINED 2026-06-21:** render results into a **Find Results tab** (WP12) — grouped-by-file, open-on-click → EditorPanel + in-document highlight (the open-at-match seam already built). The overlay built in Phase 2 is superseded by the tab on resume.
-- [ ] Project-wide *replace* — full depth (per-result + per-file + confirmed replace-all-across-project; chosen at WP7 spec 2026-06-21)
-- [x] Unit tests on the search core (TempDir fixture with known matches) — SHIPPED (Phase 1)
+- [x] Render results into a **Find Results tab** (WP12 synthetic buffer) — grouped-by-file, highlighted matched text, open-on-click → EditorPanel + in-document highlight (the open-at-match seam). The floating-overlay result list was superseded by the tab (Phase 2 redefinition). — SHIPPED
+- [x] Project-wide *replace* — project-wide Replace All shipped (overlay Replace field + blast-radius confirm; backend `project_replace` reuses search's regex+walk; regex `$1` / substring-literal). Per-result + per-file deferred to backlog. — SHIPPED (Phase 3)
+- [x] Unit tests on the search core (TempDir fixture with known matches) — SHIPPED (Phase 1); + 9 replace_core cargo tests + findResultsBuffer/replaceConfirm vitest (Phase 2/3)
 
 ### WP10: File-tree navigator (app-layer) ✅ SHIPPED 2026-06-20 (commit 348376b)
 
