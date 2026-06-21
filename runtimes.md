@@ -53,9 +53,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 30s (2026-06-20, cold build WP6 fs_index; +9 tests → 82 pass, run ~0.37s)
+- **Last:** 5s (2026-06-20, warm WP10 P1 fs_tree; +8 tests → 90 pass, run ~0.38s)
 - **Use timeout:** 120000
 - **History:**
+  - 5s — 2026-06-20 (warm, WP10 P1: +8 walk_tree_core tests → 90 pass; no new deps, reused ignore crate)
   - 30s — 2026-06-20 (cold build, WP6 P1: +9 fs_index tests → 82 pass; ignore 0.4.26 dep tree compiled, test run itself ~0.37s)
   - 6s — 2026-06-20 (warm, WP5 P1: +4 merge_command tests → 71 pass; sublime module generalized for Sublime Merge)
   - 7s — 2026-06-20 (warm, WP4 Phase A: +12 tests → 72 pass; git_diff hunks + commit log/diff)

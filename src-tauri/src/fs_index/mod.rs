@@ -31,6 +31,7 @@ pub mod commands;
 
 use std::path::Path;
 
+use serde::Serialize;
 use thiserror::Error;
 
 /// Errors from building the file index. IPC-facing wrappers map this to a `String`.
@@ -46,68 +47,128 @@ pub enum FsIndexError {
     BadRoot { root: String, reason: String },
 }
 
+/// One entry in the file-tree walk: a project-relative POSIX path plus whether it is
+/// a directory (WP10's `FileTree` nests these into a tree, with dirs as collapsible
+/// nodes and files as leaves). Serialized to JSON `{path, is_dir}` across IPC.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct TreeEntry {
+    pub path: String,
+    pub is_dir: bool,
+}
+
+/// Reject a root that is not a readable directory (the surfaced-not-swallowed error
+/// case shared by both walks). On success the caller proceeds to walk.
+fn check_root(root: &Path) -> Result<(), FsIndexError> {
+    if root.is_dir() {
+        return Ok(());
+    }
+    Err(FsIndexError::BadRoot {
+        root: root.display().to_string(),
+        reason: if root.exists() {
+            "not a directory".to_string()
+        } else {
+            "does not exist".to_string()
+        },
+    })
+}
+
+/// The shared `ignore` walker config for both `fs_index` walks: gitignore / `.ignore`
+/// / global gitignore honored (defaults), `hidden` OFF so dotfiles (`.gitignore`,
+/// `.prettierignore`, `.env.example`, …) appear (the operator edits those; Sublime's
+/// Cmd+P shows them), and the `.git` metadata dir always excluded (gitignore rules
+/// don't cover it). Both `walk_index_core` (files-only) and `walk_tree_core`
+/// (files + dirs) build on this identical exclusion set so the finder and the tree
+/// never disagree about what's in the project.
+fn project_walker(root: &Path) -> ignore::Walk {
+    ignore::WalkBuilder::new(root)
+        .hidden(false)
+        .filter_entry(|entry| entry.file_name() != ".git")
+        .build()
+}
+
+/// Convert an absolute walk entry path to a project-relative POSIX string, or `None`
+/// if it is the root itself (empty relative path) or escapes `root`.
+fn rel_posix(root: &Path, path: &Path) -> Option<String> {
+    let rel = path.strip_prefix(root).ok()?;
+    // POSIX separators for display consistency (macOS is already `/`, but normalize
+    // so the contract is platform-independent and test-stable).
+    let s = rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/");
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
 /// Walk `root` and return its files as sorted, project-relative POSIX paths.
 ///
-/// Honors `.gitignore` / `.ignore` (via [`ignore::WalkBuilder`]) and excludes the
-/// `.git/` directory. Returns **files only** (no directories), each path relative to
-/// `root` with `/` separators (the finder displays + matches these). The list is
-/// sorted for a deterministic, stable order.
+/// Honors `.gitignore` / `.ignore` and excludes the `.git/` directory (see
+/// [`project_walker`]). Returns **files only** (no directories) — the Cmd+P finder
+/// matches over filenames. Sorted for a deterministic, stable order.
 ///
 /// # Errors
 /// [`FsIndexError::BadRoot`] if `root` does not exist or is not a directory.
 pub fn walk_index_core(root: &Path) -> Result<Vec<String>, FsIndexError> {
-    if !root.is_dir() {
-        return Err(FsIndexError::BadRoot {
-            root: root.display().to_string(),
-            reason: if root.exists() {
-                "not a directory".to_string()
-            } else {
-                "does not exist".to_string()
-            },
-        });
-    }
+    check_root(root)?;
 
     let mut files: Vec<String> = Vec::new();
-    // gitignore + .ignore + global gitignore honored (defaults). We deliberately
-    // turn `hidden` OFF so dotfiles (.gitignore, .prettierignore, .env.example, …)
-    // appear in the finder — the operator edits those, and Sublime's Cmd+P shows
-    // them. The `.git` metadata dir is the one dotfile we always exclude (gitignore
-    // rules don't cover it), via the explicit filter below.
-    let walker = ignore::WalkBuilder::new(root)
-        .hidden(false)
-        .filter_entry(|entry| entry.file_name() != ".git")
-        .build();
-
-    for result in walker {
-        let entry = match result {
-            Ok(e) => e,
-            // A per-entry error (e.g. a permission-denied subdir) is skipped rather
-            // than failing the whole index — the finder is more useful with a
-            // partial list than with nothing. A root-level failure is caught above.
-            Err(_) => continue,
-        };
+    for result in project_walker(root) {
+        // A per-entry error (e.g. a permission-denied subdir) is skipped rather than
+        // failing the whole index — the finder is more useful with a partial list
+        // than with nothing. A root-level failure is caught by check_root above.
+        let Ok(entry) = result else { continue };
         // Directories (incl. the root itself) are not finder candidates.
-        let is_file = entry.file_type().is_some_and(|ft| ft.is_file());
-        if !is_file {
+        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
             continue;
         }
-        let Ok(rel) = entry.path().strip_prefix(root) else {
-            continue;
-        };
-        // POSIX separators for display + matching consistency (macOS is already `/`,
-        // but normalize so the contract is platform-independent and test-stable).
-        let rel_posix = rel
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy())
-            .collect::<Vec<_>>()
-            .join("/");
-        if !rel_posix.is_empty() {
-            files.push(rel_posix);
+        if let Some(s) = rel_posix(root, entry.path()) {
+            files.push(s);
         }
     }
 
     files.sort();
     Ok(files)
+}
+
+/// Walk `root` and return **both files and directories** as sorted [`TreeEntry`]s
+/// (each tagged `is_dir`), for WP10's file-tree navigator.
+///
+/// Same exclusion rules as [`walk_index_core`] (shared [`project_walker`]: gitignore
+/// honored, `.git/` excluded, dotfiles shown) — so the tree and the Cmd+P finder
+/// agree about the project's contents. Unlike `walk_index_core` this EMITS directory
+/// entries too (including empty dirs), so the frontend can build a full tree. The
+/// root entry itself is skipped. Sorted by path for a deterministic order; the
+/// frontend nests the flat list into a tree.
+///
+/// # Errors
+/// [`FsIndexError::BadRoot`] if `root` does not exist or is not a directory.
+pub fn walk_tree_core(root: &Path) -> Result<Vec<TreeEntry>, FsIndexError> {
+    check_root(root)?;
+
+    let mut entries: Vec<TreeEntry> = Vec::new();
+    for result in project_walker(root) {
+        let Ok(entry) = result else { continue };
+        let Some(ft) = entry.file_type() else {
+            continue;
+        };
+        // Keep files and dirs; skip anything that's neither (e.g. a symlink the
+        // walker didn't follow). The root entry has an empty relative path and is
+        // dropped by rel_posix.
+        let is_dir = ft.is_dir();
+        if !is_dir && !ft.is_file() {
+            continue;
+        }
+        if let Some(path) = rel_posix(root, entry.path()) {
+            entries.push(TreeEntry { path, is_dir });
+        }
+    }
+
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
 }
 
 #[cfg(test)]
@@ -235,6 +296,111 @@ mod tests {
         assert!(
             matches!(result, Err(FsIndexError::BadRoot { .. })),
             "{result:?}"
+        );
+    }
+
+    // ── walk_tree_core (WP10) ───────────────────────────────────────────────
+
+    /// Look up an entry by path in a tree result; panics if absent.
+    fn find<'a>(entries: &'a [TreeEntry], path: &str) -> &'a TreeEntry {
+        entries
+            .iter()
+            .find(|e| e.path == path)
+            .unwrap_or_else(|| panic!("expected {path} in {entries:?}"))
+    }
+
+    #[test]
+    fn tree_includes_both_files_and_directories_tagged() {
+        let dir = fixture();
+        let tree = walk_tree_core(dir.path()).unwrap();
+        // The `src` directory is present and tagged is_dir.
+        assert!(find(&tree, "src").is_dir, "{tree:?}");
+        // Files under it are present and tagged NOT is_dir.
+        assert!(!find(&tree, "src/main.rs").is_dir, "{tree:?}");
+        assert!(!find(&tree, "README.md").is_dir, "{tree:?}");
+    }
+
+    #[test]
+    fn tree_includes_empty_directories() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("emptydir")).unwrap();
+        fs::write(dir.path().join("file.txt"), "x").unwrap();
+        let tree = walk_tree_core(dir.path()).unwrap();
+        // The empty dir IS in the tree (this is why WP10 chose dirs-included over
+        // building the tree from the files-only fs_index list).
+        assert!(find(&tree, "emptydir").is_dir, "{tree:?}");
+        assert!(!find(&tree, "file.txt").is_dir, "{tree:?}");
+    }
+
+    #[test]
+    fn tree_honors_gitignore_and_excludes_git_dir() {
+        let dir = fixture();
+        let tree = walk_tree_core(dir.path()).unwrap();
+        assert!(
+            !tree.iter().any(|e| e.path.contains("ignored_dir")),
+            "gitignored dir must be absent: {tree:?}"
+        );
+        assert!(
+            !tree.iter().any(|e| e.path == "secret.txt"),
+            "gitignored file must be absent: {tree:?}"
+        );
+        assert!(
+            !tree
+                .iter()
+                .any(|e| e.path == ".git" || e.path.starts_with(".git/")),
+            "the .git dir must never appear: {tree:?}"
+        );
+    }
+
+    #[test]
+    fn tree_shows_dotfiles() {
+        let dir = fixture();
+        let tree = walk_tree_core(dir.path()).unwrap();
+        // Dotfiles appear (hidden(false)) — same rule as the finder.
+        assert!(!find(&tree, ".gitignore").is_dir, "{tree:?}");
+    }
+
+    #[test]
+    fn tree_is_sorted_by_path() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir(dir.path().join("zdir")).unwrap();
+        fs::write(dir.path().join("zdir/inner.txt"), "i").unwrap();
+        fs::write(dir.path().join("alpha.txt"), "a").unwrap();
+        let tree = walk_tree_core(dir.path()).unwrap();
+        let paths: Vec<&str> = tree.iter().map(|e| e.path.as_str()).collect();
+        let mut sorted = paths.clone();
+        sorted.sort_unstable();
+        assert_eq!(paths, sorted, "tree must be sorted by path: {tree:?}");
+    }
+
+    #[test]
+    fn tree_uses_relative_posix_paths_and_skips_root() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("a/b")).unwrap();
+        fs::write(dir.path().join("a/b/deep.txt"), "x").unwrap();
+        let tree = walk_tree_core(dir.path()).unwrap();
+        let paths: Vec<&str> = tree.iter().map(|e| e.path.as_str()).collect();
+        // The root entry (empty relative path) is skipped; nested entries use '/'.
+        assert_eq!(paths, vec!["a", "a/b", "a/b/deep.txt"]);
+        assert!(find(&tree, "a").is_dir && find(&tree, "a/b").is_dir);
+        assert!(!find(&tree, "a/b/deep.txt").is_dir);
+    }
+
+    #[test]
+    fn tree_empty_dir_is_empty_list_not_error() {
+        let dir = TempDir::new().unwrap();
+        let tree = walk_tree_core(dir.path()).unwrap();
+        assert!(tree.is_empty(), "{tree:?}");
+    }
+
+    #[test]
+    fn tree_nonexistent_root_is_typed_error() {
+        let dir = TempDir::new().unwrap();
+        let missing = dir.path().join("no-such-subdir");
+        let result = walk_tree_core(&missing);
+        assert!(
+            matches!(result, Err(FsIndexError::BadRoot { .. })),
+            "a missing root must surface as an error, not an empty tree: {result:?}"
         );
     }
 }

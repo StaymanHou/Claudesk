@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use super::walk_index_core;
+use super::{walk_index_core, walk_tree_core, TreeEntry};
 
 /// Return the gitignore-honoring file list for the workspace `root`, as sorted
 /// project-relative POSIX paths. Errors (root missing / not a directory) come back
@@ -19,4 +19,13 @@ use super::walk_index_core;
 #[tauri::command]
 pub fn fs_index(root: String) -> Result<Vec<String>, String> {
     walk_index_core(Path::new(&root)).map_err(|e| e.to_string())
+}
+
+/// Return the gitignore-honoring file+directory tree for the workspace `root`, as
+/// sorted [`TreeEntry`]s (each tagged `is_dir`). Backs WP10's file-tree navigator;
+/// the frontend nests this flat list into a collapsible tree. Errors come back as a
+/// `String` so the tree surfaces them inline instead of showing an empty rail.
+#[tauri::command]
+pub fn fs_tree(root: String) -> Result<Vec<TreeEntry>, String> {
+    walk_tree_core(Path::new(&root)).map_err(|e| e.to_string())
 }

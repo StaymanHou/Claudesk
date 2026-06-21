@@ -551,6 +551,116 @@ body,
   flex-direction: column;
 }
 
+/* ── WP10 file-tree left rail + right-half restructure ────────────────── */
+/* The right-half body is a horizontal row beneath the Sublime toolbar:
+   [ FileTree rail | panel column ]. Fills the remaining height; min-height:0 keeps
+   the editor's flex/scroll chain bounded (the WP3a height-chain lesson). */
+.right-panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+/* The panel column (tabs + editor/diff slots) — was the direct child set of
+   .workspace-right before WP10; now nested so the tree rail can sit beside it.
+   Carries the same flex:1 / min-height:0 so the inner panels bound correctly. */
+.right-panel-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The file-tree rail: a fixed-width left column, vertically scrollable, dark.
+   Collapses to a thin strip (just the toggle) to reclaim width for the editor. */
+.file-tree-rail {
+  flex-shrink: 0;
+  width: 200px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(128, 128, 128, 0.2);
+  background-color: #1b1b1b;
+}
+
+.file-tree-rail.is-collapsed {
+  width: auto;
+}
+
+/* The collapse toggle pinned to the top of the rail. */
+.file-tree-collapse {
+  flex-shrink: 0;
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  color: #b0b0b0;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.file-tree-collapse:hover {
+  color: #e0e0e0;
+}
+
+/* The scrolling tree body fills the rail below the toggle. */
+.file-tree-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 0.5rem;
+}
+
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 2px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: #cfcfcf;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.file-tree-row:hover {
+  background-color: #2a2d2e;
+}
+
+.file-tree-file.is-active {
+  background-color: #094771;
+  color: #ffffff;
+}
+
+.file-tree-chevron {
+  flex-shrink: 0;
+  width: 0.8em;
+  color: #888;
+  font-size: 0.7rem;
+}
+
+.file-tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-error,
+.file-tree-loading,
+.file-tree-empty {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.75rem;
+  color: #858585;
+}
+
+.file-tree-error {
+  color: #f0a0a0;
+}
+
 /* The diff panel itself: status bar (fixed) + body (fills). Mirrors .editor-panel
    so the two panels read as siblings. */
 .diff-panel {

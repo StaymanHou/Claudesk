@@ -21,6 +21,7 @@ import { DiffPanel } from "./diff/DiffPanel";
 import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
+import { FileTree } from "./filetree/FileTree";
 
 interface RightPanelHostProps {
   /** The workspace's project directory — passed to every panel + the toolbars. */
@@ -36,6 +37,11 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
 
   // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.
   const [finderOpen, setFinderOpen] = useState(false);
+
+  // WP10 — whether the FileTree left rail is collapsed (to a strip) to reclaim the
+  // editor's horizontal width in the 50/50 split. State lives here so it persists
+  // across center-stage switches (the panels-stay-mounted rule). Default expanded.
+  const [treeCollapsed, setTreeCollapsed] = useState(false);
 
   // Which right-half panel is front. Direct-select via tabs + ⌘⇧ chords. Both panels
   // stay mounted (display:none toggle) so each keeps its state across switches.
@@ -77,65 +83,98 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
   return (
     <div className="workspace-right">
       <SublimeToolbar projectPath={projectPath} active={visible} />
-      {/* Clickable panel tabs — direct-select, coexisting with the ⌘⇧ chords. */}
-      <div
-        className="right-panel-toggle"
-        role="tablist"
-        aria-label="right panel"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={panel === "editor"}
-          className={`panel-tab${panel === "editor" ? " is-active" : ""}`}
-          data-testid="panel-tab-editor"
-          onClick={() => setPanel((cur) => selectPanel(cur, "editor"))}
-          title="Editor (⌘⇧E)"
-        >
-          Editor
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={panel === "diff"}
-          className={`panel-tab${panel === "diff" ? " is-active" : ""}`}
-          data-testid="panel-tab-diff"
-          onClick={() => setPanel((cur) => selectPanel(cur, "diff"))}
-          title="Diff (⌘⇧D)"
-        >
-          Diff
-        </button>
-        {/* Terminal tab (⌘⇧T) arrives with WP9; omitted until the panel exists. */}
-      </div>
 
-      {/* Editor panel — kept mounted; hidden (not unmounted) when Diff is front so
-          the open file + scroll survive the switch. Files are opened via the Cmd+P
-          finder (WP6) — the WP2 path-input open-bar it replaced is gone. */}
-      <div
-        className="right-panel-slot"
-        style={{ display: panel === "editor" ? "flex" : "none" }}
-      >
-        <EditorPanel
-          projectPath={projectPath}
-          openPath={openPath}
-          active={visible && panel === "editor"}
-        />
-      </div>
+      {/* WP10 — the right-half body is a horizontal row: the FileTree rail (left) +
+          the panel column (right). The rail collapses to a strip to reclaim width
+          for the editor in the 50/50 split; collapse state persists (mounted). */}
+      <div className="right-panel-body">
+        <div
+          className={`file-tree-rail${treeCollapsed ? " is-collapsed" : ""}`}
+        >
+          <button
+            type="button"
+            className="file-tree-collapse"
+            data-testid="file-tree-collapse"
+            aria-label={treeCollapsed ? "Show file tree" : "Hide file tree"}
+            aria-expanded={!treeCollapsed}
+            title={treeCollapsed ? "Show file tree" : "Hide file tree"}
+            onClick={() => setTreeCollapsed((c) => !c)}
+          >
+            {treeCollapsed ? "›" : "‹ Files"}
+          </button>
+          {/* The tree stays mounted (keeps its expand state) even when collapsed;
+              CSS hides the body in the collapsed strip. */}
+          {!treeCollapsed && (
+            <FileTree
+              projectPath={projectPath}
+              openPath={openPath}
+              onOpen={openFile}
+            />
+          )}
+        </div>
 
-      {/* Diff panel — kept mounted; the selected-file diff survives the switch.
-          `active` is gated on BOTH workspace visibility AND the diff panel being
-          front so a backgrounded panel doesn't auto-refresh its file list. */}
-      <div
-        className="right-panel-slot"
-        style={{ display: panel === "diff" ? "flex" : "none" }}
-      >
-        <DiffPanel
-          projectPath={projectPath}
-          active={visible && panel === "diff"}
-          // "Open" always opens the live working-tree file (by design — see
-          // DiffPanel onOpenInEditor doc). Same seam as the Cmd+P finder.
-          onOpenInEditor={openFile}
-        />
+        <div className="right-panel-main">
+          {/* Clickable panel tabs — direct-select, coexisting with the ⌘⇧ chords. */}
+          <div
+            className="right-panel-toggle"
+            role="tablist"
+            aria-label="right panel"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panel === "editor"}
+              className={`panel-tab${panel === "editor" ? " is-active" : ""}`}
+              data-testid="panel-tab-editor"
+              onClick={() => setPanel((cur) => selectPanel(cur, "editor"))}
+              title="Editor (⌘⇧E)"
+            >
+              Editor
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panel === "diff"}
+              className={`panel-tab${panel === "diff" ? " is-active" : ""}`}
+              data-testid="panel-tab-diff"
+              onClick={() => setPanel((cur) => selectPanel(cur, "diff"))}
+              title="Diff (⌘⇧D)"
+            >
+              Diff
+            </button>
+            {/* Terminal tab (⌘⇧T) arrives with WP9; omitted until the panel exists. */}
+          </div>
+
+          {/* Editor panel — kept mounted; hidden (not unmounted) when Diff is front
+              so the open file + scroll survive the switch. Files are opened via the
+              Cmd+P finder (WP6) or the WP10 file tree. */}
+          <div
+            className="right-panel-slot"
+            style={{ display: panel === "editor" ? "flex" : "none" }}
+          >
+            <EditorPanel
+              projectPath={projectPath}
+              openPath={openPath}
+              active={visible && panel === "editor"}
+            />
+          </div>
+
+          {/* Diff panel — kept mounted; the selected-file diff survives the switch.
+              `active` is gated on BOTH workspace visibility AND the diff panel being
+              front so a backgrounded panel doesn't auto-refresh its file list. */}
+          <div
+            className="right-panel-slot"
+            style={{ display: panel === "diff" ? "flex" : "none" }}
+          >
+            <DiffPanel
+              projectPath={projectPath}
+              active={visible && panel === "diff"}
+              // "Open" always opens the live working-tree file (by design — see
+              // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
+              onOpenInEditor={openFile}
+            />
+          </div>
+        </div>
       </div>
 
       {/* WP6 — Cmd+P fuzzy file finder overlay. Only the focused workspace mounts

@@ -53,6 +53,9 @@ pub fn run() {
             // .gitignore (ignore crate) and returns the file list the finder overlay
             // fuzzy-matches over. Errors surface to the overlay, never empty-on-fail.
             fs_index::commands::fs_index,
+            // WP10: file-tree navigator. Same gitignore-honoring walk as fs_index but
+            // returns files + directories (tagged) so the frontend can nest a tree.
+            fs_index::commands::fs_tree,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an

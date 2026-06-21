@@ -258,3 +258,27 @@
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** all three are trivial `/feature-refactor` nits (or leave — #3 matches the existing CommandPalette pattern, arguably WAI). Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-20-WP10-ARROW-KEY-TREE-NAV
+- **Source:** feature:build (WP10 Phase 2, P2.6 stretch)
+- **Target level:** product:wbs
+- **Type:** new-work (deferred stretch)
+- **Summary:** The FileTree (WP10) supports click-to-open + click-to-toggle (the must-haves) but NOT arrow-key navigation (↑/↓ move, →/← expand/collapse, Enter open). Deferred at build to keep the WP boundary clean.
+- **Context:** Sublime/VS Code sidebars support keyboard tree nav; some operators prefer it. The treeState reducer + recursive TreeRow are already structured to add it (a focused-index + keydown handler on the rail).
+- **Suggested action:** Add a focused-node index + a keydown handler on `.file-tree-rail` (↑/↓ over the flattened visible-node list, →/← dispatch expand/collapse, Enter = onOpen). Pure flatten-visible helper is vitest-testable. Pick up in a later editor-polish pass or on request.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-WP10-FOLLOWUP-TREE-EDITOR-POLISH
+- **Source:** feature:verify-human (WP10 — operator request at approval)
+- **Target level:** product:wbs (a new M2 polish WP, or fold into a later editor-polish milestone)
+- **Type:** new-work (UI polish + one new feature)
+- **Summary:** Operator-requested tree/editor density + git-status polish, captured at WP10 approval. Four asks:
+  1. **File-tree rail 66% WIDER** — `.file-tree-rail` width 200px → ~332px (200 × 1.66).
+  2. **Tree rows 2/3 current HEIGHT + correspondingly SMALLER font** — `.file-tree-row` padding/line-height to ~2/3, font-size ~0.78rem → ~0.52rem (or the proportional value that reads well). Denser, more files visible at once.
+  3. **Minimap 75% of current WIDTH** — the `@replit/codemirror-minimap` (WP3a) width → 0.75×. Check the minimap extension's width option / its container CSS.
+  4. **Sublime-style file-change indicators** — git status dots/marks on tree rows like Sublime Text's sidebar (the colored dots in the operator's reference image: modified / untracked / etc.). NEW feature — needs a backend git-status source (reuse `git2` from WP4's `git_diff` module — a `git_status(root)` returning per-path status: modified/added/untracked/clean) + a per-row indicator in `FileTree`/`TreeRow`. This is the substantive piece (the other 3 are CSS/config tweaks).
+- **Context:** All four are post-WP10 polish; WP10 shipped the functional tree (browse + open). #1–3 are quick CSS/config; #4 is a real subsystem (git status per file) that pairs naturally with the existing `git_diff`/`git2` infrastructure and the diff viewer.
+- **Suggested action:** Spin a new WP (e.g. "WP11: tree/editor density + git-status indicators") — route #4 through spec (backend git_status command + frontend indicator), bundle #1–3 as a quick CSS/config phase. Reuse git2 (already a dep) for the status walk; honor the errors-surfaced discipline.
+- **Priority:** medium (operator-requested; #4 is a real feature, #1–3 are fast wins)
+- **Status:** pending
