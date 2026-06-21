@@ -573,3 +573,31 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Suggested action:** Optionally gate the hover-set on actual pointer movement, or leave (matches CommandPalette). Low value.
 - **Priority:** low
 - **Status:** pending
+
+# m2-wp12-editor-tab-strip — 2026-06-21
+
+_From `feature-review-quality` on ship commit `f2c86d7`. 0 CRITICAL, 0 MAJOR, 3 MINOR (all priority: low). Reviewer rated the feature well-built, low-debt, advancing the codebase; no refactor pass warranted. WP12 = editor multi-file tab strip (per-pane split-editor groups + shared document store + disk-change detection + synthetic read-only buffer hook)._
+
+## SURFACE-2026-06-21-QUALITY-WP12-DEAD-TAB-DIRTY-FIELD
+- **Severity:** MINOR (priority: low)
+- **Location:** `src/components/workspace/editor/openFiles.ts:39-40, 66-68, 150-161` (+ its tests in `__tests__/openFiles.test.ts:196-227`)
+- **Finding:** `OpenFile.dirty` field + the `set-dirty` event are DEAD in production. After the Phase-2S back-loop moved dirty to the shared document store, `PaneTabs.tabIsDirty` reads `isDirty(docs.byPath[path])`; nothing dispatches `set-dirty` outside its own unit test.
+- **Why it matters:** a future reader will assume the tab-level `dirty` flag is load-bearing and try to keep it in sync, reintroducing the per-view dirty-tracking the shared-doc model deliberately removed.
+- **Pickup:** remove the `dirty` field from `OpenFile`, the `set-dirty` event from the reducer, and the 3 `set-dirty` tests. Quick `/feature-refactor`.
+- **Status:** pending
+
+## SURFACE-2026-06-21-QUALITY-WP12-CLOSE-GUARD-OVERWARNS-MULTIVIEW
+- **Severity:** MINOR (priority: low)
+- **Location:** `src/components/workspace/editor/PaneTabs.tsx:186-206` (the dirty-close guard) — needs the store's refCount, which lives in `editorDocs.DocEntry.refCount`.
+- **Finding:** the dirty-close guard prompts save/discard/cancel whenever `tabIsDirty`, but when the same dirty file is open in another pane (refCount > 1) closing THIS tab loses nothing — the buffer survives in the other view. The operator is warned about changes that aren't at risk.
+- **Why it matters:** a spurious "unsaved changes" modal on every multi-view tab close trains the operator to click through it reflexively, eroding the guard for the case that matters. Not a correctness bug (no data loss either way) → MINOR.
+- **Pickup:** only raise the close guard when it's the LAST view of a dirty doc (dirty AND `docs.byPath[path].refCount <= 1`); a non-last view closes immediately. Needs threading refCount into `PaneTabs` (it already receives `docs`). Quick `/feature-refactor`.
+- **Status:** pending
+
+## SURFACE-2026-06-21-QUALITY-WP12-INTRA-FEATURE-PHASE-TAGS
+- **Severity:** MINOR (priority: low)
+- **Location:** file headers of `EditorSplit.tsx` / `PaneTabs.tsx` (Phase 4/2S) / `confirmDialog.ts` (Phase 3) / `diskConflict.ts` (Phase 3) / `editorDocs.ts` (Phase 2S).
+- **Finding:** intra-feature build-phase tags ("Phase 2S/3/4") are internal to this one feature's build and reference no shared roadmap; they'll read as dangling references to a future maintainer.
+- **Why it matters:** trivial, but the inconsistent intra-feature phase labels age poorly; a single "WP12" prefix would be self-explanatory.
+- **Pickup:** s/Phase 2S|3|4/WP12/ in the affected file-header comments. Trivial `/feature-refactor` or leave.
+- **Status:** pending

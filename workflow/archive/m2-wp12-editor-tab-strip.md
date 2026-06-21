@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: WP12 — Editor multi-file tab strip (Sublime-style open-file tabs)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready to ship
+**State:** COMPLETED 2026-06-21 — shipped f2c86d7, review-quality clean (3 MINOR backlogged), finalized
 **Created:** 2026-06-21
 **Entry:** spec (complex feature)
 **Milestone:** Milestone 2 (Lite Editor + Diff Viewer)
@@ -229,8 +229,8 @@ Resolving the four plan/build-time mechanics from the spec's Open Questions:
   - [x] verify-codify  <!-- status: done — add-synthetic reducer path unit-covered (openFiles suite); SyntheticView render/read-only/click-callback live-verified in verify-self (repo has no jsdom/RTL → no CM6 unit mount possible/warranted). Full suites green: vitest 301, cargo 111, no regressions. -->
 
 ## Current Node
-- **Path:** Feature > SHIP
-- **Active scope:** ALL PHASES COMPLETE (1, 2, 2S, 3, 4 — every verify loop green). WP12 (editor multi-file tab strip, per-pane split-editor groups, shared document store, disk-change detection, synthetic read-only buffer hook) is ready to ship. Final gates: vitest 301, cargo 111, tsc/eslint/prettier clean. Run `/feature-ship`.
+- **Path:** Feature > finalize
+- **Active scope:** review-quality DONE — 0 CRITICAL, 0 MAJOR, 3 MINOR (all auto-backlogged, Mode 3; reviewer: well-built, no refactor warranted). SHIPPED f2c86d7. Next: finalize (resync docs, sweep backlog, archive WIP, CHANGELOG, mark WP12 complete in WBS → unblocks WP7's resume). The 3 .claude/memory prettier nits stay unstaged per SURFACE-2026-06-18.
 - **Blocked:** none
 - **Unvisited:** none — ship → finalize. On finalize, close the carried SURFACEs (WP3C-INDEPENDENT-FILE-SPLIT realized, file-watcher deferred, shared-doc-cursor-reset accepted) + resume WP7 (its Find Results tab now has the WP12 synthetic-buffer seam).
 - **Open discoveries:** editor-file-watcher (deferred, logged); shared-doc cursor-reset extends to same-file-2-panes (accepted v1); WP3C-INDEPENDENT-FILE-SPLIT realized — close at finalize.
@@ -246,6 +246,37 @@ Resolving the four plan/build-time mechanics from the spec's Open Questions:
 - **Blocked:** none
 - **Unvisited:** Phase 2 verify group (verify-auto → verify-self → verify-human → verify-codify), then Phase 3 (disk-change detection, per-(pane,tab) keyed), then Phase 4 (synthetic buffer hook, per-pane). ⌘⇧+digit RESERVED for filmstrip/workspace switching (operator) — WP12's bare ⌘+digit unaffected.
 - **Open discoveries:** SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT realized by the per-pane model (close at finalize).
+
+## Retrospect
+- **What changed in our understanding:** the plan's containment + buffer model were both wrong at first and corrected by operator verify-human, in two distinct back-loops. (1) The first build made ONE global tab strip whose active tab owned a pane layout (tabs>panes); the operator wanted the VS Code split-editor-group model — panes top-level, each with its OWN tab strip (panes>tabs). (2) The per-pane build then gave each pane an INDEPENDENT buffer; the operator wanted the same file in two panes to SHARE one buffer (two views of one document). Both were design intent that only surfaced when the operator drove the real native UX.
+- **Assumptions that held:** the pure-reducer posture (openFiles / editorDocs / diskConflict / confirmDialog / tabSwitchChord all React-free + vitest-first) paid off — every back-loop reused the reducers unchanged and re-keyed the React layer around them. The Phase-1 stat_file + confirmDialog + openFiles reducer all survived both re-plans intact. The `stat_file` mtime+size marker (no hash) was sufficient.
+- **Assumptions that were wrong:** (a) "one tab strip is the natural model" — inverted to per-pane. (b) "independent per-pane buffers are fine" — must be shared. (c) The split-flash-then-close bug: an unstable inline `onEmptyChange` callback re-fired a stale-closure collapse — only reproduced under the native filled-pane condition the stub couldn't reach (caught via fiber-driven reproduction in the debug sidebar). (d) the dead tab-level `dirty` field left behind by the shared-doc move (review-quality MINOR).
+- **Approach delta:** plan→build was NOT linear — 2 F23 plan re-plans (tabs>panes inversion; shared-doc store) + 1 F12 build back-loop (split-persist gesture) + 1 F12 (the buffer-share reject) + a debug-empirical-telemetry sidebar (gate-skipped → static fix) for the flash-close bug. Final architecture (EditorSplit owns pane model + shared editorDocs store; PaneTabs per pane; EditorPanel as a view; SyntheticView for the WP7 seam) is materially better than the original tabs>panes plan and is exactly what Phase 3 + WP7 needed. 5 phases (1, 2, 2S, 3, 4); 301 vitest + 111 cargo.
+
+## Code-Quality Review — m2-wp12-editor-tab-strip
+
+_Reviewed against ship commit f2c86d7 (per-feature review-quality, 2026-06-21). 0 CRITICAL, 0 MAJOR, 3 MINOR — all auto-backlogged (Mode 3). Reviewer: well-built, low-debt, advances the codebase; no refactor pass warranted._
+
+### Strengths
+- Clean pure-logic/imperative split consistently applied (openFiles/editorDocs/diskConflict/confirmDialog/tabSwitchChord/labelForPath all React-free + vitest-covered).
+- The shared-document store (editorDocs) is a good model: ref-counting by path, `updateEntry` identity-preservation on no-op, `isDirty` pure derivation; delegates to reused load/save reducers.
+- Rust `editor_fs` solid: `resolve_within` canonicalizes the parent (not-yet-existing files still guarded), atomic tmp+rename, typed errors → String at the seam, 15 tests.
+- The two back-loop fixes (panesRef live-mirror, lastReported* ref-gated effects) are pinned with comments explaining the "Split flashes then closes" bug they prevent.
+- Chord-ownership centrally documented (exclusivity matrix incl. ⌘⇧O freed + ⌘⇧1..9 reserved).
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [openFiles.ts:39-40,66-68,150-161] `OpenFile.dirty` field + `set-dirty` event are dead in production — dirty now lives only in the shared store (`PaneTabs.tabIsDirty` reads `isDirty(docs.byPath[path])`); nothing dispatches `set-dirty` outside its own test. Residue from the Phase-2S back-loop. Remove field+event+tests so the model says what it means.
+- [PaneTabs.tsx:186-206] The dirty-close guard prompts save/discard/cancel even when refCount>1 (same dirty file open in another pane) → closing this tab loses nothing (buffer survives in the other view), so the warning is spurious. The dirty/refCount data to distinguish "last view of a dirty doc" is in the store. Not a correctness bug → MINOR.
+- [EditorSplit.tsx / PaneTabs.tsx / confirmDialog.ts / diskConflict.ts / editorDocs.ts headers] Intra-feature phase tags ("Phase 2S/3/4") won't mean anything to a future reader; a single "WP12" prefix would age better.
+
+### Assessment
+Well-built work that advances the codebase. Architecture (per-pane tab reducers over a ref-counted shared document store, cursor/scroll per-view) is the right decomposition; the three operator back-loops left the code clearer because each fix is pinned with its why. Rust IO layer exemplary for the repo's conventions. Only debt is cosmetic-to-minor; nothing warrants a refactor pass. Known WP3c cursor-reset correctly scoped out + logged.
+
+### If you disagree
+Dismiss any finding by editing this section + marking the line `[DISMISSED]` before finalize archives the WIP.
 
 ## Discoveries
 

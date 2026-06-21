@@ -287,7 +287,7 @@
 - **Context:** This is the dependency WP7's Sublime "Find Results" UX sits on top of. WP7 backend (project_search, shipped) + the search overlay + the open-at-match highlight seam (searchModel byte→char, EditorPanel scroll+select) all REUSE forward into the tab-strip world — none is wasted. But "Find Results as a tab among editor file-tabs" can't be built until the tab strip exists. Operator chose (2026-06-21): PAUSE WP7 mid-Phase-2, build the tab strip first (its own spec→build cycle), THEN redefine WP7 Phase 2 to render Find Results into a tab.
 - **Suggested action:** Decompose a new M2 WP — "Editor multi-file tab strip": multiple open files (state model beyond single `openPath`), a clickable/closable tab row above the editor, switch-active-file, close-tab/last-tab edge cases, per-file editor state (cursor/scroll), and a hook for synthetic read-only buffers (the Find Results tab is one). Folds in the deferred SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT (independent-file panes). Then redefine WP7 Phase 2 (overlay → Find Results tab) + keep Phase 3 (replace) layered after. Sequence/priority vs WP9/WP11: operator to set at WBS decomposition.
 - **Priority:** high
-- **Status:** PROMOTED to **WP12** in `docs/product/wbs.md` (2026-06-21, P11 SURFACE-IN). WP7 now hard-depends on WP12.
+- **Status:** RESOLVED 2026-06-21 — WP12 (editor multi-file tab strip) SHIPPED (commit f2c86d7): per-pane tab strips + shared-doc store + disk-change + synthetic-buffer hook, operator-approved. WP7 is now UNBLOCKED — its Find-Results tab has the WP12 synthetic-buffer seam to resume onto. (Was: PROMOTED to WP12 2026-06-21.)
 
 ## SURFACE-2026-06-21-EDITOR-FILE-WATCHER
 - **Source:** feature:build (WP12 Phase 3 verify-human — operator directive)
@@ -298,3 +298,9 @@
 - **Suggested action:** When a later milestone adds the `notify`/`tauri-plugin-fs-watch` watcher (or the Phase-2 status-surface milestone lands it), extend it to watch open editor documents: on a watched-file change event, run the existing `diskDecision` against the store entry (reload-when-clean / conflict-when-dirty) WITHOUT requiring a tab activation. Reuse `editorDocs` (`set-marker`/`load-ok`) + the Phase-3 conflict popup — no new decision logic needed, just the event source. Debounce rapid writes (editors/formatters write-then-rename).
 - **Priority:** low (deferred to a later milestone; the synchronous check covers the operator's daily flow)
 - **Status:** pending
+
+## Code-quality findings — m2-wp12-editor-tab-strip (2026-06-21)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `f2c86d7` (0 CRITICAL, 0 MAJOR). All low-stakes: (1) dead tab-level `dirty` field + `set-dirty` event in `openFiles.ts` — residue from the Phase-2S shared-doc move (dirty now lives in the store); (2) the dirty-close guard over-warns when refCount>1 (closing one view of a dirty file open in another pane loses nothing — gate on last-view); (3) intra-feature "Phase 2S/3/4" comment tags that won't age (use "WP12"). Reviewer rated the feature well-built, low-debt, advancing the codebase; no refactor pass warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp12-editor-tab-strip — 2026-06-21`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** all three are quick `/feature-refactor` items (delete the dead dirty machinery; gate the close guard on `refCount<=1`; s/Phase N/WP12/ in headers). Dismiss any via the WIP's `## Code-Quality Review` section.

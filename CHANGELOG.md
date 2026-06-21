@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-21
+
+- **Feature shipped:** WP12 — editor multi-file tab strip: the right-half editor now opens multiple files as a row of tabs per pane in VS Code split-editor-group style (panes are top-level via the reused `editorPanes` reducer, each pane owns its own tab strip + ordered open-file set via a new pure `openFiles` reducer), with a per-workspace SHARED document store (`editorDocs`, ref-counted by path) so the same file open in two panes is ONE live buffer (edits mirror, dirty + save are document-level) while cursor/scroll stay per-view, synchronous disk-change detection (a new `stat_file` mtime+size marker checked on tab-activate + pre-save → silent reload when clean, a keep-mine/load-disk conflict popup when dirty, and a save-guard that blocks clobbering), a ⌘1..⌘9 tab-switch chord (bare ⌘+digit; ⌘⇧+digit reserved for the future filmstrip), confirm-before-close on a dirty tab, and a generic synthetic read-only buffer hook (`SyntheticView` + a dev-only `window.__editorSynthetic`) that is the seam WP7's "Find Results" tab will render into; built across 5 phases through 3 operator verify-human back-loops (tabs→per-pane inversion, a split-flash-then-close fix, and the independent→shared buffer correction).
+- **Backlog resolved:** SURFACE-2026-06-21-EDITOR-MULTI-FILE-TAB-STRIP — the driver SURFACE (from WP7 Phase-2 verify-human), shipped as WP12; WP7 is now unblocked to render Find Results into a WP12 synthetic tab.
+- **Backlog resolved:** SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT — realized by WP12's per-pane split-editor groups (a different file, or the same file with a shared buffer, can be open per pane).
+- **Milestone:** WP12 (Milestone 2, editor multi-file tab strip) complete — 11th of Milestone 2's 13 WPs shipped; WP7 (now unblocked), WP9, WP11 remain.
+
 ## 2026-06-20
 
 - **Feature shipped:** WP3a — editor core-editing parity: layered the daily Sublime-parity editing features onto the WP2 editor shell via a new pure `editorExtensions.ts` builder — multi-cursor with Cmd-drag rectangular/column select and Cmd-D select-next, in-file find (Cmd+F) / replace (Cmd+R) via a dark-styled `@codemirror/search` panel, font-size zoom (Cmd+= / Cmd+- / Cmd+0) via a Compartment-swapped `fontSizeTheme` persisted globally in localStorage, a `@replit/codemirror-minimap`, and `scrollPastEnd()`; plus a flex/grid height-chain fix (`.workspace-right` grid-item `min-height:0` + the `@uiw` `.cm-theme` wrapper) so the editor scrolls both axes with word-wrap off.
