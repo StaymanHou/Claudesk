@@ -15,13 +15,15 @@
 // AND across a center-stage switch. `visible` gates the active panel's liveness.
 
 import { useEffect, useState } from "react";
-import { SublimeToolbar } from "./SublimeToolbar";
 import { EditorPanel } from "./editor/EditorPanel";
 import { DiffPanel } from "./diff/DiffPanel";
 import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
 import { FileTree } from "./filetree/FileTree";
+import { openSublime, openSublimeMerge } from "../../sublime/sublimeLaunch";
+import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
+import { SublimeMergeIcon } from "../../sublime/icons/SublimeMergeIcon";
 
 interface RightPanelHostProps {
   /** The workspace's project directory — passed to every panel + the toolbars. */
@@ -82,8 +84,6 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
 
   return (
     <div className="workspace-right">
-      <SublimeToolbar projectPath={projectPath} active={visible} />
-
       {/* WP10 — the right-half body is a horizontal row: the FileTree rail (left) +
           the panel column (right). The rail collapses to a strip to reclaim width
           for the editor in the 50/50 split; collapse state persists (mounted). */}
@@ -143,6 +143,35 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
               Diff
             </button>
             {/* Terminal tab (⌘⇧T) arrives with WP9; omitted until the panel exists. */}
+
+            {/* WP8 — external-app launchers, right-aligned past a divider so they
+                read as ACTIONS distinct from the selectable Editor/Diff tabs.
+                Both KEPT permanently (the Sublime Text pop is no longer removed);
+                only the old ⌘⇧O Text hotkey was dropped — these buttons are the
+                sole affordance. Each calls its backend command with this host's
+                projectPath (always the focused tab — a backgrounded host is
+                display:none and unclickable). */}
+            <span className="panel-launch-group" aria-hidden="true" />
+            <button
+              type="button"
+              className="panel-launch"
+              data-testid="sublime-open"
+              onClick={() => void openSublime(projectPath)}
+              aria-label="Open in Sublime Text"
+              title="Open in Sublime Text"
+            >
+              <SublimeTextIcon />
+            </button>
+            <button
+              type="button"
+              className="panel-launch"
+              data-testid="smerge-open"
+              onClick={() => void openSublimeMerge(projectPath)}
+              aria-label="Open in Sublime Merge"
+              title="Open in Sublime Merge"
+            >
+              <SublimeMergeIcon />
+            </button>
           </div>
 
           {/* Editor panel — kept mounted; hidden (not unmounted) when Diff is front

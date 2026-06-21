@@ -48,8 +48,8 @@ interface EditorPanelProps {
    * True when this workspace is the focused/visible tab — gates the Cmd+Shift+P
    * palette chord so only the active tab's editor opens the palette. REQUIRED
    * (not optional-with-default) so a caller can't silently mount an
-   * always-listening palette in a backgrounded tab — mirrors SublimeToolbar's
-   * required `active` (the gating prop must be a compile-time obligation).
+   * always-listening palette in a backgrounded tab (the gating prop must be a
+   * compile-time obligation, not optional-with-default).
    */
   active: boolean;
 }
@@ -184,8 +184,8 @@ export function EditorPanel({
   // WP3b — open the palette on Cmd+Shift+P. Registered as a CAPTURE-phase document
   // listener (the WP1-proven pattern): it fires before CM6's contentEditable
   // handler, so the chord works while focus is inside the editor (any pane). Gated
-  // on `active` so only the focused workspace's editor responds (mirrors
-  // SublimeToolbar). preventDefault suppresses any browser default and keeps the
+  // on `active` so only the focused workspace's editor responds (same gating
+  // pattern as the host's chords). preventDefault suppresses any browser default and keeps the
   // literal "P" out of the document. Cmd+P (bare, WP6's finder) is NOT matched here.
   const hasFile = openPath != null;
   useEffect(() => {

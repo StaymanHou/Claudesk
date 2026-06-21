@@ -4,7 +4,6 @@ import {
   isPaletteChord,
   type PaletteCommand,
 } from "../paletteCommands";
-import { isSublimeChord } from "../../../../sublime/chord";
 import { panelForChord } from "../../panelHost";
 
 const cmd = (id: string, title: string): PaletteCommand => ({
@@ -103,15 +102,15 @@ describe("isPaletteChord", () => {
   });
 });
 
-// WP5 — cross-predicate exclusivity: the four app-level ⌘⇧ chords (palette, Sublime
-// pop, and the three panel-select chords) must partition cleanly — no single keydown
-// is claimed by more than one predicate. This is the codified contract that the
-// RightPanelHost capture-phase listener, the palette listener, and the Sublime
-// keydown handler never double-fire on the same event.
-describe("app-level ⌘⇧ chord exclusivity (WP5)", () => {
+// WP5/WP8 — cross-predicate exclusivity: the app-level ⌘⇧ chords (palette + the
+// three panel-select chords) must partition cleanly — no single keydown is claimed
+// by more than one predicate. This is the codified contract that the RightPanelHost
+// capture-phase listener and the palette listener never double-fire on the same
+// event. WP8 deleted the Sublime-Text ⌘⇧O chord (both Sublime launchers are now
+// click-only buttons), so ⌘⇧O is FREED — claimed by no predicate.
+describe("app-level ⌘⇧ chord exclusivity (WP5/WP8)", () => {
   const chords = [
     { name: "⌘⇧P palette", e: { metaKey: true, shiftKey: true, key: "p" } },
-    { name: "⌘⇧O Sublime", e: { metaKey: true, shiftKey: true, key: "o" } },
     { name: "⌘⇧E Editor", e: { metaKey: true, shiftKey: true, key: "e" } },
     { name: "⌘⇧D Diff", e: { metaKey: true, shiftKey: true, key: "d" } },
     { name: "⌘⇧T Terminal", e: { metaKey: true, shiftKey: true, key: "t" } },
@@ -119,14 +118,20 @@ describe("app-level ⌘⇧ chord exclusivity (WP5)", () => {
 
   for (const { name, e } of chords) {
     it(`${name} is claimed by exactly one predicate`, () => {
-      const claims = [
-        isPaletteChord(e),
-        isSublimeChord(e),
-        panelForChord(e) !== null,
-      ].filter(Boolean).length;
+      const claims = [isPaletteChord(e), panelForChord(e) !== null].filter(
+        Boolean,
+      ).length;
       expect(claims, `${name} must be owned by exactly one handler`).toBe(1);
     });
   }
+
+  it("⌘⇧O is freed (no predicate claims it after WP8 deleted the Sublime chord)", () => {
+    const e = { metaKey: true, shiftKey: true, key: "o" };
+    const claims = [isPaletteChord(e), panelForChord(e) !== null].filter(
+      Boolean,
+    ).length;
+    expect(claims, "⌘⇧O must be unclaimed after WP8").toBe(0);
+  });
 });
 
 describe("filterCommands", () => {

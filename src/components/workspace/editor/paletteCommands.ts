@@ -3,9 +3,9 @@
 // CodeMirror 6 ships no turnkey command palette, so this is a small custom
 // subsystem. This module holds the pieces that need no React and no live DOM, so
 // they are unit-testable under vitest (the repo posture: pure logic → vitest,
-// live DOM → Playwright — same split as chord.ts / fontZoom.ts / language.ts):
+// live DOM → Playwright — same split as fontZoom.ts / language.ts):
 //   - the PaletteCommand registry shape (id / title / run),
-//   - the Cmd+Shift+P chord predicate (mirrors isSublimeChord),
+//   - the Cmd+Shift+P chord predicate,
 //   - the filter predicate that narrows the command list as the user types.
 //
 // EXTENSION POINT — adding a command is ONE registry entry. The command set is
@@ -26,10 +26,9 @@
 //   ⌘⇧E  → Editor panel-select     (WP5; RightPanelHost — panelHost.panelForChord)
 //   ⌘⇧D  → Diff panel-select       (WP5; RightPanelHost)
 //   ⌘⇧T  → Terminal panel-select   (WP5 scheme; live binding lands with WP9)
-//   ⌘⇧O  → Sublime Text pop        (WP5 reassigned ⌘⇧E→⌘⇧O; src/sublime/chord.ts —
-//                                   transitional, removed once the in-app editor
-//                                   reaches parity, WBS WP8)
-//   (Sublime Merge → button only, NO chord — permanent, SublimeToolbar)
+//   ⌘⇧O  → FREED (WP8 deleted the Sublime-Text chord; both Sublime launchers are
+//                                   now click-only icon buttons in the panel tab row
+//                                   — see sublime/sublimeLaunch.ts + RightPanelHost)
 //   ⌘F ⌘R ⌘S ⌘D ⌘=/-/0            → CM6 editor chords (editorExtensions coreKeymap)
 // NOTE: ⌘⇧D (panel-select Diff) is APP-level + capture-phase, distinct from the
 // editor-internal bare ⌘D (Cmd-D select-next, CM6 keymap, no Shift) — the Shift

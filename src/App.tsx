@@ -13,9 +13,9 @@ import { parseSeedParam } from "./state/seedWorkspace";
 // Opening a project from the picker calls openWorkspace(path), which adds a
 // workspace and focuses it; the derived `view` flips to "workspace-open".
 //
-// WP8's Sublime hotkey + button live inside each Workspace's right panel
-// (SublimeToolbar), not here — the focused workspace owns its own in-app ⌘⇧E
-// handler, so the app shell stays unchanged from WP5/WP7.
+// WP8's Sublime launchers (Text + Merge) are icon buttons in each workspace's
+// right-panel tab row (RightPanelHost), not here — so the app shell stays
+// unchanged from WP5/WP7. (The old ⌘⇧O Text hotkey was removed in WP8.)
 function App() {
   const { workspaces, focusedId, view, openWorkspace, setSessionId } =
     useWorkspaceList();

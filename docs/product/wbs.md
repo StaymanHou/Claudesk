@@ -3,12 +3,12 @@ stage: wbs
 state: in-progress
 updated: 2026-06-20
 milestone: 2
-# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5, WP6, WP10 shipped (9/12); WP7/WP8/WP9/WP11 remain
+# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5, WP6, WP8, WP10 shipped (10/12); WP7/WP9/WP11 remain
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
 
-**Cycle scope:** **Milestone 2 only** (Lite Editor + Diff Viewer — the in-app right-half editor that *replaces* Sublime Text for routine work). Milestones 3–9 are tracked in [`roadmap.md`](roadmap.md) and are **deliberately not decomposed** here — just-in-time decomposition happens when each milestone opens. The completed Milestone 1 (Phase 1) WBS is archived at [`archive/phase-1-bare-shell-poc/wbs.md`](archive/phase-1-bare-shell-poc/wbs.md).
+**Cycle scope:** **Milestone 2 only** (Lite Editor + Diff Viewer — the in-app right-half editor that becomes the primary surface for routine editing; note that as of WP8's 2026-06-20 redefinition, Sublime Text is **not removed** — it stays as a permanent icon-button launcher alongside Sublime Merge, see WP8). Milestones 3–9 are tracked in [`roadmap.md`](roadmap.md) and are **deliberately not decomposed** here — just-in-time decomposition happens when each milestone opens. The completed Milestone 1 (Phase 1) WBS is archived at [`archive/phase-1-bare-shell-poc/wbs.md`](archive/phase-1-bare-shell-poc/wbs.md).
 
 **Grounding docs:** [`arch.md`](arch.md) → "Milestone 2 architecture" (RightPanelHost, component table, design constraints); [`research.md`](research.md) (CodeMirror 6 decided over Monaco; the two app-layer scoping corrections; the `git2` + `@codemirror/merge` diff split; risk list).
 
@@ -21,7 +21,7 @@ Learning-sequence ordering, riskiest-unknown-first:
 3. **Editor features as additive layer (WP3)** — the Sublime-parity feature set on top of the working shell.
 4. **Backend app-layer subsystems (WP4 diff, WP6 file finder, WP7 search)** — each is a Rust synchronous path (`git2` / fs-walk / ripgrep-style) behind Tauri commands, with a thin frontend. The diff viewer (WP4) pairs with `@codemirror/merge` rendering; the **fuzzy finder (WP6) and project-wide search (WP7) are app-layer subsystems, NOT editor config** (the load-bearing `research.md` correction).
 5. **Panel host wiring (WP5)** ties the editor + diff + second-terminal panels into the per-workspace RightPanelHost with the panel-switch hotkey — depends on the probe (WP1) settling the hotkey/focus question and on the editor (WP2) + diff (WP4) panels existing.
-6. **Gated Sublime-pop removal LAST (WP8)** — only after the in-app editor proves daily-use parity (vision Core Principle 3). It is the last build WP before polish, by design.
+6. **Sublime-launcher consolidation (WP8)** — *(REDEFINED 2026-06-20: this was originally "gated Sublime-pop removal, last")* — relocate both Sublime launchers (Text + Merge) into the panel tab row as icon buttons + drop the redundant ⌘⇧O hotkey. Both launchers are KEPT (no removal), so there is no parity gate and it is NOT ordered last — it's a small frontend slice off WP5's tab row, parallel to the other app-layer WPs. See the WP8 section below.
 7. **No async/orchestration in M2** — every backend piece is a synchronous request/response Tauri command; no queues/workers/event-bus. (The Phase-2 status broadcaster is a *different* milestone.)
 
 ## Milestone 2
@@ -153,18 +153,19 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Placement: a collapsible LEFT RAIL inside the right half (`.right-panel-body` horizontal row = `[ rail | panel-column ]`); collapse toggle reclaims width, state persists across center-stage switches, FileTree stays mounted (CSS `display:none` on collapse — not unmount)
 - [x] Unit tests on the tree-building / gitignore-honoring walk (pure cores, TempDir fixture) — 8 backend `walk_tree_core` + 12 frontend (`buildTree` + `treeState`)
 
-### WP8: Remove the Sublime *Text* pop (gated on editor parity) — LAST build WP
+### WP8: Relocate both Sublime launchers into the panel tab row as icon buttons; drop the ⌘⇧O hotkey ✅ SHIPPED 2026-06-20
 
-**Description:** Delete the Milestone 1 Sublime **Text** stopgap once the in-app editor proves daily-use parity (vision Core Principle 3): the `sublime_open` command, the `⌘⇧O` `keydown` handler (was `⌘⇧E` pre-WP5), and the "Open in Sublime" toolbar button. Frees the `⌘⇧O` chord. **Sublime *Merge* is KEPT (WP5 decision)** — the `smerge_open` command + "Open in Sublime Merge" button stay, so the `sublime` Rust module, its `find_*`/`tool_command`/`spawn` resolver, and `SublimeToolbar` are NOT deleted wholesale: WP8 removes only the *Text* half (the `find_subl`/`subl_command`/`launch`/`sublime_open` paths + the ⌘⇧O handler + the "Open in Sublime" button), leaving the Merge paths intact. `chord.ts` (the ⌘⇧O matcher) is Text-only → removed; the panel-select chords in `panelHost.ts` survive. **Gate:** do not start until **WP9's parity gate passes** — if a relied-on gesture is hard in CM6, that gate surfaces it and the removal waits.
+> **REDEFINED by operator 2026-06-20** — supersedes the old "remove the Sublime *Text* pop, gated on WP9 editor-parity" scope. WP8 is **no longer a removal WP** and the **parity gate is dropped** (WP8 no longer removes the editor's escape hatch, so it needs no parity proof and is **NOT gated on WP9**). Both Sublime launchers are now kept permanently.
+
+**Description:** A frontend UI consolidation. Both Sublime launchers (Text + Merge) move out of the standalone `SublimeToolbar` strip and into the existing `right-panel-toggle` tab row in `RightPanelHost` (alongside the Editor / Diff tabs), rendered as compact **icon buttons** (inlined-SVG marks, no text labels) right-aligned past a divider so they read as *actions* distinct from the selectable tabs. The now-redundant Sublime-**Text** `⌘⇧O` hotkey is **deleted** (the always-visible button is the only affordance) — `chord.ts` (the Text-only matcher) + its test are removed; `SublimeToolbar.tsx` is deleted (the two `invoke` handlers move to a small pure `sublimeLaunch.ts`). **Backend is UNTOUCHED:** `sublime_open`, `smerge_open`, `find_subl`/`find_smerge`, the shared `resolve`/`tool_command`/`spawn`, and all consts STAY. `⌘⇧O` is freed (left unbound); the panel-select chords (`panelHost.ts`) + finder chord survive.
 **Milestone:** Milestone 2
-**Dependencies:** WP3a/3b/3c (editor features built), WP9 parity gate (parity proven), WP5 (panel-select hotkeys are the surviving right-half binding; Merge button shipped)
+**Dependencies:** WP5 (the `right-panel-toggle` tab row + `RightPanelHost` chrome the buttons move into; the `smerge_open` button shipped here). **NOT gated on WP9.**
 **Size:** S
 **Tasks:**
-- [ ] **Gate check:** WP9's parity gate has passed — operator confirmed the in-app editor covers daily Sublime usage
-- [ ] Remove the frontend "Open in Sublime" button + the `⌘⇧O` keydown handler from `SublimeToolbar` + delete `chord.ts` (Text-only); **KEEP the "Open in Sublime Merge" button** (rename `SublimeToolbar`→e.g. `MergeToolbar` if the Text half is fully gone)
-- [ ] Remove the backend Text paths — `sublime_open` command + its `lib.rs` registration, `find_subl`/`subl_command`/`launch` + the `ST_*` consts; **KEEP `smerge_open`/`find_smerge`/`merge_command`/`launch_merge` + the shared `resolve`/`tool_command`/`spawn` + `SM_*` consts**
-- [ ] Drop the `subl`-on-PATH prerequisite from `CLAUDE.md` / README (keep `smerge`); resync arch.md component table (drop the Sublime *Text* row, keep Merge)
-- [ ] Confirm no orphaned references (cargo + tsc + lint clean after removal)
+- [x] Frontend: inlined-SVG icon components (`SublimeTextIcon` / `SublimeMergeIcon`); both launchers as icon buttons in the `right-panel-toggle` row (right-aligned past a `.panel-launch-group` divider), each calling its backend command via `sublimeLaunch.ts` with the workspace path
+- [x] Delete the `⌘⇧O` Sublime-Text hotkey: remove the `keydown` handler + delete `chord.ts` + `chord.test.ts`; delete `SublimeToolbar.tsx`. KEEP both launch affordances (Text + Merge buttons)
+- [x] Backend unchanged (both commands + resolver + consts stay); reconcile stale comments (`paletteCommands.ts` chord map, `App.tsx`, `EditorPanel.tsx`) + the `paletteCommands.test.ts` chord-exclusivity matrix (⌘⇧O now FREED)
+- [x] Unit test `sublimeLaunch.ts` (command name + `{projectPath}` + caught-rejection); gates clean (tsc/eslint/prettier; vitest 206; cargo 90 untouched)
 
 ### WP9: Second-terminal panel + Milestone 2 polish & exit-criteria
 
@@ -177,8 +178,8 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [ ] N-mounted-editors sanity check in the real app (apply the WP1 probe finding + any mitigation; not a separate probe)
 - [ ] Error handling: file open/save failures, non-git dir for the diff panel, empty search
 - [ ] Dogfood: a full working day of editing + diff review entirely inside Claudesk's right half
-- [ ] **PARITY GATE (owns the daily-Sublime-usage check; was buried in old WP3, pulled here 2026-06-19):** during dogfooding, confirm the in-app editor covers the operator's daily Sublime feature set (multi-cursor, find/replace, font-zoom, palette, split panes as needed). This is the **parity evidence WP8's Sublime-pop removal is gated on** — if a relied-on gesture is missing/hard, it surfaces here and WP8 waits. Record the verdict explicitly.
-- [ ] Confirm exit criteria: editing + diff review complete inside the right half with the panel-switch hotkey; the Sublime Text pop is removed (WP8); `subl` is no longer a routine-work dependency
+- [ ] **EDITOR-PARITY DOGFOOD CHECKPOINT (informational; was buried in old WP3, pulled here 2026-06-19):** during dogfooding, record whether the in-app editor covers the operator's daily Sublime feature set (multi-cursor, find/replace, font-zoom, palette, split panes as needed). **No longer a gate on anything** — WP8 was redefined 2026-06-20 to KEEP both Sublime launchers (the Sublime Text pop is no longer removed), so this checkpoint gates no removal. Kept purely as a dogfood quality signal: a missing/hard gesture becomes a backlog item, not a blocker. Record the verdict explicitly.
+- [ ] Confirm exit criteria: editing + diff review complete inside the right half with the panel-switch hotkey. (NOTE: "the Sublime Text pop is removed" is NO LONGER an exit criterion — WP8's 2026-06-20 redefinition keeps both Sublime launchers as permanent icon-button affordances; `subl`/`smerge` remain permanent companion surfaces, not routine-work dependencies to eliminate.)
 
 ### WP11: Tree/editor density polish + Sublime-style git-change indicators
 
@@ -201,18 +202,18 @@ Learning-sequence ordering, riskiest-unknown-first:
 ```
 WP1 ✅─► WP2 ✅─► WP3a ✅ (core editing) ──► WP3b ✅ (palette) ──► WP3c ✅ (split) ──┐
               │                                                              │
-              ├──► WP4 ✅ (diff viewer) ───────────────────────────────────►├─► WP9 dogfood + PARITY GATE ─► WP8 (remove Sublime pop) ─► WP9 exit-criteria
-              ├──► WP5 ✅ (panel host) ────────────────────────────────────►│
-              │       ▲                                                      │
+              ├──► WP4 ✅ (diff viewer) ───────────────────────────────────►├─► WP9 dogfood + exit-criteria
+              ├──► WP5 ✅ (panel host) ─┬──► WP8 ✅ (Sublime icon buttons) ──►│
+              │       ▲                 └──(frontend-only, parallel)─────────►│
               ├──► WP6 ✅ (file finder)┬──► WP10 ✅ (file-tree) ─────────────►│
               └──► WP7 (project search)┴──(app-layer, parallel)─────────────►┘
 ```
 
-- **Critical path:** WP1 ✅ → WP2 ✅ → WP3a → WP3b → WP3c → WP9 (dogfood + parity gate) → WP8 (Sublime-pop removal) → WP9 (exit-criteria). The parity gate inside WP9 dogfooding now *unblocks* WP8, so WP8 sits between WP9's dogfood and its final exit-criteria confirmation.
-- **WP3 was split 2026-06-19** (operator: "too much packed in") into **WP3a** (core editing — multi-cursor/find-replace/font-zoom/minimap), **WP3b** (command palette), **WP3c** (split panes). WP3a is the must-have; 3b/3c are independent and can be sequenced or parallelized after 3a. The old WP3's "daily-parity confirmation" task moved to WP9 as the explicit parity gate.
-- **Parallelizable after WP2 (✅ shipped):** WP3a, WP4 (diff), WP6 (file finder), WP7 (search), WP10 (file-tree) are largely independent slices; WP5 (panel host) needs WP2 + WP4. WP6/WP7/WP10 share fs-walk infrastructure (do WP6's index first; WP7 and WP10 reuse it). WP3b/3c depend on WP3a landing first (inherit the finished editing set).
+- **Critical path:** WP1 ✅ → WP2 ✅ → WP3a → WP3b → WP3c → WP9 (dogfood + exit-criteria). WP8 is **no longer on the critical path** — its 2026-06-20 redefinition made it a small frontend-only UI consolidation (relocate the Sublime launchers into the tab row + drop the ⌘⇧O hotkey) that depends only on WP5's tab row and is **not gated on WP9's dogfood**. WP4/5/6/7/8/10 are parallel slices feeding WP9's final dogfood + exit-criteria.
+- **WP3 was split 2026-06-19** (operator: "too much packed in") into **WP3a** (core editing — multi-cursor/find-replace/font-zoom/minimap), **WP3b** (command palette), **WP3c** (split panes). WP3a is the must-have; 3b/3c are independent and can be sequenced or parallelized after 3a. The old WP3's "daily-parity confirmation" task moved to WP9 as a dogfood checkpoint (it no longer gates anything since WP8's redefinition).
+- **Parallelizable after WP2 (✅ shipped):** WP3a, WP4 (diff), WP6 (file finder), WP7 (search), WP8 (Sublime icon buttons), WP10 (file-tree) are largely independent slices; WP5 (panel host) needs WP2 + WP4; WP8 needs WP5's tab row. WP6/WP7/WP10 share fs-walk infrastructure (do WP6's index first; WP7 and WP10 reuse it). WP3b/3c depend on WP3a landing first (inherit the finished editing set).
 - **WP1 gates the panel-host + finder + palette hotkeys.** ✅ settled — capture-phase listener pattern. WP3b/WP5/WP6 apply it.
-- **WP8 is gated and last** (before WP9's final exit-criteria) — parity must be proven at WP9's gate first. The gate's daily-use check should include the file-tree (WP10).
+- **WP8 is NOT gated and NOT last** (redefined 2026-06-20) — it keeps both Sublime launchers (no removal, no parity proof needed) and shipped 2026-06-20 as a frontend-only consolidation. The old "gated on WP9's parity gate, last build WP" framing is superseded.
 - **App-layer callout:** WP6 (fuzzy finder), WP7 (project-wide search), and WP10 (file-tree navigator) are Rust+React subsystems, not editor configuration — the single biggest scoping point from `research.md`. They are sized as full WPs, not editor sub-tasks. WP10 was added 2026-06-19 (operator must-have at WP2 verify-human).
 
 ## Future milestones
@@ -221,5 +222,6 @@ Tracked in [`roadmap.md`](roadmap.md) (Milestones 3–9: stateful CC controller,
 
 ## SURFACE-IN history
 
+- [2026-06-20] **WP8 REDEFINED + shipped** — operator reversed WP8's scope: it is **no longer a removal WP** (both Sublime launchers are KEPT) and the **parity gate is dropped** (WP8 is no longer gated on WP9). New scope: relocate both Sublime launchers into the `right-panel-toggle` tab row as inlined-SVG icon buttons + delete the redundant `⌘⇧O` Sublime-Text hotkey; backend untouched. Shipped same day. The WP8 section, the M2 critical-path diagram + notes, and WP9's parity-gate task were all resynced to the new scope. Source: operator directive → feature workflow (WP8).
 - [2026-06-19] **WP10 (file-tree navigator) added** — operator designated it a must-have at WP2 Phase-1 verify-human. App-layer subsystem reusing WP6's `fs_index` infrastructure; parallel to the critical path. Source: feature:build (WP2) → product:wbs.
 - [2026-06-19] **WP3 split into WP3a/WP3b/WP3c** — operator flagged the original WP3 as over-packed (6 features under one "M"). Split into WP3a (core editing: multi-cursor / find-replace / font-zoom / minimap), WP3b (command palette — net-new overlay subsystem), WP3c (split panes — riskiest layout work). The old WP3's "daily-Sublime-parity confirmation" task was pulled out and relocated to **WP9** as an explicit parity gate that unblocks WP8's Sublime-pop removal. Source: operator review → product:wbs.
