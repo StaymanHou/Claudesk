@@ -19,6 +19,8 @@ import { SublimeToolbar } from "./SublimeToolbar";
 import { EditorPanel } from "./editor/EditorPanel";
 import { DiffPanel } from "./diff/DiffPanel";
 import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
+import { FileFinder } from "./finder/FileFinder";
+import { isFinderChord } from "./finder/finderChord";
 
 interface RightPanelHostProps {
   /** The workspace's project directory — passed to every panel + the toolbars. */
@@ -28,23 +30,41 @@ interface RightPanelHostProps {
 }
 
 export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
-  // WP2 temporary open-file affordance: a path box that opens a file relative to
-  // the project dir into the EditorPanel. The real Cmd+P fuzzy finder is WP6; this
-  // is the minimal way to exercise the open path until then.
-  const [pathInput, setPathInput] = useState("README.md");
+  // The file currently open in the editor. Set by the Cmd+P finder (WP6) and by
+  // the diff panel's "Open" action; null = no file (the editor shows its empty state).
   const [openPath, setOpenPath] = useState<string | null>(null);
+
+  // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.
+  const [finderOpen, setFinderOpen] = useState(false);
 
   // Which right-half panel is front. Direct-select via tabs + ⌘⇧ chords. Both panels
   // stay mounted (display:none toggle) so each keeps its state across switches.
   const [panel, setPanel] = useState<RightPanel>("editor");
 
-  // P3 — panel-select hotkeys: ⌘⇧E Editor / ⌘⇧D Diff / ⌘⇧T Terminal. Registered as a
+  // Open a file into the editor: load it + flip the editor panel to the front so
+  // the focused pane becomes the viewport on it (active-pane semantics within the
+  // WP3c shared-document model — see EditorPanel). Shared by the Cmd+P finder and
+  // the diff panel's "Open". Does NOT change the pane model (independent-per-pane
+  // files remain a deferred follow-up: SURFACE-2026-06-20-WP3C-INDEPENDENT-FILE-SPLIT).
+  const openFile = (path: string) => {
+    setOpenPath(path);
+    setPanel((cur) => selectPanel(cur, "editor"));
+  };
+
+  // P3 — panel-select hotkeys (⌘⇧E/⌘⇧D/⌘⇧T) AND the ⌘P file-finder, registered as a
   // CAPTURE-phase document listener (WP1 finding: fires before CM6's contentEditable
   // handler, so it works while focus is inside the editor — no per-editor keymap
-  // wiring). Gated on `visible` so only the focused workspace's host reacts.
+  // wiring). Gated on `visible` so only the focused workspace's host reacts. ⌘P
+  // (bare, no Shift) is distinct from ⌘⇧E/D/T (panelForChord requires Shift), so the
+  // two predicates never both fire — see finder/finderChord.ts.
   useEffect(() => {
     if (!visible) return;
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isFinderChord(e)) {
+        e.preventDefault();
+        setFinderOpen((open) => !open); // toggle: re-press closes
+        return;
+      }
       const target = panelForChord(e);
       if (target === null) return;
       e.preventDefault();
@@ -89,29 +109,12 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
       </div>
 
       {/* Editor panel — kept mounted; hidden (not unmounted) when Diff is front so
-          the open file + scroll survive the switch. */}
+          the open file + scroll survive the switch. Files are opened via the Cmd+P
+          finder (WP6) — the WP2 path-input open-bar it replaced is gone. */}
       <div
         className="right-panel-slot"
         style={{ display: panel === "editor" ? "flex" : "none" }}
       >
-        <form
-          className="editor-open-bar"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setOpenPath(pathInput.trim() || null);
-          }}
-        >
-          <input
-            type="text"
-            className="editor-open-input"
-            value={pathInput}
-            onChange={(e) => setPathInput(e.target.value)}
-            placeholder="path/in/project.ts"
-            aria-label="file to open"
-            spellCheck={false}
-          />
-          <button type="submit">Open</button>
-        </form>
         <EditorPanel
           projectPath={projectPath}
           openPath={openPath}
@@ -129,14 +132,22 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
         <DiffPanel
           projectPath={projectPath}
           active={visible && panel === "diff"}
-          onOpenInEditor={(path) => {
-            // "Open" always opens the live working-tree file (by design — see
-            // DiffPanel onOpenInEditor doc). Flip to the editor + load it.
-            setOpenPath(path);
-            setPanel((cur) => selectPanel(cur, "editor"));
-          }}
+          // "Open" always opens the live working-tree file (by design — see
+          // DiffPanel onOpenInEditor doc). Same seam as the Cmd+P finder.
+          onOpenInEditor={openFile}
         />
       </div>
+
+      {/* WP6 — Cmd+P fuzzy file finder overlay. Only the focused workspace mounts
+          it (gated on `visible` via the chord listener + this render guard).
+          Selecting a file opens it into the editor (active-pane via openFile). */}
+      {visible && finderOpen && (
+        <FileFinder
+          projectPath={projectPath}
+          onOpen={openFile}
+          onClose={() => setFinderOpen(false)}
+        />
+      )}
     </div>
   );
 }

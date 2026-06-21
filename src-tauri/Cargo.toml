@@ -42,6 +42,13 @@ which = "8"
 # SSH/HTTPS transport we never use (we only open local on-disk repos). We use
 # git2 for *data* only; @codemirror/merge computes + renders the diff itself.
 git2 = { version = "0.21", default-features = false }
+# WP6: Cmd+P fuzzy file finder. ripgrep's directory walker — honors .gitignore /
+# .ignore / global gitignore out of the box, so the fs_index walk returns only the
+# files the operator actually edits (no node_modules/target/.git). Chosen over
+# walkdir + hand-rolled gitignore parsing deliberately so WP7's ripgrep-style
+# content search REUSES the same walker (same ecosystem). Data only — the React
+# overlay does the fuzzy match + render.
+ignore = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

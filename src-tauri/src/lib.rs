@@ -1,6 +1,7 @@
 mod cc_session;
 mod config_store;
 mod editor_fs;
+mod fs_index;
 mod git_diff;
 mod sublime;
 
@@ -48,6 +49,10 @@ pub fn run() {
             git_diff::commands::git_file_hunks,
             git_diff::commands::git_recent_commits,
             git_diff::commands::git_commit_diff,
+            // WP6: Cmd+P fuzzy file finder. Walks the workspace project dir honoring
+            // .gitignore (ignore crate) and returns the file list the finder overlay
+            // fuzzy-matches over. Errors surface to the overlay, never empty-on-fail.
+            fs_index::commands::fs_index,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an

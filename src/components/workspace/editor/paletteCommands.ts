@@ -21,7 +21,8 @@
 // isPaletteChord exclusivity matrix in paletteCommands.test.ts codifies this;
 // the panel-select chords are codified in panelHost.test.ts):
 //   ⌘⇧P  → command palette        (WP3b — THIS module; opens the overlay)
-//   ⌘P   → fuzzy file finder       (WP6; bare meta, NO shift — distinct from ⌘⇧P)
+//   ⌘P   → fuzzy file finder       (WP6 — LIVE; bare meta, NO shift — distinct from
+//                                   ⌘⇧P; finder/finderChord.ts isFinderChord)
 //   ⌘⇧E  → Editor panel-select     (WP5; RightPanelHost — panelHost.panelForChord)
 //   ⌘⇧D  → Diff panel-select       (WP5; RightPanelHost)
 //   ⌘⇧T  → Terminal panel-select   (WP5 scheme; live binding lands with WP9)

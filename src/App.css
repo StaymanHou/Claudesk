@@ -192,6 +192,9 @@ body,
   border-left: 1px solid rgba(128, 128, 128, 0.3);
   display: flex;
   flex-direction: column;
+  /* Positioning context for the WP6 Cmd+P FileFinder overlay (absolute backdrop),
+     so it covers the right panel rather than escaping to a higher ancestor. */
+  position: relative;
 }
 
 /* WP8 + WP5 — Sublime launch toolbar pinned to the top of the right panel.
@@ -249,26 +252,8 @@ body,
 }
 
 /* ── WP2 lite editor (right-half EditorPanel) ────────────────────────── */
-/* Temporary open-file bar (the real Cmd+P fuzzy finder is WP6). */
-.editor-open-bar {
-  flex-shrink: 0;
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-}
-
-.editor-open-input {
-  flex: 1;
-  min-width: 0;
-  padding: 0.3rem 0.5rem;
-  border: 1px solid rgba(160, 160, 160, 0.4);
-  border-radius: 4px;
-  background-color: #1a1a1a;
-  color: inherit;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.8rem;
-}
+/* (The WP2 temporary open-file bar was removed in WP6 — the Cmd+P FileFinder
+   overlay replaces it. The finder reuses the .command-palette-* overlay styles.) */
 
 /* The CodeMirror host fills the remaining right-half height. The panel is a
    column: status bar (fixed) + optional save-error banner (fixed) + editor (fills). */

@@ -16,7 +16,8 @@
 //
 // CHORD-OWNERSHIP (see paletteCommands.ts for the full app-wide matrix):
 //   ⌘⇧E → Editor   ⌘⇧D → Diff   ⌘⇧T → Terminal (WP9)
-//   ⌘⇧O → Sublime Text pop (transitional)   ⌘⇧P → palette   ⌘P → finder
+//   ⌘⇧O → Sublime Text pop (transitional)   ⌘⇧P → palette
+//   ⌘P → finder (WP6 — LIVE; bare meta, no shift; finder/finderChord.ts)
 // All app-level chords use the WP1-proven capture-phase document listener.
 
 /** Which right-half panel is front. "terminal" is reserved for WP9 (no-op until then). */
