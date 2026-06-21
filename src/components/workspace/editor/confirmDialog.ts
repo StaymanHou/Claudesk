@@ -1,8 +1,8 @@
 // WP12 — pure model for the small modal confirm dialog.
 //
-// Two WP12 surfaces need a modal yes/no/cancel: the dirty-tab close guard (Phase 2:
-// save / discard / cancel) and the disk-change conflict prompt (Phase 3: keep mine /
-// load disk — no cancel). Rather than reuse the command-palette overlay (a filter
+// Two WP12 surfaces need a modal yes/no/cancel: the dirty-tab close guard (save /
+// discard / cancel) and the disk-change conflict prompt (keep mine / load disk — no
+// cancel). Rather than reuse the command-palette overlay (a filter
 // list, a different shape) we build one tiny dark-styled <ConfirmDialog> over this
 // model. This module holds the React-free, DOM-free part — the button definitions
 // and which choice each press yields — so it is vitest-testable (repo posture: pure

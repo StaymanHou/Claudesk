@@ -5,7 +5,9 @@
 // → Playwright; mirrors editorPanes.ts / editorLoad.ts / treeState.ts).
 //
 // This is the SERIALIZABLE, testable part of the multi-file model: the ordered tab
-// list, the active-tab pointer, and per-tab METADATA (kind, path, label, dirty). The
+// list, the active-tab pointer, and per-tab METADATA (kind, path, label). Dirty state
+// is NOT here — it's document-level, derived from the shared editorDocs store
+// (`isDirty(docs.byPath[path])`), so it's correct across every view of a path. The
 // mutable per-tab EDITOR state (the CM6 buffer, language override, PanesState, the
 // captured EditorView map, the disk marker, the save lifecycle) is imperative and
 // lives in a Map<tabId, …> inside EditorPanel — NOT here. That split mirrors WP3c,
@@ -36,8 +38,6 @@ export interface OpenFile {
   path: string | null;
   /** Tab label shown in the strip (filename for files; caller-chosen for synthetic). */
   label: string;
-  /** Unsaved-edits indicator. Always false for synthetic (read-only) tabs. */
-  dirty: boolean;
 }
 
 export interface OpenFilesState {
@@ -62,10 +62,7 @@ export type OpenFilesEvent =
   // Activate the Nth tab (1-based). n past the end clamps to the LAST tab — so ⌘9 on
   // a 3-tab strip activates the 3rd (the browser/Sublime "last tab" convention). No-op
   // if there are no tabs.
-  | { type: "activate-index"; n: number }
-  // Set a file tab's dirty flag (EditorPanel mirrors its buffer-vs-saved compare here
-  // so the strip can render the ● indicator). No-op on a synthetic or unknown tab.
-  | { type: "set-dirty"; id: string; dirty: boolean };
+  | { type: "activate-index"; n: number };
 
 /** The initial empty state — no tabs, no active tab (the "No file open" editor). */
 export function initialOpenFilesState(): OpenFilesState {
@@ -99,7 +96,6 @@ export function openFilesReducer(
         kind: "file",
         path: event.path,
         label: event.label,
-        dirty: false,
       };
       return insertAfterActiveAndActivate(state, tab);
     }
@@ -116,7 +112,6 @@ export function openFilesReducer(
         kind: "synthetic",
         path: null,
         label: event.label,
-        dirty: false,
       };
       return insertAfterActiveAndActivate(state, tab);
     }
@@ -146,18 +141,6 @@ export function openFilesReducer(
       const id = state.tabs[i].id;
       if (id === state.activeTabId) return state;
       return { ...state, activeTabId: id };
-    }
-    case "set-dirty": {
-      const tab = state.tabs.find((t) => t.id === event.id);
-      // No-op on unknown, synthetic (always clean), or unchanged.
-      if (!tab || tab.kind === "synthetic" || tab.dirty === event.dirty)
-        return state;
-      return {
-        ...state,
-        tabs: state.tabs.map((t) =>
-          t.id === event.id ? { ...t, dirty: event.dirty } : t,
-        ),
-      };
     }
     default:
       return state;

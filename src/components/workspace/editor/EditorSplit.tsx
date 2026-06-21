@@ -5,7 +5,7 @@
 // strip + open-file set (its own openFiles reducer instance), so panes are VS Code
 // split-editor groups — independent tabs, focus, layout.
 //
-// Phase 2S (2026-06-21) — but the BUFFERS are SHARED via the per-workspace document
+// But the BUFFERS are SHARED via the per-workspace document
 // store (editorDocs.ts) owned HERE. The same file open in two panes is ONE DocEntry
 // (ref-counted by view), so an edit in pane 1 mirrors live in pane 2 and dirty + save
 // are document-level (operator P2.vh.9). EditorSplit runs the read_file/write_file IPC
@@ -45,7 +45,7 @@ export interface EditorSplitHandle {
   /** Activate the Nth tab in the FOCUSED pane (⌘1..⌘9). */
   activateIndex: (n: number) => void;
   /**
-   * Phase 4 — open (or re-activate) a synthetic READ-ONLY tab in the focused pane (the
+   * Open (or re-activate) a synthetic READ-ONLY tab in the focused pane (the
    * WP7 "Find Results" seam). `id` keys its content + line-click callback; generic — WP7
    * is the first consumer. Seed/replace its content with `setSyntheticContent`, and a
    * click on a line invokes the callback passed in `onLineClick`.
@@ -55,7 +55,7 @@ export interface EditorSplitHandle {
     label: string,
     onLineClick?: (line: number) => void,
   ) => void;
-  /** Phase 4 — (re)set a synthetic tab's in-memory content. */
+  /** (Re)set a synthetic tab's in-memory content. */
   setSyntheticContent: (id: string, content: string) => void;
 }
 
@@ -100,10 +100,10 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
     // NOT in the set until a file lands in it, so it persists empty.
     const everFilled = useRef<Set<string>>(new Set());
 
-    // Phase 2S — the per-workspace SHARED document store (keyed by path, ref-counted).
+    // The per-workspace SHARED document store (keyed by path, ref-counted).
     const [docs, dispatchDocs] = useReducer(docsReducer, initialDocsState);
 
-    // Phase 4 — synthetic read-only tab content (the WP7 Find-Results seam), keyed by the
+    // Synthetic read-only tab content (the WP7 Find-Results seam), keyed by the
     // synthetic tab's id. Content is in `state` so a setSyntheticContent re-renders the
     // view; the line-click callbacks live in a ref (no re-render needed; identity-stable
     // to PaneTabs). Generic — WP7 is the first consumer.
@@ -136,7 +136,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       [],
     );
 
-    // Phase 3 — the pending disk-change conflict (a dirty doc whose file changed on
+    // The pending disk-change conflict (a dirty doc whose file changed on
     // disk). null = no popup. The operator must choose keep-mine / load-disk.
     const [conflict, setConflict] = useState<{
       path: string;
@@ -162,7 +162,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       [projectPath],
     );
 
-    // Phase 3 — re-stat `path` and act on the disk decision: noop (adopt the marker),
+    // Re-stat `path` and act on the disk decision: noop (adopt the marker),
     // reload (clean buffer → silent re-read), or conflict (dirty buffer → popup). Fired
     // on tab activation and before a save. A stat failure is ignored (treat as unchanged)
     // so a transiently-unreadable file doesn't nag.
@@ -304,14 +304,14 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       [panes.activePaneId],
     );
 
-    // Phase 4 — set/replace a synthetic tab's in-memory content (re-renders its view).
+    // Set/replace a synthetic tab's in-memory content (re-renders its view).
     const setSyntheticContent = useCallback((id: string, content: string) => {
       setSyntheticContentState((prev) =>
         prev[id] === content ? prev : { ...prev, [id]: content },
       );
     }, []);
 
-    // Phase 4 — open a synthetic read-only tab in the focused pane + register its content
+    // Open a synthetic read-only tab in the focused pane + register its content
     // (seeded empty unless already set) and its line-click callback.
     const addSynthetic = useCallback(
       (id: string, label: string, onLineClick?: (line: number) => void) => {
@@ -330,7 +330,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       [openFile, activateIndex, addSynthetic, setSyntheticContent],
     );
 
-    // Phase 4 (P4.3) — DEV-ONLY synthetic-tab seam. Gated on `import.meta.env.DEV` (like
+    // DEV-ONLY synthetic-tab seam. Gated on `import.meta.env.DEV` (like
     // `window.__seedWorkspace`), so verify-self / console harnesses can drive a synthetic
     // read-only tab without a real WP7 consumer. `add` opens the tab with a line-click
     // callback that records clicked lines into `clickedLines` (assertable from a stub).
@@ -451,7 +451,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
           ))}
         </div>
 
-        {/* Phase 3 — disk-change conflict popup: a dirty doc whose file changed on disk.
+        {/* Disk-change conflict popup: a dirty doc whose file changed on disk.
             keep-mine adopts the disk marker (keeps my edits, quiets the next check);
             load-disk re-reads disk over my buffer. No silent overwrite either way. */}
         {conflict && (

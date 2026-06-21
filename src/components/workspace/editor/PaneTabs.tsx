@@ -12,7 +12,7 @@
 // this pane marks it the focused pane (onFocusPane) so chords + opens target it.
 //
 // Synthetic read-only tabs (kind: "synthetic") are the WP7 "Find Results" seam; they
-// land in Phase 4 (a placeholder renders for now so the model round-trips).
+// they render a read-only SyntheticView (the model round-trips for the WP7 consumer).
 
 import {
   forwardRef,
@@ -49,7 +49,7 @@ export interface PaneTabsHandle {
   openFile: (path: string) => void;
   /** Activate the Nth tab (1-based; ⌘1..⌘9, n past the end clamps to the last). */
   activateIndex: (n: number) => void;
-  /** Phase 4 — add (or re-activate) a synthetic read-only tab by id (the WP7 seam). */
+  /** Add (or re-activate) a synthetic read-only tab by id (the WP7 seam). */
   addSynthetic: (id: string, label: string) => void;
 }
 
@@ -72,7 +72,7 @@ interface PaneTabsProps {
   onActivePathChange?: (path: string | null) => void;
   /** Reports whether this pane has zero tabs (EditorSplit collapses an emptied pane). */
   onEmptyChange?: (empty: boolean) => void;
-  // Phase 2S — the SHARED document store (owned by EditorSplit) + its write callbacks.
+  // The SHARED document store (owned by EditorSplit) + its write callbacks.
   // A view reads its buffer/dirty/save-state from `docs.byPath[path]` and writes via
   // these. onTabOpen/onTabClose ref-count the store as this pane's tabs add/remove.
   /** The shared document store. */
@@ -87,9 +87,9 @@ interface PaneTabsProps {
   onSave: (path: string) => void;
   /** Palette syntax override for the document. */
   onSetOverride: (path: string, id: string | null) => void;
-  /** Phase 3 — a view became front (active + loaded) → run the disk-change check. */
+  /** A view became front (active + loaded) → run the disk-change check. */
   onActivated: (path: string) => void;
-  // Phase 4 — synthetic read-only tabs (the WP7 seam). Content + line-click callback are
+  // Synthetic read-only tabs (the WP7 seam). Content + line-click callback are
   // keyed by the synthetic tab's id, supplied by the owner (EditorSplit).
   /** In-memory content per synthetic tab id (read-only). */
   syntheticContent: Record<string, string>;
@@ -163,7 +163,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
 
     const { tabs, activeTabId } = state;
 
-    // Phase 2S — ref-count the SHARED store as this pane's FILE tabs add/remove. We diff
+    // Ref-count the SHARED store as this pane's FILE tabs add/remove. We diff
     // the set of open file-paths against the previous render and fire onTabOpen/onTabClose
     // for the delta — robust against the reducer's add-or-activate nuance (a re-open of an
     // already-open path doesn't add a tab, so it must not double-count). Synthetic tabs
@@ -186,9 +186,17 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
     const requestClose = (id: string) => {
       const tab = state.tabs.find((t) => t.id === id);
       if (!tab) return;
-      if (tabIsDirty(tab)) {
-        setClosing(id);
-        return;
+      // Only raise the unsaved-changes guard when closing this tab would actually lose
+      // the buffer — i.e. it's dirty AND this is the LAST view of the doc (refCount <=
+      // 1). When the same dirty file is open in another pane, the buffer survives that
+      // other view, so closing this one loses nothing → close immediately. Warning on a
+      // non-last view trains the operator to click through the modal reflexively.
+      if (tab.kind === "file" && tab.path != null && tabIsDirty(tab)) {
+        const entry = docs.byPath[tab.path];
+        if (entry && entry.refCount <= 1) {
+          setClosing(id);
+          return;
+        }
       }
       doClose(id);
     };

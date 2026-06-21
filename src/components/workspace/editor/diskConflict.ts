@@ -1,4 +1,4 @@
-// WP12 Phase 3 — pure decision logic for disk-change detection.
+// WP12 — pure decision logic for disk-change detection.
 //
 // On tab activation and before a save, the editor re-stats the open file (the backend
 // `stat_file` → a FileMarker of mtime_ms + size) and compares it to the marker stored

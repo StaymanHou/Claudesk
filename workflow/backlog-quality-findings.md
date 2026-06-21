@@ -584,7 +584,7 @@ _From `feature-review-quality` on ship commit `f2c86d7`. 0 CRITICAL, 0 MAJOR, 3 
 - **Finding:** `OpenFile.dirty` field + the `set-dirty` event are DEAD in production. After the Phase-2S back-loop moved dirty to the shared document store, `PaneTabs.tabIsDirty` reads `isDirty(docs.byPath[path])`; nothing dispatches `set-dirty` outside its own unit test.
 - **Why it matters:** a future reader will assume the tab-level `dirty` flag is load-bearing and try to keep it in sync, reintroducing the per-view dirty-tracking the shared-doc model deliberately removed.
 - **Pickup:** remove the `dirty` field from `OpenFile`, the `set-dirty` event from the reducer, and the 3 `set-dirty` tests. Quick `/feature-refactor`.
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — deleted the `OpenFile.dirty` field, the `set-dirty` event from the reducer + its `case`, the two `dirty: false` literals (file/synthetic tab builders), and the 4-test `set-dirty` describe block + the `dirty: false` assertion lines in `openFiles.test.ts`. Header comment rewritten to point at the `editorDocs` store as the dirty source of truth. vitest 297 (was 301; −4), tsc/eslint/prettier clean.
 
 ## SURFACE-2026-06-21-QUALITY-WP12-CLOSE-GUARD-OVERWARNS-MULTIVIEW
 - **Severity:** MINOR (priority: low)
@@ -592,7 +592,7 @@ _From `feature-review-quality` on ship commit `f2c86d7`. 0 CRITICAL, 0 MAJOR, 3 
 - **Finding:** the dirty-close guard prompts save/discard/cancel whenever `tabIsDirty`, but when the same dirty file is open in another pane (refCount > 1) closing THIS tab loses nothing — the buffer survives in the other view. The operator is warned about changes that aren't at risk.
 - **Why it matters:** a spurious "unsaved changes" modal on every multi-view tab close trains the operator to click through it reflexively, eroding the guard for the case that matters. Not a correctness bug (no data loss either way) → MINOR.
 - **Pickup:** only raise the close guard when it's the LAST view of a dirty doc (dirty AND `docs.byPath[path].refCount <= 1`); a non-last view closes immediately. Needs threading refCount into `PaneTabs` (it already receives `docs`). Quick `/feature-refactor`.
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — `PaneTabs.requestClose` now reads `docs.byPath[path].refCount` and only raises the unsaved-changes confirm when the tab is dirty AND `refCount <= 1` (the last view); a non-last view of a dirty doc closes immediately since the buffer survives in the other pane. WHY-comment added explaining the multi-view case. All gates green (vitest 297, tsc/eslint/prettier).
 
 ## SURFACE-2026-06-21-QUALITY-WP12-INTRA-FEATURE-PHASE-TAGS
 - **Severity:** MINOR (priority: low)
@@ -600,4 +600,4 @@ _From `feature-review-quality` on ship commit `f2c86d7`. 0 CRITICAL, 0 MAJOR, 3 
 - **Finding:** intra-feature build-phase tags ("Phase 2S/3/4") are internal to this one feature's build and reference no shared roadmap; they'll read as dangling references to a future maintainer.
 - **Why it matters:** trivial, but the inconsistent intra-feature phase labels age poorly; a single "WP12" prefix would be self-explanatory.
 - **Pickup:** s/Phase 2S|3|4/WP12/ in the affected file-header comments. Trivial `/feature-refactor` or leave.
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — stripped all intra-feature `Phase 2S/3/4` build-phase tags from the comments in `EditorSplit.tsx`, `PaneTabs.tsx`, `confirmDialog.ts`, `diskConflict.ts`, and `editorDocs.ts` (the `WP12` feature prefix on the file-header lines is kept; the dangling sub-phase qualifiers are gone). No code change; tsc/eslint/prettier clean.

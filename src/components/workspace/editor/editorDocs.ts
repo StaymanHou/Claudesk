@@ -1,9 +1,9 @@
-// WP12 Phase 2S — per-workspace SHARED document store, keyed by file path.
+// WP12 — per-workspace SHARED document store, keyed by file path.
 //
 // The same file open in two panes must be ONE document (edit in pane 1 mirrors live
 // in pane 2; dirty + save are document-level) — the VS Code "two views of one doc"
 // model (operator decision 2026-06-21, Option 1). So the buffer (doc/savedDoc), the
-// load + save lifecycles, the language override, and (Phase 3) the disk marker all
+// load + save lifecycles, the language override, and the disk marker all
 // belong to the DOCUMENT, not to a pane/tab view. This reducer is that store: a map
 // from path → DocEntry, ref-counted by how many views (tabs across all panes) hold
 // the path open. EditorPanel becomes a VIEW that reads its entry from here and writes
@@ -37,7 +37,7 @@ export interface DocEntry {
    */
   languageOverrideId: string | null;
   /**
-   * Phase 3 — the on-disk marker (mtime+size) last seen for this document, for the
+   * The on-disk marker (mtime+size) last seen for this document, for the
    * disk-change check. Undefined until first loaded/stat'd.
    */
   marker?: { mtime_ms: number; size: number };
@@ -71,7 +71,7 @@ export type DocsEvent =
   | { type: "save-fail"; path: string; message: string }
   // Palette syntax override for a document.
   | { type: "set-override"; path: string; id: string | null }
-  // Phase 3 — record/refresh the disk marker for a document.
+  // Record/refresh the disk marker for a document.
   | {
       type: "set-marker";
       path: string;

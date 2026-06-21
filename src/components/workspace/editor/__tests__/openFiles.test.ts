@@ -34,7 +34,6 @@ describe("open-or-activate", () => {
       kind: "file",
       path: "a.ts",
       label: "a.ts",
-      dirty: false,
     });
     expect(s.activeTabId).toBe("t1");
   });
@@ -172,7 +171,6 @@ describe("add-synthetic", () => {
       kind: "synthetic",
       path: null,
       label: "Find Results",
-      dirty: false,
     });
   });
 
@@ -190,40 +188,5 @@ describe("add-synthetic", () => {
     });
     expect(s.tabs.filter((t) => t.id === "fr")).toHaveLength(1);
     expect(s.activeTabId).toBe("fr");
-  });
-});
-
-describe("set-dirty", () => {
-  it("flips a file tab's dirty flag", () => {
-    let s = open(initialOpenFilesState(), "t1", "a.ts");
-    s = openFilesReducer(s, { type: "set-dirty", id: "t1", dirty: true });
-    expect(s.tabs[0].dirty).toBe(true);
-    s = openFilesReducer(s, { type: "set-dirty", id: "t1", dirty: false });
-    expect(s.tabs[0].dirty).toBe(false);
-  });
-
-  it("is a no-op when the flag is unchanged (identity preserved)", () => {
-    const s = open(initialOpenFilesState(), "t1", "a.ts");
-    expect(
-      openFilesReducer(s, { type: "set-dirty", id: "t1", dirty: false }),
-    ).toBe(s);
-  });
-
-  it("never marks a synthetic (read-only) tab dirty", () => {
-    const s = openFilesReducer(initialOpenFilesState(), {
-      type: "add-synthetic",
-      id: "fr",
-      label: "Find Results",
-    });
-    expect(
-      openFilesReducer(s, { type: "set-dirty", id: "fr", dirty: true }),
-    ).toBe(s);
-  });
-
-  it("is a no-op for an unknown id", () => {
-    const s = open(initialOpenFilesState(), "t1", "a.ts");
-    expect(
-      openFilesReducer(s, { type: "set-dirty", id: "ghost", dirty: true }),
-    ).toBe(s);
   });
 });
