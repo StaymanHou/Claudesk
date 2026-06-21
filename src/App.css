@@ -197,9 +197,6 @@ body,
   position: relative;
 }
 
-/* WP8 + WP5 — Sublime launch toolbar pinned to the top of the right panel.
-   Two buttons: "Open in Sublime" (Text, transitional) + "Open in Sublime Merge"
-   (permanent, WP5). The gap separates them when both are present. */
 .placeholder-card {
   text-align: center;
   opacity: 0.7;
@@ -544,7 +541,7 @@ body,
 }
 
 /* ── WP10 file-tree left rail + right-half restructure ────────────────── */
-/* The right-half body is a horizontal row beneath the Sublime toolbar:
+/* The right-half body is a horizontal row beneath the panel tab row:
    [ FileTree rail | panel column ]. Fills the remaining height; min-height:0 keeps
    the editor's flex/scroll chain bounded (the WP3a height-chain lesson). */
 .right-panel-body {

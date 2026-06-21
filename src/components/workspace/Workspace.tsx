@@ -2,7 +2,8 @@
 //
 // Left half: the xterm.js terminal — a real PTY-backed CC session as of WP7.
 // Right half: the RightPanelHost (WP5) — owns the Editor↔Diff(↔terminal) panels,
-// the panel-select hotkeys (⌘⇧E/D/T), and the external-Sublime launch toolbar.
+// the panel-select hotkeys (⌘⇧E/D/T), and the external-Sublime launch icon buttons
+// (in the panel tab row, WP8).
 // (Before WP5 the right half was an inline segmented toggle living in this file.)
 //
 // CRITICAL invariant (CLAUDE.md "All workspaces stay mounted"): this component

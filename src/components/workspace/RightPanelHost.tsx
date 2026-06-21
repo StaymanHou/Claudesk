@@ -26,7 +26,7 @@ import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
 import { SublimeMergeIcon } from "../../sublime/icons/SublimeMergeIcon";
 
 interface RightPanelHostProps {
-  /** The workspace's project directory — passed to every panel + the toolbars. */
+  /** The workspace's project directory — passed to every panel + the Sublime launch buttons. */
   projectPath: string;
   /** True when this workspace is the focused/visible tab (display:block vs none). */
   visible: boolean;
