@@ -54,6 +54,15 @@ pub enum ProjectSearchError {
     /// operator can fix the pattern, rather than seeing an empty result list.
     #[error("invalid search pattern: {0}")]
     BadPattern(String),
+
+    /// A project-wide replace failed to write one or more files. Carries the
+    /// project-relative path of the first file that failed + the underlying reason, so
+    /// the overlay surfaces an actionable message rather than silently leaving a
+    /// partial replace. Replace is best-effort across files: files written before the
+    /// failure stay written (mirrors the search walk's partial-result posture); the
+    /// error names where it stopped.
+    #[error("could not write {file} during replace: {reason}")]
+    WriteFailed { file: String, reason: String },
 }
 
 /// The search request: the pattern plus the four mode toggles. Deserialized from the
@@ -195,6 +204,105 @@ pub fn search_core(
 
     results.sort_by(|a, b| a.file.cmp(&b.file));
     Ok(results)
+}
+
+/// The outcome of a project-wide replace: how many files were rewritten and how many
+/// individual matches were replaced. Serialized to the overlay for a post-replace
+/// summary ("Replaced N matches in M files").
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct ReplaceSummary {
+    /// Number of files whose contents changed (a file with matches but whose replaced
+    /// text equals the original — e.g. replacing `x` with `x` — does not count).
+    pub files_changed: u32,
+    /// Total number of matches replaced across all files.
+    pub matches_replaced: u32,
+}
+
+/// Replace every match of `query` with `replacement` across the project, in place.
+///
+/// Reuses the SAME composed regex and shared walk as [`search_core`], so "what gets
+/// replaced" is exactly "what a search with this query would have found" — no second
+/// match definition. For each file with ≥1 match, the new contents are computed with
+/// [`Regex::replace_all`] and written via [`crate::editor_fs::write_file_core`] (the
+/// atomic tmp-then-rename write, root-confined). Capture-group references (`$1`,
+/// `${name}`) in `replacement` expand in **regex** mode; in **substring** mode the
+/// replacement is inserted literally (a `$` in it is not a group reference) via
+/// [`regex::NoExpand`].
+///
+/// Replace is best-effort across files (mirrors the search walk): a per-file write
+/// failure stops the run and returns [`ProjectSearchError::WriteFailed`] naming that
+/// file; files already written stay written. Gitignored / `.git/` / binary / unreadable
+/// files are skipped, identical to search.
+///
+/// # Errors
+/// - [`ProjectSearchError::BadRoot`] / [`ProjectSearchError::BadPattern`] — same as search.
+/// - [`ProjectSearchError::WriteFailed`] — a matching file could not be written.
+pub fn replace_core(
+    root: &Path,
+    query: &SearchQuery,
+    replacement: &str,
+) -> Result<ReplaceSummary, ProjectSearchError> {
+    check_root(root).map_err(|e| match e {
+        crate::fs_index::FsIndexError::BadRoot { root, reason } => {
+            ProjectSearchError::BadRoot { root, reason }
+        }
+    })?;
+
+    let re = build_regex(query)?;
+
+    let mut files_changed: u32 = 0;
+    let mut matches_replaced: u32 = 0;
+
+    for entry in project_walker(root) {
+        let Ok(entry) = entry else { continue };
+        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
+            continue;
+        }
+        let path = entry.path();
+
+        // Skip non-UTF-8 (binary) + unreadable files, same as search.
+        let Ok(contents) = std::fs::read_to_string(path) else {
+            continue;
+        };
+
+        // Count matches the same way search does (per line) so the summary's
+        // matches_replaced equals the search's match count for this query.
+        let count: usize = contents.lines().map(|l| re.find_iter(l).count()).sum();
+        if count == 0 {
+            continue;
+        }
+
+        // In substring mode the replacement is LITERAL (NoExpand) — a `$` the user typed
+        // is not a capture-group reference. In regex mode `$1`/`${name}` expand normally.
+        let new_contents = if query.regex {
+            re.replace_all(&contents, replacement).into_owned()
+        } else {
+            re.replace_all(&contents, regex::NoExpand(replacement))
+                .into_owned()
+        };
+
+        // A no-op replacement (e.g. `x` → `x`) leaves contents identical — don't rewrite
+        // the file or count it as changed, but the matches were still "replaced".
+        matches_replaced += count as u32;
+        if new_contents == contents {
+            continue;
+        }
+
+        // Write through the editor_fs atomic, root-confined writer. `path` is absolute
+        // inside `root`; write_file_core re-resolves it within root (defense in depth).
+        crate::editor_fs::write_file_core(root, path, &new_contents).map_err(|e| {
+            ProjectSearchError::WriteFailed {
+                file: rel_posix(root, path).unwrap_or_else(|| path.display().to_string()),
+                reason: e.to_string(),
+            }
+        })?;
+        files_changed += 1;
+    }
+
+    Ok(ReplaceSummary {
+        files_changed,
+        matches_replaced,
+    })
 }
 
 #[cfg(test)]
@@ -460,5 +568,119 @@ mod tests {
         // something actionable rather than a silently-empty result list.
         assert!(msg.contains("no-such-subdir"), "{msg:?}");
         assert!(msg.contains("does not exist"), "{msg:?}");
+    }
+
+    // ── replace_core (WP7 Phase 3 — project-wide Replace All) ────────────────────
+
+    #[test]
+    fn replace_rewrites_matching_files_and_counts() {
+        let dir = fixture();
+        // "foo" appears: main.rs ×2, lib.rs ×1 (foobar), README ×1 (Foo, case-insens),
+        // ignored.txt excluded. Replace-all should rewrite 3 files, 4 matches.
+        let summary = replace_core(dir.path(), &substring("foo"), "BAR").unwrap();
+        assert_eq!(summary.matches_replaced, 4, "{summary:?}");
+        assert_eq!(summary.files_changed, 3, "{summary:?}");
+        // The replaced text is actually on disk + the old text is gone.
+        let main = fs::read_to_string(dir.path().join("src/main.rs")).unwrap();
+        assert_eq!(main, "let BAR = 1;\nBAR(bar)\n");
+        // Case-insensitive search replaced "Foo" too.
+        let readme = fs::read_to_string(dir.path().join("README.md")).unwrap();
+        assert_eq!(readme, "BAR Bar Baz\n");
+    }
+
+    #[test]
+    fn replace_does_not_touch_gitignored_files() {
+        let dir = fixture();
+        replace_core(dir.path(), &substring("foo"), "BAR").unwrap();
+        // ignored.txt is gitignored → not searched → not rewritten.
+        let ignored = fs::read_to_string(dir.path().join("ignored.txt")).unwrap();
+        assert_eq!(ignored, "foo here\n", "gitignored file must be untouched");
+    }
+
+    #[test]
+    fn replace_regex_mode_expands_capture_groups() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.txt"), "call foo(1) and foo(2)\n").unwrap();
+        let q = SearchQuery {
+            pattern: r"foo\((\d)\)".to_string(),
+            regex: true,
+            case_sensitive: false,
+            whole_word: false,
+        };
+        let summary = replace_core(dir.path(), &q, "bar[$1]").unwrap();
+        assert_eq!(summary.matches_replaced, 2, "{summary:?}");
+        let out = fs::read_to_string(dir.path().join("a.txt")).unwrap();
+        assert_eq!(out, "call bar[1] and bar[2]\n");
+    }
+
+    #[test]
+    fn replace_substring_mode_treats_replacement_literally() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.txt"), "price is X here\n").unwrap();
+        // Substring mode: a `$1` in the replacement must be inserted LITERALLY, not
+        // treated as a (nonexistent) capture-group reference.
+        let summary = replace_core(dir.path(), &substring("X"), "$1.99").unwrap();
+        assert_eq!(summary.matches_replaced, 1, "{summary:?}");
+        let out = fs::read_to_string(dir.path().join("a.txt")).unwrap();
+        assert_eq!(out, "price is $1.99 here\n");
+    }
+
+    #[test]
+    fn replace_with_no_matches_changes_nothing() {
+        let dir = fixture();
+        let summary = replace_core(dir.path(), &substring("zzz-absent"), "X").unwrap();
+        assert_eq!(summary.files_changed, 0);
+        assert_eq!(summary.matches_replaced, 0);
+    }
+
+    #[test]
+    fn replace_noop_replacement_counts_matches_but_changes_no_file() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.txt"), "foo foo\n").unwrap();
+        // Replacing "foo" with "foo" matches twice but leaves the file byte-identical:
+        // matches_replaced counts the hits, files_changed stays 0 (no needless rewrite).
+        let summary = replace_core(dir.path(), &substring("foo"), "foo").unwrap();
+        assert_eq!(summary.matches_replaced, 2, "{summary:?}");
+        assert_eq!(summary.files_changed, 0, "{summary:?}");
+    }
+
+    #[test]
+    fn replace_invalid_regex_is_typed_error() {
+        let dir = fixture();
+        let q = SearchQuery {
+            pattern: "(unterminated".to_string(),
+            regex: true,
+            case_sensitive: false,
+            whole_word: false,
+        };
+        let result = replace_core(dir.path(), &q, "X");
+        assert!(
+            matches!(result, Err(ProjectSearchError::BadPattern(_))),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn replace_bad_root_is_typed_error() {
+        let dir = TempDir::new().unwrap();
+        let missing = dir.path().join("no-such-subdir");
+        let result = replace_core(&missing, &substring("foo"), "X");
+        assert!(
+            matches!(result, Err(ProjectSearchError::BadRoot { .. })),
+            "{result:?}"
+        );
+    }
+
+    #[test]
+    fn replace_count_equals_search_count_for_same_query() {
+        // The replace match count must equal what a search would have found — same
+        // composed regex, same walk. Pins the "no second match definition" invariant.
+        let dir = fixture();
+        let q = substring("foo");
+        let search_total = total(&search_core(dir.path(), &q).unwrap());
+        let replace_total = replace_core(dir.path(), &q, "foo")
+            .unwrap()
+            .matches_replaced;
+        assert_eq!(replace_total as usize, search_total);
     }
 }

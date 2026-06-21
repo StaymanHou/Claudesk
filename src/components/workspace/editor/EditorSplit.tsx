@@ -30,6 +30,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { PaneTabs, type PaneTabsHandle } from "./PaneTabs";
+import type { SyntheticHighlight } from "./SyntheticView";
 import { initialPanesState, panesReducer } from "./editorPanes";
 import { docsReducer, initialDocsState, isDirty } from "./editorDocs";
 import { diskDecision, type FileMarker } from "./diskConflict";
@@ -55,8 +56,15 @@ export interface EditorSplitHandle {
     label: string,
     onLineClick?: (line: number) => void,
   ) => void;
-  /** (Re)set a synthetic tab's in-memory content. */
-  setSyntheticContent: (id: string, content: string) => void;
+  /**
+   * (Re)set a synthetic tab's in-memory content + optional hit highlights (0-based
+   * char-offset spans into `content` — the WP7 matched-text marks).
+   */
+  setSyntheticContent: (
+    id: string,
+    content: string,
+    highlights?: SyntheticHighlight[],
+  ) => void;
 }
 
 interface EditorSplitProps {
@@ -109,6 +117,11 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
     // to PaneTabs). Generic — WP7 is the first consumer.
     const [syntheticContent, setSyntheticContentState] = useState<
       Record<string, string>
+    >({});
+    // Hit highlights per synthetic tab id (parallel to content; in state so a re-set
+    // re-renders the marks). The WP7 Find-Results matched-text spans land here.
+    const [syntheticHighlights, setSyntheticHighlightsState] = useState<
+      Record<string, SyntheticHighlight[]>
     >({});
     const syntheticLineClick = useRef<Record<string, (line: number) => void>>(
       {},
@@ -304,12 +317,17 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       [panes.activePaneId],
     );
 
-    // Set/replace a synthetic tab's in-memory content (re-renders its view).
-    const setSyntheticContent = useCallback((id: string, content: string) => {
-      setSyntheticContentState((prev) =>
-        prev[id] === content ? prev : { ...prev, [id]: content },
-      );
-    }, []);
+    // Set/replace a synthetic tab's in-memory content + hit highlights (re-renders the
+    // view). Highlights default to none so a content-only set clears any stale marks.
+    const setSyntheticContent = useCallback(
+      (id: string, content: string, highlights: SyntheticHighlight[] = []) => {
+        setSyntheticContentState((prev) =>
+          prev[id] === content ? prev : { ...prev, [id]: content },
+        );
+        setSyntheticHighlightsState((prev) => ({ ...prev, [id]: highlights }));
+      },
+      [],
+    );
 
     // Open a synthetic read-only tab in the focused pane + register its content
     // (seeded empty unless already set) and its line-click callback.
@@ -421,6 +439,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
                 onSetOverride={onSetOverride}
                 onActivated={onActivated}
                 syntheticContent={syntheticContent}
+                syntheticHighlights={syntheticHighlights}
                 syntheticLineClick={syntheticLineClick.current}
                 onFocusPane={() => focusPane(pane.id)}
                 onActivePathChange={(p) => {

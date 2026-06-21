@@ -1,34 +1,34 @@
-// WP7 Phase 2 — ProjectSearch: the ⌘⇧F project-wide "Find in Files" overlay.
+// WP7 Phase 2 — ProjectSearch: the ⌘⇧F project-wide "Find in Files" QUERY overlay.
 //
 // APP-LAYER subsystem (research.md correction — @codemirror/search is single-document
-// only): a React overlay over the backend `project_search` command. The operator types
-// a pattern (+ regex / case / whole-word toggles), hits Enter, and gets results grouped
-// by file; clicking a match opens that file into the EditorPanel and scrolls to +
-// highlights the match (via the openFile highlight-target seam).
+// only): a small React overlay over the backend `project_search` command. The operator
+// types a pattern (+ regex / case / whole-word toggles), hits Enter / Search, and the
+// RESULTS render into a Sublime-style "Find Results" TAB in the editor (the WP12
+// synthetic-tab seam) — NOT into this overlay. This overlay is QUERY+REPLACE INPUT: it
+// owns the find/replace inputs + toggles + the search invocation, and hands the results
+// up via `onResults`; RightPanelHost formats them into the tab. (Operator UX redirect
+// 2026-06-21: floating result list → Find Results tab.)
 //
-// Mirrors FileFinder (WP6) / CommandPalette (WP3b) for the overlay shell + keyboard
-// nav; the chord that OPENS it (⌘⇧F) is registered in RightPanelHost via the WP1
-// capture-phase document listener so it fires while focus is inside CodeMirror.
+// REPLACE (WP7 Phase 3): a replacement input + a project-wide "Replace All" button.
+// Replace All is gated on a search having found matches (`canReplace`) and routes through
+// `onReplaceAll` → RightPanelHost's confirm dialog (blast-radius counts) → the backend
+// `project_replace`. Per-result / per-file replace are deferred (the read-only Find
+// Results tab has no per-row affordance — SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE).
 //
-// STATE IS LIFTED to RightPanelHost (query + results + error are props, not local):
-// closing then re-opening the overlay restores the last search, and opening a result
-// does NOT clear the list — so the operator can click through many matches. The
-// overlay only owns transient UI state (the active-row index + in-flight flag).
+// Mirrors FileFinder (WP6) / CommandPalette (WP3b) for the overlay shell; the chord that
+// OPENS it (⌘⇧F) is registered in RightPanelHost via the WP1 capture-phase document
+// listener so it fires while focus is inside CodeMirror.
+//
+// STATE IS LIFTED to RightPanelHost (query + error are props): closing then re-opening
+// the overlay restores the last query, and the results live in the tab (persistent
+// across re-opens) — so the operator can click through many matches.
 //
 // IPC ERRORS ARE SURFACED, NEVER SWALLOWED (the WP6 picker IPC error-surfacing lesson):
-// a bad root or an invalid regex renders an inline error row, not a silent empty list.
+// a bad root or an invalid regex renders an inline error row, not a silent empty result.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  byteOffsetToCharIndex,
-  matchTargetFor,
-  totalMatchCount,
-  type FileMatches,
-  type HighlightTarget,
-  type LineMatch,
-  type SearchQuery,
-} from "./searchModel";
+import { type FileMatches, type SearchQuery } from "./searchModel";
 import { SEARCH_CHORD_LABEL } from "./searchChord";
 
 interface ProjectSearchProps {
@@ -37,43 +37,38 @@ interface ProjectSearchProps {
   /** The current query (lifted to RightPanelHost so it persists across re-opens). */
   query: SearchQuery;
   onQueryChange: (q: SearchQuery) => void;
-  /** Last results (lifted). null = never searched this session; [] = searched, no matches. */
-  results: FileMatches[] | null;
-  onResults: (r: FileMatches[]) => void;
+  /** The current replacement text (lifted, persists across re-opens). */
+  replacement: string;
+  onReplacementChange: (r: string) => void;
   /** Last error string (lifted), or null. */
   error: string | null;
   onError: (e: string | null) => void;
-  /** Open a result's file at the match (line + char range → highlight). */
-  onOpen: (path: string, target: HighlightTarget) => void;
+  /** Hand the search results up — RightPanelHost renders them into the Find Results tab. */
+  onResults: (results: FileMatches[], query: SearchQuery) => void;
+  /**
+   * True when a search has run and found ≥1 match — gates "Replace All" (we only replace
+   * what the last search found, and the confirm needs the match/file counts).
+   */
+  canReplace: boolean;
+  /** Open the Replace-All confirm flow (RightPanelHost owns the confirm + the replace). */
+  onReplaceAll: () => void;
   /** Close the overlay (Esc or backdrop click). */
   onClose: () => void;
-}
-
-/** One nav-addressable row in the flat match sequence (for ↓/↑ navigation). */
-interface FlatRow {
-  file: string;
-  match: LineMatch;
-}
-
-/** Flatten grouped results into the document-order match sequence for keyboard nav. */
-function flatten(results: FileMatches[]): FlatRow[] {
-  return results.flatMap((f) =>
-    f.matches.map((match) => ({ file: f.file, match })),
-  );
 }
 
 export function ProjectSearch({
   projectPath,
   query,
   onQueryChange,
-  results,
-  onResults,
+  replacement,
+  onReplacementChange,
   error,
   onError,
-  onOpen,
+  onResults,
+  canReplace,
+  onReplaceAll,
   onClose,
 }: ProjectSearchProps) {
-  const [activeIndex, setActiveIndex] = useState(0);
   const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -83,12 +78,10 @@ export function ProjectSearch({
     inputRef.current?.select();
   }, []);
 
-  const flatRows = useMemo(() => (results ? flatten(results) : []), [results]);
-  const active =
-    flatRows.length === 0 ? -1 : Math.min(activeIndex, flatRows.length - 1);
-
   // Run the search. Explicit (Enter / Search button) — NOT as-you-type: project-wide
   // content search is heavier than the in-memory fuzzy finder, so we submit on intent.
+  // On success the results go UP (onResults → the Find Results tab); the overlay does
+  // not render them. An error stays inline here so the operator can fix the pattern.
   const runSearch = () => {
     if (query.pattern === "") return; // empty pattern is a no-op (backend rejects it too)
     setSearching(true);
@@ -102,42 +95,16 @@ export function ProjectSearch({
         whole_word: query.wholeWord,
       },
     })
-      .then((r) => {
-        onResults(r);
-        setActiveIndex(0);
-      })
-      .catch((e: unknown) => {
-        onError(String(e));
-        onResults([]); // distinct from "never searched"; the error row is what's shown
-      })
+      .then((r) => onResults(r, query))
+      .catch((e: unknown) => onError(String(e)))
       .finally(() => setSearching(false));
-  };
-
-  const openRow = (row: FlatRow | undefined) => {
-    if (!row) return;
-    onOpen(row.file, matchTargetFor(row.match));
-    // Do NOT close — keep the overlay so the operator can click through more matches
-    // (the lifted-state design). Esc / backdrop closes it.
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        if (flatRows.length > 0)
-          setActiveIndex((i) => (i + 1) % flatRows.length);
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        if (flatRows.length > 0)
-          setActiveIndex((i) => (i - 1 + flatRows.length) % flatRows.length);
-        break;
       case "Enter":
         e.preventDefault();
-        // Enter submits a new search when results are stale-or-absent; once results
-        // exist, Enter opens the active row (the operator is navigating hits).
-        if (results === null) runSearch();
-        else openRow(flatRows[active]);
+        runSearch();
         break;
       case "Escape":
         e.preventDefault();
@@ -150,19 +117,6 @@ export function ProjectSearch({
 
   const patch = (p: Partial<SearchQuery>) => onQueryChange({ ...query, ...p });
 
-  // The flat-row index where each file group starts — so the grouped render can map a
-  // match back to its flat-nav index for the active-row highlight. Derived (no
-  // render-time mutation): groupStarts[i] = sum of match counts of groups before i.
-  const groupStarts = useMemo(() => {
-    const starts: number[] = [];
-    let acc = 0;
-    for (const f of results ?? []) {
-      starts.push(acc);
-      acc += f.matches.length;
-    }
-    return starts;
-  }, [results]);
-
   return (
     <div
       className="command-palette-backdrop"
@@ -172,7 +126,7 @@ export function ProjectSearch({
       }}
     >
       <div
-        className="command-palette project-search"
+        className="command-palette project-search project-search-query-only"
         role="dialog"
         aria-label="Find in files"
       >
@@ -231,9 +185,50 @@ export function ProjectSearch({
               {searching ? "Searching…" : "Search"}
             </button>
           </div>
+
+          {/* Replace row (WP7 Phase 3) — a replacement input + project-wide Replace All.
+              Replace All is gated on a search having found matches (canReplace): we only
+              replace what the last search found, and the confirm needs its counts. */}
+          <div className="project-search-replace-row">
+            <input
+              type="text"
+              className="command-palette-input"
+              data-testid="project-search-replace"
+              value={replacement}
+              onChange={(e) => onReplacementChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  onClose();
+                }
+                // Enter in the replace field does NOT auto-replace — replace is
+                // destructive and must go through the explicit button + confirm.
+              }}
+              placeholder="Replace with…"
+              aria-label="replacement text"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="project-search-go project-search-replace-all"
+              data-testid="project-search-replace-all"
+              onClick={onReplaceAll}
+              disabled={!canReplace || searching}
+              title={
+                canReplace
+                  ? "Replace every match across the project"
+                  : "Run a search that finds matches first"
+              }
+            >
+              Replace All
+            </button>
+          </div>
         </div>
 
-        {error !== null ? (
+        {/* Results render into the Find Results editor tab, not here. The overlay only
+            surfaces a search ERROR inline (invalid regex / bad root) so the operator can
+            fix the pattern without losing the overlay — the WP6 IPC-error-surfacing lesson. */}
+        {error !== null && (
           <div
             className="command-palette-empty"
             data-testid="project-search-error"
@@ -241,90 +236,6 @@ export function ProjectSearch({
           >
             Search failed: {error}
           </div>
-        ) : results === null ? (
-          <div
-            className="command-palette-empty"
-            data-testid="project-search-hint"
-          >
-            Type a pattern and press Enter to search the project.
-          </div>
-        ) : flatRows.length === 0 ? (
-          <div
-            className="command-palette-empty"
-            data-testid="project-search-empty"
-          >
-            No matches
-          </div>
-        ) : (
-          <>
-            <div
-              className="project-search-summary"
-              data-testid="project-search-summary"
-            >
-              {totalMatchCount(results)} matches in {results.length} files
-            </div>
-            <ul
-              className="command-palette-list project-search-list"
-              role="listbox"
-            >
-              {results.map((fileGroup, gi) => {
-                const groupStart = groupStarts[gi];
-                return (
-                  <li key={fileGroup.file} className="project-search-group">
-                    <div
-                      className="project-search-file"
-                      data-testid="project-search-file"
-                    >
-                      {fileGroup.file}
-                      <span className="project-search-file-count">
-                        {fileGroup.matches.length}
-                      </span>
-                    </div>
-                    <ul className="project-search-matches" role="group">
-                      {fileGroup.matches.map((m, j) => {
-                        const flatIndex = groupStart + j;
-                        // Byte→char for the DISPLAY slice too (the editor highlight
-                        // converts separately via matchTargetFor) — exact for
-                        // multi-byte lines, a no-op for ASCII.
-                        const cs = byteOffsetToCharIndex(m.line_text, m.start);
-                        const ce = byteOffsetToCharIndex(m.line_text, m.end);
-                        return (
-                          <li
-                            key={`${m.line}:${m.start}`}
-                            role="option"
-                            aria-selected={flatIndex === active}
-                            className={
-                              "project-search-match" +
-                              (flatIndex === active
-                                ? " command-palette-item-active"
-                                : "")
-                            }
-                            data-testid="project-search-match"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              openRow({ file: fileGroup.file, match: m });
-                            }}
-                            onMouseEnter={() => setActiveIndex(flatIndex)}
-                          >
-                            <span className="project-search-line-no">
-                              {m.line}
-                            </span>
-                            <span className="project-search-line-text">
-                              {m.line_text.slice(0, cs)}
-                              <mark className="project-search-hit">
-                                {m.line_text.slice(cs, ce)}
-                              </mark>
-                              {m.line_text.slice(ce)}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
         )}
       </div>
     </div>

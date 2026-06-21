@@ -477,12 +477,18 @@ body,
 }
 
 /* ── WP7 project-wide search ("Find in Files", ⌘⇧F) overlay ──────────── */
-/* Reuses .command-palette-backdrop + .command-palette shell; widened for results
-   and given a controls row (query + regex/case/word toggles + Search). Dark-only,
+/* WP7 (Find Results tab redirect, 2026-06-21) — QUERY-ONLY overlay: a thin query box
+   (input + regex/case/word toggles + Search) over the .command-palette shell; results
+   render into the "Find Results" editor tab, NOT here. Sized to the controls + an
+   optional inline error row (no result list → no tall max-height). Dark-only,
    palette-aligned tokens (matches the finder + command palette). */
 .command-palette.project-search {
   width: min(94%, 720px);
-  max-height: 78%;
+}
+
+.command-palette.project-search.project-search-query-only {
+  /* No scrollable result list — let the box hug its controls + error row. */
+  max-height: none;
 }
 
 .project-search-controls {
@@ -490,8 +496,6 @@ body,
   flex-direction: column;
   gap: 6px;
   flex-shrink: 0;
-  border-bottom: 1px solid #3c3c3c;
-  padding-bottom: 8px;
 }
 
 .project-search-toggles {
@@ -530,69 +534,33 @@ body,
   cursor: default;
 }
 
-.project-search-summary {
-  flex-shrink: 0;
-  padding: 4px 14px;
-  font-size: 11px;
-  color: #858585;
-}
-
-.project-search-list {
-  padding-bottom: 6px;
-}
-
-.project-search-group {
-  list-style: none;
-}
-
-.project-search-file {
+/* WP7 Phase 3 — Replace row: a replacement input + the Replace All button, on one line
+   below the find controls. Dark-only, palette-aligned to the find row. */
+.project-search-replace-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 14px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  color: #9cdcfe;
-  background-color: #2d2d2d;
-  position: sticky;
-  top: 0;
+  margin: 0 8px;
 }
 
-.project-search-file-count {
-  color: #858585;
+.project-search-replace-row .command-palette-input {
+  flex: 1;
 }
 
-.project-search-matches {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.project-search-replace-all {
+  margin-left: auto;
+  background-color: #6e2f2f;
+  border-color: #8a3a3a;
 }
 
-.project-search-match {
-  display: flex;
-  gap: 10px;
-  padding: 3px 14px 3px 22px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12.5px;
-  color: #d4d4d4;
-  cursor: pointer;
-  white-space: pre;
-  overflow: hidden;
+.project-search-replace-all:hover:not(:disabled) {
+  background-color: #7e3636;
 }
 
-.project-search-line-no {
-  flex-shrink: 0;
-  min-width: 3em;
-  text-align: right;
-  color: #858585;
-}
-
-.project-search-line-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.project-search-hit {
+/* WP7 — matched-text highlight inside the "Find Results" synthetic tab (the SyntheticView
+   Decoration.mark hit). Same amber as the old overlay's .project-search-hit so the marked
+   span reads as a search hit, Sublime-style. Dark-only. */
+.cm-synthetic-hit {
   background-color: #613a00;
   color: #ffd596;
   border-radius: 2px;

@@ -24,7 +24,7 @@ import {
   useState,
 } from "react";
 import { EditorPanel } from "./EditorPanel";
-import { SyntheticView } from "./SyntheticView";
+import { SyntheticView, type SyntheticHighlight } from "./SyntheticView";
 import { ConfirmModal } from "./ConfirmModal";
 import { closeDirtySpec, type CloseChoice } from "./confirmDialog";
 import {
@@ -93,6 +93,8 @@ interface PaneTabsProps {
   // keyed by the synthetic tab's id, supplied by the owner (EditorSplit).
   /** In-memory content per synthetic tab id (read-only). */
   syntheticContent: Record<string, string>;
+  /** Hit highlights (0-based char-offset spans into content) per synthetic tab id. */
+  syntheticHighlights: Record<string, SyntheticHighlight[]>;
   /** Line-click callbacks per synthetic tab id (1-based line number). */
   syntheticLineClick: Record<string, (line: number) => void>;
 }
@@ -113,6 +115,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
       onSetOverride,
       onActivated,
       syntheticContent,
+      syntheticHighlights,
       syntheticLineClick,
     },
     ref,
@@ -328,6 +331,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
                     ) : (
                       <SyntheticView
                         content={syntheticContent[tab.id] ?? ""}
+                        highlights={syntheticHighlights[tab.id]}
                         onLineClick={syntheticLineClick[tab.id]}
                       />
                     )}

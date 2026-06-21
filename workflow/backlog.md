@@ -4,6 +4,16 @@
 
 > **Phase 1 cycle-close backlog sweep — 2026-06-19 (`/product-finalize`).** Phase 1 (Bare Shell + Tab Substrate PoC) closed; all 9 WPs shipped. Sweep disposition of the items still pending at close: **all DEFERRED → carry to the Phase 2 cycle** (none escalated, none newly resolved by the close itself). Carried forward: wp5/wp6/wp7/wp8/wp9 code-quality findings (the **wp6 picker IPC error-surfacing MAJORs are the most load-bearing** — they pair with Phase 2's multi-workspace picker work, WP13/WP16) + `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS` (housekeeping). These remain in this file (not archived) so the next cycle inherits them.
 
+## SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE
+- **Source:** feature:build (WP7 Phase 3 relevance gate — operator decision 2026-06-21)
+- **Target level:** product:wbs (a WP7 follow-on, or a small standalone feature)
+- **Type:** new-work
+- **Summary:** WP7 Phase 3 shipped project-wide **Replace All** ONLY (an overlay Replace field + a confirmed replace-all-across-project). Per-result single-match replace and per-file replace — the other two scopes in the WP7 spec's "full depth" replace — were DEFERRED because the Phase-2 UX redirect moved results into a **read-only** "Find Results" synthetic tab that can't cleanly host per-row / per-file replace affordances.
+- **Context:** the WP7 spec chose full replace depth (per-result + per-file + replace-all). The read-only-tab result surface (operator's chosen Sublime model) removed the writable result rows those two scopes attached to. Replace All covers the headline "rename a string across the project" use case; the finer scopes are a refinement.
+- **Suggested action:** add per-result + per-file replace when there's a writable result surface — e.g. clickable per-file "replace in this file" markers rendered into the Find Results tab (via the synthetic click-line callback, the same seam clicks already use), or a richer results panel. Backend `project_replace` already does per-file rewrite; a scope param + a file-filter would extend it.
+- **Priority:** medium
+- **Status:** pending
+
 ## Code-quality findings — m2-wp3c-editor-split-panes (2026-06-20)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `b72ed30` (0 CRITICAL, 0 MAJOR). All cosmetic: (1) the middle-close focus-reassign in `editorPanes.ts` relies on a pre-filter-index shift that's correct + tested but under-commented; (2) the "is-split" predicate is encoded twice (JS `splitable` const vs CSS `:has(.editor-pane + .editor-pane)`) — a drift pair; (3) a redundant inline JSX comment restating the shared-doc rationale already stated in the file header. Reviewer rated the feature well-built, low-debt, fitting the codebase grain. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp3c-editor-split-panes — 2026-06-20`.
 - **Priority:** low (all)

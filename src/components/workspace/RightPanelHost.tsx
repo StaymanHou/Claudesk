@@ -24,11 +24,16 @@ import { isFinderChord } from "./finder/finderChord";
 import { FileTree } from "./filetree/FileTree";
 import { ProjectSearch } from "./search/ProjectSearch";
 import { isSearchChord } from "./search/searchChord";
-import type {
-  FileMatches,
-  HighlightTarget,
-  SearchQuery,
+import {
+  matchTargetFor,
+  totalMatchCount,
+  type SearchQuery,
 } from "./search/searchModel";
+import type { FileMatches, HighlightTarget } from "./search/searchModel";
+import { formatFindResults, type FlatMatch } from "./search/findResultsBuffer";
+import { replaceAllSpec, type ReplaceAllChoice } from "./search/replaceConfirm";
+import { ConfirmModal } from "./editor/ConfirmModal";
+import { invoke } from "@tauri-apps/api/core";
 import { openSublime, openSublimeMerge } from "../../sublime/sublimeLaunch";
 import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
 import { SublimeMergeIcon } from "../../sublime/icons/SublimeMergeIcon";
@@ -57,10 +62,10 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
   const [highlightTarget, setHighlightTarget] =
     useState<HighlightTarget | null>(null);
 
-  // WP7 — project-search overlay state. `searchOpen` toggles the overlay; the last
-  // query + results live HERE (not inside the overlay) so re-opening ⌘⇧F restores
-  // them — the overlay stays usable for click-through-many-matches (opening a result
-  // doesn't lose the result set). null results = "never searched yet" this session.
+  // WP7 — project-search QUERY overlay state. `searchOpen` toggles the overlay; the
+  // last query lives HERE (lifted) so re-opening ⌘⇧F restores it. RESULTS do NOT live
+  // here — they render into the "Find Results" editor tab (the WP12 synthetic-tab seam),
+  // which is persistent across re-opens so the operator can click through many matches.
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState<SearchQuery>({
     pattern: "",
@@ -68,10 +73,27 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
     caseSensitive: false,
     wholeWord: false,
   });
-  const [searchResults, setSearchResults] = useState<FileMatches[] | null>(
-    null,
-  );
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // WP7 Phase 3 — the replacement text (lifted, persists across re-opens) + the last
+  // search's counts (drives the Replace-All gate + the confirm's blast-radius message) +
+  // whether the Replace-All confirm dialog is open. Counts are null until a search runs.
+  const [replacement, setReplacement] = useState("");
+  const [lastCounts, setLastCounts] = useState<{
+    matches: number;
+    files: number;
+  } | null>(null);
+  const [replaceConfirmOpen, setReplaceConfirmOpen] = useState(false);
+
+  // WP7 — the Find Results tab's current buffer-line → match map. A click in the
+  // synthetic tab reports a 1-based buffer line; `findResultsLineMap.current[line - 1]`
+  // resolves it to the {file, match} to open. Held in a ref (not state) because the
+  // synthetic tab's click callback is registered ONCE (on first addSynthetic) and must
+  // read the LATEST map after a re-search without re-registering. null on non-match lines.
+  const findResultsLineMap = useRef<(FlatMatch | null)[]>([]);
+  // Whether the "find-results" synthetic tab has been created this session (addSynthetic
+  // registers the click callback only on first add; later searches just replace content).
+  const findResultsAdded = useRef(false);
 
   // WP10 — whether the FileTree left rail is collapsed (to a strip) to reclaim the
   // editor's horizontal width in the 50/50 split. State lives here so it persists
@@ -97,6 +119,90 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
     setHighlightTarget(target);
     setPanel((cur) => selectPanel(cur, "editor"));
     editorSplitRef.current?.openFile(path);
+  };
+
+  // WP7 — a search returned results: render them into the "Find Results" synthetic tab
+  // (the WP12 seam). The buffer text + the click-line→match map come from the pure
+  // `formatFindResults`. On the FIRST search we create the tab and register a click
+  // callback that resolves the clicked buffer line against `findResultsLineMap.current`
+  // (the ref so later searches don't need to re-register); subsequent searches just
+  // replace the tab's content + the map. Opening a match drives the same open-at-match
+  // highlight path as the finder/tree (`openFile(path, target)`). The query overlay
+  // STAYS open after a search (WP7 Phase 3) so Replace All is reachable; Esc closes it.
+  const handleSearchResults = (results: FileMatches[], query: SearchQuery) => {
+    const { text, lineMap, highlights } = formatFindResults(results, query);
+    findResultsLineMap.current = lineMap;
+    setPanel((cur) => selectPanel(cur, "editor"));
+    if (!findResultsAdded.current) {
+      editorSplitRef.current?.addSynthetic(
+        "find-results",
+        "Find Results",
+        (bufferLine) => {
+          const hit = findResultsLineMap.current[bufferLine - 1];
+          if (hit) openFile(hit.file, matchTargetFor(hit.match));
+        },
+      );
+      findResultsAdded.current = true;
+    }
+    // Content + the matched-text highlights together — the tab marks each hit like
+    // Sublime's Find Results (WP7 verify-human fix).
+    editorSplitRef.current?.setSyntheticContent(
+      "find-results",
+      text,
+      highlights,
+    );
+    // Record the counts so Replace All can gate on "a search found matches" and the
+    // confirm can show the blast radius. (WP7 Phase 3.)
+    setLastCounts({ matches: totalMatchCount(results), files: results.length });
+    // KEEP the overlay open (WP7 Phase 3): the operator may now Replace All on these
+    // results, which lives in the overlay. The results are in the tab behind it; Esc /
+    // backdrop closes the overlay to read them full-screen. (Supersedes the Phase-2
+    // close-on-search detail, which predated the in-overlay Replace control.)
+  };
+
+  // WP7 Phase 3 — "Replace All" pressed: open the confirm (blast-radius counts). The
+  // confirm + the project_replace call live here so the overlay stays a thin input.
+  const onReplaceAll = () => {
+    if (!lastCounts || lastCounts.matches === 0) return; // nothing to replace
+    setReplaceConfirmOpen(true);
+  };
+
+  // The confirm resolved: on "replace", run the backend project_replace, then re-run the
+  // search to refresh the Find Results tab (replaced matches drop out). On "cancel",
+  // close the dialog and change nothing. A write/IPC failure surfaces in the overlay's
+  // inline error row (never silently swallowed — the WP6 IPC-error lesson).
+  const onReplaceConfirm = (choice: ReplaceAllChoice) => {
+    setReplaceConfirmOpen(false);
+    if (choice !== "replace") return;
+    setSearchError(null);
+    invoke<{ files_changed: number; matches_replaced: number }>(
+      "project_replace",
+      {
+        root: projectPath,
+        query: {
+          pattern: searchQuery.pattern,
+          regex: searchQuery.regex,
+          case_sensitive: searchQuery.caseSensitive,
+          whole_word: searchQuery.wholeWord,
+        },
+        replacement,
+      },
+    )
+      .then(() =>
+        // Re-run the search so the tab reflects the post-replace state (the just-replaced
+        // matches are gone; any remaining ones stay). Reuses the same result→tab path.
+        invoke<FileMatches[]>("project_search", {
+          root: projectPath,
+          query: {
+            pattern: searchQuery.pattern,
+            regex: searchQuery.regex,
+            case_sensitive: searchQuery.caseSensitive,
+            whole_word: searchQuery.wholeWord,
+          },
+        }),
+      )
+      .then((r) => handleSearchResults(r, searchQuery))
+      .catch((e: unknown) => setSearchError(String(e)));
   };
 
   // P3 — panel-select hotkeys (⌘⇧E/⌘⇧D/⌘⇧T) AND the ⌘P file-finder, registered as a
@@ -275,23 +381,43 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
         />
       )}
 
-      {/* WP7 — project-wide search ("Find in Files") overlay. Like the finder, only
-          the focused workspace mounts it. The query + results are LIFTED here (not
-          overlay-local) so closing then re-opening ⌘⇧F restores the last search —
-          opening a result doesn't clear the list, so the operator can click through
-          many matches. Selecting a result opens the file at the match (openFile with
-          a highlight target). */}
+      {/* WP7 — project-wide search ("Find in Files") QUERY overlay. Like the finder,
+          only the focused workspace mounts it. The query is LIFTED here so re-opening
+          ⌘⇧F restores it; the RESULTS render into the persistent "Find Results" editor
+          tab (handleSearchResults), NOT this overlay — so the operator clicks through
+          matches in the tab and the overlay stays a thin query box. */}
       {visible && searchOpen && (
         <ProjectSearch
           projectPath={projectPath}
           query={searchQuery}
-          onQueryChange={setSearchQuery}
-          results={searchResults}
+          onQueryChange={(q) => {
+            setSearchQuery(q);
+            // Editing the query invalidates the last search's counts — Replace All
+            // re-gates until a fresh search runs (so we never replace against a query
+            // the displayed count no longer matches).
+            setLastCounts(null);
+          }}
+          replacement={replacement}
+          onReplacementChange={setReplacement}
           error={searchError}
-          onResults={setSearchResults}
           onError={setSearchError}
-          onOpen={openFile}
+          onResults={handleSearchResults}
+          canReplace={lastCounts !== null && lastCounts.matches > 0}
+          onReplaceAll={onReplaceAll}
           onClose={() => setSearchOpen(false)}
+        />
+      )}
+
+      {/* WP7 Phase 3 — Replace-All confirm (blast-radius counts). Reuses the shared
+          ConfirmModal; only mounts while the query overlay is open + a search has run. */}
+      {visible && searchOpen && replaceConfirmOpen && lastCounts && (
+        <ConfirmModal
+          spec={replaceAllSpec(
+            lastCounts.matches,
+            lastCounts.files,
+            replacement,
+          )}
+          onChoose={onReplaceConfirm}
         />
       )}
     </div>

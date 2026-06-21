@@ -65,6 +65,9 @@ pub fn run() {
             // finder + tree) and matches per-line with the `regex` crate. Errors
             // (bad root, invalid regex) surface to the overlay, never empty-on-fail.
             project_search::commands::project_search,
+            // WP7 Phase 3: project-wide Replace All — reuses the same composed regex +
+            // shared walk as search, writes via editor_fs's atomic root-confined writer.
+            project_search::commands::project_replace,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an

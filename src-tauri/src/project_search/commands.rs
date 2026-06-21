@@ -12,7 +12,7 @@
 
 use std::path::Path;
 
-use super::{search_core, FileMatches, SearchQuery};
+use super::{replace_core, search_core, FileMatches, ReplaceSummary, SearchQuery};
 
 /// Run a project-wide content search over the workspace `root`.
 ///
@@ -22,4 +22,20 @@ use super::{search_core, FileMatches, SearchQuery};
 #[tauri::command]
 pub fn project_search(root: String, query: SearchQuery) -> Result<Vec<FileMatches>, String> {
     search_core(Path::new(&root), &query).map_err(|e| e.to_string())
+}
+
+/// Replace every match of `query` with `replacement` across the workspace `root`
+/// (WP7 Phase 3 — project-wide Replace All).
+///
+/// Same `query` shape as `project_search`, plus the replacement text (with `$1`/`${name}`
+/// capture-group support in regex mode; literal in substring mode). Returns a
+/// `{files_changed, matches_replaced}` summary; a bad root / invalid regex / per-file
+/// write failure comes back as a `String` the overlay surfaces inline.
+#[tauri::command]
+pub fn project_replace(
+    root: String,
+    query: SearchQuery,
+    replacement: String,
+) -> Result<ReplaceSummary, String> {
+    replace_core(Path::new(&root), &query, &replacement).map_err(|e| e.to_string())
 }
