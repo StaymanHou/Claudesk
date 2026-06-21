@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-20
 milestone: 2
-# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5, WP6 shipped (8/12); WP7/WP10/WP8/WP9 remain
+# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5, WP6, WP10 shipped (9/12); WP7/WP8/WP9/WP11 remain
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -141,17 +141,17 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [ ] Project-wide *replace* (scope decided at build — at minimum a per-result/per-file apply)
 - [ ] Unit tests on the search core (TempDir fixture with known matches)
 
-### WP10: File-tree navigator (app-layer)
+### WP10: File-tree navigator (app-layer) ✅ SHIPPED 2026-06-20 (commit 348376b)
 
 **Description:** **App-layer subsystem** — a persistent left-side file-tree explorer of the workspace's project dir (VS Code/Sublime-sidebar model), in addition to WP6's Cmd+P fuzzy-open. Operator-designated **must-have** (added 2026-06-19 at WP2 verify-human: the path-input stopgap and Cmd+P alone don't cover browsing an unfamiliar tree). Renders a collapsible directory tree; clicking a file opens it into the EditorPanel; honors `.gitignore`. Lives in the workspace's right-half panel chrome (it browses *into* the editor) — exact placement (left rail of the right half vs. a togglable overlay) decided at build, mindful of the 50/50 split's horizontal budget.
 **Milestone:** Milestone 2
 **Dependencies:** WP2 (clicking a node opens into the editor), WP6 (**reuses the `fs_index` fs-walk/.gitignore infrastructure** — do WP6 first; WP10 consumes the same backend, adding directory structure to the flat index or a `list_dir` command), WP5 (the tree is part of the RightPanelHost chrome / a panel)
 **Size:** M
 **Tasks:**
-- [ ] Backend: extend `fs_index` (WP6) to return directory structure, or add a lazy `list_dir(path)` Tauri command (pure-fn core + command; honor `.gitignore`) — decide eager-tree vs. lazy-expand at build based on project size
-- [ ] React `FileTree` component: collapsible directory tree, keyboard nav, click-to-open → EditorPanel; reflects the active file
-- [ ] Placement in the right-half chrome (left rail vs. togglable), respecting the horizontal budget of the 50/50 workspace split; collapsible to reclaim width
-- [ ] Unit tests on the tree-building / gitignore-honoring walk (pure core, TempDir fixture)
+- [x] Backend: extended `fs_index` with a dirs-included `walk_tree_core` (returns tagged `TreeEntry{path,is_dir}`, empty dirs included) + `fs_tree` Tauri command; factored shared `check_root`/`project_walker`/`rel_posix` helpers so finder + tree provably share one exclusion contract (gitignore on, `.git/` excluded, dotfiles shown); errors surfaced as `String` — 8 new tests
+- [x] React `FileTree` component: collapsible directory tree (pure `buildTree` nester + pure `treeState` reducer), click-to-open → EditorPanel via the existing `openFile` seam; reflects + highlights the active file; inline IPC-error row (not swallowed). Arrow-key nav deferred as a low-pri stretch (SURFACE-2026-06-20-WP10-ARROW-KEY-TREE-NAV)
+- [x] Placement: a collapsible LEFT RAIL inside the right half (`.right-panel-body` horizontal row = `[ rail | panel-column ]`); collapse toggle reclaims width, state persists across center-stage switches, FileTree stays mounted (CSS `display:none` on collapse — not unmount)
+- [x] Unit tests on the tree-building / gitignore-honoring walk (pure cores, TempDir fixture) — 8 backend `walk_tree_core` + 12 frontend (`buildTree` + `treeState`)
 
 ### WP8: Remove the Sublime *Text* pop (gated on editor parity) — LAST build WP
 
@@ -180,6 +180,22 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [ ] **PARITY GATE (owns the daily-Sublime-usage check; was buried in old WP3, pulled here 2026-06-19):** during dogfooding, confirm the in-app editor covers the operator's daily Sublime feature set (multi-cursor, find/replace, font-zoom, palette, split panes as needed). This is the **parity evidence WP8's Sublime-pop removal is gated on** — if a relied-on gesture is missing/hard, it surfaces here and WP8 waits. Record the verdict explicitly.
 - [ ] Confirm exit criteria: editing + diff review complete inside the right half with the panel-switch hotkey; the Sublime Text pop is removed (WP8); `subl` is no longer a routine-work dependency
 
+### WP11: Tree/editor density polish + Sublime-style git-change indicators
+
+**Description:** Post-WP10 polish requested by the operator at WP10 verify-human (2026-06-20), promoted from a backlog SURFACE to a WP at operator direction. Two parts: (A) quick density/sizing tweaks to the file tree + minimap, and (B) the substantive piece — **Sublime-Text-style git-change indicators** on file-tree rows (the colored status dots in Sublime's sidebar: modified / added / untracked / etc.). Part B is a real subsystem: a backend `git_status` source (reuse `git2` from WP4's `git_diff` module — a per-path status walk) feeding a per-row indicator in `FileTree`/`TreeRow`.
+**Milestone:** Milestone 2
+**Dependencies:** WP10 (the FileTree rail + `fs_tree`), WP4 (`git2` / `git_diff` module — reuse for the status walk), WP3a (the `@replit/codemirror-minimap` whose width part A adjusts)
+**Size:** M (Part A is S/CSS-config; Part B is the M-sized git-status subsystem)
+**Tasks:**
+- [ ] **(A)** File-tree rail 66% wider — `.file-tree-rail` width 200px → ~332px (200 × 1.66)
+- [ ] **(A)** Tree rows ~2/3 current height + correspondingly smaller font — `.file-tree-row` padding/line-height to ~2/3, font-size proportionally smaller (denser; more files visible)
+- [ ] **(A)** Minimap 75% of current width — adjust the `@replit/codemirror-minimap` width option / container CSS
+- [ ] **(B)** Backend `git_status` core + command: reuse `git2` (already a dep, WP4) to return per-path working-tree status (modified / added / deleted / untracked / clean) for the workspace dir; pure-fn core (TempDir git-fixture testable) + thin Tauri command (errors surfaced as `String`, the WP6 lesson)
+- [ ] **(B)** Per-row git-status indicator in `FileTree`/`TreeRow`: a colored dot/mark per file (and rolled-up for dirs, optional) reflecting `git_status`; dark-only palette matching Sublime's convention. Refresh policy decided at build (on tree load + on save; a live `notify` watcher is out of scope — that's the Phase-2 watcher milestone)
+- [ ] Unit tests: the `git_status` pure core (TempDir git fixture with known modified/untracked/clean files) + any pure status→indicator mapping helper
+
+**Source:** operator request at WP10 verify-human, 2026-06-20 (reference image: Sublime sidebar status dots). Originally captured as SURFACE-2026-06-20-WP10-FOLLOWUP-TREE-EDITOR-POLISH; promoted to this WP at operator direction.
+
 ## Milestone 2 critical path
 
 ```
@@ -188,7 +204,7 @@ WP1 ✅─► WP2 ✅─► WP3a ✅ (core editing) ──► WP3b ✅ (palette)
               ├──► WP4 ✅ (diff viewer) ───────────────────────────────────►├─► WP9 dogfood + PARITY GATE ─► WP8 (remove Sublime pop) ─► WP9 exit-criteria
               ├──► WP5 ✅ (panel host) ────────────────────────────────────►│
               │       ▲                                                      │
-              ├──► WP6 (file finder) ──┬──► WP10 (file-tree) ───────────────►│
+              ├──► WP6 ✅ (file finder)┬──► WP10 ✅ (file-tree) ─────────────►│
               └──► WP7 (project search)┴──(app-layer, parallel)─────────────►┘
 ```
 

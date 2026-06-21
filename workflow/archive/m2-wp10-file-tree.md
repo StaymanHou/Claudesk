@@ -1,7 +1,8 @@
 # Feature: M2 WP10 — File-tree navigator (app-layer)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready for ship
+**State:** COMPLETED 2026-06-20 — shipped 348376b, review-quality MAJOR+MINOR resolved via refactor, finalized
+**Completion date:** 2026-06-20
 **Created:** 2026-06-20
 **Entry:** spec (complex feature)
 **Drive mode:** autopilot (standing directive: halt at WBS-WP boundaries; operator confirms the spec before plan)
@@ -127,9 +128,11 @@ WP10 is an **app-layer subsystem** (the load-bearing `research.md` correction, s
   - [x] verify-codify  <!-- status: COMPLETE — nester + reducer codified by 15 filetree tests; component/wiring codified by verify-self Playwright (5/5) + verify-human (5/5); no DOM test env by design; suites 90/90 + 211/211, no regressions; no new tests warranted -->
 
 ## Current Node
-- **Path:** Feature > WP10 COMPLETE → WP boundary (ship/finalize)
-- **Active scope:** none — both phases done; WP10 feature-complete. HALT at WP boundary per standing directive (operator picks /feature-ship).
-- **Follow-up logged:** SURFACE-2026-06-20-WP10-FOLLOWUP-TREE-EDITOR-POLISH (operator-requested next WP — wider rail, denser rows, narrower minimap, Sublime git-change indicators; NOT part of WP10)
+- **Path:** Feature > WP10 SHIPPED (348376b) → review-quality DONE → **refactor DONE (MAJOR fixed + MINOR trimmed, verify-self 5/5)** → ready for `/feature-finalize`
+- **Active scope:** `/feature-finalize` WP10 — append CHANGELOG (Feature shipped + Milestone 9/12), tick WBS WP10 + bump frontmatter 8/12→9/12, archive WIP. Fold the uncommitted edits (wbs.md WP11, backlog.md, this WIP) into the finalize commit; leave the 3 `.claude/memory/*.md` prettier nits unstaged.
+- **Blocked:** none
+- **Follow-up promoted to WBS:** the operator's tree/editor-polish + git-indicators request is now **WP11 in `docs/product/wbs.md`** (was SURFACE-2026-06-20-WP10-FOLLOWUP, removed from backlog).
+- **Next session:** `/session-resume` → read the handoff → refactor MAJOR → finalize WP10.
 - **Blocked:** none
 - **Unvisited:** Phase 2 verify (auto → self → human → codify) → then WP10 ship/finalize (WP boundary — HALT per standing directive)
 - **Phase 1:** ✅ COMPLETE (backend fs_tree — 8 tests, suite 90/90)
@@ -146,6 +149,41 @@ WP10 is an **app-layer subsystem** (the load-bearing `research.md` correction, s
 - **Keyboard-nav depth:** decide at plan — click-to-open is the must-have; arrow-key tree nav is a stretch within the same WP.
 
 > No 3rd-party probe required. No research unknowns — build/UX decisions resolved above. **F4 → `/feature-plan`.**
+
+## Code-Quality Review — m2-wp10-file-tree
+
+Ship commit 348376b. **0 CRITICAL, 1 MAJOR, 1 MINOR.** Reviewer rated it well-built, idiomatic; the Rust shared-helper refactor is the highlight. One real behavior bug found.
+
+### Strengths
+- `check_root`/`project_walker`/`rel_posix` shared-helper refactor — finder + tree provably share one exclusion contract, pinned by 9+8 tests.
+- `walk_tree_core` confirmed behavior-preserving for the finder path.
+- `buildTree` implied-parent `ensureDir` recursion correct + order-robust.
+- `treeReducer` same-ref no-op discipline, unit-tested incl. no-mutation.
+- Error-surfacing consistent end-to-end (typed BadRoot → String → inline alert).
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR**
+- [RightPanelHost.tsx:105-113] Collapse toggle **unmounts** FileTree (`{!treeCollapsed && <FileTree/>}`) but the comment claims it "stays mounted... CSS hides the body" — no `display:none` for `.file-tree-body` under `.is-collapsed` (App.css only sets `width:auto`). Each collapse→expand remounts FileTree: (a) resets the expanded-dir Set, (b) re-issues the full `fs_tree` IPC walk. Real behavior bug + lying comment; contained fix. (`treeCollapsed` itself persists across center-stage switches — fine.)
+**MINOR**
+- [treeState.ts:42-55] `expand`/`collapse`/`collapse-all` reducer actions implemented+tested but never dispatched (FileTree only dispatches `toggle`). Tested-but-unwired surface; wire a collapse-all affordance or trim.
+
+### Assessment
+Well-built, idiomatic; Rust refactor is the highlight. Pure/impure split matches repo posture. The one substantive blemish is the collapse path (unmount vs documented CSS-hide), a contained fix worth landing before the comment misleads.
+
+### Disposition
+Operator in-loop at review time → MAJOR (genuine UX bug, ~3-line fix) surfaced for fix-now vs backlog rather than silent Mode-3 auto-backlog. Operator deferred to a handoff, then chose **fix-now** on resume (2026-06-20).
+
+**RESOLVED 2026-06-20 (`/feature-refactor`):**
+- **MAJOR — FIXED.** `RightPanelHost.tsx`: dropped the `{!treeCollapsed && <FileTree/>}` unmount guard — `<FileTree>` now renders unconditionally (stays mounted). `App.css`: added the real `.file-tree-rail.is-collapsed .file-tree-body { display: none }` so the body is CSS-hidden in the collapsed strip. Comment corrected to match. Collapse→expand now preserves the expanded-dir Set AND avoids re-issuing the `fs_tree` walk. **Verify-self 5/5 PASS** at :1420 via seed seam: a `data-verify-tag` set on the FileTree node survived a full collapse→expand cycle (same DOM element, hidden not remounted); `.file-tree-body` computed `display` = `block`→`none`→`block`; console clean.
+- **MINOR — TRIMMED.** `treeState.ts`: removed the never-dispatched `expand`/`collapse`/`collapse-all` actions; `TreeAction` is now just `{ type: "toggle"; path }`. Trimmed the 3 corresponding tests (kept toggle/multi-dir/no-mutation/new-ref coverage). Reducer surface now matches its only caller. (Operator chose "trim" over "wire a collapse-all button"; a collapse-all action can return with WP11's tree polish if wanted.)
+- **Gates green:** vitest 208/208 (was 211; −3 trimmed action tests), tsc clean, eslint 0, prettier clean. Backend untouched (cargo unaffected).
+
+## Retrospect
+- **What changed in our understanding:** The "all-workspaces-stay-mounted" rule applies *within* a component's collapse UI too, not just across center-stage switches. The collapse toggle was written as a conditional render (`{!treeCollapsed && <FileTree/>}`) that read as harmless but silently violated the mounted-not-remounted convention at a sub-component scope — remounting on every toggle, dropping the expanded-dir Set and re-issuing the `fs_tree` walk. The accompanying comment claimed CSS-hide while the code unmounted: the comment was the tell, not the code.
+- **Assumptions that held:** The plan's pure-logic/live-DOM split (vitest `buildTree` + `treeState`; Playwright via the WP6 seed seam) held exactly — the seam made the collapse-refactor verify-self-able in a stub browser, and a `data-verify-tag` survived the collapse→expand cycle as definitive mounted-not-remounted proof. The dirs-included `walk_tree_core` reusing WP6's `check_root`/`project_walker`/`rel_posix` helpers was clean and behavior-preserving for the finder.
+- **Assumptions that were wrong:** That a conditional-render collapse was equivalent to a CSS-hide collapse. They differ exactly where this WP's value lives (preserved expand state + no redundant IPC walk). The review-quality pass caught it; the build + verify-human had passed it because the bug is invisible until you expand→collapse→expand AND watch for the re-walk.
+- **Approach delta:** Implementation matched the plan through ship + operator approval. The delta was the post-ship correction: review-quality found the collapse MAJOR + an unwired-reducer-action MINOR. Resolved in a follow-up `/feature-refactor` (render FileTree unconditionally + real `.is-collapsed .file-tree-body { display:none }`; trimmed the MINOR's dead actions/tests) rather than a re-plan — contained, no scope change.
 
 ## Discoveries
 <!-- [SURFACED-<date>] <target node> — <summary> -->

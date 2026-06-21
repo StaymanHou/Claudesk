@@ -102,15 +102,15 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
           >
             {treeCollapsed ? "›" : "‹ Files"}
           </button>
-          {/* The tree stays mounted (keeps its expand state) even when collapsed;
-              CSS hides the body in the collapsed strip. */}
-          {!treeCollapsed && (
-            <FileTree
-              projectPath={projectPath}
-              openPath={openPath}
-              onOpen={openFile}
-            />
-          )}
+          {/* The tree stays MOUNTED even when collapsed — CSS (.is-collapsed
+              .file-tree-body { display:none }) hides the body in the strip. Keeping
+              it mounted preserves the expanded-dir Set AND avoids re-issuing the
+              fs_tree walk on every collapse→expand cycle. */}
+          <FileTree
+            projectPath={projectPath}
+            openPath={openPath}
+            onOpen={openFile}
+          />
         </div>
 
         <div className="right-panel-main">
