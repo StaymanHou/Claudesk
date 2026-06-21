@@ -1,7 +1,7 @@
 ---
 name: macos-tcc-permissions-granted
 description: Terminal.app has Accessibility + Screen Recording granted; agent can screenshot native windows and run osascript GUI queries
-metadata: 
+metadata:
   node_type: memory
   type: reference
   originSessionId: 3ad92028-0aea-4de8-a9d0-f4e7d10a8cb0

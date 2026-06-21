@@ -8,6 +8,7 @@ metadata:
 In Tauri, the frontend↔backend command binding is **stringly-typed**: the frontend calls `invoke("<name>", …)` and the backend exposes `#[tauri::command] fn <name>`. Nothing checks that the string matches a registered command at compile time — not `tsc`, not `cargo test`, not `cargo clippy -D warnings`. A removed/renamed command with a live `invoke()` caller **passes the entire unit gate** and breaks only at runtime when the call fires.
 
 **Rule when touching the command surface (add, remove, rename a `#[tauri::command]`):**
+
 1. **Caller sweep before deletion** — `grep -rn 'invoke("<name>"' src/` (and `generate_handler!` registration in Rust). No orphaned callers may remain.
 2. **Runtime smoke-launch** — `pnpm tauri dev`, confirm clean launch + exercise the affected path. The unit suite is necessary but NOT sufficient for FE/BE-spanning changes.
 

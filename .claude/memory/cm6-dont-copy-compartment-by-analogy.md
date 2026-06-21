@@ -9,4 +9,4 @@ In this editor, the `@uiw/react-codemirror` `extensions` array is rebuilt (via `
 
 WP3b copied the `fontSizeCompartment` pattern for the language override, but `fontSizeTheme` is genuinely live-`.reconfigure()`d (in `applyZoom`, no array rebuild) whereas the language is swapped by the `languageOverrideId` array rebuild — so `languageCompartment` is **vestigial** (`.of()`-seeded, never reconfigured) and its comments describe a reconfigure that isn't wired. (Auto-backlogged: SURFACE-2026-06-20-QUALITY-WP3B-VESTIGIAL-LANGUAGE-COMPARTMENT.)
 
-**Rule:** before adding a CM6 `Compartment` by analogy to `fontSizeCompartment`, confirm the new case actually needs a *live reconfigure independent of the array rebuild*. If the value only changes via a React dep that's already in the `buildEditorExtensions` memo, the rebuild covers it — skip the compartment.
+**Rule:** before adding a CM6 `Compartment` by analogy to `fontSizeCompartment`, confirm the new case actually needs a _live reconfigure independent of the array rebuild_. If the value only changes via a React dep that's already in the `buildEditorExtensions` memo, the rebuild covers it — skip the compartment.
