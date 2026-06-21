@@ -16,6 +16,9 @@
 - **Backlog resolved:** SURFACE-2026-06-20-WP5-PANEL-HOTKEY-DIRECT-SELECT — closed by WP5: the panel hotkey shipped as per-panel direct-select (not cycling) and the WBS WP5 wording + arch.md prose were corrected to match.
 - **Backlog resolved:** SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV — dismissed as working-as-intended: "open" always opens the live working-tree file by design (inspecting a file at a past commit is Sublime Merge's job), and the stale "deferred to WP5" DiffPanel comment was corrected.
 - **Milestone:** WP5 (Milestone 2, RightPanelHost + panel-select hotkey) complete — the 7th of Milestone 2's 12 WPs (after WP1 + WP2 + WP3a + WP3b + WP3c + WP4); WP6, WP7, WP10, WP8, WP9 remain.
+- **Feature shipped:** WP6 — Cmd+P fuzzy file finder: an app-layer file-finder subsystem (a Rust `fs_index` module walking the workspace dir via the `ignore` crate — honoring `.gitignore`, excluding `.git/`, showing dotfiles, surfacing errors not swallowing them) plus a `⌘P` React overlay (pure subsequence `fuzzyMatch` ranker, capture-phase chord that fires while focus is inside CodeMirror, keyboard nav, inline IPC-error row) that opens the picked file into the editor via the existing `openPath` seam, replacing the WP2 path-input stopgap; folded in a DEV-only `?ws=`/`window.__seedWorkspace` workspace-seed seam.
+- **Backlog resolved:** SURFACE-2026-06-20-WP4-VERIFY-SELF-DIALOG-STUB-WEDGE — closed by WP6's DEV-only `?ws=`/`window.__seedWorkspace` seed seam, which lets verify-self open a workspace without the Tauri folder dialog (confirmed: WP6's finder→editor flow was driven in a stub browser via `?ws=`), making all future editor/panel WPs verify-self-able.
+- **Milestone:** WP6 (Milestone 2, Cmd+P fuzzy file finder) complete — the 8th of Milestone 2's 12 WPs (after WP1 + WP2 + WP3a + WP3b + WP3c + WP4 + WP5); WP7, WP10, WP8, WP9 remain.
 
 ## 2026-06-19
 

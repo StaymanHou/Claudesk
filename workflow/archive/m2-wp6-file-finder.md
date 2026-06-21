@@ -1,7 +1,7 @@
 # Feature: M2 WP6 — Cmd+P fuzzy file finder (app-layer `fs_index` subsystem)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready for ship
+**State:** COMPLETED 2026-06-20 — shipped fc77ad4, review-quality clean (3 MINOR backlogged), finalized
 **Created:** 2026-06-20
 **Entry:** spec (complex feature)
 **Drive mode:** autopilot (standing directive: halt at WBS-WP boundaries; operator confirms the spec before plan)
@@ -167,8 +167,8 @@ The feature is done when:
   - [x] verify-codify  <!-- status: COMPLETE — ranker + chord-exclusivity codified by 21 unit tests; overlay/wiring codified by verify-self Playwright (5/5) + verify-human (4/4 real backend); repo has no DOM test env by design; backend 82/82 + frontend 196/196, no regressions; no new tests warranted -->
 
 ## Current Node
-- **Path:** Feature > WP6 COMPLETE → WP boundary (ship/finalize)
-- **Active scope:** none — all 3 phases done; WP6 feature-complete. HALT at WP boundary per standing directive (operator picks /feature-ship).
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** none — WP6 shipped (fc77ad4); review-quality clean (0 CRIT/0 MAJ, 3 MINOR auto-backlogged). Next: /feature-finalize.
 - **Blocked:** none
 - **Unvisited:** WP6 ship → finalize (WP boundary — operator-gated, not auto-chained)
 - **Phase 1:** ✅ COMPLETE (backend fs_index — 9 tests)
@@ -183,6 +183,37 @@ Classification: Obsolete test — the test's assertion encoded a wrong expectati
 Confidence: high
 Evidence: The test asserted `comp`→`src/component.ts` (basename) outscores `comp`→`components/x.ts` (dir), but empirically the dir match scores HIGHER (20.25 vs 15.2) because "comp" matches at the very START of `components/x.ts` (start-of-string boundary bonus) and contiguously — which is DEFENSIBLE ranking (a path literally starting with the query is a reasonable top hit). The basename bonus is real but correctly does not override a start-of-string contiguous match.
 Action: Replaced the assertion with one that genuinely isolates the basename bonus — a candidate where the dir match is neither start-of-string nor the only differentiator. The ranker code is unchanged (it behaves correctly); only the test's example was fixed.
+
+## Retrospect
+- **What changed in our understanding:** The dev seed seam (folded in at the operator's request) turned out to be the highest-leverage part of WP6 — it unwedged verify-self for the *entire* workspace UI, not just this WP. WP6 Phase 3 became the first time verify-self drove the workspace UI in a stub browser; WP7/WP10/WP9 inherit that capability for free. A process win that outlasts the feature.
+- **Assumptions that held:** Every seam predicted at spec/plan time existed exactly as expected — the `editor_fs` backend template, the `openPath`/`setOpenPath` open-into-editor seam (same one DiffPanel uses), the WP1 capture-phase chord pattern, and `useWorkspaceList(initial)` for seeding. No re-plan, no F23/F22/F26. The `ignore` crate was the right pick (zero-config gitignore + WP7 reuse). No 3rd-party probe needed (correctly judged at spec).
+- **Assumptions that were wrong:** Two small ones, both caught in-build: (1) `ignore::WalkBuilder` defaults to `hidden(true)` — would have hidden dotfiles from the finder; flipped to `hidden(false)` (operator-acknowledged). (2) A `fuzzyMatch` test encoded a wrong ranking expectation (assumed basename always beats a start-of-string dir match) — the ranker was correct, the test assertion was fixed (triaged).
+- **Approach delta:** Implementation matched the plan's 3 phases exactly (backend → seed seam → overlay), in that deliberate order so the seam made Phase 3 verify-self-able. One eslint fix (`set-state-in-effect`) and one prettier pass during build. No scope expansion beyond the operator-approved seed seam.
+
+## Code-Quality Review — m2-wp6-file-finder
+
+Ship commit fc77ad4. Reviewer: code-quality-reviewer subagent. **0 CRITICAL, 0 MAJOR, 3 MINOR.** Rated well-built, low-debt, consistent with repo seams; correctness validated (deterministic tiebreak sort, greedy subsequence matcher, async cancellation, chord exclusivity).
+
+### Strengths
+- Clean pure-core/IPC-wrapper split in `fs_index` (mirrors `editor_fs`), 9 TempDir tests covering the load-bearing contracts incl. error-vs-empty-list.
+- `rankFiles` uses an explicit path comparator as secondary sort (deterministic across engines), pinned by a test.
+- Chord exclusivity enforced by construction (`!shiftKey`) + a cross-predicate matrix test.
+- Async loads use the `cancelled`-flag cleanup; mousedown-not-click beats input-blur teardown.
+- Comments encode WHY, not WHAT.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [RightPanelHost.tsx:60-75] Panel chord (⌘⇧E) while the finder overlay is open switches the panel underneath the still-visible overlay — UX seam, not a correctness bug. Consider guarding panel chords on `!finderOpen` or a one-line note.
+- [fuzzyMatch.ts:32-34] `isBoundary` includes `.` (extension dot earns the boundary bonus); harmless given the "deliberately simple" ranker + tests, but the rationale for including `.` is undocumented.
+- [FileFinder.tsx:177] `onMouseEnter→setActiveIndex` couples hover to the keyboard cursor; a mouse resting over the list can yank the active row during arrow-key nav. Negligible at the 100-row cap.
+
+### Assessment
+Well-built feature that advances the codebase rather than accruing debt. Architecture consistent with established seams (Rust command→pure-fn→typed-error→String, capture-phase chords, openPath/active-pane editor seam, pure→vitest/DOM→Playwright posture). Error-surfacing discipline applied correctly (the WP6 picker MAJORs' lesson). Only findings are minor overlay interaction seams.
+
+### Disposition (Mode 3 autopilot)
+All 3 MINOR auto-backlogged to `workflow/backlog-quality-findings.md` (pointer in `workflow/backlog.md`). To address now: `/feature-refactor`. To dismiss: mark `[DISMISSED]` here before finalize archives the WIP.
 
 ## Discoveries
 <!-- [SURFACED-<date>] <target node> — <summary> -->

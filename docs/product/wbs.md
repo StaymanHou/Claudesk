@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-20
 milestone: 2
-# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5 shipped; WP6/WP7/WP10/WP8/WP9 remain
+# WP1, WP2, WP3a, WP3b, WP3c, WP4, WP5, WP6 shipped (8/12); WP7/WP10/WP8/WP9 remain
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -116,17 +116,18 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Wire the right half from the M1 placeholder to RightPanelHost (the placeholder card is now only the empty/no-file state)
 - [x] (folded in) Permanent "Open in Sublime Merge" button + `smerge_open` backend command; Sublime Text pop chord ⌘⇧E→⌘⇧O (transitional)
 
-### WP6: Cmd+P fuzzy file finder (app-layer)
+### WP6: Cmd+P fuzzy file finder (app-layer) ✅ SHIPPED 2026-06-20 (commit fc77ad4)
 
 **Description:** **App-layer subsystem, NOT an editor feature** (`research.md` correction). A backend file index of the workspace's project dir + a React fuzzy-picker overlay; selecting a file opens it into the EditorPanel. Honors `.gitignore`.
 **Milestone:** Milestone 2
 **Dependencies:** WP2 (opening a picked file needs the editor), WP5 (overlay lives over the panel host; hotkey via WP1 pattern)
-**Size:** M
+**Size:** M (grew slightly: folded in a dev-only `?ws=`/`window.__seedWorkspace` workspace-seed seam that unwedges verify-self for the workspace UI — closes SURFACE-2026-06-20-WP4-VERIFY-SELF-DIALOG-STUB-WEDGE, makes WP7/WP10/WP9 verify-self-able)
 **Tasks:**
-- [ ] Backend `fs_index` module: walk the workspace project dir, honor `.gitignore`, return the file list (pure-fn core + Tauri command)
-- [ ] React fuzzy-picker overlay (Cmd+P): fuzzy-match over the index, keyboard nav, open-on-select → EditorPanel
-- [ ] Cmd+P chord coexists with CM6 focus (WP1 finding)
-- [ ] Unit tests on the fuzzy-match predicate (pure) + the gitignore-honoring walk
+- [x] Backend `fs_index` module: walk the workspace project dir, honor `.gitignore` (via the `ignore` crate; `.git/` excluded, dotfiles shown), return the file list (pure `walk_index_core` + `fs_index` Tauri command, errors surfaced not swallowed) — 9 tests
+- [x] React fuzzy-picker overlay (Cmd+P): fuzzy-match over the index (pure `fuzzyMatch`/`rankFiles`), keyboard nav, open-on-select → EditorPanel (active-pane via the existing `openPath` seam); removed the WP2 path-input stopgap
+- [x] Cmd+P chord coexists with CM6 focus (WP1 capture-phase pattern; bare-⌘P `isFinderChord` exclusive vs ⌘⇧P / ⌘⇧E·D·T)
+- [x] Unit tests on the fuzzy-match predicate (pure) + the gitignore-honoring walk (21 frontend finder tests + 9 backend fs_index tests)
+- [x] (folded in) Dev-only `?ws=`/`window.__seedWorkspace` seed seam (DEV-gated, reuses `openWorkspace`) — unwedges verify-self; 7 `parseSeedParam` tests
 
 ### WP7: Project-wide find/replace (app-layer)
 

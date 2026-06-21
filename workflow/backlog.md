@@ -179,7 +179,7 @@
 - **Context:** Distinct from the known reload-clobber gotcha. Editor WPs (WP2/3*) reached the editor via the open-bar (a plain `invoke` path) so verify-self worked; WP4's DiffPanel lives in a workspace only reachable via the folder dialog. The workaround used for WP4 was operator-driven verify-human in the real `pnpm tauri dev` app (a stronger check — real git_diff vs a real repo).
 - **Suggested action:** Add a test-only seam to reach a workspace without the dialog — e.g. a `?ws=<path>` query param or a `window.__seedWorkspace(path)` dev hook gated to dev builds — so future editor/diff/panel WPs have a stub-friendly verify-self entry. Alternatively, stub the dialog plugin's invoke channel correctly (investigate the exact `plugin:dialog|open` request/response shape so the promise resolves).
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-20 — WP6 Phase 2 (commit fc77ad4) built exactly the suggested seam: a DEV-gated `?ws=<path>` URL param + `window.__seedWorkspace(path)` (both → the existing `openWorkspace` reducer, dead-code-eliminated in prod). Confirmed effective: WP6 Phase 3 verify-self drove the finder→editor flow in a stub browser via `?ws=` (5/5 Playwright) — the wedge is unwedged. Makes WP7/WP10/WP9 (all editor/panel WPs) verify-self-able.
 
 ## SURFACE-2026-06-20-WP4-COMMIT-LOG-SCOPE-EXPANSION
 - **Source:** feature:spec (WP4 diff-viewer redesign)
@@ -252,3 +252,9 @@
 - **Priority:** medium (the WP9-handoff terminal-seam guard) + low (MINORs)
 - **Status:** pending
 - **Pickup shape:** the MAJOR is a **WP9 pickup** — when WP9 enables the terminal panel, add the JSX slot + a render test in the same change that adds `"terminal"` to `AVAILABLE_PANELS` (or add a render-time fallback-to-editor guard now). The MINORs are trivial `/feature-refactor` nits. Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## Code-quality findings — m2-wp6-file-finder (2026-06-20)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `fc77ad4` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, low-debt, consistent with repo seams; correctness validated (deterministic tiebreak sort, greedy subsequence matcher, async cancellation, chord exclusivity). All cosmetic overlay/doc nits: (1) a panel chord (⌘⇧E) fires under the open finder overlay (no `!finderOpen` guard); (2) the `.` segment-boundary in `isBoundary` is undocumented rationale; (3) `onMouseEnter→setActiveIndex` couples hover to the keyboard cursor (mirrors CommandPalette). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp6-file-finder — 2026-06-20`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** all three are trivial `/feature-refactor` nits (or leave — #3 matches the existing CommandPalette pattern, arguably WAI). Dismiss any via the WIP's `## Code-Quality Review` section.

@@ -544,4 +544,32 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Why it matters:** trivial; flagged only to confirm the stopgap wasn't accidentally promoted to permanent during the lift. No new debt — just relocated.
 - **Suggested action:** WP6 removes it when the Cmd+P finder lands. No action now.
 - **Priority:** low
+- **Status:** RESOLVED 2026-06-20 — WP6 (commit fc77ad4) removed the `editor-open-bar` form + `pathInput` state from RightPanelHost (and its orphaned CSS); the Cmd+P FileFinder replaces it. The `openPath`/`setOpenPath` seam stays (now driven by the finder + diff "Open").
+
+# m2-wp6-file-finder — 2026-06-20
+
+3 MINOR findings from `feature-review-quality` on ship commit `fc77ad4` (0 CRITICAL, 0 MAJOR). The feature is well-built and low-debt — reviewer validated correctness (deterministic tiebreak sort, greedy subsequence matcher, async cancellation, chord exclusivity) and consistency with repo seams. All three are minor overlay/doc nits. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-20-QUALITY-WP6-PANEL-CHORD-UNDER-OVERLAY
+- **File:** `src/components/workspace/RightPanelHost.tsx:60-75` (the capture-phase keydown listener)
+- **Finding:** While the Cmd+P finder overlay is open, a panel chord (⌘⇧E/⌘⇧D) still fires and switches the right-half panel *underneath* the still-visible overlay — the listener doesn't early-return on `finderOpen`.
+- **Why it matters:** UX seam, not a correctness bug; a future reader will wonder whether interleaving panel-switch with an open overlay was intended.
+- **Suggested action:** Guard panel chords on `!finderOpen` (or add a one-line note that the interleave is acceptable). Trivial.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP6-DOT-BOUNDARY-RATIONALE
+- **File:** `src/components/workspace/finder/fuzzyMatch.ts:32-34` (`isBoundary`)
+- **Finding:** `isBoundary` includes `.`, so the char after an extension dot earns the +8 segment-boundary bonus (e.g. `m` in `file.md`). Harmless given the "deliberately simple" ranker and current tests, but why `.` is a boundary is undocumented.
+- **Why it matters:** the dot-boundary is the least obvious of the four boundary chars; a half-line of rationale would prevent a future reader second-guessing it.
+- **Suggested action:** Add a one-line comment explaining the `.` inclusion (matches extension chars after a dot), or drop `.` if it ever distorts ordering. No correctness impact now.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-20-QUALITY-WP6-HOVER-COUPLES-KEYBOARD-CURSOR
+- **File:** `src/components/workspace/finder/FileFinder.tsx:177` (`onMouseEnter`)
+- **Finding:** `onMouseEnter={() => setActiveIndex(i)}` couples mouse-hover to the keyboard cursor — a mouse resting over the list can yank the active row out from under an arrow-key user.
+- **Why it matters:** minor interaction nit; negligible at the 100-row cap. Mirrors the same pattern in CommandPalette (consistency), so arguably WAI.
+- **Suggested action:** Optionally gate the hover-set on actual pointer movement, or leave (matches CommandPalette). Low value.
+- **Priority:** low
 - **Status:** pending
