@@ -1,7 +1,8 @@
 # Feature: WP9 — Second-terminal panel + Milestone 2 polish & exit-criteria
 
+**Status:** ✅ COMPLETED 2026-06-21 (shipped 70a7576 + refactor a8db974; operator-approved)
 **Workflow:** feature
-**State:** plan (complete)
+**State:** finalize (complete)
 **Created:** 2026-06-21
 **Entry:** spec (complex feature)
 **drive_mode:** autopilot
@@ -163,3 +164,12 @@ Reviewer (`code-quality-reviewer`) on ship commit `70a7576`: 0 CRITICAL, 2 MAJOR
 - **MAJOR #2 (active-churn in-flight double-spawn → orphaned PTY) — RESOLVED, but the fix path mattered:** first attempt added a `spawnStartedRef` ref-latch; **empirical re-test caught that it regressed StrictMode into 2 live sessions per pane** (a later effect run reset the ref before the first spawn's await resolved). Reverted to the proven **closure-`cancelled`** primitive (each run's cleanup cancels its own in-flight spawn) — which handles active-churn AND StrictMode AND unmount uniformly. Live-verified: exactly 1 shell + 1 CC session, prompt paints. The shell-prompt race stays fixed by the backend buffer-and-flush (`cc_ready`), independent of listener lifetime. Net: removed the over-engineered `spawnStartedRef`/`unlistenersRef`/`unmountedRef`/`disposeListeners` machinery; XtermPane is back to the WP7 closure structure + `active` gate + `spawnCommand` + `cc_ready`.
 - **MINOR #1 (mark_ready drain→emit ordering not atomic across the seam):** acknowledged — no loss/dup (tests prove), only a microsecond ordering window on a one-shot prompt. Comment wording softened is a nice-to-have; logged as low-pri below, not fixed (out of refactor scope).
 - **MINOR #2 (cc_ready holds registry lock across emit):** acknowledged low-pri; backlog below.
+
+## Retrospect
+- **What changed in our understanding:** The hard part of WP9 was NOT the backend shell spawn (that was a clean ~1hr delegation refactor) — it was the **frontend PTY-session lifecycle under React + Tauri events**. Three distinct, escalating bugs hid behind "the terminal is blank," and only the third (the listener-teardown / prompt-race) was the true blocker. Two were latent since WP7 and only surfaced because a *shell* (one-shot prompt, quiescent) is a harsher test of the output path than *claude* (continuous emitter, which masks dropped early frames + a torn-down listener).
+- **Assumptions that held:** The `CcSession`-seam reuse (b-approach: generic `spawn_argv` core, `term_spawn` command, shared registry + I/O commands) was exactly right — minimal new surface, CC byte-identical, no seam bypass. The plan-time finding that the error-handling cases were already covered+tested held perfectly (zero new code in P2.1).
+- **Assumptions that were wrong:** (1) My first verify-human-fail diagnosis (hidden-mount zero-size paint) was WRONG — disproved because the always-visible CC pane was ALSO blank. (2) A ref-based single-spawn latch felt like the obviously-correct fix for the duplicate-spawn; it REGRESSED StrictMode into a 2-session leak. The closure-`cancelled` primitive (which I'd reverted away from) was the right tool all along. Lesson: for async-effect de-dup under StrictMode, a per-run closure flag beats a shared ref — and **verify lifecycle fixes empirically (ps + screencap), never by reasoning alone**.
+- **Approach delta:** The spec/plan anticipated a straightforward panel mount + a verification-only Phase 2. Actual: Phase 1 took 3 build↔verify-human back-loops + a `/debug-empirical-telemetry` sidebar (Playwright can't attach to WKWebView → diagnosed via instrumented native stderr + `ps` + `screencapture`). Phase 2 was indeed verification-only as planned. The operator's devtools+backend logs were decisive for the final fix — agent-only verification had repeatedly mis-verified the wrong code path (terminal-as-default vs terminal-on-reveal).
+
+## Communicate
+**Feature complete:** WP9 — Second-terminal panel has shipped. A second terminal running your login shell (cd'd into the project) is one click / ⌘⇧T away in the right half of each workspace, alongside Editor and Diff. It also closed out Milestone 2 (error-handling already-covered, exit criteria confirmed). Verify: open a workspace, press ⌘⇧T — a working shell prompt appears. Requester = operator — closure notice for self-record.

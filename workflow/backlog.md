@@ -330,3 +330,11 @@
 - **Suggested action:** In the multi-workspace milestone (M6+), after the N-workspace open flow lands, open N≈8 workspaces each with editor+diff+terminal mounted, read RAM/CPU (Activity Monitor / `top`), confirm within the <300MB / <20% envelope or schedule a mitigation (e.g. React.lazy the EditorPanel — see SURFACE about CM6 boot-parse cost).
 - **Priority:** medium (load-bearing for multi-workspace usability; not blocking until N>1 ships)
 - **Status:** pending
+
+## Code-quality findings — m2-wp9-second-terminal (2026-06-21)
+- **Pointer:** 2 MAJOR + 2 MINOR from `feature-review-quality` on ship commit `70a7576` (0 CRITICAL). Both MAJORs RESOLVED in the post-ship `/feature-refactor` (commit `a8db974`): stale spawn-effect comment rewritten; active-churn double-spawn fixed via the closure-`cancelled` primitive (a ref-latch attempt regressed StrictMode → reverted; live-verified 1 shell + 1 CC, prompt paints). Remaining = the 2 MINORs below.
+- **MINOR #1 — `mark_ready` drain→emit not atomic across the seam** (`cc_session/mod.rs`): `drain_backlog` releases the backlog lock (Some→None) then emits the drained chunks unlocked, so a reader-thread chunk produced in that gap can emit ahead of a buffered one. No loss/dup (unit-tested), only an ordering window on a one-shot prompt (microseconds, effectively unobservable). The inline "no lost/duplicated chunk at the seam" comment slightly overstates the guarantee (it's no-loss, not ordering-safe). Fix if it ever matters: hold the lock across the flush, or emit-under-lock.
+- **MINOR #2 — `cc_ready` holds the registry mutex across `mark_ready`'s emits** (`cc_session/commands.rs`): briefly serializes other session commands behind the (tiny) backlog flush. Tighter: `drain` returns chunks, emit after the lock drops.
+- **Priority:** low (both)
+- **Status:** pending (MINORs); MAJORs resolved in a8db974
+- **Pickup shape:** two small `/feature-refactor` items in the cc_session backend; neither is behavioral at the shipped baseline. Dismiss via the WIP `## Code-Quality Review` section if not worth it.

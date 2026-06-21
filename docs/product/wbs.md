@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-21
 milestone: 2
-# WP1,2,3a,3b,3c,4,5,6,7,8,10,12 shipped (12/13); WP7 SHIPPED 2026-06-21 (commit 8a788bf — search→Find Results tab + project-wide Replace All; per-result/per-file replace deferred to backlog). WP9, WP11 remain.
+# WP1,2,3a,3b,3c,4,5,6,7,8,9,10,12 shipped (13/13 core M2 WPs). WP9 SHIPPED 2026-06-21 (commits 70a7576 + a8db974 — second-terminal panel via the CcSession seam + M2 close-out; M2 exit criteria operator-approved). **Only WP11 remains** — post-WP10 tree/editor density polish + Sublime-style git-change indicators + (new) Files-nav-Editor-only, operator-promoted as its own follow-on cycle (NOT part of the original M2 lite-editor+diff scope).
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -169,19 +169,22 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Backend unchanged (both commands + resolver + consts stay); reconcile stale comments (`paletteCommands.ts` chord map, `App.tsx`, `EditorPanel.tsx`) + the `paletteCommands.test.ts` chord-exclusivity matrix (⌘⇧O now FREED)
 - [x] Unit test `sublimeLaunch.ts` (command name + `{projectPath}` + caught-rejection); gates clean (tsc/eslint/prettier; vitest 206; cargo 90 untouched)
 
-### WP9: Second-terminal panel + Milestone 2 polish & exit-criteria
+### WP9: Second-terminal panel + Milestone 2 polish & exit-criteria ✅ SHIPPED 2026-06-21 (commits 70a7576 feature + a8db974 refactor)
+
+> **As-built:** the second-terminal panel mounts a login shell (`$SHELL` else `/bin/zsh`, `-l -i`) in the right half (⌘⇧T / Terminal tab), via the `CcSession` seam — a generic `spawn_argv(argv,cwd,env,exit_command)` core that `cc_spawn` (claude) and the new `term_spawn` (shell) both delegate to; reused `cc_input`/`cc_resize`/`cc_kill` + the `cc-output/exit-<sid>` events unchanged. Frontend: `XtermPane` parameterized (`spawnCommand`/`errorTitle`/`testId`/`active`) + a thin `TerminalPane`; `active`-gated DEFERRED spawn (no shell into a hidden zero-size xterm). **Three verify-human back-loops** shook out the hard parts: (1) the SURFACE-2026-06-20 terminal-seam guard (slot+tab+test in one change); (2) a multi-spawn from `onSessionId` inline-arrow identity churn (→ ref + narrowed spawn deps); (3) a shell one-shot-prompt race — fixed by a **backend output buffer-and-flush** (`OutputBacklog` + `mark_ready`/`cc_ready`: buffer PTY output from spawn until the frontend attaches its listener, then flush) + reverting to the proven closure-`cancelled` spawn-effect primitive (a ref-latch attempt leaked 2 sessions under StrictMode — caught live). M2 close-out: error-handling cases (non-git diff, empty search, editor save) were already covered+tested (zero new code); N-editors snapshot deferred to the multi-workspace milestone (not measurable at N=1; SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE); editor-parity informational; exit criteria operator-approved. Gates: cargo 128 / vitest 317 / clippy / fmt / tsc / eslint / prettier.
 
 **Description:** Add the ad-hoc second-terminal panel to the RightPanelHost (a plain shell via the `CcSession` seam, not `claude`), then the Milestone 2 polish + exit-criteria pass: a full editing+diff day inside the right half, dogfood, error handling, and confirm the exit criteria.
 **Milestone:** Milestone 2
 **Dependencies:** WP5 (panel host), WP3a/3b/3c + WP4 (editor features + diff working)
 **Size:** M
 **Tasks:**
-- [ ] Second-terminal panel: a `PtyCcSession`-equivalent spawning the user's shell (not `claude`) in the workspace dir, mounted as a RightPanelHost panel; reuse the `cc_*` command + event pattern
-- [ ] N-mounted-editors sanity check in the real app (apply the WP1 probe finding + any mitigation; not a separate probe)
-- [ ] Error handling: file open/save failures, non-git dir for the diff panel, empty search
-- [ ] Dogfood: a full working day of editing + diff review entirely inside Claudesk's right half
-- [ ] **EDITOR-PARITY DOGFOOD CHECKPOINT (informational; was buried in old WP3, pulled here 2026-06-19):** during dogfooding, record whether the in-app editor covers the operator's daily Sublime feature set (multi-cursor, find/replace, font-zoom, palette, split panes as needed). **No longer a gate on anything** — WP8 was redefined 2026-06-20 to KEEP both Sublime launchers (the Sublime Text pop is no longer removed), so this checkpoint gates no removal. Kept purely as a dogfood quality signal: a missing/hard gesture becomes a backlog item, not a blocker. Record the verdict explicitly.
-- [ ] Confirm exit criteria: editing + diff review complete inside the right half with the panel-switch hotkey. (NOTE: "the Sublime Text pop is removed" is NO LONGER an exit criterion — WP8's 2026-06-20 redefinition keeps both Sublime launchers as permanent icon-button affordances; `subl`/`smerge` remain permanent companion surfaces, not routine-work dependencies to eliminate.)
+- [x] Second-terminal panel: a `PtyCcSession`-equivalent spawning the user's shell (not `claude`) in the workspace dir, mounted as a RightPanelHost panel; reuse the `cc_*` command + event pattern
+- [x] N-mounted-editors sanity check in the real app — **deferred to the multi-workspace milestone** (not measurable at N=1; the multi-workspace open flow is M6+). WP4 envelope referenced; logged SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE. Single-workspace (editor+diff+terminal mounted) showed no issue.
+- [x] Error handling: file open/save failures, non-git dir for the diff panel, empty search — **already covered + regression-tested** by their origin WPs (confirmed, zero new code); the one new path (`term_spawn` failure) reuses `classify_spawn_error` + the bridge error overlay
+- [x] Dogfood: a full working day of editing + diff review entirely inside Claudesk's right half — operator dogfooded the terminal + panels; real-use issues route to the incident flow (operator directive), not a held-open gate
+- [x] **EDITOR-PARITY DOGFOOD CHECKPOINT (informational):** verdict recorded — in-app editor covers the core daily set (multi-cursor, find/replace, font-zoom, palette, splits, tabs, Cmd+P, project find/replace, file tree); both Sublime launchers remain as escape hatches. No blocker surfaced; gaps → backlog.
+- [x] Confirm exit criteria: editing + diff review complete inside the right half with the panel-switch hotkey — **operator-approved 2026-06-21**. (NOTE: "the Sublime Text pop is removed" is NO LONGER an exit criterion — WP8's 2026-06-20 redefinition keeps both Sublime launchers as permanent icon-button affordances; `subl`/`smerge` remain permanent companion surfaces, not routine-work dependencies to eliminate.)
+- [x] Operator follow-up captured: Files nav (left tree rail) should be Editor-only (hidden for Diff + Terminal) — added to WP11 Part A (own cycle, operator's choice).
 
 ### WP11: Tree/editor density polish + Sublime-style git-change indicators
 
