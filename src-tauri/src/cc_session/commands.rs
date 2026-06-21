@@ -30,6 +30,24 @@ pub fn cc_spawn(
     reg.spawn(app, &project_path).map_err(|e| e.to_string())
 }
 
+/// Spawn the WP9 second-terminal panel's interactive login shell for `project_path`;
+/// returns the new session id. Reuses the shared registry + the command-agnostic
+/// `cc_input`/`cc_resize`/`cc_kill` + the `cc-output-<sid>`/`cc-exit-<sid>` events,
+/// so the frontend `TerminalPane` differs from `XtermPane` only in calling this
+/// command instead of `cc_spawn`.
+#[tauri::command]
+pub fn term_spawn(
+    app: AppHandle,
+    registry: State<'_, Registry>,
+    project_path: String,
+) -> Result<String, String> {
+    let mut reg = registry
+        .lock()
+        .map_err(|_| "session registry lock poisoned".to_string())?;
+    reg.spawn_shell(app, &project_path)
+        .map_err(|e| e.to_string())
+}
+
 /// Forward keystroke bytes (base64-encoded) to a session's PTY.
 #[tauri::command]
 pub fn cc_input(
@@ -44,6 +62,18 @@ pub fn cc_input(
         .lock()
         .map_err(|_| "session registry lock poisoned".to_string())?;
     reg.input(&session_id, &bytes).map_err(|e| e.to_string())
+}
+
+/// Signal that the frontend has attached its `cc-output-<sid>` listener and is ready to
+/// receive output. Flushes the pre-subscription backlog + switches the session to live
+/// streaming — closes the shell-prompt race (a shell's one-shot prompt is buffered until
+/// this call instead of being emitted before any listener exists). Idempotent.
+#[tauri::command]
+pub fn cc_ready(registry: State<'_, Registry>, session_id: String) -> Result<(), String> {
+    let reg = registry
+        .lock()
+        .map_err(|_| "session registry lock poisoned".to_string())?;
+    reg.ready(&session_id).map_err(|e| e.to_string())
 }
 
 /// Resize a session's PTY (fit-addon → SIGWINCH → CC redraw).

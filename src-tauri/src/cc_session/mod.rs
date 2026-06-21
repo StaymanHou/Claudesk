@@ -27,7 +27,7 @@ pub mod commands;
 
 use std::collections::HashMap;
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -43,6 +43,9 @@ const CC_CMD: &str = "claude";
 const CC_ARG_YOLO: &str = "--dangerously-skip-permissions";
 /// Chunk size for the PTY reader. WP2 saw multi-KB redraws; 4 KB matches the probe.
 const READ_CHUNK: usize = 4096;
+/// Fallback shell for the WP9 second-terminal panel when `$SHELL` is unset (macOS
+/// default login shell since Catalina). Used by [`resolve_shell_argv`].
+const DEFAULT_SHELL: &str = "/bin/zsh";
 
 /// User-facing guidance shown when `claude` is not on `PATH`. The frontend overlay
 /// renders this verbatim, so it must read as actionable help, not an OS error code.
@@ -111,6 +114,32 @@ pub fn slash_command_bytes(command: &str) -> Vec<u8> {
     bytes
 }
 
+/// The explicit color-TTY env both the CC and shell spawns set. A Tauri app has no
+/// inherited `TERM`, so the spawned process must be told it's on a color-capable TTY
+/// (the WP2 finding — `wp2-cc-pty-probe.md:67,176`). Shared so the two spawn paths
+/// can't drift.
+fn color_tty_env() -> [(&'static str, &'static str); 2] {
+    [("TERM", "xterm-256color"), ("COLORTERM", "truecolor")]
+}
+
+/// Resolve the argv for the WP9 second-terminal panel's login shell.
+///
+/// Prefers the user's `$SHELL` (so they get their normal prompt, aliases, and
+/// rc files); falls back to [`DEFAULT_SHELL`] when it is unset or blank. The
+/// shell is launched as an **interactive login** shell (`-l -i`) so it sources
+/// the login + interactive rc chain (`.zprofile`/`.zshrc`, `.bash_profile`/`.bashrc`)
+/// — without this an interactive panel would have a bare environment and no aliases.
+///
+/// Pure (env string in → argv out) so it is unit-testable without spawning a real
+/// shell; the env read happens at the call site (`spawn_shell`) and is injected here.
+pub fn resolve_shell_argv(env_shell: Option<String>) -> Vec<String> {
+    let shell = match env_shell {
+        Some(s) if !s.trim().is_empty() => s,
+        _ => DEFAULT_SHELL.to_string(),
+    };
+    vec![shell, "-l".to_string(), "-i".to_string()]
+}
+
 /// Claudesk's seam for driving a Claude Code session. Never bypass this trait when
 /// talking to CC (`CLAUDE.md`). Phase 2 extends it with `state_events()` (hook-channel
 /// status fan-out) and `recycle()` (Recycle Session) — reserved here, not implemented.
@@ -121,28 +150,122 @@ pub trait CcSession: Send {
     fn resize(&self, cols: u16, rows: u16) -> Result<(), CcError>;
     /// Terminate the session: `/exit\r` first, then SIGKILL after a grace window.
     fn kill(&self) -> Result<(), CcError>;
+    /// Frontend has attached its output listener: flush any pre-subscription backlog and
+    /// switch to live streaming (closes the WP9 shell-prompt race). Idempotent.
+    fn mark_ready(&self);
 
     // --- Phase 2 forward-look (NOT implemented in Phase 1) ---
     // fn state_events(&self) -> Receiver<WorkspaceStatusUpdate>;  // hook-channel status
     // fn recycle(&self) -> Result<(), CcError>;                   // Recycle Session
 }
 
-/// A live CC process in a `portable-pty`. Holds the master end (for resize), a
-/// single writer (for input), and the child handle (for kill).
+/// Shared between a session and its reader thread. `Some(buf)` = pre-subscription
+/// BUFFERING mode (the frontend hasn't attached its `cc-output-<sid>` listener yet, so
+/// the reader appends here instead of emitting into the void); `None` = LIVE mode (emit
+/// straight to the Tauri event). [`PtyCcSession::mark_ready`] flips Some→None and flushes.
+///
+/// This closes the WP9 shell-prompt race: a shell emits its prompt exactly ONCE at
+/// startup, before the frontend can subscribe (it only learns the session id after
+/// `term_spawn` returns). Without buffering those bytes are lost and the pane stays blank.
+/// CC happened to survive only because it emits continuously.
+type OutputBacklog = Arc<Mutex<Option<Vec<String>>>>;
+
+/// Per-chunk routing decision for the reader thread (pure, lock-scoped here so it is
+/// unit-testable without a real PTY or AppHandle). If the backlog is `Some` (buffering),
+/// append `chunk` there and return `None` (nothing to emit live yet). If `None` (live),
+/// return `Some(chunk)` for the caller to emit. A poisoned lock returns `None` (drop).
+fn route_chunk(backlog: &Mutex<Option<Vec<String>>>, chunk: String) -> Option<String> {
+    match backlog.lock() {
+        Ok(mut guard) => match guard.as_mut() {
+            Some(pending) => {
+                pending.push(chunk);
+                None
+            }
+            None => Some(chunk),
+        },
+        Err(_) => None,
+    }
+}
+
+/// Take the buffered backlog and flip the session to live mode (`Some`→`None`).
+/// Returns the chunks to flush in order (empty if already live or never buffered).
+/// Pure + lock-scoped → unit-testable without an AppHandle.
+fn drain_backlog(backlog: &Mutex<Option<Vec<String>>>) -> Vec<String> {
+    match backlog.lock() {
+        Ok(mut guard) => guard.take().unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// A live PTY-backed process (CC, or a WP9 shell). Holds the master end (for resize),
+/// a single writer (for input), the child handle (for kill), and the clean-exit
+/// command to attempt before the SIGKILL fallback.
 pub struct PtyCcSession {
     master: Box<dyn MasterPty + Send>,
     writer: Mutex<Box<dyn Write + Send>>,
     child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
+    /// The command `kill()` writes (CR-terminated) to ask the process to exit cleanly
+    /// before the SIGKILL grace window. `/exit` for CC's TUI; `exit` for a shell
+    /// (a shell would print "command not found" for `/exit` and force the full
+    /// 3s SIGKILL wait on every window close — the WP9 P1.5 decision).
+    exit_command: &'static str,
+    /// Pre-subscription output backlog (see [`OutputBacklog`]). Shared with the reader
+    /// thread; flushed + switched to live by [`Self::mark_ready`].
+    backlog: OutputBacklog,
+    /// The `cc-output-<id>` event name (for flushing the backlog in `mark_ready`).
+    output_event: String,
+    /// Handle to emit the flushed backlog on `mark_ready`.
+    app: AppHandle,
 }
 
 impl PtyCcSession {
-    /// Spawn `claude --dangerously-skip-permissions` with `cwd = project_path` and
-    /// start the reader thread that streams output to `cc-output-<id>` events.
+    /// Spawn `claude --dangerously-skip-permissions` with `cwd = project_path`.
     ///
-    /// `TERM`/`COLORTERM` are set explicitly: WP2 ran under a terminal that exported
-    /// `TERM`, but a Tauri app has none, so CC would not detect a color TTY without
-    /// this (`wp2-cc-pty-probe.md:67,176`).
+    /// Builds CC's argv + the explicit color-TTY env, then delegates to the generic
+    /// [`Self::spawn_argv`] core. The `TERM`/`COLORTERM` overrides are required: WP2
+    /// ran under a terminal that exported `TERM`, but a Tauri app has none, so CC
+    /// would not detect a color TTY without this (`wp2-cc-pty-probe.md:67,176`).
     fn spawn(app: AppHandle, id: String, project_path: &str) -> Result<Self, CcError> {
+        Self::spawn_argv(
+            app,
+            id,
+            &[CC_CMD.to_string(), CC_ARG_YOLO.to_string()],
+            project_path,
+            &color_tty_env(),
+            "/exit",
+        )
+    }
+
+    /// Spawn the WP9 second-terminal panel's interactive login shell with
+    /// `cwd = project_path`. Resolves the argv from `$SHELL` (via
+    /// [`resolve_shell_argv`]) and reuses the same color-TTY env + generic
+    /// [`Self::spawn_argv`] core as the CC spawn — the shared "drive a PTY process"
+    /// path, so the `CcSession` seam is not bypassed (`CLAUDE.md`).
+    fn spawn_shell(app: AppHandle, id: String, project_path: &str) -> Result<Self, CcError> {
+        let argv = resolve_shell_argv(std::env::var("SHELL").ok());
+        Self::spawn_argv(app, id, &argv, project_path, &color_tty_env(), "exit")
+    }
+
+    /// Generic PTY-process spawn core: open a pty, launch `argv` with `cwd` + `env`,
+    /// and start the reader thread that streams output to `cc-output-<id>` events.
+    ///
+    /// This is the single chokepoint both [`Self::spawn`] (CC) and
+    /// [`Self::spawn_shell`] (WP9 terminal) delegate to; the (a)-vs-(c) decision
+    /// (spec WP9) was (b) — keep the public `cc_spawn` command + tests untouched while
+    /// giving the internals a generic argv core. `argv[0]` is the program; the rest
+    /// are args. A missing program is classified via [`classify_spawn_error`].
+    fn spawn_argv(
+        app: AppHandle,
+        id: String,
+        argv: &[String],
+        cwd: &str,
+        env: &[(&str, &str)],
+        exit_command: &'static str,
+    ) -> Result<Self, CcError> {
+        let (program, args) = argv
+            .split_first()
+            .ok_or_else(|| CcError::Spawn("empty argv".to_string()))?;
+
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize {
@@ -153,18 +276,20 @@ impl PtyCcSession {
             })
             .map_err(|e| CcError::Spawn(e.to_string()))?;
 
-        let mut cmd = CommandBuilder::new(CC_CMD);
-        cmd.arg(CC_ARG_YOLO);
-        cmd.cwd(project_path);
-        // Make CC believe it's on a color-capable TTY (no inherited TERM here).
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
+        let mut cmd = CommandBuilder::new(program);
+        for arg in args {
+            cmd.arg(arg);
+        }
+        cmd.cwd(cwd);
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
 
         let child = pair
             .slave
             .spawn_command(cmd)
-            // The "claude not on PATH" case lands here — classify so the user sees
-            // actionable guidance, not a bare `os error 2`.
+            // The "claude not on PATH" (or shell-not-found) case lands here — classify
+            // so the user sees actionable guidance, not a bare `os error 2`.
             .map_err(|e| classify_spawn_error(&e.to_string()))?;
         // The child owns the slave end now; drop ours so EOF propagates on exit.
         drop(pair.slave);
@@ -178,12 +303,28 @@ impl PtyCcSession {
             .take_writer()
             .map_err(|e| CcError::Spawn(e.to_string()))?;
 
-        Self::spawn_reader_thread(app, id, reader);
+        // Start in BUFFERING mode (Some(empty)) — output accumulates here until the
+        // frontend attaches its listener and calls `cc_ready` (→ mark_ready), which
+        // flushes + switches to live. Closes the shell-prompt race.
+        let backlog: OutputBacklog = Arc::new(Mutex::new(Some(Vec::new())));
+        let output_event = format!("cc-output-{id}");
+
+        Self::spawn_reader_thread(
+            app.clone(),
+            id,
+            reader,
+            Arc::clone(&backlog),
+            output_event.clone(),
+        );
 
         Ok(Self {
             master: pair.master,
             writer: Mutex::new(writer),
             child: Mutex::new(child),
+            exit_command,
+            backlog,
+            output_event,
+            app,
         })
     }
 
@@ -192,8 +333,17 @@ impl PtyCcSession {
     /// Reader-thread lifecycle (same invariant the WP2 harness documents): the loop
     /// ends on `read() == 0` (EOF), which the master delivers once the child exits
     /// and the last slave handle is dropped. The thread self-terminates; no join.
-    fn spawn_reader_thread(app: AppHandle, id: String, mut reader: Box<dyn std::io::Read + Send>) {
-        let output_event = format!("cc-output-{id}");
+    ///
+    /// Per chunk: if `backlog` is still `Some` (frontend not yet subscribed), APPEND the
+    /// encoded chunk there; once `mark_ready` has set it to `None`, emit live. This
+    /// guarantees no output is lost between spawn and the frontend's `listen()` attaching.
+    fn spawn_reader_thread(
+        app: AppHandle,
+        id: String,
+        mut reader: Box<dyn std::io::Read + Send>,
+        backlog: OutputBacklog,
+        output_event: String,
+    ) {
         let exit_event = format!("cc-exit-{id}");
         thread::spawn(move || {
             let engine = base64::engine::general_purpose::STANDARD;
@@ -203,9 +353,13 @@ impl PtyCcSession {
                     Ok(0) => break,
                     Ok(n) => {
                         let encoded = engine.encode(&buf[..n]);
-                        // A failed emit means the frontend went away; keep draining
-                        // the PTY so the child isn't blocked on a full buffer.
-                        let _ = app.emit(&output_event, encoded);
+                        // Buffer until the frontend is ready, then emit live (route_chunk
+                        // is the pure decision; mark_ready takes the same lock to flush+
+                        // flip, so there's no lost/duplicated chunk at the seam). A failed
+                        // emit means the frontend went away; keep draining the PTY anyway.
+                        if let Some(live) = route_chunk(&backlog, encoded) {
+                            let _ = app.emit(&output_event, live);
+                        }
                     }
                     Err(_) => break,
                 }
@@ -237,10 +391,12 @@ impl CcSession for PtyCcSession {
     }
 
     fn kill(&self) -> Result<(), CcError> {
-        // Preferred path: ask CC to exit cleanly with one deterministic CR-terminated
-        // write (WP2: `/exit\r` exits in <5s, no two-keystroke race). Then poll, and
-        // SIGKILL as a fallback so we never leak an orphaned `claude`.
-        let _ = self.send_input(&slash_command_bytes("/exit"));
+        // Preferred path: ask the process to exit cleanly with one deterministic
+        // CR-terminated write (WP2: `/exit\r` exits CC in <5s, no two-keystroke race;
+        // a shell exits on `exit\r`). Then poll, and SIGKILL as a fallback so we never
+        // leak an orphaned child. `exit_command` is per-session-kind (`/exit` CC /
+        // `exit` shell) so a shell doesn't eat the full SIGKILL grace window.
+        let _ = self.send_input(&slash_command_bytes(self.exit_command));
 
         let deadline = Instant::now() + Duration::from_secs(3);
         loop {
@@ -262,6 +418,18 @@ impl CcSession for PtyCcSession {
         let mut child = self.child.lock().map_err(|_| CcError::Lock)?;
         child.kill().map_err(|e| CcError::Io(e.to_string()))?;
         Ok(())
+    }
+
+    /// Frontend has attached its `cc-output-<id>` listener and is ready to receive.
+    /// Flush the buffered backlog (emit each chunk in order) and switch the reader thread
+    /// to live mode (`backlog` → `None`). Idempotent: a second call is a no-op (backlog
+    /// already taken). The consumer of the spawn-time buffering — closes the shell race.
+    fn mark_ready(&self) {
+        // drain_backlog flips Some→None (reader switches to live) and returns the
+        // buffered chunks; emit them in order so the frontend sees nothing-lost output.
+        for chunk in drain_backlog(&self.backlog) {
+            let _ = self.app.emit(&self.output_event, chunk);
+        }
     }
 }
 
@@ -305,12 +473,29 @@ impl SessionRegistry {
         Ok(id)
     }
 
+    /// Spawn the WP9 second-terminal panel's shell for `project_path` and register it
+    /// in the SAME registry (so `cc_input`/`cc_resize`/`cc_kill` + the window-close
+    /// `kill_all` reaping all apply unchanged — the shell session is just another
+    /// `CcSession`).
+    pub fn spawn_shell(&mut self, app: AppHandle, project_path: &str) -> Result<String, CcError> {
+        let id = self.mint_id();
+        let session = PtyCcSession::spawn_shell(app, id.clone(), project_path)?;
+        self.sessions.insert(id.clone(), Box::new(session));
+        Ok(id)
+    }
+
     pub fn input(&self, id: &str, bytes: &[u8]) -> Result<(), CcError> {
         self.get(id)?.send_input(bytes)
     }
 
     pub fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<(), CcError> {
         self.get(id)?.resize(cols, rows)
+    }
+
+    /// Mark a session ready (frontend listener attached): flush its output backlog.
+    pub fn ready(&self, id: &str) -> Result<(), CcError> {
+        self.get(id)?.mark_ready();
+        Ok(())
     }
 
     /// Kill a session and drop it from the registry. Unknown id is an error.
@@ -385,6 +570,96 @@ mod tests {
     fn slash_command_preserves_arguments() {
         assert_eq!(slash_command_bytes("/session-resume"), b"/session-resume\r");
         assert_eq!(slash_command_bytes("/model opus"), b"/model opus\r");
+    }
+
+    // --- resolve_shell_argv: WP9 second-terminal shell resolution (pure) ---
+
+    #[test]
+    fn shell_argv_prefers_env_shell() {
+        let argv = resolve_shell_argv(Some("/usr/local/bin/fish".to_string()));
+        assert_eq!(argv, vec!["/usr/local/bin/fish", "-l", "-i"]);
+    }
+
+    #[test]
+    fn shell_argv_falls_back_when_unset_or_blank() {
+        // Unset → default.
+        assert_eq!(resolve_shell_argv(None), vec![DEFAULT_SHELL, "-l", "-i"]);
+        // Blank / whitespace-only → default (not an empty program path).
+        assert_eq!(
+            resolve_shell_argv(Some("".to_string())),
+            vec![DEFAULT_SHELL, "-l", "-i"]
+        );
+        assert_eq!(
+            resolve_shell_argv(Some("   ".to_string())),
+            vec![DEFAULT_SHELL, "-l", "-i"]
+        );
+    }
+
+    #[test]
+    fn shell_argv_launches_interactive_login() {
+        // The flags are load-bearing: without -l -i the panel shell has no aliases /
+        // rc files. Guard that both are present and the program is argv[0].
+        let argv = resolve_shell_argv(Some("/bin/bash".to_string()));
+        assert_eq!(argv[0], "/bin/bash");
+        assert!(argv.contains(&"-l".to_string()));
+        assert!(argv.contains(&"-i".to_string()));
+    }
+
+    // --- output backlog: the WP9 shell-prompt-race fix (route_chunk + drain_backlog) ---
+
+    #[test]
+    fn route_chunk_buffers_while_pending_then_emits_live() {
+        let backlog: Mutex<Option<Vec<String>>> = Mutex::new(Some(Vec::new()));
+        // Buffering mode: chunks are appended, nothing returned to emit live.
+        assert_eq!(route_chunk(&backlog, "a".to_string()), None);
+        assert_eq!(route_chunk(&backlog, "b".to_string()), None);
+        assert_eq!(
+            backlog.lock().unwrap().as_deref(),
+            Some(["a".to_string(), "b".to_string()].as_slice())
+        );
+    }
+
+    #[test]
+    fn drain_backlog_returns_buffered_in_order_and_flips_to_live() {
+        let backlog: Mutex<Option<Vec<String>>> = Mutex::new(Some(vec![
+            "1".to_string(),
+            "2".to_string(),
+            "3".to_string(),
+        ]));
+        // Flush returns the buffered chunks in order...
+        assert_eq!(drain_backlog(&backlog), vec!["1", "2", "3"]);
+        // ...and flips the session to live (None).
+        assert!(backlog.lock().unwrap().is_none());
+        // Now route_chunk emits live (returns the chunk) instead of buffering.
+        assert_eq!(
+            route_chunk(&backlog, "live".to_string()),
+            Some("live".to_string())
+        );
+    }
+
+    #[test]
+    fn drain_backlog_is_idempotent() {
+        let backlog: Mutex<Option<Vec<String>>> = Mutex::new(Some(vec!["x".to_string()]));
+        assert_eq!(drain_backlog(&backlog), vec!["x"]);
+        // A second drain (e.g. a duplicate cc_ready) yields nothing and stays live.
+        assert!(drain_backlog(&backlog).is_empty());
+        assert!(backlog.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn no_chunk_is_lost_across_the_buffer_to_live_seam() {
+        // The race the fix closes: a chunk that arrives, then the frontend readies, then
+        // more chunks. Every chunk is accounted for exactly once (buffered then flushed,
+        // or emitted live) — none dropped, none duplicated.
+        let backlog: Mutex<Option<Vec<String>>> = Mutex::new(Some(Vec::new()));
+        assert_eq!(route_chunk(&backlog, "prompt".to_string()), None); // buffered pre-ready
+        let flushed = drain_backlog(&backlog); // frontend readied → flush
+        assert_eq!(flushed, vec!["prompt"]);
+        // Post-ready chunks go live.
+        assert_eq!(
+            route_chunk(&backlog, "typed".to_string()),
+            Some("typed".to_string())
+        );
     }
 
     // --- classify_spawn_error: friendly "claude not on PATH" mapping (P1.1) ---
@@ -468,6 +743,7 @@ mod tests {
             self.killed.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
+        fn mark_ready(&self) {}
     }
 
     fn reg_with_fakes(n: usize) -> (SessionRegistry, Arc<AtomicUsize>, Vec<String>) {

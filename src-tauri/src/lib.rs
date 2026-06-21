@@ -27,9 +27,16 @@ pub fn run() {
             // WP9: prune projects whose folder was deleted between sessions.
             config_store::commands::prune_missing_projects,
             cc_session::commands::cc_spawn,
+            // WP9: second-terminal panel — spawns the user's login shell (not claude)
+            // into the same SessionRegistry; reuses cc_input/cc_resize/cc_kill.
+            cc_session::commands::term_spawn,
             cc_session::commands::cc_input,
             cc_session::commands::cc_resize,
             cc_session::commands::cc_kill,
+            // WP9: frontend-ready signal — flushes the pre-subscription output backlog
+            // (closes the shell-prompt race where a shell's one-shot prompt emitted
+            // before the frontend's listener attached).
+            cc_session::commands::cc_ready,
             // WP8: Sublime Text pop. Invoked from the frontend (right-panel button
             // and the in-app ⌘⇧O keybinding — was ⌘⇧E pre-WP5) with the focused
             // workspace's path. Transitional — removed at WP8 once editor parity.

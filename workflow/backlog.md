@@ -320,3 +320,13 @@
 - **Priority:** low (all)
 - **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — all three fixed: (1) deleted the dead `OpenFile.dirty` field + `set-dirty` event + reducer case + 4 tests (dirty derives from the `editorDocs` store); (2) `PaneTabs.requestClose` now gates the unsaved-changes confirm on `refCount <= 1` (last view only); (3) stripped the intra-feature `Phase 2S/3/4` comment tags across the 5 editor files. Gates green: vitest 297 (−4), tsc/eslint/prettier/cargo (111)/clippy/fmt all clean. Per-finding RESOLVED notes in `backlog-quality-findings.md`.
 - **Pickup shape:** all three are quick `/feature-refactor` items (delete the dead dirty machinery; gate the close guard on `refCount<=1`; s/Phase N/WP12/ in headers). Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE
+- **Source:** feature:build (WP9 Phase 2, P2.2)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** The "N mounted editors cost-at-N" sanity check (arch.md:332) could NOT be measured during WP9 because the app opens one workspace at a time — the multi-workspace open flow is Milestone 6+. Carry the real N≈8 mounted EditorSplit+Diff+terminal RAM/CPU measurement to the multi-workspace WP.
+- **Context:** WP4 probe established the envelope for N=8 *terminals* (Apple M4: idle CPU 4.5%, RAM 240MB, <300MB budget) but explicitly did not cover CM6 editors. CM6 is lighter than Monaco; the concern is real but only testable once N>1 workspaces can be open. Single-workspace (editor+diff+terminal all mounted) showed no perceptible issue this session.
+- **Suggested action:** In the multi-workspace milestone (M6+), after the N-workspace open flow lands, open N≈8 workspaces each with editor+diff+terminal mounted, read RAM/CPU (Activity Monitor / `top`), confirm within the <300MB / <20% envelope or schedule a mitigation (e.g. React.lazy the EditorPanel — see SURFACE about CM6 boot-parse cost).
+- **Priority:** medium (load-bearing for multi-workspace usability; not blocking until N>1 ships)
+- **Status:** pending

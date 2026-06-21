@@ -38,7 +38,11 @@ export function Workspace({ workspace, visible, onSessionId }: WorkspaceProps) {
           onSessionId={(sid) => onSessionId?.(workspace.id, sid)}
         />
       </div>
-      <RightPanelHost projectPath={workspace.project_path} visible={visible} />
+      <RightPanelHost
+        workspaceId={workspace.id}
+        projectPath={workspace.project_path}
+        visible={visible}
+      />
     </div>
   );
 }

@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { EditorSplit, type EditorSplitHandle } from "./editor/EditorSplit";
 import { tabSwitchIndex } from "./editor/tabSwitchChord";
 import { DiffPanel } from "./diff/DiffPanel";
+import { TerminalPane } from "./TerminalPane";
 import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
@@ -39,13 +40,19 @@ import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
 import { SublimeMergeIcon } from "../../sublime/icons/SublimeMergeIcon";
 
 interface RightPanelHostProps {
+  /** The workspace id — keys the WP9 second-terminal session (one shell per workspace). */
+  workspaceId: string;
   /** The workspace's project directory — passed to every panel + the Sublime launch buttons. */
   projectPath: string;
   /** True when this workspace is the focused/visible tab (display:block vs none). */
   visible: boolean;
 }
 
-export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
+export function RightPanelHost({
+  workspaceId,
+  projectPath,
+  visible,
+}: RightPanelHostProps) {
   // WP12 — open files live in PER-PANE TAB STRIPS (EditorSplit owns the pane model;
   // each pane has its own tab strip + open-file set). The open seams (finder, tree,
   // diff "Open", WP7 search) call `openFile`, which drives EditorSplit via this
@@ -310,7 +317,17 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
             >
               Diff
             </button>
-            {/* Terminal tab (⌘⇧T) arrives with WP9; omitted until the panel exists. */}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panel === "terminal"}
+              className={`panel-tab${panel === "terminal" ? " is-active" : ""}`}
+              data-testid="panel-tab-terminal"
+              onClick={() => setPanel((cur) => selectPanel(cur, "terminal"))}
+              title="Terminal (⌘⇧T)"
+            >
+              Terminal
+            </button>
 
             {/* WP8 — external-app launchers, right-aligned past a divider so they
                 read as ACTIONS distinct from the selectable Editor/Diff tabs.
@@ -374,6 +391,23 @@ export function RightPanelHost({ projectPath, visible }: RightPanelHostProps) {
               // "Open" always opens the live working-tree file (by design — see
               // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
               onOpenInEditor={openFile}
+            />
+          </div>
+
+          {/* WP9 — second-terminal panel: a login shell `cd`'d into the project.
+              Kept MOUNTED (display:none when not front) so the shell session +
+              scrollback survive panel + center-stage switches. Mounting the slot
+              in the SAME change that added "terminal" to AVAILABLE_PANELS is the
+              SURFACE-2026-06-20 guard: selectPanel can now return "terminal", and
+              this slot guarantees that never leaves the right half blank. */}
+          <div
+            className="right-panel-slot"
+            style={{ display: panel === "terminal" ? "flex" : "none" }}
+          >
+            <TerminalPane
+              workspaceId={workspaceId}
+              projectPath={projectPath}
+              active={visible && panel === "terminal"}
             />
           </div>
         </div>

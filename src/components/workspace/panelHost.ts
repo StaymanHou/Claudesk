@@ -1,7 +1,7 @@
 // WP5 — pure core for the RightPanelHost panel-select logic.
 //
 // The right half of a workspace shows exactly one of three panels: the CM6 editor,
-// the git diff viewer, or (WP9) a second terminal. WP5 replaces the WP4 stopgap
+// the git diff viewer, or the WP9 second terminal. WP5 replaces the WP4 stopgap
 // segmented toggle with DIRECT-SELECT — each panel has its own ⌘⇧+mnemonic chord
 // AND a clickable tab; both route through `selectPanel`. NOT cycling: pressing a
 // panel's chord goes straight to it and is idempotent (pressing it again is a no-op).
@@ -20,26 +20,31 @@
 //   ⌘P → finder (WP6 — LIVE; bare meta, no shift; finder/finderChord.ts)
 // All app-level chords use the WP1-proven capture-phase document listener.
 
-/** Which right-half panel is front. "terminal" is reserved for WP9 (no-op until then). */
+/** Which right-half panel is front. All three are live as of WP9. */
 export type RightPanel = "editor" | "diff" | "terminal";
 
-/** Panels actually mountable today. "terminal" is selectable-but-absent until WP9. */
-export const AVAILABLE_PANELS: readonly RightPanel[] = ["editor", "diff"];
+/** Panels actually mountable today. All three are now live (WP9 mounted "terminal"). */
+export const AVAILABLE_PANELS: readonly RightPanel[] = [
+  "editor",
+  "diff",
+  "terminal",
+];
 
 /**
  * Direct-select the target panel.
  *
- * Returns the panel to make front. Idempotent (selecting the current panel returns
- * it unchanged). The "terminal" panel is not mountable until WP9: selecting it while
- * absent is a graceful no-op — we keep the current panel rather than show a blank
- * slot. Once WP9 adds the terminal panel, drop it from the no-op guard.
+ * Returns the panel to make front. Idempotent (selecting the current panel returns it
+ * unchanged). A target not in [`AVAILABLE_PANELS`] is a graceful no-op — we keep the
+ * current panel rather than flip to an unmounted (blank) slot. As of WP9 all three
+ * panels are available, so the no-op branch is dormant; it's kept as the structural
+ * guard against ever selecting a panel that has no mounted JSX slot (the
+ * SURFACE-2026-06-20-QUALITY-WP5-TERMINAL-SEAM-UNTESTED failure mode).
  */
 export function selectPanel(
   current: RightPanel,
   target: RightPanel,
 ): RightPanel {
-  if (target === "terminal" && !AVAILABLE_PANELS.includes("terminal")) {
-    // WP9 will mount the terminal panel; until then ⌘⇧T does nothing.
+  if (!AVAILABLE_PANELS.includes(target)) {
     return current;
   }
   return target;
