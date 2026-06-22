@@ -4,7 +4,9 @@ state: complete
 updated: 2026-06-22
 ---
 
-> Revision 2026-06-22: Resynced root `CLAUDE.md` for the **Milestone 3** cycle open. Replaced the stale "Current Phase" (Phase 1) section with **Current Milestone: M3 — CC lifecycle & state plumbing** (status broadcaster + Unix-socket hook channel + `.session.md` watcher; WP1–WP6, live WBS at `docs/product/wbs.md`). Recorded M1 + M2 as COMPLETE/CLOSED, the 2026-06-22 dogfood-first roadmap resequence (M3 → M4 multi-workspace → M5 PiP-unconditional → M6 menu-bar → M7/M8 later), and updated the status-surface-order Key Decision (PiP before menu-bar, unconditional — the old menu-bar-first/dogfood-gate plan is dropped). All commits local-only (no remote yet).
+> Revision 2026-06-22 (b): Resynced root `CLAUDE.md` for the **Milestone 4** cycle open. M3 closed (`/product-finalize`, commit `99b9398` — WP5 `.session.md` watcher dropped as the wrong file). Replaced the `## Current Milestone` section with **Current Milestone: M4 — Multi-workspace UX (filmstrip + center stage)**, the dogfood-replace point: WP1 N-cost probe → WP2 N>1 lift (+ picker error-surfacing) → WP3 filmstrip (tiles + status dots + `serializeAsHTML()` mirror + `⌘⇧+digit` switch + drag-reorder + static center-stage tile) → WP4 collapse → WP5 verify; WP4b (left/right focus indicator) parallel. Operator scope decisions captured (cost-probe-first, `⌘⇧+digit` reserved-chord switch, focus indicator added, doc-hierarchy watcher deferred to M6). All commits local-only.
+>
+> Prior revision 2026-06-22 (a): Resynced root `CLAUDE.md` for the **Milestone 3** cycle open. Replaced the stale "Current Phase" (Phase 1) section with **Current Milestone: M3 — CC lifecycle & state plumbing** (status broadcaster + Unix-socket hook channel + `.session.md` watcher; WP1–WP6). Recorded M1 + M2 as COMPLETE/CLOSED, the 2026-06-22 dogfood-first roadmap resequence (M3 → M4 multi-workspace → M5 PiP-unconditional → M6 menu-bar → M7/M8 later), and updated the status-surface-order Key Decision (PiP before menu-bar, unconditional — the old menu-bar-first/dogfood-gate plan is dropped). All commits local-only (no remote yet).
 >
 > Prior revision 2026-06-15: Resynced with the major product revision (multi-window → single-window with tabbed workspaces; filmstrip + center stage + menu-bar + conditional PiP; xterm.js DOM-renderer only; Unix-socket hook channel; status broadcaster → three surfaces; tab-shell substrate ships in Phase 1; thumbnail-rendering probe gates the filmstrip strategy). Phase 1 WPs renumbered (WP1–WP9).
 >
@@ -14,6 +16,6 @@ updated: 2026-06-22
 
 Project `CLAUDE.md` generated at `CLAUDE.md` (project root). It captures the project overview, tech stack, project structure, host-based dev environment justification, setup instructions, development conventions, the current milestone, and key decisions — all derived from the product docs under `docs/product/`. (The Setup & Ecosystem Gotchas section also records pnpm-v11 / ESLint-v9-pin / Prettier-ignore pitfalls from M1's scaffold.)
 
-**Active milestone:** Milestone 3 — CC lifecycle & state plumbing (status broadcaster + Unix-socket hook channel + `.session.md` watcher). M1 + M2 complete and closed.
+**Active milestone:** Milestone 4 — Multi-workspace UX (filmstrip + center stage); the M3 + M4 dogfood-replace point. M1 + M2 + M3 complete and closed.
 
-**First feature:** WP1 — Probe: hook → Rust Unix-socket → parse wire + `settings.json` coexistence with `claude-time`.
+**First feature:** WP1 — Probe: N-workspace mount cost with the full M2 stack (editor + diff + terminal) mounted; gates eager-mount vs `React.lazy`-the-EditorPanel before the filmstrip is built.
