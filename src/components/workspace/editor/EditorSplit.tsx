@@ -45,6 +45,8 @@ export interface EditorSplitHandle {
   openFile: (path: string) => void;
   /** Activate the Nth tab in the FOCUSED pane (⌘1..⌘9). */
   activateIndex: (n: number) => void;
+  /** Close the active tab of the FOCUSED pane (⌘W), via its dirty-guard; no-op if none. */
+  closeActiveTab: () => void;
   /**
    * Open (or re-activate) a synthetic READ-ONLY tab in the focused pane (the
    * WP7 "Find Results" seam). `id` keys its content + line-click callback; generic — WP7
@@ -325,6 +327,9 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       },
       [panes.activePaneId],
     );
+    const closeActiveTab = useCallback(() => {
+      paneHandles.current.get(panes.activePaneId)?.closeActiveTab();
+    }, [panes.activePaneId]);
 
     // Set/replace a synthetic tab's in-memory content + hit highlights (re-renders the
     // view). Highlights default to none so a content-only set clears any stale marks.
@@ -353,8 +358,20 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
 
     useImperativeHandle(
       ref,
-      () => ({ openFile, activateIndex, addSynthetic, setSyntheticContent }),
-      [openFile, activateIndex, addSynthetic, setSyntheticContent],
+      () => ({
+        openFile,
+        activateIndex,
+        closeActiveTab,
+        addSynthetic,
+        setSyntheticContent,
+      }),
+      [
+        openFile,
+        activateIndex,
+        closeActiveTab,
+        addSynthetic,
+        setSyntheticContent,
+      ],
     );
 
     // DEV-ONLY synthetic-tab seam. Gated on `import.meta.env.DEV` (like

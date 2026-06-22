@@ -22,6 +22,7 @@ import {
 } from "react";
 import { EditorSplit, type EditorSplitHandle } from "./editor/EditorSplit";
 import { tabSwitchIndex } from "./editor/tabSwitchChord";
+import { isCloseTabChord } from "./editor/closeTabChord";
 import { DiffPanel } from "./diff/DiffPanel";
 import { TerminalPane } from "./TerminalPane";
 import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
@@ -84,6 +85,15 @@ export function RightPanelHost({
   // here — they render into the "Find Results" editor tab (the WP12 synthetic-tab seam),
   // which is persistent across re-opens so the operator can click through many matches.
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // WP13 — mirror "an overlay is open" into a ref so the capture-phase keydown listener
+  // (registered once on [visible]) can read the CURRENT value without re-registering on
+  // every overlay toggle. Used to suppress ⌘W while the finder/search overlay covers the
+  // editor (closing a hidden tab would be surprising — cf. the wp6 overlay shadowing nit).
+  const overlayOpenRef = useRef(false);
+  useEffect(() => {
+    overlayOpenRef.current = finderOpen || searchOpen;
+  }, [finderOpen, searchOpen]);
   const [searchQuery, setSearchQuery] = useState<SearchQuery>({
     pattern: "",
     regex: false,
@@ -302,6 +312,16 @@ export function RightPanelHost({
       if (tabN !== null) {
         e.preventDefault();
         editorSplitRef.current?.activateIndex(tabN);
+        return;
+      }
+      // WP13 — ⌘W closes the focused pane's active tab (via its dirty-guard; inert when
+      // no tab is open — Sublime parity). Suppressed while the finder/search overlay is
+      // open so ⌘W doesn't silently close a tab hidden behind it (cf. the wp6 overlay
+      // shadowing MINOR). preventDefault pre-empts the OS "close window" ⌘W.
+      if (isCloseTabChord(e)) {
+        if (overlayOpenRef.current) return;
+        e.preventDefault();
+        editorSplitRef.current?.closeActiveTab();
         return;
       }
       const target = panelForChord(e);

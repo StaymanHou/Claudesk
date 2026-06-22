@@ -38,6 +38,13 @@
 //                                   tabSwitchIndex. Bare ⌘+DIGIT — disjoint from every
 //                                   ⌘⇧ chord and from bare ⌘P/F/R/S/D (those are letters).
 //                                   ⌘0 is NOT a tab chord — it stays the CM6 font-reset.)
+//   ⌘W   → close active editor tab (WP13 — LIVE; closes the FOCUSED pane's active tab
+//                                   via the WP12 requestClose dirty-guard, inert with no
+//                                   tab open; editor/closeTabChord.ts isCloseTabChord.
+//                                   Bare ⌘ + "w", Shift required-absent — disjoint from
+//                                   ⌘⇧ chords and from bare ⌘P/F/R/S/D/⌘1..9. Suppressed
+//                                   while the finder/search overlay is open; preventDefault
+//                                   pre-empts the OS close-window ⌘W. RightPanelHost.)
 //   ⌘⇧1..⌘⇧9 → RESERVED            (operator 2026-06-21: future workspace/filmstrip
 //                                   switching — a later milestone. Do NOT claim ⌘⇧+digit
 //                                   for anything else. Distinct from WP12's bare ⌘+digit

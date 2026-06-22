@@ -4,6 +4,16 @@
 
 > **Phase 1 cycle-close backlog sweep — 2026-06-19 (`/product-finalize`).** Phase 1 (Bare Shell + Tab Substrate PoC) closed; all 9 WPs shipped. Sweep disposition of the items still pending at close: **all DEFERRED → carry to the Phase 2 cycle** (none escalated, none newly resolved by the close itself). Carried forward: wp5/wp6/wp7/wp8/wp9 code-quality findings (the **wp6 picker IPC error-surfacing MAJORs are the most load-bearing** — they pair with Phase 2's multi-workspace picker work, WP13/WP16) + `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS` (housekeeping). These remain in this file (not archived) so the next cycle inherits them.
 
+## SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP
+- **Source:** feature:verify-codify (WP13 — ⌘W close-active-tab)
+- **Target level:** product:wbs (test-infra decision)
+- **Type:** tech-debt
+- **Summary:** WP13's vh.3 regression (the ⌘W `closeActiveTab` stale-closure bug — the memoized handle read pre-dirty `docs`, so a dirty tab closed silently instead of raising the confirm dialog) had NO automated test that would catch a recurrence. The fix was confirmed only at verify-human.
+- **Context:** The dirty-guard routing lives in the `PaneTabs` React component (reads the parent `docs` store + calls `setClosing`); `openFiles.ts` is dirty-unaware, so there's no pure-logic seam. The repo has no DOM/component test environment — vitest runs node-default, there are zero rendered-component tests, and `pure logic → vitest` is the standing posture. Closure-freshness defects in component event handlers (state X updates without dep Y changing) are a recurring foot-gun (same shape as the `overlayOpenRef`/`closeActiveTabRef` latest-ref patterns WP13 itself used) and are exactly what a component test would guard.
+- **Suggested action:** When a future WP warrants it (or as a deliberate test-infra investment), add jsdom + `@testing-library/react` + a vitest `environment: "jsdom"` config, then write a `PaneTabs` test: render with an open dirty file tab, fire `closeActiveTab()` via the imperative handle, assert the confirm dialog opens (not an immediate close). Pairs with any future component-level coverage (RightPanelHost chord wiring, EditorSplit focus). NOT worth standing up the whole toolchain for this single assertion in isolation.
+- **Priority:** low
+- **Status:** pending
+
 ## Code-quality findings — m2-wp11-tree-density-git-indicators (2026-06-21)
 - **Pointer:** 1 MAJOR + 3 MINOR from `feature-review-quality` on ship commit `6bcbe1f` (0 CRITICAL). MAJOR: git-status path-keying mismatch — `fs_tree` keys are workspace-relative but `git_file_statuses` keys are git-repo-root-relative, so a workspace nested below its repo root renders NO indicators (silent, graceful). MINORs: non-UTF-8 path drop comment; redundant flex:1/margin-left:auto right-pin; prose-only GitFileStatus TS↔Rust contract. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp11-tree-density-git-indicators — 2026-06-21`.
 - **Priority:** medium (MAJOR) + low (MINORs)
