@@ -4,12 +4,15 @@ mod editor_fs;
 mod fs_index;
 mod git_diff;
 mod git_status;
+// M3 WP2: register Claudesk's CC hook in ~/.claude/settings.json (additive,
+// idempotent, reversible). The setup-hook install wiring lands in WP2 Phase 2.
+mod hook_install;
 mod project_search;
 mod sublime;
 
 use std::sync::Mutex;
 
-use tauri::{Manager, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 
 use cc_session::SessionRegistry;
 
@@ -20,6 +23,20 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         // WP7: the live CC sessions live here, reachable from the cc_* commands.
         .manage(Mutex::new(SessionRegistry::new()))
+        // M3 WP2: register Claudesk's CC hook in ~/.claude/settings.json on launch
+        // (deploy the bundled script to app-data, chmod +x, additive-merge the three
+        // M3 events). Idempotent + additive + reversible (see hook_install). A
+        // failure is surfaced, never swallowed (the WP6/WP7-M2 IPC-error lesson):
+        // log to stderr AND emit `hook-install-error` so the frontend can toast it —
+        // status would silently break otherwise.
+        .setup(|app| {
+            let handle = app.handle().clone();
+            if let Err(e) = hook_install::commands::install_on_launch(&handle) {
+                eprintln!("[claudesk] hook install failed: {e}");
+                let _ = handle.emit("hook-install-error", e);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             config_store::commands::list_projects,
             config_store::commands::add_project,
@@ -80,6 +97,10 @@ pub fn run() {
             // WP7 Phase 3: project-wide Replace All — reuses the same composed regex +
             // shared walk as search, writes via editor_fs's atomic root-confined writer.
             project_search::commands::project_replace,
+            // M3 WP2: remove Claudesk's CC hook from ~/.claude/settings.json (only
+            // ours). Exposed for a future settings toggle / clean teardown. The
+            // install runs once at launch (WP2 Phase 2 setup wiring), not via IPC.
+            hook_install::commands::hook_uninstall,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an

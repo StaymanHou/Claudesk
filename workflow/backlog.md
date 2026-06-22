@@ -1,5 +1,25 @@
 # Backlog
 
+## SURFACE-2026-06-22-APP-DATA-DIR-IS-BUNDLE-IDENTIFIER-NOT-PRODUCTNAME
+- **Source:** feature:build (M3 WP2 Phase 2 verify-human live test)
+- **Target level:** product:arch (+ CLAUDE.md doc fix)
+- **Type:** doc-inaccuracy
+- **Summary:** Multiple docs state the app-data dir is `~/Library/Application Support/Claudesk/`, but the live app resolves `app_data_dir()` to the bundle **identifier** path `~/Library/Application Support/com.claudesk.app/` (confirmed at WP2 launch: both `claudesk-hook.pl`/`hook.sock` and the existing `projects.json` live there). Affected lines: `CLAUDE.md:43,135`; `arch.md:37,114,228`; `roadmap.md:23`; `wbs.md:61,82` (the WP3 socket-path task).
+- **Context:** Pre-existing since Phase 1 (config_store has used `app_data_dir()` all along) — not WP2-introduced; surfaced now because WP2 is the first doc that quotes the `hook.sock` path operationally. Harmless to the running code (the code uses `app_data_dir()`, never the hardcoded string), but a future session reading the docs will `ls` the wrong dir (as happened in this verify-human). WP3 binds the socket at this path — its task text quotes the wrong dir.
+- **Suggested action:** Sweep `Claudesk/` → `com.claudesk.app/` in the 4 docs at finalize (or fix opportunistically in WP3 when the socket path is coded). One-line arch.md note: "app_data_dir() resolves to the bundle identifier (`com.claudesk.app`), not the productName."
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-22-WP1-NOTIFICATION-PAYLOAD-NOT-LIVE-CAPTURED
+- **Source:** feature:research (M3 WP1 probe)
+- **Target level:** product:wbs (WP2 / WP6 interactive testing)
+- **Type:** verification-gap (low-risk)
+- **Summary:** WP1 first-hand OBSERVED `UserPromptSubmit` + `Stop` from a real `claude` (headless `--print`), but the `Notification` event's live payload was NOT first-hand captured — its shape (carries a `message` field) is inference-grade: documented by the working `claude-time/hook.pl` (lines 88–94) and proven parseable by our hook+parser in an offline test, but `Notification` doesn't fire in `--print` and an `expect`-driven interactive TUI only reliably produced `UserPromptSubmit` in the timing windows tried (same CC-raw-mode-TUI fragility the WP2 probe documented).
+- **Context:** Not blocking — WP4's `Notification`→AwaitingInput mapping rests on a documented, parse-verified contract; the residual is purely "see it live." Cheap to confirm once Claudesk drives a real interactive CC session.
+- **Suggested action:** During WP2 (hook script live test) or WP6 (frontend end-to-end verify-human against `pnpm tauri dev` + real `claude`), trigger a real `Notification` (idle-wait or a permission prompt) and capture its verbatim payload; confirm `message` + `cwd` + `session_id` match the inferred shape in `docs/product/wp1-hook-socket-probe-outcome.md`. Update that doc's `Notification` block from inference-grade to observed.
+- **Priority:** low
+- **Status:** pending
+
 > **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md).
 
 > **Phase 1 cycle-close backlog sweep — 2026-06-19 (`/product-finalize`).** Phase 1 (Bare Shell + Tab Substrate PoC) closed; all 9 WPs shipped. Sweep disposition of the items still pending at close: **all DEFERRED → carry to the Phase 2 cycle** (none escalated, none newly resolved by the close itself). Carried forward: wp5/wp6/wp7/wp8/wp9 code-quality findings (the **wp6 picker IPC error-surfacing MAJORs are the most load-bearing** — they pair with Phase 2's multi-workspace picker work, WP13/WP16) + `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS` (housekeeping). These remain in this file (not archived) so the next cycle inherits them.

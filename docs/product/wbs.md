@@ -35,7 +35,9 @@ Learning-sequence ordering, riskiest-unknown-first, synchronous-before-async:
 
 ## Milestone 3
 
-### WP1: Probe — hook → Unix-socket → parse wire + settings.json coexistence
+### WP1: Probe — hook → Unix-socket → parse wire + settings.json coexistence  ✅ DONE 2026-06-22 — verdict GO
+
+**Outcome:** [`wp1-hook-socket-probe-outcome.md`](wp1-hook-socket-probe-outcome.md). All four learning objectives met: real `claude` hook → Claudesk `AF_UNIX` socket → clean `serde` parse; `cwd`+`session_id` present on every event; coexistence with `claude-time` PROVEN (both fired, neither errored); ~15 ms/call latency, exits 0 with no listener. **Listener go/no-go: blocking `std::os::unix::net::UnixListener` on a dedicated thread (NOT `tokio`).** Hook language: Perl (`/usr/bin/perl`). `UserPromptSubmit`+`Stop` observed live; `Notification` payload inference-grade (documented + offline-parsed) — live capture deferred to WP2/WP6 (`SURFACE-2026-06-22-WP1-NOTIFICATION-PAYLOAD-NOT-LIVE-CAPTURED`). Harness kept at `src-tauri/examples/hook_socket_probe.{rs,pl}`.
 
 **Type:** probe
 **Milestone:** Milestone 3

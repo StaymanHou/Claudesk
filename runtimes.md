@@ -56,8 +56,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 8s (2026-06-22, WP11 path-keying task: +2 git_status tests → 138 pass; warm recompile + run ~0.45s)
+- **Last:** 9s (2026-06-22, M3 WP2 P1: +13 hook_install tests → 151 pass; recompile new module + run ~0.47s)
 - **Use timeout:** 120000
+- **History:**
+  - 9s — 2026-06-22 (M3 WP2 P1 — +13 hook_install tests, 151 pass)
+  - 8s — 2026-06-22 (WP11 path-keying — +2 git_status tests, 138 pass)
 - **History:**
   - 8s — 2026-06-22 (WP11 path-keying task: +2 nested-workspace tests → 138 pass; recurse_untracked_dirs fix, no new deps)
   - 8s — 2026-06-21 (WP11 P2: new git_status module, +8 status_map_core tests → 136 pass; reuses git2/git_diff, no new deps)
