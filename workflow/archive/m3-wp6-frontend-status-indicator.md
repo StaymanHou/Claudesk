@@ -1,7 +1,7 @@
 # Feature: M3 WP6 — Frontend `workspace-status` subscription + honest status indicator
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** COMPLETED 2026-06-22 — shipped (b377a97), reviewed (0 CRIT / 1 MAJOR / 2 MINOR auto-backlogged), finalized. Archived.
 **Created:** 2026-06-22
 **Drive mode:** autopilot
 **Milestone:** Milestone 3 — CC lifecycle & state plumbing (critical-path WP, closes the M3 chain)
@@ -72,11 +72,45 @@ M3 built the backend "central nervous system" end-to-end in automated tests — 
   - [x] verify-codify  <!-- status: done — no new tests warranted: Phase 3's live behaviors (UserPromptSubmit→Running, Stop→Idle, Notification→AwaitingInput, message→snippet) are all already codified at the transform layer (event_to_state tests, to_update tests incl. to_update_uses_message_as_snippet_for_notification, end-to-end socket→transform test) + the new default_workspace_state_is_unknown. The live wiring (socket bind/emit/listen/render) isn't CI-codifiable w/o a Tauri+real-claude harness (project posture: live verify-human owns it). No duplication. Backend 183/183, vitest 350/350. -->
 
 ## Current Node
-- **Path:** Feature > ship (ALL PHASES COMPLETE)
-- **Active scope:** none — all 3 phases [x]. WP6 = the M3 close-the-loop, confirmed live. Ready for `/feature-ship`.
+- **Path:** Feature > finalize (ship + review-quality complete)
+- **Active scope:** none — all 3 phases [x], shipped (b377a97), reviewed (0 CRIT / 1 MAJOR / 2 MINOR, all auto-backlogged per autopilot). Ready for `/feature-finalize`.
 - **Blocked:** none
 - **Unvisited:** none — ship is the next step
 - **Open discoveries:** none
+
+## Retrospect
+- **What changed in our understanding:** The ~1s indicator lag turned out to be **CC's own hook-firing cadence**, not anything in Claudesk's chain (which is ~15–20ms end-to-end). This is worth remembering: any future "status feels laggy" complaint is upstream of us, and the only honest lever is CC's timing — never PTY-output scraping (which M3's whole architecture forbids and Phase-3 verify-human explicitly confirmed we don't do).
+- **Assumptions that held:** The WP4 seam was exactly as designed — `register`/`deregister`/`resolve_cwd` + the snake_case DTO needed zero rework; WP6 only added the two commands + the frontend. The "no jsdom/RTL, pure-logic-only vitest + live verify-self/human" posture held cleanly. The 3 deferred residuals (WP1 Notification payload, WP3 live bind, WP4 live emit) all confirmed live in one session as planned.
+- **Assumptions that were wrong:** The plan declared the `last_output_snippet` → tooltip path as a WP6 deliverable intent, and the code wired the prop+DTO+component for it — but the reducer never threaded it, so it shipped as a **dead surface** (the code-quality MAJOR). The plan's own Phase-3 note claimed the snippet "shows in the tooltip if surfaced," which the implementation silently couldn't honor. Lesson: when a plan declares a telemetry/secondary affordance, either feed it or don't wire it — a wired-but-unfed path passes tests and review-of-the-happy-path but is latent debt.
+- **Approach delta:** Implementation matched the plan structure (3 phases, same task breakdown). Two deltas: (1) operator changed the dot palette at Phase-1 verify-human (Running→Claude orange, Awaiting→cool blue) — cosmetic, applied in-place; (2) Phase-2's live register check was rolled into Phase-3's single live session (operator choice, avoided launching the app twice). Registration-by-list-diffing (vs hooking openWorkspace) was a build-time refinement that made the N≤1 replace correct and is multi-workspace-ready.
+
+## Code-Quality Review — m3-wp6-frontend-status-indicator
+
+_Reviewed against ship commit `b377a97` (2026-06-22). Drive mode: autopilot → MAJOR + MINOR auto-backlogged (Case B/C); no CRITICAL._
+
+### Strengths
+- Clean three-layer separation: pure model (`workspaceStatus.ts`), runtime glue (`useWorkspaceStatus.ts`), render (`WorkspaceStatusIndicator.tsx`) — pure layer unit-tested, runtime layer honestly left to verify-self/human per the documented posture.
+- Wire contract mirrored verbatim: snake_case `workspace_id`/`awaiting_input`, optional fields as `?`, with a module docstring explaining why it must not drift — honoring the M2 IPC-DTO lesson.
+- Dead-code-allow retirement is exemplary: the 3 WP4 allows deleted, `WorkspaceState::Unknown` given a live semantically-correct presence via `#[default]`, pinned by `default_workspace_state_is_unknown`.
+- Registration-by-diffing the workspace list (not hooking `openWorkspace`) correctly handles the N≤1 array-swap and generalizes to Phase 2.
+- IPC errors surfaced (`.catch` → `console.error`), not swallowed; `statusPresentation`/`stateFor` degrade to honest `unknown` rather than throwing.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [src/state/useWorkspaceStatus.ts:53-55 reducer + Workspace.tsx:33 + CenterStage.tsx] The `statusSnippet`/tooltip path is dead end-to-end. `applyStatusUpdate` stores only `update.state`, discarding `last_output_snippet`; the hook exposes only `stateFor` (no snippet accessor); `CenterStage` never passes `statusSnippet`. So the indicator's `title={snippet ?? label}` always falls to `label`. The wire DTO carries `last_output_snippet`, the indicator declares the tooltip affordance, and the WIP's Phase-3 verify-human note claims the captured `Notification` snippet "shows in the indicator's title/tooltip if surfaced" — it cannot, the reducer drops it. Fix-or-remove: thread the snippet (small reducer + accessor change) OR remove the unused props/field. → auto-backlogged (autopilot).
+
+**MINOR**
+- [useWorkspaceStatus.ts:53-55] `stateFor` re-created as a fresh closure every render; harmless at N≤1, a `useCallback` keyed on `statusMap` would avoid re-running the lookup as the list grows in Phase 2. → auto-backlogged.
+- [workspaceStatus.ts:38-39 + WorkspaceStatusIndicator.tsx snippet prop] Companion to the MAJOR: `last_output_snippet` field + `snippet` prop documented as "telemetry"/tooltip but have no live consumer; a `// not yet consumed — deferred` note would prevent a future reader assuming it's wired. → auto-backlogged.
+
+### Assessment
+Well-built, disciplined feature that cleanly closes the M3 chain. Pure/runtime/render layering is textbook, the wire contract is mirrored faithfully, and the dead-code-allow cleanup with the `#[default]` pin is exactly the seam-tightening that prevents future drift. The one real blemish is the snippet/tooltip path — fully declared across DTO/hook/props/component but fed by nothing, a small genuine dead surface that contradicts the WIP's own verify-human claim and slipped past the test baseline. One-commit fix-or-remove, not a structural problem.
+
+### If you disagree
+Operator: dismiss any finding by editing this section in the WIP file and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

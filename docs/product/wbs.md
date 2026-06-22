@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: in-progress
-updated: 2026-06-22  # WP4 shipped (8bc2d68); critical path WP1✅→WP2✅→WP3✅→WP4✅→WP6. WP5 (parallel) + WP6 remain
+updated: 2026-06-22  # WP6 shipped (b377a97) — M3 chain closed live. critical path WP1✅→WP2✅→WP3✅→WP4✅→WP6✅. WP5 (parallel, .session.md watcher) remains
 milestone: 3
 # Milestone 3 — CC lifecycle & state plumbing. Scope = arch.md Phase-2 forward-look §A
 # (status broadcaster + Unix-socket hook channel) + the workflow/.session.md file-watcher.
@@ -121,18 +121,18 @@ Learning-sequence ordering, riskiest-unknown-first, synchronous-before-async:
 - [ ] Tests: debounce coalescing (pure timer logic if extractable), frontmatter-read on a TempDir `.session.md` fixture
 - [ ] **Note:** this is the same `notify`/`tauri-plugin-fs-watch` capability `SURFACE-2026-06-21-EDITOR-FILE-WATCHER` wants extended to open editor documents later — out of M3 scope (that SURFACE stays deferred), but build the watcher seam so a future milestone can reuse it for `editorDocs`.
 
-### WP6: Frontend subscription + honest status surfacing (proves the chain end-to-end)
+### WP6: Frontend subscription + honest status surfacing (proves the chain end-to-end)  ✅ SHIPPED 2026-06-22 (commit b377a97)
 
 **Description:** The main React webview subscribes to the `workspace-status` Tauri event and renders an idle/running/awaiting-input/unknown indicator on the workspace (the single center-stage workspace in M3 — the M4 filmstrip + M5 PiP + M6 menu-bar are later milestones that subscribe to the same event). This closes the loop and is the M3 verify surface: a real CC state transition is observed in the UI purely from the hook channel + file-watcher, no PTY scraping.
 **Milestone:** Milestone 3
 **Dependencies:** WP4 (the `workspace-status` event + DTO), WP5 (session.md signal, if surfaced in the indicator)
 **Size:** S
 **Tasks:**
-- [ ] Frontend `workspace-status` listener (Tauri `listen`), keyed by `workspace_id`; TS type mirrors the WP4 serde field names verbatim (snake_case — the M2 IPC-DTO lesson)
-- [ ] Status indicator on the workspace header/chrome: dot + label for Idle / Running / AwaitingInput / Unknown (dark-only palette, project convention)
-- [ ] Wire workspace-open to register the project path with the broadcaster (so cwd→workspace matching in WP4 has the mapping) and workspace-close to deregister
-- [ ] Verify-self/verify-human against the live native app (`pnpm tauri dev` + a real `claude`) — observe idle→running→awaiting-input→exit reflected from the hook channel only (native-PTY discipline: this is NOT browser-harness-observable; per the `verify-native-pty-via-ps-screencapture-stderr` posture)
-- [ ] Tests: pure status-reducer/mapping (event payload → indicator state) in vitest
+- [x] Frontend `workspace-status` listener (Tauri `listen`), keyed by `workspace_id`; TS type mirrors the WP4 serde field names verbatim (snake_case — the M2 IPC-DTO lesson) — `workspaceStatus.ts` wire DTO + `useWorkspaceStatus.ts` subscription
+- [x] Status indicator on the workspace header/chrome: dot + label for Idle / Running / AwaitingInput / Unknown (dark-only palette) — `WorkspaceStatusIndicator.tsx` + new chrome header; Running=Claude orange #d97757, Awaiting=cool blue #539bf5 (operator-chosen at verify-human, deliberately distinct)
+- [x] Wire workspace-open to register the project path with the broadcaster + workspace-close to deregister — `workspace_register`/`workspace_deregister` commands; frontend registration by diffing the workspace list (handles N≤1 replace + generalizes to multi-workspace). Made the 3 WP4 item-scoped `#[allow(dead_code)]` live (deleted; `Unknown` via `#[default]`).
+- [x] Verify-self/verify-human against the live native app (`pnpm tauri dev` + a real `claude`) — observed idle→running→awaiting-input transitions from the hook channel only; confirmed with terminal output scrolled away (NOT PTY scraping). Resolved the 3 deferred residuals (WP1 Notification payload live-captured, WP3 live socket bind, WP4 live emit).
+- [x] Tests: pure status-reducer/mapping (event payload → indicator state) in vitest — 8 `workspaceStatus.test.ts` tests + 2 backend command tests + `default_workspace_state_is_unknown`
 
 ## Dependency map
 

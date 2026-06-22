@@ -4,6 +4,29 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m3-wp6-frontend-status-indicator — 2026-06-22
+
+1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `b377a97` (0 CRITICAL). Reviewer rated it well-built — clean pure/runtime/render layering, faithful wire-contract mirror, exemplary dead-code-allow retirement. The one real blemish is a dead snippet/tooltip path. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-22-QUALITY-WP6-SNIPPET-TOOLTIP-DEAD-PATH
+- **Files:** `src/state/workspaceStatus.ts:38-39,93-98` (`applyStatusUpdate` reducer); `src/state/useWorkspaceStatus.ts:53-55` (no snippet accessor); `src/components/workspace/CenterStage.tsx` (never passes `statusSnippet`); `src/components/workspace/Workspace.tsx:33` + `WorkspaceStatusIndicator.tsx:18` (prop + `title={snippet ?? label}`)
+- **Priority:** medium
+- **Status:** pending
+- **Type:** tech-debt (dead surface)
+- **Summary:** The `statusSnippet`/tooltip path is wired end-to-end (wire DTO `last_output_snippet` → `snippet` prop → indicator `title`) but **fed by nothing**: `applyStatusUpdate` stores only `update.state`, discarding `last_output_snippet`; the hook exposes only `stateFor` (no snippet accessor); `CenterStage` never passes `statusSnippet`. So the indicator tooltip always falls to `label`.
+- **Context:** The WIP's Phase-3 verify-human note claims the captured `Notification` snippet "shows in the indicator's title/tooltip if surfaced" — it cannot, the reducer drops it before it reaches the component. The test baseline missed it (no test asserts snippet→tooltip). Genuine but small.
+- **Suggested action:** Fix-or-remove, one commit. EITHER thread the snippet — extend the map to store `{state, snippet}` (or a parallel map), add a `snippetFor(id)` accessor, pass `statusSnippet={snippetFor(ws.id)}` in CenterStage — OR remove the unused `snippet` prop + the `last_output_snippet` frontend DTO field (keep the backend field; drop the unused frontend surface). Threading it is the higher-value path (it makes the Notification payload visible on hover, which was the WP6 intent).
+- **Pickup shape:** a `/feature-refactor` item; threading is ~15 lines across reducer+hook+CenterStage. Pairs naturally with any future status-detail UI. Dismiss via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-22-QUALITY-WP6-MINORS
+- **Files:** `src/state/useWorkspaceStatus.ts:53-55`; `src/state/workspaceStatus.ts:38-39` + `WorkspaceStatusIndicator.tsx` snippet prop
+- **Priority:** low (all)
+- **Status:** pending
+- **Findings:**
+  1. **`stateFor` re-created every render** (`useWorkspaceStatus.ts:53-55`) — a fresh closure each render, consumed per-workspace in CenterStage. Harmless at N≤1; a `useCallback` keyed on `statusMap` would avoid re-running the lookup chain as the list grows in Phase 2 (multi-workspace).
+  2. **Comment accuracy on the unfed snippet** (`workspaceStatus.ts:38-39` + indicator `snippet` prop) — companion to the MAJOR: the `last_output_snippet` field + `snippet` prop are documented as "telemetry"/tooltip but have no live consumer; a `// not yet consumed — deferred` note would stop a future reader assuming it's wired. (Resolved automatically if the MAJOR's thread-it path is chosen.)
+- **Pickup shape:** trivial `/feature-refactor` nits. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 # m3-wp3-socket-listener — 2026-06-22
 
 3 MINOR findings from `feature-review-quality` on ship commit `4355e00` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built — lands scope cleanly, advances the codebase, no refactor warranted; honest integration-level test coverage + negative-direction serde guard; every non-obvious decision carries a WHY comment. All polish-tier. Auto-backlogged per drive_mode=autopilot.

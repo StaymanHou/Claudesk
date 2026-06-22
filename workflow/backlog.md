@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m3-wp6-frontend-status-indicator (2026-06-22)
+- **Pointer:** 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `b377a97` (0 CRITICAL). MAJOR: the `statusSnippet`/tooltip path is wired end-to-end (DTO `last_output_snippet` → prop → indicator `title`) but fed by nothing — `applyStatusUpdate` discards the snippet, no accessor, CenterStage never passes it, so the tooltip always falls to the label (contradicts the WIP's verify-human note). MINORs: `stateFor` closure re-created each render (Phase-2 perf nit); comment accuracy on the unfed snippet field. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp6-frontend-status-indicator — 2026-06-22`.
+- **Priority:** medium (the MAJOR), low (the 2 MINORs)
+- **Status:** pending
+- **Pickup shape:** the MAJOR is a one-commit `/feature-refactor` fix-or-remove (thread the snippet ~15 lines across reducer+hook+CenterStage — the higher-value path, surfaces the Notification payload on hover — OR drop the unused frontend snippet surface). The 2 MINORs are trivial; minor #2 resolves automatically if the MAJOR's thread-it path is chosen. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — m3-wp4-status-broadcaster (2026-06-22)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `8bc2d68` (0 CRITICAL, 0 MAJOR). All cosmetic docstring drift in `status_broadcaster/commands.rs`: (1) `start_broadcaster` docstring describes a `Result`-style error contract the `JoinHandle`-returning signature lacks; (2) `.expect()` on the thread spawn is a non-test panic path (mirrors WP3's `spawn_listener` precedent — convention judgment call); (3) the detached-handle asymmetry vs WP3's retained `_handle` is correct but undocumented. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp4-status-broadcaster — 2026-06-22`.
 - **Priority:** low (all)
@@ -36,7 +42,7 @@
 - **Context:** Not blocking — WP4's `Notification`→AwaitingInput mapping rests on a documented, parse-verified contract; the residual is purely "see it live." Cheap to confirm once Claudesk drives a real interactive CC session.
 - **Suggested action:** During WP2 (hook script live test) or WP6 (frontend end-to-end verify-human against `pnpm tauri dev` + real `claude`), trigger a real `Notification` (idle-wait or a permission prompt) and capture its verbatim payload; confirm `message` + `cwd` + `session_id` match the inferred shape in `docs/product/wp1-hook-socket-probe-outcome.md`. Update that doc's `Notification` block from inference-grade to observed.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-22 (M3 WP6 Phase-3 verify-human, commit b377a97) — the live close-the-loop drove a real `pnpm tauri dev` + real `claude` session; a real `Notification` fired and turned the indicator AwaitingInput (blue), confirming the `Notification`→AwaitingInput chain end-to-end against an actual payload. The inference-grade contract is now observed-grade. (The same session also live-confirmed the WP3 socket bind + WP4 emit residuals.)
 
 > **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md).
 
