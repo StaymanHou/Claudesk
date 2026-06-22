@@ -3,7 +3,13 @@ stage: wbs
 state: in-progress
 updated: 2026-06-21
 milestone: 2
-# WP1,2,3a,3b,3c,4,5,6,7,8,9,10,11,12 shipped. WP11 SHIPPED 2026-06-21 (commit 6bcbe1f — tree/editor density + git indicators + drag-resize rail + P5 layout restructure; review 0 CRIT / 1 MAJOR + 3 MINOR auto-backlogged). **Only WP13 remains** (⌘W close-active-tab, size S, spun out of WP11 verify-human) — pending its own feature cycle. Once WP13 ships, run /product-finalize to close the M2 cycle. Carried backlog: WP11 git-status path-keying MAJOR + the deferred terminal blank-cursor incident.
+# WP1,2,3a,3b,3c,4,5,6,7,8,9,10,11,12 shipped. WP11 SHIPPED 2026-06-21 (commit 6bcbe1f — tree/editor density + git indicators + drag-resize rail + P5 layout restructure; review 0 CRIT / 1 MAJOR + 3 MINOR auto-backlogged).
+#
+# ⚠️ /product-finalize is BLOCKED (operator directive 2026-06-21) — do NOT close the M2 cycle until ALL THREE clear:
+#   1. WP13 — ⌘W close-active-tab (size S, spun out of WP11 verify-human; its own feature cycle). Section below.
+#   2. WP11 review MAJOR — git-status path-keying for a workspace nested below its repo root (SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING in backlog.md).
+#   3. Terminal blank-cursor incident — deferred WP9 prompt-flush/fit race (NOT a WP11 regression; needs real-PTY diagnosis via /incident-report). See the archived WP11 WIP Discoveries.
+# Only when all three are resolved/shipped → run /product-finalize to close M2.
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
