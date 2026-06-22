@@ -12,6 +12,11 @@ mod hook_install;
 // HookEvent + pure parse seam; Phase 2 binds the socket + accept-loop thread.
 mod hook_socket;
 mod project_search;
+// M3 WP4: status broadcaster — normalizes each HookEvent to a workspace state,
+// maps cwd→open-workspace, and emits WorkspaceStatusUpdate on `workspace-status`.
+// Phase 1 = the pure transform core + DTO + registry; Phase 2 drains WP3's receiver
+// and wires the Tauri emit in `.setup()`.
+mod status_broadcaster;
 mod sublime;
 
 use std::sync::Mutex;
@@ -39,13 +44,39 @@ pub fn run() {
                 eprintln!("[claudesk] hook install failed: {e}");
                 let _ = handle.emit("hook-install-error", e);
             }
+            // M3 WP4: the workspace registry the broadcaster maps each event's cwd
+            // against. Empty at launch — WP6 wires workspace-open → register /
+            // close → deregister; until then every event is dropped (no match), so
+            // nothing is emitted. Managed before start_broadcaster so the drain
+            // thread can read it via try_state.
+            app.manage(status_broadcaster::commands::init_registry());
             // M3 WP3: bind the AF_UNIX listener that RECEIVES the hook's JSON lines
             // and spawn its accept-loop thread (the receive side of the status
-            // channel WP2's hook writes to). The receiver is held in managed state
-            // for WP4's broadcaster to drain. A bind failure is surfaced, never
+            // channel WP2's hook writes to). A bind failure is surfaced, never
             // swallowed — status then defaults to Unknown, never PTY-inferred.
             match hook_socket::commands::start_on_launch(&handle) {
                 Ok(state) => {
+                    // M3 WP4: hand the held HookEvent receiver to the status
+                    // broadcaster's drain thread — it maps each event to a
+                    // WorkspaceStatusUpdate and emits it on `workspace-status`. Take
+                    // it out of the HookSocketState holder (the WP3→WP4 seam); a
+                    // double-start (receiver already taken) is a bug, so we log and
+                    // skip rather than panic.
+                    match state.receiver.lock() {
+                        Ok(mut guard) => {
+                            if let Some(rx) = guard.take() {
+                                status_broadcaster::commands::start_broadcaster(
+                                    handle.clone(),
+                                    rx,
+                                );
+                            } else {
+                                eprintln!("[claudesk] status-broadcaster: hook receiver already taken; not starting drain thread");
+                            }
+                        }
+                        Err(e) => eprintln!(
+                            "[claudesk] status-broadcaster: could not lock hook receiver: {e}"
+                        ),
+                    }
                     app.manage(state);
                 }
                 Err(e) => hook_socket::commands::emit_start_error(&handle, &e),

@@ -29,14 +29,10 @@
 //! `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE`, which WP4's DTO
 //! key-shape test fully closes).
 
-// Phase 2 wires `parse_line` into the accept-loop and sends `HookEvent`s over an
-// `mpsc` channel held in managed state. The channel's RECEIVER is held but not yet
-// drained — WP4's broadcaster is the consumer (`rx.recv()` lands there). Until
-// then the receiver + a few `HookEvent` fields (prompt/timestamp, read only by
-// WP4) are dead-code to the non-test build under the project's `clippy -D
-// warnings` policy. Narrowly scoped allow with a removal note — WP4 deletes it
-// when the broadcaster consumes the receiver and the event fields.
-#![allow(dead_code)] // REMOVE in WP4 once the broadcaster drains the receiver.
+// WP4's status broadcaster now drains the receiver held in `HookSocketState` and
+// reads the `HookEvent` fields (`prompt`/`timestamp` via `status_broadcaster::
+// to_update`), so the WP3-era module-wide dead-code allow is removed — the whole
+// module is now live to the non-test build under `clippy -D warnings`.
 
 pub mod commands;
 
