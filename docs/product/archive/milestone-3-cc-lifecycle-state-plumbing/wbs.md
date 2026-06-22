@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: in-progress
-updated: 2026-06-22  # WP6 shipped (b377a97) — M3 chain closed live. critical path WP1✅→WP2✅→WP3✅→WP4✅→WP6✅. WP5 (parallel, .session.md watcher) remains
+updated: 2026-06-22  # M3 COMPLETE. WP1✅→WP2✅→WP3✅→WP4✅→WP6✅ shipped + live-confirmed. WP5 (.session.md watcher) ❌ DROPPED — wrong file (manual pause bookmark, not a live signal); replacement idea = watch workflow doc hierarchy, deferred to M4+ (SURFACE-2026-06-22-WP5-DROPPED-…). → /product-finalize
 milestone: 3
 # Milestone 3 — CC lifecycle & state plumbing. Scope = arch.md Phase-2 forward-look §A
 # (status broadcaster + Unix-socket hook channel) + the workflow/.session.md file-watcher.
@@ -108,18 +108,13 @@ Learning-sequence ordering, riskiest-unknown-first, synchronous-before-async:
 
 **WP4 → WP5 rationale:** WP5 is a *second input source* feeding the same broadcaster; it can land in parallel once WP3/WP4 exist, but is ordered after WP4 so the broadcaster + DTO it feeds are defined first.
 
-### WP5: `workflow/.session.md` file-watcher → broadcaster
+### WP5: `workflow/.session.md` file-watcher → broadcaster  ❌ DROPPED 2026-06-22 — wrong file; M3 closes at WP6
 
-**Description:** A live filesystem watcher on each open workspace's `workflow/.session.md`, debounced, feeding the same broadcaster. Detects workflow-state changes (pause/resume pointer writes) in real time — a second signal alongside the hook channel. `notify` / `tauri-plugin-fs-watch`.
-**Milestone:** Milestone 3
-**Dependencies:** WP4 (broadcaster sink), WP3 (core wiring)
-**Size:** S
-**Tasks:**
-- [ ] `session_watcher` module: watch each open workspace's `<project>/workflow/.session.md` via `notify` (debounced — editors write-then-rename; coalesce rapid events)
-- [ ] On a write/create/remove event, read the (small) `.session.md` frontmatter and feed a workflow-state signal into the broadcaster (the watcher complements the hook channel; define how the two compose — hook = CC idle/running/awaiting; session.md = workflow paused/active context)
-- [ ] Watch lifecycle: add a watch on workspace-open, drop it on workspace-close; tolerate a missing `workflow/` dir (no watch, no error)
-- [ ] Tests: debounce coalescing (pure timer logic if extractable), frontmatter-read on a TempDir `.session.md` fixture
-- [ ] **Note:** this is the same `notify`/`tauri-plugin-fs-watch` capability `SURFACE-2026-06-21-EDITOR-FILE-WATCHER` wants extended to open editor documents later — out of M3 scope (that SURFACE stays deferred), but build the watcher seam so a future milestone can reuse it for `editorDocs`.
+**Dropped, not built.** The spec watched `workflow/.session.md`, framed as a real-time "second workflow-state signal alongside the hook channel." It isn't one: `.session.md` is a **manual handoff bookmark** created *only* by `/session-pause` and deleted by `/session-resume` (verified against the installed `session-pause`/`session-resume` SKILL.md). It is absent during all active work, present only in the parked gap between sessions, binary, and known to the user before any watcher could report it — a near-constant, trivially-derivable signal with no live workflow state to detect. The genuine live workflow state lives in the **WIP file** (`workflow/wip/*.md` Work Tree / Current Node), which mutates continuously as skills run — not in the pause bookmark.
+
+**Consequence:** M3's exit criterion (CC idle/running/awaiting-input/exit observed solely from the hook channel, broadcast to subscribers, no PTY scraping) is **fully met by WP1 → WP2 → WP3 → WP4 → WP6**. Dropping WP5 leaves **Milestone 3 COMPLETE** → `/product-finalize`.
+
+**Replacement idea (operator-defined 2026-06-22 — deferred to a LATER milestone, NOT M3):** a new WP that watches the **workflow document hierarchy** to surface where a project actually sits in the workflow — `roadmap.md → wbs.md → workflow/wip/*.md` (possibly multiple WIP files; tasks can fork mid-feature) `→ backlog.md`. Reuses the `notify` watcher seam `SURFACE-2026-06-21-EDITOR-FILE-WATCHER` also wants. The hard part is *visually representing the whole tree* — a good-to-have, not a must-have, not a blocker; pairs with **M4 multi-workspace**. Tracked at `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` in `backlog.md`; slot into M4+ JIT decomposition.
 
 ### WP6: Frontend subscription + honest status surfacing (proves the chain end-to-end)  ✅ SHIPPED 2026-06-22 (commit b377a97)
 
@@ -136,18 +131,18 @@ Learning-sequence ordering, riskiest-unknown-first, synchronous-before-async:
 
 ## Dependency map
 
-**Critical path:** WP1 → WP2 → WP3 → WP4 → WP6.
-**Parallel track:** WP5 (file-watcher) can proceed alongside WP4 once WP3 lands (independent input source, same broadcaster sink); WP6 surfaces both WP4 and WP5 signals.
+**Critical path (= the whole milestone):** WP1 → WP2 → WP3 → WP4 → WP6. ✅ ALL SHIPPED.
+**WP5 (`.session.md` watcher): ❌ DROPPED 2026-06-22** — wrong file (a manual pause bookmark, not a live signal); see WP5 above. M3 closes at WP6.
 
 ```
-WP1 (probe) ─→ WP2 (hook+settings) ─→ WP3 (socket listener) ─┬─→ WP4 (broadcaster+DTO) ─→ WP6 (frontend)
-                                                              └─→ WP5 (session.md watcher) ─┘
+WP1 (probe) ─→ WP2 (hook+settings) ─→ WP3 (socket listener) ─→ WP4 (broadcaster+DTO) ─→ WP6 (frontend) ✅
+                                                              └─→ WP5 (session.md watcher) ❌ DROPPED
 ```
 
 ## Carried backlog — disposition for this cycle
 
 - **`SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE`** — **FOLDED INTO WP4** (the `WorkspaceStatusUpdate` serde-shape contract test); also a candidate arch.md convention note ("IPC DTOs are snake_case end-to-end; frontend types mirror the serde field names"). The M3 DTO is exactly the multi-word-field-struct-over-IPC hazard this warns about.
-- **`SURFACE-2026-06-21-EDITOR-FILE-WATCHER`** — **stays DEFERRED** (low pri); but WP5 builds the `notify` watcher seam this would later reuse for `editorDocs`. Noted in WP5.
+- **`SURFACE-2026-06-21-EDITOR-FILE-WATCHER`** — **stays DEFERRED** (low pri). WP5 was to have built the reusable `notify` watcher seam this would extend; with WP5 dropped, the seam now lands with whichever future WP first needs `notify` (the new workflow-doc-hierarchy watcher idea, or editor live-reload). See `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`.
 - **`SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE`** — **defers to M4** (multi-workspace milestone), not M3. M3 never opens N workspaces.
 - **wp6-M1 picker IPC error-surfacing MAJORs** — **defer to M4** (they pair with the multi-workspace picker open-flow, per the Phase-1 sweep note). Not touched by M3's backend plumbing.
 - **All other carried code-quality MINORs + forward-look SURFACEs** — remain deferred (M2-close sweep); none are M3-relevant. Re-triage continues at each milestone open.
@@ -155,4 +150,4 @@ WP1 (probe) ─→ WP2 (hook+settings) ─→ WP3 (socket listener) ─┬─→
 ## Architectural notes / gaps
 
 - **No architectural gaps found** — M3 is a faithful build of arch.md Phase-2 forward-look §A + the roadmap M3 deliverables; no P8 back-loop to `/product-arch` needed. The one refinement worth landing during the cycle (likely at WP4 or WP6) is the small arch.md convention note on snake_case IPC DTOs (above), which is a clarification, not a design change.
-- **Hook/file-watcher composition** (how the CC-hook idle/running/awaiting signal and the `.session.md` workflow-paused/active signal combine into what the indicator shows) is the one design decision M3 surfaces that arch.md leaves open — resolve it concretely in WP5 (it's a small composition rule, not a structural gap).
+- **Hook/file-watcher composition** — **MOOT, WP5 dropped.** This was the one open M3 design decision (how the CC-hook idle/running/awaiting signal and a `.session.md` workflow-paused/active signal combine into the indicator). With WP5 dropped there is no second signal in M3; the indicator is driven solely by the hook channel (WP6). When the workflow-doc-hierarchy watcher idea (`SURFACE-2026-06-22-WP5-DROPPED-…`) is decomposed in a later milestone, *that* WP defines its own composition rule against the WIP Work Tree state — not a manual bookmark.
