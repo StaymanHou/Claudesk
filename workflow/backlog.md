@@ -236,7 +236,7 @@
 - **Context:** Benign for a local-disk Tauri app (no network fetch on load), but it grows app startup parse time. Background workspaces don't need the editor until focused.
 - **Suggested action:** If a future milestone targets startup trimming, lazy-load the EditorPanel (`React.lazy`) so CM6 loads on first editor focus rather than at app boot. Reassess after WP9 dogfooding shows whether startup feels slow.
 - **Priority:** low
-- **Status:** pending
+- **Status:** pending (DEFERRED, reconciled by M4 WP1 2026-06-22). M4 WP1 confirmed lazy-mount is NOT needed for the multi-workspace *runtime* cost envelope (eager-mount holds). This SURFACE is about a different axis — *startup parse time* — and stays deferred as a future startup-trimming lever (likely M9 polish), NOT an M4 mount-architecture requirement.
 
 ## Code-quality findings — m2-wp2-editor-shell (2026-06-19)
 - **Pointer:** 2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `a84f3e9` (0 CRITICAL). MAJORs (medium): `editor_fs::resolve_within` leaf-symlink gap vs. its doc's security-invariant claim, and the backend trusting a frontend-supplied workspace `root` (trust boundary in the renderer — Phase-2 hardening seam; pair the two, same module). MINORs (low): save-status-driven CM6 keymap churn, `_state` param misnamed in editorLoad.ts, a speculative test comment. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp2-editor-shell — 2026-06-19`.
@@ -406,7 +406,7 @@
 - **Context:** WP4 probe established the envelope for N=8 *terminals* (Apple M4: idle CPU 4.5%, RAM 240MB, <300MB budget) but explicitly did not cover CM6 editors. CM6 is lighter than Monaco; the concern is real but only testable once N>1 workspaces can be open. Single-workspace (editor+diff+terminal all mounted) showed no perceptible issue this session.
 - **Suggested action:** In the multi-workspace milestone (M6+), after the N-workspace open flow lands, open N≈8 workspaces each with editor+diff+terminal mounted, read RAM/CPU (Activity Monitor / `top`), confirm within the <300MB / <20% envelope or schedule a mitigation (e.g. React.lazy the EditorPanel — see SURFACE about CM6 boot-parse cost).
 - **Priority:** medium (load-bearing for multi-workspace usability; not blocking until N>1 ships)
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-22 by M4 WP1 (N-workspace mount-cost probe). Measured N=8 real CC + full M2 stack: idle CPU 0.0%, active CPU 7.8%/11.7% (median/p95), webview RAM 311/428 MB. **Verdict GO for eager-mount** — editors+diffs add only ~0% idle CPU + ~120–190 MB; envelope effectively holds. Full writeup: `docs/product/wp1-n-workspace-cost-probe-outcome.md`.
 
 ## Code-quality findings — m2-wp9-second-terminal (2026-06-21)
 - **Pointer:** 2 MAJOR + 2 MINOR from `feature-review-quality` on ship commit `70a7576` (0 CRITICAL). Both MAJORs RESOLVED in the post-ship `/feature-refactor` (commit `a8db974`): stale spawn-effect comment rewritten; active-churn double-spawn fixed via the closure-`cancelled` primitive (a ref-latch attempt regressed StrictMode → reverted; live-verified 1 shell + 1 CC, prompt paints). Remaining = the 2 MINORs below.
@@ -415,3 +415,13 @@
 - **Priority:** low (both)
 - **Status:** pending (MINORs); MAJORs resolved in a8db974
 - **Pickup shape:** two small `/feature-refactor` items in the cc_session backend; neither is behavioral at the shipped baseline. Dismiss via the WIP `## Code-Quality Review` section if not worth it.
+
+## SURFACE-2026-06-22-N8-CC-BACKEND-RAM
+- **Source:** feature:build (M4 WP1 Phase 2)
+- **Target level:** product:wbs
+- **Type:** new-work (watch-item)
+- **Summary:** At N=8 *real* CC sessions, the 8 `claude --dangerously-skip-permissions` backend processes cost ~2.8 GB aggregate RSS (~350 MB each) — ~6× the entire Claudesk webview. Surfaced by M4 WP1's probe (WP4's replay-fixture method could not see this).
+- **Context:** This is INHERENT to running 8 concurrent CC sessions — not introduced by Claudesk. The same 8 `claude` processes consume the same RAM whether launched via Claudesk or 8 separate Terminal tabs; Claudesk's marginal cost is only the ~300–430 MB webview. Held fine on 16 GB (83% free at idle). NOT a blocker for M4 — but it sets a practical concurrent-workspace ceiling (~8–10 on 16 GB before backend RAM pressure) worth confirming with real sessions and surfacing to the operator.
+- **Suggested action:** M4 WP5 (verify-at-N) — re-confirm RAM headroom with N real in-flight sessions; note the practical ceiling as operator guidance. Longer-term (post-M4 dogfooding), consider whether an idle-session-suspend mechanism is ever worth it (likely overkill for a single-user 16 GB+ tool). Do NOT pursue as M4 scope.
+- **Priority:** low (inherent-to-workload; informational + a WP5 watch-item)
+- **Status:** pending

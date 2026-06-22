@@ -39,9 +39,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-21, WP11 P4: +10 railWidth cases → 337 pass)
+- **Last:** 1s (2026-06-22, M4 WP1: 350 pass, no new tests — probe phase)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-22 (M4 WP1 verify-codify: 38 files / 350 tests, no new tests — throwaway probe phase; run ~0.73s)
   - 1s — 2026-06-21 (WP11 P4: +10 railWidth cases → 35 files / 337 tests; run ~0.73s)
   - 1s — 2026-06-21 (WP11 P3: +6 gitStatus cases → 34 files / 327 tests; run ~0.67s)
   - 1s — 2026-06-21 (WP11 P1: +4 cases → 33 files / 321 tests; run ~0.63s)
