@@ -702,3 +702,17 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Suggested action:** hoist one shared `plural()` into `searchModel.ts` (where `totalMatchCount` already lives) and import it in both. Trivial `/feature-refactor`.
 - **Priority:** low
 - **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — hoisted to `searchModel.ts` as exported `pluralCount(n, "file"|"match")`; `findResultsBuffer.ts` + `replaceConfirm.ts` both import it; the two local copies deleted. vitest 308 still green (the existing formatter/confirm tests cover the output).
+
+# m3-wp4-status-broadcaster — 2026-06-22
+
+3 MINOR findings from `feature-review-quality` on ship commit `8bc2d68` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built — textbook "pure core, thin runtime shell"; every piece of logic unit-tested, the one IO-bound line (`app.emit`) isolated and acknowledged, the end-to-end test exercising real WP3 socket plumbing through the transform without a Tauri app. Honors the load-bearing conventions; documents the item-scoped-allow deviation. No refactor warranted; all cosmetic docstring drift. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-22-QUALITY-WP4-MINORS
+- **Files:** `src-tauri/src/status_broadcaster/commands.rs:41-47,48-53`
+- **Priority:** low (all)
+- **Status:** pending
+- **Findings:**
+  1. **`start_broadcaster` docstring describes a `Result`-style error contract the signature lacks** (`commands.rs:43-47`) — the doc says "errors returned as a human-readable string for the caller to surface… the only failure here is the receiver already having been taken," but the function returns `thread::JoinHandle<()>` with no error channel, and the double-start (receiver-already-taken) guard actually lives in `lib.rs`. The prose has drifted from the signature + call site. *(Fix: trim the docstring to match — the spawn either succeeds or panics via `.expect`; the receiver-take guard is documented at the lib.rs call site.)*
+  2. **`.expect()` on the thread spawn is a non-test panic path** (`commands.rs:48-53`) — `Builder::spawn(...).expect(...)` violates the "no unwrap outside tests" convention, though it mirrors WP3's `spawn_listener` precedent (`hook_socket/mod.rs`) and thread-spawn failure is near-impossible in practice. Borderline; flagged for convention-consistency only. *(If WP3's pattern is accepted as the house style for infallible thread spawns, dismiss.)*
+  3. **Detached-handle asymmetry is undocumented** (`commands.rs:41-42`) — the docstring says the caller "may hold or detach" the `JoinHandle`, and `lib.rs` discards it (detached) while WP3's listener retains `_handle` in `HookSocketState`. The asymmetry is correct (the drain thread self-terminates on channel close, so no cleanup handle is needed) but the WHY is unstated. *(Fix: one-line note "detached — exits on channel close, no cleanup needed.")*
+- **Pickup shape:** all three are trivial `/feature-refactor` doc-fix nits in one file; none changes correctness, the emit behavior, or any hand-off contract. Items 1 + 3 are pure docstring corrections; item 2 is a convention judgment call (dismiss if WP3's `.expect` precedent stands). Dismiss any via the WIP's `## Code-Quality Review` section.

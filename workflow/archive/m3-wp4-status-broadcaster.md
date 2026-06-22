@@ -1,7 +1,7 @@
 # Feature: M3 WP4 — Status broadcaster + WorkspaceStatusUpdate DTO + cwd→workspace mapping + Tauri emit
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete) — COMPLETED 2026-06-22
 **Created:** 2026-06-22
 **Milestone:** 3 (CC lifecycle & state plumbing)
 **WBS ref:** `docs/product/wbs.md` → WP4
@@ -43,8 +43,8 @@ WP3 lands a stream of parsed `HookEvent`s on an `mpsc::Receiver<HookEvent>` held
   - [x] verify-codify  <!-- status: done — behavior already codified by P2.5's end-to-end socket→transform test + init_registry test + Phase 1's 14 transform tests (no new tests; the only uncoverable line is the AppHandle-bound emit, a Tauri one-liner — live close-the-loop deferred to WP6 per WBS). Full suite 180/180, 0 regressions. No integration boundary. -->
 
 ## Current Node
-- **Path:** Feature > all phases COMPLETE → ship
-- **Active scope:** Both phases COMPLETE (all nodes [x]). Full suite 180/180, clippy + fmt + build clean. Next: `/feature-ship`
+- **Path:** Feature > ship + review-quality COMPLETE → finalize
+- **Active scope:** Shipped (`8bc2d68`). Review-quality done: 0 CRIT / 0 MAJ / 3 MINOR (auto-backlogged → SURFACE-2026-06-22-QUALITY-WP4-MINORS). Next: `/feature-finalize`
 - **Blocked:** none
 - **Unvisited:** none — ship remains
 - **Open discoveries:** [NOTE-2026-06-22] targeted-allow refinement (build decision, not a backlog SURFACE)
@@ -53,6 +53,42 @@ WP3 lands a stream of parsed `HookEvent`s on an `mpsc::Receiver<HookEvent>` held
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
 [NOTE-2026-06-22] Phase 2 — The plan said "delete the dead-code allow." Reality: deleting the WP3 module-wide allow surfaced that `WorkspaceState::Unknown` (frontend initial value, never emitted by the backend) and `WorkspaceRegistry::register`/`deregister` (wired by WP6's workspace-open/close) are *genuinely* still dead until WP6. Resolved more honestly than a re-added module allow: 3 **targeted** `#[allow(dead_code)]` on exactly those items, each naming WP6 as removal owner + noting they're exercised by WP4's tests. The WP3 `hook_socket` module allow IS fully deleted (its receiver + prompt/timestamp fields are now live via the broadcaster). Net: no module-wide allow remains anywhere in the WP3/WP4 surface; only item-scoped WP6-owned allows. Not a backlog SURFACE — it's a build-decision note for the reviewer/WP6.
+
+## Retrospect
+- **What changed in our understanding:** Deleting the WP3 module-wide dead-code allow (a planned WP4 acceptance item) surfaced that not *everything* the broadcaster touches becomes live at WP4. `WorkspaceState::Unknown` (a frontend-default value the backend never emits) and `WorkspaceRegistry::register`/`deregister` (wired by WP6's workspace open/close) are genuinely dead until WP6. The plan's "delete the allow" was right in spirit but underspecified — the honest landing was a *targeted* allow on exactly those three WP6-owned items, not a re-added module allow. The reflection-learning "dead-code allow removal owner = the consumer WP" generalizes: the owner is the consumer *of each specific item*, which can be a later WP than the one that deletes the broad allow.
+- **Assumptions that held:** The WP3→WP4 seam was exactly as designed — a parsed `HookEvent` stream on `HookSocketState.receiver: Mutex<Option<Receiver>>`; `take()` + a dedicated drain thread (the blocking-recv-on-a-thread shape, mirroring WP1's listener verdict) was the clean owner. The pure-transform factoring (`to_update` holds all logic, `app.emit` is the one untestable line) let the end-to-end test exercise the real WP3 socket plumbing without a Tauri app. The M2 WP11 canonicalization pattern transferred directly to cwd→workspace matching.
+- **Assumptions that were wrong:** None material. The only plan/reality delta was the targeted-vs-module allow (above), caught at the first clippy run and resolved within the same build step.
+- **Approach delta:** Implementation matched the plan's two-phase shape (pure core → runtime wiring) exactly. The one refinement: 3 item-scoped allows replacing the planned single allow-deletion, documented as `[NOTE-2026-06-22]` and folded into the WBS shipped-notes + CLAUDE.md.
+
+## Communicate
+> **Feature complete:** M3 WP4 (status broadcaster) has shipped. Claudesk now drains the parsed CC-hook event stream and emits a normalized `WorkspaceStatusUpdate { workspace_id, state, … }` on the `workspace-status` Tauri event — the single signal the M4/M5/M6 status surfaces will subscribe to. Verify via `cargo test` (180/180, incl. the end-to-end socket→transform test); the live real-`claude`→UI close-the-loop arrives at WP6 when the frontend listener + workspace registration land.
+
+Requester = operator — closure notice for self-record.
+
+## Code-Quality Review — m3-wp4-status-broadcaster
+
+Reviewed on ship commit `8bc2d68` by `code-quality-reviewer`. **0 CRITICAL / 0 MAJOR / 3 MINOR.** Verdict: well-built, no refactor warranted; the 3 MINORs are cosmetic docstring drift.
+
+### Strengths
+- Pure/impure split is exemplary: `to_update` / `event_to_state` / `WorkspaceRegistry` hold all logic with zero `AppHandle` coupling, leaving exactly one untestable line (`app.emit`), exercised directly by the test suite.
+- Honest-state discipline preserved end-to-end: unmapped event / unresolved cwd dropped (never guessed), `Unknown` never emitted from an event, tied back to arch.md + the never-infer-from-PTY invariant.
+- Serde-shape contract test pins the exact wire key set + snake_case enum rendering, genuinely closing `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE`.
+- Dead-code-allow handling is the right call: WP3 module-wide allow fully deleted; 3 residuals item-scoped with WP6 named as removal owner + rationale; `[NOTE-2026-06-22]` documents the plan deviation transparently.
+- Lock-then-drop-before-emit discipline correctly avoids holding the registry mutex across `app.emit`; poisoned-lock recovery via `into_inner()` keeps the drain thread alive.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [commands.rs:43-47] `start_broadcaster` docstring describes a `Result`-style error contract ("errors returned as a human-readable string… receiver-already-taken") but the signature returns `thread::JoinHandle<()>` with no error channel — the double-start check actually lives in `lib.rs`. Doc drifted from signature.
+- [commands.rs:48-53] `start_broadcaster` uses `.expect()` on the thread spawn (a non-test panic path) — mirrors WP3's `spawn_listener` precedent but is borderline vs the "no unwrap outside tests" convention. Consistent with WP3; flagged for convention-consistency only.
+- [commands.rs:41-42] Docstring says the caller "may hold or detach" the JoinHandle, but `lib.rs` discards it (detached) while WP3's listener retains `_handle` in `HookSocketState`. Asymmetry is correct (drain thread self-terminates on channel close) but undocumented — a one-line "detached — exits on channel close" note would close the gap.
+
+### Assessment
+Well-built; advances the codebase cleanly. Textbook "pure core, thin runtime shell" — every piece of logic unit-tested, the one IO-bound line isolated and acknowledged, the end-to-end test exercising real WP3 socket plumbing through the transform without a Tauri app. Honors the load-bearing conventions and documents the item-scoped-allow deviation. Only debt is cosmetic docstring drift. No refactor warranted; the 3 MINORs are backlog-or-dismiss material.
+
+### If you disagree
+Dismiss any finding by marking it `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
 
 ## Design notes (grounding, read at build)
 - **Receiver hand-off (the central wiring decision):** WP3 holds `HookSocketState.receiver: Mutex<Option<Receiver<HookEvent>>>`. WP4's `start_broadcaster` does `state.receiver.lock().unwrap().take()` to own the receiver, then spawns a `std::thread` draining it (mirrors WP3's blocking-thread discipline — the `mpsc::Receiver` blocks on `recv`; a thread is the simplest correct owner, consistent with WP1's listener verdict). The drain thread holds a cloned `AppHandle` for `emit`.

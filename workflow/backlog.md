@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m3-wp4-status-broadcaster (2026-06-22)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `8bc2d68` (0 CRITICAL, 0 MAJOR). All cosmetic docstring drift in `status_broadcaster/commands.rs`: (1) `start_broadcaster` docstring describes a `Result`-style error contract the `JoinHandle`-returning signature lacks; (2) `.expect()` on the thread spawn is a non-test panic path (mirrors WP3's `spawn_listener` precedent — convention judgment call); (3) the detached-handle asymmetry vs WP3's retained `_handle` is correct but undocumented. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp4-status-broadcaster — 2026-06-22`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** trivial `/feature-refactor` doc-fix nits in one file; none changes correctness, emit behavior, or any hand-off contract. Items 1+3 are pure docstring corrections; item 2 is dismissable if WP3's `.expect` precedent stands. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — m3-wp3-socket-listener (2026-06-22)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `4355e00` (0 CRITICAL, 0 MAJOR). All polish-tier: (1) `hook_socket_path` carries a hidden `create_dir_all` side effect (path-resolver name understates it); (2) accept-loop `BufReader::lines()` has no per-line length cap (trusted local writer, low risk); (3) `HOOK_SOCKET_NAME` `pub const` is over-exported (module-private suffices). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp3-socket-listener — 2026-06-22`.
 - **Priority:** low (all)
@@ -349,7 +355,7 @@
 - **Context:** This is a general hazard for every Tauri command that returns a multi-word-field struct. Pure-TS unit tests over hand-built DTOs validate logic but cannot catch a frontend↔backend field-name/shape drift. The convention IS snake_case end-to-end (git_diff `old_lineno`/`short_sha`/`is_head`, fs_index `is_dir`) — WP7 deviated by typing camelCase on the frontend, which the tests couldn't see.
 - **Suggested action:** (a) WP7 fix: rename the frontend field to `line_text` (done in the F12 build re-entry). (b) Cross-cutting: when adding a Tauri command that returns a struct, add ONE test that pins the exact JSON key shape — e.g. a Rust `#[test]` asserting `serde_json::to_value(&dto)` has the expected keys, OR a frontend test that feeds a realistic snake_case JSON literal (as it arrives over IPC) through the consuming code path. Consider a shared convention note in arch.md: "IPC DTOs are snake_case end-to-end; frontend types mirror the serde field names verbatim."
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-22 — M3 WP4 (commit `8bc2d68`). The `WorkspaceStatusUpdate` DTO carries a `serde_json::to_value` key-shape contract test (`status_broadcaster::tests::dto_serde_shape_is_snake_case`) that pins the exact snake_case keys + snake_case enum rendering — the cross-cutting pattern this SURFACE asked for. The arch.md convention note ("IPC DTO casing convention — snake_case end-to-end") was landed at finalize (`arch.md` §"Phase 2 forward-look §A"). New IPC DTOs follow the convention + add a parallel key-shape test.
 
 ## SURFACE-2026-06-21-EDITOR-MULTI-FILE-TAB-STRIP
 - **Source:** feature:build (WP7 Phase 2 verify-human — operator UX direction)

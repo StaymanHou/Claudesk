@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: in-progress
-updated: 2026-06-22  # WP3 shipped (4355e00); critical path WP1✅→WP2✅→WP3✅→WP4→WP6
+updated: 2026-06-22  # WP4 shipped (8bc2d68); critical path WP1✅→WP2✅→WP3✅→WP4✅→WP6. WP5 (parallel) + WP6 remain
 milestone: 3
 # Milestone 3 — CC lifecycle & state plumbing. Scope = arch.md Phase-2 forward-look §A
 # (status broadcaster + Unix-socket hook channel) + the workflow/.session.md file-watcher.
@@ -90,19 +90,21 @@ Learning-sequence ordering, riskiest-unknown-first, synchronous-before-async:
 
 **WP3 → WP4 rationale:** Get a parsed `HookEvent` flowing synchronously into the core before adding the normalize-map-emit broadcaster on top — the broadcaster is a transform over a working event stream, not part of the IO plumbing.
 
-### WP4: Status broadcaster + `WorkspaceStatusUpdate` DTO + cwd→workspace mapping + Tauri emit
+### WP4: Status broadcaster + `WorkspaceStatusUpdate` DTO + cwd→workspace mapping + Tauri emit  ✅ SHIPPED 2026-06-22 (commit 8bc2d68)
 
 **Description:** The central node. Normalizes each `HookEvent` to a workspace state (`UserPromptSubmit`→Running, `Stop`→Idle, `Notification`→AwaitingInput), maps the event's `cwd` to a known workspace's project path, builds `WorkspaceStatusUpdate { workspace_id, state, last_event_at, last_output_snippet? }`, and emits it on the Tauri event channel (`app.emit("workspace-status", …)`). This is the single source the three (later-milestone) surfaces subscribe to.
 **Milestone:** Milestone 3
 **Dependencies:** WP3 (parsed `HookEvent` stream)
 **Size:** M
 **Tasks:**
-- [ ] `status_broadcaster` Rust module: pure `event_to_state(HookEvent) -> WorkspaceState` mapping (`Idle|Running|AwaitingInput`; unknown event → no-op)
-- [ ] cwd→workspace resolution: match `HookEvent.cwd` against the open workspaces' project paths (canonicalized, reusing the path-keying lesson from M2 WP11); an event whose cwd matches no open workspace is dropped (not an error)
-- [ ] Define `WorkspaceStatusUpdate` DTO; emit via `app.emit("workspace-status", update)` on each mapped event
-- [ ] **Serde-shape contract test (folds in `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE`):** add a Rust `#[test]` asserting `serde_json::to_value(&WorkspaceStatusUpdate)` has the exact expected keys (snake_case end-to-end, per the M2 lesson), so the frontend (WP6) can mirror the serde field names verbatim with no camelCase drift
-- [ ] `Unknown`-state default for a workspace that has produced no hook event yet (honest, not guessed)
-- [ ] Tests: pure mapping (all 3 events + unknown), cwd-match (hit/miss/canonicalization), the DTO key-shape test
+- [x] `status_broadcaster` Rust module: pure `event_to_state(HookEvent) -> WorkspaceState` mapping (`Idle|Running|AwaitingInput`; unknown event → no-op)
+- [x] cwd→workspace resolution: match `HookEvent.cwd` against the open workspaces' project paths (canonicalized, reusing the path-keying lesson from M2 WP11); an event whose cwd matches no open workspace is dropped (not an error)
+- [x] Define `WorkspaceStatusUpdate` DTO; emit via `app.emit("workspace-status", update)` on each mapped event
+- [x] **Serde-shape contract test (folds in `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE`):** add a Rust `#[test]` asserting `serde_json::to_value(&WorkspaceStatusUpdate)` has the exact expected keys (snake_case end-to-end, per the M2 lesson), so the frontend (WP6) can mirror the serde field names verbatim with no camelCase drift
+- [x] `Unknown`-state default for a workspace that has produced no hook event yet (honest, not guessed)
+- [x] Tests: pure mapping (all 3 events + unknown), cwd-match (hit/miss/canonicalization), the DTO key-shape test
+
+**Shipped notes:** `status_broadcaster` module = pure transform core (`WorkspaceState`, `WorkspaceStatusUpdate` DTO, `WorkspaceRegistry` cwd→workspace seam, `event_to_state` + `to_update`) + `commands` runtime wiring (drain thread consuming WP3's held `mpsc::Receiver` on a dedicated `std::thread`, `app.emit("workspace-status", …)`, `SharedRegistry` managed in `lib.rs` `.setup()`). The WP3 module-wide `#![allow(dead_code)]` was deleted; the genuinely WP6-owned residuals (`WorkspaceState::Unknown` = frontend initial value; `WorkspaceRegistry::register`/`deregister` = workspace open/close wiring) carry 3 *item-scoped* allows naming WP6 as removal owner — no module-wide allow remains. 16 broadcaster tests (incl. the serde-shape contract test closing `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE` + an end-to-end socket→transform test over real WP3 plumbing); full suite 180/180. Review 0 CRIT / 0 MAJ / 3 MINOR (cosmetic docstring drift, auto-backlogged → `SURFACE-2026-06-22-QUALITY-WP4-MINORS`). **The cwd→workspace registration (open→register / close→deregister) + the live real-`claude`→emit close-the-loop are WP6 deliverables** per this WBS — WP4 defines + tests the registry seam and the transform; WP6 wires the registration, the frontend `listen("workspace-status")`, and the live verify-human.
 
 **WP4 → WP5 rationale:** WP5 is a *second input source* feeding the same broadcaster; it can land in parallel once WP3/WP4 exist, but is ordered after WP4 so the broadcaster + DTO it feeds are defined first.
 
