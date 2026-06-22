@@ -17,8 +17,11 @@
 //!
 //! ## Invariants
 //! - **Additive** — never touch a matcher-group that isn't ours.
-//! - **Idempotent** — re-running install adds nothing (detected by our `command`
-//!   marker, which embeds the stable Claudesk script path).
+//! - **Idempotent + self-healing** — re-running install adds nothing when our
+//!   entry is already current; if the command *format* changed (e.g. the
+//!   2026-06-22 shell-quoting fix), it replaces the stale entry in place rather
+//!   than duplicating. Detection keys on the stable script basename
+//!   ([`CLAUDESK_SCRIPT_MARKER`]), not the full command string.
 //! - **Reversible** — [`uninstall`] removes only Claudesk's groups, pruning a now-
 //!   empty event array, and leaves everything else byte-for-byte.
 //! - **Never wipe a file we can't parse** — a malformed `settings.json` is an
@@ -57,17 +60,29 @@ pub enum HookInstallError {
     NotAnObject,
 }
 
-/// Does this matcher-group object register our `command`? Detection marker for
-/// idempotency + surgical uninstall. A group is "ours" iff any of its
-/// `hooks[].command` strings contains the Claudesk script path.
-fn group_is_claudesk(group: &Value, command: &str) -> bool {
+/// Stable detection marker: the hook script's basename. Detection keys on this
+/// substring rather than the exact `command` string so that a change to the
+/// command *format* (e.g. adding shell-quoting around the paths, as happened
+/// 2026-06-22) is still recognized as "ours" — install can then replace the
+/// stale entry instead of leaving a broken one and appending a duplicate, and
+/// uninstall still finds it. The basename is invariant across those changes.
+const CLAUDESK_SCRIPT_MARKER: &str = "claudesk-hook.pl";
+
+/// Does this matcher-group object register a Claudesk hook? A group is "ours"
+/// iff any of its `hooks[].command` strings contains [`CLAUDESK_SCRIPT_MARKER`].
+/// The `_command` arg is unused now (kept so callers needn't change); detection
+/// is by the stable script-path marker, not the full command string.
+fn group_is_claudesk(group: &Value, _command: &str) -> bool {
     group
         .get("hooks")
         .and_then(Value::as_array)
         .map(|hooks| {
-            hooks
-                .iter()
-                .any(|h| h.get("command").and_then(Value::as_str) == Some(command))
+            hooks.iter().any(|h| {
+                h.get("command")
+                    .and_then(Value::as_str)
+                    .map(|c| c.contains(CLAUDESK_SCRIPT_MARKER))
+                    .unwrap_or(false)
+            })
         })
         .unwrap_or(false)
 }
@@ -82,12 +97,16 @@ fn claudesk_group(command: &str) -> Value {
 }
 
 /// Merge Claudesk's hook into `settings`'s `hooks` block for all
-/// [`CLAUDESK_EVENTS`]. Idempotent: a group already carrying our `command` marker
-/// is left as-is (no duplicate appended). Additive: existing matcher-groups for
-/// any event are preserved untouched. `command` is the exact string registered as
-/// the hook's `command` (it doubles as the idempotency/uninstall marker).
+/// [`CLAUDESK_EVENTS`]. Additive: existing non-Claudesk matcher-groups are
+/// preserved untouched. For the Claudesk entry, detection is by the stable
+/// script-path marker ([`group_is_claudesk`]):
+/// - no Claudesk group present → append `command`;
+/// - a Claudesk group present with the **same** `command` → no-op (idempotent);
+/// - a Claudesk group present with a **different** `command` (e.g. an older,
+///   pre-quoting format) → replace it with the current `command` (self-heals a
+///   command-format change on next launch — see the 2026-06-22 shell-quoting fix).
 ///
-/// Returns `true` if anything changed (a caller can skip the write when not).
+/// Returns `true` if anything changed (the caller skips the write when not).
 /// Errors only if the JSON root or an existing `hooks` value has the wrong shape.
 pub fn merge_claudesk_hooks(settings: &mut Value, command: &str) -> Result<bool, HookInstallError> {
     let root = settings
@@ -107,12 +126,23 @@ pub fn merge_claudesk_hooks(settings: &mut Value, command: &str) -> Result<bool,
             .or_insert_with(|| Value::Array(Vec::new()));
         let arr = arr.as_array_mut().ok_or(HookInstallError::NotAnObject)?;
 
-        // Idempotency: skip if a Claudesk group is already present.
-        if arr.iter().any(|g| group_is_claudesk(g, command)) {
-            continue;
+        // Find an existing Claudesk group (by stable script-path marker).
+        match arr.iter_mut().find(|g| group_is_claudesk(g, command)) {
+            Some(existing) => {
+                // Already ours. If the command text drifted (format change),
+                // replace in place so the stale/broken entry self-heals; else
+                // leave it untouched (idempotent).
+                let want = claudesk_group(command);
+                if *existing != want {
+                    *existing = want;
+                    changed = true;
+                }
+            }
+            None => {
+                arr.push(claudesk_group(command));
+                changed = true;
+            }
         }
-        arr.push(claudesk_group(command));
-        changed = true;
     }
     Ok(changed)
 }
@@ -257,11 +287,19 @@ mod tests {
         let mut s = settings_with_claude_time();
         merge_claudesk_hooks(&mut s, CMD).unwrap();
 
-        // claude-time survives on every event...
+        // claude-time survives on every event... (detect by its OWN command —
+        // group_is_claudesk now keys on the claudesk-hook.pl marker, so check the
+        // raw command string for the claude-time path here).
+        let has_claude_time = |g: &Value| {
+            g.get("hooks")
+                .and_then(Value::as_array)
+                .map(|h| h.iter().any(|x| x["command"].as_str() == Some(OTHER)))
+                .unwrap_or(false)
+        };
         for event in CLAUDESK_EVENTS {
             let arr = s["hooks"][event].as_array().unwrap();
             assert!(
-                arr.iter().any(|g| group_is_claudesk(g, OTHER)),
+                arr.iter().any(has_claude_time),
                 "claude-time entry must survive on {event}"
             );
         }
@@ -305,6 +343,70 @@ mod tests {
                 "no duplicate on {event}"
             );
         }
+    }
+
+    #[test]
+    fn merge_self_heals_a_stale_claudesk_command_in_place() {
+        // Regression (2026-06-22): a prior launch registered an UNQUOTED command
+        // that word-split under /bin/sh because the macOS app-data path has a
+        // space. The fix changed the command FORMAT (now shell-quoted). On the
+        // next launch, merge must recognize the stale entry (by the
+        // claudesk-hook.pl marker), REPLACE it in place with the corrected
+        // command, and NOT append a duplicate — so the broken entry self-heals.
+        const STALE: &str =
+            "CLAUDESK_HOOK_SOCK=/Users/me/Library/Application Support/com.claudesk.app/hook.sock \
+             /usr/bin/perl /Users/me/Library/Application Support/com.claudesk.app/claudesk-hook.pl";
+        const FIXED: &str =
+            "CLAUDESK_HOOK_SOCK='/Users/me/Library/Application Support/com.claudesk.app/hook.sock' \
+             /usr/bin/perl '/Users/me/Library/Application Support/com.claudesk.app/claudesk-hook.pl'";
+
+        let mut s = json!({
+            "hooks": {
+                "UserPromptSubmit": [
+                    { "hooks": [ { "type": "command", "command": OTHER } ] },
+                    { "hooks": [ { "type": "command", "command": STALE } ] }
+                ],
+                "Stop": [
+                    { "hooks": [ { "type": "command", "command": STALE } ] }
+                ],
+                "Notification": [
+                    { "hooks": [ { "type": "command", "command": STALE } ] }
+                ]
+            }
+        });
+
+        let changed = merge_claudesk_hooks(&mut s, FIXED).unwrap();
+        assert!(changed, "replacing the stale command must report a change");
+
+        for event in CLAUDESK_EVENTS {
+            // Exactly one Claudesk group per event (no duplicate appended)...
+            assert_eq!(claudesk_group_count(&s, event), 1, "event {event}");
+            // ...and its command is the FIXED (quoted) form, not the stale one.
+            let cmds: Vec<&str> = s["hooks"][event]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|g| g["hooks"].as_array().unwrap())
+                .filter_map(|h| h["command"].as_str())
+                .collect();
+            assert!(
+                cmds.contains(&FIXED),
+                "{event} must carry the fixed command"
+            );
+            assert!(
+                !cmds.contains(&STALE),
+                "{event} must NOT keep the stale command"
+            );
+        }
+        // claude-time (OTHER) on UserPromptSubmit is untouched.
+        let ups = s["hooks"]["UserPromptSubmit"].as_array().unwrap();
+        assert!(ups
+            .iter()
+            .any(|g| g["hooks"][0]["command"].as_str() == Some(OTHER)));
+
+        // And a second merge with the same FIXED command is now a no-op.
+        let again = merge_claudesk_hooks(&mut s, FIXED).unwrap();
+        assert!(!again, "re-merge of the fixed command is idempotent");
     }
 
     #[test]

@@ -33,15 +33,27 @@ fn dirs_home() -> Result<PathBuf, String> {
         .ok_or_else(|| "could not resolve $HOME".to_string())
 }
 
+/// Single-quote a path for safe interpolation into the `/bin/sh -c` command
+/// string CC runs. macOS app-data paths contain a space (`Application Support`),
+/// so an unquoted path word-splits and the hook never runs (the env value's tail
+/// is mis-parsed as a command — observed live 2026-06-22). Wrap in single quotes;
+/// escape any embedded single quote via the POSIX `'\''` idiom. Single quotes
+/// also neutralize every other shell metacharacter, so this is robust regardless
+/// of what the resolved path contains.
+fn sh_quote(path: &Path) -> String {
+    format!("'{}'", path.display().to_string().replace('\'', "'\\''"))
+}
+
 /// The exact `command` string Claudesk registers (also the idempotency/uninstall
 /// marker). Sets `CLAUDESK_HOOK_SOCK` inline so the hook knows where to write,
-/// then invokes the deployed Perl script. Shell-form is fine: both paths are
-/// app-controlled (under our app-data dir), not user input.
+/// then invokes the deployed Perl script. Both paths are shell-quoted: they are
+/// app-controlled but NOT space-free — `app_data_dir()` resolves under
+/// `~/Library/Application Support/…` on macOS.
 fn hook_command(script_path: &Path, socket_path: &Path) -> String {
     format!(
         "CLAUDESK_HOOK_SOCK={} /usr/bin/perl {}",
-        socket_path.display(),
-        script_path.display()
+        sh_quote(socket_path),
+        sh_quote(script_path)
     )
 }
 
@@ -137,7 +149,37 @@ mod tests {
         );
         assert_eq!(
             cmd,
-            "CLAUDESK_HOOK_SOCK=/app-data/hook.sock /usr/bin/perl /app-data/claudesk-hook.pl"
+            "CLAUDESK_HOOK_SOCK='/app-data/hook.sock' /usr/bin/perl '/app-data/claudesk-hook.pl'"
         );
+    }
+
+    #[test]
+    fn hook_command_quotes_spaced_macos_app_data_path() {
+        // Regression: the real macOS app-data path contains a space
+        // (`Application Support`). An unquoted command word-splits under
+        // `/bin/sh -c` and the hook never runs — observed live 2026-06-22
+        // ("/bin/sh: Support/com.claudesk.app/hook.sock: No such file or
+        // directory"). Both paths must be single-quoted so the space is inert.
+        let cmd = hook_command(
+            Path::new("/Users/me/Library/Application Support/com.claudesk.app/claudesk-hook.pl"),
+            Path::new("/Users/me/Library/Application Support/com.claudesk.app/hook.sock"),
+        );
+        assert_eq!(
+            cmd,
+            "CLAUDESK_HOOK_SOCK='/Users/me/Library/Application Support/com.claudesk.app/hook.sock' \
+             /usr/bin/perl '/Users/me/Library/Application Support/com.claudesk.app/claudesk-hook.pl'"
+        );
+        // The env value and script path are each a single shell word (quoted),
+        // so no token outside the quotes can be mis-parsed as a command.
+        assert!(cmd.contains("='/Users/me/Library/Application Support/"));
+        assert!(cmd.contains("/usr/bin/perl '/Users/me/Library/Application Support/"));
+    }
+
+    #[test]
+    fn sh_quote_escapes_embedded_single_quote() {
+        // Defensive: a path with a literal single quote must still produce one
+        // safe shell word via the POSIX '\'' idiom.
+        let q = sh_quote(Path::new("/tmp/it's here/x.sock"));
+        assert_eq!(q, "'/tmp/it'\\''s here/x.sock'");
     }
 }
