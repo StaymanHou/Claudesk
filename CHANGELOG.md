@@ -6,6 +6,7 @@
 - **Milestone:** WP13 (Milestone 2, ⌘W close-active-tab) complete — clears the first of the three operator-gated blockers before the Milestone 2 cycle can close (the WP11 git-status path-keying MAJOR and the terminal blank-cursor incident remain).
 - **Task closed:** WP11 git-status path-keying — `git_file_statuses` now re-bases each status path to the workspace root (stripping the workspace's within-repo prefix and dropping out-of-subtree entries) so a workspace nested below its repo root shows its file-tree git indicators instead of silently showing none, plus a fold-in `recurse_untracked_dirs(true)` fix so untracked subdirs report per-file; clears the second of the three operator-gated Milestone-2-close blockers (the terminal blank-cursor incident remains).
 - **Backlog resolved:** SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING — the WP11 review MAJOR, fixed by re-basing the status map to the workspace key space (3 cosmetic MINORs from the same review remain pending).
+- **Incident resolved:** Terminal blank-cursor (P1) — the right-panel Terminal rendered blank because its `cc-output` listener was torn down by the spawn effect re-running on the `spawning→live` phase flip, dropping the shell's one-shot prompt flush; fixed by keying the spawn effect on a `spawnNonce` instead of `bridge.phase` (so the listener survives the transition) and locked with a pure `spawnTrigger` contract test, clearing the third and last operator-gated Milestone-2-close blocker.
 
 ## 2026-06-21
 

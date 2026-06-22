@@ -13,7 +13,7 @@
 // (the WP6 picker MAJOR lesson — Tauri `invoke` rejections vanish without a catch).
 // Here the bridge `error` phase renders the message with a Retry button.
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
@@ -25,6 +25,7 @@ import {
   encodeBase64,
   initialBridgeState,
 } from "../../cc/bridge";
+import { spawnTriggerDeps } from "../../cc/spawnTrigger";
 
 interface XtermPaneProps {
   workspaceId: string;
@@ -71,6 +72,16 @@ export function XtermPane({
   // mount always see the current id without re-subscribing).
   const sessionIdRef = useRef<string | null>(null);
   const [bridge, dispatch] = useReducer(bridgeReducer, initialBridgeState);
+  // Spawn trigger. The spawn effect keys on THIS (not `bridge.phase`) so the
+  // spawning→live dispatch does NOT re-run the effect — which previously fired the
+  // effect's cleanup and tore down the `cc-output` listener mid-spawn. For a
+  // continuously-emitting process (CC) the lost listener was masked by later output;
+  // for a one-shot emitter (the WP9 shell, whose prompt flushes exactly once via
+  // `cc_ready`) the flushed prompt landed after the listener was gone → permanently
+  // blank pane (incident-terminal-blank-cursor). Bumping this nonce is the sole
+  // re-spawn signal; the listener now lives for the session's lifetime, torn down
+  // only on a real teardown (unmount, active→false, projectPath/command change, relaunch).
+  const [spawnNonce, setSpawnNonce] = useState(0);
 
   // The spawn effect must fire ONLY when the spawn conditions change (phase / path /
   // command / active) — NOT when a parent re-render hands us a new `onSessionId` arrow
@@ -92,6 +103,10 @@ export function XtermPane({
     if (sid) void invoke("cc_kill", { sessionId: sid }).catch(() => {});
     sessionIdRef.current = null;
     dispatch({ type: "relaunch" });
+    // Bump the spawn nonce so the spawn effect re-runs (it no longer keys on
+    // `bridge.phase`). The relaunch dispatch resets phase to "spawning" for the UI;
+    // this nonce is what actually re-triggers a fresh spawn + listener attach.
+    setSpawnNonce((n) => n + 1);
   };
 
   // Fit the terminal to its container and push the resulting cols/rows to the PTY.
@@ -188,13 +203,17 @@ export function XtermPane({
   //    unmount) self-kills its orphan and attaches nothing — exactly one session
   //    survives. A ref-based latch was tried and leaked 2 live sessions per pane (a later
   //    run reset the ref before the first spawn resolved). Do not "simplify" to a ref.
-  //  - The shell's one-shot prompt is not lost despite the cleanup unlisten-on-re-run:
-  //    the backend BUFFERS output until `cc_ready`, and we call `cc_ready` here while
-  //    this run's listener is still attached, so the buffered prompt flushes to a live
-  //    listener before the spawning→live re-run's cleanup tears it down. (Backend buffer-
-  //    and-flush is the real prompt-race fix; see cc_session::mark_ready + WIP telemetry.)
+  //  - The shell's one-shot prompt is not lost: the backend BUFFERS output until
+  //    `cc_ready`, AND this effect no longer re-runs on the spawning→live dispatch
+  //    (it keys on `spawnNonce`, not `bridge.phase`), so the cleanup does NOT tear the
+  //    `cc-output` listener down mid-spawn. The listener stays attached when `cc_ready`
+  //    flushes the buffered prompt, so a one-shot emitter (the WP9 shell) paints. Keying
+  //    on `bridge.phase` previously re-ran the effect at "spawned", whose cleanup
+  //    unlistened before the fire-and-forget flush arrived → blank pane
+  //    (incident-terminal-blank-cursor). Backend buffer-and-flush is necessary but not
+  //    sufficient; the listener must also survive the phase transition.
   useEffect(() => {
-    if (bridge.phase !== "spawning" || !active) return;
+    if (!active) return;
     let unlistenOutput: UnlistenFn | undefined;
     let unlistenExit: UnlistenFn | undefined;
     let cancelled = false;
@@ -234,9 +253,9 @@ export function XtermPane({
         }
 
         // Listeners attached — flush the backend's pre-subscription backlog (the shell's
-        // one-shot prompt was buffered since spawn) + switch to live. The flush happens
-        // NOW, while this run's listener is attached, so the prompt lands even though the
-        // cleanup below will unlisten on the imminent spawning→live re-run.
+        // one-shot prompt was buffered since spawn) + switch to live. The `spawned`
+        // dispatch below no longer re-runs this effect (deps key on `spawnNonce`, not
+        // `bridge.phase`), so this listener stays attached to receive the flush.
         void invoke("cc_ready", { sessionId }).catch(() => {});
 
         dispatch({ type: "spawned", sessionId });
@@ -260,7 +279,17 @@ export function XtermPane({
       unlistenOutput?.();
       unlistenExit?.();
     };
-  }, [bridge.phase, projectPath, fitAndResize, spawnCommand, active]);
+    // The re-spawn trigger set comes from `spawnTriggerDeps` (single source of truth,
+    // unit-tested in spawnTrigger.test.ts): `spawnNonce`, `active`, `projectPath`,
+    // `spawnCommand`. `bridge.phase` is deliberately EXCLUDED — see the LIFECYCLE comment
+    // above; re-adding it re-runs the effect on spawning→live and tears down the listener
+    // (the blank-pane incident). `fitAndResize` is a stable useCallback appended only to
+    // satisfy exhaustive-deps; it is not a re-spawn trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps come from spawnTriggerDeps (the unit-tested contract) + the stable fitAndResize callback
+  }, [
+    ...spawnTriggerDeps({ spawnNonce, active, projectPath, spawnCommand }),
+    fitAndResize,
+  ]);
 
   // Repaint on becoming active. A pane hidden with display:none has zero size, so xterm
   // output written/laid-out while hidden is degenerate; on reveal we refit (recompute
