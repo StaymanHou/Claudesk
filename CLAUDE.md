@@ -137,7 +137,7 @@ pnpm tauri build
 - **PTY byte-injection for input; hook channel for state.** We write bytes into the CC pty for any "send a slash command" operation. We do NOT parse CC's output text to infer state. Workflow state is read from `workflow/.session.md` and similar files via a file watcher (Phase 2). CC's idle/running/awaiting-input state is read from CC's official hook channel (`UserPromptSubmit` / `Stop` / `Notification` events written to `~/.claude/settings.json`), delivered to Claudesk via Unix socket (Phase 2). NEVER from PTY output.
 - **CC hook channel uses Unix socket, not shared file.** Resolved by research: with three concurrent status-surface consumers (filmstrip, menu-bar, PiP), Unix-socket multi-consumer concurrency wins decisively. Claudesk opens the socket on launch; the installed CC hook script writes one JSON line per event.
 - **Status broadcaster fans out one stream to three subscribers.** Filmstrip (main webview), menu-bar popover (separate webview), and PiP (NSPanel webview) all subscribe to the same Tauri-event-channel broadcast of `WorkspaceStatusUpdate`. All three surfaces agree at all times.
-- **Menu-bar status item ships before PiP in Phase 2.** The Phase 2 plan includes a dogfooding gate after the menu-bar item lands: at least one daily-driver week using menu-bar alone before building PiP. If menu-bar covers the "Claudesk hidden" case, PiP defers to Phase 4.
+- **Status-surface order (resequenced 2026-06-22): PiP (M5) ships BEFORE the menu-bar (M6), and PiP is now UNCONDITIONAL.** Supersedes the earlier "menu-bar first, dogfood a week, defer PiP if sufficient" plan — that gate is dropped. All three surfaces (M4 filmstrip, M5 PiP, M6 menu-bar) subscribe to the same M3 status broadcaster regardless of build order. See `roadmap.md` → "Revision 2026-06-22".
 - **Drive mode lives in the WIP file's frontmatter.** Phase 2's drive-mode selector writes to the active WIP file's `drive_mode:` field — that field is the source of truth for the workflow's pause-policy logic. Claudesk's UI mirrors `projects.json` `default_drive_mode` only as a fallback for the gap between WIP files (e.g., right after `feature-finalize`). Never let the UI hold an in-memory drive mode that disagrees with the WIP frontmatter; always re-read on mount.
 - **Pre-risky-action checklist for scaffolders.** Scaffolders (`create-tauri-app`, `npm create *`, etc.) can wipe strategic docs. Before running one in a non-empty dir, ensure git is clean and scaffold into a sibling dir then merging. The strategic docs in `docs/product/`, the root `CLAUDE.md`, and the `_ref/` symlink are load-bearing and must survive any scaffold.
 
@@ -149,24 +149,26 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 - **ESLint pinned to v9 LTS.** ESLint v10 (Nov 2025) is incompatible with `eslint-plugin-react` 7.37.x — the plugin uses `contextOrFilename.getFilename` which v10's API removed (`TypeError: contextOrFilename.getFilename is not a function` on every lint run). `eslint` and `@eslint/js` are pinned to `^9` until `eslint-plugin-react` ships a v10-compatible release. Do not bump to v10 without first verifying the plugin has caught up.
 - **Prettier ignores strategic docs by design.** `.prettierignore` lists `docs/`, `workflow/`, `CLAUDE.md`, and `runtimes.md` — these are hand-authored prose where Prettier's blank-line-before-bullet-list rewrites are unwanted. Do NOT remove those entries casually; if you need to run Prettier on a sub-tree of those dirs, do it with explicit paths rather than removing the ignore rule. `pnpm format` skips them silently by design.
 
-## Current Phase
+## Current Milestone
 
-**Phase 1: Bare Shell + Tab Substrate (PoC).** Goal: prove the Tauri shell + embedded terminal + project picker + tab-shell substrate work together; replace the "open terminal + cd + run claude" step at the user-visible level, while shipping the WorkspaceList / Center Stage / (empty) Filmstrip layout that Phase 2 will populate. Exit criteria: click a project → working CC session running in the project dir inside a workspace within the Claudesk window, in <10s; Sublime Text pops via hotkey when needed; the WP4 thumbnail-rendering probe has produced a documented pass/fail outcome that selects Phase 2's filmstrip rendering strategy (live ~1 fps mirrors or status tiles).
+**Milestone 3: CC lifecycle & state plumbing.** Goal: Claudesk owns each workspace's CC process lifecycle and knows its idle/running/awaiting-input state from CC's **official hook signals** (`UserPromptSubmit` / `Stop` / `Notification`) delivered over a **Claudesk-owned Unix socket** — never by scraping PTY output — plus a `workflow/.session.md` file-watcher. This is the backend "central nervous system" the three status surfaces (M4 filmstrip, M5 PiP, M6 menu-bar) all subscribe to. Exit criteria: a workspace's CC state transitions (idle→running→awaiting-input→exit) are observed in Claudesk solely from the hook channel + file-watcher, broadcast to all subscribers, with no PTY-output parsing.
 
-Work packages (Phase 1 — full decomposition archived at `docs/product/archive/phase-1-bare-shell-poc/wbs.md`):
-- **WP1** Tauri 2 scaffold + dev environment
-- **WP2** Probe — CC under host-driven PTY byte-injection
-- **WP3** Probe — Sublime Text / Sublime Merge CLI shapes
-- **WP4** Probe — thumbnail-rendering cost at N=8 workspaces (gates Phase 2 filmstrip strategy)
-- **WP5** Frontend UI prototype (tab-shell substrate from day one)
-- **WP6** Project config store
-- **WP7** PtyCcSession — embedded CC terminal
-- **WP8** In-app hotkey (⌘⇧E) + right-panel button for Sublime Text pop
-- **WP9** Phase 1 polish + exit-criteria verification
+Work packages (Milestone 3 — live decomposition in `docs/product/wbs.md`). Critical path **WP1 → WP2 → WP3 → WP4 → WP6**; WP5 runs parallel off WP3:
+- **WP1** Probe — hook → Rust Unix-socket → parse wire + `settings.json` coexistence with `claude-time`
+- **WP2** Hook script + `~/.claude/settings.json` registration (additive, idempotent, reversible)
+- **WP3** `AF_UNIX` listener + synchronous receive/parse → typed `HookEvent`
+- **WP4** Status broadcaster + `WorkspaceStatusUpdate` DTO + cwd→workspace mapping + Tauri emit
+- **WP5** `workflow/.session.md` file-watcher (`notify`) → same broadcaster
+- **WP6** Frontend subscribes to `workspace-status`; renders honest idle/running/awaiting-input/unknown indicator
 
-Critical path: WP1 → WP5 → WP6 → WP7 → WP9. WP2 / WP3 / WP4 are probes that run in parallel as soon as WP1 unblocks them.
+No `/product-research` pass was needed: the CC hook contract is fully documented by the working reference at `_ref/claude-customization/tools/claude-time/hook.pl` (events, payload fields, JSON-on-stdin, `cwd`, multi-script coexistence). WP1 is a small probe of *our* seam only.
 
-**Status:** **Phase 1 COMPLETE — all WP1–WP9 shipped** (scaffold + 3 probes + frontend UI prototype + project config store + embedded CC terminal + in-app Sublime hotkey/button + Phase-1 polish/exit-criteria). WP9 (commit 91fae7f) added the two unhappy-path fixes — friendly "claude not on PATH" error (`CcError::CcNotFound`) and deleted-project prune-on-mount + toast — plus the README placeholder and exit-criteria confirmations (WP4 report linked, tab-shell substrate in place; time-to-productive accepted on feel, 3-day dogfood operator-waived). **Phase 1 cycle CLOSED** 2026-06-19 via `/product-finalize` (commit 02fb44e): durable docs resynced, backlog swept (open items deferred to Phase 2), Phase 1 WBS + research archived to `docs/product/archive/phase-1-bare-shell-poc/`. There is **no live `docs/product/wbs.md`** until the next cycle's `/product-wbs` writes one. **Next cycle:** Phase 2 (Stateful CC Controller + Multi-Workspace + Status Surfaces) — its WP headlines (WP10–WP24) live in the archived snapshot + `roadmap.md`; run `/product-wbs` (or `/product-vision`→…) to decompose them, grounding in `arch.md`'s Phase-2 forward-look + the carried-forward backlog (esp. the wp6 picker IPC error-surfacing MAJORs).
+**Status (2026-06-22):**
+- **Milestone 1 (Bare Shell + Tab Substrate PoC) — COMPLETE + CLOSED** 2026-06-19. WP1–WP9 shipped; WBS archived at `docs/product/archive/phase-1-bare-shell-poc/`.
+- **Milestone 2 (Lite Editor + Diff Viewer) — COMPLETE + CLOSED** 2026-06-22 (`/product-finalize`, commit `c501e3b`). All WPs shipped (1, 2, 3a/b/c, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13) + the terminal blank-cursor P1 incident resolved (`d26756e`). WBS + research archived at `docs/product/archive/milestone-2-lite-editor-diff-viewer/`.
+- **Roadmap resequenced dogfood-first** 2026-06-22 (commit `07444cb`): execution order is now M3 → **M4 multi-workspace** → **M5 PiP (unconditional, before menu-bar)** → **M6 menu-bar** → **M7 auto-resume** → **M8 skill-orchestration** → **M9 polish**. The M3 + M4 pair is the dogfood-replace point (drop the terminal+Sublime setup). See `roadmap.md` → "Revision 2026-06-22" for the old→new mapping.
+- **Milestone 3 WBS written** 2026-06-22 (commit `5846164`), live at `docs/product/wbs.md`. **Next:** start WP1 via the feature workflow.
+- **All commits are local-only** (no git remote yet). To publish: `gh repo create claudesk --private --source=. --remote=origin --push`.
 
 ## Key Decisions
 
