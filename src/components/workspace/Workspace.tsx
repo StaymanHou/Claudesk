@@ -15,15 +15,31 @@
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
 import { XtermPane } from "./XtermPane";
 import { RightPanelHost } from "./RightPanelHost";
+import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
+import type { WireWorkspaceState } from "../../state/workspaceStatus";
 
 interface WorkspaceProps {
   workspace: WorkspaceModel;
   visible: boolean;
   /** Store the backend CC session id once cc_spawn resolves (WP7). */
   onSessionId?: (workspaceId: string, ccSessionId: string) => void;
+  /**
+   * Live CC state from the `workspace-status` hook channel (M3 WP6). Defaults to
+   * `"unknown"` — the honest no-data state before any hook event arrives. Phase 2
+   * feeds the live value from the app-level subscription.
+   */
+  statusState?: WireWorkspaceState;
+  /** Last prompt/message snippet for the indicator tooltip (M3 WP6). */
+  statusSnippet?: string;
 }
 
-export function Workspace({ workspace, visible, onSessionId }: WorkspaceProps) {
+export function Workspace({
+  workspace,
+  visible,
+  onSessionId,
+  statusState = "unknown",
+  statusSnippet,
+}: WorkspaceProps) {
   return (
     <div
       className="workspace"
@@ -31,6 +47,10 @@ export function Workspace({ workspace, visible, onSessionId }: WorkspaceProps) {
       // display:none keeps the subtree mounted (xterm + PTY persist).
       style={{ display: visible ? "grid" : "none" }}
     >
+      <div className="workspace-header" data-testid="workspace-header">
+        <span className="workspace-header-name">{workspace.display_name}</span>
+        <WorkspaceStatusIndicator state={statusState} snippet={statusSnippet} />
+      </div>
       <div className="workspace-left">
         <XtermPane
           workspaceId={workspace.id}

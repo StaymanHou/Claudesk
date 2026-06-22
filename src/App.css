@@ -93,12 +93,82 @@ body,
   overflow: hidden;
 }
 
-/* One workspace = 50/50 horizontal split. Fills the center stage. */
+/* One workspace = a thin chrome header row spanning the full width, then a
+   50/50 horizontal split below it. Fills the center stage. */
 .workspace {
   grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr;
   height: 100%;
   width: 100%;
   /* display is toggled grid/none by the `visible` prop (stay-mounted rule). */
+}
+
+/* WP6 — workspace chrome header: project name + the honest CC-status indicator.
+   Spans both columns above the left/right split. Thin, dark, unobtrusive. */
+.workspace-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0.6rem;
+  min-height: 0;
+  background-color: #111;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+.workspace-header-name {
+  font-weight: 600;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* WP6 — the status indicator: a colored dot + label. Dark-only palette. */
+.workspace-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.workspace-status-label {
+  font-size: 0.78rem;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: #6e7681; /* fallback (unknown) */
+}
+
+/* Running — Claude brand orange (#d97757), matching Claude Code's own "running"
+   accent (brand-aligned, warm/human). AwaitingInput — cool blue (#539bf5),
+   maximally distinct from the orange so "needs you" never reads as "still
+   running". Idle — calm grey. Unknown — muted grey (honest no-data). The
+   warm/cool split is deliberate: Running and Awaiting must never be confusable. */
+.status-dot-running {
+  background-color: #d97757;
+  box-shadow: 0 0 4px rgba(217, 119, 87, 0.6);
+}
+
+.status-dot-idle {
+  background-color: #6e7681;
+}
+
+.status-dot-awaiting {
+  background-color: #539bf5;
+  box-shadow: 0 0 4px rgba(83, 155, 245, 0.6);
+}
+
+.status-dot-unknown {
+  background-color: #484f58;
 }
 
 .workspace-left {

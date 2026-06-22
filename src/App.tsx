@@ -1,6 +1,7 @@
 import "./App.css";
 import { useEffect } from "react";
 import { useWorkspaceList } from "./state/useWorkspaceList";
+import { useWorkspaceStatus } from "./state/useWorkspaceStatus";
 import { CenterStage } from "./components/workspace/CenterStage";
 import { Filmstrip } from "./components/workspace/Filmstrip";
 import { ProjectPicker } from "./components/picker/ProjectPicker";
@@ -19,6 +20,9 @@ import { parseSeedParam } from "./state/seedWorkspace";
 function App() {
   const { workspaces, focusedId, view, openWorkspace, setSessionId } =
     useWorkspaceList();
+  // M3 WP6 — live CC status from the `workspace-status` hook channel + the
+  // open/close registration that makes WP4's cwd→workspace match resolve.
+  const { stateFor } = useWorkspaceStatus(workspaces);
 
   // WP6 Phase 2 — DEV-ONLY workspace seed seam. Gated on `import.meta.env.DEV`, so
   // neither path exists in a `pnpm tauri build` bundle. Both paths funnel through
@@ -49,6 +53,7 @@ function App() {
             workspaces={workspaces}
             focusedId={focusedId}
             onSessionId={setSessionId}
+            statusFor={stateFor}
           />
         </>
       )}

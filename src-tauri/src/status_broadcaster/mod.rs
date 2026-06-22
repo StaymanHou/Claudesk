@@ -48,7 +48,7 @@ use crate::hook_socket::HookEvent;
 
 /// A workspace's CC lifecycle state, derived solely from the hook channel (never
 /// from PTY output). Serializes snake_case so the frontend mirrors it verbatim.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceState {
     /// CC is idle (finished its last turn) — emitted on `Stop`.
@@ -58,11 +58,13 @@ pub enum WorkspaceState {
     /// CC has paused for the user (permission / input) — emitted on `Notification`.
     AwaitingInput,
     /// No hook event observed yet — the honest default a surface shows before any
-    /// event arrives. Never emitted from an event; the registry/frontend initial.
-    /// Constructed by WP6's frontend (the TS default) and the variant tests here —
-    /// the backend broadcaster never emits it, so it is dead to the non-test build
-    /// until WP6 lands. Targeted allow (removal owner = WP6), not a module-wide one.
-    #[allow(dead_code)] // WP6: the frontend initial-state value; backend never emits it.
+    /// event arrives. Never *emitted* from an event (the broadcaster only ever
+    /// produces the three live states); it exists on the Rust side so the DTO enum
+    /// is complete and its `"unknown"` serde rendering is pinned. The frontend (TS)
+    /// owns it as the initial state a workspace shows before its first hook event.
+    /// Marked the `#[default]` because Unknown IS the absence-of-data state — this
+    /// also gives the variant a live (non-test) presence via the derived `Default`.
+    #[default]
     Unknown,
 }
 
@@ -123,17 +125,14 @@ impl WorkspaceRegistry {
     /// exact-string match can still resolve it (best-effort; the resolve side also
     /// canonicalizes, so a both-canonicalizable pair matches regardless).
     ///
-    /// Called by WP6's workspace-open command — dead to the non-test build until
-    /// then (the seam WP4 defines + tests; removal owner = WP6). Targeted allow.
-    #[allow(dead_code)] // WP6: wired by workspace-open. Exercised by WP4's tests.
+    /// Called by WP6's `workspace_register` command (open → register).
     pub fn register(&mut self, project_path: &Path, workspace_id: String) {
         let key = canonical_key(project_path);
         self.by_path.insert(key, workspace_id);
     }
 
     /// Deregister a closed workspace by its project path. Called by WP6's
-    /// workspace-close command; dead to the non-test build until then.
-    #[allow(dead_code)] // WP6: wired by workspace-close. Exercised by WP4's tests.
+    /// `workspace_deregister` command (close → deregister).
     pub fn deregister(&mut self, project_path: &Path) {
         let key = canonical_key(project_path);
         self.by_path.remove(&key);
@@ -226,6 +225,14 @@ mod tests {
             event_to_state(&ev("Notification", "/p")),
             Some(WorkspaceState::AwaitingInput)
         );
+    }
+
+    #[test]
+    fn default_workspace_state_is_unknown() {
+        // P2.4: Unknown is the derived Default — the honest no-data state. This pins
+        // the #[default] choice so a future reorder/rename can't silently change the
+        // default a consumer constructing `WorkspaceState::default()` would get.
+        assert_eq!(WorkspaceState::default(), WorkspaceState::Unknown);
     }
 
     #[test]

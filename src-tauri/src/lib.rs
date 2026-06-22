@@ -147,6 +147,13 @@ pub fn run() {
             // ours). Exposed for a future settings toggle / clean teardown. The
             // install runs once at launch (WP2 Phase 2 setup wiring), not via IPC.
             hook_install::commands::hook_uninstall,
+            // M3 WP6: workspace-open → register the project path with the status
+            // broadcaster's WorkspaceRegistry (so cwd→workspace matching resolves
+            // hook events), workspace-close → deregister. The frontend invokes these
+            // on open/close; until a path is registered the broadcaster drops every
+            // event (no match) so nothing is emitted.
+            status_broadcaster::commands::workspace_register,
+            status_broadcaster::commands::workspace_deregister,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an

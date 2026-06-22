@@ -18,10 +18,11 @@
 //! `AppHandle` for `emit`. A closed channel (`recv` `Err`) means the socket listener
 //! shut down → the drain thread exits cleanly.
 
+use std::path::Path;
 use std::sync::mpsc::Receiver;
 use std::thread;
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, State};
 
 use super::{to_update, SharedRegistry, WorkspaceRegistry};
 use crate::hook_socket::HookEvent;
@@ -99,6 +100,43 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>) {
 /// here so the registry's construction lives with its consumer.
 pub fn init_registry() -> SharedRegistry {
     std::sync::Mutex::new(WorkspaceRegistry::new())
+}
+
+/// Register an open workspace's project path → `workspace_id` so the broadcaster's
+/// cwd→workspace match can resolve hook events fired from that project dir. Called
+/// by the frontend on workspace-open (M3 WP6). The path is canonicalized inside
+/// [`WorkspaceRegistry::register`], matching how `resolve_cwd` canonicalizes the
+/// incoming hook `cwd`.
+///
+/// A poisoned lock is surfaced as an error rather than swallowed (the never-swallow
+/// IPC lesson) — a failed registration means status stays Unknown for that
+/// workspace, which the frontend shows honestly.
+#[tauri::command]
+pub fn workspace_register(
+    registry: State<'_, SharedRegistry>,
+    project_path: String,
+    workspace_id: String,
+) -> Result<(), String> {
+    let mut reg = registry
+        .lock()
+        .map_err(|_| "workspace registry lock poisoned".to_string())?;
+    reg.register(Path::new(&project_path), workspace_id);
+    Ok(())
+}
+
+/// Deregister a closed workspace by its project path (M3 WP6, workspace-close). A
+/// path not present is a no-op (the underlying `HashMap::remove`); a poisoned lock
+/// is surfaced, never swallowed.
+#[tauri::command]
+pub fn workspace_deregister(
+    registry: State<'_, SharedRegistry>,
+    project_path: String,
+) -> Result<(), String> {
+    let mut reg = registry
+        .lock()
+        .map_err(|_| "workspace registry lock poisoned".to_string())?;
+    reg.deregister(Path::new(&project_path));
+    Ok(())
 }
 
 #[cfg(test)]
@@ -193,5 +231,48 @@ mod tests {
     fn init_registry_starts_empty() {
         let reg = init_registry();
         assert_eq!(reg.lock().unwrap().len(), 0);
+    }
+
+    // The workspace_register / workspace_deregister commands are thin lock+call
+    // wrappers over WorkspaceRegistry::register/deregister (themselves tested in
+    // mod.rs). State<'_, _> injection needs a live Tauri app, so these tests
+    // exercise the exact lock-then-mutate path the commands run by operating on a
+    // raw SharedRegistry (what init_registry returns + what the app manages),
+    // proving the register→resolve→deregister→miss lifecycle through the same
+    // Mutex<WorkspaceRegistry> the commands lock.
+    #[test]
+    fn register_then_resolve_then_deregister_lifecycle() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let shared = init_registry();
+        let cwd = dir.path().to_string_lossy().to_string();
+
+        // Register (the workspace_register command body).
+        {
+            let mut reg = shared.lock().unwrap();
+            reg.register(Path::new(&cwd), "ws-1".to_string());
+        }
+        // A hook event from that cwd now resolves to the workspace.
+        assert_eq!(
+            shared.lock().unwrap().resolve_cwd(&cwd),
+            Some("ws-1".to_string())
+        );
+
+        // Deregister (the workspace_deregister command body).
+        {
+            let mut reg = shared.lock().unwrap();
+            reg.deregister(Path::new(&cwd));
+        }
+        // Now it misses — the event would be dropped (status stays Unknown).
+        assert_eq!(shared.lock().unwrap().resolve_cwd(&cwd), None);
+    }
+
+    #[test]
+    fn deregister_unknown_path_is_a_noop() {
+        let shared = init_registry();
+        // Deregistering a path that was never registered must not error/panic —
+        // HashMap::remove on an absent key is a no-op (the command returns Ok).
+        let mut reg = shared.lock().unwrap();
+        reg.deregister(Path::new("/never/registered"));
+        assert_eq!(reg.len(), 0);
     }
 }

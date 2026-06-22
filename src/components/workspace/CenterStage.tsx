@@ -7,18 +7,22 @@
 
 import { Workspace } from "./Workspace";
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
+import type { WireWorkspaceState } from "../../state/workspaceStatus";
 
 interface CenterStageProps {
   workspaces: WorkspaceModel[];
   focusedId: string | null;
   /** Forwarded to each Workspace so cc_spawn's session id reaches WorkspaceList (WP7). */
   onSessionId?: (workspaceId: string, ccSessionId: string) => void;
+  /** Live CC state lookup by workspace id (M3 WP6 — the `workspace-status` channel). */
+  statusFor?: (workspaceId: string) => WireWorkspaceState;
 }
 
 export function CenterStage({
   workspaces,
   focusedId,
   onSessionId,
+  statusFor,
 }: CenterStageProps) {
   return (
     <div className="center-stage" data-testid="center-stage">
@@ -28,6 +32,7 @@ export function CenterStage({
           workspace={ws}
           visible={ws.id === focusedId}
           onSessionId={onSessionId}
+          statusState={statusFor?.(ws.id) ?? "unknown"}
         />
       ))}
     </div>
