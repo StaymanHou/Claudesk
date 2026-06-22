@@ -11,6 +11,7 @@
 // restores editor focus when it closes.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   filterCommands,
   PALETTE_CHORD_LABEL,
@@ -28,10 +29,27 @@ export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // WP11 Phase 5 — the palette is rendered deep inside a per-pane EditorPanel, but
+  // its backdrop must cover the FULL right panel (like the ⌘⇧F global-search overlay,
+  // which mounts at the RightPanelHost level). The intervening `.editor-pane` /
+  // `.editor-split-pane` boxes are `position:relative`, so an in-place absolute
+  // backdrop would anchor to a narrow pane. We portal the overlay UP to the enclosing
+  // `.workspace-right` so its `inset:0` fills the right half — matching global search
+  // exactly, without lifting the per-view command set out of EditorPanel. Resolved on
+  // mount via a hidden anchor's `closest()`; falls back to in-place render if not found.
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 
   // Auto-focus the filter on open so the user types immediately (Sublime parity).
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Resolve the portal target (the enclosing right panel) once mounted.
+  useEffect(() => {
+    setPortalTarget(
+      anchorRef.current?.closest(".workspace-right") as HTMLElement | null,
+    );
   }, []);
 
   const filtered = useMemo(
@@ -77,7 +95,7 @@ export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
     }
   };
 
-  return (
+  const overlay = (
     <div
       className="command-palette-backdrop"
       data-testid="command-palette"
@@ -141,5 +159,15 @@ export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
         </ul>
       </div>
     </div>
+  );
+
+  // The anchor is a zero-size span used only to resolve the enclosing `.workspace-right`
+  // on mount; the overlay itself is portaled there (or rendered in place as a fallback
+  // before the target resolves / if not found).
+  return (
+    <>
+      <span ref={anchorRef} style={{ display: "none" }} aria-hidden="true" />
+      {portalTarget ? createPortal(overlay, portalTarget) : overlay}
+    </>
   );
 }

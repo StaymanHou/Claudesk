@@ -50,6 +50,12 @@ export function selectPanel(
   return target;
 }
 
+// WP11 — `railVisibleForPanel` (a pure "rail visible for this panel?" predicate)
+// was removed in Phase 5: the FileTree rail is no longer CSS-hidden per panel — it
+// now lives STRUCTURALLY inside the editor slot (RightPanelHost), so it only exists
+// when the Editor panel is rendered. The editor-only guarantee is structural, not a
+// computed visibility flag.
+
 /** A minimal keydown shape — just the fields the matcher reads (mirrors ChordEvent). */
 export interface PanelChordEvent {
   metaKey: boolean;

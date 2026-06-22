@@ -39,9 +39,12 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-16)
+- **Last:** 1s (2026-06-21, WP11 P4: +10 railWidth cases → 337 pass)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-21 (WP11 P4: +10 railWidth cases → 35 files / 337 tests; run ~0.73s)
+  - 1s — 2026-06-21 (WP11 P3: +6 gitStatus cases → 34 files / 327 tests; run ~0.67s)
+  - 1s — 2026-06-21 (WP11 P1: +4 cases → 33 files / 321 tests; run ~0.63s)
   - 1s — 2026-06-16
 
 ## pnpm lint
@@ -53,9 +56,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 4s (2026-06-21, warm WP12 P1 stat_file; +4 tests → 111 pass, run ~0.40s)
+- **Last:** 8s (2026-06-21, WP11 P2: +8 git_status tests → 136 pass; warm recompile ~7.3s, run ~0.45s)
 - **Use timeout:** 120000
 - **History:**
+  - 8s — 2026-06-21 (WP11 P2: new git_status module, +8 status_map_core tests → 136 pass; reuses git2/git_diff, no new deps)
   - 4s — 2026-06-21 (warm, WP12 P1: +4 stat_file_core tests → 111 pass; no new deps, serde already present)
   - 5s — 2026-06-20 (warm, WP10 P1: +8 walk_tree_core tests → 90 pass; no new deps, reused ignore crate)
   - 30s — 2026-06-20 (cold build, WP6 P1: +9 fs_index tests → 82 pass; ignore 0.4.26 dep tree compiled, test run itself ~0.37s)

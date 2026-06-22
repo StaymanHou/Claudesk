@@ -75,11 +75,17 @@ interface EditorSplitProps {
   highlightTarget: HighlightTarget | null;
   /** Reports the focused pane's active file path up for the FileTree highlight. */
   onActivePathChange?: (path: string | null) => void;
+  /**
+   * WP11 — fires after a successful save (write_file ok) with the saved path, so the
+   * parent can refresh the file tree's git-status indicators (a save changes the
+   * file's git status). Not called on a save that conflicts or fails.
+   */
+  onSaved?: (path: string) => void;
 }
 
 export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
   function EditorSplit(
-    { projectPath, active, highlightTarget, onActivePathChange },
+    { projectPath, active, highlightTarget, onActivePathChange, onSaved },
     ref,
   ) {
     // The pane model (reused editorPanes reducer): pane list + focused pane id.
@@ -255,6 +261,9 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
             contents,
           });
           dispatchDocs({ type: "save-ok", path, contents });
+          // WP11 — the save changed the file's git status; tell the parent to refresh
+          // the tree indicators. After save-ok (not on conflict/fail).
+          onSaved?.(path);
           // Refresh the marker to the just-written file so the next check is quiet.
           try {
             const after = await invoke<FileMarker>("stat_file", {
@@ -269,7 +278,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
           dispatchDocs({ type: "save-fail", path, message: String(e) });
         }
       },
-      [projectPath],
+      [projectPath, onSaved],
     );
 
     // Load-ONCE-per-path: when a freshly-opened entry is still idle, read_file it. One
@@ -387,17 +396,9 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
 
     return (
       <div className="editor-split" data-testid="editor-split">
-        <div className="editor-split-bar" data-testid="editor-split-bar">
-          <button
-            type="button"
-            className="editor-split-btn"
-            data-testid="editor-split-btn"
-            onClick={splitPane}
-            title="Split editor (new pane with its own tabs)"
-          >
-            Split
-          </button>
-        </div>
+        {/* WP11 Phase 5 — the dedicated `.editor-split-bar` row was removed; the Split
+            control now lives in the active pane's tab strip (PaneTabs onSplit) to
+            reclaim its full-width row of vertical space. */}
         <div className="editor-split-panes">
           {panes.panes.map((pane) => (
             <div
@@ -407,22 +408,6 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
               data-pane-id={pane.id}
               data-active-pane={pane.id === panes.activePaneId}
             >
-              {splitable && (
-                <button
-                  type="button"
-                  className="editor-pane-close"
-                  data-testid="editor-pane-close"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closePane(pane.id);
-                  }}
-                  title="Close this pane"
-                  aria-label="Close pane"
-                >
-                  ✕
-                </button>
-              )}
               <PaneTabs
                 ref={(h) => {
                   paneHandles.current.set(pane.id, h);
@@ -431,6 +416,16 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
                 highlightTarget={
                   pane.id === panes.activePaneId ? highlightTarget : null
                 }
+                // WP11 Phase 5 — EVERY pane shows its own Split control in its tab
+                // strip (splitPane inserts a new pane after the active one). Passing it
+                // to every pane (not just the active one) fixes the "Split gone with 2
+                // panes" bug: after a split the new pane becomes active + empty, so an
+                // active-only gate left NO pane showing the control.
+                onSplit={splitPane}
+                // WP11 Phase 5 — close-pane control, now a strip icon beside Split
+                // (was an absolute ✕ overlapping it). Only when >1 pane (the sole
+                // pane can't be closed). closePane(pane.id) targets THIS pane.
+                onClosePane={splitable ? () => closePane(pane.id) : undefined}
                 docs={docs}
                 onTabOpen={onTabOpen}
                 onTabClose={onTabClose}

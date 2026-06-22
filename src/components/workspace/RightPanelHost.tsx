@@ -14,7 +14,12 @@
 // (the editor's open file + scroll, the diff's selected file) across a panel switch
 // AND across a center-stage switch. `visible` gates the active panel's liveness.
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { EditorSplit, type EditorSplitHandle } from "./editor/EditorSplit";
 import { tabSwitchIndex } from "./editor/tabSwitchChord";
 import { DiffPanel } from "./diff/DiffPanel";
@@ -23,6 +28,11 @@ import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
 import { FileTree } from "./filetree/FileTree";
+import {
+  clampRailWidth,
+  loadRailWidth,
+  saveRailWidth,
+} from "./filetree/railWidth";
 import { ProjectSearch } from "./search/ProjectSearch";
 import { isSearchChord } from "./search/searchChord";
 import {
@@ -106,6 +116,52 @@ export function RightPanelHost({
   // editor's horizontal width in the 50/50 split. State lives here so it persists
   // across center-stage switches (the panels-stay-mounted rule). Default expanded.
   const [treeCollapsed, setTreeCollapsed] = useState(false);
+
+  // WP11 — bumped on each successful editor save so the FileTree re-fetches the
+  // git-status map (a save changes the file's status). Passed down to FileTree;
+  // the EditorSplit's onSaved callback increments it. (No live watcher — the refresh
+  // is on tree-load + on-save only, per the M2 scope; the Phase-2 notify watcher is
+  // the deferred real-time path.)
+  const [gitStatusRefreshKey, setGitStatusRefreshKey] = useState(0);
+
+  // WP11 Part C — the user-adjustable file-tree rail width (drag handle below).
+  // Seeded from localStorage (default 299, the Part-A CSS value); applied as an
+  // inline style overriding the CSS default. State lives here so it persists across
+  // center-stage switches (panels-stay-mounted). The drag's start x + start width are
+  // held in a ref so the document mousemove handler reads them without re-binding.
+  const [railWidth, setRailWidth] = useState<number>(loadRailWidth);
+  const railDragRef = useRef<{ startX: number; startWidth: number } | null>(
+    null,
+  );
+
+  // Begin a rail-resize drag: record the start point + width, then track the pointer
+  // on the document (so the drag continues even if the cursor leaves the thin handle)
+  // until mouseup, which persists the final width. Clamped live so the rail can't be
+  // dragged past its bounds.
+  const onRailResizeStart = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    railDragRef.current = { startX: e.clientX, startWidth: railWidth };
+    const onMove = (ev: MouseEvent) => {
+      const drag = railDragRef.current;
+      if (!drag) return;
+      setRailWidth(
+        clampRailWidth(drag.startWidth + (ev.clientX - drag.startX)),
+      );
+    };
+    const onUp = () => {
+      railDragRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      // Persist the final width (read from state via the functional updater so we
+      // store the latest clamped value, not a stale closure capture).
+      setRailWidth((w) => {
+        saveRailWidth(w);
+        return w;
+      });
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   // Which right-half panel is front. Direct-select via tabs + ⌘⇧ chords. Both panels
   // stay mounted (display:none toggle) so each keeps its state across switches.
@@ -257,159 +313,191 @@ export function RightPanelHost({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [visible]);
 
+  // WP11 Phase 5 — the FileTree rail. Lives INSIDE the editor slot (operator request
+  // at review-quality 2026-06-21) so the Editor/Diff/Terminal tab row is the OUTER
+  // full-width layer and the tree belongs to the editor panel, not the whole column.
+  // The rail is the editor's nav affordance — it is only rendered in the editor slot,
+  // so Diff + Terminal get full width structurally (superseding Phase 1's CSS-hide).
+  // Kept MOUNTED with the always-mounted editor slot, so the expanded-dir Set + the
+  // fs_tree walk survive an Editor→Diff→Editor round-trip.
+  const fileTreeRail = (
+    <div
+      className={`file-tree-rail${treeCollapsed ? " is-collapsed" : ""}`}
+      data-testid="file-tree-rail"
+      // WP11 Part C — the dragged width overrides the CSS default. Not applied when
+      // collapsed (the .is-collapsed rule pins width:auto for the strip).
+      style={treeCollapsed ? undefined : { width: `${railWidth}px` }}
+    >
+      <button
+        type="button"
+        className="file-tree-collapse"
+        data-testid="file-tree-collapse"
+        aria-label={treeCollapsed ? "Show file tree" : "Hide file tree"}
+        aria-expanded={!treeCollapsed}
+        title={treeCollapsed ? "Show file tree" : "Hide file tree"}
+        onClick={() => setTreeCollapsed((c) => !c)}
+      >
+        {treeCollapsed ? "›" : "‹ Files"}
+      </button>
+      {/* The tree stays MOUNTED even when collapsed — CSS (.is-collapsed
+          .file-tree-body { display:none }) hides the body in the strip. Keeping it
+          mounted preserves the expanded-dir Set AND avoids re-issuing the fs_tree
+          walk on every collapse→expand cycle. */}
+      <FileTree
+        projectPath={projectPath}
+        openPath={activePath}
+        onOpen={openFile}
+        gitStatusRefreshKey={gitStatusRefreshKey}
+      />
+      {/* WP11 Part C — drag handle on the rail's right edge. mousedown begins a
+          document-tracked drag (onRailResizeStart); CSS hides it when the rail is
+          collapsed so it can't be grabbed in that state. */}
+      <div
+        className="file-tree-resize"
+        data-testid="file-tree-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize file tree"
+        onMouseDown={onRailResizeStart}
+      />
+    </div>
+  );
+
   return (
     <div className="workspace-right">
-      {/* WP10 — the right-half body is a horizontal row: the FileTree rail (left) +
-          the panel column (right). The rail collapses to a strip to reclaim width
-          for the editor in the 50/50 split; collapse state persists (mounted). */}
-      <div className="right-panel-body">
+      {/* WP11 Phase 5 — the right half is a single vertical column: the
+          Editor/Diff/Terminal tab row on top (full width), then the panel slots. The
+          FileTree rail is no longer a peer here — it lives INSIDE the editor slot
+          below, so the tab row spans full width and the tree is editor-scoped. */}
+      <div className="right-panel-main">
+        {/* Clickable panel tabs — direct-select, coexisting with the ⌘⇧ chords. */}
         <div
-          className={`file-tree-rail${treeCollapsed ? " is-collapsed" : ""}`}
+          className="right-panel-toggle"
+          role="tablist"
+          aria-label="right panel"
         >
           <button
             type="button"
-            className="file-tree-collapse"
-            data-testid="file-tree-collapse"
-            aria-label={treeCollapsed ? "Show file tree" : "Hide file tree"}
-            aria-expanded={!treeCollapsed}
-            title={treeCollapsed ? "Show file tree" : "Hide file tree"}
-            onClick={() => setTreeCollapsed((c) => !c)}
+            role="tab"
+            aria-selected={panel === "editor"}
+            className={`panel-tab${panel === "editor" ? " is-active" : ""}`}
+            data-testid="panel-tab-editor"
+            onClick={() => setPanel((cur) => selectPanel(cur, "editor"))}
+            title="Editor (⌘⇧E)"
           >
-            {treeCollapsed ? "›" : "‹ Files"}
+            Editor
           </button>
-          {/* The tree stays MOUNTED even when collapsed — CSS (.is-collapsed
-              .file-tree-body { display:none }) hides the body in the strip. Keeping
-              it mounted preserves the expanded-dir Set AND avoids re-issuing the
-              fs_tree walk on every collapse→expand cycle. */}
-          <FileTree
-            projectPath={projectPath}
-            openPath={activePath}
-            onOpen={openFile}
-          />
-        </div>
-
-        <div className="right-panel-main">
-          {/* Clickable panel tabs — direct-select, coexisting with the ⌘⇧ chords. */}
-          <div
-            className="right-panel-toggle"
-            role="tablist"
-            aria-label="right panel"
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panel === "diff"}
+            className={`panel-tab${panel === "diff" ? " is-active" : ""}`}
+            data-testid="panel-tab-diff"
+            onClick={() => setPanel((cur) => selectPanel(cur, "diff"))}
+            title="Diff (⌘⇧D)"
           >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={panel === "editor"}
-              className={`panel-tab${panel === "editor" ? " is-active" : ""}`}
-              data-testid="panel-tab-editor"
-              onClick={() => setPanel((cur) => selectPanel(cur, "editor"))}
-              title="Editor (⌘⇧E)"
-            >
-              Editor
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={panel === "diff"}
-              className={`panel-tab${panel === "diff" ? " is-active" : ""}`}
-              data-testid="panel-tab-diff"
-              onClick={() => setPanel((cur) => selectPanel(cur, "diff"))}
-              title="Diff (⌘⇧D)"
-            >
-              Diff
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={panel === "terminal"}
-              className={`panel-tab${panel === "terminal" ? " is-active" : ""}`}
-              data-testid="panel-tab-terminal"
-              onClick={() => setPanel((cur) => selectPanel(cur, "terminal"))}
-              title="Terminal (⌘⇧T)"
-            >
-              Terminal
-            </button>
+            Diff
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panel === "terminal"}
+            className={`panel-tab${panel === "terminal" ? " is-active" : ""}`}
+            data-testid="panel-tab-terminal"
+            onClick={() => setPanel((cur) => selectPanel(cur, "terminal"))}
+            title="Terminal (⌘⇧T)"
+          >
+            Terminal
+          </button>
 
-            {/* WP8 — external-app launchers, right-aligned past a divider so they
+          {/* WP8 — external-app launchers, right-aligned past a divider so they
                 read as ACTIONS distinct from the selectable Editor/Diff tabs.
                 Both KEPT permanently (the Sublime Text pop is no longer removed);
                 only the old ⌘⇧O Text hotkey was dropped — these buttons are the
                 sole affordance. Each calls its backend command with this host's
                 projectPath (always the focused tab — a backgrounded host is
                 display:none and unclickable). */}
-            <span className="panel-launch-group" aria-hidden="true" />
-            <button
-              type="button"
-              className="panel-launch"
-              data-testid="sublime-open"
-              onClick={() => void openSublime(projectPath)}
-              aria-label="Open in Sublime Text"
-              title="Open in Sublime Text"
-            >
-              <SublimeTextIcon />
-            </button>
-            <button
-              type="button"
-              className="panel-launch"
-              data-testid="smerge-open"
-              onClick={() => void openSublimeMerge(projectPath)}
-              aria-label="Open in Sublime Merge"
-              title="Open in Sublime Merge"
-            >
-              <SublimeMergeIcon />
-            </button>
-          </div>
+          <span className="panel-launch-group" aria-hidden="true" />
+          <button
+            type="button"
+            className="panel-launch"
+            data-testid="sublime-open"
+            onClick={() => void openSublime(projectPath)}
+            aria-label="Open in Sublime Text"
+            title="Open in Sublime Text"
+          >
+            <SublimeTextIcon />
+          </button>
+          <button
+            type="button"
+            className="panel-launch"
+            data-testid="smerge-open"
+            onClick={() => void openSublimeMerge(projectPath)}
+            aria-label="Open in Sublime Merge"
+            title="Open in Sublime Merge"
+          >
+            <SublimeMergeIcon />
+          </button>
+        </div>
 
-          {/* Editor split (WP12) — kept mounted; hidden (not unmounted) when Diff is
+        {/* Editor split (WP12) — kept mounted; hidden (not unmounted) when Diff is
               front so every pane's tabs + buffers + scroll survive the switch.
               EditorSplit owns the pane model; each pane has its own tab strip +
               open-file set (PaneTabs). Files open via the Cmd+P finder (WP6), the
               WP10 file tree, the diff "Open", or (WP7) a search result — all through
               `openFile` → the focused pane. */}
-          <div
-            className="right-panel-slot"
-            style={{ display: panel === "editor" ? "flex" : "none" }}
-          >
-            <EditorSplit
-              ref={editorSplitRef}
-              projectPath={projectPath}
-              active={visible && panel === "editor"}
-              highlightTarget={highlightTarget}
-              onActivePathChange={setActivePath}
-            />
-          </div>
+        {/* WP11 Phase 5 — the editor slot is a horizontal flex: the FileTree rail
+              (left) + the EditorSplit. The rail lives HERE (not as a panel-column
+              peer) so it is structurally editor-only — Diff + Terminal slots below
+              have no rail and get full width. */}
+        <div
+          className="right-panel-slot right-panel-slot--editor"
+          style={{ display: panel === "editor" ? "flex" : "none" }}
+        >
+          {fileTreeRail}
+          <EditorSplit
+            ref={editorSplitRef}
+            projectPath={projectPath}
+            active={visible && panel === "editor"}
+            highlightTarget={highlightTarget}
+            onActivePathChange={setActivePath}
+            // WP11 — a save changes the file's git status; bump the key so the
+            // FileTree re-fetches its status map and refreshes the row indicators.
+            onSaved={() => setGitStatusRefreshKey((k) => k + 1)}
+          />
+        </div>
 
-          {/* Diff panel — kept mounted; the selected-file diff survives the switch.
+        {/* Diff panel — kept mounted; the selected-file diff survives the switch.
               `active` is gated on BOTH workspace visibility AND the diff panel being
               front so a backgrounded panel doesn't auto-refresh its file list. */}
-          <div
-            className="right-panel-slot"
-            style={{ display: panel === "diff" ? "flex" : "none" }}
-          >
-            <DiffPanel
-              projectPath={projectPath}
-              active={visible && panel === "diff"}
-              // "Open" always opens the live working-tree file (by design — see
-              // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
-              onOpenInEditor={openFile}
-            />
-          </div>
+        <div
+          className="right-panel-slot"
+          style={{ display: panel === "diff" ? "flex" : "none" }}
+        >
+          <DiffPanel
+            projectPath={projectPath}
+            active={visible && panel === "diff"}
+            // "Open" always opens the live working-tree file (by design — see
+            // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
+            onOpenInEditor={openFile}
+          />
+        </div>
 
-          {/* WP9 — second-terminal panel: a login shell `cd`'d into the project.
+        {/* WP9 — second-terminal panel: a login shell `cd`'d into the project.
               Kept MOUNTED (display:none when not front) so the shell session +
               scrollback survive panel + center-stage switches. Mounting the slot
               in the SAME change that added "terminal" to AVAILABLE_PANELS is the
               SURFACE-2026-06-20 guard: selectPanel can now return "terminal", and
               this slot guarantees that never leaves the right half blank. */}
-          <div
-            className="right-panel-slot"
-            style={{ display: panel === "terminal" ? "flex" : "none" }}
-          >
-            <TerminalPane
-              workspaceId={workspaceId}
-              projectPath={projectPath}
-              active={visible && panel === "terminal"}
-            />
-          </div>
+        <div
+          className="right-panel-slot"
+          style={{ display: panel === "terminal" ? "flex" : "none" }}
+        >
+          <TerminalPane
+            workspaceId={workspaceId}
+            projectPath={projectPath}
+            active={visible && panel === "terminal"}
+          />
         </div>
       </div>
 

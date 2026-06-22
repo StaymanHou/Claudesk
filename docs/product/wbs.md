@@ -200,8 +200,9 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [ ] **(B)** Backend `git_status` core + command: reuse `git2` (already a dep, WP4) to return per-path working-tree status (modified / added / deleted / untracked / clean) for the workspace dir; pure-fn core (TempDir git-fixture testable) + thin Tauri command (errors surfaced as `String`, the WP6 lesson)
 - [ ] **(B)** Per-row git-status indicator in `FileTree`/`TreeRow`: a colored dot/mark per file (and rolled-up for dirs, optional) reflecting `git_status`; dark-only palette matching Sublime's convention. Refresh policy decided at build (on tree load + on save; a live `notify` watcher is out of scope — that's the Phase-2 watcher milestone)
 - [ ] Unit tests: the `git_status` pure core (TempDir git fixture with known modified/untracked/clean files) + any pure status→indicator mapping helper
+- [ ] **(C — added 2026-06-21 at WP11 verify-human)** Drag-to-resize the file-tree rail: a `col-resize` drag handle on the rail's right edge resizes `.file-tree-rail` live (clamped min/max); the chosen width persists across app restarts via localStorage (UI chrome — app-global, no backend command); the Part A 299px becomes the *default*. Composes with the editor-only scoping + collapse toggle. Pure `clampRailWidth`/drag-math helper, vitest-tested.
 
-**Source:** operator request at WP10 verify-human, 2026-06-20 (reference image: Sublime sidebar status dots). Originally captured as SURFACE-2026-06-20-WP10-FOLLOWUP-TREE-EDITOR-POLISH; promoted to this WP at operator direction.
+**Source:** operator request at WP10 verify-human, 2026-06-20 (reference image: Sublime sidebar status dots). Originally captured as SURFACE-2026-06-20-WP10-FOLLOWUP-TREE-EDITOR-POLISH; promoted to this WP at operator direction. **Part C (drag-to-resize rail) added 2026-06-21 at WP11 Phase-1 verify-human** (operator request).
 
 ### WP12: Editor multi-file tab strip (Sublime-style open-file tabs) ✅ SHIPPED 2026-06-21 (commit f2c86d7)
 
@@ -221,6 +222,20 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] (added during build) Disk-change detection — `diskConflict.ts` + `stat_file` (Phase 3): on-activate/pre-save check, silent reload / conflict popup / save-guard. Live watcher deferred → SURFACE-2026-06-21-EDITOR-FILE-WATCHER.
 
 **Source:** SURFACE-2026-06-21-EDITOR-MULTI-FILE-TAB-STRIP (high) — surfaced from WP7 Phase-2 verify-human when the operator chose the Sublime "Find Results" tab UX, which depends on an editor open-file tab strip not previously planned. Operator decision 2026-06-21: build WP12 first, then resume WP7 to render Find Results into a WP12 tab.
+
+### WP13: ⌘W — close the active editor tab
+
+**Description:** A keyboard shortcut to close the currently-active open-file tab in the focused editor pane (Sublime/VS-Code `⌘W` parity). Today tabs close only via the per-tab `✕` (WP12); this adds the chord. Must route through the existing dirty-close guard (the WP12 confirm dialog) so ⌘W on an unsaved tab prompts rather than silently discarding. Small, self-contained: a chord predicate + wiring to the focused pane's existing close path.
+**Milestone:** Milestone 2
+**Dependencies:** WP12 (the per-pane open-file tab model + `requestClose` dirty-guard path this reuses); WP1 (the capture-phase document-listener chord pattern, so ⌘W fires while focus is inside CM6).
+**Size:** S
+**Tasks:**
+- [ ] Pure `isCloseTabChord(e)` predicate (bare ⌘W, no Shift) — vitest, mirroring the existing chord predicates (`finderChord`/`searchChord`/`tabSwitchChord`). Confirm disjoint from the ⌘⇧ family + bare-⌘P/⌘1..9.
+- [ ] Wire ⌘W (capture-phase listener, gated on the focused pane being active) → the focused pane's active-tab close, routed through the WP12 `requestClose` dirty-guard (unsaved → confirm dialog, not silent discard). Decide: a no-op when no tab is open (vs. closing the pane) — match Sublime (inert with no tab).
+- [ ] Chord-ownership: add ⌘W to the app-wide chord matrix doc (`paletteCommands.ts` comment / the chord map) so it's recorded as reserved.
+- [ ] verify the close path + dirty-guard fire correctly (unit for the predicate; live/operator for the guarded close).
+
+**Source:** operator request 2026-06-21 (during WP11 Phase 5 verify-human) — "⌘W to close the current file tab," explicitly scoped as its own WP.
 
 ## Milestone 2 critical path
 

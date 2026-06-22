@@ -24,6 +24,7 @@ import {
   useState,
 } from "react";
 import { EditorPanel } from "./EditorPanel";
+import { SplitIcon } from "./SplitIcon";
 import { SyntheticView, type SyntheticHighlight } from "./SyntheticView";
 import { ConfirmModal } from "./ConfirmModal";
 import { closeDirtySpec, type CloseChoice } from "./confirmDialog";
@@ -72,6 +73,19 @@ interface PaneTabsProps {
   onActivePathChange?: (path: string | null) => void;
   /** Reports whether this pane has zero tabs (EditorSplit collapses an emptied pane). */
   onEmptyChange?: (empty: boolean) => void;
+  /**
+   * WP11 Phase 5 — split-editor control, a fixed icon at the right end of this pane's
+   * tab strip (reclaims the old dedicated split-bar row's height). EditorSplit passes
+   * it to EVERY pane (each can split itself); undefined → no Split button.
+   */
+  onSplit?: () => void;
+  /**
+   * WP11 Phase 5 — close-this-pane control, a fixed icon SIDE-BY-SIDE with the Split
+   * icon at the right end of the tab strip (was an absolute ✕ in the pane's corner,
+   * which overlapped the Split icon). EditorSplit passes it only when >1 pane exists
+   * (the sole pane can't be closed); undefined → no close-pane button.
+   */
+  onClosePane?: () => void;
   // The SHARED document store (owned by EditorSplit) + its write callbacks.
   // A view reads its buffer/dirty/save-state from `docs.byPath[path]` and writes via
   // these. onTabOpen/onTabClose ref-count the store as this pane's tabs add/remove.
@@ -107,6 +121,8 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
       onFocusPane,
       onActivePathChange,
       onEmptyChange,
+      onSplit,
+      onClosePane,
       docs,
       onTabOpen,
       onTabClose,
@@ -258,56 +274,99 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
         onFocusCapture={onFocusPane}
         onMouseDownCapture={onFocusPane}
       >
+        {/* WP11 Phase 5 — the tab strip ALWAYS renders (even on an empty pane) so the
+            Split control is reachable regardless of tab count + pane state. The tabs
+            scroll in an inner container; the Split icon is a FIXED sibling pinned at
+            the right (it does NOT scroll away when tabs overflow — the earlier bug). */}
+        <div
+          className="editor-tab-strip"
+          role="tablist"
+          aria-label="open files"
+        >
+          <div
+            className="editor-tab-strip-tabs"
+            data-testid="editor-tab-strip-tabs"
+          >
+            {tabs.map((tab) => (
+              <div
+                key={tab.id}
+                role="tab"
+                aria-selected={tab.id === activeTabId}
+                className={`editor-tab${tab.id === activeTabId ? " is-active" : ""}`}
+                data-testid="editor-tab"
+                data-tab-id={tab.id}
+                title={tab.path ?? tab.label}
+                onMouseDown={() => activate(tab.id)}
+              >
+                {tabIsDirty(tab) && (
+                  <span
+                    className="editor-tab-dirty"
+                    aria-label="unsaved"
+                    title="unsaved"
+                  >
+                    ●
+                  </span>
+                )}
+                <span className="editor-tab-label">{tab.label}</span>
+                <button
+                  type="button"
+                  className="editor-tab-close"
+                  data-testid="editor-tab-close"
+                  aria-label={`Close ${tab.label}`}
+                  title="Close tab"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    requestClose(tab.id);
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          {/* Fixed pane controls — Split + (when >1 pane) Close-pane, SIDE BY SIDE at
+              the strip's right, outside the scrolling tabs container so they stay
+              visible at any tab count and never overlap (the close ✕ was previously an
+              absolute corner button overlapping the Split icon). */}
+          {onSplit && (
+            <button
+              type="button"
+              className="editor-split-btn"
+              data-testid="editor-split-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onSplit}
+              aria-label="Split editor"
+              title="Split editor (new pane with its own tabs)"
+            >
+              <SplitIcon />
+            </button>
+          )}
+          {onClosePane && (
+            <button
+              type="button"
+              className="editor-pane-close"
+              data-testid="editor-pane-close"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClosePane();
+              }}
+              aria-label="Close pane"
+              title="Close this pane"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
         {isEmpty ? (
-          // Empty pane → the editor's "No file open" placeholder. EditorSplit collapses
-          // an emptied pane when >1 pane exists; the SOLE pane stays and shows this.
+          // Empty pane → the editor's "No file open" placeholder below the strip.
+          // EditorSplit collapses an emptied pane when >1 pane exists; the SOLE pane
+          // stays and shows this.
           <EditorPanel openPath={null} active={false} />
         ) : (
           <>
-            <div
-              className="editor-tab-strip"
-              role="tablist"
-              aria-label="open files"
-            >
-              {tabs.map((tab) => (
-                <div
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={tab.id === activeTabId}
-                  className={`editor-tab${tab.id === activeTabId ? " is-active" : ""}`}
-                  data-testid="editor-tab"
-                  data-tab-id={tab.id}
-                  title={tab.path ?? tab.label}
-                  onMouseDown={() => activate(tab.id)}
-                >
-                  {tabIsDirty(tab) && (
-                    <span
-                      className="editor-tab-dirty"
-                      aria-label="unsaved"
-                      title="unsaved"
-                    >
-                      ●
-                    </span>
-                  )}
-                  <span className="editor-tab-label">{tab.label}</span>
-                  <button
-                    type="button"
-                    className="editor-tab-close"
-                    data-testid="editor-tab-close"
-                    aria-label={`Close ${tab.label}`}
-                    title="Close tab"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      requestClose(tab.id);
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-
             <div className="editor-tab-bodies">
               {tabs.map((tab) => {
                 const isActive = tab.id === activeTabId;

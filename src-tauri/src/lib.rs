@@ -3,6 +3,7 @@ mod config_store;
 mod editor_fs;
 mod fs_index;
 mod git_diff;
+mod git_status;
 mod project_search;
 mod sublime;
 
@@ -60,6 +61,10 @@ pub fn run() {
             git_diff::commands::git_file_hunks,
             git_diff::commands::git_recent_commits,
             git_diff::commands::git_commit_diff,
+            // WP11: per-path working-tree status map for the file-tree row indicators
+            // (Sublime-sidebar style). Reuses git_diff's git2 plumbing; a non-git
+            // workspace returns an empty map (not an error) so the tree still renders.
+            git_status::commands::git_file_statuses,
             // WP6: Cmd+P fuzzy file finder. Walks the workspace project dir honoring
             // .gitignore (ignore crate) and returns the file list the finder overlay
             // fuzzy-matches over. Errors surface to the overlay, never empty-on-fail.

@@ -86,3 +86,9 @@ describe("panelForChord (⌘⇧+mnemonic → panel)", () => {
     ).toBeNull();
   });
 });
+
+// WP11 Phase 5 — the `railVisibleForPanel` describe block was removed: the FileTree
+// rail is now editor-only by STRUCTURE (it renders only inside the editor slot in
+// RightPanelHost), not via a per-panel visibility predicate. There is no pure
+// function left to unit-test; the editor-only placement is a DOM property confirmed
+// at verify-self/human (repo posture: live DOM → Playwright).

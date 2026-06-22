@@ -16,6 +16,7 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { buildTree, type TreeEntry, type TreeNode } from "./buildTree";
 import { treeReducer, initialExpanded, type ExpandedDirs } from "./treeState";
+import { statusClass, statusGlyph, type GitStatusMap } from "./gitStatus";
 
 interface FileTreeProps {
   /** Workspace project dir — the root `fs_tree` walks. */
@@ -24,12 +25,27 @@ interface FileTreeProps {
   openPath: string | null;
   /** Open a file (project-relative path) into the editor — the shared openFile seam. */
   onOpen: (path: string) => void;
+  /**
+   * WP11 — bump this to force a git-status re-fetch (the parent bumps it on each
+   * file save so the indicators reflect the just-written file). Changing it re-runs
+   * the status effect without re-walking fs_tree. Defaults to 0 (initial fetch).
+   */
+  gitStatusRefreshKey?: number;
 }
 
-export function FileTree({ projectPath, openPath, onOpen }: FileTreeProps) {
+export function FileTree({
+  projectPath,
+  openPath,
+  onOpen,
+  gitStatusRefreshKey = 0,
+}: FileTreeProps) {
   const [entries, setEntries] = useState<TreeEntry[] | null>(null); // null = loading
   const [error, setError] = useState<string | null>(null);
   const [expanded, dispatch] = useReducer(treeReducer, initialExpanded);
+  // WP11 — per-path git status for the row indicators. Empty until the first fetch
+  // resolves; a non-git workspace stays empty (the backend returns an empty map, not
+  // an error — so the tree renders with no indicators rather than an error row).
+  const [gitStatus, setGitStatus] = useState<GitStatusMap>({});
 
   // Load the tree on mount (the rail stays mounted per the all-workspaces-mounted
   // rule, so this fires once per workspace). An fs_tree failure surfaces inline,
@@ -50,6 +66,26 @@ export function FileTree({ projectPath, openPath, onOpen }: FileTreeProps) {
       cancelled = true;
     };
   }, [projectPath]);
+
+  // WP11 — fetch the git-status map (parallel to fs_tree), re-running on workspace
+  // change AND on `gitStatusRefreshKey` bumps (a save in the editor). A failure here
+  // does NOT blank the tree or set the error row — git status is decorative, and a
+  // non-git dir legitimately "fails" by returning an empty map; we clear to empty
+  // (no indicators) and let the file list stand. (Distinct from the fs_tree error,
+  // which IS surfaced — losing the file list is a real failure.)
+  useEffect(() => {
+    let cancelled = false;
+    invoke<GitStatusMap>("git_file_statuses", { root: projectPath })
+      .then((map) => {
+        if (!cancelled) setGitStatus(map);
+      })
+      .catch(() => {
+        if (!cancelled) setGitStatus({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectPath, gitStatusRefreshKey]);
 
   const tree = useMemo(
     () => (entries === null ? [] : buildTree(entries)),
@@ -94,6 +130,7 @@ export function FileTree({ projectPath, openPath, onOpen }: FileTreeProps) {
             depth={0}
             expanded={expanded}
             openPath={openPath}
+            gitStatus={gitStatus}
             onOpen={onOpen}
             onToggle={(path) => dispatch({ type: "toggle", path })}
           />
@@ -108,6 +145,8 @@ interface TreeRowProps {
   depth: number;
   expanded: ExpandedDirs;
   openPath: string | null;
+  /** WP11 — repo-relative path → git status, for the per-row indicator. */
+  gitStatus: GitStatusMap;
   onOpen: (path: string) => void;
   onToggle: (path: string) => void;
 }
@@ -118,6 +157,7 @@ function TreeRow({
   depth,
   expanded,
   openPath,
+  gitStatus,
   onOpen,
   onToggle,
 }: TreeRowProps) {
@@ -149,6 +189,7 @@ function TreeRow({
               depth={depth + 1}
               expanded={expanded}
               openPath={openPath}
+              gitStatus={gitStatus}
               onOpen={onOpen}
               onToggle={onToggle}
             />
@@ -156,6 +197,12 @@ function TreeRow({
       </>
     );
   }
+
+  // WP11 — per-file git-status indicator (Sublime-sidebar style). File rows only
+  // (no dir roll-up in v1). A clean/absent path → glyph null → no element rendered.
+  const status = gitStatus[node.path];
+  const glyph = statusGlyph(status);
+  const statusCls = statusClass(status);
 
   return (
     <div
@@ -170,6 +217,17 @@ function TreeRow({
       onClick={() => onOpen(node.path)}
     >
       <span className="file-tree-name">{node.name}</span>
+      {glyph !== null && (
+        <span
+          className={`file-tree-status ${statusCls}`}
+          data-testid="file-tree-status"
+          data-status={status}
+          aria-label={`git: ${status}`}
+          title={`git: ${status}`}
+        >
+          {glyph}
+        </span>
+      )}
     </div>
   );
 }

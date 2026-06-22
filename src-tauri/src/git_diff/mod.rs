@@ -76,7 +76,11 @@ pub enum ChangedStatus {
 /// root (so a workspace dir that is a subdirectory of the repo still works). A
 /// path with no enclosing repo maps to [`GitDiffError::NotARepo`] rather than a
 /// raw libgit2 error, so the UI can show a clean "not a git repo" state.
-fn open_repo(repo_root: &Path) -> Result<Repository, GitDiffError> {
+// `pub(crate)` (WP11): the `git_status` module reuses these git2 primitives —
+// `open_repo` + the two Status→kind mappers — so the per-path status walk shares one
+// repo-open and one mapping contract with the diff viewer (no duplicated libgit2
+// plumbing). No behavior change to git_diff itself.
+pub(crate) fn open_repo(repo_root: &Path) -> Result<Repository, GitDiffError> {
     Repository::discover(repo_root)
         .map_err(|_| GitDiffError::NotARepo(repo_root.display().to_string()))
 }
@@ -131,7 +135,7 @@ pub fn changed_files_core(repo_root: &Path) -> Result<Vec<ChangedFile>, GitDiffE
 
 /// Map the index-vs-HEAD bits of a libgit2 status to a [`ChangedStatus`], or
 /// `None` if nothing is staged for this file.
-fn staged_status(s: Status) -> Option<ChangedStatus> {
+pub(crate) fn staged_status(s: Status) -> Option<ChangedStatus> {
     if s.contains(Status::INDEX_NEW) {
         Some(ChangedStatus::Added)
     } else if s.contains(Status::INDEX_DELETED) {
@@ -147,7 +151,7 @@ fn staged_status(s: Status) -> Option<ChangedStatus> {
 
 /// Map the working-tree-vs-index bits of a libgit2 status to a [`ChangedStatus`],
 /// or `None` if the working tree matches the index.
-fn unstaged_status(s: Status) -> Option<ChangedStatus> {
+pub(crate) fn unstaged_status(s: Status) -> Option<ChangedStatus> {
     if s.contains(Status::WT_NEW) {
         Some(ChangedStatus::Untracked)
     } else if s.contains(Status::WT_DELETED) {

@@ -166,11 +166,16 @@ function multiSelection(): Extension {
  * `displayText: "blocks"` renders condensed blocks (legible at minimap scale and
  * naturally dark-toned over the #1e1e1e editor); the overlay shows the viewport.
  * The minimap creates its own container element via `create`.
+ *
+ * WP11 — the container carries `cm-minimap-narrow` so App.css can clip the
+ * package's `.cm-minimap-gutter` (whose width is set inline to its 120px MaxWidth)
+ * down to ~75% (90px). The marker class scopes the override to our minimap only.
  */
 function minimap(): Extension {
   return showMinimap.compute([], () => ({
     create: () => {
       const dom = document.createElement("div");
+      dom.classList.add("cm-minimap-narrow");
       return { dom };
     },
     displayText: "blocks",

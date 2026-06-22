@@ -225,8 +225,10 @@ body,
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  /* Positioning context for the WP3b command-palette overlay (absolute, pinned
-     to the top of the editor like VS Code / Sublime). */
+  /* Positioning context for any editor-panel-local absolute children. (The WP3b
+     command palette no longer relies on this — Phase 5 portals its overlay up to
+     `.workspace-right` so it centers over the full right half like the ⌘⇧F global
+     search overlay, regardless of the narrower editor panel.) */
   position: relative;
 }
 
@@ -283,16 +285,21 @@ body,
 
 /* WP3c — per-pane close affordance (only rendered when >1 pane). Top-right of the
    pane, above the editor content; subdued until hover. */
+/* WP11 Phase 5 — the close-pane ✕ now sits in the tab strip beside the Split icon
+   (was an absolute corner button overlapping it). Square icon button matching
+   `.editor-split-btn` so the two read as a side-by-side pair. */
 .editor-pane-close {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  z-index: 5;
-  padding: 0 5px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
   font-size: 0.8rem;
-  line-height: 1.4;
+  line-height: 1;
   color: #9b9b9b;
-  background-color: rgba(30, 30, 30, 0.7);
+  background-color: transparent;
   border: 1px solid transparent;
   border-radius: 3px;
   cursor: pointer;
@@ -359,12 +366,18 @@ body,
 }
 
 .editor-split-btn {
-  padding: 0 6px;
-  font-size: 0.7rem;
-  line-height: 1.5;
+  /* WP11 Phase 5 — a fixed icon button at the right of the tab strip (a sibling of
+     the scrolling tabs container, so it never scrolls away). Square, icon-only. */
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
   color: #9b9b9b;
-  background-color: #2a2a2a;
-  border: 1px solid #3c3c3c;
+  background-color: transparent;
+  border: 1px solid transparent;
   border-radius: 3px;
   cursor: pointer;
 }
@@ -437,9 +450,10 @@ body,
 .command-palette-input {
   flex-shrink: 0;
   margin: 8px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
+  /* WP11 Phase 5 — smaller overlay text across the board (operator request). */
+  font-size: 12px;
   color: #d4d4d4;
   background-color: #1e1e1e;
   border: 1px solid #3c3c3c;
@@ -459,9 +473,9 @@ body,
 }
 
 .command-palette-item {
-  padding: 6px 14px;
+  padding: 5px 14px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
+  font-size: 12px;
   color: #d4d4d4;
   cursor: pointer;
 }
@@ -471,8 +485,8 @@ body,
 }
 
 .command-palette-empty {
-  padding: 6px 14px;
-  font-size: 13px;
+  padding: 5px 14px;
+  font-size: 12px;
   color: #858585;
 }
 
@@ -510,7 +524,7 @@ body,
   align-items: center;
   gap: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 11px;
   color: #b5b5b5;
   cursor: pointer;
   user-select: none;
@@ -519,7 +533,7 @@ body,
 .project-search-go {
   margin-left: auto;
   padding: 4px 12px;
-  font-size: 12px;
+  font-size: 11px;
   color: #d4d4d4;
   background-color: #0e639c;
   border: 1px solid #1177bb;
@@ -630,6 +644,15 @@ body,
   flex-direction: column;
 }
 
+/* WP11 Phase 5 — the editor slot is a horizontal row: the FileTree rail (left) +
+   the EditorSplit. The rail lives HERE (inside the editor slot) so it is structurally
+   editor-only; Diff + Terminal slots keep the default column layout + full width.
+   `display` is set inline (flex/none) by the panel toggle; the row direction applies
+   when shown. */
+.right-panel-slot--editor {
+  flex-direction: row;
+}
+
 /* ── WP12 editor per-pane tab strips (VS Code split-editor-group model) ──── */
 /* EditorSplit fills the editor slot: a thin split bar on top + a vertical stack of
    panes. Each pane (PaneTabs) has its OWN tab strip + active EditorPanel. Column flex
@@ -637,18 +660,19 @@ body,
 .editor-split {
   flex: 1;
   min-height: 0;
+  /* WP11 Phase 5 — min-width:0 is load-bearing now that EditorSplit is a flex CHILD
+     of the row-direction editor slot (rail + editor). Without it, min-width defaults
+     to `auto` (content width), so a wide editor line refuses to shrink to its flex
+     share and overflows — pushing the split bar + editor off the right edge (read as
+     "the Split button disappeared"). Mirrors the horizontal version of the WP3a
+     height-chain min-height:0 lesson. */
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
-/* The split bar holds the Split control (adds a pane with its own tabs). */
-.editor-split-bar {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.2rem 0.5rem;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
-  background-color: #181818;
-}
+/* WP11 Phase 5 — `.editor-split-bar` (the dedicated full-width split-control row) was
+   removed; the Split button now lives at the right end of the active pane's tab strip
+   (PaneTabs), reclaiming the row's height. */
 /* The panes stack vertically and share the remaining height. */
 .editor-split-panes {
   flex: 1;
@@ -672,26 +696,10 @@ body,
 .editor-split-pane.is-active {
   box-shadow: inset 2px 0 0 rgba(110, 168, 255, 0.5);
 }
-/* The pane-close ✕ floats at the pane's top-right (only shown when >1 pane). */
-.editor-split-pane > .editor-pane-close {
-  position: absolute;
-  top: 2px;
-  right: 4px;
-  z-index: 5;
-  width: 1.2rem;
-  height: 1.2rem;
-  padding: 0;
-  font-size: 0.7rem;
-  color: #7a7a7a;
-  background-color: rgba(24, 24, 24, 0.85);
-  border: 1px solid #3c3c3c;
-  border-radius: 3px;
-  cursor: pointer;
-}
-.editor-split-pane > .editor-pane-close:hover {
-  color: #f6f6f6;
-  background-color: rgba(128, 128, 128, 0.3);
-}
+/* WP11 Phase 5 — the `.editor-split-pane > .editor-pane-close` absolute-corner rule
+   was removed; the close-pane ✕ now lives in the tab strip beside the Split icon (a
+   plain `.editor-pane-close` icon button, styled below), so it no longer overlaps the
+   Split control. */
 /* PaneTabs fills its pane: its tab strip on top + the active EditorPanel below.
    Relative so its dirty-close confirm overlay anchors to the pane, not the window. */
 .pane-tabs {
@@ -707,11 +715,26 @@ body,
 .editor-tab-strip {
   flex-shrink: 0;
   display: flex;
-  gap: 2px;
-  padding: 0.3rem 0.5rem;
-  overflow-x: auto;
+  align-items: center;
+  gap: 4px;
+  /* WP11 Phase 5 — shorter strip (operator request): less vertical padding. */
+  padding: 0.15rem 0.5rem;
+  /* The strip itself does NOT scroll — only its inner tabs container does, so the
+     fixed Split icon at the right stays put when tabs overflow. */
+  overflow: hidden;
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
   background-color: #181818;
+}
+
+/* WP11 Phase 5 — the scrolling tabs container: takes the remaining width and
+   horizontally scrolls when tabs overflow. The Split icon is its FIXED sibling. */
+.editor-tab-strip-tabs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
 }
 
 .editor-tab {
@@ -720,8 +743,9 @@ body,
   align-items: center;
   gap: 0.3rem;
   max-width: 16rem;
-  padding: 0.2rem 0.35rem 0.2rem 0.6rem;
-  font-size: 0.76rem;
+  /* WP11 Phase 5 — denser tabs (shorter strip): tighter vertical padding + font. */
+  padding: 0.1rem 0.3rem 0.1rem 0.55rem;
+  font-size: 0.72rem;
   color: #9b9b9b;
   background-color: #1a1a1a;
   border: 1px solid #3c3c3c;
@@ -756,10 +780,12 @@ body,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.1rem;
-  height: 1.1rem;
+  /* WP11 Phase 5 — slightly smaller so the close box doesn't set the (now shorter)
+     tab-strip row height. */
+  width: 0.95rem;
+  height: 0.95rem;
   padding: 0;
-  font-size: 0.7rem;
+  font-size: 0.66rem;
   color: #7a7a7a;
   background: transparent;
   border: none;
@@ -852,16 +878,13 @@ body,
 /* The right-half body is a horizontal row beneath the panel tab row:
    [ FileTree rail | panel column ]. Fills the remaining height; min-height:0 keeps
    the editor's flex/scroll chain bounded (the WP3a height-chain lesson). */
-.right-panel-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: row;
-}
+/* WP11 Phase 5 — `.right-panel-body` (the WP10 horizontal [rail | panel-column] row)
+   was removed: the rail moved INSIDE the editor slot, so `.right-panel-main` is now
+   the direct, full-width child of `.workspace-right` again. */
 
-/* The panel column (tabs + editor/diff slots) — was the direct child set of
-   .workspace-right before WP10; now nested so the tree rail can sit beside it.
-   Carries the same flex:1 / min-height:0 so the inner panels bound correctly. */
+/* The panel column (tabs + editor/diff/terminal slots): the top-level child of
+   .workspace-right. The Editor/Diff/Terminal tab row sits on top spanning full width;
+   the slots fill below. */
 .right-panel-main {
   flex: 1;
   min-width: 0;
@@ -874,17 +897,43 @@ body,
    Collapses to a thin strip (just the toggle) to reclaim width for the editor. */
 .file-tree-rail {
   flex-shrink: 0;
-  width: 200px;
+  width: 299px; /* WP11 — 200 × 1.66 then ×0.9; the DEFAULT (Part C overrides via inline style once dragged) */
   min-height: 0;
   display: flex;
   flex-direction: column;
   border-right: 1px solid rgba(128, 128, 128, 0.2);
   background-color: #1b1b1b;
+  position: relative; /* WP11 Part C — anchors the drag handle to the rail's right edge */
+}
+
+/* WP11 Part C — drag-to-resize handle on the rail's right edge. A thin col-resize
+   strip overlapping the border; widens its hit area without shifting layout. */
+.file-tree-resize {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.file-tree-resize:hover {
+  background-color: rgba(120, 170, 255, 0.35);
+}
+
+/* Hidden when the rail is collapsed (strip) — no grab target in that state. */
+.file-tree-rail.is-collapsed .file-tree-resize {
+  display: none;
 }
 
 .file-tree-rail.is-collapsed {
   width: auto;
 }
+
+/* WP11 Phase 5 — `.file-tree-rail.is-hidden` was removed: the rail is no longer
+   CSS-hidden per panel. It renders only inside the editor slot (RightPanelHost), so
+   Diff + Terminal have no rail structurally. (Superseded the Phase-1 CSS-hide.) */
 
 /* When collapsed, the rail shrinks to just the toggle: the tree body is hidden
    (NOT unmounted — the component stays mounted in RightPanelHost so its expanded
@@ -923,9 +972,11 @@ body,
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 2px 6px;
+  /* WP11 — denser rows (~2/3 the prior 2px×6px / 0.78rem) so more files fit. */
+  padding: 1px 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.78rem;
+  font-size: 0.66rem;
+  line-height: 1.35;
   color: #cfcfcf;
   white-space: nowrap;
   cursor: pointer;
@@ -951,6 +1002,55 @@ body,
 .file-tree-name {
   overflow: hidden;
   text-overflow: ellipsis;
+  /* WP11 — grow to fill the row so the right-aligned git-status glyph sits at the
+     row's trailing edge (operator request: indicator on the RIGHT of the name). */
+  flex: 1;
+  min-width: 0;
+}
+
+/* WP11 — per-file git-status indicator (Sublime-sidebar style). A single-char glyph
+   on the RIGHT of the filename (operator request, verify-human 2026-06-21), colored
+   by status (dark-only palette derived from VS Code's git decoration colors). File
+   rows only; clean files render no glyph. */
+.file-tree-status {
+  flex-shrink: 0;
+  margin-left: auto; /* belt-and-suspenders right-pin even if name doesn't fill */
+  padding-left: 0.4em;
+  width: auto;
+  text-align: right;
+  font-weight: 600;
+  font-size: 0.92em;
+}
+
+.file-tree-status--modified {
+  color: #e2c08d; /* amber — modified */
+}
+
+.file-tree-status--added,
+.file-tree-status--untracked {
+  color: #73c991; /* green — added / new untracked */
+}
+
+.file-tree-status--deleted {
+  color: #f48771; /* red — deleted */
+}
+
+.file-tree-status--renamed {
+  color: #e2c08d; /* amber — renamed (treated like modified) */
+}
+
+/* WP11 — minimap narrowed. @replit/codemirror-minimap sets the gutter's width inline
+   to its 120px MaxWidth and sizes the canvas to match; we clip BOTH on our
+   marker-classed gutter. 120 × 0.75 = 90, then ×0.75 again (operator trim at
+   verify-human) = 68px. !important beats the package's inline width;
+   overflow:hidden + canvas max-width clip the 120px-rendered canvas to fit. */
+.cm-minimap-narrow.cm-minimap-gutter {
+  width: 68px !important;
+  overflow: hidden;
+}
+
+.cm-minimap-narrow.cm-minimap-gutter canvas {
+  max-width: 68px !important;
 }
 
 .file-tree-error,
