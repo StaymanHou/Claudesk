@@ -80,7 +80,7 @@ Learning-sequence ordering, riskiest-unknown-first, synchronous-before-async:
 **Dependencies:** WP1 (listener-design go/no-go), WP2 (line format + socket path)
 **Size:** M
 **Tasks:**
-- [ ] `hook_socket` Rust module: bind `UnixListener` at `~/Library/Application Support/Claudesk/hook.sock`, removing a stale socket file from a prior unclean exit first; accept-loop on a dedicated thread (or `tokio` task per WP1's verdict)
+- [ ] `hook_socket` Rust module: bind `UnixListener` at `<app-data>/hook.sock` (resolved via `app_data_dir()` — on macOS `~/Library/Application Support/com.claudesk.app/hook.sock`, the bundle identifier, NOT `Claudesk/`; see SURFACE-2026-06-22-APP-DATA-DIR-…), removing a stale socket file from a prior unclean exit first; accept-loop on a dedicated thread (or `tokio` task per WP1's verdict)
 - [ ] Per-connection newline-delimited reader → `serde` parse to `HookEvent { event_name, cwd, session_id, timestamp, message: Option<String> }`; tolerate partial/garbage lines (skip-and-continue, never panic the loop)
 - [ ] Deliver parsed `HookEvent`s into the core via a channel (the seam WP4's broadcaster consumes) — keep parsing pure/testable, separate from the IO loop
 - [ ] Socket lifecycle: created on launch, cleaned up on `WindowEvent::CloseRequested` (mirror the WP7-M1 `kill_all` reaping discipline); a missing/failed socket → status defaults to `Unknown` (arch.md failure mode), never inferred from PTY

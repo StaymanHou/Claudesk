@@ -7,6 +7,10 @@ mod git_status;
 // M3 WP2: register Claudesk's CC hook in ~/.claude/settings.json (additive,
 // idempotent, reversible). The setup-hook install wiring lands in WP2 Phase 2.
 mod hook_install;
+// M3 WP3: AF_UNIX listener that receives the CC hook's JSON lines (the receive
+// side of the status channel WP2's hook writes to). Phase 1 = the typed
+// HookEvent + pure parse seam; Phase 2 binds the socket + accept-loop thread.
+mod hook_socket;
 mod project_search;
 mod sublime;
 
@@ -34,6 +38,17 @@ pub fn run() {
             if let Err(e) = hook_install::commands::install_on_launch(&handle) {
                 eprintln!("[claudesk] hook install failed: {e}");
                 let _ = handle.emit("hook-install-error", e);
+            }
+            // M3 WP3: bind the AF_UNIX listener that RECEIVES the hook's JSON lines
+            // and spawn its accept-loop thread (the receive side of the status
+            // channel WP2's hook writes to). The receiver is held in managed state
+            // for WP4's broadcaster to drain. A bind failure is surfaced, never
+            // swallowed — status then defaults to Unknown, never PTY-inferred.
+            match hook_socket::commands::start_on_launch(&handle) {
+                Ok(state) => {
+                    app.manage(state);
+                }
+                Err(e) => hook_socket::commands::emit_start_error(&handle, &e),
             }
             Ok(())
         })
@@ -110,6 +125,11 @@ pub fn run() {
                     if let Ok(mut reg) = registry.lock() {
                         reg.kill_all();
                     }
+                }
+                // M3 WP3: unlink the hook socket on close (mirror the kill_all
+                // reaping discipline). Belt to bind_listener's stale-file removal.
+                if let Some(state) = window.try_state::<hook_socket::commands::HookSocketState>() {
+                    hook_socket::commands::cleanup_socket(&state.socket_path);
                 }
             }
         })

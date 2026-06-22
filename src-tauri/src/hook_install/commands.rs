@@ -16,8 +16,6 @@ use super::{install, uninstall};
 
 /// Basename of the hook script as deployed into the app-data dir.
 const HOOK_SCRIPT_NAME: &str = "claudesk-hook.pl";
-/// Basename of the Claudesk-owned hook socket (bound by WP3's listener).
-const HOOK_SOCKET_NAME: &str = "hook.sock";
 
 /// Path to the user's `~/.claude/settings.json` (where CC reads hook registrations).
 fn user_settings_path() -> Result<PathBuf, String> {
@@ -58,7 +56,11 @@ fn hook_command(script_path: &Path, socket_path: &Path) -> String {
 }
 
 /// Resolve the app-data dir (creating it), the deployed script path, and the
-/// socket path together — the trio the launch wiring needs.
+/// socket path together — the trio the launch wiring needs. The socket path comes
+/// from [`crate::hook_socket::commands::hook_socket_path`] — the SINGLE source of
+/// truth shared with WP3's listener, so the path we put in `CLAUDESK_HOOK_SOCK`
+/// (where the hook writes) and the path the listener binds (where we read) can
+/// never drift apart.
 fn resolve_paths(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
     let data_dir = app
         .path()
@@ -67,7 +69,7 @@ fn resolve_paths(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("could not create app data dir {}: {e}", data_dir.display()))?;
     let script = data_dir.join(HOOK_SCRIPT_NAME);
-    let socket = data_dir.join(HOOK_SOCKET_NAME);
+    let socket = crate::hook_socket::commands::hook_socket_path(app)?;
     Ok((script, socket))
 }
 
