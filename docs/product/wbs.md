@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: in-progress
-updated: 2026-06-22
+updated: 2026-06-22  # WP3 shipped (4355e00); critical path WP1✅→WP2✅→WP3✅→WP4→WP6
 milestone: 3
 # Milestone 3 — CC lifecycle & state plumbing. Scope = arch.md Phase-2 forward-look §A
 # (status broadcaster + Unix-socket hook channel) + the workflow/.session.md file-watcher.
@@ -73,18 +73,20 @@ Learning-sequence ordering, riskiest-unknown-first, synchronous-before-async:
 
 **WP2 → WP3 rationale:** The hook script + a known socket path must exist before the listener has anything real to accept; WP2's output (the line format + socket path) is WP3's input contract.
 
-### WP3: Unix-socket listener + synchronous receive/parse path (Rust core)
+### WP3: Unix-socket listener + synchronous receive/parse path (Rust core)  ✅ SHIPPED 2026-06-22 (commit 4355e00)
 
 **Description:** Claudesk opens the `AF_UNIX` listener at the stable path on app launch, accepts the stream of newline-delimited JSON lines from any CC hook, and parses each to a typed `HookEvent` (serde). Synchronous receive path only — no broadcast/normalization yet (that's WP4). Handles the lifecycle: bind (removing a stale socket file), accept-loop on a dedicated thread/task, per-connection line reads, graceful shutdown on app exit.
 **Milestone:** Milestone 3
 **Dependencies:** WP1 (listener-design go/no-go), WP2 (line format + socket path)
 **Size:** M
 **Tasks:**
-- [ ] `hook_socket` Rust module: bind `UnixListener` at `<app-data>/hook.sock` (resolved via `app_data_dir()` — on macOS `~/Library/Application Support/com.claudesk.app/hook.sock`, the bundle identifier, NOT `Claudesk/`; see SURFACE-2026-06-22-APP-DATA-DIR-…), removing a stale socket file from a prior unclean exit first; accept-loop on a dedicated thread (or `tokio` task per WP1's verdict)
-- [ ] Per-connection newline-delimited reader → `serde` parse to `HookEvent { event_name, cwd, session_id, timestamp, message: Option<String> }`; tolerate partial/garbage lines (skip-and-continue, never panic the loop)
-- [ ] Deliver parsed `HookEvent`s into the core via a channel (the seam WP4's broadcaster consumes) — keep parsing pure/testable, separate from the IO loop
-- [ ] Socket lifecycle: created on launch, cleaned up on `WindowEvent::CloseRequested` (mirror the WP7-M1 `kill_all` reaping discipline); a missing/failed socket → status defaults to `Unknown` (arch.md failure mode), never inferred from PTY
-- [ ] Tests: pure parse-function tests over verbatim WP1 payload literals (incl. the snake_case serde shape — see WP4 DTO note); a stale-socket-file cleanup test
+- [x] `hook_socket` Rust module: bind `UnixListener` at `<app-data>/hook.sock` (resolved via `app_data_dir()` — on macOS `~/Library/Application Support/com.claudesk.app/hook.sock`, the bundle identifier, NOT `Claudesk/`; see SURFACE-2026-06-22-APP-DATA-DIR-…), removing a stale socket file from a prior unclean exit first; accept-loop on a dedicated `std::thread` (blocking `UnixListener` per WP1's verdict — NOT tokio)
+- [x] Per-connection newline-delimited reader → `serde` parse to `HookEvent { hook_event_name, session_id, cwd, timestamp?, prompt?, message? }` (snake_case wire keys verbatim, `#[serde(default)]`-tolerant); tolerate partial/garbage lines (skip-and-continue, never panic the loop)
+- [x] Deliver parsed `HookEvent`s into the core via an `mpsc` channel (the seam WP4's broadcaster consumes) — `parse_line` kept pure/testable, separate from the IO loop
+- [x] Socket lifecycle: created on launch (`.setup()`), cleaned up on `WindowEvent::CloseRequested` (mirrors the WP7-M1 `kill_all` reaping discipline); a missing/failed socket → status defaults to `Unknown` (arch.md failure mode), never inferred from PTY; bind failure surfaced via `hook-socket-error`, never swallowed
+- [x] Tests: pure parse-function tests over verbatim WP1 payload literals (incl. the snake_case serde-shape guard + production-hook `timestamp` shape); stale-socket-file cleanup; end-to-end thread+UnixStream+channel (2 events delivered, garbage skipped, loop survives); clean-exit-on-dropped-receiver. 10 hook_socket tests; full suite 164/164.
+
+**Shipped notes:** `hook_socket::commands::hook_socket_path` is the single source of truth for the socket path — `hook_install::resolve_paths` now delegates to it (writer/reader drift retired). Review 0 CRIT / 0 MAJ / 3 MINOR (auto-backlogged → SURFACE-2026-06-22-QUALITY-WP3-MINORS). **Live runtime confirmation (real `claude` hook → live listener end-to-end) deferred to WP6's frontend close-the-loop** per the M3 plan (the WP1 `Notification` live-capture residual rides along).
 
 **WP3 → WP4 rationale:** Get a parsed `HookEvent` flowing synchronously into the core before adding the normalize-map-emit broadcaster on top — the broadcaster is a transform over a working event stream, not part of the IO plumbing.
 

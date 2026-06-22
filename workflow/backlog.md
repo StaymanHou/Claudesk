@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m3-wp3-socket-listener (2026-06-22)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `4355e00` (0 CRITICAL, 0 MAJOR). All polish-tier: (1) `hook_socket_path` carries a hidden `create_dir_all` side effect (path-resolver name understates it); (2) accept-loop `BufReader::lines()` has no per-line length cap (trusted local writer, low risk); (3) `HOOK_SOCKET_NAME` `pub const` is over-exported (module-private suffices). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp3-socket-listener — 2026-06-22`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** trivial `/feature-refactor` nits / opportunistic fixes; none changes correctness or the WP4 hand-off contract. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## SURFACE-2026-06-22-APP-DATA-DIR-IS-BUNDLE-IDENTIFIER-NOT-PRODUCTNAME
 - **Source:** feature:build (M3 WP2 Phase 2 verify-human live test)
 - **Target level:** product:arch (+ CLAUDE.md doc fix)

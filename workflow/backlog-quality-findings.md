@@ -4,6 +4,20 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m3-wp3-socket-listener — 2026-06-22
+
+3 MINOR findings from `feature-review-quality` on ship commit `4355e00` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built — lands scope cleanly, advances the codebase, no refactor warranted; honest integration-level test coverage + negative-direction serde guard; every non-obvious decision carries a WHY comment. All polish-tier. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-22-QUALITY-WP3-MINORS
+- **Files:** `src-tauri/src/hook_socket/commands.rs:31-39,58-59,23`; `src-tauri/src/hook_socket/mod.rs:157-158`
+- **Priority:** low (all)
+- **Status:** pending
+- **Findings:**
+  1. **`hook_socket_path` carries a hidden mkdir side effect** (`commands.rs:31-39`) — the function reads as "resolve a path" but `create_dir_all`s the app-data dir, and runs ~3×/launch (once via `start_on_launch`, again per `hook_install::resolve_paths` delegation). Idempotent/harmless, but a future caller wanting just the path string inherits a filesystem write. *(Consider splitting a pure `socket_path()` from an `ensure_socket_dir()` if a path-only caller ever appears.)*
+  2. **No per-line length cap in the accept-loop** (`mod.rs:157-158`) — `BufReader::lines()` reads each connection line unbounded. The hook is a trusted single-user local writer so not a real DoS surface, but a malformed writer emitting one unbounded line with no newline would buffer without bound on the accept thread. A `take(N)` cap would harden the never-block-CC thread.
+  3. **`HOOK_SOCKET_NAME` over-exported** (`commands.rs:23`) — `pub const` but only consumed within this module (the old private `hook_install` copy was deleted in favor of delegating to `hook_socket_path`). Tighten to module-private unless WP4 references the basename directly.
+- **Pickup shape:** all three are trivial `/feature-refactor` nits / opportunistic fixes. None changes correctness or the WP4 hand-off contract. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 # m3-wp2-hook-install — 2026-06-22
 
 4 MINOR findings from `feature-review-quality` on ship commit `77d6a6e` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built and defensively-minded for a dangerous operation (mutating a shared user `settings.json`); standout test suite (real-config shape + byte-exact round-trip + never-wipe-on-parse-failure). No refactor warranted; all cosmetic/opportunistic. Auto-backlogged per drive_mode=autopilot.
