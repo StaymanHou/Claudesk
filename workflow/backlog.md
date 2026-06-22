@@ -4,6 +4,12 @@
 
 > **Phase 1 cycle-close backlog sweep — 2026-06-19 (`/product-finalize`).** Phase 1 (Bare Shell + Tab Substrate PoC) closed; all 9 WPs shipped. Sweep disposition of the items still pending at close: **all DEFERRED → carry to the Phase 2 cycle** (none escalated, none newly resolved by the close itself). Carried forward: wp5/wp6/wp7/wp8/wp9 code-quality findings (the **wp6 picker IPC error-surfacing MAJORs are the most load-bearing** — they pair with Phase 2's multi-workspace picker work, WP13/WP16) + `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS` (housekeeping). These remain in this file (not archived) so the next cycle inherits them.
 
+## Code-quality findings — m2-wp11-tree-density-git-indicators (2026-06-21)
+- **Pointer:** 1 MAJOR + 3 MINOR from `feature-review-quality` on ship commit `6bcbe1f` (0 CRITICAL). MAJOR: git-status path-keying mismatch — `fs_tree` keys are workspace-relative but `git_file_statuses` keys are git-repo-root-relative, so a workspace nested below its repo root renders NO indicators (silent, graceful). MINORs: non-UTF-8 path drop comment; redundant flex:1/margin-left:auto right-pin; prose-only GitFileStatus TS↔Rust contract. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp11-tree-density-git-indicators — 2026-06-21`.
+- **Priority:** medium (MAJOR) + low (MINORs)
+- **Status:** pending
+- **Pickup shape:** the MAJOR is the highest-value — re-base `git_file_statuses` paths to `root` (or assert root==repo-root); natural to fold into WP13 or a quick task. The 3 MINORs are a quick `/feature-refactor` sweep. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE
 - **Source:** feature:build (WP7 Phase 3 relevance gate — operator decision 2026-06-21)
 - **Target level:** product:wbs (a WP7 follow-on, or a small standalone feature)

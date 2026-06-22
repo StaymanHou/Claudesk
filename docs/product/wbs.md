@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-21
 milestone: 2
-# WP1,2,3a,3b,3c,4,5,6,7,8,9,10,12 shipped (13/13 core M2 WPs). WP9 SHIPPED 2026-06-21 (commits 70a7576 + a8db974 — second-terminal panel via the CcSession seam + M2 close-out; M2 exit criteria operator-approved). **Only WP11 remains** — post-WP10 tree/editor density polish + Sublime-style git-change indicators + (new) Files-nav-Editor-only, operator-promoted as its own follow-on cycle (NOT part of the original M2 lite-editor+diff scope).
+# WP1,2,3a,3b,3c,4,5,6,7,8,9,10,11,12 shipped. WP11 SHIPPED 2026-06-21 (commit 6bcbe1f — tree/editor density + git indicators + drag-resize rail + P5 layout restructure; review 0 CRIT / 1 MAJOR + 3 MINOR auto-backlogged). **Only WP13 remains** (⌘W close-active-tab, size S, spun out of WP11 verify-human) — pending its own feature cycle. Once WP13 ships, run /product-finalize to close the M2 cycle. Carried backlog: WP11 git-status path-keying MAJOR + the deferred terminal blank-cursor incident.
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -186,21 +186,23 @@ Learning-sequence ordering, riskiest-unknown-first:
 - [x] Confirm exit criteria: editing + diff review complete inside the right half with the panel-switch hotkey — **operator-approved 2026-06-21**. (NOTE: "the Sublime Text pop is removed" is NO LONGER an exit criterion — WP8's 2026-06-20 redefinition keeps both Sublime launchers as permanent icon-button affordances; `subl`/`smerge` remain permanent companion surfaces, not routine-work dependencies to eliminate.)
 - [x] Operator follow-up captured: Files nav (left tree rail) should be Editor-only (hidden for Diff + Terminal) — added to WP11 Part A (own cycle, operator's choice).
 
-### WP11: Tree/editor density polish + Sublime-style git-change indicators
+### WP11: Tree/editor density polish + Sublime-style git-change indicators ✅ SHIPPED 2026-06-21 (commit 6bcbe1f)
+
+> **As-built (5 phases + many operator verify-human iterations):** P1 density/scoping — file-tree rail **Editor-only** (P5 made this STRUCTURAL: rail moved INSIDE the editor slot, so the Editor/Diff/Terminal tab row is the outer full-width layer); rail 299px (200×1.66×0.9 operator trim), denser rows, minimap clipped to 68px. P2 backend `git_status` module (`status_map_core`) reusing `git_diff`'s git2 plumbing (`open_repo`/`staged_status`/`unstaged_status` lifted to `pub(crate)`), non-git-dir → empty map (not an error), `git_file_statuses` command. P3 per-row Sublime indicators (M/A/U/D/R glyph, dark palette, **right** of filename per operator), refresh on tree-load + on-save (`onSaved` seam EditorSplit→RightPanelHost). P4 drag-to-resize rail (`railWidth` clamp 160–600 + localStorage persist). **P5 layout restructure (operator at review-quality):** ⌘⇧P palette **portaled** to `.workspace-right` (centers over full right panel like ⌘⇧F) + smaller overlay font; **Split control → SVG icon in the tab strip** (was a dedicated full-width row), overflow-safe + present in every pane; close-pane ✕ moved beside it; `.editor-split min-width:0` fix. Review: 0 CRITICAL, 1 MAJOR + 3 MINOR auto-backlogged (git-status path-keying for nested-workspace, + 3 nits). **⌘W close-tab spun out as WP13.**
 
 **Description:** Post-WP10 polish requested by the operator at WP10 verify-human (2026-06-20), promoted from a backlog SURFACE to a WP at operator direction. Two parts: (A) quick density/sizing tweaks to the file tree + minimap **plus scoping the Files nav to the Editor panel only** (operator request at WP9 verify-human, 2026-06-21), and (B) the substantive piece — **Sublime-Text-style git-change indicators** on file-tree rows (the colored status dots in Sublime's sidebar: modified / added / untracked / etc.). Part B is a real subsystem: a backend `git_status` source (reuse `git2` from WP4's `git_diff` module — a per-path status walk) feeding a per-row indicator in `FileTree`/`TreeRow`.
 **Milestone:** Milestone 2
 **Dependencies:** WP10 (the FileTree rail + `fs_tree`), WP4 (`git2` / `git_diff` module — reuse for the status walk), WP3a (the `@replit/codemirror-minimap` whose width part A adjusts)
 **Size:** M (Part A is S/CSS-config; Part B is the M-sized git-status subsystem)
 **Tasks:**
-- [ ] **(A)** Files nav (`.file-tree-rail`) is **Editor-only** — render the left tree rail only when the right panel is the editor (`panel === "editor"`); hide it for the Diff and Terminal panels so they get the full panel width. The tree rail is an editor-navigation affordance, not relevant to the diff viewer or the second terminal (operator request, WP9 verify-human 2026-06-21). Add a vitest assertion (the rail mounts for editor, not for diff/terminal). NOTE the tree must stay mounted across panel switches per the "all panels stay mounted" rule — scope it by CSS/visibility, not unmount, so the expanded-dir state + the fs_tree walk survive an Editor→Diff→Editor round-trip.
-- [ ] **(A)** File-tree rail 66% wider — `.file-tree-rail` width 200px → ~332px (200 × 1.66)
-- [ ] **(A)** Tree rows ~2/3 current height + correspondingly smaller font — `.file-tree-row` padding/line-height to ~2/3, font-size proportionally smaller (denser; more files visible)
-- [ ] **(A)** Minimap 75% of current width — adjust the `@replit/codemirror-minimap` width option / container CSS
-- [ ] **(B)** Backend `git_status` core + command: reuse `git2` (already a dep, WP4) to return per-path working-tree status (modified / added / deleted / untracked / clean) for the workspace dir; pure-fn core (TempDir git-fixture testable) + thin Tauri command (errors surfaced as `String`, the WP6 lesson)
-- [ ] **(B)** Per-row git-status indicator in `FileTree`/`TreeRow`: a colored dot/mark per file (and rolled-up for dirs, optional) reflecting `git_status`; dark-only palette matching Sublime's convention. Refresh policy decided at build (on tree load + on save; a live `notify` watcher is out of scope — that's the Phase-2 watcher milestone)
-- [ ] Unit tests: the `git_status` pure core (TempDir git fixture with known modified/untracked/clean files) + any pure status→indicator mapping helper
-- [ ] **(C — added 2026-06-21 at WP11 verify-human)** Drag-to-resize the file-tree rail: a `col-resize` drag handle on the rail's right edge resizes `.file-tree-rail` live (clamped min/max); the chosen width persists across app restarts via localStorage (UI chrome — app-global, no backend command); the Part A 299px becomes the *default*. Composes with the editor-only scoping + collapse toggle. Pure `clampRailWidth`/drag-math helper, vitest-tested.
+- [x] **(A)** Files nav (`.file-tree-rail`) is **Editor-only** — P5 made this STRUCTURAL (rail rendered only inside the editor slot; Diff/Terminal get full width; tab row is the outer full-width layer). Stays mounted across switches (expanded-dir + fs_tree walk survive). (`railVisibleForPanel` CSS-hide approach from P1 was superseded + removed.)
+- [x] **(A)** File-tree rail wider — 200px → 299px (200 × 1.66 then ×0.9 operator trim at verify-human).
+- [x] **(A)** Tree rows ~2/3 height + smaller font — `.file-tree-row` padding 1px/6px, font 0.66rem.
+- [x] **(A)** Minimap narrower — `cm-minimap-narrow` clips the gutter to 68px (0.75×120 then ×0.75 operator trim).
+- [x] **(B)** Backend `git_status` core + command — `status_map_core` (reuses `git_diff`'s git2 plumbing; per-path staged-wins fold; NotARepo → Ok(empty)) + `git_file_statuses` command (error→String). 8 TempDir tests.
+- [x] **(B)** Per-row git-status indicator in `FileTree`/`TreeRow` — M/A/U/D/R glyph right of the filename, dark Sublime palette; refresh on tree-load + on-save (no live watcher). File-rows only (no dir roll-up, v1).
+- [x] Unit tests: `git_status` pure core (8 TempDir) + `gitStatus.ts` statusGlyph/statusClass (6 vitest).
+- [x] **(C — added 2026-06-21 at WP11 verify-human)** Drag-to-resize the file-tree rail — `col-resize` handle resizes live (clamp 160–600), persisted via localStorage; 299px is the default. `railWidth.ts` pure helper, 10 vitest.
 
 **Source:** operator request at WP10 verify-human, 2026-06-20 (reference image: Sublime sidebar status dots). Originally captured as SURFACE-2026-06-20-WP10-FOLLOWUP-TREE-EDITOR-POLISH; promoted to this WP at operator direction. **Part C (drag-to-resize rail) added 2026-06-21 at WP11 Phase-1 verify-human** (operator request).
 

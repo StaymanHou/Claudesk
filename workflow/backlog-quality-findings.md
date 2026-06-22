@@ -4,6 +4,24 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m2-wp11-tree-density-git-indicators — 2026-06-21
+
+1 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `6bcbe1f` (0 CRITICAL). Reviewer rated it ship-quality; backend (git_status `pub(crate)` reuse of git_diff's git2 plumbing, non-git-dir-is-not-an-error semantics, per-path staged-wins fold) the standout; Phase-5 layout churn well-annotated. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING
+- **File:** `src/components/workspace/filetree/FileTree.tsx:203` (`gitStatus[node.path]`) × `src-tauri/src/git_status/mod.rs` (`status_map_core`)
+- **Priority:** medium
+- **Status:** pending
+- **Summary:** The tree keys the git-status map by `node.path`, which is **workspace-root-relative** (`fs_tree` strips `projectPath`), but `git_file_statuses` returns **git-repo-root-relative** paths (libgit2 `repo.statuses()` + `open_repo`'s `Repository::discover` support a workspace nested below the repo root). When `projectPath` is a subdirectory of the enclosing repo, the two key spaces diverge → every git indicator silently fails to render (no error, blank). The verify-human passes ran against a workspace that WAS the repo root, so the green baseline never exercised the nested case.
+- **Suggested action:** Re-base the command's returned paths to `root` (compute repo-root → strip the `root`-relative prefix so keys match `fs_tree`), OR assert + document a root==repo-root precondition and surface a clear state when violated. Graceful failure today (no crash, just no indicators) → MAJOR not CRITICAL. Natural to fold into WP13 or a quick task.
+
+## SURFACE-2026-06-21-QUALITY-WP11-MINORS
+- **Files:** `git_status/mod.rs:68`; `App.css` + `FileTree.tsx:219`; `gitStatus.ts:16`
+- **Priority:** low
+- **Status:** pending
+- **Summary:** Three cosmetic/clarity nits: (1) `entry.path().unwrap_or("")`+skip silently drops non-UTF-8 paths (libgit2 returns `None`) — add a one-word comment; (2) the indicator right-pin uses BOTH `.file-tree-name {flex:1}` and `.file-tree-status {margin-left:auto}` (self-flagged "belt-and-suspenders" — one redundant); (3) `GitFileStatus` TS union is a prose-only mirror of the Rust serde forms (latent drift channel — a new `ChangedStatus` variant compiles clean both sides + renders no glyph; no exhaustiveness test).
+- **Suggested action:** Quick `/feature-refactor` sweep; all three are low-stakes polish.
+
 # m2-wp3b-command-palette — 2026-06-20
 
 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `3699a22` (0 CRITICAL). The feature is well-built (registry seam genuinely extensible, render-time override derivation idiomatic, well-aimed tests). Findings are comment-vs-code drift around a vestigial language Compartment (MAJOR), a duplicated language-pack switch (MINOR), and an optional-vs-required `active` prop asymmetry (MINOR). Auto-backlogged per drive_mode=autopilot.
