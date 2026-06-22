@@ -4,6 +4,12 @@
 
 > **Phase 1 cycle-close backlog sweep — 2026-06-19 (`/product-finalize`).** Phase 1 (Bare Shell + Tab Substrate PoC) closed; all 9 WPs shipped. Sweep disposition of the items still pending at close: **all DEFERRED → carry to the Phase 2 cycle** (none escalated, none newly resolved by the close itself). Carried forward: wp5/wp6/wp7/wp8/wp9 code-quality findings (the **wp6 picker IPC error-surfacing MAJORs are the most load-bearing** — they pair with Phase 2's multi-workspace picker work, WP13/WP16) + `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS` (housekeeping). These remain in this file (not archived) so the next cycle inherits them.
 
+## Code-quality findings — m2-wp13-close-tab-chord (2026-06-22)
+- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `f8d6761` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, tightly-scoped, no debt. All cosmetic: (1) `closeActiveTabRef` WHY-comment duplicates the render-fresh-ref rationale already at PaneTabs L257-263; (2) `CloseTabChordEvent` is a verbatim copy of `TabSwitchChordEvent` (a shared `ChordEvent` type would dedupe); (3) no test pins the documented Ctrl/Alt-permissive contract of the predicate. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp13-close-tab-chord — 2026-06-22`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** all three are trivial `/feature-refactor` nits (consolidate a comment; optionally hoist a shared `ChordEvent` type; add one test case). Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP
 - **Source:** feature:verify-codify (WP13 — ⌘W close-active-tab)
 - **Target level:** product:wbs (test-infra decision)

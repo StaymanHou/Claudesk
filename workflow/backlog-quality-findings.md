@@ -4,6 +4,20 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m2-wp13-close-tab-chord — 2026-06-22
+
+3 MINOR findings from `feature-review-quality` on ship commit `f8d6761` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built, tightly-scoped, no debt; the stale-closure fix matches existing in-file prior art and the codification gap was honestly surfaced (SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP). All cosmetic. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-22-QUALITY-WP13-MINORS
+- **Files:** `PaneTabs.tsx:231-245`; `closeTabChord.ts:1-32`; `__tests__/closeTabChord.test.ts`
+- **Priority:** low (all)
+- **Status:** pending
+- **Findings:**
+  1. **`closeActiveTabRef` comment duplication** — the ~10-line WHY comment on the render-fresh-ref restates the rationale already documented at PaneTabs.tsx L257-263 (`onActivePathChangeRef`/`onEmptyChangeRef`). A one-liner + back-reference ("same render-fresh-ref pattern as the reporters below, see L257") would cut the dup while keeping the load-bearing vh.3 explanation.
+  2. **`CloseTabChordEvent` is a verbatim copy of `TabSwitchChordEvent`** — identical 3-field shape + "mirrors ChordEvent" comment. A shared `ChordEvent` type imported by both pure predicates would remove the dup; per-file self-containment for these seams is arguably a feature, so low-value.
+  3. **Missing Ctrl/Alt-permissive test case** — `closeTabChord.ts:27-29` docstring promises Ctrl/Alt aren't part of the chord, but no test pins it. A `{metaKey:true,shiftKey:false,ctrlKey:true,key:"w"}` assertion would lock the documented invariant (safe today — the predicate doesn't read those fields).
+- **Pickup shape:** all three are trivial `/feature-refactor` nits (consolidate a comment; optionally hoist a shared `ChordEvent` type; add one test case). Dismiss any via the WIP's `## Code-Quality Review` section.
+
 # m2-wp11-tree-density-git-indicators — 2026-06-21
 
 1 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `6bcbe1f` (0 CRITICAL). Reviewer rated it ship-quality; backend (git_status `pub(crate)` reuse of git_diff's git2 plumbing, non-git-dir-is-not-an-error semantics, per-path staged-wins fold) the standout; Phase-5 layout churn well-annotated. Auto-backlogged per drive_mode=autopilot.

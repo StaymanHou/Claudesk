@@ -1,6 +1,7 @@
 ---
 workflow: feature
-state: ship (complete)
+state: completed
+completed: 2026-06-22
 drive_mode: autopilot
 milestone: 2
 wp: WP13
@@ -74,10 +75,10 @@ one branch in the capture-phase listener that already hosts ⌘1..9 / ⌘P / ⌘
   - **Dirty-guard closure-freshness regression** (the vh.3 bug: `closeActiveTab` must read CURRENT `docs` so a dirty active tab routes to the confirm dialog, not silent close) — **NOT codified by an automated test.** Honest assessment: this regression is a React closure-freshness defect reachable ONLY through the `PaneTabs` component (the dirty decision reads the parent `docs` store + calls `setClosing`; `openFiles.ts` is dirty-unaware). Catching a recurrence needs a rendered-component test with a mutating `docs` prop — which requires a jsdom/Testing-Library environment the repo does NOT have (vitest runs node-default; zero component tests exist; `pure logic → vitest` is the standing posture). Standing up a DOM-test toolchain for one assertion in a size-S WP is disproportionate and is itself an arch decision out of this WP's scope. Covered instead by verify-human (vh.3, re-tested PASS after the fix). Gap surfaced to backlog → SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP.
 
 ## Current Node
-- **Path:** Feature > Phase 1 > ship (Phase 1 complete — single-phase feature, all phases done)
-- **Active scope:** ship — Phase 1 fully verified (impl + verify-auto/self/human/codify all [x]). Full suite 36 files / 338 tests green. Ready to ship.
+- **Path:** Feature > finalize
+- **Active scope:** finalize — shipped (`f8d6761`), review-quality clean (0 CRIT / 0 MAJOR / 3 MINOR auto-backlogged). Ready to finalize, then halt at WP boundary.
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize (then halt at WP boundary per the standing directive)
+- **Unvisited:** finalize (then halt at WP boundary per the standing directive)
 - **Open discoveries:** SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP (component-test infra absent; dirty-guard regression covered by verify-human only)
 - **Blocked:** none
 - **Unvisited:** verify-auto → verify-self → verify-human → verify-codify (single-phase feature)
@@ -87,3 +88,34 @@ one branch in the capture-phase listener that already hosts ⌘1..9 / ⌘P / ⌘
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
 [SURFACED-2026-06-22] product:wbs — SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP: the WP13 vh.3 stale-closure regression (closeActiveTab dirty-guard read pre-dirty docs) had NO automated test that would catch a recurrence — the repo has no DOM/component test environment (vitest node-default, zero rendered-component tests). Surfaced to backlog; covered by verify-human for now.
+
+## Code-Quality Review — m2-wp13-close-tab-chord
+
+Reviewer: `code-quality-reviewer` subagent on ship commit `f8d6761`. Result: **0 CRITICAL, 0 MAJOR, 3 MINOR** — well-built, no refactor warranted; MINORs auto-backlogged (Mode 3).
+
+### Strengths
+- `isCloseTabChord` mirrors the established `tabSwitchChord.ts`/`finderChord.ts` posture exactly (pure, minimal event shape, vitest-tested); disjointness is explicit and asserted against the real sibling chords.
+- The stale-closure fix matches prior art already in the same file (`onActivePathChangeRef`/`onEmptyChangeRef` render-fresh-ref pattern) — consistent idiom, not a one-off.
+- Reuses the WP12 `requestClose` dirty-guard rather than re-implementing close logic — ⌘W and the per-tab ✕ share one path, so dialog semantics can't drift.
+- Chord-ownership map updated in the same commit (single source of truth stays in sync).
+- `overlayOpenRef` avoids re-registering the capture-phase listener on every overlay toggle (listener stays keyed on `[visible]`).
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [PaneTabs.tsx:231-245] `closeActiveTabRef` carries a ~10-line WHY comment restating the render-fresh-ref rationale already documented at L257-263 for the path/empty reporters; a one-liner + back-reference would cut duplication while keeping the vh.3 explanation.
+- [closeTabChord.ts:1-32] `CloseTabChordEvent` is a verbatim copy of `TabSwitchChordEvent`; a shared `ChordEvent` type would remove the dup, though per-file self-containment for these pure seams is arguably a feature.
+- [__tests__/closeTabChord.test.ts] No case pins the documented Ctrl/Alt-permissive contract (docstring promises Ctrl/Alt aren't part of the chord); a `{metaKey:true,shiftKey:false,ctrlKey:true,key:"w"}` assertion would lock it.
+
+### Assessment
+Well-built, tightly-scoped, advances the codebase without debt. Reuses the two correct seams (WP12 dirty-guard + WP1 capture-phase listener), the imperative-handle plumbing is isomorphic to the existing `activateIndex` path, and the subtle stale-closure fix uses an in-file existing pattern with the codification gap honestly surfaced (SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP) rather than hidden. All findings MINOR/cosmetic; none justify a refactor.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The dirty-guard close logic is NOT a pure-reducer concern — it lives in the `PaneTabs` component (reads the parent `docs` store + calls `setClosing`). That meant the regression class (closure-freshness) is only catchable with a DOM/component test the repo doesn't have. The plan assumed "reuse requestClose" was a trivial wiring; the subtlety was *how* the imperative handle captures it.
+- **Assumptions that held:** The imperative-handle chain (PaneTabs → EditorSplit → RightPanelHost) was the right seam, isomorphic to WP12's `activateIndex`. The capture-phase listener + `preventDefault` correctly pre-empts the OS ⌘W. The predicate-disjointness reasoning was sound. The overlay-suppress guard (wp6 lesson) was correctly anticipated at plan time.
+- **Assumptions that were wrong:** That a `useCallback([activeTabId])` would be a safe memoization for `closeActiveTab` — it wasn't, because the guard's dirtiness input (`docs`) changes WITHOUT `activeTabId` changing. The first impl shipped a stale closure that defeated the dirty-guard; caught at verify-human (vh.3), not by any automated check.
+- **Approach delta:** Two unplanned in-loop fixes beyond the original plan: (1) a ref-write-during-render lint error on `overlayOpenRef` (fixed via `useEffect` sync at verify-auto); (2) the stale-closure dirty-guard bug (fixed via the latest-ref pattern at the F12 back-loop from verify-human). The core 5-leaf plan otherwise landed as written.

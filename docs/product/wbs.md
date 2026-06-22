@@ -1,15 +1,15 @@
 ---
 stage: wbs
 state: in-progress
-updated: 2026-06-21
+updated: 2026-06-22
 milestone: 2
-# WP1,2,3a,3b,3c,4,5,6,7,8,9,10,11,12 shipped. WP11 SHIPPED 2026-06-21 (commit 6bcbe1f — tree/editor density + git indicators + drag-resize rail + P5 layout restructure; review 0 CRIT / 1 MAJOR + 3 MINOR auto-backlogged).
+# WP1,2,3a,3b,3c,4,5,6,7,8,9,10,11,12,13 shipped. WP13 SHIPPED 2026-06-22 (commit f8d6761 — ⌘W close-active-editor-tab chord; review 0 CRIT / 0 MAJOR / 3 MINOR auto-backlogged).
 #
-# ⚠️ /product-finalize is BLOCKED (operator directive 2026-06-21) — do NOT close the M2 cycle until ALL THREE clear:
-#   1. WP13 — ⌘W close-active-tab (size S, spun out of WP11 verify-human; its own feature cycle). Section below.
-#   2. WP11 review MAJOR — git-status path-keying for a workspace nested below its repo root (SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING in backlog.md).
-#   3. Terminal blank-cursor incident — deferred WP9 prompt-flush/fit race (NOT a WP11 regression; needs real-PTY diagnosis via /incident-report). See the archived WP11 WIP Discoveries.
-# Only when all three are resolved/shipped → run /product-finalize to close M2.
+# ⚠️ /product-finalize is BLOCKED (operator directive 2026-06-21) — do NOT close the M2 cycle until BOTH remaining clear:
+#   1. ✅ DONE — WP13 ⌘W close-active-tab (shipped 2026-06-22, commit f8d6761).
+#   2. WP11 review MAJOR — git-status path-keying for a workspace nested below its repo root (SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING in backlog.md). STILL OPEN.
+#   3. Terminal blank-cursor incident — deferred WP9 prompt-flush/fit race (NOT a WP11 regression; needs real-PTY diagnosis via /incident-report). See the archived WP11 WIP Discoveries. STILL OPEN.
+# Only when BOTH remaining (#2 + #3) are resolved → run /product-finalize to close M2.
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -231,17 +231,17 @@ Learning-sequence ordering, riskiest-unknown-first:
 
 **Source:** SURFACE-2026-06-21-EDITOR-MULTI-FILE-TAB-STRIP (high) — surfaced from WP7 Phase-2 verify-human when the operator chose the Sublime "Find Results" tab UX, which depends on an editor open-file tab strip not previously planned. Operator decision 2026-06-21: build WP12 first, then resume WP7 to render Find Results into a WP12 tab.
 
-### WP13: ⌘W — close the active editor tab
+### WP13: ⌘W — close the active editor tab ✅ SHIPPED 2026-06-22 (commit f8d6761)
 
 **Description:** A keyboard shortcut to close the currently-active open-file tab in the focused editor pane (Sublime/VS-Code `⌘W` parity). Today tabs close only via the per-tab `✕` (WP12); this adds the chord. Must route through the existing dirty-close guard (the WP12 confirm dialog) so ⌘W on an unsaved tab prompts rather than silently discarding. Small, self-contained: a chord predicate + wiring to the focused pane's existing close path.
 **Milestone:** Milestone 2
 **Dependencies:** WP12 (the per-pane open-file tab model + `requestClose` dirty-guard path this reuses); WP1 (the capture-phase document-listener chord pattern, so ⌘W fires while focus is inside CM6).
 **Size:** S
 **Tasks:**
-- [ ] Pure `isCloseTabChord(e)` predicate (bare ⌘W, no Shift) — vitest, mirroring the existing chord predicates (`finderChord`/`searchChord`/`tabSwitchChord`). Confirm disjoint from the ⌘⇧ family + bare-⌘P/⌘1..9.
-- [ ] Wire ⌘W (capture-phase listener, gated on the focused pane being active) → the focused pane's active-tab close, routed through the WP12 `requestClose` dirty-guard (unsaved → confirm dialog, not silent discard). Decide: a no-op when no tab is open (vs. closing the pane) — match Sublime (inert with no tab).
-- [ ] Chord-ownership: add ⌘W to the app-wide chord matrix doc (`paletteCommands.ts` comment / the chord map) so it's recorded as reserved.
-- [ ] verify the close path + dirty-guard fire correctly (unit for the predicate; live/operator for the guarded close).
+- [x] Pure `isCloseTabChord(e)` predicate (bare ⌘W, no Shift) — vitest, mirroring the existing chord predicates (`finderChord`/`searchChord`/`tabSwitchChord`). Confirm disjoint from the ⌘⇧ family + bare-⌘P/⌘1..9. (`closeTabChord.ts` + 5-case test.)
+- [x] Wire ⌘W (capture-phase listener, gated on the focused pane being active) → the focused pane's active-tab close, routed through the WP12 `requestClose` dirty-guard (unsaved → confirm dialog, not silent discard). No-op when no tab is open (Sublime parity). Wired via `closeActiveTab` on the PaneTabs→EditorSplit imperative-handle chain (latest-ref so the guard reads current `docs`); RightPanelHost ⌘W branch suppressed under the finder/search overlay.
+- [x] Chord-ownership: add ⌘W to the app-wide chord matrix doc (`paletteCommands.ts` comment / the chord map) so it's recorded as reserved.
+- [x] verify the close path + dirty-guard fire correctly (unit for the predicate; live/operator for the guarded close — verify-human 4/4 PASS incl. dirty-guard re-test after the F12 stale-closure fix).
 
 **Source:** operator request 2026-06-21 (during WP11 Phase 5 verify-human) — "⌘W to close the current file tab," explicitly scoped as its own WP.
 
