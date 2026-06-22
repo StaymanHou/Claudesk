@@ -23,8 +23,8 @@
 ## Code-quality findings — m2-wp11-tree-density-git-indicators (2026-06-21)
 - **Pointer:** 1 MAJOR + 3 MINOR from `feature-review-quality` on ship commit `6bcbe1f` (0 CRITICAL). MAJOR: git-status path-keying mismatch — `fs_tree` keys are workspace-relative but `git_file_statuses` keys are git-repo-root-relative, so a workspace nested below its repo root renders NO indicators (silent, graceful). MINORs: non-UTF-8 path drop comment; redundant flex:1/margin-left:auto right-pin; prose-only GitFileStatus TS↔Rust contract. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp11-tree-density-git-indicators — 2026-06-21`.
 - **Priority:** medium (MAJOR) + low (MINORs)
-- **Status:** pending
-- **Pickup shape:** the MAJOR is the highest-value — re-base `git_file_statuses` paths to `root` (or assert root==repo-root); natural to fold into WP13 or a quick task. The 3 MINORs are a quick `/feature-refactor` sweep. Dismiss any via the WIP's `## Code-Quality Review` section.
+- **Status:** MAJOR RESOLVED 2026-06-22 (task `m2-wp11-git-status-path-keying`) — `status_map_core` now re-bases each git path to the workspace root (`within_repo_prefix` + `rebase_to_workspace`: strip the workspace's within-repo prefix, drop out-of-subtree entries, empty-prefix short-circuit preserves the ws==repo-root case). Also added `recurse_untracked_dirs(true)` so untracked subdirs report per-file (latent even at the baseline). +2 regression tests (nested-workspace key + sibling-omit) → 138 cargo pass. **3 MINORs STILL pending** (non-UTF-8 path drop comment; redundant flex:1/margin-left:auto right-pin; prose-only GitFileStatus TS↔Rust contract).
+- **Pickup shape:** MAJOR done. The 3 MINORs remain — a quick `/feature-refactor` sweep. Dismiss any via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE
 - **Source:** feature:build (WP7 Phase 3 relevance gate — operator decision 2026-06-21)

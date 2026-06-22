@@ -5,11 +5,11 @@ updated: 2026-06-22
 milestone: 2
 # WP1,2,3a,3b,3c,4,5,6,7,8,9,10,11,12,13 shipped. WP13 SHIPPED 2026-06-22 (commit f8d6761 — ⌘W close-active-editor-tab chord; review 0 CRIT / 0 MAJOR / 3 MINOR auto-backlogged).
 #
-# ⚠️ /product-finalize is BLOCKED (operator directive 2026-06-21) — do NOT close the M2 cycle until BOTH remaining clear:
+# ⚠️ /product-finalize is BLOCKED (operator directive 2026-06-21) — do NOT close the M2 cycle until the remaining blocker clears:
 #   1. ✅ DONE — WP13 ⌘W close-active-tab (shipped 2026-06-22, commit f8d6761).
-#   2. WP11 review MAJOR — git-status path-keying for a workspace nested below its repo root (SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING in backlog.md). STILL OPEN.
-#   3. Terminal blank-cursor incident — deferred WP9 prompt-flush/fit race (NOT a WP11 regression; needs real-PTY diagnosis via /incident-report). See the archived WP11 WIP Discoveries. STILL OPEN.
-# Only when BOTH remaining (#2 + #3) are resolved → run /product-finalize to close M2.
+#   2. ✅ DONE — WP11 git-status path-keying (resolved 2026-06-22, task m2-wp11-git-status-path-keying — re-base status keys to the workspace root; 138 cargo pass).
+#   3. Terminal blank-cursor incident — deferred WP9 prompt-flush/fit race (NOT a WP11 regression; needs real-PTY diagnosis via /incident-report). See the archived WP11 WIP Discoveries. STILL OPEN — the LAST M2-close blocker.
+# Only when the remaining blocker (#3) is resolved → run /product-finalize to close M2.
 ---
 
 # Work Breakdown Structure — Milestone 2: Lite Editor + Diff Viewer
@@ -276,3 +276,6 @@ Tracked in [`roadmap.md`](roadmap.md) (Milestones 3–9: stateful CC controller,
 - [2026-06-20] **WP8 REDEFINED + shipped** — operator reversed WP8's scope: it is **no longer a removal WP** (both Sublime launchers are KEPT) and the **parity gate is dropped** (WP8 is no longer gated on WP9). New scope: relocate both Sublime launchers into the `right-panel-toggle` tab row as inlined-SVG icon buttons + delete the redundant `⌘⇧O` Sublime-Text hotkey; backend untouched. Shipped same day. The WP8 section, the M2 critical-path diagram + notes, and WP9's parity-gate task were all resynced to the new scope. Source: operator directive → feature workflow (WP8).
 - [2026-06-19] **WP10 (file-tree navigator) added** — operator designated it a must-have at WP2 Phase-1 verify-human. App-layer subsystem reusing WP6's `fs_index` infrastructure; parallel to the critical path. Source: feature:build (WP2) → product:wbs.
 - [2026-06-19] **WP3 split into WP3a/WP3b/WP3c** — operator flagged the original WP3 as over-packed (6 features under one "M"). Split into WP3a (core editing: multi-cursor / find-replace / font-zoom / minimap), WP3b (command palette — net-new overlay subsystem), WP3c (split panes — riskiest layout work). The old WP3's "daily-Sublime-parity confirmation" task was pulled out and relocated to **WP9** as an explicit parity gate that unblocks WP8's Sublime-pop removal. Source: operator review → product:wbs.
+
+## Session Pause — 2026-06-22 11:10
+Paused at the WP boundary after WP13 fully closed (no active WIP). /product-finalize stays gated on 2 remaining blockers — NEXT is the WP11 git-status path-keying MAJOR (SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING); the terminal blank-cursor incident remains after. See the status-line comment near the top of this file. See `workflow/.session.md` to resume (run `/session-start`).

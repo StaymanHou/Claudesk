@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-21
+updated: 2026-06-22
 ---
 
 # Runtime Registry
@@ -56,9 +56,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 8s (2026-06-21, WP11 P2: +8 git_status tests → 136 pass; warm recompile ~7.3s, run ~0.45s)
+- **Last:** 8s (2026-06-22, WP11 path-keying task: +2 git_status tests → 138 pass; warm recompile + run ~0.45s)
 - **Use timeout:** 120000
 - **History:**
+  - 8s — 2026-06-22 (WP11 path-keying task: +2 nested-workspace tests → 138 pass; recurse_untracked_dirs fix, no new deps)
   - 8s — 2026-06-21 (WP11 P2: new git_status module, +8 status_map_core tests → 136 pass; reuses git2/git_diff, no new deps)
   - 4s — 2026-06-21 (warm, WP12 P1: +4 stat_file_core tests → 111 pass; no new deps, serde already present)
   - 5s — 2026-06-20 (warm, WP10 P1: +8 walk_tree_core tests → 90 pass; no new deps, reused ignore crate)

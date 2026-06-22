@@ -25,6 +25,16 @@
 //! (unstaged) bits. The tree shows ONE mark per file, so we fold: the **staged**
 //! change-kind wins when present (it's the more-intentional state), else the unstaged
 //! kind, else the path is clean and omitted from the map.
+//!
+//! ## Key space: workspace-root-relative, NOT repo-root-relative
+//! `open_repo` discovers the repository *upward* from `repo_root` ([`Repository::discover`]),
+//! so a workspace nested below its repo root still finds the repo — but libgit2 then
+//! reports every status path relative to the **repo working dir**, e.g. `subdir/file.txt`.
+//! The file tree, however, keys its rows on **workspace-root-relative** paths (the
+//! `fs_tree` / `buildTree` key space, e.g. `file.txt`). To make `gitStatus[node.path]`
+//! lookups hit, we re-base each path: strip the workspace's within-repo prefix, and drop
+//! entries that fall outside the workspace subtree (the tree never renders those rows).
+//! When the workspace IS the repo root the prefix is empty and keys pass through unchanged.
 
 pub mod commands;
 
@@ -40,7 +50,8 @@ use crate::git_diff::{open_repo, staged_status, unstaged_status, ChangedStatus, 
 /// diff viewer uses) so the frontend has one status vocabulary across both surfaces.
 pub type GitFileStatus = ChangedStatus;
 
-/// Build the `repo-relative path → status` map for the working tree at `repo_root`.
+/// Build the `workspace-root-relative path → status` map for the working tree at
+/// `repo_root` (the workspace dir — see module docs on the key space).
 ///
 /// - **Clean files are omitted** (absence from the map = no indicator).
 /// - **A non-git `repo_root` returns an empty map**, not an error (see module docs) —
@@ -54,8 +65,22 @@ pub fn status_map_core(repo_root: &Path) -> Result<HashMap<String, GitFileStatus
         Err(e) => return Err(e),
     };
 
+    // The workspace's path *within* the repo working dir, as a `/`-joined POSIX prefix
+    // (empty when the workspace IS the repo root). git status paths are repo-root-relative;
+    // we strip this prefix to re-key them into the tree's workspace-root-relative space.
+    // A bare repo (no workdir) has no working-tree statuses → empty map.
+    let prefix = match repo.workdir() {
+        Some(workdir) => within_repo_prefix(workdir, repo_root),
+        None => return Ok(HashMap::new()),
+    };
+
     let mut opts = StatusOptions::new();
     opts.include_untracked(true)
+        // Report untracked FILES, not a collapsed parent dir. Without this, an untracked
+        // subdir reports as one `subdir/` entry — so the tree's file rows under it get no
+        // indicator, and (in a nested workspace) the lone dir entry can equal the strip
+        // prefix and re-base to an empty key. The tree marks files, so we want per-file paths.
+        .recurse_untracked_dirs(true)
         .renames_head_to_index(true)
         .renames_index_to_workdir(true)
         .include_ignored(false);
@@ -65,18 +90,64 @@ pub fn status_map_core(repo_root: &Path) -> Result<HashMap<String, GitFileStatus
 
     for entry in statuses.iter() {
         let s = entry.status();
-        let path = entry.path().unwrap_or("").to_string();
+        let path = entry.path().unwrap_or("");
         if path.is_empty() {
             continue;
         }
+        // Re-base into the workspace key space; `None` ⇒ outside the workspace subtree,
+        // a row the tree never renders, so drop it.
+        let Some(key) = rebase_to_workspace(path, &prefix) else {
+            continue;
+        };
         // One mark per file: the staged change-kind wins (more intentional), else the
         // unstaged kind. A path with neither is clean and stays out of the map.
         if let Some(status) = staged_status(s).or_else(|| unstaged_status(s)) {
-            out.insert(path, status);
+            out.insert(key, status);
         }
     }
 
     Ok(out)
+}
+
+/// Compute the workspace's path *within* the repo working dir as a `/`-joined POSIX
+/// prefix (no trailing slash; empty `String` when the workspace IS the repo root).
+///
+/// Both paths are canonicalized first so symlinks / `.` components / relative segments
+/// don't defeat `strip_prefix`. `workdir` from libgit2 is already canonical, but the
+/// IPC-supplied `repo_root` may not be. If either canonicalize fails (e.g. the path no
+/// longer exists) or the workspace is somehow not under the workdir, we fall back to an
+/// empty prefix — the pass-through behavior, which at worst keys repo-relative (the
+/// pre-fix status quo), never panics, and still renders the workspace==repo-root case.
+fn within_repo_prefix(workdir: &Path, repo_root: &Path) -> String {
+    let workdir_canon = workdir
+        .canonicalize()
+        .unwrap_or_else(|_| workdir.to_path_buf());
+    let ws_canon = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    match ws_canon.strip_prefix(&workdir_canon) {
+        Ok(rel) => rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/"),
+        Err(_) => String::new(),
+    }
+}
+
+/// Re-key a repo-root-relative git path into the workspace-root-relative tree key space.
+///
+/// - Empty `prefix` (workspace == repo root) ⇒ pass through unchanged.
+/// - Path inside the workspace subtree ⇒ the remainder after `prefix/` (e.g.
+///   `subdir/file.txt` with prefix `subdir` ⇒ `file.txt`).
+/// - Path outside the workspace subtree ⇒ `None` (caller drops it).
+fn rebase_to_workspace(path: &str, prefix: &str) -> Option<String> {
+    if prefix.is_empty() {
+        return Some(path.to_string());
+    }
+    path.strip_prefix(prefix)
+        .and_then(|rest| rest.strip_prefix('/'))
+        .map(str::to_string)
 }
 
 #[cfg(test)]
@@ -196,5 +267,50 @@ mod tests {
         assert_eq!(map.get("committed.txt"), Some(&ChangedStatus::Modified));
         assert_eq!(map.get("fresh.txt"), Some(&ChangedStatus::Untracked));
         assert_eq!(map.len(), 2, "{map:?}");
+    }
+
+    /// The bug case: the workspace is a SUBDIR of the repo root. `Repository::discover`
+    /// finds the repo upward, libgit2 reports `ws/file.txt`, and the tree keys rows on
+    /// `file.txt` (workspace-relative). The status map must be re-keyed to match, or the
+    /// nested workspace silently shows no indicators (SURFACE-2026-06-21-...-PATH-KEYING).
+    #[test]
+    fn workspace_nested_below_repo_root_is_keyed_workspace_relative() {
+        let dir = init_repo();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir(&ws).unwrap();
+        std::fs::write(ws.join("nested.txt"), "fresh\n").unwrap();
+        // Pass the SUBDIR as the workspace root (what the picker hands us for a nested ws).
+        let map = status_map_core(&ws).unwrap();
+        assert_eq!(
+            map.get("nested.txt"),
+            Some(&ChangedStatus::Untracked),
+            "nested workspace path must be keyed relative to the workspace, not the repo: {map:?}"
+        );
+        assert!(
+            !map.contains_key("ws/nested.txt"),
+            "repo-relative key must NOT leak through: {map:?}"
+        );
+        assert_eq!(map.len(), 1, "{map:?}");
+    }
+
+    /// A change OUTSIDE the workspace subtree (a sibling dir of the nested workspace) must
+    /// be omitted — the tree never renders those rows, and a stray repo-relative key would
+    /// never match anyway.
+    #[test]
+    fn change_outside_workspace_subtree_is_omitted() {
+        let dir = init_repo();
+        let ws = dir.path().join("ws");
+        let sibling = dir.path().join("other");
+        std::fs::create_dir(&ws).unwrap();
+        std::fs::create_dir(&sibling).unwrap();
+        std::fs::write(ws.join("inside.txt"), "in\n").unwrap();
+        std::fs::write(sibling.join("outside.txt"), "out\n").unwrap();
+        let map = status_map_core(&ws).unwrap();
+        assert_eq!(map.get("inside.txt"), Some(&ChangedStatus::Untracked));
+        assert!(
+            !map.keys().any(|k| k.contains("outside")),
+            "a sibling-dir change must not appear in the workspace's status map: {map:?}"
+        );
+        assert_eq!(map.len(), 1, "{map:?}");
     }
 }
