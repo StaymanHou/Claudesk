@@ -425,3 +425,9 @@
 - **Suggested action:** M4 WP5 (verify-at-N) — re-confirm RAM headroom with N real in-flight sessions; note the practical ceiling as operator guidance. Longer-term (post-M4 dogfooding), consider whether an idle-session-suspend mechanism is ever worth it (likely overkill for a single-user 16 GB+ tool). Do NOT pursue as M4 scope.
 - **Priority:** low (inherent-to-workload; informational + a WP5 watch-item)
 - **Status:** pending
+
+## Code-quality findings — m4-wp1-n-workspace-cost-probe (2026-06-22)
+- **Pointer:** 2 MINOR findings from `feature-review-quality` on ship commit `9f3e0fe` (0 CRITICAL, 0 MAJOR). Both robustness/precision nits in the throwaway `measure.sh`: (1) the `pgrep -fc` N-alive guard degraded to `?` during the run (operator confirmed 8 sessions manually); (2) percentile indexing is the lower-median truncation (sub-sample at 110+ samples, matches the `cm6/measure.sh` baseline). Reviewer rated the probe well-built, effectively zero durable debt. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp1-n-workspace-cost-probe — 2026-06-22`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** both relevant only if the throwaway probe is resurrected (it is archived-or-deleted at finalize); neither is worth a `/feature-refactor` pass. Dismiss via the WIP's `## Code-Quality Review` section.

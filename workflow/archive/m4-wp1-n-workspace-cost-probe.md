@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M4 WP1 — N-workspace mount-cost probe
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready to ship
+**State:** COMPLETED 2026-06-22 — shipped 9f3e0fe, review clean (2 MINOR backlogged), GO verdict. Archived.
 **Created:** 2026-06-22
 **Type:** probe (size S, knowledge output)
 **WBS:** Milestone 4 → WP1 (`docs/product/wbs.md` §WP1)
@@ -59,8 +59,8 @@ The whole M4 premise — keep **every** workspace mounted (`display:none` backgr
   - [x] verify-codify  <!-- status: complete — no new tests warranted (docs/backlog-only phase; no behavior to codify, testing doc content would be an anti-pattern). No integration boundary. Full suite 350/350 green — no regression. -->
 
 ## Current Node
-- **Path:** Feature > READY TO SHIP (all phases complete)
-- **Active scope:** none — both Phase 1 (probe + measurement) and Phase 2 (verdict + outcome doc + backlog) complete. WP1 verdict: GO for eager-mount. Next: /feature-ship.
+- **Path:** Feature > review-quality (complete) > finalize
+- **Active scope:** none — all phases shipped (9f3e0fe), code-quality review done (0 CRITICAL / 0 MAJOR / 2 MINOR auto-backlogged). WP1 verdict: GO for eager-mount. Next: /feature-finalize (this WP's close → also completes the M4 WP1 boundary, the standing-directive halt point).
 - **Blocked:** none
 - **Unvisited:** Phase 2 verify-auto → verify-self → verify-human → verify-codify → ship → finalize (WP boundary)
 - **Open discoveries:** the ~2.8GB N=8 backend-RAM finding (non-blocking) — logged as SURFACE-2026-06-22-N8-CC-BACKEND-RAM → WP5
@@ -113,6 +113,35 @@ NOTE: the script's RAM line reports `phys_footprint_peak` (high-water mark incl.
 - **Webview RAM: at/just over the line, but the editor adds only modestly.** 311 idle / 428 active vs WP4's 240 active (terminals-only). The 8 editors + 8 diffs + 8 second-terminals add ~120–190 MB — real but does NOT by itself force lazy-loading.
 - **DOMINANT cost = the 8 real `claude` processes (~2.8 GB), which `React.lazy` cannot touch.** The probe surfaced what WP4's replay-fixture method structurally couldn't: at N=8 *real* CC the backend is ~6× the entire webview. System held fine on 16 GB, but this reframes the lazy-mount question (lazy-mounting the editor saves frontend MB, not the backend GB).
 
+## Code-Quality Review — m4-wp1-n-workspace-cost-probe
+
+### Strengths
+- Probe re-uses the *real shipped* `XtermPane` + `RightPanelHost` (not synthetic stand-ins), targeting actual M2 production mount cost — the gap vs the isolation-only M1 `NMountProbe`.
+- `ProbeWorkspace` mirrors `Workspace.tsx`'s grid + `display:none`-keeps-mounted toggle; the one divergence (the `term=cc|shell` `spawnCommand` seam) is documented inline with its justification.
+- The bespoke multi-seed path (direct `makeWorkspace` array, bypassing the N=1-clamp `openWorkspace`) keeps the N>1 lift out of production until WP2 — respects the build-order seam.
+- `?nwsprobe` dispatcher is a faithful 1:1 mirror of `?cm6probe`/`?probe`; the StrictMode omission carries a precise WHY (double-spawned PTYs would confound a steady-state cost probe).
+- Outcome doc separates the scoped question (editor cost — modest) from the decisive surprise (~2.8 GB CC backend — inherent-to-workload, not lazy-fixable) and routes it to WP5 as a non-blocking watch-item without muddying the GO verdict.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [src/probe/nworkspaces/measure.sh:33-34] The `pgrep -fc 'claude --dangerously-skip-permissions'` N-alive sanity guard silently degraded to `?` during the run (shell-snapshot eval-mangling), forcing a manual `pgrep -fl` fallback. The one built-in "did N actually spawn" guard didn't fire as designed. Throwaway code; operator caught it manually.
+- [src/probe/nworkspaces/measure.sh:75] Percentile indexing `a[int(n*0.5)]`/`a[int(n*0.95)]` copied verbatim from `cm6/measure.sh` — usual lower-median truncation off-by-one. Sub-sample at 110+ samples, immaterial to a threshold decision; matching the baseline aids comparability. Flagged for completeness, not action.
+
+### Assessment
+A well-built probe: measures the real production tree, isolates the new unknown (editor mount cost) from the dominant cost it incidentally surfaced (CC backend RAM), routes each finding to the right downstream consumer (GO → WP2, backend ceiling → WP5, lazy reconciliation → backlog). Throwaway code is clear and respects the WP2 build-order seam. Effectively zero durable debt — the only lasting change is a one-branch dispatcher matching two siblings; the rest is archived at finalize. Both MINORs are robustness/precision nits in throwaway measurement code, neither worth a refactor pass.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The probe's *scoped* question (do N editors bust the envelope → must we lazy-mount?) turned out to be the *minor* axis. The real, unmeasured-until-now cost at N=8 is the **8 `claude` backend processes (~2.8 GB, ~6× the entire webview)** — a dimension WP4's replay-fixture method structurally could not see. This reframed the verdict from "is eager-mount affordable?" to "the dominant cost is inherent to the workload, and Claudesk's marginal cost (the editor+diff webview) is small and green."
+- **Assumptions that held:** The keep-everything-mounted + off-viewport-background model is cheap on CPU (idle 0.0%, active 7.8% — *better* than WP4's terminals-only because the realistic 1-streaming-7-idle case is gentler than WP4's 8-streaming harness). The WP4 `serializeAsHTML()` render path remains safe to build WP3 on. The `measure.sh` method ported cleanly.
+- **Assumptions that were wrong:** That "RAM at N" was primarily a *frontend* (editor-mount) question. It's overwhelmingly a *backend* (CC-process) question, and `React.lazy` — the mitigation the WBS pre-loaded — addresses the wrong axis entirely. Also: the initial idle RAM read (477 MB) looked like an envelope bust until separating `phys_footprint_peak` (spawn-storm transient) from steady-state RSS (311 MB).
+- **Approach delta:** Built a NEW probe rather than reusing the M1 `NMountProbe` (which mounted raw CM6 in isolation, not the real `Workspace` tree) — the WBS anticipated this. The N=1 clamp in `workspace.ts` forced a throwaway multi-seed path (direct `makeWorkspace` array) rather than the `?ws=` seam, keeping the N>1 lift in WP2 where it belongs. The conditional `React.lazy` prototype (P2.2) was correctly skipped — the envelope held AND lazy couldn't touch the dominant cost, so prototyping it would have answered a moot question.
+
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
+- [SURFACED-2026-06-22] WP5 — `SURFACE-2026-06-22-N8-CC-BACKEND-RAM`: 8 real CC sessions cost ~2.8 GB (inherent to the workload, not Claudesk); WP5 verify-at-N should confirm headroom + note the practical ceiling. Logged to backlog.

@@ -739,3 +739,27 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
   2. **`.expect()` on the thread spawn is a non-test panic path** (`commands.rs:48-53`) — `Builder::spawn(...).expect(...)` violates the "no unwrap outside tests" convention, though it mirrors WP3's `spawn_listener` precedent (`hook_socket/mod.rs`) and thread-spawn failure is near-impossible in practice. Borderline; flagged for convention-consistency only. *(If WP3's pattern is accepted as the house style for infallible thread spawns, dismiss.)*
   3. **Detached-handle asymmetry is undocumented** (`commands.rs:41-42`) — the docstring says the caller "may hold or detach" the `JoinHandle`, and `lib.rs` discards it (detached) while WP3's listener retains `_handle` in `HookSocketState`. The asymmetry is correct (the drain thread self-terminates on channel close, so no cleanup handle is needed) but the WHY is unstated. *(Fix: one-line note "detached — exits on channel close, no cleanup needed.")*
 - **Pickup shape:** all three are trivial `/feature-refactor` doc-fix nits in one file; none changes correctness, the emit behavior, or any hand-off contract. Items 1 + 3 are pure docstring corrections; item 2 is a convention judgment call (dismiss if WP3's `.expect` precedent stands). Dismiss any via the WIP's `## Code-Quality Review` section.
+
+# m4-wp1-n-workspace-cost-probe — 2026-06-22
+
+2 MINOR findings from `feature-review-quality` on ship commit `9f3e0fe` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built — measures the real production tree, isolates the new unknown from the incidental backend-RAM surprise, effectively zero durable debt (the only lasting change is a one-branch dispatcher; the rest is throwaway probe code archived at finalize). Both findings are robustness/precision nits in the throwaway `measure.sh`. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-22-QUALITY-WP1-MEASURE-PGREP-GUARD-DEGRADED
+- **Files:** `src/probe/nworkspaces/measure.sh:33-34`
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (throwaway-code robustness)
+- **Summary:** The `pgrep -fc 'claude --dangerously-skip-permissions'` N-alive sanity guard printed `?` during the actual measurement run (a shell-snapshot eval-mangling artifact of the literal pattern), so the script's one built-in "did N actually spawn?" guard silently degraded; the operator fell back to a manual `pgrep -fl` to confirm 8 live sessions.
+- **Context:** The guard exists precisely so an N-workspace probe doesn't silently measure 1 live session instead of N. It didn't fail the measurement (the operator caught it), but the guard as written wasn't robust to the run environment. Throwaway probe code — slated for deletion-or-archival at finalize.
+- **Suggested action:** If the probe is ever re-run (rather than archived), make the count robust — e.g. capture PIDs into a var first (`pids=$(pgrep -f dangerously-skip-permissions); echo "$pids" | grep -c .`) rather than `pgrep -fc` with a pattern that the eval wrapper can mangle. Likely moot once the probe is archived.
+- **Pickup shape:** trivial; only relevant if the probe is resurrected. Dismiss via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-22-QUALITY-WP1-MEASURE-PERCENTILE-OFFBYONE
+- **Files:** `src/probe/nworkspaces/measure.sh:75` (also the same in `src/probe/cm6/measure.sh`)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (precision nit, inherited from baseline)
+- **Summary:** Percentile indexing `a[int(n*0.5)]` / `a[int(n*0.95)]` is the lower-median truncation, not interpolated — a classic off-by-one vs a 1-based interpolated percentile. Copied verbatim from `cm6/measure.sh`.
+- **Context:** With 110+ samples the error is sub-sample and immaterial to a threshold (<20%) decision, and matching the established `cm6/measure.sh` baseline is the right call for cross-probe comparability. Flagged for completeness only.
+- **Suggested action:** None recommended (matching the baseline is intentional). If a future probe wants exact percentiles, fix both `measure.sh` copies together. Throwaway code.
+- **Pickup shape:** no action; informational. Dismiss via the WIP's `## Code-Quality Review` section.

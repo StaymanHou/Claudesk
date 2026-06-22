@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-22  # M4 (Multi-workspace UX — filmstrip + center stage) decomposed. WP1 cost-probe → WP2 N>1 lift → WP3 filmstrip (tiles+status+mirror+⌘⇧-digit switch+drag-reorder) → WP4 collapse → WP5 verify; WP4b (left/right focus indicator) parallel off WP2. dogfood-replace point.
+updated: 2026-06-22  # M4 WP1 (N-workspace cost probe) SHIPPED — GO for eager-mount. Remaining: WP2 N>1 lift → WP3 filmstrip → WP4 collapse → WP5 verify; WP4b parallel off WP2. dogfood-replace point.
 ---
 
 # Work Breakdown Structure — Milestone 4: Multi-workspace UX (filmstrip + center stage)
@@ -26,7 +26,8 @@ Learning-sequence ordering (riskiest-unknown-first), per the WBS discipline:
 
 ## Milestone 4
 
-### WP1: Probe — N-workspace mount cost with the full M2 stack
+### WP1: Probe — N-workspace mount cost with the full M2 stack ✅ SHIPPED 2026-06-22 (commit 9f3e0fe)
+**Verdict: GO for eager-mount.** N=8 real CC + full M2 stack measured idle CPU 0.0% / active 7.8% median (11.7% p95), webview RAM 311/428 MB — editors+diffs add only ~0% idle CPU + ~120–190 MB; envelope effectively holds, no `React.lazy` needed (WP2 mounts the EditorPanel eagerly, no mount-sequence delta). Decisive finding: the ~2.8 GB N=8 cost is the 8 `claude` backend processes — inherent to 8 concurrent CC sessions (same as 8 terminals), not Claudesk-introduced, not lazy-fixable → logged `SURFACE-2026-06-22-N8-CC-BACKEND-RAM` as a WP5 headroom watch-item. Full writeup: `docs/product/wp1-n-workspace-cost-probe-outcome.md`.
 **Type:** probe
 **Milestone:** Milestone 4
 **Dependencies:** none (M1 tab-shell + M2 editor/diff/terminal + M3 broadcaster all shipped; this probes *our* mount cost at N)
@@ -35,10 +36,10 @@ Learning-sequence ordering (riskiest-unknown-first), per the WBS discipline:
 **Timebox:** half-day
 **Success criterion:** A short writeup (`docs/product/wp1-n-workspace-cost-probe-outcome.md`) recording: measured RAM + idle/active CPU at N≈8 with the full M2 stack mounted per workspace (Activity Monitor / `top`), a go/no-go on "keep all editors eagerly mounted" vs "lazy-load EditorPanel," and — if lazy-load is needed — the concrete mount-sequence delta WP2 must honor. Closes `SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE`; references `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` for the mitigation.
 **Tasks:**
-- [ ] Stand up N≈8 workspaces in a dev build — temporarily seed the WorkspaceList with N project paths (reuse the M2 DEV `?ws=`/`window.__seedWorkspace` seam, extended to seed several), each opening into the full RightPanelHost (editor + diff + terminal mounted)
-- [ ] Measure idle (all N backgrounded, no PTY output) and active (one center-stage workspace receiving real CC output, N−1 backgrounded) RAM + CPU; compare to the <300 MB / <20% envelope
-- [ ] If within envelope → record GO for eager-mount. If busted → prototype `React.lazy(EditorPanel)` (CM6 loads on first focus), re-measure, and record the mount-sequence delta + verdict
-- [ ] Write the outcome doc; SURFACE any architectural consequence (e.g. "background workspaces must lazy-mount the editor") to backlog and note it forward into WP2/WP3
+- [x] Stand up N≈8 workspaces in a dev build — built a throwaway `?nwsprobe` route (`src/probe/nworkspaces/`) mounting N real `<Workspace>` records (full RightPanelHost: editor+diff+terminal) bypassing the N=1 clamp via direct `makeWorkspace` (WP2 owns the real N>1 lift)
+- [x] Measure idle (all N backgrounded) + active (1 center-stage streaming, N−1 bg) RAM + CPU vs the <300 MB / <20% envelope — idle 0.0% CPU / 311 MB; active 7.8%/11.7% CPU / 428 MB
+- [x] Within envelope → recorded GO for eager-mount (lazy prototype skipped: no bust, and lazy can't touch the dominant ~2.8 GB CC-backend cost)
+- [x] Wrote outcome doc; resolved `SURFACE-2026-06-21-WP9-N-EDITORS-COST`, reconciled `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (deferred — different axis), logged `SURFACE-2026-06-22-N8-CC-BACKEND-RAM` → WP5
 
 **WP1 → WP2 rationale:** Measure the mount-cost envelope before building the N>1 open-flow, so WP2 mounts workspaces the right way (eager vs lazy editor) the first time — a lazy-load retrofit after the filmstrip exists would re-touch the same mount code. Resolve the architecture-shaping unknown when re-planning is cheapest.
 
