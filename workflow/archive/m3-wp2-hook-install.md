@@ -1,7 +1,7 @@
 # Feature: M3 WP2 — Hook script + `~/.claude/settings.json` registration
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** COMPLETED 2026-06-22 — ship 77d6a6e + fix 99a48d5; finalized & archived
 **Created:** 2026-06-22
 **Milestone:** 3 (CC lifecycle & state plumbing)
 **WBS WP:** WP2
@@ -62,11 +62,52 @@ Claudesk needs CC to report each workspace's lifecycle events (`UserPromptSubmit
   - [x] verify-codify  <!-- status: complete — merge/idempotency/uninstall/never-wipe fully covered by the 13 hook_install:: unit tests (no new test: would duplicate). The setup-hook launch wiring (P2.1/P2.2) is AppHandle-runtime-only, not cargo-testable without a GUI launch; its consuming-surface verification IS the live verify-human test (.1–.4) — an automated "launch GUI + inspect real ~/.claude" test is infeasible + unsafe (would mutate the dev's real settings). Full suite 151 pass, no regressions. -->
 
 ## Current Node
-- **Path:** Feature > COMPLETE — all phases done; next is ship
-- **Active scope:** Phase 1 + Phase 2 fully verified (codify complete, 151 tests pass). Ready for `/feature-ship`.
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** Shipped (77d6a6e) + reviewed (0 CRITICAL/0 MAJOR/4 MINOR auto-backlogged). Ready for `/feature-finalize`.
 - **Blocked:** none
 - **Unvisited:** none (ship)
 - **Open discoveries:** 2 SURFACEd (both low-pri, non-blocking) — Notification live-capture deferred to WP6; app-data-dir doc nit → finalize/WP3
+
+## Retrospect
+- **What changed in our understanding:** The app-data dir resolves to the bundle **identifier** (`com.claudesk.app/`), not the productName (`Claudesk/`) — every doc that quoted the socket/projects path had it wrong (pre-existing since Phase 1, surfaced now because WP2 is the first to operate on that path live). Logged as a SURFACE for a finalize/WP3 sweep.
+- **Assumptions that held:** WP1's design inputs were exactly right — the additive-array merge model (the real config already runs multi-entry-per-event), Perl + `/usr/bin/perl`, the `{hook_event_name, session_id, cwd, timestamp, prompt?, message?}` line shape, and the exit-0-with-no-listener resilience all transferred from probe to production with no surprises. The `config_store` injected-path testability pattern dropped straight in.
+- **Assumptions that were wrong:** None material. The only friction was my own verify-human checklist naming the wrong app-data dir (`Claudesk/` vs `com.claudesk.app/`) — a doc bug, not a code bug; the running app was correct.
+- **Approach delta:** Implementation matched the plan. One efficiency: P2.3 (uninstall seam) was already satisfied by P1.3's `hook_uninstall` command, so Phase 2 only confirmed it. The live `Notification` capture (P2.4) was deferred by operator decision to WP6 (timing-flaky to trigger), exactly the carry the plan anticipated.
+
+## Code-Quality Review — m3-wp2-hook-install
+
+Reviewer: `code-quality-reviewer` on ship commit `77d6a6e`. **0 CRITICAL, 0 MAJOR, 4 MINOR.** Auto-backlogged (drive_mode=autopilot) → `workflow/backlog-quality-findings.md`, pointer in `workflow/backlog.md`.
+
+### Strengths
+- Clean pure-core/IO split (merge/remove over `serde_json::Value` vs file-level install/uninstall over injected `&Path`) mirrors `config_store`; filesystem-free unit tests.
+- Additive/idempotent/reversible invariants stated as module-doc contract AND each pinned by a test, incl. byte-exact install→uninstall round-trip.
+- Tests built on `settings_with_claude_time()` (real-machine shape) — "never clobber a co-resident hook" exercised against production reality.
+- "Never wipe a file we can't parse" correct + tested (highest-stakes failure mode handled exactly right).
+- Perl hook fail-open discipline (env-absent no-op, unconditional exit 0, eval-guarded connect, 1s timeout) faithfully carries the claude-time pattern.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [commands.rs:42 / mod.rs:78] Command hardcodes `/usr/bin/perl <script>` while the script is also `chmod 0o755`'d + carries a shebang — the exec bit is never used; the "CC invokes it directly" comment is inaccurate. Drop the chmod OR invoke the script directly.
+- [resources/claudesk-hook.pl:66] `print $sock $line` can block if WP3's listener accepts but stalls on read (`Timeout=>1` covers connect, not write). Not a defect now (no listener); a heads-up for the WP3 author to preserve "never block CC" on the write side.
+- [mod.rs:101] Three distinct shape failures collapse to the single `NotAnObject` variant; a malformed `hooks.<event>` array value yields the misleading "root is not a JSON object" message. Opaque-string-to-toast, low impact.
+- [lib.rs:62] Pre-existing stale comment: `sublime_open` registration still reads "Transitional — removed at WP8" contradicting CLAUDE.md's "both Sublime launchers KEPT permanently." Not WP2-introduced; sits 2 lines above WP2's new registration.
+
+### Assessment
+Well-built, defensively-minded code for a genuinely dangerous operation (mutating a shared user `settings.json`). Correct architecture: pure exhaustively-tested merge core, atomic write-then-rename, hard never-wipe-on-parse-failure, fail-open hook. Test suite is the standout. Advances the codebase, no meaningful debt. Nothing warrants a refactor pass; MINORs are backlog/opportunistic-fix material.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+### Post-ship bug + fix (2026-06-22, same session)
+**Found live during finalize:** the registered hook `command` was unquoted, and the macOS app-data path contains a space (`Application Support`) — so `/bin/sh -c` word-split it and CC threw a Stop-hook error every turn (`/bin/sh: Support/com.claudesk.app/hook.sock: No such file or directory`). The hook never ran. This is a stronger form of the reviewer's MINOR #1 (the "shell-form is fine, app-controlled paths" assumption was wrong — app-controlled ≠ space-free), missed because the unit tests used space-free `/app-data/…` paths.
+**Fix (inline, operator-approved — folded into WP2, NOT a separate incident):**
+- `sh_quote()` single-quotes both the socket env value and the script path (POSIX `'\''` escaping).
+- Detection (`group_is_claudesk`) now keys on the stable script basename `claudesk-hook.pl`, not the exact command string.
+- `merge_claudesk_hooks` **self-heals**: a stale Claudesk entry with a different command is replaced in place (not skipped, not duplicated) — so the already-broken live entry repairs itself on next launch.
+- 3 new regression tests: spaced-path quoting, embedded-quote escaping, live-shape self-heal.
+**Verified live:** all 3 events self-healed to the quoted form on launch (no dup); the exact registered command runs under `/bin/sh -c` with exit 0. Committed as a follow-up to ship `77d6a6e`.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

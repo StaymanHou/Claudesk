@@ -4,6 +4,21 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m3-wp2-hook-install — 2026-06-22
+
+4 MINOR findings from `feature-review-quality` on ship commit `77d6a6e` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built and defensively-minded for a dangerous operation (mutating a shared user `settings.json`); standout test suite (real-config shape + byte-exact round-trip + never-wipe-on-parse-failure). No refactor warranted; all cosmetic/opportunistic. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-22-QUALITY-WP2-MINORS
+- **Files:** `src-tauri/src/hook_install/commands.rs:42` + `mod.rs:78`; `src-tauri/resources/claudesk-hook.pl:66`; `src-tauri/src/hook_install/mod.rs:101`; `src-tauri/src/lib.rs:62`
+- **Priority:** low (all)
+- **Status:** pending
+- **Findings:**
+  1. **chmod/`/usr/bin/perl` mismatch** — the registered command runs `/usr/bin/perl <script>` (not `<script>` directly), so the `chmod 0o755` in `deploy_hook_script` + the script's shebang are never exercised; the `commands.rs`/`mod.rs:78` comment "CC invokes it directly" is inaccurate. Either drop the chmod (dead effort) or invoke the script directly. *(Mild — keeping chmod is harmless future-proofing if the command form ever changes; pick one and reconcile the comment.)* **— PARTIALLY ADDRESSED 2026-06-22 (commit 99a48d5):** the related "shell-form is fine, paths are app-controlled" assumption was the leading edge of a real word-split bug (spaced app-data path) — now fixed (paths shell-quoted). The chmod-vs-invocation cosmetic mismatch itself remains open (low pri).
+  2. **Perl hook write-side blocking (WP3 heads-up)** — `print $sock $line` (claudesk-hook.pl:66) can block if WP3's listener accepts the connection but stalls on read (`Timeout=>1` covers connect, not write). Not a defect in WP2 (no listener exists yet), but the WP3 author must keep the accept-loop draining promptly to preserve the "never block CC" invariant on the write side. Best addressed when WP3 builds the listener.
+  3. **`NotAnObject` error-variant coarseness** — three distinct shape failures (root not object, `hooks` not object, an event value not an array) all collapse to one variant (`mod.rs:101`); a malformed `hooks.<event>` array value yields the misleading "root is not a JSON object" message. Opaque-string-to-toast, low impact; a future debugger would be misdirected.
+  4. **Stale `sublime_open` comment (pre-existing)** — `lib.rs:62` still reads "Transitional — removed at WP8 once editor parity," contradicting CLAUDE.md's normative "both Sublime launchers KEPT permanently (revised 2026-06-20)." NOT WP2-introduced (inherited), but sits 2 lines above WP2's new registration and is demonstrably wrong against the style guide. Trivial comment fix.
+- **Pickup shape:** all four are trivial `/feature-refactor` nits. #2 is best deferred to WP3 (the listener WP). #1, #3, #4 are quick opportunistic fixes. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 # m2-wp13-close-tab-chord — 2026-06-22
 
 3 MINOR findings from `feature-review-quality` on ship commit `f8d6761` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built, tightly-scoped, no debt; the stale-closure fix matches existing in-file prior art and the codification gap was honestly surfaced (SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP). All cosmetic. Auto-backlogged per drive_mode=autopilot.

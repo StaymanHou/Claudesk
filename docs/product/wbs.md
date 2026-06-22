@@ -1,6 +1,6 @@
 ---
 stage: wbs
-state: complete
+state: in-progress
 updated: 2026-06-22
 milestone: 3
 # Milestone 3 — CC lifecycle & state plumbing. Scope = arch.md Phase-2 forward-look §A
@@ -56,19 +56,20 @@ Learning-sequence ordering, riskiest-unknown-first, synchronous-before-async:
 
 **WP1 → WP2 rationale:** Probe the live wire + coexistence before writing the real hook script and the `settings.json` install logic — so WP2's registration is designed against the verbatim payload shapes and the confirmed array-merge behavior, not the arch.md sketch.
 
-### WP2: Hook script + `~/.claude/settings.json` registration (install/uninstall, idempotent, coexisting)
+### WP2: Hook script + `~/.claude/settings.json` registration (install/uninstall, idempotent, coexisting)  ✅ SHIPPED 2026-06-22 (commit 77d6a6e)
 
-**Description:** The production hook script Claudesk installs, plus the Rust logic that registers/deregisters it in `~/.claude/settings.json`'s `hooks` block for the three events — idempotent, additive (never clobbering `claude-time` or any other registered hook), and reversible. The script writes one JSON line per event to Claudesk's stable socket path (`~/Library/Application Support/Claudesk/hook.sock`).
+**Description:** The production hook script Claudesk installs, plus the Rust logic that registers/deregisters it in `~/.claude/settings.json`'s `hooks` block for the three events — idempotent, additive (never clobbering `claude-time` or any other registered hook), and reversible. The script writes one JSON line per event to Claudesk's stable socket path (`<app-data>/hook.sock` — note: app-data resolves to `~/Library/Application Support/com.claudesk.app/`, the bundle identifier, not `Claudesk/`; see SURFACE-2026-06-22-APP-DATA-DIR-IS-BUNDLE-IDENTIFIER-NOT-PRODUCTNAME).
 **Milestone:** Milestone 3
 **Dependencies:** WP1 (payload shapes + coexistence behavior confirmed)
 **Size:** M
 **Tasks:**
-- [ ] Ship the hook script as a Claudesk resource (POSIX `sh` if WP1 shows it's fast enough, else the `hook.pl` Perl pattern — `/usr/bin/perl` is bundled on macOS): reads stdin JSON, writes `{event, cwd, session_id, timestamp, message?}` to the socket, exits 0 unconditionally (never blocks CC)
-- [ ] Rust `hook_install` module: read `~/.claude/settings.json`, **merge** Claudesk's three hook entries into the existing `hooks` array (do NOT overwrite — preserve claude-time + any others), write back atomically; idempotent (re-running is a no-op, detected by a stable Claudesk marker/command path)
-- [ ] `hook_uninstall` (remove only Claudesk's entries, leave the rest) — for clean teardown / a future settings toggle
-- [ ] Install-on-launch wiring (or first-launch); resolve the script to a stable on-disk path under app-data; chmod +x
-- [ ] Errors surfaced, not swallowed (the WP6/WP7-M2 IPC-error lesson): a failed settings write shows an actionable message, doesn't silently leave status broken
-- [ ] Tests: a TempDir/`settings.json`-fixture test for the merge (additive, idempotent, uninstall-leaves-others); the script's JSON-line output shape pinned
+- [x] Ship the hook script as a Claudesk resource — **Perl** (`/usr/bin/perl`, the `hook.pl` pattern; WP1 measured ~15 ms): `resources/claudesk-hook.pl` reads stdin JSON, writes `{hook_event_name, session_id, cwd, timestamp, prompt?, message?}` to the socket, exits 0 unconditionally (never blocks CC)
+- [x] Rust `hook_install` module: read `~/.claude/settings.json`, **merge** Claudesk's three hook entries into the existing `hooks` array (additive — preserves claude-time + notify-telegram + any others), write back atomically (tmp→rename); idempotent (re-run is a no-op, detected by the stable command-path marker); malformed file is an error, never wiped
+- [x] `hook_uninstall` (`#[tauri::command]` + pure `uninstall` fn — removes only Claudesk's entries via the command marker, prunes now-empty event arrays) — clean teardown / future settings toggle
+- [x] Install-on-launch wiring (Tauri `.setup()` hook); resolves the script to `<app-data>/claudesk-hook.pl`; chmod 0o755; registered as a `tauri.conf.json` bundle resource
+- [x] Errors surfaced, not swallowed (WP6/WP7-M2 IPC-error lesson): a failed settings write/resource-copy logs to stderr AND emits `hook-install-error` to the frontend; never silently leaves status broken
+- [x] Tests: 13 TempDir/`settings.json`-fixture tests for the merge (additive, idempotent, uninstall-leaves-others, byte-exact round-trip, malformed-never-wiped); script JSON-line output shape verified live (full pin → WP3's parse-fn tests). **Live-verified** on real `~/.claude/settings.json`: additive merge alongside claude-time/notify-telegram, idempotent re-launch, real-`claude` coexistence (claude-time DB keeps logging).
+- **Residual:** live `Notification` payload capture deferred to WP6 (SURFACE-2026-06-22-WP1-NOTIFICATION-PAYLOAD-NOT-LIVE-CAPTURED); 4 MINOR code-quality findings auto-backlogged (#2 write-side-blocking folds into WP3).
 
 **WP2 → WP3 rationale:** The hook script + a known socket path must exist before the listener has anything real to accept; WP2's output (the line format + socket path) is WP3's input contract.
 

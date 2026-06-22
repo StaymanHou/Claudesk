@@ -10,6 +10,12 @@
 - **Priority:** low
 - **Status:** pending
 
+## Code-quality findings — m3-wp2-hook-install (2026-06-22)
+- **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `77d6a6e` (0 CRITICAL, 0 MAJOR). All cosmetic/opportunistic: (1) chmod/`/usr/bin/perl` exec-bit mismatch + inaccurate comment; (2) Perl hook write-side blocking heads-up (best addressed in WP3 when the listener lands); (3) `NotAnObject` error-variant coarseness; (4) pre-existing stale `sublime_open` comment at lib.rs:62. Reviewer: well-built, defensively-minded, standout test suite, no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp2-hook-install — 2026-06-22`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** trivial `/feature-refactor` nits — #2 defers to WP3 (the listener WP); #1/#3/#4 are quick opportunistic fixes. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## SURFACE-2026-06-22-WP1-NOTIFICATION-PAYLOAD-NOT-LIVE-CAPTURED
 - **Source:** feature:research (M3 WP1 probe)
 - **Target level:** product:wbs (WP2 / WP6 interactive testing)
