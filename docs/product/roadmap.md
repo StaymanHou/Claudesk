@@ -6,7 +6,7 @@ updated: 2026-06-22
 
 # Roadmap
 
-Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the in-app lite editor + diff viewer** comes second (Milestone 2) — a must-have, not a nice-to-have, now that projects live in tabs (see the resequencing rationale in the 2026-06-19 revision below); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes third (Milestones 3–8); **release polish** comes fourth (Milestone 9).
+Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the in-app lite editor + diff viewer** comes second (Milestone 2) — a must-have, not a nice-to-have, now that projects live in tabs (see the resequencing rationale in the 2026-06-19 revision below); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes third (Milestones 3–8, resequenced dogfood-first 2026-06-22 so CC-state + the multi-workspace filmstrip land first as the daily-driver replacement point); **release polish** comes fourth (Milestone 9).
 
 Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). The `## Group` headings below are **cosmetic clustering only** — they carry no numbering or dependency semantics; they just organize the flat list for readability. Dependencies, where they exist, are stated in each milestone's prose.
 
@@ -49,7 +49,9 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 ## Group C — Stateful CC controller, multi-workspace & status surfaces
 
-> The architectural heart of the product: stop treating CC as a black box, and light up the full multi-workspace UX (filmstrip with live thumbnails, menu-bar status item, optional PiP). This is what makes Claudesk genuinely *aware* of CC, the workflow system, and the user's project-juggling pattern. **Milestone 7 (menu-bar status item) ships before the PiP work in Milestone 8 — see each milestone's dependency note.**
+> The architectural heart of the product: stop treating CC as a black box, and light up the full multi-workspace UX (filmstrip with live thumbnails, PiP, menu-bar status item). This is what makes Claudesk genuinely *aware* of CC, the workflow system, and the user's project-juggling pattern.
+>
+> **Resequenced 2026-06-22 (operator dogfood-first reorder — see the Revision 2026-06-22 note below).** Execution order is now **M3 → M4 (multi-workspace) → M5 (PiP) → M6 (menu-bar) → M7 (auto-resume) → M8 (skill orchestration)**. The driver: **M3 + M4 alone are the dogfood-replace point** — once Claudesk knows CC state (M3) and shows N projects in a filmstrip (M4), the operator can drop the current terminal+Sublime setup and daily-drive Claudesk. The CC-lifecycle "hand-holding" surfaces (smart auto-resume M7, skill-button orchestration M8) are livable-without for now and slid to last-before-polish. **PiP (M5) now ships before the menu-bar (M6)** and is **no longer conditional** — the earlier "menu-bar first, PiP gated on a dogfood week" plan is dropped (operator decision 2026-06-22). The status-broadcaster (M3) still fans out to all three surfaces regardless of their build order.
 
 ### Milestone 3: CC lifecycle & state plumbing
 
@@ -63,7 +65,37 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** A workspace's CC state transitions (idle→running→awaiting-input→exit) are observed in Claudesk solely from the hook channel + file-watcher, broadcast to all subscribers, with no PTY-output parsing.
 
-### Milestone 4: Smart auto-resume + drive mode
+### Milestone 4: Multi-workspace UX (filmstrip + center stage) *(was Milestone 6)*
+
+**Goal:** N projects open concurrently as workspaces in one window, switched via the filmstrip. **This + M3 is the dogfood-replace point — once it ships, Claudesk replaces the current terminal + Sublime setup as the daily driver.** *(Depends on Milestone 3's status broadcaster for tile status dots, and Milestone 1's tab-shell substrate.)*
+
+**Deliverables:**
+- [ ] **Multi-workspace UX:** opening a project from the picker adds a new workspace tab rather than reusing the existing one; the focused one is center-stage, the others render in the filmstrip.
+- [ ] **Filmstrip** along the top of the window, one tile per non-center-stage workspace, each showing project name + idle/running/awaiting-input status dot. **Tile body is a live ~1 fps terminal mirror** (per the Milestone 1 probe PASS) via `serializeAsHTML()` from the off-viewport background terminal's buffer. Clicking a tile promotes that workspace to center stage and demotes the previous one.
+- [ ] **Filmstrip collapse toggle** — one-click control collapses the filmstrip into a row of mini status tiles (project name + status dot only) and back. Collapsed workspaces render nothing (`display: none`); PTY output continues to buffer.
+
+**Exit Criteria:** Idle/running/awaiting-input of every workspace is visible from inside the Claudesk window without clicking (filmstrip or collapsed-tile row); clicking a tile switches the center stage.
+
+### Milestone 5: Picture-in-picture *(was Milestone 8 — now unconditional, and ordered before the menu-bar)*
+
+**Goal:** An always-on-top floating status surface for when the Claudesk window is out of focus. *(Resequenced 2026-06-22: ships **before** the menu-bar item and is **no longer conditional** — the prior "build the menu-bar first, gate PiP on a dogfood week" plan is dropped per operator decision. Depends on Milestone 3's broadcaster + Milestone 4's filmstrip-tile rendering.)*
+
+**Deliverables:**
+- [ ] **PiP NSPanel** via `tauri-nspanel` v2.1: `PanelBuilder` with `no_activate(true)` + `PanelLevel::Floating` + `CanJoinAllSpaces | FullScreenAuxiliary | Stationary`. User-toggled (menu-bar right-click or in-Claudesk button). Display-only — clicking a tile does NOT bring the workspace forward (that's a Future Possibility).
+- [ ] **PiP rendering mode** matches the filmstrip outcome: live ~1 fps mirrors (probe PASSED).
+
+**Exit Criteria:** The PiP panel ships and mirrors the same status surface as the filmstrip; workspace status is visible while the Claudesk window is out of focus.
+
+### Milestone 6: Menu-bar status item *(was Milestone 7)*
+
+**Goal:** Workspace status is visible system-wide, even when the Claudesk window is hidden or on another Space.
+
+**Deliverables:**
+- [ ] **Menu-bar status item** via `tauri::tray::TrayIconBuilder`. Icon shows an aggregate status dot (green: all idle, blue: any running, amber: any awaiting input), `setIconAsTemplate` for light/dark adaptation. Left-click opens a popover (positioned via `tauri-plugin-positioner` with the `tray-icon` feature) listing every open workspace with status dot + project name; clicking a row brings Claudesk forward AND switches the center stage. Right-click opens a native menu: Show Claudesk window / Toggle PiP / Quit.
+
+**Exit Criteria:** Idle/running of every workspace is visible when the Claudesk window is NOT in focus, via the menu-bar item.
+
+### Milestone 7: Smart auto-resume + drive mode *(was Milestone 4 — slid later; livable-without for now)*
 
 **Goal:** Opening a workspace lands on the correct resumption command automatically, and the active drive mode is always visible and one-click changeable.
 
@@ -78,7 +110,7 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Workspace open always fires the right resumption command without manual selection; the active drive mode is visible in the header and switchable in one click.
 
-### Milestone 5: Skill orchestration
+### Milestone 8: Skill orchestration *(was Milestone 5 — slid later; livable-without for now)*
 
 **Goal:** Common workflow operations are clicks, not typed slash commands.
 
@@ -88,52 +120,41 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** No slash-command typing for common skills; Recycle Session is a single click.
 
-### Milestone 6: Multi-workspace UX (filmstrip + center stage)
-
-**Goal:** N projects open concurrently as workspaces in one window, switched via the filmstrip. *(Depends on Milestone 3's status broadcaster for tile status dots, and Milestone 1's tab-shell substrate.)*
-
-**Deliverables:**
-- [ ] **Multi-workspace UX:** opening a project from the picker adds a new workspace tab rather than reusing the existing one; the focused one is center-stage, the others render in the filmstrip.
-- [ ] **Filmstrip** along the top of the window, one tile per non-center-stage workspace, each showing project name + idle/running/awaiting-input status dot. **Tile body is a live ~1 fps terminal mirror** (per the Milestone 1 probe PASS) via `serializeAsHTML()` from the off-viewport background terminal's buffer. Clicking a tile promotes that workspace to center stage and demotes the previous one.
-- [ ] **Filmstrip collapse toggle** — one-click control collapses the filmstrip into a row of mini status tiles (project name + status dot only) and back. Collapsed workspaces render nothing (`display: none`); PTY output continues to buffer.
-
-**Exit Criteria:** Idle/running/awaiting-input of every workspace is visible from inside the Claudesk window without clicking (filmstrip or collapsed-tile row); clicking a tile switches the center stage.
-
-### Milestone 7: Menu-bar status item
-
-**Goal:** Workspace status is visible system-wide, even when the Claudesk window is hidden or on another Space. *(Ships **before** the PiP work in Milestone 8 — see Milestone 8's gate.)*
-
-**Deliverables:**
-- [ ] **Menu-bar status item** via `tauri::tray::TrayIconBuilder`. Icon shows an aggregate status dot (green: all idle, blue: any running, amber: any awaiting input), `setIconAsTemplate` for light/dark adaptation. Left-click opens a popover (positioned via `tauri-plugin-positioner` with the `tray-icon` feature) listing every open workspace with status dot + project name; clicking a row brings Claudesk forward AND switches the center stage. Right-click opens a native menu: Show Claudesk window / Toggle PiP / Quit.
-
-**Exit Criteria:** Idle/running of every workspace is visible when the Claudesk window is NOT in focus, via the menu-bar item.
-
-### Milestone 8: Picture-in-picture (conditional)
-
-**Goal:** An always-on-top floating status surface for when the Claudesk window is out of focus — *if* the menu-bar item proves insufficient. **Gating dependency:** after Milestone 7 ships, dogfood the menu-bar item alone for at least one daily-driver week. If it covers the "Claudesk hidden / not in focus" case sufficiently, **this milestone defers to Group D (Milestone 9)**; otherwise build it now.
-
-**Deliverables:**
-- [ ] **PiP NSPanel** via `tauri-nspanel` v2.1: `PanelBuilder` with `no_activate(true)` + `PanelLevel::Floating` + `CanJoinAllSpaces | FullScreenAuxiliary | Stationary`. User-toggled (menu-bar right-click or in-Claudesk button). Display-only — clicking a tile does NOT bring the workspace forward (that's a Future Possibility).
-- [ ] **PiP rendering mode** matches the filmstrip outcome: live ~1 fps mirrors (probe PASSED).
-
-**Exit Criteria:** Either the dogfooding gate defers PiP to Milestone 9 (documented), or the PiP panel ships and mirrors the same status surface as the filmstrip.
-
-> **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (menu-bar item, and PiP if shipped). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling.
+> **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (PiP + menu-bar item). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling. *(Note: the dogfood-replace point arrives earlier than full Group-C completion — at M3 + M4 — per the 2026-06-22 reorder; metrics 2/3/5 land with the later M7/M8.)*
 
 ## Group D — Polish & open-source release
 
 ### Milestone 9: Polish & Open-Source Release
 
-**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. Also the home for PiP if it deferred from Milestone 8.
+**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)*
 
 **Deliverables:**
 - [ ] **Settings UI:** project list management, hotkeys, default CLI args for `claude` (e.g. yolo-mode toggle), menu-bar / PiP visibility toggles.
-- [ ] **PiP NSPanel (if deferred from Milestone 8)** — same shape as Milestone 8. Drop if Milestone 7's menu-bar-only dogfooding proved sufficient long-term.
 - [ ] **macOS app bundle + DMG;** code-signing / notarization strategy decided and documented.
 - [ ] **README + minimum setup docs** (assumes the workflow system is installed; no hand-holding for users who don't share that assumption).
 - [ ] **Public repo + open-source license** chosen and added.
 
 **Exit Criteria:** A stranger with the workflow system installed at `~/.claude/skills/` can clone the repo, build Claudesk, and use it on their own macOS machine without further help from the author.
+
+## Revision 2026-06-22 — Group C resequenced dogfood-first; PiP unconditional, before menu-bar
+
+**Reordered Milestones 3–8 to reach the daily-driver-replacement point as early as possible, and dropped the PiP conditionality.** No deliverable content changed — only sequence, numbering, and the removed PiP gate. Operator-directed at the M2 cycle close.
+
+**Old → new mapping** (Group C only; M1, M2, M9 unchanged):
+
+| Old | New | Milestone |
+|-----|-----|-----------|
+| M3 | **M3** | CC lifecycle & state plumbing |
+| M6 | **M4** | Multi-workspace UX (filmstrip + center stage) |
+| M8 | **M5** | Picture-in-picture *(now unconditional)* |
+| M7 | **M6** | Menu-bar status item |
+| M4 | **M7** | Smart auto-resume + drive mode |
+| M5 | **M8** | Skill orchestration |
+| M9 | **M9** | Polish & open-source release |
+
+**Why:** The operator's dogfood-replace bar is **M3 + M4 (new numbering)** — CC-state awareness plus an N-project filmstrip is enough to drop the current terminal+Sublime setup and daily-drive Claudesk. The two CC-lifecycle "hand-holding" milestones (smart auto-resume, skill-button orchestration) are livable-without for now and slid to last-before-polish (M7, M8). **PiP moved ahead of the menu-bar (M5 before M6) and is no longer gated** — the prior "menu-bar first, dogfood a week, defer PiP if sufficient" plan (old M7→M8 gate + the M9 deferred-PiP slot) is fully dropped; PiP ships unconditionally as M5. The status broadcaster (M3) is unaffected — it fans out to all three surfaces no matter their build order.
+
+**Cross-doc impact:** `arch.md`'s Phase-2 forward-look sub-sections (A/B/C/D) describe these surfaces by content, not by milestone number, so they remain accurate; the one numbered reference (the N-editors-cost note) is updated to the new numbering. Historical Revision sections below keep their original numbers (they're history). Next `/product-wbs` decomposes from M3.
 
 ## Revision 2026-06-19 (d) — Sublime Text pop is a stopgap, not a permanent escape hatch
 
