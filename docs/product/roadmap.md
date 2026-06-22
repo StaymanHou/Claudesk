@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-19
+updated: 2026-06-22
 ---
 
 # Roadmap
@@ -33,14 +33,16 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 > **Resequenced to second, 2026-06-19.** With the pivot from one-project-per-window to one-project-per-tab, the right half can no longer stay a placeholder behind an external Sublime pop-up: popping a separate Sublime/Sublime-Merge window per tab fragments the workflow across OS windows and reintroduces the exact window-juggling tax the tab model exists to remove. The in-app editor + diff viewer is therefore a **must-have**, built before the multi-workspace/status-surface work — so the right half is real the moment more than one tab is in play.
 
-### Milestone 2: Lite Editor + Diff Viewer
+### Milestone 2: Lite Editor + Diff Viewer ✅ COMPLETE 2026-06-22
+
+> **Cycle closed 2026-06-22.** All work packages shipped (WP1, 2, 3a/b/c, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13); the full decomposition is archived at [`docs/product/archive/milestone-2-lite-editor-diff-viewer/wbs.md`](archive/milestone-2-lite-editor-diff-viewer/wbs.md). Beyond the original three editor/diff deliverables, the cycle added a file-tree navigator (WP10), a multi-file editor tab strip (WP12), ⌘W close-tab (WP13), and tree/editor density + Sublime-style git indicators (WP11); one P1 incident (terminal blank-cursor) was resolved at close.
 
 **Goal:** Cover the daily-use Sublime Text features inside Claudesk so the right half stops being a placeholder and becomes the **primary** routine-editing surface. With projects in tabs, in-app editing/diffing is the difference between a coherent single-window workflow and a window-juggling mess. *(Revised 2026-06-20, WP8: the in-app editor is the primary surface but does **not remove** Sublime Text — both Sublime launchers, Text + Merge, are kept permanently as icon buttons in the panel tab row. See the WP8 deliverable below.)*
 
-**Deliverables:**
-- [ ] **Lite editor** (Monaco or CodeMirror 6 — decided in a research pass) covering: multi-cursor / column selection, Cmd+P fuzzy file finder, command palette for syntax selection, project-wide find/replace, split panes, minimap.
-- [ ] **Git diff viewer** for unstaged + staged changes (file list + per-file diff view, comparable to Sublime Merge's basics; `git2` crate).
-- [ ] **Right-half panel-switch hotkeys** (the in-window navigation that survives long-term): a keybind cycles the right half between editor ↔ diff viewer (↔ second terminal), per-workspace, not global. *(Builds on Milestone 1's right-half placeholder + the per-workspace right panel. This is the permanent hotkey surface — distinct from the temporary Sublime Text pop below.)*
+**Deliverables (all shipped):**
+- [x] **Lite editor** — **CodeMirror 6** (via `@uiw/react-codemirror`; decided over Monaco in research) covering multi-cursor / Cmd-drag column selection, Cmd+P fuzzy file finder, ⌘⇧P command palette (syntax selection), project-wide find/replace, split panes, minimap, font-zoom; plus a multi-file tab strip (WP12), ⌘W close-tab (WP13), and a left file-tree rail (WP10). *(WP2, 3a, 3b, 3c, 6, 7, 10, 12, 13.)*
+- [x] **Git diff viewer** for unstaged + staged changes (file list + per-file diff + commit log) — backend `git2` hunks rendered as styled +/- lines (not `@codemirror/merge`, as-built). *(WP4, commit 4e2d742.)*
+- [x] **Right-half panel-switch hotkeys** — per-panel **direct-select** (⌘⇧E Editor / ⌘⇧D Diff / ⌘⇧T Terminal — NOT a cycle, as-built WP5) + clickable tabs, per-workspace, coexisting with CM6's keymap via the WP1 capture-phase registration. *(WP5, commit 4546ffb.)*
 - [x] **Consolidate the Sublime launchers into the panel tab row (WP8 ✅ 2026-06-20).** *(REDEFINED 2026-06-20 — was "Remove the Sublime Text pop once the editor proves parity.")* The Sublime Text pop is **NOT removed**. Both launchers (Text via `sublime_open` + Merge via `smerge_open`) are kept permanently as inlined-SVG **icon buttons** in the `right-panel-toggle` tab row; the redundant Sublime-Text `⌘⇧O` `keydown` hotkey was deleted (the button is the sole affordance, `⌘⇧O` freed). The backend `sublime` module is untouched. Rationale: the in-app editor is the primary surface, but keeping a one-click Sublime Text escape hatch (alongside the permanent Sublime Merge button for staging/blame/history) costs nothing and the operator wanted both retained.
 
 **Exit Criteria:** A full working day of editing + diff review completes entirely inside Claudesk's right half, with the editor ↔ diff viewer panel-switch hotkey as the navigation. *(Revised 2026-06-20, WP8: "the Sublime Text pop is removed" is NO LONGER an exit criterion — both Sublime launchers are kept as permanent panel-tab-row icon buttons; `subl`/`smerge` are companion surfaces, not dependencies to eliminate.)*
@@ -134,6 +136,8 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 **Exit Criteria:** A stranger with the workflow system installed at `~/.claude/skills/` can clone the repo, build Claudesk, and use it on their own macOS machine without further help from the author.
 
 ## Revision 2026-06-19 (d) — Sublime Text pop is a stopgap, not a permanent escape hatch
+
+> **SUPERSEDED 2026-06-20 by the WP8 redefinition** (see Milestone 2's WP8 deliverable + arch.md's top-of-file Revision 2026-06-20 note): both Sublime launchers (Text + Merge) are KEPT permanently as panel-tab-row icon buttons. The "remove the pop once the editor proves parity" plan below did NOT happen. Retained here as history.
 
 **The in-app lite editor will *replace* Sublime Text, not coexist with it.** The Sublime Text `⌘⇧E` pop + right-panel button that shipped in Milestone 1 (WP8) are reframed from a permanent escape hatch to a **temporary stopgap** that made the right half usable before the in-app editor existed. Milestone 2 now includes a deliverable to **remove** them once the lite editor is proven to cover the daily-use feature set (drop the `keydown` handler, the toolbar button, and the `sublime` backend command). What survives long-term is the **right-half panel-switch hotkeys** (editor ↔ diff viewer ↔ second terminal) — the actual in-window navigation, distinct from the Sublime pop.
 
