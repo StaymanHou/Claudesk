@@ -22,6 +22,8 @@ export interface WorkspaceListApi {
   /** Derived app-shell view: "picker" when nothing is open, else "workspace-open". */
   view: AppView;
   openWorkspace: (projectPath: string) => void;
+  /** Promote an already-open workspace to center stage by id (M4 WP3 — filmstrip
+   *  tile click + ⌘⇧+digit both route through this). No-op if id is unknown. */
   focusWorkspace: (id: string) => void;
   /** Store the backend CC session id on a workspace once cc_spawn resolves (WP7). */
   setSessionId: (id: string, ccSessionId: string) => void;
@@ -57,5 +59,5 @@ export function useWorkspaceList(
     openWorkspace,
     focusWorkspace,
     setSessionId,
-  };
+  } satisfies WorkspaceListApi;
 }

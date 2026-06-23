@@ -116,6 +116,144 @@ body,
   border-color: rgba(255, 255, 255, 0.7);
 }
 
+/* M4 WP3 — workspace tiles. The filmstrip is 84px tall; a tile is a small
+   landscape card: a body (P3 grafts the live ~1 fps serialize mirror here for
+   background tiles; the active tile leaves it static) above a one-line footer
+   (project name + status dot). */
+.filmstrip-tile {
+  width: 112px;
+  height: 64px;
+  flex-shrink: 0;
+  /* The mirror body fills the tile; the header floats on top as an overlay (P3). */
+  position: relative;
+  display: block;
+  background-color: #1e1e1e;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  overflow: hidden;
+  box-sizing: border-box;
+  /* It's a <button> (click-to-promote, M4 WP3 P2): neutralize button defaults. */
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}
+
+.filmstrip-tile:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* M4 WP3 P4 — the tile currently being dragged (pointer live-reorder): lift it with a
+   subtle highlight + grabbing cursor so the WYSIWYG shuffle reads clearly. */
+.filmstrip-tile--dragging {
+  border-color: #6ea8ff;
+  opacity: 0.85;
+  cursor: grabbing;
+  z-index: 3;
+}
+
+/* Active = the center-staged workspace. A 2px accent border in the same blue
+   the M2 split-pane active-pane indicator uses (#6ea8ff) — consistent "this is
+   the focused thing" language across the app. */
+.filmstrip-tile--active {
+  border-color: #6ea8ff;
+  box-shadow: 0 0 0 1px #6ea8ff;
+}
+
+/* The name + status-dot row is a SEMI-TRANSPARENT OVERLAY across the top of the tile
+   (operator preference, P3 verify-human 2026-06-23) — the mirror body fills the whole
+   tile underneath and shows through. pointer-events:none so the whole tile stays one
+   click target (the header doesn't intercept the promote click). */
+.filmstrip-tile-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px 6px;
+  background-color: rgba(17, 17, 17, 0.6);
+  pointer-events: none;
+}
+
+/* The mirror body fills the ENTIRE tile (the header floats over its top edge). */
+.filmstrip-tile-body {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background-color: #1e1e1e;
+}
+
+/* M4 WP3 P3 — the live mirror. xterm's serializeAsHTML() emits a <pre> of the terminal
+   buffer with its own per-cell colors. The KEY fix (P3 verify-human white-bar bug): the
+   mirror node is fixed at the terminal's NATURAL width with `white-space:pre` so lines
+   do NOT reflow to the tiny tile width (reflow collapsed every char into one column =
+   the vertical white bar). The whole wide block is then scaled down from the top-left to
+   fit the tile. Mirrors the WP4-probe recipe (width:720 + transform:scale + overflow
+   clip on the parent). pointer-events:none so the tile stays one click target. */
+.filmstrip-tile-mirror {
+  position: absolute;
+  /* Anchor to the BOTTOM-left so the tile tails the newest rows of the serialized block
+     (which is taller than the tile — active screen + 40-row tail). top:auto + bottom:0
+     + transform-origin:bottom-left means the latest output sits at the tile's bottom and
+     older rows scroll up out of view, exactly like watching the live terminal. */
+  left: 0;
+  bottom: 0;
+  width: 640px; /* ~80 cols of terminal — wide enough that lines don't wrap */
+  transform: scale(0.16);
+  transform-origin: bottom left;
+  pointer-events: none;
+}
+
+/* The serialized <pre>/<div> must keep terminal whitespace (no reflow) and a readable
+   mono font; xterm's own inline styles set the per-cell colors + (with
+   includeGlobalBackground) the dark bg. The light fallback fg keeps it dark-readable
+   even on the rare cell that has no explicit color. */
+.filmstrip-tile-mirror pre,
+.filmstrip-tile-mirror div {
+  white-space: pre;
+  margin: 0;
+  font-family: "SF Mono", Menlo, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.1;
+  color: #d4d4d4;
+}
+
+/* The center-stage (active) tile shows no mirror — a small centered dot stands in so the
+   body isn't an empty black rectangle. */
+.filmstrip-tile-active-glyph {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background-color: rgba(110, 168, 255, 0.7);
+}
+
+.filmstrip-tile-name {
+  font-size: 0.66rem;
+  font-weight: 600;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The status dot reuses WorkspaceStatusIndicator; inside a tile we want the dot
+   only (no label — the header row is tight), so collapse the label here. */
+.filmstrip-tile-header .workspace-status-label {
+  display: none;
+}
+
 .center-stage {
   position: relative;
   overflow: hidden;
@@ -128,7 +266,12 @@ body,
   grid-template-rows: auto 1fr;
   height: 100%;
   width: 100%;
-  /* display is toggled grid/none by the `visible` prop (stay-mounted rule). */
+  /* M4 WP3: always display:grid; hidden (background) workspaces are pushed
+     OFF-VIEWPORT via an inline style (position:absolute; left:-99999px) rather
+     than display:none — keeps real dimensions for FitAddon + lets xterm pause the
+     off-screen renderer while the buffer stays serializable for the filmstrip
+     mirror. `.center-stage` is position:relative + overflow:hidden so the
+     off-viewport copies are contained and clipped. */
 }
 
 /* WP6 — workspace chrome header: project name + the honest CC-status indicator.

@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
@@ -26,6 +27,10 @@ import {
   initialBridgeState,
 } from "../../cc/bridge";
 import { spawnTriggerDeps } from "../../cc/spawnTrigger";
+import {
+  registerTerminalSerializer,
+  unregisterTerminalSerializer,
+} from "./terminalMirror";
 
 interface XtermPaneProps {
   workspaceId: string;
@@ -136,16 +141,45 @@ export function XtermPane({
     if (!host) return;
 
     const term = new Terminal({
-      fontSize: 13,
+      fontSize: 11,
       scrollback: 1000,
       cursorBlink: true,
+      // Explicit DARK theme (dark-mode-only project): light fg on a near-black bg. This
+      // also drives the filmstrip mirror's colors — serializeAsHTML() emits each cell
+      // with these fg/bg values, so the mirror reads as dark too (P3 verify-human: the
+      // default theme rendered dark-on-white in the mirror tile). #1e1e1e matches the
+      // editor/diff surfaces.
+      theme: {
+        background: "#1e1e1e",
+        foreground: "#d4d4d4",
+        cursor: "#d4d4d4",
+      },
       // DOM renderer is the default; no WebGL addon loaded.
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    // M4 WP3 P3 — SerializeAddon feeds the filmstrip's live ~1 fps background mirror.
+    // Only the primary CC pane (cc_spawn, the workspace's left half) registers; the
+    // WP9 second-terminal sub-panel (term_spawn) is not the workspace's mirror source.
+    const serialize = new SerializeAddon();
+    term.loadAddon(serialize);
     term.open(host);
     termRef.current = term;
     fitRef.current = fit;
+    if (spawnCommand === "cc_spawn") {
+      // The mirror must TAIL the latest output. serializeAsHTML anchors at the BOTTOM of
+      // the buffer (active screen + `scrollback` rows of history), so a small positive
+      // scrollback always captures the newest rows — even for a backgrounded terminal
+      // whose on-screen viewport (ydisp) is parked and does NOT auto-advance while its
+      // renderer is paused off-viewport. scrollback:0 froze the mirror once output scrolled
+      // past the initial screen (P3 verify-human: "doesn't tail the bottom"); a ~40-row
+      // tail keeps it current and the tile clips to show the bottom (App.css).
+      // includeGlobalBackground:true → the block carries the dark bg (#1e1e1e) so the tile
+      // is dark, not white (P3 verify-human dark-theme fix).
+      registerTerminalSerializer(workspaceId, () =>
+        serialize.serializeAsHTML({ scrollback: 40, includeGlobalBackground: true }),
+      );
+    }
 
     // Fit AFTER layout settles. On first mount the flex/grid cell may not have its
     // final width during the synchronous effect, so a synchronous fit() computes a
@@ -177,6 +211,9 @@ export function XtermPane({
       cancelAnimationFrame(raf);
       observer.disconnect();
       onDataDisposable.dispose();
+      if (spawnCommand === "cc_spawn") {
+        unregisterTerminalSerializer(workspaceId);
+      }
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -186,7 +223,7 @@ export function XtermPane({
       // happens at app shutdown, which kill_all covers. (No per-pane kill here, matching
       // the proven WP7 lifecycle — multi-workspace pane-close will revisit this.)
     };
-  }, [workspaceId, fitAndResize]);
+  }, [workspaceId, fitAndResize, spawnCommand]);
 
   // Spawn (and re-spawn on relaunch) the session. Keyed on the bridge phase being
   // "spawning" — the initial mount and every "relaunch" land here. Gated on `active`:

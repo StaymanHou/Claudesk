@@ -45,10 +45,12 @@
 //                                   ⌘⇧ chords and from bare ⌘P/F/R/S/D/⌘1..9. Suppressed
 //                                   while the finder/search overlay is open; preventDefault
 //                                   pre-empts the OS close-window ⌘W. RightPanelHost.)
-//   ⌘⇧1..⌘⇧9 → RESERVED            (operator 2026-06-21: future workspace/filmstrip
-//                                   switching — a later milestone. Do NOT claim ⌘⇧+digit
-//                                   for anything else. Distinct from WP12's bare ⌘+digit
-//                                   tab switch by the required Shift.)
+//   ⌘⇧1..⌘⇧9 → workspace switch    (M4 WP3 — promote the Nth filmstrip tile to center
+//                                   stage. APP-level capture-phase listener in App.tsx;
+//                                   workspaceSwitchIndex predicate in
+//                                   workspace/workspaceSwitchChord.ts. Distinct from
+//                                   WP12's bare ⌘+digit tab switch by the required Shift.
+//                                   Was RESERVED for exactly this since 2026-06-21.)
 //   ⌘F ⌘R ⌘S ⌘D ⌘=/-/0            → CM6 editor chords (editorExtensions coreKeymap)
 // NOTE: ⌘⇧D (panel-select Diff) is APP-level + capture-phase, distinct from the
 // editor-internal bare ⌘D (Cmd-D select-next, CM6 keymap, no Shift) — the Shift

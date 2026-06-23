@@ -7,10 +7,19 @@
 // (Before WP5 the right half was an inline segmented toggle living in this file.)
 //
 // CRITICAL invariant (CLAUDE.md "All workspaces stay mounted"): this component
-// is NEVER unmounted to switch the center stage. When not focused it is hidden
-// with `display:none` so its xterm + PTY connection persist. The `visible` prop
-// drives that toggle, and is forwarded to RightPanelHost to gate panel liveness +
-// the capture-phase hotkey (only the focused workspace's host reacts).
+// is NEVER unmounted to switch the center stage. When not focused it stays mounted
+// (xterm + PTY connection persist) but is pushed OFF-VIEWPORT (`left:-99999px`),
+// NOT hidden with `display:none`. Two reasons, both load-bearing for M4 WP3's live
+// filmstrip mirror (WP4 thumbnail-probe findings):
+//   1. Off-viewport keeps the element laid out with real dimensions, so xterm's
+//      FitAddon `fit()` still works (`display:none` → zero dims → `fit()` throws).
+//   2. Off-viewport lets xterm's IntersectionObserver PAUSE the background
+//      renderer for free (~5ms/frame saved) while the buffer still updates via
+//      `write()` — so the filmstrip can read a current `serializeAsHTML()` snapshot
+//      from the paused-renderer buffer (WP3 P3). `display:none` would also pause
+//      rendering but breaks fit + can't be serialized into a sized tile.
+// The `visible` prop drives that toggle, and is forwarded to RightPanelHost to gate
+// panel liveness + the capture-phase hotkey (only the focused workspace's host reacts).
 
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
 import { XtermPane } from "./XtermPane";
@@ -44,8 +53,25 @@ export function Workspace({
     <div
       className="workspace"
       data-testid={`workspace-${workspace.id}`}
-      // display:none keeps the subtree mounted (xterm + PTY persist).
-      style={{ display: visible ? "grid" : "none" }}
+      data-visible={visible ? "true" : "false"}
+      // Always display:grid (real dimensions → FitAddon works); hidden workspaces
+      // are pushed off-viewport instead of `display:none`. See the header comment:
+      // this is what keeps background xterm buffers serializable for the WP3
+      // filmstrip mirror while xterm pauses their off-screen renderer.
+      style={
+        visible
+          ? { display: "grid" }
+          : {
+              display: "grid",
+              position: "absolute",
+              left: "-99999px",
+              top: 0,
+              // Match the on-stage footprint so FitAddon sizes the background
+              // terminal the same as it will appear once promoted.
+              width: "100%",
+              height: "100%",
+            }
+      }
     >
       <div className="workspace-header" data-testid="workspace-header">
         <span className="workspace-header-name">{workspace.display_name}</span>
