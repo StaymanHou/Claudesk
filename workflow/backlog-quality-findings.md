@@ -4,6 +4,40 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m4-wp4b-focus-indicator — 2026-06-23
+
+3 MINOR findings from `feature-review-quality` on ship commit `647148f` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built with negligible (cosmetic) debt: clean pure/impure seam (`deriveFocusHalf`), well-justified duck-typed guard, correct `relatedTarget`-based `focusout`, and the atomically-landed F12 fix that repaired a pre-existing regression + deleted a dead rule. All three findings are leftover cosmetic dust from the F12 fix. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-23-QUALITY-WP4B-DEAD-DATA-ACTIVE-PANE
+- **Files:** `src/components/workspace/editor/EditorSplit.tsx:426`
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (dead surface)
+- **Summary:** The `data-active-pane={pane.id === panes.activePaneId}` attribute rendered on `.editor-split-pane` is now consumed by nothing — the live active-pane indicator selector is `.editor-split-pane.is-active::before` (the `is-active` class), and the only remaining `[data-active-pane]` references are inside `App.css` *comments*. The WP4b F12 fix moved the live selector off `data-active-pane`, leaving it a dangling render-time emit.
+- **Context:** Was load-bearing pre-WP11-Phase-5 (the orphaned WP3c rule keyed off it). A future reader will reasonably assume it's still live and hesitate to remove it.
+- **Suggested action:** Drop the `data-active-pane` attribute from EditorSplit.tsx:426 (the `is-active` class already carries the state). One-line. Pairs with finding #2 (the stale comment cross-ref) — one `/feature-refactor` pass.
+- **Pickup shape:** trivial `/feature-refactor` item. Dismiss via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-23-QUALITY-WP4B-STALE-COMMENT-XREF
+- **Files:** `src/App.css` (WP4b half-accent block, ~line 443)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (stale comment)
+- **Summary:** The WP4b block comment cross-references `.editor-pane[data-active-pane]` as the WP3c precedent ("the WP3c lesson, see ..."), but that exact rule is the dead one this same commit deletes ~180 lines below. The live precedent is now `.editor-split-pane.is-active::before`.
+- **Context:** A cross-reference pointing at a selector the same commit removes; stale on arrival. The adjacent removed-rule tombstone comment is accurate — only this one pointer needs the updated target.
+- **Suggested action:** Update the comment's cross-ref to point at `.editor-split-pane.is-active::before`. Pairs with finding #1.
+- **Pickup shape:** trivial `/feature-refactor` item. Dismiss via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-23-QUALITY-WP4B-COEXISTENCE-COMMENT-DUP
+- **Files:** `src/App.css` (WP4b half-accent block + the F12 `.editor-split-pane.is-active::before` block)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (comment duplication)
+- **Summary:** The coexistence rationale (outer-edge vs inner-edge, "framed vs striped", z-index:6 parity) is documented near-verbatim in two CSS blocks; they will drift if the edge convention ever changes.
+- **Context:** Belt-and-suspenders given the genuine cross-rule coupling, but a drift hazard. Acceptable as-is; noted for completeness.
+- **Suggested action:** Optionally consolidate to a single canonical comment with a one-line back-reference from the other block. Lowest-value of the three.
+- **Pickup shape:** trivial `/feature-refactor` item. Dismiss via the WIP's `## Code-Quality Review` section.
+
 # m3-wp6-frontend-status-indicator — 2026-06-22
 
 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `b377a97` (0 CRITICAL). Reviewer rated it well-built — clean pure/runtime/render layering, faithful wire-contract mirror, exemplary dead-code-allow retirement. The one real blemish is a dead snippet/tooltip path. Auto-backlogged per drive_mode=autopilot.

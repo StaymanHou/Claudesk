@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-23  # M4 WP4 (collapse toggle) SHIPPED (d06ac50). Remaining: WP5 verify (milestone exit); WP4b (focus indicator) parallel/open. dogfood-replace point.
+updated: 2026-06-23  # M4 WP4b (focus indicator) SHIPPED (647148f). Remaining: WP5 verify (milestone exit) ONLY — its deps (WP2/WP3/WP4/WP4b) now all satisfied. dogfood-replace point reached once WP5 passes.
 ---
 
 # Work Breakdown Structure — Milestone 4: Multi-workspace UX (filmstrip + center stage)
@@ -82,16 +82,16 @@ Learning-sequence ordering (riskiest-unknown-first), per the WBS discipline:
 
 **WP3 → WP4 rationale:** The collapse toggle is a *display mode over tiles that already exist* — the expanded (thumbnail) filmstrip must exist before there's anything to collapse into a status-pill row. Build the rich surface, then add the space-reclaiming toggle.
 
-### WP4b: Left/right focus indicator (intra-workspace)
+### WP4b: Left/right focus indicator (intra-workspace) ✅ SHIPPED 2026-06-23 (commit 647148f)
 **Description:** A subtle persistent indicator (analogous to the M2 WP3c split-pane active-editor border) marking which half of the center-stage workspace currently holds keyboard focus — the **left** CC terminal vs the **right** panel (editor / diff / terminal). At N workspaces with two interactive halves each, "where will my keystrokes land" otherwise has no on-screen answer. Independent of the filmstrip; folds in the focus-ambiguity gap the operator spotted 2026-06-22.
 **Milestone:** Milestone 4
 **Dependencies:** WP2 (a focused workspace exists to indicate within); independent of WP3/WP4 (can land in parallel)
 **Size:** S
 **Tasks:**
-- [ ] Track which half (left terminal / right panel) of the center-stage workspace holds focus — `focusin`/`focusout` on the two half-containers (capture-phase), keyed per workspace; the indicator follows the genuinely-focused workspace only
-- [ ] Render a subtle active-half border/accent on the focused half (reuse the M2 split-pane active-editor border styling/tokens for visual consistency, dark-only palette); the unfocused half shows no accent
-- [ ] Coexist with the existing M2 split-pane active-*editor*-border (that distinguishes *which editor pane within the right half*; this is the coarser *left-half vs right-half* level — don't double-draw or fight it)
-- [ ] Tests: pure focus-half derivation (a focus event target → left|right|none) in vitest
+- [x] Track which half (left terminal / right panel) of the center-stage workspace holds focus — capture-phase `focusin`/`focusout` on the workspace root, gated on `visible`; `focusout` derives the half from `relatedTarget`; pure `deriveFocusHalf(target)` seam (`focusHalf.ts`) → emits `data-focus-half` on the `.workspace` root. Indicator follows the visible/center-stage workspace only (clears to `none` on hide).
+- [x] Render a subtle active-half border/accent on the focused half — 2px `#6ea8ff` `::before` strip (App.css), reusing the M2 WP3c token + opaque-bg-proof `::before` technique, dark-only. Unfocused half shows no accent.
+- [x] Coexist with the existing M2 split-pane active-*editor*-border — accents on OUTER edges (left half left edge, right half right edge); the per-pane strip stays on the inner edge → opposite edges, no double-draw. **Also fixed a pre-existing regression surfaced by this check:** the split-pane active-pane indicator was an `inset` box-shadow painted over by the opaque CodeMirror editor (only showed on empty panes); the WP11-Phase-5 rename had orphaned the original WP3c `::before` fix onto a dead class. Restored as `.editor-split-pane.is-active::before` (z-index:6) + removed the dead rule.
+- [x] Tests: pure focus-half derivation (a focus event target → left|right|none) in vitest — `focusHalf.test.ts` (5 cases incl. null + non-Element). Live visual verified at native verify-human (operator PASS).
 
 ### WP4: Filmstrip collapse toggle ✅ SHIPPED 2026-06-23 (commit d06ac50)
 **Description:** A window-chrome control that toggles the filmstrip between **expanded** (full tiles with the live ~1 fps thumbnail) and **collapsed** (a one-line row of mini status pills — project name + status dot only, no preview). Collapsing reclaims vertical space *and* stops the serialize mirror loop, dropping the background-render CPU cost. (Vision feature: `vision.md` filmstrip bullet + Core Principle 4.)

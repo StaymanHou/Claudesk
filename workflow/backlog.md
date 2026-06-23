@@ -459,3 +459,9 @@
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** quick `/feature-refactor` items; the join/split round-trip + the still-pending WP3 ticker-effect-dual-responsibility finding both live in the SAME ticker effect — natural to fix together in one pass. Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## Code-quality findings — m4-wp4b-focus-indicator (2026-06-23)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `647148f` — all cosmetic dust from the bundled F12 fix: (1) `data-active-pane` attribute on `.editor-split-pane` (EditorSplit.tsx:426) is now unconsumed (live selector moved to `.is-active::before`); (2) the WP4b CSS comment cross-refs the dead `.editor-pane[data-active-pane]` rule the same commit deletes; (3) the coexistence rationale is near-duplicated across the two CSS blocks. Reviewer rated the feature well-built, negligible debt, no refactor warranted. Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp4b-focus-indicator — 2026-06-23`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** findings #1 + #2 pair (drop the dead attribute + fix its comment cross-ref) in one trivial `/feature-refactor` pass; #3 (comment dedup) is optional lowest-value polish. Dismiss any via the WIP's `## Code-Quality Review` section.
