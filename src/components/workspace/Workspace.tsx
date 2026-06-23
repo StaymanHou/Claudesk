@@ -21,11 +21,13 @@
 // The `visible` prop drives that toggle, and is forwarded to RightPanelHost to gate
 // panel liveness + the capture-phase hotkey (only the focused workspace's host reacts).
 
+import { useEffect, useRef, useState } from "react";
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
 import { XtermPane } from "./XtermPane";
 import { RightPanelHost } from "./RightPanelHost";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import type { WireWorkspaceState } from "../../state/workspaceStatus";
+import { deriveFocusHalf, type FocusHalf } from "./focusHalf";
 
 interface WorkspaceProps {
   workspace: WorkspaceModel;
@@ -49,11 +51,45 @@ export function Workspace({
   statusState = "unknown",
   statusSnippet,
 }: WorkspaceProps) {
+  // M4 WP4b — which half (left CC terminal / right panel) holds keyboard focus, so the
+  // CSS can paint a #6ea8ff accent on it. Capture-phase focusin/focusout on this
+  // workspace's root keeps the read scoped to THIS workspace (no document-level
+  // listener that every workspace would re-handle). Only the visible/center-stage
+  // workspace indicates: backgrounds are off-viewport + unfocusable, and clearing to
+  // "none" on hide prevents a stale accent if a workspace is demoted while focused.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [focusHalf, setFocusHalf] = useState<FocusHalf>("none");
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !visible) {
+      setFocusHalf("none");
+      return;
+    }
+    // focusin bubbles (unlike focus) so a single listener on the root sees focus landing
+    // anywhere inside either half. focusout's relatedTarget is where focus is GOING —
+    // deriving the half from it (not the leaving element) keeps the accent correct when
+    // moving directly from one half to the other, and clears to "none" on focus leaving
+    // the workspace entirely (relatedTarget null or outside both halves).
+    const onFocusIn = (e: FocusEvent) => setFocusHalf(deriveFocusHalf(e.target));
+    const onFocusOut = (e: FocusEvent) =>
+      setFocusHalf(deriveFocusHalf(e.relatedTarget));
+    root.addEventListener("focusin", onFocusIn, true);
+    root.addEventListener("focusout", onFocusOut, true);
+    return () => {
+      root.removeEventListener("focusin", onFocusIn, true);
+      root.removeEventListener("focusout", onFocusOut, true);
+    };
+  }, [visible]);
+
   return (
     <div
+      ref={rootRef}
       className="workspace"
       data-testid={`workspace-${workspace.id}`}
       data-visible={visible ? "true" : "false"}
+      // M4 WP4b — only the center-stage workspace lights a half; backgrounds stay "none".
+      data-focus-half={visible ? focusHalf : "none"}
       // Always display:grid (real dimensions → FitAddon works); hidden workspaces
       // are pushed off-viewport instead of `display:none`. See the header comment:
       // this is what keeps background xterm buffers serializable for the WP3

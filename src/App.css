@@ -430,6 +430,43 @@ body,
   height: 100%;
   background-color: #000;
   overflow: hidden;
+  /* M4 WP4b — positioning context for the focus-half accent ::before (below). */
+  position: relative;
+}
+
+/* M4 WP4b — left/right intra-workspace focus indicator. A subtle #6ea8ff accent on
+   whichever half of the CENTER-STAGE workspace holds keyboard focus (driven by the
+   `data-focus-half` attribute set on the `.workspace` root from capture-phase
+   focusin/focusout — Workspace.tsx). This is the COARSER sibling of the M2 WP3c
+   active-editor-pane strip: reuses the same #6ea8ff token + the same ::before-strip
+   technique (an inset box-shadow would be painted over by the opaque #000 xterm /
+   #1e1e1e editor backgrounds — the WP3c lesson, see .editor-pane[data-active-pane]).
+
+   COEXISTENCE with the finer WP3c per-editor-pane strip: WP3c paints the INNER edge of
+   an editor PANE (the left edge of `.editor-pane`, toward the editor content). WP4b
+   paints the OUTER edge of each HALF — the left half's LEFT edge, the right half's
+   RIGHT edge — so the focused half is framed along the window's outer border, never on
+   the central seam where the WP3c strip sits. Different elements, opposite edges → the
+   two levels read as distinct (a half is "framed", a pane is "tabbed") and never draw
+   a doubled line. The right-half accent (right edge) is far from the WP3c strip (which
+   lives on the left edge of an inner pane), so the right panel can show BOTH at once
+   without overlap. z-index:6 matches WP3c so neither out-draws the other. */
+.workspace[data-focus-half="left"] .workspace-left::before,
+.workspace[data-focus-half="right"] .workspace-right::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  z-index: 6;
+  background-color: #6ea8ff;
+  pointer-events: none;
+}
+.workspace[data-focus-half="left"] .workspace-left::before {
+  left: 0;
+}
+.workspace[data-focus-half="right"] .workspace-right::before {
+  right: 0;
 }
 
 /* Wrapper positions the session-ended / error overlay over the terminal (WP7). */
@@ -582,30 +619,12 @@ body,
   border-top: 1px solid #3c3c3c;
 }
 
-/* WP3c — active-pane indicator: when split (>1 pane), the focused pane gets a
-   thin accent strip on its left edge so the user can see which pane chords act
-   on. Single-pane (the default) shows nothing — there is nothing to disambiguate.
-
-   Rendered as an absolutely-positioned ::before strip (NOT an inset box-shadow):
-   the CodeMirror `.cm-editor` fills the pane flush to its left edge (offset 0)
-   with an OPAQUE #1e1e1e background, which paints over any inset box-shadow on
-   the pane — so the shadow's computed style was correct but it was never visible
-   (caught at WP3c Phase-2 verify-human, 2026-06-20). The ::before sits at
-   z-index:6 (above the editor, matching the close ✕) so it draws on top, and it
-   doesn't shift the editor layout (the editor still starts at the pane's edge;
-   the 2px strip overlays its left margin). */
-.editor-panes:has(.editor-pane + .editor-pane)
-  .editor-pane[data-active-pane="true"]::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 2px;
-  z-index: 6;
-  background-color: #6ea8ff;
-  pointer-events: none;
-}
+/* (WP3c's active-pane ::before rule formerly lived here, selecting
+   `.editor-pane[data-active-pane="true"]`. The WP11-Phase-5 split refactor moved the
+   `data-active-pane` attribute onto the OUTER `.editor-split-pane` (EditorSplit.tsx) —
+   the inner `.editor-pane` (EditorPanel/SyntheticView) never carries it — so this
+   selector matched nothing and was dead. Removed 2026-06-23 during the WP4b F12 fix;
+   the live active-pane indicator is `.editor-split-pane.is-active::before` above.) */
 
 /* WP3c — per-pane close affordance (only rendered when >1 pane). Top-right of the
    pane, above the editor content; subdued until hover. */
@@ -1017,8 +1036,30 @@ body,
 .editor-split-pane + .editor-split-pane {
   border-top: 1px solid rgba(128, 128, 128, 0.25);
 }
-.editor-split-pane.is-active {
-  box-shadow: inset 2px 0 0 rgba(110, 168, 255, 0.5);
+/* M4 WP4b (F12 back-loop fix) — the active-pane indicator. Rendered as a 2px #6ea8ff
+   ::before strip on the pane's LEFT (inner) edge, NOT an inset box-shadow: CodeMirror's
+   `.cm-editor` fills the pane with an OPAQUE #1e1e1e background, which paints over an
+   inset box-shadow — so the box-shadow was invisible the moment a file opened (it only
+   showed on an empty "No file open" pane). This is the SAME hazard + fix the original
+   WP3c ::before solved; the WP11-Phase-5 DOM rename (.editor-pane → .editor-split-pane)
+   orphaned the WP3c rule onto the now-unused .editor-pane class and reverted this one to
+   a box-shadow, silently reintroducing the bug (caught at WP4b coexistence verify-human,
+   2026-06-23). z-index:6 draws above the editor (matching the close ✕). Gated on the
+   split case (>1 pane) — a single pane has nothing to disambiguate, so no strip.
+   COEXISTS with the WP4b half accent: that strip is on the OUTER right edge of
+   `.workspace-right`; this is on the INNER left edge of a pane — opposite edges, no
+   overlap, two distinct levels (a half is framed, the active pane is striped). */
+.editor-split-panes:has(.editor-split-pane + .editor-split-pane)
+  .editor-split-pane.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  z-index: 6;
+  background-color: #6ea8ff;
+  pointer-events: none;
 }
 /* WP11 Phase 5 — the `.editor-split-pane > .editor-pane-close` absolute-corner rule
    was removed; the close-pane ✕ now lives in the tab strip beside the Split icon (a

@@ -39,9 +39,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-23, M4 WP2 P4: 361 pass, +6 mapIpcError tests)
+- **Last:** 1s (2026-06-23, M4 WP4b: 426 pass, +5 focusHalf tests)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-23 (M4 WP4b verify-codify: +5 focusHalf derivation tests → 49 files / 426 tests; run ~0.86s)
   - 1s — 2026-06-23 (M4 WP2 P4: +6 mapIpcError picker-error-surfacing tests → 39 files / 361 tests; run ~0.74s)
   - 1s — 2026-06-23 (M4 WP2 P1 codify: +1 3+-workspace generalization test → 38 files / 355 tests; run ~0.94s)
   - 1s — 2026-06-23 (M4 WP2 P1 build: +4 openWorkspace append/focus-existing + viewFor N>1 → 38 files / 354 tests; run ~0.78s)
