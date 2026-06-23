@@ -7,6 +7,7 @@ import { Filmstrip } from "./components/workspace/Filmstrip";
 import { deriveTiles, tileForSwitchIndex } from "./components/workspace/filmstripTiles";
 import { workspaceSwitchIndex } from "./components/workspace/workspaceSwitchChord";
 import { loadOrder, reorder, saveOrder } from "./components/workspace/filmstripOrder";
+import { loadCollapsed, saveCollapsed } from "./components/workspace/filmstripCollapse";
 import { ProjectPicker } from "./components/picker/ProjectPicker";
 import { PickerOverlay } from "./components/picker/PickerOverlay";
 import { parseSeedParam } from "./state/seedWorkspace";
@@ -80,6 +81,21 @@ function App() {
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [view, tiles, focusWorkspace]);
 
+  // M4 WP4 — filmstrip collapse: EXPANDED (full ~1 fps thumbnail tiles, WP3) ↔
+  // COLLAPSED (a one-line row of mini status pills). Seeded from the persisted
+  // preference (localStorage, app-global UI chrome — same pattern as `order` above and
+  // the M2 rail width). The toggle flips state + persists; Filmstrip reads `collapsed`
+  // both to choose its render mode AND to gate the serialize mirror ticker (P2 — the
+  // loop stops while collapsed so the background-render CPU cost goes to zero).
+  const [collapsed, setCollapsed] = useState<boolean>(() => loadCollapsed());
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      saveCollapsed(next);
+      return next;
+    });
+  }, []);
+
   // M4 WP2 — the new-workspace overlay (the filmstrip "+" re-entry). Only ever
   // shown when a workspace is already open; first-open uses the full-screen picker.
   const [showPicker, setShowPicker] = useState(false);
@@ -120,6 +136,8 @@ function App() {
           <Filmstrip
             tiles={tiles}
             statusFor={stateFor}
+            collapsed={collapsed}
+            onToggleCollapsed={toggleCollapsed}
             onPromote={focusWorkspace}
             onReorder={reorderTiles}
             onReorderCommit={commitOrder}

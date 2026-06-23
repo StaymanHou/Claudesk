@@ -17,6 +17,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import type { FilmstripTile } from "./filmstripTiles";
 import { serializeTerminal } from "./terminalMirror";
+import { shouldRunMirror } from "./mirrorTicker";
 import { insertionIndex } from "./filmstripOrder";
 import type { WireWorkspaceState } from "../../state/workspaceStatus";
 
@@ -30,6 +31,11 @@ interface FilmstripProps {
   tiles: FilmstripTile[];
   /** Live CC state lookup by workspace id (M3 WP6 `workspace-status` channel). */
   statusFor: (workspaceId: string) => WireWorkspaceState;
+  /** M4 WP4 — collapsed = one-line status-pill row (no live mirror); expanded = full
+   *  thumbnail tiles. Drives both the render mode AND the mirror-ticker gate (P2). */
+  collapsed: boolean;
+  /** M4 WP4 — flip the collapse preference (App persists it). */
+  onToggleCollapsed: () => void;
   /** Promote a workspace to center stage (M4 WP3 P2 — tile click). */
   onPromote: (workspaceId: string) => void;
   /** Reorder tiles LIVE: move from index → to index (fires on every pointermove that
@@ -47,6 +53,8 @@ const DRAG_THRESHOLD_PX = 5;
 export function Filmstrip({
   tiles,
   statusFor,
+  collapsed,
+  onToggleCollapsed,
   onPromote,
   onReorder,
   onReorderCommit,
@@ -162,8 +170,15 @@ export function Filmstrip({
       if (activeMirror) activeMirror.innerHTML = "";
     }
 
+    // M4 WP4 P2 — collapsed = no thumbnails to mirror into; gate the ticker entirely so
+    // serializeTerminal() is never called and the background-render CPU cost goes to
+    // zero. The decision (expanded AND ≥1 background tile) is the pure `shouldRunMirror`
+    // (mirrorTicker.ts, vitest-pinned). `collapsed` is in the deps, so collapse tears the
+    // interval down (cleanup) and expand restarts it (with the immediate first tick()
+    // below). The xterm buffers keep updating via write() regardless (M1 rule) — only the
+    // *read* pauses.
     const backgroundIds = bgSignature ? bgSignature.split(",") : [];
-    if (backgroundIds.length === 0) return; // nothing to mirror (0 or 1 workspace)
+    if (!shouldRunMirror(collapsed, backgroundIds.length)) return;
 
     const tick = () => {
       if (document.hidden) return; // app not visible → no serialize churn
@@ -179,65 +194,107 @@ export function Filmstrip({
     tick(); // paint an immediate first frame so a freshly-demoted tile isn't blank for 1s
     const timer = setInterval(tick, MIRROR_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [bgSignature, activeId]);
+  }, [bgSignature, activeId, collapsed]);
 
   return (
     <div
-      className="filmstrip"
+      className={`filmstrip${collapsed ? " filmstrip--collapsed" : ""}`}
       data-testid="filmstrip"
+      data-collapsed={collapsed ? "true" : "false"}
       ref={stripRef}
       // M4 WP3 P4 — pointer handlers live HERE on the stable strip (not per-tile): the
       // live reorder rebuilds the tile buttons each move, so capturing on a tile would
       // drop the capture mid-drag (proven root cause, P4 verify-human r3). closest()
-      // resolves which tile was pressed.
+      // resolves which tile was pressed. In collapsed mode the pills carry no
+      // [data-tile-index], so onStripPointerDown bails and the pills' own onClick
+      // (click-to-promote) handles them — drag-reorder is an expanded-only affordance.
       onPointerDown={onStripPointerDown}
       onPointerMove={onStripPointerMove}
       onPointerUp={onStripPointerUp}
       onPointerCancel={onStripPointerCancel}
     >
-      {tiles.map((tile, index) => (
-        <button
-          type="button"
-          key={tile.id}
-          data-tile-index={index}
-          data-id={tile.id}
-          className={
-            `filmstrip-tile${tile.active ? " filmstrip-tile--active" : ""}` +
-            (draggingId === tile.id ? " filmstrip-tile--dragging" : "")
-          }
-          data-testid={`filmstrip-tile-${tile.id}`}
-          data-active={tile.active ? "true" : "false"}
-          title={tile.display_name}
-          aria-label={`Switch to ${tile.display_name}`}
-          aria-current={tile.active ? "true" : undefined}
-        >
-          {/* The mirror body is the BASE layer filling the whole tile; the header is a
-              semi-transparent OVERLAY floated on top (operator request P3 verify-human).
-              Background tiles get a live ~1 fps serializeAsHTML() mirror written into the
-              inner `.filmstrip-tile-mirror` node by the ticker; the active tile shows no
-              mirror (just the glyph) — it's already full-size on the center stage. The
-              body clips; the inner node is terminal-natural-width + scaled (App.css) so
-              lines don't wrap (the P3 white-bar fix). */}
-          <div
-            className="filmstrip-tile-body"
-            data-testid={`filmstrip-tile-body-${tile.id}`}
-          >
-            <div
-              className="filmstrip-tile-mirror"
-              data-testid={`filmstrip-tile-mirror-${tile.id}`}
-              ref={(el) => {
-                if (el) mirrorRefs.current.set(tile.id, el);
-                else mirrorRefs.current.delete(tile.id);
-              }}
-            />
-            {tile.active && <span className="filmstrip-tile-active-glyph" aria-hidden="true" />}
-          </div>
-          <div className="filmstrip-tile-header">
-            <span className="filmstrip-tile-name">{tile.display_name}</span>
-            <WorkspaceStatusIndicator state={statusFor(tile.id)} />
-          </div>
-        </button>
-      ))}
+      {/* M4 WP4 — the collapse toggle. Expanded ↔ collapsed; persisted by App. Sits at
+          the head of the strip in both modes. */}
+      <button
+        type="button"
+        className="filmstrip-collapse-toggle"
+        data-testid="filmstrip-collapse-toggle"
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? "Expand filmstrip" : "Collapse filmstrip"}
+        title={collapsed ? "Expand filmstrip" : "Collapse filmstrip"}
+        onClick={onToggleCollapsed}
+      >
+        {collapsed ? "▸" : "▾"}
+      </button>
+
+      {collapsed
+        ? // COLLAPSED — a one-line row of mini status pills (project name + M3 dot only,
+          // no live mirror). Click-to-promote preserved (vision metric 4: glance→switch
+          // from the thin row). No drag wiring (no data-tile-index).
+          tiles.map((tile) => (
+            <button
+              type="button"
+              key={tile.id}
+              data-id={tile.id}
+              className={`filmstrip-pill${tile.active ? " filmstrip-pill--active" : ""}`}
+              data-testid={`filmstrip-pill-${tile.id}`}
+              data-active={tile.active ? "true" : "false"}
+              title={tile.display_name}
+              aria-label={`Switch to ${tile.display_name}`}
+              aria-current={tile.active ? "true" : undefined}
+              onClick={() => onPromote(tile.id)}
+            >
+              <span className="filmstrip-pill-name">{tile.display_name}</span>
+              <WorkspaceStatusIndicator state={statusFor(tile.id)} />
+            </button>
+          ))
+        : // EXPANDED — the full WP3 thumbnail tiles.
+          tiles.map((tile, index) => (
+            <button
+              type="button"
+              key={tile.id}
+              data-tile-index={index}
+              data-id={tile.id}
+              className={
+                `filmstrip-tile${tile.active ? " filmstrip-tile--active" : ""}` +
+                (draggingId === tile.id ? " filmstrip-tile--dragging" : "")
+              }
+              data-testid={`filmstrip-tile-${tile.id}`}
+              data-active={tile.active ? "true" : "false"}
+              title={tile.display_name}
+              aria-label={`Switch to ${tile.display_name}`}
+              aria-current={tile.active ? "true" : undefined}
+            >
+              {/* The mirror body is the BASE layer filling the whole tile; the header is
+                  a semi-transparent OVERLAY floated on top (operator request P3
+                  verify-human). Background tiles get a live ~1 fps serializeAsHTML()
+                  mirror written into the inner `.filmstrip-tile-mirror` node by the
+                  ticker; the active tile shows no mirror (just the glyph) — it's already
+                  full-size on the center stage. The body clips; the inner node is
+                  terminal-natural-width + scaled (App.css) so lines don't wrap (the P3
+                  white-bar fix). */}
+              <div
+                className="filmstrip-tile-body"
+                data-testid={`filmstrip-tile-body-${tile.id}`}
+              >
+                <div
+                  className="filmstrip-tile-mirror"
+                  data-testid={`filmstrip-tile-mirror-${tile.id}`}
+                  ref={(el) => {
+                    if (el) mirrorRefs.current.set(tile.id, el);
+                    else mirrorRefs.current.delete(tile.id);
+                  }}
+                />
+                {tile.active && (
+                  <span className="filmstrip-tile-active-glyph" aria-hidden="true" />
+                )}
+              </div>
+              <div className="filmstrip-tile-header">
+                <span className="filmstrip-tile-name">{tile.display_name}</span>
+                <WorkspaceStatusIndicator state={statusFor(tile.id)} />
+              </div>
+            </button>
+          ))}
       <button
         type="button"
         className="filmstrip-add"

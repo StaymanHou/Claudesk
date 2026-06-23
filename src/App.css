@@ -254,6 +254,89 @@ body,
   display: none;
 }
 
+/* ───────────────────────── M4 WP4 — collapse toggle ─────────────────────────
+   The filmstrip toggles between EXPANDED (full thumbnail tiles, above) and
+   COLLAPSED (a one-line row of mini status pills — project name + the same M3 status
+   dot, no live preview). Collapsing reclaims ~56px of vertical space AND stops the
+   serialize mirror loop (Filmstrip P2). Click-to-promote still works from a pill. */
+
+/* The collapse/expand control — a small chevron at the head of the strip, in both
+   modes. Reuses the dashed-square language of `.filmstrip-add` but slimmer. */
+.filmstrip-collapse-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  align-self: stretch;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 5px;
+  cursor: pointer;
+  appearance: none;
+}
+
+.filmstrip-collapse-toggle:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Collapsed strip — a single thin row. Overrides the 84px expanded height. */
+.filmstrip--collapsed {
+  height: 30px;
+}
+
+/* A mini status pill: project name + the same WorkspaceStatusIndicator dot. Compact
+   horizontal chip, click-to-promote. */
+.filmstrip-pill {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 180px;
+  height: 22px;
+  padding: 0 9px;
+  background-color: #1e1e1e;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 11px;
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  appearance: none;
+}
+
+.filmstrip-pill:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Active pill = the center-staged workspace — same #6ea8ff accent as the active tile,
+   for one consistent "this is the focused thing" language across expanded + collapsed. */
+.filmstrip-pill--active {
+  border-color: #6ea8ff;
+  box-shadow: 0 0 0 1px #6ea8ff;
+}
+
+.filmstrip-pill-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Like the expanded tile, the pill shows the dot only (no text label) — the row is
+   tight and the project name already names the workspace. */
+.filmstrip-pill .workspace-status-label {
+  display: none;
+}
+
 .center-stage {
   position: relative;
   overflow: hidden;
