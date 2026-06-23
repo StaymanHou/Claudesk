@@ -297,6 +297,51 @@ mod tests {
         assert_eq!(reg.resolve_cwd(&dir.path().to_string_lossy()), None);
     }
 
+    #[test]
+    fn registry_generalizes_to_n_gt_1_no_cross_workspace_bleed() {
+        // M4 WP2 P4.3 — confirm the WP6 register/deregister list-diffing generalizes from
+        // N<=1 to N>1: the map holds N entries, each cwd resolves to ITS OWN workspace_id
+        // (no bleed), and deregistering one leaves the others intact + still resolving.
+        let dir_a = tempfile::TempDir::new().unwrap();
+        let dir_b = tempfile::TempDir::new().unwrap();
+        let dir_c = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir_a.path(), "ws-1".to_string());
+        reg.register(dir_b.path(), "ws-2".to_string());
+        reg.register(dir_c.path(), "ws-3".to_string());
+        assert_eq!(reg.len(), 3, "the map must hold all N=3 entries");
+
+        // Each cwd resolves to its OWN workspace — a status event for one workspace's cwd
+        // never bleeds into another's id.
+        assert_eq!(
+            reg.resolve_cwd(&dir_a.path().to_string_lossy()),
+            Some("ws-1".to_string())
+        );
+        assert_eq!(
+            reg.resolve_cwd(&dir_b.path().to_string_lossy()),
+            Some("ws-2".to_string())
+        );
+        assert_eq!(
+            reg.resolve_cwd(&dir_c.path().to_string_lossy()),
+            Some("ws-3".to_string())
+        );
+
+        // Deregister the middle one (close one of N workspaces) — the others survive.
+        reg.deregister(dir_b.path());
+        assert_eq!(reg.len(), 2);
+        assert_eq!(reg.resolve_cwd(&dir_b.path().to_string_lossy()), None);
+        assert_eq!(
+            reg.resolve_cwd(&dir_a.path().to_string_lossy()),
+            Some("ws-1".to_string()),
+            "deregistering ws-2 must not disturb ws-1"
+        );
+        assert_eq!(
+            reg.resolve_cwd(&dir_c.path().to_string_lossy()),
+            Some("ws-3".to_string()),
+            "deregistering ws-2 must not disturb ws-3"
+        );
+    }
+
     // ---- to_update: full transform (mapped+resolved → Some; unmapped/unresolved → None) ----
 
     #[test]

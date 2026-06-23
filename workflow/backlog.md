@@ -431,3 +431,13 @@
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** both relevant only if the throwaway probe is resurrected (it is archived-or-deleted at finalize); neither is worth a `/feature-refactor` pass. Dismiss via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-23-WP3-BACKGROUND-WORKSPACE-SWITCH-AFFORDANCE
+- **Source:** feature:build (M4 WP2 Phase 2 verify-human)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** WP2 ships N>1 (workspaces coexist + stay mounted) but provides NO visible way to switch BACK to a backgrounded workspace — the only switch-back path is reopening the project via the "+" overlay (dedup focuses the existing workspace). Operator hit this during P2 verify-human ("how do I verify A is still alive? it's not shown in UI").
+- **Context:** Expected by design — tile-click promote + ⌘⇧+digit are WP3, not WP2. But it's the load-bearing UX of multi-workspace; until WP3 lands, N>1 is technically working but practically one-directional. Confirms WP3's value.
+- **Suggested action:** WP3 must treat "click a filmstrip tile (or ⌘⇧+digit) to promote a background workspace to center stage" as its PRIMARY path and verify it explicitly at WP3 verify-human. Already in the WP3 task list (`docs/product/wbs.md` §WP3 click-to-promote + ⌘⇧+digit) — this is a pointer, not new scope.
+- **Priority:** medium
+- **Status:** pending (WP3 owns it)

@@ -20,6 +20,12 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
+import { mapIpcError } from "./ipcError";
+
+// A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
+// an ERROR (an IPC rejection that must surface, not be swallowed — the WP6 MAJOR). The
+// kind drives styling; both are dismissible.
+type PickerToast = { kind: "info" | "error"; message: string };
 
 // Mirrors the Rust `Project` serialization (`path` serializes as `project_path`).
 // Only the fields the picker reads are typed here; `last_opened_at` /
@@ -51,28 +57,32 @@ interface ProjectPickerProps {
 export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [filter, setFilter] = useState("");
-  // WP9: toast shown when projects were pruned on mount because their folder is
-  // gone. `null` = no toast (the common case).
-  const [pruneToast, setPruneToast] = useState<string | null>(null);
+  // The picker toast: an info note (prune-on-mount) or a surfaced IPC error. `null` =
+  // no toast (the common case). Both kinds are dismissible.
+  const [toast, setToast] = useState<PickerToast | null>(null);
 
   useEffect(() => {
     // Load recents on mount. First prune any project whose folder was deleted
     // between sessions (`prune_missing_projects` returns the dropped records), then
     // list the survivors. A `cancelled` guard avoids a state update if the picker
-    // unmounts before the IPC resolves. Failures leave the list empty (first run has
-    // no projects.json yet — the backend returns []); the prune is a no-op then.
+    // unmounts before the IPC resolves.
+    //
+    // M4 WP2 P4.1 — a failed prune/list is SURFACED, not swallowed: previously the
+    // catch was empty, so a malformed projects.json read as "no projects yet" (the
+    // deferred WP6 MAJOR). First-run-empty is NOT an error: the backend returns []
+    // when projects.json is absent, which resolves normally (no toast).
     let cancelled = false;
     void (async () => {
       try {
         const dropped = await invoke<RecentProject[]>("prune_missing_projects");
         if (cancelled) return;
-        setPruneToast(pruneToastMessage(dropped));
+        const pruneMsg = pruneToastMessage(dropped);
+        if (pruneMsg !== null) setToast({ kind: "info", message: pruneMsg });
         const projects = await invoke<RecentProject[]>("list_projects");
         if (!cancelled) setRecents(projects);
-      } catch {
-        // A failed prune/list is non-fatal — the picker shows whatever it has
-        // (empty on first run). Surfacing IPC errors in the picker is tracked
-        // separately (SURFACE-2026-06-18-QUALITY-* picker IPC error-surfacing).
+      } catch (e) {
+        if (!cancelled)
+          setToast({ kind: "error", message: mapIpcError("load projects", e) });
       }
     })();
     return () => {
@@ -81,21 +91,36 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   }, []);
 
   async function handleOpenRecent(projectPath: string) {
-    // Stamp recency before handing off so the next list_projects reflects it.
-    await invoke("record_open", { path: projectPath });
-    onOpen(projectPath);
+    // Stamp recency before handing off so the next list_projects reflects it. A
+    // rejection surfaces as an error toast (P4.2) — never dropped as an unhandled
+    // promise rejection. We do NOT proceed to onOpen if recording failed, since the
+    // store is in an unknown state.
+    try {
+      await invoke("record_open", { path: projectPath });
+      onOpen(projectPath);
+    } catch (e) {
+      setToast({ kind: "error", message: mapIpcError("open project", e) });
+    }
   }
 
   async function handleOpenFolder() {
-    const picked = await openDialog({ directory: true });
-    if (typeof picked !== "string") return; // user cancelled (null) or multi (array)
-    await invoke("add_project", { path: picked });
-    onOpen(picked);
+    try {
+      const picked = await openDialog({ directory: true });
+      if (typeof picked !== "string") return; // user cancelled (null) or multi (array)
+      await invoke("add_project", { path: picked });
+      onOpen(picked);
+    } catch (e) {
+      setToast({ kind: "error", message: mapIpcError("open folder", e) });
+    }
   }
 
   async function handleRemove(projectPath: string) {
-    await invoke("remove_project", { path: projectPath });
-    setRecents((rs) => rs.filter((r) => r.project_path !== projectPath));
+    try {
+      await invoke("remove_project", { path: projectPath });
+      setRecents((rs) => rs.filter((r) => r.project_path !== projectPath));
+    } catch (e) {
+      setToast({ kind: "error", message: mapIpcError("remove project", e) });
+    }
   }
 
   const visible = recents.filter((r) => matchesFilter(r, filter));
@@ -103,15 +128,20 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   return (
     <div className="picker" data-testid="picker">
       <h1>Claudesk</h1>
-      {pruneToast !== null && (
-        <div className="picker-toast" role="status" data-testid="picker-toast">
-          <span>{pruneToast}</span>
+      {toast !== null && (
+        <div
+          className={`picker-toast${toast.kind === "error" ? " picker-toast-error" : ""}`}
+          role={toast.kind === "error" ? "alert" : "status"}
+          data-testid="picker-toast"
+          data-toast-kind={toast.kind}
+        >
+          <span>{toast.message}</span>
           <button
             type="button"
             className="picker-toast-dismiss"
             aria-label="Dismiss"
             title="Dismiss"
-            onClick={() => setPruneToast(null)}
+            onClick={() => setToast(null)}
           >
             ×
           </button>

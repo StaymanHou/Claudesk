@@ -2,8 +2,10 @@
 //
 // It renders EVERY workspace in the list (so all stay mounted, per the
 // "All workspaces stay mounted" rule) and toggles visibility via the
-// Workspace component's `visible` prop. Phase 1: the list holds <= 1
-// workspace, so exactly one is shown. Phase 2: N workspaces, one focused.
+// Workspace component's `visible` prop. As of M4 WP2 the list holds N
+// workspaces (one focused, the rest `display:none` but mounted); before WP2
+// the list was clamped to <= 1. This component needed NO change for N>1 —
+// the map-over-all + `visible` toggle was N-ready from the start.
 
 import { Workspace } from "./Workspace";
 import type { Workspace as WorkspaceModel } from "../../state/workspace";

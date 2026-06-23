@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-22  # M3 WP4 P1 cargo test
+updated: 2026-06-23  # M4 WP2 P3 cargo test
 ---
 
 # Runtime Registry
@@ -39,9 +39,12 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-22, M4 WP1: 350 pass, no new tests — probe phase)
+- **Last:** 1s (2026-06-23, M4 WP2 P4: 361 pass, +6 mapIpcError tests)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-23 (M4 WP2 P4: +6 mapIpcError picker-error-surfacing tests → 39 files / 361 tests; run ~0.74s)
+  - 1s — 2026-06-23 (M4 WP2 P1 codify: +1 3+-workspace generalization test → 38 files / 355 tests; run ~0.94s)
+  - 1s — 2026-06-23 (M4 WP2 P1 build: +4 openWorkspace append/focus-existing + viewFor N>1 → 38 files / 354 tests; run ~0.78s)
   - 1s — 2026-06-22 (M4 WP1 verify-codify: 38 files / 350 tests, no new tests — throwaway probe phase; run ~0.73s)
   - 1s — 2026-06-21 (WP11 P4: +10 railWidth cases → 35 files / 337 tests; run ~0.73s)
   - 1s — 2026-06-21 (WP11 P3: +6 gitStatus cases → 34 files / 327 tests; run ~0.67s)
@@ -57,9 +60,12 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 5s (2026-06-22, M3 WP4 P1: +14 status_broadcaster tests → 178 pass; warm recompile of one new module + run ~0.63s)
+- **Last:** 6s (2026-06-23, M4 WP2 P4: +1 registry N>1 no-bleed test → 186 pass; warm recompile + run ~0.59s)
 - **Use timeout:** 120000
 - **History:**
+  - 6s — 2026-06-23 (M4 WP2 P4 — +1 registry_generalizes_to_n_gt_1 test, 186 pass)
+  - 6s — 2026-06-23 (M4 WP2 P3 codify — +1 kill_all_is_best_effort test (FailingSession double), 185 pass)
+  - 6s — 2026-06-23 (M4 WP2 P3 — +1 kill_all_runs_grace_windows_in_parallel test, 184 pass; FakeSession gained a kill_delay seam)
   - 5s — 2026-06-22 (M3 WP4 P1 — +14 status_broadcaster tests, 178 pass; warm recompile + run ~0.63s)
   - 9s — 2026-06-22 (M3 WP2 P1 — +13 hook_install tests, 151 pass)
   - 8s — 2026-06-22 (WP11 path-keying task: +2 nested-workspace tests → 138 pass; recurse_untracked_dirs fix, no new deps)

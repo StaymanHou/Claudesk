@@ -509,17 +509,32 @@ impl SessionRegistry {
 
     /// Kill every live session (window-close shutdown). Best-effort: a failure on one
     /// session does not stop the others. Returns the count terminated.
+    ///
+    /// PARALLELIZED (M4 WP2): each `kill()` blocks up to a 3s SIGKILL grace window
+    /// ([`PtyCcSession::kill`]). At N>1 a sequential loop would serialize to N×3s of
+    /// window-close latency. Instead we drain every session out of the map, spawn one
+    /// thread per session to run its `kill()`, and join them — so the N grace windows
+    /// OVERLAP and total close latency is ~one window (~3s), not N×. The registry's own
+    /// `Mutex` (held by the `CloseRequested` caller) is released the moment this returns;
+    /// the threads are joined inside this call so no kill is orphaned. Sessions are
+    /// `Send` (the [`CcSession`] supertrait), so moving each `Box` into its thread is sound.
     pub fn kill_all(&mut self) -> usize {
-        let ids: Vec<String> = self.sessions.keys().cloned().collect();
-        let mut killed = 0;
-        for id in ids {
-            if let Some(session) = self.sessions.remove(&id) {
-                if session.kill().is_ok() {
-                    killed += 1;
-                }
-            }
-        }
-        killed
+        // Drain ownership of every session out of the map first (so the threads own
+        // them outright — no shared borrow of `self` across threads).
+        let sessions: Vec<Box<dyn CcSession>> = self.sessions.drain().map(|(_, s)| s).collect();
+
+        let handles: Vec<thread::JoinHandle<bool>> = sessions
+            .into_iter()
+            .map(|session| thread::spawn(move || session.kill().is_ok()))
+            .collect();
+
+        // Join all — the slowest grace window bounds the total, not the sum. A thread
+        // that panicked (join Err) simply isn't counted (best-effort).
+        handles
+            .into_iter()
+            .filter_map(|h| h.join().ok())
+            .filter(|&ok| ok)
+            .count()
     }
 
     fn get(&self, id: &str) -> Result<&dyn CcSession, CcError> {
@@ -728,9 +743,12 @@ mod tests {
 
     // --- SessionRegistry: id minting + map ops, with a fake session (no real PTY) ---
 
-    /// A test double counting kills; never touches a PTY.
+    /// A test double counting kills; never touches a PTY. `kill_delay` lets a test
+    /// simulate the real per-session SIGKILL grace window so `kill_all`'s parallelism
+    /// is observable (deterministic — a fixed sleep, not wall-clock-dependent state).
     struct FakeSession {
         killed: Arc<AtomicUsize>,
+        kill_delay: Duration,
     }
     impl CcSession for FakeSession {
         fn send_input(&self, _bytes: &[u8]) -> Result<(), CcError> {
@@ -740,19 +758,46 @@ mod tests {
             Ok(())
         }
         fn kill(&self) -> Result<(), CcError> {
+            // Simulate the grace window. In kill_all this runs on a per-session thread,
+            // so N of these overlap rather than summing.
+            thread::sleep(self.kill_delay);
             self.killed.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
         fn mark_ready(&self) {}
     }
 
+    /// A test double whose `kill()` always FAILS — for asserting `kill_all`'s
+    /// best-effort semantics (a failing kill must not stop the others, and must not
+    /// be counted as terminated).
+    struct FailingSession;
+    impl CcSession for FailingSession {
+        fn send_input(&self, _bytes: &[u8]) -> Result<(), CcError> {
+            Ok(())
+        }
+        fn resize(&self, _cols: u16, _rows: u16) -> Result<(), CcError> {
+            Ok(())
+        }
+        fn kill(&self) -> Result<(), CcError> {
+            Err(CcError::Io("simulated kill failure".to_string()))
+        }
+        fn mark_ready(&self) {}
+    }
+
     fn reg_with_fakes(n: usize) -> (SessionRegistry, Arc<AtomicUsize>, Vec<String>) {
+        reg_with_delayed_fakes(n, Duration::from_millis(0))
+    }
+
+    fn reg_with_delayed_fakes(
+        n: usize,
+        kill_delay: Duration,
+    ) -> (SessionRegistry, Arc<AtomicUsize>, Vec<String>) {
         let killed = Arc::new(AtomicUsize::new(0));
         let mut reg = SessionRegistry::new();
         let ids = (0..n)
             .map(|_| {
                 let killed = killed.clone();
-                reg.insert(move |_id| Box::new(FakeSession { killed }))
+                reg.insert(move |_id| Box::new(FakeSession { killed, kill_delay }))
             })
             .collect();
         (reg, killed, ids)
@@ -807,5 +852,68 @@ mod tests {
         assert_eq!(killed_count, 4);
         assert_eq!(reg.len(), 0);
         assert_eq!(killed.load(Ordering::SeqCst), 4);
+    }
+
+    #[test]
+    fn kill_all_runs_grace_windows_in_parallel_not_serially() {
+        // The M4 WP2 fix: each session's kill() blocks a grace window; at N>1 the
+        // windows must OVERLAP (~one window total), not serialize to N× the window.
+        // 4 sessions × 200ms each: serial would be ~800ms; parallel is ~200ms. Assert
+        // the total is comfortably under the serial sum (< 500ms leaves wide margin for
+        // thread spawn/join overhead while still proving overlap, not 4× serialization).
+        let per_session = Duration::from_millis(200);
+        let (mut reg, killed, _ids) = reg_with_delayed_fakes(4, per_session);
+        assert_eq!(reg.len(), 4);
+
+        let start = Instant::now();
+        let killed_count = reg.kill_all();
+        let elapsed = start.elapsed();
+
+        // All four were killed and drained...
+        assert_eq!(killed_count, 4);
+        assert_eq!(reg.len(), 0);
+        assert_eq!(killed.load(Ordering::SeqCst), 4);
+        // ...and the wall-clock proves the windows overlapped (parallel), not summed.
+        assert!(
+            elapsed < Duration::from_millis(500),
+            "kill_all took {elapsed:?} for 4×200ms sessions — expected ~200ms (parallel), \
+             not ~800ms (serial). The grace windows are not overlapping."
+        );
+        // Sanity: it did at least take roughly one grace window (the sleeps ran).
+        assert!(
+            elapsed >= per_session,
+            "kill_all returned in {elapsed:?}, faster than a single 200ms grace window — \
+             the kill() sleeps did not actually run."
+        );
+    }
+
+    #[test]
+    fn kill_all_is_best_effort_a_failing_kill_does_not_block_or_count() {
+        // Best-effort under the parallel refactor: register 3 succeeding fakes + 1 that
+        // fails its kill(). All 4 must be DRAINED from the registry, the 3 successes must
+        // run (and the failing one's thread must not deadlock the join), and the returned
+        // count reflects ONLY the successes (the `filter(|&ok| ok)` branch).
+        let killed = Arc::new(AtomicUsize::new(0));
+        let mut reg = SessionRegistry::new();
+        for _ in 0..3 {
+            let killed = killed.clone();
+            reg.insert(move |_id| {
+                Box::new(FakeSession {
+                    killed,
+                    kill_delay: Duration::from_millis(0),
+                })
+            });
+        }
+        reg.insert(|_id| Box::new(FailingSession));
+        assert_eq!(reg.len(), 4);
+
+        let killed_count = reg.kill_all();
+
+        // The failing session is NOT counted as terminated...
+        assert_eq!(killed_count, 3);
+        // ...but every session (incl. the failing one) is drained from the registry...
+        assert_eq!(reg.len(), 0);
+        // ...and the 3 successes all ran (the failing one didn't short-circuit them).
+        assert_eq!(killed.load(Ordering::SeqCst), 3);
     }
 }

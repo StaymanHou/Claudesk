@@ -1,28 +1,47 @@
 import "./App.css";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useWorkspaceList } from "./state/useWorkspaceList";
 import { useWorkspaceStatus } from "./state/useWorkspaceStatus";
 import { CenterStage } from "./components/workspace/CenterStage";
 import { Filmstrip } from "./components/workspace/Filmstrip";
 import { ProjectPicker } from "./components/picker/ProjectPicker";
+import { PickerOverlay } from "./components/picker/PickerOverlay";
 import { parseSeedParam } from "./state/seedWorkspace";
 
 // WP5 app shell. The view is a state machine over WorkspaceList:
-//   - "picker"         → Project Picker (no workspace open)
+//   - "picker"         → Project Picker, full-screen (no workspace open yet)
 //   - "workspace-open" → Filmstrip slot + Center Stage (a workspace is focused)
 //
-// Opening a project from the picker calls openWorkspace(path), which adds a
-// workspace and focuses it; the derived `view` flips to "workspace-open".
+// Opening a project from the picker calls openWorkspace(path), which (M4 WP2)
+// APPENDS a workspace and focuses it; the derived `view` flips to "workspace-open".
+//
+// M4 WP2 — opening a SECOND/THIRD project: once a workspace is open the full-screen
+// picker is gone, so the Filmstrip carries a "+" control that summons the picker as
+// an overlay (`showPicker`). Picking there appends another workspace and dismisses
+// the overlay; Esc / backdrop / × dismiss without opening anything.
 //
 // WP8's Sublime launchers (Text + Merge) are icon buttons in each workspace's
-// right-panel tab row (RightPanelHost), not here — so the app shell stays
-// unchanged from WP5/WP7. (The old ⌘⇧O Text hotkey was removed in WP8.)
+// right-panel tab row (RightPanelHost), not here. (The old ⌘⇧O Text hotkey was
+// removed in WP8.)
 function App() {
   const { workspaces, focusedId, view, openWorkspace, setSessionId } =
     useWorkspaceList();
   // M3 WP6 — live CC status from the `workspace-status` hook channel + the
   // open/close registration that makes WP4's cwd→workspace match resolve.
   const { stateFor } = useWorkspaceStatus(workspaces);
+
+  // M4 WP2 — the new-workspace overlay (the filmstrip "+" re-entry). Only ever
+  // shown when a workspace is already open; first-open uses the full-screen picker.
+  const [showPicker, setShowPicker] = useState(false);
+
+  // Open from the overlay = append a workspace, then dismiss the overlay.
+  const openFromOverlay = useCallback(
+    (projectPath: string) => {
+      openWorkspace(projectPath);
+      setShowPicker(false);
+    },
+    [openWorkspace],
+  );
 
   // WP6 Phase 2 — DEV-ONLY workspace seed seam. Gated on `import.meta.env.DEV`, so
   // neither path exists in a `pnpm tauri build` bundle. Both paths funnel through
@@ -48,13 +67,19 @@ function App() {
         <ProjectPicker onOpen={openWorkspace} />
       ) : (
         <>
-          <Filmstrip />
+          <Filmstrip onAddWorkspace={() => setShowPicker(true)} />
           <CenterStage
             workspaces={workspaces}
             focusedId={focusedId}
             onSessionId={setSessionId}
             statusFor={stateFor}
           />
+          {showPicker && (
+            <PickerOverlay
+              onOpen={openFromOverlay}
+              onDismiss={() => setShowPicker(false)}
+            />
+          )}
         </>
       )}
     </div>

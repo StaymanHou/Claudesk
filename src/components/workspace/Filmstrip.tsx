@@ -1,18 +1,34 @@
 // WP5 — Filmstrip slot.
 //
-// Phase 2 populates this. It is intentionally empty in Phase 1: it exists only
-// to reserve the layout real-estate (a horizontal strip above the Center Stage)
-// so Phase 2's WP16 can drop in tiles without reshaping the foundation.
+// M4 WP2 adds the FIRST live affordance to this slot: a "+" control that
+// re-opens the ProjectPicker (as an overlay) so a second/third project can be
+// opened while a workspace is already on the center stage. Before WP2 this slot
+// was empty (it reserved the layout real-estate from M1).
 //
-// Phase 2 will render one tile per non-focused workspace — either a live ~1 fps
-// `serializeAsHTML()` mirror or a static status tile, per the WP4 probe outcome
-// (PASS → live mirrors). It will also gain a collapse toggle (collapsed = mini
-// status tiles only). None of that is built here.
+// WP3 (next) populates the rest of the strip — one tile per open workspace
+// (live ~1 fps `serializeAsHTML()` mirror for background tiles, a static
+// active-marked tile for the center-staged one), click/⌘⇧+digit promote, and
+// drag-reorder. WP2 deliberately renders ONLY the "+" control, no tiles.
 
-export function Filmstrip() {
+interface FilmstripProps {
+  /** Open the ProjectPicker overlay to add another workspace (M4 WP2). */
+  onAddWorkspace: () => void;
+}
+
+export function Filmstrip({ onAddWorkspace }: FilmstripProps) {
   return (
     <div className="filmstrip" data-testid="filmstrip">
-      {/* Phase 2 populates this. */}
+      {/* WP2: the new-workspace re-entry. WP3 adds the workspace tiles. */}
+      <button
+        type="button"
+        className="filmstrip-add"
+        data-testid="filmstrip-add-workspace"
+        aria-label="Open another project"
+        title="Open another project"
+        onClick={onAddWorkspace}
+      >
+        +
+      </button>
     </div>
   );
 }
