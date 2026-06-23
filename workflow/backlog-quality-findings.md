@@ -810,3 +810,20 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Suggested fix:** split the clear into its own effect keyed on `activeId`.
 - **Priority:** low
 - **Status:** pending
+
+# m4-wp4-filmstrip-collapse — 2026-06-23
+
+2 actionable MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `d06ac50`. Reviewer rated it well-built — idiomatic pure-helper extraction, correct effect lifecycle, dark-only CSS honored, no debt accrued. (A 3rd "finding" was a non-actionable test-count-consistency confirmation, not logged.)
+
+## SURFACE-2026-06-23-QUALITY-WP4-ACTIVE-PILL-NOOP-PROMOTE
+- **Finding:** `Filmstrip.tsx` collapsed branch — the pill row maps over ALL tiles including the active one and gives the active pill `onClick={() => onPromote(tile.id)}`, a silent no-op (focusWorkspace on the already-focused workspace), while still advertising `aria-label="Switch to <name>"` + a pointer cursor. The expanded tiles avoid a click handler on the active tile (promote flows through the strip pointer-up path).
+- **Suggested fix:** no-op guard on the active pill (skip onPromote when `tile.active`) or an `aria-current`-aware disabled affordance, to align the two render branches.
+- **Priority:** low (minor UX/a11y inconsistency between branches; harmless functionally)
+- **Status:** pending
+
+## SURFACE-2026-06-23-QUALITY-WP4-BGIDS-JOIN-SPLIT-ROUNDTRIP
+- **Finding:** `Filmstrip.tsx` ticker effect — `bgSignature ? bgSignature.split(",") : []` re-derives `backgroundIds` by splitting a comma-joined string that was just built from `tiles.filter(...).map(...)` a few lines above. The same id array could be memoized once and reused for both the signature and the iteration.
+- **Suggested fix:** compute the background-id array once; derive `bgSignature` from it (join) for the dep, and reuse the array for iteration.
+- **Priority:** low (trivial readability; join-then-split is a tiny confabulation surface only if an id ever held a comma — not the case today, ids are uuids)
+- **Status:** pending
+- **Note:** the still-pending `SURFACE-2026-06-23-QUALITY-WP3-TICKER-EFFECT-DUAL-RESPONSIBILITY` is in this same ticker effect — WP4 added the `shouldRunMirror` gate but did not split the active-tile clear. The two are natural pickup-together candidates for one `/feature-refactor` pass on the ticker effect.

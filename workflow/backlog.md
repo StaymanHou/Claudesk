@@ -453,3 +453,9 @@
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** quick `/feature-refactor` items; the `inert` a11y fix is the highest-value (genuine focus-leak from the P1.2 mount-strategy change). Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## Code-quality findings — m4-wp4-filmstrip-collapse (2026-06-23)
+- **Pointer:** 2 actionable MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `d06ac50` — both low-effort polish: active pill in the collapsed row has a no-op promote `onClick` while advertising a Switch-to aria-label/cursor (branch inconsistency vs expanded tiles); the ticker effect re-derives `backgroundIds` by splitting a string it just joined (memoize once). Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp4-filmstrip-collapse — 2026-06-23`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** quick `/feature-refactor` items; the join/split round-trip + the still-pending WP3 ticker-effect-dual-responsibility finding both live in the SAME ticker effect — natural to fix together in one pass. Dismiss any via the WIP's `## Code-Quality Review` section.

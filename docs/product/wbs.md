@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-23  # M4 WP3 (filmstrip) SHIPPED (920678a). Remaining: WP4 collapse → WP5 verify; WP4b parallel off WP2. dogfood-replace point.
+updated: 2026-06-23  # M4 WP4 (collapse toggle) SHIPPED (d06ac50). Remaining: WP5 verify (milestone exit); WP4b (focus indicator) parallel/open. dogfood-replace point.
 ---
 
 # Work Breakdown Structure — Milestone 4: Multi-workspace UX (filmstrip + center stage)
@@ -93,17 +93,17 @@ Learning-sequence ordering (riskiest-unknown-first), per the WBS discipline:
 - [ ] Coexist with the existing M2 split-pane active-*editor*-border (that distinguishes *which editor pane within the right half*; this is the coarser *left-half vs right-half* level — don't double-draw or fight it)
 - [ ] Tests: pure focus-half derivation (a focus event target → left|right|none) in vitest
 
-### WP4: Filmstrip collapse toggle
+### WP4: Filmstrip collapse toggle ✅ SHIPPED 2026-06-23 (commit d06ac50)
 **Description:** A window-chrome control that toggles the filmstrip between **expanded** (full tiles with the live ~1 fps thumbnail) and **collapsed** (a one-line row of mini status pills — project name + status dot only, no preview). Collapsing reclaims vertical space *and* stops the serialize mirror loop, dropping the background-render CPU cost. (Vision feature: `vision.md` filmstrip bullet + Core Principle 4.)
 **Milestone:** Milestone 4
 **Dependencies:** WP3 (the expanded filmstrip + its serialize loop)
 **Size:** S
 **Tasks:**
-- [ ] Collapse toggle control in window chrome (per vision: "toggle via window chrome"); persist the collapsed/expanded preference (localStorage, consistent with the M2 panel-width pattern)
-- [ ] Collapsed render: each background workspace shows a mini status pill (project name + the same M3-driven status dot), no live preview; one-line row
-- [ ] On collapse: stop the per-tile serialize loop (collapsed tiles render nothing live) so the mirror CPU cost goes to zero; backgrounds still buffer PTY output to xterm scrollback (M1 rule). On expand: restart the loop
-- [ ] Click-to-promote still works from a collapsed pill (switching center-stage from the thin row is a core glance→switch path — vision metric 4)
-- [ ] Tests: collapsed-vs-expanded tile derivation + the loop-stop-on-collapse logic (vitest, pure where extractable)
+- [x] Collapse toggle control in window chrome (per vision: "toggle via window chrome"); persist the collapsed/expanded preference (localStorage, consistent with the M2 panel-width pattern) — `filmstripCollapse.ts` + a chevron toggle in the strip
+- [x] Collapsed render: each background workspace shows a mini status pill (project name + the same M3-driven status dot), no live preview; one-line row — `.filmstrip-pill` + reused `WorkspaceStatusIndicator`
+- [x] On collapse: stop the per-tile serialize loop (collapsed tiles render nothing live) so the mirror CPU cost goes to zero; backgrounds still buffer PTY output to xterm scrollback (M1 rule). On expand: restart the loop — pure `shouldRunMirror(collapsed, bgCount)` gates the ticker effect (`collapsed` in deps → teardown/restart w/ immediate first frame)
+- [x] Click-to-promote still works from a collapsed pill (switching center-stage from the thin row is a core glance→switch path — vision metric 4)
+- [x] Tests: collapsed-vs-expanded tile derivation + the loop-stop-on-collapse logic (vitest, pure where extractable) — `filmstripCollapse.test.ts` (6) + `mirrorTicker.test.ts` (4); render-mode/click-promote verified live (Playwright + native verify-human) per repo live-DOM posture
 
 ### WP5: Verify multi-workspace at N (milestone-exit verification)
 **Description:** End-to-end verification of the M4 exit criteria against real N workspaces in the live native app — the dogfood-replace bar. Distinct from per-WP verify-self/human: this is the milestone-level proof that the whole surface holds at N with real CC sessions.
