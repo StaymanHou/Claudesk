@@ -440,10 +440,16 @@
 - **Context:** Expected by design — tile-click promote + ⌘⇧+digit are WP3, not WP2. But it's the load-bearing UX of multi-workspace; until WP3 lands, N>1 is technically working but practically one-directional. Confirms WP3's value.
 - **Suggested action:** WP3 must treat "click a filmstrip tile (or ⌘⇧+digit) to promote a background workspace to center stage" as its PRIMARY path and verify it explicitly at WP3 verify-human. Already in the WP3 task list (`docs/product/wbs.md` §WP3 click-to-promote + ⌘⇧+digit) — this is a pointer, not new scope.
 - **Priority:** medium
-- **Status:** pending (WP3 owns it)
+- **Status:** RESOLVED 2026-06-23 by M4 WP3 (commit 920678a) — tile-click promote AND ⌘⇧+digit both land + were explicitly verified at WP3 P2 verify-human (operator confirmed background-workspace switch-back in the native app).
 
 ## Code-quality findings — m4-wp2-n1-lift (2026-06-23)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `b48ccce` — all low-effort polish in the new PickerOverlay/ProjectPicker code (unconditional Esc preventDefault, single-slot toast multiplexing, dead `backdropRef`). Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp2-n1-lift — 2026-06-23`.
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** all 3 are quick `/feature-refactor` items localized to PickerOverlay.tsx + ProjectPicker.tsx; the Esc-scope + single-slot-toast ones pair naturally with WP3/WP4 when more overlays land on the same surfaces. Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## Code-quality findings — m4-wp3-filmstrip (2026-06-23)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `920678a` — all low-effort polish: off-viewport bg workspaces lack `inert` (a11y/focus leak — the highest-value one), ⌘⇧+digit `useEffect` re-subscribe thrash on `tiles` identity churn, ticker `useEffect` dual-responsibility. Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp3-filmstrip — 2026-06-23`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** quick `/feature-refactor` items; the `inert` a11y fix is the highest-value (genuine focus-leak from the P1.2 mount-strategy change). Dismiss any via the WIP's `## Code-Quality Review` section.

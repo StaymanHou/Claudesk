@@ -7,6 +7,9 @@
 - **Backlog resolved:** SURFACE-2026-06-18 wp6-project-config-store — the 2 picker IPC error-surfacing MAJORs (mount loader swallowing a rejected `list_projects`; mutation handlers dropping rejections) closed by WP2's `mapIpcError` + error-toast.
 - **Backlog resolved:** wp9-phase1-polish finding #1 — the picker mount effect's empty `catch {}` partial-failure window, closed by the same error-surfacing work.
 - **Backlog resolved:** wp7-pty-cc-session finding #2 — `kill_all` serializing 3s grace windows under the registry lock (blocking window-close at N>1), closed by WP2's per-session-thread parallelization.
+- **Feature shipped:** M4 WP3 — Filmstrip: the top strip now shows one tile per open workspace (the center-staged one marked active), each with a live CC status dot driven by the M3 hook channel and, for backgrounded workspaces, a live ~1 fps dark-themed terminal mirror that tails the latest output; clicking a tile or pressing ⌘⇧+digit promotes that workspace to center stage (no remount, PTY survives), and tiles are drag-reorderable in real time (WYSIWYG) with the arrangement persisted per project across restarts.
+- **Milestone:** WP3 (Milestone 4, filmstrip render) complete — the multi-workspace status surface + switch affordances; remaining M4 WPs are WP4 (collapse toggle), WP4b (focus indicator), WP5 (verify-at-N).
+- **Backlog resolved:** SURFACE-2026-06-23-WP3-BACKGROUND-WORKSPACE-SWITCH-AFFORDANCE — clicking a filmstrip tile (or ⌘⇧+digit) is now the primary way to switch back to a backgrounded workspace, verified live at WP3 verify-human.
 
 ## 2026-06-22
 

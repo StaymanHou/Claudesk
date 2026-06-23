@@ -788,3 +788,25 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Suggested action:** remove the unused ref.
 - **Priority:** low
 - **Status:** pending
+
+# m4-wp3-filmstrip — 2026-06-23
+
+3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `920678a`.
+
+## SURFACE-2026-06-23-QUALITY-WP3-OFFVIEWPORT-A11Y
+- **Finding:** `Workspace.tsx:56-78` — the P1.2 `display:none` → `position:absolute; left:-99999px` switch leaves background workspaces (full editor + live PTY) in the tab order + accessibility tree (display:none had removed them). No `inert`/`aria-hidden` on the non-`visible` branch → keyboard focus can land in an off-screen workspace; screen readers announce N hidden terminals.
+- **Suggested fix:** add `inert` to the hidden branch (doesn't affect FitAddon/serialize, doesn't change layout).
+- **Priority:** low (genuine minor a11y/focus regression; low-effort)
+- **Status:** pending
+
+## SURFACE-2026-06-23-QUALITY-WP3-CHORD-EFFECT-THRASH
+- **Finding:** `App.tsx:62-79` — the ⌘⇧+digit `useEffect` depends on `tiles`, whose identity churns on every reorder-move + status update, so the document keydown listener re-subscribes frequently. Correct but thrashy.
+- **Suggested fix:** hold latest `tiles` in a `useRef`, read it inside a stable handler registered once.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-23-QUALITY-WP3-TICKER-EFFECT-DUAL-RESPONSIBILITY
+- **Finding:** `Filmstrip.tsx:113-126` — the active-tile stale-mirror clear shares the ticker `useEffect` (two responsibilities; a future ticker-dep edit could shift clear timing). Works + commented.
+- **Suggested fix:** split the clear into its own effect keyed on `activeId`.
+- **Priority:** low
+- **Status:** pending
