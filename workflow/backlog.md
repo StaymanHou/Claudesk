@@ -118,8 +118,8 @@
 ## Code-quality findings — wp9-phase1-polish (2026-06-19)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). All low-stakes: (1) picker mount effect's empty `catch {}` over prune+list has a partial-failure window (fold into the existing picker IPC error-surfacing item, `SURFACE-2026-06-18-QUALITY-*`); (2) plan-text/impl drift — plan said `CcError::Spawn`, code shipped the cleaner dedicated `CcError::CcNotFound` (informational, no change); (3) `classify_spawn_error` would benefit from a one-line `to_lowercase()` case-folding comment. Reviewer rated the feature well-built, no debt accrued. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp9-phase1-polish — 2026-06-19` section.
 - **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** #1 belongs with the broader picker IPC error-surfacing work (wp6 MAJORs); #2 is informational (dismiss/ack); #3 is a 1-line comment. Fold into a `/feature-refactor` pass or leave. Dismiss any via the WIP's `## Code-Quality Review` section.
+- **Status:** **#1 (picker empty `catch {}` partial-failure window) RESOLVED 2026-06-23 by M4 WP2 P4.1 (`b48ccce`)** — the mount loader catch now surfaces an error toast. #2 (informational drift) + #3 (1-line comment) remain pending.
+- **Pickup shape:** #2 is informational (dismiss/ack); #3 is a 1-line comment. Fold into a `/feature-refactor` pass or leave. Dismiss any via the WIP's `## Code-Quality Review` section.
 
 ## Code-quality findings — wp8-sublime-hotkey (2026-06-19)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `74dfc2c` (0 CRITICAL, 0 MAJOR). MINOR #1 (stale "global-shortcut handler" rationale) was FIXED IN-PLACE at the time. Of the 2 that remained: the `chord.ts` "Phase 2" header-tag nit is **MOOTED** — `chord.ts` was DELETED by the redefined WP8 (2026-06-20, commit `62869de`). The `sublime/mod.rs` WP3 probe-citation-shorthand nit is the **only one still pending** (backend untouched by the redefined WP8). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp8-sublime-hotkey — 2026-06-19` section.
@@ -130,14 +130,14 @@
 ## Code-quality findings — wp7-pty-cc-session (2026-06-19)
 - **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `50ca322` (0 CRITICAL, 0 MAJOR). Low-stakes: (1) `cc_kill` comment says SIGTERM but code does `/exit\r`→SIGKILL (comment drift); (2) `kill_all` serializes 3s grace windows under the registry lock — blocks window close at N>1 (Phase-2 N-clamp concern); (3) `onSessionId` inline-arrow in the spawn-effect dep array (safety is incidental via the phase guard, not structural); (4) rAF fit+focus pattern duplicated mount/post-spawn. Backend module rated the strongest part of the diff. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp7-pty-cc-session — 2026-06-19` section.
 - **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all four are cleanup/comment fixes — fold into a `/feature-refactor` pass or the Phase-2 multi-workspace work (the `kill_all`-scaling + `onSessionId`-dep ones naturally pair with the WP13 N-clamp lift). Dismiss any via the WIP's `## Code-Quality Review` section if not worth it.
+- **Status:** **#2 (`kill_all` serializes 3s grace windows under the lock, blocks window-close at N>1) RESOLVED 2026-06-23 by M4 WP2 P3 (`b48ccce`)** — parallelized (one thread per session + join, lock not held across waits; deterministic timing test). #1 (comment drift), #3 (onSessionId dep), #4 (rAF dup) remain pending.
+- **Pickup shape:** the remaining three are cleanup/comment fixes — fold into a `/feature-refactor` pass. Dismiss any via the WIP's `## Code-Quality Review` section if not worth it.
 
 ## Code-quality findings — wp6-project-config-store (2026-06-18)
 - **Pointer:** 2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `525b7e8` (0 CRITICAL). MAJORs: the picker's IPC boundary has no error handling (mount loader silently swallows a rejected `list_projects`, masking a malformed `projects.json` as empty; mutation handlers drop rejections as unhandled promise rejections). MINORs: `add_project` doesn't refresh recents (asymmetry vs `handleRemove`), `add_project`/`record_open` byte-identical bodies, `now_ms()` `unwrap_or(0)` sentinel collides with recency ordering. Backend rated exemplary. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp6-project-config-store — 2026-06-18` section.
 - **Priority:** medium (MAJORs — picker error-surfacing, load-bearing for Phase 2 multi-workspace shell) + low (MINORs)
-- **Status:** pending
-- **Pickup shape:** address the IPC error-handling MAJOR in a `/feature-refactor` pass or fold into the Phase 2 picker work; the MINORs are low-effort polish. Dismiss any via the WIP's `## Code-Quality Review` section if not worth it.
+- **Status:** **2 MAJORs RESOLVED 2026-06-23 by M4 WP2 P4.1/P4.2 (`b48ccce`)** — the mount loader now surfaces a rejected prune/list via an error toast (no longer swallowed into an empty list), and the mutation handlers (`record_open`/`add_project`/`remove_project`) surface rejections via `mapIpcError` instead of dropping them. The 3 MINORs (add_project no-refresh, add_project/record_open dup bodies, now_ms sentinel) remain pending.
+- **Pickup shape:** MAJORs done; the MINORs are low-effort polish — fold into a `/feature-refactor` pass or leave. Dismiss any via the WIP's `## Code-Quality Review` section if not worth it.
 
 ## SURFACE-2026-06-19-ARCH-SUBLIME-LAUNCH-MECHANISM
 - **Source:** feature:build (WP8 Phase 1)
@@ -441,3 +441,9 @@
 - **Suggested action:** WP3 must treat "click a filmstrip tile (or ⌘⇧+digit) to promote a background workspace to center stage" as its PRIMARY path and verify it explicitly at WP3 verify-human. Already in the WP3 task list (`docs/product/wbs.md` §WP3 click-to-promote + ⌘⇧+digit) — this is a pointer, not new scope.
 - **Priority:** medium
 - **Status:** pending (WP3 owns it)
+
+## Code-quality findings — m4-wp2-n1-lift (2026-06-23)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `b48ccce` — all low-effort polish in the new PickerOverlay/ProjectPicker code (unconditional Esc preventDefault, single-slot toast multiplexing, dead `backdropRef`). Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp2-n1-lift — 2026-06-23`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** all 3 are quick `/feature-refactor` items localized to PickerOverlay.tsx + ProjectPicker.tsx; the Esc-scope + single-slot-toast ones pair naturally with WP3/WP4 when more overlays land on the same surfaces. Dismiss any via the WIP's `## Code-Quality Review` section.

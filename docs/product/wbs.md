@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-22  # M4 WP1 (N-workspace cost probe) SHIPPED — GO for eager-mount. Remaining: WP2 N>1 lift → WP3 filmstrip → WP4 collapse → WP5 verify; WP4b parallel off WP2. dogfood-replace point.
+updated: 2026-06-23  # M4 WP2 (N>1 lift) SHIPPED (b48ccce). Remaining: WP3 filmstrip → WP4 collapse → WP5 verify; WP4b parallel off WP2. dogfood-replace point.
 ---
 
 # Work Breakdown Structure — Milestone 4: Multi-workspace UX (filmstrip + center stage)
@@ -43,21 +43,23 @@ Learning-sequence ordering (riskiest-unknown-first), per the WBS discipline:
 
 **WP1 → WP2 rationale:** Measure the mount-cost envelope before building the N>1 open-flow, so WP2 mounts workspaces the right way (eager vs lazy editor) the first time — a lazy-load retrofit after the filmstrip exists would re-touch the same mount code. Resolve the architecture-shaping unknown when re-planning is cheapest.
 
-### WP2: N>1 lift — picker appends a workspace; resolve N=1-clamp ripple + picker error-surfacing
+### WP2: N>1 lift — picker appends a workspace; resolve N=1-clamp ripple + picker error-surfacing ✅ SHIPPED 2026-06-23 (commit b48ccce)
 **Description:** Flip the picker's open-handler from the M1 invariant "open replaces the single workspace (N=1)" to "open **appends** a new workspace to the WorkspaceList (N≥1)," with the focused one center-stage and the rest available to the (WP3) filmstrip. Resolve the latent N=1 assumptions this exposes across the already-built backend/frontend, and fold in the long-deferred picker IPC error-surfacing (the open-flow is being reworked here anyway). This is the synchronous core of multi-workspace — no filmstrip rendering yet.
 **Milestone:** Milestone 4
 **Dependencies:** WP1 (mount-cost verdict — eager vs lazy editor mount shapes how a new workspace is added)
 **Size:** M
 **Tasks:**
-- [ ] Picker open-handler: append a new Workspace record (new `id`, `project_path`, fresh `PtyCcSession`) to the WorkspaceList instead of replacing; reopening an already-open project focuses the existing workspace rather than duplicating it
-- [ ] Center-stage switch: the newly-opened (or re-focused) workspace becomes center-stage via `display:block`; the prior one demotes to `display:none` (stays mounted, PTY persists) — the M1 substrate rule, now exercised at N>1 for the first time
-- [ ] **Register/deregister each workspace with the M3 broadcaster registry on open/close** — the WP6-M3 `workspace_register`/`workspace_deregister` wiring already does this by list-diffing; confirm it generalizes correctly from N≤1 to N>1 (the canonicalized cwd→workspace map must hold N entries, unmatched cwd still dropped)
-- [ ] **N=1-clamp ripple — resolve the latent single-workspace assumptions:**
-  - [ ] `cc_session::kill_all` serializes a 3s grace window per session under the registry lock — at N>1 this blocks window-close for up to N×3s. Parallelize the grace windows (or drop the lock during the wait) so close stays responsive at N (WP7-M1 finding)
-  - [ ] `EditorPanel.active` / `RightPanelHost` `active`-prop defaults — audit the optional-with-default `active` props (WP3b/WP5-M2 findings) so panel chords + spawn-gating fire only for the genuinely-focused workspace, never leak across N
-  - [ ] The `"terminal"` panel-seam guard (WP5/WP9-M2) — confirm the per-workspace panel state is independent at N (each workspace keeps its own active panel / open files / scroll, per the M1 "all workspaces stay mounted" rule)
-- [ ] **Picker IPC error-surfacing (folds in the deferred WP6-M1 MAJORs):** the picker mount loader must surface a rejected `list_projects` (not swallow it into an empty list, masking a malformed `projects.json`); mutation handlers (`open`/`remove`/`record_open`) must surface rejections instead of dropping them as unhandled promise rejections — reuse the established `cc-error-overlay` / toast IPC-error pattern
-- [ ] Tests: pure reducer/handler logic for append-vs-focus-existing + the center-stage switch (vitest); the `kill_all`-at-N parallelization (cargo, if extractable as a pure-timing seam); picker-error-surfacing path (the loader/​mutation rejection → surfaced-error mapping)
+- [x] Picker open-handler: append a new Workspace record (new `id`, `project_path`, fresh `PtyCcSession`) to the WorkspaceList instead of replacing; reopening an already-open project focuses the existing workspace rather than duplicating it
+- [x] Center-stage switch: the newly-opened (or re-focused) workspace becomes center-stage via `display:block`; the prior one demotes to `display:none` (stays mounted, PTY persists) — the M1 substrate rule, now exercised at N>1 for the first time
+- [x] **Register/deregister each workspace with the M3 broadcaster registry on open/close** — the WP6-M3 `workspace_register`/`workspace_deregister` wiring already does this by list-diffing; confirm it generalizes correctly from N≤1 to N>1 (the canonicalized cwd→workspace map must hold N entries, unmatched cwd still dropped)
+- [x] **N=1-clamp ripple — resolve the latent single-workspace assumptions:**
+  - [x] `cc_session::kill_all` serializes a 3s grace window per session under the registry lock — at N>1 this blocks window-close for up to N×3s. Parallelize the grace windows (or drop the lock during the wait) so close stays responsive at N (WP7-M1 finding) — **parallelized: one thread per session + join, lock not held across waits**
+  - [x] `EditorPanel.active` / `RightPanelHost` `active`-prop defaults — audit the optional-with-default `active` props (WP3b/WP5-M2 findings) so panel chords + spawn-gating fire only for the genuinely-focused workspace, never leak across N — **confirmed: chord listener is registered on a `[visible]`-keyed effect; background hosts have NO listener at all (verified live at N>1)**
+  - [x] The `"terminal"` panel-seam guard (WP5/WP9-M2) — confirm the per-workspace panel state is independent at N (each workspace keeps its own active panel / open files / scroll, per the M1 "all workspaces stay mounted" rule) — **confirmed: each Workspace subtree stays mounted via `display:none`, state independent (operator verify-human PASS)**
+- [x] **Picker IPC error-surfacing (folds in the deferred WP6-M1 MAJORs):** the picker mount loader must surface a rejected `list_projects` (not swallow it into an empty list, masking a malformed `projects.json`); mutation handlers (`open`/`remove`/`record_open`) must surface rejections instead of dropping them as unhandled promise rejections — reuse the established `cc-error-overlay` / toast IPC-error pattern — **done via `mapIpcError` + error-kind toast**
+- [x] Tests: pure reducer/handler logic for append-vs-focus-existing + the center-stage switch (vitest); the `kill_all`-at-N parallelization (cargo, if extractable as a pure-timing seam); picker-error-surfacing path (the loader/​mutation rejection → surfaced-error mapping) — **+11 vitest, +3 cargo**
+
+**New-workspace re-entry (operator decision 2026-06-23):** once a workspace is open the full-screen picker is gone, so a "**+**" control in the (M1-empty) filmstrip slot summons the picker as a dismissable **overlay** (`PickerOverlay`) — picking appends, Esc/backdrop/× dismiss. (WP3 adds the workspace tiles + tile-click/⌘⇧+digit switch to this same slot.)
 
 **WP2 → WP3 rationale:** The filmstrip renders *one tile per non-center-stage workspace* — there must be a working N>1 WorkspaceList with a focused/background distinction before there's anything to put in the filmstrip. Build the synchronous multi-workspace core, then render the surface on top.
 

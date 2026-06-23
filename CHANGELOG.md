@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-23
+
+- **Feature shipped:** M4 WP2 — N>1 lift: opening a project now **appends** a workspace (N coexist, every one stays mounted with its CC session alive in the background) instead of replacing the single one; a "**+**" control in the filmstrip re-opens the picker as a dismissable overlay to add more (re-opening an already-open project focuses the existing one, no duplicate session); window-close at N is responsive again via a parallelized `kill_all` (the N per-session 3s SIGKILL grace windows now overlap on one thread each instead of serializing to N×3s under the registry lock); and the project picker now surfaces IPC failures (a malformed `projects.json`, a failed open/remove) via an error toast instead of swallowing them into a silent empty list or an unhandled promise rejection.
+- **Milestone:** WP2 (Milestone 4, N>1 lift) complete — the synchronous core of multi-workspace; remaining M4 WPs are WP3 (filmstrip render), WP4 (collapse), WP4b (focus indicator), WP5 (verify-at-N).
+- **Backlog resolved:** SURFACE-2026-06-18 wp6-project-config-store — the 2 picker IPC error-surfacing MAJORs (mount loader swallowing a rejected `list_projects`; mutation handlers dropping rejections) closed by WP2's `mapIpcError` + error-toast.
+- **Backlog resolved:** wp9-phase1-polish finding #1 — the picker mount effect's empty `catch {}` partial-failure window, closed by the same error-surfacing work.
+- **Backlog resolved:** wp7-pty-cc-session finding #2 — `kill_all` serializing 3s grace windows under the registry lock (blocking window-close at N>1), closed by WP2's per-session-thread parallelization.
+
 ## 2026-06-22
 
 - **Feature shipped:** WP13 — ⌘W close-active-editor-tab chord: a bare-⌘W app-level chord closes the focused editor pane's active tab (Sublime/VS-Code parity), routed through WP12's existing `requestClose` dirty-guard so an unsaved last view raises the Save/Don't-Save/Cancel dialog instead of silently discarding, inert when no tab is open, and registered via the WP1 capture-phase document listener (so it fires with focus inside CodeMirror, `preventDefault` pre-empts the OS close-window ⌘W, and it's suppressed while the finder/search overlay is open) — wired through a new pure `isCloseTabChord` predicate plus a `closeActiveTab` method threaded down the PaneTabs→EditorSplit→RightPanelHost imperative-handle chain using a latest-ref so the guard always reads the current document state (the fix for a stale-closure bug caught at verify-human).

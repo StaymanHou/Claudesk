@@ -763,3 +763,28 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Context:** With 110+ samples the error is sub-sample and immaterial to a threshold (<20%) decision, and matching the established `cm6/measure.sh` baseline is the right call for cross-probe comparability. Flagged for completeness only.
 - **Suggested action:** None recommended (matching the baseline is intentional). If a future probe wants exact percentiles, fix both `measure.sh` copies together. Throwaway code.
 - **Pickup shape:** no action; informational. Dismiss via the WIP's `## Code-Quality Review` section.
+
+# m4-wp2-n1-lift — 2026-06-23
+
+3 MINOR findings from `feature-review-quality` on ship commit `b48ccce` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built + scope-disciplined; the `kill_all` parallelization was the standout (sound ownership reasoning + deterministic timing test). All 3 are low-effort polish in the new picker-overlay code. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-23-QUALITY-WP2-OVERLAY-ESC-PREVENTDEFAULT
+- **File:** `src/components/picker/PickerOverlay.tsx:28-37`
+- **Finding:** the document-level Esc handler calls `preventDefault()` unconditionally → suppresses the picker search input's native Esc-to-clear, and is a latent conflict if another document Esc consumer (command palette / finder share the `command-palette-backdrop` shell) is ever co-mounted.
+- **Suggested action:** scope the Esc handling (only preventDefault when the overlay is the topmost consumer, or only when Esc isn't being used to clear the focused input).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-23-QUALITY-WP2-TOAST-SINGLE-SLOT-MULTIPLEX
+- **File:** `src/components/picker/ProjectPicker.tsx:131-149`
+- **Finding:** the single `toast` slot multiplexes two independent signals (benign `info` prune-note vs surfaced `error` IPC failure) — a transient prune note can be clobbered the instant a mutation fails (or vice versa).
+- **Suggested action:** if it bites, split into separate info/error slots (or a small queue). Acceptable for WP2 scope.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-23-QUALITY-WP2-OVERLAY-DEAD-BACKDROPREF
+- **File:** `src/components/picker/PickerOverlay.tsx:24,41`
+- **Finding:** `backdropRef` is created + attached to the backdrop div but never read (backdrop-close uses `e.target === e.currentTarget`). Dead code implying an abandoned approach.
+- **Suggested action:** remove the unused ref.
+- **Priority:** low
+- **Status:** pending

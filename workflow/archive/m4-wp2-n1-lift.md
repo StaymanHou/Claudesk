@@ -1,7 +1,7 @@
 # Feature: M4 WP2 — N>1 lift (picker appends a workspace)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** finalize (complete) — Completed 2026-06-23
 **Created:** 2026-06-23
 **Entry:** spec (complex feature)
 **Milestone:** Milestone 4 (Multi-workspace UX) — WBS §WP2
@@ -222,10 +222,10 @@ The feature is done when:
   - [x] verify-codify  <!-- status: done — TDD tests comprehensive: +6 mapIpcError (string/Error/object/empty/blank/never-empty) + +1 registry N>1 no-bleed cargo. No new test: the only pure seam (mapIpcError) is fully covered; the first-run-empty-no-toast resolve-path is a JSX-state assertion (project verifies via Playwright/human, no jsdom/RTL) and is noted-not-fabricated. Both full suites green: vitest 361, cargo 186, no regression. -->
 
 ## Current Node
-- **Path:** Feature > COMPLETE — all 4 phases done. Ready for /feature-ship.
-- **Active scope:** ALL PHASES COMPLETE. Phase 1 (reducer append+dedup), Phase 2 ("+"→overlay), Phase 3 (kill_all parallelization), Phase 4 (picker error-surfacing + registry N>1) — all [x] through verify-codify. Suites: vitest 361, cargo 186, clippy -D warnings clean.
+- **Path:** Feature > shipped (b48ccce) + review-quality done → ready for /feature-finalize.
+- **Active scope:** ALL PHASES COMPLETE + SHIPPED + REVIEWED. review-quality: 0 CRITICAL / 0 MAJOR / 3 MINOR auto-backlogged (low, in backlog-quality-findings.md). Next: /feature-finalize (the WP2 WBS-WP close).
 - **Blocked:** none
-- **Unvisited:** none — exit to ship.
+- **Unvisited:** none — exit to finalize.
 
 ### P2.4 audit confirmation (ripple-item D, behavioral half)
 - The RightPanelHost chord listener is registered on a `useEffect(..., [visible])` that **early-returns when `!visible`** (`RightPanelHost.tsx:296-334`) — so a background (non-focused) workspace's host has **NO capture-phase keydown listener registered at all** (the effect's body is skipped + its cleanup removes any prior listener on the visible→false transition). This is stronger than an early-return guard: background workspaces literally do not listen, so ⌘⇧E/D/T / ⌘P / ⌘W / ⌘+digit reach only the ONE focused workspace's host. Panel liveness is independently gated via `active={visible && panel === ...}`.
@@ -244,3 +244,41 @@ The feature is done when:
      Each entry is also logged to workflow/backlog.md -->
 - [SURFACED-2026-06-23] WP3 (filmstrip) — At WP2's surface there is NO visible affordance to switch BACK to a backgrounded workspace; the only switch-back path is reopening the project via the "+" overlay (the dedup focuses the existing workspace). This made P2.verify-human.2 awkward to observe (operator asked "how do I verify this?"). Expected — tile-click + ⌘⇧+digit promote are explicitly WP3 — but WP3 should treat "switch to a background workspace from the filmstrip" as the primary path and confirm it during its own verify-human. Logged to backlog. (Not blocking WP2.)
 
+## Code-Quality Review — M4 WP2: N>1 lift (picker appends a workspace)
+
+Reviewer: code-quality-reviewer subagent, against ship commit b48ccce (base 1fa2548). 2026-06-23. drive_mode=autopilot → 0 CRITICAL / 0 MAJOR / 3 MINOR auto-backlogged.
+
+### Strengths
+- N=1→N>1 clamp lift landed in exactly one place (`openWorkspace`); audit-and-confirm phases (P1.3, P2.4) documented WHY CenterStage/RightPanelHost needed no change.
+- `kill_all` parallelization correctly reasons about ownership (`.drain()` moves each `Box<dyn CcSession>` to its thread; `Send` soundness called out; best-effort preserved + tested).
+- The timing test uses a deterministic injected `kill_delay` seam with upper bound (overlap) + lower bound (sleeps ran) — non-flaky.
+- `mapIpcError` extracted pure + never-empty with focused unit coverage.
+- Cross-subsystem canonicalization divergence (TS string-trim vs Rust `Path::canonicalize`) honestly documented at the seam.
+
+### Issues
+
+**CRITICAL** — (none)
+
+**MAJOR** — (none)
+
+**MINOR**
+- [src/components/picker/PickerOverlay.tsx:28-37] Document-level Esc handler calls `preventDefault()` unconditionally → suppresses the search input's native Esc-to-clear; latent conflict if another document Esc consumer (palette/finder share `command-palette-backdrop`) is ever co-mounted. Benign today; worth a scoped guard as WP3/WP4 add overlays.
+- [src/components/picker/ProjectPicker.tsx:131-149] The toast slot multiplexes two independent signals (info prune-note vs error IPC failure) on one `setToast` — a transient prune note can be clobbered by a later error. Acceptable for WP2; single-slot multiplexing may surprise a future reader.
+- [src/components/picker/PickerOverlay.tsx:24,41] `backdropRef` created + attached but never read (backdrop-close uses `e.target === e.currentTarget`). Dead code; remove.
+
+### Assessment
+Well-built, scope-disciplined. The tricky part (parallelizing `kill_all` without orphaning children or holding the registry lock across N grace windows) is sound, justified, and pinned by deterministic tests — the standout. Frontend changes are small, idiomatic React-19, respecting dark-only + pure-logic-test conventions. Negligible debt: two minor latent-interaction smells deferred-appropriate at this WP. No CRITICAL/MAJOR; nothing warrants a refactor pass.
+
+### If you disagree
+Dismiss any finding by editing this section + marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The M1 substrate was even more N-ready than the WBS assumed — the N=1 clamp lived in *exactly one* line (`openWorkspace`'s replace). CenterStage/Workspace/RightPanelHost needed zero logic changes; the "ripple" work (active-prop, panel-seam) collapsed to *audit-and-confirm* rather than rebuild, because the `[visible]`-keyed chord listener means background workspaces literally register no listener.
+- **Assumptions that held:** WP1's eager-mount verdict (no lazy gate to honor); the `CcSession: Send` supertrait made `kill_all` thread-per-session sound with no new bounds; the existing `picker-toast` surface extended cleanly to an error variant; pure-logic-vitest + Playwright-for-UI convention covered everything without needing jsdom/RTL.
+- **Assumptions that were wrong:** The plan implicitly assumed the picker was reachable to open a 2nd workspace — it isn't (it only renders when nothing's open). That surfaced a genuine design fork resolved with the operator: a "+" filmstrip control → picker overlay (the `PickerOverlay` component, not in the original task list). Also: "switching back to a backgrounded workspace" has no WP2 affordance beyond reopen-via-"+" (logged forward to WP3).
+- **Approach delta:** Added `PickerOverlay.tsx` + the filmstrip "+" (operator-chosen re-entry) beyond the bare task list. Everything else matched the plan. The `kill_all` fix needed a `FakeSession` kill-delay seam + a `FailingSession` double for deterministic timing + best-effort-failure coverage — anticipated as "extractable pure-timing seam" in the plan, realized as expected.
+
+## Closure
+- **Feature complete:** M4 WP2 (N>1 lift) has shipped. Opening a project now appends a workspace (N coexist, all stay mounted) instead of replacing the single one; a "+" filmstrip control re-opens the picker as an overlay to add more; window-close at N is responsive (parallelized `kill_all`); and the picker now surfaces IPC errors instead of swallowing them.
+- **Verify:** `pnpm tauri dev` → open a project → click the filmstrip "+" → open a second → both run live CC sessions, center stage switches, the first stays alive in the background.
+- **Requester = operator** — closure notice for self-record.
