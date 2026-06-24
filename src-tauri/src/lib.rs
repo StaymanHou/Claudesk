@@ -1,6 +1,10 @@
 mod cc_session;
 mod config_store;
 mod editor_fs;
+// Process-wide PATH fix: a Finder/Dock-launched macOS app inherits the minimal
+// launchd PATH, not the user's shell PATH, so user-installed CLIs (claude, subl,
+// …) aren't found. Capture the login-shell PATH at startup and set it process-wide.
+mod env_path;
 // "Reveal in Finder" launcher — opens a workspace's project dir in the macOS
 // Finder (`open <dir>`), alongside the Sublime Text / Merge launch buttons.
 mod finder;
@@ -43,6 +47,13 @@ pub fn run() {
         // status would silently break otherwise.
         .setup(|app| {
             let handle = app.handle().clone();
+            // GUI-PATH fix (2026-06-24): a Finder/Dock-launched app inherits the
+            // minimal launchd PATH (/usr/bin:/bin:/usr/sbin:/sbin), so user-installed
+            // CLIs (claude in ~/.local/bin, etc.) aren't found and `cc_spawn` fails
+            // with "No viable candidates found in PATH". Capture the login-shell PATH
+            // and set it process-wide — MUST run before any spawn below. Best-effort:
+            // a capture failure leaves the inherited PATH untouched.
+            env_path::apply_login_path_to_process();
             // Dev/prod isolation (2026-06-24): on a DEV build's first launch, seed
             // its projects.json from the prod list so dogfooding starts with the
             // operator's real projects. Best-effort + idempotent + no-op on prod.
