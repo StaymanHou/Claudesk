@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-22
+updated: 2026-06-24  # M4 (multi-workspace UX) COMPLETE — M3+M4 dogfood-replace point reached. Next execution milestone: M5 (PiP, unconditional).
 ---
 
 # Roadmap
@@ -67,19 +67,21 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria (met):** A workspace's CC state transitions (idle→running→awaiting-input→exit) are observed in Claudesk solely from the hook channel, broadcast to subscribers, with no PTY-output parsing. *(The file-watcher half of the original criterion was dropped with WP5; the hook channel alone satisfies the milestone goal.)*
 
-### Milestone 4: Multi-workspace UX (filmstrip + center stage) *(was Milestone 6)*
+### Milestone 4: Multi-workspace UX (filmstrip + center stage) ✅ COMPLETE 2026-06-24 *(was Milestone 6)*
+
+> **Cycle closed 2026-06-24 — the M3+M4 dogfood-replace point is REACHED.** All 6 WPs shipped (WP1 N-cost probe → GO for eager-mount; WP2 N>1 lift; WP3 filmstrip tiles + status + live ~1 fps mirror + click/⌘⇧+digit + drag-reorder; WP4 collapse toggle; WP4b left/right focus indicator; WP5 verify-at-N, all exit criteria operator-PASSED at N≥4 real sessions). Three inserted-but-shipped items also landed this cycle (dev/prod isolation, the GUI-PATH fix, the Reveal-in-Finder launcher) — see the arch.md Revision 2026-06-24 note. WBS archived at [`docs/product/archive/milestone-4-multi-workspace-ux/wbs.md`](archive/milestone-4-multi-workspace-ux/wbs.md).
 
 **Goal:** N projects open concurrently as workspaces in one window, switched via the filmstrip. **This + M3 is the dogfood-replace point — once it ships, Claudesk replaces the current terminal + Sublime setup as the daily driver.** *(Depends on Milestone 3's status broadcaster for tile status dots, and Milestone 1's tab-shell substrate.)*
 
 **Deliverables:**
-- [ ] **Multi-workspace UX:** opening a project from the picker adds a new workspace tab rather than reusing the existing one; the focused one is center-stage, the others render in the filmstrip.
-- [ ] **Filmstrip** along the top of the window, one tile per **open workspace including the center-staged one**, in a user-arranged order, each showing project name + idle/running/awaiting-input status dot. Background-workspace tiles render a **live ~1 fps terminal mirror** (per the Milestone 1 probe PASS) via `serializeAsHTML()` from the off-viewport terminal's buffer; the **center-staged workspace's tile is a static, active-marked placeholder** (no live mirror — it's already full-size on the center stage) so the row is a complete roster and tile indices never renumber on switch. Clicking a tile promotes that workspace to center stage and demotes the previous one.
-- [ ] **`⌘⇧+digit` workspace-switch hotkey** — `⌘⇧1..⌘⇧9` jump to the Nth filmstrip tile (keyboard equivalent of clicking it), firing regardless of focus (capture-phase, like the M2 panel chords). The chord is **already reserved** for this — the M2 editor tab-switch uses *bare* `⌘+digit`, deliberately disjoint (see the chord-ownership map in `paletteCommands.ts`).
-- [ ] **Drag-and-drop filmstrip reorder** — the user arranges the filmstrip tile order by dragging; the order persists (localStorage) and is what `⌘⇧+digit` indexes into (so the digits map to *the user's* layout, not open-order).
-- [ ] **Left/right focus indicator** — a subtle border (analogous to the M2 split-pane active-editor border) marks which half of the center-stage workspace — the left CC terminal or the right panel (editor/diff/terminal) — currently holds keyboard focus, since at N workspaces with two halves each "where will my keystrokes land" otherwise has no on-screen answer. *(Folds in the focus-ambiguity gap surfaced 2026-06-22.)*
-- [ ] **Filmstrip collapse toggle** — one-click control collapses the filmstrip into a row of mini status tiles (project name + status dot only) and back. Collapsed workspaces render nothing (`display: none`); PTY output continues to buffer.
+- [x] **Multi-workspace UX:** opening a project from the picker adds a new workspace tab rather than reusing the existing one; the focused one is center-stage, the others render in the filmstrip.
+- [x] **Filmstrip** along the top of the window, one tile per **open workspace including the center-staged one**, in a user-arranged order, each showing project name + idle/running/awaiting-input status dot. Background-workspace tiles render a **live ~1 fps terminal mirror** (per the Milestone 1 probe PASS) via `serializeAsHTML()` from the off-viewport terminal's buffer; the **center-staged workspace's tile is a static, active-marked placeholder** (no live mirror — it's already full-size on the center stage) so the row is a complete roster and tile indices never renumber on switch. Clicking a tile promotes that workspace to center stage and demotes the previous one.
+- [x] **`⌘⇧+digit` workspace-switch hotkey** — `⌘⇧1..⌘⇧9` jump to the Nth filmstrip tile (keyboard equivalent of clicking it), firing regardless of focus (capture-phase, like the M2 panel chords). The chord is **already reserved** for this — the M2 editor tab-switch uses *bare* `⌘+digit`, deliberately disjoint (see the chord-ownership map in `paletteCommands.ts`).
+- [x] **Drag-and-drop filmstrip reorder** — the user arranges the filmstrip tile order by dragging; the order persists (localStorage) and is what `⌘⇧+digit` indexes into (so the digits map to *the user's* layout, not open-order).
+- [x] **Left/right focus indicator** — a subtle border (analogous to the M2 split-pane active-editor border) marks which half of the center-stage workspace — the left CC terminal or the right panel (editor/diff/terminal) — currently holds keyboard focus, since at N workspaces with two halves each "where will my keystrokes land" otherwise has no on-screen answer. *(Folds in the focus-ambiguity gap surfaced 2026-06-22.)*
+- [x] **Filmstrip collapse toggle** — one-click control collapses the filmstrip into a row of mini status tiles (project name + status dot only) and back. Collapsed workspaces render nothing (`display: none`); PTY output continues to buffer.
 
-**Exit Criteria:** Idle/running/awaiting-input of every workspace is visible from inside the Claudesk window without clicking (filmstrip or collapsed-tile row); clicking a tile switches the center stage.
+**Exit Criteria (met):** Idle/running/awaiting-input of every workspace is visible from inside the Claudesk window without clicking (filmstrip or collapsed-tile row); clicking a tile switches the center stage.
 
 > **Scope notes for the M4 `/product-wbs` pass (operator decisions 2026-06-22):**
 > - **Open M4 with a cost-probe WP1** — the N-workspace mount cost (N≈8, each with editor+diff+terminal mounted) is unmeasured (M1's probe covered N=8 *terminals* only, not CM6 editors; `SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE`). M4's whole premise (keep-everything-mounted + serialize-mirror) rests on the <300MB/<20% envelope holding at N. If it busts, the mitigation is `React.lazy` the EditorPanel (`SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD`) — a *mount-architecture* decision, so measure before building the filmstrip, not after.

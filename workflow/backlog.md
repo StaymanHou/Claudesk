@@ -1,5 +1,13 @@
 # Backlog
 
+<!-- M4 cycle-close sweep 2026-06-24 (/product-finalize): no pending item was newly
+RESOLVED by M4's work (M4's own WP outcomes were recorded at each feature-finalize).
+Disposition of the operationally-relevant pending items: SURFACE-2026-06-23-VERIFY-SELF-
+DRIVER-FOR-WORKSPACE-UI (high) → DEFERRED, anchored to M5 planning; SURFACE-2026-06-22-
+WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY (medium) → DEFERRED, anchored to M6; the
+dev-prod-isolation 3 MINORs + the long code-quality-findings tail → DEFERRED (low, carry
+forward — none M5-blocking). No escalations. -->
+
 ## Code-quality findings — dev-prod-isolation (2026-06-24)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `5f9a86a` — all low-risk coupling/drift seams: a duplicated `PROJECTS_FILE` const, an undocumented no-spaces-in-`.pl`-segments assumption in the basename matcher, and an implicit prod↔overlay window-size coupling in `tauri.dev.json`. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# dev-prod-isolation — 2026-06-24`.
 - **Priority:** low (all)

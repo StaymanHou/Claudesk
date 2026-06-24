@@ -1,11 +1,19 @@
 ---
 stage: arch
 state: complete
-updated: 2026-06-22
+updated: 2026-06-24
 phase-1-archived: docs/product/archive/phase-1-bare-shell-poc/
 milestone-2-archived: docs/product/archive/milestone-2-lite-editor-diff-viewer/
 milestone-3-archived: docs/product/archive/milestone-3-cc-lifecycle-state-plumbing/
+milestone-4-archived: docs/product/archive/milestone-4-multi-workspace-ux/
 ---
+
+> Revision 2026-06-24 (Milestone 4 SHIPPED — finalize resync): M4 (multi-workspace UX — filmstrip + center stage) closed; **the M3+M4 dogfood-replace point is reached** (Claudesk replaces the terminal + Sublime daily-driver setup). All 6 WPs shipped (WP1 N-cost probe → eager-mount; WP2 N>1 lift; WP3 filmstrip tiles + status + live mirror + click/⌘⇧+digit + drag-reorder; WP4 collapse toggle; WP4b left/right intra-workspace focus indicator; WP5 verify-at-N). Three **inserted-but-shipped** items this cycle (not WBS WPs) are now as-built and supersede inline mentions below:
+> 1. **Dev/prod isolation.** The running **bundle identifier** is the single source of truth for all per-install state: prod = `com.claudesk.app`, dev = `com.claudesk.app.dev` (via a `src-tauri/tauri.dev.json` config-overlay; `pnpm tauri:dev` launches with `--config tauri.dev.json`). The identifier derives the app-data dir, `projects.json`, `hook.sock`, the deployed hook-script basename (`claudesk-hook.pl` vs `claudesk-hook-dev.pl`), and the `~/.claude/settings.json` matcher-group (matched on the **exact** script basename — closes the `claudesk-hook.pl` ⊂ `claudesk-hook-dev.pl` substring trap), so the installed prod app and `pnpm tauri:dev` run **concurrently with zero interference**. Dev `projects.json` seeds once from prod on first launch.
+> 2. **GUI-PATH fix (`src-tauri/src/env_path`).** A Finder/Dock-launched macOS app inherits the minimal launchd PATH (`/usr/bin:/bin:/usr/sbin:/sbin`), not the user's shell PATH — so user-installed CLIs (`claude` in `~/.local/bin`, etc.) were invisible and `cc_spawn` failed ("No viable candidates found in PATH"). On launch (FIRST line of `.setup()`, before any spawn) the app captures the login-shell PATH (`$SHELL -l -i -c 'printf %s "$PATH"'`) and sets it process-wide — fixing `claude` + `subl`/`smerge` + `finder` + any future CLI. Bug surfaced only in installs (never `tauri:dev`); see `CLAUDE.md` → Setup & Ecosystem Gotchas + the installed-build-smoke-test convention.
+> 3. **Right-panel launcher is now a TRIO.** Sublime Text (`sublime_open`) + Sublime Merge (`smerge_open`) + **Reveal-in-Finder (`finder_open`, `open <dir>`)** — a new `src-tauri/src/finder` module mirroring `sublime` (no tool discovery; `open` is always present). Third icon button in the `RightPanelHost` tab row.
+>
+> Stale path mentions below (`~/Library/Application Support/Claudesk/…`) are corrected to the bundle-identifier path inline at the two highest-traffic spots; the rest are covered globally by this note. M4 WBS + the WP1/WP4 probe-outcome docs archived to `archive/milestone-4-multi-workspace-ux/`.
 
 > Revision 2026-06-22 (Milestone 3 SHIPPED — finalize resync): M3 (CC lifecycle & state plumbing) closed. The Phase-2 forward-look §A is now as-built for the hook channel + broadcaster: hook script is **Perl** (not POSIX sh), socket path is `com.claudesk.app/hook.sock` (bundle identifier, not `Claudesk/`), the broadcaster + snake_case DTO landed at WP4, and a frontend close-the-loop note (WP6) records the honest indicator + the orange/blue palette. The planned `.session.md` file-watcher (§"Phase 2 additions") was **DROPPED** — wrong file (manual pause bookmark, not a live signal); a future milestone may watch the live workflow doc hierarchy instead. M3 WBS archived to `archive/milestone-3-cc-lifecycle-state-plumbing/`.
 
@@ -37,7 +45,7 @@ milestone-3-archived: docs/product/archive/milestone-3-cc-lifecycle-state-plumbi
   - Bridge: `tauri-pty` (JS bindings shipped with `tauri-plugin-pty`) — `spawn()` returns a handle whose `onData` / `write` / `resize` mirror node-pty's API closely enough that xterm.js wiring is straight-line.
 - **Sublime-pop hotkey:** an **in-app** keybinding — a webview `keydown` handler (`⌘⇧E`) owned by the focused workspace. NOT an OS-global shortcut, so **no `tauri-plugin-global-shortcut` and no macOS Accessibility permission** are required. (As-built 2026-06-19, WP8: the OS-global approach was built then rejected at verify-human in favor of in-app — see WP8 in `docs/product/archive/phase-1-bare-shell-poc/wbs.md`.)
 - **External tools invoked via shell:** `subl` (Sublime Text), `smerge` (Sublime Merge — Phase 2). Claudesk launches `subl` from the backend `sublime_open` command via **`std::process::Command`** (consistent with `cc_session` spawning `claude`; the original `tauri-plugin-shell` plan was dropped as-built — the launch is backend code, not a frontend-callable shell). No embedding.
-- **Persistence:** flat JSON file at `~/Library/Application Support/Claudesk/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()`. No DB; project list is a list of `{path, last_opened_at, display_name?, default_drive_mode?}` records. Matches the "no per-project config burden" vision principle (no `.claudesk.json` per repo).
+- **Persistence:** flat JSON file at `~/Library/Application Support/<bundle-id>/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()` — `<bundle-id>` is `com.claudesk.app` (prod) or `com.claudesk.app.dev` (dev), per the dev/prod-isolation note at the top of this file (NOT `Claudesk/`). No DB; project list is a list of `{path, last_opened_at, display_name?, default_drive_mode?}` records. Matches the "no per-project config burden" vision principle (no `.claudesk.json` per repo).
 - **Database:** none — Phase 1 has no relational data, and the only durable state is the project list (handled above).
 - **Infrastructure:** none — this is a single-user desktop app; no servers, no cloud, no telemetry.
 
@@ -114,7 +122,7 @@ flowchart LR
   PtyImpl -- spawns --> ClaudeCLI["claude (CC CLI in PTY)"]
   SublimeToolbar["SublimeToolbar - in-app ⌘⇧E + button (frontend)"] -- "invoke(sublime_open)" --> SublimeOpen
   SublimeOpen -- spawns --> Sublime[Sublime Text]
-  ConfigStore -- read/write --> AppDataDir["~/Library/Application Support/Claudesk/projects.json"]
+  ConfigStore -- read/write --> AppDataDir["~/Library/Application Support/&lt;bundle-id&gt;/projects.json"]
 ```
 
 **Component responsibilities:**

@@ -6,10 +6,14 @@ workflow in **one window with multiple virtual workspaces inside it**. Pick a pr
 inside a workspace — no more "open terminal → `cd` → `claude`" every time, across 20+
 rotating projects.
 
-> **Status: Phase 1 (Bare Shell + Tab Substrate PoC).** Click a project → a working CC
-> session in the project dir inside a workspace; Sublime Text pops via an in-app `⌘⇧E`.
-> The multi-workspace filmstrip, menu-bar status, stateful CC controller, and built-in
-> editor/diff viewer arrive in Phases 2–3. A full user-facing README lands in Phase 4.
+> **Status: Milestones 1–4 shipped — daily-driver ready.** Click a project → a working
+> CC session in the project dir inside a workspace; a built-in lite editor + git-diff
+> viewer in the right half; Sublime Text / Sublime Merge / Reveal-in-Finder one click
+> away; N projects open concurrently as workspaces switched via a live filmstrip with
+> per-workspace idle/running/awaiting-input status. **M3+M4 is the dogfood-replace
+> point** — Claudesk now replaces the terminal + Sublime daily-driver setup. Next:
+> M5 picture-in-picture, M6 menu-bar status, M7 auto-resume, M8 skill orchestration,
+> M9 polish + open-source release.
 
 ## What it is
 
