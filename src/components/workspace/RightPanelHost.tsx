@@ -47,8 +47,10 @@ import { replaceAllSpec, type ReplaceAllChoice } from "./search/replaceConfirm";
 import { ConfirmModal } from "./editor/ConfirmModal";
 import { invoke } from "@tauri-apps/api/core";
 import { openSublime, openSublimeMerge } from "../../sublime/sublimeLaunch";
+import { openFinder } from "../../finder/finderLaunch";
 import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
 import { SublimeMergeIcon } from "../../sublime/icons/SublimeMergeIcon";
+import { FinderIcon } from "../../finder/icons/FinderIcon";
 
 interface RightPanelHostProps {
   /** The workspace id — keys the WP9 second-terminal session (one shell per workspace). */
@@ -457,6 +459,16 @@ export function RightPanelHost({
             title="Open in Sublime Merge"
           >
             <SublimeMergeIcon />
+          </button>
+          <button
+            type="button"
+            className="panel-launch"
+            data-testid="finder-open"
+            onClick={() => void openFinder(projectPath)}
+            aria-label="Reveal in Finder"
+            title="Reveal in Finder"
+          >
+            <FinderIcon />
           </button>
         </div>
 

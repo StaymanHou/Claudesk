@@ -6,6 +6,7 @@
 - **Backlog resolved:** SURFACE-2026-06-22-N8-CC-BACKEND-RAM — RAM headroom re-confirmed with N real in-flight sessions; Claudesk's marginal webview cost matches the WP1 envelope and the ~8–10-workspace practical ceiling on 16 GB (inherent backend `claude` RSS) is recorded as operator guidance.
 - **Milestone:** WP5 (Milestone 4, verify-multi-workspace-at-N) complete — the last M4 work package; **Milestone 4 is COMPLETE and the M3+M4 dogfood-replace point is reached** (Claudesk can replace the terminal + Sublime daily-driver setup). Next strategic step: `/product-finalize`.
 - **Feature shipped:** Dev/prod isolation — the installed `.app` (`com.claudesk.app`) and `pnpm tauri:dev` (`com.claudesk.app.dev`, via a `tauri.dev.json` overlay) now run concurrently with zero interference (separate app-data dirs, project lists, hook sockets, and per-identity `~/.claude/settings.json` registrations matched on the exact hook-script basename), unblocking dogfooding Claudesk with Claudesk; ships a new app icon (base + a magenta "DEV"-badged dev variant so the two Dock tiles are tellable apart) and a quarter-turn rotation of the inline Sublime Merge launcher icon.
+- **Task closed:** Added a "Reveal in Finder" icon button to the right-panel tab row (beside the Sublime Text and Sublime Merge launchers) that opens the focused workspace's project folder in the macOS Finder via a new `finder_open` backend command (`open <dir>`, no tool discovery needed).
 
 ## 2026-06-23
 

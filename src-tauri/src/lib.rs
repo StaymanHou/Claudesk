@@ -1,6 +1,9 @@
 mod cc_session;
 mod config_store;
 mod editor_fs;
+// "Reveal in Finder" launcher — opens a workspace's project dir in the macOS
+// Finder (`open <dir>`), alongside the Sublime Text / Merge launch buttons.
+mod finder;
 mod fs_index;
 mod git_diff;
 mod git_status;
@@ -112,6 +115,9 @@ pub fn run() {
             // WP5: Sublime Merge open. Permanent companion surface (NOT removed by
             // WP8) — staging/blame/history/blob-at-rev the inline diff viewer omits.
             sublime::commands::smerge_open,
+            // Reveal-in-Finder: open the focused workspace's project dir in the
+            // macOS Finder (`open <dir>`), the third tab-row launcher button.
+            finder::commands::finder_open,
             // WP2: lite-editor file IO, confined to the workspace project root.
             // (write_file is exercised by the save keybinding in Phase 2.)
             editor_fs::commands::read_file,
