@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# app-menu-bar — 2026-06-24
+
+1 MAJOR + 2 MINOR from `feature-review-quality` on ship commit `f815154` (0 CRITICAL). Reviewer rated the feature well-built, appropriately-scoped, adds zero new behavior, integrates through existing chord predicates. The MAJOR is the one real durability concern: an unguarded cross-language id contract. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-24-QUALITY-APPMENU-CROSS-LANG-ID-CONTRACT
+- **Files:** `src-tauri/src/app_menu/mod.rs:33` (`ids` module / `FUNCTIONAL_IDS`) ↔ `src/menu/menuBridge.ts:16` (`MENU_IDS`)
+- **Priority:** medium (the MAJOR)
+- **Status:** pending
+- **Type:** tech-debt (unguarded cross-language contract)
+- **Finding:** The 11 functional menu-item id strings are duplicated across Rust (`app_menu::ids`) and TS (`MENU_IDS`) with NO mechanical link — only prose ("keep in sync" / "byte-identical"). A one-character drift on either side silently dead-clicks exactly one menu item: Rust emits an id, the TS `menuActionFor` switch falls through to `default → null`, the click does nothing. Crucially this ships with GREEN tests — the Rust tests only check `FUNCTIONAL_IDS` internal uniqueness, and `menuBridge.test.ts` references `MENU_IDS.*` symbolically (so it passes regardless of what the literal strings are). This is the feature's single load-bearing cross-language contract and the most likely future-regression vector (rename a panel id, ship, lose one menu item, no test fails).
+- **Pickup shape:** add a mechanical pin — cheapest options: (a) a Rust test that reads `src/menu/menuBridge.ts` as text and asserts each `ids::*` literal appears as a `MENU_IDS` value (string-grep assertion); (b) generate the shared id list at build time from one source; (c) a small TS test that imports a JSON/generated list emitted by the Rust side. (a) is the lowest-effort guard and fits the repo's no-codegen posture. Dismiss via the WIP `## Code-Quality Review` section if judged not worth it.
+
+## SURFACE-2026-06-24-QUALITY-APPMENU-LABEL-ONLY-ID-COMMENT
+- **Files:** `src-tauri/src/app_menu/mod.rs` (label-only disabled items + the `label_only_ids_are_not_functional` test)
+- **Priority:** low
+- **Status:** pending
+- **Type:** readability nit
+- **Finding:** The label-only disabled items carry ids (`file.save.label`, etc.) that exist only so `is_functional_id` returns false and the negative-space test can enumerate them — they never reach `on_menu_event` (disabled items don't fire). A reader will hunt for where `file.save.label` is dispatched (answer: never). A one-line comment at the test would save the hunt.
+- **Pickup shape:** one-line comment. Trivial `/feature-refactor` or opportunistic.
+
+## SURFACE-2026-06-24-QUALITY-APPMENU-LISTENER-NOT-EXTRACTED
+- **Files:** `src/App.tsx:120-160` (the `menu` listener effect)
+- **Priority:** low
+- **Status:** pending
+- **Type:** testability (consistent with standing posture)
+- **Finding:** The `menu` listener body (id→action mapping, key re-dispatch, the 4 callback branches with the focused-path-ref lookup) lives inline in `App()` — the one piece of menu logic not extracted to a pure testable seam (unlike `menuBridge`). Extracting the action-dispatch (given an action + a small effects object) would let the callback-vs-key branching be unit-tested. LOW priority — consistent with the repo's "runtime-bound listeners are not unit-tested" posture (XtermPane, useWorkspaceStatus); the pure `menuBridge` mapping IS fully tested, which is the higher-value half.
+- **Pickup shape:** optional extraction of a pure `dispatchMenuAction(action, effects)` + its unit test. Defer unless the listener grows.
+
 # m4-wp4b-focus-indicator — 2026-06-23
 
 3 MINOR findings from `feature-review-quality` on ship commit `647148f` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built with negligible (cosmetic) debt: clean pure/impure seam (`deriveFocusHalf`), well-justified duck-typed guard, correct `relatedTarget`-based `focusout`, and the atomically-landed F12 fix that repaired a pre-existing regression + deleted a dead rule. All three findings are leftover cosmetic dust from the F12 fix. Auto-backlogged per drive_mode=autopilot.

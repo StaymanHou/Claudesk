@@ -1,7 +1,7 @@
 # Feature: Native macOS App Menu Bar
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-24 — committed f815154 on main (local-only; no push); finalized.
 **Created:** 2026-06-24
 **drive_mode:** autopilot
 
@@ -131,16 +131,42 @@ one `listen("menu", …)` seam on the frontend dispatches by id to the right pat
   - [x] verify-codify  <!-- status: DONE — menuBridge correctness fully covered by the 10 unit tests (the load-bearing "each synthetic event satisfies its predicate" assertions). The vh.2 StrictMode double-listen fix is an App.tsx effect-lifecycle bug; the repo has NO jsdom/component-test env (SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP) — standing up the toolchain for one assertion is not warranted (same standing posture); folded this instance into that backlog item instead. No integration boundary (additive `menu` listener; existing seams unchanged). Full suite green: vitest 438, cargo 208. -->
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ALL phases complete (Phase 1 native menu + Phase 2 frontend bridge) → ship
+- **Path:** Feature > finalize
+- **Active scope:** review-quality complete (0 CRITICAL, 1 MAJOR + 2 MINOR auto-backlogged per Mode 3) → finalize
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
-- **Open discoveries:** none open (5 backlog SURFACEs filed this session: switch-workspace-autofocus, editor-add-new-file, status-indicator-busy-vs-awaiting, filetree-git-bubble-up, terminal-spurious-newline, no-way-to-close-workspace, new-workspace-hotkey — all separate from this feature)
-- **Blocked:** none
-- **Unvisited:** Phase 2 (P2.1 pure menuBridge map + tests → P2.2 App.tsx listen("menu") effect → P2.3 focused-workspace launcher targeting), then verify-auto/self/human/codify → ship → finalize
-- **Blocked:** none
-- **Unvisited:** Phase 1 verify-self → verify-human → verify-codify, then Phase 2 (frontend menu-event bridge — functional items)
-- **Open discoveries:** none
+- **Unvisited:** finalize
+- **Open discoveries:** none open (7 backlog SURFACEs filed this session, all separate from this feature: switch-workspace-autofocus-cc-panel, editor-add-new-file, status-indicator-busy-vs-awaiting-input, filetree-git-indicator-bubble-up, terminal-spurious-newline-on-panel-switch, no-way-to-close-workspace, new-workspace-hotkey)
+
+## Code-Quality Review — app-menu-bar
+
+### Strengths
+- The re-dispatch-as-alias architecture (menu emits id → frontend synthesizes the exact chord the existing capture-phase handlers already own) avoids the Tauri-2-accelerator-steals-keystroke trap and keeps the menu a pure alias with zero changes to the existing chord handlers.
+- `menuBridge.test.ts` asserts each synthetic `KeyboardEventInit` actually satisfies its real chord predicate (incl. ⌘P-vs-⌘⇧P shift disambiguation) — the strongest local guard, breaks loudly if a predicate tightens.
+- The `cancelled`-flag StrictMode guard is byte-faithful to the established `useWorkspaceStatus` pattern.
+- Three-way item classification (predefined / functional-emit / label-only-disabled) documented coherently + mechanically consistent with `FUNCTIONAL_IDS`.
+- Errors surfaced not swallowed throughout (build/set_menu/emit log; launchers `.catch`+log).
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR**
+- [src-tauri/src/app_menu/mod.rs:33 / src/menu/menuBridge.ts:16] The 11 functional id strings are duplicated across Rust (`app_menu::ids`) and TS (`MENU_IDS`) with no mechanical link — only prose. A one-char drift silently dead-clicks one menu item (Rust emits an id the TS switch falls through to `default→null`) with GREEN tests (Rust tests check only `FUNCTIONAL_IDS` internal uniqueness; `menuBridge.test.ts` references `MENU_IDS.*` symbolically so it passes regardless of the literal strings). A cheap guard exists (build-time shared id list, or a Rust test that reads the TS file and asserts the literal strings match). → Auto-backlogged (Mode 3).
+
+**MINOR**
+- [app_menu/mod.rs label-only ids] The disabled items carry ids (`file.save.label`, …) that exist only for the negative-space test; no runtime consumer — a one-line test comment would save a reader's hunt. → Auto-backlogged.
+- [src/App.tsx:120-160] The `menu` listener body (id→action + key re-dispatch + 4 callback branches) is inline in `App()`, not extracted to a pure testable seam (unlike menuBridge). Consistent with the repo's runtime-bound-listeners-not-unit-tested posture. → Auto-backlogged.
+
+### Assessment
+Well-built, appropriately-scoped, adds zero new behavior, integrates through existing chord predicates rather than duplicating them. Rust idiomatic (typed `?`, no unwrap); frontend reuses established patterns faithfully; thoughtful test posture. The one real debt is the unguarded cross-language id contract — worth a mechanical pin. Everything else solid.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** the cleanest menu→action bridge wasn't "synthesize a key for everything" — Tauri-2 menu accelerators STEAL keystrokes from the webview/CM6 on macOS, and CM6-internal commands can't be driven by a synthetic DOM event at all. The viable design is a three-way split (predefined / functional-emit-event / label-only), settled in planning via a Tauri-2 menu-API research pass.
+- **Assumptions that held:** the re-dispatch-as-alias approach (menu emits id → frontend synthesizes the exact existing chord) worked exactly as intended for the app-level document chords; the pure menuBridge mapping was fully unit-testable (each synthetic event asserted to satisfy its real predicate); PredefinedMenuItem wired Edit/About/Window to the native responder chain with zero custom code.
+- **Assumptions that were wrong:** the menu→action path was NOT correct on first build — a StrictMode async-`listen` double-registration (the `menu` effect lacked the `cancelled` guard) double-dispatched every menu click, which was INVISIBLE for idempotent panel-switch but CANCELLED OUT the finder/search/palette toggles. Caught only at verify-human (the native-menu surface is unobservable by the agent — SURFACE-2026-06-23). A Playwright minimal-harness proved the predicate chain was correct, isolating the cause to the effect lifecycle.
+- **Approach delta:** matched the plan's two-phase shape (Rust menu → frontend bridge) exactly. The only deviation was one F12 back-loop (the StrictMode double-listen fix + the ⌘N→⌘⇧N label change), plus confirming with the operator that the displayed accelerators are label-only (no real hotkey bound) — consistent with "mirror existing features, add no new behavior."
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
