@@ -27,14 +27,51 @@ gotchas (pnpm v11 `pnpm-workspace.yaml`, ESLint v9 pin, etc.).
 
 ```bash
 pnpm install
-pnpm tauri dev      # native dev build with hot-reload
+pnpm tauri:dev      # native dev build with hot-reload
 ```
 
-Build a production `.app`:
+`pnpm tauri:dev` runs the **dev build** under a separate identity (`com.claudesk.app.dev`,
+window titled *"Claudesk (dev)"*, magenta "DEV" badge on the Dock icon). This is fully
+isolated from an installed production build — separate project list, hook socket, and
+Claude Code hook registration — so you can run the installed app **and** `pnpm tauri:dev`
+at the same time without interference (i.e. develop Claudesk *with* Claudesk). Use
+`pnpm tauri:dev`, not a bare `pnpm tauri dev`, or the dev build will collide with an install.
+
+## Install (and update)
+
+Claudesk is a single-user, self-built, **unsigned** macOS app — there's no App Store
+release, no notarization, and no auto-updater. Installing and updating is a manual
+build-and-copy:
 
 ```bash
 pnpm tauri build
+cp -R src-tauri/target/release/bundle/macos/Claudesk.app /Applications/
 ```
+
+This produces (and you can also distribute) a `.dmg` at
+`src-tauri/target/release/bundle/dmg/Claudesk_<version>_aarch64.dmg`.
+
+**First launch — clear Gatekeeper (one time per build).** Because the app is unsigned,
+macOS blocks the first open with *"Apple cannot check it for malicious software."* Clear
+it once with either:
+
+- **Right-click `Claudesk.app` → Open → Open**, or
+- `xattr -dr com.apple.quarantine /Applications/Claudesk.app` before launching.
+
+**Updating** = rebuild and replace (quit the running app first):
+
+```bash
+git pull && pnpm install        # if there are upstream changes / dep updates
+pnpm tauri build
+cp -R src-tauri/target/release/bundle/macos/Claudesk.app /Applications/
+```
+
+The production bundle id (`com.claudesk.app`) is stable across updates, so your state —
+remembered projects (`projects.json`), the Claude Code hook registration, etc. under
+`~/Library/Application Support/com.claudesk.app/` — carries over automatically. The
+Gatekeeper right-click-Open step reappears on each replaced unsigned build. (Proper
+Developer-ID signing + notarization + in-app auto-update is deferred to a later polish
+milestone — it's only needed for distributing to *other* people.)
 
 ## Tests
 
