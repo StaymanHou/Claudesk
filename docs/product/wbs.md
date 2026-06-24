@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-23  # M4 WP4b (focus indicator) SHIPPED (647148f). Remaining: WP5 verify (milestone exit) ONLY — its deps (WP2/WP3/WP4/WP4b) now all satisfied. dogfood-replace point reached once WP5 passes.
+updated: 2026-06-24  # M4 WP5 (verify-at-N, milestone exit) SHIPPED (1fe939a) — ALL M4 WPs now [x]. Milestone 4 COMPLETE; M3+M4 dogfood-replace point REACHED. Next strategic step: /product-finalize (resync arch/roadmap, sweep backlog, archive M4 cycle).
 ---
 
 # Work Breakdown Structure — Milestone 4: Multi-workspace UX (filmstrip + center stage)
@@ -105,19 +105,20 @@ Learning-sequence ordering (riskiest-unknown-first), per the WBS discipline:
 - [x] Click-to-promote still works from a collapsed pill (switching center-stage from the thin row is a core glance→switch path — vision metric 4)
 - [x] Tests: collapsed-vs-expanded tile derivation + the loop-stop-on-collapse logic (vitest, pure where extractable) — `filmstripCollapse.test.ts` (6) + `mirrorTicker.test.ts` (4); render-mode/click-promote verified live (Playwright + native verify-human) per repo live-DOM posture
 
-### WP5: Verify multi-workspace at N (milestone-exit verification)
+### WP5: Verify multi-workspace at N (milestone-exit verification) ✅ SHIPPED 2026-06-24 (commit 1fe939a)
 **Description:** End-to-end verification of the M4 exit criteria against real N workspaces in the live native app — the dogfood-replace bar. Distinct from per-WP verify-self/human: this is the milestone-level proof that the whole surface holds at N with real CC sessions.
 **Milestone:** Milestone 4
 **Dependencies:** WP2, WP3, WP4, WP4b
 **Size:** S
+**Outcome:** All 7 exit-criteria checks operator-PASSED in the native app at N≥4 real CC sessions (autopilot, halted at verify-human per standing directive — one clean pass, no back-loop). Verification-only WP — no impl code; review-quality N/A (no code diff). vitest 426/426, tsc + lint clean. Folded WP1 watch-items re-confirmed with real sessions: window-close-at-N responsive (the WP2 `kill_all` parallelization holds), RAM headroom confirmed at the ~8–10/16GB practical ceiling → `SURFACE-2026-06-22-N8-CC-BACKEND-RAM` resolved. **This was the LAST M4 work package — Milestone 4 is COMPLETE and the M3+M4 dogfood-replace point is reached.**
 **Tasks:**
-- [ ] Open N (≥4, ideally the operator's real in-flight set) real projects as workspaces in one `pnpm tauri dev` window; confirm each gets its own live CC session, center-stage switch works, no cross-workspace state leak
-- [ ] Confirm idle/running/awaiting-input of **every** workspace is visible without clicking — in both the expanded filmstrip (incl. the static center-stage tile) and the collapsed pill row — driven purely by the M3 hook channel (no PTY scraping), agreeing with each workspace's center-stage header
-- [ ] Confirm **both** promote paths: clicking a tile/pill AND `⌘⇧+digit` switch center-stage (the chord fires with focus inside CM6 / the terminal); confirm drag-reorder rearranges tiles + the new order survives reload + `⌘⇧+digit` follows the new order
-- [ ] Confirm the **left/right focus indicator** correctly tracks terminal-half vs right-panel-half focus on the center-stage workspace (WP4b)
-- [ ] Confirm collapse/expand reclaims space + halts/restarts the mirror loop
-- [ ] Re-confirm the WP1 cost envelope holds with N *real* sessions (not the synthetic probe fixture); window-close at N is responsive (the `kill_all` ripple fix)
-- [ ] verify-human sign-off: the operator can find the awaiting-input workspace in <1s, zero clicks, and switch to it via `⌘⇧+digit` without reaching for the mouse (vision success metric 4)
+- [x] Open N (≥4, ideally the operator's real in-flight set) real projects as workspaces in one `pnpm tauri dev` window; confirm each gets its own live CC session, center-stage switch works, no cross-workspace state leak
+- [x] Confirm idle/running/awaiting-input of **every** workspace is visible without clicking — in both the expanded filmstrip (incl. the static center-stage tile) and the collapsed pill row — driven purely by the M3 hook channel (no PTY scraping), agreeing with each workspace's center-stage header
+- [x] Confirm **both** promote paths: clicking a tile/pill AND `⌘⇧+digit` switch center-stage (the chord fires with focus inside CM6 / the terminal); confirm drag-reorder rearranges tiles + the new order survives reload + `⌘⇧+digit` follows the new order
+- [x] Confirm the **left/right focus indicator** correctly tracks terminal-half vs right-panel-half focus on the center-stage workspace (WP4b)
+- [x] Confirm collapse/expand reclaims space + halts/restarts the mirror loop
+- [x] Re-confirm the WP1 cost envelope holds with N *real* sessions (not the synthetic probe fixture); window-close at N is responsive (the `kill_all` ripple fix)
+- [x] verify-human sign-off: the operator can find the awaiting-input workspace in <1s, zero clicks, and switch to it via `⌘⇧+digit` without reaching for the mouse (vision success metric 4)
 
 ## Dependency map
 

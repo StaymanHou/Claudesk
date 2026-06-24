@@ -1,7 +1,7 @@
 # Feature: M4 WP5 — Verify multi-workspace at N (milestone-exit verification)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** Completed 2026-06-24
 **Created:** 2026-06-24
 **drive_mode:** autopilot
 
@@ -37,11 +37,29 @@ Milestone 4's exit criterion is the **dogfood-replace bar**: N projects open con
   - [x] verify-codify  <!-- status: done 2026-06-24 — NO new tests: WP5 is a milestone-exit verification gate, ships no impl code, introduces no new behavior. All M4 behaviors already codified by owning WPs (pure logic unit-covered by vitest 426; wiring/render/interaction has no agent driver — that gap is M5-scoped per SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI). No integration boundary. Full suite re-run: 426/426, no regression. -->
 
 ## Current Node
-- **Path:** Feature > COMPLETE (all phases [x]) → ship
-- **Active scope:** none — WP5 done; next is /feature-ship
+- **Path:** Feature > COMPLETE → review-quality done (N/A, no code diff) → finalize
+- **Active scope:** none — WP5 shipped (1fe939a); next is /feature-finalize
 - **Blocked:** none
 - **Unvisited:** (none — single-phase verification WP; after Phase 1 verify-codify, the WP is done → milestone-exit → `/product-finalize`)
 - **Open discoveries:** none
+
+## Code-Quality Review — M4 WP5 (Verify multi-workspace at N)
+
+**Disposition: N/A — no code diff.** WP5 is a verification-only milestone-exit gate. The ship commit `1fe939a` changed only `workflow/backlog.md` (a SURFACE entry) and this WIP verification artifact — **zero source files** (`git diff --name-only 1fe939a^..1fe939a` matches no `.ts/.tsx/.rs/.css/.js`). The `code-quality-reviewer` subagent spawn was skipped because there is no implementation diff to review; spawning against an empty code surface would only invite confabulated findings against unchanged code. No findings (CRITICAL/MAJOR/MINOR) — none possible. All M4 implementation code was reviewed at its owning WP's review-quality pass (WP2/WP3/WP4/WP4b).
+
+### If you disagree
+If you want a review run anyway, the escape hatch is to invoke `/feature-review-quality` manually against a specific commit range; there's no code in this WP's range to review.
+
+## Retrospect
+- **What changed in our understanding:** Nothing material — WP5 was a pure verification gate and the M4 surface held together exactly as the per-WP work predicted. The single confirmation of note: the WP1 cost/RAM envelope (measured on a *synthetic* probe fixture) holds with *real* CC sessions at N≥4, and the responsive window-close from WP2's `kill_all` parallelization holds with real sessions too — both were the explicit risks WP5 existed to retire, and both passed.
+- **Assumptions that held:** The four prior WPs (N>1 lift, filmstrip, collapse, focus indicator) compose without interaction bugs at real N; status is honestly M3-hook-driven with the dot agreeing with the header; both promote paths (click + `⌘⇧+digit`) fire from both focus contexts; drag-reorder persists and reindexes the chord. One clean autopilot pass, zero back-loops.
+- **Assumptions that were wrong:** None. Operator returned "all pass" on all 7 leaves.
+- **Approach delta:** As expected for a verification-only WP, the build/verify-auto/verify-self states were structurally near-empty — the only auto-checkable leg was the green-suite trio (already green); every behavioral outcome was native-verify-human by necessity (no Tauri IPC for agent drivers — the now-4×-hit gap tracked in `SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI`, anchored to M5). review-quality was N/A (no code diff). The workflow machinery ran end-to-end but most states were acknowledgement-only — appropriate for a milestone-exit gate.
+
+## Communicate
+> **Feature complete:** M4 WP5 (Verify multi-workspace at N) has shipped. It is the milestone-exit verification gate that proved Claudesk's full multi-workspace surface holds at N≥4 real CC sessions — independent sessions with no leak, zero-click status across the filmstrip + collapsed pills, both promote paths, the focus indicator, collapse/expand, responsive close, and the <1s-find-and-keyboard-switch success metric. With it, **Milestone 4 is complete and the M3+M4 dogfood-replace point is reached** — Claudesk can now replace the terminal + Sublime daily-driver setup. Verify by opening ≥4 projects in `pnpm tauri dev` and switching among them via `⌘⇧+digit`.
+
+Requester = operator — closure notice for self-record.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

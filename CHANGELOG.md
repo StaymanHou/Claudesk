@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-24
+
+- **Feature shipped:** M4 WP5 — Verify multi-workspace at N: the milestone-exit verification gate proved Claudesk's full multi-workspace surface holds at N≥4 real CC sessions in the native app — independent sessions with no cross-workspace leak, zero-click idle/running/awaiting-input status across both the expanded filmstrip and the collapsed pill row (M3-hook-driven, agreeing with each workspace's header), both promote paths (tile/pill click and `⌘⇧+digit`, the chord firing from focus inside CM6 and the terminal) plus persistent drag-reorder, the left/right focus indicator, collapse/expand reclaiming space while halting the mirror loop, responsive window-close at N, and the headline success metric (find the awaiting-input workspace in <1s, zero clicks, keyboard-switch to it) — all 7 checks operator-PASSED in one clean autopilot pass.
+- **Backlog resolved:** SURFACE-2026-06-22-N8-CC-BACKEND-RAM — RAM headroom re-confirmed with N real in-flight sessions; Claudesk's marginal webview cost matches the WP1 envelope and the ~8–10-workspace practical ceiling on 16 GB (inherent backend `claude` RSS) is recorded as operator guidance.
+- **Milestone:** WP5 (Milestone 4, verify-multi-workspace-at-N) complete — the last M4 work package; **Milestone 4 is COMPLETE and the M3+M4 dogfood-replace point is reached** (Claudesk can replace the terminal + Sublime daily-driver setup). Next strategic step: `/product-finalize`.
+
 ## 2026-06-23
 
 - **Feature shipped:** M4 WP2 — N>1 lift: opening a project now **appends** a workspace (N coexist, every one stays mounted with its CC session alive in the background) instead of replacing the single one; a "**+**" control in the filmstrip re-opens the picker as a dismissable overlay to add more (re-opening an already-open project focuses the existing one, no duplicate session); window-close at N is responsive again via a parallelized `kill_all` (the N per-session 3s SIGKILL grace windows now overlap on one thread each instead of serializing to N×3s under the registry lock); and the project picker now surfaces IPC failures (a malformed `projects.json`, a failed open/remove) via an error toast instead of swallowing them into a silent empty list or an unhandled promise rejection.
