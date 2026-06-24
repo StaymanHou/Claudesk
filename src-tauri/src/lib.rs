@@ -1,3 +1,7 @@
+// Native macOS application menu (the menu bar). Mirrors existing features only —
+// predefined items (About/version, Edit, Window) wire to the native responder chain;
+// custom items emit a `menu` event the frontend bridge acts on (see app_menu).
+mod app_menu;
 mod cc_session;
 mod config_store;
 mod editor_fs;
@@ -37,6 +41,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Native menu clicks: predefined items (Edit/Window/About/Quit) are handled
+        // by macOS directly and never reach here; our custom items broadcast their id
+        // on the `menu` event for the frontend bridge to act on (app_menu).
+        .on_menu_event(|app, event| {
+            app_menu::handle_menu_event(app, event.id().as_ref());
+        })
         // WP7: the live CC sessions live here, reachable from the cc_* commands.
         .manage(Mutex::new(SessionRegistry::new()))
         // M3 WP2: register Claudesk's CC hook in ~/.claude/settings.json on launch
@@ -54,6 +64,17 @@ pub fn run() {
             // and set it process-wide — MUST run before any spawn below. Best-effort:
             // a capture failure leaves the inherited PATH untouched.
             env_path::apply_login_path_to_process();
+            // Native application menu (the menu bar). Build + set app-wide (macOS
+            // ignores per-window menus). A failure is surfaced, never swallowed — the
+            // app would fall back to no/default menu, which we want to see in logs.
+            match app_menu::build_menu(&handle) {
+                Ok(menu) => {
+                    if let Err(e) = app.set_menu(menu) {
+                        eprintln!("[claudesk] set_menu failed: {e}");
+                    }
+                }
+                Err(e) => eprintln!("[claudesk] build_menu failed: {e}"),
+            }
             // Dev/prod isolation (2026-06-24): on a DEV build's first launch, seed
             // its projects.json from the prod list so dogfooding starts with the
             // operator's real projects. Best-effort + idempotent + no-op on prod.

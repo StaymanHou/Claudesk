@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-24  # dev-prod-isolation Phase 2 tauri build
+updated: 2026-06-24  # app-menu-bar P1 codify — cargo test 208 pass
 ---
 
 # Runtime Registry
@@ -32,9 +32,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 32s (2026-06-24, dev-prod-isolation Phase 2: release rebuild after backend changes; bundled .app + .dmg)
+- **Last:** 78s (2026-06-24, /release v0.1.1: COLD build after `cargo clean` — full dep-tree recompile + .app + .dmg)
 - **Use timeout:** 600000
 - **History:**
+  - 78s — 2026-06-24 (/release v0.1.1 cold build: cargo clean removed 24.4GiB, full recompile ~49s + bundle)
   - 32s — 2026-06-24 (dev-prod-isolation Phase 2 verify-human: prod .app for the concurrent test)
   - 40s — 2026-06-16
 
@@ -62,9 +63,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 6s (2026-06-23, M4 WP2 P4: +1 registry N>1 no-bleed test → 186 pass; warm recompile + run ~0.59s)
+- **Last:** 5s (2026-06-24, app-menu P1 codify: +1 functional-id uniqueness test → 208 pass; warm recompile + run ~0.66s)
 - **Use timeout:** 120000
 - **History:**
+  - 5s — 2026-06-24 (app-menu-bar Phase 1 codify — new app_menu module, 3 unit tests incl. FUNCTIONAL_IDS uniqueness, 208 pass)
   - 6s — 2026-06-23 (M4 WP2 P4 — +1 registry_generalizes_to_n_gt_1 test, 186 pass)
   - 6s — 2026-06-23 (M4 WP2 P3 codify — +1 kill_all_is_best_effort test (FailingSession double), 185 pass)
   - 6s — 2026-06-23 (M4 WP2 P3 — +1 kill_all_runs_grace_windows_in_parallel test, 184 pass; FakeSession gained a kill_delay seam)

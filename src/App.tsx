@@ -1,16 +1,30 @@
 import "./App.css";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceList } from "./state/useWorkspaceList";
 import { useWorkspaceStatus } from "./state/useWorkspaceStatus";
 import { CenterStage } from "./components/workspace/CenterStage";
 import { Filmstrip } from "./components/workspace/Filmstrip";
-import { deriveTiles, tileForSwitchIndex } from "./components/workspace/filmstripTiles";
+import {
+  deriveTiles,
+  tileForSwitchIndex,
+} from "./components/workspace/filmstripTiles";
 import { workspaceSwitchIndex } from "./components/workspace/workspaceSwitchChord";
-import { loadOrder, reorder, saveOrder } from "./components/workspace/filmstripOrder";
-import { loadCollapsed, saveCollapsed } from "./components/workspace/filmstripCollapse";
+import {
+  loadOrder,
+  reorder,
+  saveOrder,
+} from "./components/workspace/filmstripOrder";
+import {
+  loadCollapsed,
+  saveCollapsed,
+} from "./components/workspace/filmstripCollapse";
 import { ProjectPicker } from "./components/picker/ProjectPicker";
 import { PickerOverlay } from "./components/picker/PickerOverlay";
 import { parseSeedParam } from "./state/seedWorkspace";
+import { listen } from "@tauri-apps/api/event";
+import { menuActionFor } from "./menu/menuBridge";
+import { openSublime, openSublimeMerge } from "./sublime/sublimeLaunch";
+import { openFinder } from "./finder/finderLaunch";
 
 // WP5 app shell. The view is a state machine over WorkspaceList:
 //   - "picker"         → Project Picker, full-screen (no workspace open yet)
@@ -28,8 +42,14 @@ import { parseSeedParam } from "./state/seedWorkspace";
 // right-panel tab row (RightPanelHost), not here. (The old ⌘⇧O Text hotkey was
 // removed in WP8.)
 function App() {
-  const { workspaces, focusedId, view, openWorkspace, focusWorkspace, setSessionId } =
-    useWorkspaceList();
+  const {
+    workspaces,
+    focusedId,
+    view,
+    openWorkspace,
+    focusWorkspace,
+    setSessionId,
+  } = useWorkspaceList();
   // M3 WP6 — live CC status from the `workspace-status` hook channel + the
   // open/close registration that makes WP4's cwd→workspace match resolve.
   const { stateFor } = useWorkspaceStatus(workspaces);
@@ -99,6 +119,66 @@ function App() {
   // M4 WP2 — the new-workspace overlay (the filmstrip "+" re-entry). Only ever
   // shown when a workspace is already open; first-open uses the full-screen picker.
   const [showPicker, setShowPicker] = useState(false);
+
+  // Native menu bridge: the macOS menu (src-tauri/src/app_menu) emits a clicked
+  // functional item's id on the `menu` event. We map it (menuBridge) to either a
+  // synthetic KeyboardEvent re-dispatched on document — reproducing the exact chord
+  // the existing capture-phase handlers already listen for (panel-switch, finder,
+  // search, palette, close-tab), so no handler changes — or a React callback (open
+  // the picker; launch Sublime/Merge/Finder against the FOCUSED workspace's path).
+  //
+  // The focused workspace's path is read via a ref so the listener registers ONCE
+  // (latest-ref pattern, as in RightPanelHost) — re-subscribing on every focus change
+  // would be churn and could drop an in-flight menu event.
+  const focusedPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    const focused = workspaces.find((w) => w.id === focusedId);
+    focusedPathRef.current = focused ? focused.project_path : null;
+  }, [workspaces, focusedId]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    // `cancelled` guard (mirrors useWorkspaceStatus): `listen` is async, so under
+    // React StrictMode's dev double-mount the effect's cleanup can run BEFORE the
+    // promise resolves. Without this guard the first subscription's unlisten is never
+    // captured → two live `menu` listeners → every menu click dispatches the synthetic
+    // keydown TWICE. Invisible for idempotent actions (panel-switch setPanel(→target))
+    // but CANCELS OUT the toggle actions (finder/search/palette setX(open=>!open)
+    // open-then-close) — the vh.2 bug. Unlisten immediately if torn down already.
+    let cancelled = false;
+    void listen<string>("menu", (event) => {
+      const action = menuActionFor(event.payload);
+      if (!action) return; // unknown / label-only id — ignore defensively
+      if (action.kind === "key") {
+        // Re-dispatch the synthetic chord; the capture-phase listeners (App + the
+        // focused RightPanelHost) handle it exactly as a real keypress.
+        document.dispatchEvent(new KeyboardEvent("keydown", action.init));
+        return;
+      }
+      // callback actions
+      if (action.callback === "newWorkspace") {
+        setShowPicker(true);
+        return;
+      }
+      // The three launchers act on the focused workspace; no-op when none is open.
+      const path = focusedPathRef.current;
+      if (!path) return;
+      if (action.callback === "openSublimeText") void openSublime(path);
+      else if (action.callback === "openSublimeMerge")
+        void openSublimeMerge(path);
+      else if (action.callback === "revealInFinder") void openFinder(path);
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   // Open from the overlay = append a workspace, then dismiss the overlay.
   const openFromOverlay = useCallback(
