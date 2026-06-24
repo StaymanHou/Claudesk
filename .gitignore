@@ -1,6 +1,11 @@
 # Read-only reference symlinks to companion repos
 _ref/
 
+# Homebrew tap — its own independent git repo (StaymanHou/homebrew-claudesk),
+# nested here for filesystem tidiness but NOT tracked by this (canonical) repo.
+# The /release skill bumps its cask on each release.
+homebrew-claudesk/
+
 # Global-scope learning drafts (hand-curated, never auto-committed)
 .claude/learnings/
 

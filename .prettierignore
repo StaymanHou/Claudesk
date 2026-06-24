@@ -7,6 +7,10 @@ src-tauri/Cargo.lock
 
 # Hand-authored strategic documentation — preserve author's spacing
 CLAUDE.md
+README.md
 docs/
 workflow/
 runtimes.md
+
+# Nested Homebrew tap — its own independent git repo
+homebrew-claudesk/
