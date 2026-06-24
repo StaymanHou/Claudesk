@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — dev-prod-isolation (2026-06-24)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `5f9a86a` — all low-risk coupling/drift seams: a duplicated `PROJECTS_FILE` const, an undocumented no-spaces-in-`.pl`-segments assumption in the basename matcher, and an implicit prod↔overlay window-size coupling in `tauri.dev.json`. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# dev-prod-isolation — 2026-06-24`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** all three are trivial doc/refactor nits in one `/feature-refactor` pass (or opportunistically); none changes correctness or any hand-off contract. The `pub(crate)` const dedup is the only code change; the other two are one-line comments. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI
 - **What:** Adopt (or deliberately reject) a real-app UI driver for `feature-verify-self` so workspace-UI features can be agent-verified instead of always punting to native `verify-human`. **Decide at next-milestone (M5 PiP) planning.**
 - **The gap:** The current verify-self path drives **Playwright (MCP) against the Vite dev URL as a plain browser** — which has **no Tauri IPC** (`window.__TAURI_INTERNALS__` undefined), so `list_projects`/`cc_spawn`/`listen("workspace-status")` all throw, no `.workspace` ever mounts, and **every live-DOM Observable Outcome comes back UNVERIFIED**. This has now bitten **three consecutive workspace-UI features (M4 WP3 filmstrip, WP4 collapse, WP4b focus indicator)** — each re-discovered the dead-end mid-verify-self and forwarded the visual checks to the operator. Pure logic (`deriveFocusHalf`, reorder reducers, tile derivation) IS unit-covered; it's the *wiring + render + interaction* layer that has no agent-side net.

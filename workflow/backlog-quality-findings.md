@@ -861,3 +861,22 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Priority:** low (trivial readability; join-then-split is a tiny confabulation surface only if an id ever held a comma — not the case today, ids are uuids)
 - **Status:** pending
 - **Note:** the still-pending `SURFACE-2026-06-23-QUALITY-WP3-TICKER-EFFECT-DUAL-RESPONSIBILITY` is in this same ticker effect — WP4 added the `shouldRunMirror` gate but did not split the active-tile clear. The two are natural pickup-together candidates for one `/feature-refactor` pass on the ticker effect.
+
+# dev-prod-isolation — 2026-06-24
+
+3 MINOR findings from `feature-review-quality` on ship commit `5f9a86a` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built and advancing the codebase: single-root-cause design (identifier is the one source of truth), exemplary pure/impure split mirroring the config_store/hook_install precedent, the substring trap closed with exact-match + a both-directions regression test, and WHY-encoding doc comments. All three findings are low-risk coupling/drift seams, none affecting correctness. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-24-QUALITY-DEVPROD-PROJECTS-FILE-DUP
+- **File:** `src-tauri/src/config_store/commands.rs:18`
+- **Finding (MINOR):** `PROJECTS_FILE` const is duplicated here (with a "kept in sync" comment) from the module-private `super::PROJECTS_FILE`. Two literals that must agree = a latent drift seam: a rename of the project-list filename would silently diverge the seed path from the read/write path.
+- **Fix shape:** make `super::PROJECTS_FILE` `pub(crate)` and import it; delete the local copy. Trivial.
+
+## SURFACE-2026-06-24-QUALITY-DEVPROD-BASENAME-SPACE-ASSUMPTION
+- **File:** `src-tauri/src/hook_install/mod.rs:84-90`
+- **Finding (MINOR):** `script_basename_of_command` matches the last whitespace token ending in `.pl` (after quote-stripping). Correct for all command shapes Claudesk emits and for the real macOS `/Application Support/…` path (the `.pl` tail token survives the split), but it assumes no `.pl`-suffixed path *segment* contains a space. Inputs are app-controlled → defensive-only.
+- **Fix shape:** add a one-line comment documenting the no-spaces-in-`.pl`-segments assumption for any future reuser. Optional.
+
+## SURFACE-2026-06-24-QUALITY-DEVPROD-OVERLAY-WINDOW-SIZE-COUPLING
+- **File:** `src-tauri/tauri.dev.json:6-12`
+- **Finding (MINOR):** the dev overlay re-declares `width`/`height` in `app.windows[0]` only because Tauri's array-merge replaces the whole window object (the sole intended override is `title`). Documented in the WIP (P1.1) but not at the file site → a future editor changing the prod window size would see dev silently keep 1280×800.
+- **Fix shape:** add an inline comment in tauri.dev.json noting the array-replace coupling, or track window size in a shared place. Optional.

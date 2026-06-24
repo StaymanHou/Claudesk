@@ -1,7 +1,7 @@
 # Feature: Dev/Prod isolation (concurrent installed-app + `pnpm tauri dev`)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** Completed 2026-06-24
 **Created:** 2026-06-24
 **drive_mode:** autopilot
 
@@ -74,12 +74,48 @@ To dogfood Claudesk (use the installed `.app` to develop Claudesk itself), the o
     - [x] P3.vh.4 both crisp at Dock size, no transparent-edge padding  <!-- status: PASS 2026-06-24 -->
   - [x] verify-codify  <!-- status: done 2026-06-24 — NO new tests: icons are static raster assets (no logic); smerge rotation is a pure-render SVG transform already covered by the frontend suite staying green. No new behavior to codify. No integration boundary needing a test beyond existing coverage. Full suites green: cargo 198, frontend 426, tsc clean, lint 0 errors (1 pre-existing XtermPane warning). No regression. -->
 
+## Code-Quality Review — dev-prod-isolation
+
+Reviewer (code-quality-reviewer subagent) on ship commit `5f9a86a`. **0 CRITICAL, 0 MAJOR, 3 MINOR.** drive_mode autopilot → 3 MINORs auto-backlogged (Case C). Assessment: well-built, advances the codebase; one root cause (shared identifier), one mechanism (identifier-derived everything), the riskiest sub-problem (substring trap) closed with exact-match + a both-directions regression test; pure-function layering mirrors the existing config_store/hook_install precedent; honest scoping of the unavoidable native-verify gap.
+
+### Strengths
+- Single-root-cause design carried through: identifier is the one source of truth; data dir / socket / script basename / settings marker all derive from it — no scattered `if dev` branches.
+- Exemplary pure/impure split (script_basename, script_basename_of_command, group_is_claudesk, merge/remove, seed_dev_projects all FS-free + unit-tested with no Tauri).
+- Substring trap fixed AND pinned (both-directions regression test).
+- Doc comments encode WHY (2026-06-22 quoting regression, the trap, `$HOME` choice) not WHAT.
+- seed_dev_projects no-op branches each justified + individually tested; seeding is best-effort (never blocks launch).
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR** (all auto-backlogged, drive_mode autopilot)
+- [config_store/commands.rs:18] `PROJECTS_FILE` duplicated from module-private `super::PROJECTS_FILE` ("kept in sync" comment) — a rename would silently diverge the seed path from read/write. Fix: `pub(crate)` the parent const + import.
+- [hook_install/mod.rs:84-90] `script_basename_of_command` relies on no `.pl`-suffixed path segment containing a space (true for app-controlled inputs; defensive-only). Worth a one-line note for a future reuser.
+- [tauri.dev.json:6-12] overlay re-declares window width/height only because Tauri array-merge replaces the whole window object; the prod↔overlay size coupling isn't visible at the override site. Worth an inline note.
+
+### Assessment
+Well-built; advances the codebase rather than accruing debt. Only findings are minor coupling/drift seams — none affect correctness today; better as backlog notes than a refactor pass.
+
+### If you disagree
+Dismiss a finding by marking its line `[DISMISSED]` in this section before finalize archives the WIP.
+
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** none — Phases 1+2+3 all [x]. Next: /feature-ship.
+- **Path:** Feature > review-quality done (0C/0M/3 MINOR auto-backlogged) → finalize
+- **Active scope:** none — next: /feature-finalize.
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize → then resume BLOCKED M4 /product-finalize.
+- **Unvisited:** finalize → then resume BLOCKED M4 /product-finalize.
 - **Open discoveries:** none
+
+## Retrospect
+- **What changed in our understanding:** The 5 apparent "shared resource" collisions (data dir, projects.json, hook.sock, hook script, settings.json registration) turned out to be a SINGLE root cause — the shared bundle identifier — so the fix collapsed from "5 separate isolations" to "make the identifier the source of truth and derive everything." Also: reading the *live deployed* Perl hook upfront proved the event fan-out to two sockets was already free (best-effort connect + silent no-op), which removed a whole imagined sub-problem before any code was written.
+- **Assumptions that held:** Option A (runtime identifier-derived, not `cfg(debug_assertions)`) was the right call — it kept one code path and made all 5 resources isolate off one knob; the operator's instinct to reject `cfg` (which couples to debug-vs-release, the wrong axis) was correct. Tauri 2's `--config` overlay deep-merge worked exactly as expected. The pure/impure split kept everything unit-testable with no Tauri runtime.
+- **Assumptions that were wrong:** (1) The SUBSTRING TRAP was the real teeth — `claudesk-hook.pl` ⊂ `claudesk-hook-dev.pl`, so the pre-existing `.contains()` marker match would have silently broken isolation; flagged at plan time and closed with exact-basename matching + a both-directions regression test (this was the single highest-value catch). (2) Tauri's array-merge REPLACES (not merges) the `app.windows[0]` object, so the overlay had to re-declare width/height — discovered, handled, now a backlogged drift-seam note.
+- **Approach delta:** Plan was 2 phases; grew to 3 when the operator folded in the app-icon + smerge-rotation work mid-feature (Phase 3). The icon then took 4 operator art-iterations (placeholder rejected → operator-supplied Gemini art → fill-canvas/black-corners → transparent-corners → stretch-to-fill) + a smerge rotation-direction correction — all cosmetic, no logic churn. The load-bearing isolation (Phases 1+2) landed clean, first try, exactly as planned. Also: this whole feature was an INSERTED M4-blocker — discovered while answering the operator's "will dev and prod interfere?" question mid-M4-finalize — not a planned WBS WP.
+
+## Communicate
+> **Feature complete:** Dev/prod isolation has shipped. The installed Claudesk `.app` (`com.claudesk.app`) and `pnpm tauri:dev` (`com.claudesk.app.dev`) now run **concurrently with zero interference** — separate app-data dirs, project lists, hook sockets, and `~/.claude/settings.json` registrations — which is the prerequisite for dogfooding Claudesk with Claudesk. Verify by launching the installed `.app` and `pnpm tauri:dev` at the same time: each gets its own status surface with no cross-talk, and the dev build's Dock icon carries a magenta "DEV" badge so the two are tellable apart.
+
+Requester = operator — closure notice for self-record.
 
 ## Test Triage — full cargo suite (Phase 2 verify-codify)
 Classification: Flaky test — failure unrelated to new code; inconsistent across runs
