@@ -11,6 +11,49 @@ rotating projects.
 > The multi-workspace filmstrip, menu-bar status, stateful CC controller, and built-in
 > editor/diff viewer arrive in Phases 2–3. A full user-facing README lands in Phase 4.
 
+## What it is
+
+Claudesk is a **macOS-only, single-user "lite IDE"** that puts the daily
+**Claude Code + Sublime** workflow into **one window with multiple virtual
+workspaces inside it**. Each workspace = one project = one live Claude Code (CC)
+session: a true terminal on the left, a lite code-editor + git-diff viewer on the
+right. A **Mission-Control-style layout** runs the show — one workspace is the
+full-size *center stage*, and a *filmstrip* of live thumbnails/status-tiles across
+the top shows every other open project at a glance, each with an
+**idle / running / awaiting-input** status dot. Click a tile (or press a hotkey)
+to promote that project to center stage. It replaces the old routine of juggling
+terminal tabs, Sublime Text, and Sublime Merge across many windows and macOS Spaces.
+
+**Tech feel:** Tauri 2 (a tiny ~3 MB native app, not Electron), **dark-mode only —
+always**, fast (<500 ms startup), lean. The aesthetic is *quiet, dark,
+keyboard-driven, dense-but-calm* — a tool for a power user running 20+ rotating
+projects, 3–4 in flight on any given day.
+
+### What it does, and why it matters
+
+- **One window, many project workspaces (Mission-Control layout).** A single window
+  holds N concurrent project workspaces — one full-size *center stage* + a
+  *filmstrip* of the rest across the top. No window-juggling, no Spaces-hopping;
+  every in-flight project is one glance and one click away, so you instantly see
+  which project needs you and switch without breaking flow.
+- **Per-workspace status at a glance (idle / running / awaiting-input).** Every
+  filmstrip tile carries a live status dot driven by Claude Code's real lifecycle
+  (not guesswork). The "which of my 4 running agents is waiting on me?" question is
+  answered in under a second, zero clicks — no more hunting through windows for the
+  one stalled on a prompt.
+- **Instant project launch.** Pick a project → its full environment (CC session
+  `cd`'d in, editor, diff) fires up in seconds as a new workspace, eliminating the
+  minutes of repetitive setup (open terminal → `cd` → `claude`, open Sublime, load
+  project, open Merge, …) per project, per day. Starting work on any of 20+ projects
+  is one click, not a ritual.
+- **Split workspace: terminal + editor side by side.** Left half = a true
+  PTY-backed Claude Code terminal (the real interactive TUI); right half = a lite
+  code editor + git-diff viewer. Drive the AI and read the code without leaving the
+  window — the whole edit-review-converse loop in one calm surface.
+- **Lean, fast, dark, native.** Tauri 2 native app — ~3 MB, ~30–40 MB RAM idle,
+  <500 ms launch, always dark. A daily driver that disappears into the work instead
+  of competing with it.
+
 ## Prerequisites
 
 - **macOS** (this project is macOS-only)
