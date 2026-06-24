@@ -20,10 +20,15 @@
 //! - **Idempotent + self-healing** — re-running install adds nothing when our
 //!   entry is already current; if the command *format* changed (e.g. the
 //!   2026-06-22 shell-quoting fix), it replaces the stale entry in place rather
-//!   than duplicating. Detection keys on the stable script basename
-//!   ([`CLAUDESK_SCRIPT_MARKER`]), not the full command string.
-//! - **Reversible** — [`uninstall`] removes only Claudesk's groups, pruning a now-
-//!   empty event array, and leaves everything else byte-for-byte.
+//!   than duplicating. Detection keys on the script *basename*
+//!   ([`script_basename_of_command`]), not the full command string.
+//! - **Per-identity (dev/prod isolation, 2026-06-24)** — the basename is
+//!   identity-specific (`claudesk-hook.pl` vs `claudesk-hook-dev.pl`), matched
+//!   EXACTLY, so the installed prod build and `pnpm tauri:dev` each own a separate
+//!   matcher-group in the shared `settings.json` and never touch each other's.
+//! - **Reversible** — [`uninstall`] removes only THIS identity's groups, pruning a
+//!   now-empty event array, and leaves everything else (incl. the OTHER identity's
+//!   Claudesk group) byte-for-byte.
 //! - **Never wipe a file we can't parse** — a malformed `settings.json` is an
 //!   error, not a silent overwrite (mirrors `config_store`'s precedent).
 //!
@@ -60,19 +65,40 @@ pub enum HookInstallError {
     NotAnObject,
 }
 
-/// Stable detection marker: the hook script's basename. Detection keys on this
-/// substring rather than the exact `command` string so that a change to the
-/// command *format* (e.g. adding shell-quoting around the paths, as happened
-/// 2026-06-22) is still recognized as "ours" — install can then replace the
-/// stale entry instead of leaving a broken one and appending a duplicate, and
-/// uninstall still finds it. The basename is invariant across those changes.
-const CLAUDESK_SCRIPT_MARKER: &str = "claudesk-hook.pl";
+/// Extract the hook-script basename (`claudesk-hook.pl` / `claudesk-hook-dev.pl`)
+/// from a registered `command` string of the shape
+/// `CLAUDESK_HOOK_SOCK='…' /usr/bin/perl '<script-path>'`. Returns the basename of
+/// the last whitespace-delimited token that ends in `.pl`, with surrounding single
+/// quotes stripped — `None` if no `.pl` token is present.
+///
+/// Detection keys on this **basename**, not the full `command` string, for two
+/// reasons: (1) a change to the command *format* (e.g. the 2026-06-22 shell-quoting
+/// fix) must still be recognized as "ours" so install self-heals the stale entry
+/// rather than duplicating it; (2) — the dev/prod-isolation reason (2026-06-24) —
+/// the basename is per-identity (`claudesk-hook.pl` vs `claudesk-hook-dev.pl`), so
+/// matching on it lets the prod build and the dev build each own a SEPARATE
+/// matcher-group in the shared `~/.claude/settings.json` without touching the
+/// other's. Matching is EXACT (`==`), never substring: `claudesk-hook.pl` is a
+/// substring of `claudesk-hook-dev.pl`, so a `.contains()` test would make prod
+/// falsely adopt/replace dev's group (the "substring trap").
+fn script_basename_of_command(command: &str) -> Option<&str> {
+    command
+        .split_whitespace()
+        .map(|tok| tok.trim_matches('\''))
+        .rfind(|tok| tok.ends_with(".pl"))
+        .map(|path| path.rsplit('/').next().unwrap_or(path))
+}
 
-/// Does this matcher-group object register a Claudesk hook? A group is "ours"
-/// iff any of its `hooks[].command` strings contains [`CLAUDESK_SCRIPT_MARKER`].
-/// The `_command` arg is unused now (kept so callers needn't change); detection
-/// is by the stable script-path marker, not the full command string.
-fn group_is_claudesk(group: &Value, _command: &str) -> bool {
+/// Does this matcher-group register the SAME Claudesk hook identity as `command`?
+/// True iff any of the group's `hooks[].command` strings embeds a script whose
+/// basename EXACTLY equals `command`'s script basename. Per-identity by
+/// construction: a prod `command` matches only prod groups, a dev `command` only
+/// dev groups (see [`script_basename_of_command`]). A `command` with no `.pl`
+/// token matches nothing.
+fn group_is_claudesk(group: &Value, command: &str) -> bool {
+    let Some(want) = script_basename_of_command(command) else {
+        return false;
+    };
     group
         .get("hooks")
         .and_then(Value::as_array)
@@ -80,7 +106,8 @@ fn group_is_claudesk(group: &Value, _command: &str) -> bool {
             hooks.iter().any(|h| {
                 h.get("command")
                     .and_then(Value::as_str)
-                    .map(|c| c.contains(CLAUDESK_SCRIPT_MARKER))
+                    .and_then(script_basename_of_command)
+                    .map(|have| have == want)
                     .unwrap_or(false)
             })
         })
@@ -554,5 +581,98 @@ mod tests {
         let path = dir.path().join("does-not-exist.json");
         uninstall(&path, CMD).unwrap(); // no error
         assert!(!path.exists(), "uninstall must not create the file");
+    }
+
+    // ---- dev/prod isolation: per-identity coexistence (Phase 2, 2026-06-24) ----
+
+    /// The prod and dev registered commands, embedding their distinct script
+    /// basenames (the real shell-quoted shape).
+    const CMD_PROD: &str =
+        "CLAUDESK_HOOK_SOCK='/data/com.claudesk.app/hook.sock' \
+         /usr/bin/perl '/data/com.claudesk.app/claudesk-hook.pl'";
+    const CMD_DEV: &str =
+        "CLAUDESK_HOOK_SOCK='/data/com.claudesk.app.dev/hook.sock' \
+         /usr/bin/perl '/data/com.claudesk.app.dev/claudesk-hook-dev.pl'";
+
+    #[test]
+    fn script_basename_extraction_strips_quotes_and_dir() {
+        assert_eq!(script_basename_of_command(CMD_PROD), Some("claudesk-hook.pl"));
+        assert_eq!(
+            script_basename_of_command(CMD_DEV),
+            Some("claudesk-hook-dev.pl")
+        );
+        // A command with no .pl token matches nothing.
+        assert_eq!(script_basename_of_command("/usr/bin/perl --version"), None);
+    }
+
+    #[test]
+    fn substring_trap_closed_prod_marker_does_not_match_dev_group() {
+        // `claudesk-hook.pl` is a substring of `claudesk-hook-dev.pl`. The match
+        // MUST be basename-exact, so a prod command must NOT classify a dev group
+        // as its own (and vice-versa) — else isolation silently breaks.
+        let dev_group = json!({ "hooks": [ { "type": "command", "command": CMD_DEV } ] });
+        let prod_group = json!({ "hooks": [ { "type": "command", "command": CMD_PROD } ] });
+
+        assert!(!group_is_claudesk(&dev_group, CMD_PROD), "prod must NOT match dev group");
+        assert!(!group_is_claudesk(&prod_group, CMD_DEV), "dev must NOT match prod group");
+        // Sanity: each matches its own.
+        assert!(group_is_claudesk(&prod_group, CMD_PROD));
+        assert!(group_is_claudesk(&dev_group, CMD_DEV));
+    }
+
+    #[test]
+    fn prod_and_dev_groups_coexist_per_event() {
+        // Install prod, then dev, into the same settings — both must be present as
+        // SEPARATE matcher-groups on every event (dev must not replace prod).
+        let mut s = settings_with_claude_time();
+        merge_claudesk_hooks(&mut s, CMD_PROD).unwrap();
+        let dev_changed = merge_claudesk_hooks(&mut s, CMD_DEV).unwrap();
+        assert!(dev_changed, "registering dev alongside prod is a change");
+
+        for event in CLAUDESK_EVENTS {
+            let arr = s["hooks"][event].as_array().unwrap();
+            let prod_groups = arr.iter().filter(|g| group_is_claudesk(g, CMD_PROD)).count();
+            let dev_groups = arr.iter().filter(|g| group_is_claudesk(g, CMD_DEV)).count();
+            assert_eq!(prod_groups, 1, "exactly one prod group on {event}");
+            assert_eq!(dev_groups, 1, "exactly one dev group on {event}");
+        }
+    }
+
+    #[test]
+    fn uninstall_dev_leaves_prod_group_intact() {
+        let mut s = settings_with_claude_time();
+        merge_claudesk_hooks(&mut s, CMD_PROD).unwrap();
+        merge_claudesk_hooks(&mut s, CMD_DEV).unwrap();
+
+        // Uninstall ONLY dev.
+        let removed = remove_claudesk_hooks(&mut s, CMD_DEV).unwrap();
+        assert!(removed);
+        for event in CLAUDESK_EVENTS {
+            let arr = s["hooks"][event].as_array().unwrap();
+            assert_eq!(
+                arr.iter().filter(|g| group_is_claudesk(g, CMD_PROD)).count(),
+                1,
+                "prod group survives dev uninstall on {event}"
+            );
+            assert_eq!(
+                arr.iter().filter(|g| group_is_claudesk(g, CMD_DEV)).count(),
+                0,
+                "dev group is gone on {event}"
+            );
+        }
+    }
+
+    #[test]
+    fn same_identity_remerge_still_idempotent_with_other_identity_present() {
+        // With BOTH identities registered, re-merging prod is a no-op (doesn't
+        // touch dev, doesn't duplicate prod) — coexistence preserves idempotency.
+        let mut s = settings_with_claude_time();
+        merge_claudesk_hooks(&mut s, CMD_PROD).unwrap();
+        merge_claudesk_hooks(&mut s, CMD_DEV).unwrap();
+        let snapshot = s.clone();
+
+        let prod_again = merge_claudesk_hooks(&mut s, CMD_PROD).unwrap();
+        assert!(!prod_again, "re-merge of prod is a no-op when already present");
+        assert_eq!(s, snapshot, "re-merge leaves both identities byte-identical");
     }
 }

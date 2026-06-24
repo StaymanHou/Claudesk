@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-23  # M4 WP2 P3 cargo test
+updated: 2026-06-24  # dev-prod-isolation Phase 2 tauri build
 ---
 
 # Runtime Registry
@@ -32,9 +32,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 40s (2026-06-16, release profile from clean target/)
+- **Last:** 32s (2026-06-24, dev-prod-isolation Phase 2: release rebuild after backend changes; bundled .app + .dmg)
 - **Use timeout:** 600000
 - **History:**
+  - 32s — 2026-06-24 (dev-prod-isolation Phase 2 verify-human: prod .app for the concurrent test)
   - 40s — 2026-06-16
 
 ## pnpm test

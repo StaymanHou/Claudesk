@@ -40,6 +40,10 @@ pub fn run() {
         // status would silently break otherwise.
         .setup(|app| {
             let handle = app.handle().clone();
+            // Dev/prod isolation (2026-06-24): on a DEV build's first launch, seed
+            // its projects.json from the prod list so dogfooding starts with the
+            // operator's real projects. Best-effort + idempotent + no-op on prod.
+            config_store::commands::seed_dev_projects_from_prod(&handle);
             if let Err(e) = hook_install::commands::install_on_launch(&handle) {
                 eprintln!("[claudesk] hook install failed: {e}");
                 let _ = handle.emit("hook-install-error", e);

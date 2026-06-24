@@ -24,11 +24,16 @@ export function SublimeMergeIcon({ size = 16 }: IconProps) {
       aria-hidden="true"
       focusable="false"
     >
-      {/* Two branch lines merging into one — the git-merge motif. */}
-      <circle cx="4" cy="3.5" r="1.4" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="3.5" r="1.4" fill="currentColor" stroke="none" />
-      <circle cx="8" cy="12.5" r="1.4" fill="currentColor" stroke="none" />
-      <path d="M4 4.9v1.2c0 1.7 1.4 3 3 3.2M12 4.9v1.2c0 1.7-1.4 3-3 3.2" />
+      {/* Two branch lines merging into one — the git-merge motif.
+          Rotated a quarter-turn counter-clockwise (about the 16×16 center) per
+          operator request 2026-06-24 so the merge axis runs horizontally
+          (the two source dots on the right, merging toward the left). */}
+      <g transform="rotate(-90 8 8)">
+        <circle cx="4" cy="3.5" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="3.5" r="1.4" fill="currentColor" stroke="none" />
+        <circle cx="8" cy="12.5" r="1.4" fill="currentColor" stroke="none" />
+        <path d="M4 4.9v1.2c0 1.7 1.4 3 3 3.2M12 4.9v1.2c0 1.7-1.4 3-3 3.2" />
+      </g>
     </svg>
   );
 }

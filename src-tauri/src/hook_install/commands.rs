@@ -14,8 +14,34 @@ use tauri::{AppHandle, Manager};
 
 use super::{install, uninstall};
 
-/// Basename of the hook script as deployed into the app-data dir.
-const HOOK_SCRIPT_NAME: &str = "claudesk-hook.pl";
+/// Hook-script basename for the production identity (`com.claudesk.app`).
+pub(crate) const HOOK_SCRIPT_NAME_PROD: &str = "claudesk-hook.pl";
+/// Hook-script basename for the dev identity (identifier ending in `.dev`).
+/// A DISTINCT basename is what lets the installed prod app and `pnpm tauri:dev`
+/// coexist: it isolates the deployed script AND is the per-identity registration
+/// marker that keeps each build touching only its own `settings.json` group
+/// (see [`super::group_is_claudesk`] — Phase 2). NOTE: prod's basename is a
+/// SUBSTRING of dev's, so marker matching must be basename-EXACT, not
+/// `.contains()` (the substring trap — Phase 2 P2.2).
+pub(crate) const HOOK_SCRIPT_NAME_DEV: &str = "claudesk-hook-dev.pl";
+
+/// Pure derivation of the hook-script basename from the running app's bundle
+/// identifier — the single source of truth for dev/prod isolation (Option A,
+/// 2026-06-24). A dev build runs under the `tauri.dev.json` overlay's
+/// `com.claudesk.app.dev` identifier; everything else (data dir, socket, this
+/// script, the registration marker) follows from the identifier. Unit-tested.
+pub(crate) fn script_basename(identifier: &str) -> &'static str {
+    if identifier.ends_with(".dev") {
+        HOOK_SCRIPT_NAME_DEV
+    } else {
+        HOOK_SCRIPT_NAME_PROD
+    }
+}
+
+/// The deployed hook-script basename for THIS running build, from its identifier.
+fn hook_script_name(app: &AppHandle) -> &'static str {
+    script_basename(&app.config().identifier)
+}
 
 /// Path to the user's `~/.claude/settings.json` (where CC reads hook registrations).
 fn user_settings_path() -> Result<PathBuf, String> {
@@ -68,7 +94,7 @@ fn resolve_paths(app: &AppHandle) -> Result<(PathBuf, PathBuf), String> {
         .map_err(|e| format!("could not resolve app data dir: {e}"))?;
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("could not create app data dir {}: {e}", data_dir.display()))?;
-    let script = data_dir.join(HOOK_SCRIPT_NAME);
+    let script = data_dir.join(hook_script_name(app));
     let socket = crate::hook_socket::commands::hook_socket_path(app)?;
     Ok((script, socket))
 }
@@ -183,5 +209,27 @@ mod tests {
         // safe shell word via the POSIX '\'' idiom.
         let q = sh_quote(Path::new("/tmp/it's here/x.sock"));
         assert_eq!(q, "'/tmp/it'\\''s here/x.sock'");
+    }
+
+    #[test]
+    fn script_basename_maps_prod_identifier_to_prod_script() {
+        assert_eq!(script_basename("com.claudesk.app"), HOOK_SCRIPT_NAME_PROD);
+        assert_eq!(script_basename("com.claudesk.app"), "claudesk-hook.pl");
+    }
+
+    #[test]
+    fn script_basename_maps_dev_identifier_to_dev_script() {
+        // The dev overlay (tauri.dev.json) sets this identifier; the distinct
+        // basename is what isolates the deployed script + the settings.json marker.
+        assert_eq!(script_basename("com.claudesk.app.dev"), HOOK_SCRIPT_NAME_DEV);
+        assert_eq!(script_basename("com.claudesk.app.dev"), "claudesk-hook-dev.pl");
+    }
+
+    #[test]
+    fn script_basename_only_dev_suffix_triggers_dev_script() {
+        // Defensive: only a trailing `.dev` flips to the dev script. An identifier
+        // that merely contains "dev" elsewhere stays prod.
+        assert_eq!(script_basename("com.claudesk.devtools"), HOOK_SCRIPT_NAME_PROD);
+        assert_eq!(script_basename("com.dev.claudesk"), HOOK_SCRIPT_NAME_PROD);
     }
 }

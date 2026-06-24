@@ -105,7 +105,7 @@ The Tauri scaffold is added in WP1. Until then, the project is documentation-onl
 
 ```bash
 pnpm install
-pnpm tauri dev
+pnpm tauri:dev   # dev build — runs under the com.claudesk.app.dev identity (isolated from a prod install)
 ```
 
 To build a production `.app`:
@@ -113,6 +113,8 @@ To build a production `.app`:
 ```bash
 pnpm tauri build
 ```
+
+**Dev/prod isolation (2026-06-24):** `pnpm tauri:dev` launches with `--config src-tauri/tauri.dev.json`, which overlays a distinct bundle identifier `com.claudesk.app.dev` (productName "Claudesk Dev", window title "Claudesk (dev)"). This isolates the dev build's app-data dir, `projects.json`, hook socket, deployed hook script (`claudesk-hook-dev.pl`), and `~/.claude/settings.json` registration from a production install (`com.claudesk.app`) — so the installed `.app` and `pnpm tauri:dev` can run **concurrently** with no cross-talk (required for dogfooding Claudesk with Claudesk). The hook-script basename + registration marker derive from the running app's identifier at runtime (single source of truth — `hook_install::commands::script_basename`); a dev build's `projects.json` seeds once from the prod list on first launch. Plain `pnpm tauri dev` (no overlay) would collide with a prod install — use `pnpm tauri:dev`.
 
 ## Development Conventions
 
