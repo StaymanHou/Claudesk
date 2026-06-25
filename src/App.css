@@ -1704,6 +1704,14 @@ body,
   overflow-y: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.78rem;
+  /* WP8 item 2/A — stacked sticky offset. The Commits section pins at top:0; the
+     commit banner + per-file headers must pin BELOW it so they don't collide at 0
+     and hide behind the Commits panel (z2). `--diff-commits-h` is the MEASURED
+     height of the .diff-commits section, set by a ResizeObserver in DiffPanel.tsx
+     (it's dynamic: collapsed = header-only, expanded = header + a 33vh body). The
+     fallback (~2rem) matches the collapsed header height so first paint is correct
+     before the observer fires. */
+  --diff-commits-h: 2rem;
 }
 
 /* Shared collapse chevron for the Commits section + each file section header. */
@@ -1715,9 +1723,13 @@ body,
 
 /* ── Commits section (collapsible top region) ── */
 /* Pin the WHOLE commits section (header + the bounded, scrollable commit list)
-   at the top of .diff-scroll so the files area scrolls underneath it. The body is
+   at the top:0 of .diff-scroll so the files area scrolls underneath it. The body is
    max-height:33vh;overflow-y:auto, so the pinned panel stays a bounded region.
-   z-index above the file headers (z-index: 1) so they tuck under it. */
+   z-index above the file headers (z-index: 1) + the commit banner (z-index: 2 too,
+   but the banner pins lower). WP8 item 2/A: its measured height feeds the
+   `--diff-commits-h` var that offsets the banner + file headers below it (so they
+   stack instead of colliding at top:0 and hiding behind this z2 panel). Default
+   COLLAPSED (WP8 item B), so the resting height is just the header. */
 .diff-commits {
   border-bottom: 1px solid rgba(128, 128, 128, 0.2);
   background-color: #1a1a1a;
@@ -1845,11 +1857,12 @@ body,
   padding: 5px 10px;
   background-color: #18233a;
   border-bottom: 1px solid rgba(110, 168, 255, 0.3);
-  /* Pin the "← Working Directory" banner while a commit's files scroll. Above the
-     file headers; the Commits header sits above the files area, so within the
-     files area this is the topmost sticky element. */
+  /* WP8 item 2/A — pin the "← Working Directory" banner BELOW the Commits section
+     (cumulative offset, not top:0) so the two don't collide. Above the file headers
+     (z2 > the file header's z1). The file headers in turn pin below this banner —
+     see .diff-file-header's calc() top. */
   position: sticky;
-  top: 0;
+  top: var(--diff-commits-h, 2rem);
   z-index: 2;
 }
 .diff-back-btn {
@@ -1876,13 +1889,20 @@ body,
 /* The header row: a flex container holding the toggle button + (optional) the
    open-in-editor button. Owns the sticky + background; the toggle is a transparent
    button filling most of the row. z-index 1 so it tucks UNDER the sticky Commits
-   header / commit banner (z-index 2). */
+   header / commit banner (z-index 2).
+   WP8 item 2/A — pin BELOW the Commits section (and, in commit view, below the
+   banner too). `--diff-commit-banner-h` is 0 in working-dir view and the measured
+   banner height in commit view (set by DiffPanel's ResizeObserver), so the header
+   stacks below whatever sticky layers are above it instead of colliding at top:0
+   (which hid it behind the z2 Commits panel and let the next file's header shove it
+   off). With a cumulative top, each file's header stays pinned for the whole of
+   that file's diff. */
 .diff-file-header {
   display: flex;
   align-items: center;
   background-color: #202020;
   position: sticky;
-  top: 0;
+  top: calc(var(--diff-commits-h, 2rem) + var(--diff-commit-banner-h, 0px));
   z-index: 1;
 }
 .diff-file-header:hover {

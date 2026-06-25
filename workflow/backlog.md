@@ -1,5 +1,15 @@
 # Backlog
 
+## SURFACE-2026-06-25-CSS-RAW-EMPTY-UNDER-VITEST
+- **Source:** feature:build (QoL-WP8 P2 verify-codify)
+- **Target level:** product:arch (testing convention)
+- **Type:** gap
+- **Summary:** Vite's `?raw` query returns an EMPTY string for `.css` files under Vitest (CSS is routed through Vite's style pipeline, not the raw-text loader), unlike `.tsx?raw` which returns the source text. A codify test that did `import css from "../App.css?raw"` silently asserted against `""`.
+- **Context:** Discovered writing `stickyHeaderStacking.test.ts` (QoL-WP8 P2) — the first test in the repo to assert on `App.css` content. The `.tsx?raw` source-assertion pattern (used widely) does NOT extend to CSS.
+- **Suggested action:** For any future test asserting on `App.css` (or other `.css`) text, read it via `readFileSync(fileURLToPath(new URL("…/App.css", import.meta.url)), "utf8")` instead of a `?raw` import. Consider noting this in the testing conventions section of CLAUDE.md / arch.md if more CSS-assertion tests appear.
+- **Priority:** low
+- **Status:** RESOLVED-IN-PLACE 2026-06-25 (the WP8 test uses the fs-read pattern; this entry is the durable note for the next person)
+
 ## Code-quality findings — qol-wp6-new-workspace-hotkey (2026-06-25)
 - **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `47fdeb9`: (1) the `newWorkspaceChord` unit test's "is permissive on Ctrl/Alt" case sets neither `ctrlKey` nor `altKey` (interface omits them) so it duplicates the uppercase-N positive — name overpromises coverage; (2) the `newWorkspaceChord.ts` header's cross-reference to the `paletteCommands.ts` chord-ownership map is a drift seam if that map ever relocates (confirmed present + correct today — no action needed now). Reviewer: clean, convention-adherent, near-verbatim clone of the proven ⌘⇧+digit listener, accrues no debt, no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp6-new-workspace-hotkey — 2026-06-25`.
 - **Priority:** low (all)

@@ -14,7 +14,14 @@
 // here mutates the repo. Every IPC failure renders inline, never swallowed
 // (the WP6/WP7 error-surfacing lesson).
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CommitList } from "./CommitList";
 import { FileDiffSection, type HunkLoad } from "./FileDiffSection";
@@ -182,7 +189,9 @@ export function DiffPanel({
     initialCommitsState,
   );
   const { commits, loading: commitsLoading, lastPageLen } = commitsState;
-  const [commitsCollapsed, setCommitsCollapsed] = useState(false);
+  // Default COLLAPSED (WP8 item B): the commit history is secondary to the
+  // working-dir changes, so it starts folded and the user expands it on demand.
+  const [commitsCollapsed, setCommitsCollapsed] = useState(true);
 
   // ── selected-commit diff (bulk) ──
   const [commitDiff, setCommitDiff] = useState<{
@@ -190,6 +199,17 @@ export function DiffPanel({
     files: FileDiff[];
   } | null>(null);
   const [commitDiffError, setCommitDiffError] = useState<string | null>(null);
+
+  // ── WP8 item 2/A — stacked-sticky offsets ──
+  // The Commits section pins at top:0; the commit banner + per-file headers must
+  // pin BELOW it (and the file headers below the banner in commit view) so the
+  // sticky layers stack instead of colliding at top:0 (which hid the file header
+  // behind the z2 Commits panel and let the next file shove it off). We measure the
+  // live heights of .diff-commits + .diff-commit-banner and publish them as CSS
+  // custom properties on .diff-scroll; the CSS top: calc()s read them. A
+  // ResizeObserver keeps them current as the Commits section collapses/expands or
+  // the banner appears/disappears between working-dir and commit views.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch the working-dir changed-file list on becoming active / Refresh. Resets
   // the per-file lazy-load cache so re-opened files re-fetch fresh hunks.
@@ -235,6 +255,41 @@ export function DiffPanel({
       cancelled = true;
     };
   }, [active, projectPath, refreshSeq]);
+
+  // Keep the stacked-sticky CSS vars in sync with the live heights of the Commits
+  // section + (commit-view) banner. Re-runs when the structure that owns those
+  // nodes changes (view switch adds/removes the banner; list/commit load mounts the
+  // files area). The ResizeObserver then tracks height changes WITHIN a structure
+  // (collapse/expand of the Commits body, banner subject wrap). Sets the vars on
+  // .diff-scroll, which both top: calc()s read. Guarded for ResizeObserver
+  // availability (always present in WKWebView/modern browsers; the guard keeps
+  // jsdom + older runtimes from throwing).
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll || typeof ResizeObserver === "undefined") return;
+    const apply = () => {
+      const commits = scroll.querySelector<HTMLElement>(".diff-commits");
+      const banner = scroll.querySelector<HTMLElement>(".diff-commit-banner");
+      scroll.style.setProperty(
+        "--diff-commits-h",
+        `${commits ? commits.offsetHeight : 0}px`,
+      );
+      scroll.style.setProperty(
+        "--diff-commit-banner-h",
+        `${banner ? banner.offsetHeight : 0}px`,
+      );
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    const commits = scroll.querySelector<HTMLElement>(".diff-commits");
+    const banner = scroll.querySelector<HTMLElement>(".diff-commit-banner");
+    if (commits) ro.observe(commits);
+    if (banner) ro.observe(banner);
+    return () => ro.disconnect();
+    // Re-attach when the observed nodes can appear/disappear: view switch toggles
+    // the banner; commitsCollapsed/list/commitDiff change the Commits body + files
+    // mount. Height changes within a stable structure are caught by the observer.
+  }, [view.kind, commitsCollapsed, list.kind, commitDiff]);
 
   const loadMoreCommits = useCallback(() => {
     dispatchCommits({ type: "more-start" });
@@ -390,7 +445,7 @@ export function DiffPanel({
         </div>
       </div>
 
-      <div className="diff-scroll" data-testid="diff-scroll">
+      <div className="diff-scroll" data-testid="diff-scroll" ref={scrollRef}>
         <CommitList
           commits={commits}
           collapsed={commitsCollapsed}
