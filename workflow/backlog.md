@@ -412,11 +412,11 @@ forward — none M5-blocking). No escalations. -->
   1. **Collapse/expand-all button** — a control to collapse (or expand) ALL file-diff sections at once. The collapse model (`toggleCollapsed`/`isCollapsed` keyed by fileKey in diffModel.ts) already supports it; needs a "collapse all" that adds every current file key to the set + an "expand all" that clears it.
   2. **Sticky Working Directory + Commits headers** — the `.diff-statusbar` ("Working Directory") and the `.diff-commits-header` should stay pinned at the top of `.diff-scroll` while the files area scrolls. (Currently only `.diff-file-header` is `position:sticky`; the panel-level header + commits header scroll away.)
   3. **"Open file in editor" badge per file row** — a per-file affordance that opens the file into the EditorPanel (the easy version = open the CURRENT working-tree file). NOTE (operator's sharp catch): when viewing a COMMIT's diff, this should ideally open the file's content AT THAT COMMIT, which needs a NEW backend path (read a blob at a rev — `git2` tree-at-commit → blob), not just `read_file`. Decide scope at plan: current-file-only (cheap) vs. blob-at-rev (new backend).
-  4. **Changed-line highlighting too faint / washed out** — HIGHEST PRIORITY of the four. In the shipped CSS the add/remove line backgrounds (`rgba(46,160,67,.16)` / `rgba(248,81,73,.16)`) read as a faint full-width wash that makes the actual change hard to see (operator screenshot 2026-06-20). Investigate: bump the add/remove bg opacity/saturation, OR highlight only the changed text span rather than the full line, OR add a left accent bar per changed line. Verify it's not a stray selection/`::selection` artifact.
-- **Context:** WP4 grew M→L via the Sublime-Merge redesign; these were explicitly deferred to keep WP4 shippable. Item 4 is a readability issue worth doing soon; items 1–3 are enhancements.
-- **Suggested action:** A small follow-up WP after M2's critical path (or fold into WP5 RightPanelHost work, since the panel chrome is adjacent). Item 4 could even be a quick standalone task.
-- **Priority:** medium (item 4 = readability; items 1-3 = enhancement)
-- **Status:** pending
+  - _(Former item 4 — "changed-line highlighting too faint" — DROPPED 2026-06-24 by operator decision during QoL-WBS triage; not a problem in practice.)_
+- **Context:** WP4 grew M→L via the Sublime-Merge redesign; these were explicitly deferred to keep WP4 shippable. Items 1–3 are enhancements.
+- **Suggested action:** A small follow-up WP after M2's critical path (or fold into WP5 RightPanelHost work, since the panel chrome is adjacent).
+- **Priority:** medium (enhancements)
+- **Status:** pending — items 1–3 folded into the 2026-06-24 QoL temporary WBS (`docs/product/qol-wbs.md`)
 
 ## Code-quality findings — m2-wp4-git-diff-viewer (2026-06-20)
 - **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `4e2d742` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, no refactor warranted. Doc-comment drift from the PB.7 removal sweep (stale `[file_base_core]` doc-link + wrong `diff_*` API name) + dead untracked-opts on the staged path + a 3-ternary commit-diff gate. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp4-git-diff-viewer — 2026-06-20`.
@@ -472,14 +472,7 @@ forward — none M5-blocking). No escalations. -->
 - **Pickup shape:** all three are trivial `/feature-refactor` nits (or leave — #3 matches the existing CommandPalette pattern, arguably WAI). Dismiss any via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-06-20-WP10-ARROW-KEY-TREE-NAV
-- **Source:** feature:build (WP10 Phase 2, P2.6 stretch)
-- **Target level:** product:wbs
-- **Type:** new-work (deferred stretch)
-- **Summary:** The FileTree (WP10) supports click-to-open + click-to-toggle (the must-haves) but NOT arrow-key navigation (↑/↓ move, →/← expand/collapse, Enter open). Deferred at build to keep the WP boundary clean.
-- **Context:** Sublime/VS Code sidebars support keyboard tree nav; some operators prefer it. The treeState reducer + recursive TreeRow are structured to add it (a focused-index + keydown handler on the rail).
-- **Suggested action:** Add a focused-node index + a keydown handler on `.file-tree-rail` (↑/↓ over the flattened visible-node list, →/← expand/collapse, Enter = onOpen). Pure flatten-visible helper is vitest-testable. NOTE: WP10 finalize trimmed the unused `expand`/`collapse`/`collapse-all` reducer actions (now `toggle`-only) — re-add the `expand`/`collapse` actions when wiring →/← keys. Pick up in a later editor-polish pass or on request.
-- **Priority:** low
-- **Status:** pending
+- **Status:** DROPPED 2026-06-24 (operator decision during QoL-WBS triage) — arrow-key FileTree nav is not wanted; click-to-open + click-to-toggle suffices.
 
 ## SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE
 - **Source:** feature:build (WP7 Phase 2 verify-human BLOCKING)
@@ -508,8 +501,9 @@ forward — none M5-blocking). No escalations. -->
 - **Summary:** WP12 Phase 3 ships SYNCHRONOUS disk-change detection only — a `stat_file` (mtime+size) check on tab-activate + pre-save (silent reload when clean, conflict popup when dirty). There is NO live filesystem watcher: a file changed on disk while its tab is backgrounded + untouched is caught only when you next activate it, not in real time. Operator confirmed (2026-06-21, WP12 Phase 3 verify-human "all pass") that a live watcher is wanted **later down the line**.
 - **Context:** The synchronous check is the right v1 for a single-user local tool and was explicitly scoped that way in the WP12 spec (Out of Scope: "A live filesystem watcher — disk-change detection is the synchronous on-activate/on-save check only"). A watcher would give real-time reload/conflict surfacing without a tab switch, and is the same `notify`/`tauri-plugin-fs-watch` capability the Phase-2 status-surface milestone already plans for `workflow/.session.md`. The editor's `editorDocs` store + `diskConflict` decision fn are watcher-ready: a watcher event would feed the same `checkDisk`/`reloadFromDisk`/conflict path keyed by `DocEntry.marker`.
 - **Suggested action:** When a later milestone adds the `notify`/`tauri-plugin-fs-watch` watcher (or the Phase-2 status-surface milestone lands it), extend it to watch open editor documents: on a watched-file change event, run the existing `diskDecision` against the store entry (reload-when-clean / conflict-when-dirty) WITHOUT requiring a tab activation. Reuse `editorDocs` (`set-marker`/`load-ok`) + the Phase-3 conflict popup — no new decision logic needed, just the event source. Debounce rapid writes (editors/formatters write-then-rename).
-- **Priority:** low (deferred to a later milestone; the synchronous check covers the operator's daily flow)
-- **Status:** pending
+- **SCOPE BROADENED 2026-06-24:** the operator hit the sibling gap LIVE while dogfooding Claudesk — the **FileTree rail does NOT refresh** when files are added/removed/renamed on disk externally (a file created by an out-of-app process after the tree rendered is invisible until the folder is manually collapsed/re-expanded; ⌘P file-finder DOES see it because the finder re-walks on open). The `notify` watcher is the single seam that serves BOTH consumers: (1) the FileTree (re-walk / patch the tree on fs change — the gap just hit), and (2) open editor documents (the original editor-reload scope above). Build the watcher once, fan out to both.
+- **Priority:** ~~low~~ → **HIGH** (PULLED FORWARD 2026-06-24 by operator — the stale-tree friction bites during normal dogfooding; the operator hit it in this very session)
+- **Status:** PROMOTED 2026-06-24 into the QoL temporary WBS as **WP1** (`docs/product/qol-wbs.md`) — sequenced first as a high-priority patch; scope = the `notify` watcher seam feeding both the FileTree refresh and open-editor-doc reload.
 
 ## Code-quality findings — m2-wp12-editor-tab-strip (2026-06-21)
 - **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `f2c86d7` (0 CRITICAL, 0 MAJOR). All low-stakes: (1) dead tab-level `dirty` field + `set-dirty` event in `openFiles.ts` — residue from the Phase-2S shared-doc move (dirty now lives in the store); (2) the dirty-close guard over-warns when refCount>1 (closing one view of a dirty file open in another pane loses nothing — gate on last-view); (3) intra-feature "Phase 2S/3/4" comment tags that won't age (use "WP12"). Reviewer rated the feature well-built, low-debt, advancing the codebase; no refactor pass warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp12-editor-tab-strip — 2026-06-21`.
