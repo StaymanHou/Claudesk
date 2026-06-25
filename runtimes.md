@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-25  # QoL-WP8 P2 verify-codify — pnpm test 591 pass
+updated: 2026-06-25  # /release v0.1.2 — pnpm tauri build cold 73s
 ---
 
 # Runtime Registry
@@ -32,9 +32,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 78s (2026-06-24, /release v0.1.1: COLD build after `cargo clean` — full dep-tree recompile + .app + .dmg)
+- **Last:** 73s (2026-06-25, /release v0.1.2: COLD build after `cargo clean` — full dep-tree recompile + .app + .dmg)
 - **Use timeout:** 600000
 - **History:**
+  - 73s — 2026-06-25 (/release v0.1.2 cold build: cargo clean removed 9.7GiB, full recompile ~50s + bundle)
   - 78s — 2026-06-24 (/release v0.1.1 cold build: cargo clean removed 24.4GiB, full recompile ~49s + bundle)
   - 32s — 2026-06-24 (dev-prod-isolation Phase 2 verify-human: prod .app for the concurrent test)
   - 40s — 2026-06-16
