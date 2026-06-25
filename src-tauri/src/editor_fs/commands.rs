@@ -9,7 +9,10 @@
 
 use std::path::Path;
 
-use super::{delete_file_core, read_file_core, stat_file_core, write_file_core, FileMarker};
+use super::{
+    create_dir_core, delete_file_core, read_file_core, stat_file_core, trash_path_core,
+    write_file_core, FileMarker,
+};
 
 /// Read a UTF-8 text file under the workspace `root`. Errors (missing file, binary
 /// content, path escaping the workspace) come back as a `String` for the UI to
@@ -44,4 +47,25 @@ pub fn stat_file(root: String, path: String) -> Result<FileMarker, String> {
 #[tauri::command]
 pub fn delete_file(root: String, path: String) -> Result<(), String> {
     delete_file_core(Path::new(&root), Path::new(&path)).map_err(|e| e.to_string())
+}
+
+/// Move a path (file OR directory) under the workspace `root` to the macOS Trash
+/// (QoL-WP5b — recoverable folder delete). Confined to `root` by the same guard as
+/// `delete_file`/`write_file`; a missing target is an error. Unlike `delete_file` (a
+/// hard `remove_file`, single-file only), this is recoverable from Finder — the choice
+/// for the folder-delete blast radius. Returns the error as a `String` so a failed
+/// trash is surfaced in the UI, never swallowed. WP5b wires it to directory rows.
+#[tauri::command]
+pub fn trash_path(root: String, path: String) -> Result<(), String> {
+    trash_path_core(Path::new(&root), Path::new(&path)).map_err(|e| e.to_string())
+}
+
+/// Create a directory (and any missing intermediate dirs) under the workspace `root`
+/// (QoL-WP5b — the "new folder" affordance + the nested-file create's `mkdir -p`).
+/// Confined to `root` by the parent-tolerant lexical guard; idempotent on an existing
+/// dir; an escaping path is rejected. Returns the error as a `String` so a failed create
+/// is surfaced in the UI, never swallowed.
+#[tauri::command]
+pub fn create_dir(root: String, path: String) -> Result<(), String> {
+    create_dir_core(Path::new(&root), Path::new(&path)).map_err(|e| e.to_string())
 }

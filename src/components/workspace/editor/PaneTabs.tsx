@@ -61,6 +61,12 @@ export interface PaneTabsHandle {
    * pane holds no tab for `path`.
    */
   closeTabsForPath: (path: string) => void;
+  /**
+   * QoL-WP5b — close THIS pane's tab(s) UNDER a deleted folder (prefix match), WITHOUT
+   * the dirty guard (the folder is gone; the parent's folder-delete confirm covered loss).
+   * No-op if the pane holds no tab under `dir`.
+   */
+  closeTabsUnderPath: (dir: string) => void;
 }
 
 interface PaneTabsProps {
@@ -245,6 +251,13 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
       [],
     );
 
+    // QoL-WP5b — close every tab UNDER a deleted folder (prefix match). No dirty guard:
+    // the folder-delete confirm covered the loss (mirrors closeTabsForPath).
+    const closeTabsUnderPath = useCallback(
+      (dir: string) => dispatch({ type: "close-under-path", dir }),
+      [],
+    );
+
     useImperativeHandle(
       ref,
       () => ({
@@ -253,8 +266,15 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
         addSynthetic,
         closeActiveTab: () => closeActiveTabRef.current(),
         closeTabsForPath,
+        closeTabsUnderPath,
       }),
-      [openFile, activateIndex, addSynthetic, closeTabsForPath],
+      [
+        openFile,
+        activateIndex,
+        addSynthetic,
+        closeTabsForPath,
+        closeTabsUnderPath,
+      ],
     );
 
     const onCloseChoice = (choice: CloseChoice) => {

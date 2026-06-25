@@ -38,6 +38,21 @@ export interface TreeNode {
  * before files**, each group alphabetical (case-insensitive) — the Sublime/VS Code
  * sidebar convention. Pure: same input → same output, no DOM.
  */
+/**
+ * QoL-WP5b — count the `fs_tree` entries strictly UNDER `dir` (files + subdirs), for the
+ * folder-delete confirm's blast-radius message. Prefix match on `dir + "/"`, so it's
+ * precise (`src` counts `src/a.ts` but not `src-utils/a.ts`) and excludes the dir itself.
+ * Pure (no DOM); operates on the same flat `fs_tree` list buildTree nests.
+ */
+export function countDescendants(entries: TreeEntry[], dir: string): number {
+  const prefix = dir + "/";
+  let n = 0;
+  for (const e of entries) {
+    if (e.path.startsWith(prefix)) n++;
+  }
+  return n;
+}
+
 export function buildTree(entries: TreeEntry[]): TreeNode[] {
   const roots: TreeNode[] = [];
   // Index every node by its full path so children attach to the right parent

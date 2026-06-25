@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-24
-status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5 shipped 2026-06-25; WP6–WP8 pending
+status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5 shipped 2026-06-25; WP5b (next) + WP6–WP8 pending
 context: between-milestone QoL/lifecycle sweep, filed after M4 close, before M5 (PiP) planning
 ---
 
@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59)*
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → **WP5b** → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59)* — **WP5b inserted 2026-06-25 as the immediate next WP** (operator promoted the WP5 follow-ups ahead of WP6).
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -141,6 +141,29 @@ and delete this file.
 - **Close any open tab** for the deleted file (the file is gone; its `DocEntry`/tab must be torn down — reuse the PaneTabs close path). Mind the dirty-tab case (deleting a file with unsaved edits — confirm covers it).
 - Tree refresh after delete rides the **WP0 fs-watcher** for free (the external `remove` event re-walks the tree) — but also trigger an explicit refresh so it's immediate even if the watcher debounce lags.
 - Folder delete (recursive) is OUT of scope for v1 unless trivial — single-file delete first.
+
+---
+
+## WP5b — Editor file management, folder depth (create-in-folder + delete-folder)  `[priority: MEDIUM]`  `← immediate next; extends WP5`
+**Backlog:** SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS
+**Size:** small (A) + small/medium (B) · **Type:** new editor feature (depth on the shipped WP5 create/delete)
+**Why immediate-next (operator decision 2026-06-25):** surfaced live at WP5 verify-human — the two natural extensions of the just-shipped create/delete. Promoted ahead of WP6 (which stays LOW). (A) is cheap + low-risk and the backend already supports it; (B) is the riskier piece (a wrong click wipes a subtree) and carries the interesting design calls.
+
+**What:** Two depth extensions of WP5's root-only-create / single-file-delete: **(A)** create a file INSIDE a folder (today the new-file input creates at the workspace root and rejects any `/`); **(B)** delete a FOLDER (recursive) (today `delete_file_core` rejects a directory with `IsDirectory` and the ✕ renders on file rows only).
+
+**Tasks (A) — create-in-folder [cheaper, do first]:**
+- The backend already supports it: `editor_fs::write_file`/`resolve_within` confine to root but allow any EXISTING-parent subpath (proven by the `write_in_nested_existing_dir_round_trips` test). The blockers are purely frontend.
+- `proposeNewFilePath(dir, name)` already takes a `dir` arg (passed `null` today) — wire a real dir through it. Two viable UX shapes (decide at plan time): (i) a per-DIR-row "+ new file here" affordance that passes that dir; (ii) allow a relative path in the input (`sub/x.txt`) but ONLY when the parent dir already exists (no `mkdir -p`, matching the backend constraint).
+- If nested-dir create (parent doesn't exist yet) is wanted, add `create_dir_all` of the parent to the create path — otherwise keep the existing-parent-only guard and reject with a clear inline message. Reserve a separate "new folder" affordance as an optional sub-item.
+- Collision guard still applies (reuse `collides`); refresh via the existing `fsTreeRefreshKey` bump.
+
+**Tasks (B) — delete-folder (recursive) [riskier]:**
+- Backend: a new `delete_dir(root, path)` command in `editor_fs` — root-confined `fs::remove_dir_all` mirroring `delete_file`'s `resolve_within`. **Decide: macOS Trash (recoverable) vs hard `remove_dir_all`** — given the blast radius, Trash (a `trash` crate / `NSFileManager`) is the recommended default, unlike WP5's hard single-file delete.
+- UI: a delete ✕ on DIR rows (today file-rows only). A STRONGER confirm than the single-file `deleteFileSpec` — name + "and everything inside it" + ideally a descendant count so the operator sees the blast radius before confirming.
+- Tab teardown: the current `close-path` is EXACT-match; a folder delete needs a **prefix-match** teardown (close every open tab whose path is under the deleted dir). Extend `closeTabsForPath` (or add `closeTabsUnderPath`) + the `openFiles` reducer accordingly; fan out to every pane as WP5 does.
+- Tree refresh via `fsTreeRefreshKey` (+ the WP0 watcher catches the external removes).
+
+**Pairs-with WP5:** direct extension — reuses `proposeNewFilePath`'s `dir` arg, the `resolve_within` guard, the per-pane `closeTabsForPath` fan-out, and the FileTree row/✕ + ConfirmModal affordances. (A) and (B) can land in one feature or as two phases.
 
 ---
 

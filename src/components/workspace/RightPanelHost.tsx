@@ -30,7 +30,11 @@ import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
 import { FileTree, type FileTreeHandle } from "./filetree/FileTree";
 import { isNewFileChord } from "./filetree/newFileChord";
-import { proposeNewFilePath, collides } from "./filetree/newFilePath";
+import {
+  proposeNewFilePath,
+  proposeNewDirPath,
+  collides,
+} from "./filetree/newFilePath";
 import {
   clampRailWidth,
   loadRailWidth,
@@ -47,7 +51,11 @@ import type { FileMatches, HighlightTarget } from "./search/searchModel";
 import { formatFindResults, type FlatMatch } from "./search/findResultsBuffer";
 import { replaceAllSpec, type ReplaceAllChoice } from "./search/replaceConfirm";
 import { ConfirmModal } from "./editor/ConfirmModal";
-import { deleteFileSpec, type DeleteFileChoice } from "./editor/confirmDialog";
+import {
+  deleteFileSpec,
+  deleteFolderSpec,
+  type DeleteFileChoice,
+} from "./editor/confirmDialog";
 import { labelForPath } from "./editor/PaneTabs";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -101,6 +109,13 @@ export function RightPanelHost({
   // open + tree refresh, and the delete flow's confirm + delete_file + tab teardown.
   const fileTreeRef = useRef<FileTreeHandle>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  // QoL-WP5b — the FOLDER pending a delete-confirm (null = no dialog). Carries the
+  // descendant count (resolved by FileTree from its fs_tree entries) so the stronger
+  // confirm can show the blast radius.
+  const [pendingDeleteFolder, setPendingDeleteFolder] = useState<{
+    path: string;
+    count: number;
+  } | null>(null);
 
   // QoL-WP1 — register this workspace's unsaved-doc probe with App's close guard. The
   // probe reads the editor's live dirty count at call time (the close handler invokes it
@@ -281,23 +296,58 @@ export function RightPanelHost({
   // focused pane, and bump fsTreeRefreshKey for an immediate tree refresh (the WP0
   // watcher would also catch it, but the explicit bump avoids debounce lag). Returns an
   // error string for the input to show inline, or null on success. IPC errors surface
-  // (never swallowed — the WP6 lesson). v1 creates at the workspace ROOT.
+  // (never swallowed — the WP6 lesson). QoL-WP5b: `dir` is the project-relative dir to
+  // create in (null = the workspace root, the WP5 behavior); the backend's existing-parent
+  // `resolve_within` guard already accepts any subpath under an existing dir — no nested
+  // (`mkdir -p`) create, matching the no-separator name rule.
+  // QoL-WP5b P3: `allowNested` — a `/`-bearing name (`sub/x.txt`) creates the intermediate
+  // dirs via `create_dir` (mkdir -p) before the write, so the user can create a file in a
+  // not-yet-existing folder. A single-segment name keeps the Phase-1 behavior.
   const createFile = (
     name: string,
     existingPaths: string[],
+    dir: string | null,
   ): Promise<string | null> => {
-    const proposed = proposeNewFilePath(null, name);
+    const proposed = proposeNewFilePath(dir, name, /* allowNested */ true);
     if (!proposed.ok) return Promise.resolve(proposed.reason);
     if (collides(proposed.path, existingPaths)) {
       return Promise.resolve(`${proposed.path} already exists.`);
     }
-    return invoke<void>("write_file", {
-      root: projectPath,
-      path: proposed.path,
-      contents: "",
-    })
+    // mkdir -p the file's parent if the name was nested (a no-op for a root/existing-dir
+    // file — create_dir is idempotent). Then write the empty file + open it.
+    const slash = proposed.path.lastIndexOf("/");
+    const parent = slash === -1 ? null : proposed.path.slice(0, slash);
+    const ensureParent = parent
+      ? invoke<void>("create_dir", { root: projectPath, path: parent })
+      : Promise.resolve();
+    return ensureParent
+      .then(() =>
+        invoke<void>("write_file", {
+          root: projectPath,
+          path: proposed.path,
+          contents: "",
+        }),
+      )
       .then(() => {
         openFile(proposed.path);
+        setFsTreeRefreshKey((k) => k + 1);
+        return null;
+      })
+      .catch((e: unknown) => String(e));
+  };
+
+  // QoL-WP5b P3 — create a new FOLDER (called by the FileTree inline input in folder mode).
+  // Validate the path (proposeNewDirPath), then create_dir (mkdir -p, idempotent) and bump
+  // the tree refresh so the folder appears. Returns an inline error string or null. No
+  // openFile (a folder isn't an editor doc); no collision guard (create_dir is idempotent).
+  const createDir = (
+    name: string,
+    dir: string | null,
+  ): Promise<string | null> => {
+    const proposed = proposeNewDirPath(dir, name);
+    if (!proposed.ok) return Promise.resolve(proposed.reason);
+    return invoke<void>("create_dir", { root: projectPath, path: proposed.path })
+      .then(() => {
         setFsTreeRefreshKey((k) => k + 1);
         return null;
       })
@@ -325,6 +375,30 @@ export function RightPanelHost({
       .catch((e: unknown) => {
         // Surface the failure rather than swallow it; the tree stays as-is.
         console.error(`delete_file failed for ${path}:`, e);
+      });
+  };
+
+  // QoL-WP5b — a folder delete ✕ was clicked: open the stronger confirm (the actual
+  // recursive trash happens on confirm). FileTree resolves the descendant count.
+  const requestDeleteFolder = (path: string, count: number) =>
+    setPendingDeleteFolder({ path, count });
+
+  // The folder-delete confirm resolved. On "delete": trash_path (recoverable — moves the
+  // whole subtree to the macOS Trash, NOT a hard remove_dir_all), then close every open
+  // tab UNDER the deleted dir across all panes (prefix match) and bump the tree refresh.
+  // On "cancel": change nothing. A failed trash surfaces (console, like the single-file
+  // delete — a future toast could show it); the tree stays as-is.
+  const onDeleteFolderConfirm = (choice: DeleteFileChoice) => {
+    const target = pendingDeleteFolder;
+    setPendingDeleteFolder(null);
+    if (choice !== "delete" || !target) return;
+    void invoke<void>("trash_path", { root: projectPath, path: target.path })
+      .then(() => {
+        editorSplitRef.current?.closeTabsUnderPath(target.path);
+        setFsTreeRefreshKey((k) => k + 1);
+      })
+      .catch((e: unknown) => {
+        console.error(`trash_path failed for ${target.path}:`, e);
       });
   };
 
@@ -518,6 +592,19 @@ export function RightPanelHost({
             ＋
           </button>
         )}
+        {/* QoL-WP5b P3 — header "new folder" (⊞), creates at the workspace root. */}
+        {!treeCollapsed && (
+          <button
+            type="button"
+            className="file-tree-newfile-btn"
+            data-testid="file-tree-newfolder-btn"
+            aria-label="New folder"
+            title="New folder"
+            onClick={() => fileTreeRef.current?.beginNewFolder()}
+          >
+            ⊞
+          </button>
+        )}
       </div>
       {/* The tree stays MOUNTED even when collapsed — CSS (.is-collapsed
           .file-tree-body { display:none }) hides the body in the strip. Keeping it
@@ -529,7 +616,9 @@ export function RightPanelHost({
         openPath={activePath}
         onOpen={openFile}
         onCreateFile={createFile}
+        onCreateDir={createDir}
         onDeleteFile={requestDeleteFile}
+        onDeleteFolder={requestDeleteFolder}
         gitStatusRefreshKey={gitStatusRefreshKey}
         fsTreeRefreshKey={fsTreeRefreshKey}
       />
@@ -753,6 +842,19 @@ export function RightPanelHost({
         <ConfirmModal
           spec={deleteFileSpec(labelForPath(pendingDelete))}
           onChoose={onDeleteConfirm}
+        />
+      )}
+
+      {/* QoL-WP5b — delete-FOLDER confirm (danger, stronger than single-file). Shows the
+          folder basename + descendant count + "moved to Trash (recoverable)". Only the
+          focused workspace mounts it; resolving (delete/cancel) clears pendingDeleteFolder. */}
+      {visible && pendingDeleteFolder && (
+        <ConfirmModal
+          spec={deleteFolderSpec(
+            labelForPath(pendingDeleteFolder.path),
+            pendingDeleteFolder.count,
+          )}
+          onChoose={onDeleteFolderConfirm}
         />
       )}
     </div>

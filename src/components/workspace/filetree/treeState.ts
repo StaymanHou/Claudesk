@@ -14,13 +14,18 @@ export type ExpandedDirs = ReadonlySet<string>;
 
 export const initialExpanded: ExpandedDirs = new Set<string>();
 
-export type TreeAction = { type: "toggle"; path: string };
+export type TreeAction =
+  | { type: "toggle"; path: string }
+  // QoL-WP5b — idempotently EXPAND a dir (a no-op if already expanded). Used when the
+  // per-dir-row "＋" opens the new-file input, so the inline input (rendered under the
+  // dir) is visible; unlike "toggle" it never collapses an already-expanded dir.
+  | { type: "expand"; path: string };
 
 /**
  * Pure reducer over the expanded-dir set. Returns a NEW set on change (so React
- * sees a new reference). The FileTree only ever toggles a dir on click; a
- * collapse-all affordance would add its own action when/if WP11's tree polish wants
- * one.
+ * sees a new reference). The FileTree toggles a dir on click and expands one when
+ * the new-file input opens scoped to it; a collapse-all affordance would add its own
+ * action when/if WP11's tree polish wants one.
  */
 export function treeReducer(
   state: ExpandedDirs,
@@ -34,6 +39,12 @@ export function treeReducer(
       } else {
         next.add(action.path);
       }
+      return next;
+    }
+    case "expand": {
+      if (state.has(action.path)) return state; // already expanded — no churn
+      const next = new Set(state);
+      next.add(action.path);
       return next;
     }
     default:

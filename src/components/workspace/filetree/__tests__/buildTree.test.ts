@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTree, type TreeEntry } from "../buildTree";
+import { buildTree, countDescendants, type TreeEntry } from "../buildTree";
 
 const e = (path: string, is_dir: boolean): TreeEntry => ({ path, is_dir });
 
@@ -78,5 +78,39 @@ describe("buildTree — flat fs_tree entries → nested tree", () => {
   it("ignores a stray empty-path entry", () => {
     const tree = buildTree([e("", true), e("real.txt", false)]);
     expect(tree.map((n) => n.name)).toEqual(["real.txt"]);
+  });
+});
+
+describe("countDescendants (QoL-WP5b — folder-delete blast radius)", () => {
+  const entries: TreeEntry[] = [
+    e("src", true),
+    e("src/a.ts", false),
+    e("src/b.ts", false),
+    e("src/nested", true),
+    e("src/nested/d.ts", false),
+    e("src-utils", true), // sibling — must NOT be counted under "src"
+    e("src-utils/x.ts", false),
+    e("lib", true),
+    e("lib/c.ts", false),
+  ];
+
+  it("counts every entry strictly under the dir (files + subdirs), excluding the dir itself", () => {
+    // src/a.ts, src/b.ts, src/nested, src/nested/d.ts = 4
+    expect(countDescendants(entries, "src")).toBe(4);
+  });
+
+  it("is prefix-precise: 'src' does not count the sibling 'src-utils' subtree", () => {
+    // If it weren't precise, src-utils + src-utils/x.ts would inflate the count.
+    expect(countDescendants(entries, "src")).toBe(4);
+    expect(countDescendants(entries, "src-utils")).toBe(1); // just src-utils/x.ts
+  });
+
+  it("returns 0 for an empty dir", () => {
+    expect(countDescendants(entries, "lib")).toBe(1); // lib/c.ts
+    expect(countDescendants([e("empty", true)], "empty")).toBe(0);
+  });
+
+  it("counts a nested dir's own descendants", () => {
+    expect(countDescendants(entries, "src/nested")).toBe(1); // src/nested/d.ts
   });
 });

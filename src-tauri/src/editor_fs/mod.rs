@@ -63,6 +63,11 @@ pub enum EditorFsError {
     OutsideWorkspace { requested: String, root: String },
     #[error("path {0} is a directory; recursive directory delete is not supported")]
     IsDirectory(String),
+    #[error("could not move {path} to Trash: {source}")]
+    Trash {
+        path: String,
+        source: trash::Error,
+    },
 }
 
 /// Resolve `requested` against `root` and confirm the result stays inside `root`.
@@ -110,6 +115,63 @@ fn resolve_within(root: &Path, requested: &Path) -> Result<PathBuf, EditorFsErro
         });
     }
     Ok(parent_canon.join(file_name))
+}
+
+/// Resolve `requested` against `root` and confirm containment **lexically** — WITHOUT
+/// requiring the target or its parent to already exist (QoL-WP5b).
+///
+/// [`resolve_within`] canonicalizes the target's parent, so it can only validate a path
+/// whose parent dir is already on disk. Creating a new (possibly nested) directory needs
+/// to validate `a/b/c` where `a/b` does not exist yet — canonicalizing its parent would
+/// fail. This resolver instead normalizes `.`/`..`/empty components purely in memory and
+/// asserts the result stays under the canonicalized `root`. A leading `..` that would
+/// climb above root (or an absolute path pointing elsewhere) is rejected.
+///
+/// Safety note: this is used ONLY for the create paths (`create_dir_all` + write-into-a-
+/// to-be-created-nested-dir). `create_dir_all` does not follow a symlink to write outside
+/// a lexically-contained path, and the read/write/delete primitives keep the stricter
+/// canonicalizing [`resolve_within`] — so the symlink-traversal class those guard against
+/// is unchanged. Returns the absolute, lexically-normalized target path.
+fn resolve_within_lexical(root: &Path, requested: &Path) -> Result<PathBuf, EditorFsError> {
+    use std::path::Component;
+
+    let root_canon = root.canonicalize().map_err(|e| {
+        EditorFsError::Io(std::io::Error::new(e.kind(), format!("root {root:?}: {e}")))
+    })?;
+
+    let joined = if requested.is_absolute() {
+        requested.to_path_buf()
+    } else {
+        root_canon.join(requested)
+    };
+
+    // Normalize purely in memory: resolve `.` (skip) and `..` (pop), keep normal segments.
+    // A `..` that would pop above the accumulated path is an escape attempt → reject.
+    let mut normalized = PathBuf::new();
+    for comp in joined.components() {
+        match comp {
+            Component::Prefix(p) => normalized.push(p.as_os_str()),
+            Component::RootDir => normalized.push(Component::RootDir.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(EditorFsError::OutsideWorkspace {
+                        requested: requested.display().to_string(),
+                        root: root.display().to_string(),
+                    });
+                }
+            }
+            Component::Normal(seg) => normalized.push(seg),
+        }
+    }
+
+    if !normalized.starts_with(&root_canon) {
+        return Err(EditorFsError::OutsideWorkspace {
+            requested: requested.display().to_string(),
+            root: root.display().to_string(),
+        });
+    }
+    Ok(normalized)
 }
 
 /// Read a UTF-8 text file under `root`. Rejects paths escaping the workspace and
@@ -174,6 +236,46 @@ pub fn delete_file_core(root: &Path, requested: &Path) -> Result<(), EditorFsErr
         return Err(EditorFsError::IsDirectory(target.display().to_string()));
     }
     std::fs::remove_file(&target)?;
+    Ok(())
+}
+
+/// Move a path (file OR directory) under `root` to the macOS Trash (QoL-WP5b). Confined
+/// to `root` by the same [`resolve_within`] guard as every other op, so a `..`/absolute-
+/// outside/symlink-out target can never trash anything outside the open project. Unlike
+/// [`delete_file_core`] (a hard `remove_file`, single-file only), this is **recoverable**:
+/// the OS moves the target to the Trash, where the operator can restore it from Finder —
+/// the deliberate choice for the folder-delete blast radius (one misclick wipes a subtree).
+/// It accepts both files and dirs (so a future WP could route single-file delete through
+/// it too), but WP5b wires it only to directory rows. A missing target is an
+/// [`EditorFsError::Io`] (so the UI treats "nothing to delete" as a real error, not a
+/// silent success); a Trash-move failure is [`EditorFsError::Trash`].
+pub fn trash_path_core(root: &Path, requested: &Path) -> Result<(), EditorFsError> {
+    let target = resolve_within(root, requested)?;
+    // `resolve_within` does not assert the target exists (it allows a not-yet-existing
+    // file on write); a delete of a missing path must be a real error, not a Trash no-op.
+    if !target.exists() {
+        return Err(EditorFsError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{} does not exist", target.display()),
+        )));
+    }
+    trash::delete(&target).map_err(|source| EditorFsError::Trash {
+        path: target.display().to_string(),
+        source,
+    })
+}
+
+/// Create a directory (and any missing intermediate dirs) under `root` (QoL-WP5b).
+/// Confined to `root` by [`resolve_within_lexical`] — the parent-tolerant guard — because
+/// the requested path may be nested with not-yet-existing intermediate components. Uses
+/// `std::fs::create_dir_all`, so it is **idempotent**: creating an already-existing dir is
+/// `Ok(())`, not an error (matches the operator mental model — "ensure this folder
+/// exists"). An escaping path (`..` above root, absolute-outside) is rejected with
+/// [`EditorFsError::OutsideWorkspace`] and nothing is created. Backs both the explicit
+/// "new folder" affordance and the nested-file create's `mkdir -p` of the file's parent.
+pub fn create_dir_core(root: &Path, requested: &Path) -> Result<(), EditorFsError> {
+    let target = resolve_within_lexical(root, requested)?;
+    std::fs::create_dir_all(&target)?;
     Ok(())
 }
 
@@ -414,5 +516,149 @@ mod tests {
         write_file_core(dir.path(), Path::new("new.txt"), "").unwrap();
         let out = read_file_core(dir.path(), Path::new("new.txt")).unwrap();
         assert_eq!(out, "");
+    }
+
+    // QoL-WP5b — trash_path_core (recoverable delete of a file OR directory). These run
+    // on the host macOS, so the target is genuinely moved to the Trash (recoverable,
+    // harmless — they're TempDir scratch files). The tests assert the contract we own:
+    // the target is GONE from the workspace root, and an escaping path is rejected with
+    // the outside target surviving. OS-level recoverability is the crate's job, not ours.
+
+    #[test]
+    fn trash_removes_a_directory_and_its_contents_from_the_root() {
+        let dir = TempDir::new().unwrap();
+        let sub = dir.path().join("subdir");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("inner.txt"), "bye").unwrap();
+        std::fs::write(sub.join("nested.rs"), "fn x() {}").unwrap();
+        trash_path_core(dir.path(), Path::new("subdir")).unwrap();
+        // The whole subtree is gone from the workspace (moved to Trash, not left behind).
+        assert!(!sub.exists());
+    }
+
+    #[test]
+    fn trash_also_works_for_a_single_file() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("doomed.txt"), "bye").unwrap();
+        trash_path_core(dir.path(), Path::new("doomed.txt")).unwrap();
+        assert!(!dir.path().join("doomed.txt").exists());
+    }
+
+    #[test]
+    fn trash_path_escaping_root_is_rejected_and_outside_dir_survives() {
+        let dir = TempDir::new().unwrap();
+        // A sibling dir outside the workspace root that must NOT be trashable.
+        let outside = dir.path().parent().unwrap().join("outside-keep-dir");
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("keep.txt"), "keep me").unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir(&ws).unwrap();
+        let result = trash_path_core(&ws, Path::new("../../outside-keep-dir"));
+        assert!(
+            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            "got {result:?}"
+        );
+        assert!(
+            outside.exists(),
+            "the outside dir must survive a rejected trash"
+        );
+        let _ = std::fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn trash_absolute_path_outside_root_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let other = TempDir::new().unwrap();
+        let victim = other.path().join("elsewhere");
+        std::fs::create_dir(&victim).unwrap();
+        let result = trash_path_core(dir.path(), &victim);
+        assert!(matches!(
+            result,
+            Err(EditorFsError::OutsideWorkspace { .. })
+        ));
+        assert!(victim.exists());
+    }
+
+    #[test]
+    fn trash_missing_target_is_io_error() {
+        let dir = TempDir::new().unwrap();
+        let result = trash_path_core(dir.path(), Path::new("no-such-dir"));
+        assert!(matches!(result, Err(EditorFsError::Io(_))));
+    }
+
+    // QoL-WP5b — create_dir_core (new folder + nested-file-parent mkdir -p) + its
+    // parent-tolerant lexical containment guard.
+
+    #[test]
+    fn create_dir_makes_a_nested_dir_under_root() {
+        let dir = TempDir::new().unwrap();
+        create_dir_core(dir.path(), Path::new("a/b/c")).unwrap();
+        assert!(dir.path().join("a/b/c").is_dir());
+    }
+
+    #[test]
+    fn create_dir_is_idempotent_on_an_existing_dir() {
+        let dir = TempDir::new().unwrap();
+        std::fs::create_dir(dir.path().join("existing")).unwrap();
+        // Creating it again is Ok (create_dir_all semantics), not an error.
+        create_dir_core(dir.path(), Path::new("existing")).unwrap();
+        assert!(dir.path().join("existing").is_dir());
+    }
+
+    #[test]
+    fn create_dir_then_write_a_nested_file_round_trips() {
+        // The nested-file-create path: mkdir -p the parent, then write the file.
+        let dir = TempDir::new().unwrap();
+        create_dir_core(dir.path(), Path::new("src/util")).unwrap();
+        write_file_core(dir.path(), Path::new("src/util/helpers.rs"), "fn h() {}").unwrap();
+        let out = read_file_core(dir.path(), Path::new("src/util/helpers.rs")).unwrap();
+        assert_eq!(out, "fn h() {}");
+    }
+
+    #[test]
+    fn create_dir_escaping_root_with_dotdot_is_rejected_and_nothing_created() {
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir(&ws).unwrap();
+        let result = create_dir_core(&ws, Path::new("../escapee-dir"));
+        assert!(
+            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            "got {result:?}"
+        );
+        assert!(!dir.path().join("escapee-dir").exists());
+    }
+
+    #[test]
+    fn create_dir_climbing_above_root_via_dotdot_chain_is_rejected() {
+        // A `..` chain that pops above root must be rejected, not silently clamped.
+        let dir = TempDir::new().unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir(&ws).unwrap();
+        let result = create_dir_core(&ws, Path::new("a/../../../../tmp/evil"));
+        assert!(matches!(
+            result,
+            Err(EditorFsError::OutsideWorkspace { .. })
+        ));
+    }
+
+    #[test]
+    fn create_dir_absolute_path_outside_root_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let other = TempDir::new().unwrap();
+        let victim = other.path().join("evil-dir");
+        let result = create_dir_core(dir.path(), &victim);
+        assert!(matches!(
+            result,
+            Err(EditorFsError::OutsideWorkspace { .. })
+        ));
+        assert!(!victim.exists());
+    }
+
+    #[test]
+    fn create_dir_with_interior_dotdot_that_stays_inside_is_allowed() {
+        // `a/../b` normalizes to `b` (still inside root) — allowed.
+        let dir = TempDir::new().unwrap();
+        create_dir_core(dir.path(), Path::new("a/../b")).unwrap();
+        assert!(dir.path().join("b").is_dir());
     }
 }

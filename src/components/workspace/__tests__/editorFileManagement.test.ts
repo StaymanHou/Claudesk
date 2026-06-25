@@ -74,6 +74,31 @@ describe("FileTree exposes the create/delete affordances (P3.1)", () => {
   });
 });
 
+describe("FileTree create-in-folder wiring (WP5b P1.1)", () => {
+  it("renders a per-DIR-row '＋ new file here' affordance", () => {
+    expect(fileTreeSource).toMatch(/file-tree-newhere/);
+    expect(fileTreeSource).toMatch(/onNewFileInDir\(node\.path\)/);
+  });
+
+  it("scopes the input to a dir (newFileDir) + expands that dir when opening it", () => {
+    expect(fileTreeSource).toMatch(/newFileDir/);
+    // beginNewFile / the per-dir opener expands the target dir so the input is visible.
+    expect(fileTreeSource).toMatch(/type:\s*"expand"/);
+  });
+
+  it("renders the input at body-top for root (null) and inline under the dir otherwise", () => {
+    expect(fileTreeSource).toMatch(/newFileDir === null && renderNewFileInput\(\)/);
+    expect(fileTreeSource).toMatch(/newFileDir === node\.path &&\s*\n?\s*renderNewFileInput/);
+  });
+});
+
+describe("RightPanelHost create-in-folder wiring (WP5b P1.2)", () => {
+  it("threads the target dir through proposeNewFilePath (not hardcoded null)", () => {
+    // P3 evolved the call to the 3-arg allowNested form; `dir` is still the first arg.
+    expect(rightPanelSource).toMatch(/proposeNewFilePath\(dir,\s*name/);
+  });
+});
+
 describe("editor handle plumbing for tab teardown on delete (P3.3)", () => {
   it("EditorSplit closeTabsForPath fans out to EVERY pane", () => {
     expect(editorSplitSource).toMatch(/closeTabsForPath/);
@@ -87,5 +112,58 @@ describe("editor handle plumbing for tab teardown on delete (P3.3)", () => {
   it("PaneTabs closeTabsForPath dispatches the close-path action (no dirty guard)", () => {
     expect(paneTabsSource).toMatch(/closeTabsForPath/);
     expect(paneTabsSource).toMatch(/type:\s*"close-path"/);
+  });
+});
+
+describe("RightPanelHost delete-FOLDER wiring (WP5b P2.3)", () => {
+  it("renders a dir-row ✕ wired to onDeleteFolder with a descendant count", () => {
+    expect(fileTreeSource).toMatch(/file-tree-delete-folder/);
+    expect(fileTreeSource).toMatch(/onDeleteFolder\(node\.path\)/);
+    // FileTree resolves the count from its fs_tree entries before calling up.
+    expect(fileTreeSource).toMatch(/countDescendants\(entries/);
+  });
+
+  it("confirms with the STRONGER folder spec before trashing", () => {
+    expect(rightPanelSource).toMatch(/deleteFolderSpec\(/);
+    expect(rightPanelSource).toMatch(/pendingDeleteFolder/);
+  });
+
+  it("on confirm: trash_path (recoverable), then close tabs UNDER the dir, then refresh", () => {
+    expect(rightPanelSource).toMatch(/invoke<void>\("trash_path"/);
+    expect(rightPanelSource).toMatch(
+      /editorSplitRef\.current\?\.closeTabsUnderPath\(target\.path\)/,
+    );
+  });
+});
+
+describe("editor handle plumbing for prefix tab teardown on folder delete (WP5b P2.3)", () => {
+  it("EditorSplit closeTabsUnderPath fans out to EVERY pane", () => {
+    expect(editorSplitSource).toMatch(/closeTabsUnderPath/);
+  });
+
+  it("PaneTabs closeTabsUnderPath dispatches the close-under-path action (no dirty guard)", () => {
+    expect(paneTabsSource).toMatch(/closeTabsUnderPath/);
+    expect(paneTabsSource).toMatch(/type:\s*"close-under-path"/);
+  });
+});
+
+describe("new-folder + nested-file create wiring (WP5b P3.3)", () => {
+  it("FileTree exposes beginNewFolder + a header & per-dir new-folder affordance", () => {
+    expect(fileTreeSource).toMatch(/beginNewFolder/);
+    expect(fileTreeSource).toMatch(/file-tree-newfolder-here/);
+    expect(fileTreeSource).toMatch(/onNewFolderInDir\(node\.path\)/);
+  });
+
+  it("RightPanelHost has a createDir handler invoking create_dir + a header new-folder button", () => {
+    expect(rightPanelSource).toMatch(/const createDir = /);
+    expect(rightPanelSource).toMatch(/invoke<void>\("create_dir"/);
+    expect(rightPanelSource).toMatch(/file-tree-newfolder-btn/);
+    expect(rightPanelSource).toMatch(/onCreateDir=\{createDir\}/);
+  });
+
+  it("createFile creates a nested path's parent (mkdir -p) before writing (allowNested)", () => {
+    expect(rightPanelSource).toMatch(/proposeNewFilePath\(dir, name, \/\* allowNested \*\/ true\)/);
+    // The nested-file path ensures the parent dir exists via create_dir before write_file.
+    expect(rightPanelSource).toMatch(/create_dir/);
   });
 });

@@ -167,8 +167,17 @@ pub fn run() {
             // detection — checked on tab-activate + pre-save to spot a file CC edited.
             editor_fs::commands::stat_file,
             // QoL-WP5: delete a single file under the workspace root (root-confined,
-            // no recursive directory delete). Create reuses write_file (empty contents).
+            // hard remove_file, no recursive directory delete). Create reuses write_file
+            // (empty contents).
             editor_fs::commands::delete_file,
+            // QoL-WP5b: move a path (file OR dir) under the workspace root to the macOS
+            // Trash (root-confined, recoverable). Wired to folder-delete; the blast radius
+            // of a recursive delete makes Trash the safe default over a hard remove_dir_all.
+            editor_fs::commands::trash_path,
+            // QoL-WP5b: create a directory (+ missing intermediates) under the workspace
+            // root (root-confined via a parent-tolerant lexical guard, idempotent). Backs
+            // the "new folder" affordance + the nested-file create's mkdir -p of the parent.
+            editor_fs::commands::create_dir,
             // WP4: git diff viewer data (Sublime-Merge-style). The backend computes
             // the real git hunks + commit history; the frontend renders styled +/-
             // lines (no @codemirror/merge). (The superseded git_file_base command

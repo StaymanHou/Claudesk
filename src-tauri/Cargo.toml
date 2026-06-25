@@ -66,6 +66,15 @@ regex = "1"
 # walk (one .gitignore contract; .git/ hard-excluded), so the watcher and the tree
 # agree on visibility and we never fire a re-walk storm on build-dir / VCS churn.
 notify-debouncer-full = "0.7"
+# QoL-WP5b: delete-folder. `trash` moves a path to the macOS Trash (NSFileManager
+# under the hood) instead of an unrecoverable `remove_dir_all` — chosen for the
+# folder-delete blast radius (a misclick wipes a subtree), so a deleted folder is
+# recoverable from Finder. Handles both files and dirs; WP5b wires it to dir rows
+# (the shipped single-file delete stays a hard `remove_file` — deliberate asymmetry,
+# a single file is low-stakes). The pure core stays TempDir-testable: a trashed path
+# is gone from the workspace root, which is what the tests assert (not its OS-level
+# recoverability, which is the crate's/OS's job).
+trash = "5"
 
 [dev-dependencies]
 tempfile = "3"

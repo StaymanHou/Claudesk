@@ -92,6 +92,12 @@ export interface EditorSplitHandle {
    * which dispatches `close-path` (no dirty guard — the delete-confirm covered loss).
    */
   closeTabsForPath: (path: string) => void;
+  /**
+   * QoL-WP5b — a folder was deleted: close every tab UNDER it in EVERY pane (prefix
+   * match). Routed to each pane's PaneTabs handle (`close-under-path`); same no-dirty-
+   * guard rationale as `closeTabsForPath` (the folder-delete confirm covered loss).
+   */
+  closeTabsUnderPath: (dir: string) => void;
 }
 
 interface EditorSplitProps {
@@ -416,6 +422,15 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       }
     }, []);
 
+    // QoL-WP5b — close every tab UNDER a deleted folder in EVERY pane (prefix match).
+    // Mirrors closeTabsForPath: each PaneTabs dispatches `close-under-path` (a no-op
+    // where the pane holds nothing under the dir).
+    const closeTabsUnderPath = useCallback((dir: string) => {
+      for (const handle of paneHandles.current.values()) {
+        handle?.closeTabsUnderPath(dir);
+      }
+    }, []);
+
     useImperativeHandle(
       ref,
       () => ({
@@ -427,6 +442,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         checkDiskForPaths,
         dirtyDocCount,
         closeTabsForPath,
+        closeTabsUnderPath,
       }),
       [
         openFile,
@@ -437,6 +453,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         checkDiskForPaths,
         dirtyDocCount,
         closeTabsForPath,
+        closeTabsUnderPath,
       ],
     );
 

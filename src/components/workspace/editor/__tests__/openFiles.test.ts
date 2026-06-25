@@ -242,3 +242,67 @@ describe("close-path (QoL-WP5 — delete a file closes its tab)", () => {
     expect(s.activeTabId).toBe("fr");
   });
 });
+
+describe("close-under-path (QoL-WP5b — delete a folder closes every tab under it)", () => {
+  const threeUnderSrc = () =>
+    open(
+      open(
+        open(open(initialOpenFilesState(), "t1", "src/a.ts"), "t2", "src/b.ts"),
+        "t3",
+        "lib/c.ts",
+      ),
+      "t4",
+      "src/nested/d.ts",
+    );
+
+  it("closes every tab whose path is the dir or under it (prefix), keeping outside tabs", () => {
+    let s = threeUnderSrc(); // active = src/nested/d.ts (t4)
+    s = openFilesReducer(s, { type: "close-under-path", dir: "src" });
+    // src/a.ts, src/b.ts, src/nested/d.ts all close; lib/c.ts survives.
+    expect(s.tabs.map((t) => t.path)).toEqual(["lib/c.ts"]);
+    expect(s.activeTabId).toBe("t3"); // active was inside src → reassigned to survivor
+  });
+
+  it("is prefix-precise: 'src' does NOT close a sibling like 'src-utils/x.ts'", () => {
+    let s = open(
+      open(initialOpenFilesState(), "t1", "src/a.ts"),
+      "t2",
+      "src-utils/x.ts",
+    );
+    s = openFilesReducer(s, { type: "close-under-path", dir: "src" });
+    expect(s.tabs.map((t) => t.path)).toEqual(["src-utils/x.ts"]);
+  });
+
+  it("closes a tab whose path EQUALS the dir name (a file named like the dir edge case)", () => {
+    // Defensive: if a tab path equals the dir string exactly it's covered too.
+    let s = open(initialOpenFilesState(), "t1", "docs");
+    s = openFilesReducer(s, { type: "close-under-path", dir: "docs" });
+    expect(s.tabs).toHaveLength(0);
+    expect(s.activeTabId).toBeNull();
+  });
+
+  it("keeps the active tab when it survives (outside the deleted dir)", () => {
+    let s = threeUnderSrc();
+    s = openFilesReducer(s, { type: "activate", id: "t3" }); // active = lib/c.ts (outside)
+    s = openFilesReducer(s, { type: "close-under-path", dir: "src" });
+    expect(s.activeTabId).toBe("t3"); // untouched
+  });
+
+  it("is a no-op when no tab is under the dir (identity preserved)", () => {
+    const s = open(initialOpenFilesState(), "t1", "lib/c.ts");
+    expect(openFilesReducer(s, { type: "close-under-path", dir: "src" })).toBe(
+      s,
+    );
+  });
+
+  it("never closes a synthetic tab (no path) on a close-under-path", () => {
+    let s = openFilesReducer(initialOpenFilesState(), {
+      type: "add-synthetic",
+      id: "fr",
+      label: "Find Results",
+    });
+    s = open(s, "t2", "src/a.ts");
+    s = openFilesReducer(s, { type: "close-under-path", dir: "src" });
+    expect(s.tabs.map((t) => t.id)).toEqual(["fr"]);
+  });
+});

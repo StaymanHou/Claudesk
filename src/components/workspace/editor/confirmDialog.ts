@@ -112,6 +112,39 @@ export function deleteFileSpec(name: string): ConfirmSpec<DeleteFileChoice> {
   };
 }
 
+/**
+ * The delete-FOLDER confirm dialog (QoL-WP5b): Delete (danger) / Cancel (primary, the
+ * safe default). Esc → cancel. STRONGER than the single-file `deleteFileSpec` because the
+ * blast radius is a whole subtree: the message names the folder, says "and everything
+ * inside it", and shows the descendant `count` so the operator sees the blast radius
+ * before confirming. Unlike the single-file delete (a hard `remove_file`), folder delete
+ * moves to the macOS Trash (recoverable) — the copy says so. `name` is the folder's
+ * basename; `count` is the number of files+folders inside it (0 → an empty folder).
+ */
+export function deleteFolderSpec(
+  name: string,
+  count: number,
+): ConfirmSpec<DeleteFileChoice> {
+  const inside =
+    count === 0
+      ? "It is empty."
+      : `It contains ${count} item${count === 1 ? "" : "s"}.`;
+  return {
+    title: "Delete folder",
+    message: `Delete ${name} and everything inside it? ${inside} It will be moved to the Trash (recoverable from Finder).`,
+    buttons: [
+      { id: "cancel", label: "Cancel", value: "cancel", variant: "primary" },
+      {
+        id: "delete",
+        label: "Delete Folder",
+        value: "delete",
+        variant: "danger",
+      },
+    ],
+    escValue: "cancel",
+  };
+}
+
 /** The two outcomes of the disk-change conflict prompt. */
 export type ConflictChoice = "keep-mine" | "load-disk";
 

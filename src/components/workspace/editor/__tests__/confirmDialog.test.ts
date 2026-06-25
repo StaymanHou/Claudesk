@@ -5,6 +5,7 @@ import {
   closeDirtySpec,
   conflictSpec,
   deleteFileSpec,
+  deleteFolderSpec,
   type ConfirmButton,
 } from "../confirmDialog";
 
@@ -59,5 +60,33 @@ describe("deleteFileSpec (QoL-WP5)", () => {
 
   it("names the file in the message", () => {
     expect(deleteFileSpec("notes.md").message).toContain("notes.md");
+  });
+});
+
+describe("deleteFolderSpec (QoL-WP5b)", () => {
+  it("offers cancel (primary) then delete (danger), with Esc → cancel", () => {
+    const spec = deleteFolderSpec("src", 5);
+    expect(spec.buttons.map((b) => b.value)).toEqual(["cancel", "delete"]);
+    expect(spec.buttons.find((b) => b.value === "cancel")?.variant).toBe(
+      "primary",
+    );
+    expect(spec.buttons.find((b) => b.value === "delete")?.variant).toBe(
+      "danger",
+    );
+    expect(spec.escValue).toBe("cancel");
+  });
+
+  it("is STRONGER than the file confirm: names the folder + 'everything inside it' + count + Trash", () => {
+    const msg = deleteFolderSpec("components", 12).message;
+    expect(msg).toContain("components");
+    expect(msg).toContain("everything inside it");
+    expect(msg).toContain("12 items");
+    expect(msg).toMatch(/Trash/i); // tells the operator it's recoverable
+  });
+
+  it("singularizes the count and handles an empty folder", () => {
+    expect(deleteFolderSpec("d", 1).message).toContain("1 item");
+    expect(deleteFolderSpec("d", 1).message).not.toContain("1 items");
+    expect(deleteFolderSpec("empty", 0).message).toContain("It is empty.");
   });
 });

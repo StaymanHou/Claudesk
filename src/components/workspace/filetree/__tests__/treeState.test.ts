@@ -41,4 +41,23 @@ describe("treeState — expand/collapse reducer", () => {
     expect(after.has("b")).toBe(true);
     expect(before.has("a")).toBe(true); // first toggle still intact
   });
+
+  // QoL-WP5b — `expand` (idempotent, never collapses) used when the per-dir "＋" opens
+  // the new-file input scoped to a dir.
+  it("expand adds a collapsed dir", () => {
+    const s = treeReducer(initialExpanded, { type: "expand", path: "src" });
+    expect(isExpanded(s, "src")).toBe(true);
+  });
+
+  it("expand on an already-expanded dir is a no-op (same reference, never collapses)", () => {
+    const open = treeReducer(initialExpanded, { type: "expand", path: "src" });
+    const again = treeReducer(open, { type: "expand", path: "src" });
+    expect(again).toBe(open); // identity preserved — no churn
+    expect(isExpanded(again, "src")).toBe(true); // still expanded (unlike toggle)
+  });
+
+  it("expand returns a NEW set reference when it changes", () => {
+    const s = treeReducer(initialExpanded, { type: "expand", path: "src" });
+    expect(s).not.toBe(initialExpanded);
+  });
 });

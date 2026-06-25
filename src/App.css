@@ -1591,6 +1591,29 @@ body,
   color: #f48771; /* red on hover — destructive affordance */
 }
 
+/* QoL-WP5b — per-dir "＋ new file here". Same hover-reveal pattern as the file ✕ so it
+   doesn't clutter the dense tree; sits at the dir row's trailing edge. */
+.file-tree-newhere {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0 0.25em;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.file-tree-row:hover .file-tree-newhere {
+  visibility: visible;
+}
+
+.file-tree-newhere:hover {
+  color: #73c991; /* green on hover — additive affordance */
+}
+
 /* WP11 — minimap narrowed. @replit/codemirror-minimap sets the gutter's width inline
    to its 120px MaxWidth and sizes the canvas to match; we clip BOTH on our
    marker-classed gutter. 120 × 0.75 = 90, then ×0.75 again (operator trim at
