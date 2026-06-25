@@ -1068,3 +1068,21 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **File:** `src-tauri/tauri.dev.json:6-12`
 - **Finding (MINOR):** the dev overlay re-declares `width`/`height` in `app.windows[0]` only because Tauri's array-merge replaces the whole window object (the sole intended override is `title`). Documented in the WIP (P1.1) but not at the file site → a future editor changing the prod window size would see dev silently keep 1280×800.
 - **Fix shape:** add an inline comment in tauri.dev.json noting the array-replace coupling, or track window size in a shared place. Optional.
+
+# qol-wp6-new-workspace-hotkey — 2026-06-25
+
+2 MINOR findings from `feature-review-quality` on ship commit `47fdeb9` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature clean and convention-adherent — pure-predicate + app-level-listener split is the right factoring, disjointness vs the neighbouring ⌘N chord is bidirectionally documented, the listener is a near-verbatim clone of the proven ⌘⇧+digit effect. Accrues no debt. Both findings are low-effort honesty/hygiene nits, neither a behavior bug. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP6-TEST-CTRLALT-NAME-OVERPROMISE
+- **File:** `src/components/workspace/__tests__/newWorkspaceChord.test.ts:46-49`
+- **Finding (MINOR):** the final case is titled "is permissive on Ctrl/Alt" but the literal sets neither `ctrlKey` nor `altKey` (the `NewWorkspaceChordEvent` interface omits both fields), so it is identical in effect to the earlier uppercase-N positive. The assertion passes but does not exercise the permissiveness its name promises — a reader trusting the title would believe Ctrl/Alt coverage exists when it doesn't.
+- **Fix shape:** either widen the interface to include optional `ctrlKey`/`altKey` and add `ctrlKey: true, altKey: true` to the literal, or simply retitle the case to match what it tests. Trivial.
+- **Priority:** low (test-naming/coverage-honesty nit; predicate behavior is correct).
+- **Status:** pending
+
+## SURFACE-2026-06-25-QUALITY-WP6-CHORD-MAP-XREF-HYGIENE
+- **File:** `src/components/workspace/newWorkspaceChord.ts:6`
+- **Finding (MINOR):** header cites "the chord-ownership map in editor/paletteCommands.ts" (same citation as sibling `workspaceSwitchChord.ts`) — a cross-reference that drifts silently if the map ever moves/renames. Confirmed present + correct this session, so no action needed today; flagged only as cross-reference hygiene for a future map-relocation.
+- **Fix shape:** if the chord-ownership map is ever relocated, grep for "paletteCommands.ts" and update all chord-file headers together. No standalone fix.
+- **Priority:** low (cross-reference hygiene; not a confirmed break).
+- **Status:** pending

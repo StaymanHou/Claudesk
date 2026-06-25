@@ -1,7 +1,8 @@
 # Feature: QoL-WP6 — New-workspace hotkey ⌘⇧N
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** finalize (complete) — committed 47fdeb9 (local-only)
+**Completed:** 2026-06-25
 **Created:** 2026-06-25
 **Drive mode:** autopilot
 **Backlog:** SURFACE-2026-06-24-NEW-WORKSPACE-HOTKEY
@@ -30,12 +31,44 @@ The native macOS menu's "New Workspace" item displays the accelerator **⌘⇧N*
   **No integration boundary requiring a NEW consuming-surface test:** the only consuming surface (PickerOverlay open on ⌘⇧N) requires a native modifier chord against a real Tauri app — out of CI reach by project convention; operator-verified end-to-end at verify-human.
 
 ## Current Node
-- **Path:** Feature > Phase 1 (COMPLETE) — ready to ship
+- **Path:** Feature > review-quality (COMPLETE — 0C/0M/2 MINOR auto-backlogged) — ready to finalize
 - **Active scope:** none — single phase complete (all impl + verify-auto/self/human/codify [x])
 - **Blocked:** none
 - **Unvisited:** none (single-phase feature; all phases complete)
 - **Open discoveries:** none
 - **Build note:** tsc --noEmit clean; eslint src clean (1 pre-existing XtermPane warning, unrelated); `pnpm vite build` exits 0; new chord test 8/8.
+
+## Retrospect
+- **What changed in our understanding:** Nothing material — the WBS spec was complete and the existing `newWorkspace` open-overlay path (already wired for the menu bridge + filmstrip "+") meant WP6 was purely an additional keyboard entry point, not new behavior.
+- **Assumptions that held:** ⌘⇧N is disjoint from every existing chord (confirmed against the paletteCommands.ts chord-ownership map); the ⌘⇧+digit listener was a perfect structural template; the `view === "workspace-open"` gate is correct (in "picker" view the full-screen picker is already up).
+- **Assumptions that were wrong:** None.
+- **Approach delta:** Implemented exactly as planned — single phase, three impl tasks (predicate, listener, test), no back-loops. The only nuance was placing the listener effect after the `setShowPicker` useState declaration (vs. next to the sibling ⌘⇧+digit effect) so `setShowPicker` is in scope. No surprises.
+
+## Code-Quality Review — qol-wp6-new-workspace-hotkey
+
+### Strengths
+- Pure predicate (`newWorkspaceChord`) extracted into its own file with a minimal keydown-shape interface — exactly the established `workspaceSwitchChord.ts` / `newFileChord.ts` posture, keeping the matcher vitest-testable with no React/DOM coupling.
+- Disjointness with the adjacent `⌘N` editor new-file chord is enforced symmetrically and documented on both sides, so the two provably never co-fire.
+- App.tsx listener is a faithful mirror of the `⌘⇧+digit` `useEffect` directly above it (capture phase, `view === "workspace-open"` gate, `preventDefault`, identical add/remove teardown).
+- Reuses the single canonical open-overlay path (`setShowPicker(true)`) shared by the filmstrip "+", the menu bridge `newWorkspace` callback, and now the chord.
+- Test cases cover lowercase + macOS-shifted-uppercase `key` reports plus the three collision vectors (bare ⌘N, ⌘⇧+digit, ⌘⇧E).
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [src/components/workspace/__tests__/newWorkspaceChord.test.ts:46-49] The final case is titled "is permissive on Ctrl/Alt" but the object passes neither `ctrlKey` nor `altKey` — it is identical in effect to the earlier uppercase-N positive. The assertion passes but does not test what its name promises. Either add `ctrlKey: true, altKey: true` to the literal or retitle the case. (Test-naming/coverage-honesty nit, not a behavior bug.)
+- [src/components/workspace/newWorkspaceChord.ts:6] Header cites "the chord-ownership map in editor/paletteCommands.ts" — cross-reference hygiene: confirm that path still exists and lists this chord. (Confirmed present this session — the map exists at paletteCommands.ts and ⌘⇧N is correctly disjoint from every entry; reference is sound.)
+
+### Assessment
+A small, well-built feature that does exactly one thing the way the codebase already does this class of thing. Pure-predicate + app-level-listener split is the right factoring; disjointness reasoning against the neighbouring ⌘N chord is sound and bidirectionally documented; the listener is a near-verbatim clone of the proven ⌘⇧+digit effect so it advances rather than fragments the pattern. Accrues no debt. Only blemish is one unit-test case whose name overpromises its coverage — harmless to behavior. Net: clean, convention-adherent, needs no refactor pass.
+
+### If you disagree
+Operator: dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

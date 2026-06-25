@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-24
-status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5+WP5b shipped 2026-06-25; WP6–WP8 pending
+status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5+WP5b+WP6 shipped 2026-06-25; WP7–WP8 pending
 context: between-milestone QoL/lifecycle sweep, filed after M4 close, before M5 (PiP) planning
 ---
 
@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → ~~WP5b~~ ✅ → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59; WP5b SHIPPED 2026-06-25 374f7cb)* — **WP5b inserted 2026-06-25 as the immediate next WP** (operator promoted the WP5 follow-ups ahead of WP6).
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → ~~WP5b~~ ✅ → ~~WP6~~ ✅ → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59; WP5b SHIPPED 2026-06-25 374f7cb; WP6 SHIPPED 2026-06-25 47fdeb9)* — **WP5b inserted 2026-06-25 as the immediate next WP** (operator promoted the WP5 follow-ups ahead of WP6).
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -168,7 +168,7 @@ and delete this file.
 
 ---
 
-## WP6 — New-workspace hotkey ⌘⇧N  `[priority: LOW]`  `↔ pairs with WP5`
+## WP6 — New-workspace hotkey ⌘⇧N  `[priority: LOW]`  `↔ pairs with WP5`  ✅ SHIPPED 2026-06-25 (commit 47fdeb9)
 **Backlog:** SURFACE-2026-06-24-NEW-WORKSPACE-HOTKEY
 **Size:** tiny · **Type:** new keyboard binding
 **Why adjacent to WP5 despite low priority:** ⌘N (editor new-file, WP5) and ⌘⇧N (new workspace) should land together so the chord pair is coherent.

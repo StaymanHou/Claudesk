@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — qol-wp6-new-workspace-hotkey (2026-06-25)
+- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `47fdeb9`: (1) the `newWorkspaceChord` unit test's "is permissive on Ctrl/Alt" case sets neither `ctrlKey` nor `altKey` (interface omits them) so it duplicates the uppercase-N positive — name overpromises coverage; (2) the `newWorkspaceChord.ts` header's cross-reference to the `paletteCommands.ts` chord-ownership map is a drift seam if that map ever relocates (confirmed present + correct today — no action needed now). Reviewer: clean, convention-adherent, near-verbatim clone of the proven ⌘⇧+digit listener, accrues no debt, no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp6-new-workspace-hotkey — 2026-06-25`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** finding (1) is a one-line `/feature-refactor` nit — retitle the test case or widen the interface + add `ctrlKey/altKey: true`; finding (2) needs no standalone fix (only act if the chord map is ever moved). Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — qol-wp5b-editor-folder-depth (2026-06-25)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `374f7cb`: (1) a failed `trash_path` in `onDeleteFolderConfirm` is swallowed to `console.error` only (folder appears to still exist — pairs with the WP5 delete-toast item); (2) the `validateRelSegments` "mirrors the backend lexical guard" comment overstates parity (frontend rejects leading `~`, backend treats it as a normal segment — frontend stricter, safe); (3) the folder-delete confirm's descendant `count` can lag the live subtree if it grew since the last tree refresh (advisory only; the trash is correct). Reviewer: well-built, security-conscious, ship-quality; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp5b-editor-folder-depth — 2026-06-25`.
 - **Priority:** low (all)
@@ -101,7 +107,7 @@ forward — none M5-blocking). No escalations. -->
 - **Summary:** The native menu's "New Workspace" item shows the accelerator **⌘⇧N** as DISPLAY-ONLY text — pressing ⌘⇧N on the keyboard does **nothing** (the menu carries no real accelerators by design; New Workspace is reachable only by clicking the menu item or the filmstrip "+"). Wire ⌘⇧N as an actual hotkey that opens the picker, to match the displayed label.
 - **Context:** Out of scope for the app-menu feature (which mirrors EXISTING features — New Workspace had no hotkey before). Implementation is the established pattern: a pure `newWorkspaceChord` predicate (`e.metaKey && e.shiftKey && e.key.toLowerCase()==="n"`) + an App.tsx capture-phase document keydown listener calling `setShowPicker(true)` (same shape as `workspaceSwitchChord` in App.tsx). ⌘⇧N is disjoint from all existing chords. Pairs with reserving ⌘N for the editor's add-new-file (SURFACE-2026-06-24-EDITOR-ADD-NEW-FILE) — do them together so ⌘N and ⌘⇧N land coherently.
 - **Priority:** low (the click path works; this is the keyboard-parity nicety the label promises)
-- **Status:** open
+- **Status:** RESOLVED 2026-06-25 (QoL-WP6, commit 47fdeb9) — `newWorkspaceChord` pure predicate + App.tsx capture-phase keydown listener (gated `view==="workspace-open"`) → `setShowPicker(true)`, the same open-overlay path the filmstrip "+" and menu bridge already use. ⌘⇧N disjoint from ⌘N (editor new-file) + ⌘⇧+digit (switch). 8-case unit test; operator-verified live.
 
 ## SURFACE-2026-06-24-NO-WAY-TO-CLOSE-A-WORKSPACE
 - **Source:** operator request (2026-06-24, during the app-menu feature)
