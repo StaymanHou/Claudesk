@@ -105,6 +105,66 @@ projects, 3–4 in flight on any given day.
   <500 ms launch, always dark. A daily driver that disappears into the work instead
   of competing with it.
 
+## Philosophy & design choices
+
+Claudesk is **deliberately opinionated software.** It is not meant to fit every
+developer's needs in every circumstance, and it never will. Read these as the *why*
+behind the product — if your situation contradicts them, Claudesk is probably the
+wrong tool, and that's by design.
+
+- **Opinionated by intent, narrow by intent.** This is a personal tool built against
+  one workflow (heavy Claude Code use, the custom
+  [`stayman-claude-code-customization`](https://github.com/StaymanHou/stayman-claude-code-customization)
+  workflow system installed at `~/.claude/skills/`, Sublime, macOS, 20+ rotating
+  projects). It's open-sourced for others with the *same* setup — but no design
+  concession is made for users who don't share it. A tool that fits one workflow
+  exactly beats a tool that fits every workflow approximately.
+
+- **Tuned for Claude Code specifically — not OpenAI, not Gemini.** Portability across
+  models was attempted and abandoned: not all models are created the same, and the
+  workflow system + Claudesk are specifically tuned against Claude's behavior. The
+  hook channel, the skill/orchestrator conventions, the drive modes, the
+  resume/recycle rituals — all assume Claude Code. Running this against another
+  model's CLI is out of scope.
+
+- **Parallelism across projects, not across agents within a project.** The whole layout
+  optimizes for *deliverable output per engineer-hour* by keeping many projects in
+  flight at once — but with **one agent / one CC session per project** (subagents
+  within that session are still fair game). This is a conscious rejection of the
+  multi-agent-on-a-single-project approach: per *The Mythical Man-Month*, throwing more
+  concurrent actors at one problem introduces coordination overhead that eats the gains.
+  Claudesk parallelizes the *projects*, where the work is genuinely independent and the
+  overhead is near zero, rather than the *agents*, where it isn't.
+
+- **Built for flexible timelines, not for rushing.** The model assumes you're rotating
+  among projects with relatively elastic deadlines — picking up whichever one is ready
+  for you, letting the others run or sit. If you need to *rush a single project* to a
+  hard deadline, the right move is multi-agent concurrency on that one project, and
+  Claudesk is **not the fit**. It optimizes throughput across a portfolio, not latency
+  on any single item.
+
+- **Human-in-the-loop, surfaced not hidden.** Every CC session keeps a real, visible
+  status (idle / running / awaiting-input) precisely because the bottleneck in this
+  model is *operator attention* — the scarce resource is the one human steering N
+  sessions. The filmstrip, PiP, and menu-bar surfaces all exist to answer "which
+  project needs me right now?" in under a second. Claudesk doesn't try to remove the
+  human from the loop; it tries to make the human's attention land where it's needed
+  with minimal cost. (Hence also: yolo mode by default, but recycle/resume on operator
+  judgment, never automatically.)
+
+- **Lite over featureful.** If it isn't a *daily* friction, it doesn't get built.
+  Claudesk consciously refuses to grow into a general-purpose IDE — the wins come from
+  eliminating the repeated setup tax and the cross-project attention tax, not from
+  feature breadth. Reuse the real tools (Sublime Text, Sublime Merge) for the long tail
+  instead of reimplementing them.
+
+- **Wrap the official tools, don't fork them.** Claudesk drives the real `claude` CLI
+  and pops the real Sublime apps. It's an *orchestration layer*, not a replacement — so
+  it inherits every upstream improvement for free and never has a fork to maintain.
+
+See [`docs/product/vision.md`](docs/product/vision.md) for the full vision, principles,
+and anti-goals.
+
 ## Prerequisites
 
 **To run Claudesk** (whether installed via Homebrew or built from source):
