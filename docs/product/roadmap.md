@@ -1,12 +1,12 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-25  # M4 COMPLETE + the between-milestone QoL/lifecycle sweep COMPLETE (scratch qol-wbs.md, not a milestone). Next execution milestone: M5 (PiP, unconditional).
+updated: 2026-06-25  # M4 COMPLETE + the between-milestone QoL/lifecycle sweep COMPLETE (scratch qol-wbs.md, not a milestone). Workflow-docs markdown viewer inserted as M7 (slides old M7/M8/M9 → M8/M9/M10). Next execution milestone: M5 (PiP, unconditional).
 ---
 
 # Roadmap
 
-Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the in-app lite editor + diff viewer** comes second (Milestone 2) — a must-have, not a nice-to-have, now that projects live in tabs (see the resequencing rationale in the 2026-06-19 revision below); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes third (Milestones 3–8, resequenced dogfood-first 2026-06-22 so CC-state + the multi-workspace filmstrip land first as the daily-driver replacement point); **release polish** comes fourth (Milestone 9).
+Claudesk grows in dogfood-able increments, each independently usable. **Launch-friction relief comes first** (Milestone 1 — also lays down the tab-shell substrate even though only one workspace is open at a time); **the in-app lite editor + diff viewer** comes second (Milestone 2) — a must-have, not a nice-to-have, now that projects live in tabs (see the resequencing rationale in the 2026-06-19 revision below); **the architectural heart** — stateful CC controller, three status surfaces, orchestration — comes third (Milestones 3–9, resequenced dogfood-first 2026-06-22 so CC-state + the multi-workspace filmstrip land first as the daily-driver replacement point); **release polish** comes fourth (Milestone 10).
 
 Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). The `## Group` headings below are **cosmetic clustering only** — they carry no numbering or dependency semantics; they just organize the flat list for readability. Dependencies, where they exist, are stated in each milestone's prose.
 
@@ -108,9 +108,20 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Idle/running of every workspace is visible when the Claudesk window is NOT in focus, via the menu-bar item.
 
-> **Anchored here (operator decision 2026-06-22): the workflow-doc-hierarchy watcher** (`SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`, the dropped-M3-WP5 replacement idea — watch `roadmap→wbs→wip(s)→backlog` to surface where each project sits in the workflow). The M6 popover's one-row-per-workspace LIST is the natural form factor for a workflow-position line (e.g. `acme-api · WBS M2/WP3 · building`); by M6 the operator will have dogfooded M4+M5 and know what's worth showing. Builds the `notify` watcher seam (shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER`). Decide at M6's `/product-wbs` whether it's an M6 WP or — if it outgrows a popover line into a real tree view — a standalone feature after M6.
+> **Anchored here (operator decision 2026-06-22): the workflow-doc-hierarchy watcher** (`SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`, the dropped-M3-WP5 replacement idea — watch `roadmap→wbs→wip(s)→backlog` to surface where each project sits in the workflow). The M6 popover's one-row-per-workspace LIST is the natural form factor for a workflow-position line (e.g. `acme-api · WBS M2/WP3 · building`); by M6 the operator will have dogfooded M4+M5 and know what's worth showing. Builds the `notify` watcher seam (shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER`). Decide at M6's `/product-wbs` whether it's an M6 WP or — if it outgrows a popover line into a real tree view — a standalone feature after M6. *(Note: Milestone 7's workflow-docs markdown viewer is the adjacent surface — the watcher answers "where does each project sit in the workflow" as a status line; M7 renders the docs themselves. Decide at M6/M7 whether the watcher feeds the M7 doc panel rather than the popover.)*
 
-### Milestone 7: Smart auto-resume + drive mode *(was Milestone 4 — slid later; livable-without for now)*
+### Milestone 7: Workflow-docs markdown viewer
+
+**Goal:** Read the conventional product/workflow docs as formatted markdown without leaving Claudesk or popping an external editor — so the workflow document hierarchy (vision → roadmap → wbs → wip → backlog) is glanceable inside the workspace it belongs to. *(Depends on Milestone 2's right-half panel model.)*
+
+**Deliverables:**
+- [ ] **`Docs` right-panel tab** — a new panel alongside Editor / Diff / Terminal in the `right-panel-toggle` tab row, switched via a `⌘⇧`-chord (next free chord, disjoint from `⌘⇧E`/`⌘⇧D`/`⌘⇧T` and the `⌘⇧+digit` workspace switch) and a clickable tab. Per-workspace, scoped to the workspace's project.
+- [ ] **Auto-discovered conventional doc set** — lists, if present in the workspace's project: `docs/product/*.md` (vision, roadmap, research, arch, context — and **glob-matched `*wbs*.md`** so temporary/scratch WBS files surface alongside the canonical `wbs.md`), `workflow/wip/*.md`, `workflow/backlog.md`, and `workflow/.session.md`. No config; absent files are silent no-ops. **CHANGELOG.md is deliberately out of scope.**
+- [ ] **Read-only markdown render** — formatted display with scroll and clickable in-doc / cross-doc links; the WIP Work-Tree checkboxes and frontmatter render legibly. Editing those docs stays in the Editor panel or Claude Code — the viewer never writes to disk.
+
+**Exit Criteria:** From any workspace, the `Docs` tab renders that project's conventional product/workflow docs as formatted, scrollable, link-navigable markdown, read-only, with no external editor pop.
+
+### Milestone 8: Smart auto-resume + drive mode *(was Milestone 4 — slid later; livable-without for now)*
 
 **Goal:** Opening a workspace lands on the correct resumption command automatically, and the active drive mode is always visible and one-click changeable.
 
@@ -125,7 +136,7 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Workspace open always fires the right resumption command without manual selection; the active drive mode is visible in the header and switchable in one click.
 
-### Milestone 8: Skill orchestration *(was Milestone 5 — slid later; livable-without for now)*
+### Milestone 9: Skill orchestration *(was Milestone 5 — slid later; livable-without for now)*
 
 **Goal:** Common workflow operations are clicks, not typed slash commands.
 
@@ -135,13 +146,13 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** No slash-command typing for common skills; Recycle Session is a single click.
 
-> **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (PiP + menu-bar item). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling. *(Note: the dogfood-replace point arrives earlier than full Group-C completion — at M3 + M4 — per the 2026-06-22 reorder; metrics 2/3/5 land with the later M7/M8.)*
+> **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (PiP + menu-bar item). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling. *(Note: the dogfood-replace point arrives earlier than full Group-C completion — at M3 + M4 — per the 2026-06-22 reorder; metrics 2/3/5 land with the later M8/M9.)*
 
 ## Group D — Polish & open-source release
 
-### Milestone 9: Polish & Open-Source Release
+### Milestone 10: Polish & Open-Source Release
 
-**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)*
+**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)* *(2026-06-25: the workflow-docs markdown viewer was inserted as Milestone 7, sliding Skill orchestration to M9 and this Polish milestone to M10.)*
 
 **Deliverables:**
 - [ ] **Settings UI:** project list management, hotkeys, default CLI args for `claude` (e.g. yolo-mode toggle), menu-bar / PiP visibility toggles.
@@ -150,6 +161,21 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 - [ ] **Public repo + open-source license** chosen and added.
 
 **Exit Criteria:** A stranger with the workflow system installed at `~/.claude/skills/` can clone the repo, build Claudesk, and use it on their own macOS machine without further help from the author.
+
+## Revision 2026-06-25 — Workflow-docs markdown viewer inserted as Milestone 7
+
+**Inserted a new Milestone 7 (workflow-docs markdown viewer) between the menu-bar item (M6) and smart auto-resume.** A read-only `Docs` right-panel tab that renders the conventional product/workflow docs (`docs/product/*.md` incl. glob-matched `*wbs*.md`, `workflow/wip/*.md`, `workflow/backlog.md`, `workflow/.session.md`; CHANGELOG out of scope) as formatted, link-navigable markdown, per-workspace. Operator-directed.
+
+**Old → new mapping** (Group C tail only; M1–M6 unchanged):
+
+| Old | New | Milestone |
+|-----|-----|-----------|
+| — | **M7** | Workflow-docs markdown viewer *(new)* |
+| M7 | **M8** | Smart auto-resume + drive mode |
+| M8 | **M9** | Skill orchestration |
+| M9 | **M10** | Polish & open-source release |
+
+**Why here:** it sits naturally after the status surfaces (M5/M6) and before the CC-lifecycle hand-holding (M8/M9) — and is the rendering counterpart to the M6-anchored workflow-doc-hierarchy watcher (the watcher answers *where* a project sits; M7 renders the docs themselves). Read-only by design; editing stays in the Editor panel / CC.
 
 ## Revision 2026-06-22 — Group C resequenced dogfood-first; PiP unconditional, before menu-bar
 
