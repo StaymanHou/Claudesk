@@ -61,6 +61,8 @@ pub enum EditorFsError {
     NotUtf8(String),
     #[error("path {requested} is outside the workspace root {root}")]
     OutsideWorkspace { requested: String, root: String },
+    #[error("path {0} is a directory; recursive directory delete is not supported")]
+    IsDirectory(String),
 }
 
 /// Resolve `requested` against `root` and confirm the result stays inside `root`.
@@ -151,6 +153,28 @@ pub fn stat_file_core(root: &Path, requested: &Path) -> Result<FileMarker, Edito
         mtime_ms,
         size: meta.len(),
     })
+}
+
+/// Delete a single file under `root`. Rejects paths escaping the workspace (the same
+/// `resolve_within` guard `write_file_core` uses, so a `..`/absolute-outside/symlink-out
+/// target can never remove a file outside the open project). A directory target is
+/// rejected with [`EditorFsError::IsDirectory`] — recursive directory delete is out of
+/// scope for v1 (QoL-WP5); only single-file delete is supported. A missing file is an
+/// [`EditorFsError::Io`] (so the UI treats "nothing to delete" as a real error rather
+/// than silently succeeding). The create counterpart is just [`write_file_core`] with
+/// empty contents — no dedicated create primitive is needed.
+pub fn delete_file_core(root: &Path, requested: &Path) -> Result<(), EditorFsError> {
+    let target = resolve_within(root, requested)?;
+    // `resolve_within` confines the path but does not assert it is a regular file —
+    // guard the directory case explicitly so we never `remove_file` a dir (which errors
+    // unhelpfully) and never recurse. A missing target falls through to `remove_file`'s
+    // own NotFound Io error.
+    let meta = std::fs::metadata(&target)?;
+    if meta.is_dir() {
+        return Err(EditorFsError::IsDirectory(target.display().to_string()));
+    }
+    std::fs::remove_file(&target)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -312,5 +336,83 @@ mod tests {
             result,
             Err(EditorFsError::OutsideWorkspace { .. })
         ));
+    }
+
+    // QoL-WP5 — delete_file_core + the create-via-empty-write primitive.
+
+    #[test]
+    fn delete_removes_a_file_and_then_read_errors() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join("doomed.txt"), "bye").unwrap();
+        delete_file_core(dir.path(), Path::new("doomed.txt")).unwrap();
+        assert!(!dir.path().join("doomed.txt").exists());
+        // Reading it now is the missing-file Io error (round-trips create→delete).
+        let read = read_file_core(dir.path(), Path::new("doomed.txt"));
+        assert!(matches!(read, Err(EditorFsError::Io(_))));
+    }
+
+    #[test]
+    fn delete_path_escaping_root_is_rejected_and_outside_file_survives() {
+        let dir = TempDir::new().unwrap();
+        // A sibling file outside the workspace root that must NOT be removable.
+        let outside = dir.path().parent().unwrap().join("outside-keep.txt");
+        std::fs::write(&outside, "keep me").unwrap();
+        let ws = dir.path().join("ws");
+        std::fs::create_dir(&ws).unwrap();
+        let result = delete_file_core(&ws, Path::new("../../outside-keep.txt"));
+        assert!(
+            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            "got {result:?}"
+        );
+        assert!(
+            outside.exists(),
+            "the outside file must survive a rejected delete"
+        );
+        let _ = std::fs::remove_file(outside);
+    }
+
+    #[test]
+    fn delete_absolute_path_outside_root_is_rejected() {
+        let dir = TempDir::new().unwrap();
+        let other = TempDir::new().unwrap();
+        let victim = other.path().join("elsewhere.txt");
+        std::fs::write(&victim, "x").unwrap();
+        let result = delete_file_core(dir.path(), &victim);
+        assert!(matches!(
+            result,
+            Err(EditorFsError::OutsideWorkspace { .. })
+        ));
+        assert!(victim.exists());
+    }
+
+    #[test]
+    fn delete_missing_file_is_io_error() {
+        let dir = TempDir::new().unwrap();
+        let result = delete_file_core(dir.path(), Path::new("nope.txt"));
+        assert!(matches!(result, Err(EditorFsError::Io(_))));
+    }
+
+    #[test]
+    fn delete_directory_is_rejected_not_recursively_removed() {
+        let dir = TempDir::new().unwrap();
+        let sub = dir.path().join("subdir");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("inner.txt"), "still here").unwrap();
+        let result = delete_file_core(dir.path(), Path::new("subdir"));
+        assert!(
+            matches!(result, Err(EditorFsError::IsDirectory(_))),
+            "got {result:?}"
+        );
+        // The directory + its contents must be untouched (no recursion).
+        assert!(sub.join("inner.txt").exists());
+    }
+
+    #[test]
+    fn create_is_write_file_with_empty_contents() {
+        // The "create a new file" primitive is just write_file_core(.., ""); document it.
+        let dir = TempDir::new().unwrap();
+        write_file_core(dir.path(), Path::new("new.txt"), "").unwrap();
+        let out = read_file_core(dir.path(), Path::new("new.txt")).unwrap();
+        assert_eq!(out, "");
     }
 }

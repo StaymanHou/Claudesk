@@ -166,6 +166,9 @@ pub fn run() {
             // WP12: file disk-marker (mtime + size) for the tab strip's disk-change
             // detection — checked on tab-activate + pre-save to spot a file CC edited.
             editor_fs::commands::stat_file,
+            // QoL-WP5: delete a single file under the workspace root (root-confined,
+            // no recursive directory delete). Create reuses write_file (empty contents).
+            editor_fs::commands::delete_file,
             // WP4: git diff viewer data (Sublime-Merge-style). The backend computes
             // the real git hunks + commit history; the frontend renders styled +/-
             // lines (no @codemirror/merge). (The superseded git_file_base command

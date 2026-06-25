@@ -28,7 +28,9 @@ import { TerminalPane } from "./TerminalPane";
 import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
-import { FileTree } from "./filetree/FileTree";
+import { FileTree, type FileTreeHandle } from "./filetree/FileTree";
+import { isNewFileChord } from "./filetree/newFileChord";
+import { proposeNewFilePath, collides } from "./filetree/newFilePath";
 import {
   clampRailWidth,
   loadRailWidth,
@@ -45,6 +47,8 @@ import type { FileMatches, HighlightTarget } from "./search/searchModel";
 import { formatFindResults, type FlatMatch } from "./search/findResultsBuffer";
 import { replaceAllSpec, type ReplaceAllChoice } from "./search/replaceConfirm";
 import { ConfirmModal } from "./editor/ConfirmModal";
+import { deleteFileSpec, type DeleteFileChoice } from "./editor/confirmDialog";
+import { labelForPath } from "./editor/PaneTabs";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -90,6 +94,13 @@ export function RightPanelHost({
   // focused pane's active file here only so the FileTree can highlight the open file.
   const editorSplitRef = useRef<EditorSplitHandle>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
+
+  // QoL-WP5 — the FileTree's imperative handle (⌘N → open its inline new-file input)
+  // + the file pending a delete-confirm (null = no dialog). The create flow lives in
+  // FileTree (the inline input); RightPanelHost owns the collision check + write_file +
+  // open + tree refresh, and the delete flow's confirm + delete_file + tab teardown.
+  const fileTreeRef = useRef<FileTreeHandle>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   // QoL-WP1 — register this workspace's unsaved-doc probe with App's close guard. The
   // probe reads the editor's live dirty count at call time (the close handler invokes it
@@ -264,6 +275,59 @@ export function RightPanelHost({
     editorSplitRef.current?.openFile(path);
   };
 
+  // QoL-WP5 — create a new file (called by the FileTree inline input). Validate the
+  // name (proposeNewFilePath: single segment, no separator/escape), reject a collision
+  // (don't clobber an existing file), then write_file an EMPTY buffer, open it into the
+  // focused pane, and bump fsTreeRefreshKey for an immediate tree refresh (the WP0
+  // watcher would also catch it, but the explicit bump avoids debounce lag). Returns an
+  // error string for the input to show inline, or null on success. IPC errors surface
+  // (never swallowed — the WP6 lesson). v1 creates at the workspace ROOT.
+  const createFile = (
+    name: string,
+    existingPaths: string[],
+  ): Promise<string | null> => {
+    const proposed = proposeNewFilePath(null, name);
+    if (!proposed.ok) return Promise.resolve(proposed.reason);
+    if (collides(proposed.path, existingPaths)) {
+      return Promise.resolve(`${proposed.path} already exists.`);
+    }
+    return invoke<void>("write_file", {
+      root: projectPath,
+      path: proposed.path,
+      contents: "",
+    })
+      .then(() => {
+        openFile(proposed.path);
+        setFsTreeRefreshKey((k) => k + 1);
+        return null;
+      })
+      .catch((e: unknown) => String(e));
+  };
+
+  // QoL-WP5 — a delete ✕ was clicked in the FileTree: open the confirm (the actual
+  // delete happens on confirm in onDeleteConfirm). Held as the pending path.
+  const requestDeleteFile = (path: string) => setPendingDelete(path);
+
+  // The delete-confirm resolved. On "delete": delete_file, then close any open tab(s)
+  // for it across all panes (the file is gone) and bump the tree refresh. On "cancel":
+  // change nothing. A failed delete surfaces — re-open the tree's error path is overkill
+  // for a single op, so we just log via the rejected invoke (no silent swallow; a future
+  // toast could show it). The confirm covered the dirty-tab data-loss case.
+  const onDeleteConfirm = (choice: DeleteFileChoice) => {
+    const path = pendingDelete;
+    setPendingDelete(null);
+    if (choice !== "delete" || !path) return;
+    void invoke<void>("delete_file", { root: projectPath, path })
+      .then(() => {
+        editorSplitRef.current?.closeTabsForPath(path);
+        setFsTreeRefreshKey((k) => k + 1);
+      })
+      .catch((e: unknown) => {
+        // Surface the failure rather than swallow it; the tree stays as-is.
+        console.error(`delete_file failed for ${path}:`, e);
+      });
+  };
+
   // WP7 — a search returned results: render them into the "Find Results" synthetic tab
   // (the WP12 seam). The buffer text + the click-line→match map come from the pure
   // `formatFindResults`. On the FIRST search we create the tab and register a click
@@ -376,6 +440,15 @@ export function RightPanelHost({
         setSearchOpen((open) => !open); // WP7 — toggle the Find-in-Files overlay
         return;
       }
+      // QoL-WP5 — ⌘N opens the FileTree's inline new-file input (bare ⌘N, disjoint
+      // from WP6's ⌘⇧N new-workspace + the ⌘P finder). preventDefault pre-empts any
+      // OS "new" binding. Flips to the editor panel so the rail (+ its input) is visible.
+      if (isNewFileChord(e)) {
+        e.preventDefault();
+        setPanel((cur) => selectPanel(cur, "editor"));
+        fileTreeRef.current?.beginNewFile();
+        return;
+      }
       // WP12 — ⌘1..⌘9 activates the Nth open-file tab (n past the end → last tab).
       // Bare ⌘+digit, disjoint from every ⌘⇧ chord and the bare-⌘P finder.
       const tabN = tabSwitchIndex(e);
@@ -418,25 +491,45 @@ export function RightPanelHost({
       // collapsed (the .is-collapsed rule pins width:auto for the strip).
       style={treeCollapsed ? undefined : { width: `${railWidth}px` }}
     >
-      <button
-        type="button"
-        className="file-tree-collapse"
-        data-testid="file-tree-collapse"
-        aria-label={treeCollapsed ? "Show file tree" : "Hide file tree"}
-        aria-expanded={!treeCollapsed}
-        title={treeCollapsed ? "Show file tree" : "Hide file tree"}
-        onClick={() => setTreeCollapsed((c) => !c)}
-      >
-        {treeCollapsed ? "›" : "‹ Files"}
-      </button>
+      {/* QoL-WP5 — rail header: the collapse toggle + a "+ new file" action. The
+          header is a flex row so the + sits at the trailing edge; the + is hidden
+          when collapsed (the strip has no room + create needs the visible tree). */}
+      <div className="file-tree-header" data-testid="file-tree-header">
+        <button
+          type="button"
+          className="file-tree-collapse"
+          data-testid="file-tree-collapse"
+          aria-label={treeCollapsed ? "Show file tree" : "Hide file tree"}
+          aria-expanded={!treeCollapsed}
+          title={treeCollapsed ? "Show file tree" : "Hide file tree"}
+          onClick={() => setTreeCollapsed((c) => !c)}
+        >
+          {treeCollapsed ? "›" : "‹ Files"}
+        </button>
+        {!treeCollapsed && (
+          <button
+            type="button"
+            className="file-tree-newfile-btn"
+            data-testid="file-tree-newfile-btn"
+            aria-label="New file (⌘N)"
+            title="New file (⌘N)"
+            onClick={() => fileTreeRef.current?.beginNewFile()}
+          >
+            ＋
+          </button>
+        )}
+      </div>
       {/* The tree stays MOUNTED even when collapsed — CSS (.is-collapsed
           .file-tree-body { display:none }) hides the body in the strip. Keeping it
           mounted preserves the expanded-dir Set AND avoids re-issuing the fs_tree
           walk on every collapse→expand cycle. */}
       <FileTree
+        ref={fileTreeRef}
         projectPath={projectPath}
         openPath={activePath}
         onOpen={openFile}
+        onCreateFile={createFile}
+        onDeleteFile={requestDeleteFile}
         gitStatusRefreshKey={gitStatusRefreshKey}
         fsTreeRefreshKey={fsTreeRefreshKey}
       />
@@ -650,6 +743,16 @@ export function RightPanelHost({
             replacement,
           )}
           onChoose={onReplaceConfirm}
+        />
+      )}
+
+      {/* QoL-WP5 — delete-file confirm (danger). Only the focused workspace mounts it;
+          resolving (delete/cancel) clears pendingDelete. The basename is shown so the
+          operator knows exactly which file. */}
+      {visible && pendingDelete && (
+        <ConfirmModal
+          spec={deleteFileSpec(labelForPath(pendingDelete))}
+          onChoose={onDeleteConfirm}
         />
       )}
     </div>

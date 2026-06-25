@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use super::{read_file_core, stat_file_core, write_file_core, FileMarker};
+use super::{delete_file_core, read_file_core, stat_file_core, write_file_core, FileMarker};
 
 /// Read a UTF-8 text file under the workspace `root`. Errors (missing file, binary
 /// content, path escaping the workspace) come back as a `String` for the UI to
@@ -34,4 +34,14 @@ pub fn write_file(root: String, path: String, contents: String) -> Result<(), St
 #[tauri::command]
 pub fn stat_file(root: String, path: String) -> Result<FileMarker, String> {
     stat_file_core(Path::new(&root), Path::new(&path)).map_err(|e| e.to_string())
+}
+
+/// Delete a single file under the workspace `root` (QoL-WP5). Confined to `root` by the
+/// same guard as `write_file`; a directory target is rejected (no recursive delete) and
+/// a missing file is an error. Returns the error as a `String` so a failed delete is
+/// surfaced in the UI, never swallowed. The "create a new file" path has no command of
+/// its own — it is `write_file` with empty contents.
+#[tauri::command]
+pub fn delete_file(root: String, path: String) -> Result<(), String> {
+    delete_file_core(Path::new(&root), Path::new(&path)).map_err(|e| e.to_string())
 }

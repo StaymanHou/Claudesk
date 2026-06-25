@@ -1,5 +1,17 @@
 # Backlog
 
+## SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS
+- **Source:** feature:verify-human (QoL-WP5 Phase 3 — operator questions, 2026-06-25)
+- **Target level:** feature (small) — editor file-management depth
+- **Type:** new-work (two scoped extensions of QoL-WP5's create/delete)
+- **Summary:** QoL-WP5 shipped create-file (root-only) + delete-file (single-file-only). Two natural extensions the operator asked for at verify-human, both DELIBERATELY out of WP5 v1 scope: **(A) create a file INSIDE a folder** — today the new-file input creates at the workspace root and rejects any `/` in the name; **(B) delete a FOLDER** (recursive) — today `delete_file_core` rejects a directory target (`IsDirectory`) and the ✕ renders on file rows only.
+- **Context:**
+  - **(A) create-in-folder** is the cheaper of the two and low-risk. The backend already supports it: `editor_fs::write_file`/`resolve_within` confine to root but allow any existing-parent subpath (`write_in_nested_existing_dir_round_trips` test proves `src/lib.rs` works). The only blockers are frontend: `proposeNewFilePath(dir, name)` already takes a `dir` arg (passed `null` today), and it rejects `/`-containing names. Two viable UX shapes: (i) a per-DIR-row "+ new file here" affordance that passes that dir as `dir`; (ii) allow a relative path in the input (`sub/x.txt`) but only when the parent dir already exists (no `mkdir -p`, matching the backend constraint) — or add `create_dir_all` of the parent to the create path if nested-dir create is wanted. Reserve "new folder" as a separate sub-item if pursued.
+  - **(B) delete-folder (recursive)** is riskier — one click wipes a subtree. Needs: a new `delete_dir(root, path)` backend command (root-confined `fs::remove_dir_all`, mirroring `delete_file`'s `resolve_within`), a delete ✕ on dir rows, a STRONGER confirm (name + "and everything inside it" + ideally a descendant count), and `closeTabsForPath` for every open tab UNDER the deleted dir (the current `close-path` is exact-match; a folder delete needs a prefix-match teardown). Consider macOS Trash (`NSFileManager` / a `trash` crate) instead of a hard `remove_dir_all` for recoverability given the blast radius.
+- **Suggested action:** (A) first (cheap, low-risk) — likely a quick task. (B) as a deliberate small feature with the stronger-confirm + prefix-close-tabs + (recommended) Trash-not-hard-delete decisions made at plan time.
+- **Priority:** low (A) / low (B) — both are depth on an already-working feature; the operator can use Sublime Text (one click) for folder ops meanwhile.
+- **Status:** open
+
 <!-- M4 cycle-close sweep 2026-06-24 (/product-finalize): no pending item was newly
 RESOLVED by M4's work (M4's own WP outcomes were recorded at each feature-finalize).
 Disposition of the operationally-relevant pending items: SURFACE-2026-06-23-VERIFY-SELF-

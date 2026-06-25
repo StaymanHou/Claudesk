@@ -54,6 +54,13 @@ export interface PaneTabsHandle {
   addSynthetic: (id: string, label: string) => void;
   /** Close THIS pane's active tab (⌘W), routed through the dirty-guard; no-op if none. */
   closeActiveTab: () => void;
+  /**
+   * QoL-WP5 — close THIS pane's tab(s) for a file deleted on disk, WITHOUT the dirty
+   * guard (the file is gone; the parent's delete-confirm already covered data loss).
+   * The shared-store ref-count drops via the existing prevPaths diff. No-op if the
+   * pane holds no tab for `path`.
+   */
+  closeTabsForPath: (path: string) => void;
 }
 
 interface PaneTabsProps {
@@ -233,6 +240,11 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
       if (activeTabId) requestClose(activeTabId);
     };
 
+    const closeTabsForPath = useCallback(
+      (path: string) => dispatch({ type: "close-path", path }),
+      [],
+    );
+
     useImperativeHandle(
       ref,
       () => ({
@@ -240,8 +252,9 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
         activateIndex,
         addSynthetic,
         closeActiveTab: () => closeActiveTabRef.current(),
+        closeTabsForPath,
       }),
-      [openFile, activateIndex, addSynthetic],
+      [openFile, activateIndex, addSynthetic, closeTabsForPath],
     );
 
     const onCloseChoice = (choice: CloseChoice) => {

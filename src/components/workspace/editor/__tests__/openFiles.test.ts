@@ -190,3 +190,55 @@ describe("add-synthetic", () => {
     expect(s.activeTabId).toBe("fr");
   });
 });
+
+describe("close-path (QoL-WP5 — delete a file closes its tab)", () => {
+  it("removes the file tab matching the path and reassigns the active tab", () => {
+    let s = open(
+      open(open(initialOpenFilesState(), "t1", "a.ts"), "t2", "b.ts"),
+      "t3",
+      "c.ts",
+    );
+    // active is c (last opened); delete b (a non-active middle tab).
+    s = openFilesReducer(s, { type: "close-path", path: "b.ts" });
+    expect(s.tabs.map((t) => t.path)).toEqual(["a.ts", "c.ts"]);
+    expect(s.activeTabId).toBe("t3"); // active survived → unchanged
+  });
+
+  it("closing the active file's path reassigns to the slot-neighbor", () => {
+    let s = open(
+      open(open(initialOpenFilesState(), "t1", "a.ts"), "t2", "b.ts"),
+      "t3",
+      "c.ts",
+    );
+    s = openFilesReducer(s, { type: "activate", id: "t2" }); // active b
+    s = openFilesReducer(s, { type: "close-path", path: "b.ts" });
+    expect(s.tabs.map((t) => t.path)).toEqual(["a.ts", "c.ts"]);
+    // b sat at index 1; the tab now at index 1 (c) takes the slot.
+    expect(s.activeTabId).toBe("t3");
+  });
+
+  it("closing the only tab's path returns to the empty state", () => {
+    let s = open(initialOpenFilesState(), "t1", "a.ts");
+    s = openFilesReducer(s, { type: "close-path", path: "a.ts" });
+    expect(s.tabs).toHaveLength(0);
+    expect(s.activeTabId).toBeNull();
+  });
+
+  it("is a no-op for a path no tab holds (identity preserved)", () => {
+    const s = open(initialOpenFilesState(), "t1", "a.ts");
+    expect(openFilesReducer(s, { type: "close-path", path: "z.ts" })).toBe(s);
+  });
+
+  it("never closes a synthetic tab (no path) on a close-path", () => {
+    let s = openFilesReducer(initialOpenFilesState(), {
+      type: "add-synthetic",
+      id: "fr",
+      label: "Find Results",
+    });
+    s = open(s, "t2", "a.ts");
+    // Deleting a.ts must leave the synthetic Find-Results tab intact.
+    s = openFilesReducer(s, { type: "close-path", path: "a.ts" });
+    expect(s.tabs.map((t) => t.id)).toEqual(["fr"]);
+    expect(s.activeTabId).toBe("fr");
+  });
+});

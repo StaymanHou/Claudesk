@@ -12,11 +12,24 @@
 //
 // Dark-only, styled to match the picker/finder chrome.
 
-import { useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useReducer,
+  useState,
+  forwardRef,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { buildTree, type TreeEntry, type TreeNode } from "./buildTree";
 import { treeReducer, initialExpanded, type ExpandedDirs } from "./treeState";
 import { statusClass, statusGlyph, type GitStatusMap } from "./gitStatus";
+
+/** Imperative surface the parent drives the tree through (QoL-WP5 — ⌘N opens the input). */
+export interface FileTreeHandle {
+  /** Open the inline new-file name input (the ⌘N target + the "+" button action). */
+  beginNewFile: () => void;
+}
 
 interface FileTreeProps {
   /** Workspace project dir — the root `fs_tree` walks. */
@@ -25,6 +38,22 @@ interface FileTreeProps {
   openPath: string | null;
   /** Open a file (project-relative path) into the editor — the shared openFile seam. */
   onOpen: (path: string) => void;
+  /**
+   * QoL-WP5 — create a new file named `name` at the workspace root. Returns a Promise
+   * resolving to an error string (shown inline) or null on success. The parent owns the
+   * collision check + `write_file` IPC + open-into-editor + tree refresh; the tree owns
+   * only the inline name input. `existingPaths` (current project-relative tree paths) is
+   * passed so the parent can reject a clobber. Optional — older callers/tests omit it.
+   */
+  onCreateFile?: (
+    name: string,
+    existingPaths: string[],
+  ) => Promise<string | null>;
+  /**
+   * QoL-WP5 — delete the file at `path` (project-relative). The parent owns the
+   * confirm dialog + `delete_file` IPC + open-tab teardown + tree refresh. Optional.
+   */
+  onDeleteFile?: (path: string) => void;
   /**
    * WP11 — bump this to force a git-status re-fetch (the parent bumps it on each
    * file save so the indicators reflect the just-written file). Changing it re-runs
@@ -42,116 +71,203 @@ interface FileTreeProps {
   fsTreeRefreshKey?: number;
 }
 
-export function FileTree({
-  projectPath,
-  openPath,
-  onOpen,
-  gitStatusRefreshKey = 0,
-  fsTreeRefreshKey = 0,
-}: FileTreeProps) {
-  const [entries, setEntries] = useState<TreeEntry[] | null>(null); // null = loading
-  const [error, setError] = useState<string | null>(null);
-  const [expanded, dispatch] = useReducer(treeReducer, initialExpanded);
-  // WP11 — per-path git status for the row indicators. Empty until the first fetch
-  // resolves; a non-git workspace stays empty (the backend returns an empty map, not
-  // an error — so the tree renders with no indicators rather than an error row).
-  const [gitStatus, setGitStatus] = useState<GitStatusMap>({});
+export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
+  function FileTree(
+    {
+      projectPath,
+      openPath,
+      onOpen,
+      onCreateFile,
+      onDeleteFile,
+      gitStatusRefreshKey = 0,
+      fsTreeRefreshKey = 0,
+    },
+    ref,
+  ) {
+    const [entries, setEntries] = useState<TreeEntry[] | null>(null); // null = loading
+    const [error, setError] = useState<string | null>(null);
+    const [expanded, dispatch] = useReducer(treeReducer, initialExpanded);
 
-  // Load the tree on mount (the rail stays mounted per the all-workspaces-mounted
-  // rule), AND re-walk on each `fsTreeRefreshKey` bump (QoL-WP0: an `fs-change` event
-  // from the backend watcher → an external on-disk create/remove/rename). An fs_tree
-  // failure surfaces inline, never swallowed into an empty rail. The re-walk replaces
-  // `entries` only; the path-keyed `expanded` reducer + native scroll are untouched,
-  // so collapse state + scroll position survive a refresh.
-  useEffect(() => {
-    let cancelled = false;
-    invoke<TreeEntry[]>("fs_tree", { root: projectPath })
-      .then((list) => {
-        if (!cancelled) setEntries(list);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setError(String(e));
-          setEntries([]);
+    // QoL-WP5 — inline new-file name input. `newFileName` is null when the input is
+    // closed; a string (possibly empty) while the operator types. `newFileError` shows a
+    // rejected create (collision / invalid name / IPC error) inline below the input.
+    const [newFileName, setNewFileName] = useState<string | null>(null);
+    const [newFileError, setNewFileError] = useState<string | null>(null);
+
+    // ⌘N (and the "+" button) opens the input; the parent drives ⌘N through this handle.
+    useImperativeHandle(
+      ref,
+      () => ({
+        beginNewFile: () => {
+          setNewFileError(null);
+          setNewFileName("");
+        },
+      }),
+      [],
+    );
+    // WP11 — per-path git status for the row indicators. Empty until the first fetch
+    // resolves; a non-git workspace stays empty (the backend returns an empty map, not
+    // an error — so the tree renders with no indicators rather than an error row).
+    const [gitStatus, setGitStatus] = useState<GitStatusMap>({});
+
+    // Load the tree on mount (the rail stays mounted per the all-workspaces-mounted
+    // rule), AND re-walk on each `fsTreeRefreshKey` bump (QoL-WP0: an `fs-change` event
+    // from the backend watcher → an external on-disk create/remove/rename). An fs_tree
+    // failure surfaces inline, never swallowed into an empty rail. The re-walk replaces
+    // `entries` only; the path-keyed `expanded` reducer + native scroll are untouched,
+    // so collapse state + scroll position survive a refresh.
+    useEffect(() => {
+      let cancelled = false;
+      invoke<TreeEntry[]>("fs_tree", { root: projectPath })
+        .then((list) => {
+          if (!cancelled) setEntries(list);
+        })
+        .catch((e: unknown) => {
+          if (!cancelled) {
+            setError(String(e));
+            setEntries([]);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [projectPath, fsTreeRefreshKey]);
+
+    // WP11 — fetch the git-status map (parallel to fs_tree), re-running on workspace
+    // change AND on `gitStatusRefreshKey` bumps (a save in the editor). A failure here
+    // does NOT blank the tree or set the error row — git status is decorative, and a
+    // non-git dir legitimately "fails" by returning an empty map; we clear to empty
+    // (no indicators) and let the file list stand. (Distinct from the fs_tree error,
+    // which IS surfaced — losing the file list is a real failure.)
+    useEffect(() => {
+      let cancelled = false;
+      invoke<GitStatusMap>("git_file_statuses", { root: projectPath })
+        .then((map) => {
+          if (!cancelled) setGitStatus(map);
+        })
+        .catch(() => {
+          if (!cancelled) setGitStatus({});
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [projectPath, gitStatusRefreshKey]);
+
+    const tree = useMemo(
+      () => (entries === null ? [] : buildTree(entries)),
+      [entries],
+    );
+
+    // QoL-WP5 — submit the inline new-file input: hand the name + the current tree path
+    // set up to the parent (which validates collision, write_files, opens it, refreshes).
+    // On success (null) close the input; on a rejection keep it open with the error shown.
+    const submitNewFile = () => {
+      if (newFileName === null || !onCreateFile) return;
+      const existingPaths = (entries ?? []).map((e) => e.path);
+      void onCreateFile(newFileName, existingPaths).then((err) => {
+        if (err) {
+          setNewFileError(err);
+        } else {
+          setNewFileName(null);
+          setNewFileError(null);
         }
       });
-    return () => {
-      cancelled = true;
     };
-  }, [projectPath, fsTreeRefreshKey]);
 
-  // WP11 — fetch the git-status map (parallel to fs_tree), re-running on workspace
-  // change AND on `gitStatusRefreshKey` bumps (a save in the editor). A failure here
-  // does NOT blank the tree or set the error row — git status is decorative, and a
-  // non-git dir legitimately "fails" by returning an empty map; we clear to empty
-  // (no indicators) and let the file list stand. (Distinct from the fs_tree error,
-  // which IS surfaced — losing the file list is a real failure.)
-  useEffect(() => {
-    let cancelled = false;
-    invoke<GitStatusMap>("git_file_statuses", { root: projectPath })
-      .then((map) => {
-        if (!cancelled) setGitStatus(map);
-      })
-      .catch(() => {
-        if (!cancelled) setGitStatus({});
-      });
-    return () => {
-      cancelled = true;
+    const cancelNewFile = () => {
+      setNewFileName(null);
+      setNewFileError(null);
     };
-  }, [projectPath, gitStatusRefreshKey]);
 
-  const tree = useMemo(
-    () => (entries === null ? [] : buildTree(entries)),
-    [entries],
-  );
-
-  if (error !== null) {
-    return (
-      <div className="file-tree-body" data-testid="file-tree">
-        <div
-          className="file-tree-error"
-          data-testid="file-tree-error"
-          role="alert"
-        >
-          Could not list files: {error}
-        </div>
-      </div>
-    );
-  }
-
-  if (entries === null) {
-    return (
-      <div className="file-tree-body" data-testid="file-tree">
-        <div className="file-tree-loading" data-testid="file-tree-loading">
-          Indexing…
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="file-tree-body" data-testid="file-tree" role="tree">
-      {tree.length === 0 ? (
-        <div className="file-tree-empty" data-testid="file-tree-empty">
-          No files
-        </div>
-      ) : (
-        tree.map((node) => (
-          <TreeRow
-            key={node.path}
-            node={node}
-            depth={0}
-            expanded={expanded}
-            openPath={openPath}
-            gitStatus={gitStatus}
-            onOpen={onOpen}
-            onToggle={(path) => dispatch({ type: "toggle", path })}
+    // The inline new-file input row (rendered at the top of the loaded body). Enter submits,
+    // Esc cancels; the error (collision / invalid / IPC) shows below until the name changes.
+    const newFileInput =
+      newFileName !== null ? (
+        <div className="file-tree-newfile" data-testid="file-tree-newfile">
+          <input
+            className="file-tree-newfile-input"
+            data-testid="file-tree-newfile-input"
+            autoFocus
+            value={newFileName}
+            placeholder="new-file-name.ext"
+            aria-label="New file name"
+            onChange={(e) => {
+              setNewFileName(e.target.value);
+              if (newFileError) setNewFileError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitNewFile();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancelNewFile();
+              }
+            }}
+            onBlur={cancelNewFile}
           />
-        ))
-      )}
-    </div>
-  );
-}
+          {newFileError && (
+            <div
+              className="file-tree-newfile-error"
+              data-testid="file-tree-newfile-error"
+              role="alert"
+            >
+              {newFileError}
+            </div>
+          )}
+        </div>
+      ) : null;
+
+    if (error !== null) {
+      return (
+        <div className="file-tree-body" data-testid="file-tree">
+          <div
+            className="file-tree-error"
+            data-testid="file-tree-error"
+            role="alert"
+          >
+            Could not list files: {error}
+          </div>
+        </div>
+      );
+    }
+
+    if (entries === null) {
+      return (
+        <div className="file-tree-body" data-testid="file-tree">
+          <div className="file-tree-loading" data-testid="file-tree-loading">
+            Indexing…
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="file-tree-body" data-testid="file-tree" role="tree">
+        {newFileInput}
+        {tree.length === 0 ? (
+          <div className="file-tree-empty" data-testid="file-tree-empty">
+            No files
+          </div>
+        ) : (
+          tree.map((node) => (
+            <TreeRow
+              key={node.path}
+              node={node}
+              depth={0}
+              expanded={expanded}
+              openPath={openPath}
+              gitStatus={gitStatus}
+              onOpen={onOpen}
+              onDeleteFile={onDeleteFile}
+              onToggle={(path) => dispatch({ type: "toggle", path })}
+            />
+          ))
+        )}
+      </div>
+    );
+  },
+);
 
 interface TreeRowProps {
   node: TreeNode;
@@ -161,6 +277,8 @@ interface TreeRowProps {
   /** WP11 — repo-relative path → git status, for the per-row indicator. */
   gitStatus: GitStatusMap;
   onOpen: (path: string) => void;
+  /** QoL-WP5 — delete a file row (parent confirms + does the IPC). Undefined → no ✕. */
+  onDeleteFile?: (path: string) => void;
   onToggle: (path: string) => void;
 }
 
@@ -172,6 +290,7 @@ function TreeRow({
   openPath,
   gitStatus,
   onOpen,
+  onDeleteFile,
   onToggle,
 }: TreeRowProps) {
   const isOpen = expanded.has(node.path);
@@ -204,6 +323,7 @@ function TreeRow({
               openPath={openPath}
               gitStatus={gitStatus}
               onOpen={onOpen}
+              onDeleteFile={onDeleteFile}
               onToggle={onToggle}
             />
           ))}
@@ -240,6 +360,25 @@ function TreeRow({
         >
           {glyph}
         </span>
+      )}
+      {/* QoL-WP5 — per-file delete ✕, shown on row hover (CSS). The parent confirms
+          + runs delete_file + tears down any open tab. stopPropagation so the click
+          doesn't also open the file. mousedown-preventDefault keeps editor focus. */}
+      {onDeleteFile && (
+        <button
+          type="button"
+          className="file-tree-delete"
+          data-testid="file-tree-delete"
+          aria-label={`Delete ${node.name}`}
+          title="Delete file"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteFile(node.path);
+          }}
+        >
+          ✕
+        </button>
       )}
     </div>
   );

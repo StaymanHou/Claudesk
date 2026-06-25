@@ -1421,14 +1421,22 @@ body,
   display: none;
 }
 
+/* QoL-WP5 — the rail header row: collapse toggle (left) + "+ new file" (right). The
+   header carries the bottom separator that used to live on the collapse button. */
+.file-tree-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
 /* The collapse toggle pinned to the top of the rail. */
 .file-tree-collapse {
-  flex-shrink: 0;
+  flex: 1;
   text-align: left;
   padding: 0.35rem 0.6rem;
   background: none;
   border: none;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
   color: #b0b0b0;
   font-size: 0.75rem;
   cursor: pointer;
@@ -1436,6 +1444,48 @@ body,
 
 .file-tree-collapse:hover {
   color: #e0e0e0;
+}
+
+/* QoL-WP5 — "+ new file" button at the header's trailing edge. */
+.file-tree-newfile-btn {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  background: none;
+  border: none;
+  color: #b0b0b0;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-tree-newfile-btn:hover {
+  color: #e0e0e0;
+}
+
+/* QoL-WP5 — the inline new-file name input at the top of the tree body. */
+.file-tree-newfile {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.file-tree-newfile-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.2rem 0.4rem;
+  background-color: #2a2d2e;
+  border: 1px solid rgba(120, 170, 255, 0.5);
+  border-radius: 3px;
+  color: #e0e0e0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.66rem;
+  outline: none;
+}
+
+.file-tree-newfile-error {
+  margin-top: 0.25rem;
+  color: #f48771;
+  font-size: 0.62rem;
+  line-height: 1.3;
 }
 
 /* The scrolling tree body fills the rail below the toggle. */
@@ -1516,6 +1566,29 @@ body,
 
 .file-tree-status--renamed {
   color: #e2c08d; /* amber — renamed (treated like modified) */
+}
+
+/* QoL-WP5 — per-file delete ✕. Hidden by default; revealed on row hover so it doesn't
+   clutter the dense tree. Sits at the row's trailing edge after the git-status glyph. */
+.file-tree-delete {
+  flex-shrink: 0;
+  margin-left: 0.3em;
+  padding: 0 0.25em;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.file-tree-row:hover .file-tree-delete {
+  visibility: visible;
+}
+
+.file-tree-delete:hover {
+  color: #f48771; /* red on hover — destructive affordance */
 }
 
 /* WP11 — minimap narrowed. @replit/codemirror-minimap sets the gutter's width inline

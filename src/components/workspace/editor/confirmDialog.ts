@@ -90,6 +90,28 @@ export function closeWorkspaceSpec(
   };
 }
 
+/** The two outcomes of the delete-file confirm (QoL-WP5). */
+export type DeleteFileChoice = "delete" | "cancel";
+
+/**
+ * The delete-file confirm dialog (QoL-WP5): Delete (danger) / Cancel (primary, the safe
+ * default). Esc → cancel (keeps the file). Deleting is irreversible (a hard `remove_file`,
+ * not a Trash move in v1), so the danger button is non-default and the safe Cancel is
+ * primary. `name` is the file's basename, woven into the message so the operator knows
+ * exactly which file they're about to remove.
+ */
+export function deleteFileSpec(name: string): ConfirmSpec<DeleteFileChoice> {
+  return {
+    title: "Delete file",
+    message: `Delete ${name}? This can't be undone.`,
+    buttons: [
+      { id: "cancel", label: "Cancel", value: "cancel", variant: "primary" },
+      { id: "delete", label: "Delete", value: "delete", variant: "danger" },
+    ],
+    escValue: "cancel",
+  };
+}
+
 /** The two outcomes of the disk-change conflict prompt. */
 export type ConflictChoice = "keep-mine" | "load-disk";
 

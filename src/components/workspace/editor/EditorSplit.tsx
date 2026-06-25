@@ -86,6 +86,12 @@ export interface EditorSplitHandle {
    * to decide whether to confirm before tearing the workspace down. 0 → close silently.
    */
   dirtyDocCount: () => number;
+  /**
+   * QoL-WP5 — a file was deleted on disk: close its tab in EVERY pane (the same file
+   * can be open in more than one split pane). Routed to each pane's PaneTabs handle,
+   * which dispatches `close-path` (no dirty guard — the delete-confirm covered loss).
+   */
+  closeTabsForPath: (path: string) => void;
 }
 
 interface EditorSplitProps {
@@ -396,7 +402,19 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
 
     // QoL-WP1 — read the live store via the ref (stable identity; no `docs` dep so the
     // handle isn't rebuilt on every edit). Called by the close guard at click time.
-    const dirtyDocCount = useCallback(() => dirtyDocCountOf(docsRef.current), []);
+    const dirtyDocCount = useCallback(
+      () => dirtyDocCountOf(docsRef.current),
+      [],
+    );
+
+    // QoL-WP5 — close a deleted file's tab in EVERY pane. Each PaneTabs dispatches
+    // `close-path` (a no-op where the pane doesn't hold it); the shared-store ref-count
+    // drops via each pane's prevPaths diff. Iterates the live handle map.
+    const closeTabsForPath = useCallback((path: string) => {
+      for (const handle of paneHandles.current.values()) {
+        handle?.closeTabsForPath(path);
+      }
+    }, []);
 
     useImperativeHandle(
       ref,
@@ -408,6 +426,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         setSyntheticContent,
         checkDiskForPaths,
         dirtyDocCount,
+        closeTabsForPath,
       }),
       [
         openFile,
@@ -417,6 +436,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         setSyntheticContent,
         checkDiskForPaths,
         dirtyDocCount,
+        closeTabsForPath,
       ],
     );
 

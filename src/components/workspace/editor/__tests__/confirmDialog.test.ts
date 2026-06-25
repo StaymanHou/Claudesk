@@ -4,6 +4,7 @@ import { describe, it, expect } from "vitest";
 import {
   closeDirtySpec,
   conflictSpec,
+  deleteFileSpec,
   type ConfirmButton,
 } from "../confirmDialog";
 
@@ -42,5 +43,21 @@ describe("conflictSpec", () => {
 
   it("names the file in the message", () => {
     expect(conflictSpec("a.ts").message).toContain("a.ts");
+  });
+});
+
+describe("deleteFileSpec (QoL-WP5)", () => {
+  it("offers cancel (primary) then delete (danger), with Esc → cancel", () => {
+    const spec = deleteFileSpec("a.ts");
+    expect(spec.buttons.map((b) => b.value)).toEqual(["cancel", "delete"]);
+    const cancel = spec.buttons.find((b) => b.value === "cancel");
+    const del = spec.buttons.find((b) => b.value === "delete");
+    expect(cancel?.variant).toBe("primary"); // safe default is the primary
+    expect(del?.variant).toBe("danger"); // delete is irreversible → danger, non-default
+    expect(spec.escValue).toBe("cancel"); // Esc keeps the file
+  });
+
+  it("names the file in the message", () => {
+    expect(deleteFileSpec("notes.md").message).toContain("notes.md");
   });
 });

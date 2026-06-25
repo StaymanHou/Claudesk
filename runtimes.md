@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-25  # QoL-WP2 P1 build — cargo test 224 pass
+updated: 2026-06-25  # QoL-WP5 P1 build — cargo test 237 pass
 ---
 
 # Runtime Registry
@@ -41,9 +41,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-25, QoL-WP1 P3: 456 pass, +8 closeWorkspaceGuard tests)
+- **Last:** 1s (2026-06-25, QoL-WP5 P3: 514 pass, +11 editorFileManagement ?raw wiring assertions)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-25 (QoL-WP5 Phase 3 verify-codify: +11 ?raw wiring assertions → 60 files / 514 tests; run ~1.07s)
+  - 1s — 2026-06-25 (QoL-WP5 Phase 2 verify-codify: +16 pure-seam tests → 59 files / 503 tests; run ~1.04s)
   - 1s — 2026-06-25 (QoL-WP1 Phase 3 verify-codify: +8 dirtyDocCount + closeWorkspaceSpec tests → 53 files / 456 tests)
   - 1s — 2026-06-25 (QoL-WP1 Phase 1 verify-codify: +6 closeWorkspace focus-repick tests → 52 files / 448 tests; run ~0.94s)
   - 1s — 2026-06-23 (M4 WP4b verify-codify: +5 focusHalf derivation tests → 49 files / 426 tests; run ~0.86s)
@@ -65,9 +67,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 6s (2026-06-25, QoL-WP2 P2 build: notification_type gating + DTO/HookEvent field; +7 tests → 231 pass; warm recompile, run ~0.62s)
+- **Last:** 7s (2026-06-25, QoL-WP5 P1 build: editor_fs delete_file_core + command; +6 tests → 237 pass; warm recompile, run ~0.66s)
 - **Use timeout:** 120000
 - **History:**
+  - 7s — 2026-06-25 (QoL-WP5 Phase 1 build: delete_file_core + delete_file command + IsDirectory variant; +6 editor_fs tests, 237 pass; warm recompile)
   - 6s — 2026-06-25 (QoL-WP2 Phase 2 build: Notification gated on notification_type; +7 tests, 231 pass; warm recompile)
   - 7s — 2026-06-25 (QoL-WP2 Phase 1 build: PostToolUse→Running + CLAUDESK_EVENTS 3→4; +3 tests, 224 pass; warm recompile)
   - 4s — 2026-06-25 (QoL-WP1 Phase 2 verify-auto: no new Rust — frontend-only unmount-kill; 221 pass, no regression; warm run 0.62s)

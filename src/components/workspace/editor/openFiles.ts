@@ -57,6 +57,10 @@ export type OpenFilesEvent =
   // Close a tab. Reassigns the active tab to a neighbor if the closed one was active;
   // closing the last tab leaves activeTabId null (the editor's empty state).
   | { type: "close"; id: string }
+  // QoL-WP5 — close EVERY file tab whose path === this (a file deleted on disk: its
+  // tab(s) must disappear). No-op for an unknown path / synthetic tabs (no path). Same
+  // active-tab reassignment semantics as `close` when the active tab was one of them.
+  | { type: "close-path"; path: string }
   // Activate a tab by id (a tab click). No-op if id is unknown or already active.
   | { type: "activate"; id: string }
   // Activate the Nth tab (1-based). n past the end clamps to the LAST tab — so ⌘9 on
@@ -128,6 +132,23 @@ export function openFilesReducer(
         activeTabId = neighbor.id;
       }
       return { tabs, activeTabId };
+    }
+    case "close-path": {
+      // Index of the active tab BEFORE removal, so we can pick its neighbor by the same
+      // rule `close` uses when the active tab is among those removed.
+      const activeIdx = activeIndex(state);
+      const tabs = state.tabs.filter(
+        (t) => !(t.kind === "file" && t.path === event.path),
+      );
+      if (tabs.length === state.tabs.length) return state; // no tab matched — no-op
+      if (tabs.length === 0) return { tabs, activeTabId: null }; // all closed → empty
+      // If the active tab survived, keep it. Otherwise reassign to the tab that now
+      // occupies the active tab's old slot (clamped to the new last) — same neighbor
+      // rule as `close`, generalized to a multi-removal.
+      const activeSurvives = tabs.some((t) => t.id === state.activeTabId);
+      if (activeSurvives) return { tabs, activeTabId: state.activeTabId };
+      const neighbor = tabs[Math.min(activeIdx, tabs.length - 1)];
+      return { tabs, activeTabId: neighbor.id };
     }
     case "activate": {
       if (!state.tabs.some((t) => t.id === event.id)) return state;
