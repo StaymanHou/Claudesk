@@ -9,6 +9,7 @@ import {
   tileForSwitchIndex,
 } from "./components/workspace/filmstripTiles";
 import { workspaceSwitchIndex } from "./components/workspace/workspaceSwitchChord";
+import { newWorkspaceChord } from "./components/workspace/newWorkspaceChord";
 import {
   loadOrder,
   reorder,
@@ -125,6 +126,22 @@ function App() {
   // M4 WP2 — the new-workspace overlay (the filmstrip "+" re-entry). Only ever
   // shown when a workspace is already open; first-open uses the full-screen picker.
   const [showPicker, setShowPicker] = useState(false);
+
+  // QoL-WP6 — ⌘⇧N opens the picker overlay to start a new workspace (the keyboard
+  // parity for the native "New Workspace" menu item, which displays ⌘⇧N as label-only).
+  // Same APP-LEVEL capture-phase pattern as the ⌘⇧+digit switch above; gated on
+  // view === "workspace-open" (the only view where PickerOverlay renders — in "picker"
+  // view the full-screen picker is already up, so ⌘⇧N would be a no-op anyway).
+  useEffect(() => {
+    if (view !== "workspace-open") return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!newWorkspaceChord(e)) return;
+      e.preventDefault();
+      setShowPicker(true);
+    };
+    document.addEventListener("keydown", onKeyDown, true); // capture phase
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [view]);
 
   // QoL-WP1 — per-workspace unsaved-doc probe registry. Each workspace's RightPanelHost
   // registers `() => editor.dirtyDocCount()` on mount (cleared on unmount). The close
