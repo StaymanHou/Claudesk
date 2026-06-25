@@ -23,7 +23,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
-import { XtermPane } from "./XtermPane";
+import { XtermPane, type XtermPaneHandle } from "./XtermPane";
 import { RightPanelHost } from "./RightPanelHost";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import type { WireWorkspaceState } from "../../state/workspaceStatus";
@@ -66,6 +66,24 @@ export function Workspace({
   const rootRef = useRef<HTMLDivElement>(null);
   const [focusHalf, setFocusHalf] = useState<FocusHalf>("none");
 
+  // QoL-WP3 — auto-focus the LEFT CC terminal when this workspace becomes the center
+  // stage. The promote path (filmstrip click / ⌘⇧+digit / picker overlay / close
+  // re-pick) only flips `focusedId` → our `visible` prop; the CC XtermPane is always
+  // active=true, so its own mount/active-transition focus never re-fires on a switch.
+  // This effect closes that gap: on the false→true `visible` edge (and on mount when
+  // already visible), call the pane's imperative focus() so keystrokes land in this
+  // project's CC session with zero clicks. Operator decision: ALWAYS focus CC-left for
+  // v1 (no last-focused-half restore). rAF-deferred so the off-viewport→on-viewport
+  // layout flip settles first (focusing a parked element is unreliable in WKWebview —
+  // mirrors XtermPane's existing rAF-then-focus pattern). It calls focus() only — it
+  // NEVER sends a byte to the PTY, so a switch can't inject a spurious prompt line.
+  const ccPaneRef = useRef<XtermPaneHandle>(null);
+  useEffect(() => {
+    if (!visible) return;
+    const raf = requestAnimationFrame(() => ccPaneRef.current?.focus());
+    return () => cancelAnimationFrame(raf);
+  }, [visible]);
+
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !visible) {
@@ -77,7 +95,8 @@ export function Workspace({
     // deriving the half from it (not the leaving element) keeps the accent correct when
     // moving directly from one half to the other, and clears to "none" on focus leaving
     // the workspace entirely (relatedTarget null or outside both halves).
-    const onFocusIn = (e: FocusEvent) => setFocusHalf(deriveFocusHalf(e.target));
+    const onFocusIn = (e: FocusEvent) =>
+      setFocusHalf(deriveFocusHalf(e.target));
     const onFocusOut = (e: FocusEvent) =>
       setFocusHalf(deriveFocusHalf(e.relatedTarget));
     root.addEventListener("focusin", onFocusIn, true);
@@ -121,6 +140,7 @@ export function Workspace({
       </div>
       <div className="workspace-left">
         <XtermPane
+          ref={ccPaneRef}
           workspaceId={workspace.id}
           projectPath={workspace.project_path}
           onSessionId={(sid) => onSessionId?.(workspace.id, sid)}
