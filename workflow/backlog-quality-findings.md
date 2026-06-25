@@ -4,6 +4,28 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp5-editor-file-management — 2026-06-25
+
+3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `3abfe59`. Reviewer verdict: well-built, low-debt; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP5-CREATE-COLLISION-GITIGNORE
+- **Finding:** `createFile`'s collision check (`collides` over the `fs_tree` path set) can't see `.gitignore`d files — `fs_tree` excludes them via `ignore::WalkBuilder`. A new root-level name colliding with a gitignored file (e.g. `.env`) passes the guard and `write_file` overwrites it silently. `newFilePath.ts`'s `collides` doc ("turns create into create-new, don't clobber") is slightly overstated.
+- **Where:** `src/components/workspace/RightPanelHost.tsx` `createFile` (~285-300) + the `collides` doc in `src/components/workspace/filetree/newFilePath.ts`.
+- **Fix shape:** a pre-write `stat_file` existence check (truthy → reject; covers gitignored + untracked alike), OR a one-line doc caveat that the guard only covers tree-visible files. Low likelihood (v1 creates at root only); data is never outside the workspace.
+- **Priority:** low
+
+## SURFACE-2026-06-25-QUALITY-WP5-DELETE-FAILURE-NOT-SURFACED
+- **Finding:** `onDeleteConfirm` surfaces a failed `delete_file` only via `console.error` (the inline comment itself flags "a future toast could show it"). Every other failure path in the feature surfaces visibly (create errors render inline; fs_tree errors render a row). A delete that fails (e.g. permission) leaves the tree unchanged with no user-visible signal — the operator can't distinguish a no-op cancel from a silent failure.
+- **Where:** `src/components/workspace/RightPanelHost.tsx` `onDeleteConfirm` (~320-327).
+- **Fix shape:** surface the delete error inline (a transient row/toast near the tree, or reuse the inline-error pattern the new-file input already has). Consistent with the feature's surfaced-not-swallowed discipline.
+- **Priority:** low
+
+## SURFACE-2026-06-25-QUALITY-WP5-NEWFILE-BLUR-DISCARDS
+- **Finding:** the new-file input's `onBlur={cancelNewFile}` silently discards a partially-typed name on any focus-steal (clicking elsewhere in the rail). Enter-submit is safe (keydown precedes blur), but blur-cancels-silently is an undocumented UX choice.
+- **Where:** `src/components/workspace/filetree/FileTree.tsx` the new-file input (~165).
+- **Fix shape:** either a one-line comment marking blur-cancel as deliberate, or keep the input open on blur (cancel only on Esc). Cosmetic.
+- **Priority:** low
+
 # qol-wp4-terminal-respawn-on-switch — 2026-06-25
 
 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `10c604f`. Reviewer rated the fix well-built and appropriately-scoped — the `active`-in-deps conflation was split cleanly into a pure `shouldSpawnOnActive` predicate + a tiny `[active, bridge.phase]` trigger effect + the single-source-of-truth `spawnTriggerDeps` contract; "change advances rather than accrues debt" for a file with a documented spawn-lifecycle bug history. All three findings are polish; none warrants a refactor pass. Auto-backlogged per drive_mode=autopilot.

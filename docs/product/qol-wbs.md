@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-24
-status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4 shipped 2026-06-25; WP5–WP8 pending
+status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5 shipped 2026-06-25; WP6–WP8 pending
 context: between-milestone QoL/lifecycle sweep, filed after M4 close, before M5 (PiP) planning
 ---
 
@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f)*
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59)*
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -122,9 +122,10 @@ and delete this file.
 
 ---
 
-## WP5 — Editor: file management (add new file + delete file)  `[priority: MEDIUM]`  `↔ pairs with WP6`
-**Backlog:** SURFACE-2026-06-24-EDITOR-ADD-NEW-FILE (+ delete-file, added 2026-06-24 — operator request during WP0)
+## WP5 — Editor: file management (add new file + delete file)  `[priority: MEDIUM]`  `↔ pairs with WP6`  ✅ SHIPPED 2026-06-25 (commit 3abfe59)
+**Backlog:** SURFACE-2026-06-24-EDITOR-ADD-NEW-FILE (RESOLVED)
 **Size:** small/medium · **Type:** new editor feature
+**As-built:** create = `write_file("")` at root (no new backend command) + `openFile`; delete = NEW root-confined `delete_file` in `editor_fs` (reuses `resolve_within`; rejects a directory → `IsDirectory`, no recursion; hard `fs::remove_file` — Trash deferred). Pure seams (unit-tested): `openFiles` `close-path` action, `newFilePath` (validate + collision), `newFileChord` (⌘N), `deleteFileSpec`. UI: FileTree `forwardRef` + inline new-file input + per-row hover ✕; RightPanelHost "+ new file" header button + create/delete handlers + ⌘N chord; `closeTabsForPath` fans out to every pane. Operator-verified all 8 live checks. 0C/0M/3MINOR review (auto-backlogged). vitest 514 + cargo 237. **v1 scope cuts (deliberate):** create is root-only (no nested-dir / `mkdir -p`); folder delete is OUT — both logged as SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS.
 
 **What:** Basic file-management affordances the editor lacks today — **create** a new file (name it, open it in a tab) and **delete** an existing file. Today the editor can only OPEN existing files; there's no create and no delete path.
 

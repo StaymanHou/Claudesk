@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — qol-wp5-editor-file-management (2026-06-25)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `3abfe59`: (1) the `createFile` collision check (`collides` over the `fs_tree` set) can't see gitignored files, so a root-level name colliding with a gitignored file is overwritten silently — the `collides` "don't clobber" doc is overstated; (2) `onDeleteConfirm` surfaces a failed `delete_file` only via `console.error`, inconsistent with the feature's own inline-surfacing discipline; (3) the new-file input's `onBlur` silently discards a partial name (undocumented UX choice). Reviewer: well-built, low-debt; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp5-editor-file-management — 2026-06-25`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** three quick `/feature-refactor` nits — (1) a pre-write `stat_file` existence check or a doc caveat on `collides`; (2) surface the delete error inline (reuse the new-file inline-error pattern); (3) a one-line comment marking blur-cancel deliberate (or keep-open-on-blur). Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS
 - **Source:** feature:verify-human (QoL-WP5 Phase 3 — operator questions, 2026-06-25)
 - **Target level:** feature (small) — editor file-management depth
@@ -68,7 +74,7 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** File IO is `editor_fs` (`read_file` / `write_file` / `stat_file`, all root-confined). A new file = a `write_file` of an empty (or templated) buffer at a chosen path under the workspace root, then `openFile(path)` into the focused pane (the `RightPanelHost.openFile` seam). UI surface candidates: a "+"/context-menu action in the `FileTree` rail (`src/components/workspace/filetree/`), and/or a command-palette entry, and/or a File-menu item once the native menu lands (this current feature). Needs: a name/path input (inline rename-style or a small prompt), collision handling (don't clobber an existing file), and respecting the gitignore-honoring tree walk for refresh. Pairs naturally with the deferred editor file-watcher SURFACE.
 - **Note:** this is a genuine NEW editor feature (not a menu mirror) — explicitly OUT of scope for the current app-menu feature, which mirrors existing features only. When the menu ships, a "New File" File-menu item can be added in a follow-up once this backend+UI exists.
 - **Priority:** medium
-- **Status:** open
+- **Status:** RESOLVED 2026-06-25 (QoL-WP5, commit 3abfe59) — covers BOTH create (`write_file("")` at root + `openFile`) AND delete (new root-confined `delete_file` in `editor_fs`, reuses `resolve_within`, no recursion). Surfaced in the FileTree rail: "+ new file" header button + ⌘N → inline name input (collision-guarded), per-row hover ✕ → confirm → delete + close any open tab(s). Operator-verified all 8 live checks. v1 scope cuts (create root-only, no folder delete) logged as SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS.
 
 ## SURFACE-2026-06-24-STATUS-INDICATOR-BUSY-VS-AWAITING-INPUT
 - **Source:** operator observation (2026-06-24, screenshot) — during the app-menu feature

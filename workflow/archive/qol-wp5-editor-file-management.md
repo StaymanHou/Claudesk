@@ -1,7 +1,7 @@
 # Feature: QoL-WP5 — Editor file management (add new file + delete file)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready to ship
+**State:** COMPLETED 2026-06-25 — shipped 3abfe59, finalized + archived
 **Created:** 2026-06-25
 **Drive mode:** autopilot
 
@@ -76,11 +76,48 @@ The lite editor can only OPEN existing files (⌘P finder, FileTree click, diff 
        rather than back-looping. See SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS. -->
 
 ## Current Node
-- **Path:** Feature > COMPLETE — ready to ship
-- **Active scope:** ALL THREE PHASES COMPLETE (every node [x]); next is /feature-ship
+- **Path:** Feature > finalize (complete) — feature CLOSED
+- **Active scope:** none — shipped 3abfe59, WBS WP5 ✅, SURFACE-2026-06-24-EDITOR-ADD-NEW-FILE resolved, CHANGELOG appended, archived.
 - **Blocked:** none
-- **Unvisited:** none — ship
+- **Unvisited:** none
 - **Open discoveries:** SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS (low — create-in-folder + delete-folder, both deliberate v1 scope cuts; logged, not blocking)
+
+## Retrospect
+- **What changed in our understanding:** Nothing structural — the existing `editor_fs` `resolve_within` guard already supported nested-existing-dir writes (proven by the pre-existing `write_in_nested_existing_dir_round_trips` test), so the "create" backend was free (just `write_file("")`). The only genuinely new backend was `delete_file`. The `openFiles` reducer had a `close`-by-id action but no `close-by-path` — that gap (a deleted file's tab must close without an id) was the one real new pure-logic piece.
+- **Assumptions that held:** the 3-phase split (backend → pure seams → UI wiring) mapped cleanly; the `?raw` wiring-test posture covered the un-jsdom-able integration layer exactly as in WP3/WP4; the per-pane `closeTabsForPath` fan-out was the right shape (a file can be open in >1 split pane).
+- **Assumptions that were wrong:** none material. One scope question surfaced live (operator asked about create-in-folder + folder-delete) — both were already-planned v1 cuts, not gaps, so no rework; logged as a follow-up.
+- **Approach delta:** implementation matched the plan exactly — no back-loops, no redirects, no plan revisions across all three phases. The only additions beyond the plan were the inline new-file-input UX details (Enter/Esc/blur, inline error) and the rail-header restructure (the "+ button" lives in RightPanelHost's header, not FileTree's), both within P3.1's scope.
+
+## Communicate
+> **Feature complete:** QoL-WP5 (editor file management) has shipped. The lite editor can now **create** a new file (＋ button or ⌘N → inline name input, collision-guarded, opens in a tab) and **delete** an existing file (per-row hover ✕ → confirm → removes it + closes any open tab), both confined to the workspace root. Verify by launching `pnpm tauri:dev`, opening a workspace's Editor panel, and using the file-tree rail. Create-in-folder and folder-delete are deliberate v1 exclusions (backlog SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS).
+
+Requester = operator — closure notice for self-record.
+
+## Code-Quality Review — qol-wp5-editor-file-management
+
+### Strengths
+- Clean pure-logic/wiring split honored exactly per repo posture: `newFilePath.ts`, `newFileChord.ts`, `confirmDialog.deleteFileSpec`, and the `close-path` reducer case are each unit-tested, while the un-jsdom-able Phase-3 wiring is pinned via the `?raw` source-text assertions (`editorFileManagement.test.ts`).
+- `delete_file_core` reuses the existing `resolve_within` guard rather than forking path-confinement; test set covers the four escape vectors (`..`, absolute-outside, directory, missing) incl. a positive assertion the outside file *survives* a rejected delete.
+- "Create is just `write_file` with empty contents — no dedicated primitive" — correct minimalism, documented at both layers, locked by a round-trip test.
+- Chord boundaries defended: `isNewFileChord` requires Shift-absent to stay disjoint from WP6's ⌘⇧N, cross-checked against `isFinderChord`; ⌘N does not touch the ⌘⇧+digit filmstrip reservation.
+- `closeTabsForPath` fans out to *every* pane (not just focused), rationale stated + pinned by a test asserting the `paneHandles.current.values()` iteration.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [RightPanelHost.tsx ~285-300] `createFile` collision check (`collides` over the `fs_tree` path set) can't see `.gitignore`d files (fs_tree excludes them) — a root-level name colliding with a gitignored file (e.g. `.env`) passes the guard and `write_file` overwrites it silently. Low likelihood (root-only v1); `collides`' "create-new, don't clobber" doc is slightly overstated. — *one-line caveat or a pre-write `stat_file` existence check.*
+- [RightPanelHost.tsx ~320-327] `onDeleteConfirm` surfaces a failed `delete_file` only via `console.error` (the comment itself flags "a future toast could show it") — inconsistent with the feature's own surfaced-not-swallowed discipline (create errors render inline; fs_tree errors render a row). — *operator can't tell a no-op cancel from a silent delete failure.*
+- [FileTree.tsx ~165] the new-file input's `onBlur={cancelNewFile}` silently discards a partially-typed name on any focus-steal. Enter-submit is safe (keydown precedes blur); the blur-cancels-silently behavior is an undocumented UX choice. — *cosmetic; worth a deliberate note.*
+
+### Assessment
+Well-built, low-debt feature — new behavior as small pure modules with real unit tests, a backend core reusing the existing path-confinement seam, and wiring locked by source-text assertions matching the documented verify-self posture. Clean layering (FileTree owns the input, RightPanelHost owns IPC+confirm+teardown, EditorSplit fans out). The only soft spots are a documented-but-unimplemented delete-failure surface and a collision check that doesn't account for gitignored files; both MINOR, both appropriate backlog items rather than refactor triggers.
+
+### If you disagree
+Operator: dismiss any finding by marking the line `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+### Disposition (autopilot)
+0 CRITICAL / 0 MAJOR / 3 MINOR → all 3 MINORs auto-backlogged to `workflow/backlog-quality-findings.md` (`# qol-wp5-editor-file-management — 2026-06-25`) + pointer in `workflow/backlog.md`. F39 → finalize.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
