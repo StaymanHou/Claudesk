@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-24
-status: in-progress — WP0 shipped 2026-06-24, WP1+WP2 shipped 2026-06-25; WP3–WP8 pending
+status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3 shipped 2026-06-25; WP4–WP8 pending
 context: between-milestone QoL/lifecycle sweep, filed after M4 close, before M5 (PiP) planning
 ---
 
@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → WP3 → WP4 → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464)*
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → WP4 → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6)*
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -90,8 +90,9 @@ and delete this file.
 
 ---
 
-## WP3 — Switch-workspace autofocus CC panel  `[priority: MEDIUM]`  `↔ pairs with WP4`
-**Backlog:** SURFACE-2026-06-24-SWITCH-WORKSPACE-AUTOFOCUS-CC-PANEL
+## WP3 — Switch-workspace autofocus CC panel  `[priority: MEDIUM]`  `↔ pairs with WP4`  ✅ SHIPPED 2026-06-25 (commit 78c76d6)
+**Backlog:** SURFACE-2026-06-24-SWITCH-WORKSPACE-AUTOFOCUS-CC-PANEL (RESOLVED)
+**As-built:** imperative `focus()`-only handle on `XtermPane` (forwardRef + useImperativeHandle, `XtermPaneHandle`) fired from a `Workspace` effect on the `visible` false→true edge (rAF-deferred, early-returns for backgrounds). All four promote triggers (filmstrip click / ⌘⇧+digit / picker overlay / close re-pick) route through the single `visible` seam for free. Focus-ONLY — never writes a byte to the PTY (pre-empts the WP4 spurious-newline bug class on the left pane). Operator decision honored: always focus CC-left for v1 (no last-focused-half restore). 6 `?raw` source-assertion tests pin the wiring + the no-PTY-byte invariant; operator-verified all 5 live outcomes pass. Full suite 462/462; review-quality clean (0 CRITICAL/0 MAJOR/2 MINOR auto-backlogged).
 **Size:** small · **Type:** UX refinement
 
 **What:** On promoting a workspace to center stage (filmstrip click, ⌘⇧+digit, or the Workspace menu), auto-focus the **left CC terminal** so typing goes straight to that project's CC session.

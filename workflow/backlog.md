@@ -8,6 +8,12 @@ WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY (medium) → DEFERRED, anchored to M6; 
 dev-prod-isolation 3 MINORs + the long code-quality-findings tail → DEFERRED (low, carry
 forward — none M5-blocking). No escalations. -->
 
+## Code-quality findings — qol-wp3-switch-workspace-autofocus-cc (2026-06-25)
+- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `78c76d6`: (1) the no-PTY-byte test guard (`not.toMatch(/\r\n|\r|\n/)` in `autofocusCcOnPromote.test.ts`) is over-broad — pins absence of any newline anywhere in Workspace.tsx, so a future unrelated `\n` literal would fail with a misleading WP4-regression message; (2) the WP3 `visible`-edge effect comment block (Workspace.tsx ~69-79) triplicates the commit + WIP rationale. Reviewer: well-built, tightly-scoped, minimal correct seam, no debt — neither finding warrants a refactor pass. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp3-switch-workspace-autofocus-cc — 2026-06-25`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** two quick `/feature-refactor` polish nits — (1) scope the newline assertion to the focus effect / `invoke(`; (2) trim the effect comment to the WKWebview-rAF rationale. Dismiss either via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — qol-wp2-status-busy-vs-awaiting (2026-06-25)
 - **Pointer:** 1 MINOR finding (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7cfc464` — the unknown-`notification_type`-fallback rationale is restated in 3 places (const doc + fn doc + match-arm comments) in `status_broadcaster/mod.rs` (~25 lines of doc for ~15 of logic). A second MINOR (a duplicate dangling `verify-codify` checkbox in the WIP tree) was resolved in-place before archive. Reviewer: well-built, tightly-scoped; root cause diagnosed empirically (live hook-stream capture), fix in one place, docs resynced same-commit. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp2-status-busy-vs-awaiting — 2026-06-25`.
 - **Priority:** low
@@ -34,7 +40,7 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** The center-stage left half is the xterm.js CC terminal (`TerminalPane` / the CC session). The promote path is `focusWorkspace(id)` in `useWorkspaceList` (called from `App.tsx` filmstrip click + the ⌘⇧+digit handler at `App.tsx:73`, and `Filmstrip.tsx`). Auto-focusing means, after the display:block flip, calling `.focus()` on the promoted workspace's xterm instance (or its textarea). Mind the "all workspaces stay mounted, switch is display toggling" rule — focus must move to the now-visible terminal, and only when the left CC panel is the intended target (per the WP4b left/right focus-indicator work, focus has a notion of which half is active).
 - **Open question:** should it ALWAYS focus the CC (left) panel, or restore the last-focused half of that workspace? Operator said "left CC panel" → default to always-CC-left for v1; revisit if it fights the focus-indicator memory.
 - **Priority:** medium
-- **Status:** open
+- **Status:** RESOLVED 2026-06-25 (QoL-WP3, commit 78c76d6) — imperative `focus()`-only handle on XtermPane fired from a Workspace `visible`-edge effect; all four promote triggers route through the single seam; always-CC-left for v1; focus-only (no PTY byte). Operator-verified live.
 
 ## SURFACE-2026-06-24-EDITOR-ADD-NEW-FILE
 - **Source:** operator request (2026-06-24, during the app-menu feature)

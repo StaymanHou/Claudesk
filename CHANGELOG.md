@@ -6,6 +6,8 @@
 - **Backlog resolved:** SURFACE-2026-06-24-NO-WAY-TO-CLOSE-A-WORKSPACE — closed by QoL-WP1; the "Close Workspace ⌘⇧W" native-menu item remains a noted follow-up.
 - **Feature shipped:** Status indicator — busy vs awaiting-input (QoL temporary-WBS WP2) — the workspace status dot no longer gets stuck on "awaiting input" (blue) after you answer an AskUserQuestion/permission prompt: a live hook-stream capture proved Claude Code fires `PostToolUse` on resume, so Claudesk now registers it and maps it to "running", flipping the dot back to orange the instant you answer; the `Notification → awaiting-input` mapping is also gated on `notification_type` so an idle nudge no longer flips a busy dot blue; and the dot now "breathes" while running, "blinks" while awaiting input, with the filmstrip tile caption made more transparent.
 - **Backlog resolved:** SURFACE-2026-06-24-STATUS-INDICATOR-BUSY-VS-AWAITING-INPUT — closed by QoL-WP2 (PostToolUse→Running resume signal + notification_type gating, operator-verified live in the installed app).
+- **Feature shipped:** Switch-workspace autofocus CC panel (QoL temporary-WBS WP3) — promoting a workspace to center stage (filmstrip tile click, ⌘⇧+digit, picker overlay, or close re-pick) now auto-focuses that workspace's left Claude Code terminal, so typing lands in the project's CC session with zero clicks; implemented as a focus-only imperative handle on the terminal pane (it never writes a byte to the PTY, so a switch can't inject a spurious prompt line) fired from a single `visible`-edge effect that all four promote triggers route through.
+- **Backlog resolved:** SURFACE-2026-06-24-SWITCH-WORKSPACE-AUTOFOCUS-CC-PANEL — closed by QoL-WP3 (always-CC-left autofocus on promote, operator-verified live).
 
 ## 2026-06-24
 

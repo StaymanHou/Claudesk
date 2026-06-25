@@ -1,7 +1,7 @@
 # Feature: QoL-WP3 — Switch-workspace autofocus CC panel
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-25 — shipped 78c76d6 (local-only); review-quality clean (2 MINOR backlogged); finalized + archived
 **Created:** 2026-06-25
 **Drive mode:** autopilot
 **Backlog:** SURFACE-2026-06-24-SWITCH-WORKSPACE-AUTOFOCUS-CC-PANEL
@@ -54,15 +54,44 @@ WP4 (terminal spurious newline on panel switch) is bug-shape + reproduce-first (
     - Full frontend suite: 462/462 pass, 54 files, 0 failures. forwardRef conversion caused no regression in XtermPane-adjacent tests (mirrorTail, spawnTrigger) or the probe components.
 
 ## Current Node
-- **Path:** Feature > Phase 1 > COMPLETE — ready to ship
-- **Active scope:** none (single phase fully verified; all impl + verify-auto/self/human/codify [x])
+- **Path:** Feature > review-quality (complete) → finalize
+- **Active scope:** none (shipped 78c76d6; review-quality clean — 0 CRITICAL/0 MAJOR/2 MINOR auto-backlogged; next is /feature-finalize)
 - **Blocked:** none
-- **Unvisited:** (none — all phases complete; next is /feature-ship)
+- **Unvisited:** (none — all phases complete; next is /feature-finalize)
 - **Open discoveries:** none
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
+
+## Code-Quality Review — qol-wp3-switch-workspace-autofocus-cc
+Reviewed against ship commit 78c76d6 (autopilot / Mode 3). Result: 0 CRITICAL, 0 MAJOR, 2 MINOR → MINORs auto-backlogged (low priority), no refactor warranted.
+
+### Strengths
+- Imperative-handle seam placed correctly: `focus()` lives where the `Terminal` instance lives (XtermPane); reducer `focusWorkspace` stays pure (DOM focus is a render-effect concern, honored in code).
+- Focus-only invariant enforced cleanly: `useImperativeHandle` exposes a single `focus: () => termRef.current?.focus()` with no PTY write path — pre-empts the WP4 spurious-newline bug class as the decision record specifies.
+- `visible`-edge effect is minimal + correct: `if (!visible) return` guards backgrounds, rAF mirrors XtermPane's focus-deferral pattern, cleanup `cancelAnimationFrame` prevents a stale focus after a fast demote.
+- Routing picker-overlay + close-re-pick through the same `visible` seam (vs wiring each call site) is good leverage — one effect covers all four promote triggers.
+- `?raw` source-assertion test faithfully follows the established workspace-UI codify posture; each assertion documents the specific regression it prevents — the right CI stand-in given no headless Tauri.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [autofocusCcOnPromote.test.ts:63] The no-PTY-byte guard `not.toMatch(/\r\n|\r|\n/)` pins the absence of any `\r`/`\n` escape anywhere in Workspace.tsx, not specifically the focus path. Passes today (zero matches) but is over-broad — a future unrelated `\n` literal (tooltip string, multiline template) would fail with a misleading "WP4 spurious-prompt regression" message. The companion `cc_input` assertion is appropriately targeted; this one would be more robust scoped to the focus effect or to `invoke(`/PTY-write identifiers. — false-positive failure that misdirects the next maintainer.
+- [Workspace.tsx:69-79] The WP3 effect carries an 11-line comment block over a 4-line body; prose is high-quality but restates the commit + WIP near-verbatim (triplicated rationale = future-drift surface). Trimming to just the non-obvious WKWebview-rAF rationale would reduce drift risk.
+
+### Assessment
+Well-built, tightly-scoped feature that advances the codebase without accruing debt. The imperative `focus()`-only handle threaded to a single `visible`-edge effect is the minimal correct seam, deliberately consolidating four promote triggers through one path. Focus-only invariant is both designed-in and test-pinned. The 680-line XtermPane churn is almost entirely Prettier reflow around the `forwardRef` wrap; the genuine functional delta is ~a dozen clean, null-safe lines. The only real critique is mild over-documentation. verify-self/codify correctly applied the workspace-UI corollary. The two MINORs are polish, not debt; neither warrants a refactor pass.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The promote path turned out to be a `left:-99999px` off-viewport toggle on the `visible` prop, NOT a `display:none` toggle (a load-bearing M4 WP3 invariant for the filmstrip mirror). Critically, the CC pane is always `active=true`, so XtermPane's own mount/active-transition `term.focus()` never re-fires on a switch — confirming the gap was real and that the fix belongs on the `visible` edge, not the `active` prop.
+- **Assumptions that held:** The plan's seam choice (imperative handle via forwardRef + a Workspace `visible`-edge effect, reducer stays pure) was exactly right. The four promote triggers all route through `focusedId → visible` for free — no per-call-site wiring needed, as predicted.
+- **Assumptions that were wrong:** None material. One mild surprise: Prettier reflowed XtermPane's long comment blocks on the `--write` pass, inflating the diff to 680 changed lines for a ~12-line functional delta (cosmetic noise, flagged to the reviewer).
+- **Approach delta:** Implementation matched the plan exactly. WP3 was kept standalone (not bundled with WP4) per the plan-time decision; the "never send a byte to the PTY on focus" invariant was both designed-in and test-pinned, which is the explicit hand-off that lets WP4's reproduce exercise this same left-pane path safely later.
 
 ## Notes — verify-self tier posture (per CLAUDE.md)
 This is a workspace-UI feature whose live outcomes (real focus landing in a real xterm, typing reaching CC) are NOT observable in a bare Vite browser (no Tauri backend; the `?ws=`/`__seedWorkspace` dev seam mounts the React frontend but no PTY). Per the project's verify-self corollary: the agent proves the static slice (`tsc --noEmit`, `eslint`, `pnpm vite build`, the reducer/seam unit tests, + a wiring trace of the `visible`-edge → `ccPaneRef.focus()` path); the LIVE focus + typing outcomes are CARRIED into verify-human, where the operator drives `pnpm tauri:dev` (or the installed `.app`) with ≥2 real CC sessions. Not a PATH/spawn-touching change, so the installed-build smoke test is not strictly required — but the operator should still confirm on the real app since focus behavior is WKWebview-specific.

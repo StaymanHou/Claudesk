@@ -4,6 +4,26 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp3-switch-workspace-autofocus-cc — 2026-06-25
+
+2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `78c76d6`. Reviewer rated the feature well-built and tightly-scoped — minimal correct seam (imperative `focus()`-only handle → single `visible`-edge effect consolidating all four promote triggers), focus-only invariant designed-in AND test-pinned, no debt. Both findings are polish; neither warrants a refactor pass. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP3-OVERBROAD-NEWLINE-GUARD
+- **Files:** `src/components/workspace/__tests__/autofocusCcOnPromote.test.ts` (the `not.toMatch(/\r\n|\r|\n/)` assertion, ~line 63)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (test robustness)
+- **Finding:** The no-PTY-byte guard pins the absence of any `\r`/`\n` escape anywhere in Workspace.tsx, not specifically in the focus path. Passes today (zero matches), but it's over-broad — a future unrelated `\n` literal (a tooltip string, a multiline template) would fail this test with a misleading "WP4 spurious-prompt regression" message. The companion `cc_input` assertion is appropriately targeted.
+- **Pickup shape:** scope the assertion to the focus effect or to `invoke(`/PTY-write identifiers instead of the whole file. One small test edit. Dismiss if the broad guard is judged acceptable.
+
+## SURFACE-2026-06-25-QUALITY-WP3-TRIPLICATED-EFFECT-RATIONALE
+- **Files:** `src/components/workspace/Workspace.tsx` (the WP3 `visible`-edge focus effect comment block, ~lines 69-79)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (comment clarity)
+- **Finding:** The 11-line comment block over a 4-line effect body restates the commit message + WIP near-verbatim (operator-decision + bug-class sentences). Triplicated rationale (comment + commit + WIP) is a future-drift surface.
+- **Pickup shape:** trim to just the non-obvious WKWebview-rAF rationale (the parked-element + always-active=true gap); drop the operator-decision/bug-class sentences already captured in commit + WIP. One small comment edit. Dismiss if the redundancy is judged helpful.
+
 # qol-wp2-status-busy-vs-awaiting — 2026-06-25
 
 1 MINOR finding (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7cfc464`. Reviewer rated the feature well-built and tightly-scoped — root cause diagnosed empirically (live hook-stream capture), fix in exactly one place, docs resynced same-commit. The other MINOR (a duplicate dangling `verify-codify` checkbox in the WIP) was resolved in-place before archive. This remaining finding is low-risk comment cleanup. Auto-backlogged per drive_mode=autopilot.
