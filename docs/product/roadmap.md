@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-24  # M4 (multi-workspace UX) COMPLETE — M3+M4 dogfood-replace point reached. Next execution milestone: M5 (PiP, unconditional).
+updated: 2026-06-25  # M4 COMPLETE + the between-milestone QoL/lifecycle sweep COMPLETE (scratch qol-wbs.md, not a milestone). Next execution milestone: M5 (PiP, unconditional).
 ---
 
 # Roadmap
