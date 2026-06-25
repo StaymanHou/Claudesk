@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-25  # QoL-WP6 verify-codify — pnpm test 562 pass
+updated: 2026-06-25  # QoL-WP7 P2 verify-codify — pnpm test 579 pass
 ---
 
 # Runtime Registry
@@ -41,9 +41,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-25, QoL-WP6 verify-codify: 562 pass, +8 newWorkspaceChord cases — already written at build)
+- **Last:** 1s (2026-06-25, QoL-WP7 P2 verify-codify: 579 pass, +6 fileTreeGitRollup wiring cases — already written at build)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-25 (QoL-WP7 P2: 579 pass)
+  - 1s — 2026-06-25 (QoL-WP7 P1: 573 pass)
   - 1s — 2026-06-25 (QoL-WP6 verify-codify: +8 newWorkspaceChord cases → 61 files / 562 tests; run ~1.05s)
   - 1s — 2026-06-25 (QoL-WP5 Phase 3 verify-codify: +11 ?raw wiring assertions → 60 files / 514 tests; run ~1.07s)
   - 1s — 2026-06-25 (QoL-WP5 Phase 2 verify-codify: +16 pure-seam tests → 59 files / 503 tests; run ~1.04s)

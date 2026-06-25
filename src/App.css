@@ -1568,6 +1568,16 @@ body,
   color: #e2c08d; /* amber — renamed (treated like modified) */
 }
 
+/* QoL-WP7 — folder roll-up indicator. Reuses the .file-tree-status glyph + color
+   tokens (so a folder reads with the same visual vocabulary as the files inside it).
+   margin-left:auto pins it to the row's trailing edge, ahead of the hover-only
+   ＋/⊞/✕ buttons (which each carry their own margin); on a dir row this is the
+   element that absorbs the free space, so the buttons cluster right after it. The
+   roll-up is always visible (unlike the hover-only action buttons). */
+.file-tree-dir-status {
+  margin-left: auto;
+}
+
 /* QoL-WP5 — per-file delete ✕. Hidden by default; revealed on row hover so it doesn't
    clutter the dense tree. Sits at the row's trailing edge after the git-status glyph. */
 .file-tree-delete {

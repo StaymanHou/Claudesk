@@ -30,7 +30,13 @@ import {
   type TreeNode,
 } from "./buildTree";
 import { treeReducer, initialExpanded, type ExpandedDirs } from "./treeState";
-import { statusClass, statusGlyph, type GitStatusMap } from "./gitStatus";
+import {
+  statusClass,
+  statusGlyph,
+  type GitFileStatus,
+  type GitStatusMap,
+} from "./gitStatus";
+import { dominantStatusByDir } from "./gitRollup";
 
 /** Imperative surface the parent drives the tree through (QoL-WP5 — ⌘N opens the input). */
 export interface FileTreeHandle {
@@ -215,6 +221,12 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
       [entries],
     );
 
+    // QoL-WP7 — directory → dominant git status, bubbled up from the leaf statuses.
+    // Same key space as the per-file lookup (gitStatus[node.path]), recomputed on the
+    // same `gitStatus` source the leaf indicators use — so a folder's roll-up agrees
+    // with the indicators on the rows inside it. Empty until the first fetch resolves.
+    const rollupByDir = useMemo(() => dominantStatusByDir(gitStatus), [gitStatus]);
+
     // QoL-WP5 — submit the inline new-file input: hand the name + the current tree path
     // set + the target dir (QoL-WP5b) up to the parent (which validates collision,
     // write_files, opens it, refreshes). On success (null) close the input; on a
@@ -368,6 +380,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
               expanded={expanded}
               openPath={openPath}
               gitStatus={gitStatus}
+              rollupByDir={rollupByDir}
               onOpen={onOpen}
               onDeleteFile={onDeleteFile}
               onDeleteFolder={deleteFolderWithCount}
@@ -391,6 +404,8 @@ interface TreeRowProps {
   openPath: string | null;
   /** WP11 — repo-relative path → git status, for the per-row indicator. */
   gitStatus: GitStatusMap;
+  /** QoL-WP7 — directory path → dominant rolled-up git status, for the folder-row indicator. */
+  rollupByDir: Record<string, GitFileStatus>;
   onOpen: (path: string) => void;
   /** QoL-WP5 — delete a file row (parent confirms + does the IPC). Undefined → no ✕. */
   onDeleteFile?: (path: string) => void;
@@ -414,6 +429,7 @@ function TreeRow({
   expanded,
   openPath,
   gitStatus,
+  rollupByDir,
   onOpen,
   onDeleteFile,
   onDeleteFolder,
@@ -429,6 +445,10 @@ function TreeRow({
   const indent = { paddingLeft: `${depth * 12 + 6}px` };
 
   if (node.isDir) {
+    // QoL-WP7 — the dominant rolled-up status for this dir (undefined → no indicator).
+    const rollupStatus = rollupByDir[node.path];
+    const rollupGlyph = statusGlyph(rollupStatus);
+    const rollupCls = statusClass(rollupStatus);
     return (
       <>
         <div
@@ -442,6 +462,22 @@ function TreeRow({
         >
           <span className="file-tree-chevron">{isOpen ? "▾" : "▸"}</span>
           <span className="file-tree-name">{node.name}</span>
+          {/* QoL-WP7 — rolled-up git status for this folder (dominant of its changed
+              descendants). Always visible (collapsed AND expanded) so a folder hiding a
+              change still reads. Same glyph + color tokens as the per-file indicator;
+              margin-left:auto pins it right, ahead of the hover-only ＋/⊞/✕ buttons.
+              A clean folder (no changed descendants) → undefined → no element. */}
+          {rollupGlyph !== null && (
+            <span
+              className={`file-tree-status file-tree-dir-status ${rollupCls}`}
+              data-testid="file-tree-dir-status"
+              data-status={rollupStatus}
+              aria-label={`git: ${rollupStatus} (rolled up)`}
+              title={`git: ${rollupStatus} (rolled up from contents)`}
+            >
+              {rollupGlyph}
+            </span>
+          )}
           {/* QoL-WP5b — per-dir "＋ new file here", hover-revealed like the file ✕.
               stopPropagation so the click opens the input rather than toggling the dir;
               mousedown-preventDefault keeps editor focus until the input mounts. */}
@@ -513,6 +549,7 @@ function TreeRow({
                 expanded={expanded}
                 openPath={openPath}
                 gitStatus={gitStatus}
+                rollupByDir={rollupByDir}
                 onOpen={onOpen}
                 onDeleteFile={onDeleteFile}
                 onDeleteFolder={onDeleteFolder}
@@ -529,8 +566,9 @@ function TreeRow({
     );
   }
 
-  // WP11 — per-file git-status indicator (Sublime-sidebar style). File rows only
-  // (no dir roll-up in v1). A clean/absent path → glyph null → no element rendered.
+  // WP11 — per-file git-status indicator (Sublime-sidebar style). A clean/absent path
+  // → glyph null → no element rendered. (QoL-WP7 added the dir-row roll-up above; leaf
+  // rows keep their own per-file indicator — the roll-up does not suppress it.)
   const status = gitStatus[node.path];
   const glyph = statusGlyph(status);
   const statusCls = statusClass(status);
