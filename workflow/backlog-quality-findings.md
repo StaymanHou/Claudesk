@@ -4,6 +4,28 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp8-diff-viewer-polish — 2026-06-25
+
+3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `7385a61`. Reviewer verdict: well-built, tightly-scoped, right mechanism (measured CSS var + ResizeObserver), no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP8-REDUNDANT-COLLAPSE-DEP
+- **Finding:** The sticky-var ResizeObserver effect lists `commitsCollapsed` in its dep array, but the observer already tracks the `.diff-commits` parent's height directly (only `.diff-commits-body` mounts/unmounts inside the observed node), so the re-run on collapse is belt-and-suspenders, not load-bearing. The inline comment slightly overstates that collapse needs the re-attach. The genuinely-needed deps are `view.kind` (banner appears/disappears) + `list.kind`/`commitDiff` (files area mounts).
+- **Where:** `src/components/workspace/diff/DiffPanel.tsx` sticky-var effect (~290-292).
+- **Fix shape:** either drop `commitsCollapsed` from the deps (the observer covers it) OR keep it and reword the comment to mark it belt-and-suspenders so a future trimmer doesn't mistake it for load-bearing. Lowest-risk = comment reword.
+- **Priority:** low
+
+## SURFACE-2026-06-25-QUALITY-WP8-COMMENT-COPYEDIT-SLIP
+- **Finding:** The `.diff-commits` comment reads "at the top:0 of .diff-scroll" — the inserted "the" is a copy-edit slip ("at top:0 of" or "at the top of" was intended).
+- **Where:** `src/App.css` `.diff-commits` comment (~1726).
+- **Fix shape:** one-word comment fix.
+- **Priority:** low
+
+## SURFACE-2026-06-25-QUALITY-WP8-FALLBACK-COUPLING
+- **Finding:** The CSS first-paint fallback `--diff-commits-h: 2rem` is coupled to today's `.diff-commits-header` padding/font (≈2rem total); if those change later, the pre-observer first-paint offset drifts until the ResizeObserver fires. Harmless (observer corrects within a frame) but undocumented coupling.
+- **Where:** `src/App.css` `.diff-scroll` `--diff-commits-h` default (~1714) ↔ `.diff-commits-header`.
+- **Fix shape:** add a one-line comment cross-referencing `.diff-commits-header`'s height so the `2rem` guess's provenance is pinned.
+- **Priority:** low
+
 # qol-wp7-filetree-git-bubble-up — 2026-06-25
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `4d384b1`. Reviewer verdict: well-built, right architecture, no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.

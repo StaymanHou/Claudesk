@@ -10,6 +10,12 @@
 - **Priority:** low
 - **Status:** RESOLVED-IN-PLACE 2026-06-25 (the WP8 test uses the fs-read pattern; this entry is the durable note for the next person)
 
+## Code-quality findings — qol-wp8-diff-viewer-polish (2026-06-25)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7385a61`: (1) the sticky-var ResizeObserver effect's `commitsCollapsed` dep is belt-and-suspenders (the observer already tracks the parent `.diff-commits` height) — comment slightly overstates it as load-bearing; (2) a one-word copy-edit slip in the `.diff-commits` comment ("at the top:0 of"); (3) the `--diff-commits-h: 2rem` first-paint fallback is undocumented-coupled to `.diff-commits-header`'s height. Reviewer: well-built, tightly-scoped, right mechanism (measured CSS var + ResizeObserver), no debt — no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp8-diff-viewer-polish — 2026-06-25`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** three trivial `/feature-refactor` nits — (1) drop the dep or reword the comment; (2) one-word comment fix; (3) add a cross-reference comment. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — qol-wp6-new-workspace-hotkey (2026-06-25)
 - **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `47fdeb9`: (1) the `newWorkspaceChord` unit test's "is permissive on Ctrl/Alt" case sets neither `ctrlKey` nor `altKey` (interface omits them) so it duplicates the uppercase-N positive — name overpromises coverage; (2) the `newWorkspaceChord.ts` header's cross-reference to the `paletteCommands.ts` chord-ownership map is a drift seam if that map ever relocates (confirmed present + correct today — no action needed now). Reviewer: clean, convention-adherent, near-verbatim clone of the proven ⌘⇧+digit listener, accrues no debt, no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp6-new-workspace-hotkey — 2026-06-25`.
 - **Priority:** low (all)
@@ -486,7 +492,7 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** WP4 grew M→L via the Sublime-Merge redesign; these were explicitly deferred to keep WP4 shippable. Items 1–3 are enhancements.
 - **Suggested action:** A small follow-up WP after M2's critical path (or fold into WP5 RightPanelHost work, since the panel chrome is adjacent).
 - **Priority:** medium (enhancements)
-- **Status:** pending — items 1–3 folded into the 2026-06-24 QoL temporary WBS (`docs/product/qol-wbs.md`)
+- **Status:** RESOLVED 2026-06-25 (QoL-WP8, ship commit `7385a61`). Disposition: **item 1 (collapse/expand-all)** and **item 3 (open-in-editor badge)** were found ALREADY SHIPPED during M2 WP4's own build (`diff-collapse-all` button + `toggleAllCollapsed`; `diff-open-in-editor` "Edit" button wired through `RightPanelHost.onOpenInEditor=openFile`, always opens the live working-tree file per the dismissed blob-at-rev SURFACE) — verified at WP8 plan time, no rebuild needed. **Item 2 (sticky headers)** + the two NEW operator requests **(A) genuinely-sticky per-file filename row** and **(B) commits collapsed by default** were the genuine WP8 work: B = `commitsCollapsed` defaults true; 2/A = stacked sticky offsets via `--diff-commits-h`/`--diff-commit-banner-h` CSS vars driven by a ResizeObserver. Item 4 (faint highlighting) already DROPPED 2026-06-24. All items closed.
 
 ## Code-quality findings — m2-wp4-git-diff-viewer (2026-06-20)
 - **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `4e2d742` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, no refactor warranted. Doc-comment drift from the PB.7 removal sweep (stale `[file_base_core]` doc-link + wrong `diff_*` API name) + dead untracked-opts on the staged path + a 3-ternary commit-diff gate. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp4-git-diff-viewer — 2026-06-20`.

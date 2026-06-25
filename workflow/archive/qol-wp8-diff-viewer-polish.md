@@ -1,7 +1,8 @@
 # Feature: QoL-WP8 — Diff-viewer polish
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready to ship
+**State:** finalize (complete) — Completed 2026-06-25
+**Ship commit:** 7385a61 (local-only, no remote)
 **Created:** 2026-06-25
 **Drive mode:** autopilot
 
@@ -96,11 +97,43 @@ header OUTSIDE `.diff-scroll`, always visible.) After WP8 ships, the QoL WBS com
   - [x] verify-codify  <!-- status: DONE — +7 wiring assertions (stickyHeaderStacking.test.ts: 4 CSS via fs-read, 3 DiffPanel ?raw); full vitest 591 pass (was 584) -->
 
 ## Current Node
-- **Path:** Feature > (all phases complete) > ship
-- **Active scope:** none — both phases COMPLETE (P1 commits-collapsed-default; P2 sticky stacking). Ready for /feature-ship.
+- **Path:** Feature > review-quality (complete) > finalize
+- **Active scope:** none — review-quality done (0C/0M/3MINOR auto-backlogged). Ready for /feature-finalize.
 - **Blocked:** none
-- **Unvisited:** ship → finalize
+- **Unvisited:** finalize
 - **Open discoveries:** Items 1 & 3 of the WBS WP8 list were found already-shipped at plan time (verified in DiffPanel/FileDiffSection/RightPanelHost) — scope reduced to items B + 2/A. Logged below.
+
+## Retrospect
+- **What changed in our understanding:** Two of the four planned WP8 items (collapse/expand-all, open-in-editor badge) turned out to be ALREADY SHIPPED during M2 WP4's own build — a fresh code read at plan time caught it, halving the scope before any work. The lesson: re-verify the WBS task list against the live code at plan time; a months-old scratch-WBS can list work that's since landed under another WP.
+- **Assumptions that held:** The sticky-collision root cause (all `.diff-*` layers at `top:0` in one `.diff-scroll`) was correct as diagnosed in the WBS; the measured-CSS-var + ResizeObserver mechanism was the right call over a hard-coded offset; the repo's `?raw` source-assertion test posture extended cleanly to the DiffPanel wiring.
+- **Assumptions that were wrong:** (1) The `?raw` trick does NOT extend to `.css` files — `App.css?raw` (and `?inline`) return an empty string under Vitest, forcing an `fs.readFileSync` read for the CSS assertions. (2) That fs-read needed `node:fs`/`node:url`, which the root tsconfig didn't type — surfaced only at the ship-time full `tsc --noEmit` (the scoped per-file tsc earlier didn't flag it), requiring `@types/node` as a devDep.
+- **Approach delta:** Slightly richer than planned — added a SECOND CSS var (`--diff-commit-banner-h`) so commit-view file headers stack below BOTH the commits section and the banner (the plan flagged this as an optional do-if-needed follow-up; doing it now made commit view correct out of the box with the same single observer). Otherwise matched the plan: Phase 1 = collapsed-default (one-line state flip), Phase 2 = stacked sticky offsets.
+
+## Closure
+**Feature complete:** QoL-WP8 (Diff-viewer polish) has shipped. The diff viewer's Commits section now starts collapsed, and the sticky headers (commits / commit-banner / per-file) stack instead of colliding so the current file's header stays visible while scrolling its diff. Verify in `pnpm tauri:dev`: open the Diff panel for a repo with several changed files + commit history. Requester = operator — closure notice for self-record. **This was the LAST QoL WBS WP — the QoL scratch WBS is now complete and its file deleted at this finalize.**
+
+## Code-Quality Review — qol-wp8-diff-viewer-polish
+
+### Strengths
+- The stacked-sticky offset is driven by a measured CSS custom property (`--diff-commits-h`) with a sensible `2rem` collapsed-header fallback for first paint, rather than a brittle hard-coded `top:` — correctly handles the dynamic commits-section height (collapsed vs. 33vh-expanded).
+- The ResizeObserver is wired the right way: ref-scoped, `typeof ResizeObserver === "undefined"` guarded for jsdom, observes the stable parent nodes, and `disconnect()`s on cleanup — no leak, no impure render reads.
+- The two-var design (`--diff-commits-h` + `--diff-commit-banner-h`, the latter 0 in working-dir view) makes commit view correct out of the box with a single observer measuring both nodes, and is honestly logged as a deliberate scope-richening in the WIP `[SCOPE-2026-06-25]` discovery.
+- Tests encode the actual failure modes they guard (regression to `top:0`, var removal, observer drop, default flipped back to `false`) with prose explaining why each assertion exists and why the live layout is verify-human's job — exemplary codify discipline given jsdom can't compute sticky geometry.
+- The `?raw`-for-tsx / `fs.readFileSync`-for-css split is documented inline with the root cause, and the discovery is also backlogged for future codify work.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [src/components/workspace/diff/DiffPanel.tsx:292] The effect dep `commitsCollapsed` is redundant for the stated purpose. The ResizeObserver observes `.diff-commits` (the stable, always-mounted parent), so its height change on collapse/expand is already caught without re-running the effect — only `.diff-commits-body` mounts/unmounts, inside the observed node. The genuinely-needed re-runs are `view.kind` (banner appears/disappears) and `list.kind`/`commitDiff` (files area mounts). Harmless, but the inline comment slightly overstates the dependency.
+- [src/App.css:1726] The `.diff-commits` comment reads "at the top:0 of .diff-scroll" — the inserted "the" reads as a copy-edit slip ("at top:0 of" or "at the top of" was intended). Trivial prose polish.
+- [src/App.css:1714 / DiffPanel.tsx:275] The CSS fallback `2rem` is coupled to today's `.diff-commits-header` padding/font; if those change, the pre-observer first-paint offset drifts until the observer fires. A one-line comment cross-referencing `.diff-commits-header` height would pin the coupling.
+
+### Assessment
+Well-built, tightly-scoped polish slice. The sticky-stacking solution picks the right mechanism (measured CSS var + ResizeObserver) over a hard-coded `top:` and handles the dynamic-height reality correctly across all three views. Guarded, leak-free, comments encode WHY. The test pair is exemplary for this repo's posture. The WIP honestly records the scope reduction (items 1 & 3 pre-shipped) and addition (`--diff-commit-banner-h`). No debt accrued; the only findings are MINOR comment/dep-array polish that don't warrant a refactor pass.
+
+### If you disagree
+Operator: dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
