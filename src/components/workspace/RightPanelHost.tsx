@@ -65,12 +65,23 @@ interface RightPanelHostProps {
   projectPath: string;
   /** True when this workspace is the focused/visible tab (display:block vs none). */
   visible: boolean;
+  /**
+   * QoL-WP1 — register a probe that returns this workspace's current unsaved-doc count,
+   * so App's workspace-close dirty guard can ask "does closing this discard edits?".
+   * Registered on mount, unregistered (probe=null) on unmount. Optional so existing
+   * callers/tests that don't wire it still work.
+   */
+  registerDirtyProbe?: (
+    workspaceId: string,
+    probe: (() => number) | null,
+  ) => void;
 }
 
 export function RightPanelHost({
   workspaceId,
   projectPath,
   visible,
+  registerDirtyProbe,
 }: RightPanelHostProps) {
   // WP12 — open files live in PER-PANE TAB STRIPS (EditorSplit owns the pane model;
   // each pane has its own tab strip + open-file set). The open seams (finder, tree,
@@ -79,6 +90,20 @@ export function RightPanelHost({
   // focused pane's active file here only so the FileTree can highlight the open file.
   const editorSplitRef = useRef<EditorSplitHandle>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
+
+  // QoL-WP1 — register this workspace's unsaved-doc probe with App's close guard. The
+  // probe reads the editor's live dirty count at call time (the close handler invokes it
+  // on an ×-click). Registered on mount, cleared on unmount so a closed workspace's
+  // stale probe never lingers. `registerDirtyProbe` is identity-stable in App (useCallback)
+  // so this effect runs once per workspace.
+  useEffect(() => {
+    if (!registerDirtyProbe) return;
+    registerDirtyProbe(
+      workspaceId,
+      () => editorSplitRef.current?.dirtyDocCount() ?? 0,
+    );
+    return () => registerDirtyProbe(workspaceId, null);
+  }, [workspaceId, registerDirtyProbe]);
 
   // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.
   const [finderOpen, setFinderOpen] = useState(false);

@@ -41,9 +41,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-23, M4 WP4b: 426 pass, +5 focusHalf tests)
+- **Last:** 1s (2026-06-25, QoL-WP1 P3: 456 pass, +8 closeWorkspaceGuard tests)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-25 (QoL-WP1 Phase 3 verify-codify: +8 dirtyDocCount + closeWorkspaceSpec tests → 53 files / 456 tests)
+  - 1s — 2026-06-25 (QoL-WP1 Phase 1 verify-codify: +6 closeWorkspace focus-repick tests → 52 files / 448 tests; run ~0.94s)
   - 1s — 2026-06-23 (M4 WP4b verify-codify: +5 focusHalf derivation tests → 49 files / 426 tests; run ~0.86s)
   - 1s — 2026-06-23 (M4 WP2 P4: +6 mapIpcError picker-error-surfacing tests → 39 files / 361 tests; run ~0.74s)
   - 1s — 2026-06-23 (M4 WP2 P1 codify: +1 3+-workspace generalization test → 38 files / 355 tests; run ~0.94s)
@@ -63,9 +65,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 6s (2026-06-24, QoL-WP0 fs-watcher P1: new fs_watch module +13 tests → 221 pass; recompile + run ~0.63s after the notify-debouncer-full dep add)
+- **Last:** 4s (2026-06-25, QoL-WP1 P2 verify-auto: no backend change, 221 pass; warm run ~0.62s)
 - **Use timeout:** 120000
 - **History:**
+  - 4s — 2026-06-25 (QoL-WP1 Phase 2 verify-auto: no new Rust — frontend-only unmount-kill; 221 pass, no regression; warm run 0.62s)
   - 6s — 2026-06-24 (QoL-WP0 fs-watcher Phase 1 — new fs_watch module, 13 unit tests incl. ignore-filter + FsChange snake_case DTO, 221 pass)
   - 5s — 2026-06-24 (app-menu-bar Phase 1 codify — new app_menu module, 3 unit tests incl. FUNCTIONAL_IDS uniqueness, 208 pass)
   - 6s — 2026-06-23 (M4 WP2 P4 — +1 registry_generalizes_to_n_gt_1 test, 186 pass)

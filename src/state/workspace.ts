@@ -119,6 +119,49 @@ export function focusWorkspace(
 }
 
 /**
+ * Close a workspace (QoL-WP1): remove it from the list and re-pick `focusedId`.
+ *
+ * Closing is the explicit EXCEPTION to the "all workspaces stay mounted" rule — the
+ * workspace is genuinely removed from the array, so its `<Workspace>` truly unmounts and
+ * tears down its panes (the per-pane `cc_kill` on unmount reaps both PTY sessions) and
+ * its status-registry entry + filesystem watcher (the `useWorkspaceStatus` diff loop sees
+ * the id leave the array and fires `workspace_deregister` + `workspace_watch_stop`).
+ *
+ * Focus re-pick:
+ *   - Closing a NON-focused workspace → `focusedId` unchanged.
+ *   - Closing the FOCUSED workspace with others remaining → promote the ARRAY-index-left
+ *     neighbour (or the new leftmost, index 0, if the closed one was leftmost). Array
+ *     order coincides with filmstrip order in the common case (no custom drag-order); a
+ *     custom-ordered roster promoting the array-left rather than the visual-left neighbour
+ *     is an accepted v1 imperfection that keeps this reducer pure (resolved-decision Q1).
+ *   - Closing the LAST workspace → `focusedId: null` (the derived view flips to "picker").
+ *
+ * No-op (returns the SAME state reference) if the id is unknown.
+ */
+export function closeWorkspace(
+  state: WorkspaceListState,
+  id: string,
+): WorkspaceListState {
+  const idx = state.workspaces.findIndex((w) => w.id === id);
+  if (idx === -1) return state; // unknown id → no-op
+
+  const workspaces = state.workspaces.filter((w) => w.id !== id);
+
+  // Closed a NON-focused workspace: drop it, keep focus where it was.
+  if (state.focusedId !== id) {
+    return { workspaces, focusedId: state.focusedId };
+  }
+
+  // Closed the focused one: promote the left neighbour (the workspace now at idx-1
+  // in the FILTERED list), or the new leftmost if it was index 0, or null if empty.
+  const focusedId =
+    workspaces.length === 0
+      ? null
+      : workspaces[Math.max(0, idx - 1)].id;
+  return { workspaces, focusedId };
+}
+
+/**
  * Record the backend-issued CC session id on a workspace (WP7). Called when
  * `cc_spawn` resolves. No-op if the workspace id is unknown.
  */

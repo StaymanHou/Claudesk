@@ -217,11 +217,30 @@ export function XtermPane({
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
-      // Note: the backend session is reaped on window close via SessionRegistry::kill_all
-      // (robust against a frozen webview). A single pane unmounting mid-run is handled by
-      // the spawn effect's `cancelled` self-kill; a live session outliving its pane only
-      // happens at app shutdown, which kill_all covers. (No per-pane kill here, matching
-      // the proven WP7 lifecycle — multi-workspace pane-close will revisit this.)
+      // QoL-WP1 — PER-PANE KILL ON UNMOUNT. Closing a workspace genuinely REMOVES it
+      // from the WorkspaceList array, so its <Workspace> truly unmounts (the explicit
+      // EXCEPTION to "all workspaces stay mounted" — a center-stage switch only flips
+      // display, never unmounts). Reaping the backend PTY here makes that one change
+      // reap BOTH this workspace's left CC pane (cc_spawn) AND its WP9 second-terminal
+      // pane (term_spawn) generically — both are XtermPane instances — without lifting
+      // the second-terminal's session id up to App (it's owned here). Best-effort: a
+      // kill failure must not block the unmount (mirrors kill_all's best-effort posture).
+      //
+      // STRICTMODE-SAFE: under React 19 StrictMode (dev) this mount effect runs
+      // mount→cleanup→remount. The throwaway first mount sets sessionIdRef to the session
+      // IT spawned (via the spawn effect), so this cleanup kills THAT session, and the
+      // real remount spawns a fresh one — no surviving session is killed. (The spawn
+      // effect's per-run `cancelled` self-kill already covers the spawn-resolves-after-
+      // cleanup race.) This also closes the latent WP7 gap: before, a session outlived
+      // its pane until window-close kill_all; now an unmount reaps it immediately.
+      const sid = sessionIdRef.current;
+      if (sid) {
+        void invoke("cc_kill", { sessionId: sid }).catch((err) => {
+          // Surfaced, never silently swallowed (the WP6 IPC-error lesson); does not block.
+          console.error(`cc_kill on unmount failed for ${sid}:`, err);
+        });
+        sessionIdRef.current = null;
+      }
     };
   }, [workspaceId, fitAndResize, spawnCommand]);
 

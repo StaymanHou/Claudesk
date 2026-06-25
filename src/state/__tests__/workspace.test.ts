@@ -5,6 +5,7 @@ import {
   canonicalizeProjectPath,
   openWorkspace,
   focusWorkspace,
+  closeWorkspace,
   emptyWorkspaceList,
 } from "../workspace";
 
@@ -126,5 +127,63 @@ describe("focusWorkspace", () => {
     const s1 = openWorkspace(emptyWorkspaceList, "/a");
     const s2 = focusWorkspace(s1, "ws-does-not-exist");
     expect(s2).toBe(s1);
+  });
+});
+
+describe("closeWorkspace — QoL-WP1", () => {
+  /** Build a 3-workspace list /a /b /c with `focusPath` focused. */
+  function threeWith(focusPath: string) {
+    let s = openWorkspace(emptyWorkspaceList, "/a");
+    s = openWorkspace(s, "/b");
+    s = openWorkspace(s, "/c");
+    const target = s.workspaces.find((w) => w.project_path === focusPath)!;
+    return focusWorkspace(s, target.id);
+  }
+
+  it("removes the workspace from the list", () => {
+    const s = threeWith("/c");
+    const bId = s.workspaces.find((w) => w.project_path === "/b")!.id;
+    const next = closeWorkspace(s, bId);
+    expect(next.workspaces.map((w) => w.project_path)).toEqual(["/a", "/c"]);
+  });
+
+  it("leaves focus unchanged when closing a NON-focused workspace", () => {
+    const s = threeWith("/c"); // /c focused
+    const aId = s.workspaces.find((w) => w.project_path === "/a")!.id;
+    const cId = s.focusedId;
+    const next = closeWorkspace(s, aId);
+    expect(next.focusedId).toBe(cId); // still /c
+    expect(next.workspaces.map((w) => w.project_path)).toEqual(["/b", "/c"]);
+  });
+
+  it("promotes the LEFT neighbour when closing the focused workspace", () => {
+    const s = threeWith("/c"); // /c focused (rightmost)
+    const cId = s.focusedId!;
+    const bId = s.workspaces.find((w) => w.project_path === "/b")!.id;
+    const next = closeWorkspace(s, cId);
+    expect(next.focusedId).toBe(bId); // left neighbour /b
+    expect(next.workspaces.map((w) => w.project_path)).toEqual(["/a", "/b"]);
+  });
+
+  it("promotes the new LEFTMOST when closing the focused leftmost workspace", () => {
+    const s = threeWith("/a"); // /a focused (leftmost, index 0)
+    const aId = s.focusedId!;
+    const bId = s.workspaces.find((w) => w.project_path === "/b")!.id;
+    const next = closeWorkspace(s, aId);
+    expect(next.focusedId).toBe(bId); // new leftmost /b (Math.max(0, 0-1) = 0)
+    expect(next.workspaces.map((w) => w.project_path)).toEqual(["/b", "/c"]);
+  });
+
+  it("focuses null (→ picker) when closing the LAST workspace", () => {
+    const s1 = openWorkspace(emptyWorkspaceList, "/only");
+    const next = closeWorkspace(s1, s1.focusedId!);
+    expect(next.workspaces).toHaveLength(0);
+    expect(next.focusedId).toBeNull();
+  });
+
+  it("is a no-op (same reference) for an unknown id", () => {
+    const s = threeWith("/b");
+    const next = closeWorkspace(s, "ws-does-not-exist");
+    expect(next).toBe(s);
   });
 });

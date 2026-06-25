@@ -202,3 +202,14 @@ export function docsReducer(state: DocsState, event: DocsEvent): DocsState {
 export function isDirty(entry: DocEntry | undefined): boolean {
   return entry != null && entry.doc !== entry.savedDoc;
 }
+
+/**
+ * How many open documents have unsaved edits (QoL-WP1 — the workspace-close dirty
+ * guard). A fold over the store via `isDirty`; 0 when every open doc is clean (or none
+ * are open). Pure → vitest-testable. The close handler reads this (via the
+ * EditorSplit handle's `dirtyDocCount`) to decide whether to prompt before tearing down
+ * a workspace.
+ */
+export function dirtyDocCount(state: DocsState): number {
+  return Object.values(state.byPath).filter((e) => isDirty(e)).length;
+}

@@ -20,6 +20,11 @@ import {
 } from "./components/workspace/filmstripCollapse";
 import { ProjectPicker } from "./components/picker/ProjectPicker";
 import { PickerOverlay } from "./components/picker/PickerOverlay";
+import { ConfirmModal } from "./components/workspace/editor/ConfirmModal";
+import {
+  closeWorkspaceSpec,
+  type CloseWorkspaceChoice,
+} from "./components/workspace/editor/confirmDialog";
 import { parseSeedParam } from "./state/seedWorkspace";
 import { listen } from "@tauri-apps/api/event";
 import { menuActionFor } from "./menu/menuBridge";
@@ -48,6 +53,7 @@ function App() {
     view,
     openWorkspace,
     focusWorkspace,
+    closeWorkspace,
     setSessionId,
   } = useWorkspaceList();
   // M3 WP6 — live CC status from the `workspace-status` hook channel + the
@@ -119,6 +125,62 @@ function App() {
   // M4 WP2 — the new-workspace overlay (the filmstrip "+" re-entry). Only ever
   // shown when a workspace is already open; first-open uses the full-screen picker.
   const [showPicker, setShowPicker] = useState(false);
+
+  // QoL-WP1 — per-workspace unsaved-doc probe registry. Each workspace's RightPanelHost
+  // registers `() => editor.dirtyDocCount()` on mount (cleared on unmount). The close
+  // handler reads the closing workspace's probe to decide whether to confirm. A ref (not
+  // state) because the probe set changes on workspace open/close, not per render, and the
+  // close handler reads it imperatively at click time. `registerDirtyProbe` is useCallback-
+  // stable so the registering effect in RightPanelHost runs once per workspace.
+  const dirtyProbes = useRef<Map<string, () => number>>(new Map());
+  const registerDirtyProbe = useCallback(
+    (workspaceId: string, probe: (() => number) | null) => {
+      if (probe) dirtyProbes.current.set(workspaceId, probe);
+      else dirtyProbes.current.delete(workspaceId);
+    },
+    [],
+  );
+
+  // QoL-WP1 — the workspace pending a close-confirm (dirty guard). null = no dialog.
+  // Holds the id + display name + unsaved count so the ConfirmModal can show the blast
+  // radius; resolving it (close/cancel) clears it.
+  const [pendingClose, setPendingClose] = useState<{
+    id: string;
+    name: string;
+    count: number;
+  } | null>(null);
+
+  // Close a workspace from the filmstrip × (QoL-WP1). If its editor has unsaved docs,
+  // open the discard-or-cancel confirm; otherwise close immediately. The actual teardown
+  // (CC + second-terminal kill on unmount, workspace_deregister, workspace_watch_stop)
+  // rides closeWorkspace removing the id from the list — see closeWorkspace + the
+  // useWorkspaceStatus diff loop + XtermPane's unmount-kill.
+  const requestClose = useCallback(
+    (workspaceId: string) => {
+      const dirty = dirtyProbes.current.get(workspaceId)?.() ?? 0;
+      if (dirty > 0) {
+        const ws = workspaces.find((w) => w.id === workspaceId);
+        setPendingClose({
+          id: workspaceId,
+          name: ws?.display_name ?? "This workspace",
+          count: dirty,
+        });
+        return;
+      }
+      closeWorkspace(workspaceId);
+    },
+    [workspaces, closeWorkspace],
+  );
+
+  // Resolve the close-confirm: "close" tears the workspace down; "cancel" keeps it.
+  const resolveClose = useCallback(
+    (choice: CloseWorkspaceChoice) => {
+      const target = pendingClose;
+      setPendingClose(null);
+      if (choice === "close" && target) closeWorkspace(target.id);
+    },
+    [pendingClose, closeWorkspace],
+  );
 
   // Native menu bridge: the macOS menu (src-tauri/src/app_menu) emits a clicked
   // functional item's id on the `menu` event. We map it (menuBridge) to either a
@@ -222,17 +284,27 @@ function App() {
             onReorder={reorderTiles}
             onReorderCommit={commitOrder}
             onAddWorkspace={() => setShowPicker(true)}
+            onClose={requestClose}
           />
           <CenterStage
             workspaces={workspaces}
             focusedId={focusedId}
             onSessionId={setSessionId}
             statusFor={stateFor}
+            registerDirtyProbe={registerDirtyProbe}
           />
           {showPicker && (
             <PickerOverlay
               onOpen={openFromOverlay}
               onDismiss={() => setShowPicker(false)}
+            />
+          )}
+          {/* QoL-WP1 — close-with-unsaved-changes confirm (discard or cancel). Mounted
+              only while a close is pending the guard; reuses the shared ConfirmModal. */}
+          {pendingClose && (
+            <ConfirmModal
+              spec={closeWorkspaceSpec(pendingClose.name, pendingClose.count)}
+              onChoose={resolveClose}
             />
           )}
         </>

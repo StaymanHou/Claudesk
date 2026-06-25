@@ -34,6 +34,11 @@ interface WorkspaceProps {
   visible: boolean;
   /** Store the backend CC session id once cc_spawn resolves (WP7). */
   onSessionId?: (workspaceId: string, ccSessionId: string) => void;
+  /** QoL-WP1 — register this workspace's unsaved-doc probe with App's close guard. */
+  registerDirtyProbe?: (
+    workspaceId: string,
+    probe: (() => number) | null,
+  ) => void;
   /**
    * Live CC state from the `workspace-status` hook channel (M3 WP6). Defaults to
    * `"unknown"` — the honest no-data state before any hook event arrives. Phase 2
@@ -48,6 +53,7 @@ export function Workspace({
   workspace,
   visible,
   onSessionId,
+  registerDirtyProbe,
   statusState = "unknown",
   statusSnippet,
 }: WorkspaceProps) {
@@ -124,6 +130,7 @@ export function Workspace({
         workspaceId={workspace.id}
         projectPath={workspace.project_path}
         visible={visible}
+        registerDirtyProbe={registerDirtyProbe}
       />
     </div>
   );

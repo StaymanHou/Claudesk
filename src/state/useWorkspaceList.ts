@@ -6,6 +6,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
+  closeWorkspace as closeReducer,
   emptyWorkspaceList,
   focusWorkspace as focusReducer,
   openWorkspace as openReducer,
@@ -25,6 +26,10 @@ export interface WorkspaceListApi {
   /** Promote an already-open workspace to center stage by id (M4 WP3 — filmstrip
    *  tile click + ⌘⇧+digit both route through this). No-op if id is unknown. */
   focusWorkspace: (id: string) => void;
+  /** Close a workspace by id and re-pick the focus (QoL-WP1 — filmstrip-tile ×).
+   *  Removing it from the list also tears down its panes + status registration +
+   *  watcher (see `closeWorkspace` in workspace.ts). No-op if id is unknown. */
+  closeWorkspace: (id: string) => void;
   /** Store the backend CC session id on a workspace once cc_spawn resolves (WP7). */
   setSessionId: (id: string, ccSessionId: string) => void;
 }
@@ -40,6 +45,10 @@ export function useWorkspaceList(
 
   const focusWorkspace = useCallback((id: string) => {
     setState((s) => focusReducer(s, id));
+  }, []);
+
+  const closeWorkspace = useCallback((id: string) => {
+    setState((s) => closeReducer(s, id));
   }, []);
 
   const setSessionId = useCallback((id: string, ccSessionId: string) => {
@@ -58,6 +67,7 @@ export function useWorkspaceList(
     view: viewFor(state),
     openWorkspace,
     focusWorkspace,
+    closeWorkspace,
     setSessionId,
   } satisfies WorkspaceListApi;
 }

@@ -45,6 +45,8 @@ interface FilmstripProps {
   onReorderCommit: () => void;
   /** Open the ProjectPicker overlay to add another workspace (M4 WP2). */
   onAddWorkspace: () => void;
+  /** Close a workspace (QoL-WP1 — the per-tile × button). App runs the dirty guard. */
+  onClose: (workspaceId: string) => void;
 }
 
 /** Px the pointer must travel before a press becomes a drag (vs a click-to-promote). */
@@ -59,6 +61,7 @@ export function Filmstrip({
   onReorder,
   onReorderCommit,
   onAddWorkspace,
+  onClose,
 }: FilmstripProps) {
   // M4 WP3 P4 — POINTER-based live (WYSIWYG) reorder. A press that stays under
   // DRAG_THRESHOLD_PX is a click (promote, P2); past it, it's a drag — and on each move
@@ -246,6 +249,33 @@ export function Filmstrip({
             >
               <span className="filmstrip-pill-name">{tile.display_name}</span>
               <WorkspaceStatusIndicator state={statusFor(tile.id)} />
+              {/* QoL-WP1 (P3.6 — operator request) — close (×) on the collapsed pill too.
+                  stopPropagation so the pill's own onClick (promote) doesn't fire; the
+                  click routes through the SAME onClose → App.requestClose (dirty-guard +
+                  focus-repick + reap unchanged). span role=button avoids nesting a
+                  <button> inside the pill <button>. */}
+              <span
+                role="button"
+                tabIndex={0}
+                className="filmstrip-pill-close"
+                data-testid={`filmstrip-close-${tile.id}`}
+                aria-label={`Close ${tile.display_name}`}
+                title={`Close ${tile.display_name}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose(tile.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClose(tile.id);
+                  }
+                }}
+              >
+                ×
+              </span>
             </button>
           ))
         : // EXPANDED — the full WP3 thumbnail tiles.
@@ -292,6 +322,34 @@ export function Filmstrip({
               <div className="filmstrip-tile-header">
                 <span className="filmstrip-tile-name">{tile.display_name}</span>
                 <WorkspaceStatusIndicator state={statusFor(tile.id)} />
+                {/* QoL-WP1 — close (×). stopPropagation on pointerdown so the strip's
+                    drag/promote handler (onStripPointerDown) never treats this as a tile
+                    press; the click closes via onClose (App runs the dirty guard). The
+                    button is a child of the tile <button> — invalid nested <button> in
+                    strict HTML, but it renders + works in WKWebView; rendered as a <span>
+                    role=button to stay valid and avoid the nested-button warning. */}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="filmstrip-tile-close"
+                  data-testid={`filmstrip-close-${tile.id}`}
+                  aria-label={`Close ${tile.display_name}`}
+                  title={`Close ${tile.display_name}`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose(tile.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onClose(tile.id);
+                    }
+                  }}
+                >
+                  ×
+                </span>
               </div>
             </button>
           ))}

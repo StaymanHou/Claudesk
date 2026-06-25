@@ -58,6 +58,38 @@ export function closeDirtySpec(name: string): ConfirmSpec<CloseChoice> {
   };
 }
 
+/** The two outcomes of the workspace-close dirty guard (QoL-WP1). */
+export type CloseWorkspaceChoice = "close" | "cancel";
+
+/**
+ * The close-workspace-with-unsaved-edits dialog (QoL-WP1): Close Anyway (danger) /
+ * Cancel (primary, the safe default). Esc → cancel (keeps the workspace). Unlike the
+ * single-tab `closeDirtySpec` there is no "Save" — a workspace can hold many dirty docs
+ * across panes/files, so v1 offers discard-or-cancel (save-all-then-close is out of
+ * scope). `name` is the workspace display name; `count` is the unsaved-doc count, woven
+ * into the message so the operator knows the blast radius before discarding.
+ */
+export function closeWorkspaceSpec(
+  name: string,
+  count: number,
+): ConfirmSpec<CloseWorkspaceChoice> {
+  const files = count === 1 ? "1 file" : `${count} files`;
+  return {
+    title: "Close workspace with unsaved changes",
+    message: `${name} has unsaved changes in ${files}. Close anyway and discard them?`,
+    buttons: [
+      { id: "cancel", label: "Cancel", value: "cancel", variant: "primary" },
+      {
+        id: "close",
+        label: "Close Anyway",
+        value: "close",
+        variant: "danger",
+      },
+    ],
+    escValue: "cancel",
+  };
+}
+
 /** The two outcomes of the disk-change conflict prompt. */
 export type ConflictChoice = "keep-mine" | "load-disk";
 

@@ -32,7 +32,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { PaneTabs, type PaneTabsHandle } from "./PaneTabs";
 import type { SyntheticHighlight } from "./SyntheticView";
 import { initialPanesState, panesReducer } from "./editorPanes";
-import { docsReducer, initialDocsState, isDirty } from "./editorDocs";
+import {
+  dirtyDocCount as dirtyDocCountOf,
+  docsReducer,
+  initialDocsState,
+  isDirty,
+} from "./editorDocs";
 import { diskDecision, type FileMarker } from "./diskConflict";
 import { ConfirmModal } from "./ConfirmModal";
 import { conflictSpec, type ConflictChoice } from "./confirmDialog";
@@ -75,6 +80,12 @@ export interface EditorSplitHandle {
    * WP12 synchronous-check machinery verbatim — the only new thing is the event source.
    */
   checkDiskForPaths: (paths: string[]) => void;
+  /**
+   * QoL-WP1 — how many open docs in THIS workspace's editor have unsaved edits. The
+   * workspace-close dirty guard reads this (via App's per-workspace dirty-probe registry)
+   * to decide whether to confirm before tearing the workspace down. 0 → close silently.
+   */
+  dirtyDocCount: () => number;
 }
 
 interface EditorSplitProps {
@@ -126,6 +137,8 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
 
     // The per-workspace SHARED document store (keyed by path, ref-counted).
     const [docs, dispatchDocs] = useReducer(docsReducer, initialDocsState);
+    // (A live `docsRef` mirror of `docs` already exists below — reused by the QoL-WP1
+    // `dirtyDocCount` handle as well as the disk-conflict machinery.)
 
     // Synthetic read-only tab content (the WP7 Find-Results seam), keyed by the
     // synthetic tab's id. Content is in `state` so a setSyntheticContent re-renders the
@@ -381,6 +394,10 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
       [panes.activePaneId],
     );
 
+    // QoL-WP1 — read the live store via the ref (stable identity; no `docs` dep so the
+    // handle isn't rebuilt on every edit). Called by the close guard at click time.
+    const dirtyDocCount = useCallback(() => dirtyDocCountOf(docsRef.current), []);
+
     useImperativeHandle(
       ref,
       () => ({
@@ -390,6 +407,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         addSynthetic,
         setSyntheticContent,
         checkDiskForPaths,
+        dirtyDocCount,
       }),
       [
         openFile,
@@ -398,6 +416,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         addSynthetic,
         setSyntheticContent,
         checkDiskForPaths,
+        dirtyDocCount,
       ],
     );
 
