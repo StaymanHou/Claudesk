@@ -4,6 +4,18 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp2-status-busy-vs-awaiting — 2026-06-25
+
+1 MINOR finding (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7cfc464`. Reviewer rated the feature well-built and tightly-scoped — root cause diagnosed empirically (live hook-stream capture), fix in exactly one place, docs resynced same-commit. The other MINOR (a duplicate dangling `verify-codify` checkbox in the WIP) was resolved in-place before archive. This remaining finding is low-risk comment cleanup. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP2-TRIPLE-RATIONALE-COMMENT
+- **Files:** `src-tauri/src/status_broadcaster/mod.rs` (`INPUT_NEEDED_NOTIFICATION_TYPES` const doc + `notification_awaits_input` + `is_known_informational_notification`)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (comment clarity)
+- **Finding:** The unknown-`notification_type`-falls-back-to-AwaitingInput rationale is restated in three places (const doc, fn doc, inline match-arm comments) — ~25 lines of doc for ~15 of logic. The WHY is genuinely non-obvious and worth documenting once, but the triple-restatement means a future editor changing the allow-list must keep three prose copies in sync.
+- **Pickup shape:** consolidate the rationale to one anchor (e.g. the const doc) and trim the fn/match-arm copies to a back-reference. One small comment edit. Dismiss if the redundancy is judged helpful.
+
 # qol-wp1-close-workspace — 2026-06-25
 
 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9`. Reviewer rated the feature well-built and idiomatic — the standout being the per-pane `cc_kill`-on-unmount that reaps both PTY panes generically and closes a latent WP7 lifecycle gap. All findings are low-risk: two over-narrated comments + one accepted test-boundary gap. Auto-backlogged per drive_mode=autopilot.

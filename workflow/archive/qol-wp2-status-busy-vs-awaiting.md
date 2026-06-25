@@ -1,7 +1,7 @@
 # Feature: WP2 — Status indicator: busy vs awaiting-input (clear stuck AwaitingInput)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** COMPLETED 2026-06-25 — shipped 7cfc464, review-quality clean, finalized + archived
 **Created:** 2026-06-25
 **Entry:** reproduce → spec → plan (F32 → F4 → F7; bug reproduced cleanly, complex)
 **Drive mode:** autopilot
@@ -235,7 +235,6 @@ real post-answer work makes that window arbitrarily long.
     - [x] VH2: no perceptible CC lag in a tool-heavy session  <!-- status: pass -->
     - [x] VH3 (installed-build parity): observed in the installed `.app`  <!-- status: pass -->
   - [x] verify-codify  <!-- status: done — coverage complete (3 anchor tests written TDD-style in build); full suite green: cargo 224/224, frontend 456/456, no regressions, no new tests needed -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [x] Phase 1.5: Status-dot animation (breathe/blink) + filmstrip caption transparency  <!-- status: COMPLETE 2026-06-25 — operator-verified visually + no regression -->
   **What:** operator UX request added at Phase 1 verify-human. Presentation-only (CSS), no
@@ -326,8 +325,8 @@ real post-answer work makes that window arbitrarily long.
   - [x] verify-codify  <!-- status: done — coverage complete (7 tests TDD in build); no new test warranted. Full suites green: cargo 231/231, frontend 456/456, no regression. -->
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** Phase 1 + Phase 1.5 + Phase 2 all COMPLETE + operator-verified + codified. Ready for `/feature-ship`.
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** Shipped (7cfc464). review-quality: 0 CRITICAL / 0 MAJOR / 2 MINOR (1 fixed in-place, 1 auto-backlogged). Ready for `/feature-finalize`.
 - **Phase 2 verify-self note (backend-lifecycle posture):** No Playwright subagent — by design. The gating transform is pure + fully unit-tested (7 tests: permission_prompt/elicitation_dialog→Awaiting, idle_prompt/auth_success→noop, unknown→Awaiting-fallback, to_update carry+drop, hook_socket parse, DTO serde). Wiring trace PASS — hook forwards notification_type → HookEvent parses → event_to_state gates (mod.rs:130) → to_update carries into DTO (mod.rs:251) → frontend mirror (telemetry only). The no-op-preserves-prior-state property holds by construction: informational Notification → event_to_state None → to_update None → no emit → applyStatusUpdate not called → map keeps last state. The LIVE observable (a real idle_prompt/permission_prompt reaching the dot) needs the running app + is unobservable in the dev-seam browser → carried to verify-human VH2a–c.
 - **Phase 1.5 verify-self note:** No Playwright subagent spawned — by design. The outcome is a PLAYING CSS keyframe animation (breathe/blink) + a translucency judgment, which a static Playwright snapshot can't meaningfully observe (captures one arbitrary-opacity frame; "more transparent" is a human visual call), and no dev-server/app is running in-session. Agent-verifiable slice done: (1) static CSS assertions (verify-auto) confirm the keyframes exist + are applied to `.status-dot-running`/`.status-dot-awaiting`, idle/unknown carry none, reduced-motion guard present, tile-header alpha 0.6→0.35; (2) render-path trace — `WorkspaceStatusIndicator.tsx:33` renders `status-dot ${dotClass}` where `dotClass` = `statusPresentation(state)` → `status-dot-running`/`status-dot-awaiting`, used in center-stage header + (shared class) filmstrip tiles + pills. The visual is carried to verify-human VH1.5a–e.
 - **Blocked:** none
@@ -366,3 +365,35 @@ The captured live stream (below) IS the red→green anchor: "fixed" means the
 `UserPromptSubmit → Notification(permission_prompt) → PostToolUse → Stop` sequence resolves to
 `Running → AwaitingInput → Running → Idle` (today it resolves to `Running → AwaitingInput → [drop] → Idle`
 — stuck blue until Stop). verify-codify pins this as a `status_broadcaster` sequence test.
+
+## Code-Quality Review — qol-wp2-status-busy-vs-awaiting
+*(feature-review-quality on ship commit 7cfc464, drive_mode=autopilot — 0 CRITICAL, 0 MAJOR, 2 MINOR)*
+
+### Strengths
+- Gating logic split into two named helpers (`notification_awaits_input` + `is_known_informational_notification`) so an unknown future `notification_type` falls through to the conservative AwaitingInput default rather than being silently swallowed — honest-default encoded in code structure, not just a comment.
+- Cross-layer contract migration landed atomically: the "three events" contract in `CLAUDE.md`/`arch.md`/module headers was updated to four in the same commit as `CLAUDESK_EVENTS` 3→4 — no implicit drift.
+- AwaitingInput-vs-no-op decision kept entirely backend-side in `event_to_state`; the frontend `notification_type` is telemetry-only (reducer keys on `state`) — no split-brain.
+- Thorough, intentional tests: the captured-stream sequence anchor + unknown-type-fallback + `to_update` carry+drop.
+- DTO follows the IPC-DTO snake_case convention; CSS is compositor-friendly + `prefers-reduced-motion`-guarded.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [WIP Phase 1 verify group] Duplicate dangling `verify-codify` leaf under the COMPLETE Phase 1 (a `[x]` followed by an orphaned `[ ] NOT-STARTED`). — **RESOLVED in-place 2026-06-25** (stray line removed before finalize archive; tree-integrity defect, fixed since it's a one-line removal of a template leftover).
+- [status_broadcaster/mod.rs INPUT_NEEDED const + the two gating helpers] The unknown-type-fallback rationale is restated in three places (const doc, fn doc, inline match-arm comments) — ~25 lines of doc for ~15 of logic. — **AUTO-BACKLOGGED** (MINOR, low priority): consolidate the rationale to one anchor to reduce the prose-drift surface. Cosmetic; no behavior impact.
+
+### Assessment
+Well-built, tightly-scoped fix. Root cause diagnosed empirically (live hook-stream capture vs a pinned `claude`, preserved in the WIP), fix maps directly onto the evidence (`PostToolUse`→Running, `PreToolUse` deliberately not registered). Gating in exactly one place, additive convention-compliant wire change, docs resynced same-commit. Advances the codebase rather than accruing debt.
+
+### If you disagree
+Dismiss any finding by marking it `[DISMISSED]` in this section before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The bug's mechanism was refined by empirical capture. The operator's hypothesis ("answering doesn't emit `UserPromptSubmit`, so nothing flips it back") was *half* right — `UserPromptSubmit` indeed fires only for top-level prompts — but the conclusion "nothing fires after the answer" was wrong: CC **does** emit `PostToolUse(AskUserQuestion)` on resume. The defect was that Claudesk simply wasn't registered for `PostToolUse`. Online research (official hooks docs) alone would have wrongly concluded "no answer event exists, use `Stop` as a workaround"; the live hook-stream capture corrected it. Also learned: `AskUserQuestion`'s blue dot comes from a generic `Notification` `notification_type:"permission_prompt"`, not a dedicated event — which is what made the Phase-2 gating both possible and necessary.
+- **Assumptions that held:** The M3 hook channel + pure-transform `event_to_state` seam absorbed both changes cleanly (one new match arm + a gating helper); the additive/self-healing settings-merge made registering a 4th event a one-const change; the `None`-drops-event-preserves-prior-state behavior was exactly the no-op semantics the Notification gating needed (no new logic). The backend-lifecycle verify-self posture (static slice + wiring trace, live carried to verify-human) was the right call for all phases.
+- **Assumptions that were wrong:** The original SURFACE framing guessed "subagents/background jobs" as the trigger — the reproduction proved it was the `AskUserQuestion`/permission path. The spec's initial sizing leaned toward including PreToolUse; the capture showed `PostToolUse` alone suffices, so PreToolUse was correctly cut.
+- **Approach delta:** Two deltas from the plan. (1) The operator added Phase 1.5 (status-dot breathe/blink + caption transparency) mid-flight at Phase 1 verify-human — folded in as a new phase rather than a separate task, since it's polish on the same indicator. (2) Researching online first (operator's prompt) before the empirical capture was the high-leverage move — it framed the question precisely so the live capture was decisive rather than exploratory.
+
+## Closure
+**Feature complete:** WP2 (status indicator: busy vs awaiting-input) has shipped. The workspace status dot now clears from "awaiting input" (blue) to "running" (orange) the instant you answer an AskUserQuestion/permission prompt — driven by registering CC's `PostToolUse` resume signal — and an idle nudge no longer flips a busy dot blue (Notification gated on `notification_type`). It also breathes when running / blinks when awaiting input, and the filmstrip tile caption is more transparent. Verify by triggering an AskUserQuestion in any workspace and watching the dot flip orange on answer. Requester = operator — closure notice for self-record.

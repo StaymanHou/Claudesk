@@ -8,6 +8,12 @@ WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY (medium) → DEFERRED, anchored to M6; 
 dev-prod-isolation 3 MINORs + the long code-quality-findings tail → DEFERRED (low, carry
 forward — none M5-blocking). No escalations. -->
 
+## Code-quality findings — qol-wp2-status-busy-vs-awaiting (2026-06-25)
+- **Pointer:** 1 MINOR finding (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7cfc464` — the unknown-`notification_type`-fallback rationale is restated in 3 places (const doc + fn doc + match-arm comments) in `status_broadcaster/mod.rs` (~25 lines of doc for ~15 of logic). A second MINOR (a duplicate dangling `verify-codify` checkbox in the WIP tree) was resolved in-place before archive. Reviewer: well-built, tightly-scoped; root cause diagnosed empirically (live hook-stream capture), fix in one place, docs resynced same-commit. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp2-status-busy-vs-awaiting — 2026-06-25`.
+- **Priority:** low
+- **Status:** pending
+- **Pickup shape:** one comment-consolidation edit (`/feature-refactor`) — anchor the rationale once, back-reference from the other two. Dismiss via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — qol-wp1-close-workspace (2026-06-25)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9` — all low-risk: (1) the filmstrip × comment over-narrates a rejected nested-`<button>` alternative (Filmstrip.tsx); (2) a forward-referencing `docsRef` comment in EditorSplit.tsx; (3) the App-level close wiring (`requestClose`/`resolveClose`/dirty-probe registry) + the × routing are untested by automation (accepted per the manual-host-UI convention + live 9/9 verification). Reviewer: well-built, idiomatic, closes a latent WP7 lifecycle gap. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp1-close-workspace — 2026-06-25`.
 - **Priority:** low (all)
@@ -50,7 +56,7 @@ forward — none M5-blocking). No escalations. -->
 - **What this changes for investigation:** the live-capture should specifically (1) trigger an `AskUserQuestion`, observe the indicator go AwaitingInput, (2) ANSWER it, and watch whether ANY hook event fires afterward (a `UserPromptSubmit`? a new `Stop`? nothing?). The likely root cause is that answering a tool-call prompt does NOT emit `UserPromptSubmit` (that's only for top-level prompts), so the broadcaster never sees a running signal and the dot stays blue until the next real `Stop`/`UserPromptSubmit`. Fix candidates: map the post-answer resumption (whatever event CC does emit — possibly a `PreToolUse`/`PostToolUse` or the next `Stop`) back to running/busy; or treat AwaitingInput as auto-clearing on the next ANY-activity event. Confirm against the real hook stream before choosing.
 - **Recommended workflow:** `/feature-reproduce` (bug-shape: indicator stuck in wrong state) — drive a real CC session that calls `AskUserQuestion`, capture the FULL hook event sequence across ask→answer→resume, then plan the mapping/clear-condition fix. The transition OUT of AwaitingInput is the crux, more than the transition in.
 - **Priority:** medium-high (it actively misleads the core dogfood signal — the awaiting-input dot is THE "this project needs me" cue; a STUCK false-positive is worse than a transient one because the project looks like it needs you when it doesn't)
-- **Status:** open
+- **Status:** RESOLVED 2026-06-25 (QoL-WP2, commit 7cfc464). Empirically confirmed via live hook-stream capture: the revised hypothesis was half-right — answering does NOT emit `UserPromptSubmit`, BUT CC DOES fire `PostToolUse(AskUserQuestion)` on resume; Claudesk just wasn't registered for it. Fix: register `PostToolUse → Running` (clears the stuck blue on answer) + gate `Notification → AwaitingInput` on `notification_type` (idle nudges no longer flip a busy dot blue). Operator-verified live in the installed `.app`. (Phase 1.5 also added the operator-requested breathe/blink dot animation + filmstrip caption transparency.)
 
 ## SURFACE-2026-06-24-NEW-WORKSPACE-HOTKEY
 - **Source:** operator question during app-menu verify-human (2026-06-24)

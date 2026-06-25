@@ -4,6 +4,8 @@
 
 - **Feature shipped:** Close a workspace (QoL temporary-WBS WP1) — each filmstrip tile (expanded thumbnail and collapsed pill) now has a hover-revealed × that fully tears the workspace down: it reaps both the Claude Code PTY and the second-terminal shell (via a per-pane `cc_kill`-on-unmount that also closes a latent session-leak gap), deregisters it from the status broadcaster, stops its filesystem watcher, and re-picks the center stage (promoting the left-neighbour, or returning to the full-screen picker when the last workspace closes) — with a discard/cancel confirm if the workspace has unsaved editor edits.
 - **Backlog resolved:** SURFACE-2026-06-24-NO-WAY-TO-CLOSE-A-WORKSPACE — closed by QoL-WP1; the "Close Workspace ⌘⇧W" native-menu item remains a noted follow-up.
+- **Feature shipped:** Status indicator — busy vs awaiting-input (QoL temporary-WBS WP2) — the workspace status dot no longer gets stuck on "awaiting input" (blue) after you answer an AskUserQuestion/permission prompt: a live hook-stream capture proved Claude Code fires `PostToolUse` on resume, so Claudesk now registers it and maps it to "running", flipping the dot back to orange the instant you answer; the `Notification → awaiting-input` mapping is also gated on `notification_type` so an idle nudge no longer flips a busy dot blue; and the dot now "breathes" while running, "blinks" while awaiting input, with the filmstrip tile caption made more transparent.
+- **Backlog resolved:** SURFACE-2026-06-24-STATUS-INDICATOR-BUSY-VS-AWAITING-INPUT — closed by QoL-WP2 (PostToolUse→Running resume signal + notification_type gating, operator-verified live in the installed app).
 
 ## 2026-06-24
 

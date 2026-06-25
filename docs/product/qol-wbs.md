@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-24
-status: in-progress — WP0 shipped 2026-06-24, WP1 shipped 2026-06-25; WP2–WP8 pending
+status: in-progress — WP0 shipped 2026-06-24, WP1+WP2 shipped 2026-06-25; WP3–WP8 pending
 context: between-milestone QoL/lifecycle sweep, filed after M4 close, before M5 (PiP) planning
 ---
 
@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → WP2 → WP3 → WP4 → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9)*
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → WP3 → WP4 → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464)*
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -71,7 +71,8 @@ and delete this file.
 
 ---
 
-## WP2 — Status indicator: busy vs awaiting-input  `[priority: MED-HIGH]`  `← reproduce-first`
+## WP2 — Status indicator: busy vs awaiting-input  `[priority: MED-HIGH]`  `← reproduce-first`  ✅ SHIPPED 2026-06-25 (commit 7cfc464)
+**As-built:** root cause confirmed empirically (live hook-stream capture, claude v2.1.178): CC fires `PostToolUse(AskUserQuestion)` on answer-resume but Claudesk only registered UserPromptSubmit/Stop/Notification, so the dot stayed stuck blue until the next Stop. Fix shipped in 3 phases: **(1)** register `PostToolUse → Running` (the resume signal; PreToolUse deliberately NOT registered) — CLAUDESK_EVENTS 3→4; **(1.5, operator UX request at verify-human)** status-dot animation — Running breathes (opacity+scale), AwaitingInput hard on/off blinks, idle/unknown static, prefers-reduced-motion guarded; filmstrip tile caption bar made more transparent (0.6→0.35); **(2)** gate `Notification → AwaitingInput` on `notification_type` (permission_prompt/elicitation_dialog or unknown/absent → Awaiting; idle_prompt/auth_success/etc. → no-op). +10 Rust tests, frontend unchanged-but-mirrored; operator-verified live in the installed `.app`. Both fix candidates from the design notes below were superseded by the empirical capture (PostToolUse→Running chosen over auto-clear-on-any-activity).
 **Backlog:** SURFACE-2026-06-24-STATUS-INDICATOR-BUSY-VS-AWAITING-INPUT
 **Size:** small · **Type:** bug-shape (indicator STUCK in wrong state)
 **Why second:** it actively misleads the **core dogfood signal** — the awaiting-input dot is THE "this project needs me" cue; a STUCK false-positive is worse than a transient one.
