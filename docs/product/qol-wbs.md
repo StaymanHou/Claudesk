@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** WP0 → WP1 → WP2 → WP3 → WP4 → WP5 → WP6 → WP7 → WP8
+**Sequence of execution:** ~~WP0~~ ✅ → WP1 → WP2 → WP3 → WP4 → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24, commit d893254)*
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -29,7 +29,7 @@ and delete this file.
 
 ---
 
-## WP0 — Filesystem watcher (FileTree refresh + editor-doc reload)  `[priority: HIGH]`  `← foundational seam`
+## WP0 — Filesystem watcher (FileTree refresh + editor-doc reload)  `[priority: HIGH]`  `← foundational seam`  ✅ SHIPPED 2026-06-24 (commit d893254)
 **Backlog:** SURFACE-2026-06-21-EDITOR-FILE-WATCHER (pulled forward + scope broadened 2026-06-24)
 **Size:** medium · **Type:** new capability (foundational `notify` seam)
 **Why WP0 / first:** the operator hit it LIVE this session — a file created on disk by an external process (e.g. a CLI-written `qol-wbs.md`) does NOT appear in the FileTree until the folder is manually collapsed/re-expanded (⌘P finds it because the finder re-walks on open; the tree is a stale snapshot). It's a foundational `notify` seam that two consumers reuse — build it once, first.

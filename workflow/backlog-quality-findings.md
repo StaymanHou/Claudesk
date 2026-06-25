@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp0-fs-watcher — 2026-06-24
+
+3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `d893254`. Reviewer rated the feature well-built, advancing the codebase — a textbook instance of the repo's conventions (status_broadcaster split, reused `ignore`/`diskConflict` seams, lifecycle through the existing register/deregister diff loop, IPC snake_case pinned both sides). All findings are forward-looking, none a defect at current scope. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-24-QUALITY-FSWATCH-REWALK-AMPLIFICATION
+- **Files:** `src/components/workspace/RightPanelHost.tsx:162-163`
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (latent scaling cost)
+- **Finding:** Each `fs-change` event bumps BOTH `fsTreeRefreshKey` and `gitStatusRefreshKey`, each triggering a full `fs_tree` re-walk + `git_file_statuses` IPC. With the 200ms debounce, a bulk external op (`git checkout`, branch switch) still produces multiple batches → several back-to-back full-tree re-walks. Acceptable at the operator's repo sizes (the `build_ignore` doc-comment already accepts "a harmless extra re-walk"); the only place in the design where event→work amplification is unbounded.
+- **Pickup shape:** a trailing-edge coalesce on the consumer side (collapse rapid `fs-change` bumps into one re-walk), OR raise the backend debounce window. Reassess if/when N-workspace concurrent dogfooding shows real cost. Dismiss if the re-walk stays imperceptible.
+
+## SURFACE-2026-06-24-QUALITY-FSWATCH-EMIT-FAILURE-INVISIBLE
+- **Files:** `src-tauri/src/fs_watch/commands.rs:143,161`
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (observability gap)
+- **Finding:** Debouncer-callback failures (debounce errors, emit failures) go to `eprintln!` — consistent with the file's "log, don't crash the callback thread" intent and the repo's no-structured-logger posture, BUT a persistent emit failure means the tree/editor silently stop updating, invisible to the operator. The surfaced-error discipline applied to `workspace_watch_start`/`stop` doesn't reach the steady-state emit path.
+- **Pickup shape:** low-value unless emit failures are seen in practice — there's no clean IPC channel back from a detached callback thread to surface a toast. Could set a "watcher degraded" flag the next command reads, or emit a one-shot `fs-watch-error` event. Likely dismiss (FSEvents emit failures are vanishingly rare on a healthy local app).
+
+## SURFACE-2026-06-24-QUALITY-FSWATCH-ISDIR-FALSE
+- **Files:** `src-tauri/src/fs_watch/mod.rs:119`
+- **Priority:** low
+- **Status:** pending
+- **Type:** polish (documented-sound edge)
+- **Finding:** `is_ignored` always passes `is_dir=false` to `matched_path_or_any_parents`; the doc-comment correctly explains parent-matching covers directory-only patterns (`foo/`). Non-issue for the watcher's actual inputs (every emitted event path is a file or a path under an ignored dir). Noted only because the comment's reasoning is load-bearing; the reviewer checked the matcher edge and found it sound.
+- **Pickup shape:** no action needed — effectively a confirmation the edge was reviewed. Dismiss unless a future case feeds bare directory paths through `is_ignored`.
+
 # app-menu-bar — 2026-06-24
 
 1 MAJOR + 2 MINOR from `feature-review-quality` on ship commit `f815154` (0 CRITICAL). Reviewer rated the feature well-built, appropriately-scoped, adds zero new behavior, integrates through existing chord predicates. The MAJOR is the one real durability concern: an unguarded cross-language id contract. Auto-backlogged per drive_mode=autopilot.

@@ -1,7 +1,7 @@
 # Feature: Filesystem watcher — FileTree refresh + editor-doc reload
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready to ship
+**State:** ship (complete) — commit d893254 (local-only)
 **Created:** 2026-06-24
 **Entry:** spec (complex feature)
 **WBS:** `docs/product/qol-wbs.md` → WP0 (QoL/lifecycle temporary WBS)
@@ -147,15 +147,47 @@ Concrete attach points confirmed by reading the code:
   - [x] verify-codify  <!-- status: [x] — reload decision logic (diskConflict.diskDecision) covered by 10 vitest (reused unchanged); checkDiskForPaths is a thin open-doc selector over it. Live wiring is native-app (no jsdom harness) — integration-boundary end-to-end = operator verify-human (passed). Full suite green: vitest 442, cargo 221, 0 fail. No new tests warranted. -->
 
 ## Current Node
-- **Path:** Feature > SHIP
-- **Active scope:** ALL 3 PHASES COMPLETE (every impl + verify node [x]). Ready for /feature-ship.
+- **Path:** Feature > finalize
+- **Active scope:** review-quality COMPLETE (0 CRITICAL, 0 MAJOR, 3 MINOR auto-backlogged per Mode 3). Ready for /feature-finalize.
 - **Blocked:** none
-- **Unvisited:** none — ship next.
+- **Unvisited:** none — finalize next (then this WP0 of the QoL WBS is done).
 - **Open discoveries:** SURFACE-2026-06-23 verify-self driver gap fired again (4th instance, logged in Discoveries — pointer for M5 planning, not new WP work).
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
 - [SURFACED-2026-06-24] Phase 2 verify-self — SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI fired AGAIN (4th instance: after M4 WP3/WP4/WP4b). The FileTree auto-refresh + console-clean outcomes are native-app live-DOM, unverifiable by Playwright-vs-Vite (no Tauri IPC). Forwarded to native verify-human as expected. Strengthens the M5-planning adopt/reject decision on a real-app UI driver (`mcp-server-tauri`). NOT new work for this WP — a pointer reinforcing the existing high-priority backlog item.
+
+## Code-Quality Review — qol-wp0-fs-watcher
+
+### Strengths
+- Clean pure/runtime split (`mod.rs` pure transform + DTO; `commands.rs` runtime debouncer/registry/emit) faithfully mirrors the established `status_broadcaster` shape, so the testable logic is fully unit-covered without a live Tauri app or real watcher.
+- Reuses existing seams instead of duplicating them: the `ignore`-crate matcher (one gitignore contract shared with `fs_index`), the `diskConflict` reload/conflict decision, and the `useWorkspaceStatus` register/deregister diff loop — the watcher rides lifecycle that already exists rather than inventing parallel teardown.
+- Error discipline consistent with the repo's "never-swallow" lesson: `FsWatchError` typed (`thiserror`), IPC-mapped to surfaced strings, frontend `invoke` failures all `console.error`.
+- DTO casing contract pinned on both sides (`fs_change_dto_serializes_snake_case` Rust + the snake_case-verbatim vitest), guarding the SURFACE-2026-06-21 IPC-casing failure mode.
+- Doc-comments explain the non-obvious WHY (root-only gitignore tradeoff, coarse `FsKind`, drop-stops-watcher lifecycle, StrictMode `cancelled`-flag listen guard).
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [RightPanelHost.tsx:162-163] An `fs-change` bumps BOTH `fsTreeRefreshKey` and `gitStatusRefreshKey` (full `fs_tree` re-walk + `git_file_statuses` IPC each); a bulk `git checkout` produces multiple debounce batches → several back-to-back full-tree re-walks. Acceptable at the operator's repo sizes (the `build_ignore` doc already accepts "a harmless extra re-walk"); a future N-workspace scenario may want a trailing-edge coalesce. Backlog note, not a fix.
+- [commands.rs:143,161] Debouncer-callback failures (debounce errors, emit failures) go to `eprintln!` — matches the "log, don't crash the callback thread" intent + no structured logger, but a persistent emit failure means the tree/editor silently stop updating, invisible to the operator (no clean IPC channel back from a callback thread to surface it).
+- [mod.rs:119] `is_ignored` always passes `is_dir=false` to `matched_path_or_any_parents`; doc-comment correctly explains parent-matching covers dir patterns. Non-issue for the watcher's actual inputs (every event is a file or under an ignored dir); noted only because the comment's reasoning is load-bearing + checked sound.
+
+### Assessment
+Well-built feature that advances the codebase rather than accruing debt — a textbook instance of the repo's own conventions (status_broadcaster split, reused `ignore`/`diskConflict` seams, lifecycle through the existing diff loop, IPC snake_case pinned both sides). The self-write suppression via the post-save marker advance is an elegant reuse — no new debounce-against-own-writes logic needed. Only findings are MINOR + forward-looking; neither a defect at current scope, both appropriate backlog candidates, not refactor triggers.
+
+### If you disagree
+Dismiss any finding by editing this section + marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The online research (operator's "don't reinvent the wheel" prompt) materially simplified the build — `notify-debouncer-full` re-exports `notify`, collapsing two deps to one AND handing us rename From/To pairing for the write-then-rename atomic-save case we'd otherwise have hand-rolled. The exclusion design also flipped from "hand-maintain a `.git`/`node_modules`/`target` list" to "reuse `fs_index`'s `ignore` matcher" once we recognized the same engine already backs the tree walk.
+- **Assumptions that held:** Every integration seam was watcher-ready by design — `diskConflict.diskDecision` (its own header literally said "a watcher event would feed the same path"), the `gitStatusRefreshKey` bump pattern, and the `useWorkspaceStatus` register/deregister diff loop. The plan's "no new decision logic, just an event source" held exactly: the editor consumer is one `checkDiskForPaths` selector over the existing `checkDisk`.
+- **Assumptions that were wrong:** None material. The one open-question (self-write race needing a post-save ignore-window) resolved in our favor — the save path already stores the post-write marker, so the marker filter suppresses self-writes by construction; the speculative ignore-window was YAGNI.
+- **Approach delta:** One clean improvement over the plan: rather than a second `fs-change` listener inside EditorSplit, the editor consumer reuses RightPanelHost's SINGLE per-workspace listener (already workspace-scoped) via a new `EditorSplitHandle.checkDiskForPaths` — one subscription, correctly scoped, less wiring. Everything else matched the plan.
+
+## Closure
+**Feature complete:** QoL-WP0 (filesystem watcher) has shipped. A per-workspace `notify` watcher keeps the FileTree rail and open editor docs in sync with external on-disk changes (CLI, git, Claude Code) — the tree auto-refreshes and backgrounded editor tabs reload/conflict in real time, no manual collapse/expand. Verify by running `pnpm tauri:dev`, opening a workspace, and `touch`/`rm`-ing a file from a terminal (the operator confirmed all 8 verify-human checks live). Requester = operator — closure notice for self-record.
 
 TRANSITION: F7
