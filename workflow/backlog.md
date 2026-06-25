@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — qol-wp5b-editor-folder-depth (2026-06-25)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `374f7cb`: (1) a failed `trash_path` in `onDeleteFolderConfirm` is swallowed to `console.error` only (folder appears to still exist — pairs with the WP5 delete-toast item); (2) the `validateRelSegments` "mirrors the backend lexical guard" comment overstates parity (frontend rejects leading `~`, backend treats it as a normal segment — frontend stricter, safe); (3) the folder-delete confirm's descendant `count` can lag the live subtree if it grew since the last tree refresh (advisory only; the trash is correct). Reviewer: well-built, security-conscious, ship-quality; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp5b-editor-folder-depth — 2026-06-25`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** three quick `/feature-refactor` nits — (1) surface the trash failure inline/toast (one fix covers both delete paths with the WP5 item); (2) reword the guard-parity comment (or drop the `~`-check); (3) accept as cosmetic or re-walk on confirm-open. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — qol-wp5-editor-file-management (2026-06-25)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `3abfe59`: (1) the `createFile` collision check (`collides` over the `fs_tree` set) can't see gitignored files, so a root-level name colliding with a gitignored file is overwritten silently — the `collides` "don't clobber" doc is overstated; (2) `onDeleteConfirm` surfaces a failed `delete_file` only via `console.error`, inconsistent with the feature's own inline-surfacing discipline; (3) the new-file input's `onBlur` silently discards a partial name (undocumented UX choice). Reviewer: well-built, low-debt; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp5-editor-file-management — 2026-06-25`.
 - **Priority:** low (all)
@@ -16,7 +22,7 @@
   - **(B) delete-folder (recursive)** is riskier — one click wipes a subtree. Needs: a new `delete_dir(root, path)` backend command (root-confined `fs::remove_dir_all`, mirroring `delete_file`'s `resolve_within`), a delete ✕ on dir rows, a STRONGER confirm (name + "and everything inside it" + ideally a descendant count), and `closeTabsForPath` for every open tab UNDER the deleted dir (the current `close-path` is exact-match; a folder delete needs a prefix-match teardown). Consider macOS Trash (`NSFileManager` / a `trash` crate) instead of a hard `remove_dir_all` for recoverability given the blast radius.
 - **Suggested action:** (A) first (cheap, low-risk) — likely a quick task. (B) as a deliberate small feature with the stronger-confirm + prefix-close-tabs + (recommended) Trash-not-hard-delete decisions made at plan time.
 - **Priority:** medium — promoted (operator decision 2026-06-25) from low; both are depth on the already-shipped WP5 create/delete.
-- **Status:** SCHEDULED 2026-06-25 — promoted into `docs/product/qol-wbs.md` as **WP5b** (the immediate-next WP, ahead of WP6). Full task breakdown lives there. Closes when WP5b ships.
+- **Status:** RESOLVED 2026-06-25 (QoL-WP5b, commit 374f7cb) — shipped as 3 phases: (A) create-in-folder (per-dir ＋), (B) delete-folder via macOS Trash (recoverable) + stronger confirm + prefix-match tab teardown, and (C) new-folder + nested-file create (operator folded the new-folder ask in at Phase-2 verify-human as Phase 3 — `create_dir` command + parent-tolerant `resolve_within_lexical` guard + `proposeNewDirPath` + ⊞ affordances). frontend 554 / backend 249; operator-verified all 3 phases live + installed build. 3 MINOR quality findings auto-backlogged (low).
 
 <!-- M4 cycle-close sweep 2026-06-24 (/product-finalize): no pending item was newly
 RESOLVED by M4's work (M4's own WP outcomes were recorded at each feature-finalize).

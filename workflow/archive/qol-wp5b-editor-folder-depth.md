@@ -1,7 +1,7 @@
 # Feature: QoL-WP5b — Editor file management, folder depth (create-in-folder + delete-folder)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-06-25 (shipped 374f7cb; review-quality 0C/0M/3 MINOR; finalized)
 **Created:** 2026-06-25
 **Drive mode:** autopilot
 **Backlog:** SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS
@@ -84,8 +84,8 @@ QoL-WP5 shipped editor file management at the shallow end only: **create** is ro
 
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ALL 3 PHASES COMPLETE through verify-codify (frontend 554 / backend 249 green; operator-approved live + installed build for each). Ready to ship. (State: verify-codify all phases complete.)
+- **Path:** Feature > finalize
+- **Active scope:** Shipped (`374f7cb`); review-quality complete — 0 CRITICAL / 0 MAJOR / 3 MINOR auto-backlogged (low). Next: finalize.
 - **Blocked:** none
 - **Unvisited:** Phase 3 verify loop (auto → self → human → codify) → then ship.
 - **Open discoveries:** none
@@ -105,6 +105,35 @@ Classification: Obsolete test — Phase 3 intentionally evolved the call from `p
 Confidence: high
 Evidence: the call at RightPanelHost.createFile now passes a third `allowNested` arg (P3.3); `dir` is still the first arg, so the behavior the test guards (dir threaded, not hardcoded null) is intact.
 Action: relaxed the regex to `/proposeNewFilePath\(dir,\s*name/` (still asserts dir-first, tolerates the new 3rd arg). No code change.
+
+## Code-Quality Review — qol-wp5b-editor-folder-depth
+
+### Strengths
+- `resolve_within_lexical` is the right call + well-reasoned (WHY-comment for lexical-vs-canonical + why symlink class stays covered).
+- Containment tested adversarially (escape paths rejected AND outside target survives / nothing created).
+- `closeMatching` cleanly de-dups `close-path`/`close-under-path` neighbor-reassign; trailing-`/` prefix subtlety documented.
+- Recoverable-vs-hard-delete asymmetry (folder→Trash, file→hard) is intentional + documented; WP5 not re-litigated.
+- `expand` treeState action idempotent (same ref when already expanded); reducer comment updated, not stale.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [RightPanelHost.tsx `onDeleteFolderConfirm`] failed `trash_path` swallowed to console only (no refresh, no user surface) — consistent with single-file delete (WIP flags future toast), but folder blast radius makes the silent window more consequential. Backlog for the toast.
+- [newFilePath.ts `validateRelSegments`] frontend rejects leading `~` whole-string while backend treats `~` as a normal segment — guards disagree on `~` (frontend stricter → safe); the "mirrors the backend lexical guard" comment slightly overstates parity.
+- [confirmDialog.ts `deleteFolderSpec`] descendant `count` from last-refreshed `fs_tree` entries can lag the live subtree if it grew since the last refresh; the actual trash is correct (backend trashes live subtree), only the displayed number can understate.
+
+### Assessment
+Well-built, security-conscious, advances the codebase without accruing debt. The load-bearing `resolve_within_lexical` guard is correctly designed (component-wise `starts_with` — no `/root` vs `/rootsibling` bug), thoroughly tested against escape vectors, scoped so it doesn't weaken symlink protection on read/write/delete. Frontend wiring + refactors reduce duplication. Doc comments encode WHY. All findings MINOR + consistent-with-existing-pattern deferrals — none change the refactor-vs-backlog decision. Ship-quality.
+
+### If you disagree
+Dismiss a finding by marking its line `[DISMISSED]` in this section before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The shipped `resolve_within` guard canonicalizes the target's PARENT, so it can't validate a not-yet-existing nested path — the create-folder/nested-file work needed a parent-tolerant `resolve_within_lexical` (in-memory `.`/`..` normalization) rather than reusing the existing guard. This was the one real backend design point and was flagged at plan time (Phase 3), so it didn't surprise mid-build.
+- **Assumptions that held:** (A) create-in-folder was indeed pure-frontend — the backend already accepted any existing-parent subpath (the `write_in_nested_existing_dir_round_trips` test predicted it). The `trash` crate dropped in cleanly for recoverable folder delete. The `close-path`/`close-under-path` prefix logic factored into one shared `closeMatching` with no friction.
+- **Assumptions that were wrong:** None material. One minor ordering bug in my own `proposeNewDirPath` (validated segments before stripping the trailing slash → false-rejected `dir/`) surfaced in its unit test and was fixed in-build — exactly what the TDD step is for.
+- **Approach delta:** The feature GREW from the planned 2 phases (A create-in-folder, B delete-folder) to 3: the operator asked "how do I create a new folder?" at Phase-2 verify-human and chose to fold new-folder + nested-file create in as Phase 3 (F23 scope expansion, scope = "Folder + nested-file create" via AskUserQuestion). Phases 1+2 stayed done across the back-loop; Phase 3 ran its own build/verify loop before ship. The single-file delete deliberately kept its hard `remove_file` (only folder delete got Trash) — an intentional asymmetry, not an oversight.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

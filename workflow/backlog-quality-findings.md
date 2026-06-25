@@ -4,6 +4,28 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp5b-editor-folder-depth — 2026-06-25
+
+3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `374f7cb`. Reviewer verdict: well-built, security-conscious, ship-quality; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP5B-TRASH-FAILURE-NOT-SURFACED
+- **Finding:** a failed `trash_path` in `onDeleteFolderConfirm` is swallowed to `console.error` only — the tree isn't refreshed and no user-visible surface reports it, so the folder silently appears to still exist. Consistent with the single-file delete's existing behavior (and the WIP flags a future toast), but the folder-delete blast radius makes the silent-failure window more consequential.
+- **Where:** `src/components/workspace/RightPanelHost.tsx` `onDeleteFolderConfirm` (~410).
+- **Fix shape:** surface the trash failure inline/toast (reuse the new-file inline-error pattern). Pairs with the WP5 `SURFACE-2026-06-25-QUALITY-WP5-DELETE-FAILURE-NOT-SURFACED` toast item — one fix covers both delete paths.
+- **Priority:** low
+
+## SURFACE-2026-06-25-QUALITY-WP5B-GUARD-PARITY-COMMENT
+- **Finding:** `validateRelSegments` rejects a leading `~` on the whole string, but the backend `resolve_within_lexical` has no `~` notion (treats `~` as a normal segment) — the two guards disagree on `~` (frontend stricter → safe, backend still contains under root). The "mirrors the backend lexical guard" comment slightly overstates parity.
+- **Where:** `src/components/workspace/filetree/newFilePath.ts` `validateRelSegments` (~70).
+- **Fix shape:** reword the comment to "stricter than / defense-in-depth over the backend guard" (or drop the `~`-whole-string check, since the backend contains it anyway). Cosmetic comment-accuracy.
+- **Priority:** low
+
+## SURFACE-2026-06-25-QUALITY-WP5B-DESCENDANT-COUNT-STALE
+- **Finding:** the folder-delete confirm's descendant `count` (`countDescendants` over the loaded `fs_tree` entries) reflects the tree as last refreshed; if the folder grew on disk since the last `fsTreeRefreshKey` bump, the displayed number understates the blast radius. The trash itself is correct (backend trashes the live subtree) — only the advisory number can lag.
+- **Where:** `src/components/workspace/editor/confirmDialog.ts` `deleteFolderSpec` consumer in `RightPanelHost.tsx` (count source).
+- **Fix shape:** accept as cosmetic (the WP0 watcher keeps the tree fresh in practice), or re-walk on confirm-open for an exact count. Lowest value of the three.
+- **Priority:** low
+
 # qol-wp5-editor-file-management — 2026-06-25
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `3abfe59`. Reviewer verdict: well-built, low-debt; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.

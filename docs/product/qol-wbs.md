@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-24
-status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5 shipped 2026-06-25; WP5b (next) + WP6–WP8 pending
+status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5+WP5b shipped 2026-06-25; WP6–WP8 pending
 context: between-milestone QoL/lifecycle sweep, filed after M4 close, before M5 (PiP) planning
 ---
 
@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → **WP5b** → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59)* — **WP5b inserted 2026-06-25 as the immediate next WP** (operator promoted the WP5 follow-ups ahead of WP6).
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → ~~WP5b~~ ✅ → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59; WP5b SHIPPED 2026-06-25 374f7cb)* — **WP5b inserted 2026-06-25 as the immediate next WP** (operator promoted the WP5 follow-ups ahead of WP6).
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -144,7 +144,8 @@ and delete this file.
 
 ---
 
-## WP5b — Editor file management, folder depth (create-in-folder + delete-folder)  `[priority: MEDIUM]`  `← immediate next; extends WP5`
+## WP5b — Editor file management, folder depth (create-in-folder + delete-folder)  `[priority: MEDIUM]`  ✅ SHIPPED 2026-06-25 (commit 374f7cb)
+**Shipped scope (3 phases — grew beyond the original A+B):** Phase 1 = create-in-folder (per-dir ＋); Phase 2 = delete-folder via **macOS Trash** (recoverable, `trash` crate — the design call) + stronger confirm + prefix-match `close-under-path` tab teardown; **Phase 3 = new-folder + nested-file create** (operator folded this in at Phase-2 verify-human via an F23 scope expansion — new `create_dir` command + a parent-tolerant `resolve_within_lexical` guard + `proposeNewFilePath(allowNested)` + `proposeNewDirPath` + header/per-dir "new folder" ⊞). Review-quality: 0 CRITICAL / 0 MAJOR / 3 MINOR (auto-backlogged low). frontend 554 / backend 249.
 **Backlog:** SURFACE-2026-06-25-EDITOR-FOLDER-FILE-OPS
 **Size:** small (A) + small/medium (B) · **Type:** new editor feature (depth on the shipped WP5 create/delete)
 **Why immediate-next (operator decision 2026-06-25):** surfaced live at WP5 verify-human — the two natural extensions of the just-shipped create/delete. Promoted ahead of WP6 (which stays LOW). (A) is cheap + low-risk and the backend already supports it; (B) is the riskier piece (a wrong click wipes a subtree) and carries the interesting design calls.
