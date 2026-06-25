@@ -8,6 +8,12 @@ WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY (medium) → DEFERRED, anchored to M6; 
 dev-prod-isolation 3 MINORs + the long code-quality-findings tail → DEFERRED (low, carry
 forward — none M5-blocking). No escalations. -->
 
+## Code-quality findings — qol-wp1-close-workspace (2026-06-25)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9` — all low-risk: (1) the filmstrip × comment over-narrates a rejected nested-`<button>` alternative (Filmstrip.tsx); (2) a forward-referencing `docsRef` comment in EditorSplit.tsx; (3) the App-level close wiring (`requestClose`/`resolveClose`/dirty-probe registry) + the × routing are untested by automation (accepted per the manual-host-UI convention + live 9/9 verification). Reviewer: well-built, idiomatic, closes a latent WP7 lifecycle gap. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp1-close-workspace — 2026-06-25`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** two are one-line comment trims (`/feature-refactor`); the third is a test-harness gap that only matters once the project adopts RTL/E2E (deferred per Phase-1 convention). Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — qol-wp0-fs-watcher (2026-06-24)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `d893254` — all forward-looking, none a defect at current scope: (1) `fs-change` re-walk amplification under bulk external ops (RightPanelHost.tsx); (2) steady-state emit-failure invisibility in the debouncer callback (fs_watch/commands.rs); (3) `is_ignored` `is_dir=false` documented-sound edge (fs_watch/mod.rs). Reviewer: well-built, textbook instance of repo conventions. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp0-fs-watcher — 2026-06-24`.
 - **Priority:** low (all)
@@ -64,7 +70,7 @@ forward — none M5-blocking). No escalations. -->
 - **Edge cases:** closing the focused workspace (must promote another to center stage); closing the LAST workspace (return to the full-screen picker, `view → "picker"`); a dirty editor tab in the closing workspace (confirm-before-close? — or defer that to the editor's own dirty guard).
 - **Note:** explicitly OUT of scope for the current app-menu feature (which mirrors EXISTING features only — and "close workspace" does not exist yet). Once this ships, a "Close Workspace ⌘⇧W" item is a natural addition to the native Workspace menu in a follow-up.
 - **Priority:** high (it's a basic lifecycle gap — workspaces accumulate with no way to remove them; directly impedes the multi-workspace daily-driver use case the M3+M4 dogfood depends on)
-- **Status:** open
+- **Status:** RESOLVED 2026-06-25 (QoL-WP1, commit c01a3f9) — filmstrip × on expanded tiles + collapsed pills; per-pane `cc_kill`-on-unmount reaps CC + second-terminal; deregister/watch-stop ride the status diff loop; dirty-tab discard/cancel guard; focus re-pick (left-neighbour / last→picker). The "Close Workspace ⌘⇧W" native-menu item remains the noted follow-up (not in this WP).
 
 ## SURFACE-2026-06-24-TERMINAL-SPURIOUS-NEWLINE-ON-PANEL-SWITCH
 - **Source:** operator observation (2026-06-24, screenshot — the WP9 second-terminal panel) during the app-menu feature

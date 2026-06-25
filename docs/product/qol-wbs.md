@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → WP1 → WP2 → WP3 → WP4 → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24, commit d893254)*
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → WP2 → WP3 → WP4 → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9)*
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -50,9 +50,10 @@ and delete this file.
 
 ---
 
-## WP1 — Close a workspace  `[priority: HIGH]`
-**Backlog:** SURFACE-2026-06-24-NO-WAY-TO-CLOSE-A-WORKSPACE
+## WP1 — Close a workspace  `[priority: HIGH]`  ✅ SHIPPED 2026-06-25 (commit c01a3f9)
+**Backlog:** SURFACE-2026-06-24-NO-WAY-TO-CLOSE-A-WORKSPACE (RESOLVED)
 **Size:** small/medium · **Type:** new capability (genuine lifecycle gap)
+**As-built notes:** filmstrip × on BOTH expanded tiles AND collapsed pills (collapsed-× added at verify-human per operator — supersedes the spec's "expanded-only"). Teardown via a per-pane `cc_kill`-on-unmount in `XtermPane` — a real close removes the `<Workspace>` from the list (the explicit exception to "all workspaces stay mounted"), which reaps BOTH the CC pane and the WP9 second-terminal pane generically AND closes the latent WP7 "session outlives its pane until window-close kill_all" gap. `workspace_deregister`/`workspace_watch_stop` ride the existing `useWorkspaceStatus` diff loop. Dirty guard: `EditorSplitHandle.dirtyDocCount()` + a per-workspace dirty-probe registry → discard/cancel ConfirmModal. Focus re-pick = array-index-left-neighbour (Q1: array order, not visual filmstrip order — accepted v1 trade-off to keep the reducer pure). Persisted filmstrip-order entry LEFT on close (Q4: `orderWorkspaces` already skips not-open entries; preserves arrangement across reopen).
 **Why first:** workspaces accumulate with no removal path — directly impedes the multi-workspace daily-driver use case the M3+M4 dogfood depends on.
 
 **What:** A close affordance per workspace that deregisters it, kills its CC session, and removes its tile.

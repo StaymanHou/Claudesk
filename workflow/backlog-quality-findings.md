@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp1-close-workspace — 2026-06-25
+
+3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9`. Reviewer rated the feature well-built and idiomatic — the standout being the per-pane `cc_kill`-on-unmount that reaps both PTY panes generically and closes a latent WP7 lifecycle gap. All findings are low-risk: two over-narrated comments + one accepted test-boundary gap. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP1-OVERNARRATED-X-COMMENT
+- **Files:** `src/components/workspace/Filmstrip.tsx` (expanded × ~252-280 + collapsed-pill × ~308-340)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (comment clarity)
+- **Finding:** The × button comment narrates a rejected "invalid nested `<button>`" alternative before stating the actual `<span role="button">` choice — a future reader scanning it may think there's a nested-button bug. Trim to state only what shipped (and why span-over-button: to avoid invalid nesting inside the tile/pill button).
+- **Pickup shape:** one-line comment edit at both × sites. Dismiss if the historical context is judged useful.
+
+## SURFACE-2026-06-25-QUALITY-WP1-DOCSREF-FORWARD-REF-COMMENT
+- **Files:** `src/components/workspace/editor/EditorSplit.tsx:137-141`
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (comment drift risk)
+- **Finding:** The "(A live `docsRef` mirror of `docs` already exists below — reused by…)" comment forward-references the `docsRef` declared ~50 lines down (line ~188), restating a relationship the `docsRef.current` read at the handle already makes obvious. Drifts if the file is reordered.
+- **Pickup shape:** delete the forward-referencing comment (or move it adjacent to the actual `docsRef` declaration). Trivial.
+
+## SURFACE-2026-06-25-QUALITY-WP1-APP-WIRING-UNTESTED
+- **Files:** `src/components/workspace/Filmstrip.tsx`, `src/App.tsx` (requestClose / resolveClose / dirty-probe registry)
+- **Priority:** low
+- **Status:** pending
+- **Type:** test-coverage gap
+- **Finding:** Only the pure layer (reducer, `dirtyDocCount`, `closeWorkspaceSpec`) is unit-covered. No component test for the × (stopPropagation routing, keyboard Enter/Space) and no App-level test for the probe-registry / focus-repick wiring. Accepted boundary per the project's manual-host-UI convention + the live 9/9 operator verification — but the App wiring (`requestClose` reading the `workspaces` closure, `resolveClose` clearing `pendingClose`) is the part most likely to regress silently.
+- **Pickup shape:** if/when the project adopts a component-test harness (RTL) or E2E (deferred per Phase-1 convention), add a Filmstrip-×-routing test + an App close-handler test. Low value until then; dismiss if the manual-verification posture holds.
+
 # qol-wp0-fs-watcher — 2026-06-24
 
 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `d893254`. Reviewer rated the feature well-built, advancing the codebase — a textbook instance of the repo's conventions (status_broadcaster split, reused `ignore`/`diskConflict` seams, lifecycle through the existing register/deregister diff loop, IPC snake_case pinned both sides). All findings are forward-looking, none a defect at current scope. Auto-backlogged per drive_mode=autopilot.

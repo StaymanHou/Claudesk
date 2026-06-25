@@ -1,7 +1,7 @@
 # Feature: Close a workspace (QoL-WP1)
 
 **Workflow:** feature
-**State:** ship (complete) — next: review-quality
+**State:** COMPLETED 2026-06-25 (shipped c01a3f9; review-quality clean — 3 MINOR auto-backlogged)
 **Created:** 2026-06-25
 **Entry:** spec (complex feature)
 **Source WBS:** `docs/product/qol-wbs.md` → WP1
@@ -300,14 +300,40 @@ check: N/A.)
   - [x] verify-codify  <!-- status: complete — pure logic fully codified (14 tests: 6 closeWorkspace + 8 dirtyDocCount/closeWorkspaceSpec). UI behavior is Playwright-class (deferred per project E2E convention) + operator-verified at verify-human. Full suite 456 pass, no regression. -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 COMPLETE — all phases done
-- **Active scope:** All 3 phases complete (all nodes [x]); ready to ship
+- **Path:** Feature > review-quality COMPLETE → feature-finalize
+- **Active scope:** Shipped (c01a3f9); review-quality done (0 CRITICAL / 0 MAJOR / 3 MINOR auto-backlogged); ready to finalize
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
-- **Blocked:** none
-- **Unvisited:** (Phase 3 is the last phase)
-- **Open discoveries:** none
+
+## Code-Quality Review — qol-wp1-close-workspace
+
+### Strengths
+- Clean separation of pure logic (`closeWorkspace` reducer, `dirtyDocCount` fold, `closeWorkspaceSpec`) from React/IPC wiring — all three vitest-covered with meaningful cases (focus re-pick variants, unknown-id no-op, dirty-count revert-to-clean).
+- The per-pane `cc_kill`-on-unmount generically reaps both the CC pane and the WP9 second-terminal pane because both are `XtermPane` instances, closing the documented latent WP7 gap without lifting session ids up to App.
+- Reference-identity discipline correct throughout: `registerDirtyProbe` useCallback-stable (effect runs once/workspace); `dirtyDocCount` reads `docsRef.current` with empty deps (handle not rebuilt per keystroke).
+- Reducer returns same state reference on unknown-id; the "all workspaces stay mounted" exception is documented at every site that creates it.
+- Safe-default UX: confirm dialog makes Cancel primary + Esc → cancel; danger variant reserved for "Close Anyway".
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [Filmstrip.tsx:312-340, 252-280] The expanded × comment narrates a rejected "invalid nested `<button>`" alternative before the actual `<span role=button>` choice — trim to state only what shipped.
+- [EditorSplit.tsx:137-141] The "(A live `docsRef` mirror already exists below…)" comment forward-references the `docsRef` ~50 lines down, restating what the `docsRef.current` read already makes obvious.
+- [Filmstrip.tsx / App.tsx] No component/integration test for the × button (stopPropagation routing, keyboard) or the App-level probe-registry / focus-repick wiring; only the pure layer is covered. Accepted boundary per the project's manual-host-UI convention + live 9/9 verification, but the App wiring (`requestClose` stale-closure, `resolveClose`) is the part most likely to regress silently.
+
+### Assessment
+Well-built, idiomatic work that fits the existing architecture. The standout — reaping PTYs in `XtermPane`'s unmount cleanup so a single list-removal tears down both panes generically — is leverage that reduces complexity and closes a pre-existing gap as a side effect. StrictMode-safety reasoning sound. The Q1 array-order-vs-visual-order divergence is honestly documented as an accepted v1 trade-off. Only debt: a couple over-narrated comments + absence of App-wiring automation — neither above MINOR. Net: advances the codebase, accrues no meaningful debt.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The spec assumed killing the CC + second-terminal would need explicit handler-side `cc_kill` calls, with the second-terminal's session id being a problem (it's owned inside `TerminalPane`'s `XtermPane`, never lifted to App). Reading the lifecycle revealed a cleaner path: because a real close genuinely UNMOUNTS the `<Workspace>`, a per-pane `cc_kill`-on-unmount in `XtermPane` reaps BOTH panes generically — no id-lifting needed — and incidentally closes the latent WP7 "session outlives its pane until window-close kill_all" gap. The `useWorkspaceStatus` diff loop was already written (WP0) to fire deregister + watch-stop on list removal, so two of the four teardown obligations were free.
+- **Assumptions that held:** The reducer/binding/UI three-phase split was right-sized; `viewFor` already returned "picker" on an empty list (last-close → picker fell out for free); `ConfirmModal`/`ConfirmSpec` reused cleanly for the dirty guard; the dirty-probe registry threaded App→CenterStage→Workspace→RightPanelHost without friction.
+- **Assumptions that were wrong:** The spec scoped the collapsed-pill × OUT ("expanded tiles only, fiddly"). The operator wanted it immediately at verify-human — a 1-build F12 back-loop folded it in. Lesson: a "v1 leaves X out" scope cut on a small, symmetric affordance is cheap to add and worth a second thought at spec time.
+- **Approach delta:** Implementation matched the plan except (1) the collapsed-× scope addition (F12 back-loop, P3.6), and (2) the live UI/backend outcomes couldn't be agent-verified (no running Tauri app + the `pgrep` reap needs the real app, not a Vite browser) — they were carried to verify-human and operator-confirmed 9/9. The pure-logic phases (1, 3) were fully agent-verifiable; the cross-layer/backend phases (2, 3-live) leaned on the operator, which is the correct posture for a Tauri desktop feature touching process lifecycle (per the installed-build-smoke-test convention).
 
 ## Discoveries
 <!-- [SURFACED-<date>] <target node> — <summary> -->

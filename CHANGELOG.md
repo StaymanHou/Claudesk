@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-25
+
+- **Feature shipped:** Close a workspace (QoL temporary-WBS WP1) — each filmstrip tile (expanded thumbnail and collapsed pill) now has a hover-revealed × that fully tears the workspace down: it reaps both the Claude Code PTY and the second-terminal shell (via a per-pane `cc_kill`-on-unmount that also closes a latent session-leak gap), deregisters it from the status broadcaster, stops its filesystem watcher, and re-picks the center stage (promoting the left-neighbour, or returning to the full-screen picker when the last workspace closes) — with a discard/cancel confirm if the workspace has unsaved editor edits.
+- **Backlog resolved:** SURFACE-2026-06-24-NO-WAY-TO-CLOSE-A-WORKSPACE — closed by QoL-WP1; the "Close Workspace ⌘⇧W" native-menu item remains a noted follow-up.
+
 ## 2026-06-24
 
 - **Feature shipped:** M4 WP5 — Verify multi-workspace at N: the milestone-exit verification gate proved Claudesk's full multi-workspace surface holds at N≥4 real CC sessions in the native app — independent sessions with no cross-workspace leak, zero-click idle/running/awaiting-input status across both the expanded filmstrip and the collapsed pill row (M3-hook-driven, agreeing with each workspace's header), both promote paths (tile/pill click and `⌘⇧+digit`, the chord firing from focus inside CM6 and the terminal) plus persistent drag-reorder, the left/right focus indicator, collapse/expand reclaiming space while halting the mirror loop, responsive window-close at N, and the headline success metric (find the awaiting-input workspace in <1s, zero clicks, keyboard-switch to it) — all 7 checks operator-PASSED in one clean autopilot pass.
