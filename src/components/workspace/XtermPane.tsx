@@ -35,6 +35,7 @@ import {
   initialBridgeState,
 } from "../../cc/bridge";
 import { spawnTriggerDeps } from "../../cc/spawnTrigger";
+import { shouldSpawnOnActive } from "../../cc/respawnGuard";
 import {
   registerTerminalSerializer,
   unregisterTerminalSerializer,
@@ -99,6 +100,11 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // Live session id for the input/resize callbacks (a ref so the handlers wired at
     // mount always see the current id without re-subscribing).
     const sessionIdRef = useRef<string | null>(null);
+    // QoL-WP4 — true once a session has been spawned for this pane. The deferred-spawn
+    // trigger effect consults this (via shouldSpawnOnActive) so the shell spawns on the
+    // FIRST activation only — a re-activation (panel/center-stage switch-back) is inert.
+    // Reset to false on a real teardown/relaunch so a fresh spawn is allowed again.
+    const hasSpawnedRef = useRef(false);
     const [bridge, dispatch] = useReducer(bridgeReducer, initialBridgeState);
 
     // QoL-WP3 — imperative focus handle for the parent Workspace's visible-edge effect.
@@ -133,17 +139,20 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     }, [onSessionId]);
 
     // Re-launch / Retry: kill any lingering backend session, then flip the bridge to
-    // "spawning" so the spawn effect fires a fresh spawn. The ended/failed run's listeners
-    // were already disposed by that run's effect cleanup, so we only kill the backend here.
+    // "spawning". The ended/failed run's listeners were already disposed by that run's
+    // effect cleanup, so we only kill the backend here. We do NOT bump the nonce directly —
+    // clearing the spawn-once latch + resetting the phase to "spawning" lets the single
+    // deferred-spawn trigger effect (QoL-WP4) fire the nonce bump on the phase transition,
+    // so relaunch and first-spawn share ONE nonce-bump path (no risk of a double bump →
+    // double spawn). Relaunch is always clicked on an on-screen pane, so `active` is true
+    // and the trigger fires immediately.
     const handleRelaunch = () => {
       const sid = sessionIdRef.current;
       if (sid) void invoke("cc_kill", { sessionId: sid }).catch(() => {});
       sessionIdRef.current = null;
+      // Clear the spawn-once latch so the trigger effect treats this as a fresh first-spawn.
+      hasSpawnedRef.current = false;
       dispatch({ type: "relaunch" });
-      // Bump the spawn nonce so the spawn effect re-runs (it no longer keys on
-      // `bridge.phase`). The relaunch dispatch resets phase to "spawning" for the UI;
-      // this nonce is what actually re-triggers a fresh spawn + listener attach.
-      setSpawnNonce((n) => n + 1);
     };
 
     // Fit the terminal to its container and push the resulting cols/rows to the PTY.
@@ -279,21 +288,23 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       };
     }, [workspaceId, fitAndResize, spawnCommand]);
 
-    // Spawn (and re-spawn on relaunch) the session. Keyed on the bridge phase being
-    // "spawning" — the initial mount and every "relaunch" land here. Gated on `active`:
-    // the WP9 terminal panel mounts hidden (display:none until its tab is front) and
-    // passes active=false, DEFERRING its spawn until first revealed — so the shell never
-    // starts into a zero-size xterm and an unopened terminal panel costs no shell. The CC
-    // pane is always active=true → spawns at mount, as before.
+    // Spawn (and re-spawn on relaunch) the session. Keyed ONLY on `spawnNonce` (+ path /
+    // command). The nonce is bumped by exactly two callers: the deferred-first-spawn trigger
+    // effect below (once, on the first activation) and `handleRelaunch`. The initial mount
+    // value `spawnNonce === 0` is the "not yet triggered" sentinel and spawns nothing — so
+    // a hidden terminal panel costs no shell, and the always-active CC pane spawns via the
+    // trigger effect's first bump (not an implicit mount spawn). This removes `active` from
+    // this effect's deps entirely (QoL-WP4): a re-activation can no longer re-run it (which
+    // re-spawned a fresh shell + tore the listeners down → lost history + stacked prompts).
     //
     // LIFECYCLE (this file's back-loops were all about this — read before editing):
     //  - The per-run closure `cancelled` flag is the de-dup primitive and MUST stay a
     //    closure var, not a ref: each effect run captures its own `cancelled`; its cleanup
     //    sets THAT run's flag, so a spawn whose `await` resolves after its run was torn
-    //    down (StrictMode mount→cleanup→remount, an `active`-churn re-run, or a real
-    //    unmount) self-kills its orphan and attaches nothing — exactly one session
-    //    survives. A ref-based latch was tried and leaked 2 live sessions per pane (a later
-    //    run reset the ref before the first spawn resolved). Do not "simplify" to a ref.
+    //    down (StrictMode mount→cleanup→remount, a nonce re-run, or a real unmount)
+    //    self-kills its orphan and attaches nothing — exactly one session survives. A
+    //    ref-based latch was tried and leaked 2 live sessions per pane (a later run reset
+    //    the ref before the first spawn resolved). Do not "simplify" to a ref.
     //  - The shell's one-shot prompt is not lost: the backend BUFFERS output until
     //    `cc_ready`, AND this effect no longer re-runs on the spawning→live dispatch
     //    (it keys on `spawnNonce`, not `bridge.phase`), so the cleanup does NOT tear the
@@ -304,7 +315,10 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     //    (incident-terminal-blank-cursor). Backend buffer-and-flush is necessary but not
     //    sufficient; the listener must also survive the phase transition.
     useEffect(() => {
-      if (!active) return;
+      // spawnNonce === 0 is the pre-trigger sentinel: nothing spawns until the deferred
+      // trigger effect (or relaunch) bumps it. This is what defers the terminal panel and
+      // serializes the CC pane's first spawn through the same single path.
+      if (spawnNonce === 0) return;
       let unlistenOutput: UnlistenFn | undefined;
       let unlistenExit: UnlistenFn | undefined;
       let cancelled = false;
@@ -313,8 +327,8 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
         try {
           const sessionId = await invoke<string>(spawnCommand, { projectPath });
           if (cancelled) {
-            // This effect run was torn down (unmount, or a dep/`active` re-run) before the
-            // spawn resolved — kill the orphan we just created and attach nothing. This
+            // This effect run was torn down (unmount, or a nonce/path/command re-run) before
+            // the spawn resolved — kill the orphan we just created and attach nothing. This
             // per-run closure flag is the StrictMode-correct de-dup primitive (WP7): run 1
             // spawns S1, its cleanup sets cancelled1=true, so when S1 resolves it self-kills
             // and only the surviving run's session lives. A ref cannot do this (run 2 would
@@ -342,6 +356,13 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
             void invoke("cc_kill", { sessionId }).catch(() => {});
             return;
           }
+
+          // QoL-WP4 — the spawn has fully committed (session id minted, listeners attached,
+          // not cancelled). Latch spawned NOW so the deferred-spawn trigger effect never
+          // fires a second spawn on a later active false→true edge (the switch-back that
+          // lost history). A cancelled/self-killed run never reaches here, so the latch is
+          // only set for a session that actually survives.
+          hasSpawnedRef.current = true;
 
           // Listeners attached — flush the backend's pre-subscription backlog (the shell's
           // one-shot prompt was buffered since spawn) + switch to live. The `spawned`
@@ -371,16 +392,37 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
         unlistenExit?.();
       };
       // The re-spawn trigger set comes from `spawnTriggerDeps` (single source of truth,
-      // unit-tested in spawnTrigger.test.ts): `spawnNonce`, `active`, `projectPath`,
-      // `spawnCommand`. `bridge.phase` is deliberately EXCLUDED — see the LIFECYCLE comment
-      // above; re-adding it re-runs the effect on spawning→live and tears down the listener
-      // (the blank-pane incident). `fitAndResize` is a stable useCallback appended only to
+      // unit-tested in spawnTrigger.test.ts): `spawnNonce`, `projectPath`, `spawnCommand`.
+      // `bridge.phase` is deliberately EXCLUDED — re-adding it re-runs the effect on
+      // spawning→live and tears down the listener (the blank-pane incident). `active` is
+      // ALSO EXCLUDED (QoL-WP4): a re-activation (panel/center-stage switch-back) must NOT
+      // re-run this effect — that re-spawned a fresh shell + tore the listeners down (lost
+      // history + stacked prompts). Deferred FIRST-spawn is driven instead by the
+      // `[active]`-keyed trigger effect below, which bumps `spawnNonce` once via
+      // `shouldSpawnOnActive`. `fitAndResize` is a stable useCallback appended only to
       // satisfy exhaustive-deps; it is not a re-spawn trigger.
       // eslint-disable-next-line react-hooks/exhaustive-deps -- deps come from spawnTriggerDeps (the unit-tested contract) + the stable fitAndResize callback
     }, [
-      ...spawnTriggerDeps({ spawnNonce, active, projectPath, spawnCommand }),
+      ...spawnTriggerDeps({ spawnNonce, projectPath, spawnCommand }),
       fitAndResize,
     ]);
+
+    // QoL-WP4 — DEFERRED FIRST-SPAWN trigger. The spawn effect above no longer depends on
+    // `active` (so a re-activation can't re-run it). This tiny effect carries the deferral:
+    // on the first edge where the pane is active AND no session exists yet
+    // (`shouldSpawnOnActive`), it bumps `spawnNonce` to fire exactly one spawn. Subsequent
+    // active false→true edges are inert because `hasSpawnedRef` is now true. The
+    // always-active CC pane spawns at mount (active=true, hasSpawned=false → one bump);
+    // the deferred terminal pane spawns on its first reveal. A relaunch clears the latch +
+    // bumps the nonce itself, so it does not rely on this effect.
+    useEffect(() => {
+      if (
+        shouldSpawnOnActive({ active, hasSpawned: hasSpawnedRef.current }) &&
+        bridge.phase === "spawning"
+      ) {
+        setSpawnNonce((n) => n + 1);
+      }
+    }, [active, bridge.phase]);
 
     // Repaint on becoming active. A pane hidden with display:none has zero size, so xterm
     // output written/laid-out while hidden is degenerate; on reveal we refit (recompute
