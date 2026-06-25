@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp4-terminal-respawn-on-switch — 2026-06-25
+
+3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `10c604f`. Reviewer rated the fix well-built and appropriately-scoped — the `active`-in-deps conflation was split cleanly into a pure `shouldSpawnOnActive` predicate + a tiny `[active, bridge.phase]` trigger effect + the single-source-of-truth `spawnTriggerDeps` contract; "change advances rather than accrues debt" for a file with a documented spawn-lifecycle bug history. All three findings are polish; none warrants a refactor pass. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP4-TRIGGER-ONCE-UNDERFLAGGED
+- **Files:** `src/components/workspace/XtermPane.tsx` (the deferred-spawn trigger effect, ~lines 418-425; cross-refs the spawn effect's `hasSpawnedRef.current = true` at ~line 365)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (comment accuracy / future-edit safety)
+- **Finding:** The trigger effect reads non-reactive `hasSpawnedRef.current` while keyed on `[active, bridge.phase]`. A narrow async window exists after the nonce bump but before the latch is set where an `active` toggle could fire a second nonce bump. It is SAFE — the spawn effect's per-run `cancelled` closure self-kills the orphan so exactly one session survives — but the trigger effect's comment ("bumps `spawnNonce` exactly once") slightly overstates the guarantee; once-ness is co-enforced downstream by `cancelled`.
+- **Pickup shape:** add a one-line comment at the trigger effect pointing at the `cancelled` backstop (so a future reader doesn't "tighten" the de-dup here and break the StrictMode contract). Comment-only; no behavior change.
+
+## SURFACE-2026-06-25-QUALITY-WP4-REPRO-TEST-DUP-TRUTH-TABLE
+- **Files:** `src/cc/__tests__/respawnOnReactivate.repro.test.ts` (the first `describe` block restating the predicate truth table, ~lines 32-53)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (test redundancy)
+- **Finding:** The repro file restates the four `shouldSpawnOnActive` truth-table cases already covered exhaustively in `respawnGuard.test.ts`. The repro file's unique value is the red-import anchor + the dep-tuple-inertness assertion; the duplicated predicate cases add maintenance surface without new signal.
+- **Pickup shape:** trim the duplicated predicate cases from the repro file, keeping the red-import + dep-tuple-inertness assertions (the bug-specific signal). Small test edit.
+
+## SURFACE-2026-06-25-QUALITY-WP4-UNANCHORED-LATCH-ASSERTION
+- **Files:** `src/components/workspace/__tests__/spawnOnceOnReactivate.test.ts` (the "clears the latch on relaunch" assertion, ~line 47)
+- **Priority:** low
+- **Status:** pending
+- **Type:** tech-debt (test robustness)
+- **Finding:** `/hasSpawnedRef\.current\s*=\s*false/` is a bare substring match not anchored to the relaunch path — it would pass on any `.current = false` assignment in the file. Low-stakes (only one such assignment exists today), but unanchored.
+- **Pickup shape:** anchor the assertion near `handleRelaunch` (or match the relaunch comment context) so an unrelated edit can't satisfy it. One small test edit.
+
 # qol-wp3-switch-workspace-autofocus-cc — 2026-06-25
 
 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `78c76d6`. Reviewer rated the feature well-built and tightly-scoped — minimal correct seam (imperative `focus()`-only handle → single `visible`-edge effect consolidating all four promote triggers), focus-only invariant designed-in AND test-pinned, no debt. Both findings are polish; neither warrants a refactor pass. Auto-backlogged per drive_mode=autopilot.

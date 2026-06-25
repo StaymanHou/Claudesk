@@ -8,6 +8,12 @@ WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY (medium) → DEFERRED, anchored to M6; 
 dev-prod-isolation 3 MINORs + the long code-quality-findings tail → DEFERRED (low, carry
 forward — none M5-blocking). No escalations. -->
 
+## Code-quality findings — qol-wp4-terminal-respawn-on-switch (2026-06-25)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `10c604f`: (1) the deferred-spawn trigger effect's "bumps spawnNonce exactly once" comment slightly overstates the guarantee — once-ness is co-enforced downstream by the spawn effect's `cancelled` closure (XtermPane.tsx ~418-425); (2) `respawnOnReactivate.repro.test.ts` duplicates the `shouldSpawnOnActive` truth table already exhaustive in `respawnGuard.test.ts`; (3) the "clears the latch on relaunch" assertion in `spawnOnceOnReactivate.test.ts` (~line 47) is an unanchored substring match. Reviewer: well-built, appropriately-scoped, "advances rather than accrues debt"; no finding warrants a refactor pass. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp4-terminal-respawn-on-switch — 2026-06-25`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** three quick `/feature-refactor` polish nits — (1) add a one-line comment at the trigger effect pointing at the `cancelled` backstop; (2) trim the duplicated truth-table cases from the repro test; (3) anchor the latch assertion near `handleRelaunch`. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — qol-wp3-switch-workspace-autofocus-cc (2026-06-25)
 - **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `78c76d6`: (1) the no-PTY-byte test guard (`not.toMatch(/\r\n|\r|\n/)` in `autofocusCcOnPromote.test.ts`) is over-broad — pins absence of any newline anywhere in Workspace.tsx, so a future unrelated `\n` literal would fail with a misleading WP4-regression message; (2) the WP3 `visible`-edge effect comment block (Workspace.tsx ~69-79) triplicates the commit + WIP rationale. Reviewer: well-built, tightly-scoped, minimal correct seam, no debt — neither finding warrants a refactor pass. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp3-switch-workspace-autofocus-cc — 2026-06-25`.
 - **Priority:** low (all)
@@ -93,7 +99,7 @@ forward — none M5-blocking). No escalations. -->
 - **Files:** `src/components/workspace/TerminalPane.tsx` (the show/visible effect — fit/focus/resize on becoming active), `XtermPane.tsx` (the xterm instance + cc_input/cc_resize wiring), `src-tauri/src/cc_session` (resize handling). The rAF fit+focus duplication is already a noted MINOR (wp7-pty-cc-session finding #4).
 - **Recommended workflow:** `/feature-reproduce` — switch panels with a terminal open, confirm whether a byte actually reaches the PTY (instrument `cc_input`) vs. a pure cosmetic reprint, then fix the show/focus path to not send input.
 - **Priority:** medium (cosmetic-to-mildly-annoying; doesn't corrupt the shell, but accumulates noise and could mis-fire if a partial command was typed)
-- **Status:** open
+- **Status:** RESOLVED 2026-06-25 (QoL-WP4, commit 10c604f). The reproduce reframed it: not a stray byte but full session teardown+respawn — `active` was an unconditional spawn-effect dependency, so every panel/center-stage switch-back re-ran the effect → a fresh `term_spawn` → a new shell PTY → lost history + stacked prompts. Fixed frontend-only by spawning ONCE: a pure `shouldSpawnOnActive` predicate + a `[active, bridge.phase]` trigger effect bumping `spawnNonce` once, `active` removed from the spawn deps, `spawnNonce===0` sentinel + `hasSpawnedRef` latch making re-activation inert. Operator-verified all 5 live outcomes (history survives switches, no stacked prompts, LEFT CC pane unaffected, deferred-spawn intact). 3 MINOR code-quality findings auto-backlogged (see the qol-wp4 pointer above).
 
 ## SURFACE-2026-06-24-FILETREE-GIT-INDICATOR-BUBBLE-UP-TO-PARENTS
 - **Source:** operator request (2026-06-24, during the app-menu feature)

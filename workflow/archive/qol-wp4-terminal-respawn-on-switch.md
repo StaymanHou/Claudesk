@@ -1,7 +1,7 @@
 # Feature: Terminal session torn down + re-spawned on panel/workspace switch (QoL-WP4)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-06-25
 **Created:** 2026-06-25
 **Entry:** reproduce (bug-fix feature)
 **Drive mode:** autopilot
@@ -219,9 +219,9 @@ the bug). The blank-cursor invariant (`bridge.phase` is NEVER a trigger) is pres
       mirrors the incident-terminal-blank-cursor manual step the spawnTrigger contract carries.
 
 ## Current Node
-- **Path:** Feature > Phase 1 > COMPLETE (single-phase feature done)
-- **Active scope:** none — Phase 1 fully complete; ready to ship
-- **State:** verify-codify (all phases complete) → ship
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** none — shipped (10c604f); review-quality clean (0 CRITICAL/0 MAJOR/3 MINOR auto-backlogged)
+- **State:** review-quality (complete) → finalize
 - **Blocked:** none
 - **Unvisited:** within Phase 1: verify-auto → verify-self → verify-human → verify-codify
 - **Open discoveries:** none
@@ -231,3 +231,36 @@ the bug). The blank-cursor invariant (`bridge.phase` is NEVER a trigger) is pres
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
 none
+
+## Code-Quality Review — qol-wp4-terminal-respawn-on-switch
+
+### Strengths
+- Extracting the spawn decision into a pure `shouldSpawnOnActive` predicate (`respawnGuard.ts`) makes the load-bearing "spawn once" invariant unit-testable in isolation and reads as exactly the conjunction it claims to be — the right seam for a file with this bug history.
+- The `active`-removal is funneled through `spawnTriggerDeps` (single source of truth) AND its companion `isSpawnTrigger` regression test, so re-introducing the bug fails a test rather than relying on review — consistent with how the prior blank-cursor incident was pinned.
+- The single-nonce-bump design (relaunch clears the latch + resets phase rather than bumping the nonce directly, routing both first-spawn and relaunch through the one `[active, bridge.phase]` trigger effect) eliminates the double-spawn risk a second bump path would create; the rationale is documented inline at `handleRelaunch`.
+- Comments encode WHY (the conflation of "spawn on FIRST activation" vs. "spawn on EVERY activation", the StrictMode `cancelled`-closure de-dup, the listener-survival-across-phase contract) rather than restating WHAT.
+- Test layering matches the project's documented posture (pure logic → vitest; live PTY/DOM → operator verify-human): the `?raw` source-assertion test pins the wiring invariants that jsdom can't observe, and the WIP carries the live history-survives-switch check.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [src/components/workspace/XtermPane.tsx:418-425] The deferred-spawn trigger effect reads the non-reactive `hasSpawnedRef.current` while keyed on `[active, bridge.phase]`. There is a narrow async window after the nonce bump but before `hasSpawnedRef.current = true` (line 365) where an `active` toggle re-runs this effect with `hasSpawned` still false and `phase` still `"spawning"`, firing a second nonce bump. It is safe — the spawn effect's per-run `cancelled` closure self-kills the orphan so exactly one session survives — but the trigger effect's own comment ("bumps `spawnNonce` exactly once") slightly overstates the guarantee; the once-ness is enforced downstream by `cancelled`, not by this effect. A one-line note pointing at that backstop would prevent a future reader from "tightening" the de-dup here and breaking the StrictMode contract.
+- [src/cc/__tests__/respawnOnReactivate.repro.test.ts:55-73] The second `describe` block ("WP4 repro") duplicates all four truth-table cases already covered exhaustively in `respawnGuard.test.ts:13-42`. The repro file's value is the red-import + the dep-tuple-inertness assertion (lines 44-52); the four restated predicate cases are redundant coverage that adds maintenance surface without new signal.
+- [src/components/workspace/__tests__/spawnOnceOnReactivate.test.ts:47] The "clears the latch on relaunch" assertion `/hasSpawnedRef\.current\s*=\s*false/` is a bare substring match that does not anchor the match to the relaunch path — it would pass on any `.current = false` assignment anywhere in the file. Low-stakes (only one such assignment exists today), but a near-`handleRelaunch` anchor would make the test resilient to an unrelated edit.
+
+### Assessment
+This is a well-built, appropriately-scoped fix. The author correctly diagnosed that the `active`-in-deps mechanism conflated two distinct intents and split them cleanly: the reactive trigger lives in a tiny `[active, bridge.phase]` effect, the policy lives in a pure predicate, and the dep contract stays in the single-source-of-truth module that already guards the sibling blank-cursor invariant. For a file with a documented history of subtle spawn-lifecycle regressions, the change advances rather than accrues debt. The only real wrinkle is that the "exactly once" guarantee is co-enforced by the downstream `cancelled` primitive rather than fully owned by the trigger effect, which is correct but under-flagged at the trigger site. No correctness defect found within the green-tests baseline.
+
+### If you disagree
+Operator: dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The bug title ("spurious newline") was a misdiagnosis baked into the WBS + backlog. The operator's clarification (typed history gone after a switch; ↑ recalls nothing) reframed it from "a stray `\r`/`\n` reaches the PTY" to "the shell SESSION is torn down and re-spawned." The reproduce step caught this before any fix was written — the value of reproduce-first on a bug whose symptom misleads about its cause.
+- **Assumptions that held:** Frontend-only fix (backend `term_spawn` was correct all along — it should always mint a fresh PTY; the caller just had to stop calling it). The `CcSession`/spawn-effect seam was the right place. The pure-predicate + single-source-of-truth-deps pattern (mirroring the sibling blank-cursor guard) fit cleanly.
+- **Assumptions that were wrong:** The plan's first instinct (a `[active]`-keyed trigger effect ALONGSIDE the existing spawn-at-mount) would have double-spawned at mount. Caught during build by tracing the mount sequence; resolved by making `spawnNonce===0` a pre-trigger sentinel so ONE nonce-bump path serves both panes and there is no implicit mount spawn. Also re-examined the StrictMode double-mount interaction (refs persist across remount) — verified safe because the spawn effect re-runs on remount with `spawnNonce≠0`.
+- **Approach delta:** Plan described "add a trigger effect + remove active from deps." Implementation added two refinements not in the plan: (1) the `spawnNonce===0` sentinel unifying first-spawn for BOTH panes (the plan implied the CC pane still spawned at mount independently); (2) relaunch routed through the trigger (clears latch + resets phase) instead of bumping the nonce directly, collapsing two bump paths into one to remove a double-spawn-on-relaunch risk. Both are strictly-safer consolidations, not scope changes.

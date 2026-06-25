@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-24
-status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3 shipped 2026-06-25; WP4–WP8 pending
+status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4 shipped 2026-06-25; WP5–WP8 pending
 context: between-milestone QoL/lifecycle sweep, filed after M4 close, before M5 (PiP) planning
 ---
 
@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → WP4 → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6)*
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → WP5 → WP6 → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f)*
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -106,8 +106,9 @@ and delete this file.
 
 ---
 
-## WP4 — Terminal spurious newline on panel switch  `[priority: MEDIUM]`  `← reproduce-first` `↔ pairs with WP3`
-**Backlog:** SURFACE-2026-06-24-TERMINAL-SPURIOUS-NEWLINE-ON-PANEL-SWITCH
+## WP4 — Terminal spurious newline on panel switch  `[priority: MEDIUM]`  `← reproduce-first` `↔ pairs with WP3`  ✅ SHIPPED 2026-06-25 (commit 10c604f)
+**Backlog:** SURFACE-2026-06-24-TERMINAL-SPURIOUS-NEWLINE-ON-PANEL-SWITCH (RESOLVED)
+**As-built:** the "spurious newline" was actually full SESSION teardown+respawn (operator clarification: typed history was gone after a switch). Root cause: `active` (= `visible && panel==="terminal"`) was an unconditional dependency of XtermPane's spawn effect, so every panel/center-stage switch-back re-ran the effect → a fresh `term_spawn` → a new shell PTY → lost history + stacked prompts (and the cleanup tore the cc-output listeners down on the toggle — same failure mode as incident-terminal-blank-cursor). Fix (frontend-only): spawn ONCE. New pure `shouldSpawnOnActive({active,hasSpawned})` predicate (`respawnGuard.ts`) consulted by a small `[active, bridge.phase]`-keyed trigger effect that bumps `spawnNonce` once on first activation; `active` removed from the spawn-effect deps; `spawnNonce===0` is the pre-trigger sentinel so ONE nonce-bump path serves both the always-active CC pane and the deferred terminal; `hasSpawnedRef` latch makes re-activation inert; relaunch clears the latch + resets phase so the same trigger re-fires (no direct bump → no double-spawn). Reconciled `spawnTrigger.ts`/test (pins `active` AND `bridge.phase` as non-triggers). Reproduction red→green + respawnGuard.test (exhaustive truth table) + `?raw` spawnOnceOnReactivate.test (5 wiring invariants). Operator-verified all 5 live outcomes; full suite 478/478; review-quality clean (0 CRITICAL/0 MAJOR/3 MINOR auto-backlogged).
 **Size:** small · **Type:** bug-shape (spurious input)
 
 **What:** Switching workspaces, or right-panel tabs (Terminal↔Editor / Terminal↔Diff), makes the terminal emit an empty prompt line each time — a stack of empty `stayman@… claudesk %` prompts accumulates. No input should reach the PTY on a show/focus.
