@@ -21,9 +21,10 @@
 //! status `Unknown` (arch.md failure mode), never inferred.
 //!
 //! ## Wire contract (the line the hook writes, parsed here)
-//! `{"hook_event_name":..,"session_id":..,"cwd":..,"timestamp":<ms>,"prompt"?:..,"message"?:..}`
-//! `prompt` is present only on `UserPromptSubmit`; `message` only on
-//! `Notification`. Keys are **snake_case end-to-end** — the Rust struct mirrors
+//! `{"hook_event_name":..,"session_id":..,"cwd":..,"timestamp":<ms>,"prompt"?:..,"message"?:..,"notification_type"?:..}`
+//! `prompt` is present only on `UserPromptSubmit`; `message` + `notification_type`
+//! only on `Notification` (the latter added QoL-WP2 to gate AwaitingInput on genuine
+//! input-needed types). Keys are **snake_case end-to-end** — the Rust struct mirrors
 //! the wire field names verbatim (NO `rename_all`), so the frontend (WP6) and the
 //! hook agree with no camelCase drift (folds toward
 //! `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE`, which WP4's DTO
@@ -74,6 +75,12 @@ pub struct HookEvent {
     /// Notification text — present only on `Notification`.
     #[serde(default)]
     pub message: Option<String>,
+    /// Notification subtype — present only on `Notification` (QoL-WP2). Distinguishes
+    /// a genuine input request (`permission_prompt`, `elicitation_dialog`) from an
+    /// informational nudge (`idle_prompt`, `auth_success`, …). The broadcaster gates
+    /// AwaitingInput on this (see `status_broadcaster::event_to_state`).
+    #[serde(default)]
+    pub notification_type: Option<String>,
 }
 
 /// Errors from the socket listener's IO/lifecycle (bind, remove-stale, accept).
@@ -231,6 +238,20 @@ mod tests {
         assert_eq!(ev.cwd, "/tmp/proj");
         assert_eq!(ev.message.as_deref(), Some("Claude needs your permission"));
         assert_eq!(ev.prompt, None);
+        // No notification_type on the legacy line → None (the field defaults absent).
+        assert_eq!(ev.notification_type, None);
+    }
+
+    #[test]
+    fn parses_notification_type_when_present() {
+        // QoL-WP2: the production hook forwards `notification_type` on Notification
+        // events (the live capture showed `permission_prompt`). Pin that the
+        // snake_case key deserializes into the Option<String> field.
+        let line = r#"{"hook_event_name":"Notification","session_id":"s","cwd":"/p","message":"Claude needs your permission","notification_type":"permission_prompt"}"#;
+        let ev = parse_line(line).unwrap();
+        assert_eq!(ev.hook_event_name, "Notification");
+        assert_eq!(ev.notification_type.as_deref(), Some("permission_prompt"));
+        assert_eq!(ev.message.as_deref(), Some("Claude needs your permission"));
     }
 
     #[test]

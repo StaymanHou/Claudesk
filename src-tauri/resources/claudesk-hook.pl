@@ -4,8 +4,11 @@
 # three Milestone-3 events: UserPromptSubmit / Stop / Notification.
 #
 # Contract (the line WP3's listener parses):
-#   {"hook_event_name":..,"session_id":..,"cwd":..,"timestamp":<ms>,"prompt"?:..,"message"?:..}
-# `prompt` is present only on UserPromptSubmit; `message` only on Notification.
+#   {"hook_event_name":..,"session_id":..,"cwd":..,"timestamp":<ms>,"prompt"?:..,"message"?:..,"notification_type"?:..}
+# `prompt` is present only on UserPromptSubmit; `message` + `notification_type` only on
+# Notification. `notification_type` (QoL-WP2) lets the broadcaster gate AwaitingInput on
+# genuine input-needed types (permission_prompt / elicitation_dialog) vs informational
+# ones (idle_prompt / auth_success) — so an idle nudge doesn't flip a busy dot blue.
 #
 # Discipline (proven in the WP1 probe, see docs/product/wp1-hook-socket-probe-outcome.md):
 #   - reads the event payload as JSON on stdin,
@@ -50,6 +53,11 @@ my %out = (
 );
 $out{prompt}  = $payload->{prompt}  if defined $payload->{prompt};
 $out{message} = $payload->{message} if defined $payload->{message};
+# Notification-only: the type that distinguishes a genuine input request
+# (permission_prompt / elicitation_dialog) from an informational nudge
+# (idle_prompt / auth_success). The broadcaster gates AwaitingInput on it (QoL-WP2).
+$out{notification_type} = $payload->{notification_type}
+    if defined $payload->{notification_type};
 
 my $line = encode_json(\%out) . "\n";
 

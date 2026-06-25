@@ -3,8 +3,8 @@
 //! Claudesk reports each workspace's CC lifecycle (idle/running/awaiting-input)
 //! from CC's official hook channel, not by scraping PTY output (see `CLAUDE.md` →
 //! "PTY byte-injection for input; hook channel for state"). To receive those
-//! events it must register a hook script for the three Milestone-3 events in the
-//! user's `~/.claude/settings.json`.
+//! events it must register a hook script for the lifecycle events in the user's
+//! `~/.claude/settings.json` (see [`CLAUDESK_EVENTS`]).
 //!
 //! ## The merge contract (confirmed by the WP1 probe)
 //! Each event in `settings.json`'s `hooks` block maps to an **array of
@@ -46,10 +46,19 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 use thiserror::Error;
 
-/// The three Milestone-3 lifecycle events Claudesk registers for.
+/// The lifecycle events Claudesk registers for. The state mapping itself lives in
+/// the broadcaster (`status_broadcaster::event_to_state`), not here:
 /// `UserPromptSubmit` → Running, `Stop` → Idle, `Notification` → AwaitingInput
-/// (the state mapping itself lives in WP4's broadcaster, not here).
-pub const CLAUDESK_EVENTS: [&str; 3] = ["UserPromptSubmit", "Stop", "Notification"];
+/// (gated on `notification_type`), `PostToolUse` → Running.
+///
+/// `PostToolUse` was added (QoL-WP2, 2026-06-25) as the **resume signal**: when a
+/// user answers an `AskUserQuestion`/permission prompt mid-turn, CC fires
+/// `PostToolUse` and resumes working, but emits NO `UserPromptSubmit` (that's
+/// top-level prompts only). Without registering `PostToolUse` the indicator stayed
+/// stuck at AwaitingInput until the eventual `Stop`. `PreToolUse` is deliberately
+/// NOT registered — the initial `UserPromptSubmit`→Running already covers a turn's
+/// pre-tool state, and `PostToolUse` alone clears AwaitingInput on resume.
+pub const CLAUDESK_EVENTS: [&str; 4] = ["UserPromptSubmit", "Stop", "Notification", "PostToolUse"];
 
 /// Basename of the settings file's sidecar temp used for the atomic write.
 const SETTINGS_TMP_SUFFIX: &str = ".claudesk.tmp";
@@ -237,7 +246,7 @@ fn write_settings(settings_path: &Path, settings: &Value) -> Result<(), HookInst
 }
 
 /// Install Claudesk's hook into the settings file at `settings_path`, registering
-/// `command` for all three events. Idempotent — re-running is a no-op write-skip.
+/// `command` for all [`CLAUDESK_EVENTS`]. Idempotent — re-running is a no-op write-skip.
 /// A missing settings file is created with just our hooks block.
 pub fn install(settings_path: &Path, command: &str) -> Result<(), HookInstallError> {
     let mut settings = read_settings(settings_path)?;
@@ -287,6 +296,12 @@ mod tests {
                 "Notification": [
                     { "matcher": "", "hooks": [ { "type": "command", "command": "$HOME/.claude/hooks/notify-telegram.sh", "timeout": 10 } ] },
                     { "hooks": [ { "type": "command", "command": OTHER } ] }
+                ],
+                // claude-time also taps PostToolUse on the real machine — keep the
+                // fixture faithful so the additive-merge invariant is tested against
+                // the production shape for every CLAUDESK_EVENT (QoL-WP2 added it).
+                "PostToolUse": [
+                    { "hooks": [ { "type": "command", "command": OTHER } ] }
                 ]
             }
         })
@@ -300,12 +315,31 @@ mod tests {
     }
 
     #[test]
-    fn merge_into_empty_settings_creates_all_three_events() {
+    fn merge_into_empty_settings_creates_a_group_per_event() {
         let mut s = json!({});
         let changed = merge_claudesk_hooks(&mut s, CMD).unwrap();
         assert!(changed);
         for event in CLAUDESK_EVENTS {
             assert_eq!(claudesk_group_count(&s, event), 1, "event {event}");
+        }
+    }
+
+    #[test]
+    fn claudesk_events_includes_post_tool_use_resume_signal() {
+        // QoL-WP2: PostToolUse is the resume signal that clears stuck AwaitingInput
+        // after an answered AskUserQuestion/permission prompt. Pin that it's
+        // registered (and PreToolUse deliberately is NOT — see the const doc).
+        assert!(
+            CLAUDESK_EVENTS.contains(&"PostToolUse"),
+            "PostToolUse must be registered as the answer-resume signal"
+        );
+        assert!(
+            !CLAUDESK_EVENTS.contains(&"PreToolUse"),
+            "PreToolUse is deliberately NOT registered (UserPromptSubmit covers pre-tool state)"
+        );
+        // The three original M3 events are still present.
+        for ev in ["UserPromptSubmit", "Stop", "Notification"] {
+            assert!(CLAUDESK_EVENTS.contains(&ev), "{ev} must remain registered");
         }
     }
 
@@ -587,16 +621,17 @@ mod tests {
 
     /// The prod and dev registered commands, embedding their distinct script
     /// basenames (the real shell-quoted shape).
-    const CMD_PROD: &str =
-        "CLAUDESK_HOOK_SOCK='/data/com.claudesk.app/hook.sock' \
+    const CMD_PROD: &str = "CLAUDESK_HOOK_SOCK='/data/com.claudesk.app/hook.sock' \
          /usr/bin/perl '/data/com.claudesk.app/claudesk-hook.pl'";
-    const CMD_DEV: &str =
-        "CLAUDESK_HOOK_SOCK='/data/com.claudesk.app.dev/hook.sock' \
+    const CMD_DEV: &str = "CLAUDESK_HOOK_SOCK='/data/com.claudesk.app.dev/hook.sock' \
          /usr/bin/perl '/data/com.claudesk.app.dev/claudesk-hook-dev.pl'";
 
     #[test]
     fn script_basename_extraction_strips_quotes_and_dir() {
-        assert_eq!(script_basename_of_command(CMD_PROD), Some("claudesk-hook.pl"));
+        assert_eq!(
+            script_basename_of_command(CMD_PROD),
+            Some("claudesk-hook.pl")
+        );
         assert_eq!(
             script_basename_of_command(CMD_DEV),
             Some("claudesk-hook-dev.pl")
@@ -613,8 +648,14 @@ mod tests {
         let dev_group = json!({ "hooks": [ { "type": "command", "command": CMD_DEV } ] });
         let prod_group = json!({ "hooks": [ { "type": "command", "command": CMD_PROD } ] });
 
-        assert!(!group_is_claudesk(&dev_group, CMD_PROD), "prod must NOT match dev group");
-        assert!(!group_is_claudesk(&prod_group, CMD_DEV), "dev must NOT match prod group");
+        assert!(
+            !group_is_claudesk(&dev_group, CMD_PROD),
+            "prod must NOT match dev group"
+        );
+        assert!(
+            !group_is_claudesk(&prod_group, CMD_DEV),
+            "dev must NOT match prod group"
+        );
         // Sanity: each matches its own.
         assert!(group_is_claudesk(&prod_group, CMD_PROD));
         assert!(group_is_claudesk(&dev_group, CMD_DEV));
@@ -631,7 +672,10 @@ mod tests {
 
         for event in CLAUDESK_EVENTS {
             let arr = s["hooks"][event].as_array().unwrap();
-            let prod_groups = arr.iter().filter(|g| group_is_claudesk(g, CMD_PROD)).count();
+            let prod_groups = arr
+                .iter()
+                .filter(|g| group_is_claudesk(g, CMD_PROD))
+                .count();
             let dev_groups = arr.iter().filter(|g| group_is_claudesk(g, CMD_DEV)).count();
             assert_eq!(prod_groups, 1, "exactly one prod group on {event}");
             assert_eq!(dev_groups, 1, "exactly one dev group on {event}");
@@ -650,7 +694,9 @@ mod tests {
         for event in CLAUDESK_EVENTS {
             let arr = s["hooks"][event].as_array().unwrap();
             assert_eq!(
-                arr.iter().filter(|g| group_is_claudesk(g, CMD_PROD)).count(),
+                arr.iter()
+                    .filter(|g| group_is_claudesk(g, CMD_PROD))
+                    .count(),
                 1,
                 "prod group survives dev uninstall on {event}"
             );
@@ -672,7 +718,13 @@ mod tests {
         let snapshot = s.clone();
 
         let prod_again = merge_claudesk_hooks(&mut s, CMD_PROD).unwrap();
-        assert!(!prod_again, "re-merge of prod is a no-op when already present");
-        assert_eq!(s, snapshot, "re-merge leaves both identities byte-identical");
+        assert!(
+            !prod_again,
+            "re-merge of prod is a no-op when already present"
+        );
+        assert_eq!(
+            s, snapshot,
+            "re-merge leaves both identities byte-identical"
+        );
     }
 }

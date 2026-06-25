@@ -178,7 +178,10 @@ body,
   justify-content: space-between;
   gap: 4px;
   padding: 2px 6px;
-  background-color: rgba(17, 17, 17, 0.6);
+  /* More transparent (QoL-WP2 Phase 1.5, operator request) — was 0.6; lowered so
+     more of the live mirror shows through the caption row. Still enough scrim for
+     the name/dot to stay legible against a bright thumbnail. */
+  background-color: rgba(17, 17, 17, 0.35);
   pointer-events: none;
 }
 
@@ -273,7 +276,9 @@ body,
   opacity: 0;
   cursor: pointer;
   pointer-events: auto; /* override the header's pointer-events:none */
-  transition: opacity 0.12s ease, background-color 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease;
 }
 
 .filmstrip-tile:hover .filmstrip-tile-close,
@@ -386,7 +391,9 @@ body,
   color: #d4d4d4;
   opacity: 0;
   cursor: pointer;
-  transition: opacity 0.12s ease, background-color 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease;
 }
 
 .filmstrip-pill:hover .filmstrip-pill-close,
@@ -486,6 +493,50 @@ body,
 
 .status-dot-unknown {
   background-color: #484f58;
+}
+
+/* Live-state animation (QoL-WP2 Phase 1.5, operator request):
+   - Running "breathes" — a slow, calm opacity+scale pulse (CC is alive/working).
+   - AwaitingInput "blinks" — a fast, hard on/off flash (THE "needs me" cue; grabs
+     the eye more urgently than the breathe).
+   - Idle / Unknown stay static (no animation).
+   `transform: scale()` is compositor-friendly (no layout reflow); the dot is
+   `flex-shrink:0` so the scale never nudges the name/label beside it. Wrapped in
+   prefers-reduced-motion so motion-sensitive users still get the static state color. */
+@media (prefers-reduced-motion: no-preference) {
+  .status-dot-running {
+    animation: status-breathe 1.8s ease-in-out infinite;
+  }
+
+  .status-dot-awaiting {
+    animation: status-blink 0.7s steps(1, end) infinite;
+  }
+}
+
+@keyframes status-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.15);
+  }
+}
+
+/* Hard on/off blink — steps(1,end) above gives the abrupt flash (no easing); the
+   keyframe holds full for the first half, near-zero for the second. */
+@keyframes status-blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.1;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 .workspace-left {

@@ -37,6 +37,15 @@ export interface WorkspaceStatusUpdate {
   last_event_at?: number;
   /** The event's prompt/message text, if present (telemetry for the surface). */
   last_output_snippet?: string;
+  /**
+   * The `Notification` subtype (`permission_prompt` / `idle_prompt` / …), if the
+   * event carried one (QoL-WP2). Telemetry/diagnostic ONLY — the
+   * AwaitingInput-vs-no-op decision is made BACKEND-side in
+   * `status_broadcaster::event_to_state`, never here; this mirror exists so a
+   * surface could show *why* (e.g. a tooltip) without re-deriving. The reducer
+   * (`applyStatusUpdate`) keys only on `state` — it does NOT read this field.
+   */
+  notification_type?: string;
 }
 
 /** The Tauri event name — mirrors `status_broadcaster::commands::STATUS_EVENT`. */

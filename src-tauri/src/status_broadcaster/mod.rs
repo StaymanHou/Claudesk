@@ -8,10 +8,18 @@
 //! channel as `workspace-status`. Every later status surface (M4 filmstrip, M5 PiP,
 //! M6 menu-bar) subscribes to that one event — this is the single source of truth.
 //!
-//! ## State mapping (the M3 contract)
+//! ## State mapping (the M3 contract, extended QoL-WP2 2026-06-25)
 //! - `UserPromptSubmit` → [`WorkspaceState::Running`] (CC is working a prompt)
 //! - `Stop`             → [`WorkspaceState::Idle`] (CC finished, awaiting nothing)
-//! - `Notification`     → [`WorkspaceState::AwaitingInput`] (CC paused for the user)
+//! - `PostToolUse`      → [`WorkspaceState::Running`] (a tool finished, CC resumed —
+//!   the **answer-resume signal**: when a user answers an `AskUserQuestion`/permission
+//!   prompt CC fires `PostToolUse` but NO `UserPromptSubmit`, so this is what clears a
+//!   stuck `AwaitingInput`)
+//! - `Notification`     → [`WorkspaceState::AwaitingInput`] **gated on
+//!   `notification_type`**: a genuine input-needed type (`permission_prompt`,
+//!   `elicitation_dialog`) or an unknown/absent type → AwaitingInput; a known
+//!   non-input type (`idle_prompt`, `auth_success`, …) → no-op (`None`), so the dot
+//!   doesn't flip blue on an idle nudge.
 //! - any other event    → no-op (`None`) — never guessed, never emitted
 //!
 //! [`WorkspaceState::Unknown`] is the **honest no-data default** a surface shows for
@@ -68,14 +76,63 @@ pub enum WorkspaceState {
     Unknown,
 }
 
+/// The `notification_type` values that mean CC is GENUINELY blocked on the user —
+/// these map to [`WorkspaceState::AwaitingInput`]. Everything else CC sends as a
+/// `Notification` (`idle_prompt`, `auth_success`, `elicitation_complete`,
+/// `elicitation_response`, …) is informational and must NOT flip a busy dot blue
+/// (QoL-WP2). An UNKNOWN or ABSENT type falls back to AwaitingInput (honest default —
+/// never silently swallow a future CC notification type; mirrors the `Unknown`
+/// no-data principle). Live-captured type for AskUserQuestion/permission: `permission_prompt`.
+const INPUT_NEEDED_NOTIFICATION_TYPES: [&str; 2] = ["permission_prompt", "elicitation_dialog"];
+
+/// Whether a `Notification`'s `notification_type` means "awaiting genuine user input."
+/// `None`/absent or an unrecognized type → `true` (honest fallback). A recognized
+/// informational type → `false` (no-op; the prior state is preserved).
+fn notification_awaits_input(notification_type: Option<&str>) -> bool {
+    match notification_type {
+        // Absent type → conservative AwaitingInput (older CC, or a type CC didn't tag).
+        None => true,
+        Some(t) if INPUT_NEEDED_NOTIFICATION_TYPES.contains(&t) => true,
+        // A recognized non-input type (idle_prompt, auth_success, elicitation_complete,
+        // elicitation_response, …) → informational, not a fresh input request.
+        Some(t) if is_known_informational_notification(t) => false,
+        // An UNKNOWN type → honest fallback to AwaitingInput (don't swallow a future type).
+        Some(_) => true,
+    }
+}
+
+/// The recognized informational `notification_type`s that do NOT mean "awaiting input."
+/// Kept explicit (not "anything not input-needed") so a genuinely unknown future type
+/// falls through to the conservative AwaitingInput default rather than being silently
+/// treated as informational.
+fn is_known_informational_notification(t: &str) -> bool {
+    matches!(
+        t,
+        "idle_prompt" | "auth_success" | "elicitation_complete" | "elicitation_response"
+    )
+}
+
 /// Normalize a [`HookEvent`] to a [`WorkspaceState`]. Returns `None` for any event
-/// that is not one of the three M3 lifecycle events — an unknown event is a no-op,
-/// never a guessed state.
+/// that is not a mapped lifecycle event, OR for a `Notification` whose
+/// `notification_type` is a recognized informational one (a no-op — the prior state
+/// is preserved). An unknown event is a no-op, never a guessed state.
 pub fn event_to_state(event: &HookEvent) -> Option<WorkspaceState> {
     match event.hook_event_name.as_str() {
         "UserPromptSubmit" => Some(WorkspaceState::Running),
         "Stop" => Some(WorkspaceState::Idle),
-        "Notification" => Some(WorkspaceState::AwaitingInput),
+        // The answer-resume signal: a tool call (incl. AskUserQuestion) finished and
+        // CC resumed working — clears a stuck AwaitingInput (QoL-WP2 Phase 1).
+        "PostToolUse" => Some(WorkspaceState::Running),
+        // AwaitingInput only for genuine input-needed notifications (QoL-WP2 Phase 2);
+        // an informational Notification (idle_prompt / auth_success / …) is a no-op so
+        // it doesn't flip a busy dot blue.
+        "Notification" => {
+            if notification_awaits_input(event.notification_type.as_deref()) {
+                Some(WorkspaceState::AwaitingInput)
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -86,8 +143,9 @@ pub fn event_to_state(event: &HookEvent) -> Option<WorkspaceState> {
 /// Field names are **snake_case verbatim** (NO `rename_all`); WP6's TS type mirrors
 /// them exactly. `last_event_at` carries the hook-side send time (`HookEvent.timestamp`,
 /// epoch ms) when present; `last_output_snippet` carries the event's `prompt`
-/// (`UserPromptSubmit`) or `message` (`Notification`) when present. Both are `Option`
-/// and `skip_serializing_if`-omitted when absent so the wire shape is minimal.
+/// (`UserPromptSubmit`) or `message` (`Notification`) when present; `notification_type`
+/// carries the `Notification` subtype (QoL-WP2). All three are `Option` and
+/// `skip_serializing_if`-omitted when absent so the wire shape is minimal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WorkspaceStatusUpdate {
     /// The registry id of the workspace this event belongs to.
@@ -100,6 +158,13 @@ pub struct WorkspaceStatusUpdate {
     /// The event's prompt/message text, if present (telemetry for the surface).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_output_snippet: Option<String>,
+    /// The `Notification` subtype (`permission_prompt` / `idle_prompt` / …), if the
+    /// event carried one (QoL-WP2). Telemetry/diagnostic for the surface — the
+    /// AwaitingInput-vs-no-op gating decision is made backend-side in `event_to_state`,
+    /// NOT by the frontend; this field is exposed so a surface can show *why* (e.g. a
+    /// tooltip) without re-deriving.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notification_type: Option<String>,
 }
 
 /// Maps a canonicalized project path → its `workspace_id`. The cwd→workspace seam:
@@ -183,6 +248,7 @@ pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<Work
         state,
         last_event_at: event.timestamp,
         last_output_snippet,
+        notification_type: event.notification_type.clone(),
     })
 }
 
@@ -198,6 +264,20 @@ mod tests {
             timestamp: None,
             prompt: None,
             message: None,
+            notification_type: None,
+        }
+    }
+
+    /// A `Notification` event carrying a specific `notification_type` (QoL-WP2 gating).
+    fn notif(notification_type: Option<&str>, cwd: &str) -> HookEvent {
+        HookEvent {
+            hook_event_name: "Notification".to_string(),
+            session_id: "s".to_string(),
+            cwd: cwd.to_string(),
+            timestamp: None,
+            prompt: None,
+            message: Some("a notification".to_string()),
+            notification_type: notification_type.map(str::to_string),
         }
     }
 
@@ -221,9 +301,88 @@ mod tests {
 
     #[test]
     fn notification_maps_to_awaiting_input() {
+        // A Notification with NO notification_type (older CC / untyped) → AwaitingInput
+        // (the conservative honest default).
         assert_eq!(
             event_to_state(&ev("Notification", "/p")),
             Some(WorkspaceState::AwaitingInput)
+        );
+    }
+
+    // ---- QoL-WP2 Phase 2: Notification gated on notification_type ----
+
+    #[test]
+    fn notification_permission_prompt_maps_to_awaiting() {
+        // The live-captured AskUserQuestion/permission case → genuine input needed.
+        assert_eq!(
+            event_to_state(&notif(Some("permission_prompt"), "/p")),
+            Some(WorkspaceState::AwaitingInput)
+        );
+    }
+
+    #[test]
+    fn notification_elicitation_dialog_maps_to_awaiting() {
+        // The other input-needed type (MCP elicitation prompt).
+        assert_eq!(
+            event_to_state(&notif(Some("elicitation_dialog"), "/p")),
+            Some(WorkspaceState::AwaitingInput)
+        );
+    }
+
+    #[test]
+    fn notification_idle_prompt_is_a_noop() {
+        // An idle nudge is informational, NOT a fresh input request — it must NOT flip
+        // a busy dot blue. None (no-op) → prior state preserved on the frontend.
+        assert_eq!(event_to_state(&notif(Some("idle_prompt"), "/p")), None);
+    }
+
+    #[test]
+    fn notification_auth_success_is_a_noop() {
+        // Another recognized informational type → no-op.
+        assert_eq!(event_to_state(&notif(Some("auth_success"), "/p")), None);
+    }
+
+    #[test]
+    fn notification_unknown_type_falls_back_to_awaiting() {
+        // A type CC introduces in the future that we don't recognize → honest fallback
+        // to AwaitingInput (never silently swallow a future input-needed type). This is
+        // the conservative-default principle that mirrors WorkspaceState::Unknown.
+        assert_eq!(
+            event_to_state(&notif(Some("some_future_type_we_dont_know"), "/p")),
+            Some(WorkspaceState::AwaitingInput)
+        );
+    }
+
+    #[test]
+    fn post_tool_use_maps_to_running() {
+        // QoL-WP2: PostToolUse is the answer-resume signal — it must map to Running
+        // so an AskUserQuestion answer clears the stuck AwaitingInput.
+        assert_eq!(
+            event_to_state(&ev("PostToolUse", "/p")),
+            Some(WorkspaceState::Running)
+        );
+    }
+
+    #[test]
+    fn captured_ask_user_question_stream_resolves_running_awaiting_running_idle() {
+        // The verify-codify anchor (from the live-captured hook stream, QoL-WP2):
+        // UserPromptSubmit → Notification → PostToolUse → Stop must resolve to
+        // Running → AwaitingInput → Running → Idle. The AwaitingInput→Running step
+        // (via PostToolUse) is the bug fix — before WP2, PostToolUse was a no-op
+        // (None) and the dot stayed AwaitingInput until the Stop.
+        let stream = ["UserPromptSubmit", "Notification", "PostToolUse", "Stop"];
+        let resolved: Vec<Option<WorkspaceState>> = stream
+            .iter()
+            .map(|name| event_to_state(&ev(name, "/p")))
+            .collect();
+        assert_eq!(
+            resolved,
+            vec![
+                Some(WorkspaceState::Running),
+                Some(WorkspaceState::AwaitingInput),
+                Some(WorkspaceState::Running),
+                Some(WorkspaceState::Idle),
+            ]
         );
     }
 
@@ -237,7 +396,9 @@ mod tests {
 
     #[test]
     fn unknown_event_is_a_noop() {
-        // Any event outside the M3 trio is a no-op — never a guessed state.
+        // Any event outside the mapped set is a no-op — never a guessed state.
+        // PreToolUse is deliberately NOT mapped (QoL-WP2: we register PostToolUse as
+        // the resume signal, NOT PreToolUse — UserPromptSubmit covers pre-tool state).
         assert_eq!(event_to_state(&ev("PreToolUse", "/p")), None);
         assert_eq!(event_to_state(&ev("", "/p")), None);
         assert_eq!(event_to_state(&ev("SessionStart", "/p")), None);
@@ -394,6 +555,29 @@ mod tests {
         );
     }
 
+    #[test]
+    fn to_update_carries_notification_type_and_drops_informational() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "ws-1".to_string());
+
+        // An input-needed notification → DTO built, carrying notification_type through.
+        let permission = notif(Some("permission_prompt"), &dir.path().to_string_lossy());
+        let update = to_update(&permission, &reg).expect("permission_prompt yields a DTO");
+        assert_eq!(update.state, WorkspaceState::AwaitingInput);
+        assert_eq!(
+            update.notification_type.as_deref(),
+            Some("permission_prompt")
+        );
+
+        // An informational notification → dropped (no-op), prior state preserved.
+        let idle = notif(Some("idle_prompt"), &dir.path().to_string_lossy());
+        assert!(
+            to_update(&idle, &reg).is_none(),
+            "an idle_prompt notification must be dropped, not emitted as AwaitingInput"
+        );
+    }
+
     // ---- DTO serde-shape contract (folds in SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE) ----
 
     #[test]
@@ -405,11 +589,12 @@ mod tests {
             state: WorkspaceState::Running,
             last_event_at: Some(123),
             last_output_snippet: Some("hi".to_string()),
+            notification_type: Some("permission_prompt".to_string()),
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
 
-        // Exact key set, all snake_case.
+        // Exact key set, all snake_case (incl. the QoL-WP2 notification_type field).
         let mut keys: Vec<&String> = obj.keys().collect();
         keys.sort();
         assert_eq!(
@@ -417,6 +602,7 @@ mod tests {
             vec![
                 &"last_event_at".to_string(),
                 &"last_output_snippet".to_string(),
+                &"notification_type".to_string(),
                 &"state".to_string(),
                 &"workspace_id".to_string(),
             ]
@@ -427,6 +613,10 @@ mod tests {
         assert_eq!(obj["workspace_id"], serde_json::json!("ws-1"));
         assert_eq!(obj["last_event_at"], serde_json::json!(123));
         assert_eq!(obj["last_output_snippet"], serde_json::json!("hi"));
+        assert_eq!(
+            obj["notification_type"],
+            serde_json::json!("permission_prompt")
+        );
     }
 
     #[test]
@@ -437,11 +627,13 @@ mod tests {
             state: WorkspaceState::Unknown,
             last_event_at: None,
             last_output_snippet: None,
+            notification_type: None,
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
         assert!(!obj.contains_key("last_event_at"));
         assert!(!obj.contains_key("last_output_snippet"));
+        assert!(!obj.contains_key("notification_type"));
         assert_eq!(obj["state"], serde_json::json!("unknown"));
     }
 }

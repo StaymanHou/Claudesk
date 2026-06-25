@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-24  # app-menu-bar P1 codify — cargo test 208 pass
+updated: 2026-06-25  # QoL-WP2 P1 build — cargo test 224 pass
 ---
 
 # Runtime Registry
@@ -65,9 +65,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 4s (2026-06-25, QoL-WP1 P2 verify-auto: no backend change, 221 pass; warm run ~0.62s)
+- **Last:** 6s (2026-06-25, QoL-WP2 P2 build: notification_type gating + DTO/HookEvent field; +7 tests → 231 pass; warm recompile, run ~0.62s)
 - **Use timeout:** 120000
 - **History:**
+  - 6s — 2026-06-25 (QoL-WP2 Phase 2 build: Notification gated on notification_type; +7 tests, 231 pass; warm recompile)
+  - 7s — 2026-06-25 (QoL-WP2 Phase 1 build: PostToolUse→Running + CLAUDESK_EVENTS 3→4; +3 tests, 224 pass; warm recompile)
   - 4s — 2026-06-25 (QoL-WP1 Phase 2 verify-auto: no new Rust — frontend-only unmount-kill; 221 pass, no regression; warm run 0.62s)
   - 6s — 2026-06-24 (QoL-WP0 fs-watcher Phase 1 — new fs_watch module, 13 unit tests incl. ignore-filter + FsChange snake_case DTO, 221 pass)
   - 5s — 2026-06-24 (app-menu-bar Phase 1 codify — new app_menu module, 3 unit tests incl. FUNCTIONAL_IDS uniqueness, 208 pass)
