@@ -57,6 +57,15 @@ ignore = "0.4"
 # needs no user-installed binary, and stays a pure-fn TempDir-testable core. Search is
 # in-process and line-oriented; `regex` gives byte match ranges per line directly.
 regex = "1"
+# QoL-WP0: filesystem watcher (FileTree auto-refresh + editor live-reload). The
+# debouncer re-exports `notify ^8.2` (one dep, not two) and does rename From/To
+# pairing + FSEvents file-ID stitching — exactly the editor/formatter write-then-rename
+# atomic-save case. The lighter notify-debouncer-mini was rejected (no rename pairing);
+# watchexec-as-a-library rejected (full command-runner framework — overkill). Ignored
+# paths are filtered with the SAME `ignore`-crate matcher fs_index uses for the tree
+# walk (one .gitignore contract; .git/ hard-excluded), so the watcher and the tree
+# agree on visibility and we never fire a re-walk storm on build-dir / VCS churn.
+notify-debouncer-full = "0.7"
 
 [dev-dependencies]
 tempfile = "3"

@@ -13,6 +13,10 @@ mod env_path;
 // Finder (`open <dir>`), alongside the Sublime Text / Merge launch buttons.
 mod finder;
 mod fs_index;
+// QoL-WP0: filesystem watcher — per-workspace notify-debouncer-full watcher that
+// emits debounced, gitignore-filtered `fs-change` events so the FileTree rail
+// auto-refreshes and open editor docs live-reload on external on-disk changes.
+mod fs_watch;
 mod git_diff;
 mod git_status;
 // M3 WP2: register Claudesk's CC hook in ~/.claude/settings.json (additive,
@@ -89,6 +93,11 @@ pub fn run() {
             // nothing is emitted. Managed before start_broadcaster so the drain
             // thread can read it via try_state.
             app.manage(status_broadcaster::commands::init_registry());
+            // QoL-WP0: the filesystem-watcher registry (workspace_id → live debouncer).
+            // Empty at launch — the frontend calls workspace_watch_start on open /
+            // workspace_watch_stop on close (mirroring workspace_register/deregister).
+            // Managed here so the start/stop commands can reach it via State.
+            app.manage(fs_watch::commands::init_watcher_registry());
             // M3 WP3: bind the AF_UNIX listener that RECEIVES the hook's JSON lines
             // and spawn its accept-loop thread (the receive side of the status
             // channel WP2's hook writes to). A bind failure is surfaced, never
@@ -196,6 +205,12 @@ pub fn run() {
             // event (no match) so nothing is emitted.
             status_broadcaster::commands::workspace_register,
             status_broadcaster::commands::workspace_deregister,
+            // QoL-WP0: start/stop a per-workspace filesystem watcher. The frontend
+            // invokes start on workspace-open (alongside workspace_register) and stop
+            // on close; the watcher emits debounced, gitignore-filtered `fs-change`
+            // events the FileTree + editor consumers subscribe to.
+            fs_watch::commands::workspace_watch_start,
+            fs_watch::commands::workspace_watch_stop,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an

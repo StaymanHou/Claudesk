@@ -67,6 +67,14 @@ export interface EditorSplitHandle {
     content: string,
     highlights?: SyntheticHighlight[],
   ) => void;
+  /**
+   * QoL-WP0 — the filesystem watcher reported these (project-relative) paths changed
+   * on disk. For each one that is currently OPEN here, re-run the existing disk-change
+   * check (`checkDisk` → stat + `diskDecision` → reload-when-clean / conflict-when-dirty),
+   * WITHOUT requiring a tab activation. Paths not open here are ignored. Reuses the
+   * WP12 synchronous-check machinery verbatim — the only new thing is the event source.
+   */
+  checkDiskForPaths: (paths: string[]) => void;
 }
 
 interface EditorSplitProps {
@@ -211,6 +219,23 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
     // EditorPanel calls this when it becomes the front view (active) and is loaded.
     const onActivated = useCallback(
       (path: string) => void checkDisk(path),
+      [checkDisk],
+    );
+
+    // QoL-WP0 — the filesystem watcher reported these paths changed on disk. Re-run
+    // `checkDisk` for each one that is currently open here (a path not in byPath is a
+    // cheap no-op — checkDisk early-returns). This is what makes a backgrounded /
+    // unfocused tab reload (or raise the conflict popup) in real time, instead of only
+    // on the next tab activation. No new decision logic — `checkDisk` already does
+    // stat + diskDecision + reload/conflict, and ignores a stat failure (a deleted
+    // file → treated as unchanged, no nag).
+    const checkDiskForPaths = useCallback(
+      (paths: string[]) => {
+        const byPath = docsRef.current.byPath;
+        for (const path of paths) {
+          if (byPath[path]) void checkDisk(path);
+        }
+      },
       [checkDisk],
     );
 
@@ -364,6 +389,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         closeActiveTab,
         addSynthetic,
         setSyntheticContent,
+        checkDiskForPaths,
       }),
       [
         openFile,
@@ -371,6 +397,7 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         closeActiveTab,
         addSynthetic,
         setSyntheticContent,
+        checkDiskForPaths,
       ],
     );
 

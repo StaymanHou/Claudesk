@@ -31,6 +31,15 @@ interface FileTreeProps {
    * the status effect without re-walking fs_tree. Defaults to 0 (initial fetch).
    */
   gitStatusRefreshKey?: number;
+  /**
+   * QoL-WP0 — bump this to force an `fs_tree` RE-WALK (the parent bumps it on every
+   * `fs-change` event from the backend filesystem watcher, so the rail reflects an
+   * external on-disk create/remove/rename without a manual collapse/expand). The
+   * expand/collapse state lives in a path-keyed reducer that survives the re-fetch,
+   * and scroll is native on the same (never-remounted) container — both preserved.
+   * Defaults to 0 (initial load only).
+   */
+  fsTreeRefreshKey?: number;
 }
 
 export function FileTree({
@@ -38,6 +47,7 @@ export function FileTree({
   openPath,
   onOpen,
   gitStatusRefreshKey = 0,
+  fsTreeRefreshKey = 0,
 }: FileTreeProps) {
   const [entries, setEntries] = useState<TreeEntry[] | null>(null); // null = loading
   const [error, setError] = useState<string | null>(null);
@@ -48,8 +58,11 @@ export function FileTree({
   const [gitStatus, setGitStatus] = useState<GitStatusMap>({});
 
   // Load the tree on mount (the rail stays mounted per the all-workspaces-mounted
-  // rule, so this fires once per workspace). An fs_tree failure surfaces inline,
-  // never swallowed into an empty rail.
+  // rule), AND re-walk on each `fsTreeRefreshKey` bump (QoL-WP0: an `fs-change` event
+  // from the backend watcher → an external on-disk create/remove/rename). An fs_tree
+  // failure surfaces inline, never swallowed into an empty rail. The re-walk replaces
+  // `entries` only; the path-keyed `expanded` reducer + native scroll are untouched,
+  // so collapse state + scroll position survive a refresh.
   useEffect(() => {
     let cancelled = false;
     invoke<TreeEntry[]>("fs_tree", { root: projectPath })
@@ -65,7 +78,7 @@ export function FileTree({
     return () => {
       cancelled = true;
     };
-  }, [projectPath]);
+  }, [projectPath, fsTreeRefreshKey]);
 
   // WP11 — fetch the git-status map (parallel to fs_tree), re-running on workspace
   // change AND on `gitStatusRefreshKey` bumps (a save in the editor). A failure here

@@ -118,17 +118,24 @@ and delete this file.
 
 ---
 
-## WP5 — Editor: add new file  `[priority: MEDIUM]`  `↔ pairs with WP6`
-**Backlog:** SURFACE-2026-06-24-EDITOR-ADD-NEW-FILE
+## WP5 — Editor: file management (add new file + delete file)  `[priority: MEDIUM]`  `↔ pairs with WP6`
+**Backlog:** SURFACE-2026-06-24-EDITOR-ADD-NEW-FILE (+ delete-file, added 2026-06-24 — operator request during WP0)
 **Size:** small/medium · **Type:** new editor feature
 
-**What:** An "Add New File" affordance — create a file in the workspace, name it, open it in an editor tab. Today the editor only opens EXISTING files.
+**What:** Basic file-management affordances the editor lacks today — **create** a new file (name it, open it in a tab) and **delete** an existing file. Today the editor can only OPEN existing files; there's no create and no delete path.
 
-**Tasks:**
+**Tasks (create):**
 - Backend: a new file = `write_file` of an empty (or templated) buffer at a chosen path under the workspace root (`editor_fs` — root-confined `read_file`/`write_file`/`stat_file`), then `openFile(path)` into the focused pane (the `RightPanelHost.openFile` seam).
 - UI surface candidates: a "+"/context-menu action in the `FileTree` rail (`src/components/workspace/filetree/`), and/or a command-palette entry, and/or a File-menu item (once the native menu has one).
 - Needs: a name/path input (inline rename-style or a small prompt); **collision handling** (don't clobber an existing file); respect the gitignore-honoring tree walk for refresh.
 - **Reserve ⌘N for this** (pairs with WP6's ⌘⇧N — land them coherently).
+
+**Tasks (delete — added 2026-06-24, operator request):**
+- Backend: a new root-confined `delete_file(root, path)` command in `editor_fs` (mirrors `write_file`'s `resolve_within` confinement — never delete outside the workspace root). Decide: hard `fs::remove_file` vs macOS Trash (a hard delete is simplest for v1; Trash is a nicety).
+- UI: a delete action in the `FileTree` rail context-menu (the same surface as "+ new file") and/or a File/Edit-menu item. **Confirm-before-delete** (a small ConfirmModal — reuse the editor's existing `ConfirmModal`).
+- **Close any open tab** for the deleted file (the file is gone; its `DocEntry`/tab must be torn down — reuse the PaneTabs close path). Mind the dirty-tab case (deleting a file with unsaved edits — confirm covers it).
+- Tree refresh after delete rides the **WP0 fs-watcher** for free (the external `remove` event re-walks the tree) — but also trigger an explicit refresh so it's immediate even if the watcher debounce lags.
+- Folder delete (recursive) is OUT of scope for v1 unless trivial — single-file delete first.
 
 ---
 

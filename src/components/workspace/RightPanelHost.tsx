@@ -46,6 +46,12 @@ import { formatFindResults, type FlatMatch } from "./search/findResultsBuffer";
 import { replaceAllSpec, type ReplaceAllChoice } from "./search/replaceConfirm";
 import { ConfirmModal } from "./editor/ConfirmModal";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import {
+  FS_CHANGE_EVENT,
+  appliesToWorkspace,
+  type FsChange,
+} from "../../state/fsChange";
 import { openSublime, openSublimeMerge } from "../../sublime/sublimeLaunch";
 import { openFinder } from "../../finder/finderLaunch";
 import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
@@ -135,6 +141,43 @@ export function RightPanelHost({
   // is on tree-load + on-save only, per the M2 scope; the Phase-2 notify watcher is
   // the deferred real-time path.)
   const [gitStatusRefreshKey, setGitStatusRefreshKey] = useState(0);
+
+  // QoL-WP0 — bumped on every `fs-change` event for THIS workspace (an external
+  // on-disk create/remove/rename/modify caught by the backend notify watcher). Passed
+  // to FileTree, which re-walks `fs_tree` on the bump so the rail reflects on-disk
+  // reality without a manual collapse/expand. The same event also bumps
+  // gitStatusRefreshKey (an external change can flip a file's git status too), so the
+  // row indicators refresh on the same signal for free.
+  const [fsTreeRefreshKey, setFsTreeRefreshKey] = useState(0);
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    // The `cancelled`-flag guard is the StrictMode async-listen lesson: the effect's
+    // cleanup can run before the `listen()` promise resolves; without the flag the
+    // first subscription's unlisten is never captured → a double listener.
+    void listen<FsChange>(FS_CHANGE_EVENT, (event) => {
+      // Only act on changes for THIS workspace (the watcher tags each event with its
+      // workspace_id). Other workspaces' events are ignored here.
+      if (!appliesToWorkspace(event.payload, workspaceId)) return;
+      setFsTreeRefreshKey((k) => k + 1);
+      setGitStatusRefreshKey((k) => k + 1);
+      // QoL-WP0 Phase 3 — also live-reload any OPEN editor doc whose file changed on
+      // disk (reuse via the same single per-workspace listener instead of a second one
+      // in EditorSplit). `checkDiskForPaths` re-stats only the changed paths that are
+      // open, then reload-when-clean / conflict-when-dirty via the existing seam.
+      editorSplitRef.current?.checkDiskForPaths(event.payload.paths);
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [workspaceId]);
 
   // WP11 Part C — the user-adjustable file-tree rail width (drag handle below).
   // Seeded from localStorage (default 299, the Part-A CSS value); applied as an
@@ -370,6 +413,7 @@ export function RightPanelHost({
         openPath={activePath}
         onOpen={openFile}
         gitStatusRefreshKey={gitStatusRefreshKey}
+        fsTreeRefreshKey={fsTreeRefreshKey}
       />
       {/* WP11 Part C — drag handle on the rail's right edge. mousedown begins a
           document-tracked drag (onRailResizeStart); CSS hides it when the rail is

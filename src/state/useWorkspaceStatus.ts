@@ -76,17 +76,29 @@ export function useWorkspaceStatus(
     const registered = registeredRef.current;
     const liveIds = new Set(workspaces.map((w) => w.id));
 
-    // Deregister workspaces that are no longer present (e.g. the N≤1 replace).
+    // Deregister workspaces that are no longer present (e.g. the N≤1 replace, or a
+    // QoL-WP1 close). Also STOP that workspace's filesystem watcher (QoL-WP0) — the
+    // watcher's lifecycle is the same as the status registration's, so it rides the
+    // same diff loop. (When WP1's closeWorkspace removes a workspace from the list,
+    // this fires and tears down both for free.)
     for (const [id, projectPath] of registered) {
       if (!liveIds.has(id)) {
         registered.delete(id);
         void invoke("workspace_deregister", { projectPath }).catch((err) => {
           console.error(`workspace_deregister failed for ${projectPath}:`, err);
         });
+        void invoke("workspace_watch_stop", { workspaceId: id }).catch(
+          (err) => {
+            console.error(`workspace_watch_stop failed for ${id}:`, err);
+          },
+        );
       }
     }
 
-    // Register newly-opened workspaces.
+    // Register newly-opened workspaces AND start their filesystem watcher (QoL-WP0)
+    // so the FileTree auto-refreshes + open editor docs live-reload on external
+    // on-disk changes. A failed watch_start is surfaced (console), never swallowed —
+    // a missing watcher silently lets the tree/editor go stale.
     for (const ws of workspaces) {
       if (!registered.has(ws.id)) {
         registered.set(ws.id, ws.project_path);
@@ -95,6 +107,12 @@ export function useWorkspaceStatus(
           workspaceId: ws.id,
         }).catch((err) => {
           console.error(`workspace_register failed for ${ws.id}:`, err);
+        });
+        void invoke("workspace_watch_start", {
+          projectPath: ws.project_path,
+          workspaceId: ws.id,
+        }).catch((err) => {
+          console.error(`workspace_watch_start failed for ${ws.id}:`, err);
         });
       }
     }

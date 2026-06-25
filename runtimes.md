@@ -63,9 +63,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 5s (2026-06-24, app-menu P1 codify: +1 functional-id uniqueness test → 208 pass; warm recompile + run ~0.66s)
+- **Last:** 6s (2026-06-24, QoL-WP0 fs-watcher P1: new fs_watch module +13 tests → 221 pass; recompile + run ~0.63s after the notify-debouncer-full dep add)
 - **Use timeout:** 120000
 - **History:**
+  - 6s — 2026-06-24 (QoL-WP0 fs-watcher Phase 1 — new fs_watch module, 13 unit tests incl. ignore-filter + FsChange snake_case DTO, 221 pass)
   - 5s — 2026-06-24 (app-menu-bar Phase 1 codify — new app_menu module, 3 unit tests incl. FUNCTIONAL_IDS uniqueness, 208 pass)
   - 6s — 2026-06-23 (M4 WP2 P4 — +1 registry_generalizes_to_n_gt_1 test, 186 pass)
   - 6s — 2026-06-23 (M4 WP2 P3 codify — +1 kill_all_is_best_effort test (FailingSession double), 185 pass)
