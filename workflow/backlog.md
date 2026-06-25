@@ -139,7 +139,7 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** M2 WP11 shipped `git_file_statuses` (backend per-path working-tree status map, re-based to the workspace root — see the WP11 path-keying task `m2-wp11-git-status-path-keying`) consumed by the `FileTree` rows (`src/components/workspace/filetree/`). The bubble-up is a **frontend derivation**: for each directory node, aggregate the statuses of its descendants into a roll-up marker (e.g. show "modified" if any descendant is modified; pick a precedence among modified/added/untracked/deleted when a folder contains a mix). The backend map already has every changed path, so no new backend command is needed — it's an aggregation + a folder-row indicator render. Decide the precedence/merge rule (Sublime/VS Code show a single dominant color; VS Code uses a count badge too) and whether to show on collapsed folders only or always.
 - **Suggested action:** in the FileTree, build a directory→rolled-up-status map from the existing `git_file_statuses` (walk descendants or fold bottom-up over the tree), then render a folder-row indicator using the same marker styling as file rows. Pairs with the existing `gitStatusRefreshKey` refresh seam (recompute the roll-up on the same save/load triggers).
 - **Priority:** medium
-- **Status:** open
+- **Status:** RESOLVED 2026-06-25 (QoL-WP7, commit 4d384b1) — new pure `gitRollup.ts` (`dominantStatusByDir` + precedence fold: deleted > modified ≈ renamed > added > untracked) derived from the existing `git_file_statuses` (no new backend), wired into `FileTree.tsx` as a `rollupByDir` memo off `gitStatus` (recomputed on the same `gitStatusRefreshKey` triggers); dir rows render an always-visible (collapsed AND expanded) roll-up glyph reusing the `.file-tree-status` element + color tokens; leaf rows keep their own indicators. 17 tests (11 derivation + 6 `?raw` wiring); operator-verified live (all 6 verify-human PASS). Review-quality 0C/0M/3MINOR (auto-backlogged low).
 
 ## SURFACE-2026-06-24-HOMEBREW-DISTRIBUTION-VIA-UNSIGNED-PERSONAL-TAP
 - **Source:** operator request (developer friends asked for `brew install`, 2026-06-24)
@@ -638,3 +638,9 @@ forward — none M5-blocking). No escalations. -->
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** findings #1 + #2 pair (drop the dead attribute + fix its comment cross-ref) in one trivial `/feature-refactor` pass; #3 (comment dedup) is optional lowest-value polish. Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## Code-quality findings — qol-wp7-filetree-git-bubble-up (2026-06-25)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `4d384b1` — all low-effort polish: (1) `.file-tree-dir-status { margin-left:auto }` is a dead/redundant CSS rule whose comment misattributes the right-push (the real mechanism is `.file-tree-name`'s `flex:1`) — highest-value; (2) `dominantStatusByDir` uses `for...in` without a `hasOwnProperty` guard (latent proto-key footgun on a serde record); (3) the `consider` closure allocates a 1–2-elem array per ancestor (dismiss-candidate — favors single-source-of-precedence clarity). Reviewer verdict: well-built, right architecture, no debt. Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp7-filetree-git-bubble-up — 2026-06-25`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** finding #1 (dead CSS + misleading comment) is the only one worth a touch — a one-line `/feature-refactor`; #2 is a zero-cost `Object.keys` swap if bundled; #3 is a dismiss-candidate. Dismiss any via the WIP's `## Code-Quality Review` section.

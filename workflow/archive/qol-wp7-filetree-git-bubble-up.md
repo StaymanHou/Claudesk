@@ -1,7 +1,7 @@
 # Feature: QoL-WP7 — FileTree git-indicator bubble-up to parents
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** Completed 2026-06-25 — commit 4d384b1
 **Created:** 2026-06-25
 **Drive mode:** autopilot
 **Backlog:** SURFACE-2026-06-24-FILETREE-GIT-INDICATOR-BUBBLE-UP-TO-PARENTS
@@ -56,11 +56,40 @@ The FileTree rail's git-status indicators (M2 WP11 — the Sublime-sidebar M/A/U
   - [x] verify-codify  <!-- status: done; integration boundary covered by fileTreeGitRollup.test.ts (6 ?raw wiring) + gitRollup.test.ts (11 derivation), already written at build. Full suite 579 pass, no regressions. -->
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE
-- **Active scope:** Both phases [x]. Full suite 579 pass. Ready to ship.
+- **Path:** Feature > review-quality COMPLETE → finalize next
+- **Active scope:** Shipped (4d384b1). Review-quality: 0C/0M/3MINOR auto-backlogged (low). Ready for finalize.
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
+
+## Retrospect
+- **What changed in our understanding:** Nothing material — the M2 WP11 design (backend `git_file_statuses` map keyed in the same space `FileTree` looks up with `node.path`) made this a pure frontend derivation exactly as the WBS predicted. The one concrete thing confirmed during build: a folder roll-up MUST reuse the leaf lookup's key space, else a folder's marker could disagree with the rows inside it.
+- **Assumptions that held:** No new backend needed; the `useMemo` off `gitStatus` rides the existing `gitStatusRefreshKey` seam for free; the `.file-tree-status` element + color tokens drop straight onto dir rows.
+- **Assumptions that were wrong:** None. The only sour note was cosmetic — the added `.file-tree-dir-status { margin-left:auto }` CSS turned out redundant (the element already inherits it via `.file-tree-status`, and `.file-tree-name`'s `flex:1` does the right-push). Caught by review-quality as a MINOR, auto-backlogged.
+- **Approach delta:** Implementation matched the plan exactly — 2 phases (pure module → render wiring), no back-loops, no surprises. The two plan-time design calls (precedence; show-always) held through verify-human unchanged.
+
+## Code-Quality Review — qol-wp7-filetree-git-bubble-up
+
+Reviewer verdict (ship commit `4d384b1`): well-built, appropriately-scoped, no debt accrued. **0 CRITICAL / 0 MAJOR / 3 MINOR.** All 3 MINOR auto-backlogged (low) per drive_mode=autopilot → `workflow/backlog-quality-findings.md` # qol-wp7-filetree-git-bubble-up — 2026-06-25.
+
+### Strengths
+- Clean pure-logic / rendering separation (`gitRollup.ts` matches the `gitStatus.ts`/`buildTree.ts` posture); reuses the existing `git_file_statuses` key space + `statusGlyph`/`statusClass` + color tokens so a folder's marker can't drift from the files inside it.
+- `dominantStatus` centralizes precedence in one place, reused by `dominantStatusByDir`'s fold.
+- Tests pin the two tricky edges (prefix vs `startsWith`: `src` ≠ `src-utils`; root-file → empty) and the consumption contract (`?raw` wiring), not just the happy path.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [src/App.css ~1577] `.file-tree-dir-status { margin-left: auto }` re-declares a property the element already inherits from its `file-tree-status` class; `.file-tree-name`'s `flex:1` is what actually pushes the glyph right. Dead rule + a comment that misattributes the layout mechanism.
+- [gitRollup.ts ~78] `dominantStatusByDir` uses `for...in` over `gitStatus` without a `hasOwnProperty` guard. Safe for a serde-serialized record, but `Object.keys(...)` would remove the latent proto-key footgun at zero cost.
+- [gitRollup.ts ~79] the `consider` closure allocates a 1–2-element array per ancestor to reuse `dominantStatus`; a direct precedence-index compare would avoid it, but the current form favors single-source-of-precedence clarity (defensible trade).
+
+### Assessment
+Well-built, right architecture for this repo: a pure tested derivation bolted onto an existing key space + render helpers, no new backend, no new visual vocabulary. The `useMemo` keyed on the same `gitStatus` source guarantees the roll-up can't go stale vs the leaf indicators. Only findings are a dead CSS rule + two micro-hygiene nits — none warrant a refactor pass; backlog-or-dismiss.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

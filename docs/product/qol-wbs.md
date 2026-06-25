@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-24
-status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5+WP5b+WP6 shipped 2026-06-25; WP7–WP8 pending
+status: in-progress — WP0 shipped 2026-06-24, WP1+WP2+WP3+WP4+WP5+WP5b+WP6+WP7 shipped 2026-06-25; WP8 pending
 context: between-milestone QoL/lifecycle sweep, filed after M4 close, before M5 (PiP) planning
 ---
 
@@ -16,7 +16,7 @@ and delete this file.
 **Ordering: priority-first** (operator decision). Natural technical pairings are kept as
 **adjacent** WPs so a paired pair can share a build session, but priority drives the sequence.
 
-**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → ~~WP5b~~ ✅ → ~~WP6~~ ✅ → WP7 → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59; WP5b SHIPPED 2026-06-25 374f7cb; WP6 SHIPPED 2026-06-25 47fdeb9)* — **WP5b inserted 2026-06-25 as the immediate next WP** (operator promoted the WP5 follow-ups ahead of WP6).
+**Sequence of execution:** ~~WP0~~ ✅ → ~~WP1~~ ✅ → ~~WP2~~ ✅ → ~~WP3~~ ✅ → ~~WP4~~ ✅ → ~~WP5~~ ✅ → ~~WP5b~~ ✅ → ~~WP6~~ ✅ → ~~WP7~~ ✅ → WP8  *(WP0 SHIPPED 2026-06-24 d893254; WP1 SHIPPED 2026-06-25 c01a3f9; WP2 SHIPPED 2026-06-25 7cfc464; WP3 SHIPPED 2026-06-25 78c76d6; WP4 SHIPPED 2026-06-25 10c604f; WP5 SHIPPED 2026-06-25 3abfe59; WP5b SHIPPED 2026-06-25 374f7cb; WP6 SHIPPED 2026-06-25 47fdeb9; WP7 SHIPPED 2026-06-25 4d384b1)* — **WP5b inserted 2026-06-25 as the immediate next WP** (operator promoted the WP5 follow-ups ahead of WP6).
 
 **Scope decisions baked in (2026-06-24 triage):**
 - All 7 new SURFACE items are IN.
@@ -181,17 +181,18 @@ and delete this file.
 
 ---
 
-## WP7 — FileTree git-indicator bubble-up to parents  `[priority: MEDIUM]`
-**Backlog:** SURFACE-2026-06-24-FILETREE-GIT-INDICATOR-BUBBLE-UP-TO-PARENTS
+## WP7 — FileTree git-indicator bubble-up to parents  `[priority: MEDIUM]`  ✅ SHIPPED 2026-06-25 (commit 4d384b1)
+**Backlog:** SURFACE-2026-06-24-FILETREE-GIT-INDICATOR-BUBBLE-UP-TO-PARENTS (RESOLVED)
 **Size:** small · **Type:** UX refinement (frontend-only derivation over existing data)
+**As-built:** new pure `gitRollup.ts` (`dominantStatus` precedence fold + `dominantStatusByDir`) derived from the existing `git_file_statuses` map — NO new backend. **Design calls made at plan time:** (1) precedence = **deleted > modified ≈ renamed > added > untracked** (single dominant status, VS Code/Sublime convention; renamed ranks with modified, both amber); (2) show **ALWAYS** (collapsed AND expanded — VS Code behavior, avoids toggle flicker). Wired into `FileTree.tsx` as a `rollupByDir = useMemo(dominantStatusByDir(gitStatus), [gitStatus])` (same key space + same `gitStatusRefreshKey` triggers as the leaf indicators, so a folder's marker can't drift from the files inside it), threaded into `TreeRow`; dir rows render the roll-up glyph reusing the `.file-tree-status` element + color tokens (`data-testid="file-tree-dir-status"`, `margin-left:auto` ahead of the hover ＋/⊞/✕ buttons); leaf rows keep their own per-file indicators. 17 tests (11 `gitRollup.test.ts` derivation + 6 `?raw` `fileTreeGitRollup.test.ts` wiring); full suite 579 pass; operator-verified all 6 verify-human leaves live. Review-quality 0 CRITICAL / 0 MAJOR / 3 MINOR (auto-backlogged low — dead `.file-tree-dir-status` CSS rule + comment, `for...in` no-hasOwnProperty, consider-closure array alloc).
 
 **What:** File-tree git-status markers should bubble up to parent folders — a collapsed folder containing a changed file shows a roll-up marker. Today only leaf file rows carry indicators (M2 WP11).
 
 **Tasks:**
-- Frontend derivation: build a directory→rolled-up-status map from the existing `git_file_statuses` (no new backend — the backend map already has every changed path). Walk descendants or fold bottom-up over the tree.
-- Render a folder-row indicator with the same marker styling as file rows (`src/components/workspace/filetree/`).
-- **Decide:** the precedence/merge rule when a folder contains a mix (modified/added/untracked/deleted) — Sublime/VS Code show a single dominant color; pick a precedence. Decide show-on-collapsed-only vs always.
-- Recompute on the same `gitStatusRefreshKey` save/load triggers.
+- [x] Frontend derivation: build a directory→rolled-up-status map from the existing `git_file_statuses` (no new backend — the backend map already has every changed path). Walk descendants or fold bottom-up over the tree.
+- [x] Render a folder-row indicator with the same marker styling as file rows (`src/components/workspace/filetree/`).
+- [x] **Decide:** the precedence/merge rule when a folder contains a mix (modified/added/untracked/deleted) — Sublime/VS Code show a single dominant color; pick a precedence. Decide show-on-collapsed-only vs always. → **deleted>modified≈renamed>added>untracked; show always.**
+- [x] Recompute on the same `gitStatusRefreshKey` save/load triggers.
 
 ---
 

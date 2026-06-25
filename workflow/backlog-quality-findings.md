@@ -4,6 +4,28 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# qol-wp7-filetree-git-bubble-up — 2026-06-25
+
+3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `4d384b1`. Reviewer verdict: well-built, right architecture, no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-25-QUALITY-WP7-DEAD-DIR-STATUS-CSS
+- **Finding:** `.file-tree-dir-status { margin-left: auto }` re-declares a property the element already inherits from its `file-tree-status` class (which already sets `margin-left:auto`). The actual right-push comes from `.file-tree-name`'s `flex:1`. The rule is a no-op, and its comment ("this is the element that absorbs the free space") misattributes the layout mechanism.
+- **Where:** `src/App.css` `.file-tree-dir-status` (~1577) + its comment block.
+- **Fix shape:** delete the redundant rule (or, if a dir-specific tweak is later wanted, keep the selector but with a real declaration); correct the comment to name `.file-tree-name flex:1` as the right-push mechanism. Highest-value of the three — it removes a misleading explanation.
+- **Priority:** low
+
+## SURFACE-2026-06-25-QUALITY-WP7-FORIN-NO-HASOWNPROPERTY
+- **Finding:** `dominantStatusByDir` iterates `gitStatus` with `for (const path in gitStatus)` without a `hasOwnProperty` guard. Safe for the serde-serialized backend record, but an unexpected prototype key would inject a bogus dir.
+- **Where:** `src/components/workspace/filetree/gitRollup.ts` `dominantStatusByDir` (~78).
+- **Fix shape:** switch to `for (const path of Object.keys(gitStatus))` — removes the latent footgun at zero cost.
+- **Priority:** low
+
+## SURFACE-2026-06-25-QUALITY-WP7-CONSIDER-ARRAY-ALLOC
+- **Finding:** the `consider` closure allocates a 1–2-element array per ancestor purely to reuse `dominantStatus`. Cosmetic given the input is changed-paths-only (O(changed × depth)).
+- **Where:** `src/components/workspace/filetree/gitRollup.ts` `consider` closure (~79).
+- **Fix shape:** a direct precedence-index compare would avoid the per-step array, but the current form favors single-source-of-precedence clarity — defensible as-is; dismiss-candidate.
+- **Priority:** low
+
 # qol-wp5b-editor-folder-depth — 2026-06-25
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `374f7cb`. Reviewer verdict: well-built, security-conscious, ship-quality; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
