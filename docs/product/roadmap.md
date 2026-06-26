@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-25  # M4 COMPLETE + the between-milestone QoL/lifecycle sweep COMPLETE (scratch qol-wbs.md, not a milestone). Workflow-docs markdown viewer inserted as M7 (slides old M7/M8/M9 → M8/M9/M10). Next execution milestone: M5 (PiP, unconditional).
+updated: 2026-06-26  # Revision 2026-06-26b: friend-QoL milestone inserted as M6 (slides menu-bar→M7, docs-viewer→M8, time-analytics→M9, auto-resume→M10, skill-orch→M11, polish→M12). Earlier same-day (2026-06-26): time-analytics absorb-claude-time inserted. Next execution milestone: M5 (PiP, unconditional).
 ---
 
 # Roadmap
@@ -99,7 +99,20 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** The PiP panel ships and mirrors the same status surface as the filmstrip; workspace status is visible while the Claudesk window is out of focus.
 
-### Milestone 6: Menu-bar status item *(was Milestone 7)*
+### Milestone 6: Friend-requested QoL polish *(new — inserted 2026-06-26; an OPEN collection bucket)*
+
+**Goal:** A batch of small, friend-sourced quality-of-life refinements to the workspace UI, landing after the dogfood-replace point (M3+M4) and the out-of-focus status surface (M5) — once real friend-users are exercising the daily driver. **This milestone is deliberately an OPEN collection:** the three deliverables below are the first batch (2026-06-26); **more friend requests are expected before this milestone is reached and should be appended as additional WPs** (or new SURFACEs anchored here) rather than forced into the initial three. Each item mirrors an already-shipped pattern (the file-tree rail resizer, the editor font-zoom, the editor extension array), so the milestone is low-risk polish. *(Depends on Milestone 2's editor/right-panel + Milestone 1's terminal — both shipped; benefits from Milestone 4's WP4b focus indicator for the focus-scoped zoom routing.)*
+
+**Deliverables (first batch — expect more before this milestone is reached):**
+- [ ] **Adjustable left/right split width** — the divider between the left CC terminal (`.workspace-left`) and the right panel (`RightPanelHost`) becomes draggable, mirroring the existing file-tree↔editor rail resizer (`railWidth.ts` pattern: clamp + load/save to localStorage + a `role="separator"` handle). The split is currently a fixed `grid-template-columns: 1fr 1fr` (`App.css:418`); the drag drives the column track and persists. **No terminal-reflow risk:** `XtermPane`'s existing `ResizeObserver → fit.fit() → cc_resize` re-fits the PTY automatically on any width change.
+- [ ] **Adjustable CC terminal font size** — the CC terminal gains font-zoom like the editor (xterm `fontSize`, hardcoded `11` today, is live-configurable via `term.options.fontSize = N` + `fit()`). Built on a `terminalFontZoom.ts` sibling of the editor's `fontZoom.ts` (own localStorage key, suitable bounds). **Keybinding is FOCUS-SCOPED:** ⌘+/⌘−/⌘0 zoom whichever half holds keyboard focus — terminal when the CC pane is focused, editor when the editor is — routed via the WP4b `data-focus-half` active-half tracking. No new chords.
+- [ ] **Editor auto-wrap toggle** — a per-editor line-wrap toggle (`EditorView.lineWrapping`, currently absent by deliberate 2026-06-20 decision — long lines scroll horizontally). Default OFF (preserves current behavior); a toggle (a chord — ⌘\ proposed — and/or a control) flips soft-wrap on, persisted per the `fontZoom.ts` localStorage template.
+
+**Exit Criteria:** The left/right split is drag-resizable (terminal re-fits cleanly); the CC terminal font size is adjustable via focus-scoped ⌘+/⌘−/⌘0; the editor offers a persisted auto-wrap toggle. (Plus any additional friend-requested QoL items folded in before this milestone's `/product-wbs`.)
+
+> Full first-batch analysis + confirmed code seams: `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1` in `workflow/backlog.md`.
+
+### Milestone 7: Menu-bar status item *(was Milestone 6 → M7)*
 
 **Goal:** Workspace status is visible system-wide, even when the Claudesk window is hidden or on another Space.
 
@@ -108,9 +121,9 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Idle/running of every workspace is visible when the Claudesk window is NOT in focus, via the menu-bar item.
 
-> **Anchored here (operator decision 2026-06-22): the workflow-doc-hierarchy watcher** (`SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`, the dropped-M3-WP5 replacement idea — watch `roadmap→wbs→wip(s)→backlog` to surface where each project sits in the workflow). The M6 popover's one-row-per-workspace LIST is the natural form factor for a workflow-position line (e.g. `acme-api · WBS M2/WP3 · building`); by M6 the operator will have dogfooded M4+M5 and know what's worth showing. Builds the `notify` watcher seam (shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER`). Decide at M6's `/product-wbs` whether it's an M6 WP or — if it outgrows a popover line into a real tree view — a standalone feature after M6. *(Note: Milestone 7's workflow-docs markdown viewer is the adjacent surface — the watcher answers "where does each project sit in the workflow" as a status line; M7 renders the docs themselves. Decide at M6/M7 whether the watcher feeds the M7 doc panel rather than the popover.)*
+> **Anchored here (operator decision 2026-06-22; the menu-bar milestone, now M7): the workflow-doc-hierarchy watcher** (`SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`, the dropped-M3-WP5 replacement idea — watch `roadmap→wbs→wip(s)→backlog` to surface where each project sits in the workflow). The menu-bar popover's one-row-per-workspace LIST is the natural form factor for a workflow-position line (e.g. `acme-api · WBS M2/WP3 · building`); by M7 the operator will have dogfooded M4+M5 and know what's worth showing. Builds the `notify` watcher seam (shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER`). Decide at M7's `/product-wbs` whether it's an M7 WP or — if it outgrows a popover line into a real tree view — a standalone feature after M7. *(Note: the workflow-docs markdown viewer (now M8) is the adjacent surface — the watcher answers "where does each project sit in the workflow" as a status line; M8 renders the docs themselves. Decide at M7/M8 whether the watcher feeds the M8 doc panel rather than the popover.)*
 
-### Milestone 7: Workflow-docs markdown viewer
+### Milestone 8: Workflow-docs markdown viewer *(was Milestone 7 → M8)*
 
 **Goal:** Read the conventional product/workflow docs as formatted markdown without leaving Claudesk or popping an external editor — so the workflow document hierarchy (vision → roadmap → wbs → wip → backlog) is glanceable inside the workspace it belongs to. *(Depends on Milestone 2's right-half panel model.)*
 
@@ -121,7 +134,22 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** From any workspace, the `Docs` tab renders that project's conventional product/workflow docs as formatted, scrollable, link-navigable markdown, read-only, with no external editor pop.
 
-### Milestone 8: Smart auto-resume + drive mode *(was Milestone 4 — slid later; livable-without for now)*
+### Milestone 9: Time-analytics panel (absorb claude-time) *(new — inserted 2026-06-26; was M8 in the same revision, +1 from the 2026-06-26b QoL insert)*
+
+**Goal:** Bring CC time-tracking inside Claudesk as a native, default-OFF analytics panel — "where did this week's session time actually go, per project?" — by **absorbing** the standalone `claude-time` tool (`_ref/claude-customization/tools/claude-time/`) and deprecating it. This is the *retrospective* counterpart to the real-time status surfaces (M4 filmstrip / M5 PiP / M6 menu-bar): the same "attention across N parallel projects" thesis, viewed after the fact. *(Depends on Milestone 2's right-half panel model + Milestone 3's hook plumbing — both shipped.)*
+
+**This is a UNIVERSAL feature, not workflow-coupled.** It observes generic CC lifecycle hook events, not the customization *skills* — so unlike the Docs viewer (M7), smart auto-resume (M9), and skill orchestration (M10), it is **not** in the off-by-default *workflow-coupled* bucket. It has its own simple Settings toggle, **default OFF** (to keep CPU/memory/storage at zero for users — including the first friend-users — who don't want it), but any user can enable it and get value without running the workflow system.
+
+**Deliverables:**
+- [ ] **Tracking toggle (default OFF), write-gated.** A Settings toggle enables time-tracking. The CC hook fires regardless (it drives the universal live status dots — unchanged); the **time-row SQLite write happens only when the toggle is ON**. Toggle off → receive event → update status → no SQLite touch → zero storage/IO. *(This is also the project's first concrete instance of the universal-vs-workflow-coupled feature-flag pattern.)*
+- [ ] **Absorbed hook + DB writer (Rust, in `hook_socket`).** Persistence moves into Claudesk's existing `AF_UNIX` listener — NOT a second Perl hook. `claudesk-hook.pl`'s `settings.json` registration extends to the full event set the reclassifier needs (incl. `PreToolUse`/`PostToolUse`/`SubagentStart`/`SubagentStop`/`SessionStart`/`SessionEnd`), and the Perl hook forwards the extra fields (`tool_use_id`, `agent_type`, `prompt_length_chars`, `source`). The separate `claude-time-hook.pl` registration is removed. **Privacy invariant preserved:** prompt *lengths* only, tool names + ids only — never prompt text or tool input/output.
+- [ ] **Per-identity SQLite DB under `app_data_dir()`.** Dev and prod each get their OWN tracking DB (consistent with the `com.claudesk.app` / `com.claudesk.app.dev` isolation) — the DB deliberately does NOT survive / share across the split. No migration of the legacy `~/.claude-time/events.sqlite` (start fresh per identity).
+- [ ] **Reclassifier ported to Rust.** `reclassify.py` (gap → tool/active/reading/thinking/away with typing-debit + cross-session reattribution; ~370 lines pure stdlib) ported to Rust, with `test_reclassify.py`'s 29 assertions as the porting oracle. Grouping logic (git-root + `project_names`-style aliasing) stays here as the single source of truth.
+- [ ] **Native dashboard right-panel tab.** Port `viz/dashboard.jsx` to a React right-panel tab (alongside Editor/Diff/Terminal/Docs), fed by a Rust query layer (the `viz_data.py` segment model). Renders in-window — no unpkg/Babel CDN, no separate browser window, no stale-snapshot-vs-moving-cursor problem. The standalone `claude-time` CLI (`report`/`visualize`) is deprecated and does not move.
+
+**Exit Criteria:** With the tracking toggle ON, a day of CC usage produces a per-project time breakdown rendered in a native Claudesk panel; with the toggle OFF, the feature adds zero storage/IO and the live status dots are unaffected. The standalone `claude-time` tool is retired.
+
+### Milestone 10: Smart auto-resume + drive mode *(was Milestone 4 → M8 → M9; slid later; livable-without for now)*
 
 **Goal:** Opening a workspace lands on the correct resumption command automatically, and the active drive mode is always visible and one-click changeable.
 
@@ -136,7 +164,7 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Workspace open always fires the right resumption command without manual selection; the active drive mode is visible in the header and switchable in one click.
 
-### Milestone 9: Skill orchestration *(was Milestone 5 — slid later; livable-without for now)*
+### Milestone 11: Skill orchestration *(was Milestone 5 → M9 → M10; slid later; livable-without for now)*
 
 **Goal:** Common workflow operations are clicks, not typed slash commands.
 
@@ -146,13 +174,13 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** No slash-command typing for common skills; Recycle Session is a single click.
 
-> **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (PiP + menu-bar item). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling. *(Note: the dogfood-replace point arrives earlier than full Group-C completion — at M3 + M4 — per the 2026-06-22 reorder; metrics 2/3/5 land with the later M8/M9.)*
+> **Group C exit (all six vision success metrics):** (1) time-to-productive <10s; (2) Recycle Session is one click; (3) no slash-command typing for common skills; (4) every workspace's status visible in-window without clicking; (5) workspace open always lands on the right resumption command without manual selection AND the active drive mode is always visible; (6) every workspace's status visible WHEN THE CLAUDESK WINDOW IS NOT IN FOCUS (PiP + menu-bar item). Combined with the Milestone 2 editor/diff viewer, Claudesk is now a full daily driver — projects in tabs, edited and diffed in-window, with no external Sublime juggling. *(Note: the dogfood-replace point arrives earlier than full Group-C completion — at M3 + M4 — per the 2026-06-22 reorder; metrics 2/3/5 land with the later M10/M11.)*
 
 ## Group D — Polish & open-source release
 
-### Milestone 10: Polish & Open-Source Release
+### Milestone 12: Polish & Open-Source Release
 
-**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)* *(2026-06-25: the workflow-docs markdown viewer was inserted as Milestone 7, sliding Skill orchestration to M9 and this Polish milestone to M10.)*
+**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)* *(2026-06-25: the workflow-docs markdown viewer was inserted as Milestone 7, sliding Skill orchestration to M9 and this Polish milestone to M10.)* *(2026-06-26: the time-analytics panel was inserted as Milestone 8, sliding Skill orchestration to M10 and this Polish milestone to M11.)* *(2026-06-26b: the friend-QoL milestone was inserted as Milestone 6, sliding everything after it +1 — time-analytics → M9, Skill orchestration → M11, this Polish milestone → M12.)*
 
 **Deliverables:**
 - [ ] **Settings UI:** project list management, hotkeys, default CLI args for `claude` (e.g. yolo-mode toggle), menu-bar / PiP visibility toggles.
@@ -161,6 +189,47 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 - [ ] **Public repo + open-source license** chosen and added.
 
 **Exit Criteria:** A stranger with the workflow system installed at `~/.claude/skills/` can clone the repo, build Claudesk, and use it on their own macOS machine without further help from the author.
+
+## Revision 2026-06-26b — Friend-requested QoL milestone inserted as Milestone 6
+
+**Inserted a new Milestone 6 (friend-requested QoL polish) between PiP (M5) and the menu-bar item,** sliding the entire Group-C tail +1. Operator-directed: a first batch of three small UI requests from friend-users, framed as an **OPEN collection bucket** — more friend requests are expected before the milestone is reached and should be appended as additional WPs, not forced into the initial three. Full first-batch analysis + confirmed code seams at `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1` in `workflow/backlog.md`.
+
+**First batch (three, all mirroring already-shipped patterns):** (1) **drag-resizable left/right split** (CC terminal ↔ right panel), like the file-tree rail resizer — terminal re-fits automatically via XtermPane's existing `ResizeObserver → fit()`, so no reflow risk; (2) **adjustable CC terminal font size**, like the editor's font-zoom, with **focus-scoped** ⌘+/⌘−/⌘0 (zooms whichever half holds keyboard focus, routed via the WP4b `data-focus-half` tracking — operator decision); (3) **editor auto-wrap toggle** (`EditorView.lineWrapping`, currently off by deliberate 2026-06-20 decision), default OFF, persisted, ⌘\ proposed.
+
+**Old → new mapping** (everything after M5 shifts +1; M1–M5 unchanged):
+
+| Old | New | Milestone |
+|-----|-----|-----------|
+| — | **M6** | Friend-requested QoL polish *(new, open collection)* |
+| M6 | **M7** | Menu-bar status item |
+| M7 | **M8** | Workflow-docs markdown viewer |
+| M8 | **M9** | Time-analytics panel (absorb claude-time) |
+| M9 | **M10** | Smart auto-resume + drive mode |
+| M10 | **M11** | Skill orchestration |
+| M11 | **M12** | Polish & open-source release |
+
+**Why here:** after the dogfood-replace point (M3+M4) and the out-of-focus status surface (M5), once friend-users are actively exercising the daily driver and surfacing ergonomic friction — but before the workflow-coupled and absorb-claude-time milestones. Low-risk polish (each item clones an existing seam). Decompose at its `/product-wbs` when reached, folding in any further friend requests that arrive first.
+
+## Revision 2026-06-26 — Time-analytics panel (absorb claude-time) inserted as Milestone 8
+
+**Inserted a new Milestone 8 (time-analytics panel) between the workflow-docs viewer (M7) and smart auto-resume.** Claudesk **absorbs** the standalone `claude-time` tool (`_ref/claude-customization/tools/claude-time/` — a hook-driven CC time-tracker: SQLite event log → reclassifier → Gantt dashboard) as a native, **default-OFF** right-panel analytics tab, and the standalone tool is **deprecated**. Operator-directed; full analysis + locked decisions at `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` in `workflow/backlog.md`.
+
+**Locked decisions:** (1) **full absorption, not reader-only** — claude-time is deprecated, so the bare-terminal-coverage / cross-repo-schema constraints that argued for reader-only are gone and "don't maintain two copies" wins; (2) it is a **universal feature, NOT workflow-coupled** (observes generic CC hook events, not the skills) — so it is NOT in the off-by-default *workflow-coupled* bucket (Docs viewer / auto-resume / skill-orch); it gets its own Settings toggle, default OFF, that a friend may enable; (3) **write only when the toggle is ON** — the hook still fires for the universal status dots, but the time-row SQLite write is gated, so cost-when-off is zero; (4) **per-identity DB** under `app_data_dir()` — dev and prod do NOT share a tracking DB, consistent with the `com.claudesk.app` / `.dev` isolation, no legacy-history migration.
+
+**Absorption shape:** persistence folds into the Rust `hook_socket` listener (not a second Perl hook; `claudesk-hook.pl`'s registration extends to the fuller event set the reclassifier needs, and the legacy `claude-time-hook.pl` registration is removed); `reclassify.py` ports to Rust (29-assertion oracle); `viz/dashboard.jsx` ports to a React right-panel tab fed by a Rust query layer; the `claude-time` CLI is retired.
+
+**Old → new mapping** (Group C tail only; M1–M7 unchanged):
+
+| Old | New | Milestone |
+|-----|-----|-----------|
+| — | **M8** | Time-analytics panel (absorb claude-time) *(new)* |
+| M8 | **M9** | Smart auto-resume + drive mode |
+| M9 | **M10** | Skill orchestration |
+| M10 | **M11** | Polish & open-source release |
+
+**Why here:** dependencies (M2 right-panel tab model + M3 hook plumbing) are both shipped; it's a natural neighbor to the Docs viewer (another read-mostly right-panel tab on the same panel pattern) and sits before the genuinely workflow-coupled hand-holding milestones. Decompose at its `/product-wbs` pass when reached (open sub-decisions: exact DB path, config/tuning surface, panel scope, the universal-vs-coupled toggle pattern).
+
+> **Numbering superseded by Revision 2026-06-26b (same day):** the friend-QoL milestone was then inserted as M6, shifting this time-analytics milestone from M8 → **M9** and the tail to M10 (auto-resume) / M11 (skill-orch) / M12 (polish). The mapping table above reflects this revision's *then*-current numbering; the current numbering is in 2026-06-26b above.
 
 ## Revision 2026-06-25 — Workflow-docs markdown viewer inserted as Milestone 7
 
@@ -229,3 +298,6 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 > 2026-06-15: Major rewrite driven by the vision pivot (multi-window → single-window tabbed workspaces + filmstrip + PiP + menu-bar) and research resolving the open design questions. Phase 1 gained the tab-shell substrate + a gating thumbnail-rendering probe; xterm.js settled on DOM-renderer-only (WebGL ~16-context cap); the prior "cross-window CC status indicator" milestone was replaced by three status surfaces (filmstrip / menu-bar / PiP) fed by a single Rust broadcaster over a Unix-socket hook channel (resolving the old "WP9b probe").
 > 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone; added a drive-mode selector + indicator milestone. Both additive to the stateful-controller phase.
+
+## Session Pause — 2026-06-26 13:05
+Paused. See `workflow/.session.md` to resume. Planning session only (two milestones inserted: M6 friend-QoL, M9 time-analytics; tail renumbered to M1–M12). Next execution milestone is still **M5 (Picture-in-picture)** — resume there off the existing `docs/product/wbs.md`. Uncommitted doc edits pending a commit decision.
