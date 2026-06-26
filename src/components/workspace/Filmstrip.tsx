@@ -6,17 +6,24 @@
 // center-stage header always agree). The WP2 "+" add-workspace control stays.
 //
 //   - P2: click + ⌘⇧+digit promote (tiles are switch affordances; promote via onPromote)
-//   - P3 (this commit): live ~1 fps serializeAsHTML() mirror on BACKGROUND tiles; the
-//     center-staged tile is a STATIC placeholder (it's already full-size on the stage —
-//     mirroring it is wasted CPU). One shared ~1 fps ticker reads each background pane's
-//     buffer from the terminalMirror registry and writes it into that tile's body. The
-//     ticker pauses on document.hidden and is structured so WP4's collapse can stop it.
+//   - P3: live ~1 fps serializeAsHTML() mirror on BACKGROUND tiles; the center-staged
+//     tile is a STATIC placeholder (it's already full-size on the stage — mirroring it
+//     is wasted CPU). (M5 WP3 update: the SERIALIZE moved to the App-level
+//     useMirrorTicker — one shared loop feeds both the filmstrip and the PiP, no
+//     duplicate serialize. This component's loop now only READS the shared mirrorFrame
+//     snapshot and writes it into the tile body. Pauses on document.hidden; WP4 collapse
+//     still gates it.)
 //   - P4 (next): drag-to-reorder + persisted order.
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import type { FilmstripTile } from "./filmstripTiles";
-import { serializeTerminal } from "./terminalMirror";
+import { readMirrorFrame } from "./mirrorFrame";
 import { shouldRunMirror } from "./mirrorTicker";
 import { insertionIndex } from "./filmstripOrder";
 import type { WireWorkspaceState } from "../../state/workspaceStatus";
@@ -183,13 +190,19 @@ export function Filmstrip({
     const backgroundIds = bgSignature ? bgSignature.split(",") : [];
     if (!shouldRunMirror(collapsed, backgroundIds.length)) return;
 
+    // M5 WP3 Phase 3: the SERIALIZE now happens once in the App-level useMirrorTicker
+    // (shared with the PiP — no second serialize loop). This loop only READS the shared
+    // `mirrorFrame` snapshot and writes it into the tile DOM. We keep a separate write
+    // interval (vs. writing from the ticker) so the filmstrip's DOM-write stays local to
+    // this component and its refs; the cost we eliminated was the duplicate serialize,
+    // not the cheap innerHTML write.
     const tick = () => {
-      if (document.hidden) return; // app not visible → no serialize churn
+      if (document.hidden) return; // app not visible → skip the DOM churn
       for (const id of backgroundIds) {
         const mirror = mirrorRefs.current.get(id);
         if (!mirror) continue;
-        const html = serializeTerminal(id);
-        // null → terminal not registered yet (pre-mount); leave the prior frame.
+        const html = readMirrorFrame(id);
+        // null → not serialized this frame yet (pre-mount / first tick); leave prior.
         if (html !== null) mirror.innerHTML = html;
       }
     };
@@ -316,7 +329,10 @@ export function Filmstrip({
                   }}
                 />
                 {tile.active && (
-                  <span className="filmstrip-tile-active-glyph" aria-hidden="true" />
+                  <span
+                    className="filmstrip-tile-active-glyph"
+                    aria-hidden="true"
+                  />
                 )}
               </div>
               <div className="filmstrip-tile-header">

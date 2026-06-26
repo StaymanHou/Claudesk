@@ -751,3 +751,13 @@ forward — none M5-blocking). No escalations. -->
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** finding #1 (pin the npx version) + #3 (reword the recipe wait-token) are each a one-line `/feature-refactor` touch; #2 is track-only. Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-26-PRETTIER-DRIFT-AND-BRITTLE-RAW-REGEX-TEST
+- **Source:** feature:ship (M5 WP3)
+- **Target level:** product:wbs
+- **Type:** tech-debt
+- **Summary:** ~21 src/*.{ts,tsx} files are not prettier-formatted as committed (a repo-wide `prettier --write src/**` reformats them, mostly multi-line wrapping). Separately, `fileTreeGitRollup.test.ts` uses a `?raw` regex (`/const\s+rollupByDir\s*=\s*useMemo\(\s*\(\)\s*=>\s*dominantStatusByDir\(gitStatus\)\s*,\s*\[\s*gitStatus\s*\]\s*\)/`) that assumes a near-single-line `useMemo` — prettier's multi-line wrap of FileTree.tsx breaks it.
+- **Context:** discovered at WP3 ship when an over-broad `prettier --write src/**` swept in 21 unrelated files + broke that test. Reverted the out-of-scope reformats; WP3's own files are prettier-clean. The drift means `pnpm format` on the whole tree produces a large noisy diff + one test failure.
+- **Suggested action:** a dedicated `/feature-refactor` (or `/task`) pass: run `pnpm format` tree-wide once to normalize, and loosen the fileTreeGitRollup `?raw` regex to tolerate prettier's wrapping (match on the call + deps tokens, not whitespace shape). Commit as a pure formatting normalization.
+- **Priority:** low
+- **Status:** pending

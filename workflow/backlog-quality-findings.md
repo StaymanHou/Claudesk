@@ -1152,3 +1152,4 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Where:** `docs/product/wbs.md`, WP2 verdict, recipe step 1.
 - **Fix shape:** reword the recipe's wait-token to the real stdout line (`"WebSocket server listening on"`), or note that `LISTEN` requires `lsof -iTCP:9223 -sTCP:LISTEN` rather than a stdout grep. One-line doc edit.
 - **Priority:** low
+- **Status:** RESOLVED 2026-06-26 (M5 WP3 P1.5) — wbs.md recipe step 1 now waits for `"WebSocket server listening on: 127.0.0.1:9223"` with a note that `LISTEN` is an lsof/netstat artifact, not a stdout token.

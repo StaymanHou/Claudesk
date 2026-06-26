@@ -26,11 +26,11 @@ mod hook_install;
 // side of the status channel WP2's hook writes to). Phase 1 = the typed
 // HookEvent + pure parse seam; Phase 2 binds the socket + accept-loop thread.
 mod hook_socket;
-// M5 WP1: THROWAWAY tauri-nspanel probe — a bare NSPanel behind a temporary
-// toggle command, to prove the always-on-top/all-Spaces/over-fullscreen/
-// non-activating contract before WP3 builds the real PiP. Torn down (or
-// promoted to the WP3 seed) at WP1 verify-codify. See pip_probe/mod.rs.
-mod pip_probe;
+// M5: Picture-in-Picture NSPanel — the out-of-focus workspace-status surface.
+// Window mechanics (build/show/teardown) built on the WP1-confirmed (GO)
+// tauri-nspanel contract; the React status surface loads at `pip.html`. See
+// pip/mod.rs.
+mod pip;
 mod project_search;
 // M3 WP4: status broadcaster — normalizes each HookEvent to a workspace state,
 // maps cwd→open-workspace, and emits WorkspaceStatusUpdate on `workspace-status`.
@@ -51,8 +51,8 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // M5 WP1: tauri-nspanel plugin — required for the NSPanel conversion the
-        // pip_probe command performs. THROWAWAY-adjacent: stays if WP1 is GO.
+        // M5: tauri-nspanel plugin — required for the NSPanel conversion the
+        // `pip` module's PanelBuilder performs.
         .plugin(tauri_nspanel::init());
 
     // M5 WP2 (PROBE): the MCP bridge plugin drives the real WKWebView over a local
@@ -250,9 +250,8 @@ pub fn run() {
             // events the FileTree + editor consumers subscribe to.
             fs_watch::commands::workspace_watch_start,
             fs_watch::commands::workspace_watch_stop,
-            // M5 WP1: THROWAWAY NSPanel probe toggle (temporary — torn down or
-            // promoted to the WP3 PiP seed at verify-codify).
-            pip_probe::commands::pip_probe_toggle,
+            // M5: toggle the PiP NSPanel (show/hide the out-of-focus status surface).
+            pip::commands::pip_toggle,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an
@@ -268,13 +267,13 @@ pub fn run() {
                 if let Some(state) = window.try_state::<hook_socket::commands::HookSocketState>() {
                     hook_socket::commands::cleanup_socket(&state.socket_path);
                 }
-                // M5 WP1: tear down the THROWAWAY PiP probe panel if it's open —
-                // otherwise the all-Spaces/floating panel orphans on screen after
-                // the main window closes. MUST go through to_window()→close(): the
-                // crate's to_window() un-swizzles the NSPanel + sets
-                // released_when_closed safely; closing the live panel object is a
-                // use-after-free abort (tauri-nspanel #22).
-                pip_probe::commands::teardown(window.app_handle());
+                // M5: tear down the PiP panel if it's open — otherwise the
+                // all-Spaces/floating panel orphans on screen after the main window
+                // closes. MUST go through to_window()→close(): the crate's
+                // to_window() un-swizzles the NSPanel + sets released_when_closed
+                // safely; closing the live panel object is a use-after-free abort
+                // (tauri-nspanel #22).
+                pip::commands::teardown(window.app_handle());
             }
         })
         .run(tauri::generate_context!())

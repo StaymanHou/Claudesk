@@ -35,3 +35,7 @@ dist-ssr
 *.sln
 *.sw?
 .playwright-mcp/
+
+# Machine-local scratch: throwaway projects used to drive verify-self (each is its
+# own git repo). Per the GLOBAL artifact-tracking MAP, tmp/ is ignore-by-default.
+tmp/

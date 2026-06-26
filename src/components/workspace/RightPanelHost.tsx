@@ -346,7 +346,10 @@ export function RightPanelHost({
   ): Promise<string | null> => {
     const proposed = proposeNewDirPath(dir, name);
     if (!proposed.ok) return Promise.resolve(proposed.reason);
-    return invoke<void>("create_dir", { root: projectPath, path: proposed.path })
+    return invoke<void>("create_dir", {
+      root: projectPath,
+      path: proposed.path,
+    })
       .then(() => {
         setFsTreeRefreshKey((k) => k + 1);
         return null;
@@ -721,21 +724,23 @@ export function RightPanelHost({
           >
             <FinderIcon />
           </button>
-          {/* M5 WP1 — THROWAWAY NSPanel probe toggle. The operator's verify-human
-                driver: toggles a bare always-on-top floating panel to confirm the
-                all-Spaces / over-fullscreen / non-activating AppKit contract.
-                Removed (or promoted to the real PiP toggle) at WP1 verify-codify. */}
+          {/* M5 — toggle the Picture-in-Picture status panel (the out-of-focus
+                workspace-status surface). Display-only: it mirrors status, it does
+                not control workspaces. (The richer toggle UX/placement — a View-menu
+                item — lands at WP5; this button is the working affordance until then.) */}
           <button
             type="button"
             className="panel-launch"
-            data-testid="pip-probe-toggle"
-            onClick={() => void invoke("pip_probe_toggle").catch((e) => {
-              console.error("[claudesk] pip_probe_toggle failed:", e);
-            })}
-            aria-label="Toggle PiP probe panel (temporary)"
-            title="Toggle PiP probe panel (M5 WP1 — temporary)"
+            data-testid="pip-toggle"
+            onClick={() =>
+              void invoke("pip_toggle").catch((e) => {
+                console.error("[claudesk] pip_toggle failed:", e);
+              })
+            }
+            aria-label="Toggle Picture-in-Picture status panel"
+            title="Toggle Picture-in-Picture status panel"
           >
-            PiP?
+            PiP
           </button>
         </div>
 

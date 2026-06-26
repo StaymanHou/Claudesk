@@ -42,16 +42,20 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo build (src-tauri)
 
-- **Last:** 50s (2026-06-25, M5 WP1: first tauri-nspanel v2.1 git-dep fetch + compile against tauri 2.11.2; GO on compile gate)
+- **Last:** 10s (2026-06-26, M5 WP3 P1: warm rebuild after pip_probe→pip module rename)
 - **Use timeout:** 135000
 - **History:**
+  - 10s — 2026-06-26 (M5 WP3 P1: warm rebuild after pip module rename — compile gate)
   - 50s — 2026-06-25 (M5 WP1: tauri-nspanel v2.1.0 @a3122e89 fetch + compile vs tauri 2.11.2, clean)
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-25, QoL-WP8 P2 verify-codify: 591 pass, +7 stickyHeaderStacking wiring cases — CSS read via fs since .css?raw is empty under Vitest)
+- **Last:** 1s (2026-06-26, M5 WP3 Phase 3 verify-codify: 622 pass / 69 files, +9 mirrorFrameSharing (computeMirrorSet union + mirrorFrame store) + extended pipFanoutWiring guards (pip-mirror, display-only, single-serialize-loop import guard))
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-26 (M5 WP3 P3: 622 pass / 69 files, +9 mirrorFrameSharing + mirror guards)
+  - 1s — 2026-06-26 (M5 WP3 P2: 610 pass / 68 files, +5 pipFanoutWiring guards)
+  - 1s — 2026-06-26 (M5 WP3 P1: 600 pass / 66 files, +9 pipEntryWiring guards)
   - 1s — 2026-06-25 (QoL-WP8 P2: 591 pass, +7 stickyHeaderStacking)
   - 1s — 2026-06-25 (QoL-WP8 P1: 584 pass, +5 commitsCollapsedDefault)
   - 1s — 2026-06-25 (QoL-WP7 P2: 579 pass)

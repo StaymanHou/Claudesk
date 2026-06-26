@@ -1,0 +1,19 @@
+<!doctype html>
+<!--
+  M5 — PiP NSPanel surface entry. Loaded into the floating NSPanel webview via
+  WebviewUrl::App("pip.html"). A real Vite entry (React + live Tauri IPC), NOT a
+  static page — the panel subscribes to `workspace-status` + `pip-frame` and
+  renders the live status mirror. Window mechanics live in src-tauri/src/pip.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Claudesk PiP</title>
+  </head>
+
+  <body>
+    <div id="pip-root"></div>
+    <script type="module" src="/src/pip/main.tsx"></script>
+  </body>
+</html>

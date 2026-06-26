@@ -31,6 +31,8 @@ import { listen } from "@tauri-apps/api/event";
 import { menuActionFor } from "./menu/menuBridge";
 import { openSublime, openSublimeMerge } from "./sublime/sublimeLaunch";
 import { openFinder } from "./finder/finderLaunch";
+import { usePipFanout } from "./pip/usePipFanout";
+import { useMirrorTicker } from "./components/workspace/useMirrorTicker";
 
 // WP5 app shell. The view is a state machine over WorkspaceList:
 //   - "picker"         → Project Picker, full-screen (no workspace open yet)
@@ -85,6 +87,19 @@ function App() {
     },
     [tiles],
   );
+
+  // M5 WP3 Phase 2 — fan the roster out to the PiP NSPanel webview (it can't read this
+  // React state). The roster is the SAME ordered `tiles`, projected to {id, display_name}
+  // — but UNLIKE the filmstrip, NO tile is dropped/marked-static: the PiP mirrors ALL N
+  // workspaces incl. the center-staged one (the intentional divergence). The projection
+  // is memoized on (id, name, order) so the fan-out effect only re-emits when the roster
+  // actually changes, not on every status tick. Status itself reaches the PiP via the
+  // backend's all-webview `workspace-status` broadcast — not fanned out here.
+  const pipRoster = useMemo(
+    () => tiles.map((t) => ({ id: t.id, display_name: t.display_name })),
+    [tiles],
+  );
+  usePipFanout(pipRoster);
   const commitOrder = useCallback(() => {
     saveOrder(tiles.map((t) => t.project_path));
   }, [tiles]);
@@ -122,6 +137,16 @@ function App() {
       return next;
     });
   }, []);
+
+  // M5 WP3 Phase 3 — the SINGLE serialize ticker, shared by the filmstrip + the PiP.
+  // It serializes the needed workspace set once per tick into the shared mirrorFrame
+  // (filmstrip reads it for its tiles; the PiP gets the same snapshot as a pip-mirror
+  // emit when shown). No second serialize loop. `allIds` = the ordered roster; the
+  // ticker excludes the center-staged one from the filmstrip set but includes it for
+  // the PiP (the divergence). It tracks PiP visibility itself via the backend
+  // `pip-visibility` broadcast, so the cost is paid only while the PiP is up.
+  const allIds = useMemo(() => tiles.map((t) => t.id), [tiles]);
+  useMirrorTicker({ allIds, focusedId, collapsed });
 
   // M4 WP2 — the new-workspace overlay (the filmstrip "+" re-entry). Only ever
   // shown when a workspace is already open; first-open uses the full-screen picker.

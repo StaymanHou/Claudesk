@@ -1,0 +1,202 @@
+/* M5 — PiP NSPanel surface styles. Self-contained: the panel webview does NOT
+   load the main App.css. Dark-only (project convention — no light tokens, no
+   prefers-color-scheme). The status-dot palette below is COPIED verbatim from
+   App.css so the PiP and the filmstrip render identical colors (the "never
+   disagree on a workspace's state" invariant — same backend broadcast, same
+   palette). Phase 3 adds the .pip-tile-mirror serialize-mirror rules. */
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#pip-root {
+  margin: 0;
+  height: 100%;
+  /* Transparent — the panel window is born transparent (src-tauri/src/pip); the
+     surface paints its own rounded dark background below. */
+  background: transparent;
+  font:
+    13px/1.4 -apple-system,
+    system-ui,
+    sans-serif;
+  color: #e8e8e8;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+  overflow: hidden;
+}
+
+.pip-root {
+  height: 100%;
+  box-sizing: border-box;
+  background: #141414;
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  align-items: stretch;
+}
+
+/* Empty-roster state — centered "No workspaces". */
+.pip-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a8a8a;
+}
+
+/* Horizontal mirror — a row of tiles (WP3's one default layout). */
+.pip-row {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pip-tile {
+  position: relative; /* mirror = absolute base layer; header = absolute overlay */
+  flex: 1 1 0;
+  min-width: 0;
+  box-sizing: border-box;
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* The live ~1 fps serialize mirror — the BASE layer filling the whole tile. Same
+   white-bar fix as the filmstrip (App.css .filmstrip-tile-mirror): the node is fixed
+   at the terminal's NATURAL width with white-space:pre so lines don't reflow to the
+   tiny tile width, then the whole wide block is scaled down. Anchored bottom-left so
+   the tile tails the newest terminal rows. The pip-mirror listener writes xterm's own
+   serializeAsHTML() into this node (no untrusted-HTML concern — it's OUR buffer). */
+.pip-tile-mirror {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 640px; /* ~80 cols — wide enough that lines don't wrap */
+  transform: scale(0.16);
+  transform-origin: bottom left;
+  pointer-events: none;
+}
+
+.pip-tile-mirror pre,
+.pip-tile-mirror div {
+  white-space: pre;
+  margin: 0;
+  font-family: "SF Mono", Menlo, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.1;
+  color: #d4d4d4;
+}
+
+/* Name + status-dot row — a semi-transparent OVERLAY across the top, the live mirror
+   shows through underneath (same as the filmstrip). */
+.pip-tile-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 6px;
+  background-color: rgba(17, 17, 17, 0.45);
+}
+
+.pip-tile-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Shared status indicator — copied from App.css so the PiP webview is self-contained
+   and the colors match the filmstrip exactly. */
+.workspace-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.workspace-status-label {
+  /* In the PiP a tile is narrow — the dot is the signal; hide the text label to
+     save width (the project name already names the row). The dot + its title/tooltip
+     carry the state. */
+  display: none;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: #6e7681; /* fallback (unknown) */
+}
+
+.status-dot-running {
+  background-color: #d97757;
+  box-shadow: 0 0 4px rgba(217, 119, 87, 0.6);
+}
+
+.status-dot-idle {
+  background-color: #6e7681;
+}
+
+.status-dot-awaiting {
+  background-color: #539bf5;
+  box-shadow: 0 0 4px rgba(83, 155, 245, 0.6);
+}
+
+.status-dot-unknown {
+  background-color: #484f58;
+}
+
+/* Live-state animation — Running "breathes", AwaitingInput "blinks" (same as the
+   main app's dots; the PiP is the out-of-focus surface, so the "needs me" blink is
+   especially load-bearing here). prefers-reduced-motion falls back to static color. */
+@media (prefers-reduced-motion: no-preference) {
+  .status-dot-running {
+    animation: status-breathe 1.8s ease-in-out infinite;
+  }
+
+  .status-dot-awaiting {
+    animation: status-blink 0.7s steps(1, end) infinite;
+  }
+}
+
+@keyframes status-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes status-blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.1;
+  }
+  100% {
+    opacity: 1;
+  }
+}
