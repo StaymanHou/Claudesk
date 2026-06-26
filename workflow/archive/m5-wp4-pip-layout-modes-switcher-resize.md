@@ -1,7 +1,7 @@
 # Feature: M5 WP4 — PiP layout modes + persisted switcher + auto-resize
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-26 (shipped d38a191; all 5 phases through verify-codify; review clean 0C/0M/4 MINOR auto-backlogged)
 **Created:** 2026-06-26
 **drive_mode:** autopilot
 
@@ -298,7 +298,8 @@ a shifted root cause.
   - [x] verify-codify  <!-- status: done 2026-06-26; P5.1 invariant pinned by the cross-layout never-disagree guard (built earlier). +4 NEW Phase-5 wiring guards in pipFanoutWiring: drag (onMouseDown=startPanelDrag → invoke pip_move; window-mousemove delta tracking), mirror-while-hidden gate (exact `document.hidden && !pipNeedsMirror` + negative-guard vs the old bare early-return), toggle PipIcon (import + <PipIcon/>). pip_move + the tick gate are live-panel/interval behavior → bridge-verified, not unit-testable. Full suite 669 pass / 71 files, tsc 0; no regressions. -->
 
 ## Current Node
-- **Path:** Feature > ship (all 5 phases complete through verify-codify)
+- **Path:** Feature > review-quality (COMPLETE — 0 CRITICAL/0 MAJOR/4 MINOR auto-backlogged) → finalize next
+- **Ship:** committed 2026-06-26 as d38a191 (20 files, +2048/-92) on main (local-only, no remote). Final checks green: frontend 669 pass, Rust 258 pass, tsc 0, eslint 0 errors (1 pre-existing XtermPane warning), clippy -D warnings clean.
 - **Active scope:** ALL 5 PHASES COMPLETE through verify-codify. Phase 5 codify pinned the drag/mirror/icon wiring (+4 guards); full suite 669 pass. NEXT: `/feature-ship` (commits the whole WP4 working tree — currently dirty across all 5 phases).
 - **Blocked:** none.
 - **Unvisited (sequence-of-execution):** ship → finalize.
@@ -312,6 +313,38 @@ a shifted root cause.
 - **Operator triage (2026-06-26):** Issue "panel doesn't resize" = EXPECTED, Phase-3 scope. Issue "no visible mirror in vertical-mirror" = FIXED (P1.vh.2; tile-height root cause, not width).
 - **Unvisited:** Phase 1 verify loop (verify-auto → verify-self → verify-human → verify-codify), Phase 2 (switcher + Rust app-settings store), Phase 3 (auto-resize), Phase 4 (minimal attention-weighting), Phase 5 (cross-layout invariant verify)
 - **Open discoveries:** none
+
+## Retrospect
+- **What changed in our understanding:** The swizzled borderless NonactivatingPanel does NOT honor the standard Tauri window-move path at all — `data-tauri-drag-region`, `startDragging()`, AND `setPosition` are all inert on it (proven empirically when `setPosition` no-op'd). The ONLY path that moves it is a direct AppKit `setFrameOrigin:` (the same family as `set_content_size`, which is why resize always worked but move never did). Also confirmed: the WP1 `.borderless()` style-mask bit is load-bearing — dropping it (to match the maintainer's draggable example) re-triggers the exact WP1 `setStyleMask:` NSRangeException crash. And the `document.hidden` serialize gate (inherited from WP3) was actively wrong for the PiP — it froze the out-of-focus surface exactly when it's needed.
+- **Assumptions that held:** The pure-core / vitest split (layout enum, size math, attention sort) was the right shape — all of it pinned cleanly with no live dependency. The MCP bridge drove live verify-self for BOTH webviews (main + PiP) end-to-end, including `pip_move` position assertions and the mirror-while-hidden check — the WP2 ADOPT verdict paid off across the whole WP. Backend-owned-layout single-source-of-truth (mirroring `pip-visibility`) kept render + resize + persist reading one value with no drift.
+- **Assumptions that were wrong:** (1) That the drag would be a simple `data-tauri-drag-region` or `startDragging` — it took two dead ends (the JS startDragging, then the .borderless()-drop crash) before landing on `pip_move`. The operator's instinct to "first verify you can even move the panel programmatically" cut straight to the root cause. (2) That the content-driven resize was done — the operator rejected the initial static-size model, forcing the (better) f(layout, N) rebuild. (3) That the minimal-dot POP needed a size bump — operator feedback showed blink alone reads cleaner with multiple dots. (4) The mirror-freeze was earlier mis-filed as a transient test NON-ISSUE; it was a real bug.
+- **Approach delta:** Phases 1–4 matched the plan. Phase 5 expanded well beyond its planned "cross-layout invariant verify" scope: four operator-surfaced items landed during it (drag fix, toggle icon, dot-size refinement, mirror-while-hidden gate), making it the largest phase. The drag fix alone went through a research consult + two rebuilds. Net: the plan's verification phase became a verification-plus-polish phase, driven by live operator dogfooding through the bridge.
+
+## Code-Quality Review — m5-wp4-pip-layout-modes-switcher-resize
+
+Reviewed against ship commit d38a191 (2026-06-26). Verdict: **0 CRITICAL, 0 MAJOR, 4 MINOR** — well-built, negligible debt. MINORs auto-backlogged per drive_mode=autopilot (Mode 3).
+
+### Strengths
+- Wire-contract discipline: `pip::layout::PipLayout` (serde kebab) ↔ `pipLayout.ts` pinned byte-identical both sides; backend-owned single-source-of-truth mirrors the `pip-visibility` pattern.
+- Clean pure-core split (`pipLayout.ts`, `pipPanelSize.ts`) isolated from React/IPC, densely vitest-pinned (grows-with-N, cap+wrap, stable attention sort, no-mutate).
+- New `config_store/settings.rs` reuses projects.json durability (atomic write-rename, missing=defaults, malformed=error-not-wipe) + forward-compat test.
+- `useMirrorTicker` gate extension keeps `computeMirrorSet` a pure set-union; the `not.toMatch(/if \(document\.hidden\) return/)` guard locks the Phase-5 fix against reversion.
+- Every IPC failure path is best-effort with an explicit rationale comment.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [src-tauri/src/pip/commands.rs `pip_move` doc] Claims it uses "the same raw-msg_send path `set_content_size` uses" — but `set_content_size` is a tauri-nspanel WRAPPER method, not raw `msg_send`. Both are safe frame-mutations; the stated equivalence is inaccurate (load-bearing safety justification for the `unsafe` block).
+- [src/pip/__tests__/pipFanoutWiring.test.ts:~211] Stale comment ".pip-tile-awaiting … CSS scales + glows the dot" — the dot-size scale was DROPPED per operator feedback (P4.2 refinement); CSS now adds only a glow halo, no transform.
+- [src/pip/Pip.tsx:~245] Vestigial `data-tauri-drag-region` on `pip-root` + `.pip-switch-row` — inert on this swizzled panel (real drag is JS `startPanelDrag` → `pip_move`); harmless but misleading to a future maintainer.
+- [src/pip/Pip.tsx:~270] `startPanelDrag` registers window listeners + preventDefault even on a zero-distance click; benign (mouseup always fires + cleans up) but the click-vs-drag boundary on the switch row is implicit — a comment would help.
+
+### Assessment
+Well-built, high-discipline work that generalizes one hardcoded layout into four without loosening any WP3 invariant (display-only, never-disagree palette, backend-owned source of truth, cost-gated serialize). The novel/risky surfaces (`pip_move` AppKit setFrameOrigin: drag, the `document.hidden && !pipNeedsMirror` gate) carry the empirical reasoning that makes them maintainable. Debt negligible — all 4 findings are comment/vestige drift, none affecting correctness. Advances the codebase.
+
+### If you disagree
+Dismiss any finding by marking its line above `[DISMISSED]` before finalize archives this WIP.
 
 ## Notes — carried-in code-quality findings (from WP3 review; formally WP5 scope)
 - `SURFACE-2026-06-26-QUALITY-WP3-UNSYNCED-FILMSTRIP-INTERVAL` (MAJOR, → WP5) — filmstrip

@@ -79,7 +79,7 @@ milestone: "Milestone 5 — Picture-in-picture"
 
 ---
 
-## WP4: PiP layout modes + persisted switcher + auto-resize
+## WP4: PiP layout modes + persisted switcher + auto-resize  ✅ SHIPPED 2026-06-26 (commit d38a191)
 
 **Description:** Add the other 3 layout modes on top of WP3's horizontal-mirror core, an on-panel control to switch between all 4, persistence of the chosen layout, and per-layout NSPanel auto-resize. The four layouts, richest → most minimal:
 1. **Horizontal mirror** (WP3's default) — live thumbnails in a row.
@@ -90,13 +90,16 @@ milestone: "Milestone 5 — Picture-in-picture"
 **Dependencies:** WP3 (the panel + one layout + the subscribe path exist to build on).
 **Size:** L
 **Tasks:**
-- [ ] Implement the vertical-mirror layout (reuses WP3's serialized mirrors; vertical flow).
-- [ ] Implement the compact layout (name + dot, vertical stack); when active, **stop the serialize loop** for the PiP (no mirrors rendered — same "stop the loop when not showing thumbnails" discipline as the filmstrip-collapse toggle).
-- [ ] Implement the minimal layout (dots only). **Design intent (operator, 2026-06-25): this is the "is anyone waiting on me?" glance for the all-instances-busy use case** — not merely the smallest mirror. The aggregate signal is what matters: *all running = quiet/ignore; any awaiting-input = pull my eye*. So the minimal view must **weight attention**, not render N equal-weight dots — make the AwaitingInput dot(s) pop (blue against a calm row of running-orange), and consider surfacing awaiting-input workspaces first/louder so "all busy" reads quiet and "needs me" reads loud. **Identification:** dots in the same persisted filmstrip order + a hover-tooltip showing the project name (so a bare dot is still resolvable to a project). *(Conceptual sibling of the M6 menu-bar aggregate dot — green=all idle / blue=any running / amber=any awaiting; keep the two coherent.)*
-- [ ] On-panel layout switcher: a small corner control (`[⋮]` click-to-cycle or a tiny menu) cycles/selects among the 4 layouts.
-- [ ] Persist the chosen layout (`pip_layout`) across toggles + launches, keyed per the bundle-identity isolation (thin layer in `config_store/`, like `default_drive_mode`). Default on first run: horizontal mirror.
-- [ ] **Auto-resize the NSPanel to each layout's dimensions on switch** — wide+short for horizontal mirror, narrow+tall for the two vertical modes, tiny for minimal dots. Each layout has sensible default dimensions; the panel reshapes on switch (use the WP1-confirmed window-resize path).
-- [ ] Confirm the M3 palette + the "never disagree with the filmstrip on a workspace's state" invariant holds across all 4 layouts.
+- [x] Implement the vertical-mirror layout (reuses WP3's serialized mirrors; vertical flow).
+- [x] Implement the compact layout (name + dot, vertical stack); when active, **stop the serialize loop** for the PiP (no mirrors rendered — same "stop the loop when not showing thumbnails" discipline as the filmstrip-collapse toggle).
+- [x] Implement the minimal layout (dots only). **Design intent (operator, 2026-06-25): this is the "is anyone waiting on me?" glance for the all-instances-busy use case** — not merely the smallest mirror. *Shipped:* `orderForAttention` sorts awaiting-input first (stable); awaiting dots POP via blink + glow (operator dropped the size-scale — blink alone reads cleaner with multiple dots); same M3 palette so the PiP never disagrees with the filmstrip; per-dot title tooltip resolves a bare dot to its project.
+- [x] On-panel layout switcher: a small corner control cycles/selects among the 4 layouts. *Shipped:* own-row switcher (not a corner overlay — avoided the dot overlap) with a per-layout SVG icon depicting the current layout.
+- [x] Persist the chosen layout (`pip_layout`) across toggles + launches, keyed per the bundle-identity isolation (thin layer in `config_store/`, like `default_drive_mode`). Default on first run: horizontal mirror.
+- [x] **Auto-resize the NSPanel to each layout's dimensions on switch.** *Shipped as content-driven* (operator rejected the static-size table): `computePanelSize(layout, count, screen)` — fixed filmstrip-size tile unit × N along the flow axis, 90%-screen cap then wrap; backend `pip_resize` applies it.
+- [x] Confirm the M3 palette + the "never disagree with the filmstrip on a workspace's state" invariant holds across all 4 layouts. *Shipped + bridge-verified across all 4 layouts + a live transition.*
+- [x] (operator-surfaced at Phase 5) PiP panel drag — `pip_move` (AppKit setFrameOrigin:) driven by a JS pointer tracker (data-tauri-drag-region/startDragging/setPosition all inert on the swizzled NonactivatingPanel; dropping `.borderless()` re-crashes per WP1).
+- [x] (operator-surfaced) Toggle button: "PiP" text → `PipIcon` SVG glyph.
+- [x] (operator-surfaced) PiP mirror no longer freezes while the main window is backgrounded — the `document.hidden` serialize gate now also checks `!pipNeedsMirror`.
 
 **WP3 → WP4 rationale:** one working layout + the subscribe/mirror path must exist before generalizing to four — the switcher, persistence, and auto-resize all wrap a proven render core rather than being designed speculatively around an unbuilt one. This also keeps the 4-layout UI work out of the same session as the NSPanel-mechanics + first-render work (WP3), which is the higher-risk integration.
 

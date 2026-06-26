@@ -1192,3 +1192,35 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Fix shape:** extract a `useTauriListen(event, handler)` helper that encapsulates the async-register + cancelled-guard + unlisten. Repo-wide (useWorkspaceStatus has the same shape) — a small cross-cutting refactor.
 - **Priority:** low
 - **Status:** pending
+
+# m5-wp4-pip-layout-modes-switcher-resize — 2026-06-26
+
+4 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `d38a191`. Reviewer verdict: well-built, high-discipline, negligible debt — all four are comment/vestige drift, none affecting correctness. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-26-QUALITY-WP4-PIPMOVE-COMMENT-INACCURATE
+- **Finding:** `pip_move`'s doc comment (src-tauri/src/pip/commands.rs) claims it uses "the same raw-msg_send path `set_content_size` uses safely" — but `set_content_size` (used by `pip_resize`) is a tauri-nspanel WRAPPER method, while `pip_move` uses a raw `msg_send!` on `panel.as_panel()`. Both are safe AppKit frame-mutations, but the stated equivalence is inaccurate.
+- **Why it matters:** the comment is load-bearing safety justification for an `unsafe` block; an inaccurate basis weakens it for a future auditor.
+- **Suggested action:** reword to "a safe AppKit frame-mutation like `set_content_size` (which wraps `setContentSize:`); here we send `setFrameOrigin:` directly" — distinguish wrapper vs raw.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-26-QUALITY-WP4-STALE-AWAITING-SCALE-COMMENT
+- **Finding:** pipFanoutWiring.test.ts (~line 211) comment says ".pip-tile-awaiting is the EMPHASIS hook (CSS scales + glows the dot)" — but the dot-size scale was DROPPED per operator feedback (P4.2 refinement); the shipped CSS adds only a glow halo, no transform.
+- **Why it matters:** contradicts shipped behavior + the corrected Pip.tsx/CSS comments; mild confabulation risk for the next reader.
+- **Suggested action:** update the test comment to "glows the dot (no size scale — operator dropped the scale, blink + glow only)".
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-26-QUALITY-WP4-VESTIGIAL-DRAG-REGION
+- **Finding:** `pip-root` + `.pip-switch-row` still carry `data-tauri-drag-region`, which the commit itself establishes is INERT on this swizzled borderless NonactivatingPanel (the real drag is the JS `startPanelDrag` → `pip_move`). The attributes are harmless but misleading.
+- **Why it matters:** a future maintainer could "fix" a drag bug by trusting the dead attribute — the exact confusion the Phase-5 work resolved.
+- **Suggested action:** remove the `data-tauri-drag-region` attributes (or leave one with a comment "// inert on NSPanel — see pip_move; kept only as documentation"). Decide remove-vs-annotate.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-26-QUALITY-WP4-DRAG-CLICK-BOUNDARY-IMPLICIT
+- **Finding:** `startPanelDrag` registers window mousemove/up listeners + calls preventDefault even on a zero-distance click (one that never moves); benign because mouseup always fires + cleans up, but the click-vs-drag arbitration on the switch row is implicit.
+- **Why it matters:** minor clarity; a reader can't tell at a glance why a click on the row's empty space is safe.
+- **Suggested action:** add a one-line comment at the listener registration noting "zero-distance click = no pip_move sent (dx==dy==0 guard); mouseup always cleans up".
+- **Priority:** low
+- **Status:** pending

@@ -65,6 +65,12 @@
 - **Priority:** low
 - **Status:** RESOLVED-IN-PLACE 2026-06-25 (the WP8 test uses the fs-read pattern; this entry is the durable note for the next person)
 
+## Code-quality findings — m5-wp4-pip-layout-modes-switcher-resize (2026-06-26)
+- **Pointer:** 4 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `d38a191`: (1) `pip_move`'s doc comment claims the "same raw-msg_send path `set_content_size` uses" but `set_content_size` is a tauri-nspanel wrapper, not raw msg_send — inaccurate safety basis for the `unsafe` block; (2) stale "CSS scales + glows the dot" comment in pipFanoutWiring.test.ts — the dot-size scale was dropped (P4.2), glow-only now; (3) vestigial `data-tauri-drag-region` on pip-root/.pip-switch-row — inert on this swizzled NSPanel (real drag is JS startPanelDrag→pip_move); (4) startPanelDrag's click-vs-drag boundary on the switch row is implicit (benign; a comment would help). Reviewer: well-built, high-discipline, negligible debt — all comment/vestige drift, no correctness impact; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp4-pip-layout-modes-switcher-resize — 2026-06-26`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** all four are one-line comment/attribute edits — a single trivial `/feature-refactor` pass (findings 1+2 reword comments; finding 3 remove-or-annotate the dead attribute; finding 4 add a clarifying comment). Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — qol-wp8-diff-viewer-polish (2026-06-25)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7385a61`: (1) the sticky-var ResizeObserver effect's `commitsCollapsed` dep is belt-and-suspenders (the observer already tracks the parent `.diff-commits` height) — comment slightly overstates it as load-bearing; (2) a one-word copy-edit slip in the `.diff-commits` comment ("at the top:0 of"); (3) the `--diff-commits-h: 2rem` first-paint fallback is undocumented-coupled to `.diff-commits-header`'s height. Reviewer: well-built, tightly-scoped, right mechanism (measured CSS var + ResizeObserver), no debt — no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp8-diff-viewer-polish — 2026-06-25`.
 - **Priority:** low (all)
