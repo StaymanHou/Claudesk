@@ -61,19 +61,19 @@ milestone: "Milestone 5 — Picture-in-picture"
 
 ---
 
-## WP3: PiP NSPanel + status-subscribe core (one default layout)
+## WP3: PiP NSPanel + status-subscribe core (one default layout)  ✅ SHIPPED 2026-06-26 (commit 95292d6)
 
 **Description:** Build the real PiP panel shell + its status plumbing, rendering **one** default layout (horizontal mirror — the filmstrip-like row). A `tauri-nspanel` webview that subscribes to the M3 `workspace-status` broadcast and renders one tile per open workspace (project name + idle/running/awaiting-input dot + the live ~1 fps `serializeAsHTML()` mirror). **Display-only:** clicking a tile does NOT promote a workspace (arch §B.3 + vision anti-goal "Not PiP click-to-focus in v1"). The 4-layout switcher is WP4 — WP3 proves "PiP works, one layout, all N live."
 **Milestone:** M5
 **Dependencies:** WP1 (NSPanel API confirmed). Reuses M3 broadcaster + M4 filmstrip-rendering code.
 **Size:** M
 **Tasks:**
-- [ ] Create the PiP panel module (`src-tauri/src/pip/` or fold into the existing window-management seam) using the WP1-confirmed `PanelBuilder` + collection-behavior call; load a dedicated PiP frontend route/entry into the NSPanel webview.
-- [ ] PiP frontend: `listen("workspace-status")` and render the horizontal-mirror tile row (reuse the filmstrip's tile component + the M3 honest dot palette — Running orange `#d97757`, AwaitingInput blue `#539bf5`, Idle, Unknown — so the two surfaces never disagree).
-- [ ] **Roster rule — PiP diverges from the filmstrip ON PURPOSE: mirror ALL N workspaces live, INCLUDING the center-staged one (no static active-marked tile).** Rationale (operator intent, 2026-06-25): the filmstrip makes the center-staged tile static because it's redundant *with the visible center stage in the same window*; the PiP is the surface you watch *when Claudesk is out of focus*, so the center-staged workspace is just another invisible project and its live state matters as much as any other. A static tile here would blind the user to the project they were most recently working on. **Do NOT "fix" this to match the filmstrip's static-center-tile behavior — the divergence is the intent.**
-- [ ] Wire the live ~1 fps mirror: the PiP subscribes to the SAME serialized-buffer source the filmstrip uses (decide cleanly — share the serialize output rather than running a second serialize loop per workspace; the M4 active-CPU p95 caveat means a second independent loop is the wrong call). Document the chosen fan-out. Note: because PiP mirrors the center-staged workspace too (which the filmstrip does NOT serialize), confirm the center-staged workspace's buffer is serialized for the PiP — this is the one extra mirror the filmstrip didn't need.
-- [ ] Enforce display-only: no click-to-promote handler; clicking a PiP tile is inert (the user switches back to Claudesk via ⌘Tab / Mission Control / Dock).
-- [ ] Snake_case DTO + the existing subscribe pattern; no new state source (status comes only from the M3 broadcaster — never PTY scraping).
+- [x] Create the PiP panel module (`src-tauri/src/pip/` — promoted from the WP1 `pip_probe` seed, PanelBuilder contract verbatim) using the WP1-confirmed `PanelBuilder` + collection-behavior call; load a dedicated PiP frontend route/entry (`pip.html` + `src/pip/main.tsx`, Vite multi-entry) into the NSPanel webview.
+- [x] PiP frontend: `listen("workspace-status")` and render the horizontal-mirror tile row (reuses `WorkspaceStatusIndicator` + the M3 honest dot palette — Running orange `#d97757`, AwaitingInput blue `#539bf5`, Idle, Unknown — copied into pip.css so the two surfaces never disagree).
+- [x] **Roster rule — PiP diverges from the filmstrip ON PURPOSE: mirror ALL N workspaces live, INCLUDING the center-staged one (no static active-marked tile).** `derivePipFrame` drops nothing; verified live (ws-3 center-staged shows a live mirror). **Do NOT "fix" this to match the filmstrip's static-center-tile behavior — the divergence is the intent.**
+- [x] Wire the live ~1 fps mirror: SHARED serialize — one App-level `useMirrorTicker` is the sole `serializeTerminal` caller, writing a `mirrorFrame` the filmstrip now READS; the PiP gets the same snapshot via a `pip-mirror` emit. NO second serialize loop. The center-staged workspace's one-extra serialize + the emit are gated on PiP-shown (backend `pip-visibility` broadcast). Fan-out documented in pipFrame.ts / mirrorFrame.ts / useMirrorTicker.ts.
+- [x] Enforce display-only: PiP tile is a plain `<div>`, no click-to-promote handler; verified inert (clicking a PiP tile left main center-stage unchanged).
+- [x] Snake_case DTO + the existing subscribe pattern; no new state source (status comes only from the M3 broadcaster — never PTY scraping).
 
 **WP1 → WP3 rationale:** the NSPanel API shape + collection-behavior flags are the riskiest unknown (single-maintainer crate, raw AppKit flags, dev-vs-installed parity). Proving the bare panel works before pouring the live-mirror content in means a render/subscribe bug and a window-mechanics bug never tangle in the same debugging session.
 

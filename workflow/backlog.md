@@ -761,3 +761,9 @@ forward — none M5-blocking). No escalations. -->
 - **Suggested action:** a dedicated `/feature-refactor` (or `/task`) pass: run `pnpm format` tree-wide once to normalize, and loosen the fileTreeGitRollup `?raw` regex to tolerate prettier's wrapping (match on the call + deps tokens, not whitespace shape). Commit as a pure formatting normalization.
 - **Priority:** low
 - **Status:** pending
+
+## Code-quality findings — m5-wp3-pip-nspanel-status-core (2026-06-26)
+- **Pointer:** 2 MAJOR + 3 MINOR (0 CRITICAL) from `feature-review-quality` on ship commit `95292d6`. The 2 MAJOR are latent desyncs that the **M5 WP5 lifecycle work will trip over** (not bugs at the WP3 baseline): (1) the filmstrip keeps a SECOND unsynchronized 1fps DOM-write interval alongside the App-level serialize ticker (phase drift / up-to-1s stale reads); (2) `pip::teardown()` skips the `pip-visibility false` broadcast, so the cost gate desyncs once a non-toggle close path exists. 3 MINORs: duplicated `MIRROR_INTERVAL_MS` literal, un-diffed full-frame `pip-mirror` emit, 5× duplicated `listen().then()` boilerplate (→ `useTauriListen` helper). Full entries in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp3-pip-nspanel-status-core — 2026-06-26`.
+- **Priority:** medium (2 MAJOR), low (3 MINOR)
+- **Status:** pending
+- **Pickup shape:** fold the 2 MAJOR into **M5 WP5** planning (they ARE the lifecycle/cost-gate concerns WP5 owns — the reviewer's explicit recommendation: WP5 scope, not a standalone refactor). The 3 MINORs ride a future `/feature-refactor` batch (the `useTauriListen` extraction is repo-wide — useWorkspaceStatus shares the shape). Dismiss any via the WIP's `## Code-Quality Review` section.

@@ -1153,3 +1153,42 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Fix shape:** reword the recipe's wait-token to the real stdout line (`"WebSocket server listening on"`), or note that `LISTEN` requires `lsof -iTCP:9223 -sTCP:LISTEN` rather than a stdout grep. One-line doc edit.
 - **Priority:** low
 - **Status:** RESOLVED 2026-06-26 (M5 WP3 P1.5) — wbs.md recipe step 1 now waits for `"WebSocket server listening on: 127.0.0.1:9223"` with a note that `LISTEN` is an lsof/netstat artifact, not a stdout token.
+
+# m5-wp3-pip-nspanel-status-core — 2026-06-26
+
+2 MAJOR + 3 MINOR findings (0 CRITICAL) from `feature-review-quality` on ship commit `95292d6`. Reviewer verdict: well-built, advances the codebase more than it accrues debt; the 2 MAJOR are NOT bugs at the shipped baseline (both benign on WP3's only lifecycle path) but are latent desyncs the **M5 WP5 lifecycle work will trip over** — carry into WP5 scope, not a standalone refactor. Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-26-QUALITY-WP3-UNSYNCED-FILMSTRIP-INTERVAL
+- **Finding:** The filmstrip retains its OWN `setInterval(1000)` DOM-write loop (Filmstrip.tsx ~199-212), unsynchronized with the App-level `useMirrorTicker` serialize loop (also 1000ms). The two intervals start at different times and drift in phase, so the filmstrip can read a `mirrorFrame` snapshot up to ~1s stale relative to the serialize. "Exactly ONE serialize ticker" holds for *serialize*, but the codebase now has two unsynced 1fps intervals doing mirror work.
+- **Where:** `src/components/workspace/Filmstrip.tsx` mirror useEffect (~199-212) vs `src/components/workspace/useMirrorTicker.ts` interval.
+- **Fix shape:** have `useMirrorTicker` push directly into the filmstrip's mirror refs (as it already conceptually does for the PiP via emit), eliminating the filmstrip's second interval — OR phase-lock them. Defer to WP5 (lifecycle/cost work) so the render-cost story is consolidated there.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-26-QUALITY-WP3-TEARDOWN-SKIPS-VISIBILITY-BROADCAST
+- **Finding:** `pip::commands::teardown()` (called from lib.rs CloseRequested) closes the panel but does NOT emit `pip-visibility false`, so `useMirrorTicker.pipShown` stays `true` after a programmatic teardown — the ticker keeps serializing the full N set (incl. center stage) + attempting `pip-mirror` emits to a dead label. Harmless on app-close (the only current teardown path), but a latent cost-gate desync the moment a non-toggle close path is added.
+- **Where:** `src-tauri/src/pip/commands.rs` `teardown()`; `src-tauri/src/lib.rs` CloseRequested handler.
+- **Fix shape:** emit `pip-visibility false` in `teardown()` (or wherever WP5 adds a programmatic hide/close), so the cost gate stays honest. Natural WP5 scope (WP5 builds the toggle + lifecycle).
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-26-QUALITY-WP3-DUP-MIRROR-INTERVAL-CONST
+- **Finding:** `MIRROR_INTERVAL_MS = 1000` is duplicated as a module literal in both `Filmstrip.tsx` and `useMirrorTicker.ts`. The rate is meant to be shared ("the WP4-probe-validated background mirror rate"); two independent literals can drift on a future tuning change.
+- **Where:** `src/components/workspace/Filmstrip.tsx:34`, `src/components/workspace/useMirrorTicker.ts:~39`.
+- **Fix shape:** export one shared const (e.g. from mirrorFrame.ts or mirrorTicker.ts) and import in both. Likely subsumed by the unsynced-interval fix above.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-26-QUALITY-WP3-UNDIFFED-MIRROR-EMIT
+- **Finding:** The `pip-mirror` emit sends `mirrorFrameSnapshot()` — the full serialized HTML for every needed workspace — every tick while shown, no per-tile diffing. Correct at dogfood N; worth a comment noting it's intentionally un-diffed.
+- **Where:** `src/components/workspace/useMirrorTicker.ts` (~130, the emit).
+- **Fix shape:** add `// full-frame each tick — no diff; revisit if N grows` (WP4/WP5 scaling territory). Optionally diff if N grows.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-26-QUALITY-WP3-LISTEN-BOILERPLATE-DUP
+- **Finding:** The `listen(...).then(...)` + `cancelled`/`unlisten` async-unlisten boilerplate is copy-pasted 5× across Pip.tsx (×3), usePipFanout, and useMirrorTicker. Correct and consistently applied, but wide enough to name.
+- **Where:** `src/pip/Pip.tsx` (3 effects), `src/pip/usePipFanout.ts`, `src/components/workspace/useMirrorTicker.ts`.
+- **Fix shape:** extract a `useTauriListen(event, handler)` helper that encapsulates the async-register + cancelled-guard + unlisten. Repo-wide (useWorkspaceStatus has the same shape) — a small cross-cutting refactor.
+- **Priority:** low
+- **Status:** pending

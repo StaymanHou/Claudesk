@@ -1,9 +1,15 @@
 # Feature: M5 WP3 — PiP NSPanel + status-subscribe core (one default layout)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-26 (shipped 95292d6)
 **Created:** 2026-06-26
 **drive_mode:** autopilot
+
+## Retrospect
+- **What changed in our understanding:** The PiP is a *separate webview with its own JS heap* — so the real design problem wasn't rendering, it was the **fan-out**: status was already free (the M3 backend `app.emit` broadcasts to all webviews incl. the NSPanel), but roster + serialized-mirror are main-webview-resident and had to be forwarded over Tauri events (`pip-frame`/`pip-mirror`). The cleanest "no second serialize loop" answer turned out to be a single App-level ticker + a shared `mirrorFrame` read-store that the filmstrip was refactored to consume. The WP2 MCP bridge let the agent drive the ENTIRE verify-self live (incl. `windowId:'pip'`) — no operator hand-off for the visual/DOM/interaction checks, which is new this milestone.
+- **Assumptions that held:** WP1's PanelBuilder contract was reusable verbatim (zero window-mechanics debugging this WP — the probe-first sequencing paid off exactly as the WBS rationale predicted). Status broadcast reaching the PiP "for free" held. The bridge reaching the `pip` window (WP2 caveat (c)) held.
+- **Assumptions that were wrong:** None major. Minor: I initially planned `mirror_html` to ride the `pip-frame` event; splitting it onto a separate `pip-mirror` (high-freq) vs `pip-frame` (low-freq roster) was a cleaner call made during build. The latest-ref pattern needed an effect (not a render-time write) per eslint react-hooks/refs.
+- **Approach delta:** Matched the plan's 3-phase shape. Two off-plan touches: (1) added a backend `pip-visibility` broadcast as the cost-gate signal (not foreseen at plan time — the PiP-shown signal had to come from somewhere; the backend owns visibility); (2) caught + reverted pre-existing repo-wide prettier/cargo-fmt drift that an over-broad format sweep pulled in (logged to backlog, NOT WP3 work).
 
 ## Problem Statement
 
@@ -65,16 +71,44 @@ Build the real Picture-in-Picture (PiP) NSPanel — the out-of-focus status surf
   - [x] verify-codify  <!-- status: done — +9 mirrorFrameSharing + extended pip mirror/display-only/single-loop guards; 622 frontend pass -->>
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ALL 3 PHASES COMPLETE (Phase 1 rename+entry, Phase 2 status surface, Phase 3 live mirror — each through build→auto→self→human→codify). Ready to ship.
+- **Path:** Feature > finalize
+- **Active scope:** SHIPPED (95292d6) + code-quality review done (0 CRITICAL, 2 MAJOR + 3 MINOR all auto-backlogged per Mode 3 — 2 MAJOR carried to M5 WP5 scope, 3 MINOR to a refactor batch). Ready for finalize.
 - **Blocked:** none
-- **Unvisited:** ship → review-quality → finalize
-- **Open discoveries:** none
+- **Unvisited:** finalize
+- **Open discoveries:** [SURFACED-2026-06-26] prettier/cargo-fmt repo drift + brittle ?raw regex test → backlog (low), NOT WP3.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
 - [SURFACED-2026-06-26] ship — pre-existing prettier drift across ~21 src files (committed without prettier; a broad `prettier --write src/**` reformats them) + a brittle `?raw` regex test (fileTreeGitRollup.test.ts expects a near-single-line `useMemo(...)` that prettier multi-line-wraps). Reverted the out-of-scope reformats this WP; logged to backlog (low). NOT WP3 work.
+
+## Code-Quality Review — m5-wp3-pip-nspanel-status-core
+
+### Strengths
+- Single-serialize-loop lift (`useMirrorTicker` as the sole `serializeTerminal` caller, `mirrorFrame` as shared read-store) is the right architecture; the filmstrip cleanly degrades to a reader.
+- `computeMirrorSet` extracted pure with an exhaustive vitest matrix (expanded/collapsed × shown/hidden + Set-dedup).
+- Backend owns PiP visibility via the `pip-visibility` broadcast (single source of truth), not a frontend guess.
+- Probe→real promotion preserves the WP1-verified PanelBuilder contract verbatim with the full "why" carried in comments.
+- Display-only enforced structurally (plain `<div>`, no handler) AND guarded by a `?raw` test — vision anti-goal defended against regression.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [Filmstrip.tsx ~199-212] The filmstrip retains its OWN `setInterval(1000)` DOM-write loop, unsynchronized with the App-level `useMirrorTicker` serialize loop (also 1000ms) — they drift in phase, so the filmstrip can read a `mirrorFrame` snapshot up to ~1s stale. "Exactly ONE serialize ticker" is true for *serialize* but there are two unsynced 1fps intervals. → AUTO-BACKLOGGED (Mode 3). WP5-scope (could push into filmstrip refs directly, as it already does for the PiP).
+- [pip/commands.rs teardown / lib.rs CloseRequested] `teardown()` does NOT emit `pip-visibility false`, so `useMirrorTicker.pipShown` stays `true` after a programmatic teardown → ticker keeps serializing + emitting to a dead label. Harmless on app-close (only current path); a latent cost-gate desync the moment WP5 adds a non-toggle close path. → AUTO-BACKLOGGED (Mode 3). WP5-scope.
+
+**MINOR**
+- [Filmstrip.tsx:34] `MIRROR_INTERVAL_MS` duplicated as a literal in both Filmstrip.tsx and useMirrorTicker.ts (both 1000) — a shared exported const would keep them provably equal. → AUTO-BACKLOGGED (low).
+- [useMirrorTicker.ts ~130] `pip-mirror` emits the full snapshot every tick (no per-tile diff) — correct, but worth a `// full-frame each tick — no diff; revisit if N grows` note. → AUTO-BACKLOGGED (low).
+- [Pip.tsx + usePipFanout + useMirrorTicker] The `listen(...).then(...)` + `cancelled`/`unlisten` boilerplate is copy-pasted 5×; a `useTauriListen` helper would remove the repeated async-unlisten footgun. → AUTO-BACKLOGGED (low).
+
+### Assessment
+Well-built; advances the codebase more than it accrues debt. The hard part (fanning roster + mirror across a separate-heap NSPanel webview without a second serialize loop) is solved with a clean pure-core/wiring split matching the repo posture. Vision invariants enforced structurally + test-guarded. The 2 MAJOR findings are NOT bugs at the shipped baseline (both benign on WP3's only lifecycle path) but are latent desyncs the WP5 lifecycle work will trip over — carried into WP5 scope, not a standalone refactor.
+
+### If you disagree
+Dismiss any finding by editing this section + marking the line `[DISMISSED]` before finalize archives the WIP.
 
 ## Design notes (carried into build)
 
