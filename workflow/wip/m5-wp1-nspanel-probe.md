@@ -4,7 +4,7 @@
 **State:** plan (complete)
 **Created:** 2026-06-25
 **drive_mode:** autopilot
-**State:** verify-codify (all phases complete) — VERDICT: GO
+**State:** ship (complete) — VERDICT: GO, committed 10a49cc
 **Type:** probe (deliverable is a GO/NO-GO knowledge note, not production code)
 **WBS ref:** `docs/product/wbs.md` → M5 WP1
 
@@ -62,6 +62,30 @@ No 3rd-party network API — `tauri-nspanel` is a compile-time Rust crate; this 
 - [BLOCKING-FIX-2026-06-25 #1] P1.verify-human.1 — First verify-human attempt: clicking "PiP?" made the MAIN Claudesk window VANISH (no dock icon, no on-screen window; process stayed alive) and NO panel appeared. **Root cause:** the builder's `.no_activate(true)` flips the whole app's `NSApplicationActivationPolicy` to `Prohibited` during `build()` (confirmed by source read of build() lines 817-928) — on this single-window app that hid the main window; the `data:` URL panel content also rendered blank under the app CSP. **Fix:** dropped `.no_activate(true)` + replaced the `data:` URL with bundled `public/pip-probe.html` via `WebviewUrl::App`.
 - [BLOCKING-FIX-2026-06-25 #4] P1.verify-human.4 + chrome + teardown — Third attempt's fix FAILED on re-test (operator): focus STILL jumped to Claudesk; AND `decorations(false)` left the panel with no titlebar (can't drag/close); AND the panel ORPHANED on screen after the main window closed. Root insight (from a research dive into tauri-nspanel issues #19/#22 + the maintainer's shipping menubar example): (a) `can_become_key_window:false`/`becomes_key_only_if_needed` do NOT stop click-ACTIVATION — only the `NonactivatingPanel` STYLE MASK does; (b) the `setStyleMask:` NSRangeException crash happens ONLY on a Titled→borderless transition, so the maintainer's documented fix (#19) is to create the window ALREADY borderless+transparent via `.with_window(...)` BEFORE conversion, after which `set_style_mask(borderless|nonactivating_panel)` is crash-free; (c) borderless needs `.movable_by_window_background(true)` for drag; (d) teardown MUST be `panel.to_window()→window.close()` (un-swizzles first) — closing the live panel is the UAF abort (#22). **Fix (applied, compiles):** restored `.style_mask(borderless().nonactivating_panel())` now that `.with_window(|wb| wb.decorations(false).transparent(true).skip_taskbar(true))` makes it crash-safe; added `.movable_by_window_background(true)`; panel class now `can_become_key_window:false`+`is_floating_panel:true`+`hides_on_deactivate:false`; added `pip_probe::commands::teardown()` to lib.rs `CloseRequested`. This fix is GROUNDED in the maintainer's documented pattern + shipping example, NOT a guess like the prior three. Awaiting operator re-test (#4 focus + drag + close-doesn't-orphan + no crash).
 - [BLOCKING-FIX-2026-06-25 #3 — superseded by #4] P1.verify-human.4 + close-button — Third attempt: panel showed fine but (a) clicking the panel ACTIVATED Claudesk (focus-steal — verify-human #4 FAIL), and (b) clicking the panel's X close button CRASHED the app: `fatal runtime error: Rust cannot catch foreign exceptions, aborting` (a released-NSPanel use-after-free — the panel is `released_when_closed` by default, so closing it dealloc'd the NSPanel while Tauri/webview still held it). **Root cause of (a):** `can_become_key_window:false` alone does NOT prevent app activation on click — that needs `NonactivatingPanel`, which we can't set post-attach (crash #2). **Fix (applied, compiles):** (i) added `becomes_key_only_if_needed:true` to the panel CLASS config (crash-free class-level override — suppresses key-window-on-click → no activation); (ii) made the window BORDERLESS via `.with_window(|wb| wb.decorations(false).closable(false).minimizable(false))` — set BEFORE the webview attaches (the only safe place for chrome changes), which removes the titlebar (no click-to-activate target) AND the X button (kills the close-crash); (iii) `released_when_closed(false)` as belt-and-braces against the UAF. Awaiting operator re-test of #4 + close. `*** Terminating app due to uncaught exception 'NSRangeException', reason: 'Cannot remove an observer <WKWindowVisibilityObserver> for the key path "contentLayoutRect" from <PipProbePanel> because it is not registered as an observer.'` Crash stack: `pip_probe_toggle` → `PanelBuilder::build` → `PipProbePanel::set_style_mask` → `-[NSWindow setStyleMask:]` → AppKit detaches/reattaches the content view → WebKit's `WKWindowVisibilityObserver` KVO teardown on an unregistered observer. **Root cause:** the builder applies `.style_mask(...)` via a POST-build `setStyleMask:` on a window that ALREADY has a WKWebView attached — mutating an attached-WKWebView NSPanel's style mask is unsafe and crashes. **Fix (applied, compiles):** dropped `.style_mask(...)` ENTIRELY. The crate's `from_window` swizzles the NSWindow class to the panel class (which sets `can_become_key_window:false`) but never sets a style mask itself, so there's nothing to crash on. Non-activation is FULLY covered by `can_become_key_window:false`; the style mask only added borderless/HUD cosmetics, irrelevant to the behavioral probe. **WP3 constraint: never call `.style_mask(...)`/`set_style_mask` on a panel whose webview is attached — establish any needed mask before attach, or live without it.** Awaiting operator re-test.
+
+## Code-Quality Review — m5-wp1-nspanel-probe (2026-06-25, ship commit 10a49cc)
+
+Reviewer (code-quality-reviewer subagent): **0 CRITICAL, 0 MAJOR, 2 MINOR.** Probe-scope calibration applied correctly.
+
+### Strengths
+- Crash-path avoidances documented at the site they govern, each tied to the verify-human failure that earned it (the highest-value probe output).
+- Teardown correct + defensive: no-op if never built, the only UAF-safe `to_window()→close()` path, fired from `CloseRequested` so the all-Spaces panel can't orphan.
+- Git dep pinned to a concrete commit SHA in `Cargo.lock` despite `branch=v2.1` — reproducible seed.
+- Class-level behavior overrides chosen over post-build setters (avoids the setter-transition crash class).
+- Cleanly isolated: one `mod`, one command, one temp button; no entanglement with M3/M4 surfaces.
+
+### Issues
+**CRITICAL** — none
+**MAJOR** — none
+**MINOR** (both ADDRESSED IN-PLACE this pass — doc-only, in the kept WP3 seed, so fixing now prevents a WP3 foot-gun rather than deferring):
+- [ADDRESSED] `pip_probe/mod.rs:14` docstring still claimed `no_activate(true)` was the non-activation mechanism — the exact API the probe concluded is FORBIDDEN, in the file a WP3 author reads first. Rewrote the docstring to name the `NonactivatingPanel` style mask + an explicit "do NOT use `.no_activate(true)`" warning.
+- [ADDRESSED] "over-fullscreen" still advertised in the panel content (`public/pip-probe.html`) + mod docs though the requirement was dropped. Removed from the content caption; mod doc now notes `full_screen_auxiliary` is set-but-not-a-validated-need.
+
+### Assessment
+Well-executed probe — converts four AppKit crash/failure modes into durable co-located constraints, correctly-scoped + correctly-torn-down throwaway, pinned risky dep. Only debt was doc-drift within the kept seed (the top-of-file summary naming the forbidden API); fixed in-place since the seed is designed to be re-read at WP3. Executable code is correct and safe.
+
+### If you disagree
+Operator: dismiss any finding by editing this section + marking `[DISMISSED]` before finalize archives the WIP.
 
 ## Probe verdict (preliminary — finalized at verify-codify after operator AppKit checks)
 

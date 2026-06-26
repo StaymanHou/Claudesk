@@ -1,19 +1,22 @@
 //! M5 WP1 — THROWAWAY NSPanel probe.
 //!
 //! This module is a temporary probe scaffold, NOT production code. Its sole
-//! purpose is to prove `tauri-nspanel` v2.1 can create the always-on-top,
-//! all-Spaces, over-fullscreen, non-activating NSPanel the M5 PiP needs — and
-//! to surface the exact working API shape so WP3 builds against confirmed calls.
+//! purpose was to prove `tauri-nspanel` v2.1 can create the always-on-top,
+//! all-Spaces, non-activating NSPanel the M5 PiP needs — and to surface the
+//! exact working API shape so WP3 builds against confirmed calls. **VERDICT: GO.**
 //!
-//! The probe verdict (GO/NO-GO + API shape) is recorded in
-//! `docs/product/wbs.md` → "Probe outcomes" at verify-codify. On GO this module
-//! becomes the seed for WP3's real `pip` module; on NO-GO it is torn down.
+//! The full verdict + the WP3 must-follow constraints are in `docs/product/wbs.md`
+//! → "Probe outcomes". On GO this module is the seed for WP3's real `pip` module.
 //!
-//! Behaviors this panel asserts (verified manually at verify-human — they are
-//! AppKit-level and not agent-observable in a plain browser):
-//!   - `no_activate(true)` + NonactivatingPanel style → click never steals focus
-//!   - `PanelLevel::Floating` → floats above normal windows
-//!   - `CollectionBehavior { can_join_all_spaces, full_screen_auxiliary,
-//!     stationary }` → visible on every Space, draws over fullscreen apps, pinned
+//! Behaviors this panel asserts (verified live at verify-human — AppKit-level,
+//! not agent-observable in a plain browser):
+//!   - **non-activating** (a click never steals focus) → the `NonactivatingPanel`
+//!     STYLE MASK on a born-borderless window. NOTE: do NOT use `.no_activate(true)`
+//!     — it flips the global activation policy and hides the main window; the probe
+//!     proved the style mask is the correct lever (see `commands.rs`).
+//!   - `PanelLevel::Floating` → floats above normal windows.
+//!   - `CollectionBehavior { can_join_all_spaces, stationary }` → visible on every
+//!     Space, pinned. (`full_screen_auxiliary` is also set but over-fullscreen draw
+//!     was DROPPED as a requirement — the flag is harmless, not a validated need.)
 
 pub mod commands;
