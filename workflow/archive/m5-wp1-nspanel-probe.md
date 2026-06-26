@@ -1,10 +1,10 @@
 # Feature: M5 WP1 — Probe: `tauri-nspanel` NSPanel mechanics
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** finalize (complete) — VERDICT: GO, shipped 10a49cc + review fixes f2ad4e5
 **Created:** 2026-06-25
+**Completed:** 2026-06-25
 **drive_mode:** autopilot
-**State:** ship (complete) — VERDICT: GO, committed 10a49cc
 **Type:** probe (deliverable is a GO/NO-GO knowledge note, not production code)
 **WBS ref:** `docs/product/wbs.md` → M5 WP1
 
@@ -49,8 +49,8 @@ No 3rd-party network API — `tauri-nspanel` is a compile-time Rust crate; this 
   
 
 ## Current Node
-- **Path:** Feature > Phase 1 > COMPLETE (all phases done)
-- **Active scope:** none — WP1 probe complete (GO). Ready for /feature-ship.
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** none — WP1 probe shipped (10a49cc) + review-quality done (0C/0M/2 MINOR, both fixed in-place f2ad4e5). Ready for /feature-finalize.
 - **Blocked:** none
 - **Blocked:** none
 - **Unvisited:** verify-auto → verify-self → verify-human (operator drives the AppKit-behavior checks on dev + installed .app) → verify-codify (write the GO/NO-GO note to wbs.md + teardown decision)
@@ -118,3 +118,12 @@ Operator: dismiss any finding by editing this section + marking `[DISMISSED]` be
 - **Bus-factor / pin:** single-maintainer, pinned to a branch (not a tag). Monitor `tauri-apps/tauri#13034` for first-party NSPanel; migrate when it lands.
 
 **Teardown decision (pending verify-human):** if GO confirmed → keep `pip_probe/` as the WP3 seed; remove only the temporary "PiP?" button + `pip_probe_toggle` registration noise as WP3 replaces them. If NO-GO → full teardown.
+
+## Retrospect
+- **What changed in our understanding:** The probe assumed (from arch §B.3 + the WP1 research) that `tauri-nspanel`'s builder flags map cleanly to the AppKit behaviors. Reality: the **order and timing** of AppKit calls is the load-bearing part the docs gloss over. Three crash/failure modes only surfaced at live verify-human — none were visible in compile/static checks: (1) `.no_activate(true)` flips the GLOBAL activation policy and hides the main window; (2) the `NonactivatingPanel` style mask crashes (`NSRangeException`) if set on a window that transitions titled→borderless post-webview-attach; (3) closing the live panel is a use-after-free abort. Each is a *usage* gotcha, not a crate defect — exactly the kind of knowledge a probe exists to extract.
+- **Assumptions that held:** the crate IS viable (GO); it compiles against Tauri 2.11.2 (not the assumed 2.9.x) with no incompatibility; no raw `objc2` fallback needed; no code-signing entitlement for local dev.
+- **Assumptions that were wrong:** (a) "agent slice green ⇒ low risk" — the static slice (compile/type/lint) passed on the very first build, yet THREE live crashes followed; for AppKit-window features the static slice proves almost nothing about behavior. (b) `can_become_key_window:false` would suffice for non-activation — it does not; only the style mask does. (c) My first live root-cause ("session died → stuck Running") during the digression was WRONG — a `pgrep` filtering artifact; the operator caught it.
+- **Approach delta:** The plan was a clean single build→verify pass. Actual: **four** build→verify-human back-loops (no_activate hides window → data-URL blank → setStyleMask crash → focus-still-jumps + close-crash → finally borderless+NonactivatingPanel). The turning point was stopping the incremental guessing and dispatching a focused research agent against the crate's issues (#19/#22) + the maintainer's shipping example — which gave the documented fix in one shot. Lesson reinforced: when a behavioral fix is handed back ≥2× untested, stop guessing and get grounded evidence (here: the maintainer's own working code) before the next attempt.
+
+## Closure
+**Feature complete:** M5 WP1 (the `tauri-nspanel` NSPanel-mechanics probe) shipped — verdict **GO**. `tauri-nspanel` v2.1 is confirmed viable for the M5 Picture-in-picture panel, with five hard-won WP3 must-follow constraints recorded in `docs/product/wbs.md` → "Probe outcomes". The throwaway probe (toggle a borderless floating panel via the "PiP?" button in the right-panel tab row) is kept as the WP3 seed. Requester = operator — closure notice for self-record.

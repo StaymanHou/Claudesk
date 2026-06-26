@@ -24,7 +24,7 @@ milestone: "Milestone 5 — Picture-in-picture"
 
 ---
 
-## WP1: Probe — `tauri-nspanel` NSPanel mechanics on macOS / Tauri 2.9
+## WP1: Probe — `tauri-nspanel` NSPanel mechanics on macOS / Tauri 2.9  ✅ SHIPPED 2026-06-25 (commit 10a49cc; review fixes f2ad4e5)
 
 **Type:** probe
 **Milestone:** M5 (must precede WP3/WP4 — the build WPs depend on this knowledge)
@@ -34,12 +34,12 @@ milestone: "Milestone 5 — Picture-in-picture"
 **Timebox:** half-day
 **Success criterion:** A one-paragraph note in this file (under "Probe outcomes") recording: (a) the working `PanelBuilder` call with `no_activate(true)` + `PanelLevel::Floating` + the collection-behavior flag set (`CanJoinAllSpaces | FullScreenAuxiliary | Stationary`) — or, if the high-level builder doesn't expose them, the raw `objc2` `NSWindow.setCollectionBehavior(...)` path that does; (b) confirmation the panel survives a Space switch + draws over a fullscreen app + does NOT steal focus on click; (c) any entitlement / signing requirement (expected: none for unsigned local builds, but verified); (d) GO/NO-GO for `tauri-nspanel` v2.1 vs. a fallback (raw `NSWindow` via `objc2`), with the pin/monitor note for `tauri-apps/tauri#13034`.
 **Tasks:**
-- [ ] Add `tauri-nspanel` v2.1 to `src-tauri/Cargo.toml`; stand up a bare empty NSPanel toggled by a temporary command (no real content yet).
-- [ ] Apply `no_activate(true)` + `PanelLevel::Floating` + the three collection-behavior flags; verify each behavior manually: all-Spaces, over-fullscreen, no-focus-steal-on-click, survives Claudesk losing focus / minimizing.
-- [ ] Confirm it works in BOTH `pnpm tauri:dev` AND a freshly-built installed `.app` launched from Finder/Dock (the installed-build-smoke-test convention — NSPanel is window/AppKit-level, exactly the dev-vs-installed parity class).
-- [ ] Verify dev/prod isolation holds (the dev panel is the dev identity's; no cross-talk with an installed prod build running concurrently).
-- [ ] Write the outcome note (GO/NO-GO + API shape + the fallback path if NO-GO).
-- [ ] Tear down the throwaway toggle command (or keep it as the WP3 seed if GO).
+- [x] Add `tauri-nspanel` v2.1 to `src-tauri/Cargo.toml`; stand up a bare empty NSPanel toggled by a temporary command (no real content yet).
+- [x] Apply `PanelLevel::Floating` + collection-behavior flags; verify each behavior manually: all-Spaces ✓, no-focus-steal-on-click ✓, survives focus-loss ✓. *(NOT `no_activate(true)` — the probe proved it's destructive; non-activation is the `NonactivatingPanel` style mask. Over-fullscreen DROPPED by operator — not a requirement.)*
+- [~] Confirm it works in BOTH `pnpm tauri:dev` AND a freshly-built installed `.app` — **dev verified ✓; installed-`.app` parity DEFERRED → WP6** (re-verifying on the throwaway probe added no signal; the real PiP gets the installed smoke test at milestone-exit).
+- [~] Verify dev/prod isolation holds — **DEFERRED → WP6** (same rationale; tied to the installed-`.app` check).
+- [x] Write the outcome note (GO/NO-GO + API shape + the fallback path if NO-GO) — done, in "Probe outcomes" below.
+- [x] Tear down OR keep the toggle — GO ⇒ KEPT as the WP3 seed (`pip_probe/` + `public/pip-probe.html` + the temp "PiP?" button).
 
 ---
 
