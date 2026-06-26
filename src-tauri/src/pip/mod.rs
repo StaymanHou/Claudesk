@@ -23,3 +23,4 @@
 //!     was DROPPED as a requirement — the flag is harmless, not a validated need.)
 
 pub mod commands;
+pub mod layout;

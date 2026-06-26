@@ -19,6 +19,7 @@
 //! discarded on next run). `rename` within one directory is atomic on macOS.
 
 pub mod commands;
+pub mod settings;
 
 use std::path::{Path, PathBuf};
 

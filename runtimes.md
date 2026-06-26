@@ -50,9 +50,15 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-26, M5 WP3 Phase 3 verify-codify: 622 pass / 69 files, +9 mirrorFrameSharing (computeMirrorSet union + mirrorFrame store) + extended pipFanoutWiring guards (pip-mirror, display-only, single-serialize-loop import guard))
+- **Last:** 1s (2026-06-26, M5 WP4 Phase 5 verify-codify: full suite 669 pass / 71 files, +Phase-5 drag/mirror/icon wiring guards)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-26 (M5 WP4 Phase 5 verify-codify: 669 pass / 71 files)
+  - 1s — 2026-06-26 (M5 WP4 Phase 4 verify-codify: 663 pass / 71 files)
+  - 1s — 2026-06-26 (M5 WP4 Phase 3 verify-codify: 652 pass / 71 files)
+  - 1s — 2026-06-26 (M5 WP4 P3 rebuild: +9 pipPanelSize (content-driven size); pip-scoped 49)
+  - 1s — 2026-06-26 (M5 WP4 P2: 640 pass / 70 files, +3 switcher wiring guards)
+  - 1s — 2026-06-26 (M5 WP4 P1: 637 pass / 70 files, +pipLayout (16) + WP4 wiring guards)
   - 1s — 2026-06-26 (M5 WP3 P3: 622 pass / 69 files, +9 mirrorFrameSharing + mirror guards)
   - 1s — 2026-06-26 (M5 WP3 P2: 610 pass / 68 files, +5 pipFanoutWiring guards)
   - 1s — 2026-06-26 (M5 WP3 P1: 600 pass / 66 files, +9 pipEntryWiring guards)
@@ -84,9 +90,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 3s (2026-06-26, M5 WP2 verify-codify: no new tests — knowledge-probe; 249 pass, dev-only bridge wiring no regression; warm run ~0.67s)
+- **Last:** 1s (2026-06-26, M5 WP4 Phase 2 verify-codify: 258 pass — +9 from P2.1 (3 pip::layout enum + 6 config_store::settings store); warm run ~0.72s)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-26 (M5 WP4 P2: 258 pass, +9 layout enum + settings store)
   - 3s — 2026-06-26 (M5 WP2 verify-codify: 249 pass, no new tests — probe deliverable is the wbs.md verdict; dev-only mcp-bridge wiring compiles under debug_assertions w/ no test regression)
   - 5s — 2026-06-25 (M5 WP1 verify-codify: 249 pass, no new tests — probe knowledge artifact is the wbs.md verdict)
   - 7s — 2026-06-25 (QoL-WP5 Phase 1 build: delete_file_core + delete_file command + IsDirectory variant; +6 editor_fs tests, 237 pass; warm recompile)

@@ -69,6 +69,7 @@ import { openFinder } from "../../finder/finderLaunch";
 import { SublimeTextIcon } from "../../sublime/icons/SublimeTextIcon";
 import { SublimeMergeIcon } from "../../sublime/icons/SublimeMergeIcon";
 import { FinderIcon } from "../../finder/icons/FinderIcon";
+import { PipIcon } from "../../pip/icons/PipIcon";
 
 interface RightPanelHostProps {
   /** The workspace id — keys the WP9 second-terminal session (one shell per workspace). */
@@ -740,7 +741,7 @@ export function RightPanelHost({
             aria-label="Toggle Picture-in-Picture status panel"
             title="Toggle Picture-in-Picture status panel"
           >
-            PiP
+            <PipIcon />
           </button>
         </div>
 

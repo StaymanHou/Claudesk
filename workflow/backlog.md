@@ -767,3 +767,23 @@ forward — none M5-blocking). No escalations. -->
 - **Priority:** medium (2 MAJOR), low (3 MINOR)
 - **Status:** pending
 - **Pickup shape:** fold the 2 MAJOR into **M5 WP5** planning (they ARE the lifecycle/cost-gate concerns WP5 owns — the reviewer's explicit recommendation: WP5 scope, not a standalone refactor). The 3 MINORs ride a future `/feature-refactor` batch (the `useTauriListen` extraction is repo-wide — useWorkspaceStatus shares the shape). Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-06-26-FILETREE-EXCLUDES-GITIGNORED-EDITABLE-FILES
+- **Source:** feature:build (operator-reported side issue during M5 WP4 verify-self)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** The FileTree rail does NOT show gitignored files (e.g. `.env`), so the operator can't open them in the in-app editor — they have to fall back to Sublime Text. Confirmed by example: a `.env` in another project is absent from the tree but editable in Sublime.
+- **Context:** `fs_index::project_walker` (the shared `ignore::WalkBuilder` backing the FileTree + Cmd+P finder + project search) sets `.hidden(false)` (so DOTFILES are not the problem — `.env` would show on the dotfile axis) but honors `.gitignore` by default (`src-tauri/src/fs_index/mod.rs:92-94`). `.env` is near-universally gitignored for secrets, so the gitignore rule — which correctly hides `node_modules/`, `target/`, build output — ALSO hides genuinely-editable config files as collateral damage. The design intent ("show the files the operator actually edits, minus build noise") and the reality ("hide everything gitignored") diverge exactly on gitignored-but-edited files. This directly undercuts the in-app editor as the primary editing surface (vision Core Principle 3) — if you can't reach `.env` in-app, you're pushed back to Sublime for a routine edit.
+- **Suggested action:** Decide the right policy (at WBS/plan time) — candidates: (a) keep gitignore-honoring but ALWAYS surface a small allowlist of common editable-but-ignored files (`.env`, `.env.*`, `.envrc`); (b) add a FileTree toggle "show gitignored" (like VSCode's explorer); (c) honor `.gitignore` for the bulk walk but un-hide ANY gitignored file whose basename matches a dotenv/config pattern; (d) show gitignored files dimmed/greyed (VSCode-style) rather than absent, so they're reachable but visually distinct. Likely (a)+(d) combined. Note the same walker backs Cmd+P + search — decide whether the change is walker-wide or FileTree-only (FileTree-only is safer; search over secrets may be unwanted). Files: `src-tauri/src/fs_index/mod.rs` (the `project_walker`), `src-tauri/src/fs_index/commands.rs`, the FileTree React rail (`src/components/workspace/filetree/`), possibly `project_search/mod.rs` if walker-wide.
+- **Priority:** medium (recurring friction on the core dogfood editing path — `.env` editing is common; the Sublime fallback works so it's not blocking, but it erodes the "in-app editor is primary" goal)
+- **Status:** pending
+
+## SURFACE-2026-06-26-M6-SETTING-NO-YOLO-DEFAULT
+- **Source:** feature:build (M5 WP4 verify-self) — operator request, explicitly anchored to M6
+- **Target level:** product:wbs
+- **Type:** new-work
+- **Summary:** Add a settings option to open the CC terminal WITHOUT yolo mode (`--dangerously-skip-permissions`) by default. Currently yolo is unconditional (vision-explicit default); the operator wants an opt-out toggle.
+- **Context:** CLAUDE.md "Key Decisions" already anticipates this: "`--dangerously-skip-permissions` (yolo) by default. Phase 4 setting will let users opt out." This is that opt-out. The CC spawn path (`cc_session`/`cc_spawn`) builds the `claude` argv including the skip-permissions flag; the setting would gate that flag. Natural home: the new app-settings store added in M5 WP4 Phase 2 (`config_store/settings.rs` — already holds `pip_layout` as an app-global field), so a `yolo_default: bool` (or per-project override in `Project`) field + a Settings UI surface. Decide app-global vs per-project at WBS time (drive_mode is per-project; yolo could reasonably be either).
+- **Suggested action:** At M6 WBS/plan time: add the setting (likely `AppSettings.cc_yolo_default` defaulting true to preserve current behavior, OR a per-project `Project` field), gate the skip-permissions flag in the CC spawn argv on it, and surface a toggle in the Settings UI. Confirm the default stays yolo-on (vision default) with this as an explicit opt-out.
+- **Priority:** medium (operator-requested QoL; not blocking — yolo-by-default still works)
+- **Status:** pending (anchored to M6)

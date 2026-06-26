@@ -12,27 +12,39 @@ import {
 // both tiles incl. center-staged mirror; display-only; ~1fps — all PASS 2026-06-26).
 
 describe("computeMirrorSet — the union serialized once per tick", () => {
+  // 4th arg is `pipNeedsMirror` (WP4): the PiP is shown AND its layout renders a
+  // mirror (horizontal/vertical). A compact/minimal PiP — even while visible — passes
+  // `false` here so it adds NO serialize cost (the layout-aware cost gate).
   const ids = ["ws-1", "ws-2", "ws-3"]; // ws-2 is center-staged in these cases
 
-  it("expanded + PiP hidden → filmstrip BACKGROUND only (excludes the center-staged one)", () => {
+  it("expanded + PiP needs no mirror → filmstrip BACKGROUND only (excludes the center-staged one)", () => {
     const set = computeMirrorSet(ids, "ws-2", false, false);
     expect([...set].sort()).toEqual(["ws-1", "ws-3"]);
     expect(set.has("ws-2")).toBe(false); // center-staged excluded for the filmstrip
   });
 
-  it("PiP shown → ALL ids incl. the center-staged one (the divergence)", () => {
+  it("PiP needs mirror → ALL ids incl. the center-staged one (the divergence)", () => {
     const set = computeMirrorSet(ids, "ws-2", false, true);
     expect([...set].sort()).toEqual(["ws-1", "ws-2", "ws-3"]);
     expect(set.has("ws-2")).toBe(true); // the one extra mirror the filmstrip skips
   });
 
-  it("collapsed + PiP shown → still ALL ids (PiP doesn't care about filmstrip collapse)", () => {
+  it("collapsed + PiP needs mirror → still ALL ids (PiP doesn't care about filmstrip collapse)", () => {
     const set = computeMirrorSet(ids, "ws-2", true, true);
     expect([...set].sort()).toEqual(["ws-1", "ws-2", "ws-3"]);
   });
 
-  it("collapsed + PiP hidden → EMPTY (no serialize cost — the gate)", () => {
+  it("collapsed + PiP needs no mirror → EMPTY (no serialize cost — the gate)", () => {
+    // This covers BOTH PiP-hidden AND a visible compact/minimal PiP: the caller folds
+    // the layout decision into pipNeedsMirror, so either way the PiP contributes nothing.
     expect(computeMirrorSet(ids, "ws-2", true, false).size).toBe(0);
+  });
+
+  it("expanded + visible-but-non-mirror PiP → filmstrip only (PiP adds nothing)", () => {
+    // The WP4 case that did NOT exist at WP3: the PiP IS visible but in compact/minimal,
+    // so pipNeedsMirror is false → the center-staged ws-2 is NOT serialized for the PiP.
+    const set = computeMirrorSet(ids, "ws-2", false, false);
+    expect([...set].sort()).toEqual(["ws-1", "ws-3"]);
   });
 
   it("a workspace in both surfaces is listed ONCE (Set dedup → single serialize)", () => {

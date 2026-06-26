@@ -3,7 +3,16 @@
    prefers-color-scheme). The status-dot palette below is COPIED verbatim from
    App.css so the PiP and the filmstrip render identical colors (the "never
    disagree on a workspace's state" invariant — same backend broadcast, same
-   palette). Phase 3 adds the .pip-tile-mirror serialize-mirror rules. */
+   palette).
+
+   WP4 — four layouts, selected by `.pip-root[data-layout=...]` on the root:
+     - horizontal-mirror — a ROW of mirror tiles (WP3's default).
+     - vertical-mirror   — the same mirror tiles stacked in a COLUMN.
+     - compact           — name+dot rows (no mirror), stacked.
+     - minimal           — bare dots (no name, no mirror); Phase 4 adds attention
+                           weighting. The `.pip-tiles` flow + per-layout tile rules
+                           below switch on the layout class; the shared tile/mirror/
+                           header/dot rules are reused across the mirror layouts. */
 
 :root {
   color-scheme: dark;
@@ -33,9 +42,56 @@ body,
   box-sizing: border-box;
   background: #141414;
   border-radius: 10px;
-  padding: 6px;
+  /* padding MUST match pipPanelSize.TILE.pad (8) so the content-driven panel width has no
+     empty band (the "title row too long" fix). */
+  padding: 8px;
   display: flex;
+  /* COLUMN: switcher row on top, tiles fill the rest (operator feedback 2026-06-26 —
+     the switcher gets its OWN ROW so it never overlaps a tile's status dot). */
+  flex-direction: column;
+  gap: 4px;
   align-items: stretch;
+}
+
+/* The switcher's own row — a thin bar at the top holding the layout button, right-
+   aligned. A drag-region (panel drags by this chrome) EXCEPT the button itself. flex:0
+   so it takes only its natural height; the tiles get the rest. */
+.pip-switch-row {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: 18px;
+}
+
+/* Layout switcher button — shows an icon DEPICTING THE CURRENT LAYOUT (it doubles as a
+   layout indicator). In its own row now, so always visible (no opacity-fade-until-hover
+   that made it hard to spot), and never overlapping a tile dot. Not a drag-region (set in
+   JSX) so a click cycles rather than dragging. */
+.pip-layout-switch {
+  width: 22px;
+  height: 16px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: rgba(48, 48, 48, 0.85);
+  color: #c9c9c9;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.pip-layout-switch:hover {
+  color: #ffffff;
+  background: rgba(70, 70, 70, 0.95);
+}
+
+.pip-layout-switch svg {
+  display: block;
 }
 
 /* Empty-roster state — centered "No workspaces". */
@@ -47,25 +103,102 @@ body,
   color: #8a8a8a;
 }
 
-/* Horizontal mirror — a row of tiles (WP3's one default layout). */
-.pip-row {
+/* The tile container. WP4 Phase-3 content-driven sizing: the PANEL is sized (via
+   pip_resize) to fit FIXED-size tiles for the live workspace count, so the tiles here are
+   their natural unit size (NOT flex:1 stretch), and the container WRAPS — a row/column
+   that fills the panel wraps to a 2nd row/column (matching computePanelSize's cap+wrap).
+   `gap: 8px` matches the main-app filmstrip + pipPanelSize.TILE.gap. Default flow = row
+   (horizontal mirror); column layouts flip flex-direction below. */
+.pip-tiles {
   flex: 1;
   display: flex;
   flex-direction: row;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
   min-width: 0;
   overflow: hidden;
 }
 
+/* Vertical-mirror + compact + minimal stack their tiles in a column; wrap → extra columns. */
+.pip-layout-vertical-mirror .pip-tiles,
+.pip-layout-compact .pip-tiles,
+.pip-layout-minimal .pip-tiles {
+  flex-direction: column;
+}
+
 .pip-tile {
   position: relative; /* mirror = absolute base layer; header = absolute overlay */
-  flex: 1 1 0;
-  min-width: 0;
   box-sizing: border-box;
   background: #1e1e1e;
   border: 1px solid #2a2a2a;
   border-radius: 6px;
   overflow: hidden;
+  flex: 0 0 auto; /* fixed-size — the panel was sized to fit these, don't stretch/shrink */
+}
+
+/* Mirror tiles (horizontal + vertical) are a FIXED 112×64 — the SAME size as the main-app
+   filmstrip tile (App.css .filmstrip-tile) and pipPanelSize.TILE.mirrorW/H. The panel is
+   sized (pip_resize) to fit exactly this many fixed tiles for the live workspace count, so
+   the tile is its natural unit size (not stretched). Both mirror layouts share the unit;
+   only the .pip-tiles flow direction differs (row vs column). The 0.16 mirror scale below
+   is tuned for this ~112px width. */
+.pip-tile-mirror-layout {
+  width: 112px;
+  height: 64px;
+}
+
+/* Compact tile — a single name+dot row, no mirror base. flex:0 so rows pack from the
+   top rather than stretching to fill the column height; width matches the compact tile
+   unit (pipPanelSize.TILE.compactW) so the row SPANS the panel width — without this the
+   row shrinks to its name+dot content (~84px) and leaves a wide empty band to the right
+   (the panel is sized to compactW, so the row must fill it). */
+.pip-tile-compact {
+  display: flex;
+  flex: 0 0 auto;
+  width: 112px; /* = pipPanelSize.TILE.compactW; matches the vertical-mirror tile width so
+                   the compact panel == the vertical-mirror panel width (both column layouts) */
+  box-sizing: border-box;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+}
+
+.pip-tile-compact .pip-tile-name {
+  /* In compact the name is the row; at 112px it ellipsizes if long (like the filmstrip
+     tile's name). flex:1 + min-width:0 lets it shrink so the dot stays visible. */
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Minimal tile — a bare dot. flex:0 so dots pack tightly; centered. Phase 4: awaiting-
+   input dots POP (.pip-tile-awaiting below) + awaiting-first ordering (orderForAttention). */
+.pip-tile-minimal {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+}
+
+/* Phase 4 — minimal-layout attention weighting: the "is anyone waiting on me?" glance.
+   An awaiting-input dot must stand out against the calm row of running/idle dots so the
+   operator sees "needs me" at a glance even when every instance is busy. The attention cues
+   are: (1) ORDERING — awaiting-input sorts to the front (orderForAttention, in Pip.tsx); and
+   (2) the BLINK animation inherited from .status-dot-awaiting (.pip-tile-awaiting carries no
+   blink of its own). Operator feedback 2026-06-26: do NOT scale the dot up — with several dots
+   blinking, the size change reads "off"; the blink itself is enough to grab attention. So the
+   only EMPHASIS this class adds is a slightly brighter halo (color UNCHANGED — still the shared
+   M3 awaiting blue via .status-dot-awaiting, so the PiP never disagrees with the filmstrip on a
+   workspace's state). No transform, no padding bump. Running/idle dots get no extra weight. */
+.pip-tile-awaiting .status-dot {
+  /* a touch brighter than the base awaiting dot's 4px shadow — same color, no size change */
+  box-shadow: 0 0 6px rgba(83, 155, 245, 0.85);
 }
 
 /* The live ~1 fps serialize mirror — the BASE layer filling the whole tile. Same
@@ -84,6 +217,10 @@ body,
   transform-origin: bottom left;
   pointer-events: none;
 }
+
+/* Both mirror layouts share this 0.16 scale — the tiles are the same fixed 112×64 unit
+   (content-driven sizing, Phase 3 rebuild), so the same scale gives the same legible
+   row density in horizontal and vertical alike. */
 
 .pip-tile-mirror pre,
 .pip-tile-mirror div {

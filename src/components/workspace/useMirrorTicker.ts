@@ -16,7 +16,11 @@
 //     serialize the filmstrip never needed; it's only paid while the PiP is visible.
 //
 // Cost gates (mirroring the filmstrip-collapse discipline):
-//   - document.hidden → skip the tick entirely (the whole app is off-screen).
+//   - document.hidden AND the PiP doesn't need a mirror → skip the tick (the filmstrip is
+//     inside the main window, so if that's off-screen nobody sees it). When the PiP DOES
+//     need a mirror we keep ticking even while the main window is hidden — the PiP is a
+//     separate always-on-top panel and showing live thumbnails while Claudesk is
+//     backgrounded is its whole purpose (WP4 Phase 5 fix).
 //   - filmstrip collapsed AND PiP hidden → nothing to serialize → the interval still
 //     ticks but the needed set is empty, so no serialize cost. (We keep the interval
 //     alive rather than tearing down/rebuilding on every collapse/PiP toggle.)
@@ -34,6 +38,12 @@ import {
   PIP_WINDOW_LABEL,
   type PipMirrorFrame,
 } from "../../pip/pipFrame";
+import {
+  coercePipLayout,
+  DEFAULT_PIP_LAYOUT,
+  layoutNeedsMirror,
+  PIP_LAYOUT_EVENT,
+} from "../../pip/pipLayout";
 
 /** ~1 fps — the WP4-probe-validated background mirror rate (shared with the filmstrip). */
 const MIRROR_INTERVAL_MS = 1000;
@@ -55,20 +65,25 @@ export interface MirrorTickerInput {
  * "serialize exactly the union, once" contract is vitest-pinnable without the hook's
  * refs/effects/interval. The union of:
  *   - filmstrip background ids (all except the center-staged one) when EXPANDED, and
- *   - ALL ids when the PiP is shown (the PiP mirrors the center-staged one too).
- * Collapsed + PiP-hidden → empty set (no serialize cost — the gate).
+ *   - ALL ids when the PiP is shown AND its active layout renders a mirror (WP4:
+ *     compact + minimal render NO mirror, so they add NO serialize cost even while the
+ *     PiP is visible — same gate discipline as filmstrip-collapse).
+ * Collapsed + (PiP hidden OR a non-mirror PiP layout) → empty set (no serialize cost).
+ *
+ * `pipNeedsMirror` already folds the layout decision (visible AND a mirror layout) so
+ * this function stays a pure set-union with no layout vocabulary leaking in.
  */
 export function computeMirrorSet(
   allIds: readonly string[],
   focusedId: string | null,
   collapsed: boolean,
-  pipShown: boolean,
+  pipNeedsMirror: boolean,
 ): Set<string> {
   const needed = new Set<string>();
   if (!collapsed) {
     for (const id of allIds) if (id !== focusedId) needed.add(id);
   }
-  if (pipShown) {
+  if (pipNeedsMirror) {
     for (const id of allIds) needed.add(id);
   }
   return needed;
@@ -100,23 +115,58 @@ export function useMirrorTicker({
     };
   }, []);
 
-  // Latest inputs in a ref so the single interval reads current values without
-  // restarting on every roster/focus/collapse/visibility change (restarting would
-  // drop a frame and churn the interval). Updated in an effect (not during render —
-  // react-hooks/refs).
-  const inputRef = useRef({ allIds, focusedId, collapsed, pipShown });
+  // WP4 — the PiP's active layout, from the backend `pip-layout` broadcast (same
+  // single-source-of-truth posture as visibility). Compact + minimal render no mirror,
+  // so a visible-but-non-mirror PiP must pay NO serialize cost; this is what gates that.
+  const [pipLayout, setPipLayout] = useState(DEFAULT_PIP_LAYOUT);
   useEffect(() => {
-    inputRef.current = { allIds, focusedId, collapsed, pipShown };
-  }, [allIds, focusedId, collapsed, pipShown]);
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listen<string>(PIP_LAYOUT_EVENT, (event) => {
+      setPipLayout(coercePipLayout(event.payload));
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // The PiP needs the live mirror only when it's shown AND its layout renders one.
+  const pipNeedsMirror = pipShown && layoutNeedsMirror(pipLayout);
+
+  // Latest inputs in a ref so the single interval reads current values without
+  // restarting on every roster/focus/collapse/visibility/layout change (restarting
+  // would drop a frame and churn the interval). Updated in an effect (not during
+  // render — react-hooks/refs).
+  const inputRef = useRef({ allIds, focusedId, collapsed, pipNeedsMirror });
+  useEffect(() => {
+    inputRef.current = { allIds, focusedId, collapsed, pipNeedsMirror };
+  }, [allIds, focusedId, collapsed, pipNeedsMirror]);
 
   useEffect(() => {
     const tick = () => {
-      if (document.hidden) return; // whole app off-screen → no serialize churn
-      const { allIds, focusedId, collapsed, pipShown } = inputRef.current;
+      const { allIds, focusedId, collapsed, pipNeedsMirror } = inputRef.current;
+      // Cost gate: when the MAIN window is off-screen/backgrounded, the filmstrip (which
+      // lives INSIDE the main window) is unseen, so skip the serialize churn — UNLESS the
+      // PiP needs a mirror. The PiP is a SEPARATE always-on-top panel that stays visible
+      // when Claudesk is backgrounded — and that's its whole purpose (the out-of-focus
+      // status surface). Gating its mirror on the main window's visibility froze the PiP
+      // thumbnails exactly when the operator looks at them (WP4 Phase 5 fix; previously
+      // mis-filed as a transient NON-ISSUE). So: skip ONLY when hidden AND the PiP doesn't
+      // need a mirror. (When pipNeedsMirror, the PiP requires ALL ids anyway — see
+      // computeMirrorSet — so ticking while hidden adds no cost beyond what the PiP needs.)
+      if (document.hidden && !pipNeedsMirror) return;
 
       // Compute the needed set (a Set so a workspace shared by both surfaces is
-      // serialized once). Pure decision — see computeMirrorSet (vitest-pinned).
-      const needed = computeMirrorSet(allIds, focusedId, collapsed, pipShown);
+      // serialized once). Pure decision — see computeMirrorSet (vitest-pinned). The
+      // PiP contributes ids only when its layout actually renders a mirror.
+      const needed = computeMirrorSet(allIds, focusedId, collapsed, pipNeedsMirror);
 
       // Serialize each needed workspace ONCE into the shared frame.
       const next = new Map<string, string>();
@@ -126,8 +176,9 @@ export function useMirrorTicker({
       }
       setMirrorFrame(next);
 
-      // Push the snapshot to the PiP (only while shown — the cost gate).
-      if (pipShown) {
+      // Push the snapshot to the PiP only while it's shown AND rendering a mirror
+      // (a compact/minimal PiP has no mirror nodes to write into — the cost gate).
+      if (pipNeedsMirror) {
         const snapshot: PipMirrorFrame = mirrorFrameSnapshot();
         void emitTo(PIP_WINDOW_LABEL, PIP_MIRROR_EVENT, snapshot).catch(() => {
           // Best-effort; the next tick retries.

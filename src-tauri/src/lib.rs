@@ -252,6 +252,19 @@ pub fn run() {
             fs_watch::commands::workspace_watch_stop,
             // M5: toggle the PiP NSPanel (show/hide the out-of-focus status surface).
             pip::commands::pip_toggle,
+            // M5 WP4: read/persist the PiP layout. set broadcasts `pip-layout` to all
+            // webviews (PiP re-renders; main ticker gates serialize); get seeds the
+            // PiP's layout on mount from the persisted value (app-settings store).
+            pip::commands::pip_get_layout,
+            pip::commands::pip_set_layout,
+            // M5 WP4 Phase 3: content-driven panel resize — the PiP computes its size
+            // (layout × workspace count, screen-capped + wrapped) and calls this to apply it.
+            pip::commands::pip_resize,
+            // M5 WP4 Phase 5: panel drag — the PiP tracks the pointer during a body drag and
+            // calls this with each frame's (dx, dy); moves the swizzled panel via AppKit
+            // setFrameOrigin: (the Tauri move path + movableByWindowBackground are both inert
+            // on this borderless NonactivatingPanel — see pip_move's doc comment).
+            pip::commands::pip_move,
         ])
         .on_window_event(|window, event| {
             // WP7 shutdown: kill every CC child on window close so we never leak an
