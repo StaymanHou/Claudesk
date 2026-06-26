@@ -86,6 +86,17 @@ notify-debouncer-full = "0.7"
 # recoverability, which is the crate's/OS's job).
 trash = "5"
 
+# M5 WP2 (PROBE — agent UI-driver adopt/reject): the MCP bridge plugin that drives
+# the real WKWebView with live Tauri IPC (so a workspace actually mounts under an
+# agent driver, unlike the bare-Vite Playwright path that has no IPC). DEV-ONLY: a
+# normal [dependencies] entry, but its `init()` is registered ONLY under
+# `#[cfg(debug_assertions)]` in lib.rs, so `tauri build` (release) links nothing
+# from it (verify: `nm -a ./target/release/claudesk | grep -i mcp` → empty). The
+# plugin binds 0.0.0.0:9223 by default; we use `localhost_only()` so the dev bridge
+# never exposes the webview on the LAN. Probe disposition (keep vs. tear down)
+# follows the WP2 verdict in docs/product/wbs.md "Probe outcomes".
+tauri-plugin-mcp-bridge = "0.11"
+
 [dev-dependencies]
 tempfile = "3"
 

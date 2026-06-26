@@ -166,7 +166,29 @@ Items explicitly NOT in M5 (kept in roadmap/backlog for their anchored milestone
 
 ## Probe outcomes
 
-_(WP2 records its findings here when run.)_
+### WP2 — agent UI-driver for verify-self — **VERDICT: ADOPT** (2026-06-26)
+
+`mcp-server-tauri` + `tauri-plugin-mcp-bridge` is **ADOPTED** as the agent-side UI driver for `feature-verify-self` on Claudesk's workspace-status surfaces. The macOS smoke test passed decisively and the bridge dissolves the bare-Vite dead end (`__TAURI_INTERNALS__` undefined → no workspace mounts → every live-DOM outcome UNVERIFIED) that bit M4 WP3/WP4/WP4b. **The whole smoke test was agent-driven in-session** — the prior "operator-only at the live tier" posture for workspace-UI features no longer holds for the *main + NSPanel webviews* (it still holds for installed-`.app` and backend-process outcomes; see boundaries).
+
+**(a) Smoke-test result (agent-driven, real macOS WKWebView, `pnpm tauri:dev`):**
+- **Bridge attaches + round-trips:** `driver_session{start, port:9223}` → connected; `webview_dom_snapshot{structure}` returned the real picker DOM (28 indexed elements, `data-testid` intact); `webview_screenshot` captured the live viewport. The README's "WebKit weaker than Chromium" caveat did NOT bite for DOM/JS/click/screenshot.
+- **Live IPC + drivable workspace:** `webview_execute_js` → `{hasTauriInternals:true, hasInvoke:true}` (the exact thing bare-Vite lacks); `webview_interact{click, [data-testid=picker-recent]}` mounted a real workspace (`workspaceCount:1`, `.xterm` present, CC v2.1.178 booted in the PTY pane); live status-dot class read via JS.
+
+**(b) NSPanel reachability (P2.1) — YES, the bridge reaches the NSPanel webview, not just `main`.** Using the WP1 throwaway `pip_probe` NSPanel as the test surface: `pip_probe_toggle` via IPC → the bridge enumerated **both** windows ("Available windows: main, pip-probe"); `webview_dom_snapshot{windowId:'pip-probe'}` returned the panel's real DOM; `webview_execute_js{windowId:'pip-probe'}` read its content (`/pip-probe.html`, "PiP probe / floating · all-Spaces · non-activating"). **Implication:** WP3's real PiP status-mirror is agent-verifiable through the bridge via the `windowId` param — NOT carried to verify-human. Best-case outcome for M5.
+
+**(c) The verify-self invocation recipe (ADOPT path):** `feature-verify-self` drives these MCP tools directly (the tool names are `mcp__tauri__*`, NOT the Playwright-MCP names `feature-verify-self-runner` assumes — so for Claudesk workspace-UI outcomes, drive the bridge tools inline, do NOT spawn the Playwright runner):
+1. `pnpm tauri:dev` (background) → wait for ":9223 LISTEN" / the "MCP Bridge plugin initialized" log line.
+2. `mcp__tauri__driver_session{action:'start', port:9223}`.
+3. Drive: `webview_dom_snapshot{type:'structure'|'accessibility', windowId?}`, `webview_execute_js{script, windowId?}` (read live status-dot class / `__TAURI_INTERNALS__`), `webview_interact{action:'click', selector:'[data-testid=…]'}` (pick a project → workspace mounts; promote a filmstrip tile), `webview_screenshot`. Target the PiP with `windowId:'<pip-label>'`.
+4. To exercise a *status transition*, trigger it via **IPC/click, not by typing into the CC terminal** (see boundary below).
+
+**(d) Boundaries found (what stays operator/verify-human even with ADOPT):**
+- **Raw xterm terminal typing is low-fidelity.** `webview_keyboard{type/press Enter}` into `.xterm-helper-textarea` reached the CC prompt line but synthetic Enter did NOT commit to the PTY. So CC-TUI keystroke flows stay operator/`expect`-driven; status-dot *transitions* are still agent-observable, just trigger them via IPC/click.
+- **Installed-`.app` + backend-process outcomes** still genuinely operator-only: GUI-PATH spawn parity (the 2026-06-24 install-only `claude` PATH class) and `pgrep`-for-a-reaped-process outcomes the webview can't see. The CLAUDE.md "installed-build smoke test" + "operator-only at the live tier" conventions stand for *those*; the bridge amends them only for main/NSPanel webview DOM/IPC/interaction.
+
+**(e) Bug the probe surfaced + fixed (bare-Vite never could have):** the inline `mcp-bridge-dev` capability in `tauri.dev.json` targeting `"main"` SUPPRESSED the file-based `default` capability for that window, dropping `core:default` → `cc_spawn`'s `event.listen` failed ("event.listen not allowed: core:event:allow-listen"). FIX: re-list `core:default`/`opener:default`/`dialog:default` alongside `mcp-bridge:default` in the inline dev capability.
+
+**Wiring disposition (ADOPT ⇒ KEEP, dev-only):** `tauri-plugin-mcp-bridge` stays wired `#[cfg(debug_assertions)]` in `lib.rs` (`init_with_config(Config::localhost_only())`, binds 127.0.0.1:9223); the `mcp-bridge-dev` capability stays in `tauri.dev.json` (dev-config overlay only, never in `capabilities/*.json`); the `tauri` MCP server stays in `.mcp.json`. Release builds compile it OUT — confirmed in P2.3 (`nm` check). CLAUDE.md's verify-self convention amended 2026-06-26 to point future sessions at the bridge.
 
 ### WP1 — `tauri-nspanel` NSPanel mechanics — **VERDICT: GO** (2026-06-25)
 

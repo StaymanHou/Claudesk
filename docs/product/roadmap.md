@@ -298,6 +298,3 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 > 2026-06-15: Major rewrite driven by the vision pivot (multi-window → single-window tabbed workspaces + filmstrip + PiP + menu-bar) and research resolving the open design questions. Phase 1 gained the tab-shell substrate + a gating thumbnail-rendering probe; xterm.js settled on DOM-renderer-only (WebGL ~16-context cap); the prior "cross-window CC status indicator" milestone was replaced by three status surfaces (filmstrip / menu-bar / PiP) fed by a single Rust broadcaster over a Unix-socket hook channel (resolving the old "WP9b probe").
 > 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone; added a drive-mode selector + indicator milestone. Both additive to the stateful-controller phase.
-
-## Session Pause — 2026-06-26 13:05
-Paused. See `workflow/.session.md` to resume. Planning session only (two milestones inserted: M6 friend-QoL, M9 time-analytics; tail renumbered to M1–M12). Next execution milestone is still **M5 (Picture-in-picture)** — resume there off the existing `docs/product/wbs.md`. Uncommitted doc edits pending a commit decision.

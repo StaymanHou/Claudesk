@@ -80,9 +80,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 5s (2026-06-25, M5 WP1 verify-codify: no new tests — throwaway NSPanel probe; 249 pass, no regression; warm run ~0.67s)
+- **Last:** 3s (2026-06-26, M5 WP2 verify-codify: no new tests — knowledge-probe; 249 pass, dev-only bridge wiring no regression; warm run ~0.67s)
 - **Use timeout:** 120000
 - **History:**
+  - 3s — 2026-06-26 (M5 WP2 verify-codify: 249 pass, no new tests — probe deliverable is the wbs.md verdict; dev-only mcp-bridge wiring compiles under debug_assertions w/ no test regression)
   - 5s — 2026-06-25 (M5 WP1 verify-codify: 249 pass, no new tests — probe knowledge artifact is the wbs.md verdict)
   - 7s — 2026-06-25 (QoL-WP5 Phase 1 build: delete_file_core + delete_file command + IsDirectory variant; +6 editor_fs tests, 237 pass; warm recompile)
   - 6s — 2026-06-25 (QoL-WP2 Phase 2 build: Notification gated on notification_type; +7 tests, 231 pass; warm recompile)

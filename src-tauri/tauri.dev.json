@@ -9,7 +9,17 @@
         "width": 1280,
         "height": 800
       }
-    ]
+    ],
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "mcp-bridge-dev",
+          "description": "M5 WP2 PROBE (dev-only): grant the MCP bridge plugin's permissions to the main window. Declared inline in tauri.dev.json — which overlays ONLY under `pnpm tauri:dev` (--config src-tauri/tauri.dev.json) — so `tauri build` (release) never references the mcp-bridge permission set and capability validation does not fail (the plugin itself is `#[cfg(debug_assertions)]`-gated out of release in lib.rs). NOTE: an inline config capability targeting `main` suppresses the file-based `default` capability for that window, so the base permissions (core/opener/dialog) MUST be re-listed here or the app's own `core:event:allow-listen` is denied (cc_spawn output streaming breaks — observed 2026-06-26).",
+          "windows": ["main"],
+          "permissions": ["core:default", "opener:default", "dialog:default", "mcp-bridge:default"]
+        }
+      ]
+    }
   },
   "bundle": {
     "icon": [

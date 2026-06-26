@@ -47,12 +47,31 @@ use cc_session::SessionRegistry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         // M5 WP1: tauri-nspanel plugin — required for the NSPanel conversion the
         // pip_probe command performs. THROWAWAY-adjacent: stays if WP1 is GO.
-        .plugin(tauri_nspanel::init())
+        .plugin(tauri_nspanel::init());
+
+    // M5 WP2 (PROBE): the MCP bridge plugin drives the real WKWebView over a local
+    // WebSocket so an agent UI-driver can mount + inspect a live workspace (the
+    // adopt/reject probe for agent-side verify-self on status surfaces). DEV-ONLY:
+    // registered under `debug_assertions` so it is wholly absent from `tauri build`
+    // release binaries (the SURFACE-2026-06-23 hard requirement). `localhost_only()`
+    // keeps the default 0.0.0.0:9223 bind on the loopback so the dev bridge never
+    // exposes the webview on the LAN.
+    #[cfg(debug_assertions)]
+    {
+        // `localhost_only()` is the constructor for a loopback-bound Config (the
+        // default Config binds 0.0.0.0); it returns a Config, not a builder method.
+        builder = builder.plugin(tauri_plugin_mcp_bridge::init_with_config(
+            tauri_plugin_mcp_bridge::Config::localhost_only(),
+        ));
+    }
+
+    builder
         // Native menu clicks: predefined items (Edit/Window/About/Quit) are handled
         // by macOS directly and never reach here; our custom items broadcast their id
         // on the `menu` event for the frontend bridge to act on (app_menu).
