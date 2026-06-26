@@ -721,6 +721,22 @@ export function RightPanelHost({
           >
             <FinderIcon />
           </button>
+          {/* M5 WP1 — THROWAWAY NSPanel probe toggle. The operator's verify-human
+                driver: toggles a bare always-on-top floating panel to confirm the
+                all-Spaces / over-fullscreen / non-activating AppKit contract.
+                Removed (or promoted to the real PiP toggle) at WP1 verify-codify. */}
+          <button
+            type="button"
+            className="panel-launch"
+            data-testid="pip-probe-toggle"
+            onClick={() => void invoke("pip_probe_toggle").catch((e) => {
+              console.error("[claudesk] pip_probe_toggle failed:", e);
+            })}
+            aria-label="Toggle PiP probe panel (temporary)"
+            title="Toggle PiP probe panel (M5 WP1 — temporary)"
+          >
+            PiP?
+          </button>
         </div>
 
         {/* Editor split (WP12) — kept mounted; hidden (not unmounted) when Diff is

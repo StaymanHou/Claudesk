@@ -166,4 +166,33 @@ Items explicitly NOT in M5 (kept in roadmap/backlog for their anchored milestone
 
 ## Probe outcomes
 
-_(WP1 and WP2 record their findings here when run.)_
+_(WP2 records its findings here when run.)_
+
+### WP1 — `tauri-nspanel` NSPanel mechanics — **VERDICT: GO** (2026-06-25)
+
+`tauri-nspanel` v2.1 is confirmed viable for the M5 PiP. Build WP3 against the API + constraints below — they are NOT assumptions; each was compiled and/or live-verified during the probe.
+
+**(a) The working API shape (copy-pasteable; confirmed by source read of the v2.1 checkout + a live-running panel).**
+- **Dependency (git-only, NOT crates.io):** `tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }` (resolves to package `2.1.0`, commit `a3122e8`). Compiles clean against **Tauri 2.11.2** (the WBS's assumed "2.9.x line" is now 2.11.2 — no incompatibility; the crate floors tauri at 2.8.5).
+- **Required:** enable the `tauri` feature **`macos-private-api`** AND set `"app": { "macOSPrivateApi": true }` in `tauri.conf.json`. Plugin init: `.plugin(tauri_nspanel::init())`.
+- **No zero-config default panel type** — you MUST define a class: `tauri_panel! { panel!(MyPanel { config: { can_become_key_window: false, can_become_main_window: false, is_floating_panel: true, hides_on_deactivate: false } }) }`. The macro expansion needs `tauri::Manager` in scope. `config:` keys are CLASS-LEVEL bool-method overrides (baked in at `define_class!` time — crash-free, unlike post-build setters).
+- **Builder:** `PanelBuilder::<_, MyPanel>::new(&app, "label").url(WebviewUrl::App("x.html".into())).size(LogicalSize::new(w,h).into()).with_window(|wb| wb.decorations(false).transparent(true).skip_taskbar(true)).style_mask(StyleMask::new().borderless().nonactivating_panel()).level(PanelLevel::Floating).collection_behavior(CollectionBehavior::new().can_join_all_spaces().full_screen_auxiliary().stationary()).has_shadow(true).build()?` → `Arc<dyn Panel>`.
+- **Show without activating:** `panel.order_front_regardless()`. **Hide:** `panel.hide()`. **Re-fetch:** `app.get_webview_panel("label")` (via `ManagerExt`). **Visibility:** `panel.is_visible()`.
+- **Content:** a bundled app route (`WebviewUrl::App("pip-probe.html")`, file in `public/`) — NOT a `data:` URL (renders blank under the app CSP).
+
+**(b) Behaviors confirmed (live, `pnpm tauri:dev`, operator-verified 2026-06-25).** Toggle show/hide ✓; **visible on every Space** after a Space switch ✓ (`can_join_all_spaces`); **does NOT steal focus / activate the app on click** ✓ (the load-bearing one); **survives Claudesk losing focus / minimize** ✓ (`hides_on_deactivate:false`); **no crash on toggle** ✓; **safe teardown** (no orphaned panel after main-window close) ✓.
+
+**(c) Entitlement / signing:** none required for unsigned local dev builds — verified (no entitlement added; `macos-private-api` is a tauri Cargo feature + conf flag, not a code-signing entitlement). Installed-`.app` parity + the `tauri-apps/tauri#5566` release-vs-dev caveat → carried to **WP6** (re-verifying on a throwaway probe added no signal; the real PiP gets the installed-build smoke test there).
+
+**(d) GO/NO-GO:** **GO** for `tauri-nspanel` v2.1 — no fallback to raw `objc2` needed (the builder + class config + a single safe `set_style_mask` cover every required behavior). **Bus-factor:** single-maintainer, pinned to a branch (not a tag) — monitor `tauri-apps/tauri#13034` for first-party NSPanel support and migrate if it lands.
+
+**⚠️ WP3 MUST-FOLLOW constraints (each cost a verify-human crash/failure to discover; all sourced to tauri-nspanel issues #19/#22 + the maintainer's menubar example):**
+1. **NonactivatingPanel needs a born-borderless window.** Non-activation (no focus-steal on click) comes ONLY from the `NonactivatingPanel` style mask — `can_become_key_window:false` alone does NOT stop app activation. BUT setting that mask post-build crashes with `NSRangeException` IF the window transitions Titled→borderless (AppKit content-view teardown vs. WebKit `WKWindowVisibilityObserver` KVO). **Fix:** create the window `decorations(false)` + `transparent(true)` via `.with_window(...)` BEFORE conversion, then `style_mask(borderless | nonactivating_panel)` is safe.
+2. **NEVER `.no_activate(true)`** on a single-window app — it flips the global `NSApplicationActivationPolicy` to `Prohibited` during `build()`, which HID the entire main Claudesk window.
+3. **Teardown via `panel.to_window()` → `window.close()` ONLY** (in the main window's `CloseRequested`). Closing the live panel object directly is a use-after-free that aborts with `fatal runtime error: Rust cannot catch foreign exceptions`. An all-Spaces/floating panel also orphans on screen unless explicitly torn down on app close.
+4. **No close (X) button** on a borderless panel — dismiss via the toggle/hide. (A titled variant restores a drag-bar but reintroduces the X-close UAF risk; the borderless build is what shipped the probe GO.)
+5. **Builder method is `collection_behavior`** (American), NOT the `set_collection_behaviour` arch.md wrote — correct arch.md at finalize.
+
+**Deferred out of WP1 (not failures):** over-fullscreen draw (operator DROPPED — not a PiP requirement, though the `full_screen_auxiliary` flag is kept, harmless); **drag-by-body** (DEFERRED→WP3: `movable_by_window_background(true)` did not visibly enable it; robust fix is a web-side `data-tauri-drag-region` handle); installed-`.app` parity + dev/prod isolation (DEFERRED→WP6).
+
+**Probe-code disposition:** GO ⇒ `src-tauri/src/pip_probe/` + `public/pip-probe.html` + the temporary "PiP?" button in `RightPanelHost.tsx` are KEPT as the **WP3 seed** (the working PanelBuilder call is the starting point). WP3 replaces the throwaway button + inline content with the real toggle + live status-mirror surface and removes the `_probe` naming.

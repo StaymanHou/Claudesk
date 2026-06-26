@@ -40,6 +40,13 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
   - 32s — 2026-06-24 (dev-prod-isolation Phase 2 verify-human: prod .app for the concurrent test)
   - 40s — 2026-06-16
 
+## cargo build (src-tauri)
+
+- **Last:** 50s (2026-06-25, M5 WP1: first tauri-nspanel v2.1 git-dep fetch + compile against tauri 2.11.2; GO on compile gate)
+- **Use timeout:** 135000
+- **History:**
+  - 50s — 2026-06-25 (M5 WP1: tauri-nspanel v2.1.0 @a3122e89 fetch + compile vs tauri 2.11.2, clean)
+
 ## pnpm test
 
 - **Last:** 1s (2026-06-25, QoL-WP8 P2 verify-codify: 591 pass, +7 stickyHeaderStacking wiring cases — CSS read via fs since .css?raw is empty under Vitest)
@@ -73,9 +80,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 7s (2026-06-25, QoL-WP5 P1 build: editor_fs delete_file_core + command; +6 tests → 237 pass; warm recompile, run ~0.66s)
+- **Last:** 5s (2026-06-25, M5 WP1 verify-codify: no new tests — throwaway NSPanel probe; 249 pass, no regression; warm run ~0.67s)
 - **Use timeout:** 120000
 - **History:**
+  - 5s — 2026-06-25 (M5 WP1 verify-codify: 249 pass, no new tests — probe knowledge artifact is the wbs.md verdict)
   - 7s — 2026-06-25 (QoL-WP5 Phase 1 build: delete_file_core + delete_file command + IsDirectory variant; +6 editor_fs tests, 237 pass; warm recompile)
   - 6s — 2026-06-25 (QoL-WP2 Phase 2 build: Notification gated on notification_type; +7 tests, 231 pass; warm recompile)
   - 7s — 2026-06-25 (QoL-WP2 Phase 1 build: PostToolUse→Running + CLAUDESK_EVENTS 3→4; +3 tests, 224 pass; warm recompile)

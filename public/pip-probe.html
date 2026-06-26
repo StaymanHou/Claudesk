@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  M5 WP1 — THROWAWAY NSPanel probe content.
+  Served at /pip-probe.html (dev) and bundled into dist (build). Loaded into the
+  probe NSPanel via WebviewUrl::App("pip-probe.html"). Content is NOT the probe's
+  concern — window mechanics are. Removed (or replaced by the real PiP route) at
+  WP1 verify-codify / WP3.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PiP probe</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font:
+          13px/1.4 -apple-system,
+          system-ui,
+          sans-serif;
+        background: #141414;
+        color: #e8e8e8;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        -webkit-user-select: none;
+        user-select: none;
+        cursor: default;
+      }
+      b {
+        color: #d97757;
+      }
+      small {
+        color: #8a8a8a;
+        margin-top: 6px;
+        text-align: center;
+        padding: 0 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <b>PiP probe</b>
+    <small>floating · all-Spaces · over-fullscreen · non-activating</small>
+  </body>
+</html>

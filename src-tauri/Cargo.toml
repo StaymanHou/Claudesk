@@ -18,7 +18,17 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# macos-private-api: required by tauri-nspanel (NSPanel conversion uses private
+# AppKit surface); paired with "macOSPrivateApi": true in tauri.conf.json. M5 WP1.
+tauri = { version = "2", features = ["macos-private-api"] }
+# M5 WP1 (PiP probe): NSPanel wrapper for the always-on-top floating PiP panel.
+# Git-only (not on crates.io); branch v2.1 is the Tauri-2.x line (its Cargo.toml
+# floors tauri at 2.8.5, satisfied by our 2.11.x). PanelBuilder exposes
+# no_activate + PanelLevel::Floating + collection_behavior(CanJoinAllSpaces |
+# FullScreenAuxiliary | Stationary) natively — no raw objc2 fallback needed.
+# Bus-factor: single-maintainer crate; monitor tauri-apps/tauri#13034 for
+# first-party NSPanel support. See docs/product/wbs.md → M5 WP1 "Probe outcomes".
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
