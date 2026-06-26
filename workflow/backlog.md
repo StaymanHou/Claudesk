@@ -745,3 +745,9 @@ forward — none M5-blocking). No escalations. -->
 - **Suggested action:** Optional. If a fully-clean release ACL is wanted, move `tauri-plugin-mcp-bridge` from `[dependencies]` to a dev-only dependency surface that the build-time permission codegen also skips (e.g. a `[target.'cfg(debug_assertions)'.dependencies]` entry or a feature-gated optional dep), and re-confirm `pnpm tauri:dev` still gets the bridge. Verify with `strings target/release/claudesk | grep -i mcp-bridge` → empty. Low value; the current state is functionally release-safe.
 - **Priority:** low
 - **Status:** pending
+
+## Code-quality findings — m5-wp2-probe-agent-ui-driver (2026-06-26)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `f18f1e0` — all low-stakes polish: (1) `.mcp.json` registers an **unpinned** `npx -y @hypothesi/tauri-mcp-server` (pin to @0.11.2); (2) a lingering `#[allow(unused_mut)]` in lib.rs's dev-only bridge block (track-only — drop if WP2 wiring ever goes unconditional); (3) the wbs.md verify-self recipe's wait-token says `":9223 LISTEN"` but the real stdout token is `"WebSocket server listening on…"` (`LISTEN` is an lsof artifact). Reviewer verdict: well-built knowledge-probe, every trap documented at its site, no refactor warranted. Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp2-probe-agent-ui-driver — 2026-06-26`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** finding #1 (pin the npx version) + #3 (reword the recipe wait-token) are each a one-line `/feature-refactor` touch; #2 is track-only. Dismiss any via the WIP's `## Code-Quality Review` section.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-06-26
+
+- **Feature shipped:** Agent UI-driver for verify-self (M5 WP2 probe) — VERDICT: **ADOPT**; a dev-only `tauri-plugin-mcp-bridge` (`#[cfg(debug_assertions)]`, 127.0.0.1:9223, MCP server in `.mcp.json`) lets an agent drive Claudesk's real WKWebView with live Tauri IPC, so `feature-verify-self` can now mount + inspect a live workspace (and the PiP NSPanel webview) instead of always carrying workspace-UI checks to native verify-human — proven by an agent-driven macOS smoke test that also surfaced + fixed a capability-suppression bug the bare-Vite path could never have caught, and confirmed release-safe (`nm` finds no bridge code symbols).
+- **Backlog resolved:** SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI — closed by the M5 WP2 probe with an ADOPT verdict + the verify-self invocation recipe recorded in `docs/product/wbs.md`.
+
 ## 2026-06-25
 
 - **Feature shipped:** Close a workspace (QoL temporary-WBS WP1) — each filmstrip tile (expanded thumbnail and collapsed pill) now has a hover-revealed × that fully tears the workspace down: it reaps both the Claude Code PTY and the second-terminal shell (via a per-pane `cc_kill`-on-unmount that also closes a latent session-leak gap), deregisters it from the status broadcaster, stops its filesystem watcher, and re-picks the center stage (promoting the left-neighbour, or returning to the full-screen picker when the last workspace closes) — with a discard/cancel confirm if the workspace has unsaved editor edits.

@@ -1130,3 +1130,25 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Fix shape:** if the chord-ownership map is ever relocated, grep for "paletteCommands.ts" and update all chord-file headers together. No standalone fix.
 - **Priority:** low (cross-reference hygiene; not a confirmed break).
 - **Status:** pending
+
+# m5-wp2-probe-agent-ui-driver — 2026-06-26
+
+3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `f18f1e0`. Knowledge-producing probe (VERDICT: ADOPT); minimal executable footprint (dev-only bridge wiring), correctly release-gated three ways. Reviewer verdict: well-built, every non-obvious trap documented at its site, no refactor warranted. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
+
+## SURFACE-2026-06-26-QUALITY-WP2-UNPINNED-MCP-SERVER
+- **Finding:** Tracked `.mcp.json` registers `npx -y @hypothesi/tauri-mcp-server` (unpinned — runs latest each invocation) for every checkout, so any MCP-aware client in the repo can auto-fetch + launch a third-party npm package that drives the live WKWebView. Intentional per the ADOPT verdict and read-only/dev-facing, but the unpinned auto-`npx -y` is a small standing supply-chain/reproducibility surface.
+- **Where:** `.mcp.json:1-9`.
+- **Fix shape:** pin the version (`@hypothesi/tauri-mcp-server@0.11.2`, matching the Rust plugin 0.11.2) in the `args` array, OR add a one-line note in the wbs.md verdict's wiring-disposition acknowledging the unpinned surface. Lowest-risk = pin the version.
+- **Priority:** low
+
+## SURFACE-2026-06-26-QUALITY-WP2-LINGERING-ALLOW-UNUSED-MUT
+- **Finding:** The dev-only bridge block mutates `builder` after the initial `.plugin(...)` chain, requiring `#[allow(unused_mut)] let mut builder`. Correct idiom for conditional plugin registration, but the `#[allow(unused_mut)]` masks the release-build case where `builder` is never reassigned — a small latent lint-suppression.
+- **Where:** `src-tauri/src/lib.rs:65-72` (approx; the `let mut builder` restructure).
+- **Fix shape:** no action needed while the bridge stays dev-only-conditional; if WP2 wiring is ever torn down or made unconditional, drop the `#[allow]` rather than let it linger. Track-only.
+- **Priority:** low
+
+## SURFACE-2026-06-26-QUALITY-WP2-RECIPE-WRONG-WAIT-TOKEN
+- **Finding:** The verify-self invocation recipe (wbs.md WP2 verdict, step 1) says wait for `":9223 LISTEN"`, but the actual dev-server stdout tokens are `"MCP Bridge plugin initialized … 127.0.0.1:9223"` / `"WebSocket server listening on: 127.0.0.1:9223"`. `LISTEN` is an `lsof`/`netstat` artifact, not a stdout string — a future session grepping stdout for `LISTEN` will miss it and waste a cycle.
+- **Where:** `docs/product/wbs.md`, WP2 verdict, recipe step 1.
+- **Fix shape:** reword the recipe's wait-token to the real stdout line (`"WebSocket server listening on"`), or note that `LISTEN` requires `lsof -iTCP:9223 -sTCP:LISTEN` rather than a stdout grep. One-line doc edit.
+- **Priority:** low

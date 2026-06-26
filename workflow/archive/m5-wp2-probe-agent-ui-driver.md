@@ -1,7 +1,7 @@
 # Feature: M5 WP2 — Probe: agent UI-driver for verify-self on workspace-status surfaces
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-26 — VERDICT: ADOPT (shipped f18f1e0)
 **Created:** 2026-06-26
 **drive_mode:** autopilot
 
@@ -56,10 +56,10 @@ Claudesk's `feature-verify-self` currently drives **Playwright (MCP) against the
   - [x] verify-codify  <!-- status: done — NO new automated tests. No integration boundary (isolated doc/decision artifacts, zero code change in Phase 2). A written verdict + backlog-status update have no automated-test surface; same probe/decision-artifact reasoning as Phase 1. Regression guard already confirmed in Phase 1 codify (cargo test --lib 249 pass) against the only code in this WP (dev-only wiring); Phase 2 changed no Rust/TS so no re-run warranted. -->
 
 ## Current Node
-- **Path:** Feature > ship (all phases complete)
-- **Active scope:** BOTH phases complete (Phase 1 + Phase 2, all verify nodes). **VERDICT: ADOPT.** Next: `/feature-ship`.
+- **Path:** Feature > finalize (review-quality complete)
+- **Active scope:** Shipped (`f18f1e0`) + review-quality done (0 CRITICAL / 0 MAJOR / 3 MINOR, auto-backlogged). **VERDICT: ADOPT.** Next: `/feature-finalize`.
 - **Blocked:** none
-- **Unvisited:** Phase 2 verify-auto → verify-self → verify-human → verify-codify → ship/finalize (probe close).
+- **Unvisited:** finalize (probe close — CHANGELOG, archive WIP).
 - **Verdict (final):** **ADOPT** the MCP bridge as the agent UI-driver for verify-self on workspace-status + NSPanel surfaces (dev-only, release-safe). Boundaries: raw xterm typing low-fidelity; installed-`.app` + `pgrep`-class outcomes stay operator-only.
 - **Open discoveries:** WP2 capability-suppression bug (found + fixed this session — see Discoveries); optional release-ACL-strings follow-up SURFACED (low priority, backlog).
 
@@ -68,3 +68,35 @@ Claudesk's `feature-verify-self` currently drives **Playwright (MCP) against the
      Each entry is also logged to workflow/backlog.md -->
 - [SURFACED-2026-06-26] Phase 1 (fixed in-session) — Inline dev capability suppresses the file-based `default` capability. An inline `app.security.capabilities` entry in `tauri.dev.json` targeting window `"main"` REPLACES (does not merge with) the file-based `default.json` capability for that window — so adding `mcp-bridge:default` alone silently dropped `core:default`/`opener:default`/`dialog:default`, breaking `cc_spawn`'s `event.listen` ("event.listen not allowed: core:event:allow-listen"). FIX: re-list the base perms alongside the bridge perm in the inline dev capability. The probe surfaced this — bare-Vite Playwright never mounts a workspace so it could not have. (Resolved; no backlog carry needed — fix is committed with the WP2 wiring.)
 ```
+
+## Code-Quality Review — m5-wp2-probe-agent-ui-driver
+
+Reviewer: `code-quality-reviewer` subagent against ship commit `f18f1e0`. Result: **0 CRITICAL, 0 MAJOR, 3 MINOR** (Case C — MINOR-only auto-backlogged per drive_mode=autopilot).
+
+### Strengths
+- Dev-only gating is airtight + defense-in-depth: `#[cfg(debug_assertions)]` plugin init, capability only in `tauri.dev.json`, `localhost_only()` off-LAN bind — three independent layers, each documented inline.
+- `localhost_only()` API correction + the inline-capability-suppression bug both captured at the site they bite, with the failing error string preserved.
+- Release-exclusion verified empirically (`nm`/`strings`) and refined honestly (inert ACL strings remain) rather than overclaimed; SURFACED as low-priority follow-up.
+- The WP2 verdict block in `wbs.md` is a high-quality, actionable decision artifact; the CLAUDE.md amendment correctly *amends* (not replaces) the prior operator-only posture and preserves the installed-`.app`/`pgrep` carve-out.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [.mcp.json:1-9] Tracked `.mcp.json` registers `npx -y @hypothesi/tauri-mcp-server` (unpinned, runs latest each invocation) for every checkout — a small standing supply-chain/reproducibility surface. Intentional per the ADOPT verdict; pinning the version or a one-line note in the verdict's wiring-disposition is cheap insurance.
+- [src-tauri/src/lib.rs:65-72] The `#[allow(unused_mut)]` masks the release-build case where `builder` is never reassigned (fine here); any future *unconditional* refactor should drop the allow rather than let it linger.
+- [docs/product/wbs.md recipe step 1] The verify-self recipe says wait for `":9223 LISTEN"`, but the actual stdout token is `"MCP Bridge plugin initialized … 127.0.0.1:9223"` / `"WebSocket server listening on: 127.0.0.1:9223"` — `LISTEN` is an `lsof`/`netstat` artifact, not a stdout string. A future session grepping dev-server stdout for `LISTEN` will miss it.
+
+### Assessment
+Well-executed knowledge-producing probe: minimal executable footprint, correctly release-gated three ways, every non-obvious trap documented at its site. Decision artifacts thorough + correctly scoped. The probe delivered a real bonus (the capability-suppression bug fix). Only debt accrued: the intentional already-SURFACED release-ACL-strings footnote + the unpinned `npx` server — both genuinely low-stakes. Advances the codebase: unblocks agent-driven verify-self for the three workspace-UI features that previously went UNVERIFIED.
+
+### If you disagree
+Dismiss any finding by editing this section + marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+_(MINOR findings auto-backlogged to `workflow/backlog-quality-findings.md` per drive_mode=autopilot; pointer in `workflow/backlog.md`.)_
+
+## Retrospect
+- **What changed in our understanding:** The probe's framing assumed the bridge smoke test would have to be **operator-carried** (the WIP + pause note both said "operator-only at the live tier", needs a fresh session for `.mcp.json` MCP-server liveness). Both assumptions were WRONG and the probe disproved its own premise: (1) the `tauri` MCP tools loaded in the *same* session that created `.mcp.json` — no new session needed; (2) the agent drove the entire O2/O3 smoke test itself against the real macOS WKWebView. The carry-to-operator posture for workspace-UI verify-self is now obsolete for main + NSPanel webviews.
+- **Assumptions that held:** macOS/WKWebView attach worked (the load-bearing "can it attach at all" unknown — the README's "WebKit weaker than Chromium" caveat did NOT bite for DOM/JS/click/screenshot); the dev-only `#[cfg(debug_assertions)]` gating compiled the bridge code cleanly OUT of release (`nm` confirmed); the NSPanel was reachable (best-case).
+- **Assumptions that were wrong:** (1) "needs a new session for MCP liveness" — false. (2) "operator must drive the live tier" — false for the webview surfaces. (3) The release-exclusion criterion (`nm | grep mcp → empty`) was *incomplete* — true for code symbols, but `strings` surfaces inert ACL permission-name tokens (build-time permission codegen emits them because the crate is a `[dependencies]` entry). Functionally release-safe; SURFACED the fully-clean follow-up.
+- **Approach delta:** Plan expected Phase 1 to end at verify-human with a carried-to-operator smoke test; instead Phase 1 verify-human was **agent-driven to PASS**, and the probe surfaced + fixed a real bug (the inline-capability suppression of `core:default` that broke `cc_spawn`) — a bug the bare-Vite path could never have caught, which itself validates the ADOPT verdict. Phase 2's NSPanel-reachability check (P2.1) used the WP1 throwaway `pip_probe` panel as a ready-made test surface (not anticipated in the plan) and came back YES.

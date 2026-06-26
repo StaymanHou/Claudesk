@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-25
+updated: 2026-06-26
 milestone: "Milestone 5 — Picture-in-picture"
 ---
 
@@ -43,7 +43,7 @@ milestone: "Milestone 5 — Picture-in-picture"
 
 ---
 
-## WP2: Probe — agent UI-driver for verify-self on workspace-status surfaces (adopt/reject)
+## WP2: Probe — agent UI-driver for verify-self on workspace-status surfaces (adopt/reject)  ✅ SHIPPED 2026-06-26 (commit f18f1e0; VERDICT: ADOPT)
 
 **Type:** probe
 **Milestone:** M5 (decision explicitly anchored to "M5 planning" — `SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI`)
@@ -53,11 +53,11 @@ milestone: "Milestone 5 — Picture-in-picture"
 **Timebox:** half-day
 **Success criterion:** A written adopt-or-reject decision in this file (under "Probe outcomes") backed by a macOS smoke test of `mcp-server-tauri` against a Claudesk dev build (does a workspace actually mount + is it drivable?). If **adopt:** a minimal harness wired so an M5 status-surface outcome (e.g. "the PiP tile shows AwaitingInput when the hook channel reports it") is agent-observable; record what `feature-verify-self` should invoke. If **reject:** the recorded reason + the standing posture stays "operator-only at the live tier for backend-lifecycle/native-window features" (the existing `CLAUDE.md` verify-self convention), so WP3/WP4 carry their live outcomes into `verify-human` knowingly, not by default.
 **Tasks:**
-- [ ] Install `tauri-plugin-mcp-bridge` into a Claudesk dev build; bring up the MCP server; smoke-test connecting to the running WKWebView.
-- [ ] Verify the workspace + filmstrip actually mount + are drivable (`webview_dom_snapshot` shows real tiles; `webview_execute_js` can read a status dot's state).
-- [ ] Assess the NSPanel reachability specifically — the PiP is a *separate* `tauri-nspanel` webview; confirm whether the driver can attach to it or only the main webview (this bounds what M5 can agent-verify vs. carry to verify-human).
-- [ ] Write the adopt/reject verdict + (if adopt) the minimal verify-self invocation recipe; (if reject) the recorded reason.
-- [ ] Update the `SURFACE-2026-06-23` backlog entry status to RESOLVED with the verdict.
+- [x] Install `tauri-plugin-mcp-bridge` into a Claudesk dev build; bring up the MCP server; smoke-test connecting to the running WKWebView.
+- [x] Verify the workspace + filmstrip actually mount + are drivable (`webview_dom_snapshot` shows real tiles; `webview_execute_js` can read a status dot's state).
+- [x] Assess the NSPanel reachability specifically — the PiP is a *separate* `tauri-nspanel` webview; confirm whether the driver can attach to it or only the main webview (this bounds what M5 can agent-verify vs. carry to verify-human).
+- [x] Write the adopt/reject verdict + (if adopt) the minimal verify-self invocation recipe; (if reject) the recorded reason.
+- [x] Update the `SURFACE-2026-06-23` backlog entry status to RESOLVED with the verdict.
 
 ---
 
