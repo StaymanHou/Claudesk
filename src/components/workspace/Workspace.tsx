@@ -28,6 +28,14 @@ import { RightPanelHost } from "./RightPanelHost";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import type { WireWorkspaceState } from "../../state/workspaceStatus";
 import { deriveFocusHalf, type FocusHalf } from "./focusHalf";
+import {
+  loadSplitState,
+  saveSplitState,
+  gridColumnsFor,
+  cycleRatio,
+  toggleCollapse,
+  type SplitState,
+} from "./splitWidth";
 
 interface WorkspaceProps {
   workspace: WorkspaceModel;
@@ -84,6 +92,44 @@ export function Workspace({
     return () => cancelAnimationFrame(raf);
   }, [visible]);
 
+  // M6 WP3 — the outer left/right split ratio. App-global (one state shared by all
+  // workspaces, mirroring the file-tree rail's app-global model — UI chrome, not
+  // project data). The derived `grid-template-columns` overrides the App.css 1fr/1fr
+  // default via an inline style on `.workspace`. Phase 1: the three ratio presets,
+  // cycled by the header button. Collapse toggles arrive in Phase 2 (the state shape
+  // already carries `collapsed`, so persistence is forward-compatible).
+  const [splitState, setSplitState] = useState<SplitState>(loadSplitState);
+  const cycleSplit = () =>
+    setSplitState((s) => {
+      const next: SplitState = { ...s, ratio: cycleRatio(s.ratio) };
+      saveSplitState(next);
+      return next;
+    });
+  // M6 WP3 Phase 2 — collapse a half (◀ CC / ED ▶). The collapsed half gets
+  // display:none (below), which makes XtermPane's existing offsetParent===null
+  // fit-guard skip fitting to 0 — no crash, PTY stays alive. Toggling the same
+  // half restores to the last ratio (toggleCollapse preserves `ratio`).
+  const toggleSplitCollapse = (half: "left" | "right") =>
+    setSplitState((s) => {
+      const next = toggleCollapse(s, half);
+      saveSplitState(next);
+      return next;
+    });
+  const leftCollapsed = splitState.collapsed === "left";
+  const rightCollapsed = splitState.collapsed === "right";
+
+  // M6 WP3 Phase 2 — nudge a terminal re-fit when the CC half un-collapses
+  // (display:none → shown). The ResizeObserver on the xterm host usually catches the
+  // box going 0 → real, but a display flip is not guaranteed to fire it under
+  // WKWebView, so we explicitly refit on the leftCollapsed false-edge. rAF-deferred
+  // so the layout settles first (same pattern as the visible-edge focus above);
+  // fitAndResize's offsetParent guard makes it a no-op if still hidden.
+  useEffect(() => {
+    if (leftCollapsed) return;
+    const raf = requestAnimationFrame(() => ccPaneRef.current?.refit());
+    return () => cancelAnimationFrame(raf);
+  }, [leftCollapsed]);
+
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !visible) {
@@ -120,10 +166,18 @@ export function Workspace({
       // this is what keeps background xterm buffers serializable for the WP3
       // filmstrip mirror while xterm pauses their off-screen renderer.
       style={
+        // M6 WP3 — the split ratio drives grid-template-columns (overrides the
+        // App.css 1fr/1fr default). Applied in BOTH branches so a backgrounded
+        // workspace lays out at the same track as it will when promoted (keeps
+        // FitAddon sizing the background terminal correctly).
         visible
-          ? { display: "grid" }
+          ? {
+              display: "grid",
+              gridTemplateColumns: gridColumnsFor(splitState),
+            }
           : {
               display: "grid",
+              gridTemplateColumns: gridColumnsFor(splitState),
               position: "absolute",
               left: "-99999px",
               top: 0,
@@ -136,9 +190,56 @@ export function Workspace({
     >
       <div className="workspace-header" data-testid="workspace-header">
         <span className="workspace-header-name">{workspace.display_name}</span>
+        {/* M6 WP3 — the split-ratio control. Two collapse toggles (◀ CC / ED ▶)
+            flank a cycle button whose label is the current ratio (3:1 / 2:2 / 1:3).
+            Collapse + cycle are orthogonal: the cycle steps the three ratios; the
+            toggles fully hide a half (and restore to the last ratio on re-click).
+            At most one half collapsed at a time (toggleCollapse mutual exclusion). */}
+        <div className="workspace-split-control" data-testid="workspace-split-control">
+          <button
+            type="button"
+            className={`split-collapse-btn${leftCollapsed ? " is-active" : ""}`}
+            data-testid="split-collapse-cc"
+            aria-label={leftCollapsed ? "Show CC terminal" : "Collapse CC terminal"}
+            aria-pressed={leftCollapsed}
+            title={leftCollapsed ? "Show CC terminal" : "Collapse CC (show editor only)"}
+            onClick={() => toggleSplitCollapse("left")}
+          >
+            ◀ CC
+          </button>
+          <button
+            type="button"
+            className="split-cycle-btn"
+            data-testid="split-cycle-btn"
+            aria-label={`Split ratio ${splitState.ratio} — click to cycle`}
+            title="Cycle split ratio (CC ↔ editor)"
+            disabled={splitState.collapsed !== "none"}
+            onClick={cycleSplit}
+          >
+            {splitState.ratio}
+          </button>
+          <button
+            type="button"
+            className={`split-collapse-btn${rightCollapsed ? " is-active" : ""}`}
+            data-testid="split-collapse-ed"
+            aria-label={rightCollapsed ? "Show editor panel" : "Collapse editor panel"}
+            aria-pressed={rightCollapsed}
+            title={rightCollapsed ? "Show editor panel" : "Collapse editor (show CC only)"}
+            onClick={() => toggleSplitCollapse("right")}
+          >
+            ED ▶
+          </button>
+        </div>
         <WorkspaceStatusIndicator state={statusState} snippet={statusSnippet} />
       </div>
-      <div className="workspace-left">
+      {/* M6 WP3 — the ◀ CC collapse hides the left half via display:none. That makes
+          XtermPane's fitAndResize see host.offsetParent === null and SKIP fit()
+          (no fit-to-0 crash); the PTY session stays alive. On restore, the
+          ResizeObserver re-fires and fits to the recovered width. */}
+      <div
+        className="workspace-left"
+        style={leftCollapsed ? { display: "none" } : undefined}
+      >
         <XtermPane
           ref={ccPaneRef}
           workspaceId={workspace.id}
@@ -150,6 +251,7 @@ export function Workspace({
         workspaceId={workspace.id}
         projectPath={workspace.project_path}
         visible={visible}
+        collapsed={rightCollapsed}
         registerDirtyProbe={registerDirtyProbe}
       />
     </div>

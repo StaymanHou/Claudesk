@@ -24,9 +24,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri dev
 
-- **Last:** 15s (2026-06-20, warm rebuild incl. git2 dep for WP4; window launched)
+- **Last:** 65s (2026-06-27, WP3 verify-self: cold-ish rebuild after source change — recompiled claudesk + plugins, ~65s to MCP-bridge bind + window)
 - **Use timeout:** 600000
 - **History:**
+  - 65s — 2026-06-27 (WP3 P1 verify-self; cold-ish: source changed since last build, full claudesk + plugin recompile to bridge bind)
   - 15s — 2026-06-20 (warm rebuild after WP4 git2 add; cargo recompiled claudesk + plugins, ~14.8s)
   - 29s — 2026-06-16 (first compile; incremental rebuilds will be faster)
 

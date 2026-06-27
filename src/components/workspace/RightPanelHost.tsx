@@ -39,6 +39,7 @@ import {
   clampRailWidth,
   loadRailWidth,
   saveRailWidth,
+  effectiveRailWidth,
 } from "./filetree/railWidth";
 import { ProjectSearch } from "./search/ProjectSearch";
 import { isSearchChord } from "./search/searchChord";
@@ -79,6 +80,12 @@ interface RightPanelHostProps {
   /** True when this workspace is the focused/visible tab (display:block vs none). */
   visible: boolean;
   /**
+   * M6 WP3 Phase 2 — true when the right half is collapsed by the ED▶ split toggle.
+   * Applies display:none to `.workspace-right` (the panel + its state stay mounted —
+   * collapse is a layout hide, not a teardown). Optional; defaults to not-collapsed.
+   */
+  collapsed?: boolean;
+  /**
    * QoL-WP1 — register a probe that returns this workspace's current unsaved-doc count,
    * so App's workspace-close dirty guard can ask "does closing this discard edits?".
    * Registered on mount, unregistered (probe=null) on unmount. Optional so existing
@@ -94,6 +101,7 @@ export function RightPanelHost({
   workspaceId,
   projectPath,
   visible,
+  collapsed = false,
   registerDirtyProbe,
 }: RightPanelHostProps) {
   // WP12 — open files live in PER-PANE TAB STRIPS (EditorSplit owns the pane model;
@@ -272,6 +280,28 @@ export function RightPanelHost({
   const railDragRef = useRef<{ startX: number; startWidth: number } | null>(
     null,
   );
+
+  // M6 WP3 (back-loop fix) — track the live right-panel width so the APPLIED rail
+  // width can be capped to a fraction of it. At the 3:1 split the right panel is
+  // ~¼ of the workspace (~320px); the stored ~299px rail would otherwise crowd the
+  // editor into an unusable sliver. We cap the applied width (via effectiveRailWidth)
+  // WITHOUT mutating the stored/dragged `railWidth`, so widening the panel (2:2/1:3
+  // or a window resize) restores exactly the user's chosen width. A ResizeObserver
+  // on `.workspace-right` keeps `panelWidth` current across split-ratio changes,
+  // window resizes, and center-stage switches.
+  const rightHostRef = useRef<HTMLDivElement>(null);
+  const [panelWidth, setPanelWidth] = useState<number>(0);
+  useEffect(() => {
+    const host = rightHostRef.current;
+    if (!host) return;
+    setPanelWidth(host.getBoundingClientRect().width);
+    const obs = new ResizeObserver((entries) => {
+      for (const e of entries) setPanelWidth(e.contentRect.width);
+    });
+    obs.observe(host);
+    return () => obs.disconnect();
+  }, []);
+  const appliedRailWidth = effectiveRailWidth(railWidth, panelWidth);
 
   // Begin a rail-resize drag: record the start point + width, then track the pointer
   // on the document (so the drag continues even if the cursor leaves the thin handle)
@@ -599,7 +629,9 @@ export function RightPanelHost({
       data-testid="file-tree-rail"
       // WP11 Part C — the dragged width overrides the CSS default. Not applied when
       // collapsed (the .is-collapsed rule pins width:auto for the strip).
-      style={treeCollapsed ? undefined : { width: `${railWidth}px` }}
+      // M6 WP3 — apply the panel-fraction-capped width (effectiveRailWidth), not the
+      // raw stored width, so the editor stays usable at the narrow 3:1 right panel.
+      style={treeCollapsed ? undefined : { width: `${appliedRailWidth}px` }}
     >
       {/* QoL-WP5 — rail header: the collapse toggle + a "+ new file" action. The
           header is a flex row so the + sits at the trailing edge; the + is hidden
@@ -673,7 +705,14 @@ export function RightPanelHost({
   );
 
   return (
-    <div className="workspace-right">
+    <div
+      className="workspace-right"
+      ref={rightHostRef}
+      // M6 WP3 — the ED▶ collapse hides the right half (display:none). The panel +
+      // all its state stay mounted (a layout hide, not a teardown), consistent with
+      // the all-workspaces-stay-mounted invariant.
+      style={collapsed ? { display: "none" } : undefined}
+    >
       {/* WP11 Phase 5 — the right half is a single vertical column: the
           Editor/Diff/Terminal tab row on top (full width), then the panel slots. The
           FileTree rail is no longer a peer here — it lives INSIDE the editor slot

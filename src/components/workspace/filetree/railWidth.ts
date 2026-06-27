@@ -52,3 +52,31 @@ export function saveRailWidth(px: number): void {
     /* storage unavailable / quota — a non-persisted width is acceptable */
   }
 }
+
+/**
+ * The largest fraction of the containing right-panel width the rail may occupy.
+ * At a narrow panel (e.g. the M6 WP3 3:1 split → ~320px) the stored/dragged rail
+ * width (default ~299px) would otherwise crowd the editor into an unusable sliver.
+ * Capping the *applied* width to half the panel guarantees the editor always keeps
+ * at least the other half. At wide panels the cap never bites (panel*0.5 ≫ the
+ * stored width), so the user's dragged width is honored unchanged.
+ */
+export const RAIL_MAX_PANEL_FRACTION = 0.5;
+
+/**
+ * The rail width to actually APPLY, given the stored/dragged width and the live
+ * containing-panel width. Caps to RAIL_MAX_PANEL_FRACTION of the panel so the
+ * editor stays usable at narrow splits — but NEVER below RAIL_MIN (a too-narrow
+ * panel keeps a usable-minimum rail rather than vanishing it), and never above the
+ * stored width (widening the panel restores exactly the dragged width). A
+ * non-positive/non-finite panelWidth (not yet measured) → the stored width
+ * unchanged, so first paint matches today.
+ */
+export function effectiveRailWidth(
+  storedWidth: number,
+  panelWidth: number,
+): number {
+  if (!Number.isFinite(panelWidth) || panelWidth <= 0) return storedWidth;
+  const cap = Math.max(RAIL_MIN, panelWidth * RAIL_MAX_PANEL_FRACTION);
+  return Math.min(storedWidth, cap);
+}

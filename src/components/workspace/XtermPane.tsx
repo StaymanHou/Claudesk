@@ -50,6 +50,13 @@ import {
  */
 export interface XtermPaneHandle {
   focus(): void;
+  /**
+   * M6 WP3 — re-fit the terminal to its container and push cols/rows to the PTY.
+   * Called by the parent on the un-collapse edge (display:none → shown): the
+   * ResizeObserver may not reliably fire on a display flip under WKWebView, so the
+   * parent nudges a fit. No-op while the host is still hidden (offsetParent guard).
+   */
+  refit(): void;
 }
 
 interface XtermPaneProps {
@@ -110,9 +117,15 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // QoL-WP3 — imperative focus handle for the parent Workspace's visible-edge effect.
     // Null-safe: a no-op before the terminal mounts. Focus-ONLY (never writes to the PTY)
     // so a center-stage switch can't inject a spurious prompt line.
+    // M6 WP3 — holds the latest fitAndResize so the imperative handle (defined here,
+    // before fitAndResize) can call it without a reorder or a stale closure.
+    const fitAndResizeRef = useRef<() => void>(() => {});
     useImperativeHandle(
       ref,
-      () => ({ focus: () => termRef.current?.focus() }),
+      () => ({
+        focus: () => termRef.current?.focus(),
+        refit: () => fitAndResizeRef.current(),
+      }),
       [],
     );
     // Spawn trigger. The spawn effect keys on THIS (not `bridge.phase`) so the
@@ -173,6 +186,9 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
         rows: term.rows,
       }).catch(() => {});
     }, []);
+    // Keep the imperative-handle ref pointing at the live fitAndResize (stable here
+    // since the callback deps are []; assignment-on-render is fine for a ref).
+    fitAndResizeRef.current = fitAndResize;
 
     // Mount the xterm terminal once per workspace; wire keystrokes + resize. This
     // effect does NOT depend on the session — it owns the terminal for the pane's
