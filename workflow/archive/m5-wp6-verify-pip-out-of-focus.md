@@ -1,7 +1,7 @@
 # Feature: M5 WP6 — Verify M5: PiP out-of-focus status visibility across all layouts
 
 **Workflow:** feature
-**State:** ship (complete — verify-only WP; agent-verified PASS, installed-build checks deferred to /release)
+**State:** Completed 2026-06-27 — agent-verified PASS via the MCP bridge; installed-build checks DEFERRED-TO-RELEASE. Closes M5.
 **Created:** 2026-06-27
 **Drive mode:** autopilot
 
@@ -50,12 +50,37 @@ Milestone-exit verification of the M5 (Picture-in-picture) exit criteria against
   - [x] verify-codify  <!-- status: N/A — verify-only WP, no behavior to codify; Phase 2 is manual operator verification -->
 
 ## Current Node
-- **Path:** Feature > WP6 complete (ready for ship/finalize)
+- **Path:** Feature > review-quality complete (clean, docs-only) → finalize
 - **Active scope:** none — both phases resolved
 - **Blocked:** none
 - **Note (verify-only WP):** Phase 1's agent-drivable outcomes all PASS via the MCP bridge (status dots, all 4 layouts + auto-resize + persistence, minimal attention-weighting, display-only inertness, PiP↔filmstrip agreement, pip-mode broadcast mechanism + Auto hide-while-focused). Phase 1 verify-human SKIPPED by operator. Phase 2 (installed-build out-of-focus — the M5 exit criterion + native menu glyph + auto-summon + dev/prod isolation + tauri#5566) DEFERRED-TO-RELEASE by operator: verified at the `/release` gate before Homebrew distribution.
 - **Unvisited:** none
 - **Open discoveries:** the deferred-to-release verification (see Discoveries) — must be honored at `/release`.
+
+## Retrospect
+- **What changed in our understanding:** The WP2-ADOPTED MCP bridge proved itself end-to-end on a *real* milestone-exit verification, not just the WP2 smoke test — it drove status transitions (via `workspace-status` IPC emit), all 4 PiP layouts (via the `pip-layout-switch` click), display-only inertness, and PiP↔filmstrip agreement, all agent-side. The dead-end that bit M4 WP3/WP4/WP4b (bare-Vite, no `__TAURI_INTERNALS__`) is genuinely dissolved for the dev build. The agent verified far more of a native-window feature than the pre-WP2 posture ("operator-only at the live tier") would have allowed.
+- **Assumptions that held:** The WP2 boundary table was exactly right — DOM/IPC/click/screenshot on both `main` and `pip` webviews were high-fidelity; status *transitions* are best triggered via IPC, not CC-TUI typing; and the genuinely-native pieces (out-of-focus AppKit behavior, the native View-menu checkmark glyph, installed-`.app` parity) are unreachable by the bridge and correctly carried to the operator. The roster divergence (PiP mirrors ALL N incl. the center-staged tile) held as designed.
+- **Assumptions that were wrong:** Minor mechanics, not substance: (1) `pip_set_layout` / `pip_set_mode` are NOT directly invokable via `ipc_execute_command` (the bridge restricts the command allow-list) — drove the on-panel switcher click + the right-panel toggle instead; (2) async/Promise-returning `webview_execute_js` times out — used synchronous reads after a shell `sleep`; (3) the duplicated `pip-toggle` (off-screen background-RightPanelHost instance resolves first by selector) forced coordinate-based clicks — this is the already-backlogged per-`RightPanelHost` `pipMode` duplication MINOR, re-confirmed here.
+- **Approach delta:** Plan held. The plan correctly split agent-drivable (Phase 1) vs operator/native (Phase 2). The only delta is the *resolution* of Phase 2: rather than the operator walking it at verify-human now, they chose to **defer the installed-build checks to the `/release` gate** — a single pre-distribution verification point instead of a per-WP one. Recorded as `DEFERRED-TO-RELEASE` + a high-priority backlog SURFACE + a memory so it's enforced before publishing.
+
+## Code-Quality Review — m5-wp6-verify-pip-out-of-focus
+
+### Strengths
+- Verification-only WP: the ship commit (`7bafd71`) is 100% documentation (`wbs.md`, `backlog.md`, the WIP file) — **zero source-code diff**. No new code to accrue debt.
+- The deferred installed-build verification was recorded honestly (WIP tree `DEFERRED-TO-RELEASE`, a high-priority backlog SURFACE, and a memory) rather than silently marked passed — the M5 exit criterion stays auditable at the `/release` gate.
+
+### Issues
+**CRITICAL** — none.
+**MAJOR** — none.
+**MINOR** — none.
+
+(No source code changed; nothing to review. Reviewer subagent not spawned — a docs-only verify WP is clean by construction. Pre-existing backlogged m5-wp5 MINORs — stale `pip_toggle` rustdoc, per-RightPanelHost `pipMode` duplication — are untouched by this WP and remain in the backlog for a future `/feature-refactor`.)
+
+### Assessment
+Clean by construction. WP6 is the M5 milestone-exit verification; it ships documentation only, so there is no code-quality surface. Agent-drivable outcomes all passed via the MCP bridge; the installed-build outcomes are deferred to release with an enforced backlog pointer.
+
+### If you disagree
+Edit this section in the WIP and mark a finding `[DISMISSED]` before `feature-finalize` archives the file.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

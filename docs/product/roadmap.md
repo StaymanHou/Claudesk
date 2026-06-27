@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-26  # Revision 2026-06-26b: friend-QoL milestone inserted as M6 (slides menu-bar→M7, docs-viewer→M8, time-analytics→M9, auto-resume→M10, skill-orch→M11, polish→M12). Earlier same-day (2026-06-26): time-analytics absorb-claude-time inserted. Next execution milestone: M5 (PiP, unconditional).
+updated: 2026-06-27  # Revision 2026-06-27: M5 (PiP) COMPLETE — all 6 WPs shipped, agent-verified PASS via the MCP bridge; installed-build out-of-focus confirmation deferred to /release. Next execution milestone: M6 (friend-QoL, lead item = fix the stuck-`Running` status dot). | Revision 2026-06-26b: friend-QoL milestone inserted as M6 (slides menu-bar→M7, docs-viewer→M8, time-analytics→M9, auto-resume→M10, skill-orch→M11, polish→M12). Earlier same-day (2026-06-26): time-analytics absorb-claude-time inserted.
 ---
 
 # Roadmap
@@ -89,15 +89,15 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 > - **N=1-clamp ripple** — the lift from "replace the single workspace" to "append a workspace" surfaces latent N=1 assumptions to resolve: `kill_all` serializing 3s grace windows under one lock (WP7-M1), the `active`-prop defaults (WP3b-M2), the `"terminal"` panel-seam guard (WP5-M2).
 > - **Workflow-doc-hierarchy watcher does NOT land in M4** — deferred and anchored to M6 (see `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`). M4's filmstrip status dot is driven by the M3 CC-hook channel alone.
 
-### Milestone 5: Picture-in-picture *(was Milestone 8 — now unconditional, and ordered before the menu-bar)*
+### Milestone 5: Picture-in-picture *(was Milestone 8 — now unconditional, and ordered before the menu-bar)*  ✅ COMPLETE 2026-06-27
 
 **Goal:** An always-on-top floating status surface for when the Claudesk window is out of focus. *(Resequenced 2026-06-22: ships **before** the menu-bar item and is **no longer conditional** — the prior "build the menu-bar first, gate PiP on a dogfood week" plan is dropped per operator decision. Depends on Milestone 3's broadcaster + Milestone 4's filmstrip-tile rendering.)*
 
 **Deliverables:**
-- [ ] **PiP NSPanel** via `tauri-nspanel` v2.1: `PanelBuilder` with `no_activate(true)` + `PanelLevel::Floating` + `CanJoinAllSpaces | FullScreenAuxiliary | Stationary`. User-toggled (menu-bar right-click or in-Claudesk button). Display-only — clicking a tile does NOT bring the workspace forward (that's a Future Possibility).
-- [ ] **PiP rendering mode** matches the filmstrip outcome: live ~1 fps mirrors (probe PASSED).
+- [x] **PiP NSPanel** via `tauri-nspanel` v2.1 (WP1 GO → WP3): `PanelBuilder` with `PanelLevel::Floating` + `CanJoinAllSpaces | FullScreenAuxiliary | Stationary` + `NonactivatingPanel` style mask (NOT `no_activate(true)` — WP1 proved it destructive). User-toggled via the in-Claudesk right-panel PiP icon + a View-menu tri-state radio (Off/On/Auto). Display-only — clicking a tile does NOT bring the workspace forward (Future Possibility). **Plus (operator scope-adds):** 4 selectable layouts (horizontal/vertical mirror, compact, minimal) with persisted switcher + content-driven auto-resize (WP4); auto-summon-on-blur tri-state `PipMode` lifecycle (WP5).
+- [x] **PiP rendering mode** matches the filmstrip outcome: live ~1 fps mirrors via the shared `useMirrorTicker` serialize (WP3 — one serialize loop feeds both filmstrip + PiP, no second loop).
 
-**Exit Criteria:** The PiP panel ships and mirrors the same status surface as the filmstrip; workspace status is visible while the Claudesk window is out of focus.
+**Exit Criteria:** The PiP panel ships and mirrors the same status surface as the filmstrip; workspace status is visible while the Claudesk window is out of focus. *(Agent-verified PASS on the dev build via the MCP bridge at WP6; the installed-`.app` out-of-focus confirmation is operator-deferred to the `/release` gate before Homebrew distribution — `SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE`.)*
 
 ### Milestone 6: Friend-requested QoL polish *(new — inserted 2026-06-26; an OPEN collection bucket)*
 
