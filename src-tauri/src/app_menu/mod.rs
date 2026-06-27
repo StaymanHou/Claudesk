@@ -252,9 +252,10 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pip_on = CheckMenuItemBuilder::with_id(ids::PIP_MODE_ON, "PiP: On (pinned)")
         .checked(pip_mode == PipMode::On)
         .build(app)?;
-    let pip_auto = CheckMenuItemBuilder::with_id(ids::PIP_MODE_AUTO, "PiP: Auto (summon when away)")
-        .checked(pip_mode == PipMode::Auto)
-        .build(app)?;
+    let pip_auto =
+        CheckMenuItemBuilder::with_id(ids::PIP_MODE_AUTO, "PiP: Auto (summon when away)")
+            .checked(pip_mode == PipMode::Auto)
+            .build(app)?;
     // Stash the handles so the runtime `pip-mode` listener can re-check them (the menu is
     // never rebuilt). Managed by type — one set per app, keyed on `PipModeMenuItems<R>`.
     app.manage(PipModeMenuItems {

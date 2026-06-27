@@ -137,6 +137,19 @@ pub fn event_to_state(event: &HookEvent) -> Option<WorkspaceState> {
     }
 }
 
+/// The short, stable label for a [`WorkspaceState`] used by the WP1 status-channel
+/// telemetry (`status_log`). Matches the serde `snake_case` rendering so a log line
+/// and the wire DTO read the same. Kept here next to the enum so a future variant/
+/// rename updates both in one place.
+pub(crate) fn state_label(state: WorkspaceState) -> &'static str {
+    match state {
+        WorkspaceState::Idle => "idle",
+        WorkspaceState::Running => "running",
+        WorkspaceState::AwaitingInput => "awaiting_input",
+        WorkspaceState::Unknown => "unknown",
+    }
+}
+
 /// The status update broadcast on the `workspace-status` Tauri event — the single
 /// DTO every status surface consumes.
 ///
@@ -223,7 +236,7 @@ impl WorkspaceRegistry {
 /// `canonicalize` fails (e.g. the path no longer exists on disk) — a non-existent
 /// `cwd` then simply won't match any canonicalized registered path and is dropped,
 /// which is the intended "no open workspace" behavior. Never panics.
-fn canonical_key(path: &Path) -> String {
+pub(crate) fn canonical_key(path: &Path) -> String {
     match path.canonicalize() {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(_) => path.to_string_lossy().into_owned(),
@@ -384,6 +397,31 @@ mod tests {
                 Some(WorkspaceState::Idle),
             ]
         );
+    }
+
+    #[test]
+    fn state_label_matches_serde_snake_case_rendering() {
+        // M6 WP1: the status-channel log renders each state via `state_label`. Pin that
+        // it agrees with the serde snake_case wire rendering for ALL four variants, so a
+        // future enum reorder/rename can't silently drift the log label away from the DTO
+        // (the same drift-guard discipline as `dto_serde_shape_is_snake_case`). Assert
+        // against serde to keep the two derivations in lockstep, not against literals.
+        for state in [
+            WorkspaceState::Idle,
+            WorkspaceState::Running,
+            WorkspaceState::AwaitingInput,
+            WorkspaceState::Unknown,
+        ] {
+            let serde_rendered = serde_json::to_value(state).unwrap();
+            assert_eq!(
+                serde_json::Value::String(state_label(state).to_string()),
+                serde_rendered,
+                "state_label must match the serde snake_case rendering for {state:?}"
+            );
+        }
+        // And spot-check the exact literals the operator reads in the log.
+        assert_eq!(state_label(WorkspaceState::Running), "running");
+        assert_eq!(state_label(WorkspaceState::AwaitingInput), "awaiting_input");
     }
 
     #[test]

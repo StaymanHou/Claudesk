@@ -37,6 +37,9 @@ mod project_search;
 // Phase 1 = the pure transform core + DTO + registry; Phase 2 drains WP3's receiver
 // and wires the Tauri emit in `.setup()`.
 mod status_broadcaster;
+// M6 WP1: best-effort file telemetry for the status channel (stuck-`Running` dot
+// probe) — readable from the launchd-launched prod `.app` where stderr is invisible.
+mod status_log;
 mod sublime;
 
 use std::sync::Mutex;

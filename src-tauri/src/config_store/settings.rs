@@ -116,7 +116,10 @@ mod tests {
         let settings = read_settings(dir.path()).unwrap();
         assert_eq!(settings, AppSettings::default());
         // And the default layout resolves to horizontal mirror.
-        assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::HorizontalMirror);
+        assert_eq!(
+            read_pip_layout(dir.path()).unwrap(),
+            PipLayout::HorizontalMirror
+        );
     }
 
     #[test]
@@ -139,7 +142,10 @@ mod tests {
         .unwrap();
         write_pip_layout(dir.path(), PipLayout::VerticalMirror).unwrap();
         // pip_layout updated...
-        assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::VerticalMirror);
+        assert_eq!(
+            read_pip_layout(dir.path()).unwrap(),
+            PipLayout::VerticalMirror
+        );
         // ...and the unknown field is still on disk (serde ignores it on read but a
         // round-trip through our typed struct would drop it — so we assert the typed
         // value, and separately that an unknown key does not BREAK the read).

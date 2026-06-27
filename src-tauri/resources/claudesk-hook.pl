@@ -13,11 +13,19 @@
 # Discipline (proven in the WP1 probe, see docs/product/wp1-hook-socket-probe-outcome.md):
 #   - reads the event payload as JSON on stdin,
 #   - exits 0 UNCONDITIONALLY — a down Claudesk (no listener) must NEVER block CC,
-#   - uses only macOS-bundled Perl stdlib (JSON::PP, IO::Socket::UNIX, Time::HiRes),
+#   - uses only macOS-bundled Perl stdlib (JSON::PP, IO::Socket::UNIX, Time::HiRes,
+#     File::Basename),
 #   - ~15 ms/call (Perl cold-start dominated; the socket write adds ~3 ms).
 #
 # The socket path is passed via the CLAUDESK_HOOK_SOCK env var, set in the hook's
 # registered `command` by Claudesk's installer (hook_install). Absent env → no-op.
+#
+# M6 WP1 (status-channel logging probe): when the socket can't be opened, the hook
+# appends a best-effort `- HOOK write-failed …` trace to status-channel.log in the SAME
+# per-identity app-data dir the Rust backend logs to (the socket's parent dir). This
+# distinguishes a never-arrived event (a HOOK write-failed line, no matching STATUS
+# line) from an arrived-but-unresolved one (a STATUS line with resolved=none) when
+# diagnosing the stuck-Running dot. Still best-effort — wrapped in eval, exit 0 stands.
 
 use strict;
 use warnings;
@@ -73,6 +81,25 @@ my $sock = eval {
 if ($sock) {
     print $sock $line;
     close($sock);
+} else {
+    # M6 WP1 (Phase 2): the socket could not be opened (Claudesk down, or a stale/
+    # broken socket). When CC fired this event but Claudesk was running, the absence of
+    # a corresponding STATUS line in status-channel.log would otherwise be ambiguous
+    # (never-arrived vs arrived-but-unresolved). Append a best-effort write-failure
+    # trace to the SAME per-identity log dir the backend writes — the socket's parent
+    # dir IS app_data_dir, so no new env var is needed. Strictly best-effort and must
+    # NEVER change the unconditional exit 0: wrap in eval, swallow any IO error.
+    eval {
+        require File::Basename;
+        my $dir = File::Basename::dirname($sock_path);
+        my $log = "$dir/status-channel.log";
+        if (open(my $lf, '>>', $log)) {
+            print $lf "- HOOK write-failed event=$event cwd="
+                . ($out{cwd} // '') . " sock=$sock_path\n";
+            close($lf);
+        }
+    };
+    # any failure above is intentionally ignored — telemetry must not block CC.
 }
 
 exit 0;

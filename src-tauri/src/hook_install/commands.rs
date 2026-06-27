@@ -221,15 +221,24 @@ mod tests {
     fn script_basename_maps_dev_identifier_to_dev_script() {
         // The dev overlay (tauri.dev.json) sets this identifier; the distinct
         // basename is what isolates the deployed script + the settings.json marker.
-        assert_eq!(script_basename("com.claudesk.app.dev"), HOOK_SCRIPT_NAME_DEV);
-        assert_eq!(script_basename("com.claudesk.app.dev"), "claudesk-hook-dev.pl");
+        assert_eq!(
+            script_basename("com.claudesk.app.dev"),
+            HOOK_SCRIPT_NAME_DEV
+        );
+        assert_eq!(
+            script_basename("com.claudesk.app.dev"),
+            "claudesk-hook-dev.pl"
+        );
     }
 
     #[test]
     fn script_basename_only_dev_suffix_triggers_dev_script() {
         // Defensive: only a trailing `.dev` flips to the dev script. An identifier
         // that merely contains "dev" elsewhere stays prod.
-        assert_eq!(script_basename("com.claudesk.devtools"), HOOK_SCRIPT_NAME_PROD);
+        assert_eq!(
+            script_basename("com.claudesk.devtools"),
+            HOOK_SCRIPT_NAME_PROD
+        );
         assert_eq!(script_basename("com.dev.claudesk"), HOOK_SCRIPT_NAME_PROD);
     }
 }

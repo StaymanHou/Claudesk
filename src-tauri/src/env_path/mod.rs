@@ -114,10 +114,7 @@ mod tests {
     #[test]
     fn resolve_trims_a_trailing_newline() {
         // Login shells commonly emit a trailing newline; it must not pollute PATH.
-        assert_eq!(
-            resolve_path(Some("/a:/b\n")),
-            Some("/a:/b".to_string())
-        );
+        assert_eq!(resolve_path(Some("/a:/b\n")), Some("/a:/b".to_string()));
     }
 
     #[test]

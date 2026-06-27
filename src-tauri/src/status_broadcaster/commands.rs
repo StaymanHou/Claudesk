@@ -22,10 +22,13 @@ use std::path::Path;
 use std::sync::mpsc::Receiver;
 use std::thread;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
-use super::{to_update, SharedRegistry, WorkspaceRegistry};
+use super::{
+    canonical_key, event_to_state, state_label, to_update, SharedRegistry, WorkspaceRegistry,
+};
 use crate::hook_socket::HookEvent;
+use crate::status_log::{format_event_line, StatusLog};
 
 /// The Tauri event name every status surface (M4 filmstrip, M5 PiP, M6 menu-bar)
 /// subscribes to. The single broadcast channel — defined here, mirrored verbatim by
@@ -47,9 +50,26 @@ pub const STATUS_EVENT: &str = "workspace-status";
 /// already having been taken (a double-start bug), which we treat as an error rather
 /// than a panic.
 pub fn start_broadcaster(app: AppHandle, receiver: Receiver<HookEvent>) -> thread::JoinHandle<()> {
+    // M6 WP1: resolve the status-channel log path ONCE at thread start (not per event).
+    // `app_data_dir()` is per-identity (`com.claudesk.app` vs `.dev`), so the log is
+    // isolated like settings.json / hook.sock. A failure to resolve the dir → no
+    // logger (None); telemetry is best-effort and must never block the drain thread.
+    let status_log = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .map(|dir| StatusLog::new(&dir));
+    // Startup breadcrumb so the operator (and WP2's repro) knows exactly where to read,
+    // including from the launchd-launched prod `.app` where stderr is invisible.
+    if let Some(log) = &status_log {
+        log.write_line(&format!(
+            "- STATUS broadcaster-start log={}",
+            log.path().display()
+        ));
+    }
     thread::Builder::new()
         .name("claudesk-status-broadcaster".into())
-        .spawn(move || drain_loop(app, receiver))
+        .spawn(move || drain_loop(app, receiver, status_log))
         .expect("failed to spawn status-broadcaster drain thread")
 }
 
@@ -59,12 +79,15 @@ pub fn start_broadcaster(app: AppHandle, receiver: Receiver<HookEvent>) -> threa
 /// the event mapped to a state AND its cwd resolved to an open workspace (otherwise
 /// the event is silently dropped — not an error). A `recv` `Err` (sender dropped =
 /// socket listener gone) ends the loop cleanly.
-fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>) {
-    use tauri::Manager;
+fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>, status_log: Option<StatusLog>) {
     while let Ok(event) = receiver.recv() {
-        // Resolve + transform under a short registry lock, then drop the lock
-        // before emitting (emit must not hold the registry mutex).
-        let update = {
+        // Resolve + transform under a short registry lock, then drop the lock before
+        // emitting (emit must not hold the registry mutex). The canonical `to_update`
+        // is the single source of truth for the emit; M6 WP1 ALSO computes the two
+        // decisions SEPARATELY (mapped state, resolved id) for telemetry, so a line
+        // can distinguish a never-mapped event from a Stop that arrived but whose cwd
+        // matched no open workspace (the cwd-match-miss prime suspect).
+        let (mapped, resolved, update) = {
             let registry = match app.try_state::<SharedRegistry>() {
                 Some(r) => r,
                 None => {
@@ -74,6 +97,15 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>) {
                     eprintln!(
                         "[claudesk] status-broadcaster: registry not in state; dropping event"
                     );
+                    if let Some(log) = &status_log {
+                        log.write_line(&format_event_line(
+                            event.timestamp,
+                            &event.hook_event_name,
+                            &event.cwd,
+                            event_to_state(&event).map(state_label),
+                            None,
+                        ));
+                    }
                     continue;
                 }
             };
@@ -81,8 +113,22 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>) {
                 Ok(r) => r,
                 Err(poisoned) => poisoned.into_inner(), // a poisoned lock is still readable
             };
-            to_update(&event, &reg)
+            let mapped = event_to_state(&event);
+            let resolved = reg.resolve_cwd(&event.cwd);
+            let update = to_update(&event, &reg);
+            (mapped, resolved, update)
         };
+
+        // M6 WP1: one telemetry line per drained event (best-effort; never blocks).
+        if let Some(log) = &status_log {
+            log.write_line(&format_event_line(
+                event.timestamp,
+                &event.hook_event_name,
+                &event.cwd,
+                mapped.map(state_label),
+                resolved.as_deref(),
+            ));
+        }
 
         if let Some(update) = update {
             if let Err(e) = app.emit(STATUS_EVENT, &update) {
@@ -113,10 +159,15 @@ pub fn init_registry() -> SharedRegistry {
 /// workspace, which the frontend shows honestly.
 #[tauri::command]
 pub fn workspace_register(
+    app: AppHandle,
     registry: State<'_, SharedRegistry>,
     project_path: String,
     workspace_id: String,
 ) -> Result<(), String> {
+    // M6 WP1: log the canonical registry key on register so a later Stop's
+    // resolved/missed cwd can be compared against the key actually stored — the
+    // canonicalization seam is the cwd-match-miss prime suspect.
+    log_registry_mutation(&app, "register", Some(&workspace_id), &project_path);
     let mut reg = registry
         .lock()
         .map_err(|_| "workspace registry lock poisoned".to_string())?;
@@ -129,14 +180,34 @@ pub fn workspace_register(
 /// is surfaced, never swallowed.
 #[tauri::command]
 pub fn workspace_deregister(
+    app: AppHandle,
     registry: State<'_, SharedRegistry>,
     project_path: String,
 ) -> Result<(), String> {
+    // M6 WP1: log the deregister canonical key (a workspace closing should remove the
+    // mapping a subsequent Stop would have resolved against).
+    log_registry_mutation(&app, "deregister", None, &project_path);
     let mut reg = registry
         .lock()
         .map_err(|_| "workspace registry lock poisoned".to_string())?;
     reg.deregister(Path::new(&project_path));
     Ok(())
+}
+
+/// M6 WP1 helper: best-effort telemetry of a registry mutation — resolves the status
+/// log from `app_data_dir()` and writes one `REGISTRY` line with the canonicalized key
+/// (the same `canonical_key` the registry stores/resolves on). Swallows a missing
+/// data-dir; never errors the command.
+fn log_registry_mutation(app: &AppHandle, op: &str, workspace_id: Option<&str>, raw_path: &str) {
+    if let Ok(dir) = app.path().app_data_dir() {
+        let key = canonical_key(Path::new(raw_path));
+        StatusLog::new(&dir).write_line(&crate::status_log::format_registry_line(
+            op,
+            workspace_id,
+            raw_path,
+            &key,
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -146,7 +217,7 @@ mod tests {
     use std::time::Duration;
 
     use crate::hook_socket::{bind_listener, spawn_listener};
-    use crate::status_broadcaster::WorkspaceState;
+    use crate::status_broadcaster::{to_update, WorkspaceState};
     use std::io::Write;
     use std::os::unix::net::UnixStream;
 

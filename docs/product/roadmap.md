@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-27  # Revision 2026-06-27: M5 (PiP) COMPLETE — all 6 WPs shipped, agent-verified PASS via the MCP bridge; installed-build out-of-focus confirmation deferred to /release. Next execution milestone: M6 (friend-QoL, lead item = fix the stuck-`Running` status dot). | Revision 2026-06-26b: friend-QoL milestone inserted as M6 (slides menu-bar→M7, docs-viewer→M8, time-analytics→M9, auto-resume→M10, skill-orch→M11, polish→M12). Earlier same-day (2026-06-26): time-analytics absorb-claude-time inserted.
+updated: 2026-06-27  # M6 WBS WRITTEN 2026-06-27 (docs/product/wbs.md; 8 WPs, lead = stuck-Running dot fix). | Revision 2026-06-27: M5 (PiP) COMPLETE — all 6 WPs shipped, agent-verified PASS via the MCP bridge; installed-build out-of-focus confirmation deferred to /release. Next execution milestone: M6 (friend-QoL, lead item = fix the stuck-`Running` status dot). | Revision 2026-06-26b: friend-QoL milestone inserted as M6 (slides menu-bar→M7, docs-viewer→M8, time-analytics→M9, auto-resume→M10, skill-orch→M11, polish→M12). Earlier same-day (2026-06-26): time-analytics absorb-claude-time inserted.
 ---
 
 # Roadmap

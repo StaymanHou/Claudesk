@@ -64,10 +64,7 @@ pub enum EditorFsError {
     #[error("path {0} is a directory; recursive directory delete is not supported")]
     IsDirectory(String),
     #[error("could not move {path} to Trash: {source}")]
-    Trash {
-        path: String,
-        source: trash::Error,
-    },
+    Trash { path: String, source: trash::Error },
 }
 
 /// Resolve `requested` against `root` and confirm the result stays inside `root`.

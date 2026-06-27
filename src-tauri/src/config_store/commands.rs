@@ -51,7 +51,11 @@ pub fn seed_dev_projects_from_prod(app: &AppHandle) {
     };
     match seed_dev_projects(&dev_dir, &identifier) {
         Ok(Some((src, dst))) => {
-            eprintln!("[claudesk] dev projects seed: copied {} → {}", src.display(), dst.display())
+            eprintln!(
+                "[claudesk] dev projects seed: copied {} → {}",
+                src.display(),
+                dst.display()
+            )
         }
         Ok(None) => {} // no-op (prod build, already seeded, or no prod list)
         Err(e) => eprintln!("[claudesk] dev projects seed: {e}"),
@@ -82,8 +86,13 @@ fn seed_dev_projects(
     if !prod_file.exists() {
         return Ok(None); // no prod list to seed from (fresh machine) — dev empty
     }
-    std::fs::copy(&prod_file, &dev_file)
-        .map_err(|e| format!("copy {} → {} failed: {e}", prod_file.display(), dev_file.display()))?;
+    std::fs::copy(&prod_file, &dev_file).map_err(|e| {
+        format!(
+            "copy {} → {} failed: {e}",
+            prod_file.display(),
+            dev_file.display()
+        )
+    })?;
     Ok(Some((prod_file, dev_file)))
 }
 
@@ -187,7 +196,10 @@ mod tests {
         let res = seed_dev_projects(&dev_dir, "com.claudesk.app.dev").unwrap();
         assert!(res.is_none(), "must not overwrite an existing dev list");
         let kept = std::fs::read(dev_dir.join(PROJECTS_FILE)).unwrap();
-        assert_eq!(kept, br#"{"projects":["dev-own"]}"#, "dev's own list preserved");
+        assert_eq!(
+            kept, br#"{"projects":["dev-own"]}"#,
+            "dev's own list preserved"
+        );
     }
 
     #[test]

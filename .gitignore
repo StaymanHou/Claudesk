@@ -9,6 +9,19 @@ homebrew-claudesk/
 # Global-scope learning drafts (hand-curated, never auto-committed)
 .claude/learnings/
 
+# Per-machine Claude Code state (NOT shared between developers)
+.claude/settings.local.json
+
+# Transient session pointer (deleted on resume)
+workflow/.session.md
+
+# Test result artifacts (regenerable)
+tests/results/*.json
+
+# Python caches (canonical artifact-tracking-policy lines; no Python in-tree today)
+__pycache__/
+*.pyc
+
 # Logs
 logs
 *.log
