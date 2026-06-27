@@ -4,6 +4,24 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# wp4-terminal-font-zoom — 2026-06-27
+
+*(feature-review-quality on ship commit 67c3f54; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Both reviewer-flagged as "not a defect / not a finding to act on" — forward-looking readability/factoring notes only.)*
+
+## SURFACE-2026-06-27-QUALITY-WP4-UNUSED-STATE-VALUE-BINDING
+- **Severity:** MINOR
+- **Finding:** `Workspace.tsx` `const [, setTerminalFontSize] = useState<number>(loadTerminalFontSize)` keeps a state cell whose VALUE binding is intentionally unused — only the setter is read, inside `applyTerminalZoom`'s functional updater (the batch-safe prior-size source). The empty destructure + the "value never drives a render" shape can puzzle a future maintainer.
+- **Fix shape:** either leave as-is (the functional-updater read is genuinely the cleanest batch-safe pattern; the in-code comment already justifies it) OR swap to a `useRef` updated inside the same updater body for the same prior-value semantics without an unused state slot. Reviewer called it a defensible tradeoff, not a defect.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP4-THIRD-ZOOM-MODULE-COPY
+- **Severity:** MINOR
+- **Finding:** `terminalFontZoom.ts` is a near-verbatim duplicate of `editor/fontZoom.ts` (clamp/next/load/save/safeStorage differ only in constant values + the localStorage key string). This is the third per-surface zoom module (editor, now terminal) following the established copy convention — consistent with the repo's per-pref-helper pattern, so not a finding to act on now.
+- **Fix shape:** when a FOURTH zoom surface appears (e.g. WP10 right-panel terminal zoom — though that likely reuses `terminalFontZoom.ts` directly), make a deliberate "extract a shared `makeFontZoom(config)` factory vs. keep copying" decision rather than a reflexive next copy. No action until then.
+- **Priority:** low
+- **Status:** pending
+
 # m5-wp5-pip-toggle-lifecycle-autosummon — 2026-06-27
 
 *(feature-review-quality on ship commit f6e3929; Mode 3 autopilot auto-backlog. 0 CRITICAL / 2 MAJOR / 2 MINOR.)*

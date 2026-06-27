@@ -1,7 +1,7 @@
 # Feature: WP4 — Adjustable CC terminal font size (focus-scoped zoom)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** COMPLETED 2026-06-27
 **Created:** 2026-06-27
 **Drive mode:** autopilot
 **Milestone:** M6 (friend-requested QoL polish) — WP4
@@ -48,8 +48,8 @@ The CC terminal's font size is hardcoded (`fontSize: 11` in the `XtermPane` `Ter
     - **Integration boundary:** routing lives in Workspace.tsx (existing UI), but it decomposes into two CI-stable PURE seams — `terminalFontZoom.ts` (17 tests: clamp/next/load/save + terminalZoomForChord matcher) and `deriveFocusHalf` (5 tests: the left/right/none gate). Their COMPOSITION (capture-listener focus-scoped dispatch) is live-DOM, exhaustively verified via the MCP bridge (verify-self, both routing directions + batch-safety) + real keyboard (verify-human). No jsdom render harness exists (deliberate — see focusHalf.ts header + SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP); a hand-mocked DOM test would be brittle and lower-value than the live verification done. No new test written; existing coverage pins the regression-catching surface.
 
 ## Current Node
-- **Path:** Feature > Phase 1 > COMPLETE
-- **Active scope:** none — Phase 1 done (all impl + verify-auto/self/human/codify [x]); single-phase feature, all phases complete → ready to ship
+- **Path:** Feature > review-quality (complete) → finalize
+- **Active scope:** none — shipped (67c3f54); code-quality review done (0 CRIT/0 MAJOR/2 MINOR auto-backlogged) → ready to finalize
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** one SHORTCUT entry (batch-fix); two new M6 WPs (WP10 RP-terminal zoom, WP11 multiple RP-terminals) surfaced at verify-human → logged to backlog & added to WBS
@@ -59,6 +59,36 @@ The CC terminal's font size is hardcoded (`fontSize: 11` in the `XtermPane` `Ter
 - **XtermPane:** constructor `fontSize` now `loadTerminalFontSize()`; `setFontSize(px)` added to `XtermPaneHandle` → `term.options.fontSize = px; fitAndResize()` (re-fits + pushes cc_resize). Null-safe before mount.
 - **Workspace:** `terminalFontSize` state (seeded from localStorage) + a ref synced via effect; `applyTerminalFontSize` sets state + persists + calls the handle. A capture-phase `keydown` listener on the workspace root (gated on `visible`) intercepts the zoom chord ONLY when `deriveFocusHalf(document.activeElement) === "left"` — applies terminal zoom + preventDefault+stopPropagation so it never reaches the PTY or browser page-zoom; right-half focus is a pass-through (CM6 editor keymap handles it). Reads live focus (not the React `focusHalf` state) to dodge a stale-closure race.
 - **eslint nit fixed:** ref sync moved into an effect (react-hooks/refs forbids ref-assign during render). XtermPane's line-442 spread-dep warning is pre-existing (spawnTriggerDeps), untouched.
+
+## Code-Quality Review — wp4-terminal-font-zoom
+
+(reviewer: code-quality-reviewer subagent, ship commit 67c3f54, drive_mode autopilot — 0 CRITICAL / 0 MAJOR / 2 MINOR, both auto-backlogged)
+
+### Strengths
+- `terminalFontZoom.ts` is a clean pure-logic seam mirroring the proven editor `fontZoom.ts` sibling exactly — fully vitest-testable with an injected Storage, matching the "pure logic → vitest" posture.
+- Focus-scoped routing correctly resolved: capture-phase listener reads LIVE `document.activeElement` (not the lagging React `focusHalf` state) to dodge a stale-closure race, and short-circuits on right-half focus so the CM6 keymap handles editor zoom unchanged — paths genuinely disjoint (separate keys + state).
+- The functional-setState updater in `applyTerminalZoom` is the batch-safe choice for reading the prior size; the comment explains why a captured value or post-commit ref would be stale mid-batch.
+- `setFontSize` re-fits after the font change (cell size → cols/rows must be recomputed + pushed to PTY) — the easy-to-miss consequence handled.
+- Test coverage proportionate + meaningful (clamp/round/bounds/non-finite/corrupt/undefined-storage + chord matching incl. shifted `+`, bare-key null, unrelated ⌘ chords + round-trip).
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [Workspace.tsx:147] `const [, setTerminalFontSize] = useState(...)` keeps a state cell whose value binding is intentionally unused (only the setter, inside the functional updater). Defensible (the updater is the cleanest batch-safe read) — flagged only as a readability note for a future maintainer puzzling over the empty destructure. *(Reviewer: "not a defect.")*
+- [terminalFontZoom.ts:1-121] Near-verbatim duplicate of `editor/fontZoom.ts` (differs only in constants + key string). Consistent with the established per-surface-zoom convention ("the verbatim sibling") — noted only so a FUTURE third zoom surface prompts a deliberate "extract `makeFontZoom(config)` vs keep copying" decision rather than a reflexive third copy. *(Reviewer: "not a finding to act on.")*
+
+### Assessment
+Well-built, low-risk polish landing exactly as the milestone framed it — a faithful clone of the railWidth/fontZoom/split-state pattern with the genuinely new surface (focus-scoped chord interception over a PTY-forwarding terminal) handled carefully. The hard part is the routing, closed correctly (capture-phase + live activeElement + preventDefault/stopPropagation) while leaving the CM6 path untouched. Advances the codebase rather than accruing debt; the only watch item is the now-third copy-pasted zoom module, a future-factoring decision. Comments encode why, not what.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` in this section before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The hard part was never the zoom math — it was the *routing*. xterm forwards keystrokes to the PTY via its own textarea, so a ⌘= pressed in the terminal would otherwise reach CC or trigger WKWebView page-zoom; the editor's zoom (a CM6 keymap) only fires when CM has DOM focus. The clean seam was a per-workspace capture-phase keydown listener that reads LIVE `document.activeElement` (not the lagging React `focusHalf` state) and bails on right-half focus, leaving the CM6 path untouched. The two zoom paths stay fully disjoint (separate keys + state).
+- **Assumptions that held:** `terminalFontZoom.ts` as a verbatim sibling of `editor/fontZoom.ts` was exactly right (pure-logic → vitest, 17 tests). `XtermPane` already accepted `setFontSize` cleanly via the existing imperative-handle pattern, and `fitAndResize` already re-pushed `cc_resize` so a font change reflows the PTY for free. The `data-focus-half`/`deriveFocusHalf` seam (M4 WP4b) was the right routing signal, available without new plumbing.
+- **Assumptions that were wrong:** The first cut held the live size in a `useRef` synced via a post-commit effect — which collapsed when multiple chords fired within one React batch (verify-self caught it live: 3× ⌘= in one tick advanced only one step). Real keystrokes are tick-separated so it never bit a user, but the fix (compute the next size inside a functional `setState` updater) was a strict simplification that also dropped the ref + its effect.
+- **Approach delta:** Single phase, as planned. One in-place batch-fix at verify-self (the shortcut path). Two operator asks for the right-panel terminal (zoom + multiple terminals) surfaced at verify-human and were folded into the M6 open collection as WP10 + WP11 rather than scope-creeping WP4.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

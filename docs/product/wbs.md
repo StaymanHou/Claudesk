@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-27
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP3]
+shipped: [WP1, WP1b, WP3, WP4]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -107,17 +107,18 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP4: Adjustable CC terminal font size (focus-scoped zoom)
+## WP4: Adjustable CC terminal font size (focus-scoped zoom) ✅ SHIPPED 2026-06-27 (commit 67c3f54)
 **Description:** The CC terminal gains font-zoom like the editor. **Keybinding is FOCUS-SCOPED (operator decision, LOCKED):** ⌘+/⌘−/⌘0 zoom whichever half holds keyboard focus — terminal when the CC pane is focused, editor when the editor is — routed via the M4 WP4b `data-focus-half` active-half tracking. No new chords.
+**As-built:** new pure module `src/components/workspace/terminalFontZoom.ts` (clamp/next/load/save, key `claudesk.terminal.fontSize`, default 11 = old hardcode, bounds 6–32, + a `terminalZoomForChord` matcher). `XtermPane` seeds its `Terminal` constructor `fontSize` from `loadTerminalFontSize()` + exposes `setFontSize(px)` on `XtermPaneHandle` (sets `term.options.fontSize` then re-fits → pushes `cc_resize`). `Workspace` adds a capture-phase keydown listener (gated on `visible`) that routes the zoom chord to the terminal ONLY when the LEFT half holds focus (`deriveFocusHalf(document.activeElement) === "left"`) — preventDefault+stopPropagation so it never reaches the PTY or triggers WKWebView page-zoom; the editor's CM6 keymap handles the right half unchanged. Next-size computed in a functional `setState` updater (batch-safe — a latent batch-fragility found + fixed at verify-self). Verified live via the tauri MCP bridge (both routing directions, persistence, batch-safety) + operator real-keyboard verify-human. 17 unit tests; full suite 711/711. Code-quality review 0 CRIT/0 MAJOR/2 MINOR (both reviewer-flagged not-a-defect, auto-backlogged).
 **Milestone:** M6
 **Dependencies:** none (soft: build after WP3 so the terminal half exists at variable widths for verification — convenience only)
 **Size:** S
 **Seams (confirmed):** xterm `fontSize` hardcoded `11` in the `Terminal` constructor (`XtermPane.tsx` ~185); live-configurable via `term.options.fontSize = N` then `fit.fit()`. Editor pattern to mirror: `src/components/workspace/editor/fontZoom.ts` (`DEFAULT_FONT_PX`, MIN/MAX, localStorage, pure `clamp`/`next`/`load`/`save`); ⌘+/⌘−/⌘0 in `editorExtensions.ts` ~111–134. Active-half routing: `data-focus-half` on `.workspace` (App.css ~568).
 **Tasks:**
-- [ ] Add `src/components/workspace/terminalFontZoom.ts` — sibling of `fontZoom.ts` (own localStorage key e.g. `claudesk.terminal.fontSize`, suitable bounds, pure `clamp`/`next`/`load`/`save`)
-- [ ] Seed the `XtermPane` constructor `fontSize` from `loadTerminalFontSize()`; apply-and-refit (`term.options.fontSize = N; fit.fit()`) on change
-- [ ] Route ⌘+/⌘−/⌘0 to the **focused half**: when `data-focus-half` is the terminal → terminal zoom; when the editor → existing editor zoom. Reuse the existing chord handlers; dispatch on active half, do not register new chords
-- [ ] Persist + restore per launch; verify focus-routing both directions (focus terminal → ⌘+ grows terminal not editor, and vice versa)
+- [x] Add `src/components/workspace/terminalFontZoom.ts` — sibling of `fontZoom.ts` (key `claudesk.terminal.fontSize`, bounds 6–32, pure `clamp`/`next`/`load`/`save` + `terminalZoomForChord` matcher)
+- [x] Seed the `XtermPane` constructor `fontSize` from `loadTerminalFontSize()`; apply-and-refit (`term.options.fontSize = N; fitAndResize()`) on change via the `setFontSize` handle
+- [x] Route ⌘+/⌘−/⌘0 to the **focused half** via a capture-phase keydown listener reading live `deriveFocusHalf(document.activeElement)`: left → terminal zoom; right → CM6 editor keymap unchanged. No new chords
+- [x] Persist + restore per launch; focus-routing verified both directions (bridge + real keyboard)
 
 ---
 
