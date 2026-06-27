@@ -1,7 +1,7 @@
 # Feature: WP3 — Workspace split-ratio control (collapse + preset ratios)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** COMPLETED 2026-06-27 (shipped 0b68f5a; finalized)
 **Created:** 2026-06-27
 **Entry:** spec (complex feature — UX-design decisions, multiple interacting layout states, reflow-correctness risk)
 **Milestone:** M6 (Friend-requested QoL polish)
@@ -164,11 +164,48 @@ All four spec open questions resolved at plan time from reading the seams — **
   - [x] verify-codify  <!-- status: done — persistence chain covered by 3 integration tests (change→save→reload→derive); non-regression + restart-persistence driven live via bridge (real app restart). No new tests, no gaps. Suite 694/694. -->
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** WP3 done — Phases 1–3 all [x], operator-approved. Ready for `/feature-ship`.
+- **Path:** Feature > COMPLETE (finalized + archived)
+- **Active scope:** none — WP3 shipped (`0b68f5a`), finalized, archived. M6 WP3 done.
 - **Blocked:** none
 - **Unvisited:** (none)
 - **Open discoveries:** none open
+
+## Retrospect
+- **What changed in our understanding:** Two CSS-layout traps surfaced at verify-human that the plan's "reflow is handled by the ResizeObserver" lean didn't anticipate — both the same shape ("a half didn't get its expected width"): (1) at 3:1 the file-tree rail's *fixed px* crowded the editor because the plan only capped the rail's absolute min, not its size *relative to* a narrow container (→ `effectiveRailWidth` panel-fraction cap); (2) collapsing via `display:none` on a CSS-grid item left a `0` track that swallowed the lone visible half (→ single `1fr` track when collapsed). General lesson: when an inner element sits at a fixed px inside a now-shrinkable container, it needs a fraction cap; and when you `display:none` a grid item, the *track count* must drop too.
+- **Assumptions that held:** The core reflow seam — `XtermPane`'s `ResizeObserver → fit.fit() → cc_resize`, plus the existing `offsetParent===null` fit-guard — handled both the ratio changes AND the 0-width collapse with zero new guard code (the C2 crash risk never materialized). The `railWidth.ts` pure-helper template cloned cleanly into `splitWidth.ts`. The tauri MCP bridge drove every live check incl. a real app-restart persistence test.
+- **Assumptions that were wrong:** The spec's C3 lean ("rail clamps to RAIL_MIN, editor takes remainder") was insufficient at narrow widths; and the Phase-2 collapse mechanism needed a grid-track-count change I didn't foresee at plan time. Both caught at verify-human (operator screenshots), fixed same-cycle.
+- **Approach delta:** The biggest delta was at *spec* time, not build: the operator reframed the planned free-drag divider into a discrete collapse + ratio-preset control (more predictable, lower UI-bug surface, less code). The build then matched the revised plan, with the two reflow fixes folded in via verify-human back-loops. Net: superseded the original WBS WP3 "drag divider" framing entirely.
+
+## Communicate
+> **Feature complete:** WP3 — Workspace split-ratio control has shipped. The workspace header now has two collapse toggles (◀ CC / ED ▶) + a ratio cycle button (3:1 / 2:2 / 1:3) so you can give the CC terminal or the editor more room — or fully collapse either half — in one click, persisted across launches. Verify by opening any workspace and using the controls top-right of the header (next to the status dot).
+
+Requester = friend-user (relayed by operator). Operator-approved at every verify-human gate; closure notice for the operator to relay.
+
+## Code-Quality Review — wp3-split-ratio-control
+
+Reviewer (code-quality-reviewer subagent) against ship commit `0b68f5a`. **0 CRITICAL, 0 MAJOR, 4 MINOR.** Mode 3 (autopilot) → MINORs auto-backlogged (low priority) to `workflow/backlog-quality-findings.md`; pointer in `workflow/backlog.md`. No refactor warranted.
+
+### Strengths
+- Clean pure-core/DOM-wiring split (`splitWidth.ts` mirrors `railWidth.ts` posture; pure logic → vitest, live DOM → bridge).
+- Robust `loadSplitState` validation (per-field fallback, non-object/unparseable/no-localStorage guards, each tested).
+- The single-`1fr`-collapsed-track decision is well-reasoned + the WHY captured in docstring AND pinned by a test asserting the bug it prevents.
+- `effectiveRailWidth` caps the *applied* rail width without mutating the stored value (widening restores the user's choice); graceful unmeasured-panel degrade.
+- `workspaceOffViewport.test.ts` retarget narrows the guard (every display:none line must be a `*Collapsed` usage) rather than deleting the load-bearing invariant.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [Workspace.tsx:~234] `splitState` is app-global-persisted but held in per-Workspace `useState` — live cross-workspace sync is by remount, not shared state; the "app-global shared" prose slightly overstates live sharing. (Matches the rail's model; functionally fine.)
+- [railWidth.ts:effectiveRailWidth] docstring's two guarantees ("never below RAIL_MIN" / "never above stored") can conflict in principle if stored < RAIL_MIN (unreachable given clampRailWidth); the min-wins resolution is undocumented.
+- [Workspace.tsx:~262] the refit nudge fires only on the left (CC) un-collapse edge; the left-only asymmetry (only xterm has the WKWebView display-flip fit race) isn't called out in a comment.
+- [App.css / various comments] intra-feature "Phase 1 / Phase 2" comments now describe build history, not pending work — could read as latent to a merged-file reader.
+
+### Assessment
+Well-built, low-debt feature. Deliberate lower-bug-surface discrete-control design over free-drag, well-documented. Pure core properly factored + exhaustively tested (24 new assertions); the two non-obvious traps (collapsed single-track grid, narrow-panel rail cap) each guarded by a bug-encoding test. Comments encode WHY. Only soft spots are prose-accuracy nits; no refactor warranted.
+
+### If you disagree
+Dismiss a finding by marking its line `[DISMISSED]` in this section before finalize archives the WIP.
 
 ## Test Triage — workspaceOffViewport.test.ts "does NOT use display:none to hide a workspace"
 Classification: Obsolete test (over-broad assertion) — the regex blanket-bans the `display: "none"` literal anywhere in Workspace.tsx, but its documented intent (lines 8–17) is narrower: the *workspace-level* hide (the non-`visible` background branch) must use off-viewport, NOT display:none (so FitAddon + the filmstrip mirror keep working).

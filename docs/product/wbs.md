@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-27
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b]
+shipped: [WP1, WP1b, WP3]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -91,17 +91,17 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9
 
 ---
 
-## WP3: Adjustable left/right split width (drag divider)
-**Description:** The divider between the left CC terminal (`.workspace-left`) and the right panel (`RightPanelHost`) becomes draggable, persisting the split. Mirrors the shipped file-tree↔editor rail resizer.
+## WP3: Workspace split-ratio control (collapse + ratio presets) ✅ SHIPPED 2026-06-27 (commit 0b68f5a)
+**Description:** A **discrete** split-ratio control in the workspace header — two collapse toggles (◀ CC / ED ▶) + a cycle button stepping 3:1 / 2:2 / 1:3 — replacing the originally-planned free-drag divider. **Design reframed at spec time** (operator, 2026-06-27): the friend's real need is attention-switching between a few intents (CC focus / editor focus / balanced), so discrete selectable states beat a continuous drag — more predictable, lower UI-bug surface, less code, and no nested-drag-handle confusion. Captured as the broadened `explicit-selectable-mode-over-inferred-mode` prior (continuous→discrete + risk-surface-vs-value decision rule).
 **Milestone:** M6
 **Dependencies:** none
 **Size:** S
-**Seams (confirmed):** layout is `grid-template-columns: 1fr 1fr` at `src/App.css:418` (header spans both, `grid-column: 1 / -1`, App.css:433). Pattern to clone: `RightPanelHost.tsx` rail resizer (`onRailResizeStart`, `railWidth` state) + `src/components/workspace/filetree/railWidth.ts` (`clampRailWidth`/`loadRailWidth`/`saveRailWidth`, localStorage, `role="separator"` handle). **Reflow risk RESOLVED:** `XtermPane`'s `ResizeObserver → fit.fit() → cc_resize` (XtermPane.tsx ~249–252) re-fits the PTY automatically on width change.
+**As-built:** new pure module `src/components/workspace/splitWidth.ts` (state `{collapsed, ratio}` + `gridColumnsFor`/`cycleRatio`/`toggleCollapse` + never-throw localStorage, app-global key `claudesk.workspace.splitState`); control in `.workspace-header`; collapse via `display:none` on the hidden half → the existing `XtermPane` `offsetParent` fit-guard prevents a 0-width FitAddon crash (PTY stays alive), and the collapsed state derives a **single `1fr` track** (a `display:none` grid item leaves flow, so a `0/1fr` two-track mis-places the lone visible half to ~0px). Rail panel-fraction cap (`effectiveRailWidth` in `railWidth.ts`) keeps the editor usable at 3:1. `XtermPane.refit()` handle + a Workspace un-collapse-edge nudge. Tests: splitWidth 19 + railWidth effectiveRailWidth 5; `workspaceOffViewport.test.ts` retargeted. Verified live via the tauri MCP bridge (presets reflow, collapse no-crash, rail-cap at 3:1, persistence across a real app restart) + operator-approved.
 **Tasks:**
-- [ ] Add `src/components/workspace/splitWidth.ts` — sibling of `railWidth.ts` (own localStorage key e.g. `claudesk.workspace.splitWidth`, `clamp`/`load`/`save`, sensible min/max so neither half collapses)
-- [ ] Mount a draggable divider at the `Workspace.tsx` grid seam, driving `grid-template-columns` (e.g. `${splitWidth}fr 1fr` or a px/`fr` mix), with a `role="separator"` handle matching the rail resizer's affordance
-- [ ] Confirm the terminal re-fits cleanly on drag (ResizeObserver path) and the right panel reflows without clipping
-- [ ] Persist + restore across launches; verify default (1fr/1fr) preserved on first run
+- [x] Add `src/components/workspace/splitWidth.ts` — pure state model + derivation + never-throw localStorage (app-global key `claudesk.workspace.splitState`)
+- [x] Mount the split-ratio control (two collapse toggles + cycle button) in `.workspace-header`, driving `grid-template-columns` (preset-only, NO free-drag — supersedes the original drag-divider plan)
+- [x] Confirm the terminal re-fits cleanly on every ratio/collapse change (ResizeObserver + refit nudge) and the right panel reflows without clipping (incl. the 3:1 rail-cap + the collapsed single-track fixes)
+- [x] Persist + restore across launches; verify default (1fr/1fr) preserved on first run
 
 ---
 

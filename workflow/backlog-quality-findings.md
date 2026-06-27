@@ -1256,3 +1256,35 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Suggested action:** add a one-line comment at the listener registration noting "zero-distance click = no pip_move sent (dx==dy==0 guard); mouseup always cleans up".
 - **Priority:** low
 - **Status:** pending
+
+# wp3-split-ratio-control — 2026-06-27
+
+*(feature-review-quality on ship commit 0b68f5a; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 4 MINOR. Reviewer: well-built, low-debt; no refactor warranted — all 4 are prose/comment-accuracy nits.)*
+
+## SURFACE-2026-06-27-QUALITY-WP3-APP-GLOBAL-STATE-PROSE
+- **Severity:** MINOR
+- **Finding:** `splitState` is app-global-PERSISTED (one localStorage key) but held in per-Workspace `useState`, so each mounted workspace keeps its own live copy — cross-workspace sync is by remount, not shared live state. The commit + docstrings call it "app-global (shared by all workspaces)," slightly overstating live sharing. (Matches the file-tree rail's model; functionally fine for the single-window switch-on-display pattern.)
+- **Suggested action:** one-line comment in Workspace.tsx clarifying "each workspace mirrors the shared key; live sync is by remount, not cross-instance."
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP3-EFFECTIVERAIL-DOCSTRING-GUARANTEES
+- **Severity:** MINOR
+- **Finding:** `effectiveRailWidth` docstring claims both "never below RAIL_MIN" and "never above the stored width"; these can conflict in principle if stored < RAIL_MIN (unreachable today because clampRailWidth guarantees stored ≥ RAIL_MIN). The min-wins resolution is undocumented. Not a bug.
+- **Suggested action:** note in the docstring that the function relies on the caller's clampRailWidth invariant (stored ≥ RAIL_MIN), and that `Math.min` resolves the edge safely.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP3-REFIT-NUDGE-LEFT-ONLY-ASYMMETRY
+- **Severity:** MINOR
+- **Finding:** the un-collapse refit nudge fires only on the left (CC) edge (`[leftCollapsed]`); the right half relies on RightPanelHost's own ResizeObserver. Reasonable (only the xterm pane has the WKWebView display-flip fit fragility) but the asymmetry isn't called out.
+- **Suggested action:** half-sentence comment: "right half needs no nudge — only xterm's FitAddon has the display-flip race."
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP3-INTRA-FEATURE-PHASE-COMMENTS
+- **Severity:** MINOR
+- **Finding:** several comments (App.css split-control block, Workspace.tsx, splitWidth.ts) reference "Phase 1 / Phase 2" of the build sequence; in the merged single commit these describe history, not pending work, and could read as latent/unshipped to a future reader.
+- **Suggested action:** reword the intra-feature phase references to describe the shipped behavior rather than the build order (or drop the phase labels).
+- **Priority:** low
+- **Status:** pending
