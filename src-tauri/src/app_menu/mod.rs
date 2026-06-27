@@ -34,7 +34,8 @@
 //! in sync with `src/menu/menuBridge.ts`.
 
 use tauri::menu::{
-    AboutMetadataBuilder, CheckMenuItemBuilder, Menu, MenuItemBuilder, SubmenuBuilder,
+    AboutMetadataBuilder, CheckMenuItem, CheckMenuItemBuilder, Menu, MenuItemBuilder,
+    SubmenuBuilder,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
@@ -43,6 +44,42 @@ use crate::pip::layout::PipMode;
 /// The Tauri event name the menu emits a clicked item's id on. The frontend
 /// (`App.tsx`) subscribes once and dispatches by id (`menu/menuBridge.ts`).
 pub const MENU_EVENT: &str = "menu";
+
+/// Handles to the three View-menu PiP-mode `CheckMenuItem`s, stashed in managed state by
+/// [`build_menu`] so the mode can be re-checked AFTER the menu is built. The items are built
+/// once (at `.setup()`), but the active mode changes at runtime — from the icon button OR a
+/// menu click — and the displayed checkmark must track it. There is no menu-rebuild path;
+/// instead a `pip-mode` listener (wired in `lib.rs`) calls [`apply_pip_mode_to_menu`], which
+/// reads these handles and sets each item's checked-state exclusively. Without this the
+/// checkmarks would stay frozen at their launch-seeded values until relaunch, and — since
+/// three independent `CheckMenuItem`s are not a native radio group — could show contradictory
+/// state (e.g. Off still checked after picking Auto).
+pub struct PipModeMenuItems<R: Runtime> {
+    off: CheckMenuItem<R>,
+    on: CheckMenuItem<R>,
+    auto: CheckMenuItem<R>,
+}
+
+/// Set the three PiP-mode `CheckMenuItem`s' checked-state to reflect `mode`, mutually
+/// exclusively (exactly one checked). Called on every `pip-mode` broadcast so the View-menu
+/// radio always matches the backend's persisted mode (the single source of truth). The launch
+/// state needs no call here — `build_menu` seeds each item's `.checked` from the same persisted
+/// mode. No-op if the menu hasn't been built yet (no managed handles). Best-effort per item — a
+/// `set_checked` failure is logged, never propagated, so one bad item can't leave the others stale.
+pub fn apply_pip_mode_to_menu<R: Runtime>(app: &AppHandle<R>, mode: PipMode) {
+    let Some(items) = app.try_state::<PipModeMenuItems<R>>() else {
+        return;
+    };
+    for (item, item_mode) in [
+        (&items.off, PipMode::Off),
+        (&items.on, PipMode::On),
+        (&items.auto, PipMode::Auto),
+    ] {
+        if let Err(e) = item.set_checked(mode == item_mode) {
+            eprintln!("[claudesk] pip-mode menu set_checked failed for {item_mode:?}: {e}");
+        }
+    }
+}
 
 /// Functional menu-item ids — the ones the frontend acts on. Label-only items
 /// (disabled cheat-sheet rows) deliberately have NO id here; they never emit.
@@ -195,10 +232,14 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build(app)?;
     // WP5 Phase 2 (rework) — the tri-state PiP MODE as three radio-style CheckMenuItems
     // (Off / On / Auto), the active one checked from the persisted mode (default Auto). A
-    // click sets that mode via `pip_set_mode` (the frontend bridge); the menu is rebuilt
-    // on the `pip-mode` broadcast so the checkmark tracks the backend. NO accelerators (the
+    // click sets that mode via `pip_set_mode` (the frontend bridge). NO accelerators (the
     // native-menu pattern). Replaces the old Toggle + Auto-summon-checkbox pair. A read
     // failure falls back to Auto (the default).
+    //
+    // These are built ONCE here but the active mode changes at runtime (icon button OR a menu
+    // click). The handles are stashed in managed state (`PipModeMenuItems`) so the `pip-mode`
+    // listener (wired in `lib.rs`) can call `apply_pip_mode_to_menu` and re-check them — there
+    // is NO menu-rebuild. See `PipModeMenuItems` for why a refresh is required.
     let pip_mode = app
         .path()
         .app_data_dir()
@@ -214,6 +255,13 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let pip_auto = CheckMenuItemBuilder::with_id(ids::PIP_MODE_AUTO, "PiP: Auto (summon when away)")
         .checked(pip_mode == PipMode::Auto)
         .build(app)?;
+    // Stash the handles so the runtime `pip-mode` listener can re-check them (the menu is
+    // never rebuilt). Managed by type — one set per app, keyed on `PipModeMenuItems<R>`.
+    app.manage(PipModeMenuItems {
+        off: pip_off.clone(),
+        on: pip_on.clone(),
+        auto: pip_auto.clone(),
+    });
     let zoom_reset = MenuItemBuilder::with_id("view.zoomReset.label", "Reset Zoom\t⌘0")
         .enabled(false)
         .build(app)?;

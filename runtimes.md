@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-25  # /release v0.1.2 — pnpm tauri build cold 73s
+updated: 2026-06-27  # m5-wp5 MAJOR-findings refactor — cargo test 1s warm
 ---
 
 # Runtime Registry
@@ -93,9 +93,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 1s (2026-06-27, M5 WP5 Phase 2 tri-state REWORK: 266 pass — pip_mode enum/settings/state-machine replace the bool model; +3 PipMode serde net; warm run ~0.64s)
+- **Last:** 1s (2026-06-27, m5-wp5 MAJOR-findings refactor: 266 pass — View-menu PiP-mode checkmark refresh, pure refactor, no new tests; warm run ~0.64s)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-27 (m5-wp5 MAJOR-findings refactor: View-menu checkmark refresh; 266 pass, no behavior change)
   - 1s — 2026-06-27 (M5 WP5 P2 tri-state rework: 266 pass, pip_mode enum)
   - 1s — 2026-06-27 (M5 WP5 P2 build: 264 pass, +6 settings + pip state-machine)
   - 1s — 2026-06-26 (M5 WP4 P2: 258 pass, +9 layout enum + settings store)

@@ -41,7 +41,7 @@ mod sublime;
 
 use std::sync::Mutex;
 
-use tauri::{Emitter, Manager, WindowEvent};
+use tauri::{Emitter, Listener, Manager, WindowEvent};
 
 use cc_session::SessionRegistry;
 
@@ -109,6 +109,23 @@ pub fn run() {
                     }
                 }
                 Err(e) => eprintln!("[claudesk] build_menu failed: {e}"),
+            }
+            // Keep the View-menu PiP-mode checkmarks in sync with the backend. The three
+            // CheckMenuItems are seeded once in build_menu, but the active mode changes at
+            // runtime (icon button OR a menu click → pip_set_mode → `pip-mode` broadcast).
+            // Re-check them on every broadcast so the radio always matches the persisted
+            // mode (the single source of truth) — there is no menu-rebuild path.
+            {
+                let menu_handle = handle.clone();
+                handle.listen(pip::commands::PIP_MODE_EVENT, move |event| {
+                    match serde_json::from_str::<pip::layout::PipMode>(event.payload()) {
+                        Ok(mode) => app_menu::apply_pip_mode_to_menu(&menu_handle, mode),
+                        Err(e) => eprintln!(
+                            "[claudesk] pip-mode menu sync: could not parse payload {:?}: {e}",
+                            event.payload()
+                        ),
+                    }
+                });
             }
             // Dev/prod isolation (2026-06-24): on a DEV build's first launch, seed
             // its projects.json from the prod list so dogfooding starts with the
