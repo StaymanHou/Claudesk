@@ -123,20 +123,20 @@ milestone: "Milestone 5 — Picture-in-picture"
 
 ---
 
-## WP6: Verify M5 — PiP out-of-focus status visibility across all layouts
+## WP6: Verify M5 — PiP out-of-focus status visibility across all layouts  ✅ SHIPPED 2026-06-27 (agent-verified PASS via MCP bridge; installed-build checks DEFERRED-TO-RELEASE by operator)
 
 **Description:** Milestone-exit verification of the M5 exit criteria against real workspaces and a real out-of-focus Claudesk window, across all 4 layouts. Testing posture follows the WP2 verdict: agent-drive what the adopted driver (if any) can reach, carry the rest — especially the native-NSPanel out-of-focus behavior, which is AppKit-level — into `verify-human`.
 **Milestone:** M5
 **Dependencies:** WP3, WP4, WP5. WP2 (decides agent-vs-human split).
 **Size:** S
 **Tasks:**
-- [ ] With N≥2 real CC sessions in different states (one idle, one running, one driven to awaiting-input via a real prompt), toggle the PiP on and confirm every workspace's status dot is correct and the live mirror updates — **including the center-staged workspace's tile** (the deliberate roster divergence).
-- [ ] Cycle through all 4 layouts: horizontal mirror, vertical mirror, compact (name+dot), minimal (dots). Confirm each renders correctly, the panel auto-resizes, and the chosen layout persists across a PiP toggle-off/on and an app relaunch.
-- [ ] **Minimal-layout intent check:** with all instances busy (running) the view reads *quiet*; when one flips to awaiting-input its dot *pops* / is surfaced — the "is anyone waiting on me?" glance works. Hover-tooltip resolves each dot to its project.
-- [ ] Switch Claudesk fully out of focus — another app foreground, a different macOS Space, Claudesk minimized — and confirm the PiP stays visible and keeps updating status (<1s visual scan, zero clicks; vision Success Metric 6).
-- [ ] Confirm display-only: clicking a PiP tile does nothing (no promote, no focus steal).
-- [ ] Confirm the PiP and the filmstrip never disagree on any workspace's state (same broadcaster, same palette).
-- [ ] Installed-build smoke test: rebuild the `.app`, launch from Finder/Dock, repeat the out-of-focus check (NSPanel + PATH-class parity per the standing convention).
+- [x] With N≥2 real CC sessions in different states, toggle the PiP on and confirm every workspace's status dot is correct and the live mirror updates — **including the center-staged workspace's tile** (the deliberate roster divergence). *(Agent-verified via the WP2-ADOPTED `mcp__tauri__*` bridge: 2 scratch workspaces; drove ws-1→running / ws-3→awaiting_input via `workspace-status` emit; PiP showed both tiles incl. the center-staged ws-1 with correct dots; states triggered via IPC not CC-TUI typing per the WP2 boundary.)*
+- [x] Cycle through all 4 layouts: horizontal mirror, vertical mirror, compact (name+dot), minimal (dots). Confirm each renders correctly, the panel auto-resizes, and the chosen layout persists across a PiP toggle-off/on. *(Agent-verified: cycled all 4 via `pip-layout-switch`, screenshotted each, confirmed auto-resize + compact drops mirror tiles; minimal persisted across a PiP off→on cycle. App-relaunch persistence carried to /release with the installed-build checks.)*
+- [x] **Minimal-layout intent check:** all-busy reads quiet; a flip-to-awaiting pops + is surfaced; tooltip resolves each dot to its project. *(Agent-verified: `orderForAttention` sorts awaiting first; all-running shows no attention class; a flip applies `.pip-tile-awaiting` + halo; per-tile `title` tooltips present.)*
+- [~] Switch Claudesk fully out of focus (another app foreground / different Space / minimized) → PiP stays visible + keeps updating (<1s, zero clicks; vision Success Metric 6). **DEFERRED-TO-RELEASE** (operator, 2026-06-27) — native AppKit out-of-focus behavior is the M5 exit criterion; verified on the installed `.app` at the `/release` gate before Homebrew distribution. (Dev-build NSPanel all-Spaces/non-activating/survives-blur already GO in WP1.)
+- [x] Confirm display-only: clicking a PiP tile does nothing (no promote, no focus steal). *(Agent-verified: clicking the PiP ws-3 tile left the main center stage on scratch-a, unchanged.)*
+- [x] Confirm the PiP and the filmstrip never disagree on any workspace's state (same broadcaster, same palette). *(Agent-verified: identical dot states in `main` filmstrip DOM and `pip` DOM after a state flip.)*
+- [~] Installed-build smoke test: rebuild the `.app`, launch from Finder/Dock, repeat the out-of-focus check (NSPanel + PATH-class parity). **DEFERRED-TO-RELEASE** (operator, 2026-06-27) — bundled with the out-of-focus check above + native View-menu checkmark glyph + real ⌘Tab-away auto-summon + dev/prod isolation + the `tauri#5566` release-vs-dev caveat. See `SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE` (high) — the `/release` run MUST honor these before publishing.
 
 ---
 

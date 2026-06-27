@@ -824,3 +824,13 @@ forward — none M5-blocking). No escalations. -->
 - **Priority:** medium (the 2 MAJOR; bundle them) / low (the 2 MINOR).
 - **Status:** pending
 - **Pickup shape:** a small `/feature-refactor` — wire the View-menu checkmarks to the `pip-mode` broadcast (set_checked per item, mutually exclusive) + fix the misdescribing comment [the MAJOR cluster]; then trim the stale `pip_toggle` doc refs + lift `pipMode` to App-level state [the MINORs]. Worth doing before M6's menu-bar work layers onto the same `build_menu` seam.
+
+## SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE
+- **Source:** feature:verify-human (M5 WP6 — operator chose "skip", deferring to the release gate)
+- **Target level:** product:wbs (M5 exit criterion) / the `/release` skill
+- **Type:** gap (verification deferred, not dropped)
+- **Summary:** M5's installed-build verification was deferred to release-packaging time. At WP6 close, the agent confirmed everything reachable via the MCP bridge on the dev build (status dots, all 4 PiP layouts + auto-resize + persistence, minimal attention-weighting, display-only inertness, PiP↔filmstrip agreement, the pip-mode broadcast mechanism + Auto hide-while-focused). NOT yet operator-confirmed: (1) the M5 EXIT CRITERION — PiP stays visible + keeps updating status while Claudesk is fully out of focus (foreground-other / different Space / minimized) on the installed prod `.app`; (2) the native View-menu PiP-mode checkmark glyph tracks the active mode; (3) real ⌘Tab-away auto-summon (~3s) + auto-dismiss on the Finder-launched build, no off-main-thread crash; (4) dev/prod isolation (com.claudesk.app vs .dev concurrent, independent pip_mode/pip_layout); (5) the tauri#5566 release-vs-dev NSPanel caveat (collection-behavior/level parity under release codegen).
+- **Context:** Operator: "we will package and run the release build, and I will verify at that time right before we distribute to homebrew." M5 closes on agent-verified-only evidence; the installed-build out-of-focus behavior is the whole reason PiP exists, so it MUST be exercised before publishing.
+- **Suggested action:** The next `/release` run (or the `release` skill) MUST verify checks (1)–(5) above on the freshly-built `.app`, launched from Finder/Dock, BEFORE bumping the Homebrew tap. If any fails, it's an M5 regression — back-loop before distributing.
+- **Priority:** high (gates the next public release; it's the milestone's reason for being)
+- **Status:** pending
