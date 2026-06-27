@@ -174,15 +174,39 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
     ```
 
 11. **Smoke-test the install path** (the definitive check that friends' install
-    works — note this reinstalls Claudesk on YOUR machine as the test):
+    works — note this reinstalls Claudesk on YOUR machine as the test).
 
-    ```bash
-    brew update
-    brew upgrade --cask claudesk   # or `brew reinstall --cask claudesk` if already at VER
-    xattr -dr com.apple.quarantine /Applications/Claudesk.app
-    ```
+    ⚠️ **`brew upgrade --cask` deletes the currently-running `/Applications/Claudesk.app`
+    and lays down a fresh, RE-QUARANTINED copy — this KILLS any running Claudesk**
+    (it reads to the operator as "Claudesk just crashed"). And the fresh bundle has
+    the quarantine xattr re-attached, so relaunching it BEFORE the `xattr` clear gets
+    Gatekeeper-blocked (a second apparent "crash"). This is expected cask-upgrade
+    behavior, not a release defect. Sequence to avoid surprise:
 
-    Confirm the app launches.
+    a. **Tell the operator first**: "the next step will quit any running Claudesk —
+       that's normal." Quit Claudesk yourself if it's open (cleaner than letting brew
+       yank it).
+    b. Run the upgrade + **clear quarantine BEFORE relaunch** (order matters):
+
+       ```bash
+       brew update
+       brew upgrade --cask claudesk   # or `brew reinstall --cask claudesk` if already at VER
+       xattr -dr com.apple.quarantine /Applications/Claudesk.app   # MUST precede any relaunch
+       ```
+
+    c. **Verify the receipt + bundle agree, confirm quarantine is gone, THEN relaunch:**
+
+       ```bash
+       brew list --cask --versions claudesk   # must read: claudesk VER
+       /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Claudesk.app/Contents/Info.plist  # VER
+       xattr /Applications/Claudesk.app | grep -i quarantine && echo "STILL QUARANTINED — re-run xattr" || echo "clear"
+       open -a /Applications/Claudesk.app
+       ```
+
+    Confirm the app launches. (If you manually `cp`'d the build into `/Applications`
+    earlier for a pre-publish verification, brew's receipt will lag the bundle until
+    this step runs — `brew upgrade` re-syncs the receipt; that mismatch alone is not
+    an error.)
 
 12. **Report** to the operator: the release URL, the tap cask commit, and the
     one-paste install command. Record the build time in `runtimes.md` if it was a
@@ -190,6 +214,7 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
 
 ## Notes & gotchas (learned 2026-06-24 on the v0.1.0 cut)
 
+- **Step 11's `brew upgrade --cask` KILLS the running Claudesk (learned 2026-06-27, v0.2.0 cut).** brew removes the live `/Applications/Claudesk.app` and writes a fresh, re-quarantined bundle — so any open Claudesk dies mid-upgrade (operator saw it as "Claudesk just crashed"), and relaunching the fresh bundle *before* the `xattr` clear gets Gatekeeper-blocked (a second apparent crash). Both are expected, not 0.2.0 defects. Mitigation now baked into Step 11: warn the operator (or quit Claudesk yourself) before the upgrade, run `xattr -dr com.apple.quarantine` BEFORE any relaunch, then verify receipt+bundle agree and quarantine is clear before `open`. Also: a pre-publish manual `cp` of the build into `/Applications` (e.g. for the operator to verify before Gate 1) leaves brew's receipt lagging the bundle until Step 11's upgrade re-syncs it — that mismatch alone is not an error.
 - **Homebrew 6.x removed `--no-quarantine`.** Do NOT put
   `brew install --cask --no-quarantine claudesk` in release notes or the README — it
   errors with _"invalid option: --no-quarantine"_. The reliable path is plain
