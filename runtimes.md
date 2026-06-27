@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-27  # /release v0.2.0 cold tauri build 83s
+updated: 2026-06-27  # /release v0.2.1 cold tauri build 89s
 ---
 
 # Runtime Registry
@@ -32,9 +32,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 83s (2026-06-27, /release v0.2.0: COLD build after `cargo clean` — full dep-tree recompile incl. tauri-nspanel + .app + .dmg)
+- **Last:** 89s (2026-06-27, /release v0.2.1: COLD build after `cargo clean` removed 6.4GiB — full dep-tree recompile incl. tauri-nspanel + .app + .dmg)
 - **Use timeout:** 600000
 - **History:**
+  - 89s — 2026-06-27 (/release v0.2.1 cold build: cargo clean removed 6.4GiB, full recompile ~65s incl. tauri-nspanel + bundle)
   - 83s — 2026-06-27 (/release v0.2.0 cold build: cargo clean removed 16.9GiB, full recompile ~60s incl. tauri-nspanel + bundle)
   - 73s — 2026-06-25 (/release v0.1.2 cold build: cargo clean removed 9.7GiB, full recompile ~50s + bundle)
   - 78s — 2026-06-24 (/release v0.1.1 cold build: cargo clean removed 24.4GiB, full recompile ~49s + bundle)
