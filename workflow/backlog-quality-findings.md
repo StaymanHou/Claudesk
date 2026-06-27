@@ -4,6 +4,38 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m5-wp5-pip-toggle-lifecycle-autosummon — 2026-06-27
+
+*(feature-review-quality on ship commit f6e3929; Mode 3 autopilot auto-backlog. 0 CRITICAL / 2 MAJOR / 2 MINOR.)*
+
+## SURFACE-2026-06-27-QUALITY-WP5-VIEWMENU-MODE-CHECKMARK-STALE
+- **Severity:** MAJOR
+- **Finding:** The three PiP-mode `CheckMenuItem`s (`app_menu/mod.rs:198-216`, ids `view.pip.mode.{off,on,auto}`) are built ONCE at `build_menu` (called once at setup, `lib.rs:105`) with checkmarks seeded from the persisted mode, but nothing updates them afterward — no listener rebuilds the menu or calls `set_checked` on the `pip-mode` broadcast. After ANY mode change (icon button OR a menu item), the View-menu checkmarks go stale until relaunch. And three independent CheckMenuItems are NOT a radio group: a native click toggles only the clicked item's own check → the menu can display contradictory state (e.g. Off still checked after picking Auto). The functional path (click → `pip_set_mode`) works + was operator-verified; only the menu's DISPLAYED checkmark is unreliable.
+- **Fix shape:** subscribe to the `pip-mode` event (backend or a small frontend bridge) and update the three items' checked-state on change — either rebuild the View submenu or hold `CheckMenuItem` handles in managed state + `set_checked(mode==X)` for each on each broadcast (+ on launch-restore). Make them mutually exclusive (only the active mode checked). Pairs with fixing the misdescribing comment below.
+- **Priority:** medium — worth a `/feature-refactor` pass before M6 layers more onto `build_menu` (M6's menu-bar work touches the same seam).
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP5-MENU-COMMENT-MISDESCRIBES-REBUILD
+- **Severity:** MAJOR
+- **Finding:** `app_menu/mod.rs:199` comment asserts "the menu is rebuilt on the `pip-mode` broadcast so the checkmark tracks the backend" — that rebuild does NOT exist. A WHAT-comment describing unimplemented behavior; it hides + compounds the staleness bug above (a future maintainer trusts it, doesn't look for the missing listener).
+- **Fix shape:** fix together with the checkmark-refresh above — once the refresh is real, the comment becomes accurate; until then, correct the comment to state the items are seeded-once-not-refreshed.
+- **Priority:** medium (bundle with the finding above).
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP5-STALE-PIP-TOGGLE-DOC-REFS
+- **Severity:** MINOR
+- **Finding:** `pip/commands.rs:206` `pip_set_visible` rustdoc uses intra-doc link `[pip_toggle]` (the command was removed in the rework → broken rustdoc link); the module header `commands.rs:3` still narrates "`pip_toggle` builds (once) and then shows/hides…". Stale post-rework; the live entry point is `pip_set_mode`/`pip_set_visible`.
+- **Fix shape:** update the two doc references to `pip_set_mode`/`pip_set_visible`; drop the `[pip_toggle]` intra-doc link.
+- **Priority:** low.
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP5-PIPMODE-STATE-DUP-PER-WORKSPACE
+- **Severity:** MINOR
+- **Finding:** `RightPanelHost.tsx:136-159` — the `pipMode` state + `pip_get_mode` fetch + `pip-mode` listener are duplicated per RightPanelHost instance (one per mounted workspace), so at N workspaces there are N redundant IPC fetches + N subscriptions for one app-global value. The inline comment acknowledges it's "fine per-RightPanelHost," but it's avoidable at the N>1 the milestone targets.
+- **Fix shape:** lift `pipMode` to App-level state (fetched + subscribed once), passed down as a prop — mirroring how `tiles` is derived once in App. Low effort.
+- **Priority:** low.
+- **Status:** pending
+
 # qol-wp8-diff-viewer-polish — 2026-06-25
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `7385a61`. Reviewer verdict: well-built, tightly-scoped, right mechanism (measured CSS var + ResizeObserver), no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
@@ -1163,14 +1195,14 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Where:** `src/components/workspace/Filmstrip.tsx` mirror useEffect (~199-212) vs `src/components/workspace/useMirrorTicker.ts` interval.
 - **Fix shape:** have `useMirrorTicker` push directly into the filmstrip's mirror refs (as it already conceptually does for the PiP via emit), eliminating the filmstrip's second interval — OR phase-lock them. Defer to WP5 (lifecycle/cost work) so the render-cost story is consolidated there.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-27 (M5 WP5 P2.5, commit f6e3929) — added `subscribeMirrorFrame` to `mirrorFrame.ts`; the Filmstrip's 2nd `setInterval` is gone, replaced by a subscription fired in-lockstep from `useMirrorTicker.setMirrorFrame` (one mirror loop, no phase drift).
 
 ## SURFACE-2026-06-26-QUALITY-WP3-TEARDOWN-SKIPS-VISIBILITY-BROADCAST
 - **Finding:** `pip::commands::teardown()` (called from lib.rs CloseRequested) closes the panel but does NOT emit `pip-visibility false`, so `useMirrorTicker.pipShown` stays `true` after a programmatic teardown — the ticker keeps serializing the full N set (incl. center stage) + attempting `pip-mirror` emits to a dead label. Harmless on app-close (the only current teardown path), but a latent cost-gate desync the moment a non-toggle close path is added.
 - **Where:** `src-tauri/src/pip/commands.rs` `teardown()`; `src-tauri/src/lib.rs` CloseRequested handler.
 - **Fix shape:** emit `pip-visibility false` in `teardown()` (or wherever WP5 adds a programmatic hide/close), so the cost gate stays honest. Natural WP5 scope (WP5 builds the toggle + lifecycle).
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-27 (M5 WP5 P1.3, commit f6e3929) — `teardown()` now emits `pip-visibility false` after `to_window().close()`.
 
 ## SURFACE-2026-06-26-QUALITY-WP3-DUP-MIRROR-INTERVAL-CONST
 - **Finding:** `MIRROR_INTERVAL_MS = 1000` is duplicated as a module literal in both `Filmstrip.tsx` and `useMirrorTicker.ts`. The rate is meant to be shared ("the WP4-probe-validated background mirror rate"); two independent literals can drift on a future tuning change.

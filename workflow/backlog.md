@@ -818,3 +818,9 @@ forward — none M5-blocking). No escalations. -->
 - **Suggested action (durable):** consider an arch.md note in the PiP section — "any background-thread caller of PiP window ops MUST marshal to the main thread via run_on_main_thread." Fold into the next finalize resync.
 - **Priority:** high (was a hard crash) — RESOLVED 2026-06-27 in M5 WP5 Phase 2; this entry is the durable record + the arch-note pointer.
 - **Status:** resolved (fix shipped in WP5 Phase 2; arch-note follow-up pending next finalize)
+
+## Code-quality findings — m5-wp5-pip-toggle-lifecycle-autosummon (2026-06-27)
+- **Pointer:** 0 CRITICAL / 2 MAJOR / 2 MINOR from `feature-review-quality` on ship commit `f6e3929`. The 2 MAJOR are one issue cluster: the View-menu PiP-mode CheckMarks are built-once + never refreshed on the `pip-mode` broadcast (stale + non-exclusive after any mode change — functional click path works + was operator-verified; only the displayed checkmark is wrong), plus a comment that misdescribes a non-existent rebuild. 2 MINORs: stale `pip_toggle` rustdoc/module-header refs (`pip/commands.rs`); per-RightPanelHost duplication of the app-global `pipMode` fetch/listener. Full entries in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp5-pip-toggle-lifecycle-autosummon — 2026-06-27`.
+- **Priority:** medium (the 2 MAJOR; bundle them) / low (the 2 MINOR).
+- **Status:** pending
+- **Pickup shape:** a small `/feature-refactor` — wire the View-menu checkmarks to the `pip-mode` broadcast (set_checked per item, mutually exclusive) + fix the misdescribing comment [the MAJOR cluster]; then trim the stale `pip_toggle` doc refs + lift `pipMode` to App-level state [the MINORs]. Worth doing before M6's menu-bar work layers onto the same `build_menu` seam.

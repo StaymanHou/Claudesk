@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-06-26
+updated: 2026-06-27
 milestone: "Milestone 5 — Picture-in-picture"
 ---
 
@@ -105,7 +105,7 @@ milestone: "Milestone 5 — Picture-in-picture"
 
 ---
 
-## WP5: PiP toggle + lifecycle  ✅ SHIPPED 2026-06-27
+## WP5: PiP toggle + lifecycle  ✅ SHIPPED 2026-06-27 (commit f6e3929)
 
 **Description:** PiP visibility control + lifecycle (roster tracking on workspace open/close; clean teardown on app quit). The control affordances are in-Claudesk (the right-panel PiP icon + a View-menu surface); the menu-bar right-click "Toggle PiP" entry remains an M7 surface (forward-coupling noted, not built here).
 
@@ -114,10 +114,10 @@ milestone: "Milestone 5 — Picture-in-picture"
 **Dependencies:** WP3 (panel + content). Independent of WP4 in principle, but sequenced after it so the toggle wraps the final multi-layout panel.
 **Size:** M
 **Tasks:**
-- [ ] In-Claudesk toggle control (a window-chrome button and/or a `View`-menu item in the existing native app menu — reuse the `app_menu` id→event→action seam, no accelerator, per the native-menu pattern). Decide placement; wire show/hide.
-- [ ] PiP reflects the live workspace roster: opening/closing a workspace adds/removes its PiP tile (subscribe to the same registry signal the filmstrip uses; `close_workspace` already deregisters from the broadcaster — confirm the PiP tile drops with it). True across all 4 layouts.
-- [ ] Clean teardown: the panel closes on app quit (`WindowEvent`/quit path) and does not leak an orphan NSPanel; toggling off fully hides it (and stops any PiP-specific render cost — including the serialize loop in the mirror layouts, mirroring the filmstrip-collapse discipline).
-- [ ] (If GO on persistence) remember the PiP on/off state per the bundle-identity isolation (alongside `pip_layout`); otherwise default off on launch (decide + document — leaning default-off, summon-on-demand, matching the vision's "summon when the window loses focus").
+- [x] In-Claudesk control — shipped as BOTH a `View`-menu surface (3 mode radio items) AND the right-panel PiP icon button (cycles Off→On→Auto), via the `app_menu` id→event→`menu`-bridge seam (no accelerator).
+- [x] PiP reflects the live workspace roster (open/close add/drop the tile via `usePipFanout` on the same roster the filmstrip uses) — confirmed across all 4 layouts.
+- [x] Clean teardown: panel closes on app quit (`to_window()`→`close()`), no orphan NSPanel; `teardown()` now emits `pip-visibility false` so the mirror-cost gate stops; toggling Off / dismissing stops the render cost (P2.5 folded the filmstrip's 2nd interval into the single `useMirrorTicker`).
+- [x] PiP visibility state persists across launches — subsumed by the persisted `pip_mode` (Off/On/Auto, default Auto): On restores shown+pinned at launch, Auto/Off rest hidden. (Replaces the originally-scoped bool on/off persistence.)
 
 **WP4 → WP5 rationale:** the toggle + lifecycle wraps the *final* panel (all layouts present), so "toggling off stops the render cost" is verified against the actual mirror layouts rather than a single-layout placeholder.
 

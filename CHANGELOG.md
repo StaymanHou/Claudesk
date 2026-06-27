@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-27
+
+- **Feature shipped:** PiP toggle, lifecycle & auto-summon (M5 WP5) — the Picture-in-Picture panel gains a visibility control + lifecycle, and auto-summon is adopted as an explicit tri-state mode: **Off / On (pinned) / Auto (default)**, directly selectable via the right-panel PiP icon (cycles Off→On→Auto) and a View-menu radio; **Auto** hides the panel while Claudesk is focused, summons it on a 3s-debounced sustained main-window blur, and dismisses it on refocus (so the out-of-focus glance surface appears on its own — vision Success Metric 6), while **On** pins it shown and **Off** hides it, with the mode persisted in the app-settings store and the panel tearing down cleanly on quit; the implementation survived two verify-loop catches — an off-main-thread AppKit crash in the auto-summon debounce (fixed by marshaling the show onto the main thread) and an inferred-regime dead-end found at verify-human (reworked into the explicit tri-state).
+- **Backlog resolved:** SURFACE-2026-06-26-PIP-AUTO-SUMMON-DISMISS — auto-summon/dismiss adopted + shipped as the tri-state PipMode (the scope decision it raised).
+- **Backlog resolved:** SURFACE-2026-06-26-QUALITY-WP3-TEARDOWN-SKIPS-VISIBILITY-BROADCAST — `pip::teardown()` now emits `pip-visibility false` so the mirror-cost gate stays honest on the close path.
+- **Backlog resolved:** SURFACE-2026-06-26-QUALITY-WP3-UNSYNCED-FILMSTRIP-INTERVAL — the filmstrip's second unsynced 1fps interval was folded into the single `useMirrorTicker` loop via a `subscribeMirrorFrame` push (no phase drift).
+
 ## 2026-06-26
 
 - **Feature shipped:** Agent UI-driver for verify-self (M5 WP2 probe) — VERDICT: **ADOPT**; a dev-only `tauri-plugin-mcp-bridge` (`#[cfg(debug_assertions)]`, 127.0.0.1:9223, MCP server in `.mcp.json`) lets an agent drive Claudesk's real WKWebView with live Tauri IPC, so `feature-verify-self` can now mount + inspect a live workspace (and the PiP NSPanel webview) instead of always carrying workspace-UI checks to native verify-human — proven by an agent-driven macOS smoke test that also surfaced + fixed a capability-suppression bug the bare-Vite path could never have caught, and confirmed release-safe (`nm` finds no bridge code symbols).

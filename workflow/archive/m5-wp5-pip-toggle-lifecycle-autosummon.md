@@ -1,7 +1,7 @@
 # Feature: M5 WP5 — PiP toggle, lifecycle & auto-summon/dismiss
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready to ship
+**State:** COMPLETED 2026-06-27 — shipped f6e3929; review-quality done (findings auto-backlogged); finalized. M5 WP5 done (M5 continues — WP6 verify-at-N remains).
 **Created:** 2026-06-27
 **Entry:** spec (complex feature)
 **Milestone:** M5 (Picture-in-picture) — WP5
@@ -204,10 +204,10 @@ The feature is done when:
   - [x] verify-codify  <!-- status: complete — NO new tests (doc-only phase: prose edits to vision.md/wbs.md/backlog.md aren't unit-testable; no code/behavior change to codify — recorded honestly, not fabricated). No integration boundary. Close-out regression check: full suite unchanged (BE 266 / FE 670, 0 fail) — confirms the doc edits touched no code. -->
 
 ## Current Node
-- **Path:** Feature > SHIP (all 3 phases complete)
-- **Active scope:** ready for `/feature-ship`. Phase 1 (manual toggle/lifecycle/teardown/focus-probe), Phase 2 (tri-state PipMode auto-summon — incl. the F9b crash fix + F12 dead-end rework), Phase 3 (doc reconciliation) all shipped + verified. Suites green (BE 266 / FE 670).
+- **Path:** Feature > review-quality (complete) → finalize
+- **Active scope:** shipped f6e3929; review-quality done — 0 CRITICAL / 2 MAJOR / 2 MINOR, all auto-backlogged (Mode 3) to backlog-quality-findings.md + a pointer in backlog.md. Next: `/feature-finalize`.
 - **Blocked:** none
-- **Unvisited:** none — all phases done.
+- **Unvisited:** none — all phases done; finalize remains.
 - **Blocked:** none
 - **Unvisited:** P2R verify loop (auto/self/human/codify); then Phase 3 (doc reconciliation — vision + wbs; the vision amendment now describes a tri-state Off/On/Auto mode, not a bool auto-summon setting).
 - **Open discoveries:** the tri-state rework (P2R) supersedes Q1's origin/manual_off model; Q4c still resolved (panel focus-clean → no suppression guard); the F9b main-thread fix carries into P2R.2 — see Discoveries.
@@ -220,3 +220,37 @@ The feature is done when:
 - [BLOCKING-FIXED-2026-06-27] Phase 2 verify-self (P2.2) — **the auto-summon debounce called `pip_set_visible` (AppKit `PanelBuilder::build`/`order_front_regardless`) from a spawned `std::thread`, OFF the main thread → native AppKit main-thread-violation abort.** Symptom: the app launched cleanly then self-exited at ~8s (= launch + 3s debounce firing) every time, no Rust panic in the log — pinned by per-second alive-tracking (alive through 8s, dead by 9s; the death point moved with the 3s timer). `pip_toggle` never hit this because Tauri commands already run on the main thread. **Fix:** the debounce thread now sleeps off-thread (fine) then marshals the show + state update onto the main thread via `app.run_on_main_thread(...)`, with a token re-check inside the main-thread closure to close the off-thread→main-thread refocus gap. **Re-verified empirically:** post-fix the app survives >25s (well past the 8s death point) — the launch-blur debounce fires at 3s, `pip_set_visible` runs on the main thread, no abort. This is the auto-summon show path executing end-to-end. (The off-main-thread-AppKit lesson generalizes: any future background-thread caller of pip window ops must marshal to main.)
 - [DESIGN-REWORK-2026-06-27] Phase 2 verify-human (F12) — **BLOCKING design dead-end found:** the inferred-regime model (origin=Manual/Auto + manual_off) had no path back to auto-summon+auto-dismiss once the user touched the panel toggle (a Manual panel never auto-dismisses per Q1; manual-off suppresses auto) — short of relaunch. Operator rejected the boolean-patch options and chose an **explicit tri-state `PipMode` Off/On/Auto** (icon button cycles + View-menu radio; replaces the auto-summon CheckMenuItem). Reworked in P2R.1–P2R.4. The F9b run_on_main_thread crash fix is PRESERVED. Captured as design-prior `explicit-selectable-mode-over-inferred-mode`. 6/7 verify-human leaves had passed (auto-summon works + no crash, debounce, setting toggle, persistence, teardown); only the manual-vs-auto interaction (.3/.4) drove the rework.
 - [DESIGN-REWORK-DONE-2026-06-27] Phase 2 P2R (F12) — tri-state PipMode rework IMPLEMENTED + the §6 re-verify gate passed. `pip_mode: Option<PipMode>` (Off/On/Auto, default Auto) replaced `pip_auto_summon`+`pip_visible`; the state machine reads the mode fresh each focus event (no origin/manual_off); `pip_set_mode` is the single control (icon button cycles Off→On→Auto + View-menu radio; the auto-summon CheckMenuItem + pip_toggle removed). The F9b run_on_main_thread crash fix is PRESERVED in the Auto debounce path. §6 gate: app survives >18s past launch (Auto's launch-blur debounce fires + shows on the main thread, no abort) — crash fix holds across the rework. Green: cargo build, 266 BE tests, tsc, eslint, 670 FE tests, vite build. The DEAD-END is gone by construction: any mode is directly selectable (cycle/radio to Auto from anywhere). Live tri-state cycling + cross-app Auto timing → verify-human.
+
+## Code-Quality Review — m5-wp5-pip-toggle-lifecycle-autosummon
+
+*(feature-review-quality on ship commit f6e3929, 2026-06-27. Mode 3 autopilot: CRITICAL→refactor, MAJOR→auto-backlog, MINOR→auto-backlog.)*
+
+### Strengths
+- The tri-state `PipMode` rework is a genuinely good model correction — one explicit enum replaces the inferred origin/manual_off/pip_auto_summon triad, eliminating the unreachable-state dead-end by construction.
+- `pip_set_visible` as the single show/hide chokepoint keeps the `pip-visibility` broadcast + mirror-cost gate coherent; discipline visible + commented.
+- Off-main-thread AppKit fix done right: sleep off-thread → `run_on_main_thread` with a re-check of BOTH the debounce token AND the freshly-read mode inside the closure (closes the off-thread→main-thread refocus race).
+- Settings store exemplary: optional fields + skip_serializing_if + read-modify-write + atomic write + malformed-is-error-not-wipe, all test-pinned.
+- Pure decision fns (should_arm_summon/should_auto_dismiss) extracted from the AppKit machinery → unit-testable without an AppHandle.
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR**
+- [app_menu/mod.rs:198-216] The three PiP-mode CheckMenuItems are built once at setup (build_menu called once, lib.rs:105) with checkmarks seeded from the persisted mode, but NOTHING updates them on a `pip-mode` change — no listener rebuilds the menu or calls set_checked. After any mode change (icon button OR the menu item itself), the View-menu checkmarks go stale until relaunch. And three independent CheckMenuItems aren't a radio group: a native click toggles only the clicked item's own check → the menu can show contradictory state. The functional path (click → pip_set_mode) works + was verify-human'd; the menu's DISPLAYED state is unreliable. → AUTO-BACKLOGGED (Mode 3).
+- [app_menu/mod.rs:199] The comment asserts "the menu is rebuilt on the `pip-mode` broadcast so the checkmark tracks the backend" — that rebuild does NOT exist. A WHAT-comment describing unimplemented behavior; compounds the staleness bug by hiding it. → AUTO-BACKLOGGED (Mode 3).
+
+**MINOR**
+- [pip/commands.rs:206 + :3] `pip_set_visible` rustdoc uses intra-doc link `[pip_toggle]` (removed command → broken rustdoc link); the module header still narrates "`pip_toggle` builds (once)…". Stale post-rework. → AUTO-BACKLOGGED (Mode 3).
+- [RightPanelHost.tsx:136-159] The pipMode state + pip_get_mode fetch + pip-mode listener are duplicated per RightPanelHost instance (one per workspace) → N redundant IPC fetches + subscriptions for one app-global value. Inline comment acknowledges it; avoidable at the N>1 the milestone targets (lift to App-level state like `tiles`). → AUTO-BACKLOGGED (Mode 3).
+
+### Assessment
+Well-built work that advances the codebase more than it accrues debt. The Rust core (tri-state model, single show/hide chokepoint, main-thread marshal with double re-check, settings store) is clear, correct, and well-tested within the documented no-headless-AppHandle constraint. The one real soft spot is the View-menu mode surface: its displayed checkmark is stale-and-non-exclusive by construction, and a comment misdescribes it as tracking the backend — the functional wiring is sound + operator-verified, but the visual state is not. Nothing blocks the ship; the menu-checkmark refresh is worth a refactor pass before M6 layers more onto build_menu.
+
+### If you disagree
+Operator: dismiss any finding by editing this section + marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** Two things the plan didn't anticipate. (1) The auto-summon debounce **cannot** call AppKit window ops from a spawned thread — it aborts the process (no Rust panic), surfacing as a clean-launch-then-die ~3s in; Tauri commands hide this because they already run on the main thread, so the seam was invisible until a background timer drove the show. (2) An *inferred* regime (origin/manual_off) is a dead-end trap: once the user touched the toggle there was no gesture back to Auto without relaunch — the model itself was wrong, not a missing case.
+- **Assumptions that held:** the non-activating PiP show/hide does NOT self-emit a main-window `Focused` event (Q4c, verify-self Phase 1) → no summon→focus→dismiss loop, no suppression guard needed. The single `pip_set_visible` chokepoint + `pip-visibility` broadcast held across every caller. The settings-store pattern extended cleanly to the new field.
+- **Assumptions that were wrong:** that auto-summon could be a simple bool setting + manual toggle (the dead-end); that the debounce show could run inline on the timer thread (the crash). Both caught by the verify loop, not in planning.
+- **Approach delta:** the feature shipped as planned in *shape* (manual control + lifecycle + auto-summon + doc reconciliation) but the auto-summon *model* went through two back-loops — F9b (off-main-thread crash → `run_on_main_thread`) and F12 (bool/inferred model → explicit tri-state `PipMode`). The tri-state is materially better than the originally-spec'd bool; the verify loop earned its keep here (both fixes came from verify-self/verify-human, not review). Two design priors captured (`explicit-selectable-mode-over-inferred-mode`, `operator-helpful-friend-misfiring-as-offswitchable-setting`).
