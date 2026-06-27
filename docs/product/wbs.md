@@ -29,14 +29,16 @@ WP4 (terminal font)─┤   all independent of WP1/WP1b/WP2 and of each other
 WP5 (editor wrap)  ─┤   (parallel track — pure additive UI, distinct files)
 WP6 (gitignore)    ─┤
 WP7 (no-yolo)      ─┤
-WP9 (PiP-empty fix)─┘
-WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9
+WP9 (PiP-empty fix)─┤
+WP10 (RP-term zoom)─┤   WP10 soft-depends on WP4 (reuses terminalFontZoom.ts)
+WP11 (multi RP-term)┘   WP10↔WP11 soft-couple (zoom should cover all N terminals)
+WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, WP11
 ```
 
 - **Critical path:** WP1 → WP1b → WP2 → WP8. The stuck-dot telemetry is the only chain with an internal learning dependency (must instrument before diagnosing).
 - **WP1 + WP1b are the shipped probe** (both delivered 2026-06-27): WP1 = the backend file logger + drain/registry instrumentation; WP1b = the Perl hook-edge write-failure trace. Split into two WPs after build (originally one WP with two phases) because they are independently shippable telemetry slices at different layers (Rust backend vs deployed hook script). **Both shipped + released in the v0.2.1 patch** so the probe runs in prod and self-captures the bug.
 - **WP2 repro caveat (operator, 2026-06-27):** the stuck-`Running` dot is **intermittent (~once/day)** — it CANNOT be reproduced on demand. So WP2's `/feature-reproduce` is **passive**: the WP1+WP1b telemetry now ships in prod; when the bug next occurs, the on-disk `status-channel.log` captures the offending turn, and WP2 diagnoses + fixes from that real evidence. WP2 is **blocked on a natural occurrence**, not on agent/operator effort.
-- **Parallel track:** WP3, WP4, WP5, WP6, WP7, WP9 are mutually independent (each touches a distinct file/seam) and independent of WP1/WP1b/WP2. They can be built in any order or concurrently; sequenced below by ascending risk/effort.
+- **Parallel track:** WP3, WP4, WP5, WP6, WP7, WP9, WP10, WP11 are mutually independent (each touches a distinct file/seam) and independent of WP1/WP1b/WP2 — EXCEPT WP10 soft-depends on WP4 (reuses `terminalFontZoom.ts` + the `XtermPane.setFontSize` handle) and WP10↔WP11 soft-couple (the zoom should route to whichever of N terminals is focused). They can otherwise be built in any order or concurrently; sequenced below by ascending risk/effort. **WP10+WP11 were folded in 2026-06-27** (operator at WP4 verify-human — `SURFACE-2026-06-27-RIGHT-PANEL-TERMINAL-ZOOM-AND-MULTIPLE`); the open collection grew, as designed.
 - **WP4 ↔ WP3 soft coupling:** WP4's focus-scoped zoom keybinding routes through the WP4b `data-focus-half` tracking (already shipped in M4) — no dependency on WP3, but both touch the workspace layout; build WP3 first so the divider exists before WP4 verification exercises the terminal half at varying widths (convenience, not a hard dep).
 
 ---
@@ -179,10 +181,48 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9
 
 ---
 
+## WP10: Right-panel terminal font zoom (focus-scoped, extends WP4)
+**Description:** The WP9 second terminal (the right-half login-shell `TerminalPane`) gains the SAME focus-scoped font-zoom WP4 shipped for the CC terminal. When the right-panel terminal is focused, ⌘+/⌘−/⌘0 zoom *that terminal* — not the editor. (Operator-requested at WP4 verify-human, 2026-06-27 — `SURFACE-2026-06-27-RIGHT-PANEL-TERMINAL-ZOOM-AND-MULTIPLE` part 1.)
+**Milestone:** M6 (open-collection fold-in)
+**Dependencies:** WP4 (reuses the `terminalFontZoom.ts` module + the `XtermPane.setFontSize` handle; soft-coupled to WP11 if multi-terminal lands first — but independent)
+**Size:** S
+**Type:** new-work (routing extension)
+**Seams (to confirm at plan time):** the right-panel terminal is an `XtermPane` (via `TerminalPane`, `spawnCommand="term_spawn"`) — the SAME component WP4 made zoomable, so it already accepts `setFontSize(px)` via the imperative handle. The gap is ROUTING ONLY: WP4's capture-phase keydown listener in `Workspace.tsx` intercepts the zoom chord only when `deriveFocusHalf(document.activeElement) === "left"` (the CC terminal); a right-half focus falls through to the editor's CM6 keymap. WP10 must additionally route to the right-panel terminal when it is the focused right-half surface (terminal panel front + focus inside `[data-testid="term-pane"]`), vs the editor. The `panel === "terminal"` front-state lives in `RightPanelHost` (~line 337), so the listener needs that signal (lift state up, or read a DOM marker on the focused element's ancestry). 
+**Open decision (plan time):** ONE shared terminal zoom for both terminals (reuse WP4's `claudesk.terminal.fontSize` key — simplest, both terminals are "a terminal") vs a separate key per terminal kind. Lean: share the key unless there's a reason the CC terminal and the shell want different sizes.
+**Tasks:**
+- [ ] Decide shared-vs-separate zoom key + the routing signal (lifted state vs DOM-ancestry read). Record the decision.
+- [ ] Extend the `Workspace.tsx` zoom routing: when the focused right-half surface is the terminal panel (not the editor), apply terminal zoom via the right-panel terminal's `setFontSize` handle (thread a ref from `RightPanelHost`→`TerminalPane`→`XtermPane`, mirroring the CC `ccPaneRef`)
+- [ ] Verify (bridge + real keyboard): focus right-panel terminal → ⌘+/⌘−/⌘0 zooms IT; focus editor → ⌘+ zooms the editor (terminal unchanged); focus CC terminal → ⌘+ zooms CC (unchanged from WP4). Persist + restore.
+
+---
+
+## WP11: Multiple terminals in the right panel
+**Description:** The right-panel terminal supports MORE THAN ONE terminal — today it's a single `TerminalPane` per workspace (one hardcoded `term_spawn` session keyed `${workspaceId}-term`). Add the ability to open/switch/close N terminals within the terminal panel. (Operator-requested at WP4 verify-human, 2026-06-27 — `SURFACE-2026-06-27-RIGHT-PANEL-TERMINAL-ZOOM-AND-MULTIPLE` part 2.)
+**Milestone:** M6 (open-collection fold-in)
+**Dependencies:** none hard (independent of WP4/WP10; if WP10 lands first, the zoom routing should cover all N terminals — note the coupling). Backend `term_spawn` is already session-id-keyed + command-agnostic, so this is a frontend-shape change.
+**Size:** M (real UX-shape design choice — likely warrants `/feature-spec` rather than a bare `/feature-plan`)
+**Type:** new-work
+**Seams (confirmed):** `RightPanelHost` mounts exactly one `TerminalPane` in the `panel === "terminal"` slot (~line 876); `TerminalPane` hardcodes the session id `${workspaceId}-term` and forwards everything else to `XtermPane` unchanged. The PTY backend (`term_spawn` + the session-id-keyed input/resize/kill commands + `cc-output-<sid>`/`cc-exit-<sid>` streams) is already N-session-ready — only the frontend needs a terminal-list model. The QoL-WP1 per-pane kill-on-unmount (`XtermPane` unmount cleanup) already reaps each `XtermPane`'s session generically, so closing a terminal tab that unmounts its pane reaps its shell for free — confirm this covers the N case.
+**Open design choices (SPEC time — this is the one M6 item with a genuine UX-shape decision):**
+- Tabs vs splits vs both (lean: tabs first — simplest, matches the panel-tab idiom already in `RightPanelHost`; splits are a bigger layout change)
+- Max terminal count (cap or unbounded)
+- New-terminal / close-terminal affordance (a `+` button in a terminal sub-tab row / a chord / both) — check chord-ownership (`paletteCommands.ts`) before binding any new chord
+- Persistence across app restart (lean: no — terminals are ephemeral like the CC session; re-spawn fresh)
+- Keep-mounted discipline: each terminal stays mounted (scrollback survives switching between terminals) mirroring the single-terminal posture
+**Tasks:**
+- [ ] `/feature-spec` the terminal-list UX shape (tabs vs splits, count, affordances, persistence) — record the decisions
+- [ ] Terminal-list model: N `{ id, sessionId }` entries per workspace; a sub-tab/switcher row in the terminal panel; add/close/switch
+- [ ] Mount N `TerminalPane`s keep-mounted (display:none for the non-front ones), each with a distinct session id (drop the hardcoded `${workspaceId}-term` → `${workspaceId}-term-<n>`); the front one is `active`
+- [ ] Confirm each terminal's shell reaps on close (per-pane unmount kill covers it) and on workspace close (kill_all / per-pane reap covers all N)
+- [ ] If WP10 shipped: confirm focus-scoped zoom routes to whichever terminal is focused
+- [ ] Verify (bridge + real): open 2+ terminals, switch between them (scrollback intact), close one (shell reaped), persistence per the spec decision
+
+---
+
 ## WP8: Milestone-exit verification (verify M6 at the real app)
 **Description:** Milestone-exit verification against the real installed `.app` + dev build, confirming every M6 exit criterion. Verification-only WP (no new feature code).
 **Milestone:** M6
-**Dependencies:** WP2, WP3, WP4, WP5, WP6, WP7, WP9 (all M6 build WPs; WP1+WP1b already shipped in v0.2.1)
+**Dependencies:** WP2, WP3, WP4, WP5, WP6, WP7, WP9, WP10, WP11 (all M6 build WPs; WP1+WP1b already shipped in v0.2.1)
 **Size:** S
 **Exit criteria to confirm (from `roadmap.md`):**
 - [ ] Status-channel telemetry (WP1+WP1b) confirmed writing in the installed `.app` (shipped v0.2.1) — the passive probe is live
@@ -193,6 +233,8 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9
 - [ ] Editor offers a persisted auto-wrap toggle (default OFF preserved)
 - [ ] Gitignored-but-editable files (e.g. `.env`) are reachable + editable in the in-app editor per the WP6 policy
 - [ ] A setting can open the CC terminal without yolo (default stays yolo-on); verified at next-spawn in the installed build
+- [ ] Right-panel terminal is also focus-scoped-zoomable (WP10) — focus it → ⌘+/⌘−/⌘0 zooms that terminal, not the editor
+- [ ] Multiple terminals can be opened/switched/closed in the right panel (WP11) per the spec'd UX shape; each shell reaps on close
 - [ ] Any further friend-requested QoL items folded in before this verification are covered
 **Tasks:**
 - [ ] Drive the agent-observable slice via the `tauri` MCP bridge where possible (split-drag, font-zoom focus routing, wrap toggle, FileTree `.env` visibility — all main-webview-observable per the M5 WP2 bridge proof)
@@ -204,6 +246,7 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9
 ## SURFACE-IN ledger (open-collection tracking)
 
 M6 is an **OPEN collection** (`roadmap.md` Revision 2026-06-26b). New friend-QoL requests arriving before this WBS's WPs all close should be added here as new WPs (or anchored SURFACEs), not forced into existing WPs. Current first batch (this WBS): WP3–WP7 from `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1` + the two roadmap-listed additions (WP6 gitignore = `SURFACE-2026-06-26-FILETREE-EXCLUDES-GITIGNORED-EDITABLE-FILES`, WP7 no-yolo = `SURFACE-2026-06-26-M6-SETTING-NO-YOLO-DEFAULT`); WP1+WP2 = `SURFACE-2026-06-25-STATUS-STUCK-RUNNING-AFTER-CLEAN-TURN-END` (operator-designated LEAD).
+**Fold-ins after the first batch:** WP9 = `SURFACE-2026-06-27-PIP-SUMMONS-EMPTY-WITH-NO-WORKSPACE-OPEN` (operator, WP1 verify-human); **WP10 + WP11 = `SURFACE-2026-06-27-RIGHT-PANEL-TERMINAL-ZOOM-AND-MULTIPLE`** (operator at WP4 verify-human, 2026-06-27 — right-panel terminal zoom + multiple right-panel terminals). The collection grew exactly as the open-collection design intends.
 
 **Note:** `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` (the workflow-doc-hierarchy watcher) was *anchored to M6* in some earlier notes but was **re-anchored to M7 (menu-bar)** in `roadmap.md` (the popover row is its natural form factor) — it is **NOT** an M6 WP. Left out deliberately.
 

@@ -40,6 +40,7 @@ import {
   registerTerminalSerializer,
   unregisterTerminalSerializer,
 } from "./terminalMirror";
+import { loadTerminalFontSize } from "./terminalFontZoom";
 
 /**
  * Imperative handle exposed via `ref` (QoL-WP3). The parent `Workspace` calls
@@ -57,6 +58,15 @@ export interface XtermPaneHandle {
    * parent nudges a fit. No-op while the host is still hidden (offsetParent guard).
    */
   refit(): void;
+  /**
+   * M6 WP4 — set the xterm font size live (focus-scoped ⌘+/⌘−/⌘0 zoom). Applies
+   * `term.options.fontSize = px` then re-fits: a font change alters the cell size,
+   * so the column/row count must be recomputed and pushed to the PTY (fitAndResize
+   * does both). No-op before the terminal mounts. The PERSISTENCE + the next-size
+   * math live in the parent (Workspace) via terminalFontZoom.ts; this handle is the
+   * thin apply seam, so XtermPane stays unaware of the routing/storage.
+   */
+  setFontSize(px: number): void;
 }
 
 interface XtermPaneProps {
@@ -125,6 +135,13 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       () => ({
         focus: () => termRef.current?.focus(),
         refit: () => fitAndResizeRef.current(),
+        setFontSize: (px: number) => {
+          const term = termRef.current;
+          if (!term) return;
+          term.options.fontSize = px;
+          // Re-fit after the cell size changes so cols/rows + the PTY stay correct.
+          fitAndResizeRef.current();
+        },
       }),
       [],
     );
@@ -198,7 +215,10 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       if (!host) return;
 
       const term = new Terminal({
-        fontSize: 11,
+        // M6 WP4 — seed from the persisted terminal zoom (default 11, matching the
+        // historical hardcode) so the terminal mounts at the last-chosen size with
+        // no flash-then-jump. Live changes go through the setFontSize handle.
+        fontSize: loadTerminalFontSize(),
         scrollback: 1000,
         cursorBlink: true,
         // Explicit DARK theme (dark-mode-only project): light fg on a near-black bg. This

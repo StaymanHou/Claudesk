@@ -36,6 +36,13 @@ import {
   toggleCollapse,
   type SplitState,
 } from "./splitWidth";
+import {
+  loadTerminalFontSize,
+  saveTerminalFontSize,
+  nextTerminalFontSize,
+  terminalZoomForChord,
+  DEFAULT_TERMINAL_FONT_PX,
+} from "./terminalFontZoom";
 
 interface WorkspaceProps {
   workspace: WorkspaceModel;
@@ -129,6 +136,66 @@ export function Workspace({
     const raf = requestAnimationFrame(() => ccPaneRef.current?.refit());
     return () => cancelAnimationFrame(raf);
   }, [leftCollapsed]);
+
+  // M6 WP4 — live CC-terminal font size (focus-scoped ⌘+/⌘−/⌘0 zoom). App-global,
+  // mirroring the editor's fontZoom + the WP3 split state (UI chrome, persisted under
+  // one localStorage key; a fresh workspace inherits the last zoom). Seeded from
+  // localStorage so it agrees with XtermPane's constructor seed. Workspace doesn't
+  // RENDER the size (xterm owns the visual via the setFontSize handle) — useState is
+  // only the batch-safe store the functional updater reads the prior size from, so the
+  // value binding is intentionally unused; only the setter is.
+  const [, setTerminalFontSize] = useState<number>(loadTerminalFontSize);
+  // Apply a zoom ACTION ("in"/"out"/"reset"). The next size is computed INSIDE the
+  // functional setState updater so it always reads the latest committed size — even
+  // when several chords fire within one React batch (the updater is the only
+  // batch-safe source of the prior value; a captured `current` or a ref synced via a
+  // post-commit effect would all see the same stale value mid-batch). The persist +
+  // the xterm apply ride along in the updater (it returns the same value it sets, so
+  // it stays a pure-enough updater — no extra render, and React calls it once per
+  // queued update with the running value).
+  const applyTerminalZoom = (action: "in" | "out" | "reset") => {
+    setTerminalFontSize((prev) => {
+      const next =
+        action === "reset"
+          ? DEFAULT_TERMINAL_FONT_PX
+          : nextTerminalFontSize(prev, action);
+      saveTerminalFontSize(next);
+      ccPaneRef.current?.setFontSize(next);
+      return next;
+    });
+  };
+
+  // M6 WP4 — FOCUS-SCOPED zoom routing. The editor's ⌘+/⌘−/⌘0 is a CM6 keymap that
+  // fires only when CodeMirror holds DOM focus. xterm forwards keystrokes to the PTY,
+  // so the same chord pressed while the terminal is focused would otherwise reach CC
+  // (or trigger WKWebView page-zoom), not a zoom handler. This capture-phase listener
+  // closes that gap: when the LEFT (CC terminal) half holds focus, it intercepts the
+  // zoom chord, applies+persists the terminal zoom, and preventDefault+stopPropagation
+  // so it never reaches the PTY or the browser. When the RIGHT (editor) half is focused
+  // it does NOTHING — the existing CM6 keymap handles it unchanged. Gated on `visible`
+  // (only the center-stage workspace routes). Registered on this workspace's root, not
+  // the document, so backgrounds never react.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !visible) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const action = terminalZoomForChord(e);
+      if (!action) return;
+      // Only act when keystrokes are landing in the CC terminal half. Read the live
+      // DOM focus rather than the React `focusHalf` state to avoid a stale-closure
+      // race (the state may lag a just-changed focus by a render).
+      if (deriveFocusHalf(document.activeElement) !== "left") return;
+      e.preventDefault();
+      e.stopPropagation();
+      applyTerminalZoom(action);
+    };
+    root.addEventListener("keydown", onKeyDown, true); // capture phase
+    return () => root.removeEventListener("keydown", onKeyDown, true);
+    // Keyed only on `visible` (the gate). The handler captures no changing state — the
+    // current size is read inside applyTerminalZoom's functional updater, and dispatch
+    // goes through the stable ccPaneRef — so the listener lives for the visible-edge's
+    // lifetime, the same shape as the focusin/focusout effect below.
+  }, [visible]);
 
   useEffect(() => {
     const root = rootRef.current;
