@@ -24,7 +24,8 @@ use tauri_nspanel::{
     tauri_panel, CollectionBehavior, ManagerExt, PanelBuilder, PanelLevel, StyleMask,
 };
 
-use super::layout::PipLayout;
+use super::layout::{PipLayout, PipMode};
+use super::{should_arm_summon, should_auto_dismiss, PipAutoStateLock};
 
 // Define a minimal custom NSPanel class. The `tauri_panel!` macro emits the
 // objc2 class + a `FromWindow` impl so `PanelBuilder::<_, PipPanel>` can
@@ -62,6 +63,12 @@ pub const PIP_VISIBILITY_EVENT: &str = "pip-visibility";
 /// pay nothing). Backend-owned (it persists + resizes too), so the single source of
 /// truth — mirrors `src/pip/pipLayout.ts` PIP_LAYOUT_EVENT.
 pub const PIP_LAYOUT_EVENT: &str = "pip-layout";
+
+/// Event broadcast (all webviews) carrying the active PiP MODE (kebab string `off`/`on`/
+/// `auto`, matching `PipMode`'s serde). Emitted by `pip_set_mode`; the RightPanelHost icon
+/// button + the View-menu radio listen so the displayed state always matches the backend's
+/// (the single source of truth — not a frontend guess). WP5 Phase 2 rework.
+pub const PIP_MODE_EVENT: &str = "pip-mode";
 
 /// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists. Mirrors
 /// `config_store::commands::resolve_data_dir` (kept module-local — that one is private).
@@ -149,30 +156,81 @@ pub fn pip_move(app: AppHandle, dx: f64, dy: f64) -> Result<(), String> {
     Ok(())
 }
 
-/// Toggle the always-on-top PiP NSPanel.
-///
-/// First call builds the panel (non-activating / floating / all-Spaces /
-/// over-fullscreen / stationary) and orders it front without activating
-/// Claudesk; subsequent calls toggle its visibility. Returns the new
-/// visibility (`true` = now showing) so the frontend button can reflect state.
+/// Read the persisted PiP mode (default `Auto`; WP5 Phase 2 rework). The icon button +
+/// View-menu radio seed their current-state display from this on mount.
 #[tauri::command]
-pub fn pip_toggle(app: AppHandle) -> Result<bool, String> {
-    // Already built? → just toggle visibility.
-    if let Ok(panel) = app.get_webview_panel(PANEL_LABEL) {
-        if panel.is_visible() {
-            panel.hide();
-            let _ = app.emit(PIP_VISIBILITY_EVENT, false);
-            return Ok(false);
+pub fn pip_get_mode(app: AppHandle) -> Result<PipMode, String> {
+    let dir = resolve_data_dir(&app)?;
+    crate::config_store::settings::read_pip_mode(&dir).map_err(|e| e.to_string())
+}
+
+/// Set the PiP mode — the SINGLE user-facing control for the panel (WP5 Phase 2 rework).
+/// Persists the mode, applies its panel side-effect, cancels any pending auto-summon, and
+/// broadcasts `pip-mode` so both surfaces (icon button + View-menu radio) reflect it.
+///
+/// Side-effect per mode:
+///   - **Off**  → hide the panel.
+///   - **On**   → show the panel, pinned (the focus handler will NOT auto-dismiss it).
+///   - **Auto** → hide NOW (Auto's resting state while Claudesk is focused); the
+///                `WindowEvent::Focused` handler drives summon-on-blur / dismiss-on-focus
+///                from here on.
+///
+/// This replaces the old `pip_toggle` + `manual_off`/`origin` bookkeeping: the regime is
+/// the explicit mode, so there is no inferred state and no dead-end (you can select `Auto`
+/// from any mode). Show/hide still routes through the single [`pip_set_visible`] path so
+/// the `pip-visibility` broadcast + mirror-cost gate stay coherent.
+#[tauri::command]
+pub fn pip_set_mode(app: AppHandle, mode: PipMode) -> Result<(), String> {
+    // Persist first (durable state of record even if a later step best-efforts).
+    let dir = resolve_data_dir(&app)?;
+    crate::config_store::settings::write_pip_mode(&dir, mode).map_err(|e| e.to_string())?;
+
+    // Cancel any pending auto-summon debounce — the mode just changed under it.
+    if let Some(lock) = app.try_state::<PipAutoStateLock>() {
+        if let Ok(mut st) = lock.0.lock() {
+            st.pending_summon_token = st.pending_summon_token.wrapping_add(1);
         }
-        // order_front_regardless shows the panel WITHOUT activating Claudesk —
-        // the right "show" for a display-only PiP (vs. show_and_make_key, which
-        // would steal focus).
-        panel.order_front_regardless();
-        let _ = app.emit(PIP_VISIBILITY_EVENT, true);
-        return Ok(true);
     }
 
-    // First call: build the panel. The MUST-FOLLOW constraints + their
+    // Apply the panel side-effect. On/Off show/hide immediately; Auto rests hidden (the
+    // focus handler summons it on the next sustained blur).
+    let show = matches!(mode, PipMode::On);
+    pip_set_visible(&app, show)?;
+
+    // Broadcast the new mode so the icon button + View-menu radio re-render.
+    let _ = app.emit(PIP_MODE_EVENT, mode);
+    Ok(())
+}
+
+/// Show or hide the PiP NSPanel, building it on first show. The SINGLE
+/// show/hide path (WP5 P1.2): both the user toggle ([`pip_toggle`]) and the
+/// auto-summon/dismiss state machine (WP5 Phase 2) call this, so the
+/// `pip-visibility` broadcast is emitted from exactly one place and never
+/// drifts from the panel's real state. Returns the new visibility
+/// (`true` = now showing). Idempotent-ish: hiding an unbuilt panel is a no-op
+/// that returns `false` (nothing to build just to hide).
+pub fn pip_set_visible(app: &AppHandle, show: bool) -> Result<bool, String> {
+    // Already built? → show/hide it directly.
+    if let Ok(panel) = app.get_webview_panel(PANEL_LABEL) {
+        if show {
+            // order_front_regardless shows the panel WITHOUT activating Claudesk —
+            // the right "show" for a display-only PiP (vs. show_and_make_key, which
+            // would steal focus).
+            panel.order_front_regardless();
+            let _ = app.emit(PIP_VISIBILITY_EVENT, true);
+            return Ok(true);
+        }
+        panel.hide();
+        let _ = app.emit(PIP_VISIBILITY_EVENT, false);
+        return Ok(false);
+    }
+
+    // Not built. Hiding an unbuilt panel is a no-op (nothing on screen).
+    if !show {
+        return Ok(false);
+    }
+
+    // First show: build the panel. The MUST-FOLLOW constraints + their
     // resolutions (proven at M5 WP1 verify-human 2026-06-25, confirmed against
     // tauri-nspanel issues #19/#22 + the maintainer's menubar example — see the
     // archived WP1 "Probe outcomes"):
@@ -207,7 +265,7 @@ pub fn pip_toggle(app: AppHandle) -> Result<bool, String> {
     // Content is a bundled app route (`pip.html` via WebviewUrl::App — the React
     // status surface, a real Vite entry with live Tauri IPC), NOT a `data:` URL
     // (which rendered blank under the app CSP).
-    let panel = PanelBuilder::<_, PipPanel>::new(&app, PANEL_LABEL)
+    let panel = PanelBuilder::<_, PipPanel>::new(app, PANEL_LABEL)
         .url(WebviewUrl::App("pip.html".into()))
         .size(LogicalSize::new(init_w, init_h).into())
         // Borderless + transparent at CREATION (before the webview attaches) — the
@@ -248,6 +306,107 @@ pub fn pip_toggle(app: AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
+/// WP5 Phase 2 (rework) — the auto-summon/dismiss state machine, driven by the main
+/// window's `WindowEvent::Focused(bool)` (wired in `lib.rs`). Acts ONLY in `Auto` mode;
+/// `Off`/`On` are static (the focus handler leaves them alone — `Off` stays hidden, `On`
+/// stays pinned). The regime is read fresh from the persisted `pip_mode` each event (the
+/// explicit source of truth — no inferred origin/manual_off).
+///
+/// - **blur (`focused=false`)**: if `Auto` and no panel currently shown, bump+capture a
+///   debounce token and spawn a thread that, after `PIP_AUTO_SUMMON_DEBOUNCE_MS`, summons
+///   the panel ONLY if the token still matches AND the mode is still `Auto` (a refocus or
+///   a mode change in the meantime bumps the token / fails the mode re-check → no-op).
+/// - **focus (`focused=true`)**: cancel any pending summon (bump the token), and if mode
+///   is `Auto`, dismiss the panel. (`On` stays pinned; `Off` has nothing shown.)
+///
+/// Q4c (verify-self, Phase 1): showing/hiding the non-activating PiP does NOT emit a
+/// main-window `Focused` event, so there is NO summon→focus→dismiss loop and no
+/// programmatic-show suppression guard is needed.
+pub fn pip_on_main_focus_changed(app: &AppHandle, focused: bool) {
+    let Some(lock) = app.try_state::<PipAutoStateLock>() else {
+        return;
+    };
+    // The regime is the persisted mode (read fresh — the explicit source of truth).
+    let mode = resolve_data_dir(app)
+        .ok()
+        .and_then(|dir| crate::config_store::settings::read_pip_mode(&dir).ok())
+        .unwrap_or_default();
+
+    if focused {
+        // Returned to Claudesk: cancel any pending summon; in Auto, dismiss the panel.
+        {
+            let Ok(mut st) = lock.0.lock() else { return };
+            st.pending_summon_token = st.pending_summon_token.wrapping_add(1);
+        }
+        if should_auto_dismiss(mode) {
+            let _ = pip_set_visible(app, false);
+        }
+        return;
+    }
+
+    // Blurred: arm the debounce only in Auto + when nothing is currently shown.
+    let panel_visible = app
+        .get_webview_panel(PANEL_LABEL)
+        .map(|p| p.is_visible())
+        .unwrap_or(false);
+    if !should_arm_summon(mode, panel_visible) {
+        return;
+    }
+    let token = {
+        let Ok(mut st) = lock.0.lock() else { return };
+        st.pending_summon_token = st.pending_summon_token.wrapping_add(1);
+        st.pending_summon_token
+    };
+
+    // Debounce: only summon if still un-cancelled after the delay. A plain thread +
+    // sleep keeps the WAIT off any async runtime; the token check makes it cancel-safe.
+    //
+    // CRITICAL (verify-self, Phase 2 — PRESERVED across the rework): the actual show —
+    // `pip_set_visible` → `PanelBuilder::build()` / `order_front_regardless` — is AppKit
+    // window work that MUST run on the MAIN (UI) thread. Calling it directly on this
+    // spawned thread aborts the process (a native AppKit main-thread-violation, no Rust
+    // panic — the app self-exited ~3s after launch, exactly when this timer fired). So we
+    // sleep off-thread (fine) then marshal the show onto the main thread.
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(
+            super::PIP_AUTO_SUMMON_DEBOUNCE_MS,
+        ));
+        let Some(lock) = app.try_state::<PipAutoStateLock>() else {
+            return;
+        };
+        // Token still matches (no refocus / mode change since we armed)?
+        let token_ok = {
+            let Ok(st) = lock.0.lock() else { return };
+            st.pending_summon_token == token
+        };
+        if !token_ok {
+            return;
+        }
+        // Marshal the AppKit show onto the main thread, re-checking BOTH the token and
+        // the mode there (a refocus or a mode change could land between the off-thread
+        // check and the main-thread dispatch).
+        let app_main = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let Some(lock) = app_main.try_state::<PipAutoStateLock>() else {
+                return;
+            };
+            let token_still_ok = {
+                let Ok(st) = lock.0.lock() else { return };
+                st.pending_summon_token == token
+            };
+            let still_auto = resolve_data_dir(&app_main)
+                .ok()
+                .and_then(|dir| crate::config_store::settings::read_pip_mode(&dir).ok())
+                .map(|m| m == PipMode::Auto)
+                .unwrap_or(false);
+            if token_still_ok && still_auto {
+                let _ = pip_set_visible(&app_main, true);
+            }
+        });
+    });
+}
+
 /// Tear down the PiP panel on main-window close so the all-Spaces/floating
 /// panel does not orphan on screen. The ONLY safe close
 /// path: `to_window()` un-swizzles the NSPanel back to a plain NSWindow (and
@@ -260,5 +419,11 @@ pub fn teardown(app: &AppHandle) {
         if let Some(window) = panel.to_window() {
             let _ = window.close();
         }
+        // WP5 P1.3 (folds in SURFACE-...-TEARDOWN-SKIPS-VISIBILITY-BROADCAST): the
+        // panel is gone, so broadcast `pip-visibility false` like the hide path does.
+        // Every subscriber (notably the main webview's mirror-cost gate) must learn
+        // the PiP is down — without this, a teardown left the gate believing the PiP
+        // was still up and the serialize/emit loop kept paying cost for a dead panel.
+        let _ = app.emit(PIP_VISIBILITY_EVENT, false);
     }
 }

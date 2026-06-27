@@ -23,7 +23,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::ConfigError;
-use crate::pip::layout::PipLayout;
+use crate::pip::layout::{PipLayout, PipMode};
 
 /// Basename of the app-settings file within the app-data directory.
 const SETTINGS_FILE: &str = "settings.json";
@@ -39,6 +39,16 @@ pub struct AppSettings {
     /// (`PipLayout::default()` = horizontal mirror).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pip_layout: Option<PipLayout>,
+    /// The PiP visibility MODE — explicit tri-state Off/On/Auto (WP5 Phase 2 rework,
+    /// 2026-06-27). `None` = never set → the reader applies the default **`Auto`** (the
+    /// operator-benefit default; off-switchable to `Off` for multi-monitor friend-users
+    /// where a blur-trigger misfires — see `docs/product/design-priors.md` →
+    /// operator-helpful-friend-misfiring-as-offswitchable-setting +
+    /// explicit-selectable-mode-over-inferred-mode). **Replaces** the earlier
+    /// `pip_auto_summon: bool` + `pip_visible: bool` pair, whose inferred regime had a
+    /// dead-end (no return to auto without relaunch).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pip_mode: Option<PipMode>,
 }
 
 /// Read the app settings. A missing file is normal (first run) and returns the
@@ -77,6 +87,21 @@ pub fn read_pip_layout(data_dir: &Path) -> Result<PipLayout, ConfigError> {
 pub fn write_pip_layout(data_dir: &Path, layout: PipLayout) -> Result<(), ConfigError> {
     let mut settings = read_settings(data_dir)?;
     settings.pip_layout = Some(layout);
+    write_settings(data_dir, &settings)
+}
+
+/// Read the PiP mode, defaulting **`Auto`** when unset / first run — the operator-benefit
+/// default (WP5 Phase 2 rework). The single reader the `pip_get_mode` command + the
+/// launch-time restore + the focus handler call.
+pub fn read_pip_mode(data_dir: &Path) -> Result<PipMode, ConfigError> {
+    Ok(read_settings(data_dir)?.pip_mode.unwrap_or_default())
+}
+
+/// Persist the PiP mode, preserving other fields (read-modify-write). The single writer
+/// `pip_set_mode` calls.
+pub fn write_pip_mode(data_dir: &Path, mode: PipMode) -> Result<(), ConfigError> {
+    let mut settings = read_settings(data_dir)?;
+    settings.pip_mode = Some(mode);
     write_settings(data_dir, &settings)
 }
 
@@ -138,10 +163,41 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let written = AppSettings {
             pip_layout: Some(PipLayout::VerticalMirror),
+            pip_mode: Some(PipMode::On),
         };
         write_settings(dir.path(), &written).unwrap();
         let read = read_settings(dir.path()).unwrap();
         assert_eq!(read, written);
+    }
+
+    #[test]
+    fn pip_mode_defaults_to_auto_when_unset() {
+        // WP5 Phase 2 rework: the operator-benefit default. A fresh install / missing
+        // field reads as Auto — auto-summon works out of the box.
+        let dir = TempDir::new().unwrap();
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Auto);
+    }
+
+    #[test]
+    fn pip_mode_round_trips_each_variant() {
+        let dir = TempDir::new().unwrap();
+        for m in [PipMode::Off, PipMode::On, PipMode::Auto] {
+            write_pip_mode(dir.path(), m).unwrap();
+            assert_eq!(read_pip_mode(dir.path()).unwrap(), m);
+        }
+    }
+
+    #[test]
+    fn pip_mode_and_layout_are_independent() {
+        // Writing one PiP setting must not clobber the other (read-modify-write).
+        let dir = TempDir::new().unwrap();
+        write_pip_layout(dir.path(), PipLayout::Minimal).unwrap();
+        write_pip_mode(dir.path(), PipMode::Off).unwrap();
+        assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::Minimal);
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
+        // ...and updating layout leaves mode intact.
+        write_pip_layout(dir.path(), PipLayout::Compact).unwrap();
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
     }
 
     #[test]

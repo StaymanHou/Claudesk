@@ -35,6 +35,11 @@ export const MENU_IDS = {
   OPEN_SUBLIME_TEXT: "workspace.openSublimeText",
   OPEN_SUBLIME_MERGE: "workspace.openSublimeMerge",
   REVEAL_IN_FINDER: "workspace.revealInFinder",
+  // WP5 Phase 2 (rework) — tri-state PiP mode radio (Off/On/Auto). Each sets that mode
+  // via pip_set_mode. Replaces the old PIP_TOGGLE + PIP_AUTO_SUMMON.
+  PIP_MODE_OFF: "view.pip.mode.off",
+  PIP_MODE_ON: "view.pip.mode.on",
+  PIP_MODE_AUTO: "view.pip.mode.auto",
 } as const;
 
 /** A callback action's tag — App.tsx switches on this to call the right seam. */
@@ -42,7 +47,10 @@ export type MenuCallback =
   | "newWorkspace"
   | "openSublimeText"
   | "openSublimeMerge"
-  | "revealInFinder";
+  | "revealInFinder"
+  | "pipModeOff"
+  | "pipModeOn"
+  | "pipModeAuto";
 
 /**
  * The action a functional menu-item id maps to:
@@ -113,6 +121,14 @@ export function menuActionFor(id: string): MenuAction | null {
       return { kind: "callback", callback: "openSublimeMerge" };
     case MENU_IDS.REVEAL_IN_FINDER:
       return { kind: "callback", callback: "revealInFinder" };
+    // WP5 Phase 2 (rework) — tri-state PiP mode. Each radio item sets that mode via
+    // pip_set_mode (App.tsx); the backend broadcasts `pip-mode` so the menu/icon reflect it.
+    case MENU_IDS.PIP_MODE_OFF:
+      return { kind: "callback", callback: "pipModeOff" };
+    case MENU_IDS.PIP_MODE_ON:
+      return { kind: "callback", callback: "pipModeOn" };
+    case MENU_IDS.PIP_MODE_AUTO:
+      return { kind: "callback", callback: "pipModeAuto" };
     default:
       return null;
   }

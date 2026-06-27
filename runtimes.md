@@ -42,17 +42,20 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo build (src-tauri)
 
-- **Last:** 10s (2026-06-26, M5 WP3 P1: warm rebuild after pip_probe→pip module rename)
-- **Use timeout:** 135000
+- **Last:** 12s (2026-06-27, M5 WP5 Phase 1: warm rebuild after pip_set_visible extract + focus probe + View-menu item)
+- **Use timeout:** 138000
 - **History:**
+  - 12s — 2026-06-27 (M5 WP5 Phase 1 compile gate: pip_set_visible/teardown/focus-probe/menu item)
   - 10s — 2026-06-26 (M5 WP3 P1: warm rebuild after pip module rename — compile gate)
   - 50s — 2026-06-25 (M5 WP1: tauri-nspanel v2.1.0 @a3122e89 fetch + compile vs tauri 2.11.2, clean)
 
 ## pnpm test
 
-- **Last:** 1s (2026-06-26, M5 WP4 Phase 5 verify-codify: full suite 669 pass / 71 files, +Phase-5 drag/mirror/icon wiring guards)
+- **Last:** 1s (2026-06-27, M5 WP5 P2R tri-state rework verify-codify: 670 pass / 71 files; no new tests — rework was TDD, coverage already pinned)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-27 (M5 WP5 P2R tri-state rework verify-codify: 670 pass / 71 files)
+  - 1s — 2026-06-27 (M5 WP5 Phase 1 verify-codify: 670 pass / 71 files, +1 menu-wiring guard)
   - 1s — 2026-06-26 (M5 WP4 Phase 5 verify-codify: 669 pass / 71 files)
   - 1s — 2026-06-26 (M5 WP4 Phase 4 verify-codify: 663 pass / 71 files)
   - 1s — 2026-06-26 (M5 WP4 Phase 3 verify-codify: 652 pass / 71 files)
@@ -90,9 +93,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 1s (2026-06-26, M5 WP4 Phase 2 verify-codify: 258 pass — +9 from P2.1 (3 pip::layout enum + 6 config_store::settings store); warm run ~0.72s)
+- **Last:** 1s (2026-06-27, M5 WP5 Phase 2 tri-state REWORK: 266 pass — pip_mode enum/settings/state-machine replace the bool model; +3 PipMode serde net; warm run ~0.64s)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-27 (M5 WP5 P2 tri-state rework: 266 pass, pip_mode enum)
+  - 1s — 2026-06-27 (M5 WP5 P2 build: 264 pass, +6 settings + pip state-machine)
   - 1s — 2026-06-26 (M5 WP4 P2: 258 pass, +9 layout enum + settings store)
   - 3s — 2026-06-26 (M5 WP2 verify-codify: 249 pass, no new tests — probe deliverable is the wbs.md verdict; dev-only mcp-bridge wiring compiles under debug_assertions w/ no test regression)
   - 5s — 2026-06-25 (M5 WP1 verify-codify: 249 pass, no new tests — probe knowledge artifact is the wbs.md verdict)

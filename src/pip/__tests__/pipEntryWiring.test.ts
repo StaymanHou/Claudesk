@@ -7,6 +7,7 @@ import viteConfig from "../../../vite.config.ts?raw";
 import pipHtml from "../../../pip.html?raw";
 import pipMain from "../main.tsx?raw";
 import rightPanelHost from "../../components/workspace/RightPanelHost.tsx?raw";
+import appTsx from "../../App.tsx?raw";
 import defaultCapability from "../../../src-tauri/capabilities/default.json";
 
 // M5 WP3 Phase 1 codify guards.
@@ -54,10 +55,27 @@ describe("M5 WP3 — the PiP webview is granted capability coverage", () => {
   });
 });
 
-describe("M5 WP3 — PiP toggle uses the renamed command + testid (probe naming gone)", () => {
-  it("RightPanelHost invokes pip_toggle with the pip-toggle testid", () => {
-    expect(rightPanelHost).toContain('invoke("pip_toggle")');
+describe("M5 WP5 (rework) — PiP tri-state mode control wiring (replaces pip_toggle)", () => {
+  // The dead-end fix (verify-human 2026-06-27): the boolean toggle + auto-summon checkbox
+  // became one explicit tri-state PipMode (Off/On/Auto). The RightPanelHost icon button
+  // CYCLES the mode via pip_set_mode (no more pip_toggle), keeps the pip-toggle testid,
+  // and reads the current mode from the `pip-mode` broadcast for a legible label.
+  it("RightPanelHost cycles mode via pip_set_mode + reflects the pip-mode broadcast", () => {
+    expect(rightPanelHost).toContain('invoke("pip_set_mode"');
     expect(rightPanelHost).toContain('data-testid="pip-toggle"');
+    expect(rightPanelHost).toContain('"pip-mode"'); // subscribes to the mode broadcast
+    expect(rightPanelHost).not.toContain('invoke("pip_toggle")'); // the old command is gone
+  });
+});
+
+describe("M5 WP5 (rework) — the View-menu mode radio wires to pip_set_mode", () => {
+  // The View menu's three radio items (Off/On/Auto) map (in menuBridge) to pipMode*
+  // callbacks, which App.tsx turns into invoke("pip_set_mode", {mode}). This guard pins
+  // the menu path so a refactor can't silently sever it. Live-verified at verify-human.
+  it("App.tsx's menu listener invokes pip_set_mode for the mode callbacks", () => {
+    expect(appTsx).toContain('action.callback === "pipModeOff"');
+    expect(appTsx).toContain('invoke("pip_set_mode"');
+    expect(appTsx).not.toContain('invoke("pip_toggle")'); // old command gone from the menu path
   });
 });
 

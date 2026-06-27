@@ -105,9 +105,11 @@ milestone: "Milestone 5 — Picture-in-picture"
 
 ---
 
-## WP5: PiP toggle + lifecycle
+## WP5: PiP toggle + lifecycle  ✅ SHIPPED 2026-06-27
 
-**Description:** User-toggled show/hide for the PiP (it is NOT auto-summoned — vision: "Toggled on/off explicitly by the user"). The toggle affordance is an in-Claudesk control now (the menu-bar right-click "Toggle PiP" entry is an M6 surface — note the forward-coupling but don't build it here). Handle the panel's lifecycle: it tracks the live workspace set (open/close), and tears down cleanly on app quit.
+**Description:** PiP visibility control + lifecycle (roster tracking on workspace open/close; clean teardown on app quit). The control affordances are in-Claudesk (the right-panel PiP icon + a View-menu surface); the menu-bar right-click "Toggle PiP" entry remains an M7 surface (forward-coupling noted, not built here).
+
+> **✅ SCOPE DECISION RESOLVED (as-built 2026-06-27) — auto-summon ADOPTED, realized as a tri-state mode.** The 2026-06-26 open question (auto-summon/dismiss) was adopted. It first shipped as a bool `pip_auto_summon` setting (default ON) + manual toggle + manual-state persistence — but **verify-human caught a dead-end** (once the user touched the toggle, no path back to the auto-summon+auto-dismiss regime without relaunching, because a manually-shown panel never auto-dismissed and manual-off suppressed auto). The operator chose to **rework it into an explicit tri-state `PipMode` — Off / On (pinned) / Auto (default)** — directly selectable via the PiP icon (cycles Off→On→Auto) + a View-menu radio, removing the inferred-regime dead-end by construction. **Auto** = hidden while focused, summon on ~3s sustained blur, dismiss on refocus; **On** = shown + pinned; **Off** = hidden. Two in-cycle corrections: **(F9b)** the auto-summon debounce showed the panel from a background thread → off-main-thread AppKit abort, fixed by marshaling the show via `run_on_main_thread`; **(F12)** the tri-state rework above. `vision.md` amended to match (Revision 2026-06-27). The originally-listed "(If GO on persistence) remember on/off state" task is subsumed by the persisted `pip_mode`. See `SURFACE-2026-06-26-PIP-AUTO-SUMMON-DISMISS` (resolved) + the design-priors `explicit-selectable-mode-over-inferred-mode` + `operator-helpful-friend-misfiring-as-offswitchable-setting`.
 **Milestone:** M5
 **Dependencies:** WP3 (panel + content). Independent of WP4 in principle, but sequenced after it so the toggle wraps the final multi-layout panel.
 **Size:** M

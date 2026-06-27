@@ -80,6 +80,10 @@ pub fn run() {
         })
         // WP7: the live CC sessions live here, reachable from the cc_* commands.
         .manage(Mutex::new(SessionRegistry::new()))
+        // M5 WP5 Phase 2 (rework): the PiP auto-summon debounce bookkeeping (just the
+        // pending-summon token; the regime is the persisted PipMode, read fresh). Mutated
+        // by pip_set_mode + the main-window focus handler; read by the debounce timer.
+        .manage(pip::PipAutoStateLock::default())
         // M3 WP2: register Claudesk's CC hook in ~/.claude/settings.json on launch
         // (deploy the bundled script to app-data, chmod +x, additive-merge the three
         // M3 events). Idempotent + additive + reversible (see hook_install). A
@@ -155,6 +159,20 @@ pub fn run() {
                     app.manage(state);
                 }
                 Err(e) => hook_socket::commands::emit_start_error(&handle, &e),
+            }
+            // M5 WP5 Phase 2 (rework): restore the persisted PiP MODE on launch. Only `On`
+            // shows a panel at rest (pinned); `Auto` rests hidden (the focus handler summons
+            // it on the next sustained blur) and `Off` stays hidden — so we apply the panel
+            // side-effect only for `On`. Default (unset) = `Auto` → hidden at rest. (We set
+            // visibility directly rather than calling pip_set_mode, to avoid re-persisting +
+            // re-broadcasting at launch; this runs on the main thread, so the AppKit show is
+            // safe.)
+            if let Ok(dir) = handle.path().app_data_dir() {
+                if config_store::settings::read_pip_mode(&dir).unwrap_or_default()
+                    == pip::layout::PipMode::On
+                {
+                    let _ = pip::commands::pip_set_visible(&handle, true);
+                }
             }
             Ok(())
         })
@@ -250,8 +268,12 @@ pub fn run() {
             // events the FileTree + editor consumers subscribe to.
             fs_watch::commands::workspace_watch_start,
             fs_watch::commands::workspace_watch_stop,
-            // M5: toggle the PiP NSPanel (show/hide the out-of-focus status surface).
-            pip::commands::pip_toggle,
+            // M5 WP5 Phase 2 (rework): the PiP visibility MODE (Off/On/Auto) — the single
+            // user-facing control. set persists + applies the side-effect + broadcasts
+            // `pip-mode`; get seeds the icon button + View-menu radio on mount. Replaces
+            // the old pip_toggle + pip_*_auto_summon (the inferred-regime dead-end).
+            pip::commands::pip_get_mode,
+            pip::commands::pip_set_mode,
             // M5 WP4: read/persist the PiP layout. set broadcasts `pip-layout` to all
             // webviews (PiP re-renders; main ticker gates serialize); get seeds the
             // PiP's layout on mount from the persisted value (app-settings store).
@@ -267,6 +289,20 @@ pub fn run() {
             pip::commands::pip_move,
         ])
         .on_window_event(|window, event| {
+            // M5 WP5 Phase 2 — auto-summon/dismiss state machine, driven by the MAIN
+            // window's focus transitions (the Phase-1 probe proved the seam fires
+            // reliably for cross-app blur + every return path, and that the
+            // non-activating PiP show/hide does NOT itself emit a Focused event — so no
+            // suppression guard is needed). Scoped to "main": the PiP panel is a separate
+            // window whose events must not be read as main-window focus.
+            if window.label() == "main" {
+                if let WindowEvent::Focused(focused) = event {
+                    // Quiet probe trail (was a temporary eprintln! in Phase 1; kept as a
+                    // low-noise breadcrumb for live focus debugging).
+                    eprintln!("[claudesk] focus-probe: main window focused={focused}");
+                    pip::commands::pip_on_main_focus_changed(window.app_handle(), *focused);
+                }
+            }
             // WP7 shutdown: kill every CC child on window close so we never leak an
             // orphaned `claude`. Backend-driven (robust against a frozen webview).
             if let WindowEvent::CloseRequested { .. } = event {

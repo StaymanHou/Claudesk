@@ -132,6 +132,38 @@ export function RightPanelHost({
     return () => registerDirtyProbe(workspaceId, null);
   }, [workspaceId, registerDirtyProbe]);
 
+  // WP5 Phase 2 (rework) — the tri-state PiP mode (Off/On/Auto), the single user-facing
+  // control. The icon button cycles it; the View-menu radio also sets it. Seed from the
+  // backend (pip_get_mode) on mount + track the `pip-mode` broadcast (the backend is the
+  // source of truth — a menu/other-surface change reflects here too). App-global, so it's
+  // fine that this lives per-RightPanelHost: every mounted instance shows the same mode.
+  const [pipMode, setPipMode] = useState<"off" | "on" | "auto">("auto");
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void invoke<"off" | "on" | "auto">("pip_get_mode")
+      .then((m) => {
+        if (!cancelled) setPipMode(m);
+      })
+      .catch(() => {
+        /* default 'auto' stands */
+      });
+    void listen<string>("pip-mode", (e) => {
+      const m = e.payload;
+      if (m === "off" || m === "on" || m === "auto") setPipMode(m);
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.
   const [finderOpen, setFinderOpen] = useState(false);
 
@@ -725,23 +757,31 @@ export function RightPanelHost({
           >
             <FinderIcon />
           </button>
-          {/* M5 — toggle the Picture-in-Picture status panel (the out-of-focus
-                workspace-status surface). Display-only: it mirrors status, it does
-                not control workspaces. (The richer toggle UX/placement — a View-menu
-                item — lands at WP5; this button is the working affordance until then.) */}
+          {/* M5 WP5 (rework) — the tri-state PiP MODE control. Cycles Off→On→Auto→Off; the
+                label shows the current mode so the state is legible (the dead-end fix: the
+                regime is explicit, not inferred). Off = hidden; On = shown + pinned; Auto =
+                summon-when-away. The View-menu radio is the other affordance. Display-only:
+                the PiP mirrors status, it never controls workspaces. */}
           <button
             type="button"
             className="panel-launch"
             data-testid="pip-toggle"
-            onClick={() =>
-              void invoke("pip_toggle").catch((e) => {
-                console.error("[claudesk] pip_toggle failed:", e);
-              })
-            }
-            aria-label="Toggle Picture-in-Picture status panel"
-            title="Toggle Picture-in-Picture status panel"
+            data-pip-mode={pipMode}
+            onClick={() => {
+              const next =
+                pipMode === "off" ? "on" : pipMode === "on" ? "auto" : "off";
+              setPipMode(next); // optimistic; the `pip-mode` broadcast confirms
+              void invoke("pip_set_mode", { mode: next }).catch((e) => {
+                console.error("[claudesk] pip_set_mode failed:", e);
+              });
+            }}
+            aria-label={`Picture-in-Picture: ${pipMode} (click to change)`}
+            title={`PiP: ${pipMode === "off" ? "Off" : pipMode === "on" ? "On (pinned)" : "Auto (summon when away)"} — click to cycle`}
           >
             <PipIcon />
+            <span className="pip-mode-tag" aria-hidden="true">
+              {pipMode === "off" ? "○" : pipMode === "on" ? "●" : "◐"}
+            </span>
           </button>
         </div>
 

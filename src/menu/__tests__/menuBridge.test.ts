@@ -100,6 +100,19 @@ describe("menuBridge — callback ids", () => {
       kind: "callback",
       callback: "revealInFinder",
     });
+    // WP5 Phase 2 (rework) — the tri-state PiP mode radio maps each id to its set-mode callback.
+    expect(menuActionFor(MENU_IDS.PIP_MODE_OFF)).toEqual({
+      kind: "callback",
+      callback: "pipModeOff",
+    });
+    expect(menuActionFor(MENU_IDS.PIP_MODE_ON)).toEqual({
+      kind: "callback",
+      callback: "pipModeOn",
+    });
+    expect(menuActionFor(MENU_IDS.PIP_MODE_AUTO)).toEqual({
+      kind: "callback",
+      callback: "pipModeAuto",
+    });
   });
 });
 

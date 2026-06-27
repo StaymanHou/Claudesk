@@ -23,15 +23,10 @@ import {
 } from "react";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import type { FilmstripTile } from "./filmstripTiles";
-import { readMirrorFrame } from "./mirrorFrame";
+import { readMirrorFrame, subscribeMirrorFrame } from "./mirrorFrame";
 import { shouldRunMirror } from "./mirrorTicker";
 import { insertionIndex } from "./filmstripOrder";
 import type { WireWorkspaceState } from "../../state/workspaceStatus";
-
-/** ~1 fps — the WP4-probe-validated background mirror rate (lower if dogfooding shows
- *  the active-CPU p95 ~30%-on-bursts caveat bites: the documented mitigations are
- *  sub-1fps background rate, coalesced serialize, or mirror-only-visible tiles). */
-const MIRROR_INTERVAL_MS = 1000;
 
 interface FilmstripProps {
   /** The ordered tiles (derived once in App so the ⌘⇧+digit index agrees). */
@@ -190,13 +185,14 @@ export function Filmstrip({
     const backgroundIds = bgSignature ? bgSignature.split(",") : [];
     if (!shouldRunMirror(collapsed, backgroundIds.length)) return;
 
-    // M5 WP3 Phase 3: the SERIALIZE now happens once in the App-level useMirrorTicker
-    // (shared with the PiP — no second serialize loop). This loop only READS the shared
-    // `mirrorFrame` snapshot and writes it into the tile DOM. We keep a separate write
-    // interval (vs. writing from the ticker) so the filmstrip's DOM-write stays local to
-    // this component and its refs; the cost we eliminated was the duplicate serialize,
-    // not the cheap innerHTML write.
-    const tick = () => {
+    // M5 WP3 Phase 3 + WP5 P2.5: the SERIALIZE happens once in the App-level
+    // useMirrorTicker (shared with the PiP — no second serialize loop). This component
+    // only READS the shared `mirrorFrame` and writes it into the tile DOM. WP5 P2.5
+    // (SURFACE-2026-06-26-QUALITY-WP3-UNSYNCED-FILMSTRIP-INTERVAL) eliminated the SECOND
+    // setInterval that did this on an UNSYNCED 1fps phase (up-to-1s-stale reads): now we
+    // SUBSCRIBE to the ticker's `setMirrorFrame`, so the DOM write fires on the SAME tick
+    // the frame was produced — one loop, no phase drift, no second timer.
+    const writeTiles = () => {
       if (document.hidden) return; // app not visible → skip the DOM churn
       for (const id of backgroundIds) {
         const mirror = mirrorRefs.current.get(id);
@@ -207,9 +203,8 @@ export function Filmstrip({
       }
     };
 
-    tick(); // paint an immediate first frame so a freshly-demoted tile isn't blank for 1s
-    const timer = setInterval(tick, MIRROR_INTERVAL_MS);
-    return () => clearInterval(timer);
+    writeTiles(); // paint an immediate first frame from the latest snapshot (no 1s blank)
+    return subscribeMirrorFrame(writeTiles);
   }, [bgSignature, activeId, collapsed]);
 
   return (

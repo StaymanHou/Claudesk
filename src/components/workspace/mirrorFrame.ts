@@ -19,10 +19,38 @@
 
 const frame = new Map<string, string>();
 
+// M5 WP5 P2.5 — frame subscribers (fixes SURFACE-2026-06-26-QUALITY-WP3-UNSYNCED-FILMSTRIP-INTERVAL).
+// Before WP5 the Filmstrip ran its OWN setInterval(1000) to READ this frame into tile DOM,
+// unsynchronized with useMirrorTicker's serialize loop (also 1000ms) — the two drifted in
+// phase, so the filmstrip could paint an up-to-1s-stale frame. Now there is ONE loop: the
+// ticker calls setMirrorFrame, which synchronously notifies subscribers, so the filmstrip's
+// DOM write happens on the SAME tick the frame was produced — never stale, never a 2nd timer.
+type FrameSubscriber = () => void;
+const subscribers = new Set<FrameSubscriber>();
+
+/**
+ * Subscribe to be notified immediately after each `setMirrorFrame`. Returns an unsubscribe
+ * fn. The Filmstrip uses this to write its tile DOM in lockstep with the ticker (replacing
+ * its old independent interval). Notification is synchronous within `setMirrorFrame`.
+ */
+export function subscribeMirrorFrame(fn: FrameSubscriber): () => void {
+  subscribers.add(fn);
+  return () => subscribers.delete(fn);
+}
+
 /** Replace the current mirror snapshot. Called once per tick by `useMirrorTicker`. */
 export function setMirrorFrame(next: Map<string, string>): void {
   frame.clear();
   for (const [id, html] of next) frame.set(id, html);
+  // Notify in lockstep — the single source of "a new frame exists". A throwing subscriber
+  // must not block the others or the ticker.
+  for (const fn of subscribers) {
+    try {
+      fn();
+    } catch {
+      // best-effort; a bad subscriber never breaks the serialize loop
+    }
+  }
 }
 
 /** Read one workspace's latest serialized HTML, or null if not serialized this tick. */
@@ -35,7 +63,8 @@ export function mirrorFrameSnapshot(): Record<string, string> {
   return Object.fromEntries(frame);
 }
 
-/** Test-only: clear the shared frame between tests. */
+/** Test-only: clear the shared frame + subscribers between tests. */
 export function __resetMirrorFrame(): void {
   frame.clear();
+  subscribers.clear();
 }

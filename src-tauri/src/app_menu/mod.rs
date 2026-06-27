@@ -33,8 +33,12 @@
 //! The id strings are the single source of truth for the frontend bridge — keep them
 //! in sync with `src/menu/menuBridge.ts`.
 
-use tauri::menu::{AboutMetadataBuilder, Menu, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::menu::{
+    AboutMetadataBuilder, CheckMenuItemBuilder, Menu, MenuItemBuilder, SubmenuBuilder,
+};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
+
+use crate::pip::layout::PipMode;
 
 /// The Tauri event name the menu emits a clicked item's id on. The frontend
 /// (`App.tsx`) subscribes once and dispatches by id (`menu/menuBridge.ts`).
@@ -57,6 +61,12 @@ pub mod ids {
     pub const OPEN_SUBLIME_TEXT: &str = "workspace.openSublimeText";
     pub const OPEN_SUBLIME_MERGE: &str = "workspace.openSublimeMerge";
     pub const REVEAL_IN_FINDER: &str = "workspace.revealInFinder";
+    // WP5 Phase 2 (rework) — the tri-state PiP MODE, as three radio-style View-menu items
+    // (the active one checked). A click sets that mode via `pip_set_mode`. Replaces the
+    // old single PIP_TOGGLE + PIP_AUTO_SUMMON checkbox (the inferred-regime dead-end).
+    pub const PIP_MODE_OFF: &str = "view.pip.mode.off";
+    pub const PIP_MODE_ON: &str = "view.pip.mode.on";
+    pub const PIP_MODE_AUTO: &str = "view.pip.mode.auto";
 }
 
 /// Every functional menu-item id, in one place. `is_functional_id` checks membership
@@ -75,6 +85,9 @@ pub const FUNCTIONAL_IDS: &[&str] = &[
     ids::OPEN_SUBLIME_TEXT,
     ids::OPEN_SUBLIME_MERGE,
     ids::REVEAL_IN_FINDER,
+    ids::PIP_MODE_OFF,
+    ids::PIP_MODE_ON,
+    ids::PIP_MODE_AUTO,
 ];
 
 /// Whether a menu-item id is one the frontend acts on (i.e. the click should emit
@@ -180,6 +193,27 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let zoom_out = MenuItemBuilder::with_id("view.zoomOut.label", "Zoom Out\t⌘-")
         .enabled(false)
         .build(app)?;
+    // WP5 Phase 2 (rework) — the tri-state PiP MODE as three radio-style CheckMenuItems
+    // (Off / On / Auto), the active one checked from the persisted mode (default Auto). A
+    // click sets that mode via `pip_set_mode` (the frontend bridge); the menu is rebuilt
+    // on the `pip-mode` broadcast so the checkmark tracks the backend. NO accelerators (the
+    // native-menu pattern). Replaces the old Toggle + Auto-summon-checkbox pair. A read
+    // failure falls back to Auto (the default).
+    let pip_mode = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|dir| crate::config_store::settings::read_pip_mode(&dir).ok())
+        .unwrap_or_default();
+    let pip_off = CheckMenuItemBuilder::with_id(ids::PIP_MODE_OFF, "PiP: Off")
+        .checked(pip_mode == PipMode::Off)
+        .build(app)?;
+    let pip_on = CheckMenuItemBuilder::with_id(ids::PIP_MODE_ON, "PiP: On (pinned)")
+        .checked(pip_mode == PipMode::On)
+        .build(app)?;
+    let pip_auto = CheckMenuItemBuilder::with_id(ids::PIP_MODE_AUTO, "PiP: Auto (summon when away)")
+        .checked(pip_mode == PipMode::Auto)
+        .build(app)?;
     let zoom_reset = MenuItemBuilder::with_id("view.zoomReset.label", "Reset Zoom\t⌘0")
         .enabled(false)
         .build(app)?;
@@ -193,6 +227,10 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&zoom_in)
         .item(&zoom_out)
         .item(&zoom_reset)
+        .separator()
+        .item(&pip_off)
+        .item(&pip_on)
+        .item(&pip_auto)
         .build()?;
 
     // ── Workspace ───────────────────────────────────────────────────────────────

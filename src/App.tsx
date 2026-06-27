@@ -28,6 +28,7 @@ import {
 } from "./components/workspace/editor/confirmDialog";
 import { parseSeedParam } from "./state/seedWorkspace";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { menuActionFor } from "./menu/menuBridge";
 import { openSublime, openSublimeMerge } from "./sublime/sublimeLaunch";
 import { openFinder } from "./finder/finderLaunch";
@@ -262,6 +263,23 @@ function App() {
       // callback actions
       if (action.callback === "newWorkspace") {
         setShowPicker(true);
+        return;
+      }
+      // WP5 Phase 2 (rework) — PiP mode is app-global (not workspace-scoped), so these run
+      // BEFORE the focused-path guard. Each View-menu radio item sets that mode via the
+      // single pip_set_mode command (which persists + applies + broadcasts `pip-mode`).
+      const pipModeForCallback =
+        action.callback === "pipModeOff"
+          ? "off"
+          : action.callback === "pipModeOn"
+            ? "on"
+            : action.callback === "pipModeAuto"
+              ? "auto"
+              : null;
+      if (pipModeForCallback) {
+        void invoke("pip_set_mode", { mode: pipModeForCallback }).catch((e) => {
+          console.error("[claudesk] pip_set_mode (menu) failed:", e);
+        });
         return;
       }
       // The three launchers act on the focused workspace; no-op when none is open.

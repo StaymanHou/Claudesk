@@ -32,6 +32,28 @@ pub enum PipLayout {
 // the roster + screen) and is applied via the `pip_resize` command. The enum carries no
 // dimensions.
 
+/// The PiP visibility MODE — an explicit, user-selectable tri-state (WP5 Phase 2 rework,
+/// 2026-06-27). Replaces the earlier *inferred* regime (a hidden `origin=Manual/Auto` +
+/// `manual_off` bool + `pip_auto_summon` bool), which had a dead-end: once the user touched
+/// the toggle there was no path back to the auto regime without relaunch. Making the mode
+/// explicit removes the unreachable state by construction (design-prior
+/// `explicit-selectable-mode-over-inferred-mode`). Serializes kebab-case (`"off"`/`"on"`/
+/// `"auto"`) to match the TS `PipMode` union byte-for-byte across `pip_set_mode` + the
+/// `pip-mode` event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum PipMode {
+    /// Panel hidden; no auto-summon. The "I don't want it" state.
+    Off,
+    /// Panel shown + pinned; never auto-dismisses on refocus. The "keep it up" state.
+    On,
+    /// System-driven: hidden while Claudesk is focused, auto-summons on a sustained
+    /// (3s-debounced) main-window blur, auto-dismisses on refocus. The default + the
+    /// feature's reason for existing (vision Success Metric 6). First-run default.
+    #[default]
+    Auto,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,4 +93,23 @@ mod tests {
 
     // (The static panel_size test was removed with the method — sizing moved to the
     // content-driven computePanelSize in src/pip/pipPanelSize.ts, vitest-pinned there.)
+
+    #[test]
+    fn pip_mode_serializes_to_kebab_wire_strings() {
+        assert_eq!(serde_json::to_string(&PipMode::Off).unwrap(), "\"off\"");
+        assert_eq!(serde_json::to_string(&PipMode::On).unwrap(), "\"on\"");
+        assert_eq!(serde_json::to_string(&PipMode::Auto).unwrap(), "\"auto\"");
+    }
+
+    #[test]
+    fn pip_mode_deserializes_from_wire_strings() {
+        let m: PipMode = serde_json::from_str("\"on\"").unwrap();
+        assert_eq!(m, PipMode::On);
+    }
+
+    #[test]
+    fn pip_mode_default_is_auto() {
+        // First-run default — the feature's reason for existing (out-of-focus glance).
+        assert_eq!(PipMode::default(), PipMode::Auto);
+    }
 }
