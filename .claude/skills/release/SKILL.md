@@ -173,40 +173,45 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
     git -C homebrew-claudesk push origin HEAD
     ```
 
-11. **Smoke-test the install path** (the definitive check that friends' install
-    works — note this reinstalls Claudesk on YOUR machine as the test).
+11. **Hand the operator the install-upgrade block — do NOT run it yourself (SOP, 2026-06-27).**
 
-    ⚠️ **`brew upgrade --cask` deletes the currently-running `/Applications/Claudesk.app`
-    and lays down a fresh, RE-QUARANTINED copy — this KILLS any running Claudesk**
-    (it reads to the operator as "Claudesk just crashed"). And the fresh bundle has
-    the quarantine xattr re-attached, so relaunching it BEFORE the `xattr` clear gets
-    Gatekeeper-blocked (a second apparent "crash"). This is expected cask-upgrade
-    behavior, not a release defect. Sequence to avoid surprise:
+    ⚠️ **The agent MUST NOT run `brew upgrade --cask claudesk` during `/release`.** It
+    deletes the currently-running `/Applications/Claudesk.app` and lays down a fresh,
+    RE-QUARANTINED copy — which **KILLS any running Claudesk, and `/release` is almost
+    always invoked from a Claude Code session running *inside* Claudesk**, so the
+    upgrade would kill the very session driving the release (and read to the operator
+    as "Claudesk crashed"). The smoke-test is therefore **operator-run, by hand, after
+    the session** — not an agent step.
 
-    a. **Tell the operator first**: "the next step will quit any running Claudesk —
-       that's normal." Quit Claudesk yourself if it's open (cleaner than letting brew
-       yank it).
-    b. Run the upgrade + **clear quarantine BEFORE relaunch** (order matters):
+    **What the agent does:** print the copy-paste block below and tell the operator to
+    run it **in Terminal.app (NOT a Claudesk workspace)** whenever convenient. That's
+    the whole of Step 11 from the agent's side — then proceed to Step 12.
 
-       ```bash
-       brew update
-       brew upgrade --cask claudesk   # or `brew reinstall --cask claudesk` if already at VER
-       xattr -dr com.apple.quarantine /Applications/Claudesk.app   # MUST precede any relaunch
-       ```
+    ```bash
+    # Run in Terminal.app, not inside Claudesk. Quit Claudesk (Cmd-Q) first.
+    brew update
+    brew upgrade --cask claudesk        # or `brew reinstall --cask claudesk` if already at VER
+    xattr -dr com.apple.quarantine /Applications/Claudesk.app   # MUST precede any relaunch
+    # verify, then reopen:
+    brew list --cask --versions claudesk   # must read: claudesk VER
+    /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Claudesk.app/Contents/Info.plist  # VER
+    xattr /Applications/Claudesk.app | grep -i quarantine && echo "STILL QUARANTINED — re-run xattr" || echo "clear"
+    open -a /Applications/Claudesk.app
+    ```
 
-    c. **Verify the receipt + bundle agree, confirm quarantine is gone, THEN relaunch:**
+    Order matters: **quit → upgrade → clear quarantine → THEN reopen.** Clearing the
+    xattr before relaunch avoids the Gatekeeper block (a second apparent "crash"). If
+    a pre-publish manual `cp` of the build into `/Applications` happened, brew's
+    receipt lags the bundle until this upgrade re-syncs it — that mismatch alone is
+    not an error.
 
-       ```bash
-       brew list --cask --versions claudesk   # must read: claudesk VER
-       /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Claudesk.app/Contents/Info.plist  # VER
-       xattr /Applications/Claudesk.app | grep -i quarantine && echo "STILL QUARANTINED — re-run xattr" || echo "clear"
-       open -a /Applications/Claudesk.app
-       ```
-
-    Confirm the app launches. (If you manually `cp`'d the build into `/Applications`
-    earlier for a pre-publish verification, brew's receipt will lag the bundle until
-    this step runs — `brew upgrade` re-syncs the receipt; that mismatch alone is not
-    an error.)
+    **Why operator-run, not agent-run:** the release's correctness is already proven by
+    the clean build (Step 3), the resolving asset URL (Step 7), and the clean
+    `brew audit`/`brew style` (Step 8) — none of which touch the running app. The local
+    `brew upgrade` only re-confirms the operator's *own* install path, and its
+    app-killing side effect makes it unsafe to run from within the release session. The
+    operator gets the same confidence by running the block by hand once, decoupled from
+    the live session.
 
 12. **Report** to the operator: the release URL, the tap cask commit, and the
     one-paste install command. Record the build time in `runtimes.md` if it was a
@@ -214,7 +219,7 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
 
 ## Notes & gotchas (learned 2026-06-24 on the v0.1.0 cut)
 
-- **Step 11's `brew upgrade --cask` KILLS the running Claudesk (learned 2026-06-27, v0.2.0 cut).** brew removes the live `/Applications/Claudesk.app` and writes a fresh, re-quarantined bundle — so any open Claudesk dies mid-upgrade (operator saw it as "Claudesk just crashed"), and relaunching the fresh bundle *before* the `xattr` clear gets Gatekeeper-blocked (a second apparent crash). Both are expected, not 0.2.0 defects. Mitigation now baked into Step 11: warn the operator (or quit Claudesk yourself) before the upgrade, run `xattr -dr com.apple.quarantine` BEFORE any relaunch, then verify receipt+bundle agree and quarantine is clear before `open`. Also: a pre-publish manual `cp` of the build into `/Applications` (e.g. for the operator to verify before Gate 1) leaves brew's receipt lagging the bundle until Step 11's upgrade re-syncs it — that mismatch alone is not an error.
+- **Step 11 is operator-run, never agent-run (SOP, 2026-06-27 v0.2.1 cut).** `brew upgrade --cask` removes the live `/Applications/Claudesk.app` and writes a fresh, re-quarantined bundle — so any open Claudesk dies mid-upgrade. Because `/release` is almost always driven from a Claude Code session running *inside* Claudesk, the agent running the upgrade would kill its own session. **So the agent does NOT run it** — it prints the quit→upgrade→xattr→reopen block (Step 11) and the operator runs it by hand in Terminal.app after the session. The release's correctness is already proven by the clean build + resolving asset URL + clean audit/style (none touch the running app); the local upgrade only re-confirms the operator's own install and is unsafe in-session. (Earlier cuts had the agent run it with a "quit Claudesk yourself" warning — superseded: the kill is unavoidable and takes the session with it, so hand it off instead.) Also: a pre-publish manual `cp` of the build into `/Applications` leaves brew's receipt lagging the bundle until the operator's upgrade re-syncs it — that mismatch alone is not an error.
 - **Homebrew 6.x removed `--no-quarantine`.** Do NOT put
   `brew install --cask --no-quarantine claudesk` in release notes or the README — it
   errors with _"invalid option: --no-quarantine"_. The reliable path is plain
