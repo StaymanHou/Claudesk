@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-27
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP3, WP4]
+shipped: [WP1, WP1b, WP3, WP4, WP5]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -122,18 +122,19 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP5: Editor auto-wrap toggle
+## WP5: Editor auto-wrap toggle ✅ SHIPPED 2026-06-27 (commit 16ce60a)
 **Description:** A per-editor line-wrap toggle (`EditorView.lineWrapping`), default OFF (preserves the deliberate 2026-06-20 no-wrap behavior — long lines scroll horizontally), persisted. A toggle affordance flips soft-wrap on.
+**Delivered:** `editorWrapToggle.ts` (global localStorage key `claudesk.editor.lineWrap`, default OFF) + `lineWrapCompartment`/`lineWrapExtension` in `theme.ts` for live reconfigure (no editor remount). `⌘\` chord (CONFIRMED disjoint from the `paletteCommands.ts` chord-ownership map) in `editorExtensions.ts` `coreKeymap` (`applyWrap` mirrors `applyZoom`), plus a "wrap"/"no wrap" status-bar pill. 8 new tests; full suite 719/74. Verify-self driven live via the tauri MCP bridge; verify-human all-pass. Code-quality 0 CRIT/0 MAJOR/3 MINOR (auto-backlogged).
 **Milestone:** M6
 **Dependencies:** none
 **Size:** S
 **Seams (confirmed):** line-wrapping deliberately OFF, commented at `editorExtensions.ts` ~218–221 (no `EditorView.lineWrapping` added). Persistence pattern: the `fontZoom.ts` localStorage template; React state in `EditorPanel.tsx` alongside `fontSize` (~76–89); live reconfigure via a CM compartment (~83–89).
 **[PRIOR: operator-helpful-friend-misfiring-as-offswitchable-setting]** agrees → default OFF (operator's current benefit), off-switchable on. No tie/contradiction.
 **Tasks:**
-- [ ] Add `src/components/workspace/editor/editorWrapToggle.ts` — localStorage helper (key e.g. `claudesk.editor.lineWrap`, default OFF, pure `load`/`save`/`toggle`)
-- [ ] React state in `EditorPanel.tsx` alongside `fontSize`; conditional `...(wrapEnabled ? [EditorView.lineWrapping] : [])` in the extensions array, driven through a CM compartment for live reconfigure (no editor remount)
-- [ ] Toggle affordance — **`⌘\` chord is a suggestion to CONFIRM at build time** (Sublime convention; verify it's disjoint from existing chords in the `paletteCommands.ts` ownership map before binding) and/or a clickable control; per-editor-view, persisted
-- [ ] Verify default preserves horizontal-scroll behavior; toggle flips soft-wrap live; persists per launch
+- [x] Add `src/components/workspace/editor/editorWrapToggle.ts` — localStorage helper (key `claudesk.editor.lineWrap`, default OFF, pure `load`/`save`)
+- [x] React state in `EditorPanel.tsx` alongside `fontSize`; `lineWrapCompartment.of(lineWrapExtension(opts.lineWrap))` in the extensions array, driven through a CM compartment for live reconfigure (no editor remount)
+- [x] Toggle affordance — **`⌘\` chord CONFIRMED disjoint** from the `paletteCommands.ts` ownership map (`Mod-\` in `coreKeymap`), AND a clickable "wrap"/"no wrap" status-bar pill; persisted (global key)
+- [x] Verified default preserves horizontal-scroll behavior; toggle flips soft-wrap live (no remount); persists per launch (verify-self live via MCP bridge + verify-human all-pass)
 
 ---
 

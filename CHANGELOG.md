@@ -18,6 +18,9 @@
 - **Feature shipped:** Adjustable CC terminal font size (M6 WP4) — the CC terminal gains ⌘+/⌘−/⌘0 font zoom like the editor, routed focus-scoped (it zooms whichever half holds keyboard focus — the terminal when the CC pane is focused, the editor when the editor is) via a capture-phase keydown listener that reads the live focused half and prevents the chord from reaching the PTY or triggering WKWebView page-zoom, with the size persisted across launches; a latent batch-fragility (rapid presses within one React render batch collapsing to a single step) was caught live at verify-self and fixed by computing the next size inside a functional setState updater.
 - **Backlog resolved:** SURFACE-2026-06-26-FRIEND-QOL-BATCH-1 (sub-request #2, adjustable CC terminal font size) — shipped as WP4; sub-request #3 (editor wrap) remains for WP5.
 - **Milestone:** M6 WP4 (Adjustable CC terminal font size) — shipped; second of the M6 parallel-polish-track WPs.
+- **Feature shipped:** Editor auto-wrap toggle (M6 WP5) — the lite editor gains a persisted soft line-wrap toggle, default OFF (preserving the deliberate no-wrap behavior where long lines scroll horizontally), flipped live via a `⌘\` chord (confirmed disjoint from the editor's chord-ownership map) or a "wrap"/"no wrap" status-bar pill, using a CodeMirror compartment so wrap reconfigures without remounting the editor (cursor/scroll preserved); built as a near-textbook clone of the sibling font-zoom feature and driven through live verify-self via the tauri MCP bridge (chord + button + no-remount + persistence all confirmed).
+- **Backlog resolved:** SURFACE-2026-06-26-FRIEND-QOL-BATCH-1 (sub-request #3, editor auto-wrap toggle) — shipped as WP5; all three original friend sub-requests (#1 split, #2 terminal zoom, #3 editor wrap) are now shipped.
+- **Milestone:** M6 WP5 (Editor auto-wrap toggle) — shipped; third of the M6 parallel-polish-track WPs.
 
 ## 2026-06-26
 

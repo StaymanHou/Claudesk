@@ -4,6 +4,31 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m6-wp5-editor-wrap-toggle — 2026-06-27
+
+*(feature-review-quality on ship commit 16ce60a; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. All low-risk readability/factoring/copy notes — reviewer: "no refactor warranted; backlog-or-dismiss material.")*
+
+## SURFACE-2026-06-27-QUALITY-WP5-DUAL-RECONFIGURE-PATH
+- **Severity:** MINOR
+- **Finding:** `EditorPanel.tsx` `onToggleWrap` (~110-118) duplicates the live compartment-reconfigure dispatch that `coreKeymap.applyWrap` already performs, AND the extensions memo (deps include `lineWrap`) rebuilds on the resulting state change — so a button click triggers two reconfigure paths (imperative dispatch + memo rebuild). Idempotent/harmless, but two call sites for one effect is a latent drift seam.
+- **Fix shape:** route the button through the same `applyWrap` keymap entry, OR rely solely on the memo rebuild (pure-state toggle) so there's one reconfigure path. Leave-as-is is also defensible (the imperative dispatch avoids a render-cycle delay).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP5-CLOSED-OVER-FLAG-INVARIANT
+- **Severity:** MINOR
+- **Finding:** The `Mod-\` `run` (editorExtensions.ts ~160-169) closes over `lineWrap` from the latest `buildEditorExtensions` call; correctness depends on the memo rebuilding (and @uiw reconfiguring the keymap) on every `lineWrap` change. The deps array is correct, but the load-bearing invariant is only lightly documented inline.
+- **Fix shape:** add a one-line note that this relies on the memo's `lineWrap` dep, to harden against a future deps-array edit. (Identical mechanism to the fontSize chord — same latent fragility, same cheap mitigation.)
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP5-TITLE-STATE-VS-ACTION
+- **Severity:** MINOR
+- **Finding:** The wrap toggle's `title` reads "Soft-wrap on (⌘\)" when wrap is currently ON — a state label, while `aria-pressed` already conveys state and the click toggles. Slight affordance ambiguity (is the tooltip the current state or what the click does?). Cosmetic copy nit.
+- **Fix shape:** either accept as-is (state-label tooltips are common) or reword to describe the action ("Toggle soft-wrap (⌘\)"). Trivial.
+- **Priority:** low
+- **Status:** pending
+
 # wp4-terminal-font-zoom — 2026-06-27
 
 *(feature-review-quality on ship commit 67c3f54; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Both reviewer-flagged as "not a defect / not a finding to act on" — forward-looking readability/factoring notes only.)*

@@ -1,7 +1,7 @@
 # Feature: M6 WP5 — Editor auto-wrap toggle
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** COMPLETED 2026-06-27 — commit 16ce60a (LOCAL only, not pushed); finalized + archived
 **Created:** 2026-06-27
 **drive_mode:** autopilot
 
@@ -45,13 +45,42 @@ The lite editor deliberately ships with line-wrapping OFF (operator decision, ve
   - [x] verify-codify  <!-- status: done — behavior codified during build (TDD); coverage confirmed sufficient. Full suite 719 pass / 74 files, no regressions. -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > COMPLETE (all 5 verify nodes green)
-- **Active scope:** none — single phase complete, ready to ship
+- **Path:** Feature > review-quality COMPLETE → ready for finalize
+- **Active scope:** none — shipped (16ce60a), review-quality done (0 CRIT/0 MAJOR/3 MINOR auto-backlogged)
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
 - **Notes:** All phases complete. impl + verify-auto + verify-self (live MCP bridge) + verify-human ("all pass") + verify-codify (719/74, no regressions) all green. Next: `/feature-ship`.
 
+## Code-Quality Review — M6 WP5 Editor auto-wrap toggle
+
+(Reviewed against ship commit 16ce60a, drive_mode=autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. MINORs auto-backlogged per Mode 3 → `workflow/backlog-quality-findings.md`. To dismiss any, mark `[DISMISSED]` below before finalize archives this file.)
+
+### Strengths
+- Faithfully mirrors the established `fontZoom.ts` / `fontSizeCompartment` pattern (pure-logic module + Compartment + injected-Storage testability).
+- Default-OFF correctly preserves the deliberate no-wrap behavior (verify-human 2026-06-20); superseded "No EditorView.lineWrapping" comment replaced, not left to rot.
+- Persistence layer robustly defensive: `loadWrap` returns `DEFAULT_WRAP` for any non-literal value; load/save swallow storage errors — all branches tested.
+- Test coverage genuinely behavioral (`hasLineWrapping` asserts the real CM6 `contentAttributes` facet; `Mod-\` run() exercised with a view stub to confirm the flipped-flag contract).
+- Comments encode WHY (no-remount rationale, global-vs-per-view scope, chord-disjointness provenance), not WHAT.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [EditorPanel.tsx:~110-118] `onToggleWrap` duplicates the live compartment-reconfigure dispatch that `coreKeymap.applyWrap` already performs, AND the memo (deps include `lineWrap`) rebuilds extensions on the state change — so a button click triggers two reconfigure paths (imperative dispatch + memo rebuild). Idempotent/harmless, but two call sites for one effect is a latent drift seam; the button could route through `applyWrap` or rely solely on the memo rebuild.
+- [editorExtensions.ts:~160-169] The `Mod-\` `run` closes over `lineWrap` from the latest `buildEditorExtensions` call; correctness depends on the memo rebuilding on every `lineWrap` change (deps array is correct). A one-line note that this relies on the memo dep would harden it against a future deps-array edit.
+- [EditorPanel.tsx:~279] `title` reads "Soft-wrap on (⌘\)" when wrap is ON — a state label while `aria-pressed` already conveys state and the click toggles; slight affordance ambiguity (state vs action). Cosmetic copy nit.
+
+### Assessment
+Well-built, low-risk polish that does exactly what its plan said. A near-textbook clone of the sibling `fontZoom` feature — the right call for a milestone framed as "mirror an already-shipped pattern." Advances the codebase without meaningful debt; the only smell is the dual reconfigure path on the button (harmless today). Tests are behavioral, persistence edge cases covered. No refactor warranted; the 3 MINORs are backlog-or-dismiss material.
+
+## Retrospect
+- **What changed in our understanding:** Nothing material — the seams identified at plan time (fontZoom.ts template, fontSizeCompartment live-reconfigure model, `⌘\` disjointness) all held exactly. The one small implementation detail confirmed during build: `EditorView.lineWrapping` resolves to `contentAttributes.of({ class: "cm-lineWrapping" })`, which is the pure-state observable the test asserts (vs. the live-DOM `white-space:break-spaces` the bridge confirmed).
+- **Assumptions that held:** `⌘\` was free; the global-localStorage persistence scope (fontZoom pattern) was the right call; the compartment gives live reconfigure with no remount (proven via the `data-wp5-probe` instance-identity check in verify-self).
+- **Assumptions that were wrong:** None.
+- **Approach delta:** Implementation matched the plan exactly. Single phase, no back-loops. The MCP-bridge live verify-self (chord + button + no-remount + persistence) fully covered the observable outcomes — no carry to verify-human except the judgment/feel checks (operator: "all pass").
+
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
+(none)
