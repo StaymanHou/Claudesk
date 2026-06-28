@@ -1,7 +1,7 @@
 # Feature: M6 WP10 — Right-panel terminal font zoom (focus-scoped, extends WP4)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-28 — shipped (commit `baaaa4c`, local; NOT pushed — v0.2.2 /release is the operator's), review-quality done (0C/0M/2 MINOR backlogged), finalized + archived. Completes M6 WP10.
 **Created:** 2026-06-28
 **Drive mode:** autopilot
 
@@ -47,8 +47,8 @@ WP4 shipped focus-scoped ⌘+/⌘−/⌘0 font zoom for the **CC terminal** (the
 
 
 ## Current Node
-- **Path:** Feature > Phase 1 > COMPLETE → ship
-- **Active scope:** none — Phase 1 fully complete (all impl + all 5 verify nodes [x]). Single-phase feature → all phases complete → ship.
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** none — shipped (baaaa4c) + review-quality done (0C/0M/2 MINOR auto-backlogged to backlog-quality-findings.md + pointer in backlog.md). Next: feature-finalize.
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
@@ -59,6 +59,43 @@ WP4 shipped focus-scoped ⌘+/⌘−/⌘0 font zoom for the **CC terminal** (the
 ## Build notes (2026-06-28)
 - Inline fix made during build (in-scope, not a SURFACE): added `tmp/**` + `src-tauri/tmp/**` to `eslint.config.js` ignores. The gitignored verify-self scratch repos (`src-tauri/tmp/scratch/*`) were being linted (a `no-undef` error on `main.js`), which broke the `pnpm eslint .` clean Observable outcome. They are dev-only fixtures (CLAUDE.md "Scratch workspaces for verify-self"), never app code — correctly ignored now. Pre-existing latent config gap surfaced because the scratch dirs now exist locally.
 - The lone remaining `pnpm eslint .` item is a pre-existing WARNING (not error) at `XtermPane.tsx:442` (the `spawnTriggerDeps` spread in the deps array) — predates WP10, untouched, exit 0.
+
+## Retrospect
+- **What changed in our understanding:** Nothing material — the WBS had already scoped this as routing-only, and that held exactly. The one small discovery was an *environmental* one (not about the feature): the gitignored verify-self scratch repos (`src-tauri/tmp/scratch/*`) were not in eslint's ignore list, so `pnpm eslint .` flagged a `no-undef` in a scratch `main.js`. Fixed in-scope (added `tmp/**` + `src-tauri/tmp/**` to `eslint.config.js`) since it blocked the "eslint clean" Observable outcome and the scratch dirs are dev fixtures, never app code.
+- **Assumptions that held:** (a) `XtermPane.setFontSize` + the WP4 zoom math + the shared `claudesk.terminal.fontSize` key were all directly reusable — zero backend/persistence change. (b) DOM-ancestry routing (`closest('[data-testid="term-pane"]')`) is sufficient because `display:none` panels can't hold focus — no `RightPanelHost.panel` state lift needed. (c) The right-panel `XtermPane` already seeds from the shared key, so "share the key" was the natural, low-surprise choice.
+- **Assumptions that were wrong:** None.
+- **Approach delta:** Implementation matched the plan exactly — single phase, the four impl tasks as written. The shared-key re-seed behavior (the focused terminal zooms now; the other catches up on its next mount/refit) showed up cleanly in the live verify-self trace and is the intended tradeoff; the reviewer noted the comment could call out the persistently-mounted-background lag (backlogged MINOR, no behavior change).
+
+## Communicate
+> **Feature complete:** M6 WP10 (right-panel terminal font zoom) has shipped. The right-half login-shell terminal now responds to the same focus-scoped ⌘+/⌘−/⌘0 zoom the CC terminal got in WP4 — when the right-panel terminal is focused, the chord zooms it (not the editor); both terminals share one persisted size. Verify by opening a workspace, switching the right panel to the Terminal tab, clicking into it, and pressing ⌘=/⌘−/⌘0.
+
+Requester = operator — closure notice for self-record.
+
+## Code-Quality Review — m6-wp10-right-panel-terminal-zoom
+
+### Strengths
+- `rightSurface.ts` is a disciplined sibling of `focusHalf.ts` — same duck-typed `closest()` narrowing, same node-vitest rationale, same doc-comment shape; a reader who knows one knows the other.
+- The DOM-ancestry routing choice (over lifting `RightPanelHost.panel` state to `Workspace`) is correctly reasoned: `display:none` panels can't hold focus, so "focus inside term-pane" *is* "terminal panel is front" — avoids a cross-component prop lift and is documented at the decision point.
+- The unit spec includes a genuine over-infer guard (`TERM_PANE_SELECTOR` must be `term-pane`, not `xterm-pane`) — exactly the regression that would silently misroute the chord to the CC pane.
+- Shared-key decision (one `claudesk.terminal.fontSize`, one store) is documented consistently in code comment, WIP decisions block, and confirmed by the live verify-self trace — no drift between intent and behavior.
+- `applyTerminalZoom(action, target)` cleanly extends the WP4 function in place rather than forking a parallel path; the batch-safe functional-updater pattern is preserved.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [src/components/workspace/Workspace.tsx:158-182] The shared-key model applies the new size only to the *focused* pane; an already-mounted background terminal does not update live and only re-seeds on next mount/refit. Intended + benign for the single-foreground use case, but the comment frames re-seed as "on its next mount/refit" without noting a *persistently mounted* background terminal will visibly lag until something forces a refit. A one-line caveat would spare a future reader the "why didn't the other terminal move" investigation. — Cosmetic clarity; behavior correct + verified. → `SURFACE-2026-06-28-QUALITY-WP10-SHARED-KEY-LAG-COMMENT`
+- [eslint.config.js:18-21] The `tmp/**` + `src-tauri/tmp/**` ignore addition is an in-scope incidental fix bundled into a feature commit. Correctly commented + flagged in WIP Build notes, so tracked not silent. — Noted for traceability only; not a defect. → `SURFACE-2026-06-28-QUALITY-WP10-ESLINT-IGNORE-BUNDLED`
+
+### Assessment
+Well-built, tightly-scoped feature that does exactly what its plan said and no more: closes a routing gap by reusing every existing seam (`XtermPaneHandle.setFontSize`, the WP4 zoom math, the shared persistence key, the `forwardRef` pattern, the duck-typed pure helper). Faithful to repo conventions — the `rightSurface.ts`/`focusHalf.ts` symmetry means one mental model for "which surface holds focus," not two. Advances the codebase rather than accruing debt: the pure seam is unit-tested with an over-infer guard, the routing decision is documented at the point a maintainer would question it, the shared-key tradeoff is explicit across code/WIP/verify. Only nits are cosmetic comment-clarity + a bundled-but-tracked eslint tweak; neither warrants a refactor pass.
+
+### If you disagree
+Operator: dismiss any finding by editing this section + marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

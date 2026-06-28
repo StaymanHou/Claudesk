@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-28
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7, WP9]
+shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7, WP9, WP10]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -186,7 +186,8 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP10: Right-panel terminal font zoom (focus-scoped, extends WP4)
+## WP10: Right-panel terminal font zoom (focus-scoped, extends WP4) ✅ SHIPPED 2026-06-28 (commit baaaa4c)
+**Decisions made at plan/build:** (1) shared zoom key — reuse WP4's single global `claudesk.terminal.fontSize` (both terminals are "a terminal"; the right-panel `XtermPane` already seeds from it, so a separate key would diverge — confirmed the WBS lean). (2) routing signal — DOM-ancestry read (`deriveRightSurface` reads `closest('[data-testid="term-pane"]')`) over lifting `RightPanelHost.panel` state, because `display:none` panels can't hold focus, so "focus inside term-pane" == "terminal panel is the focused right surface" (no cross-component prop lift). Single phase; impl = pure `rightSurface.ts` helper + `forwardRef` thread `RightPanelHost`→`TerminalPane`→`XtermPane` + `applyTerminalZoom(action, target)` router branch in `Workspace.tsx`. Verified live via MCP bridge (all 3 focus cases) + operator real-keyboard (all 4 checks). Review-quality 0C/0M/2 MINOR (backlogged).
 **Description:** The WP9 second terminal (the right-half login-shell `TerminalPane`) gains the SAME focus-scoped font-zoom WP4 shipped for the CC terminal. When the right-panel terminal is focused, ⌘+/⌘−/⌘0 zoom *that terminal* — not the editor. (Operator-requested at WP4 verify-human, 2026-06-27 — `SURFACE-2026-06-27-RIGHT-PANEL-TERMINAL-ZOOM-AND-MULTIPLE` part 1.)
 **Milestone:** M6 (open-collection fold-in)
 **Dependencies:** WP4 (reuses the `terminalFontZoom.ts` module + the `XtermPane.setFontSize` handle; soft-coupled to WP11 if multi-terminal lands first — but independent)
@@ -195,9 +196,9 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 **Seams (to confirm at plan time):** the right-panel terminal is an `XtermPane` (via `TerminalPane`, `spawnCommand="term_spawn"`) — the SAME component WP4 made zoomable, so it already accepts `setFontSize(px)` via the imperative handle. The gap is ROUTING ONLY: WP4's capture-phase keydown listener in `Workspace.tsx` intercepts the zoom chord only when `deriveFocusHalf(document.activeElement) === "left"` (the CC terminal); a right-half focus falls through to the editor's CM6 keymap. WP10 must additionally route to the right-panel terminal when it is the focused right-half surface (terminal panel front + focus inside `[data-testid="term-pane"]`), vs the editor. The `panel === "terminal"` front-state lives in `RightPanelHost` (~line 337), so the listener needs that signal (lift state up, or read a DOM marker on the focused element's ancestry). 
 **Open decision (plan time):** ONE shared terminal zoom for both terminals (reuse WP4's `claudesk.terminal.fontSize` key — simplest, both terminals are "a terminal") vs a separate key per terminal kind. Lean: share the key unless there's a reason the CC terminal and the shell want different sizes.
 **Tasks:**
-- [ ] Decide shared-vs-separate zoom key + the routing signal (lifted state vs DOM-ancestry read). Record the decision.
-- [ ] Extend the `Workspace.tsx` zoom routing: when the focused right-half surface is the terminal panel (not the editor), apply terminal zoom via the right-panel terminal's `setFontSize` handle (thread a ref from `RightPanelHost`→`TerminalPane`→`XtermPane`, mirroring the CC `ccPaneRef`)
-- [ ] Verify (bridge + real keyboard): focus right-panel terminal → ⌘+/⌘−/⌘0 zooms IT; focus editor → ⌘+ zooms the editor (terminal unchanged); focus CC terminal → ⌘+ zooms CC (unchanged from WP4). Persist + restore.
+- [x] Decide shared-vs-separate zoom key + the routing signal (lifted state vs DOM-ancestry read). Record the decision. — shared key + DOM-ancestry read (see Decisions above).
+- [x] Extend the `Workspace.tsx` zoom routing: when the focused right-half surface is the terminal panel (not the editor), apply terminal zoom via the right-panel terminal's `setFontSize` handle (thread a ref from `RightPanelHost`→`TerminalPane`→`XtermPane`, mirroring the CC `ccPaneRef`) — `rightSurface.ts` + `forwardRef` thread + `applyTerminalZoom(action, target)` router branch.
+- [x] Verify (bridge + real keyboard): focus right-panel terminal → ⌘+/⌘−/⌘0 zooms IT; focus editor → ⌘+ zooms the editor (terminal unchanged); focus CC terminal → ⌘+ zooms CC (unchanged from WP4). Persist + restore. — all PASS (MCP bridge verify-self + operator real-keyboard verify-human).
 
 ---
 

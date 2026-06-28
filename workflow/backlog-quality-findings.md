@@ -4,6 +4,24 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m6-wp10-right-panel-terminal-zoom — 2026-06-28
+
+*(feature-review-quality on ship commit baaaa4c; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR — both cosmetic clarity/traceability nits. Reviewer: "well-built, tightly-scoped... only nits are cosmetic comment-clarity + a bundled-but-tracked eslint tweak; neither warrants a refactor pass.")*
+
+## SURFACE-2026-06-28-QUALITY-WP10-SHARED-KEY-LAG-COMMENT
+- **Severity:** MINOR
+- **Finding:** `Workspace.tsx:158-182` — the shared-key zoom applies the new size only to the *focused* pane; an already-mounted background terminal re-seeds on next mount/refit. Intended + benign for the single-foreground use case, but the comment frames re-seed as "on its next mount/refit" without noting a *persistently mounted* background terminal will visibly lag until something forces a refit.
+- **Fix shape:** one-line caveat in the `applyTerminalZoom` comment ("a persistently-mounted background terminal lags until its next refit"). No behavior change.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP10-ESLINT-IGNORE-BUNDLED
+- **Severity:** MINOR
+- **Finding:** `eslint.config.js:18-21` — the `tmp/**` + `src-tauri/tmp/**` ignore addition is an in-scope incidental fix bundled into the feature commit. Correctly commented + flagged in the WIP Build notes, so tracked not silent. Noted for traceability only; not a defect.
+- **Fix shape:** none required (informational). If a future cleanup wants strict commit-atomicity, scratch-repo lint-ignore config could move to its own commit — not worth a dedicated pass.
+- **Priority:** low
+- **Status:** pending
+
 # m6-wp7-no-yolo-setting — 2026-06-28
 
 *(feature-review-quality on ship commit 4db7b82; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR — all clarity/consistency nits the existing pip-mode pattern already shares. Reviewer: "well-built, low-risk polish... accrues no meaningful debt; no refactor warranted.")*
