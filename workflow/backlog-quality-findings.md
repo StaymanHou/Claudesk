@@ -4,6 +4,26 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m6-wp8-milestone-exit-verification — 2026-06-28
+
+*(feature-review-quality on ship commit 3895a32; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Verification-only WP; the only code change was the editor default-font 13→11 parity edit. Reviewer: "well-built, appropriately-tiny... no debt, no scope creep. Only standing weakness: the editor+terminal shared-default invariant lives in a comment, not code.")*
+
+## SURFACE-2026-06-28-QUALITY-WP8-FONT-PARITY-COMMENT-ONLY
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/fontZoom.ts:14` (`DEFAULT_FONT_PX`) vs `src/components/workspace/terminalFontZoom.ts` (`DEFAULT_TERMINAL_FONT_PX`).
+- **Finding:** The parity claim "matches `DEFAULT_TERMINAL_FONT_PX`" is enforced only by a comment — `DEFAULT_FONT_PX = 11` is an independent literal duplicating the terminal default. If the terminal default is retuned later, the editor silently drifts and the comment becomes a lie. The headline invariant of the change (editor + terminal render at the same size out of the box) has no mechanical guard.
+- **Suggested action:** Either import `DEFAULT_TERMINAL_FONT_PX` and derive `DEFAULT_FONT_PX` from it, or add a structural test asserting `DEFAULT_FONT_PX === DEFAULT_TERMINAL_FONT_PX`. Low cost; makes the parity load-bearing rather than aspirational.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP8-SIBLING-TEST-BARE-LITERALS
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/__tests__/fontZoom.test.ts:31-33,47-48`.
+- **Finding:** Sibling `clampFontSize`/`nextFontSize` tests still use bare `13` literals as sample inputs, while the round-trip test was deliberately re-anchored off literals onto `DEFAULT_FONT_PX`. The `13`s are now arbitrary in-range sample values (no longer the default), reading slightly inconsistently next to the default-relative round-trip test.
+- **Suggested action:** Optionally swap the bare `13`s for a neutral mid-range constant or a comment clarifying they're arbitrary probes. Trivial; any in-range integer works for clamp/step-math.
+- **Priority:** low
+- **Status:** pending
+
 # m6-wp11-multiple-right-panel-terminals — 2026-06-28
 
 *(feature-review-quality on ship commit f9e3292; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built... the only debt is minor — a small logic duplication between the button handlers and the keydown branches that a shared callback would erase. Nothing here warrants a refactor pass.")*

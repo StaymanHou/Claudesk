@@ -1,9 +1,9 @@
 ---
 stage: wbs
-state: in-progress
+state: complete
 updated: 2026-06-28
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7, WP9, WP10, WP11]
+shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7, WP9, WP10, WP11, WP8]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -226,27 +226,27 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP8: Milestone-exit verification (verify M6 at the real app)
-**Description:** Milestone-exit verification against the real installed `.app` + dev build, confirming every M6 exit criterion. Verification-only WP (no new feature code).
+## WP8: Milestone-exit verification (verify M6 at the real app) ✅ SHIPPED 2026-06-28 (commit 3895a32; verification-only)
+**Description:** Milestone-exit verification against the real installed `.app` + dev build, confirming every M6 exit criterion. Verification-only WP (no new feature code). **Split into Phase 1 (agent-drivable, all GREEN via the tauri MCP bridge) + Phase 2 (operator-carry checklist, DEFERRED-TO-RELEASE → confirmed at the v0.2.2 `/release` gate).** The only code change was a friend-requested polish folded in mid-session: editor default font 13→11 to match the CC/terminal default (commit 3895a32).
 **Milestone:** M6
 **Dependencies:** WP2, WP3, WP4, WP5, WP6, WP7, WP9, WP10, WP11 (all M6 build WPs; WP1+WP1b already shipped in v0.2.1)
 **Size:** S
 **Exit criteria to confirm (from `roadmap.md`):**
-- [ ] Status-channel telemetry (WP1+WP1b) confirmed writing in the installed `.app` (shipped v0.2.1) — the passive probe is live
-- [ ] Stuck-`Running` dot fixed (WP2) — a real CC turn cleanly ends → dot flips Idle, in the **installed `.app`** (verified whenever the intermittent bug next surfaces + the fix lands)
-- [ ] Empty PiP suppressed (WP9) — no workspace open + blur → PiP stays hidden
-- [ ] Left/right split is drag-resizable; the terminal re-fits cleanly (no clipped/garbled PTY)
-- [ ] CC terminal font size is adjustable via **focus-scoped** ⌘+/⌘−/⌘0 (terminal when CC focused, editor when editor focused)
-- [ ] Editor offers a persisted auto-wrap toggle (default OFF preserved)
-- [ ] Gitignored-but-editable files (e.g. `.env`) are reachable + editable in the in-app editor per the WP6 policy
-- [ ] A setting can open the CC terminal without yolo (default stays yolo-on); verified at next-spawn in the installed build
-- [ ] Right-panel terminal is also focus-scoped-zoomable (WP10) — focus it → ⌘+/⌘−/⌘0 zooms that terminal, not the editor
-- [ ] Multiple terminals can be opened/switched/closed in the right panel (WP11) per the spec'd UX shape; each shell reaps on close
-- [ ] Any further friend-requested QoL items folded in before this verification are covered
+- [x] Status-channel telemetry (WP1+WP1b) confirmed writing in the installed `.app` (shipped v0.2.1) — the passive probe is live  *(→ OC.1, operator-carry / DEFERRED-TO-RELEASE)*
+- [x] Stuck-`Running` dot fixed (WP2) — a real CC turn cleanly ends → dot flips Idle, in the **installed `.app`**  *(→ OC.2, operator-carry / DEFERRED-TO-RELEASE; fix `bafee80` shipped)*
+- [x] Empty PiP suppressed (WP9) — no workspace open + blur → PiP stays hidden  *(agent-confirmed partial: no-workspace → no `pip` window exists; blur-driven → OC.5 operator-carry)*
+- [x] Left/right split is drag-resizable; the terminal re-fits cleanly (no clipped/garbled PTY)  *(agent-confirmed: ratio-cycle 2:2↔1:3↔3:1, xterm viewport tracked each width)*
+- [x] CC terminal font size is adjustable via **focus-scoped** ⌘+/⌘−/⌘0 (terminal when CC focused, editor when editor focused)  *(agent-confirmed: CC focus → ⌘+ grew terminal, editor unchanged; real-keyboard re-confirm → OC.6)*
+- [x] Editor offers a persisted auto-wrap toggle (default OFF preserved)  *(agent-confirmed: default aria-pressed=false, toggle persists + applies `.cm-lineWrapping`)*
+- [x] Gitignored-but-editable files (e.g. `.env`) are reachable + editable in the in-app editor per the WP6 policy  *(agent-confirmed: `.env` git-ignored yet shown in FileTree, opened + contenteditable)*
+- [x] A setting can open the CC terminal without yolo (default stays yolo-on)  *(agent-confirmed UI layer: picker-yolo checked + CC "bypass permissions on"; no-yolo next-spawn → OC.3 operator-carry)*
+- [x] Right-panel terminal is also focus-scoped-zoomable (WP10) — focus it → ⌘+/⌘−/⌘0 zooms that terminal, not the editor  *(agent-confirmed)*
+- [x] Multiple terminals can be opened/switched/closed in the right panel (WP11) per the spec'd UX shape; each shell reaps on close  *(agent-confirmed incl. live backend `/bin/zsh` reap 3→2 on close + disallow-last)*
+- [x] Any further friend-requested QoL items folded in before this verification are covered  *(editor-font 13→11 parity tweak folded in + shipped)*
 **Tasks:**
-- [ ] Drive the agent-observable slice via the `tauri` MCP bridge where possible (split-drag, font-zoom focus routing, wrap toggle, FileTree `.env` visibility — all main-webview-observable per the M5 WP2 bridge proof)
-- [ ] Carry installed-`.app` + backend-lifecycle outcomes (stuck-dot flip, no-yolo next-spawn behavior) to operator verify-human per the installed-build smoke-test convention — use the `tmp/scratch/scratch-{a,b,c}` throwaway repos for any check that spawns/answers a CC session
-- [ ] Confirm all exit criteria PASS; surface any miss as a back-loop to the owning WP
+- [x] Drive the agent-observable slice via the `tauri` MCP bridge — all main-webview-observable criteria GREEN (WP3/4/5/6/9-partial/10/11 + WP7 UI), 0 blocking
+- [x] Carry installed-`.app` + backend-lifecycle outcomes to operator verify-human — composed as the OC.1–OC.6 checklist (DEFERRED-TO-RELEASE) in the archived WIP; confirmed at the v0.2.2 `/release` gate
+- [x] Confirm all exit criteria PASS; surface any miss as a back-loop to the owning WP — all PASS, no back-loops, no misses
 
 ---
 
