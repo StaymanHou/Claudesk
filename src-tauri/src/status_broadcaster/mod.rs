@@ -246,8 +246,12 @@ impl WorkspaceRegistry {
             .map(|(_, ws)| ws.clone())
     }
 
-    /// Test/inspection helper: number of registered workspaces.
-    #[cfg(test)]
+    /// Number of currently-registered (open) workspaces. This IS the open-workspace
+    /// set the broadcaster uses — `register` fires on workspace open, `deregister` on
+    /// close — so its length is "how many workspaces are open right now." Read by the
+    /// PiP auto-summon guard (M6 WP9): at zero open workspaces, blurring must NOT summon
+    /// an empty PiP. Previously `#[cfg(test)]`-only (an inspection helper); un-gated now
+    /// that it has a runtime caller.
     pub fn len(&self) -> usize {
         self.by_path.len()
     }
@@ -485,6 +489,33 @@ mod tests {
             reg.resolve_cwd(&dir.path().to_string_lossy()),
             Some("ws-1".to_string())
         );
+    }
+
+    #[test]
+    fn len_tracks_open_workspace_count_across_register_deregister() {
+        // M6 WP9: `len()` is the open-workspace count the PiP guards read (Auto auto-summon
+        // suppression + On-mode reactive show/hide). Codify that it moves 0→1→2→1→0 across
+        // register/deregister so a regression in the count signal — which would silently
+        // resurrect the empty-PiP bug — is caught. Re-registering the same path does NOT
+        // double-count (it's a HashMap keyed on the canonical path).
+        let a = tempfile::TempDir::new().unwrap();
+        let b = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        assert_eq!(reg.len(), 0, "empty registry → zero open workspaces");
+
+        reg.register(a.path(), "ws-a".to_string());
+        assert_eq!(reg.len(), 1);
+        reg.register(b.path(), "ws-b".to_string());
+        assert_eq!(reg.len(), 2);
+
+        // Re-registering an already-open path keeps the count (same canonical key).
+        reg.register(a.path(), "ws-a".to_string());
+        assert_eq!(reg.len(), 2, "re-register of the same path must not double-count");
+
+        reg.deregister(a.path());
+        assert_eq!(reg.len(), 1);
+        reg.deregister(b.path());
+        assert_eq!(reg.len(), 0, "all workspaces closed → count back to zero (PiP hides)");
     }
 
     #[test]

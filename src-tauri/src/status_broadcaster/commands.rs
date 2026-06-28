@@ -168,10 +168,17 @@ pub fn workspace_register(
     // resolved/missed cwd can be compared against the key actually stored — the
     // canonicalization seam is the cwd-match-miss prime suspect.
     log_registry_mutation(&app, "register", Some(&workspace_id), &project_path);
-    let mut reg = registry
-        .lock()
-        .map_err(|_| "workspace registry lock poisoned".to_string())?;
-    reg.register(Path::new(&project_path), workspace_id);
+    let open_count = {
+        let mut reg = registry
+            .lock()
+            .map_err(|_| "workspace registry lock poisoned".to_string())?;
+        reg.register(Path::new(&project_path), workspace_id);
+        reg.len()
+    }; // drop the registry lock before the AppKit reconcile (don't hold it across a window op).
+    // M6 WP9 Phase 2: a workspace just opened — reconcile the `On`-mode PiP visibility against
+    // the new count (shows the pinned panel once ≥1 workspace is open). No-op in Auto/Off.
+    // This command body runs on the main thread, so the AppKit show inside is safe.
+    crate::pip::commands::reconcile_pip_for_workspace_count(&app, open_count);
     Ok(())
 }
 
@@ -187,10 +194,17 @@ pub fn workspace_deregister(
     // M6 WP1: log the deregister canonical key (a workspace closing should remove the
     // mapping a subsequent Stop would have resolved against).
     log_registry_mutation(&app, "deregister", None, &project_path);
-    let mut reg = registry
-        .lock()
-        .map_err(|_| "workspace registry lock poisoned".to_string())?;
-    reg.deregister(Path::new(&project_path));
+    let open_count = {
+        let mut reg = registry
+            .lock()
+            .map_err(|_| "workspace registry lock poisoned".to_string())?;
+        reg.deregister(Path::new(&project_path));
+        reg.len()
+    }; // drop the registry lock before the AppKit reconcile (don't hold it across a window op).
+    // M6 WP9 Phase 2: a workspace just closed — reconcile the `On`-mode PiP visibility against
+    // the new count (hides the pinned panel when the count returns to 0). No-op in Auto/Off.
+    // This command body runs on the main thread, so the AppKit hide inside is safe.
+    crate::pip::commands::reconcile_pip_for_workspace_count(&app, open_count);
     Ok(())
 }
 

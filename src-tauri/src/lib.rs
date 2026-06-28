@@ -196,20 +196,15 @@ pub fn run() {
                 }
                 Err(e) => hook_socket::commands::emit_start_error(&handle, &e),
             }
-            // M5 WP5 Phase 2 (rework): restore the persisted PiP MODE on launch. Only `On`
-            // shows a panel at rest (pinned); `Auto` rests hidden (the focus handler summons
-            // it on the next sustained blur) and `Off` stays hidden — so we apply the panel
-            // side-effect only for `On`. Default (unset) = `Auto` → hidden at rest. (We set
-            // visibility directly rather than calling pip_set_mode, to avoid re-persisting +
-            // re-broadcasting at launch; this runs on the main thread, so the AppKit show is
-            // safe.)
-            if let Ok(dir) = handle.path().app_data_dir() {
-                if config_store::settings::read_pip_mode(&dir).unwrap_or_default()
-                    == pip::layout::PipMode::On
-                {
-                    let _ = pip::commands::pip_set_visible(&handle, true);
-                }
-            }
+            // M5 WP5 Phase 2 (rework): the persisted PiP MODE governs the panel at rest.
+            // M6 WP9 Phase 2: we do NOT show the `On` panel here at launch — the registry is
+            // always empty at launch (the frontend webview hasn't mounted, so no
+            // `workspace_register` has fired), so an unconditional `On`-show would render an
+            // EMPTY pinned panel (operator vh.4: "no PiP when there's nothing to mirror").
+            // Instead, `On`-mode visibility is REACTIVE: the first `workspace_register` calls
+            // `reconcile_pip_for_workspace_count`, which shows the pinned panel once ≥1
+            // workspace is open (and hides it when the count returns to 0). So launch does
+            // nothing here — `Auto`/`Off` rest hidden, and `On` rests hidden-until-first-open.
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

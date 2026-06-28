@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-28  # M6 WP7 P1 cargo test 4s
+updated: 2026-06-28  # M6 WP9 cargo test 295 pass
 ---
 
 # Runtime Registry
@@ -107,9 +107,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 1s (2026-06-28, M6 WP7 Phase 1 verify-codify: +1 forward-compat test → 291 pass; warm run 0.68s)
+- **Last:** 1s (2026-06-28, M6 WP9 verify-codify: 295 pass incl. len-tracks-count + pip On/Auto guard tests; warm run 0.69s)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-28 (M6 WP9 codify: +len_tracks_open_workspace_count + on_mode/arm_summon count tests, 295 pass; warm 0.69s)
   - 1s — 2026-06-28 (M6 WP7 P1 codify: +1 cc_yolo_absent_in_present_file test, 291 pass; warm 0.68s)
   - 4s — 2026-06-28 (M6 WP7 P1 build: +5 cc_yolo/build_cc_argv tests, 290 pass; cold-ish compile ~3.5s, run 0.71s)
   - 0.67s — 2026-06-28 (WP6 P2 codify, 285 pass)

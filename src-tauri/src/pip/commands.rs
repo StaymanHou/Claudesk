@@ -25,7 +25,50 @@ use tauri_nspanel::{
 };
 
 use super::layout::{PipLayout, PipMode};
-use super::{should_arm_summon, should_auto_dismiss, PipAutoStateLock};
+use super::{on_mode_should_show, should_arm_summon, should_auto_dismiss, PipAutoStateLock};
+use crate::status_broadcaster::SharedRegistry;
+
+/// Read the number of currently-open workspaces from the managed [`SharedRegistry`]
+/// (M6 WP9). An absent or poisoned registry → `0`, the SAFE default: the auto-summon
+/// guard treats `0` as "nothing to mirror → don't summon," so a transient lock failure
+/// errs toward NOT showing an empty PiP rather than showing one. The registry's
+/// `by_path` IS the open-workspace set (`workspace_register`/`deregister` keep it in
+/// sync with the workspace list), so its length is the count we want.
+fn open_workspace_count(app: &AppHandle) -> usize {
+    app.try_state::<SharedRegistry>()
+        .and_then(|reg| reg.lock().ok().map(|r| r.len()))
+        .unwrap_or(0)
+}
+
+/// M6 WP9 Phase 2 — reconcile the `On` (pinned) PiP panel's visibility against the current
+/// open-workspace count: shown when ≥1 workspace is open, hidden when the count returns to 0
+/// ("no PiP when there's nothing to mirror," operator vh.4 — extended from `Auto` to `On`).
+/// In `Auto`/`Off` this is a no-op (the focus handler drives `Auto`; `Off` is hidden by
+/// choice). Called after every workspace register/deregister and from `pip_set_mode` so the
+/// pinned panel never shows empty and appears as soon as the first workspace opens.
+///
+/// MUST be called from a main-thread context (a Tauri `#[command]` body) — `pip_set_visible`
+/// does AppKit window work (`PanelBuilder::build` / `order_front_regardless` / `hide`) that
+/// aborts off the main thread (CLAUDE.md main-thread-marshal rule). All current callers
+/// (`workspace_register`, `workspace_deregister`, `pip_set_mode`) are command bodies, which
+/// Tauri runs on the main thread — so no marshaling is needed here. If a future
+/// background-thread caller is added, it MUST `run_on_main_thread` around this call.
+fn reconcile_on_mode_visibility(app: &AppHandle, open_count: usize) {
+    let mode = resolve_data_dir(app)
+        .ok()
+        .and_then(|dir| crate::config_store::settings::read_pip_mode(&dir).ok())
+        .unwrap_or_default();
+    if let Some(show) = on_mode_should_show(mode, open_count) {
+        let _ = pip_set_visible(app, show);
+    }
+}
+
+/// Public entry the status-broadcaster's register/deregister commands call after a registry
+/// mutation, passing the post-mutation open-workspace count. Thin wrapper over
+/// [`reconcile_on_mode_visibility`] so the cross-module call site reads intentionally.
+pub fn reconcile_pip_for_workspace_count(app: &AppHandle, open_count: usize) {
+    reconcile_on_mode_visibility(app, open_count);
+}
 
 // Define a minimal custom NSPanel class. The `tauri_panel!` macro emits the
 // objc2 class + a `FromWindow` impl so `PanelBuilder::<_, PipPanel>` can
@@ -192,10 +235,20 @@ pub fn pip_set_mode(app: AppHandle, mode: PipMode) -> Result<(), String> {
         }
     }
 
-    // Apply the panel side-effect. On/Off show/hide immediately; Auto rests hidden (the
-    // focus handler summons it on the next sustained blur).
-    let show = matches!(mode, PipMode::On);
-    pip_set_visible(&app, show)?;
+    // Apply the panel side-effect.
+    //   - Off  → hide.
+    //   - Auto → hide now (the focus handler summons on the next sustained blur).
+    //   - On   → show ONLY if a workspace is open (WP9 Phase 2 — no empty pinned panel);
+    //            if zero workspaces are open, stay hidden and let the first
+    //            `workspace_register` reconcile it visible. `reconcile_on_mode_visibility`
+    //            encodes exactly this (On → show iff count>0; Auto/Off → no-op), so for On
+    //            we route through it; Auto/Off hide explicitly.
+    match mode {
+        PipMode::On => reconcile_on_mode_visibility(&app, open_workspace_count(&app)),
+        PipMode::Auto | PipMode::Off => {
+            pip_set_visible(&app, false)?;
+        }
+    }
 
     // Broadcast the new mode so the icon button + View-menu radio re-render.
     let _ = app.emit(PIP_MODE_EVENT, mode);
@@ -312,10 +365,12 @@ pub fn pip_set_visible(app: &AppHandle, show: bool) -> Result<bool, String> {
 /// stays pinned). The regime is read fresh from the persisted `pip_mode` each event (the
 /// explicit source of truth — no inferred origin/manual_off).
 ///
-/// - **blur (`focused=false`)**: if `Auto` and no panel currently shown, bump+capture a
-///   debounce token and spawn a thread that, after `PIP_AUTO_SUMMON_DEBOUNCE_MS`, summons
-///   the panel ONLY if the token still matches AND the mode is still `Auto` (a refocus or
-///   a mode change in the meantime bumps the token / fails the mode re-check → no-op).
+/// - **blur (`focused=false`)**: if `Auto`, no panel currently shown, AND at least one
+///   workspace is open (WP9 — never summon an empty PiP), bump+capture a debounce token and
+///   spawn a thread that, after `PIP_AUTO_SUMMON_DEBOUNCE_MS`, summons the panel ONLY if the
+///   token still matches AND the mode is still `Auto` AND a workspace is still open (a
+///   refocus, a mode change, or the last workspace closing in the meantime bumps the token /
+///   fails the mode or count re-check → no-op).
 /// - **focus (`focused=true`)**: cancel any pending summon (bump the token), and if mode
 ///   is `Auto`, dismiss the panel. (`On` stays pinned; `Off` has nothing shown.)
 ///
@@ -344,12 +399,13 @@ pub fn pip_on_main_focus_changed(app: &AppHandle, focused: bool) {
         return;
     }
 
-    // Blurred: arm the debounce only in Auto + when nothing is currently shown.
+    // Blurred: arm the debounce only in Auto + when nothing is currently shown + when at
+    // least one workspace is open (WP9 — don't summon an empty PiP that mirrors nothing).
     let panel_visible = app
         .get_webview_panel(PANEL_LABEL)
         .map(|p| p.is_visible())
         .unwrap_or(false);
-    if !should_arm_summon(mode, panel_visible) {
+    if !should_arm_summon(mode, panel_visible, open_workspace_count(app)) {
         return;
     }
     let token = {
@@ -400,7 +456,12 @@ pub fn pip_on_main_focus_changed(app: &AppHandle, focused: bool) {
                 .and_then(|dir| crate::config_store::settings::read_pip_mode(&dir).ok())
                 .map(|m| m == PipMode::Auto)
                 .unwrap_or(false);
-            if token_still_ok && still_auto {
+            // WP9: re-check the open-workspace count HERE too — a workspace could have been
+            // closed during the 3s debounce, which must cancel the summon (symmetric with the
+            // token + mode re-checks). Without this, blurring with one workspace open then
+            // closing it inside the debounce window would still summon an empty PiP.
+            let still_has_workspace = open_workspace_count(&app_main) > 0;
+            if token_still_ok && still_auto && still_has_workspace {
                 let _ = pip_set_visible(&app_main, true);
             }
         });
