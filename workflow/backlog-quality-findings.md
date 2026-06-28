@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m6-wp11-multiple-right-panel-terminals — 2026-06-28
+
+*(feature-review-quality on ship commit f9e3292; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built... the only debt is minor — a small logic duplication between the button handlers and the keydown branches that a shared callback would erase. Nothing here warrants a refactor pass.")*
+
+## SURFACE-2026-06-28-QUALITY-WP11-HANDLER-BRANCH-DUPLICATION
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/RightPanelHost.tsx` — the ⌘T/⌘W keydown branches vs the `addTerminal` / `closeTerminalById` helpers.
+- **Finding:** The ⌘T and scoped-⌘W keydown branches deliberately re-inline the open/close bodies (`setPanel(→terminal)` + `setTerminals(openTerminal)`; `setTerminals(s=>closeTerminal(s, s.activeId))`) rather than calling the button handlers, to keep the `[visible, workspaceId]` listener free of non-stable closure deps. Intent is sound + commented, but it duplicates the open/close logic across ~250 lines — a future change to "what happens on open" (e.g. an added focus call) must be made in both the handler and the inline branch or they silently diverge.
+- **Suggested action:** Wrap the bodies in a `useCallback` (or a ref-to-callback) so both call sites share one impl without re-registering the listener. Low cost.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP11-TABLIST-ARIA-CONTROLS
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/RightPanelHost.tsx` — the `.term-tab-row` (`role=tablist`/`tab` + `aria-selected`) + the `.term-pane-slot` panes.
+- **Finding:** The terminal sub-tab row carries `role=tablist`/`role=tab`/`aria-selected` but no `aria-controls` linking each tab to its pane, and the panes have no `role=tabpanel`. Consistent with the existing Editor/Diff/Terminal tab row (NOT a regression), but the fresh row was a low-cost moment to wire the relationship.
+- **Suggested action:** Add `aria-controls` on each tab + `role=tabpanel` on each pane slot (and optionally fix the outer panel-tab row to match). Cosmetic/a11y polish.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP11-ENTRY-ID-SESSIONID-ALWAYS-EQUAL
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/terminalList.ts` — `TerminalEntry { id; sessionId }`.
+- **Finding:** `id` and `sessionId` are kept as distinct fields "so a future rename/label can diverge," but in v1 they are always set equal (`{ id: sid, sessionId: sid }` at every construction site). A speculative-generality seam carried into the data model before the feature that needs it; cheap + documented, so borderline — noted only because always-equal fields invite a reader to wonder whether they can drift today (they can't).
+- **Suggested action:** Either collapse to one field until a rename/label feature lands, or add a one-line note that they're intentionally always-equal in v1. Or leave as-is (the seam is cheap).
+- **Priority:** low
+- **Status:** pending
+
 # m6-wp10-right-panel-terminal-zoom — 2026-06-28
 
 *(feature-review-quality on ship commit baaaa4c; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR — both cosmetic clarity/traceability nits. Reviewer: "well-built, tightly-scoped... only nits are cosmetic comment-clarity + a bundled-but-tracked eslint tweak; neither warrants a refactor pass.")*

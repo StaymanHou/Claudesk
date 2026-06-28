@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-28
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7, WP9, WP10]
+shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7, WP9, WP10, WP11]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -202,8 +202,9 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP11: Multiple terminals in the right panel
+## WP11: Multiple terminals in the right panel ✅ SHIPPED 2026-06-28 (commit f9e3292)
 **Description:** The right-panel terminal supports MORE THAN ONE terminal — today it's a single `TerminalPane` per workspace (one hardcoded `term_spawn` session keyed `${workspaceId}-term`). Add the ability to open/switch/close N terminals within the terminal panel. (Operator-requested at WP4 verify-human, 2026-06-27 — `SURFACE-2026-06-27-RIGHT-PANEL-TERMINAL-ZOOM-AND-MULTIPLE` part 2.)
+**Shipped as:** 3 phases — (1) terminal-list model (`terminalList.ts`, monotonic `-term-<n>` ids, disallow-last, soft cap 8) + sub-tab row (●1 ●2 + ＋, hover ✕) keep-mounted; (2) ⌘T new + scoped ⌘W close-focused chords; (3) WP10 zoom coupling (zoom follows focused terminal via the active-ref — no registry needed). Shared zoom + ephemeral (operator-confirmed). Verified via MCP bridge + operator real-keyboard; installed-build smoke deferred to /release. Review-quality 0C/0M/3 MINOR (auto-backlogged). Full suite 780/780.
 **Milestone:** M6 (open-collection fold-in)
 **Dependencies:** none hard (independent of WP4/WP10; if WP10 lands first, the zoom routing should cover all N terminals — note the coupling). Backend `term_spawn` is already session-id-keyed + command-agnostic, so this is a frontend-shape change.
 **Size:** M (real UX-shape design choice — likely warrants `/feature-spec` rather than a bare `/feature-plan`)
@@ -216,12 +217,12 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 - Persistence across app restart (lean: no — terminals are ephemeral like the CC session; re-spawn fresh)
 - Keep-mounted discipline: each terminal stays mounted (scrollback survives switching between terminals) mirroring the single-terminal posture
 **Tasks:**
-- [ ] `/feature-spec` the terminal-list UX shape (tabs vs splits, count, affordances, persistence) — record the decisions
-- [ ] Terminal-list model: N `{ id, sessionId }` entries per workspace; a sub-tab/switcher row in the terminal panel; add/close/switch
-- [ ] Mount N `TerminalPane`s keep-mounted (display:none for the non-front ones), each with a distinct session id (drop the hardcoded `${workspaceId}-term` → `${workspaceId}-term-<n>`); the front one is `active`
-- [ ] Confirm each terminal's shell reaps on close (per-pane unmount kill covers it) and on workspace close (kill_all / per-pane reap covers all N)
-- [ ] If WP10 shipped: confirm focus-scoped zoom routes to whichever terminal is focused
-- [ ] Verify (bridge + real): open 2+ terminals, switch between them (scrollback intact), close one (shell reaped), persistence per the spec decision
+- [x] `/feature-spec` the terminal-list UX shape (tabs vs splits, count, affordances, persistence) — record the decisions — sub-tab row, buttons+chords, ephemeral, cap 8, shared zoom
+- [x] Terminal-list model: N `{ id, sessionId }` entries per workspace; a sub-tab/switcher row in the terminal panel; add/close/switch
+- [x] Mount N `TerminalPane`s keep-mounted (display:none for the non-front ones), each with a distinct session id (drop the hardcoded `${workspaceId}-term` → `${workspaceId}-term-<n>`); the front one is `active`
+- [x] Confirm each terminal's shell reaps on close (per-pane unmount kill covers it) and on workspace close (kill_all / per-pane reap covers all N) — bridge-verified (pgrep: closed terminal's zsh reaped, sibling alive) + operator
+- [x] If WP10 shipped: confirm focus-scoped zoom routes to whichever terminal is focused — confirmed (active-ref binds the zoom handle to the focused/active terminal)
+- [x] Verify (bridge + real): open 2+ terminals, switch between them (scrollback intact), close one (shell reaped), persistence per the spec decision — all PASS
 
 ---
 
