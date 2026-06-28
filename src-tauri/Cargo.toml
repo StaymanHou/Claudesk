@@ -1,6 +1,6 @@
 [package]
 name = "claudesk"
-version = "0.2.1"
+version = "0.2.2"
 description = "macOS-only lite IDE for the daily Claude Code + Sublime Text workflow."
 authors = ["Stayman"]
 edition = "2021"
