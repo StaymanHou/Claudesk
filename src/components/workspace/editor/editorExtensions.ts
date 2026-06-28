@@ -34,7 +34,12 @@ import {
 } from "@codemirror/search";
 import { showMinimap } from "@replit/codemirror-minimap";
 import { languageForPath, languageForId } from "./language";
-import { fontSizeCompartment, fontSizeTheme } from "./theme";
+import {
+  fontSizeCompartment,
+  fontSizeTheme,
+  lineWrapCompartment,
+  lineWrapExtension,
+} from "./theme";
 import { nextFontSize, DEFAULT_FONT_PX } from "./fontZoom";
 
 export interface EditorExtensionOptions {
@@ -66,6 +71,18 @@ export interface EditorExtensionOptions {
    * vestigial. See memory `cm6-dont-copy-compartment-by-analogy`.)
    */
   languageOverrideId: string | null;
+  /**
+   * M6 WP5 — current line-wrap flag. Seeds the line-wrap compartment so the editor
+   * mounts at the persisted wrap state. The ⌘\ keybinding reconfigures it live.
+   */
+  lineWrap: boolean;
+  /**
+   * Called after a ⌘\ chord with the new wrap flag, so EditorPanel can mirror it
+   * into React state + persist it. The keybinding itself does the live compartment
+   * reconfigure via the view; this just syncs the outside world (mirrors
+   * onFontSizeChange).
+   */
+  onWrapChange: (on: boolean) => void;
 }
 
 /**
@@ -75,7 +92,7 @@ export interface EditorExtensionOptions {
  * chords (panel-switch / Cmd+P), which are WP5/WP6, not here.
  */
 function coreKeymap(opts: EditorExtensionOptions): Extension {
-  const { onSave, fontSize, onFontSizeChange } = opts;
+  const { onSave, fontSize, onFontSizeChange, lineWrap, onWrapChange } = opts;
 
   // Apply a new font size: live-reconfigure the compartment on the view, then
   // notify EditorPanel (React state + persist). `target` is the resolved size so
@@ -85,6 +102,17 @@ function coreKeymap(opts: EditorExtensionOptions): Extension {
       effects: fontSizeCompartment.reconfigure(fontSizeTheme(target)),
     });
     onFontSizeChange(target);
+    return true;
+  };
+
+  // M6 WP5 — apply a new wrap flag: live-reconfigure the line-wrap compartment on
+  // the view (no remount; cursor/scroll preserved), then notify EditorPanel (React
+  // state + persist). Mirrors applyZoom.
+  const applyWrap = (view: EditorView, next: boolean): boolean => {
+    view.dispatch({
+      effects: lineWrapCompartment.reconfigure(lineWrapExtension(next)),
+    });
+    onWrapChange(next);
     return true;
   };
 
@@ -131,6 +159,15 @@ function coreKeymap(opts: EditorExtensionOptions): Extension {
         key: "Mod-0",
         preventDefault: true,
         run: (view) => applyZoom(view, DEFAULT_FONT_PX),
+      },
+      // M6 WP5 — ⌘\ toggles soft line-wrap (Sublime convention; confirmed disjoint
+      // from every chord in paletteCommands.ts's ownership map). preventDefault so
+      // the OS/browser never sees it. Reads the CURRENT `lineWrap` (closed over from
+      // the latest buildEditorExtensions call) and flips it.
+      {
+        key: "Mod-\\",
+        preventDefault: true,
+        run: (view) => applyWrap(view, !lineWrap),
       },
       // The search keymap (find/replace open, find-next/prev, etc.) — included in
       // basicSetup, but re-asserted at highest prec so the find panel always opens
@@ -215,8 +252,10 @@ export function buildEditorExtensions(
     // (VS Code's scrollBeyondLastLine; operator request at WP3a verify-human).
     // Built-in @codemirror/view extension — no new dep.
     scrollPastEnd(),
-    // No EditorView.lineWrapping — the operator wants long lines to scroll
-    // horizontally, not soft-wrap (verify-human 2026-06-20). CM6's default (no
-    // wrapping) is the desired behavior, so nothing is added here.
+    // M6 WP5 — line-wrap in its own compartment, seeded at the current flag. Default
+    // OFF preserves the deliberate no-wrap behavior (long lines scroll horizontally,
+    // verify-human 2026-06-20); ⌘\ / the status-bar toggle reconfigure it live (see
+    // coreKeymap.applyWrap).
+    lineWrapCompartment.of(lineWrapExtension(opts.lineWrap)),
   ];
 }

@@ -54,9 +54,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.3s (2026-06-27, M6 WP4 verify-codify: 711 pass / 73 files; +17 terminalFontZoom)
+- **Last:** 1.3s (2026-06-27, M6 WP5 verify-codify: 719 pass / 74 files; +8 wrap-toggle)
 - **Use timeout:** 120000
 - **History:**
+  - 1.3s — 2026-06-27 (M6 WP5 verify-codify: 719 pass / 74 files, +8 editorWrapToggle + wrap cases)
   - 1.3s — 2026-06-27 (M6 WP4 verify-codify: 711 pass / 73 files, +17 terminalFontZoom)
   - 1s — 2026-06-27 (M5 WP5 P2R tri-state rework verify-codify: 670 pass / 71 files)
   - 1s — 2026-06-27 (M5 WP5 Phase 1 verify-codify: 670 pass / 71 files, +1 menu-wiring guard)

@@ -169,3 +169,17 @@ export function fontSizeTheme(px: number): Extension {
     ".cm-gutters": { fontSize },
   });
 }
+
+/**
+ * M6 WP5 — runtime-swappable line-wrap. Like the font-size compartment, the wrap
+ * state lives in its own Compartment so the ⌘\ keybinding (and the status-bar
+ * toggle) can `reconfigure` it WITHOUT rebuilding the whole editor — no remount,
+ * cursor/scroll preserved. ON → `EditorView.lineWrapping` (soft-wrap within the
+ * panel); OFF → empty (CM6 default: long lines scroll horizontally).
+ */
+export const lineWrapCompartment = new Compartment();
+
+/** The line-wrap extension for a given flag — fed into the compartment. */
+export function lineWrapExtension(on: boolean): Extension {
+  return on ? EditorView.lineWrapping : [];
+}

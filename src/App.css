@@ -903,6 +903,31 @@ body,
   border-color: #6ea8ff;
 }
 
+/* M6 WP5 — soft-wrap toggle pill in the status-bar right cluster. Text label
+   ("wrap" / "no wrap"), matching the muted statusbar tokens; aria-pressed lights
+   it when wrap is on. */
+.editor-wrap-toggle {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
+  color: #9b9b9b;
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.editor-wrap-toggle:hover {
+  color: #d4d4d4;
+  border-color: #6ea8ff;
+}
+.editor-wrap-toggle[aria-pressed="true"] {
+  color: #d4d4d4;
+  border-color: #3c3c3c;
+  background-color: #2a2d2e;
+}
+
 /* Save failure banner — inline, never swallowed (carry-forward error lesson). */
 .editor-save-error {
   flex-shrink: 0;

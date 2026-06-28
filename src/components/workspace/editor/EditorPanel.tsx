@@ -22,8 +22,13 @@ import { EditorSelection } from "@codemirror/state";
 import type { HighlightTarget } from "../search/searchModel";
 import type { DocEntry } from "./editorDocs";
 import { buildEditorExtensions } from "./editorExtensions";
-import { editorDarkTheme } from "./theme";
+import {
+  editorDarkTheme,
+  lineWrapCompartment,
+  lineWrapExtension,
+} from "./theme";
 import { loadFontSize, saveFontSize } from "./fontZoom";
+import { loadWrap, saveWrap } from "./editorWrapToggle";
 import { CommandPalette } from "./CommandPalette";
 import { isPaletteChord, type PaletteCommand } from "./paletteCommands";
 import { SYNTAX_MODES } from "./language";
@@ -77,6 +82,10 @@ export function EditorPanel({
   // once on mount). Cmd+=/-/0 update it; onFontSizeChange mirrors the keybinding's live
   // compartment reconfigure into state + persistence. Stays per-view (a view preference).
   const [fontSize, setFontSize] = useState(() => loadFontSize());
+  // M6 WP5 — line-wrap flag, seeded from the persisted global value (same lazy-init
+  // shape as fontSize). ⌘\ and the status-bar toggle update it; onWrapChange mirrors
+  // the live compartment reconfigure into state + persistence.
+  const [lineWrap, setLineWrap] = useState(() => loadWrap());
   // WP3b — whether the Cmd+Shift+P command palette is open (per-view).
   const [paletteOpen, setPaletteOpen] = useState(false);
   // WP7 — the live EditorView, captured via @uiw's onCreateEditor, so a project-search
@@ -87,6 +96,24 @@ export function EditorPanel({
     setFontSize(px);
     saveFontSize(px);
   }, []);
+
+  // M6 WP5 — mirror a wrap change (from the ⌘\ keybinding) into state + persistence.
+  const onWrapChange = useCallback((on: boolean) => {
+    setLineWrap(on);
+    saveWrap(on);
+  }, []);
+
+  // M6 WP5 — the status-bar toggle: do the SAME live compartment reconfigure the ⌘\
+  // chord does (no remount), via the captured view, then sync state + persist. Falls
+  // back to state-only if the view isn't ready yet (the memo rebuild applies it on
+  // the next render).
+  const onToggleWrap = useCallback(() => {
+    const next = !lineWrap;
+    viewRef.current?.dispatch({
+      effects: lineWrapCompartment.reconfigure(lineWrapExtension(next)),
+    });
+    onWrapChange(next);
+  }, [lineWrap, onWrapChange]);
 
   // The shared document fields (from the store entry). Fall back to empty/idle while the
   // entry is briefly absent (between the tab render and the open-doc dispatch).
@@ -155,8 +182,18 @@ export function EditorPanel({
         fontSize,
         onFontSizeChange,
         languageOverrideId,
+        lineWrap,
+        onWrapChange,
       }),
-    [openPath, doSave, fontSize, onFontSizeChange, languageOverrideId],
+    [
+      openPath,
+      doSave,
+      fontSize,
+      onFontSizeChange,
+      languageOverrideId,
+      lineWrap,
+      onWrapChange,
+    ],
   );
 
   // WP7 — scroll to + select a project-search match once the document is loaded.
@@ -232,6 +269,18 @@ export function EditorPanel({
                     ? "saved"
                     : ""}
           </span>
+          {/* M6 WP5 — soft-wrap toggle (⌘\). Reflects the current state; clicking
+              flips it via the live compartment reconfigure (same as the chord). */}
+          <button
+            type="button"
+            className="editor-wrap-toggle"
+            data-testid="editor-wrap-toggle"
+            aria-pressed={lineWrap}
+            title={lineWrap ? "Soft-wrap on (⌘\\)" : "Soft-wrap off (⌘\\)"}
+            onClick={onToggleWrap}
+          >
+            {lineWrap ? "wrap" : "no wrap"}
+          </button>
         </span>
       </div>
       {save.kind === "error" && (

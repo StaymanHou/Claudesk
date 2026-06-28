@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { EditorState, EditorSelection } from "@codemirror/state";
-import { keymap } from "@codemirror/view";
+import { keymap, EditorView } from "@codemirror/view";
 import { language } from "@codemirror/language";
 import { buildEditorExtensions } from "../editorExtensions";
 
@@ -15,6 +15,8 @@ function makeState(opts?: {
   fontSize?: number;
   onFontSizeChange?: (px: number) => void;
   languageOverrideId?: string | null;
+  lineWrap?: boolean;
+  onWrapChange?: (on: boolean) => void;
 }) {
   return EditorState.create({
     doc: "hello world\nhello again\n",
@@ -24,7 +26,24 @@ function makeState(opts?: {
       fontSize: opts?.fontSize ?? 13,
       onFontSizeChange: opts?.onFontSizeChange ?? (() => {}),
       languageOverrideId: opts?.languageOverrideId ?? null,
+      lineWrap: opts?.lineWrap ?? false,
+      onWrapChange: opts?.onWrapChange ?? (() => {}),
     }),
+  });
+}
+
+// EditorView.lineWrapping resolves to `contentAttributes.of({ class:
+// "cm-lineWrapping" })` (CM6 internal) — so the pure-state observable for "is wrap
+// on?" is whether any contentAttributes entry carries that class.
+function hasLineWrapping(state: ReturnType<typeof makeState>): boolean {
+  return state.facet(EditorView.contentAttributes).some((attrs) => {
+    // Entries are Attrs objects or (view)=>Attrs functions; lineWrapping is a
+    // static object carrying class "cm-lineWrapping".
+    if (typeof attrs === "function") return false;
+    const cls = attrs.class;
+    return (
+      typeof cls === "string" && cls.split(/\s+/).includes("cm-lineWrapping")
+    );
   });
 }
 
@@ -154,8 +173,45 @@ describe("buildEditorExtensions", () => {
       fontSize: 13,
       onFontSizeChange: () => {},
       languageOverrideId: null,
+      lineWrap: false,
+      onWrapChange: () => {},
     });
     expect(Array.isArray(ext)).toBe(true);
     expect(ext.length).toBeGreaterThan(0);
+  });
+
+  // M6 WP5 — line-wrap compartment: lineWrap:true seeds EditorView.lineWrapping,
+  // lineWrap:false (the default) does not (long lines scroll horizontally).
+  describe("line-wrap toggle (M6 WP5)", () => {
+    it("does NOT enable line-wrapping by default (lineWrap: false)", () => {
+      expect(hasLineWrapping(makeState({ lineWrap: false }))).toBe(false);
+    });
+
+    it("enables line-wrapping when lineWrap: true", () => {
+      expect(hasLineWrapping(makeState({ lineWrap: true }))).toBe(true);
+    });
+
+    it("binds the Mod-\\ wrap-toggle chord", () => {
+      const state = makeState();
+      const bindings = state.facet(keymap).flat();
+      const wrapBinding = bindings.find((b) => b.key === "Mod-\\");
+      expect(wrapBinding).toBeDefined();
+      expect(typeof wrapBinding!.run).toBe("function");
+    });
+
+    it("the Mod-\\ chord reports onWrapChange with the flipped flag", () => {
+      // From OFF, the chord should request ON. We can't drive a live view here, so
+      // we exercise the run() with a minimal view stub: dispatch is a no-op, and we
+      // assert onWrapChange receives the inverted flag.
+      const onWrapChange = vi.fn();
+      const state = makeState({ lineWrap: false, onWrapChange });
+      const binding = state
+        .facet(keymap)
+        .flat()
+        .find((b) => b.key === "Mod-\\")!;
+      const handled = binding.run!({ dispatch: () => {} } as never);
+      expect(handled).toBe(true);
+      expect(onWrapChange).toHaveBeenCalledWith(true);
+    });
   });
 });
