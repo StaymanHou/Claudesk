@@ -88,6 +88,13 @@ interface XtermPaneProps {
   /** data-testid on the pane host (defaults to `xterm-pane`). */
   testId?: string;
   /**
+   * M6 WP11 — rendered as `data-session-id` on the pane host so the focus-scoped zoom
+   * router (Workspace) can resolve WHICH terminal among N holds focus
+   * (`activeElement.closest('[data-testid="term-pane"]').dataset.sessionId`). Optional;
+   * the single CC pane omits it (its zoom routes by the left/right half, not by id).
+   */
+  dataSessionId?: string;
+  /**
    * Whether the pane is currently visible/front. Defaults to `true` (the always-visible
    * left-half CC pane). The WP9 terminal panel (display:none until its tab is front)
    * passes `visible && panel === "terminal"`: the spawn is DEFERRED until first active
@@ -107,6 +114,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       spawnCommand = "cc_spawn",
       errorTitle = "Could not start Claude Code",
       testId = "xterm-pane",
+      dataSessionId,
       active = true,
     },
     ref,
@@ -480,6 +488,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           className="xterm-pane"
           ref={hostRef}
           data-testid={testId}
+          data-session-id={dataSessionId}
           // Clicking the pane focuses the xterm textarea so keystrokes register
           // (a fresh PTY pane in a WKWebview does not reliably auto-focus xterm).
           onMouseDown={() => termRef.current?.focus()}

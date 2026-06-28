@@ -25,8 +25,20 @@ import { EditorSplit, type EditorSplitHandle } from "./editor/EditorSplit";
 import type { XtermPaneHandle } from "./XtermPane";
 import { tabSwitchIndex } from "./editor/tabSwitchChord";
 import { isCloseTabChord } from "./editor/closeTabChord";
+import { newTerminalChord } from "./newTerminalChord";
+import { shouldCloseTerminalOnChord } from "./closeTerminalChord";
+import { deriveRightSurface } from "./rightSurface";
 import { DiffPanel } from "./diff/DiffPanel";
 import { TerminalPane } from "./TerminalPane";
+import {
+  canOpenTerminal,
+  closeTerminal,
+  initialTerminalList,
+  isLastTerminal,
+  openTerminal,
+  switchTerminal,
+  MAX_TERMINALS,
+} from "./terminalList";
 import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
@@ -346,6 +358,37 @@ export function RightPanelHost({
   // stay mounted (display:none toggle) so each keeps its state across switches.
   const [panel, setPanel] = useState<RightPanel>("editor");
 
+  // M6 WP11 — the right-panel TERMINAL LIST (N terminals per workspace). Seeded with one
+  // terminal (`-term-0`); open/switch/close drive the pure terminalList reducer ops. All
+  // entries stay MOUNTED (display:none for the non-active one) so each shell + scrollback
+  // survives switching terminals AND switching the right panel away. Closing a terminal
+  // removes its entry → its TerminalPane unmounts → XtermPane reaps the PTY (cc_kill).
+  // Ephemeral (plan decision 3): a fresh workspace always seeds one terminal; nothing is
+  // persisted across restart. `workspaceId` is identity-stable, so this seeds once.
+  const [terminals, setTerminals] = useState(() =>
+    initialTerminalList(workspaceId),
+  );
+  // M6 WP11 — mirror the terminal list into a ref so the capture-phase keydown listener
+  // (registered once on [visible]) can read the CURRENT list (for the scoped-⌘W can-close
+  // decision) without re-registering on every list change. Same pattern as overlayOpenRef.
+  const terminalsRef = useRef(terminals);
+  useEffect(() => {
+    terminalsRef.current = terminals;
+  }, [terminals]);
+  // Open a new terminal (＋ / ⌘T). No-op at MAX_TERMINALS (the reducer guards; the ＋ is
+  // also disabled). Flips the panel to terminal so the new one is visible + focusable.
+  const addTerminal = () => {
+    setPanel((cur) => selectPanel(cur, "terminal"));
+    setTerminals((s) => openTerminal(s, workspaceId));
+  };
+  // Close a terminal (its ✕). Disallowed for the last one (the reducer + the UI both
+  // guard). Unmounting its pane reaps the shell; the reducer reactivates a sibling.
+  const closeTerminalById = (id: string) =>
+    setTerminals((s) => closeTerminal(s, id));
+  // Switch the active/front terminal (a tab click).
+  const switchTerminalTo = (id: string) =>
+    setTerminals((s) => switchTerminal(s, id));
+
   // Open a file into the editor: add-or-activate its TAB (WP12) + flip the editor
   // panel to the front. Shared by the Cmd+P finder, the file tree, the diff panel's
   // "Open", and (WP7) a project-search result.
@@ -599,12 +642,50 @@ export function RightPanelHost({
         fileTreeRef.current?.beginNewFile();
         return;
       }
+      // M6 WP11 — ⌘T opens a NEW terminal (keyboard parity for the ＋ button). Bare ⌘T,
+      // disjoint from ⌘⇧T (panel-select, requires Shift). addTerminal flips to the terminal
+      // panel + makes the new one active; it's a no-op at the cap (openTerminal guards).
+      // preventDefault pre-empts any OS "new tab" ⌘T.
+      if (newTerminalChord(e)) {
+        e.preventDefault();
+        // Inline the stable setters (not the addTerminal closure) so the [visible]-keyed
+        // listener depends on nothing non-stable — same discipline as the other branches.
+        setPanel((cur) => selectPanel(cur, "terminal"));
+        setTerminals((s) => openTerminal(s, workspaceId));
+        return;
+      }
       // WP12 — ⌘1..⌘9 activates the Nth open-file tab (n past the end → last tab).
       // Bare ⌘+digit, disjoint from every ⌘⇧ chord and the bare-⌘P finder.
       const tabN = tabSwitchIndex(e);
       if (tabN !== null) {
         e.preventDefault();
         editorSplitRef.current?.activateIndex(tabN);
+        return;
+      }
+      // M6 WP11 — SCOPED ⌘W: when a RIGHT-PANEL TERMINAL holds focus, ⌘W closes THAT
+      // terminal instead of an editor tab. The term-pane's elements are focusable only
+      // when the terminal panel is front (the editor/diff slots are display:none), so
+      // "focus inside a term-pane" == "the terminal is the focused surface". Gated on
+      // NOT-the-last-terminal (disallow-last → ⌘W is inert on the sole terminal). This
+      // branch is BEFORE the editor close-tab branch so a focused terminal's ⌘W never
+      // also closes an editor tab; when it routes, we swallow the event. Closing the
+      // ACTIVE terminal is correct: only the active terminal is visible/focusable, so the
+      // focused terminal IS terminals.activeId.
+      if (
+        shouldCloseTerminalOnChord({
+          isCloseChord: isCloseTabChord(e),
+          terminalFocused:
+            deriveRightSurface(document.activeElement) === "terminal",
+          // Read the CURRENT list via the ref (the listener is registered on [visible],
+          // so a captured `terminals` would be stale).
+          canClose: !isLastTerminal(terminalsRef.current),
+        })
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Inline the stable setter (read latest state in the updater) — keeps the
+        // [visible] listener free of non-stable deps. closeTerminal no-ops on the last.
+        setTerminals((s) => closeTerminal(s, s.activeId));
         return;
       }
       // WP13 — ⌘W closes the focused pane's active tab (via its dirty-guard; inert when
@@ -624,7 +705,11 @@ export function RightPanelHost({
     };
     document.addEventListener("keydown", onKeyDown, true); // capture phase
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [visible]);
+    // `workspaceId` is referenced by the ⌘T branch (openTerminal needs it). It is
+    // identity-stable for a mounted RightPanelHost (it keys the workspace), so listing it
+    // never causes real re-registration churn — included to satisfy exhaustive-deps
+    // honestly rather than suppress. Everything else read inside is a stable setter/ref.
+  }, [visible, workspaceId]);
 
   // WP11 Phase 5 — the FileTree rail. Lives INSIDE the editor slot (operator request
   // at review-quality 2026-06-21) so the Editor/Diff/Terminal tab row is the OUTER
@@ -877,22 +962,101 @@ export function RightPanelHost({
           />
         </div>
 
-        {/* WP9 — second-terminal panel: a login shell `cd`'d into the project.
-              Kept MOUNTED (display:none when not front) so the shell session +
-              scrollback survive panel + center-stage switches. Mounting the slot
-              in the SAME change that added "terminal" to AVAILABLE_PANELS is the
-              SURFACE-2026-06-20 guard: selectPanel can now return "terminal", and
-              this slot guarantees that never leaves the right half blank. */}
+        {/* WP9/M6-WP11 — the TERMINAL panel: now a LIST of login shells. A sub-tab row
+              (●1 │ ●2 │ ＋) on top; one terminal visible at a time, the rest kept MOUNTED
+              (display:none) so every shell session + scrollback survives switching
+              terminals, panels, and center-stage. Closing a tab unmounts its pane →
+              XtermPane reaps the PTY. The slot is always mounted (the SURFACE-2026-06-20
+              guard: selectPanel can return "terminal", so the slot must never be blank). */}
         <div
-          className="right-panel-slot"
+          className="right-panel-slot right-panel-slot--terminal"
           style={{ display: panel === "terminal" ? "flex" : "none" }}
         >
-          <TerminalPane
-            ref={terminalPaneRef}
-            workspaceId={workspaceId}
-            projectPath={projectPath}
-            active={visible && panel === "terminal"}
-          />
+          {/* Sub-tab row — always shown (plan decision 3): even one terminal gets a
+                one-tab row so the ＋ has a stable home. Mirrors the panel-tab idiom. */}
+          <div
+            className="term-tab-row"
+            role="tablist"
+            aria-label="terminals"
+            data-testid="term-tab-row"
+          >
+            {terminals.entries.map((t, i) => (
+              <div
+                key={t.id}
+                role="tab"
+                aria-selected={t.id === terminals.activeId}
+                className={`term-tab${t.id === terminals.activeId ? " is-active" : ""}`}
+                data-testid={`term-tab-${t.id}`}
+                onClick={() => switchTerminalTo(t.id)}
+                title={`Terminal ${i + 1}`}
+              >
+                <span className="term-tab-label">{`●${i + 1}`}</span>
+                {/* No ✕ on the sole tab — closing the last terminal is disallowed
+                      (the panel always keeps ≥1 shell). */}
+                {!isLastTerminal(terminals) && (
+                  <button
+                    type="button"
+                    className="term-tab-close"
+                    data-testid={`term-tab-close-${t.id}`}
+                    aria-label={`Close terminal ${i + 1}`}
+                    title={`Close terminal ${i + 1}`}
+                    onClick={(e) => {
+                      e.stopPropagation(); // don't also switch to the tab we're closing
+                      closeTerminalById(t.id);
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              className="term-tab-add"
+              data-testid="term-tab-add"
+              aria-label="New terminal (⌘T)"
+              title={
+                canOpenTerminal(terminals)
+                  ? "New terminal (⌘T)"
+                  : `Maximum ${MAX_TERMINALS} terminals`
+              }
+              disabled={!canOpenTerminal(terminals)}
+              onClick={addTerminal}
+            >
+              ＋
+            </button>
+          </div>
+          {/* The terminal panes — one per entry, all MOUNTED, only the active one shown.
+                M6 WP11 Phase 3 — the forwarded terminalPaneRef binds to the ACTIVE
+                terminal's pane (the others get `undefined`). This IS the zoom-follows-
+                focused mechanism: only the active terminal is visible + focusable (the
+                rest are display:none), so the focused terminal is ALWAYS the active one,
+                and the WP10 zoom router (Workspace.applyTerminalZoom → termPaneRef.current)
+                therefore always zooms the focused terminal. Switching the active tab
+                re-binds this object ref to the new active pane during commit, so a later
+                zoom chord lands on it. (A separate per-terminal handle registry — the
+                Phase-3 plan's decision 5 — would be redundant: the active-ref already
+                resolves "which of N is focused" for free. Simpler, less bug surface.) */}
+          <div className="term-panes">
+            {terminals.entries.map((t) => (
+              <div
+                key={t.id}
+                className="term-pane-slot"
+                style={{
+                  display: t.id === terminals.activeId ? "flex" : "none",
+                }}
+              >
+                <TerminalPane
+                  ref={t.id === terminals.activeId ? terminalPaneRef : undefined}
+                  sessionId={t.sessionId}
+                  projectPath={projectPath}
+                  active={
+                    visible && panel === "terminal" && t.id === terminals.activeId
+                  }
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

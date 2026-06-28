@@ -1203,6 +1203,101 @@ body,
   flex-direction: row;
 }
 
+/* M6 WP11 — the Terminal slot is a column: a sub-tab row on top + the stacked terminal
+   panes below. (Default .right-panel-slot is already column; this marker keeps the
+   selector explicit + room for future terminal-specific rules.) */
+.right-panel-slot--terminal {
+  flex-direction: column;
+}
+
+/* M6 WP11 — the terminal sub-tab row (●1 │ ●2 │ ＋). Mirrors the .right-panel-toggle
+   tab row visually but is scoped INSIDE the terminal slot. A thin flex row; tabs
+   left-aligned, the ＋ rides along at the end of the list. */
+.term-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  flex: 0 0 auto;
+}
+.term-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.78rem;
+  color: #9b9b9b;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.term-tab:hover {
+  color: #d4d4d4;
+}
+.term-tab.is-active {
+  color: #d4d4d4;
+  border-color: #6ea8ff;
+  background-color: #252526;
+}
+.term-tab-label {
+  line-height: 1;
+}
+/* Per-tab close ✕ — muted, revealed/emphasized on hover (mirrors the FileTree row ✕). */
+.term-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: #6b6b6b;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.term-tab-close:hover {
+  color: #d4d4d4;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+/* The ＋ new-terminal button — same chip style as a tab; disabled (dimmed) at the cap. */
+.term-tab-add {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: #9b9b9b;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.term-tab-add:hover:not(:disabled) {
+  color: #d4d4d4;
+  background-color: #252526;
+}
+.term-tab-add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* The stack of terminal panes — fills the remaining slot height; each pane slot is a
+   column flex so the inner XtermPane fill/fit chain stays bounded. Only the active
+   pane is display:flex (set inline); the rest are display:none but stay mounted. */
+.term-panes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.term-pane-slot {
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
 /* ── WP12 editor per-pane tab strips (VS Code split-editor-group model) ──── */
 /* EditorSplit fills the editor slot: a thin split bar on top + a vertical stack of
    panes. Each pane (PaneTabs) has its OWN tab strip + active EditorPanel. Column flex

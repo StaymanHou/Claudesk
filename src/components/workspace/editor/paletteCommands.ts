@@ -45,6 +45,18 @@
 //                                   ⌘⇧ chords and from bare ⌘P/F/R/S/D/⌘1..9. Suppressed
 //                                   while the finder/search overlay is open; preventDefault
 //                                   pre-empts the OS close-window ⌘W. RightPanelHost.)
+//                                   M6 WP11 — ⌘W is OVERLOADED: when a right-panel TERMINAL
+//                                   holds focus, ⌘W closes that terminal instead (scoped via
+//                                   deriveRightSurface === "terminal"; closeTerminalChord.ts
+//                                   shouldCloseTerminalOnChord). The terminal branch is BEFORE
+//                                   the editor close-tab branch + swallows the event, so the
+//                                   two never both fire; inert on the last terminal
+//                                   (disallow-last). Editor-focused ⌘W is unchanged.
+//   ⌘T   → new right-panel terminal (M6 WP11 — LIVE; opens a terminal in the terminal
+//                                   panel, parity with the ＋ button; newTerminalChord.ts
+//                                   newTerminalChord. Bare ⌘ + "t", Shift required-absent —
+//                                   distinct from ⌘⇧T panel-select by the absent Shift, same
+//                                   as ⌘W vs the ⌘⇧ family. No-op at the cap. RightPanelHost.)
 //   ⌘⇧1..⌘⇧9 → workspace switch    (M4 WP3 — promote the Nth filmstrip tile to center
 //                                   stage. APP-level capture-phase listener in App.tsx;
 //                                   workspaceSwitchIndex predicate in
