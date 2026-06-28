@@ -338,6 +338,34 @@ mod tests {
     }
 
     #[test]
+    fn hook_event_from_a_subdirectory_resolves_to_the_workspace() {
+        // WP2 (stuck-Running dot) at the consuming-surface level: a hook event whose cwd
+        // is a SUBDIRECTORY of the registered workspace root must resolve to that
+        // workspace through the SAME Mutex<WorkspaceRegistry> the drain_loop +
+        // workspace_register commands lock. Before the fix, resolve_cwd's exact-match
+        // dropped a subdir-cwd Stop → the idle transition was lost → dot stuck Running.
+        // This proves the fix end-to-end at the registry seam the live pipeline uses
+        // (the full hook→socket→emit chain's live confirmation is DEFERRED-TO-RELEASE).
+        let dir = tempfile::TempDir::new().unwrap();
+        let subdir = dir.path().join("src-tauri");
+        std::fs::create_dir(&subdir).unwrap();
+        let shared = init_registry();
+        {
+            let mut reg = shared.lock().unwrap();
+            reg.register(dir.path(), "ws-1".to_string());
+        }
+        // A Stop fired with the subdir as cwd resolves to ws-1 (was None before WP2).
+        assert_eq!(
+            shared
+                .lock()
+                .unwrap()
+                .resolve_cwd(&subdir.to_string_lossy()),
+            Some("ws-1".to_string()),
+            "a hook event from a workspace subdir must resolve to that workspace"
+        );
+    }
+
+    #[test]
     fn deregister_unknown_path_is_a_noop() {
         let shared = init_registry();
         // Deregistering a path that was never registered must not error/panic —

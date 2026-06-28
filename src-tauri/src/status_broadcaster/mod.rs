@@ -217,12 +217,33 @@ impl WorkspaceRegistry {
     }
 
     /// Resolve an event's `cwd` to a `workspace_id`, or `None` if no open workspace
-    /// matches (the event is then dropped, not an error). Canonicalizes the `cwd`
-    /// the same way [`register`](Self::register) canonicalized the stored path, so
-    /// symlinks / `.` / relative segments do not defeat the match (M2 WP11 lesson).
+    /// matches (the event is then dropped, not an error).
+    ///
+    /// **Ancestor / longest-prefix matching (WP2 fix).** A CC turn's shell cwd may have
+    /// descended into a *subdirectory* of the workspace root (e.g. `cd src-tauri`), so an
+    /// event's `cwd` is the workspace root OR any descendant of it. We canonicalize the
+    /// `cwd` the same way [`register`](Self::register) canonicalized the stored key (so
+    /// symlinks / `.` / relative segments don't defeat the match — M2 WP11 lesson), then
+    /// return the workspace whose registered key is the **longest** path-ancestor of (or
+    /// equal to) the cwd. Longest wins so a nested inner workspace beats its outer parent.
+    ///
+    /// Before this fix `resolve_cwd` did an exact-equality lookup, so a `Stop` fired from a
+    /// subdir resolved to `None` → the idle transition was dropped → the dot stuck on
+    /// `Running` (telemetry-confirmed in prod 2026-06-27).
+    ///
+    /// Matching is on **path components** (via [`is_path_ancestor`]), NOT raw string
+    /// prefix — so a registered `/a/src` never spuriously matches a cwd of `/a/src-tauri`.
     pub fn resolve_cwd(&self, cwd: &str) -> Option<String> {
         let key = canonical_key(Path::new(cwd));
-        self.by_path.get(&key).cloned()
+        let cwd_path = Path::new(&key);
+        self.by_path
+            .iter()
+            .filter(|(registered, _)| is_path_ancestor(Path::new(registered), cwd_path))
+            // Longest registered key wins (nearest enclosing workspace). Comparing by the
+            // canonicalized string length is a valid proxy for component depth here since
+            // every key is an ancestor of the same cwd (so they're prefixes of each other).
+            .max_by_key(|(registered, _)| registered.len())
+            .map(|(_, ws)| ws.clone())
     }
 
     /// Test/inspection helper: number of registered workspaces.
@@ -230,6 +251,17 @@ impl WorkspaceRegistry {
     pub fn len(&self) -> usize {
         self.by_path.len()
     }
+}
+
+/// Whether `ancestor` is the same path as `descendant` OR a path-ancestor of it, matched
+/// on **path components** (not raw string prefix). `Path::starts_with` does exactly this:
+/// `/a/src` is NOT an ancestor of `/a/src-tauri` (component `src` ≠ `src-tauri`), but it
+/// IS an ancestor of `/a/src/lib`. The equal case (`ancestor == descendant`) counts as an
+/// ancestor so a cwd exactly at the workspace root still resolves. Boundary-safety here is
+/// load-bearing — the WP2 fix must never spuriously match a sibling dir whose name merely
+/// shares a string prefix with a registered workspace.
+pub(crate) fn is_path_ancestor(ancestor: &Path, descendant: &Path) -> bool {
+    descendant.starts_with(ancestor)
 }
 
 /// Canonicalize a path to its registry key. Falls back to the lossy string form when
@@ -482,6 +514,93 @@ mod tests {
             reg.resolve_cwd(&non_canonical.to_string_lossy()),
             Some("ws-1".to_string()),
             "a non-canonical form of a registered dir must resolve via canonicalization"
+        );
+    }
+
+    #[test]
+    fn resolve_cwd_resolves_a_subdirectory_to_its_workspace() {
+        // WP2 (stuck-Running dot): a CC turn whose shell cwd has descended into a
+        // SUBDIRECTORY of the workspace root must still resolve to that workspace, so a
+        // Stop fired from the subdir flips the dot to Idle. Before the fix, resolve_cwd
+        // did an exact-equality lookup → a subdir cwd missed → the idle transition was
+        // dropped → the dot stuck on Running. Telemetry-confirmed in prod 2026-06-27
+        // (cwd=.../claudesk/src-tauri vs registered .../claudesk → resolved=none).
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "ws-1".to_string());
+
+        // A real nested subdir of the registered root.
+        let subdir = dir.path().join("src-tauri");
+        std::fs::create_dir(&subdir).unwrap();
+        assert_eq!(
+            reg.resolve_cwd(&subdir.to_string_lossy()),
+            Some("ws-1".to_string()),
+            "a Stop fired from a subdirectory of the workspace root must resolve to that workspace"
+        );
+
+        // A deeper nested subdir also resolves.
+        let deeper = subdir.join("src/status_broadcaster");
+        std::fs::create_dir_all(&deeper).unwrap();
+        assert_eq!(
+            reg.resolve_cwd(&deeper.to_string_lossy()),
+            Some("ws-1".to_string()),
+            "a deeply-nested subdir must still resolve to the workspace"
+        );
+    }
+
+    #[test]
+    fn resolve_cwd_nested_workspaces_longest_prefix_wins() {
+        // When one workspace's root is itself nested under another's, a cwd inside the
+        // inner workspace must resolve to the INNER one (longest/nearest match), not the
+        // outer — otherwise an inner workspace's events would be misattributed.
+        let outer = tempfile::TempDir::new().unwrap();
+        let inner = outer.path().join("packages/inner");
+        std::fs::create_dir_all(&inner).unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(outer.path(), "ws-outer".to_string());
+        reg.register(&inner, "ws-inner".to_string());
+
+        // A cwd inside the inner workspace → inner wins.
+        let inner_subdir = inner.join("sub");
+        std::fs::create_dir(&inner_subdir).unwrap();
+        assert_eq!(
+            reg.resolve_cwd(&inner_subdir.to_string_lossy()),
+            Some("ws-inner".to_string()),
+            "longest-prefix: a cwd under the inner workspace resolves to the inner one"
+        );
+        // A cwd under the outer root but NOT under inner → outer.
+        let outer_only = outer.path().join("elsewhere");
+        std::fs::create_dir(&outer_only).unwrap();
+        assert_eq!(
+            reg.resolve_cwd(&outer_only.to_string_lossy()),
+            Some("ws-outer".to_string()),
+            "a cwd under only the outer root resolves to the outer workspace"
+        );
+    }
+
+    #[test]
+    fn resolve_cwd_sibling_with_shared_string_prefix_does_not_match() {
+        // Boundary-safety guard (WP2): ancestor matching is on PATH COMPONENTS, not raw
+        // string prefix. A registered `<root>/src-tauri` must NOT resolve a cwd of
+        // `<root>/src-tauri-foo` (a sibling whose name merely shares the `src-tauri`
+        // string prefix). Pins the requirement so a future refactor can't regress to
+        // `str::starts_with` and silently misattribute sibling dirs.
+        let root = tempfile::TempDir::new().unwrap();
+        let ws_dir = root.path().join("src-tauri");
+        let sibling = root.path().join("src-tauri-foo");
+        std::fs::create_dir(&ws_dir).unwrap();
+        std::fs::create_dir(&sibling).unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(&ws_dir, "ws-1".to_string());
+        assert_eq!(
+            reg.resolve_cwd(&sibling.to_string_lossy()),
+            None,
+            "a sibling sharing only a string prefix must NOT resolve to the workspace"
+        );
+        // But the workspace dir itself + a real descendant still resolve.
+        assert_eq!(
+            reg.resolve_cwd(&ws_dir.to_string_lossy()),
+            Some("ws-1".to_string())
         );
     }
 
