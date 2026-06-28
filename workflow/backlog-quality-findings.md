@@ -1331,3 +1331,19 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Suggested action:** reword the intra-feature phase references to describe the shipped behavior rather than the build order (or drop the phase labels).
 - **Priority:** low
 - **Status:** pending
+
+# wp2-stuck-running-dot-fix — 2026-06-27
+
+## SURFACE-2026-06-27-QUALITY-WP2-LONGEST-PREFIX-STRLEN-PROXY
+- **Severity:** MINOR
+- **Finding:** `resolve_cwd`'s longest-wins (`mod.rs:242-245`) uses `max_by_key(registered.len())` — string-length as a proxy for path-component depth. Correct in practice (candidates are pre-filtered to true ancestors of one cwd, so they're prefixes of each other), but a future reader may second-guess the string-length proxy sitting two lines below the component-safe `is_path_ancestor`.
+- **Suggested action:** consider `Path::components().count()` for semantic consistency with `is_path_ancestor`, removing the proxy-reasoning footnote.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-27-QUALITY-WP2-RESOLVE-CWD-LINEAR-SCAN
+- **Severity:** MINOR
+- **Finding:** `resolve_cwd` (`mod.rs:239-246`) now scans all registered entries (`O(n)`) instead of the previous `O(1)` HashMap lookup. Negligible at the documented scale (≤100 workspaces, one CC hook event at a time) — flagged only so the linear scan is a recorded, conscious tradeoff rather than silent drift.
+- **Suggested action:** none now; revisit only if a high-frequency event source is ever added that would inherit the scan.
+- **Priority:** low
+- **Status:** pending

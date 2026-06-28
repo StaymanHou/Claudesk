@@ -42,11 +42,11 @@ vs every prior root-cwd `Stop`: `resolved=ws-1 outcome=emitted`.
     - [x] P1.verify-human.2 root-cwd regression check → DEFERRED-TO-RELEASE  <!-- status: DEFERRED-TO-RELEASE -->
     - [x] P1.verify-human.3 status-channel.log resolved=emitted confirmation → DEFERRED-TO-RELEASE  <!-- status: DEFERRED-TO-RELEASE -->
   - [x] verify-codify  <!-- status: DONE — 3 unit (resolve_cwd repro + nested + boundary guard) + 1 NEW consuming-surface integration test (hook_event_from_a_subdirectory_resolves_to_the_workspace, in commands.rs, through the same Mutex<WorkspaceRegistry> the drain_loop/register commands lock). Full lib suite 283 pass, clippy -D warnings + fmt clean. Live hook→socket→emit chain DEFERRED-TO-RELEASE. -->
-- **State:** verify-codify (all phases complete)
+- **State:** COMPLETED 2026-06-27 — commit `bafee80` on local `main` (NOT pushed; operator's call — patch release v0.2.2 planned after WP6 concludes). Review-quality 0C/0M/2 MINOR (auto-backlogged low). Live dot-flip DEFERRED-TO-RELEASE.
 
 ## Current Node
-- **Path:** Feature > Phase 1 > COMPLETE (all verify nodes done)
-- **Active scope:** Phase 1 fully complete (single-phase feature) → ship
+- **Path:** Feature > ship + review-quality DONE → finalize
+- **Active scope:** review-quality complete (0C/0M/2 MINOR auto-backlogged low) → feature-finalize
 - **Patch-release plan (operator, 2026-06-27):** cut a patch release (v0.2.2) after the CURRENT WP6 concludes, carrying this WP2 fix; operator verifies the dot-flip in real use post-install. Do NOT release mid-WP6.
 - **Blocked:** none
 - **Unvisited:** Phase 1 verify group (verify-auto → verify-self → verify-human → verify-codify) — single phase
@@ -61,4 +61,35 @@ vs every prior root-cwd `Stop`: `resolved=ws-1 outcome=emitted`.
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
-- none
+- [SURFACED-2026-06-27] product:wbs — `SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE`: decide whether to keep or demote WP1's prod status-channel logger after v0.2.2 confirms the fix (the log is the DEFERRED-TO-RELEASE confirmation channel, so it stays through v0.2.2). Logged to backlog.
+
+## Retrospect
+- **What changed in our understanding:** The intermittent stuck-dot — undiagnosable for two prior sessions because the prod `.app` has no visible stderr — was pinned in minutes once the WP1/WP1b file telemetry was running. The probe-first sequencing (ship telemetry → wait for natural occurrence → diagnose from the log) worked exactly as designed: the bug self-captured, and the log's `resolved=none outcome=dropped` line named the layer (cwd-match-miss) unambiguously. The "which of 3 sub-causes" uncertainty that blocked prior investigation collapsed to a single confirmed answer.
+- **Assumptions that held:** The plan-time hypothesis (line 240 of the original SURFACE) had already guessed "cwd-match miss — CC reports a subdir"; the telemetry confirmed exactly that. The fix scope (one function, ancestor/longest-prefix) held — sized M-to-be-safe, came in S.
+- **Assumptions that were wrong:** None material. One pleasant surprise: the bug instance we captured was *self-inflicted* by this very session's WP6 build running `cd src-tauri && cargo …` — which also became the standing reminder to run cargo via `--manifest-path` (never `cd`) while the fix is unverified in prod.
+- **Approach delta:** Matched the plan exactly (reproduce → plan → build → verify → ship). The only deviation from a "normal" close: verify-human is DEFERRED-TO-RELEASE rather than walked, because the bug can't be triggered on demand — the right call given intermittency, and consistent with the `[[installed-build-verify-deferred-to-release]]` posture.
+
+## Communicate
+> **Feature complete:** WP2 (stuck-`Running` status dot) has shipped (commit `bafee80`, local `main`). The status dot now correctly flips to Idle when a CC turn ends even if the shell cwd had descended into a subdirectory of the workspace root — the exact case that was dropping the idle transition. Requester = operator — closure notice for self-record; live confirmation comes with the planned v0.2.2 patch + real-use verification (the prod `status-channel.log` self-confirms `resolved=ws-N emitted` on the next subdir turn).
+
+## Code-Quality Review — wp2-stuck-running-dot-fix
+
+### Strengths
+- Root cause is telemetry-pinned (WP1/WP1b prod `status-channel.log` line cited), not guessed — the fix targets the exact dropped `Stop` event with `resolved=none`.
+- `is_path_ancestor` correctly uses `Path::starts_with` (component-boundary matching) not `str::starts_with`, with a dedicated boundary-guard test pinning it.
+- Nested-workspace correctness via longest-prefix (`max_by_key(len)`) with a test proving inner-beats-outer attribution — a real monorepo case.
+- Doc comments encode the WHY (the prod bug, boundary-safety rationale), matching repo comment discipline.
+- verify-codify adds a consuming-surface integration test through the same `Mutex<WorkspaceRegistry>` the live drain loop locks.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [mod.rs:242-245] `max_by_key(registered.len())` uses string-length as a proxy for path-component depth; correct in practice (candidates pre-filtered to true ancestors) but consider `Path::components().count()` for semantic consistency with `is_path_ancestor`. Cosmetic. → auto-backlogged (low).
+- [mod.rs:239-246] `resolve_cwd` now scans all registered entries (`O(n)`) instead of `O(1)` map-get; negligible at ≤100 workspaces / one event at a time. Recorded as a conscious tradeoff, not silent drift. → auto-backlogged (low).
+
+### Assessment
+Well-built, tightly-scoped correctness fix; minimal and proportional to the bug; callers signature-stable; diagnosis grounded in real prod telemetry; three failure modes each test-pinned + a consuming-surface integration test. DEFERRED-TO-RELEASE on live dot-flip is the right call per the backend-lifecycle corollary. The two minor notes are polish, not debt. Advances the codebase — closes the milestone's lead correctness item cleanly.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.

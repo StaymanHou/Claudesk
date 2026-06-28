@@ -257,7 +257,17 @@ forward — none M5-blocking). No escalations. -->
   - **Why intermittent (~once/day) — fully explained:** the dot only sticks when CC's cwd happens to be a *subdirectory* of the workspace root at turn-end. Most turns end with cwd at the project root → resolves fine. A turn whose last shell cwd was a subdir → `Stop` dropped → stuck. (This very capture was self-inflicted: the WP6 build ran `cd src-tauri && cargo …`.)
   - **THE FIX (WP2):** `resolve_cwd` must match a cwd that is the workspace root **OR any descendant of it** — walk the cwd's ancestors (or do a longest-prefix match over `by_path` keys) and resolve to the nearest registered workspace. When workspaces nest, the **longest** matching key wins. Keep `.git`-style exact behaviors irrelevant here. Guard test: a `Stop` from `<root>/src-tauri` resolves to the `<root>` workspace; a `Stop` from an unrelated dir still resolves to `None`; nested-workspace longest-prefix wins.
   - **Evidence frozen at:** `tmp/status-channel-snapshot-1782611136.log` (888 lines; the offending `Stop` at line 886, the `ws-1` register at line 2). Snapshot taken before subsequent turns could roll it.
-- **Status:** **UNBLOCKED + DIAGNOSED 2026-06-27.** WP2 was passive-blocked on a natural occurrence; it occurred and the telemetry pinned sub-cause (a). Ready for WP2 `/feature-reproduce` → fix `resolve_cwd` to do ancestor/longest-prefix matching. Anchored to M6 as the lead correctness item. (Discovered during WP6 Phase 1 verify-human; WP6 itself is unaffected — separate subsystem.)
+- **Status:** ✅ **RESOLVED 2026-06-27 (WP2, commit `bafee80`).** `resolve_cwd` rewritten from exact-match to ancestor/longest-prefix matching (boundary-safe; longest registered ancestor wins). 4 tests (3 unit incl. sibling boundary-guard + 1 consuming-surface integration); full lib 283 pass; clippy/fmt clean. Local `main`, not pushed — live dot-flip **DEFERRED-TO-RELEASE** (intermittent; patch v0.2.2 after WP6, operator verifies in real use, prod telemetry self-confirms `resolved=ws-N emitted`). Review-quality 0C/0M/2 MINOR (auto-backlogged low). Diagnosed live during WP6 Phase 1 verify-human; WP6 unaffected (separate subsystem). Follow-up: `SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE`.
+
+## SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE
+- **Source:** feature:finalize (WP2 close)
+- **Target level:** product:wbs (M6 cleanup)
+- **Type:** tech-debt
+- **Summary:** WP1's prod status-channel file logger (`status_log/mod.rs` + `drain_loop`/registry instrumentation) writes to `<app_data_dir>/status-channel.log` on EVERY status event in prod, indefinitely. Now that WP2 diagnosed + fixed the stuck-dot bug, decide whether to keep it or demote to `#[cfg(debug_assertions)]`/env-gated.
+- **Context:** The log is currently the ONLY confirmation channel for WP2's DEFERRED-TO-RELEASE live verify — a post-fix subdir-cwd `Stop` logging `resolved=ws-N emitted` is how we'll confirm the fix in prod. So it MUST stay through the v0.2.2 patch + the operator's real-use confirmation.
+- **Suggested action:** after v0.2.2 confirms the dot-flip, decide: (a) keep as-is, (b) demote to debug-only, or (c) add log rotation/size-cap if kept. Lean (a)+(c).
+- **Priority:** low
+- **Status:** pending (blocked-until v0.2.2 live-confirms WP2)
 
 ## SURFACE-2026-06-24-NEW-WORKSPACE-HOTKEY
 - **Source:** operator question during app-menu verify-human (2026-06-24)
@@ -893,3 +903,9 @@ forward — none M5-blocking). No escalations. -->
 - **Suggested action:** The next `/release` run (or the `release` skill) MUST verify checks (1)–(5) above on the freshly-built `.app`, launched from Finder/Dock, BEFORE bumping the Homebrew tap. If any fails, it's an M5 regression — back-loop before distributing.
 - **Priority:** high (gates the next public release; it's the milestone's reason for being)
 - **Status:** pending
+
+## Code-quality findings — wp2-stuck-running-dot-fix (2026-06-27)
+- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `bafee80`: (1) `resolve_cwd`'s longest-wins uses string-length as a proxy for path-component depth (consider `Path::components().count()` for consistency with `is_path_ancestor`); (2) `resolve_cwd` is now an `O(n)` scan over registered entries instead of `O(1)` map-get — negligible at ≤100 workspaces, recorded as a conscious tradeoff. Reviewer: well-built, tightly-scoped, telemetry-grounded; both notes are polish, not debt; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp2-stuck-running-dot-fix — 2026-06-27`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** both are one-line polish in `status_broadcaster/mod.rs::resolve_cwd` — fold into any future `/feature-refactor` touching the registry, or dismiss. No standalone pass warranted.

@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-27
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP3, WP4, WP5]
+shipped: [WP1, WP1b, WP2, WP3, WP4, WP5]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -77,19 +77,19 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP2: Fix the stuck-`Running` status dot
+## WP2: Fix the stuck-`Running` status dot ✅ SHIPPED 2026-06-27 (commit bafee80)
 **Description:** Using WP1 + WP1b's telemetry, pin the failing link (cwd-match-miss / socket-not-draining / frontend-not-rendering) and fix it so the dot flips `Running → Idle` when a CC turn cleanly ends in the installed build. Trust-eroding false-positive on the core "needs me / is busy" signal — this is the milestone's LEAD correctness item.
 **Milestone:** M6
 **Dependencies:** WP1, WP1b
-**Size:** M (unknown until the telemetry names the layer — could be a one-line cwd-normalization fix or a frontend render gap; sized M to be safe)
-**Status:** BLOCKED — waiting on a natural occurrence. The bug is **intermittent (~once/day)** and CANNOT be reproduced on demand (operator, 2026-06-27). The WP1+WP1b telemetry now ships in prod (v0.2.1); WP2 starts when the bug next fires and the operator hands back the `status-channel.log` lines covering that turn. So WP2's `/feature-reproduce` is **passive evidence collection**, not an active repro effort.
+**Size:** M → actual S (the telemetry named the layer immediately: a one-function cwd-resolve fix)
+**Status:** SHIPPED 2026-06-27 (commit `bafee80`, local `main`, not pushed). The bug fired live in the prod `.app` during the WP6 build session (2026-06-27) and the WP1/WP1b telemetry captured it **definitively** — sub-cause **(a) cwd-match-miss CONFIRMED**: a turn-end `Stop` fired with `cwd=.../claudesk/src-tauri` (a subdirectory of the registered workspace root) → `resolved=none outcome=dropped` → idle transition dropped → dot stuck. **Fix:** `WorkspaceRegistry::resolve_cwd` rewritten from exact canonical-path match to **ancestor / longest-prefix** matching (boundary-safe `Path::starts_with`; longest registered ancestor wins for nested workspaces). 4 tests (3 unit incl. boundary guard + 1 consuming-surface integration); full lib 283 pass; clippy/fmt clean. Live dot-flip **DEFERRED-TO-RELEASE** (intermittent, can't trigger on demand) — patch **v0.2.2** planned after WP6 concludes; operator verifies in real use, prod telemetry self-confirms `resolved=ws-N emitted`. Review-quality 0C/0M/2 MINOR (auto-backlogged low).
 **Tasks:**
-- [ ] WAIT for the bug to occur in the prod `.app`; collect the `status-channel.log` lines for the offending turn (look for: a `Stop` line with `resolved=none outcome=dropped` = cwd-miss; OR no `Stop` line + a `HOOK write-failed` line = never-arrived; OR `outcome=emitted` = frontend render gap).
-- [ ] `/feature-reproduce` against that real log evidence — write a failing test/assertion that captures the offending transition at whichever layer the telemetry implicates (red)
-- [ ] Implement the fix at the named layer (green): e.g. cwd normalization in `StatusRegistry::resolve`, a missing/duplicate `Stop`-event registration, or a frontend `workspace-status` subscription gap
-- [ ] Regression-guard: a unit/integration test that fails on the old behavior and passes on the fix (per CLAUDE.md, backend-lifecycle live outcomes carry to verify-human; the agent proves the code path statically + reproduces the transition where observable)
-- [ ] Verify in the **installed `.app`** (operator, per the installed-build smoke-test convention): a real CC turn ends → dot goes Idle within the expected window, twice (the bug reproduced twice, so confirm twice)
-- [ ] Decide whether to keep WP1's logging (likely demote to a `#[cfg(debug_assertions)]` or env-gated level once the bug is closed, so prod isn't writing a status log forever) — record the decision in the WIP
+- [x] WAIT for the bug to occur in the prod `.app`; collected the offending `status-channel.log` lines (the `Stop` with `cwd=.../src-tauri resolved=none outcome=dropped`; frozen at `tmp/status-channel-snapshot-1782611136.log` line 886) — sub-cause (a) cwd-miss
+- [x] `/feature-reproduce` against the real log evidence — failing tests `resolve_cwd_resolves_a_subdirectory_to_its_workspace` + `resolve_cwd_nested_workspaces_longest_prefix_wins` (red)
+- [x] Implement the fix (green): ancestor/longest-prefix `resolve_cwd` + `is_path_ancestor` helper in `status_broadcaster/mod.rs`
+- [x] Regression-guard: boundary-safety unit test (sibling `src-tauri-foo` ≠ `src-tauri`) + consuming-surface integration test through the live `Mutex<WorkspaceRegistry>` seam; live outcome carried per the backend-lifecycle corollary
+- [x] Verify in the **installed `.app`** — DEFERRED-TO-RELEASE (operator, 2026-06-27): the bug can't be triggered consistently on demand, so live confirmation moves to the patch v0.2.2 + real-use verification; the prod telemetry self-confirms on next subdir turn
+- [ ] **FOLLOW-UP (not done in WP2):** decide whether to keep WP1's prod status-channel logging or demote to `#[cfg(debug_assertions)]`/env-gated now that the bug is diagnosed — see `SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE`. Deliberately left open: the log is still the *only* confirmation channel for the DEFERRED-TO-RELEASE live verify, so it must stay through v0.2.2; the keep/demote call is a post-confirmation cleanup.
 
 ---
 
