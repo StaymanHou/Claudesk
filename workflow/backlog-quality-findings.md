@@ -4,6 +4,31 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m6-wp7-no-yolo-setting — 2026-06-28
+
+*(feature-review-quality on ship commit 4db7b82; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR — all clarity/consistency nits the existing pip-mode pattern already shares. Reviewer: "well-built, low-risk polish... accrues no meaningful debt; no refactor warranted.")*
+
+## SURFACE-2026-06-28-QUALITY-WP7-MENU-WRITE-FAILURE-SILENT
+- **Severity:** MINOR
+- **Finding:** The two `cc_set_yolo` write paths handle a rejection inconsistently: the picker (`ProjectPicker.tsx` `handleToggleYolo`) does optimistic-flip + revert + error toast; the App.tsx menu-listener path only `console.error`s with no user-visible signal. On a menu-path persist failure the checkmark (driven by the `cc-yolo` broadcast that never fires) silently diverges from reality until the next successful toggle. Pattern-consistent with the existing PiP-mode menu path (also silent) — not a regression vs the established pattern.
+- **Fix shape:** either surface the menu-path failure (harder — App.tsx has no toast surface like the picker) OR add a one-line comment noting menu-path write failures are deliberately silent (mirrors pip_set_mode). Lean: the comment, unless a toast surface is added app-wide.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP7-DOUBLE-CC-YOLO-SUBSCRIBE
+- **Severity:** MINOR
+- **Finding:** Two independent `cc-yolo` listeners are mounted — App.tsx's `ccYoloRef` effect + the picker's `setCcYolo` effect — each with its own `cc_get_yolo` seed call. Harmless (the picker only mounts on the picker screen; the ref-tracker lives at App root; the ref-vs-state split is deliberate) but reads as accidental duplication absent a note.
+- **Fix shape:** a one-line comment on each effect noting the deliberate double-subscribe (ref for the menu-listener's invert-current; state for the picker's visible checkbox).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP7-THIRD-RESOLVE-DATA-DIR-COPY
+- **Severity:** MINOR
+- **Finding:** `cc_session/commands.rs` adds a third module-local copy of `resolve_data_dir` (originals in `config_store::commands` + `pip::commands`), each with the same "kept module-local — those are private" comment. Trivial drift risk.
+- **Fix shape:** if a fourth consumer ever appears, promote to a shared `pub(crate)` helper (e.g. in `config_store`) and retire the three copies. No action needed at three.
+- **Priority:** low
+- **Status:** pending
+
 # wp6-filetree-shows-ignored-files — 2026-06-28
 
 *(feature-review-quality on ship commit 61db3d4; Mode 3 autopilot auto-backlog. 0 CRITICAL / 1 MAJOR / 3 MINOR. The MAJOR is a load-bearing-but-trivial cleanup — remove the now-dead `ignore` crate; the MINORs are doc/cosmetic. Reviewer: "well-built; the only follow-up is removing the now-unused dependency.")*

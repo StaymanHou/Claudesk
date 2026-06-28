@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-28
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6]
+shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -154,19 +154,20 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP7: Settings — open CC without yolo by default
+## WP7: Settings — open CC without yolo by default ✅ SHIPPED 2026-06-28 (commit 4db7b82)
 **Description:** An opt-out toggle for `--dangerously-skip-permissions`. **Yolo stays the default** (vision-explicit) — this is the CLAUDE.md-anticipated "Phase 4 setting will let users opt out," landing early. Gate the skip-permissions flag in the CC spawn argv on a new setting.
 **Milestone:** M6
 **Dependencies:** none
 **Size:** S
 **Seams (confirmed):** `CC_ARG_YOLO = "--dangerously-skip-permissions"` at `src-tauri/src/cc_session/mod.rs:43`, pushed unconditionally into the spawn argv (`mod.rs:222`). Natural settings home: `config_store/settings.rs` `AppSettings` (already holds `pip_layout` + `pip_mode`, app-global, bundle-identity-isolated, read-modify-write atomic-write discipline) — add an optional `cc_yolo: Option<bool>` field, default-when-unset = `true` (yolo on).
 **[PRIOR: operator-helpful-friend-misfiring-as-offswitchable-setting]** agrees → ship as off-switchable, default to operator benefit (yolo ON). Rule 2.
+**Shipped (3 phases):** P1 backend — `AppSettings.cc_yolo` + `read_cc_yolo`(default true)/`write_cc_yolo` + pure `build_cc_argv(yolo)` gate threaded through `SessionRegistry::spawn`→`PtyCcSession::spawn` (reads the setting at spawn time → next-spawn semantics). P2 affordance — `cc_get_yolo`/`cc_set_yolo` commands + `cc-yolo` broadcast + a View-menu `CheckMenuItem` ("Skip Permission Prompts (yolo)", `CcYoloMenuItem` managed handle + `apply_cc_yolo_to_menu` re-check), mirroring the pip-mode menu pattern. **P3 (operator-added at P2 verify-human)** — a synced picker-screen checkbox (third surface, same `cc-yolo` source of truth) + a `.picker` flex-column layout fix so "Open Folder…" stays in-viewport. **Decisions:** app-global (not per-project); affordance = native View-menu checkbox + picker checkbox (no global Settings UI until M12). Tests: backend 292 / frontend 731; clippy/fmt/tsc/eslint(scoped)/vite clean; live-verified via the MCP bridge. Review-quality 0C/0M/3 MINOR (auto-backlogged → `SURFACE-2026-06-28-QUALITY-WP7-*`). **Installed-build spawn-argv + native-menu-persist smoke test is operator-deferred to the v0.2.2 release gate** (DEFERRED-TO-RELEASE, per the installed-build-verify convention).
 **Tasks:**
-- [ ] Add `cc_yolo: Option<bool>` to `AppSettings` (`settings.rs`) with a reader `read_cc_yolo(data_dir) -> bool` defaulting `true` when unset (mirror `read_pip_mode`'s default-when-unset pattern) + a writer `write_cc_yolo` (read-modify-write)
-- [ ] Gate the `CC_ARG_YOLO` push in `cc_session` spawn on the setting (read at spawn time so a change takes effect on the next spawn; document that it's next-spawn, not live-toggle, since the flag is an argv chosen once per CC process)
-- [ ] **Decide app-global vs per-project** at build time — `AppSettings` is app-global (matches "an opt-out toggle"); per-project would live in `projects.json`. Default to app-global (simplest, matches the setting's framing); record the decision. *(If per-project is wanted, that's a `Project` field, not `AppSettings` — flag at plan time.)*
-- [ ] Expose a toggle affordance (a control; until the M12 Settings UI exists, the affordance is minimal — a menu item or a small control, decided at build time consistent with the no-global-settings-panel-yet reality noted in `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1`)
-- [ ] **Installed-build smoke test (mandatory — this touches external-process spawning):** toggle OFF → next CC spawn in the installed `.app` shows the permission prompts (no `--dangerously-skip-permissions`); toggle ON → yolo as before. Per the CLAUDE.md installed-build convention for PATH/spawn-touching features
+- [x] Add `cc_yolo: Option<bool>` to `AppSettings` (`settings.rs`) with a reader `read_cc_yolo(data_dir) -> bool` defaulting `true` when unset (mirror `read_pip_mode`'s default-when-unset pattern) + a writer `write_cc_yolo` (read-modify-write)
+- [x] Gate the `CC_ARG_YOLO` push in `cc_session` spawn on the setting (read at spawn time so a change takes effect on the next spawn; document that it's next-spawn, not live-toggle, since the flag is an argv chosen once per CC process)
+- [x] **Decide app-global vs per-project** — DECIDED app-global (`AppSettings`); matches "an opt-out toggle".
+- [x] Expose a toggle affordance — native View-menu `CheckMenuItem` + (operator-added) picker-screen checkbox, both synced via `cc-yolo`.
+- [x] **Installed-build smoke test (mandatory — this touches external-process spawning):** toggle OFF → next CC spawn in the installed `.app` shows the permission prompts (no `--dangerously-skip-permissions`); toggle ON → yolo as before. **DEFERRED-TO-RELEASE (v0.2.2 gate)** per the installed-build-verify convention — agent-verified the webview/command/menu/picker slice live via the MCP bridge; the spawn-argv + native-menu-persist proof is the operator's release-gate check.
 
 ---
 

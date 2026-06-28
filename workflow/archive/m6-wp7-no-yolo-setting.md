@@ -1,7 +1,7 @@
 # Feature: M6 WP7 — Settings: open CC without yolo by default
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) — ready for ship
+**State:** COMPLETED 2026-06-28 — shipped 4db7b82 (local main, NOT pushed; v0.2.2 planned), review-quality clean (0C/0M/3 MINOR backlogged), finalized. Installed-build spawn-argv + native-menu-persist smoke test DEFERRED-TO-RELEASE (v0.2.2 gate).
 **Created:** 2026-06-28
 **Milestone:** M6 (friend-requested QoL polish)
 **Size:** S
@@ -90,8 +90,8 @@ Claudesk spawns `claude` with `--dangerously-skip-permissions` ("yolo") **uncond
   
 
 ## Current Node
-- **Path:** Feature > ship (ALL PHASES COMPLETE)
-- **Active scope:** All 3 phases [x]. Ready for /feature-ship.
+- **Path:** Feature > finalize (shipped + reviewed)
+- **Active scope:** All 3 phases [x]; shipped (4db7b82); review-quality clean (0C/0M/3 MINOR auto-backlogged). Ready for /feature-finalize.
 - **Blocked:** none
 - **Unvisited:** none
 - **PRE-SHIP REMINDER (batched installed-build smoke test — MANDATORY before ship completes, per CLAUDE.md spawn/PATH convention):** in a freshly-built installed `.app` (NOT just tauri:dev): (a) [P1/P2.2] toggle yolo OFF → new workspace's `claude` shows permission prompts; ON → yolo (next-spawn); (b) [P2.1] native View-menu "Skip Permission Prompts (yolo)" checkmark toggles + persists across relaunch; (c) [P3] picker checkbox stays synced + Open-Folder in-viewport. All three surfaces (menu, picker, spawn) in one session.
@@ -107,9 +107,38 @@ Claudesk spawns `claude` with `--dangerously-skip-permissions` ("yolo") **uncond
 - **Checks:** fmt OK; clippy `-D warnings` exit 0 (after fixing 3 `doc_lazy_continuation` lints on the field-doc wrap — the predictable `:`-ending-then-wrap pattern); `cargo test --lib` = 290 pass (was 285, +5).
 - **Carry to Phase 2 (P2.1):** REMOVE the `#[cfg_attr(not(test), allow(dead_code))]` on `write_cc_yolo` once `cc_set_yolo` calls it.
 
+## Code-Quality Review — m6-wp7-no-yolo-setting
+
+### Strengths
+- Faithful mirror of the established pip-mode pattern across all four layers (settings read/write, `cc_set_yolo`/`cc_get_yolo` commands + broadcast, managed-state `CcYoloMenuItem` + `apply_*_to_menu` re-check listener, App.tsx latest-ref).
+- `build_cc_argv(yolo)` extracted as a pure bool-in/argv-out helper; both branches pinned by unit tests.
+- `cc_yolo_absent_in_present_file_reads_as_true` forward-compat test captures the realistic upgrade case.
+- Three-surface single-source-of-truth design honestly carried (backend canonical; menu + picker seed via `cc_get_yolo` + re-sync on `cc-yolo`); cross-surface sync live-proven via the MCP bridge.
+- Default-`true` consistently threaded across `read_cc_yolo`, `ccYoloRef`, picker `useState`, menu-seed `.unwrap_or(true)`.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [src/App.tsx menu path vs src/components/picker/ProjectPicker.tsx] The two `cc_set_yolo` write paths handle a rejection inconsistently: the picker does optimistic-flip + revert + error toast; the App.tsx menu path only `console.error`s (no user-visible signal). Pattern-consistent with the PiP-mode menu path, but a menu-path persist failure is silent. — clarity/consistency nit.
+- [src/App.tsx ccYoloRef effect / ProjectPicker `cc-yolo` effect] Two independent `cc-yolo` listeners + two `cc_get_yolo` seed reads for one setting. Harmless (picker only mounts on the picker screen; ref-tracker at App root; deliberate ref-vs-state split) but a one-line comment would save a future reader the "duplicate?" double-take. — cosmetic.
+- [src-tauri/src/cc_session/commands.rs] A third module-local copy of `resolve_data_dir` (config_store::commands original, pip::commands copy, now cc_session::commands copy). Trivial drift risk; a shared `pub(crate)` helper would retire three copies if a fourth consumer appears. — note, not a fix.
+
+### Assessment
+Well-built, low-risk polish that does exactly what its plan said and accrues no meaningful debt. Mirrors pip-mode end-to-end (right call), keeps the `CcSession` seam intact by gating argv at the call site. Test coverage proportionate + honest (pure gate + settings round-trip/independence/forward-compat real unit tests; cross-surface UI sync source-guarded + live-bridge-verified per repo convention, not faked in jsdom). The one genuine open item is operator-owned + correctly tracked: the deferred installed-`.app` spawn-argv smoke test. **0 CRITICAL / 0 MAJOR / 3 MINOR — no refactor warranted.**
+
+### If you disagree
+Dismiss any finding by editing this section + marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
 ## Verification notes
 - **verify-self (agent-drivable via MCP bridge):** Phase 1 is pure backend logic + unit tests — fully agent-verifiable (`cargo test`/`clippy`/`fmt`). Phase 2 frontend wiring is `tsc`/`eslint`/`vite build`/`vitest` + a live `tauri:dev` bridge check of the View menu state (DOM/screenshot of the menu is limited for the *native* macOS menubar — the bridge drives the WKWebview, not the native menu; if the native-menu click can't be driven, carry that single interaction to verify-human).
 - **verify-human (operator, MANDATORY installed-build smoke test — touches external-process spawn argv, per CLAUDE.md):** in the installed `.app` (NOT just `tauri:dev`): toggle the View-menu item OFF → open a NEW workspace → CC starts and shows permission prompts (no `--dangerously-skip-permissions`). Toggle ON → next new workspace → yolo as before (no prompts). Confirm it's **next-spawn** (an already-running CC session is unaffected). Confirm the checkmark persists across an app relaunch.
+
+## Retrospect
+- **What changed in our understanding:** The plan scoped 2 phases (backend + one View-menu affordance). At Phase-2 verify-human the operator asked for a SECOND affordance — a picker-screen checkbox — turning it into 3 phases. The picker is the correct app-global home for an app-global setting (the operator clarified it must NOT read as per-workspace), so the third surface strengthened the design rather than bloating it.
+- **Assumptions that held:** The pip-mode menu pattern was the right template end-to-end (settings read/write + command + broadcast + managed-handle re-check + frontend latest-ref) — every layer mirrored cleanly. Extracting a pure `build_cc_argv(yolo)` made the gate unit-testable without a PTY, exactly as planned. App-global (not per-project) was the right call.
+- **Assumptions that were wrong:** One layout assumption bit us: adding the picker checkbox pushed "Open Folder…" off-screen — `.picker` was an unbounded block whose content already summed past the viewport (a pre-existing long-recents-list risk the checkbox merely exposed). Fixed with a bounded flex column + internal recents scroll, which also hardens the pre-existing case.
+- **Approach delta:** +1 phase (picker checkbox) added mid-flight at operator request; +1 in-place layout fix at verify-human (caught by the operator, not the agent — a reminder that visual-overflow regressions need a real render, which the MCP bridge then confirmed at 768/600px). Otherwise implementation matched the plan: pure-argv-gate + three sync'd surfaces over one `cc-yolo` source of truth.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
