@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-28
+
+- **Feature shipped:** FileTree reaches gitignored-but-editable files (M6 WP6) — the file-walker and filesystem-watcher exclusion criterion is re-based from "is gitignored" to "is a heavy/generated directory" (the thing gitignore was only ever a leaky proxy for), so gitignored-but-edited files like `.env`, `.session.md`, and `.claude/*` are now shown, openable, editable, and live-watched in-app while heavy dirs (`node_modules`/`target`/… by name or by a detected >500-immediate-child count) are listed-but-not-descended and rendered with a dim "(not indexed)" marker; the change is walker-wide (FileTree + Cmd+P finder + content search all re-based onto one shared `walk_project` DFS that replaced the `ignore::WalkBuilder`, whose `filter_entry` couldn't yield-a-row-but-skip-descent), with the watcher using a pure NAME-based predicate on its hot path so `.env` gets live external-change refresh while heavy-dir churn stays suppressed.
+- **Backlog resolved:** SURFACE-2026-06-26-FILETREE-EXCLUDES-GITIGNORED-EDITABLE-FILES — closed by WP6; the policy debate rejected the allowlist candidates and landed on the heavy-dir re-base, walker-wide.
+- **Milestone:** M6 WP6 (FileTree reaches gitignored-but-editable files).
+
 ## 2026-06-27
 
 - **Feature shipped:** PiP toggle, lifecycle & auto-summon (M5 WP5) — the Picture-in-Picture panel gains a visibility control + lifecycle, and auto-summon is adopted as an explicit tri-state mode: **Off / On (pinned) / Auto (default)**, directly selectable via the right-panel PiP icon (cycles Off→On→Auto) and a View-menu radio; **Auto** hides the panel while Claudesk is focused, summons it on a 3s-debounced sustained main-window blur, and dismisses it on refocus (so the out-of-focus glance surface appears on its own — vision Success Metric 6), while **On** pins it shown and **Off** hides it, with the mode persisted in the app-settings store and the panel tearing down cleanly on quit; the implementation survived two verify-loop catches — an off-main-thread AppKit crash in the auto-summon debounce (fixed by marshaling the show onto the main thread) and an inferred-regime dead-end found at verify-human (reworked into the explicit tri-state).

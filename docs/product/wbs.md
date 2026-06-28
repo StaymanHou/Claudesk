@@ -1,9 +1,9 @@
 ---
 stage: wbs
 state: in-progress
-updated: 2026-06-27
+updated: 2026-06-28
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP2, WP3, WP4, WP5]
+shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -138,18 +138,19 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP6: FileTree reaches gitignored-but-editable files
+## WP6: FileTree reaches gitignored-but-editable files ✅ SHIPPED 2026-06-28 (commit 61db3d4)
 **Description:** The FileTree rail (and possibly Cmd+P / search) currently hides every gitignored file via the shared `fs_index::project_walker`, so routine config like `.env`/`.envrc` is unreachable in-app and pushes the operator back to Sublime — undercutting "in-app editor is primary." Make gitignored-but-editable files reachable. **Policy is a build-time decision** (see task 1).
 **Milestone:** M6
 **Dependencies:** none
 **Size:** M (the policy choice has ripple: walker-wide vs FileTree-only changes whether Cmd+P/search also surface ignored files)
 **Seams (confirmed):** `fs_index::project_walker` (`src-tauri/src/fs_index/mod.rs:91`) is the single shared `ignore::WalkBuilder` honoring `.gitignore`/`.ignore`/global gitignore; it backs the FileTree, Cmd+P, AND search (single source so they never disagree — `mod.rs:64,89`). The shared-walker design means any change is felt by all three unless scoped FileTree-only.
+**Status:** SHIPPED 2026-06-28 (commit `61db3d4`, local `main`, not pushed). **Policy DECIDED: re-base the exclusion criterion from "is gitignored" → "is a heavy/generated dir"** (NOT a fixed allowlist — operator rejected that as re-encoding the wrong-proxy mistake). Heavy = built-in NAME set OR detected-big (>500 immediate children). Scope = **walker-wide** (tree + Cmd+P + search all re-based; content-search over a secret value is acceptable per single-user). Heavy dirs are listed-but-not-descended (a `pruned` flag); everything else, incl. gitignored config, is shown/openable/editable/watched. 3 phases: P1 walker re-base (manual DFS `walk_project` replaced `ignore::WalkBuilder` — `filter_entry` can't yield-but-not-descend), P2 fs_watch emit-filter re-base (NAME-based hot path; `.env` now live-refreshes), P3 FileTree `pruned` "(not indexed)" render. Tests: frontend 723/0, backend 285/0; clippy/fmt/tsc/eslint/vite-build clean. P1+P3 live-verified via MCP bridge; P2 live FS-emit operator-verified. Review-quality 0C/1M/3 MINOR (auto-backlogged: MAJOR = now-dead `ignore` crate in Cargo.toml → `SURFACE-2026-06-28-QUALITY-WP6-DEAD-IGNORE-DEP`).
 **Tasks:**
-- [ ] **Decide the policy** (at build/spec time): (a) allowlist common editable-but-ignored basenames (`.env`, `.envrc`, …); (b) a "show gitignored" toggle; (c) basename-pattern un-hide; or (d) VSCode-style dimmed-but-present. AND decide **scope**: walker-wide (Cmd+P/search also see them) vs FileTree-only. Record the decision + rationale in the WIP. *(Operator-confirm at plan time — this is the one M6 item with a genuine open design choice; `[PRIOR: operator-helpful-friend-misfiring-as-offswitchable-setting]` mildly favors a toggle defaulting to current behavior IF the chosen policy would otherwise surprise, but an allowlist of well-known editable dotfiles needs no toggle — decide at plan time.)*
-- [ ] Implement the chosen policy at the right layer (`project_walker` config if walker-wide; a FileTree-specific filter/merge if scoped) — keep `.git/` always excluded regardless
-- [ ] Confirm a gitignored `.env` is now visible + openable + editable + savable in the in-app editor (round-trip through `editor_fs::write_file`)
-- [ ] If walker-wide: confirm Cmd+P + search behave per the chosen policy and don't flood with build artifacts (the reason gitignore was honored in the first place); if FileTree-only: confirm Cmd+P/search are unchanged
-- [ ] Guard test: the chosen policy surfaces the allowlisted/toggled file but still excludes `.git/` and (for an allowlist) does NOT surface arbitrary build dirs
+- [x] **Decide the policy** — DECIDED: heavy-dir re-base (not allowlist), walker-wide. (Operator plan-time debate; rejected the allowlist; `[PRIOR: operator-helpful-friend-misfiring-as-offswitchable-setting]` did not need to fire — heavy-dir re-base needs no toggle.)
+- [x] Implement the chosen policy at the right layer — `walk_project` (walker-wide); `.git/` always excluded; fs_watch + project_search re-based onto the same shared heavy-dir predicate.
+- [x] Confirm a gitignored `.env` is now visible + openable + editable + savable in the in-app editor (round-trip through `editor_fs::write_file`) — live-verified via MCP bridge (P1 + P3 verify-human/self).
+- [x] Walker-wide: Cmd+P + search surface gitignored files + don't flood with build artifacts (heavy dirs pruned) — verified (P1 verify-human Cmd+P, P2 watcher suppression).
+- [x] Guard test: the policy surfaces gitignored files but still excludes `.git/` and prunes heavy dirs — `git_metadata_dir_is_excluded`, `heavy_dir_contents_are_pruned_*`, `detected_big_dir_is_pruned_in_walk`, fs_watch `heavy_dir_paths_are_ignored` + `git_dir_paths_are_ignored`.
 
 ---
 

@@ -4,6 +4,38 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# wp6-filetree-shows-ignored-files — 2026-06-28
+
+*(feature-review-quality on ship commit 61db3d4; Mode 3 autopilot auto-backlog. 0 CRITICAL / 1 MAJOR / 3 MINOR. The MAJOR is a load-bearing-but-trivial cleanup — remove the now-dead `ignore` crate; the MINORs are doc/cosmetic. Reviewer: "well-built; the only follow-up is removing the now-unused dependency.")*
+
+## SURFACE-2026-06-28-QUALITY-WP6-DEAD-IGNORE-DEP
+- **Severity:** MAJOR
+- **Finding:** The `ignore = "0.4"` dependency (`src-tauri/Cargo.toml:61`) is now dead — `walk_project` dropped `ignore::WalkBuilder` and `fs_watch` dropped `GitignoreBuilder`; `grep -rn "ignore::"` over `src-tauri/src/` finds ZERO non-comment references. The Cargo.toml comments around the dep (lines ~55-76) still describe the old gitignore-honoring model (".gitignore contract with the finder + tree"), which is now misleading.
+- **Fix shape:** remove the `ignore = "0.4"` line + rewrite/remove its stale surrounding comments in Cargo.toml; `cargo build` + `cargo test --lib` to confirm nothing else pulls it directly (it remains a transitive dep of other crates, which is fine — only the direct dependency + comments are stale). Small + mechanical, but requires a rebuild → re-verify, which is why Mode-3 backlogs it rather than auto-fixing in the review path.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP6-SYMLINK-SKIP-UNDOCUMENTED
+- **Severity:** MINOR
+- **Finding:** `walk_project` (`src-tauri/src/fs_index/mod.rs` ~202) skips symlinks (the un-traversed `file_type` is neither `is_dir()` nor `is_file()`) — correct + cycle-safe, but this visibility exclusion is documented only as an inline aside, not in the function/module doc that enumerates the contract (where `.git` + heavy-dir exclusions ARE spelled out). A symlinked source dir an operator edits would be silently invisible to tree/finder/search.
+- **Fix shape:** add a one-line bullet to the `walk_project` / module "Exclusion model" doc naming the symlink skip alongside `.git` + heavy dirs.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP6-DETECTED-BIG-SYSCALL-COST
+- **Severity:** MINOR
+- **Finding:** `dir_is_heavy` (`src-tauri/src/fs_index/mod.rs` ~147) does a `read_dir` on every non-name-matched directory during the tree walk (the detected-big check), doubling directory-open syscalls vs. the walk's own. Acceptable for the single-user target + short-circuited at threshold+1, but the per-dir cost isn't called out next to the threshold constant.
+- **Fix shape:** add a one-line cost note next to `HEAVY_DIR_CHILD_THRESHOLD` documenting the per-dir `read_dir` (short-circuited).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP6-DOC-WRAP-NIT
+- **Severity:** MINOR
+- **Finding:** A reflowed doc-comment line in `project_search::search_core` (`src-tauri/src/project_search/mod.rs` ~172) runs slightly long past the file's otherwise-consistent wrap width. Cosmetic.
+- **Fix shape:** re-wrap the line.
+- **Priority:** low
+- **Status:** pending
+
 # m6-wp5-editor-wrap-toggle — 2026-06-27
 
 *(feature-review-quality on ship commit 16ce60a; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. All low-risk readability/factoring/copy notes — reviewer: "no refactor warranted; backlog-or-dismiss material.")*

@@ -1,7 +1,7 @@
 # Feature: WP6 — FileTree reaches gitignored-but-editable files (heavy-dir re-base)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-06-28
 **Created:** 2026-06-27
 **Drive mode:** autopilot
 **Milestone:** M6 (friend-QoL) — WP6
@@ -76,10 +76,10 @@ The FileTree (and the Cmd+P finder + content-search, all backed by the single sh
   - [x] verify-codify  <!-- status: DONE — no new tests needed. The pruned-flag DATA layer (the regression-catching contract) is codified by P3.2's 4 buildTree vitest cases (flag rides wire→node + empty children, ordinary/file=false, real-empty vs pruned distinct, nested keeps flag). The render itself (FileTree.tsx "(not indexed)" + suppressed buttons) follows the repo's pure-logic→vitest / live-DOM→bridge posture — exercised end-to-end at verify-self via the MCP bridge, not via a new RTL/jsdom test type the repo doesn't use for FileTree. Full suites green: frontend vitest 723/0, backend 285/0. -->
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** none — all 3 phases [x] (Phase 1 walker re-base, Phase 2 watcher re-base, Phase 3 FileTree pruned render). Frontend 723/0, backend 285/0, clippy/fmt/tsc/eslint/vite-build clean. Next: /feature-ship.
+- **Path:** Feature > ship + review-quality COMPLETE → finalize
+- **Active scope:** none — shipped (`61db3d4`), review-quality done (0C/1M/3 MINOR, all auto-backlogged → backlog-quality-findings.md + backlog.md pointer). Next: /feature-finalize.
 - **Blocked:** none
-- **Unvisited:** none — ready to ship
+- **Unvisited:** none — ready to finalize
 - **Open discoveries:** none
 - **Resolved unknown:** P1.2's yield-but-prune mechanism — `ignore` 0.4 `filter_entry` can't yield-but-not-descend; switched to a manual DFS `read_dir` walk (`walk_project`). No SURFACE needed; contained within the WP.
 
@@ -91,6 +91,41 @@ The FileTree (and the Cmd+P finder + content-search, all backed by the single sh
 5. **Heavy dirs are LISTED but NOT descended** (presence at ~zero cost), not fully absent. Confirm the `ignore` yield-but-prune mechanism at build (the one real unknown — P1.2).
 6. **EDIT is first-class** (equal to presence + read): `.env` must open→edit→save AND get live external-change detection via the re-based watcher.
 7. **Watcher hot-path heaviness:** lean NAME-based + a build-time detected-big scan cache if cheap; accept that a detected-big-but-unnamed dir may over-emit live-refresh (rare, tree still prunes it). Decide at P2.1.
+
+## Code-Quality Review — wp6-filetree-shows-ignored-files
+
+(Per-feature review against ship commit `61db3d4`, drive_mode=autopilot. 0 CRITICAL, 1 MAJOR, 3 MINOR — MAJOR + MINORs auto-backlogged to `workflow/backlog-quality-findings.md`.)
+
+### Strengths
+- Exclusion-model re-base documented end-to-end across all three module docs (why gitignore was a leaky proxy + what replaced it).
+- Shared-walk invariant ("tree/finder/search/watcher never disagree") preserved — `walk_project` is the single traversal; all consumers project from it.
+- Hot-path-vs-display split principled + reasoned: NAME-only in the watcher (FS-free) vs NAME+detected-big in the tree, accepted over-emit pinned by `detected_big_but_unnamed_dir_is_not_suppressed_by_watcher`.
+- Test coverage tracks the inversion precisely (old assertions inverted, not deleted; detected-big walk-level test added).
+- FileTree pruned-render defensive: inert chevron + suppressed create/delete with stated footgun rationale.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [src-tauri/Cargo.toml:61] The `ignore = "0.4"` dependency is now dead — `walk_project` dropped `ignore::WalkBuilder` and `fs_watch` dropped `GitignoreBuilder`; no non-comment code references the crate anywhere in `src-tauri/src/`. The Cargo.toml comments around it (lines 55-76) still describe the old gitignore-honoring model. — *Why: a dep whose removal was the whole point of the re-base is still in the build/link graph + its comments assert an abandoned posture.* → auto-backlogged (SURFACE-2026-06-28-QUALITY-WP6-DEAD-IGNORE-DEP).
+
+**MINOR**
+- [src-tauri/src/fs_index/mod.rs ~202] `walk_project` skips symlinks (neither dir nor file on the un-traversed file_type) — correct + cycle-safe, but documented only as an inline aside, not in the function/module visibility-contract doc. → auto-backlogged.
+- [src-tauri/src/project_search/mod.rs ~172] Reflowed doc-comment line runs slightly long past the file's wrap width. Cosmetic. → auto-backlogged.
+- [src-tauri/src/fs_index/mod.rs ~147] `dir_is_heavy` does a `read_dir` per non-name-matched dir during the walk (detected-big check) — acceptable for single-user + short-circuited at threshold+1, but the per-dir syscall doubling isn't called out next to the threshold constant. → auto-backlogged.
+
+### Assessment
+Well-built. Clean conceptual re-base ("is gitignored" → "is a heavy/generated dir") with the implementation matching the concept: one shared `walk_project` DFS, a pure name predicate + shallow detected-big check, three consumers projecting from the single traversal. High reasoning quality — hot-path/display asymmetry, rejected personal-allowlist alternative, and accepted watcher over-emit all documented at the decision point + pinned by tests. Manual `read_dir` DFS correctly handles "yield the row, skip the subtree" that `ignore::filter_entry` couldn't; symlink cycles sidestepped. Only debt: the now-dead `ignore` crate in Cargo.toml.
+
+### If you disagree
+Operator: dismiss any finding by editing this section + marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The plan's headline unknown (P1.2 — can `ignore`'s `filter_entry` yield-a-dir-row-but-skip-descent?) resolved to NO at build: `ignore` 0.4's `filter_entry` returning false skips the dir's OWN row too. The whole walker had to switch from `ignore::WalkBuilder` to a manual `read_dir` DFS to get exact descent control. This is what made the `ignore` crate fully removable (the review's MAJOR finding) — an emergent consequence the plan didn't foresee.
+- **Assumptions that held:** The heavy-dir re-base concept (NAME set OR detected-big) was sound and clean; the shared-walk invariant survived intact (one `walk_project`, three consumers); the NAME-based hot-path decision for the watcher (P2.1) held with no need for the build-time detected-big cache the plan floated as an alternative. The `pruned` flag — threaded onto the wire DTO during Phase 1 "because the walk already computes it" — paid off exactly as bet when Phase 3 rendered it.
+- **Assumptions that were wrong:** The plan hedged P3.1 as "minimal (empty-folder row) acceptable; add `pruned` render only if the ambiguity bothers verify-human." In practice the flag was already wired, so the fuller "(not indexed)" render was the cheaper-and-clearer choice from the start — the hedge was unnecessary.
+- **Approach delta:** Phase split changed mid-flight in spirit: P3.3 ("live verify") turned out to be a verify-self leaf (the MCP bridge drives it), not a build leaf — so build did P3.1/P3.2 and verify-self drove the live render. The MCP-bridge live verify-self (both phases) worked cleanly, dissolving what the plan assumed might be carried to verify-human. Otherwise the implementation matched the plan's 3-phase shape.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
