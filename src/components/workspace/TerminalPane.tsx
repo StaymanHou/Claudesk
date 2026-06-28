@@ -9,8 +9,13 @@
 // One terminal session per workspace (v1 — no tabbed terminals). The pane stays
 // MOUNTED when the right panel switches away (display:none in RightPanelHost), so the
 // shell session + scrollback survive panel + center-stage switches.
+//
+// M6 WP10 — forwards an XtermPaneHandle ref so the parent can drive the shell xterm's
+// focus-scoped font zoom (setFontSize), mirroring how Workspace drives the CC pane's
+// zoom via ccPaneRef. The ref is forwarded straight through to the inner XtermPane.
 
-import { XtermPane } from "./XtermPane";
+import { forwardRef } from "react";
+import { XtermPane, type XtermPaneHandle } from "./XtermPane";
 
 interface TerminalPaneProps {
   /** The workspace id (terminal session is keyed per workspace). */
@@ -26,19 +31,18 @@ interface TerminalPaneProps {
   active: boolean;
 }
 
-export function TerminalPane({
-  workspaceId,
-  projectPath,
-  active,
-}: TerminalPaneProps) {
-  return (
-    <XtermPane
-      workspaceId={`${workspaceId}-term`}
-      projectPath={projectPath}
-      spawnCommand="term_spawn"
-      errorTitle="Could not start terminal"
-      testId="term-pane"
-      active={active}
-    />
-  );
-}
+export const TerminalPane = forwardRef<XtermPaneHandle, TerminalPaneProps>(
+  function TerminalPane({ workspaceId, projectPath, active }, ref) {
+    return (
+      <XtermPane
+        ref={ref}
+        workspaceId={`${workspaceId}-term`}
+        projectPath={projectPath}
+        spawnCommand="term_spawn"
+        errorTitle="Could not start terminal"
+        testId="term-pane"
+        active={active}
+      />
+    );
+  },
+);

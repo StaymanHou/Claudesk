@@ -19,8 +19,10 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type Ref,
 } from "react";
 import { EditorSplit, type EditorSplitHandle } from "./editor/EditorSplit";
+import type { XtermPaneHandle } from "./XtermPane";
 import { tabSwitchIndex } from "./editor/tabSwitchChord";
 import { isCloseTabChord } from "./editor/closeTabChord";
 import { DiffPanel } from "./diff/DiffPanel";
@@ -95,6 +97,13 @@ interface RightPanelHostProps {
     workspaceId: string,
     probe: (() => number) | null,
   ) => void;
+  /**
+   * M6 WP10 — forwarded to the second-terminal `TerminalPane` so the parent `Workspace`
+   * (which owns the focus-scoped zoom router) can drive the shell xterm's `setFontSize`.
+   * Mirrors how `Workspace` drives the CC pane via `ccPaneRef`; lives in `Workspace` so
+   * both terminal handles sit beside the keydown router. Optional (tests/old callers omit).
+   */
+  terminalPaneRef?: Ref<XtermPaneHandle>;
 }
 
 export function RightPanelHost({
@@ -103,6 +112,7 @@ export function RightPanelHost({
   visible,
   collapsed = false,
   registerDirtyProbe,
+  terminalPaneRef,
 }: RightPanelHostProps) {
   // WP12 — open files live in PER-PANE TAB STRIPS (EditorSplit owns the pane model;
   // each pane has its own tab strip + open-file set). The open seams (finder, tree,
@@ -878,6 +888,7 @@ export function RightPanelHost({
           style={{ display: panel === "terminal" ? "flex" : "none" }}
         >
           <TerminalPane
+            ref={terminalPaneRef}
             workspaceId={workspaceId}
             projectPath={projectPath}
             active={visible && panel === "terminal"}

@@ -28,6 +28,7 @@ import { RightPanelHost } from "./RightPanelHost";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import type { WireWorkspaceState } from "../../state/workspaceStatus";
 import { deriveFocusHalf, type FocusHalf } from "./focusHalf";
+import { deriveRightSurface } from "./rightSurface";
 import {
   loadSplitState,
   saveSplitState,
@@ -93,6 +94,10 @@ export function Workspace({
   // mirrors XtermPane's existing rAF-then-focus pattern). It calls focus() only — it
   // NEVER sends a byte to the PTY, so a switch can't inject a spurious prompt line.
   const ccPaneRef = useRef<XtermPaneHandle>(null);
+  // M6 WP10 — handle for the RIGHT-panel second terminal (TerminalPane → XtermPane),
+  // threaded down through RightPanelHost. Lives here beside ccPaneRef + the zoom router
+  // so both terminal handles are co-located with the keydown listener that targets them.
+  const termPaneRef = useRef<XtermPaneHandle>(null);
   useEffect(() => {
     if (!visible) return;
     const raf = requestAnimationFrame(() => ccPaneRef.current?.focus());
@@ -153,14 +158,25 @@ export function Workspace({
   // the xterm apply ride along in the updater (it returns the same value it sets, so
   // it stays a pure-enough updater — no extra render, and React calls it once per
   // queued update with the running value).
-  const applyTerminalZoom = (action: "in" | "out" | "reset") => {
+  // M6 WP10 — `target` chooses WHICH terminal the chord zooms ("cc" left half / "right"
+  // panel terminal). The SIZE is shared: one localStorage key (claudesk.terminal.fontSize),
+  // one useState store — so a zoom in either terminal moves the persisted size, and the
+  // OTHER terminal re-seeds from it on its next mount/refit (the shared-key decision). We
+  // apply the new size to ONLY the focused terminal here so the gesture zooms the one the
+  // user is looking at; the other catches up when re-seeded. Both share the batch-safe
+  // functional updater so several chords in one React batch read the latest committed size.
+  const applyTerminalZoom = (
+    action: "in" | "out" | "reset",
+    target: "cc" | "right",
+  ) => {
     setTerminalFontSize((prev) => {
       const next =
         action === "reset"
           ? DEFAULT_TERMINAL_FONT_PX
           : nextTerminalFontSize(prev, action);
       saveTerminalFontSize(next);
-      ccPaneRef.current?.setFontSize(next);
+      const pane = target === "cc" ? ccPaneRef.current : termPaneRef.current;
+      pane?.setFontSize(next);
       return next;
     });
   };
@@ -181,13 +197,31 @@ export function Workspace({
     const onKeyDown = (e: KeyboardEvent) => {
       const action = terminalZoomForChord(e);
       if (!action) return;
-      // Only act when keystrokes are landing in the CC terminal half. Read the live
-      // DOM focus rather than the React `focusHalf` state to avoid a stale-closure
-      // race (the state may lag a just-changed focus by a render).
-      if (deriveFocusHalf(document.activeElement) !== "left") return;
-      e.preventDefault();
-      e.stopPropagation();
-      applyTerminalZoom(action);
+      // Route by which surface holds focus. Read the LIVE DOM focus (not the React
+      // `focusHalf` state) to avoid a stale-closure race (the state may lag a
+      // just-changed focus by a render).
+      const half = deriveFocusHalf(document.activeElement);
+      if (half === "left") {
+        // CC terminal (left half) — WP4 behavior, unchanged.
+        e.preventDefault();
+        e.stopPropagation();
+        applyTerminalZoom(action, "cc");
+        return;
+      }
+      // M6 WP10 — the RIGHT half is one of several panels; only the second TERMINAL
+      // wants the chord (the editor/diff have their own ⌘+/⌘−/⌘0 — CM6's keymap). The
+      // term-pane's elements are focusable only when that panel is front (the others
+      // are display:none), so "focus inside term-pane" == "terminal panel is the focused
+      // right surface". When it is, zoom the right-panel terminal and swallow the chord;
+      // otherwise fall through so the editor's keymap handles it unchanged.
+      if (
+        half === "right" &&
+        deriveRightSurface(document.activeElement) === "terminal"
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        applyTerminalZoom(action, "right");
+      }
     };
     root.addEventListener("keydown", onKeyDown, true); // capture phase
     return () => root.removeEventListener("keydown", onKeyDown, true);
@@ -320,6 +354,7 @@ export function Workspace({
         visible={visible}
         collapsed={rightCollapsed}
         registerDirtyProbe={registerDirtyProbe}
+        terminalPaneRef={termPaneRef}
       />
     </div>
   );

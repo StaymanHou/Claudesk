@@ -15,6 +15,10 @@ export default tseslint.config(
       "node_modules/**",
       "src-tauri/target/**",
       "src-tauri/gen/**",
+      // Gitignored dev-only scratch git repos (verify-self fixtures, CLAUDE.md
+      // "Scratch workspaces for verify-self"). Not app code — never lint them.
+      "tmp/**",
+      "src-tauri/tmp/**",
     ],
   },
   js.configs.recommended,
