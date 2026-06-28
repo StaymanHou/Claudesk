@@ -24,7 +24,7 @@ use notify_debouncer_full::notify::{EventKind, RecursiveMode};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult};
 use tauri::{AppHandle, Emitter, State};
 
-use super::{build_ignore, paths_to_change, FsKind, FsWatchError};
+use super::{paths_to_change, FsKind, FsWatchError};
 
 /// The Tauri event name the FileTree + editor consumers subscribe to. Defined here,
 /// mirrored verbatim by the frontend `listen("fs-change", …)`.
@@ -127,8 +127,8 @@ pub fn workspace_watch_start(
         .to_string());
     }
 
-    // Build the ignore matcher once for this root (reused on every event).
-    let matcher = build_ignore(&root);
+    // Exclusion is now a pure NAME-based heavy-dir predicate (M6 WP6) — no per-root
+    // matcher to build; `paths_to_change` calls `is_ignored` directly.
     let cb_root = root.clone();
     let cb_ws = workspace_id.clone();
     let cb_app = app.clone();
@@ -156,7 +156,7 @@ pub fn workspace_watch_start(
             }
         }
         let kind = classify(&kinds);
-        if let Some(change) = paths_to_change(&cb_ws, &cb_root, &paths, kind, &matcher) {
+        if let Some(change) = paths_to_change(&cb_ws, &cb_root, &paths, kind) {
             if let Err(e) = cb_app.emit(FS_CHANGE_EVENT, &change) {
                 eprintln!("[claudesk] fs-watch: emit failed: {e}");
             }

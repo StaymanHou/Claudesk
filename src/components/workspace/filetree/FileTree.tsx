@@ -452,16 +452,36 @@ function TreeRow({
     return (
       <>
         <div
-          className="file-tree-row file-tree-dir"
+          className={
+            "file-tree-row file-tree-dir" +
+            (node.pruned ? " file-tree-dir-pruned" : "")
+          }
           data-testid="file-tree-dir"
           data-path={node.path}
+          data-pruned={node.pruned || undefined}
           style={indent}
           role="treeitem"
           aria-expanded={isOpen}
           onClick={() => onToggle(node.path)}
         >
-          <span className="file-tree-chevron">{isOpen ? "▾" : "▸"}</span>
+          {/* M6 WP6 — a pruned heavy dir (node_modules/target/…) has no walked children,
+              so its chevron is inert; render a placeholder glyph in the chevron slot to
+              keep alignment but signal "nothing to expand". */}
+          <span className="file-tree-chevron">
+            {node.pruned ? "·" : isOpen ? "▾" : "▸"}
+          </span>
           <span className="file-tree-name">{node.name}</span>
+          {/* M6 WP6 — heavy-dir "(not indexed)" marker: distinguishes a pruned dir from a
+              genuinely-empty one. Dim, non-interactive; sits right after the name. */}
+          {node.pruned && (
+            <span
+              className="file-tree-pruned-label"
+              data-testid="file-tree-pruned-label"
+              title="Heavy/generated directory — listed but not indexed"
+            >
+              (not indexed)
+            </span>
+          )}
           {/* QoL-WP7 — rolled-up git status for this folder (dominant of its changed
               descendants). Always visible (collapsed AND expanded) so a folder hiding a
               change still reads. Same glyph + color tokens as the per-file indicator;
@@ -480,8 +500,10 @@ function TreeRow({
           )}
           {/* QoL-WP5b — per-dir "＋ new file here", hover-revealed like the file ✕.
               stopPropagation so the click opens the input rather than toggling the dir;
-              mousedown-preventDefault keeps editor focus until the input mounts. */}
-          {onNewFileInDir && (
+              mousedown-preventDefault keeps editor focus until the input mounts.
+              M6 WP6 — suppressed on a pruned heavy dir: it isn't indexed, so creating/
+              deleting inside it (node_modules/target/…) is nonsensical + a footgun. */}
+          {onNewFileInDir && !node.pruned && (
             <button
               type="button"
               className="file-tree-newhere"
@@ -498,8 +520,9 @@ function TreeRow({
             </button>
           )}
           {/* QoL-WP5b P3 — per-dir "new folder" (⊞, monochrome, distinct from the file ＋).
-              Hover-revealed; stopPropagation so it doesn't toggle the dir. */}
-          {onNewFolderInDir && (
+              Hover-revealed; stopPropagation so it doesn't toggle the dir.
+              M6 WP6 — suppressed on a pruned heavy dir (same rationale as the file ＋). */}
+          {onNewFolderInDir && !node.pruned && (
             <button
               type="button"
               className="file-tree-newhere"
@@ -517,8 +540,10 @@ function TreeRow({
           )}
           {/* QoL-WP5b — per-dir delete ✕ (recursive). Hover-revealed like the file ✕;
               stopPropagation so it doesn't toggle the dir. The parent shows a STRONGER
-              confirm (descendant count + "everything inside it") before trashing. */}
-          {onDeleteFolder && (
+              confirm (descendant count + "everything inside it") before trashing.
+              M6 WP6 — suppressed on a pruned heavy dir: the tree never indexed its
+              contents, so a recursive trash from here would delete an un-shown subtree. */}
+          {onDeleteFolder && !node.pruned && (
             <button
               type="button"
               className="file-tree-delete"

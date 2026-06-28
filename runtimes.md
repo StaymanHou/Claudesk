@@ -15,6 +15,13 @@ recorded best case. Long commands (tauri dev/build) exceed the floor and use
 the formula's value (clamped to the Bash tool's 600000 ms max).
 -->
 
+## pnpm vite build
+
+- **Last:** 1s (2026-06-28, WP6 Phase 3: built in 1.10s — frontend-only `pnpm vite build`)
+- **Use timeout:** 180000
+- **History:**
+  - 1.10s — 2026-06-28 (WP6 P3)
+
 ## pnpm install
 
 - **Last:** 3s (2026-06-16)
@@ -98,8 +105,12 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 1s (2026-06-27, m5-wp5 MAJOR-findings refactor: 266 pass — View-menu PiP-mode checkmark refresh, pure refactor, no new tests; warm run ~0.64s)
+- **Last:** 1s (2026-06-28, WP6 Phase 2 verify-codify: 285 pass — fs_watch heavy-dir re-base, warm exec 0.67s)
 - **Use timeout:** 120000
+- **History:**
+  - 0.67s — 2026-06-28 (WP6 P2 codify, 285 pass)
+  - 0.72s — 2026-06-28 (WP6 P1 codify, 283 pass)
+  - 0.64s — 2026-06-27 (m5-wp5, 266 pass)
 - **History:**
   - 1s — 2026-06-27 (m5-wp5 MAJOR-findings refactor: View-menu checkmark refresh; 266 pass, no behavior change)
   - 1s — 2026-06-27 (M5 WP5 P2 tri-state rework: 266 pass, pip_mode enum)

@@ -16,6 +16,14 @@ export interface TreeEntry {
   /** Project-relative POSIX path (e.g. "src/main.rs"). */
   path: string;
   is_dir: boolean;
+  /**
+   * M6 WP6 — true iff this is a **heavy dir** (`node_modules`/`target`/… by name, or
+   * detected-big) that the walker LISTED but did not descend into. Such a dir has zero
+   * child entries on the wire; this flag lets the tree render "(not indexed)" so a
+   * pruned heavy dir is distinguishable from a genuinely-empty dir. Optional — older
+   * `fs_tree` payloads (and most test fixtures) omit it (treated as `false`).
+   */
+  pruned?: boolean;
 }
 
 /** A node in the nested tree: a directory (with children) or a file leaf. */
@@ -27,6 +35,13 @@ export interface TreeNode {
   isDir: boolean;
   /** Child nodes (empty for files; possibly empty for an empty dir). */
   children: TreeNode[];
+  /**
+   * M6 WP6 — a heavy dir the walker pruned (listed, not descended). Carried from the
+   * wire `TreeEntry.pruned`. The FileTree renders a dim "(not indexed)" marker on such
+   * rows so an operator doesn't read a pruned `node_modules` as a genuinely-empty dir.
+   * `false` for files and for ordinary dirs.
+   */
+  pruned: boolean;
 }
 
 /**
@@ -68,7 +83,7 @@ export function buildTree(entries: TreeEntry[]): TreeNode[] {
     }
     const slash = path.lastIndexOf("/");
     const name = slash === -1 ? path : path.slice(slash + 1);
-    const node: TreeNode = { name, path, isDir: true, children: [] };
+    const node: TreeNode = { name, path, isDir: true, children: [], pruned: false };
     byPath.set(path, node);
     if (slash === -1) {
       roots.push(node);
@@ -82,13 +97,17 @@ export function buildTree(entries: TreeEntry[]): TreeNode[] {
     const { path, is_dir } = entry;
     if (path === "") continue; // defensive: the root itself is never an entry
     if (is_dir) {
-      ensureDir(path);
+      // M6 WP6 — carry the wire `pruned` flag onto the dir node. ensureDir creates the
+      // node (or returns one made on-demand by an earlier descendant); set pruned from
+      // THIS explicit entry, which is the authoritative source for the flag.
+      const node = ensureDir(path);
+      if (entry.pruned) node.pruned = true;
       continue;
     }
     // File leaf: attach under its parent dir (created on demand if unseen).
     const slash = path.lastIndexOf("/");
     const name = slash === -1 ? path : path.slice(slash + 1);
-    const leaf: TreeNode = { name, path, isDir: false, children: [] };
+    const leaf: TreeNode = { name, path, isDir: false, children: [], pruned: false };
     byPath.set(path, leaf);
     if (slash === -1) {
       roots.push(leaf);

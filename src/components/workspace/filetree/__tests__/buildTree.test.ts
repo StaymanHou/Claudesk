@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { buildTree, countDescendants, type TreeEntry } from "../buildTree";
 
 const e = (path: string, is_dir: boolean): TreeEntry => ({ path, is_dir });
+// M6 WP6 — a pruned heavy-dir entry (listed but not descended; zero child entries).
+const ep = (path: string): TreeEntry => ({ path, is_dir: true, pruned: true });
 
 describe("buildTree — flat fs_tree entries → nested tree", () => {
   it("nests files under their directory", () => {
@@ -78,6 +80,43 @@ describe("buildTree — flat fs_tree entries → nested tree", () => {
   it("ignores a stray empty-path entry", () => {
     const tree = buildTree([e("", true), e("real.txt", false)]);
     expect(tree.map((n) => n.name)).toEqual(["real.txt"]);
+  });
+
+  // M6 WP6 — the pruned flag rides from the wire TreeEntry onto the TreeNode so the
+  // FileTree can render "(not indexed)" on a heavy dir vs. a genuinely-empty one.
+  it("carries the pruned flag onto a heavy-dir node (and leaves it empty)", () => {
+    const tree = buildTree([ep("node_modules"), e("src", true), e("src/x.ts", false)]);
+    const nm = tree.find((n) => n.name === "node_modules");
+    expect(nm).toBeDefined();
+    expect(nm!.isDir).toBe(true);
+    expect(nm!.pruned).toBe(true);
+    expect(nm!.children).toEqual([]); // listed but not descended → no children
+  });
+
+  it("ordinary dirs and files are pruned=false", () => {
+    const tree = buildTree([e("src", true), e("src/x.ts", false), e("readme.md", false)]);
+    const src = tree.find((n) => n.name === "src")!;
+    expect(src.pruned).toBe(false);
+    expect(src.children[0].pruned).toBe(false); // the file leaf
+    const readme = tree.find((n) => n.name === "readme.md")!;
+    expect(readme.pruned).toBe(false);
+  });
+
+  it("a genuinely-empty dir is pruned=false (distinct from a pruned heavy dir)", () => {
+    const tree = buildTree([e("emptydir", true), ep("target")]);
+    expect(tree.find((n) => n.name === "emptydir")!.pruned).toBe(false);
+    expect(tree.find((n) => n.name === "target")!.pruned).toBe(true);
+  });
+
+  it("a pruned dir nested under an ordinary dir keeps the flag", () => {
+    const tree = buildTree([
+      e("packages", true),
+      e("packages/app", true),
+      ep("packages/app/node_modules"),
+    ]);
+    const app = tree[0].children.find((n) => n.name === "app")!;
+    const nm = app.children.find((n) => n.name === "node_modules")!;
+    expect(nm.pruned).toBe(true);
   });
 });
 

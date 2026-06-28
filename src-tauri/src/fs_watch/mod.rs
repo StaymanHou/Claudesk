@@ -14,21 +14,35 @@
 //! ## Exclusion model (the don't-fire-a-re-walk-storm rule)
 //! The watcher must NOT emit for `.git/` internal churn (every git op rewrites the
 //! index) or for build/dep dirs (`node_modules/`, `target/`, …) — both would flood
-//! events and, for build dirs, risk the documented infinite-rerun footgun. We reuse
-//! the SAME exclusion contract as `fs_index::project_walker`: `.git/` hard-excluded +
-//! the project's `.gitignore` honored. [`build_ignore`] constructs the matcher once
-//! per watched root (in `commands`); [`is_ignored`] is the pure per-path check the
-//! transform applies. Watcher + tree therefore agree on what's visible.
+//! events and, for build dirs, risk the documented infinite-rerun footgun. M6 WP6
+//! **re-based** this exclusion from "the project's `.gitignore` honored" to the SAME
+//! heavy-dir predicate the walker/tree/finder now use ([`fs_index::is_heavy_dir_name`]):
+//! a path is ignored iff any ancestor component is a heavy-dir NAME (or `.git`).
+//! Watcher + tree therefore still agree — but on the *heavy* axis, not the *gitignored*
+//! axis. The behavior change: a gitignored-but-edited file (`.env`, `.session.md`,
+//! `.claude/*`) now EMITS `fs-change`, so editing it gets live external-change refresh
+//! — the EDIT-case unlock that pairs with the tree showing it.
+//!
+//! ## Hot-path heaviness: NAME-based only (P2.1 decision, 2026-06-28)
+//! [`is_ignored`] is called once per changed path inside the debounce callback (the hot
+//! path), so it must be cheap + pure. We use NAME-based heaviness only — no per-event
+//! `read_dir`, no detected-big detection, no cached scan. The tradeoff (accepted at plan
+//! time, design decision #7): a *detected-big-but-unnamed* dir is NOT suppressed by the
+//! watcher, so it may over-emit live-refresh there. This is rare and harmless — the tree
+//! still prunes that dir for display (the tree CAN afford the `read_dir`); only the
+//! watcher over-fires, costing at worst an extra harmless re-walk, never a wrong result.
+//! This mirrors the pre-existing "missed nested-ignore at worst causes an extra re-walk"
+//! philosophy this module already accepted, and keeps [`is_ignored`] a pure FS-free fn
+//! (no matcher to build, no `Gitignore` plumbing — both dropped in WP6).
 
 pub mod commands;
 
 use std::path::{Path, PathBuf};
 
-use ignore::gitignore::Gitignore;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::fs_index::rel_posix;
+use crate::fs_index::{is_heavy_dir_name, rel_posix};
 
 /// Errors from starting/stopping a workspace watcher. IPC-facing wrappers map this to
 /// a `String` (the never-swallow lesson — a failed watcher means the tree/editor go
@@ -81,42 +95,27 @@ pub struct FsChange {
     pub kind: FsKind,
 }
 
-/// Build the ignore matcher for a watched root: the root's `.gitignore` (so
-/// `node_modules/`, `target/`, `dist/`, … are excluded wherever the project lists
-/// them). `.git/` is handled separately as a hard exclusion in [`is_ignored`] because
-/// gitignore rules never cover `.git/` itself.
-///
-/// Note: this honors the ROOT `.gitignore` only, not nested per-directory ignores (a
-/// faithful nested walk would need the full `WalkBuilder` machinery per event, too
-/// heavy for the hot path). For the operator's repos the root `.gitignore` covers the
-/// high-churn dirs that matter; a missed nested-ignore path at worst causes a harmless
-/// extra re-walk, never a wrong result. The matcher is built once per `watch_start`.
-pub fn build_ignore(root: &Path) -> Gitignore {
-    let mut builder = ignore::gitignore::GitignoreBuilder::new(root);
-    // add() returns Some(err) on a malformed line; a missing .gitignore is a silent
-    // no-op (add returns None and the path simply isn't there) — either way we get a
-    // usable (possibly empty) matcher rather than failing the watcher.
-    let _ = builder.add(root.join(".gitignore"));
-    builder.build().unwrap_or_else(|_| Gitignore::empty())
-}
-
 /// Whether an absolute changed `path` under `root` should be IGNORED (not emitted).
-/// `.git/` is hard-excluded; everything else defers to the gitignore `matcher`.
+/// `.git/` is hard-excluded; everything else is ignored iff any ancestor component is a
+/// heavy-dir NAME ([`fs_index::is_heavy_dir_name`] — `node_modules`, `target`, `dist`, …).
 ///
-/// Pure + matcher-injected so it unit-tests without touching the filesystem.
-pub fn is_ignored(root: &Path, path: &Path, matcher: &Gitignore) -> bool {
+/// NAME-based only, by design (see module doc → "Hot-path heaviness"): pure + FS-free so
+/// it unit-tests trivially and costs O(components) per event with no `read_dir`. A
+/// detected-big-but-unnamed dir is therefore NOT suppressed here (the tree still prunes
+/// it; the watcher's worst case is a harmless extra re-walk). The gitignore matcher this
+/// replaced is gone — gitignored-but-non-heavy files (`.env`, `.session.md`, `.claude/*`)
+/// now pass the filter and emit `fs-change`, giving them live external-change refresh.
+pub fn is_ignored(root: &Path, path: &Path) -> bool {
     let Ok(rel) = path.strip_prefix(root) else {
         // A path outside the root (shouldn't happen for a rooted watcher) — ignore it.
         return true;
     };
-    // Hard-exclude the .git metadata dir (any component named ".git").
-    if rel.components().any(|c| c.as_os_str() == ".git") {
-        return true;
-    }
-    // gitignore match. We don't know is_dir cheaply here; pass false — directory-only
-    // patterns (`foo/`) still match a file inside the dir via parent matching, which
-    // is what `matched_path_or_any_parents` provides.
-    matcher.matched_path_or_any_parents(path, false).is_ignore()
+    // Any path component that is `.git` or a heavy-dir NAME → ignored. This catches both
+    // the dir itself and anything under it (a path with such an ancestor component).
+    rel.components().any(|c| {
+        let name = c.as_os_str().to_string_lossy();
+        name == ".git" || is_heavy_dir_name(&name)
+    })
 }
 
 /// The pure transform: given the workspace id, root, the absolute paths from a
@@ -132,11 +131,10 @@ pub fn paths_to_change(
     root: &Path,
     abs_paths: &[PathBuf],
     kind: FsKind,
-    matcher: &Gitignore,
 ) -> Option<FsChange> {
     let mut rels: Vec<String> = Vec::new();
     for p in abs_paths {
-        if is_ignored(root, p, matcher) {
+        if is_ignored(root, p) {
             continue;
         }
         if let Some(rel) = rel_posix(root, p) {
@@ -158,115 +156,122 @@ pub fn paths_to_change(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::path::Path;
     use tempfile::TempDir;
 
-    fn fixture_with_gitignore() -> TempDir {
-        let dir = TempDir::new().unwrap();
-        let root = dir.path();
-        fs::write(root.join(".gitignore"), "node_modules/\ntarget/\n*.log\n").unwrap();
-        dir
+    // M6 WP6: `is_ignored` is now a pure NAME-based heavy-dir predicate — no `.gitignore`
+    // file, no matcher to build. Tests construct paths under a bare temp root.
+    fn root() -> TempDir {
+        TempDir::new().unwrap()
     }
 
     #[test]
     fn git_dir_paths_are_ignored() {
-        let dir = fixture_with_gitignore();
-        let root = dir.path();
-        let matcher = build_ignore(root);
-        assert!(is_ignored(root, &root.join(".git/index"), &matcher));
-        assert!(is_ignored(
-            root,
-            &root.join(".git/refs/heads/main"),
-            &matcher
-        ));
+        let dir = root();
+        let r: &Path = dir.path();
+        assert!(is_ignored(r, &r.join(".git/index")));
+        assert!(is_ignored(r, &r.join(".git/refs/heads/main")));
     }
 
     #[test]
-    fn gitignored_paths_are_ignored() {
-        let dir = fixture_with_gitignore();
-        let root = dir.path();
-        let matcher = build_ignore(root);
-        assert!(is_ignored(
-            root,
-            &root.join("node_modules/react/index.js"),
-            &matcher
-        ));
-        assert!(is_ignored(
-            root,
-            &root.join("target/debug/claudesk"),
-            &matcher
-        ));
-        assert!(is_ignored(root, &root.join("build.log"), &matcher));
+    fn heavy_dir_paths_are_ignored() {
+        // Heavy dirs by NAME stay suppressed (the hard requirement) — matched on any
+        // ancestor component, so contents anywhere under them are ignored.
+        let dir = root();
+        let r: &Path = dir.path();
+        assert!(is_ignored(r, &r.join("node_modules/react/index.js")));
+        assert!(is_ignored(r, &r.join("target/debug/claudesk")));
+        assert!(is_ignored(r, &r.join("dist/bundle.js")));
+        // a nested heavy dir (heavy component not at the top level) is still caught
+        assert!(is_ignored(r, &r.join("packages/app/node_modules/x/y.js")));
+    }
+
+    #[test]
+    fn gitignored_but_non_heavy_files_are_now_kept() {
+        // The WP6 re-base: a gitignored-but-edited file (`.env`, `.session.md`,
+        // `.claude/*`) is NO LONGER ignored — it now emits `fs-change` (the EDIT-case
+        // unlock). This is the inversion of the old `gitignored_paths_are_ignored`.
+        let dir = root();
+        let r: &Path = dir.path();
+        assert!(!is_ignored(r, &r.join(".env")));
+        assert!(!is_ignored(r, &r.join(".session.md")));
+        assert!(!is_ignored(r, &r.join(".claude/memory/note.md")));
+        // a stray *.log (gitignored in many repos) is also kept now — not heavy by name
+        assert!(!is_ignored(r, &r.join("build.log")));
     }
 
     #[test]
     fn tracked_paths_are_kept() {
-        let dir = fixture_with_gitignore();
-        let root = dir.path();
-        let matcher = build_ignore(root);
-        assert!(!is_ignored(root, &root.join("src/main.rs"), &matcher));
-        assert!(!is_ignored(
-            root,
-            &root.join("docs/product/qol-wbs.md"),
-            &matcher
-        ));
-        assert!(!is_ignored(root, &root.join("newfile.txt"), &matcher));
+        let dir = root();
+        let r: &Path = dir.path();
+        assert!(!is_ignored(r, &r.join("src/main.rs")));
+        assert!(!is_ignored(r, &r.join("docs/product/qol-wbs.md")));
+        assert!(!is_ignored(r, &r.join("newfile.txt")));
     }
 
     #[test]
-    fn missing_gitignore_yields_usable_matcher_excluding_only_git() {
-        // No .gitignore in this dir → build_ignore returns an (effectively empty)
-        // matcher; only .git/ is excluded, everything else kept.
-        let dir = TempDir::new().unwrap();
-        let root = dir.path();
-        let matcher = build_ignore(root);
-        assert!(is_ignored(root, &root.join(".git/index"), &matcher));
-        assert!(!is_ignored(root, &root.join("anything.txt"), &matcher));
+    fn detected_big_but_unnamed_dir_is_not_suppressed_by_watcher() {
+        // Accepted P2.1 tradeoff: NAME-based only, so a dir that the TREE would prune via
+        // detected-big (an unknown name with >threshold children) is NOT suppressed by
+        // the watcher — it emits. Documents the known over-emit (harmless extra re-walk).
+        let dir = root();
+        let r: &Path = dir.path();
+        assert!(!is_ignored(r, &r.join("generated/file_0001.txt")));
+    }
+
+    #[test]
+    fn path_outside_root_is_ignored() {
+        let dir = root();
+        let r: &Path = dir.path();
+        // A path that doesn't start with root (shouldn't happen for a rooted watcher).
+        assert!(is_ignored(r, Path::new("/some/other/place/x.txt")));
     }
 
     #[test]
     fn transform_filters_ignored_and_keeps_tracked() {
-        let dir = fixture_with_gitignore();
-        let root = dir.path();
-        let matcher = build_ignore(root);
+        let dir = root();
+        let r: &Path = dir.path();
         let abs = vec![
-            root.join(".git/index"),          // ignored
-            root.join("node_modules/x/y.js"), // ignored
-            root.join("src/main.rs"),         // kept
-            root.join("README.md"),           // kept
+            r.join(".git/index"),          // ignored (.git)
+            r.join("node_modules/x/y.js"), // ignored (heavy name)
+            r.join(".env"),                // KEPT now (gitignored-but-non-heavy)
+            r.join("src/main.rs"),         // kept
+            r.join("README.md"),           // kept
         ];
-        let change = paths_to_change("ws-1", root, &abs, FsKind::Modified, &matcher)
+        let change = paths_to_change("ws-1", r, &abs, FsKind::Modified)
             .expect("at least one tracked path → Some");
         assert_eq!(change.workspace_id, "ws-1");
         assert_eq!(change.kind, FsKind::Modified);
-        // sorted + only the two tracked, project-relative POSIX.
+        // sorted + only the three kept, project-relative POSIX (.env now included).
         assert_eq!(
             change.paths,
-            vec!["README.md".to_string(), "src/main.rs".to_string()]
+            vec![
+                ".env".to_string(),
+                "README.md".to_string(),
+                "src/main.rs".to_string()
+            ]
         );
     }
 
     #[test]
     fn transform_all_ignored_returns_none() {
-        let dir = fixture_with_gitignore();
-        let root = dir.path();
-        let matcher = build_ignore(root);
-        let abs = vec![root.join(".git/HEAD"), root.join("target/x")];
-        // A pure .git/ + build-dir churn batch → nothing to emit.
-        assert!(paths_to_change("ws-1", root, &abs, FsKind::Modified, &matcher).is_none());
+        let dir = root();
+        let r: &Path = dir.path();
+        let abs = vec![r.join(".git/HEAD"), r.join("target/x")];
+        // A pure .git/ + heavy-dir churn batch → nothing to emit.
+        assert!(paths_to_change("ws-1", r, &abs, FsKind::Modified).is_none());
     }
 
     #[test]
     fn transform_dedups_repeated_paths() {
-        let dir = TempDir::new().unwrap();
-        let root = dir.path();
-        let matcher = build_ignore(root);
+        let dir = root();
+        let r: &Path = dir.path();
         let abs = vec![
-            root.join("a.txt"),
-            root.join("a.txt"), // same path twice (a write-then-modify batch)
-            root.join("b.txt"),
+            r.join("a.txt"),
+            r.join("a.txt"), // same path twice (a write-then-modify batch)
+            r.join("b.txt"),
         ];
-        let change = paths_to_change("ws-1", root, &abs, FsKind::Created, &matcher).unwrap();
+        let change = paths_to_change("ws-1", r, &abs, FsKind::Created).unwrap();
         assert_eq!(change.paths, vec!["a.txt".to_string(), "b.txt".to_string()]);
     }
 

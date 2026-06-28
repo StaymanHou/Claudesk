@@ -1630,6 +1630,24 @@ body,
   min-width: 0;
 }
 
+/* M6 WP6 — a pruned heavy dir (node_modules/target/… — listed but not indexed). Dim
+   the row name and show a small "(not indexed)" marker so it's visually distinct from a
+   genuinely-empty dir, without making it look like a broken/error row. */
+.file-tree-dir-pruned .file-tree-name {
+  color: #7a7a7a;
+  font-style: italic;
+}
+
+.file-tree-pruned-label {
+  flex-shrink: 0;
+  margin-left: 0.5em;
+  color: #6a6a6a;
+  font-size: 0.9em;
+  font-style: italic;
+  white-space: nowrap;
+  user-select: none;
+}
+
 /* WP11 — per-file git-status indicator (Sublime-sidebar style). A single-char glyph
    on the RIGHT of the filename (operator request, verify-human 2026-06-21), colored
    by status (dark-only palette derived from VS Code's git decoration colors). File

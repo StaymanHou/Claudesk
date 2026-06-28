@@ -14,11 +14,14 @@
 //!   [`ProjectSearchError`] to a `String`.
 //!
 //! ## Shared walker contract (no forked walk)
-//! The walk goes through [`crate::fs_index`]'s `project_walker` / `check_root` /
+//! The walk goes through [`crate::fs_index`]'s `walk_project` / `check_root` /
 //! `rel_posix` helpers — the SAME exclusion set the Cmd+P finder and the file tree
-//! use (gitignore / `.ignore` / global gitignore honored, `.git/` excluded, dotfiles
-//! shown). So search, Cmd+P, and the tree provably agree about what is "in the
-//! project" — there is deliberately no second `WalkBuilder` here.
+//! use. M6 WP6 re-based that set from "gitignore honored" to **"heavy generated dirs
+//! pruned"** (gitignore NOT honored; `node_modules/`/`target/`/detected-big dirs listed
+//! but not descended; `.git/` excluded; dotfiles shown). So search, Cmd+P, and the tree
+//! provably agree about what is "in the project" — there is deliberately no second walk
+//! here. NOTE the consequence: a gitignored file (e.g. `.env`) IS now searched/replaced;
+//! this is intended (single-user tool, the operator wants reach over their own files).
 //!
 //! ## In-process, line-oriented matching
 //! Matching uses the `regex` crate (ripgrep's own engine), per line. The four search
@@ -40,7 +43,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::fs_index::{check_root, project_walker, rel_posix};
+use crate::fs_index::{check_root, rel_posix, walk_project};
 
 /// Errors from a project search. IPC-facing wrappers map this to a `String`.
 #[derive(Debug, Error)]
@@ -142,8 +145,8 @@ fn build_regex(query: &SearchQuery) -> Result<Regex, ProjectSearchError> {
 
 /// Search `root` for `query` and return per-file matches.
 ///
-/// Walks the project via the shared [`project_walker`] (gitignore honored, `.git/`
-/// excluded — identical to the finder/tree), reads each file as UTF-8, and records
+/// Walks the project via the shared [`walk_project`] (heavy dirs pruned, gitignore NOT
+/// honored, `.git/` excluded — identical to the finder/tree), reads each file as UTF-8, and records
 /// every line containing a match. Non-UTF-8 (binary) files and unreadable entries are
 /// skipped. Results are sorted by file path for a deterministic order; matches within
 /// a file are in document order. Files with zero matches are omitted.
@@ -165,15 +168,13 @@ pub fn search_core(
     let re = build_regex(query)?;
 
     let mut results: Vec<FileMatches> = Vec::new();
-    for entry in project_walker(root) {
-        // Per-entry walk failures (e.g. a permission-denied subdir) are skipped — a
-        // partial result beats none (mirrors fs_index). A root-level failure was
-        // already caught by check_root above.
-        let Ok(entry) = entry else { continue };
-        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
+    for entry in walk_project(root) {
+        // Files only — heavy-dir rows + every other directory carry no content. Files
+        // under a pruned heavy dir were never descended into (mirrors fs_index/tree).
+        if entry.is_dir {
             continue;
         }
-        let path = entry.path();
+        let path = entry.abs.as_path();
 
         // Non-UTF-8 (binary) files are skipped: there is no meaningful line text to
         // show, and ripgrep-style search is a text-search tool. Read errors (e.g.
@@ -253,12 +254,12 @@ pub fn replace_core(
     let mut files_changed: u32 = 0;
     let mut matches_replaced: u32 = 0;
 
-    for entry in project_walker(root) {
-        let Ok(entry) = entry else { continue };
-        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
+    for entry in walk_project(root) {
+        // Files only (same heavy-dir-pruned, gitignore-not-honored walk as search).
+        if entry.is_dir {
             continue;
         }
-        let path = entry.path();
+        let path = entry.abs.as_path();
 
         // Skip non-UTF-8 (binary) + unreadable files, same as search.
         let Ok(contents) = std::fs::read_to_string(path) else {
@@ -343,11 +344,13 @@ mod tests {
         fs::write(root.join("src/lib.rs"), "pub fn foobar() {}\n").unwrap();
         fs::write(root.join("README.md"), "Foo Bar Baz\n").unwrap();
         fs::write(root.join("ignored.txt"), "foo here\n").unwrap();
-        // The `ignore` crate applies `.gitignore` only inside a git repo; the `.git`
-        // dir provides that context (and is itself always excluded from the walk).
+        // M6 WP6: the walk no longer honors gitignore, so `ignored.txt` IS searched now.
+        // A heavy dir (by name) IS still excluded — its contents are never walked.
+        fs::create_dir(root.join("node_modules")).unwrap();
+        fs::write(root.join("node_modules/dep.js"), "foo in dep\n").unwrap();
         fs::create_dir(root.join(".git")).unwrap();
         fs::write(root.join(".git/config"), "[core]").unwrap();
-        fs::write(root.join(".gitignore"), "ignored.txt\n").unwrap();
+        fs::write(root.join(".gitignore"), "ignored.txt\nnode_modules/\n").unwrap();
         dir
     }
 
@@ -363,10 +366,14 @@ mod tests {
         // src/main.rs: "let foo = 1;" (1) + "foo(bar)" (1) = 2
         // src/lib.rs:  "foobar" (1)
         // README.md:   "Foo Bar Baz" → "Foo" (1, case-insensitive)
-        // ignored.txt: gitignored → 0
-        assert_eq!(total(&results), 4, "{results:?}");
+        // ignored.txt: "foo here" (1) — gitignored but NOW searched (M6 WP6)
+        // node_modules/dep.js: heavy-dir → never walked → 0
+        assert_eq!(total(&results), 5, "{results:?}");
         let files: Vec<&str> = results.iter().map(|f| f.file.as_str()).collect();
-        assert_eq!(files, vec!["README.md", "src/lib.rs", "src/main.rs"]);
+        assert_eq!(
+            files,
+            vec!["README.md", "ignored.txt", "src/lib.rs", "src/main.rs"]
+        );
     }
 
     #[test]
@@ -395,12 +402,13 @@ mod tests {
         };
         let results = search_core(dir.path(), &q).unwrap();
         // Whole-word "foo": matches "let foo = 1;" and "foo(bar)" (foo is its own
-        // word there), and "Foo" in README; does NOT match "foobar" in lib.rs.
+        // word there), "Foo" in README, and "foo here" in the now-searched ignored.txt;
+        // does NOT match "foobar" in lib.rs.
         assert!(
             !results.iter().any(|f| f.file == "src/lib.rs"),
             "foobar must not match whole-word foo: {results:?}"
         );
-        assert_eq!(total(&results), 3, "{results:?}");
+        assert_eq!(total(&results), 4, "{results:?}");
     }
 
     #[test]
@@ -442,12 +450,18 @@ mod tests {
     }
 
     #[test]
-    fn gitignored_files_are_not_searched() {
+    fn gitignored_files_are_now_searched_but_heavy_dirs_excluded() {
+        // M6 WP6 re-base: gitignore no longer governs the walk, so a gitignored file
+        // (`ignored.txt`) IS searched. Heavy dirs (`node_modules/`) are still excluded.
         let dir = fixture();
         let results = search_core(dir.path(), &substring("foo")).unwrap();
         assert!(
-            !results.iter().any(|f| f.file == "ignored.txt"),
-            "gitignored file must not be searched: {results:?}"
+            results.iter().any(|f| f.file == "ignored.txt"),
+            "gitignored file is now searched: {results:?}"
+        );
+        assert!(
+            !results.iter().any(|f| f.file.starts_with("node_modules/")),
+            "heavy-dir contents must not be searched: {results:?}"
         );
     }
 
@@ -580,10 +594,11 @@ mod tests {
     fn replace_rewrites_matching_files_and_counts() {
         let dir = fixture();
         // "foo" appears: main.rs ×2, lib.rs ×1 (foobar), README ×1 (Foo, case-insens),
-        // ignored.txt excluded. Replace-all should rewrite 3 files, 4 matches.
+        // ignored.txt ×1 (NOW searched, M6 WP6); node_modules excluded (heavy dir).
+        // Replace-all should rewrite 4 files, 5 matches.
         let summary = replace_core(dir.path(), &substring("foo"), "BAR").unwrap();
-        assert_eq!(summary.matches_replaced, 4, "{summary:?}");
-        assert_eq!(summary.files_changed, 3, "{summary:?}");
+        assert_eq!(summary.matches_replaced, 5, "{summary:?}");
+        assert_eq!(summary.files_changed, 4, "{summary:?}");
         // The replaced text is actually on disk + the old text is gone.
         let main = fs::read_to_string(dir.path().join("src/main.rs")).unwrap();
         assert_eq!(main, "let BAR = 1;\nBAR(bar)\n");
@@ -593,12 +608,16 @@ mod tests {
     }
 
     #[test]
-    fn replace_does_not_touch_gitignored_files() {
+    fn replace_now_touches_gitignored_files_but_not_heavy_dirs() {
+        // M6 WP6: replace mirrors search — a gitignored file IS rewritten (the operator
+        // wants reach over their own files); a heavy-dir file is NOT (never walked).
         let dir = fixture();
         replace_core(dir.path(), &substring("foo"), "BAR").unwrap();
-        // ignored.txt is gitignored → not searched → not rewritten.
         let ignored = fs::read_to_string(dir.path().join("ignored.txt")).unwrap();
-        assert_eq!(ignored, "foo here\n", "gitignored file must be untouched");
+        assert_eq!(ignored, "BAR here\n", "gitignored file is now rewritten");
+        // The heavy-dir file is untouched (its contents were never walked).
+        let dep = fs::read_to_string(dir.path().join("node_modules/dep.js")).unwrap();
+        assert_eq!(dep, "foo in dep\n", "heavy-dir file must be untouched");
     }
 
     #[test]
