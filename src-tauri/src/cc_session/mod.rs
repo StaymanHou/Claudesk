@@ -33,13 +33,15 @@ use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use thiserror::Error;
 
 /// The external CLI Claudesk drives.
 const CC_CMD: &str = "claude";
-/// Yolo mode by default (`docs/product/arch.md` Key Decisions). A Phase 4 setting
-/// will let the user opt out.
+/// Yolo mode by default (`docs/product/arch.md` Key Decisions). The opt-out is the
+/// M6 WP7 `AppSettings.cc_yolo` setting (default ON) — gated in [`build_cc_argv`] and
+/// read at spawn time from the persisted settings; a change takes effect on the next
+/// spawn (the argv is fixed once per CC process).
 const CC_ARG_YOLO: &str = "--dangerously-skip-permissions";
 /// Chunk size for the PTY reader. WP2 saw multi-KB redraws; 4 KB matches the probe.
 const READ_CHUNK: usize = 4096;
@@ -140,6 +142,20 @@ pub fn resolve_shell_argv(env_shell: Option<String>) -> Vec<String> {
     vec![shell, "-l".to_string(), "-i".to_string()]
 }
 
+/// Build the argv for a CC spawn, gating the yolo flag on the WP7 setting.
+///
+/// `yolo == true` (the default) → `["claude", "--dangerously-skip-permissions"]`; `false`
+/// → `["claude"]`, so CC shows its permission prompts. Pure (bool in → argv out) so the
+/// gate is unit-testable without spawning a real `claude`; the setting read happens at the
+/// call site ([`SessionRegistry::spawn`]) and is injected here.
+fn build_cc_argv(yolo: bool) -> Vec<String> {
+    let mut argv = vec![CC_CMD.to_string()];
+    if yolo {
+        argv.push(CC_ARG_YOLO.to_string());
+    }
+    argv
+}
+
 /// Claudesk's seam for driving a Claude Code session. Never bypass this trait when
 /// talking to CC (`CLAUDE.md`). Phase 2 extends it with `state_events()` (hook-channel
 /// status fan-out) and `recycle()` (Recycle Session) — reserved here, not implemented.
@@ -219,17 +235,18 @@ pub struct PtyCcSession {
 }
 
 impl PtyCcSession {
-    /// Spawn `claude --dangerously-skip-permissions` with `cwd = project_path`.
+    /// Spawn `claude` (with the yolo flag when `yolo`) with `cwd = project_path`.
     ///
-    /// Builds CC's argv + the explicit color-TTY env, then delegates to the generic
+    /// Builds CC's argv via [`build_cc_argv`] (gating `--dangerously-skip-permissions` on
+    /// the WP7 setting) + the explicit color-TTY env, then delegates to the generic
     /// [`Self::spawn_argv`] core. The `TERM`/`COLORTERM` overrides are required: WP2
     /// ran under a terminal that exported `TERM`, but a Tauri app has none, so CC
     /// would not detect a color TTY without this (`wp2-cc-pty-probe.md:67,176`).
-    fn spawn(app: AppHandle, id: String, project_path: &str) -> Result<Self, CcError> {
+    fn spawn(app: AppHandle, id: String, project_path: &str, yolo: bool) -> Result<Self, CcError> {
         Self::spawn_argv(
             app,
             id,
-            &[CC_CMD.to_string(), CC_ARG_YOLO.to_string()],
+            &build_cc_argv(yolo),
             project_path,
             &color_tty_env(),
             "/exit",
@@ -465,10 +482,18 @@ impl SessionRegistry {
         id
     }
 
-    /// Spawn a real CC session for `project_path` and register it.
+    /// Spawn a real CC session for `project_path` and register it. Reads the WP7
+    /// `cc_yolo` setting at spawn time (default ON) to decide whether to pass
+    /// `--dangerously-skip-permissions` — a change takes effect on the next spawn.
     pub fn spawn(&mut self, app: AppHandle, project_path: &str) -> Result<String, CcError> {
+        let yolo = app
+            .path()
+            .app_data_dir()
+            .ok()
+            .and_then(|dir| crate::config_store::settings::read_cc_yolo(&dir).ok())
+            .unwrap_or(true);
         let id = self.mint_id();
-        let session = PtyCcSession::spawn(app, id.clone(), project_path)?;
+        let session = PtyCcSession::spawn(app, id.clone(), project_path, yolo)?;
         self.sessions.insert(id.clone(), Box::new(session));
         Ok(id)
     }
@@ -585,6 +610,23 @@ mod tests {
     fn slash_command_preserves_arguments() {
         assert_eq!(slash_command_bytes("/session-resume"), b"/session-resume\r");
         assert_eq!(slash_command_bytes("/model opus"), b"/model opus\r");
+    }
+
+    // --- build_cc_argv: WP7 yolo gate (pure) ---
+
+    #[test]
+    fn cc_argv_includes_yolo_when_enabled() {
+        let argv = build_cc_argv(true);
+        assert_eq!(argv[0], CC_CMD);
+        assert!(argv.contains(&CC_ARG_YOLO.to_string()));
+    }
+
+    #[test]
+    fn cc_argv_omits_yolo_when_disabled() {
+        // The opt-out: CC then shows its permission prompts.
+        let argv = build_cc_argv(false);
+        assert_eq!(argv, vec![CC_CMD.to_string()]);
+        assert!(!argv.contains(&CC_ARG_YOLO.to_string()));
     }
 
     // --- resolve_shell_argv: WP9 second-terminal shell resolution (pure) ---

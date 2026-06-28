@@ -40,6 +40,9 @@ export const MENU_IDS = {
   PIP_MODE_OFF: "view.pip.mode.off",
   PIP_MODE_ON: "view.pip.mode.on",
   PIP_MODE_AUTO: "view.pip.mode.auto",
+  // M6 WP7 — CC yolo (--dangerously-skip-permissions) opt-out toggle (checked = yolo ON).
+  // A click sets the INVERTED state via cc_set_yolo (App.tsx reads current from `cc-yolo`).
+  CC_YOLO_TOGGLE: "view.cc.yolo",
 } as const;
 
 /** A callback action's tag — App.tsx switches on this to call the right seam. */
@@ -50,7 +53,8 @@ export type MenuCallback =
   | "revealInFinder"
   | "pipModeOff"
   | "pipModeOn"
-  | "pipModeAuto";
+  | "pipModeAuto"
+  | "ccYoloToggle";
 
 /**
  * The action a functional menu-item id maps to:
@@ -129,6 +133,10 @@ export function menuActionFor(id: string): MenuAction | null {
       return { kind: "callback", callback: "pipModeOn" };
     case MENU_IDS.PIP_MODE_AUTO:
       return { kind: "callback", callback: "pipModeAuto" };
+    // M6 WP7 — CC yolo toggle. App.tsx inverts the current state + invokes cc_set_yolo;
+    // the backend broadcasts `cc-yolo` so the menu checkmark re-checks.
+    case MENU_IDS.CC_YOLO_TOGGLE:
+      return { kind: "callback", callback: "ccYoloToggle" };
     default:
       return null;
   }

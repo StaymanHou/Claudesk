@@ -5,6 +5,9 @@ import { isPaletteChord } from "../../components/workspace/editor/paletteCommand
 import { isFinderChord } from "../../components/workspace/finder/finderChord";
 import { isSearchChord } from "../../components/workspace/search/searchChord";
 import { isCloseTabChord } from "../../components/workspace/editor/closeTabChord";
+// Source-text guard for the App.tsx menu-path wiring (the repo ?raw convention; the
+// live spawn behavior is verify-human-covered, not re-asserted here).
+import appTsx from "../../App.tsx?raw";
 
 // A KeyboardEventInit carries optional fields; the chord predicates read
 // {metaKey, shiftKey, key}. Coerce to the shape the predicates expect (the real
@@ -113,6 +116,31 @@ describe("menuBridge — callback ids", () => {
       kind: "callback",
       callback: "pipModeAuto",
     });
+    // M6 WP7 — the CC yolo toggle maps to its callback tag.
+    expect(menuActionFor(MENU_IDS.CC_YOLO_TOGGLE)).toEqual({
+      kind: "callback",
+      callback: "ccYoloToggle",
+    });
+  });
+});
+
+describe("M6 WP7 — the View-menu yolo toggle wires to cc_set_yolo", () => {
+  // The toggle (in menuBridge) maps to the ccYoloToggle callback, which App.tsx turns
+  // into invoke("cc_set_yolo", {yolo: !current}), tracking current via cc_get_yolo + the
+  // `cc-yolo` broadcast. Source guards pin the menu path so a refactor can't sever it.
+  // Live spawn-argv behavior is verify-human-covered (installed .app), not re-asserted here.
+  it("the toggle id is byte-identical to the Rust app_menu::ids constant", () => {
+    // CRITICAL contract: MENU_IDS must match app_menu::ids (Rust) byte-for-byte.
+    expect(MENU_IDS.CC_YOLO_TOGGLE).toBe("view.cc.yolo");
+  });
+  it("App.tsx's menu listener inverts current state + invokes cc_set_yolo", () => {
+    expect(appTsx).toContain('action.callback === "ccYoloToggle"');
+    expect(appTsx).toContain('invoke("cc_set_yolo"');
+    expect(appTsx).toContain("!ccYoloRef.current");
+  });
+  it("App.tsx seeds + tracks the current yolo state from the backend", () => {
+    expect(appTsx).toContain('invoke<boolean>("cc_get_yolo")');
+    expect(appTsx).toContain('listen<boolean>("cc-yolo"');
   });
 });
 

@@ -241,6 +241,34 @@ function App() {
     focusedPathRef.current = focused ? focused.project_path : null;
   }, [workspaces, focusedId]);
 
+  // M6 WP7 — track the current CC yolo setting (latest-ref, like focusedPathRef) so the
+  // once-subscribed `menu` listener can invert it on a CC_YOLO_TOGGLE click. The backend
+  // is the source of truth: seed from cc_get_yolo on mount, update on each `cc-yolo`
+  // broadcast (also fired by cc_set_yolo, so this ref re-syncs to the persisted value).
+  const ccYoloRef = useRef<boolean>(true); // default ON until the first read resolves
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void invoke<boolean>("cc_get_yolo")
+      .then((yolo) => {
+        ccYoloRef.current = yolo;
+      })
+      .catch((e) => console.error("[claudesk] cc_get_yolo failed:", e));
+    void listen<boolean>("cc-yolo", (event) => {
+      ccYoloRef.current = event.payload;
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     // `cancelled` guard (mirrors useWorkspaceStatus): `listen` is async, so under
@@ -279,6 +307,17 @@ function App() {
       if (pipModeForCallback) {
         void invoke("pip_set_mode", { mode: pipModeForCallback }).catch((e) => {
           console.error("[claudesk] pip_set_mode (menu) failed:", e);
+        });
+        return;
+      }
+      // M6 WP7 — CC yolo toggle is app-global (not workspace-scoped), so it runs BEFORE the
+      // focused-path guard too. The menu emits only the id, so invert the tracked current
+      // state; cc_set_yolo persists + broadcasts `cc-yolo`, which re-syncs ccYoloRef + the
+      // menu checkmark. Takes effect on the NEXT cc_spawn (argv is chosen once per process).
+      if (action.callback === "ccYoloToggle") {
+        const next = !ccYoloRef.current;
+        void invoke("cc_set_yolo", { yolo: next }).catch((e) => {
+          console.error("[claudesk] cc_set_yolo (menu) failed:", e);
         });
         return;
       }

@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-27  # /release v0.2.1 cold tauri build 89s
+updated: 2026-06-28  # M6 WP7 P1 cargo test 4s
 ---
 
 # Runtime Registry
@@ -61,9 +61,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.3s (2026-06-27, M6 WP5 verify-codify: 719 pass / 74 files; +8 wrap-toggle)
+- **Last:** 1.3s (2026-06-28, M6 WP7 P3 build: 731 pass / 75 files; +5 pickerYoloWiring guards)
 - **Use timeout:** 120000
 - **History:**
+  - 1.3s — 2026-06-28 (M6 WP7 P3 build: 731 pass / 75 files, +5 pickerYoloWiring guards)
+  - 1.3s — 2026-06-28 (M6 WP7 P2 build: 726 pass / 74 files, +3 cc-yolo menuBridge + App.tsx wiring guards)
   - 1.3s — 2026-06-27 (M6 WP5 verify-codify: 719 pass / 74 files, +8 editorWrapToggle + wrap cases)
   - 1.3s — 2026-06-27 (M6 WP4 verify-codify: 711 pass / 73 files, +17 terminalFontZoom)
   - 1s — 2026-06-27 (M5 WP5 P2R tri-state rework verify-codify: 670 pass / 71 files)
@@ -105,9 +107,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 1s (2026-06-28, WP6 Phase 2 verify-codify: 285 pass — fs_watch heavy-dir re-base, warm exec 0.67s)
+- **Last:** 1s (2026-06-28, M6 WP7 Phase 1 verify-codify: +1 forward-compat test → 291 pass; warm run 0.68s)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-28 (M6 WP7 P1 codify: +1 cc_yolo_absent_in_present_file test, 291 pass; warm 0.68s)
+  - 4s — 2026-06-28 (M6 WP7 P1 build: +5 cc_yolo/build_cc_argv tests, 290 pass; cold-ish compile ~3.5s, run 0.71s)
   - 0.67s — 2026-06-28 (WP6 P2 codify, 285 pass)
   - 0.72s — 2026-06-28 (WP6 P1 codify, 283 pass)
   - 0.64s — 2026-06-27 (m5-wp5, 266 pass)

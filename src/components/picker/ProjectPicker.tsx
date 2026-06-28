@@ -18,6 +18,7 @@
 
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
@@ -60,6 +61,12 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   // The picker toast: an info note (prune-on-mount) or a surfaced IPC error. `null` =
   // no toast (the common case). Both kinds are dismissible.
   const [toast, setToast] = useState<PickerToast | null>(null);
+  // M6 WP7 Phase 3 — the CC yolo opt-out, surfaced ALSO on the picker (the app-global
+  // home screen) as a checkbox synced with the native View-menu item. The backend is the
+  // single source of truth: seed from cc_get_yolo on mount, stay in sync via the `cc-yolo`
+  // broadcast (so a native-menu toggle flips this box too), and on change call cc_set_yolo
+  // (which persists + re-broadcasts, re-checking the menu). Default ON until the read lands.
+  const [ccYolo, setCcYolo] = useState(true);
 
   useEffect(() => {
     // Load recents on mount. First prune any project whose folder was deleted
@@ -89,6 +96,43 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
       cancelled = true;
     };
   }, []);
+
+  // M6 WP7 Phase 3 — seed the yolo checkbox from the backend on mount, then track the
+  // `cc-yolo` broadcast so toggling the native View-menu item keeps this box in sync
+  // (third surface, one source of truth — same pattern App.tsx uses for ccYoloRef + the
+  // menu's apply_cc_yolo_to_menu). `cancelled` guards the async listen under StrictMode.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void invoke<boolean>("cc_get_yolo")
+      .then((yolo) => {
+        if (!cancelled) setCcYolo(yolo);
+      })
+      .catch((e) => console.error("[claudesk] cc_get_yolo (picker) failed:", e));
+    void listen<boolean>("cc-yolo", (event) => {
+      setCcYolo(event.payload);
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  function handleToggleYolo(next: boolean) {
+    // Optimistic flip; the `cc-yolo` broadcast (fired by cc_set_yolo) re-confirms it and
+    // re-checks the menu. A rejection reverts the optimistic state + surfaces the error.
+    setCcYolo(next);
+    void invoke("cc_set_yolo", { yolo: next }).catch((e) => {
+      setCcYolo(!next);
+      setToast({ kind: "error", message: mapIpcError("update yolo setting", e) });
+    });
+  }
 
   async function handleOpenRecent(projectPath: string) {
     // Stamp recency before handing off so the next list_projects reflects it. A
@@ -128,6 +172,14 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   return (
     <div className="picker" data-testid="picker">
       <h1>Claudesk</h1>
+      <label className="picker-yolo" data-testid="picker-yolo">
+        <input
+          type="checkbox"
+          checked={ccYolo}
+          onChange={(e) => handleToggleYolo(e.target.checked)}
+        />
+        <span>Skip Permission Prompts (yolo)</span>
+      </label>
       {toast !== null && (
         <div
           className={`picker-toast${toast.kind === "error" ? " picker-toast-error" : ""}`}

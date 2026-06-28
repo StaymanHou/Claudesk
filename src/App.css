@@ -2193,10 +2193,26 @@ body,
   max-width: 640px;
   margin: 0 auto;
   padding: 12vh 2rem 2rem;
+  /* Bounded-height flex column so a tall recents list (or the WP7 yolo checkbox's
+     added height) scrolls INSIDE the list rather than pushing "Open Folder…" off the
+     bottom of the window. Title/checkbox/filter pin at top; recents take the slack and
+     scroll; the button pins at the bottom. box-sizing so the 12vh+2rem padding is inside
+     the 100vh, not added to it. */
+  height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .picker h1 {
   margin-bottom: 1.5rem;
+}
+
+/* When the picker is shown as the modal overlay panel (filmstrip "+" re-entry), it is
+   height-constrained by `.picker-overlay-panel` (max-height:80% + overflow-y:auto), so
+   the standalone full-viewport column must NOT also apply — let it size to content. */
+.picker-overlay-panel .picker {
+  height: auto;
 }
 
 /* M4 WP2 — the picker shown as a modal panel inside `command-palette-backdrop`
@@ -2290,6 +2306,23 @@ body,
   margin-bottom: 1rem;
 }
 
+/* M6 WP7 Phase 3 — the yolo opt-out checkbox under the title (app-global; synced with
+   the native View-menu item via the `cc-yolo` broadcast). Dark tokens only. */
+.picker-yolo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  user-select: none;
+}
+
+.picker-yolo input {
+  cursor: pointer;
+}
+
 .picker-recents {
   list-style: none;
   padding: 0;
@@ -2298,7 +2331,12 @@ body,
   flex-direction: column;
   gap: 0.5rem;
   /* The list KEEPS every project (no auto-eviction); with 20+ rotating
-     projects it must scroll rather than push the Open-Folder button off-screen. */
+     projects it must scroll rather than push the Open-Folder button off-screen.
+     In the `.picker` flex column it takes the leftover height (flex:1) and scrolls;
+     `min-height:0` is required for a flex child to shrink below content + scroll. The
+     overlay variant (no flex column) falls back to the 60vh cap below. */
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 60vh;
   overflow-y: auto;
 }

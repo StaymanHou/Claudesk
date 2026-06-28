@@ -49,6 +49,14 @@ pub struct AppSettings {
     /// dead-end (no return to auto without relaunch).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pip_mode: Option<PipMode>,
+    /// Whether new CC sessions spawn with `--dangerously-skip-permissions` ("yolo")
+    /// — the M6 WP7 opt-out. `None` = never set → the reader applies the default
+    /// **`true`** (yolo ON, vision-explicit; `docs/product/arch.md` Key Decisions +
+    /// `design-priors.md` operator-helpful-friend-misfiring-as-offswitchable-setting —
+    /// off-switchable, default to operator benefit). App-global, not per-project; the
+    /// flag is chosen once per CC process, so a change takes effect on the next spawn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cc_yolo: Option<bool>,
 }
 
 /// Read the app settings. A missing file is normal (first run) and returns the
@@ -102,6 +110,21 @@ pub fn read_pip_mode(data_dir: &Path) -> Result<PipMode, ConfigError> {
 pub fn write_pip_mode(data_dir: &Path, mode: PipMode) -> Result<(), ConfigError> {
     let mut settings = read_settings(data_dir)?;
     settings.pip_mode = Some(mode);
+    write_settings(data_dir, &settings)
+}
+
+/// Read the CC yolo setting, defaulting **`true`** (yolo ON) when unset / first run —
+/// the vision-explicit, operator-benefit default (M6 WP7). The single reader the
+/// `cc_get_yolo` command + the spawn-time gate call. (Mirror of `read_pip_mode`.)
+pub fn read_cc_yolo(data_dir: &Path) -> Result<bool, ConfigError> {
+    Ok(read_settings(data_dir)?.cc_yolo.unwrap_or(true))
+}
+
+/// Persist the CC yolo setting, preserving other fields (read-modify-write). The single
+/// writer `cc_set_yolo` calls. (Mirror of `write_pip_mode`.)
+pub fn write_cc_yolo(data_dir: &Path, yolo: bool) -> Result<(), ConfigError> {
+    let mut settings = read_settings(data_dir)?;
+    settings.cc_yolo = Some(yolo);
     write_settings(data_dir, &settings)
 }
 
@@ -170,6 +193,7 @@ mod tests {
         let written = AppSettings {
             pip_layout: Some(PipLayout::VerticalMirror),
             pip_mode: Some(PipMode::On),
+            cc_yolo: Some(false),
         };
         write_settings(dir.path(), &written).unwrap();
         let read = read_settings(dir.path()).unwrap();
@@ -203,6 +227,53 @@ mod tests {
         assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
         // ...and updating layout leaves mode intact.
         write_pip_layout(dir.path(), PipLayout::Compact).unwrap();
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
+    }
+
+    #[test]
+    fn cc_yolo_defaults_to_true_when_unset() {
+        // Vision-explicit default: a fresh install / missing field reads as yolo ON.
+        let dir = TempDir::new().unwrap();
+        assert!(read_cc_yolo(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn cc_yolo_absent_in_present_file_reads_as_true() {
+        // Forward-compat: the realistic upgrade case — a user who already had pip
+        // settings on disk (so the file EXISTS) but predates the cc_yolo field. The
+        // missing key must read as the default `true` (yolo ON), not `false`.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(SETTINGS_FILE),
+            br#"{"pip_layout":"compact","pip_mode":"auto"}"#,
+        )
+        .unwrap();
+        assert!(read_cc_yolo(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn cc_yolo_round_trips() {
+        let dir = TempDir::new().unwrap();
+        write_cc_yolo(dir.path(), false).unwrap();
+        assert!(!read_cc_yolo(dir.path()).unwrap());
+        write_cc_yolo(dir.path(), true).unwrap();
+        assert!(read_cc_yolo(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn cc_yolo_independent_of_pip_fields() {
+        // Writing cc_yolo must not clobber the pip settings, and vice versa
+        // (read-modify-write across all three fields).
+        let dir = TempDir::new().unwrap();
+        write_pip_layout(dir.path(), PipLayout::Minimal).unwrap();
+        write_pip_mode(dir.path(), PipMode::Off).unwrap();
+        write_cc_yolo(dir.path(), false).unwrap();
+        assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::Minimal);
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
+        assert!(!read_cc_yolo(dir.path()).unwrap());
+        // ...and updating cc_yolo leaves the pip settings intact.
+        write_cc_yolo(dir.path(), true).unwrap();
+        assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::Minimal);
         assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
     }
 

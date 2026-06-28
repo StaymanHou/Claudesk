@@ -81,6 +81,29 @@ pub fn apply_pip_mode_to_menu<R: Runtime>(app: &AppHandle<R>, mode: PipMode) {
     }
 }
 
+/// Handle to the single View-menu CC-yolo `CheckMenuItem`, stashed in managed state by
+/// [`build_menu`] so its checkmark can be re-set AFTER the menu is built. Same pattern as
+/// [`PipModeMenuItems`]: the item is built once (at `.setup()`) seeded from the persisted
+/// `cc_yolo`, but the value changes at runtime (a menu click → `cc_set_yolo` → `cc-yolo`
+/// broadcast), and a `cc-yolo` listener (wired in `lib.rs`) calls [`apply_cc_yolo_to_menu`]
+/// to re-check it — there is no menu-rebuild path.
+pub struct CcYoloMenuItem<R: Runtime> {
+    toggle: CheckMenuItem<R>,
+}
+
+/// Set the CC-yolo `CheckMenuItem`'s checked-state to `yolo`. Called on every `cc-yolo`
+/// broadcast so the View-menu checkmark always matches the backend's persisted value (the
+/// single source of truth). No-op if the menu hasn't been built yet (no managed handle).
+/// Best-effort — a `set_checked` failure is logged, never propagated.
+pub fn apply_cc_yolo_to_menu<R: Runtime>(app: &AppHandle<R>, yolo: bool) {
+    let Some(item) = app.try_state::<CcYoloMenuItem<R>>() else {
+        return;
+    };
+    if let Err(e) = item.toggle.set_checked(yolo) {
+        eprintln!("[claudesk] cc-yolo menu set_checked failed: {e}");
+    }
+}
+
 /// Functional menu-item ids — the ones the frontend acts on. Label-only items
 /// (disabled cheat-sheet rows) deliberately have NO id here; they never emit.
 pub mod ids {
@@ -104,6 +127,10 @@ pub mod ids {
     pub const PIP_MODE_OFF: &str = "view.pip.mode.off";
     pub const PIP_MODE_ON: &str = "view.pip.mode.on";
     pub const PIP_MODE_AUTO: &str = "view.pip.mode.auto";
+    // M6 WP7 — the CC yolo (`--dangerously-skip-permissions`) opt-out, a single
+    // `CheckMenuItem` (checked = yolo ON). A click sets the INVERTED state via
+    // `cc_set_yolo` (the frontend reads current state from the `cc-yolo` broadcast).
+    pub const CC_YOLO_TOGGLE: &str = "view.cc.yolo";
 }
 
 /// Every functional menu-item id, in one place. `is_functional_id` checks membership
@@ -125,6 +152,7 @@ pub const FUNCTIONAL_IDS: &[&str] = &[
     ids::PIP_MODE_OFF,
     ids::PIP_MODE_ON,
     ids::PIP_MODE_AUTO,
+    ids::CC_YOLO_TOGGLE,
 ];
 
 /// Whether a menu-item id is one the frontend acts on (i.e. the click should emit
@@ -263,6 +291,24 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         on: pip_on.clone(),
         auto: pip_auto.clone(),
     });
+    // M6 WP7 — the CC yolo (`--dangerously-skip-permissions`) opt-out, a single
+    // CheckMenuItem (checked = yolo ON, the default). A click sets the INVERTED value via
+    // cc_set_yolo (the frontend reads current state from `cc-yolo`); the backend broadcasts
+    // `cc-yolo` so apply_cc_yolo_to_menu re-checks it. Seeded from the persisted value (a
+    // read failure falls back to ON, the default). NO accelerator (native-menu pattern).
+    let cc_yolo = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|dir| crate::config_store::settings::read_cc_yolo(&dir).ok())
+        .unwrap_or(true);
+    let cc_yolo_toggle =
+        CheckMenuItemBuilder::with_id(ids::CC_YOLO_TOGGLE, "Skip Permission Prompts (yolo)")
+            .checked(cc_yolo)
+            .build(app)?;
+    app.manage(CcYoloMenuItem {
+        toggle: cc_yolo_toggle.clone(),
+    });
     let zoom_reset = MenuItemBuilder::with_id("view.zoomReset.label", "Reset Zoom\t⌘0")
         .enabled(false)
         .build(app)?;
@@ -280,6 +326,8 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&pip_off)
         .item(&pip_on)
         .item(&pip_auto)
+        .separator()
+        .item(&cc_yolo_toggle)
         .build()?;
 
     // ── Workspace ───────────────────────────────────────────────────────────────
@@ -371,6 +419,16 @@ mod tests {
             FUNCTIONAL_IDS.len(),
             "every functional id must be distinct"
         );
+    }
+
+    #[test]
+    fn cc_yolo_toggle_is_a_functional_menu_id() {
+        // M6 WP7: the View-menu yolo toggle must be in FUNCTIONAL_IDS so its click emits
+        // the `menu` event the frontend turns into cc_set_yolo. (Uniqueness is covered by
+        // functional_ids_are_unique_and_non_empty; this pins WP7's id specifically.)
+        assert!(is_functional_id(ids::CC_YOLO_TOGGLE));
+        assert!(FUNCTIONAL_IDS.contains(&ids::CC_YOLO_TOGGLE));
+        assert_eq!(ids::CC_YOLO_TOGGLE, "view.cc.yolo");
     }
 
     #[test]

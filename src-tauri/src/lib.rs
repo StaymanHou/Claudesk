@@ -130,6 +130,22 @@ pub fn run() {
                     }
                 });
             }
+            // M6 WP7: keep the View-menu CC-yolo checkmark in sync with the backend. The
+            // CheckMenuItem is seeded once in build_menu, but the value changes at runtime
+            // (menu click → cc_set_yolo → `cc-yolo` broadcast). Re-check on every broadcast
+            // so the checkmark always matches the persisted value (single source of truth).
+            {
+                let menu_handle = handle.clone();
+                handle.listen(cc_session::commands::CC_YOLO_EVENT, move |event| {
+                    match serde_json::from_str::<bool>(event.payload()) {
+                        Ok(yolo) => app_menu::apply_cc_yolo_to_menu(&menu_handle, yolo),
+                        Err(e) => eprintln!(
+                            "[claudesk] cc-yolo menu sync: could not parse payload {:?}: {e}",
+                            event.payload()
+                        ),
+                    }
+                });
+            }
             // Dev/prod isolation (2026-06-24): on a DEV build's first launch, seed
             // its projects.json from the prod list so dogfooding starts with the
             // operator's real projects. Best-effort + idempotent + no-op on prod.
@@ -214,6 +230,11 @@ pub fn run() {
             // (closes the shell-prompt race where a shell's one-shot prompt emitted
             // before the frontend's listener attached).
             cc_session::commands::cc_ready,
+            // M6 WP7: read/persist the CC yolo (--dangerously-skip-permissions) opt-out.
+            // get seeds the View-menu checkmark on mount; set persists + broadcasts
+            // `cc-yolo` so the menu re-checks. Read at spawn time → takes effect next spawn.
+            cc_session::commands::cc_get_yolo,
+            cc_session::commands::cc_set_yolo,
             // WP8: Sublime Text pop. Invoked from the frontend (right-panel button
             // and the in-app ⌘⇧O keybinding — was ⌘⇧E pre-WP5) with the focused
             // workspace's path. Transitional — removed at WP8 once editor parity.

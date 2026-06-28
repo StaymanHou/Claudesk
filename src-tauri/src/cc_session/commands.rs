@@ -11,11 +11,50 @@
 use std::sync::Mutex;
 
 use base64::Engine as _;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::SessionRegistry;
 
 type Registry = Mutex<SessionRegistry>;
+
+/// The Tauri event name broadcast when the CC yolo setting changes (WP7). The menu's
+/// `CheckMenuItem` (re-checked in `lib.rs`) + any frontend display listen for it so the
+/// affordance always reflects the persisted value (the single source of truth). Mirrors
+/// `pip::commands::PIP_MODE_EVENT`.
+pub const CC_YOLO_EVENT: &str = "cc-yolo";
+
+/// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists. Mirrors
+/// `pip::commands::resolve_data_dir` (kept module-local — those are private).
+fn resolve_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("could not resolve app data dir: {e}"))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("could not create app data dir {}: {e}", dir.display()))?;
+    Ok(dir)
+}
+
+/// Read the persisted CC yolo setting (default `true` — yolo ON; M6 WP7). The View-menu
+/// `CheckMenuItem` seeds its checkmark from this on mount.
+#[tauri::command]
+pub fn cc_get_yolo(app: AppHandle) -> Result<bool, String> {
+    let dir = resolve_data_dir(&app)?;
+    crate::config_store::settings::read_cc_yolo(&dir).map_err(|e| e.to_string())
+}
+
+/// Set the CC yolo setting (M6 WP7 opt-out). Persists it + broadcasts `cc-yolo` so the
+/// View-menu checkmark re-checks. The flag is an argv chosen once per CC process, so this
+/// takes effect on the NEXT `cc_spawn`, not any already-running session. Mirrors
+/// `pip::commands::pip_set_mode` (minus the panel side-effect — there is none).
+#[tauri::command]
+pub fn cc_set_yolo(app: AppHandle, yolo: bool) -> Result<(), String> {
+    let dir = resolve_data_dir(&app)?;
+    crate::config_store::settings::write_cc_yolo(&dir, yolo).map_err(|e| e.to_string())?;
+    // Broadcast so the View-menu CheckMenuItem (and any frontend display) re-render.
+    let _ = app.emit(CC_YOLO_EVENT, yolo);
+    Ok(())
+}
 
 /// Spawn a CC session for `project_path`; returns the new session id.
 #[tauri::command]
