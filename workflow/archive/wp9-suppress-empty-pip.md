@@ -1,7 +1,7 @@
 # Feature: WP9 — Suppress empty PiP when no workspace is open
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-28 — shipped `7b36853` on main (NOT pushed; v0.2.2 is operator's to cut)
 **Created:** 2026-06-28
 **Milestone:** M6 (friend-requested QoL polish — open collection)
 **Source:** `SURFACE-2026-06-27-PIP-SUMMONS-EMPTY-WITH-NO-WORKSPACE-OPEN` → WBS WP9
@@ -89,20 +89,47 @@ The guard lives in two coordinated spots, mirroring the existing token+mode re-c
   - [x] verify-codify  <!-- status: done — Phase 2's pure decision codified by on_mode_tracks_workspace_count + len_tracks_open_workspace_count (the count signal reconcile reads). Live On-mode panel show/hide is operator-verified (not CI-codifiable). 295 pass; clippy clean. -->
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ALL phases complete (Phase 1 + Phase 2 both `[x]`, all verify nodes done). 295 tests pass, clippy clean, tsc + vite build clean. Ready for `/feature-ship`.
+- **Path:** Feature > finalize
+- **Active scope:** review-quality complete (0C/0M/2 MINOR auto-backlogged to backlog-quality-findings.md + pointer in backlog.md). Both phases `[x]`. Ready for `/feature-finalize`.
 - **Blocked:** none
-- **Unvisited:** none
+- **Unvisited:** none (Phase 1 + Phase 2 complete)
 - **Open discoveries:** Design-prior CANDIDATE (vh.4): "suppress any ambient status surface that has no content to mirror, regardless of mode" — leaning feature-specific, not durable. Re-offer at close if it generalizes.
-- **Blocked:** none
-- **Unvisited:** none (Phase 2 is the last phase)
-- **Open discoveries:** none
-- **Relevance check (before Phase 2):** Requester still needs it: yes (operator just requested it). Requirements: refined at vh.4 (On-mode also guarded, reactively). Feasible: yes (register/deregister command seam). No superior alternative: reactive chosen over launch-only by operator. Verdict: proceed.
-- **Blocked:** none
-- **Unvisited:** none (single-phase feature)
-- **Open discoveries:** none
-- **Build note:** dropped the speculative `is_empty()` companion (clippy `dead_code` — it had no caller and `len()` alone doesn't trip `len_without_is_empty` here). `On`-launch show intentionally left un-guarded per the plan-time decision (registry empty at launch).
+- **Build note:** Phase 1 dropped a speculative `is_empty()` companion (clippy dead_code). Phase 2 (from vh.4 reject) made On-mode reactive — superseded the original "leave On un-guarded" plan-time decision; launch-show removed.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
+
+## Code-Quality Review — wp9-suppress-empty-pip
+
+(Reviewer subagent against ship commit 7b36853; drive_mode=autopilot → MINOR-only auto-backlogged.)
+
+### Strengths
+- Pure-decision functions (`should_arm_summon`, new `on_mode_should_show`) keep branching logic unit-testable without a live app; diff extends function + tests in lockstep, matching the existing PiP test posture.
+- Main-thread-marshal invariant correctly reasoned + documented: every new `reconcile` caller is a `#[command]` body, no new background-thread window op, and the helper's doc-comment warns a future off-main caller to wrap in `run_on_main_thread`.
+- Registry lock dropped before the AppKit reconcile in both register/deregister (scoped block returning `open_count`), avoiding a Mutex held across a window op — called out in a comment.
+- "Safe-0 default" for an absent/poisoned registry lock errs toward NOT showing an empty PiP (conservative for this bug); rationale documented.
+- Close-during-debounce race handled symmetrically with the token + still-auto re-checks; `len_tracks_open_workspace_count` pins the count signal those guards depend on.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [src-tauri/src/pip/commands.rs ~pip_set_mode/reconcile] `pip_set_mode(On)` persists `mode` then routes to `reconcile_on_mode_visibility`, which re-reads the mode back from disk rather than reusing the in-scope `mode` — a redundant disk read on a user-click path. Harmless (read returns the just-persisted value) and arguably consistent with the file's "read fresh from persisted source of truth" discipline. → SURFACE-2026-06-28-QUALITY-WP9-REDUNDANT-MODE-REREAD
+- [src-tauri/src/status_broadcaster/mod.rs len()] `len()` un-gated from `#[cfg(test)]` without a companion `is_empty()`; clippy-clean here (`len_without_is_empty` doesn't fire) and deliberate, flagged only so a future reader knows the omission was intentional. → SURFACE-2026-06-28-QUALITY-WP9-LEN-WITHOUT-IS-EMPTY
+
+### Assessment
+Well-built, low-risk polish that does exactly what its plan said. Two-phase structure cleanly separated; Phase 2 correctly removed the launch-time unconditional On-show rather than papering over it with a launch-time count guard — the reactive-on-register approach handles launch-with-zero and close-all-to-zero uniformly. Comments encode WHY, not WHAT. The two nits are backlog-or-dismiss at most; no refactor warranted.
+
+### If you disagree
+Dismiss a finding by editing this section and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The "no PiP when there's nothing to mirror" principle is mode-agnostic, not Auto-specific. The plan-time decision to leave `On`-launch un-guarded (reasoned from "registry is empty at launch → a count guard would always suppress it") was technically correct but solved the wrong problem — the operator wanted the empty panel suppressed in *all* modes, and the right shape was a REACTIVE guard (track the count), not a one-shot launch check. The launch-timing constraint that made a launch-guard look impossible is exactly what makes the reactive approach correct: showing on first register handles launch-with-zero for free.
+- **Assumptions that held:** `SharedRegistry::len()` is the right open-count signal (backend-reachable, no new frontend hop — confirmed by code trace before building). The pure-function + unit-test seam (`should_arm_summon`, `on_mode_should_show`) kept the logic CI-verifiable. The main-thread-marshal rule was satisfied for free (all reconcile callers are `#[command]` bodies).
+- **Assumptions that were wrong:** That `On`-mode was out of scope (Phase 1 plan-time decision). vh.4 corrected it — a one-phase feature became two.
+- **Approach delta:** Planned as single-phase (Auto guard only). Actual: two phases — Phase 1 as planned, Phase 2 (reactive On-mode) added from the verify-human vh.4 back-loop. The reactive design supersedes the original "leave On un-guarded" decision and additionally removed the launch-time unconditional On-show.
+
+## Closure
+- **Requester = operator** (friend-relayed original; operator owns the milestone) — closure notice for self-record.
+- **Feature complete:** WP9 (Suppress empty PiP when no workspace is open) has shipped. The PiP panel no longer appears when zero workspaces are open — in Auto mode the blur auto-summon is gated on open-count, and in On mode the pinned panel reactively tracks the count (shows on first open, hides when all close). Verify by launching with no workspace open and blurring (Auto) or relaunching in On mode (no empty panel); open a workspace to see it appear.

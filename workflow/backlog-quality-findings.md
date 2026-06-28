@@ -1404,3 +1404,21 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Suggested action:** none now; revisit only if a high-frequency event source is ever added that would inherit the scan.
 - **Priority:** low
 - **Status:** pending
+
+# wp9-suppress-empty-pip — 2026-06-28
+
+*(feature-review-quality on ship commit 7b36853; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Reviewer: "well-built, low-risk polish that does exactly what its plan said... the two nits are backlog-or-dismiss at most; no refactor warranted.")*
+
+## SURFACE-2026-06-28-QUALITY-WP9-REDUNDANT-MODE-REREAD
+- **Severity:** MINOR
+- **Finding:** `pip_set_mode(On)` (`pip/commands.rs`) persists `mode` to disk, then routes to `reconcile_on_mode_visibility`, which re-reads the mode back from disk (`resolve_data_dir` → `read_pip_mode`) rather than using the `mode` already in scope — a redundant disk read on a user-click path. Harmless (the read returns the just-persisted value) and arguably consistent with the file's "read fresh from the persisted source of truth" discipline used by the focus handler.
+- **Fix shape:** either pass the in-hand `mode` into a count-only reconcile variant, or add a one-line comment noting the re-read is the deliberate "fresh from persisted truth" pattern. Lean: a comment, unless the hot-path read ever shows up.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-28-QUALITY-WP9-LEN-WITHOUT-IS-EMPTY
+- **Severity:** MINOR
+- **Finding:** `WorkspaceRegistry::len()` (`status_broadcaster/mod.rs`) was un-gated from `#[cfg(test)]` to gain a runtime caller without a companion `is_empty()`. Clippy-clean here (`len_without_is_empty` does not fire) and deliberate (an `is_empty()` was added then removed as dead code) — flagged only so a future reader who expects the idiomatic `len`/`is_empty` pair knows the omission was intentional.
+- **Suggested action:** none now; add `is_empty()` only if/when a caller needs it (clippy will then require the pair).
+- **Priority:** low
+- **Status:** pending

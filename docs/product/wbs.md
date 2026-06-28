@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 updated: 2026-06-28
 milestone: "Milestone 6 — Friend-requested QoL polish (open collection)"
-shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7]
+shipped: [WP1, WP1b, WP2, WP3, WP4, WP5, WP6, WP7, WP9]
 ---
 
 # WBS — Milestone 6: Friend-requested QoL polish
@@ -171,17 +171,18 @@ WP8 (milestone-exit verify)  ◄── depends on all of WP2–WP7, WP9, WP10, W
 
 ---
 
-## WP9: Suppress empty PiP when no workspace is open
+## WP9: Suppress empty PiP when no workspace is open ✅ SHIPPED 2026-06-28 (commit 7b36853)
 **Description:** When Claudesk has launched but the user has NOT yet opened any workspace (the picker is still showing), blurring the app auto-summons an **empty PiP panel**. Desired: at **zero open workspaces** the PiP must not appear at all — there is nothing to mirror. (Operator-observed during WP1 verify-human, 2026-06-27 — promoted from `SURFACE-2026-06-27-PIP-SUMMONS-EMPTY-WITH-NO-WORKSPACE-OPEN` into the WBS proper.)
 **Milestone:** M6 (open-collection fold-in)
 **Dependencies:** none (independent of WP1/WP2; touches the PiP focus-handler path, not the status logger)
 **Size:** S
 **Type:** bug (cosmetic-but-annoying; not data-affecting)
 **Seams (to confirm at plan time):** the PiP auto-summon fires from the `on_window_event` focus handler / auto-summon debounce in `lib.rs` (~the M5 WP5 region, around the focus-probe + `pip_set_visible` path); `PipMode::Auto` summons on sustained blur unconditionally. The guard = "summon only if open-workspace-count > 0." Open-workspace count is reachable backend-side via the `SharedRegistry` (`status_broadcaster` `by_path` map — each open workspace is registered there; its `len()` IS the open set the broadcaster uses), OR via frontend state informing the backend. **Decide at plan time** which signal to read; also decide whether the `PipMode::On` launch-time show needs the same guard. **NB the main-thread-marshal rule** for any PiP/NSPanel window op (CLAUDE.md) — the auto-summon path already hops threads.
+**Decisions made at plan/build:** (1) open-count signal = backend `SharedRegistry` `len()` (confirmed = the open-workspace set, no new frontend→backend hop). (2) `On`-mode: originally planned un-guarded, but **operator rejected at verify-human (vh.4)** → made REACTIVE (the pinned panel tracks the count: shown when ≥1 open, hidden at 0), via `reconcile_pip_for_workspace_count` from register/deregister/`pip_set_mode`; the launch-time unconditional On-show was removed. Built in 2 phases (Phase 1 Auto guard; Phase 2 On-mode reactive from the vh.4 back-loop).
 **Tasks:**
-- [ ] Decide the open-count signal (registry `len()` vs frontend-informed) + whether `On` mode also guards. Record the decision.
-- [ ] Gate the auto-summon (and `On`-launch show if decided) on open-workspace-count > 0; marshal any window op to the main thread.
-- [ ] Verify: launch app, open no workspace, blur → PiP stays hidden. Open a workspace, blur → PiP summons as before. Close all workspaces, blur → PiP hides again. (Installed-`.app` + out-of-focus behavior → operator verify-human / release gate, per the PiP-surface convention.)
+- [x] Decide the open-count signal (registry `len()` vs frontend-informed) + whether `On` mode also guards. Record the decision.
+- [x] Gate the auto-summon (and `On`-mode show, reactively) on open-workspace-count > 0; marshal any window op to the main thread (all reconcile callers are `#[command]` bodies → already main-thread).
+- [x] Verify: launch app, open no workspace, blur → PiP stays hidden. Open a workspace, blur → PiP summons as before. Close all workspaces, blur → PiP hides again. Plus On-mode: launch-with-zero hidden, open→show, close-all→hide. (Operator verify-human, all PASS 2026-06-28.)
 
 ---
 
