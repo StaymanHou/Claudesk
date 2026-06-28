@@ -9,7 +9,9 @@
 // persisted GLOBALLY under one localStorage key — the lite, frontend-only choice
 // (no backend round-trip). A freshly opened workspace inherits the last zoom.
 
-export const DEFAULT_FONT_PX = 13;
+// DEFAULT_FONT_PX = 11 matches DEFAULT_TERMINAL_FONT_PX (terminalFontZoom.ts) so a
+// fresh editor and the ⌘0 reset land at the same size as the CC/right-panel terminals.
+export const DEFAULT_FONT_PX = 11;
 export const MIN_FONT_PX = 8;
 export const MAX_FONT_PX = 32;
 export const FONT_STEP_PX = 1;

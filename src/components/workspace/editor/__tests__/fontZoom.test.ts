@@ -94,11 +94,11 @@ describe("zoom round-trip", () => {
     s = makeStorage();
   });
   it("in, in, out lands at the expected size and persists it", () => {
-    let px = loadFontSize(s); // 13
-    px = nextFontSize(px, "in"); // 14
-    px = nextFontSize(px, "in"); // 15
-    px = nextFontSize(px, "out"); // 14
+    let px = loadFontSize(s); // DEFAULT_FONT_PX
+    px = nextFontSize(px, "in"); // +1
+    px = nextFontSize(px, "in"); // +2
+    px = nextFontSize(px, "out"); // +1
     saveFontSize(px, s);
-    expect(loadFontSize(s)).toBe(14);
+    expect(loadFontSize(s)).toBe(DEFAULT_FONT_PX + 1);
   });
 });
