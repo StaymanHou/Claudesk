@@ -1,6 +1,7 @@
 ---
 workflow: feature
-state: ship (complete)
+state: COMPLETED
+completed: 2026-06-29
 drive_mode: autopilot
 milestone: M8 — Demo assets (filmstrip & PiP value showcase)
 wp: WP2 — Shared demo-build harness
@@ -96,6 +97,12 @@ Well-built dev tooling that takes its load-bearing invariant seriously. Small, r
 
 ### If you disagree
 Operator: dismiss any finding by marking the line `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** Two concrete gotchas surfaced that the plan anticipated only one of. (1) The plan correctly flagged the `@media (prefers-reduced-motion)` wrapper — the capture context's `reducedMotion:'no-preference'` handled it. (2) **NOT anticipated:** Chromium CORS-blocks ES-module imports from `file://` origins, so the `frameAt` extraction-for-testability had to use a classic-script global (`globalThis.__frameAt`) rather than `import`/`export`. Found by the capture script's own console-error trap (which caught the CORS error and exited 1) — the error-trapping paid for itself immediately.
+- **Assumptions that held:** The probe's pipeline (Playwright seek-per-frame → ffmpeg palettegen → tiny GIF) productionized cleanly; sizes stayed ~100× under budget (45KB GIF). Lockfile isolation via a standalone private npm package worked exactly as planned (app `pnpm-lock.yaml` never touched). The single-source-of-truth CSS extraction worked.
+- **Assumptions that were wrong:** The initial CSS-sync impl hand-copied the two `animation:` declarations as constants (colors+keyframes were sourced, but timing/easing was forked) — the drift-guard gave false confidence there. The code-quality reviewer caught it (MAJOR); fixed in-place by sourcing the animations from App.css's `@media` block too. Lesson: "sourced, not forked" must cover *every* value the guard claims to protect, not just the obvious ones.
+- **Approach delta:** Matched the 2-phase plan (pipeline mechanics → UI shell). One unplanned mid-stream pivot (the `type="module"`→classic-script revert for `file://` CORS) and one review-driven tightening (animation sourcing). No re-plan needed; both were within-phase fixes.
 
 ## Notes
 

@@ -7,6 +7,7 @@
 - **Product cycle complete:** Milestone 7 (Menu-bar status item) — Claudesk gained an ambient menu-bar alarm (badge when any workspace awaits input) + a Show/Toggle-PiP/Quit actuator menu, deliberately scoped to the menu bar's one non-PiP-overlapping virtue (location); durable docs resynced (the as-built `set_icon_with_as_template` / `include_bytes!`-no-config-block corrections), backlog swept, WBS archived to `docs/product/archive/milestone-7-menu-bar-status-item/`.
 - **Backlog resolved:** SURFACE-2026-06-29-M7-TRAY-ATOMIC-ICON-METHOD-NAME — closed by the product-finalize durable-doc resync (the swap method is `set_icon_with_as_template`, not the specced `set_icon_and_icon_as_template_atomic`).
 - **Backlog resolved:** SURFACE-2026-06-29-M7-TRAY-NO-CONFIG-BLOCK — closed by the resync (glyphs embedded via `include_bytes!`; no `trayIcon` config block, which would duplicate the dynamic tray).
+- **Feature shipped:** M8 WP2 — shared demo-build harness — a dev-only, lockfile-isolated `tooling/demo/` Node package (Playwright + ffmpeg) that renders Claudesk's real status-dot UI from a mock status timeline to a looping GIF, sourcing the dot colors/keyframes/animation-timing from `src/App.css` (single source of truth, drift-guarded) so the demo dots stay pixel-identical to the app — the shared machinery the WP3 filmstrip and WP4 PiP demos build on.
 
 ## 2026-06-28
 

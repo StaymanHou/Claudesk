@@ -43,18 +43,18 @@ Read `docs/product/design-priors.md` (3 priors, all about UI surfaces / modes / 
 
 ## Work Packages
 
-### WP2: Shared demo-build harness
+### WP2: Shared demo-build harness ✅ SHIPPED 2026-06-29 (commits cbe2922 + 9cff1b1)
 **Type:** tooling
 **Milestone:** M8 (FIRST executable — both demos build on it)
 **Dependencies:** WP1 (probe — resolved)
 **Size:** M
 **Description:** Build the reusable, agent-drivable harness the two demos share, productionizing the probe's proof-of-concept: a standalone HTML/CSS shell that **imports Claudesk's real status-dot CSS** (and recreates the surrounding chrome) fed by a **mock status timeline**, a **Playwright seek-per-frame capture script** (frame-accurate via `document.getAnimations()` `currentTime`), and an **ffmpeg render recipe** (palettegen/paletteuse → looping GIF, optional WebP). Lives under a non-shipped `tooling/demo/` dir (kept out of the app bundle; its Node deps must not pollute the app's lockfile — a self-contained sub-package or a pinned local install, per the probe's `tmp/m8-probe` pattern).
 **Tasks:**
-- [ ] 2.1 Scaffold `tooling/demo/` — self-contained Node package (Playwright + a render script), isolated from the app's `package.json`/`pnpm-lock.yaml`. Document the one-time `playwright install chromium` step.
-- [ ] 2.2 Build the shared UI shell: import the real status-dot CSS from `src/App.css` (single source of truth — don't fork the color/keyframe values), recreate filmstrip + center-stage + PiP-panel chrome, parameterized by a mock status-timeline data structure.
-- [ ] 2.3 Generalize the capture script (`capture.mjs` pattern from the probe): args for HTML file, dimensions, fps, duration, output dir; deterministic seek-per-frame; `deviceScaleFactor:2` for crisp text.
-- [ ] 2.4 Generalize the render recipe: PNG frames → looping GIF (palettegen/paletteuse, bayer dither, `-loop 0`) + optional WebP; assert output exists + is under the size budget.
-- [ ] 2.5 verify-self: run the harness end-to-end on a smoke timeline, confirm a legible looping GIF under budget. (Agent-drivable — no live app, no installed `.app`, no MCP bridge.)
+- [x] 2.1 Scaffold `tooling/demo/` — self-contained Node package (Playwright + a render script), isolated from the app's `package.json`/`pnpm-lock.yaml`. Document the one-time `playwright install chromium` step.
+- [x] 2.2 Build the shared UI shell: import the real status-dot CSS from `src/App.css` (single source of truth — don't fork the color/keyframe values), recreate filmstrip + center-stage + PiP-panel chrome, parameterized by a mock status-timeline data structure. *(via `extract-dot-css.mjs` + `--check` drift-guard; colors, keyframes AND animation timing all sourced from App.css.)*
+- [x] 2.3 Generalize the capture script (`capture.mjs` pattern from the probe): args for HTML file, dimensions, fps, duration, output dir; deterministic seek-per-frame; `deviceScaleFactor:2` for crisp text. *(+ `--timeline` injection, `reducedMotion:'no-preference'`, console/pageerror→exit1.)*
+- [x] 2.4 Generalize the render recipe: PNG frames → looping GIF (palettegen/paletteuse, bayer dither, `-loop 0`) + optional WebP; assert output exists + is under the size budget. *(`render.mjs`; `build.mjs` chains capture→render.)*
+- [x] 2.5 verify-self: run the harness end-to-end on a smoke timeline, confirm a legible looping GIF under budget. (Agent-drivable — no live app, no installed `.app`, no MCP bridge.) *(`npm run smoke` → 45KB GIF + 20KB WebP under budget; dots render correct per timeline at seeked t; frame visually checked.)*
 
 ### WP3: Filmstrip demo asset
 **Type:** asset
