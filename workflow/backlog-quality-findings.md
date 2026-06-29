@@ -4,6 +4,26 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m8-wp5-embed-place — 2026-06-29
+
+*(feature-review-quality on ship commit c34925a; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Reviewer: "well-built, appropriately-scoped documentation/marketing work that accrues no debt... the one executable artifact is a useful, correctly-isolated, passing dev-only codify guard." Both MINORs are cosmetic.)*
+
+## SURFACE-2026-06-29-QUALITY-M8WP5-TEST-NAME-OVERCLAIMS-ANIMATED
+- **Severity:** MINOR
+- **Location:** `tooling/demo/readme-assets.nodetest.mjs:65` (+ header comment)
+- **Finding:** Test named "every referenced demo GIF is a real **animated** GIF" but the assertion only checks the 6-byte `GIF89a`/`GIF87a` magic — a single-frame GIF89a would pass. Committed assets are genuinely animated, so no live bug; the name over-claims its coverage.
+- **Suggested action:** Either rename to "...is a real GIF (GIF8[79]a magic)" OR extend to assert >1 frame (count GCE/image-descriptor markers) so the name matches what it proves.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M8WP5-STALE-STATUS-BLOCK-NOW-PROMINENT
+- **Severity:** MINOR
+- **Location:** `README.md:45-53` (the `> **Status: …**` block)
+- **Finding:** The WP5 restructure put the new pitch + demos above an unchanged stale "Status" block (claims "Milestones 1–4 shipped", lists the superseded M5–M9 roadmap; reality is M1–M7 shipped + released v0.2.3 with a resequenced roadmap). It's now the first thing a reader hits under the polished new top. Operator-acknowledged + logged as out-of-WP-scope.
+- **Suggested action:** Freshen the Status block (current milestone reality + resequenced roadmap) — natural fit for the next README-freshen task or `/product-finalize` durable-doc resync.
+- **Priority:** low
+- **Status:** pending
+
 # m8-wp4-pip-demo-asset — 2026-06-29
 
 *(feature-review-quality on ship commit 5625658; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built dev-only tooling that advances rather than accretes... the only debt is dead focus-ring scaffolding left over from the round-2 design [superseded by the round-3 region switch] + a duplicated comment — both cosmetic five-minute deletions, neither worth a refactor pass." All dev-only `tooling/demo/` polish.)*

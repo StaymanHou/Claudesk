@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m8-wp5-embed-place (2026-06-29)
+- **Pointer:** 2 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `c34925a`: (1) `readme-assets.nodetest.mjs` test named "...real **animated** GIF" but only checks GIF8[79]a magic (a still GIF89a would pass; assets are in fact animated — name over-claims); (2) the README restructure left the stale "Status" block (claims "Milestones 1–4 shipped" + superseded roadmap; reality M1–M7 released v0.2.3) now prominently under the new pitch — operator-acknowledged, out-of-WP-scope. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m8-wp5-embed-place — 2026-06-29`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** (1) rename the test or assert >1 frame; (2) freshen the Status block at the next README-freshen task or `/product-finalize` durable-doc resync (see also the stale-status discovery logged in the m8-wp5 WIP). A trivial `/feature-refactor` covers (1); (2) is doc-resync work. Dismiss either by marking it `[DISMISSED]` in the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — m8-wp4-pip-demo-asset (2026-06-29)
 - **Pointer:** 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `5625658`: (1) duplicated back-to-back cursor-track comment block in `timeline.pip.js` (round-4b copy-paste); (2) dead `pipFocused`/`row.focused` flag in `shell.js` (round-3 region switch superseded the PiP focus-ring beat — flag never set); (3) the matching `.pip.focused`/`.pip-cell.focused` CSS has no producer. All low-priority polish on dev-only demo tooling; the (2)+(3) dead-focus-ring pair is the natural cleanup unit. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m8-wp4-pip-demo-asset — 2026-06-29`.
 - **Priority:** low (all)

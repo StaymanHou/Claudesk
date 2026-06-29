@@ -83,16 +83,18 @@ Read `docs/product/design-priors.md` (3 priors, all about UI surfaces / modes / 
 
 **Outcome (2026-06-29):** `npm run pip` → `out/pip.gif` (~367KB, ~8× under the 3MB budget; `out/` gitignored — committed asset is WP5's job). Built on the WP2/WP3 harness. Final demo (operator-approved over **4 verify-human rounds**): a vertical PiP with **2 live CC workspace mirrors** (recipe-box + tax-cruncher, reusing the filmstrip busy/stream cadence) pinned over an **ACTIVE Slack work backdrop** (the operator types a reply + the mouse glides and clicks a 👍 reaction; messages pop in) → tax-cruncher **pings** (running→awaiting) → **⌘+Tab switches the composition to the REAL Claudesk window** (filmstrip + center stage, the faithful UX — *not* a PiP focus ring) → **1+⏎** answers the AskUserQuestion → CC resumes. Key operator decisions: **work backdrop** (not leisure/YouTube — target audience is pros multitasking real work), **2 workspaces** (not 4), **faithful window-switch** ending. New `backdropAt.js` pure helper + `timeline.pip.js` + a keyframe-level `region` override in `shell.js` (pip→filmstrip switch) + vertical `.pip-cell` mirror CSS; fixed a latent `[hidden]` keycap/cursor stuck-visible bug (also improves the filmstrip demo). 68/68 harness tests. 0C/0M/3MINOR review-quality findings auto-backlogged (`workflow/backlog-quality-findings.md` → `# m8-wp4-pip-demo-asset`; the 3 are a dup comment + dead round-2 focus-ring scaffolding). **WP4 completes the (WP3 ‖ WP4) parallel pair — only WP5 (embed both GIFs in README) remains in M8.**
 
-### WP5: Embed + place
+### WP5: Embed + place ✅ SHIPPED 2026-06-29 (commits f7b1310 + 157242d + c34925a)
 **Type:** integration
 **Milestone:** M8 (LAST — milestone exit)
 **Dependencies:** WP3, WP4
 **Size:** S
 **Description:** Commit the final GIFs to the repo and embed them in `README.md` near the top (illustrating the pitch before Install/Develop); make them available for the GitHub release page + the M13 open-source launch.
 **Tasks:**
-- [ ] 5.1 Decide + commit the asset path (e.g. `docs/demo/filmstrip.gif`, `docs/demo/pip.gif`); confirm final sizes are under budget (they will be — probe showed ~tens of KB).
-- [ ] 5.2 Embed in README near the top via relative `![]()`/`<img>` with a one-line caption each (filmstrip = parallel-project attention; PiP = monitor-while-elsewhere).
-- [ ] 5.3 Milestone-exit verify: push + view the rendered README on github.com — confirm both GIFs render inline + autoplay-loop; operator final-approves. Mark M8 exit criteria met.
+- [x] 5.1 Decide + commit the asset path (e.g. `docs/demo/filmstrip.gif`, `docs/demo/pip.gif`); confirm final sizes are under budget (they will be — probe showed ~tens of KB).
+- [x] 5.2 Embed in README near the top via relative `![]()`/`<img>` with a one-line caption each (filmstrip = parallel-project attention; PiP = monitor-while-elsewhere).
+- [x] 5.3 Milestone-exit verify: push + view the rendered README on github.com — confirm both GIFs render inline + autoplay-loop; operator final-approves. Mark M8 exit criteria met.
+
+**Outcome (2026-06-29):** Committed both rendered GIFs to **`docs/demo/`** (`filmstrip.gif` ~334KB, `pip.gif` ~367KB — both ~8× under the 3MB GitHub-embed budget; `out/` stays gitignored, `docs/demo/` is the committed home). Embedded both near the top of `README.md`, then — at operator request after approving the render — **restructured the README opening**: a punchy value one-liner (**"Many Claude Code projects. One window. Zero hunting."**, operator-selected from a brainstormed set) → two `problem → feature → demo-gif` blocks → then the original descriptive content (macOS-only paragraph, Status, Install). Added **2 new Philosophy bullets**: single-screen/laptop-scenario design target + local-dev-env-over-cloud (operator declined to capture these as `design-priors.md` entries). New dev-only codify guard `tooling/demo/readme-assets.nodetest.mjs` (4 tests: README refs both GIFs / each resolves / each <3MB / each animated GIF89a) — `tooling/demo` suite 72/72. **Pushed `1c62e7b..c34925a`** (10 M8 commits + 3 WP5 commits live on origin/main); operator final-approved the github.com-rendered README (both GIFs render inline + autoplay-loop) → **M8 exit criteria MET**. Review-quality 0C/0M/**2 MINOR** auto-backlogged (`# m8-wp5-embed-place`: test-name over-claims "animated"; stale README Status block now prominent). **WP5 completes M8 — only `/product-finalize` (cycle-close + archive `wbs.md` + the `m8-wp1` probe record) remains.**
 
 ---
 
