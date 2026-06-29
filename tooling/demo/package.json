@@ -11,6 +11,7 @@
     "css": "node extract-dot-css.mjs",
     "css:check": "node extract-dot-css.mjs --check",
     "smoke": "node extract-dot-css.mjs && node build.mjs --html shell.html --timeline timeline.smoke.js --out out/smoke.gif --width 1000 --height 600 --fps 15 --duration 3.2 --render-width 800 --webp",
+    "filmstrip": "node extract-dot-css.mjs && node build.mjs --html shell.html --timeline timeline.filmstrip.js --out out/filmstrip.gif --width 1000 --height 600 --fps 15 --duration 8.0 --render-width 900 --webp",
     "test": "node --test \"*.nodetest.mjs\""
   },
   "dependencies": {

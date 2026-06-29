@@ -24,6 +24,14 @@
         <div class="bd-lines" id="bd-lines"></div>
       </div>
       <div class="pip" id="pip"></div>
+
+      <!-- ===== user-input affordances (WP3): a glide cursor + a keycap pill ===== -->
+      <!-- NOTE: class is `mouse-cursor`, NOT `cursor` — `.cursor` is already the
+           terminal text block-cursor span in the CC stage (shell.css). -->
+      <div class="mouse-cursor" id="cursor" hidden>
+        <div class="mouse-cursor-ripple" id="cursor-ripple"></div>
+      </div>
+      <div class="keycap" id="keycap" hidden></div>
     </div>
 
     <!-- The scenario TIMELINE is injected by the build (capture loads a shell whose
@@ -31,6 +39,7 @@
          is loaded if none is present. -->
     <script src="timeline.smoke.js"></script>
     <script src="frameAt.js"></script>
+    <script src="cursorAt.js"></script>
     <script src="shell.js"></script>
   </body>
 </html>

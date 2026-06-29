@@ -30,11 +30,15 @@
 
   document.body.dataset.region = T.region || "filmstrip";
 
+  const cursorAt = globalThis.__cursorAt;
   const strip = document.getElementById("strip");
   const term = document.getElementById("term");
   const changesBody = document.getElementById("changes-body");
   const pip = document.getElementById("pip");
   const bdLines = document.getElementById("bd-lines");
+  const cursorEl = document.getElementById("cursor");
+  const rippleEl = document.getElementById("cursor-ripple");
+  const keycapEl = document.getElementById("keycap");
 
   // Static backdrop text (pip region).
   if (bdLines && Array.isArray(T.backdrop)) {
@@ -94,6 +98,51 @@
       .join("");
   }
 
+  // Cursor: glides continuously (interpolated) against the raw t — independent of
+  // the keyframe snapping the panes use. Driven by T.cursor (a waypoint list).
+  function renderCursor(t) {
+    if (!cursorEl) return;
+    if (!cursorAt || !Array.isArray(T.cursor) || T.cursor.length === 0) {
+      cursorEl.hidden = true;
+      return;
+    }
+    const c = cursorAt(T.cursor, t);
+    if (!c) {
+      cursorEl.hidden = true;
+      return;
+    }
+    cursorEl.hidden = false;
+    cursorEl.style.left = c.x + "px";
+    cursorEl.style.top = c.y + "px";
+    // press state + ripple are driven by the frame-deterministic click energy.
+    if (c.click > 0) {
+      cursorEl.classList.add("pressing");
+      if (rippleEl) {
+        // expand 0.2 -> 1.4 as energy 1 -> 0; fade opacity with energy.
+        rippleEl.style.transform = "scale(" + (1.4 - c.click * 1.2) + ")";
+        rippleEl.style.opacity = String(c.click * 0.9);
+      }
+    } else {
+      cursorEl.classList.remove("pressing");
+      if (rippleEl) rippleEl.style.opacity = "0";
+    }
+  }
+
+  // Keycap: shows the key(s) the user pressed during a [from,to] window. Driven by
+  // T.keycaps (a list of {from, to, x, y, keys:[...]}).
+  function renderKeycap(t) {
+    if (!keycapEl) return;
+    const ev = (T.keycaps || []).find((e) => t >= e.from && t < e.to);
+    if (!ev) {
+      keycapEl.hidden = true;
+      return;
+    }
+    keycapEl.hidden = false;
+    keycapEl.style.left = ev.x + "px";
+    keycapEl.style.top = ev.y + "px";
+    keycapEl.innerHTML = (ev.keys || []).map((k) => `<span class="key">${k}</span>`).join("");
+  }
+
   window.__render = function (t) {
     const k = frameAt(T.keyframes, t);
     if (!k) return;
@@ -103,6 +152,8 @@
       renderFilmstrip(k);
       renderStage(k);
     }
+    renderCursor(t);
+    renderKeycap(t);
   };
 
   // Initial paint at t=0 so opening the file standalone shows something.
