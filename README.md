@@ -6,6 +6,16 @@ workflow in **one window with multiple virtual workspaces inside it**. Pick a pr
 inside a workspace — no more "open terminal → `cd` → `claude`" every time, across 20+
 rotating projects.
 
+<p align="center">
+  <img src="docs/demo/filmstrip.gif" alt="Filmstrip demo: four Claude Code projects in flight at once, status dots shifting as attention moves; one flips to awaiting-input and a click jumps to it" width="720"><br>
+  <em><b>Filmstrip</b> — several projects in flight at once; one glance shows which one needs you, one click jumps there.</em>
+</p>
+
+<p align="center">
+  <img src="docs/demo/pip.gif" alt="Picture-in-picture demo: an always-on-top PiP keeps two Claude Code sessions watchable in the corner while you work in another app, pinging when one needs input" width="720"><br>
+  <em><b>Picture-in-picture</b> — stay in your other work; Claude Code stays watchable in the corner and pings you the moment it needs you.</em>
+</p>
+
 > **Status: Milestones 1–4 shipped — daily-driver ready.** Click a project → a working
 > CC session in the project dir inside a workspace; a built-in lite editor + git-diff
 > viewer in the right half; Sublime Text / Sublime Merge / Reveal-in-Finder one click
