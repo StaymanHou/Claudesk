@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-29  # M7 WP1: cargo 299 (+4 tray); tray-icon + image-png feature deps added
+updated: 2026-06-29  # /release v0.2.3 cold build 92s
 ---
 
 # Runtime Registry
@@ -40,9 +40,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 102s (2026-06-28, /release v0.2.2: COLD build after `cargo clean` removed 8.6GiB — full dep-tree recompile incl. tauri-nspanel + .app + .dmg; rust ~77s + bundle)
+- **Last:** 92s (2026-06-29, /release v0.2.3: COLD build after `cargo clean` removed 7.3GiB — full dep-tree recompile incl. tauri-nspanel + .app + .dmg; rust ~67s + bundle)
 - **Use timeout:** 600000
 - **History:**
+  - 92s — 2026-06-29 (/release v0.2.3 cold build: cargo clean removed 7.3GiB, full recompile ~67s incl. tauri-nspanel + bundle)
   - 102s — 2026-06-28 (/release v0.2.2 cold build: cargo clean removed 8.6GiB, full recompile ~77s incl. tauri-nspanel + bundle)
   - 89s — 2026-06-27 (/release v0.2.1 cold build: cargo clean removed 6.4GiB, full recompile ~65s incl. tauri-nspanel + bundle)
   - 83s — 2026-06-27 (/release v0.2.0 cold build: cargo clean removed 16.9GiB, full recompile ~60s incl. tauri-nspanel + bundle)
