@@ -1,0 +1,19 @@
+{
+  "name": "@claudesk/demo-build",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only demo-asset build harness for Claudesk (M8). Renders the real status-dot UI from a mock status timeline to a looping GIF. NOT part of the shipped Tauri bundle.",
+  "scripts": {
+    "capture": "node capture.mjs",
+    "render": "node render.mjs",
+    "build": "node build.mjs",
+    "css": "node extract-dot-css.mjs",
+    "css:check": "node extract-dot-css.mjs --check",
+    "smoke": "node extract-dot-css.mjs && node build.mjs --html shell.html --timeline timeline.smoke.js --out out/smoke.gif --width 1000 --height 600 --fps 15 --duration 3.2 --render-width 800 --webp",
+    "test": "node --test \"*.nodetest.mjs\""
+  },
+  "dependencies": {
+    "playwright": "1.60.0"
+  }
+}

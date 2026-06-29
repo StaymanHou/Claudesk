@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- Dots: sourced from src/App.css (single source of truth). Chrome: authored. -->
+    <link rel="stylesheet" href="_dots.generated.css" />
+    <link rel="stylesheet" href="shell.css" />
+  </head>
+  <body data-region="filmstrip">
+    <div class="app">
+      <!-- ===== filmstrip + center stage (WP3 region) ===== -->
+      <div class="filmstrip" id="strip"></div>
+      <div class="stage">
+        <div class="left" id="term"></div>
+        <div class="right" id="changes">
+          <h4>Changes</h4>
+          <div id="changes-body"></div>
+        </div>
+      </div>
+
+      <!-- ===== PiP over faux backdrop (WP4 region) ===== -->
+      <div class="backdrop">
+        <div class="bd-title">— another app (editor / video) —</div>
+        <div class="bd-lines" id="bd-lines"></div>
+      </div>
+      <div class="pip" id="pip"></div>
+    </div>
+
+    <!-- The scenario TIMELINE is injected by the build (capture loads a shell whose
+         window.TIMELINE is set). For standalone opening, a default smoke timeline
+         is loaded if none is present. -->
+    <script src="timeline.smoke.js"></script>
+    <script src="frameAt.js"></script>
+    <script src="shell.js"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+# Dev-only demo-build harness — track the scripts/shell, ignore deps + scratch render output.
+node_modules/
+package-lock.json
+# Scratch capture frames + rendered output (the COMMITTED demo GIFs live elsewhere — WP5 / docs/demo/).
+frames/
+out/
+*.gif
+*.webp
+*.png

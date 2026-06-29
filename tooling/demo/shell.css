@@ -1,0 +1,182 @@
+/* Demo-shell CHROME styling. The status DOTS are NOT styled here — they come
+   from _dots.generated.css (sourced from src/App.css). Everything below is the
+   surrounding frame (filmstrip tiles, center stage, PiP panel) recreated for the
+   demo; it's allowed to be authored since it's not the value-prop pixel surface.
+   Tokens chosen to match the app's dark palette (#0d1117 / #161b22 / #21262d). */
+:root {
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: #0d1117;
+  font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  color: #c9d1d9;
+  overflow: hidden;
+}
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ---- filmstrip ---- */
+.filmstrip {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+}
+.tile {
+  position: relative;
+  width: 150px;
+  height: 92px;
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  overflow: hidden;
+  transition:
+    border-color 0.25s,
+    box-shadow 0.25s;
+}
+.tile.active {
+  border-color: #539bf5;
+  box-shadow: 0 0 0 1px #539bf5;
+}
+.tile-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  background: linear-gradient(180deg, rgba(13, 17, 23, 0.9), rgba(13, 17, 23, 0));
+}
+.tile-body {
+  padding: 26px 8px 8px;
+  font-size: 9px;
+  color: #6e7681;
+  line-height: 1.5;
+  font-family: "SF Mono", ui-monospace, monospace;
+}
+
+/* ---- center stage ---- */
+.stage {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.left {
+  flex: 1;
+  background: #0a0d12;
+  padding: 16px 18px;
+  font-family: "SF Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  border-right: 1px solid #21262d;
+  overflow: hidden;
+}
+.right {
+  width: 300px;
+  background: #0d1117;
+  padding: 16px;
+  font-size: 11px;
+  color: #6e7681;
+}
+.prompt {
+  color: #539bf5;
+}
+.ok {
+  color: #3fb950;
+}
+.accent {
+  color: #d97757;
+}
+.dim {
+  color: #6e7681;
+}
+.cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: #c9d1d9;
+  vertical-align: -2px;
+}
+h4 {
+  font-size: 11px;
+  color: #8b949e;
+  font-weight: 600;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---- PiP panel (small always-on-top floating surface) ---- */
+.pip {
+  position: absolute;
+  width: 240px;
+  border-radius: 10px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.pip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  font-size: 11px;
+  border-bottom: 1px solid #21262d;
+}
+.pip-row:last-child {
+  border-bottom: none;
+}
+.pip-row .name {
+  flex: 1;
+}
+.pip-row .meta {
+  color: #6e7681;
+  font-size: 10px;
+  font-family: "SF Mono", ui-monospace, monospace;
+}
+
+/* faux "another app" backdrop (PiP demo) — a stylized editor/video surface the
+   PiP floats over. Authored, not real. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(1200px 500px at 70% 20%, #1b2330 0%, #0d1117 60%),
+    #0d1117;
+}
+.backdrop .bd-title {
+  padding: 18px 22px;
+  font-size: 13px;
+  color: #6e7681;
+}
+.backdrop .bd-lines {
+  padding: 0 22px;
+  font-family: "SF Mono", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.9;
+  color: #3b424c;
+}
+
+/* region visibility — the same shell renders either the filmstrip+stage view
+   (WP3) or the PiP-over-backdrop view (WP4), toggled by a body data-attr. */
+body[data-region="filmstrip"] .pip,
+body[data-region="filmstrip"] .backdrop {
+  display: none;
+}
+body[data-region="pip"] .filmstrip,
+body[data-region="pip"] .stage {
+  display: none;
+}
