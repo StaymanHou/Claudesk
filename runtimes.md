@@ -155,3 +155,12 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
   - 11s — 2026-06-19 (cold build of WP7 cc_session dep tree; test run itself ~0s warm)
   - 17s — 2026-06-18 (cold; new dep tree from WP6 — incremental runs are ~2s)
   - 2s — 2026-06-16
+
+## npm run pip (tooling/demo)
+- **Last:** 19s (2026-06-29, round-3 10s loop)
+- **Use timeout:** 180000
+- **History:**
+  - 19s — 2026-06-29 (round-4: +mouse react + 1+⏎ keycap, 10s/150 frames)
+  - 19s — 2026-06-29 (round-3 re-author: 10s loop, 150 frames, region-switch ending)
+  - 18s — 2026-06-29 (round-2 re-author: 9s loop, 135 frames)
+  - 16s — 2026-06-29

@@ -131,14 +131,82 @@ h4 {
 }
 
 /* ---- PiP panel (small always-on-top floating surface) ---- */
+/* Vertical layout: stacked workspace mini-mirrors (each a compact live CC
+   session), like the real always-on-top PiP NSPanel showing N workspaces. */
 .pip {
   position: absolute;
-  width: 240px;
-  border-radius: 10px;
-  background: #161b22;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 12px;
+  background: #0d1117;
   border: 1px solid #30363d;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  padding: 8px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.6);
+}
+
+/* a workspace mini-mirror cell: header (dot + name) + a compact CC terminal. */
+.pip-cell {
+  border-radius: 8px;
+  background: #161b22;
+  border: 1px solid #21262d;
   overflow: hidden;
+}
+.pip-cell-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #adbac7;
+  border-bottom: 1px solid #21262d;
+  background: #11161d;
+}
+.pip-cell-head .name {
+  flex: 1;
+}
+/* the compact CC mirror — same monospace terminal look as the center stage, but
+   small. line-clamped by max-height so a long stream doesn't blow out the cell. */
+.pip-cell-term {
+  padding: 7px 9px;
+  font-family: "SF Mono", ui-monospace, monospace;
+  font-size: 9px;
+  line-height: 1.5;
+  color: #adbac7;
+  height: 86px;
+  overflow: hidden;
+  /* anchor to the bottom so the newest streamed lines stay visible (like a real
+     scrolling terminal tail). */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+/* the ping: the awaiting cell lifts — blue ring + a "needs you" badge. */
+.pip-cell.awaiting {
+  border-color: #539bf5;
+  box-shadow: 0 0 0 1px #539bf5, 0 0 16px rgba(83, 155, 245, 0.45);
+}
+.pip-cell.awaiting .pip-cell-head {
+  background: rgba(83, 155, 245, 0.16);
+  color: #e6edf3;
+}
+.pip-ping {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #cae0ff;
+  background: #1f6feb;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+/* focus ring: the whole PiP lifts when the operator ⌘-Tabs over to Claudesk. */
+.pip.focused {
+  box-shadow:
+    0 0 0 2px #539bf5,
+    0 12px 40px rgba(0, 0, 0, 0.65);
 }
 .pip-row {
   display: flex;
@@ -151,6 +219,17 @@ h4 {
 .pip-row:last-child {
   border-bottom: none;
 }
+/* the awaiting row — the "ping": CC needs you now. A subtle blue wash + a left
+   accent bar so the eye snaps to it even at the corner-of-screen PiP size. The
+   dot itself already blinks (real App.css awaiting animation); this lifts the
+   whole row so it reads as the actionable one. */
+.pip-row.awaiting {
+  background: rgba(83, 155, 245, 0.12);
+  box-shadow: inset 2px 0 0 #539bf5;
+}
+.pip-row.awaiting .name {
+  color: #e6edf3;
+}
 .pip-row .name {
   flex: 1;
 }
@@ -160,26 +239,107 @@ h4 {
   font-family: "SF Mono", ui-monospace, monospace;
 }
 
-/* faux "another app" backdrop (PiP demo) — a stylized editor/video surface the
-   PiP floats over. Authored, not real. */
+/* faux "another app" backdrop (PiP demo) — a stylized WORK surface (a Slack-like
+   chat / document) the PiP floats over. The work framing (vs leisure/video) is a
+   deliberate target-audience choice (2026-06-29): the buyer is a pro multitasking
+   real work, so the backdrop shows Claudesk earning its place mid-workday.
+   Authored, not real. Slightly muted so the corner PiP stays the focal point. */
 .backdrop {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(1200px 500px at 70% 20%, #1b2330 0%, #0d1117 60%),
-    #0d1117;
+    radial-gradient(1100px 600px at 28% 18%, #1a212c 0%, #0e131a 62%),
+    #0e131a;
 }
+/* a channel/document header bar */
 .backdrop .bd-title {
-  padding: 18px 22px;
-  font-size: 13px;
-  color: #6e7681;
+  padding: 14px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #adbac7;
+  border-bottom: 1px solid #1c232c;
+  background: #11161d;
+  letter-spacing: 0.01em;
 }
+/* message rows — a stylized Slack thread. Each .bd-lines child is one message;
+   a leading "name:" reads as the author, the rest as the message body. Muted on
+   purpose — the foreground app is intentionally NOT the star of the demo. */
 .backdrop .bd-lines {
-  padding: 0 22px;
-  font-family: "SF Mono", ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 1.9;
-  color: #3b424c;
+  padding: 16px 24px;
+  font-family:
+    -apple-system, "SF Pro Text", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #768390;
+}
+.backdrop .bd-lines > div {
+  padding: 7px 0;
+  border-bottom: 1px solid #161c24;
+}
+/* a message author label: the substring before the first ":" is dimmed-bold via
+   an authored <b> in the timeline copy (innerHTML, author-controlled). */
+.backdrop .bd-lines b {
+  color: #adbac7;
+  font-weight: 600;
+}
+/* a reaction chip on a message — outline before the operator clicks it, filled
+   blue (with a count) after. The cursor glides to it + clicks during the
+   monitoring beats: concrete "you're busy working in the other app" texture. */
+.backdrop .bd-lines .bd-react {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid #30363d;
+  background: #1c2129;
+  font-size: 11px;
+  color: #768390;
+  vertical-align: middle;
+}
+.backdrop .bd-lines .bd-react.added {
+  border-color: #1f6feb;
+  background: #15233a;
+  color: #cae0ff;
+  font-weight: 600;
+}
+/* a faux text-input footer, so it reads as a live chat the user is typing in. */
+.backdrop .bd-input {
+  position: absolute;
+  left: 24px;
+  right: 300px;
+  bottom: 22px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #2b333d;
+  background: #11161d;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 13px;
+  color: #768390;
+}
+.backdrop .bd-input .bd-author {
+  color: #768390;
+  font-weight: 600;
+  margin-right: 8px;
+}
+.backdrop .bd-input .bd-caret {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  margin-left: 1px;
+  background: #539bf5;
+}
+.backdrop .bd-input .bd-author + .bd-caret,
+.backdrop .bd-input.sending {
+  border-color: #539bf5;
+}
+.backdrop .bd-input.sending {
+  background: #15233a;
+  color: #cdd9e5;
 }
 
 /* ---- user-input affordances (WP3) ---- */
@@ -253,6 +413,14 @@ h4 {
   gap: 16px;
   pointer-events: none;
   font-family: "SF Mono", ui-monospace, monospace;
+}
+/* honor the `hidden` attribute — an author `display:flex` otherwise wins over
+   the UA `[hidden]{display:none}` rule, leaving the keycap stuck visible after
+   its [from,to] window (bug surfaced in the PiP demo, where the keycap clears
+   mid-loop). The mouse-cursor needs the same guard for the same reason. */
+.keycap[hidden],
+.mouse-cursor[hidden] {
+  display: none !important;
 }
 .keycap .key {
   display: inline-flex;

@@ -32,20 +32,67 @@
 
   const cursorAt = globalThis.__cursorAt;
   const busyAt = globalThis.__busyAt;
+  const backdropAt = globalThis.__backdropAt;
   const strip = document.getElementById("strip");
   const term = document.getElementById("term");
   const changesBody = document.getElementById("changes-body");
   const pip = document.getElementById("pip");
+  const bdTitle = document.getElementById("bd-title");
   const bdLines = document.getElementById("bd-lines");
+  const bdInput = document.getElementById("bd-input");
   const cursorEl = document.getElementById("cursor");
   const rippleEl = document.getElementById("cursor-ripple");
   const ripple2El = document.getElementById("cursor-ripple2");
   const flashEl = document.getElementById("cursor-flash");
   const keycapEl = document.getElementById("keycap");
 
-  // Static backdrop text (pip region).
-  if (bdLines && Array.isArray(T.backdrop)) {
+  // Backdrop title (pip region) — the faux "other app" channel/doc header.
+  if (bdTitle && typeof T.backdropTitle === "string") {
+    bdTitle.textContent = T.backdropTitle;
+  }
+  // The backdrop body (messages + typing input) is driven per-frame in
+  // renderBackdrop(t) below when T.backdropLive is set (active Slack chat —
+  // messages pop in over time + the user types in the input box). The legacy
+  // static T.backdrop[] array is still honored as a fallback.
+  if (bdLines && Array.isArray(T.backdrop) && !T.backdropLive) {
     bdLines.innerHTML = T.backdrop.map((l) => `<div>${l}</div>`).join("");
+  }
+  if (bdInput && !T.backdropLive) {
+    if (typeof T.backdropInput === "string") {
+      bdInput.hidden = false;
+      bdInput.innerHTML = T.backdropInput + '<span class="bd-caret"></span>';
+    } else {
+      bdInput.hidden = true;
+    }
+  }
+
+  // Active backdrop: messages reveal progressively + the operator types in the
+  // input box, driven by backdropAt against the raw t (frame-deterministic, like
+  // busyAt/cursorAt). Author-controlled strings injected via innerHTML.
+  function renderBackdrop(t) {
+    if (!T.backdropLive || !backdropAt) return;
+    const b = backdropAt(T.backdropLive, t);
+    if (bdLines) {
+      bdLines.innerHTML = b.messages
+        .map((m) => {
+          // optional reaction chip on a message — the operator reacting in Slack
+          // (outline before added, filled blue after). Drawn inline after text.
+          let chip = "";
+          if (m.reaction) {
+            chip =
+              `<span class="bd-react${m.reaction.added ? " added" : ""}">` +
+              `${m.reaction.emoji}${m.reaction.added ? " 1" : ""}</span>`;
+          }
+          return `<div><b>${m.author}</b>&nbsp;&nbsp;${m.text}${chip}</div>`;
+        })
+        .join("");
+    }
+    if (bdInput) {
+      bdInput.hidden = false;
+      bdInput.classList.toggle("sending", b.sending);
+      bdInput.innerHTML =
+        `<span class="bd-author">you</span>${b.input}` + '<span class="bd-caret"></span>';
+    }
   }
   // PiP panel placement (pip region) — corner-pinned like the real NSPanel.
   if (pip && T.pipPos) {
@@ -109,15 +156,63 @@
     }
   }
 
-  function renderPip(k) {
+  // Render the CC-mirror body for a workspace cell: authored lines + the live
+  // busy layer (progressively-revealed stream + a spinner line), the SAME cadence
+  // as the filmstrip center-stage (renderStage) but compact, so each PiP cell
+  // reads as a real mirror of that workspace's CC session.
+  function mirrorBody(m, t) {
+    let html = (m.lines || [])
+      .map((l) => `<div class="${l.cls || ""}">${l.text}</div>`)
+      .join("");
+    if (busyAt && m.busy) {
+      const b = busyAt(m.busy, t);
+      if (b) {
+        const stream = (m.busy.stream || []).slice(0, b.revealed);
+        html += stream.map((l) => `<div class="${l.cls || ""}">${l.text}</div>`).join("");
+        html +=
+          `<div class="busy"><span class="busy-glyph">${b.glyph}</span> ${b.word}… ` +
+          `<span class="busy-meta">(${b.elapsed}s · ↓ ${fmtTokens(b.tokens)} tokens)</span></div>`;
+      }
+    }
+    return html;
+  }
+
+  function renderPip(k, t) {
     if (!pip) return;
+    // Panel-level focus ring: lifts when the operator ⌘-Tabs to Claudesk (the
+    // switch beat). Per-keyframe flag.
+    pip.classList.toggle("focused", !!k.pipFocused);
     pip.innerHTML = (k.pip || [])
-      .map(
-        (row) =>
-          `<div class="pip-row">${dot(row.status)}` +
+      .map((row) => {
+        // A row may be a CC MIRROR (vertical active-mirror cell: a compact live
+        // CC session) or a simple status row (legacy fallback).
+        if (row.mirror) {
+          const awaiting = row.status === "awaiting";
+          const focused = row.focused ? " focused" : "";
+          const cls = `pip-cell${awaiting ? " awaiting" : ""}${focused}`;
+          return (
+            `<div class="${cls}">` +
+            `<div class="pip-cell-head">${dot(row.status)}` +
+            `<span class="name">${row.name}</span>` +
+            (awaiting ? `<span class="pip-ping">needs you</span>` : "") +
+            `</div>` +
+            `<div class="pip-cell-term">${mirrorBody(row.mirror, t)}</div>` +
+            `</div>`
+          );
+        }
+        // legacy status-row form (kept for the smoke/back-compat path)
+        let meta = row.meta || "";
+        if (busyAt && row.busy) {
+          const b = busyAt(row.busy, t);
+          if (b) meta = `${b.elapsed}s · ↓ ${fmtTokens(b.tokens)} tokens`;
+        }
+        const rowCls = row.status === "awaiting" ? "pip-row awaiting" : "pip-row";
+        return (
+          `<div class="${rowCls}">${dot(row.status)}` +
           `<span class="name">${row.name}</span>` +
-          `<span class="meta">${row.meta || ""}</span></div>`,
-      )
+          `<span class="meta">${meta}</span></div>`
+        );
+      })
       .join("");
   }
 
@@ -183,8 +278,16 @@
   window.__render = function (t) {
     const k = frameAt(T.keyframes, t);
     if (!k) return;
-    if ((T.region || "filmstrip") === "pip") {
-      renderPip(k);
+    // Region is keyframe-switchable: a keyframe may override T.region (e.g. the
+    // PiP demo flips 'pip' → 'filmstrip' on the ⌘+Tab beat, so the ending shows
+    // the REAL Claudesk window with the workspace promoted to center stage — the
+    // faithful UX, not the PiP panel standing in for it). data-region toggles
+    // which composition is visible (shell.css), set per frame.
+    const region = k.region || T.region || "filmstrip";
+    document.body.dataset.region = region;
+    if (region === "pip") {
+      renderBackdrop(t);
+      renderPip(k, t);
     } else {
       renderFilmstrip(k);
       renderStage(k, t);
