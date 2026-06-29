@@ -109,6 +109,18 @@ body {
   background: #c9d1d9;
   vertical-align: -2px;
 }
+/* the live "Claude is working" line — matches the real CC TUI working/spinner
+   line. The glyph + elapsed/token meta are driven per-frame by busyAt(). */
+.busy {
+  color: #d97757;
+  margin-top: 2px;
+}
+.busy-glyph {
+  color: #d97757;
+}
+.busy-meta {
+  color: #6e7681;
+}
 h4 {
   font-size: 11px;
   color: #8b949e;
@@ -198,13 +210,36 @@ h4 {
   position: absolute;
   left: 1px;
   top: 1px;
-  width: 26px;
-  height: 26px;
-  margin: -13px 0 0 -13px;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
   border-radius: 50%;
-  border: 2px solid #539bf5;
+  border: 3px solid #539bf5;
+  box-shadow: 0 0 10px rgba(83, 155, 245, 0.7);
   opacity: 0;
   transform: scale(0.2);
+  pointer-events: none;
+}
+/* a second, larger concentric ring trailing the first — makes the click read
+   as a strong double-pulse, not a faint blip. */
+.mouse-cursor-ripple.ring2 {
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border-width: 2px;
+}
+/* a brief solid radial flash at the click point — the "pop". */
+.mouse-cursor-flash {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(83, 155, 245, 0.85) 0%, rgba(83, 155, 245, 0) 70%);
+  opacity: 0;
+  transform: scale(0.4);
   pointer-events: none;
 }
 
@@ -246,3 +281,38 @@ body[data-region="pip"] .filmstrip,
 body[data-region="pip"] .stage {
   display: none;
 }
+
+/* ---- diff-chunk lines (CC Edit/Update tool output: red − / green + hunk) ----
+   Used via the diff-* cls on stage lines, so CC visibly WRITES code, not just
+   logs. Mimics the real TUI's numbered diff hunk. */
+.diff-add {
+  background: rgba(63, 185, 80, 0.16);
+  color: #56d364;
+}
+.diff-del {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+.diff-ctx {
+  color: #6e7681;
+}
+.diff-add,
+.diff-del,
+.diff-ctx {
+  display: block;
+  white-space: pre;
+}
+
+/* ---- mock AskUserQuestion tool call (WP3 2nd-workspace awaiting state) ----
+   Matches the real CC AskUserQuestion TUI: a tab label, bold question, numbered
+   options with the ❯-selected row, each description on a dimmed line below, and
+   a footer hint. No box/chip — the real UI is flat. */
+.askq-tabs { margin-top: 6px; }
+.askq-tab { font-size: 11px; color: #6e7681; }
+.askq-tab.active { color: #e6edf3; background: #16314e; padding: 1px 7px; border-radius: 4px; }
+.askq-question { color: #e6edf3; font-weight: 600; margin: 8px 0 6px; }
+.askq-opt { color: #c9d1d9; }
+.askq-opt.sel .askq-num, .askq-opt.sel .askq-label { color: #539bf5; font-weight: 600; }
+.askq-num { color: #6e7681; }
+.askq-od { color: #6e7681; padding-left: 24px; margin-bottom: 4px; }
+.askq-foot { color: #484f58; margin-top: 8px; font-size: 11px; }

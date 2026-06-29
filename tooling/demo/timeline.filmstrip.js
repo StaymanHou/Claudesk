@@ -5,21 +5,25 @@
 // Narrative: "4 projects in flight, one glance tells you which needs you, one
 // click jumps there — then you decide."
 //
-// FOUR beats — switching workspaces and approving are DISTINCT steps (the click
-// promotes the workspace but does NOT auto-approve; the approval is its own beat):
-//   Beat 1 (t=0)   — 4 projects in flight; api-gateway running on center stage.
-//   Beat 2 (t=2.0) — web-client needs input → flips AWAITING (blue blink). The
+// FOUR beats — switching workspaces and answering are DISTINCT steps (the click
+// promotes the workspace but does NOT auto-answer; the answer is its own beat):
+//   Beat 1 (t=0)   — 4 projects in flight; catan-companion running on center
+//                    stage with a LIVE busy session (spinner + streaming output).
+//   Beat 2 (t=2.0) — tax-cruncher needs input → flips AWAITING (blue blink). The
 //                    blink is the single "this one needs you" signal at a glance.
-//   Beat 3 (t=4.0) — user CLICKS web-client → it promotes to center stage but is
-//                    STILL AWAITING: the real CC permission prompt is shown,
-//                    nothing approved yet. (Switch ≠ approve.)
-//   Beat 4 (t=6.0) — user APPROVES (a separate action) → web-client resumes
-//                    RUNNING; the tool proceeds.
+//   Beat 3 (t=4.0) — user CLICKS tax-cruncher → it promotes to center stage but is
+//                    STILL AWAITING: a real-shaped AskUserQuestion tool call is on
+//                    screen, nothing answered yet. (Switch ≠ answer.)
+//   Beat 4 (t=6.0) — user ANSWERS (a separate keyboard action — picks option 1) →
+//                    tax-cruncher resumes RUNNING; the tool proceeds.
 //
 // CC-pane content is authored to match the real Claude Code TUI cadence
 // (generalized, content-neutral — no real/sensitive project data): a `❯` prompt,
 // `●` tool-use bullets, `⎿` tree-result lines, real tool names (Edit/Bash/Read),
-// and the permission-prompt box (`Do you want to make this edit? ❯ 1. Yes …`).
+// the live working/spinner line (`✻ Wrangling… (Ns · ↓ N.Nk tokens · esc to
+// interrupt)`, driven by busyAt), and a real-shaped AskUserQuestion (tab label +
+// bold question + numbered options w/ ❯-selected + dimmed description-below +
+// footer hint, via the askq-* classes in shell.css).
 //
 // Classic <script> (NOT a module — shell.html loads JS as classic <script>;
 // file:// blocks ES-module imports in Chromium, the capture path). Mirrors
@@ -73,11 +77,40 @@ window.TIMELINE = window.TIMELINE || {
           { cls: "prompt", text: "❯ add a turn timer to the score tracker" },
           { text: "" },
           { cls: "accent", text: "● Edit(Sources/Views/ScoreView.swift)" },
-          { cls: "dim", text: "  ⎿ Updated ScoreView.swift with 23 additions" },
-          { cls: "accent", text: "● Bash(xcodebuild -scheme CatanCompanion)" },
-          { cls: "dim", text: "  ⎿ Compiling CatanCompanion (iOS Simulator)" },
-          { text: '<span class="cursor"></span>' },
+          { cls: "dim", text: "  ⎿ Updated with 23 additions" },
         ],
+        // LIVE: catan-companion is mid-work — a BUNCH of output cascades in fast +
+        // a working line spins/ticks across the beat (the "CC spitting out a ton
+        // of stuff, busy right now" vibe). Content is filler-by-design — the vibe
+        // is the point, not the specifics. streamEach is tight (~0.16s/line) so it
+        // reads as a fast cascade, not a slow reveal.
+        busy: {
+          startT: 0,
+          endT: 2.0,
+          words: ["Compiling", "Wrangling", "Simulating", "Crunching"],
+          tokensStart: 3800,
+          tokensPerSec: 2600,
+          streamFrom: 0.12,
+          streamEach: 0.11,
+          stream: [
+            { cls: "accent", text: "● Update(Sources/Models/Game.swift)" },
+            { cls: "dim", text: "  ⎿ Added 9 lines, removed 2" },
+            { cls: "diff-ctx", text: "    41    var round = 1" },
+            { cls: "diff-del", text: "    42 -  func endTurn() {" },
+            { cls: "diff-add", text: "    42 +  var turnDeadline: Date?" },
+            { cls: "diff-add", text: "    43 +  func endTurn() {" },
+            { cls: "diff-add", text: "    44 +    turnDeadline = .now + 90" },
+            { cls: "diff-add", text: "    45 +    onTimeout?()" },
+            { cls: "diff-ctx", text: "    46      advanceToNextPlayer()" },
+            { cls: "accent", text: "● Bash(xcodebuild -scheme CatanCompanion)" },
+            { cls: "dim", text: "  ⎿ Compiling Models (12 sources)" },
+            { cls: "dim", text: "  ⎿ Compiling Views (18 sources)" },
+            { cls: "dim", text: "  ⎿ Linking CatanCompanion.app" },
+            { cls: "ok", text: "  ⎿ Build succeeded in 4.2s" },
+            { cls: "accent", text: "● Bash(swift test --filter TurnTimerTests)" },
+            { cls: "ok", text: "  ⎿ Test Suite 'TurnTimerTests' passed (9 tests)" },
+          ],
+        },
         changes: [
           { cls: "ok", text: "+ Sources/Views/TurnTimer.swift" },
           { cls: "accent", text: "~ Sources/Views/ScoreView.swift" },
@@ -94,7 +127,7 @@ window.TIMELINE = window.TIMELINE || {
       t: 2.0,
       tiles: [
         { name: "catan-companion", status: "running", body: "● Bash · xcodebuild" },
-        { name: "tax-cruncher", status: "awaiting", body: "? Approve edit" },
+        { name: "tax-cruncher", status: "awaiting", body: "? Tax year" },
         { name: "hugo-blog", status: "idle", body: "idle" },
         { name: "recipe-box", status: "unknown", body: "—" },
       ],
@@ -124,24 +157,33 @@ window.TIMELINE = window.TIMELINE || {
       t: 4.0,
       tiles: [
         { name: "catan-companion", status: "running", body: "● Bash · xcodebuild" },
-        { name: "tax-cruncher", status: "awaiting", body: "? Approve edit" },
+        { name: "tax-cruncher", status: "awaiting", body: "? Tax year" },
         { name: "hugo-blog", status: "idle", body: "idle" },
         { name: "recipe-box", status: "unknown", body: "—" },
       ],
       active: 1,
       stage: {
+        // The 2nd workspace's awaiting state is a real-shaped AskUserQuestion tool
+        // call (NOT a file-edit permission) — tab label, bold question, numbered
+        // options with the ❯-selected row + dimmed description-below, footer hint.
+        // Rendered via the askq-* classes (shell.css); no new shell.js path.
         lines: [
           { cls: "prompt", text: "❯ handle the 2024 bracket update in the federal calc" },
           { text: "" },
-          { cls: "accent", text: "● Edit(src/brackets/federal_2024.rs)" },
-          { cls: "dim", text: "  ⎿ replace the 2023 bracket table with 2024 figures" },
+          { cls: "accent", text: "● Read(src/brackets/federal_2024.rs)" },
+          { cls: "dim", text: "  ⎿ Read 142 lines" },
           { text: "" },
-          { cls: "accent", text: "Do you want to make this edit to federal_2024.rs?" },
-          { cls: "ok", text: "  ❯ 1. Yes" },
-          { cls: "dim", text: "    2. No, tell Claude what to do differently" },
+          { cls: "askq-tab", text: "☐ Tax year" },
+          { cls: "askq-question", text: "How should the calculator treat a return filed for a prior year?" },
+          { cls: "askq-opt sel", text: "❯ 1. Use that year's brackets" },
+          { cls: "askq-od", text: "Look up the historical bracket table by tax year. Correct for amended + late returns." },
+          { cls: "askq-opt", text: "&nbsp;&nbsp;2. Always use current-year" },
+          { cls: "askq-od", text: "Simpler, but wrong for amended / late-filed prior-year returns." },
+          { cls: "askq-opt", text: "&nbsp;&nbsp;3. Prompt per calculation" },
+          { cls: "askq-foot", text: "Enter to select · Tab/Arrow keys to navigate · Esc to cancel" },
         ],
         changes: [
-          { cls: "dim", text: "awaiting approval…" },
+          { cls: "dim", text: "awaiting answer…" },
           { cls: "accent", text: "~ src/brackets/federal_2024.rs" },
         ],
       },
@@ -163,11 +205,23 @@ window.TIMELINE = window.TIMELINE || {
           { cls: "prompt", text: "❯ handle the 2024 bracket update in the federal calc" },
           { text: "" },
           { cls: "accent", text: "● Edit(src/brackets/federal_2024.rs)" },
-          { cls: "ok", text: "  ⎿ Updated federal_2024.rs with 7 additions" },
-          { cls: "accent", text: "● Bash(cargo test brackets::)" },
-          { cls: "dim", text: "  ⎿ running 12 tests…" },
-          { text: '<span class="cursor"></span>' },
+          { cls: "ok", text: "  ⎿ Updated with 7 additions" },
         ],
+        // LIVE: tax-cruncher resumed after the approval — tests streaming in.
+        busy: {
+          startT: 6.0,
+          endT: 8.0,
+          words: ["Testing", "Crunching", "Verifying"],
+          tokensStart: 5200,
+          tokensPerSec: 1100,
+          streamFrom: 0.3,
+          streamEach: 0.5,
+          stream: [
+            { cls: "accent", text: "● Bash(cargo test brackets::)" },
+            { cls: "dim", text: "  ⎿ running 12 tests" },
+            { cls: "ok", text: "  ⎿ test brackets::federal_2024 ... ok" },
+          ],
+        },
         changes: [
           { cls: "ok", text: "+ tests/federal_2024.rs" },
           { cls: "accent", text: "~ src/brackets/federal_2024.rs" },

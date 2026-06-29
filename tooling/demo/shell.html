@@ -29,6 +29,8 @@
       <!-- NOTE: class is `mouse-cursor`, NOT `cursor` — `.cursor` is already the
            terminal text block-cursor span in the CC stage (shell.css). -->
       <div class="mouse-cursor" id="cursor" hidden>
+        <div class="mouse-cursor-flash" id="cursor-flash"></div>
+        <div class="mouse-cursor-ripple ring2" id="cursor-ripple2"></div>
         <div class="mouse-cursor-ripple" id="cursor-ripple"></div>
       </div>
       <div class="keycap" id="keycap" hidden></div>
@@ -40,6 +42,7 @@
     <script src="timeline.smoke.js"></script>
     <script src="frameAt.js"></script>
     <script src="cursorAt.js"></script>
+    <script src="busyAt.js"></script>
     <script src="shell.js"></script>
   </body>
 </html>

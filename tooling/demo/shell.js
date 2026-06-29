@@ -31,6 +31,7 @@
   document.body.dataset.region = T.region || "filmstrip";
 
   const cursorAt = globalThis.__cursorAt;
+  const busyAt = globalThis.__busyAt;
   const strip = document.getElementById("strip");
   const term = document.getElementById("term");
   const changesBody = document.getElementById("changes-body");
@@ -38,6 +39,8 @@
   const bdLines = document.getElementById("bd-lines");
   const cursorEl = document.getElementById("cursor");
   const rippleEl = document.getElementById("cursor-ripple");
+  const ripple2El = document.getElementById("cursor-ripple2");
+  const flashEl = document.getElementById("cursor-flash");
   const keycapEl = document.getElementById("keycap");
 
   // Static backdrop text (pip region).
@@ -73,11 +76,31 @@
       .join("");
   }
 
-  function renderStage(k) {
+  function fmtTokens(n) {
+    return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
+  }
+
+  function renderStage(k, t) {
     if (term && k.stage) {
-      term.innerHTML = (k.stage.lines || [])
+      // Static authored lines for this beat...
+      let html = (k.stage.lines || [])
         .map((l) => `<div class="${l.cls || ""}">${l.text}</div>`)
         .join("");
+      // ...then the LIVE busy layer (progressively-revealed stream lines + a
+      // working spinner line), driven by busyAt against the raw t so it animates
+      // across the frozen capture frames — the "Claude is working RIGHT NOW" read.
+      if (busyAt && k.stage.busy) {
+        const b = busyAt(k.stage.busy, t);
+        if (b) {
+          const stream = (k.stage.busy.stream || []).slice(0, b.revealed);
+          html += stream.map((l) => `<div class="${l.cls || ""}">${l.text}</div>`).join("");
+          // working line, real-TUI shape: "✻ Wrangling… (12s · ↓ 1.5k tokens) (esc to interrupt)"
+          html +=
+            `<div class="busy"><span class="busy-glyph">${b.glyph}</span> ${b.word}… ` +
+            `<span class="busy-meta">(${b.elapsed}s · ↓ ${fmtTokens(b.tokens)} tokens · esc to interrupt)</span></div>`;
+        }
+      }
+      term.innerHTML = html;
     }
     if (changesBody && k.stage) {
       changesBody.innerHTML = (k.stage.changes || [])
@@ -114,17 +137,31 @@
     cursorEl.hidden = false;
     cursorEl.style.left = c.x + "px";
     cursorEl.style.top = c.y + "px";
-    // press state + ripple are driven by the frame-deterministic click energy.
+    // press state + ripple/flash are driven by the frame-deterministic click
+    // energy (1.0 at click, decaying to 0). A strong, legible click pop: an inner
+    // ring + a larger trailing ring + a solid radial flash, all keyed off energy.
     if (c.click > 0) {
       cursorEl.classList.add("pressing");
       if (rippleEl) {
-        // expand 0.2 -> 1.4 as energy 1 -> 0; fade opacity with energy.
-        rippleEl.style.transform = "scale(" + (1.4 - c.click * 1.2) + ")";
-        rippleEl.style.opacity = String(c.click * 0.9);
+        // inner ring expands 0.3 -> 1.6 as energy 1 -> 0; bright at click.
+        rippleEl.style.transform = "scale(" + (1.6 - c.click * 1.3) + ")";
+        rippleEl.style.opacity = String(c.click);
+      }
+      if (ripple2El) {
+        // outer ring expands further + trails (lower opacity, wider scale).
+        ripple2El.style.transform = "scale(" + (2.0 - c.click * 1.4) + ")";
+        ripple2El.style.opacity = String(c.click * 0.6);
+      }
+      if (flashEl) {
+        // solid radial flash: strongest at the instant of click, quick fade.
+        flashEl.style.transform = "scale(" + (0.4 + (1 - c.click) * 0.8) + ")";
+        flashEl.style.opacity = String(c.click * c.click); // quadratic → snappier fade
       }
     } else {
       cursorEl.classList.remove("pressing");
       if (rippleEl) rippleEl.style.opacity = "0";
+      if (ripple2El) ripple2El.style.opacity = "0";
+      if (flashEl) flashEl.style.opacity = "0";
     }
   }
 
@@ -150,7 +187,7 @@
       renderPip(k);
     } else {
       renderFilmstrip(k);
-      renderStage(k);
+      renderStage(k, t);
     }
     renderCursor(t);
     renderKeycap(t);

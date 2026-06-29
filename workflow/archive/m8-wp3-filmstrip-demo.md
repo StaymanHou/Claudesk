@@ -1,7 +1,7 @@
 # Feature: M8 WP3 — Filmstrip demo asset
 
 **Workflow:** feature
-**State:** Completed 2026-06-29 — shipped a42ba61 on main (not pushed); review-quality 0C/0M/3MINOR auto-backlogged; WBS WP3 ticked. F19 (M8 cycle continues — WP4/WP5 open).
+**State:** Completed 2026-06-29 — shipped a42ba61 + re-closed after the operator-approved realism round (busy-session/diff/AskUserQuestion/stronger-click) on main (not pushed); review-quality 0C/0M/3MINOR auto-backlogged; WBS WP3 ticked; 46/46 harness tests. F19 (M8 cycle continues — WP4/WP5 open).
 **Created:** 2026-06-29
 **Drive mode:** autopilot
 
@@ -41,18 +41,20 @@ The filmstrip (M4) is one of Claudesk's two most distinctive, hardest-to-explain
 <!-- DESIGN-PRIOR capture check (verify-human §6b): vh.1 correction ("show independent projects, not components of one system") maps to an ALREADY-DOCUMENTED identity principle (README "Parallelism across projects, not across agents within a project"; vision.md; [[claudesk-philosophy]]). Per dedup rule → NOT a new prior (existing canonical principle, not a newly-revealed transferable lean). No write to design-priors.md. -->
   - [x] verify-codify  <!-- status: [x] — cursorAt.nodetest.mjs (8 tests for the interpolation helper added during the input-affordance round) + 3 new cursor/keycap structural guards in timeline.filmstrip.nodetest.mjs (waypoints ascending+in-bounds, click waypoint exists, keycaps well-formed). Full suite 34/34 pass. No integration boundary (dev-only harness artifacts). -->
 
+<!-- RE-OPEN ROUND 2 (post-finalize, 2026-06-29): operator reviewed the shipped GIF and asked for a "busy active CC session" feel + more content. Un-archived a42ba61's WIP and ran another build round (NOT a fresh feature — same WP3). Changes:
+  (1) LIVE busy-session layer — new busyAt.js (frame-deterministic spinner glyph cycle + ticking elapsed/token counter + progressive line reveal), unit-tested (busyAt.nodetest.mjs, 9 tests). Active beats (catan-companion B1, tax-cruncher B4) now show "✻ Wrangling… (Ns · ↓ N.Nk tokens · esc to interrupt)" + streaming output → reads as working RIGHT NOW, not a finished log.
+  (2) Beat 1 packed: an Update(Game.swift) red/green DIFF HUNK (diff-add/diff-del/diff-ctx classes) + a fast cascade of build/test output (16 lines @ ~0.11s) → "CC spitting out a bunch of stuff" vibe (operator: details don't matter, the vibe does).
+  (3) Beat 3 awaiting state changed from a file-edit permission prompt to a real-shaped AskUserQuestion tool call (askq-* classes: tab label + bold question + ❯-selected option w/ dimmed description-below + 'Enter to select…' footer) — matched to the operator's screenshot of the real CC AskUserQuestion UI. Answer is now KEYBOARD (press 1).
+  (4) Stronger click indicator — glowing concentric double-ring + radial flash (was a single faint ring).
+  Operator APPROVED 2026-06-29 ("approve"). GIF 323KB (~9× under budget). 43/43 harness tests pass. -->
+
 ## Current Node
-- **Path:** Feature > review-quality COMPLETE (0C/0M/3MINOR auto-backlogged) > ready for finalize
-- **Path (prior):** Feature > COMPLETE — both phases [x]; ready to ship
-- **Active scope:** WP3 done. Phase 1 (timeline + content + script) + Phase 2 (render/legibility + operator-approved demo + cursor/keycap input affordances) both complete. Full suite 34/34.
-- **Next:** /feature-ship
-- **Asset:** tooling/demo/out/filmstrip.gif (149KB, under budget). Final path is WP5's call (likely docs/demo/filmstrip.gif).
+- **Path:** Feature > RE-OPEN round 2 > verify-human APPROVED > ready for verify-codify → re-ship → re-finalize
+- **Active scope:** WP3 realism round complete + operator-approved. Phase 1 + Phase 2 + the busy/diff/AskUserQuestion/stronger-click round all done.
+- **Next:** verify-codify (add a guard for the busy/diff/askq stream shape), then re-ship, then re-finalize (already-finalized once — this is a re-close on the same WP).
+- **Asset:** tooling/demo/out/filmstrip.gif (~323KB, under 3MB budget).
 - **Blocked:** none
 - **Unvisited:** none
-- **Phase 2 build evidence:** all 3 beats inspected crisp at render-width 900; `npm run filmstrip` reproduces GIF 79.5KB + WebP 47.7KB under budget. Knobs locked, no tuning needed.
-- **Blocked:** none
-- **Unvisited:** Phase 2 (verify-self → verify-human [REAL operator value-conveyance gate — will PAUSE in autopilot] → verify-codify)
-- **Open discoveries:** none
 - **Phase 1 build evidence:** `node --check` OK, `npm run css:check` in-sync, 16/16 unit tests pass, `npm run filmstrip` → out/filmstrip.gif 79.5 KB + .webp 47.7 KB (both ~40× under budget), zero capture console errors; per-beat choreography confirmed via frameAt (t=0 4-running/idle/unknown api active → t=2.2 web-client awaiting → t=4.4 web-client promoted active+running).
 
 ## Discoveries

@@ -123,3 +123,43 @@ test("filmstrip keycaps: well-formed window + keys (the keyboard approve is show
     for (const k of e.keys) assert.ok(typeof k === "string" && k.length > 0, `keycap ${i}: each key non-empty string`);
   }
 });
+
+// ---- busy-session + AskUserQuestion content guards (the "active CC" surface) ----
+
+test("filmstrip busy: at least one beat carries a well-formed busy spec (the live-session read)", () => {
+  const busyBeats = T.keyframes.filter((k) => k.stage && k.stage.busy);
+  assert.ok(busyBeats.length >= 1, "expected at least one beat with a live busy session");
+  for (const k of busyBeats) {
+    const b = k.stage.busy;
+    assert.equal(typeof b.startT, "number", "busy.startT must be a number");
+    assert.ok(Array.isArray(b.words) && b.words.length > 0, "busy.words must be a non-empty array");
+    assert.ok(Array.isArray(b.stream) && b.stream.length > 0, "busy.stream must be a non-empty array");
+    if (typeof b.endT === "number") assert.ok(b.endT > b.startT, "busy.endT must be > startT");
+  }
+});
+
+test("filmstrip busy: at least one busy stream shows a code diff (the 'writing code' vibe)", () => {
+  const hasDiff = T.keyframes.some(
+    (k) =>
+      k.stage &&
+      k.stage.busy &&
+      (k.stage.busy.stream || []).some((l) => l.cls === "diff-add" || l.cls === "diff-del"),
+  );
+  assert.ok(hasDiff, "expected a busy stream containing diff-add/diff-del lines");
+});
+
+test("filmstrip AskUserQuestion: the awaiting-promoted beat renders an AskUserQuestion shape", () => {
+  // the beat where the awaiting tile is active (promoted, still awaiting) should
+  // carry the askq-* lines: a question + at least 2 options + a selected option.
+  const askqBeat = T.keyframes.find(
+    (k) => k.stage && (k.stage.lines || []).some((l) => (l.cls || "").startsWith("askq-question")),
+  );
+  assert.ok(askqBeat, "expected a beat rendering an AskUserQuestion (askq-question line)");
+  const lines = askqBeat.stage.lines;
+  const opts = lines.filter((l) => (l.cls || "").startsWith("askq-opt"));
+  assert.ok(opts.length >= 2, "AskUserQuestion must show at least 2 options");
+  assert.ok(
+    opts.some((l) => (l.cls || "").includes("sel")),
+    "AskUserQuestion must have one selected option (askq-opt sel)",
+  );
+});
