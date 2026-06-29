@@ -194,13 +194,21 @@ pub fn workspace_deregister(
     // M6 WP1: log the deregister canonical key (a workspace closing should remove the
     // mapping a subsequent Stop would have resolved against).
     log_registry_mutation(&app, "deregister", None, &project_path);
-    let open_count = {
+    let (open_count, closed_workspace_id) = {
         let mut reg = registry
             .lock()
             .map_err(|_| "workspace registry lock poisoned".to_string())?;
+        // M7: resolve the closing workspace's id BEFORE removing it, so the tray can drop
+        // it from the alarm map (else a workspace that was AwaitingInput at close keeps the
+        // menu-bar glyph lit forever). resolve_cwd on the project path returns its id.
+        let closed_id = reg.resolve_cwd(&project_path);
         reg.deregister(Path::new(&project_path));
-        reg.len()
+        (reg.len(), closed_id)
     }; // drop the registry lock before the AppKit reconcile (don't hold it across a window op).
+    // M7: forget the closed workspace's last state so the aggregate alarm re-folds without it.
+    if let Some(ws_id) = closed_workspace_id {
+        crate::tray::commands::forget_workspace(&app, &ws_id);
+    }
     // M6 WP9 Phase 2: a workspace just closed — reconcile the `On`-mode PiP visibility against
     // the new count (hides the pinned panel when the count returns to 0). No-op in Auto/Off.
     // This command body runs on the main thread, so the AppKit hide inside is safe.

@@ -20,7 +20,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # macos-private-api: required by tauri-nspanel (NSPanel conversion uses private
 # AppKit surface); paired with "macOSPrivateApi": true in tauri.conf.json. M5 WP1.
-tauri = { version = "2", features = ["macos-private-api"] }
+# tray-icon: the M7 menu-bar status item (TrayIconBuilder + set_icon_with_as_template).
+# image-png: decode the bundled lit/neutral tray PNG glyphs via Image::from_bytes
+# (neither is in tauri's default feature set).
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 # M5 WP1 (PiP probe): NSPanel wrapper for the always-on-top floating PiP panel.
 # Git-only (not on crates.io); branch v2.1 is the Tauri-2.x line (its Cargo.toml
 # floors tauri at 2.8.5, satisfied by our 2.11.x). PanelBuilder exposes

@@ -50,13 +50,15 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::hook_socket::HookEvent;
 
 /// A workspace's CC lifecycle state, derived solely from the hook channel (never
 /// from PTY output). Serializes snake_case so the frontend mirrors it verbatim.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+/// `Deserialize` too (M7): the menu-bar tray consumes the emitted `workspace-status`
+/// payload in-process, round-tripping the same snake_case wire shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceState {
     /// CC is idle (finished its last turn) — emitted on `Stop`.
@@ -159,24 +161,26 @@ pub(crate) fn state_label(state: WorkspaceState) -> &'static str {
 /// (`UserPromptSubmit`) or `message` (`Notification`) when present; `notification_type`
 /// carries the `Notification` subtype (QoL-WP2). All three are `Option` and
 /// `skip_serializing_if`-omitted when absent so the wire shape is minimal.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceStatusUpdate {
     /// The registry id of the workspace this event belongs to.
     pub workspace_id: String,
     /// The derived CC lifecycle state.
     pub state: WorkspaceState,
     /// Hook-side send time (epoch ms), if the event carried one.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// `#[serde(default)]` so a minimal wire payload (the field omitted by
+    /// `skip_serializing_if`) still deserializes for the in-process tray consumer (M7).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub last_event_at: Option<u64>,
     /// The event's prompt/message text, if present (telemetry for the surface).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub last_output_snippet: Option<String>,
     /// The `Notification` subtype (`permission_prompt` / `idle_prompt` / …), if the
     /// event carried one (QoL-WP2). Telemetry/diagnostic for the surface — the
     /// AwaitingInput-vs-no-op gating decision is made backend-side in `event_to_state`,
     /// NOT by the frontend; this field is exposed so a surface can show *why* (e.g. a
     /// tooltip) without re-deriving.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub notification_type: Option<String>,
 }
 
@@ -708,6 +712,45 @@ mod tests {
         assert_eq!(update.state, WorkspaceState::Running);
         assert_eq!(update.last_event_at, Some(1_718_000_000_000));
         assert_eq!(update.last_output_snippet.as_deref(), Some("do the thing"));
+    }
+
+    #[test]
+    fn status_update_serde_round_trips_for_tray_consumer() {
+        // M7: the menu-bar tray consumes the emitted `workspace-status` payload IN-PROCESS
+        // via serde_json::from_str::<WorkspaceStatusUpdate>(event.payload()). This pins the
+        // Serialize→Deserialize round-trip the tray's listener depends on — a regression
+        // (e.g. a future field added without #[serde(default)], or a rename breaking the
+        // snake_case contract) would silently break tray parsing with green app-level tests.
+
+        // (1) Full-shape update round-trips to an EQUAL value.
+        let full = WorkspaceStatusUpdate {
+            workspace_id: "ws-1".to_string(),
+            state: WorkspaceState::AwaitingInput,
+            last_event_at: Some(1_718_000_000_000),
+            last_output_snippet: Some("perm?".to_string()),
+            notification_type: Some("permission_prompt".to_string()),
+        };
+        let json = serde_json::to_string(&full).unwrap();
+        let back: WorkspaceStatusUpdate = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, full);
+
+        // (2) MINIMAL wire shape — the three Option fields are skip_serializing_if-omitted
+        // when None, so the emitted JSON has only workspace_id + state. The tray must still
+        // deserialize it (the #[serde(default)] guard). This is the common live shape (a
+        // Stop/UserPromptSubmit with no timestamp/snippet/type).
+        let minimal_json = r#"{"workspace_id":"ws-2","state":"running"}"#;
+        let parsed: WorkspaceStatusUpdate = serde_json::from_str(minimal_json).unwrap();
+        assert_eq!(parsed.workspace_id, "ws-2");
+        assert_eq!(parsed.state, WorkspaceState::Running);
+        assert_eq!(parsed.last_event_at, None);
+        assert_eq!(parsed.last_output_snippet, None);
+        assert_eq!(parsed.notification_type, None);
+
+        // (3) The snake_case state rendering the tray folds over is pinned end-to-end.
+        assert_eq!(
+            serde_json::from_str::<WorkspaceState>("\"awaiting_input\"").unwrap(),
+            WorkspaceState::AwaitingInput
+        );
     }
 
     #[test]

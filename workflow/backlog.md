@@ -388,7 +388,8 @@ forward — none M5-blocking). No escalations. -->
 - **Hard part (acknowledged, NOT a blocker):** visually representing the whole tree (roadmap→wbs→wip(s)→backlog) in the UI is the design challenge. **Good-to-have, not must-have.**
 - **Anchored to Milestone 6 (menu-bar status item)** (operator decision 2026-06-22): the M6 popover is a one-row-per-workspace LIST (project name + status), which fits a workflow-position line (e.g. `acme-api · WBS M2/WP3 · building`) far better than a thumbnail tile — and by M6 the operator will have dogfooded M4+M5 and will know what workflow-position info is worth surfacing (resolves the "unsolved visualization" risk by deferring the design until there's real usage signal). NOT folded into M4/M5 (those are pure CC-state status-surface rendering; adding a workflow axis + tree viz mid-build is the wrong place). If it outgrows a popover line into a real tree view, promote to a standalone feature after M6. The `notify` watcher seam (shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER`) gets built whenever the first consumer needs it — likely M6.
 - **Priority:** medium (the new WP idea); the drop itself is a clean WBS correction, no work owed.
-- **Status:** WP5 dropped (recorded in M3 wbs.md, archived); new WP idea deferred → anchored to M6 JIT decomposition.
+- **RE-ANCHORED M7 → M8 (2026-06-29), reinforced by the M7 shrink.** Initially (at the M7 `/product-wbs`) this was re-anchored to M8 over M7 because the workflow-position line is value-unproven and drags in tree-visualization surface. **Then the M7 spec debate SHRUNK the menu-bar item to an ambient alarm + actuator and CUT the popover entirely** (design-prior [[new-surface-must-earn-its-place-against-existing-ones]] — a popover list was a PiP subset). So the watcher's intended form factor (a workflow-position line *in the popover*) no longer exists in M7 at all — its home is firmly **M8 (workflow-docs markdown viewer)**, the rendering counterpart ("where does each project sit" as a status line is adjacent to "render the docs themselves"; the `notify` watcher seam — shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER` — can be built there). Decide at M8's JIT decomposition whether it feeds the M8 doc panel, promotes to a standalone tree view, or is dropped.
+- **Status:** WP5 dropped (recorded in M3 wbs.md, archived); new WP idea deferred → re-anchored to **M8** JIT decomposition (was M6 → M7 → M8; M7's popover form-factor was cut at the 2026-06-29 spec-debate shrink).
 
 ## Code-quality findings — m3-wp6-frontend-status-indicator (2026-06-22)
 - **Pointer:** 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `b377a97` (0 CRITICAL). MAJOR: the `statusSnippet`/tooltip path is wired end-to-end (DTO `last_output_snippet` → prop → indicator `title`) but fed by nothing — `applyStatusUpdate` discards the snippet, no accessor, CenterStage never passes it, so the tooltip always falls to the label (contradicts the WIP's verify-human note). MINORs: `stateFor` closure re-created each render (Phase-2 perf nit); comment accuracy on the unfed snippet field. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp6-frontend-status-indicator — 2026-06-22`.
@@ -949,3 +950,23 @@ forward — none M5-blocking). No escalations. -->
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** finding 1 is a one-line comment edit in `Workspace.tsx`; finding 2 is informational (no action). Fold into any future `/feature-refactor`, or dismiss. No standalone pass warranted.
+
+## SURFACE-2026-06-29-M7-TRAY-ATOMIC-ICON-METHOD-NAME
+- **Source:** feature:build (M7 WP1, P1.4)
+- **Target level:** product:arch
+- **Type:** gap (doc-accuracy)
+- **Summary:** The M7 arch + WIP + CLAUDE.md Current Milestone all reference a tauri tray method `set_icon_and_icon_as_template_atomic(icon, true)` for the blink-free lit↔neutral icon swap. That method name does NOT exist on tauri 2.11.2. The real method is `set_icon_with_as_template(icon, is_template)` — same semantics (sets icon + template flag atomically to prevent the `tauri#6527` double-render flicker, per its source doc comment). Built against the correct name; works.
+- **Context:** Capability is fully present — this is purely a name correction in the docs (`docs/product/arch.md` §B.2, the M7 "Menu-bar item is an ambient ALARM + ACTUATOR" Key Decision, `CLAUDE.md` Current Milestone WP1 bullet). Caught at the API-verification step before writing the swap.
+- **Suggested action:** At M7 cycle-close (`/product-finalize` durable-doc resync), correct the method name in `arch.md` + the Key Decision + CLAUDE.md. Low effort.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-M7-TRAY-NO-CONFIG-BLOCK
+- **Source:** feature:build (M7 WP1, P1.2/P1.3)
+- **Target level:** product:arch
+- **Type:** gap (doc-accuracy)
+- **Summary:** The M7 arch specced "a `trayIcon` block in `tauri.conf.json` + 2 template PNGs." Building the tray dynamically via `TrayIconBuilder` in `.setup()` (required for the runtime alarm icon-swap + the WP2 actuator menu) means a `tauri.conf.json` `trayIcon` block would create a SECOND, redundant tray icon. No config block was added; the 2 glyphs are embedded via `include_bytes!` + `Image::from_bytes` (no install-path file IO).
+- **Context:** The arch's "config block" framing predates the realization that the icon must mutate at runtime (config-declared trays are static). The dynamic builder is the correct route; the config block is mutually exclusive with it.
+- **Suggested action:** At M7 cycle-close, correct `arch.md` §B.2 to say "tray built via `TrayIconBuilder` in setup; glyphs embedded via `include_bytes!`" (drop the `trayIcon` config-block + `tauri::image::Image::from_path` references). Low effort.
+- **Priority:** low
+- **Status:** pending

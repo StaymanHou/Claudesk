@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-28  # M6 WP8 static gate: vitest 780, cargo 295
+updated: 2026-06-29  # M7 WP1: cargo 299 (+4 tray); tray-icon + image-png feature deps added
 ---
 
 # Runtime Registry
@@ -53,9 +53,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo build (src-tauri)
 
-- **Last:** 12s (2026-06-27, M5 WP5 Phase 1: warm rebuild after pip_set_visible extract + focus probe + View-menu item)
-- **Use timeout:** 138000
+- **Last:** 1s (2026-06-29, M7 WP1: warm rebuild after tray module — tray-icon + image-png feature deps already compiled by the prior `cargo test tray::`)
+- **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-06-29 (M7 WP1: warm rebuild, tray module + features already compiled)
   - 12s — 2026-06-27 (M5 WP5 Phase 1 compile gate: pip_set_visible/teardown/focus-probe/menu item)
   - 10s — 2026-06-26 (M5 WP3 P1: warm rebuild after pip module rename — compile gate)
   - 50s — 2026-06-25 (M5 WP1: tauri-nspanel v2.1.0 @a3122e89 fetch + compile vs tauri 2.11.2, clean)
@@ -109,9 +110,12 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.69s (2026-06-28, M6 WP8 static gate: 295 pass, no new tests — verification-only WP baseline; warm 0.69s)
+- **Last:** 0.69s (2026-06-29, M7 WP2 verify-codify: +tray menu toggle + routing tests → 302 pass; warm run 0.69s)
 - **Use timeout:** 120000
 - **History:**
+  - 0.69s — 2026-06-29 (M7 WP2 codify: +toggle_pip_cycles + tray_menu_ids_route tests, 302 pass; warm)
+  - 0.69s — 2026-06-29 (M7 WP1 codify: +1 DTO serde round-trip test, 300 pass; warm)
+  - 40s — 2026-06-29 (M7 WP1 build: +4 tray tests, 299 pass; cold compile of new tray-icon + image-png deps ~40s, run ~0s)
   - 0.69s — 2026-06-28 (M6 WP8 static gate: 295 pass, verification-only baseline)
   - 1s — 2026-06-28 (M6 WP9 codify: +len_tracks_open_workspace_count + on_mode/arm_summon count tests, 295 pass; warm 0.69s)
   - 1s — 2026-06-28 (M6 WP7 P1 codify: +1 cc_yolo_absent_in_present_file test, 291 pass; warm 0.68s)

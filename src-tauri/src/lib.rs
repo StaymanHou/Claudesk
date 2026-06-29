@@ -41,6 +41,11 @@ mod status_broadcaster;
 // probe) — readable from the launchd-launched prod `.app` where stderr is invisible.
 mod status_log;
 mod sublime;
+// M7: menu-bar (system-tray) status item — the ambient 2-state ALARM. A template
+// tray glyph lit when ANY workspace is AwaitingInput, neutral otherwise. Subscribes
+// to the existing M3 `workspace-status` broadcast (no broadcaster change). The pure
+// `aggregate_alarm` fold lives in tray/mod.rs; the tray-icon ops in tray/commands.rs.
+mod tray;
 
 use std::sync::Mutex;
 
@@ -79,7 +84,14 @@ pub fn run() {
         // by macOS directly and never reach here; our custom items broadcast their id
         // on the `menu` event for the frontend bridge to act on (app_menu).
         .on_menu_event(|app, event| {
-            app_menu::handle_menu_event(app, event.id().as_ref());
+            let id = event.id().as_ref();
+            // M7 WP2: tray actuator items (Show Claudesk / Toggle PiP) are handled
+            // backend-side and consume the event; everything else falls through to the
+            // app_menu frontend bridge. (This closure fires for tray menu events too.)
+            if tray::commands::handle_tray_menu_event(app, id) {
+                return;
+            }
+            app_menu::handle_menu_event(app, id);
         })
         // WP7: the live CC sessions live here, reachable from the cc_* commands.
         .manage(Mutex::new(SessionRegistry::new()))
@@ -87,6 +99,9 @@ pub fn run() {
         // pending-summon token; the regime is the persisted PipMode, read fresh). Mutated
         // by pip_set_mode + the main-window focus handler; read by the debounce timer.
         .manage(pip::PipAutoStateLock::default())
+        // M7: the menu-bar tray state (built tray handle + per-workspace alarm map). Managed
+        // before `init_tray` runs in setup so the `workspace-status` listener can reach it.
+        .manage(tray::commands::TrayState::default())
         // M3 WP2: register Claudesk's CC hook in ~/.claude/settings.json on launch
         // (deploy the bundled script to app-data, chmod +x, additive-merge the three
         // M3 events). Idempotent + additive + reversible (see hook_install). A
@@ -205,6 +220,14 @@ pub fn run() {
             // `reconcile_pip_for_workspace_count`, which shows the pinned panel once ≥1
             // workspace is open (and hides it when the count returns to 0). So launch does
             // nothing here — `Auto`/`Off` rest hidden, and `On` rests hidden-until-first-open.
+            //
+            // M7: build the menu-bar tray item (neutral template glyph) and subscribe it to
+            // the `workspace-status` broadcast so its glyph lights up when any workspace is
+            // AwaitingInput. A build failure is surfaced, never swallowed (the IPC-error
+            // discipline) — the app still runs, just without the ambient alarm.
+            if let Err(e) = tray::commands::init_tray(&handle) {
+                eprintln!("[claudesk] tray init failed: {e}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
