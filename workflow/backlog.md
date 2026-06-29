@@ -959,7 +959,7 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** Capability is fully present — this is purely a name correction in the docs (`docs/product/arch.md` §B.2, the M7 "Menu-bar item is an ambient ALARM + ACTUATOR" Key Decision, `CLAUDE.md` Current Milestone WP1 bullet). Caught at the API-verification step before writing the swap.
 - **Suggested action:** At M7 cycle-close (`/product-finalize` durable-doc resync), correct the method name in `arch.md` + the Key Decision + CLAUDE.md. Low effort.
 - **Priority:** low
-- **Status:** pending
+- **Status:** pending — `wbs.md` + `roadmap.md` references ALREADY corrected at feature-finalize 2026-06-29 (WP headings + Probe-outcomes line now name `set_icon_with_as_template`); `arch.md` §B.2 + Key Decision + `CLAUDE.md` Current Milestone still carry the wrong name → resolve at the upcoming `/product-finalize` durable-doc resync.
 
 ## SURFACE-2026-06-29-M7-TRAY-NO-CONFIG-BLOCK
 - **Source:** feature:build (M7 WP1, P1.2/P1.3)
@@ -969,4 +969,10 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** The arch's "config block" framing predates the realization that the icon must mutate at runtime (config-declared trays are static). The dynamic builder is the correct route; the config block is mutually exclusive with it.
 - **Suggested action:** At M7 cycle-close, correct `arch.md` §B.2 to say "tray built via `TrayIconBuilder` in setup; glyphs embedded via `include_bytes!`" (drop the `trayIcon` config-block + `tauri::image::Image::from_path` references). Low effort.
 - **Priority:** low
+- **Status:** pending — `wbs.md` (Scope decisions / WP1 task) ALREADY corrected at feature-finalize 2026-06-29; `arch.md` §B.2 + `CLAUDE.md` Current Milestone still mention the `trayIcon` config block → resolve at the upcoming `/product-finalize` durable-doc resync.
+
+## Code-quality findings — m7-menu-bar-status-item (2026-06-29)
+- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `3888dd6`: (1) `handle_tray_menu_event` re-matches the tray ids `is_tray_menu_id` already validated (id set duplicated across two fns); (2) `apply_update`'s "callable from tests' shape" doc comment oversells (no test calls it); (3) `TRAY_ID` passed to `with_id` but never looked up by id. Reviewer: "well-built, appropriately-scoped... advances the codebase without accruing debt." All comment/duplication nits. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m7-menu-bar-status-item — 2026-06-29`.
+- **Priority:** low (all)
 - **Status:** pending
+- **Pickup shape:** all 3 are one-line comment edits / an optional predicate-merge; fold into any future `/feature-refactor`, or dismiss via the WIP's `## Code-Quality Review` section. No standalone pass warranted.

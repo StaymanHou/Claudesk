@@ -4,6 +4,35 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m7-menu-bar-status-item — 2026-06-29
+
+*(feature-review-quality on ship commit 3888dd6; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built, appropriately-scoped... reuses every existing seam, no new dependency/webview/broadcaster change... advances the codebase without accruing debt." All 3 are comment/duplication nits, none backlog-worthy beyond MINOR.)*
+
+## SURFACE-2026-06-29-QUALITY-M7-TRAY-ID-MATCH-DUP
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/tray/commands.rs:147-150` (`handle_tray_menu_event`) vs `src-tauri/src/tray/mod.rs` (`is_tray_menu_id`).
+- **Finding:** `handle_tray_menu_event` re-matches the two tray ids that `is_tray_menu_id` already validated, with a `_ => return false` arm commented "unreachable given the predicate." The tray id set is thus duplicated across two functions; a 3rd tray actuator needs both edited in lockstep.
+- **Suggested action:** Optional — a single `match id` returning bool (no separate predicate) would remove the duplication; or leave as-is (the predicate is unit-tested, the dead arm keeps the match total). Defensible either way.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M7-APPLY-UPDATE-COMMENT-OVERSELL
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/tray/commands.rs:188-199` (`apply_update`).
+- **Finding:** The doc comment says it was "pulled out ... callable from tests' shape," but no test calls `apply_update` (the runtime path is AppHandle-bound and explicitly carried to bridge verify-self). The comment slightly overstates the test coverage.
+- **Suggested action:** Trim the "callable from tests' shape" clause, or add an AppHandle-free seam test if one is cheap. Trivial.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M7-TRAY-ID-UNUSED-LOOKUP
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/tray/commands.rs:54` (`TRAY_ID`).
+- **Finding:** `TRAY_ID` ("claudesk-tray") is passed to `TrayIconBuilder::with_id`, but nothing looks the tray up by that id (the handle is stashed in `TrayState.icon`). Harmless; a one-line note that it exists for future `get_by_id` reachability would clarify intent.
+- **Suggested action:** Add a one-line comment, or leave (good hygiene for future lookup). Cosmetic.
+- **Priority:** low
+- **Status:** pending
+
+
 # m6-wp8-milestone-exit-verification — 2026-06-28
 
 *(feature-review-quality on ship commit 3895a32; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Verification-only WP; the only code change was the editor default-font 13→11 parity edit. Reviewer: "well-built, appropriately-tiny... no debt, no scope creep. Only standing weakness: the editor+terminal shared-default invariant lives in a comment, not code.")*

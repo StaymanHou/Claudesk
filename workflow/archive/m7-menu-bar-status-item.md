@@ -1,7 +1,7 @@
 # Feature: M7 — Menu-bar status item (ambient alarm + actuator)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-06-29 (commit 3888dd6; all 3 WPs shipped + verified, closed via feature-finalize)
 **Created:** 2026-06-29
 **Entry:** spec (complex feature)
 **Milestone:** Milestone 7 — Menu-bar status item
@@ -106,10 +106,10 @@ The feature is done when:
   - [x] verify-codify  <!-- status: done — NO integration boundary (WP3 added no production code). No new tests: the codifiable logic from WP1+WP2 is already covered (aggregate_alarm fold, DTO serde round-trip, toggle_pip_mode, is_tray_menu_id routing). Final full-suite confirmation green: cargo 302, vitest 780. No regressions, no issues revealed. -->
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** Phases 1+2+3 all COMPLETE (tray glyph+alarm, actuator menu, milestone-exit verify). Feature is verify-codify-complete across all phases. Next is `/feature-ship`.
+- **Path:** Feature > review-quality (complete) → finalize
+- **Active scope:** review-quality DONE — 0 CRITICAL / 0 MAJOR / 3 MINOR (auto-backlogged, Mode 3). Next is `/feature-finalize`.
 - **Blocked:** none
-- **Unvisited:** none — ready to ship
+- **Unvisited:** finalize
 - **Open discoveries:** 2 (both note-and-continue, no escalation) — see below.
 
 ## Discoveries
@@ -117,3 +117,37 @@ The feature is done when:
      Each entry is also logged to workflow/backlog.md -->
 - [SURFACED-2026-06-29] product:arch — **The arch/WIP referenced a tauri tray method name that does not exist on tauri 2.11.2.** The blink-free atomic icon swap was specced as `set_icon_and_icon_as_template_atomic(icon, true)`; the real method on this version is `set_icon_with_as_template(icon, is_template)` (same semantics — sets icon+template-flag atomically to prevent the `tauri#6527` double-render flicker, per its doc comment). Capability is fully present; this is a doc-accuracy correction to `arch.md` §B.2 + the M7 Key Decision + CLAUDE.md Current Milestone (all cite the wrong name). Note-and-continue — no architectural change. Logged to backlog.
 - [SURFACED-2026-06-29] product:arch — **No `trayIcon` config block in `tauri.conf.json`.** The arch specced a `trayIcon` block + 2 PNGs; building the tray dynamically via `TrayIconBuilder` in `.setup()` (required for the runtime icon swap + the WP2 menu) means a `tauri.conf.json` `trayIcon` block would create a SECOND, redundant tray icon. The glyphs are instead embedded via `include_bytes!` + `Image::from_bytes` (no install-path file IO — robust for the launchd-launched prod `.app`). Doc-accuracy correction; note-and-continue.
+
+## Code-Quality Review — m7-menu-bar-status-item
+
+Reviewer (code-quality-reviewer subagent) on ship commit `3888dd6`. **0 CRITICAL, 0 MAJOR, 3 MINOR.** Mode 3 → MINORs auto-backlogged to `workflow/backlog-quality-findings.md`; pointer in `workflow/backlog.md`.
+
+### Strengths
+- Clean pure/impure split mirroring the `pip/` shape (`aggregate_alarm`/`toggle_pip_mode`/`is_tray_menu_id` pure + unit-tested; AppKit ops isolated in commands.rs).
+- `forget_workspace` correctly closes the "closed-while-awaiting pins the alarm lit" failure mode (resolve id before deregister, drop lock before reconcile).
+- Main-thread-safety reasoning correct + documented (set_icon_with_as_template's internal run_item_main_thread!).
+- serde round-trip test pins the in-process DTO contract incl. the minimal-wire `#[serde(default)]` guard.
+- Never-swallow IPC error discipline consistent throughout.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [tray/commands.rs:147-150] `handle_tray_menu_event` re-matches the two ids `is_tray_menu_id` already validated (id set duplicated across two fns; a 3rd actuator needs both edited). Defensible — predicate is unit-tested, dead arm keeps the match total.
+- [tray/commands.rs:188-199] `apply_update`'s "callable from tests' shape" doc comment slightly oversells — no test calls it (runtime path is AppHandle-bound, carried to bridge verify-self).
+- [tray/commands.rs:54] `TRAY_ID` defined + passed to `with_id` but never looked up by id (handle stashed in TrayState); harmless, a one-line "for future get_by_id" note would clarify.
+
+### Assessment
+Well-built, appropriately-scoped; reuses every existing seam (M3 broadcast, M5 main-thread rule, 2026-06-24 on_menu_event bridge, pip_set_mode), no new dependency/webview/broadcaster change — matches the shrunk M7 scope exactly. DTO Deserialize+default landed atomically with consumer + guarding test. Only findings are minor duplication + 2 comments that slightly oversell coverage; none backlog-worthy beyond MINOR. Advances the codebase without accruing debt.
+
+### If you disagree
+Dismiss any finding by editing this section + marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** Two arch-pass API facts were wrong-named and had to be corrected at build: (1) the blink-free atomic icon setter is `set_icon_with_as_template`, NOT the specced `set_icon_and_icon_as_template_atomic` (which doesn't exist on tauri 2.11.2); (2) a `tauri.conf.json` `trayIcon` config block is mutually exclusive with the dynamic `TrayIconBuilder`-in-setup the runtime icon-swap requires — so no config block (glyphs embedded via `include_bytes!`). Both were API-verified before writing code (cheap to catch). Also learned: `set_icon_with_as_template` marshals to the main thread *internally* (tauri's `run_item_main_thread!`), so the M5 off-main-thread-AppKit-abort class doesn't apply to the swap — no manual `run_on_main_thread` needed (simpler than the arch assumed). And: the app-level `Builder::on_menu_event` fires for tray menu events too, so WP2 reused the existing bridge's *routing* half with zero new event plumbing.
+- **Assumptions that held:** The `pip/` module shape was the right template (pure fold in mod.rs + AppKit ops in commands.rs). The M3 `workspace-status` broadcast needed no change — the tray just subscribes. Three tightly-coupled tiny WPs in a linear chain was the right decomposition. The shrink (alarm + actuator, popover CUT) held — nothing surfaced that wanted the cut popover.
+- **Assumptions that were wrong:** Beyond the two API-name corrections above, the WIP/arch framed WP2's handlers as "the app_menu on_menu_event/**emit** + managed-handle pattern" — but for tray actuators the emit-to-frontend half is wrong (window may be hidden when the tray is clicked), so handlers act BACKEND-side; only the event-routing half was reused. The glyph design also evolved at verify-human: the planned generic lit/neutral was too subtle, and the operator steered it to a faithful monochrome app-icon portrait (window + 4 filmstrip tiles + main CC box) with a lower-right corner badge as the attention signal.
+- **Approach delta:** Implementation matched the plan's structure (3 WPs, the module shape, the reused seams) almost exactly; the deltas were the two API-name corrections, the backend-side (not frontend-emit) handler routing, and the operator-driven glyph redesign at WP1 verify-human. The `Deserialize`+`#[serde(default)]` addition to the shared status DTOs (so the tray consumes the emitted payload in-process) was an unplanned-but-trivial cross-module touch, landed atomically with its guarding round-trip test. verify-human was driven LIVE in `pnpm tauri:dev` (not deferred) once it was clear the tray glyph + menu are visible in a dev build — the operator approved both the glyph and all 4 menu actuators.
+
+## Communicate
+> **Feature complete:** M7 (Menu-bar status item) has shipped. Claudesk now puts an ambient alarm in the macOS menu bar — a monochrome Claudesk-icon glyph that grows a corner badge when any workspace is awaiting your input (neutral otherwise) — plus a click menu with Show Claudesk / Toggle PiP / Quit. To see it: run `pnpm tauri:dev` (or the installed `.app`) and watch the menu bar; drive a workspace to a permission prompt to see the badge appear. Requester = operator — closure notice for self-record.

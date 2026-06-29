@@ -37,36 +37,36 @@ No further design prior proposed this pass — the captured one above covers the
 
 ## Work Packages
 
-### WP1: Tray icon — ambient 2-state alarm
-**Description:** The `src-tauri/src/tray/` module (mirrors `pip/` shape). At `.setup()`, build a native `TrayIconBuilder` tray icon with a template image; hold 2 pre-rendered template `Image`s (lit / neutral); reduce all open-workspace states to one bit via a pure `aggregate_alarm` fold (Attention iff any `AwaitingInput`; else Neutral — Running + Idle collapse; zero workspaces → Neutral); swap the icon atomically (`set_icon_and_icon_as_template_atomic`) on every `workspace-status` event + on workspace register/deregister. No menu yet, no popover ever.
+### WP1: Tray icon — ambient 2-state alarm ✅ SHIPPED 2026-06-29 (commit 3888dd6)
+**Description:** The `src-tauri/src/tray/` module (mirrors `pip/` shape). At `.setup()`, build a native `TrayIconBuilder` tray icon with a template image; hold 2 pre-rendered template `Image`s (lit / neutral); reduce all open-workspace states to one bit via a pure `aggregate_alarm` fold (Attention iff any `AwaitingInput`; else Neutral — Running + Idle collapse; zero workspaces → Neutral); swap the icon atomically (`set_icon_with_as_template` — the real tauri 2.11.2 method; the WBS-specced `set_icon_and_icon_as_template_atomic` name does not exist) on every `workspace-status` event + on workspace register/deregister. No menu yet, no popover ever.
 **Milestone:** M7
 **Dependencies:** none (builds on the shipped M3 broadcaster + the M5 run-on-main-thread pattern)
 **Size:** S
 **Tasks:**
-- [ ] `tray/mod.rs`: `pub fn aggregate_alarm(states: &[WorkspaceState]) -> AlarmState` (`Attention | Neutral`) — pure fold; unit tests: empty → Neutral, any AwaitingInput → Attention, all Running/Idle (none awaiting) → Neutral.
-- [ ] Ship 2 template-image PNG glyphs in `src-tauri/icons/tray/` (lit + neutral); load as `tauri::image::Image` at setup. Simple glyphs (build detail; swappable later).
-- [ ] `tray/commands.rs` + setup wiring: build `TrayIconBuilder` (template icon). Subscribe to `workspace-status`; on each event + register/deregister, recompute `aggregate_alarm` and `set_icon_and_icon_as_template_atomic`. Marshal any background-thread icon op via `run_on_main_thread`.
-- [ ] Confirm `set_icon_and_icon_as_template_atomic` avoids the `tauri#6527` template-flag-reset blink on this Tauri version (the one residual API confirmation — done inline during build, no separate probe WP).
-- [ ] Confirm dev/prod isolation: one tray icon per running identity (`com.claudesk.app` vs `.dev` don't collide).
+- [x] `tray/mod.rs`: `pub fn aggregate_alarm(states: &[WorkspaceState]) -> AlarmState` (`Attention | Neutral`) — pure fold; unit tests: empty → Neutral, any AwaitingInput → Attention, all Running/Idle (none awaiting) → Neutral.
+- [x] Ship 2 template-image PNG glyphs in `src-tauri/icons/tray/` (lit + neutral); load via `include_bytes!` + `Image::from_bytes` at setup. The glyphs are a faithful monochrome app-icon portrait (rounded window + 4 filmstrip tiles, 2nd highlighted + large main CC box) with a lower-right corner BADGE on attention (operator-designed at WP1 verify-human; swappable later).
+- [x] `tray/commands.rs` + setup wiring: build `TrayIconBuilder` (template icon). Subscribe to `workspace-status`; on each event + register/deregister, recompute `aggregate_alarm` and swap via `set_icon_with_as_template` (main-thread-marshaled internally → no manual run_on_main_thread needed). `forget_workspace` wired into `workspace_deregister`.
+- [x] Confirm the atomic icon setter avoids the `tauri#6527` template-flag-reset blink — `set_icon_with_as_template` (NOT the WBS-named `set_icon_and_icon_as_template_atomic`, which doesn't exist on 2.11.2); its doc comment confirms it sets icon+template-flag atomically to prevent the double-render flicker.
+- [x] Confirm dev/prod isolation: one tray icon per running identity (`com.claudesk.app` vs `.dev` don't collide) — holds by construction (tray built in-process; each identity is a separate process).
 
-### WP2: Native actuator menu (Show Claudesk / Toggle PiP / Quit)
-**Description:** Attach a native `tauri::menu::Menu` to the tray icon (shown on click) with three **actuators**, each wired to its existing app action via the 2026-06-24 `app_menu` `on_menu_event`/emit + managed-handle pattern. Actuators are the non-redundant complement to the alarm (display-only PiP can't act on the app).
+### WP2: Native actuator menu (Show Claudesk / Toggle PiP / Quit) ✅ SHIPPED 2026-06-29 (commit 3888dd6)
+**Description:** Attach a native `tauri::menu::Menu` to the tray icon (shown on click) with three **actuators**, each wired to its existing app action. Reuses the *event-routing* half of the 2026-06-24 `app_menu` `on_menu_event` bridge (one app-level handler fires for tray menu events too); the actuators are handled BACKEND-side (NOT emit-to-frontend — the window may be hidden when the operator clicks the tray). Actuators are the non-redundant complement to the alarm (display-only PiP can't act on the app).
 **Milestone:** M7
 **Dependencies:** WP1 (tray icon to attach the menu to)
 **Size:** S
 **Tasks:**
-- [ ] `TrayIconBuilder::menu(...)` with: **Show Claudesk Window** (bring main window forward — a thin command, also reachable from the existing app menu), **Toggle PiP** (reuse the existing `pip-mode` path), **Quit** (`PredefinedMenuItem`). Default click-to-show-menu behavior (do NOT set `show_menu_on_left_click(false)` — no popover to free the left click for).
-- [ ] Wire item handlers through the `app_menu` `on_menu_event`/emit bridge; reuse the managed-handle pattern where a handle is needed.
-- [ ] verify-auto / verify-self / verify-human / verify-codify per the feature workflow.
+- [x] `TrayIconBuilder::menu(...)` with: **Show Claudesk** (bring main window forward — unminimize/show/set_focus on the "main" WebviewWindow), **Toggle PiP** (pure `toggle_pip_mode` → existing `pip_set_mode` path), **Quit** (`PredefinedMenuItem`). Default click-to-show-menu (did NOT set `show_menu_on_left_click(false)`).
+- [x] Wire item handlers via the app-level `on_menu_event` (routes tray ids FIRST through `handle_tray_menu_event`, else falls through to `app_menu`); handlers act BACKEND-side, not via the frontend emit. Tray ids namespaced `tray.*` (no app_menu collision).
+- [x] verify-auto / verify-self / verify-human (operator-approved all 4 actuators live) / verify-codify per the feature workflow.
 
-### WP3: Milestone-exit verification (installed `.app`, out-of-focus)
-**Description:** Verification-only WP (the M5 WP6 / M6 WP8 pattern). Agent GREENs the bridge-observable slice (the `aggregate_alarm` fold via unit tests; the icon-swap path via a driven status transition on a scratch workspace, confirming no abort); then composes the operator-carry / DEFERRED-TO-RELEASE checklist for what only the installed, launchd-launched `.app` can prove — the **native menu-bar glyph actually showing lit/neutral**, the **native menu appearing + each item firing**, and **out-of-focus / cross-Space / full-screen visibility** (the alarm's whole point). Carried to the next `/release` gate.
+### WP3: Milestone-exit verification (installed `.app`, out-of-focus) ✅ SHIPPED 2026-06-29 (commit 3888dd6)
+**Description:** Verification-only WP (the M5 WP6 / M6 WP8 pattern). Agent GREENs the bridge-observable slice (the `aggregate_alarm` fold via unit tests; the icon-swap path's no-abort, structurally guaranteed by main-thread marshaling + empirically confirmed in the dev build); then composes the operator-carry / DEFERRED-TO-RELEASE checklist for what only the installed, launchd-launched `.app` can prove. **NOTE:** unusually for this pattern, the substantive native checks (glyph renders; all 4 menu actuators fire) were already operator-approved LIVE at WP1+WP2 verify-human in `pnpm tauri:dev` — only the badge lit/neutral *transition*, out-of-focus/cross-Space visibility, and installed-`.app` parity remain DEFERRED-TO-RELEASE.
 **Milestone:** M7
 **Dependencies:** WP1, WP2
 **Size:** XS
 **Tasks:**
-- [ ] Phase 1: drive the bridge-observable slice (icon-swap-no-abort on a driven transition; `aggregate_alarm` unit tests green) → PASS/FAIL.
-- [ ] Phase 2: compose the operator-carry checklist (OC.*) — native glyph lit/neutral, menu appears + items fire, out-of-focus/cross-Space/full-screen visibility; mark DEFERRED-TO-RELEASE.
+- [x] Phase 1: drive the agent-GREEN slice (icon-swap-no-abort + `aggregate_alarm` unit tests green; full suites: cargo 302 / vitest 780 / clippy / tsc / eslint / vite build) → PASS.
+- [x] Phase 2: compose the operator-carry checklist (OC.1–OC.4) — native glyph badge transition, menu appears + items fire, out-of-focus/cross-Space/full-screen visibility, dev/prod isolation; mark DEFERRED-TO-RELEASE.
 
 ---
 
@@ -97,9 +97,9 @@ WP1 (tray icon + alarm) ──► WP2 (actuator menu) ──► WP3 (exit verify
 
 ## Probe outcomes
 
-*(No gating probe WP after the shrink. The one API confirmation — `set_icon_and_icon_as_template_atomic` blink-free swap — is recorded inline at WP1 close.)*
+*(No gating probe WP after the shrink. The one API confirmation — the blink-free atomic icon swap — is recorded inline at WP1 close.)*
 
-- **WP1 — `set_icon_and_icon_as_template_atomic` blink-free icon swap:** _pending (inline confirmation during WP1 build)._
+- **WP1 — blink-free atomic icon swap:** ✅ CONFIRMED 2026-06-29. The method is **`set_icon_with_as_template(icon, is_template)`** (tauri 2.11.2) — the WBS/arch-specced name `set_icon_and_icon_as_template_atomic` does NOT exist on this version. Same semantics: its source doc comment states it sets the icon + template flag atomically *specifically to prevent* the `tauri#6527` double-render flicker. Mechanism in place; the visual no-flicker is operator-carry/DEFERRED-TO-RELEASE (native glyph). Also confirmed: dev/prod isolation holds by construction (one tray per process-identity). [Both arch-name corrections logged: SURFACE-2026-06-29-M7-TRAY-ATOMIC-ICON-METHOD-NAME + SURFACE-2026-06-29-M7-TRAY-NO-CONFIG-BLOCK.]
 
 ---
 
