@@ -1,6 +1,6 @@
 # Claudesk
 
-### Run a fleet of Claude Code projects from one window — and always know which one needs you next.
+### Many Claude Code projects. One window. Zero hunting.
 
 A lean, dark, macOS-native shell for the power Claude Code user juggling many
 projects at once: every project is one click to a live CC session, every session
