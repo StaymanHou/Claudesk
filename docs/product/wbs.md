@@ -9,7 +9,7 @@ updated: 2026-06-29
 
 > **Scope: Milestone 8 only.** Per the WBS just-in-time rule, this decomposes only the immediate next milestone. Future milestones (M9 time-analytics, M10 docs-viewer, M11 auto-resume, M12 skill-orch, M13 polish) stay tracked in `roadmap.md` and are decomposed JIT when reached.
 >
-> **⚠️ THIS WBS IS PROVISIONAL BELOW WP1 — subject to change after the WP1 probe.** M8 is unusual: its output is *marketing/communication assets* (GIF and/or video), not working software, and it is **agent-produced end-to-end** (Claude Code drives capture/render/embed on the real installed `.app`; the operator verifies at checkpoints). **WP1 is a genuine feasibility probe** — agent-driven screen capture of a native macOS app, and agent-choreographed staging of a believable multi-project scenario, are BOTH unproven here. WP1's outcome (GO/NO-GO, chosen format, capture toolchain, what the agent can vs. can't stage) **redefines WP2–WP4**: their tasks, sizes, and even existence depend on what WP1 establishes. Treat WP2–WP4 as the *intended* shape, to be re-decomposed at WP1 close. *(`SURFACE-2026-06-29-DEMO-ASSETS-FILMSTRIP-AND-PIP`; roadmap Revision 2026-06-29b.)*
+> **✅ WP1 PROBE RESOLVED 2026-06-29 — WBS re-decomposed (was provisional below WP1).** M8's output is *marketing/communication assets* (animated GIF), not working software, and it is **agent-produced end-to-end** (Claude Code drives author/render/embed; the operator verifies at checkpoints). WP1 was a genuine feasibility probe; the operator then **ruled out real screen capture** and chose a **synthesized hi-fi animation** approach. The probe is answered (see "## Probe outcomes — WP1" below): GO, format = **looping GIF**, pipeline = **HTML harness reusing the real status-dot CSS → Playwright seek-per-frame screenshot → ffmpeg palettegen**. WP2–WP5 below are now the **re-decomposed real shape** (no longer provisional). *(`SURFACE-2026-06-29-DEMO-ASSETS-FILMSTRIP-AND-PIP`; roadmap Revision 2026-06-29b; research in `workflow/wip/m8-wp1-capture-pipeline-probe.md`.)*
 
 ## Milestone goal (from roadmap)
 
@@ -26,85 +26,94 @@ Read `docs/product/design-priors.md` (3 priors, all about UI surfaces / modes / 
 
 ---
 
-## Work Packages
+## Probe outcomes — WP1 (RESOLVED 2026-06-29)
 
-### WP1: Probe — agent capture/render pipeline + format decision + scenario-stageability
-**Type:** probe
-**Milestone:** M8 (FIRST — gates WP2–WP4; nothing final is produced before this closes)
-**Dependencies:** none (the features to demo — M4 filmstrip, M5 PiP — already shipped + released in v0.2.0–v0.2.3)
-**Size:** M
-**Learning objective:** Can a Claude Code agent, by itself, (1) capture the screen / a window region of the real installed Claudesk `.app` to video on macOS, (2) render that capture to a README-embeddable deliverable, and (3) drive/choreograph a believable multi-project demo scenario — and what is the right **format** (GIF vs MP4 vs both) given what the pipeline can actually produce and what GitHub README embedding supports? Where the agent *can't* fully self-drive (e.g. starting a real screen recording may need a one-time macOS Screen-Recording permission, or the "watch YouTube" backdrop needs operator setup), document the exact operator-assist seam.
-**Timebox:** half-day
-**Success criterion:** A written probe-outcome section (appended to this WBS under "## Probe outcomes — WP1") recording: **(a) GO/NO-GO** on agent-driven capture; **(b) the chosen format** (+ why) with a target dimensions / length / file-size budget for README inline embedding; **(c) the capture toolchain** (tool, how a timed recording is started + stopped, how the agent triggers it); **(d) the render toolchain** (e.g. ffmpeg palettegen/paletteuse for GIF, or gifski, or ffmpeg H.264 for MP4) proven on at least one throwaway sample clip; **(e) the staging verdict** — can the agent choreograph the 4-project filmstrip scenario + the PiP-over-another-app scenario via the MCP bridge / scripted IPC alone, or which beats need operator assist; **(f)** the asset repo path + how GitHub renders it (inline `<img>`/`![]()` for GIF vs. uploaded-attachment MP4). The probe MAY produce a rough sample asset as proof — but the polished WP2/WP3 deliverables are NOT produced here.
-**Tasks:**
-- [ ] 1.1 Inventory the available capture/render tooling on this host and what each can do: `screencapture -v` (built-in, but interactive/permission-gated?), `ffmpeg` + `avfoundation` device list (`ffmpeg -f avfoundation -list_devices true -i ""`), whether `gifski` is worth `brew install`. Note the macOS **Screen Recording permission** requirement and whether a Finder/Dock-launched capture (vs. a terminal-launched one) changes the permission prompt — this is the M8 analogue of the installed-build PATH gotcha.
-- [ ] 1.2 Prove a minimal end-to-end capture→render on a throwaway clip: start a timed screen/region capture programmatically, stop it, render to BOTH a sample GIF and a sample MP4, and eyeball file size + legibility at README-ish width (~800–1000px). Record the size/quality tradeoff. (This is the GO/NO-GO core.)
-- [ ] 1.3 Decide the format(s) and the budget. GitHub README inline-autoplay favors GIF (no controls, loops) but GIFs balloon at high fidelity + long length; MP4 is higher-fidelity but embeds as an uploaded attachment, not an arbitrary repo path. Weigh the two demos separately (a 10–15s filmstrip loop vs. a longer PiP "I'm doing other work" sequence may want different formats). Record the decision + rationale.
-- [ ] 1.4 Probe scenario-stageability via the MCP bridge: open ~4 scratch workspaces, drive them to *different* statuses (one AwaitingInput, others Running/Idle) so the filmstrip dots differ, and confirm the agent can both *capture that frame* and *trigger a visible status transition* mid-recording. Reuse the M5/M6 bridge teardown discipline (`lsof -ti tcp:1420 tcp:9223 | xargs -r kill -9` + `driver_session{stop}`). Note any beat the agent can't stage (e.g. raw xterm typing is low-fidelity per the CLAUDE.md bridge caveat — so status transitions must be IPC/click-driven, not typed).
-- [ ] 1.5 Probe the PiP-over-another-app scenario specifically: confirm the PiP NSPanel stays always-on-top + visible over a *different* foreground app during capture, and decide whether the "deep work / YouTube" backdrop can be agent-staged (open a window, play a local video) or needs operator assist. The blur-driven auto-summon (M5 WP5) is the behavior that makes this demo work — confirm it fires under capture.
-- [ ] 1.6 Need a 4th scratch repo: `tmp/scratch/` has scratch-a/b/c; create a `scratch-d` (its own git repo + baseline commit) so the filmstrip demo can show ~4 distinct projects. (`tmp/` is gitignored — fine for a staging fixture.)
-- [ ] 1.7 Write the "## Probe outcomes — WP1" section (success criterion above) and **re-decompose WP2–WP4 in this WBS** to match what the probe established (format, per-demo tasks, operator-assist seams). This task IS the back-loop that makes WP2–WP4 real.
+**Verdict: GO** on agent-produced demo assets — via a **synthesized hi-fi animation**, NOT a screen recording. (Operator ruled out real screen capture mid-probe; that removed the riskiest unknown — the macOS Screen-Recording TCC permission — entirely.)
 
-**WP1 → WP2 rationale:** Pure learning-sequence ordering — WP1 resolves the two riskiest unknowns (can the agent capture at all; can it stage the scenario) before any effort goes into a polished take. If WP1 is NO-GO on full self-drive, the milestone reshapes (operator records to a script the agent writes, then the agent renders/embeds) rather than wasting takes against a dead end. This mirrors the project's standing probe-first discipline (M1 thumbnail probe, M4 N-cost probe, M5 WP1 nspanel probe).
+- **(a) Approach:** **HTML/CSS harness that reuses Claudesk's real status-dot CSS** (`src/App.css` ~L527–599: `#d97757` running / `#539bf5` awaiting / breathe+blink keyframes) fed mock status data, driven by **Playwright seek-per-frame screenshot** (`document.getAnimations()` → pause + set `currentTime` per frame = frame-accurate, deterministic), stitched to GIF by **ffmpeg palettegen/paletteuse**. Dots render *pixel-identical to the real app*; only the terminal pane is faked (no live PTY needed). Bake-off proven: a hi-fi sample read clearly as the real product and the operator picked it over a lo-fi stylized alternative.
+- **(b) Format: looping GIF** (committed in-repo, `![]()`/`<img>` → autoplays + loops inline on github.com, zero clicks; loop baked via `-loop 0`). **MP4 rejected for the embed**: GitHub strips `<video>` from committed paths; the only MP4-player path is a manual operator drag-drop yielding a non-loop, click-to-play `user-attachments` CDN URL — not a versioned artifact, not autoplay. GIF *is* the right fit anyway (the "ambient motion" story wants autoplay-loop). Optional WebP for extra size headroom (same embed syntax).
+- **(c) Budget:** target **< ~3MB each** (git history keeps binaries forever); ~800–1000px wide, ~6–12s, 15fps. **Empirically a non-issue** — flat UI compresses tiny: the hi-fi sample was **53–70KB GIF / 30KB WebP** (≈100× under budget). Lo-fi was larger (220–340KB) only due to a gradient backdrop.
+- **(d) Toolchain (all MIT/Apache, fits the Vite repo):** Node + **Playwright** (frame capture) + **ffmpeg** (palettegen/paletteuse GIF). `gifski` optional, not needed. asciinema/`agg` or `vhs` available if a hand-authored *terminal* clip is wanted for the faked CC pane. **Remotion rejected** — source-available (non-OSS) license is a liability in a repo being open-sourced, plus Webpack-vs-Vite + Tauri-stub friction; Playwright gives the same hi-fi result with neither cost. *(Future Possibility: if M8 ever grows into a narrated launch trailer with audio/transitions/multi-scene reel, reopen Remotion — that's the scenario its compositional model + audio support actually earn their cost.)*
+- **(e) Staging — fully agent-stageable, no live app, no MCP bridge.** The 4-project filmstrip scenario and the PiP-over-another-app scenario are *authored in the animation* (mock status timeline + a faux backdrop layer), not staged against the real `.app`. The old high-risk unknowns (MCP-bridge scenario staging, the "another app / YouTube" backdrop, a 4th scratch repo) **all dissolved**. No Screen-Recording permission, no operator-assist seam required.
+- **(f) Asset path:** TBD in WP5 (likely `docs/demo/*.gif` or `assets/`), referenced by relative path in README; GitHub renders committed GIFs inline. Proof artifacts from the bake-off live in `tmp/m8-probe/` (gitignored).
+
+**Research record:** `workflow/wip/m8-wp1-capture-pipeline-probe.md`. **WP1 is closed** — WP2–WP5 below are the re-decomposed real shape.
 
 ---
 
-> **WP2–WP4 are PROVISIONAL — re-decomposed at WP1 close (task 1.7).** The shape below is the *intent*; sizes/tasks/format assume a GO on agent-driven GIF+MP4 capture and full agent staging. Adjust after the probe.
+## Work Packages
 
-### WP2: Filmstrip demo asset
-**Description:** Produce the polished filmstrip demo — ~4 CC-driven projects open as workspaces, the filmstrip roster with live ~1fps mirrors + differing status dots, attention shifting as a project flips to AwaitingInput, and a tile click promoting it to center stage. The narrative beat: *"4 projects in flight, one glance tells you which needs you, one click jumps there."* Staged on the scratch repos (a–d).
-**Milestone:** M8
-**Dependencies:** WP1 (format + capture toolchain + staging verdict)
-**Size:** M *(provisional)*
+### WP2: Shared demo-build harness
+**Type:** tooling
+**Milestone:** M8 (FIRST executable — both demos build on it)
+**Dependencies:** WP1 (probe — resolved)
+**Size:** M
+**Description:** Build the reusable, agent-drivable harness the two demos share, productionizing the probe's proof-of-concept: a standalone HTML/CSS shell that **imports Claudesk's real status-dot CSS** (and recreates the surrounding chrome) fed by a **mock status timeline**, a **Playwright seek-per-frame capture script** (frame-accurate via `document.getAnimations()` `currentTime`), and an **ffmpeg render recipe** (palettegen/paletteuse → looping GIF, optional WebP). Lives under a non-shipped `tooling/demo/` dir (kept out of the app bundle; its Node deps must not pollute the app's lockfile — a self-contained sub-package or a pinned local install, per the probe's `tmp/m8-probe` pattern).
 **Tasks:**
-- [ ] 2.1 Stage the 4-workspace scenario per WP1's proven recipe; arrange the filmstrip so the dots differ (≥1 AwaitingInput, others Running/Idle).
-- [ ] 2.2 Capture the choreographed sequence: establishing glance over the roster → a dot flips to AwaitingInput → click that tile → it promotes to center stage. Keep it short (WP1's length budget).
-- [ ] 2.3 Render to the WP1-chosen format(s) within the size budget; iterate on legibility (text crispness at README width is the usual GIF failure mode).
-- [ ] 2.4 Operator-verify checkpoint: does it legibly convey the parallel-project-attention value? Re-take if the operator's feedback needs it.
+- [ ] 2.1 Scaffold `tooling/demo/` — self-contained Node package (Playwright + a render script), isolated from the app's `package.json`/`pnpm-lock.yaml`. Document the one-time `playwright install chromium` step.
+- [ ] 2.2 Build the shared UI shell: import the real status-dot CSS from `src/App.css` (single source of truth — don't fork the color/keyframe values), recreate filmstrip + center-stage + PiP-panel chrome, parameterized by a mock status-timeline data structure.
+- [ ] 2.3 Generalize the capture script (`capture.mjs` pattern from the probe): args for HTML file, dimensions, fps, duration, output dir; deterministic seek-per-frame; `deviceScaleFactor:2` for crisp text.
+- [ ] 2.4 Generalize the render recipe: PNG frames → looping GIF (palettegen/paletteuse, bayer dither, `-loop 0`) + optional WebP; assert output exists + is under the size budget.
+- [ ] 2.5 verify-self: run the harness end-to-end on a smoke timeline, confirm a legible looping GIF under budget. (Agent-drivable — no live app, no installed `.app`, no MCP bridge.)
 
-### WP3: PiP demo asset
-**Description:** Produce the polished PiP demo — the PiP panel pinned always-on-top while the operator works in another app (deep-focus work / YouTube), CC progress visible in the corner, a status dot flipping to AwaitingInput as the monitorable signal. The narrative beat: *"Do your other work — CC stays watchable in the corner and pings you the moment it needs you."*
+### WP3: Filmstrip demo asset
+**Type:** asset
 **Milestone:** M8
-**Dependencies:** WP1 (esp. the PiP-over-another-app + backdrop-staging verdict from task 1.5)
-**Size:** M *(provisional — higher staging risk than WP2; the "another app" backdrop is the unproven part)*
+**Dependencies:** WP2
+**Size:** S–M
+**Description:** Author + render the polished filmstrip demo on the WP2 harness — ~4 projects in the filmstrip with differing status dots, attention shifting as one flips to AwaitingInput (blue blink), then a tile click promoting it to center stage. Narrative beat: *"4 projects in flight, one glance tells you which needs you, one click jumps there."*
 **Tasks:**
-- [ ] 3.1 Stage the backdrop per WP1's verdict (agent-opened window / local video, or operator-assisted) with the PiP pinned (`On` or auto-summoned via blur).
-- [ ] 3.2 Capture: operator-focus is on the other app, PiP visible in the corner, CC running → a dot flips to AwaitingInput (the "it needs you now" moment).
-- [ ] 3.3 Render to the WP1-chosen format(s) within budget; iterate on legibility.
-- [ ] 3.4 Operator-verify checkpoint: does it legibly convey the monitor-while-elsewhere value? Re-take if needed.
+- [ ] 3.1 Author the filmstrip scenario timeline (project names, the running/awaiting/idle dot choreography, the promote-on-click beat, timing/duration within budget).
+- [ ] 3.2 Fill the faked content: realistic CC-pane terminal text per project (hand-authored, or an asciinema/`agg` clip composited in) + a Changes panel, so the center stage looks alive.
+- [ ] 3.3 Render via the harness; iterate on legibility (text crispness at README width is the classic GIF failure mode — tune fps/scale/dither).
+- [ ] 3.4 verify-human checkpoint: does it legibly convey the parallel-project-attention value? Re-author/re-render on operator feedback.
 
-### WP4: Embed + place
-**Description:** Commit the final assets to the repo (path per WP1) and embed them in `README.md`; make them available for the GitHub release page + the M13 open-source launch. The README currently has an Install + Develop section (271 lines) — the demos belong near the top, illustrating the pitch.
+### WP4: PiP demo asset
+**Type:** asset
 **Milestone:** M8
-**Dependencies:** WP2, WP3
-**Size:** S *(provisional)*
+**Dependencies:** WP2 (independent of WP3 — can interleave)
+**Size:** S–M
+**Description:** Author + render the polished PiP demo on the WP2 harness — the PiP panel pinned in the corner over a **faux "another app" backdrop layer** (depicted in the animation, not staged live), CC progress visible, a status dot flipping to AwaitingInput as the monitorable signal. Narrative beat: *"Do your other work — CC stays watchable in the corner and pings you the moment it needs you."* (The old live-staging risk is gone — the backdrop is just an animation layer.)
 **Tasks:**
-- [ ] 4.1 Commit the assets at the WP1-decided path (watch repo bloat — large binaries in git history are forever; if the size budget is high, note whether release-page-upload-only beats in-repo).
-- [ ] 4.2 Embed in README near the top with a one-line caption each (filmstrip = parallel-project attention; PiP = monitor-while-elsewhere). Confirm GitHub actually renders them inline (the WP1 format decision drives this).
-- [ ] 4.3 Milestone-exit verify: both assets render correctly on GitHub (push + view the rendered README); operator final-approves. Mark the M8 exit criteria met.
+- [ ] 4.1 Author the PiP scenario timeline: faux backdrop (a stylized "other app" / editor / video surface), the always-on-top PiP panel with its status dots, the dot → AwaitingInput "needs you now" moment.
+- [ ] 4.2 Compose the backdrop + PiP-panel layers in the harness shell (reusing the real dot CSS for the panel).
+- [ ] 4.3 Render via the harness; iterate on legibility within budget.
+- [ ] 4.4 verify-human checkpoint: does it legibly convey the monitor-while-elsewhere value? Re-author/re-render on feedback.
+
+### WP5: Embed + place
+**Type:** integration
+**Milestone:** M8 (LAST — milestone exit)
+**Dependencies:** WP3, WP4
+**Size:** S
+**Description:** Commit the final GIFs to the repo and embed them in `README.md` near the top (illustrating the pitch before Install/Develop); make them available for the GitHub release page + the M13 open-source launch.
+**Tasks:**
+- [ ] 5.1 Decide + commit the asset path (e.g. `docs/demo/filmstrip.gif`, `docs/demo/pip.gif`); confirm final sizes are under budget (they will be — probe showed ~tens of KB).
+- [ ] 5.2 Embed in README near the top via relative `![]()`/`<img>` with a one-line caption each (filmstrip = parallel-project attention; PiP = monitor-while-elsewhere).
+- [ ] 5.3 Milestone-exit verify: push + view the rendered README on github.com — confirm both GIFs render inline + autoplay-loop; operator final-approves. Mark M8 exit criteria met.
 
 ---
 
 ## Dependency Map
 
 ```
-WP1 (probe: capture/render + format + staging)  ← FIRST, gates everything
-  ├──> WP2 (filmstrip demo)  ─┐
-  └──> WP3 (PiP demo)        ─┤
-                              └──> WP4 (embed + place in README/release)
+WP1 (probe) ✅ RESOLVED → approach + format + toolchain settled
+  └──> WP2 (shared demo-build harness)  ← FIRST executable
+         ├──> WP3 (filmstrip demo)  ─┐
+         └──> WP4 (PiP demo)        ─┤  (independent; interleave freely)
+                                     └──> WP5 (embed + place in README/release)
 ```
 
-- **Critical path:** WP1 → (WP2 ‖ WP3) → WP4.
-- **Parallel track:** WP2 and WP3 are independent once WP1 lands — they share the capture toolchain but stage different scenarios, so they can be produced in either order (or interleaved). WP3 carries the higher staging risk (the "another app" backdrop), so if WP1 flags it, do WP2 first to bank one win.
-- **No 3rd-party API / SDK** in the build sense — the only "external" dependency is the macOS capture stack (`screencapture`/`ffmpeg avfoundation`) + the Screen-Recording permission, which WP1 (the probe) exists to de-risk. No orchestration/async layer.
+- **Critical path:** WP2 → (WP3 ‖ WP4) → WP5.
+- **Parallel track:** WP3 and WP4 are independent once the WP2 harness lands — they share the harness but author different scenarios, in either order. The old WP3-vs-WP4 risk asymmetry is gone: with no live staging, the PiP "another app" backdrop is just an animation layer, no riskier than the filmstrip.
+- **No 3rd-party API / SDK / app-runtime dependency.** The toolchain (Node + Playwright + ffmpeg) lives in a non-shipped `tooling/demo/` dir, isolated from the app's lockfile; it adds nothing to the Tauri bundle. No macOS capture stack, no Screen-Recording permission, no MCP bridge.
 
 ## Notes
 
-- **Why a probe-first WBS for a "just record some GIFs" task:** the operator's explicit decision is that the agent produces these end-to-end. Agent-driven screen capture of a native macOS app (permission-gated, possibly interactive) and agent-choreographed staging of a 4-project + PiP-over-another-app scenario are real unknowns — exactly the kind the project's probe-first discipline exists for. Calling WP1 a probe (not a formality) is the operator's framing, carried verbatim.
-- **Operator-assist seam is expected, not a failure.** A NO-GO on *full* self-drive (e.g. the macOS Screen-Recording permission needs a one-time human grant, or the YouTube backdrop is easier operator-staged) does not sink the milestone — it reshapes WP2–WP4 to "agent writes the precise shot-list + scenario, operator does the minimal manual beat, agent renders + embeds." WP1 documents exactly where that seam falls.
-- **Verification posture:** these assets are visual + subjective, so the verify tier is **operator-judgment at each demo's checkpoint** (WP2.4 / WP3.4) + a GitHub-renders-correctly check at WP4.3. There is no `cargo test` / `vitest` slice — M8 ships no code (except possibly a throwaway capture helper script, which is not production code). This is the rare milestone where the agent-GREEN slice is "the sample clip rendered and is legible," not a test suite.
-- **CLAUDE.md bridge caveats carry in:** raw xterm typing is low-fidelity over the MCP bridge, so status transitions for the demos must be IPC/click-driven; and the bridge teardown port-cleanup (`lsof -ti tcp:1420 tcp:9223 | xargs -r kill -9`) is the default after any staging session.
+- **Why the probe paid off:** the original WP1 framed the risk as "can the agent capture the real screen + stage the live app." The operator's mid-probe steer (no screen capture → synthesized animation) plus the research dissolved *both* of those risks — no TCC permission, no live staging, no MCP bridge, no 4th scratch repo. The probe-first discipline (M1 thumbnail / M4 N-cost / M5 nspanel) earned its keep: a half-day of research replaced a fragile capture-the-real-app plan with a deterministic, agent-ownable animation pipeline.
+- **Demos reuse the real UI (single source of truth).** The harness imports the real status-dot CSS from `src/App.css` rather than forking the color/keyframe values — so the demo dots stay pixel-identical to the app even if the app's colors change later. Only the terminal pane (needs a live PTY) is faked.
+- **Verification posture:** these assets are visual + subjective. WP2 (harness) has a real agent-drivable **verify-self** (run it end-to-end, assert a legible looping GIF under budget — no live app needed). WP3/WP4 verify tier is **operator-judgment at each demo's checkpoint** (3.4 / 4.4) + a GitHub-renders-correctly check at WP5.3. No `cargo test`/`vitest` slice — M8 ships no app code; the build tooling under `tooling/demo/` is dev-only.
+- **Format is settled (GIF), see Probe outcomes.** No per-demo format re-decision needed.
 
 ## Architecture check
 
-No architectural gaps. M8 adds no production code, no new module, no new dependency to the shipped app (a capture helper, if any, is a throwaway dev script). The features being demonstrated (M4 filmstrip, M5 PiP) are already built, released, and documented in `arch.md`. **No `/product-arch` back-loop needed** → WBS complete → `/product-context` next (or proceed straight to `/feature-*` / `/session-start` to execute WP1, since M8 introduces no new architecture to context-load).
+No architectural gaps. M8 adds **no production code, no new app module, no new dependency to the shipped Tauri bundle** — the demo-build tooling lives in a dev-only `tooling/demo/` dir (Node + Playwright + ffmpeg), isolated from the app's lockfile. The features being demonstrated (M4 filmstrip, M5 PiP) are already built, released, and documented in `arch.md`. **No `/product-arch` back-loop needed.** WBS is re-decomposed and complete → proceed to plan/build **WP2** (the shared harness) via `/feature-plan` / `/session-start`. (`/product-context` skipped per operator — M8 introduces no new architecture to context-load.)
