@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m8-wp2-demo-build-harness — 2026-06-29
+
+*(feature-review-quality on ship commit cbe2922; Mode 3 autopilot. 0 CRITICAL / 1 MAJOR / 3 MINOR. The MAJOR — animation-timing fork in extract-dot-css.mjs — was FIXED in-place during review-quality (now sourced from App.css's @media block via pickAnimation(); drift-guard proven to catch a timing change). The 3 MINOR below are low-priority polish, backlogged. Reviewer: "well-built dev tooling that takes its one load-bearing invariant seriously... advances the codebase.")*
+
+## SURFACE-2026-06-29-QUALITY-M8WP2-README-DURATION-DRIFT
+- **Severity:** MINOR
+- **Location:** `tooling/demo/README.md` (build.mjs example, `--duration 5.4`) vs `tooling/demo/package.json` (`smoke` script, `--duration 3.2`).
+- **Finding:** The README's example build command uses `--duration 5.4` (a WP1-probe leftover), but the wired `smoke` script uses `3.2` (the smoke timeline's last keyframe is at t=2.6). A reader copy-pasting the README captures ~2s of dead tail.
+- **Suggested action:** Update the README example duration to match (or note it's illustrative). One-line doc fix.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M8WP2-COMMITTED-GENERATED-CSS-UNDOCUMENTED
+- **Severity:** MINOR
+- **Location:** `tooling/demo/.gitignore` + `tooling/demo/README.md` ("what's committed" prose).
+- **Finding:** `_dots.generated.css` is a generated artifact that is intentionally committed (the `--check` drift-guard needs a committed baseline to diff), yet `.gitignore` blanket-ignores `*.png`/`*.gif`/`*.webp` and the README doesn't mention the committed generated CSS. A future reader may be surprised a `*.generated.*` file is tracked.
+- **Suggested action:** One-line note in the README ("the generated dot CSS is committed as the drift-guard baseline").
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M8WP2-SHELL-INNERHTML-RAW-MARKUP
+- **Severity:** MINOR
+- **Location:** `tooling/demo/shell.js` (`dot()`, tile bodies, stage/PiP content injected via `innerHTML` from timeline data).
+- **Finding:** Timeline string fields (`tile.body`, `l.text`, etc.) are injected as raw HTML (some legitimately contain markup like `<span class="cursor">`). Not a security issue (dev-only, author-controlled input), but a sharp edge: WP3/WP4 scenario authors must remember every string field is raw HTML.
+- **Suggested action:** One-line caution in the TIMELINE shape doc-comment in shell.js so a future author doesn't pass an escape-expecting string.
+- **Priority:** low
+- **Status:** pending
+
 # m7-menu-bar-status-item — 2026-06-29
 
 *(feature-review-quality on ship commit 3888dd6; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built, appropriately-scoped... reuses every existing seam, no new dependency/webview/broadcaster change... advances the codebase without accruing debt." All 3 are comment/duplication nits, none backlog-worthy beyond MINOR.)*

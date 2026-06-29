@@ -57,8 +57,8 @@ M8's two demo GIFs (WP3 filmstrip, WP4 PiP) both need the same machinery: a stan
   - [x] verify-codify  <!-- status: done — 16 node-test units (args.mjs + frameAt.js, npm test 16/16); CSS contract guarded by extract-dot-css --check; render pipeline documented not CI-wrapped (dev-only). frameAt extracted to classic-script single source (type=module is CORS-blocked over file://, found+fixed here); app vitest unaffected -->
 
 ## Current Node
-- **Path:** Feature > ship (all phases complete)
-- **Active scope:** ALL phases complete (P1 + P2, all verify nodes [x]) — ready for ship
+- **Path:** Feature > review-quality (complete) → finalize
+- **Active scope:** Code-quality review done (0 CRIT / 1 MAJOR fixed in-place / 3 MINOR backlogged) — ready for finalize
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
@@ -67,6 +67,35 @@ M8's two demo GIFs (WP3 filmstrip, WP4 PiP) both need the same machinery: a stan
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
 [NOTE-2026-06-29] WP3/WP4 — `shell.html` loads its JS as **classic `<script>`, NOT `type="module"`**: Chromium CORS-blocks ES-module imports from `file://` origins (`Access to script ... blocked by CORS policy ... origin 'null'`), which is exactly the capture path. The pure `frameAt` helper is therefore shared via a classic-script global (`globalThis.__frameAt` in `frameAt.js`), unit-tested by importing that file for its side effect. WP3/WP4 author new timelines + scenarios against this same shell — keep any new shared JS as classic scripts (or serve over http if a future need forces modules). Not a backlog item (no action needed); recorded so WP3/WP4 don't re-hit it.
+[REVIEW-FIX-2026-06-29] extract-dot-css.mjs — MAJOR from code-quality review fixed in-place (commit follows): the two `animation:` declarations were hand-copied constants the `--check` drift-guard couldn't cover. Now SOURCED from App.css's `@media (prefers-reduced-motion: no-preference)` block via a new `pickAnimation()` helper, re-attached unwrapped. Proven: temporarily retuning `status-breathe 1.8s`→`2.5s` in App.css makes `--check` exit 1 (drift now caught); 16/16 node tests + smoke build still green. Closes the one partial breach of the single-source-of-truth rule before WP3/WP4 build on the harness.
+
+## Code-Quality Review — m8-wp2-demo-build-harness
+
+Reviewer (code-quality-reviewer subagent, ship commit cbe2922): **0 CRITICAL, 1 MAJOR, 3 MINOR.**
+
+### Strengths
+- Single hard rule genuinely implemented: brace-balanced, selector-name-based extraction from `src/App.css` + `--check` drift-guard (a real testable mechanism, not a comment).
+- Lockfile isolation achieved structurally (standalone private npm package, no workspace glob reaches it), not just asserted.
+- `frameAt` classic-script-vs-module CORS gotcha solved cleanly + forward-carried for WP3/WP4.
+- Test-runner isolation deliberate (`.nodetest.mjs` dodges vitest's glob; verified 0 tooling files collected).
+- Determinism correct end-to-end (`reducedMotion:'no-preference'` + per-frame seek + console/pageerror→exit1).
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR**
+- [extract-dot-css.mjs] `animation:` declarations were hand-copied constants, not extracted → `--check` couldn't detect timing/easing drift from App.css. **→ FIXED in-place** (see `[REVIEW-FIX-2026-06-29]` above; now sourced via `pickAnimation()`, drift-guard proven to catch a timing change).
+
+**MINOR** (auto-backlogged per drive_mode=autopilot → `workflow/backlog-quality-findings.md`)
+- [README.md vs package.json] README `build.mjs` example uses `--duration 5.4`; the wired `smoke` script uses `3.2` (probe leftover). Doc drift.
+- [.gitignore + README] `_dots.generated.css` is intentionally committed (drift-guard baseline) but the "what's committed" prose doesn't say so; a one-line note would remove ambiguity.
+- [shell.js] timeline string fields (`tile.body`, `l.text`) are injected via `innerHTML` (raw HTML). Fine for dev-only author-controlled input, but worth a one-line caution in the TIMELINE shape doc-comment so WP3/WP4 authors don't pass escape-expecting strings.
+
+### Assessment
+Well-built dev tooling that takes its load-bearing invariant seriously. Small, readable, comments encode WHY. The one MAJOR (animation-timing fork) was a tightening of the existing mechanism, now closed. Net: advances the codebase.
+
+### If you disagree
+Operator: dismiss any finding by marking the line `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
 
 ## Notes
 

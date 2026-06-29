@@ -43,6 +43,17 @@ function extractBlock(css, selector) {
   throw new Error(`extract-dot-css: unbalanced braces extracting ${selector}`);
 }
 
+// Pull the single `animation: …;` declaration out of `selector`'s rule block
+// within `css` (used to source the animation timing/easing from App.css's
+// @media block rather than hand-copying it). Returns e.g.
+// "animation: status-breathe 1.8s ease-in-out infinite;".
+function pickAnimation(css, selector) {
+  const block = extractBlock(css, selector + " ");
+  const m = block.match(/animation:\s*[^;]+;/);
+  if (!m) throw new Error(`extract-dot-css: no animation: declaration in ${selector}`);
+  return m[0].replace(/\s+/g, " ").trim();
+}
+
 function generate() {
   const css = readFileSync(APP_CSS, "utf8");
 
@@ -59,12 +70,17 @@ function generate() {
   const breathe = extractBlock(css, "@keyframes status-breathe").trim();
   const blink = extractBlock(css, "@keyframes status-blink").trim();
 
-  // The app wraps these two animation declarations in @media
-  // (prefers-reduced-motion: no-preference). We re-attach them unconditionally so
-  // the generated CSS animates regardless of the consuming context's media state.
+  // The app gates the two `animation:` declarations behind
+  // @media (prefers-reduced-motion: no-preference). We SOURCE them from inside
+  // that media block (not hand-copy — the timing/easing must track App.css too),
+  // and re-attach them UNWRAPPED so the generated CSS animates regardless of the
+  // consuming context's media state.
+  const mediaBlock = extractBlock(css, "@media (prefers-reduced-motion: no-preference)");
+  const runningAnim = pickAnimation(mediaBlock, ".status-dot-running");
+  const awaitingAnim = pickAnimation(mediaBlock, ".status-dot-awaiting");
   const animations = [
-    ".status-dot-running { animation: status-breathe 1.8s ease-in-out infinite; }",
-    ".status-dot-awaiting { animation: status-blink 0.7s steps(1, end) infinite; }",
+    `.status-dot-running { ${runningAnim} }`,
+    `.status-dot-awaiting { ${awaitingAnim} }`,
   ].join("\n");
 
   return [
