@@ -1,7 +1,7 @@
 # Feature: M8 WP3 — Filmstrip demo asset
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** Completed 2026-06-29 — shipped a42ba61 on main (not pushed); review-quality 0C/0M/3MINOR auto-backlogged; WBS WP3 ticked. F19 (M8 cycle continues — WP4/WP5 open).
 **Created:** 2026-06-29
 **Drive mode:** autopilot
 
@@ -42,7 +42,8 @@ The filmstrip (M4) is one of Claudesk's two most distinctive, hardest-to-explain
   - [x] verify-codify  <!-- status: [x] — cursorAt.nodetest.mjs (8 tests for the interpolation helper added during the input-affordance round) + 3 new cursor/keycap structural guards in timeline.filmstrip.nodetest.mjs (waypoints ascending+in-bounds, click waypoint exists, keycaps well-formed). Full suite 34/34 pass. No integration boundary (dev-only harness artifacts). -->
 
 ## Current Node
-- **Path:** Feature > COMPLETE — both phases [x]; ready to ship
+- **Path:** Feature > review-quality COMPLETE (0C/0M/3MINOR auto-backlogged) > ready for finalize
+- **Path (prior):** Feature > COMPLETE — both phases [x]; ready to ship
 - **Active scope:** WP3 done. Phase 1 (timeline + content + script) + Phase 2 (render/legibility + operator-approved demo + cursor/keycap input affordances) both complete. Full suite 34/34.
 - **Next:** /feature-ship
 - **Asset:** tooling/demo/out/filmstrip.gif (149KB, under budget). Final path is WP5's call (likely docs/demo/filmstrip.gif).
@@ -62,3 +63,37 @@ The filmstrip (M4) is one of Claudesk's two most distinctive, hardest-to-explain
 [VERIFY-HUMAN-FEEDBACK 2026-06-29] Operator rejected the first 3-beat render (P2.verify-human) with 2 changes → re-authored the timeline (in-loop F12→build):
   (1) CC-pane content now matches the REAL Claude Code TUI cadence (generalized/scrubbed): `❯` prompt, `● Edit/Bash(...)` tool-use bullets, `⎿` tree-result lines, and the actual permission-prompt box ("Do you want to make this edit? ❯ 1. Yes / 2. No"). No real/sensitive project data.
   (2) SWITCH and APPROVE are now DISTINCT beats — the old beat 3 conflated "click web-client" with "approve its pending edit" (read as: switching auto-approves). Now 4 beats: overview → awaiting-signal → CLICK promotes web-client to center stage STILL AWAITING (permission prompt shown, nothing approved) → SEPARATE APPROVE beat → running. Duration bumped 6.6s→8.0s (120 frames); GIF 107KB (still ~28× under budget). 23/23 tests still pass.
+
+## Code-Quality Review — m8-wp3-filmstrip-demo
+
+### Strengths
+- `cursorAt.js` is a clean, pure, frame-deterministic helper with a single source of truth shared between the browser shell (classic script) and the Node test — mirrors the established `frameAt.js` pattern.
+- The class-name collision with the terminal text-cursor span was anticipated and defended in three places (CSS/HTML/JS) — `mouse-cursor` not `cursor`.
+- `timeline.filmstrip.nodetest.mjs` codifies structural + narrative invariants (not verbatim copy), so it survives content tuning while catching a malformed timeline.
+- Frame-deterministic ripple/press driven off click-energy correctly respects the capture freeze-every-frame model.
+- The "unrelated projects, not components of one system" philosophy constraint is encoded as a load-bearing comment, tying the asset to the README identity principle.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [tooling/demo/timeline.filmstrip.js:9-17] Four-beat JSDoc header still names the OLD cast ("api-gateway"/"web-client") but the data uses `catan-companion`/`tax-cruncher` — the prose block wasn't updated when the cast was recast. Doc/data drift inside one file. → auto-backlogged (low).
+- [tooling/demo/timeline.filmstrip.js, whole file] The WP2 smoke fallback (`timeline.smoke.js`) still uses the "services of one system" naming this file's comment flags as the anti-pattern. Out of scope here (smoke = verify-self artifact); note for WP5. → auto-backlogged (low).
+- [tooling/demo/timeline.filmstrip.nodetest.mjs:31] Test loads the classic-script timeline via `eval(readFileSync(...))` against a bare `window` shim — brittle if the timeline ever references `document`. On-record only; not worth changing while data-only. → auto-backlogged (low).
+
+### Assessment
+Well-built, well-scoped dev tooling that does exactly what its plan said and no more. Small, pure where it should be, idiomatic to the WP2 harness, with tests calibrated to invariants rather than authored copy. Advances the codebase (reusable cursor/keycap tracks WP4's PiP demo can lean on) rather than accruing debt; the only debt is cosmetic comment/data drift. Nothing rises to a refactor trigger for author-controlled, gitignored-output, dev-only marketing tooling with zero shipped-app surface.
+
+### If you disagree
+Dismiss any finding by editing this section in the WIP and marking the line `[DISMISSED]` before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The hardest part of an asset demo isn't the pipeline (WP2 solved that) — it's the *semantics of the scenario*. Three verify-human rounds were all about meaning, not mechanics: (1) realism of CC content + separating switch-from-approve, (2) the project cast accidentally implying one-system/microservices (a philosophy violation, not a cosmetic), (3) making user input *visible* (cursor/keycap). The operator's eye caught conveyance problems an agent's "it renders correctly" self-check never would.
+- **Assumptions that held:** The WP2 harness took the new scenario + a whole new input-affordance layer (cursor glide, click ripple, keycaps) with zero changes to capture/render — the keyframe-frozen-`t` model + classic-script + `globalThis` pattern generalized cleanly. The "structural-not-verbatim" test discipline meant the timeline could be re-authored 3× without touching a single test assertion.
+- **Assumptions that were wrong:** (a) The smoke timeline's `api-gateway/web-client/...` names — copied as the WP3 starting point — encoded the exact "components of one system" framing the product philosophy forbids; I didn't catch it, the operator did. (b) I assumed a single `.cursor` class was safe; it collided with the terminal text-cursor span and painted arrows on the CC prompt — caught by a DOM count check, fixed by renaming to `mouse-cursor`.
+- **Approach delta:** Planned as a 3-beat overview→awaiting→promote scenario; shipped as a 4-beat scenario (switch and approve split into distinct beats) with visible cursor+keycap input affordances and a recast of all 4 project names — all three are operator-driven additions from verify-human, none were in the original plan. The plan's *structure* (2 phases, harness-reuse, operator-judgment gate at 3.4) held exactly; the *content* evolved substantially at the gate, which is precisely what that gate is for.
+
+## Communicate
+> **Feature complete:** M8 WP3 (filmstrip demo asset) has shipped. It renders a looping ~149KB GIF showing four *unrelated* projects in the filmstrip — attention shifting as one flips to AwaitingInput, a cursor clicking it to center stage, and a separate keyboard approval — conveying the "4 projects, one glance, one click" parallel-attention value. Verify: `cd tooling/demo && npm run filmstrip` → open `out/filmstrip.gif`. (Final committed path is WP5's call.)
+
+Requester = operator — closure notice for self-record.

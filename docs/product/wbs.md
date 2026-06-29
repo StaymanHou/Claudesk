@@ -56,17 +56,18 @@ Read `docs/product/design-priors.md` (3 priors, all about UI surfaces / modes / 
 - [x] 2.4 Generalize the render recipe: PNG frames → looping GIF (palettegen/paletteuse, bayer dither, `-loop 0`) + optional WebP; assert output exists + is under the size budget. *(`render.mjs`; `build.mjs` chains capture→render.)*
 - [x] 2.5 verify-self: run the harness end-to-end on a smoke timeline, confirm a legible looping GIF under budget. (Agent-drivable — no live app, no installed `.app`, no MCP bridge.) *(`npm run smoke` → 45KB GIF + 20KB WebP under budget; dots render correct per timeline at seeked t; frame visually checked.)*
 
-### WP3: Filmstrip demo asset
+### WP3: Filmstrip demo asset ✅ SHIPPED 2026-06-29 (commit a42ba61)
 **Type:** asset
 **Milestone:** M8
 **Dependencies:** WP2
 **Size:** S–M
 **Description:** Author + render the polished filmstrip demo on the WP2 harness — ~4 projects in the filmstrip with differing status dots, attention shifting as one flips to AwaitingInput (blue blink), then a tile click promoting it to center stage. Narrative beat: *"4 projects in flight, one glance tells you which needs you, one click jumps there."*
 **Tasks:**
-- [ ] 3.1 Author the filmstrip scenario timeline (project names, the running/awaiting/idle dot choreography, the promote-on-click beat, timing/duration within budget).
-- [ ] 3.2 Fill the faked content: realistic CC-pane terminal text per project (hand-authored, or an asciinema/`agg` clip composited in) + a Changes panel, so the center stage looks alive.
-- [ ] 3.3 Render via the harness; iterate on legibility (text crispness at README width is the classic GIF failure mode — tune fps/scale/dither).
-- [ ] 3.4 verify-human checkpoint: does it legibly convey the parallel-project-attention value? Re-author/re-render on operator feedback.
+- [x] 3.1 Author the filmstrip scenario timeline (project names, the running/awaiting/idle dot choreography, the promote-on-click beat, timing/duration within budget).
+- [x] 3.2 Fill the faked content: realistic CC-pane terminal text per project (hand-authored, or an asciinema/`agg` clip composited in) + a Changes panel, so the center stage looks alive.
+- [x] 3.3 Render via the harness; iterate on legibility (text crispness at README width is the classic GIF failure mode — tune fps/scale/dither).
+- [x] 3.4 verify-human checkpoint: does it legibly convey the parallel-project-attention value? Re-author/re-render on operator feedback.
+**Outcome:** `timeline.filmstrip.js` (4 UNRELATED projects — catan-companion/tax-cruncher/hugo-blog/recipe-box, deliberately distinct to read as parallelism-across-projects per README) + `npm run filmstrip` → `out/filmstrip.gif` (~149KB, ~20× under budget). 4-beat scenario (operator-approved after 3 verify-human rounds): overview → awaiting blue-blink → cursor-glide CLICK promotes the tile (still awaiting) → SEPARATE keyboard `1`/`⏎` approve → running. Added `cursorAt.js` (frame-deterministic glide-cursor interpolation) + cursor/keycap surface in shell.{html,css,js} + structural tests. Real CC TUI cadence, no sensitive data. 34/34 harness tests. 0C/0M/3MINOR review-quality, auto-backlogged.
 
 ### WP4: PiP demo asset
 **Type:** asset

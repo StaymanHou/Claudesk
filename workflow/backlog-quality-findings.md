@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m8-wp3-filmstrip-demo — 2026-06-29
+
+*(feature-review-quality on ship commit a42ba61; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built, well-scoped dev tooling that does exactly what its plan said and no more... advances the codebase (reusable cursor/keycap tracks WP4's PiP demo can lean on) rather than accruing debt; the only debt is cosmetic comment/data drift." Nothing rises to a refactor trigger for author-controlled, gitignored-output, dev-only marketing tooling.)*
+
+## SURFACE-2026-06-29-QUALITY-M8WP3-STALE-JSDOC-CAST
+- **Severity:** MINOR
+- **Location:** `tooling/demo/timeline.filmstrip.js:9-17` (four-beat JSDoc header) vs the keyframe data below it.
+- **Finding:** The JSDoc beat descriptions still name the OLD cast ("api-gateway running on center stage" / "web-client needs input"), but the data was recast during the verify-human round to `catan-companion` (active 0) + `tax-cruncher` (awaiting→promoted). Doc/data drift inside one file — a future reader (likely WP5) will mis-map beats to tiles.
+- **Suggested action:** Update the four-beat JSDoc to name the actual cast (catan-companion / tax-cruncher). One-line-per-beat comment fix.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M8WP3-SMOKE-TIMELINE-ONE-SYSTEM-NAMING
+- **Severity:** MINOR
+- **Location:** `tooling/demo/timeline.smoke.js` (WP2 smoke fallback cast: api-gateway / web-client / infra-tf / docs-site).
+- **Finding:** The WP2 smoke timeline still uses the "four services of one system" naming that timeline.filmstrip.js's comment now explicitly flags as the anti-pattern to avoid (per the README parallelism-across-projects philosophy). Out of scope for WP3 (smoke = verify-self artifact, not a shipped demo), but worth aligning so published-adjacent surfaces don't contradict the stated philosophy.
+- **Suggested action:** At WP5 (or a refactor), recast the smoke timeline's 4 names to unrelated projects too. Low cost.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M8WP3-EVAL-CLASSIC-SCRIPT-IN-TEST
+- **Severity:** MINOR
+- **Location:** `tooling/demo/timeline.filmstrip.nodetest.mjs:31` (loads the timeline via `eval(readFileSync(...))` against a bare `window` shim).
+- **Finding:** The only viable read path for a non-module classic script, and well-commented — but `eval` of file contents is brittle if the timeline ever gains a reference the shim doesn't provide (e.g. `document`). On-record only; not worth changing while the timeline stays data-only.
+- **Suggested action:** None now. If the timeline ever references browser globals beyond `window`, extend the shim. Dismiss-candidate.
+- **Priority:** low
+- **Status:** pending
+
 # m8-wp2-demo-build-harness — 2026-06-29
 
 *(feature-review-quality on ship commit cbe2922; Mode 3 autopilot. 0 CRITICAL / 1 MAJOR / 3 MINOR. The MAJOR — animation-timing fork in extract-dot-css.mjs — was FIXED in-place during review-quality (now sourced from App.css's @media block via pickAnimation(); drift-guard proven to catch a timing change). The 3 MINOR below are low-priority polish, backlogged. Reviewer: "well-built dev tooling that takes its one load-bearing invariant seriously... advances the codebase.")*

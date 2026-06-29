@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m8-wp3-filmstrip-demo (2026-06-29)
+- **Pointer:** 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `a42ba61`: (1) stale four-beat JSDoc cast names in `timeline.filmstrip.js` (comment says api-gateway/web-client; data is catan-companion/tax-cruncher — doc/data drift); (2) WP2 smoke timeline still uses the "one-system" naming this file's comment flags as the anti-pattern (align at WP5); (3) test loads the classic-script timeline via `eval` against a bare `window` shim (on-record, dismiss-candidate). All low-priority polish on dev-only demo tooling. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m8-wp3-filmstrip-demo — 2026-06-29`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** address at a future `/feature-refactor` (cleanup-only), or fold into WP4/WP5 build (they touch the same harness). #1 (JSDoc cast) is the highest-value one-liner. Dismiss any by marking it `[DISMISSED]` in the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — m8-wp2-demo-build-harness (2026-06-29)
 - **Pointer:** 3 MINOR findings (0 CRITICAL; the 1 MAJOR was fixed in-place during review-quality) from `feature-review-quality` on ship commit `cbe2922`: (1) README `--duration 5.4` vs the wired `smoke` script's `3.2` (doc drift); (2) committed `_dots.generated.css` (drift-guard baseline) not noted in the README's "what's committed" prose; (3) `shell.js` injects timeline string fields via `innerHTML` (raw HTML) — worth a one-line caution for WP3/WP4 scenario authors. All low-priority polish. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m8-wp2-demo-build-harness — 2026-06-29`.
 - **Priority:** low (all)
