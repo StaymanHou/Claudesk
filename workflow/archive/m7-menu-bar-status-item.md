@@ -106,11 +106,11 @@ The feature is done when:
   - [x] verify-codify  <!-- status: done — NO integration boundary (WP3 added no production code). No new tests: the codifiable logic from WP1+WP2 is already covered (aggregate_alarm fold, DTO serde round-trip, toggle_pip_mode, is_tray_menu_id routing). Final full-suite confirmation green: cargo 302, vitest 780. No regressions, no issues revealed. -->
 
 ## Current Node
-- **Path:** Feature > review-quality (complete) → finalize
-- **Active scope:** review-quality DONE — 0 CRITICAL / 0 MAJOR / 3 MINOR (auto-backlogged, Mode 3). Next is `/feature-finalize`.
+- **Path:** Feature > finalize (COMPLETE) — cycle closed, WIP archived.
+- **Active scope:** M7 feature done + WBS fully done (all 3 WPs [x]). No tech debt warranting refactor (3 MINOR auto-backlogged). → F30 → /product-finalize (entire M7 product cycle complete).
 - **Blocked:** none
-- **Unvisited:** finalize
-- **Open discoveries:** 2 (both note-and-continue, no escalation) — see below.
+- **Unvisited:** none — product-finalize next (cross-workflow)
+- **Open discoveries:** 2 arch-doc-name corrections (→ product-finalize durable-doc resync); 3 MINOR code-quality findings (→ future /feature-refactor). No escalation.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
