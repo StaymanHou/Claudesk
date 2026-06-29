@@ -1,20 +1,46 @@
 # Claudesk
 
+### Run a fleet of Claude Code projects from one window — and always know which one needs you next.
+
+A lean, dark, macOS-native shell for the power Claude Code user juggling many
+projects at once: every project is one click to a live CC session, every session
+shows its status at a glance, and your attention lands where it's needed instead of
+getting lost in a pile of terminal windows.
+
+---
+
+**The problem:** When you've got several Claude Code sessions running across
+different projects, finding the one that's stalled waiting on *you* means clicking
+through windows and hopping Spaces — a constant attention tax on top of the
+setup tax.
+
+**The filmstrip:** Every open project is a live tile across the top with an
+**idle / running / awaiting-input** status dot. One glance shows which one needs
+you; one click jumps there.
+
+<p align="center">
+  <img src="docs/demo/filmstrip.gif" alt="Filmstrip demo: four Claude Code projects in flight at once, status dots shifting as attention moves; one flips to awaiting-input and a click jumps to it" width="720">
+</p>
+
+**The problem:** Real work means leaving the IDE — you're heads-down in another
+app, reading docs, in a meeting — but a CC session you left running can finish or
+hit a prompt at any moment, and you won't know unless you keep switching back.
+
+**The picture-in-picture:** A small always-on-top panel keeps your sessions
+watchable from the corner of the screen while you work in any other app — and it
+pings you the moment one needs input.
+
+<p align="center">
+  <img src="docs/demo/pip.gif" alt="Picture-in-picture demo: an always-on-top PiP keeps two Claude Code sessions watchable in the corner while you work in another app, pinging when one needs input" width="720">
+</p>
+
+---
+
 A macOS-only, single-user "lite IDE" that puts the daily Claude Code + Sublime Text
 workflow in **one window with multiple virtual workspaces inside it**. Pick a project
 → a PTY-backed Claude Code session fires up in that project's directory, in seconds,
 inside a workspace — no more "open terminal → `cd` → `claude`" every time, across 20+
 rotating projects.
-
-<p align="center">
-  <img src="docs/demo/filmstrip.gif" alt="Filmstrip demo: four Claude Code projects in flight at once, status dots shifting as attention moves; one flips to awaiting-input and a click jumps to it" width="720"><br>
-  <em><b>Filmstrip</b> — several projects in flight at once; one glance shows which one needs you, one click jumps there.</em>
-</p>
-
-<p align="center">
-  <img src="docs/demo/pip.gif" alt="Picture-in-picture demo: an always-on-top PiP keeps two Claude Code sessions watchable in the corner while you work in another app, pinging when one needs input" width="720"><br>
-  <em><b>Picture-in-picture</b> — stay in your other work; Claude Code stays watchable in the corner and pings you the moment it needs you.</em>
-</p>
 
 > **Status: Milestones 1–4 shipped — daily-driver ready.** Click a project → a working
 > CC session in the project dir inside a workspace; a built-in lite editor + git-diff
@@ -171,6 +197,21 @@ wrong tool, and that's by design.
 - **Wrap the official tools, don't fork them.** Claudesk drives the real `claude` CLI
   and pops the real Sublime apps. It's an *orchestration layer*, not a replacement — so
   it inherits every upstream improvement for free and never has a fork to maintain.
+
+- **Designed for a single screen — the laptop scenario.** Claudesk assumes you may be
+  working on one display: a laptop on the move, not a multi-monitor desk. That's *why*
+  the whole product collapses into **one window** (no window-juggling), and why the
+  filmstrip, the collapsible-to-status-tiles layout, and the always-on-top
+  picture-in-picture all exist — they put N projects' worth of attention onto a single
+  screen without forcing you to spread windows across monitors or Spaces you don't have.
+  Multi-monitor setups still work fine; they're just never *required*.
+
+- **Local dev environment, not cloud.** Claudesk runs your Claude Code sessions in real
+  PTYs against your real local filesystem and toolchain — no remote VM, no cloud
+  workspace, no syncing your code up to someone else's machine. It's a native ~3 MB
+  macOS app, not a browser tab pointed at a server. The work stays on your hardware:
+  zero latency, your own environment and secrets, full offline capability, and nothing
+  to pay for or trust beyond the tools you already run.
 
 See [`docs/product/vision.md`](docs/product/vision.md) for the full vision, principles,
 and anti-goals.
