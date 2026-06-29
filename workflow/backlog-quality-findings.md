@@ -4,6 +4,31 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m8-wp4-pip-demo-asset — 2026-06-29
+
+*(feature-review-quality on ship commit 5625658; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built dev-only tooling that advances rather than accretes... the only debt is dead focus-ring scaffolding left over from the round-2 design [superseded by the round-3 region switch] + a duplicated comment — both cosmetic five-minute deletions, neither worth a refactor pass." All dev-only `tooling/demo/` polish.)*
+
+## SURFACE-2026-06-29-QUALITY-M8WP4-DUP-CURSOR-COMMENT
+- **Severity:** MINOR
+- **Location:** `tooling/demo/timeline.pip.js:247-259`
+- **Finding:** Two near-identical 6-line cursor-track comment blocks back-to-back (copy-paste artifact from the round-4b cursor edit). Delete one.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M8WP4-DEAD-FOCUS-FLAG
+- **Severity:** MINOR
+- **Location:** `tooling/demo/shell.js:184,191`
+- **Finding:** `pip.classList.toggle("focused", !!k.pipFocused)` + the per-row `row.focused ? " focused" : ""` are dead in the PiP timeline — the round-3 region switch replaced the PiP focus-ring beat, so `pipFocused`/`row.focused` are never set anywhere. Either wire a focus-ring frame or drop the flag.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-06-29-QUALITY-M8WP4-DEAD-FOCUS-CSS
+- **Severity:** MINOR
+- **Location:** `tooling/demo/shell.css:201` (`.pip.focused` / `.pip-cell.focused`)
+- **Finding:** The focus-ring CSS ships with no producer (same root cause as the dead flag above). Remove alongside it.
+- **Priority:** low
+- **Status:** pending
+
 # m8-wp3-filmstrip-demo — 2026-06-29
 
 *(feature-review-quality on ship commit a42ba61; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built, well-scoped dev tooling that does exactly what its plan said and no more... advances the codebase (reusable cursor/keycap tracks WP4's PiP demo can lean on) rather than accruing debt; the only debt is cosmetic comment/data drift." Nothing rises to a refactor trigger for author-controlled, gitignored-output, dev-only marketing tooling.)*

@@ -69,17 +69,19 @@ Read `docs/product/design-priors.md` (3 priors, all about UI surfaces / modes / 
 - [x] 3.4 verify-human checkpoint: does it legibly convey the parallel-project-attention value? Re-author/re-render on operator feedback.
 **Outcome:** `timeline.filmstrip.js` (4 UNRELATED projects — catan-companion/tax-cruncher/hugo-blog/recipe-box, deliberately distinct to read as parallelism-across-projects per README) + `npm run filmstrip` → `out/filmstrip.gif` (~323KB, ~9× under budget). 4-beat scenario (operator-approved across several verify-human rounds): live busy CC session (spinner + ticking elapsed/token counter + a fast-cascading code-DIFF hunk + build/test output — "working right now") → awaiting blue-blink → cursor-glide CLICK (strong double-ring + flash) promotes the tile (still awaiting, showing a real-shaped AskUserQuestion tool call) → SEPARATE keyboard `1`/`⏎` answer → running. Added `cursorAt.js` (glide-cursor interpolation) + `busyAt.js` (frame-deterministic spinner/stream) + cursor/keycap/busy/diff/askq surface in shell.{html,css,js} + structural tests. Real CC TUI cadence, no sensitive data. 46/46 harness tests. 0C/0M/3MINOR review-quality, auto-backlogged.
 
-### WP4: PiP demo asset
+### WP4: PiP demo asset ✅ SHIPPED 2026-06-29 (commit 5625658)
 **Type:** asset
 **Milestone:** M8
 **Dependencies:** WP2 (independent of WP3 — can interleave)
 **Size:** S–M
 **Description:** Author + render the polished PiP demo on the WP2 harness — the PiP panel pinned in the corner over a **faux "another app" backdrop layer** (depicted in the animation, not staged live), CC progress visible, a status dot flipping to AwaitingInput as the monitorable signal. Narrative beat: *"Do your other work — CC stays watchable in the corner and pings you the moment it needs you."* (The old live-staging risk is gone — the backdrop is just an animation layer.)
 **Tasks:**
-- [ ] 4.1 Author the PiP scenario timeline: faux backdrop (a stylized "other app" / editor / video surface), the always-on-top PiP panel with its status dots, the dot → AwaitingInput "needs you now" moment.
-- [ ] 4.2 Compose the backdrop + PiP-panel layers in the harness shell (reusing the real dot CSS for the panel).
-- [ ] 4.3 Render via the harness; iterate on legibility within budget.
-- [ ] 4.4 verify-human checkpoint: does it legibly convey the monitor-while-elsewhere value? Re-author/re-render on feedback.
+- [x] 4.1 Author the PiP scenario timeline: faux backdrop (a stylized "other app" / editor / video surface), the always-on-top PiP panel with its status dots, the dot → AwaitingInput "needs you now" moment.
+- [x] 4.2 Compose the backdrop + PiP-panel layers in the harness shell (reusing the real dot CSS for the panel).
+- [x] 4.3 Render via the harness; iterate on legibility within budget.
+- [x] 4.4 verify-human checkpoint: does it legibly convey the monitor-while-elsewhere value? Re-author/re-render on feedback.
+
+**Outcome (2026-06-29):** `npm run pip` → `out/pip.gif` (~367KB, ~8× under the 3MB budget; `out/` gitignored — committed asset is WP5's job). Built on the WP2/WP3 harness. Final demo (operator-approved over **4 verify-human rounds**): a vertical PiP with **2 live CC workspace mirrors** (recipe-box + tax-cruncher, reusing the filmstrip busy/stream cadence) pinned over an **ACTIVE Slack work backdrop** (the operator types a reply + the mouse glides and clicks a 👍 reaction; messages pop in) → tax-cruncher **pings** (running→awaiting) → **⌘+Tab switches the composition to the REAL Claudesk window** (filmstrip + center stage, the faithful UX — *not* a PiP focus ring) → **1+⏎** answers the AskUserQuestion → CC resumes. Key operator decisions: **work backdrop** (not leisure/YouTube — target audience is pros multitasking real work), **2 workspaces** (not 4), **faithful window-switch** ending. New `backdropAt.js` pure helper + `timeline.pip.js` + a keyframe-level `region` override in `shell.js` (pip→filmstrip switch) + vertical `.pip-cell` mirror CSS; fixed a latent `[hidden]` keycap/cursor stuck-visible bug (also improves the filmstrip demo). 68/68 harness tests. 0C/0M/3MINOR review-quality findings auto-backlogged (`workflow/backlog-quality-findings.md` → `# m8-wp4-pip-demo-asset`; the 3 are a dup comment + dead round-2 focus-ring scaffolding). **WP4 completes the (WP3 ‖ WP4) parallel pair — only WP5 (embed both GIFs in README) remains in M8.**
 
 ### WP5: Embed + place
 **Type:** integration

@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m8-wp4-pip-demo-asset (2026-06-29)
+- **Pointer:** 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `5625658`: (1) duplicated back-to-back cursor-track comment block in `timeline.pip.js` (round-4b copy-paste); (2) dead `pipFocused`/`row.focused` flag in `shell.js` (round-3 region switch superseded the PiP focus-ring beat — flag never set); (3) the matching `.pip.focused`/`.pip-cell.focused` CSS has no producer. All low-priority polish on dev-only demo tooling; the (2)+(3) dead-focus-ring pair is the natural cleanup unit. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m8-wp4-pip-demo-asset — 2026-06-29`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** address at a future `/feature-refactor` (cleanup-only), or fold into WP5 build (touches the same harness). Dead-focus-ring (2)+(3) delete together; the dup comment is a one-liner. Dismiss any by marking it `[DISMISSED]` in the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — m8-wp3-filmstrip-demo (2026-06-29)
 - **Pointer:** 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `a42ba61`: (1) stale four-beat JSDoc cast names in `timeline.filmstrip.js` (comment says api-gateway/web-client; data is catan-companion/tax-cruncher — doc/data drift); (2) WP2 smoke timeline still uses the "one-system" naming this file's comment flags as the anti-pattern (align at WP5); (3) test loads the classic-script timeline via `eval` against a bare `window` shim (on-record, dismiss-candidate). All low-priority polish on dev-only demo tooling. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m8-wp3-filmstrip-demo — 2026-06-29`.
 - **Priority:** low (all)

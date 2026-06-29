@@ -1,8 +1,9 @@
 # Feature: M8 WP4 — PiP demo asset
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed
 **Created:** 2026-06-29
+**Completed:** 2026-06-29
 **Drive mode:** autopilot
 
 ## Problem Statement
@@ -55,14 +56,47 @@ M8's second value-showcase asset: a short looping GIF that *shows* the picture-i
   - [x] verify-codify  <!-- status: complete — coverage assessed: every verified behavior is codified in timeline.pip.nodetest.mjs (14 tests: region-switch fidelity, 2 mirrors+diff, active backdrop, ping, ⌘⇥+1⏎ keycaps, mouse-in-Slack-not-PiP, answer→resume) + backdropAt.nodetest.mjs (typing/reveal/reaction logic). No new tests needed (built TDD-style across rounds). shell.js DOM render-glue deliberately verified via capture/verify-self per the harness's "isolated from app test infra" design — matches the filmstrip demo's codify posture. Full suite 68/68 green; no failures → no triage. No integration boundary (isolated new dev-only artifacts). -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 COMPLETE → ship
-- **Active scope:** none — Phase 1 done (all impl + 5 verify nodes [x]); single-phase feature, ready to ship.
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** none — shipped (`5625658`); review-quality clean (0C/0M/3MINOR auto-backlogged). Ready to finalize.
 - **Blocked:** none
 - **Unvisited:** verify-auto → verify-self → verify-human → verify-codify
 - **Open discoveries:** dot-color note (SURFACED, non-blocking — running=amber/awaiting=blue, sourced from real App.css by design)
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary> -->
+
+## Retrospect
+- **What changed in our understanding:** The PiP demo's hardest problem wasn't the harness (the shell already had `pip`/`backdrop` regions) — it was *fidelity to the real UX*, which only surfaced through operator review. Three of four rounds were re-authors driven by "this misrepresents how Claudesk actually works": a status-list isn't a *mirror* (round 2 → vertical live CC mirrors), a static backdrop isn't *active work* (round 2 → typing + popping messages), and answering *inside the PiP* is wrong (round 3 → ⌘+Tab switches to the real Claudesk window; the PiP is the monitor, you act in the workspace). The mouse role (round 4) was the operator's: a 👍 reaction in Slack = concrete "hands busy elsewhere," kept off the PiP/answer to preserve the keyboard-driven story.
+- **Assumptions that held:** The WP2/WP3 harness extended cleanly — classic-script + pure-helper + sibling-nodetest pattern absorbed `backdropAt.js` without friction; the keyframe-level `region` override was a small, clean way to switch compositions; reusing the filmstrip center-stage surface for the answer beat avoided a parallel path.
+- **Assumptions that were wrong:** The plan's framing ("PiP as a compact status-row list — more honest than a shrunk CC terminal") was backwards — the operator wanted *exactly* the live-mirror read, and the status list read as a frozen list, not a monitor. Also assumed the answer could stay in the PiP composition; it couldn't (display-only PiP means you switch to act).
+- **Approach delta:** Plan was a single ~7s 3-beat status-list demo; shipped a ~10s 6-beat demo with a vertical live-mirror PiP, an active backdrop, a region-switch to the real window, and both mouse + keyboard gestures. Four verify-human rounds vs the planned one. Surfaced + fixed a latent `[hidden]`-override bug along the way (benefits the filmstrip demo too).
+
+## Code-Quality Review — m8-wp4-pip-demo-asset
+
+### Strengths
+- Pure animation logic (`backdropAt`) cleanly factored as a `t`-deterministic function with a sibling `.nodetest.mjs`, matching the `frameAt`/`cursorAt`/`busyAt` convention — the right seam for the one thing that *can* be unit-tested.
+- Legacy static `T.backdrop[]` / status-row `renderPip` paths preserved behind `!T.backdropLive` / `row.mirror` branches, so the smoke + filmstrip demos keep working (no forced migration).
+- `timeline.pip.nodetest.mjs` asserts narrative *invariants* (region-switch-after-ping, answer-then-resume, mouse-in-Slack-never-PiP) rather than verbatim copy — correct codify posture for a subjective visual asset.
+- The `[hidden]{display:none!important}` guard is a genuine latent-bug fix (author `display:flex` overrode the UA hidden rule); also improves the existing filmstrip demo.
+- Region-switch composition (`k.region` override) reuses the filmstrip center-stage surface instead of a parallel answer-inside-PiP path — honors the display-only-PiP fidelity correction with minimal new surface.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [tooling/demo/timeline.pip.js:247-259] Two near-identical 6-line cursor-track comment blocks back-to-back (copy-paste artifact from round-4b). Delete one.
+- [tooling/demo/shell.js:184,191] `pip.classList.toggle("focused", !!k.pipFocused)` + per-row `row.focused` are dead in this timeline — the round-3 region switch replaced the PiP focus-ring beat, so `pipFocused`/`row.focused` are never set. Either wire a focus-ring frame or drop the flag + CSS.
+- [tooling/demo/shell.css:201] `.pip.focused` / `.pip-cell.focused` ring styles ship with no producer (same root cause). Remove alongside the dead flag.
+
+### Assessment
+Well-built dev-only tooling that advances rather than accretes — extends the harness via the established classic-script + pure-helper + sibling-nodetest pattern, adds genuine unit coverage for `backdropAt`, and fixes a latent `[hidden]` bug benefiting the sibling filmstrip demo. The only debt is dead focus-ring scaffolding left over from the round-2 design (superseded by the round-3 region switch) + a duplicated comment — both cosmetic five-minute deletions, neither worth a refactor pass given the dev-only, isolated-from-app-test-infra context. Net: ship-quality for its purpose; 3 trivial nits swept to the quality-findings backlog.
+
+### If you disagree
+Operator: dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Notes (plan-time context, from the WP2/WP3 harness study)
 - **The shell already has a full PiP path.** `shell.html` has the `.backdrop` + `.pip` regions; `shell.js` has `renderPip(k)`, `T.backdrop`, `T.pipPos` (corner-pin), and region toggling via `body[data-region="pip"]`. `shell.css` has `.pip` / `.pip-row` / `.backdrop` chrome (lines 133–183, 274–283). So WP4 is mostly **authoring a timeline** + a small `renderPip` busy-meta extension — not new infrastructure.
