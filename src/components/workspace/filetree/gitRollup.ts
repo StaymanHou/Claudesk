@@ -82,7 +82,7 @@ export function dominantStatusByDir(
     if (next !== undefined) byDir[dir] = next;
   };
 
-  for (const path in gitStatus) {
+  for (const path of Object.keys(gitStatus)) {
     const status = gitStatus[path];
     // Walk every ancestor dir of this changed path.
     let slash = path.lastIndexOf("/");

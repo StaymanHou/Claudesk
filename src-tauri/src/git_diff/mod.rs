@@ -340,19 +340,22 @@ pub fn file_hunks_core(
     let repo = open_repo(repo_root)?;
 
     let mut opts = git2::DiffOptions::new();
-    opts.pathspec(path)
-        .include_untracked(true)
-        .recurse_untracked_dirs(true)
-        // Without this, an untracked file appears as a delta with NO patch lines —
-        // the UI would show "added" with an empty hunk list. We want its content.
-        .show_untracked_content(true);
+    opts.pathspec(path);
 
     let diff = if staged {
-        // Staged side: HEAD tree → index.
+        // Staged side: HEAD tree → index. The untracked options below are meaningless
+        // here (the index can never hold an untracked file), so they're set only on the
+        // unstaged branch.
         let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
         repo.diff_tree_to_index(head_tree.as_ref(), None, Some(&mut opts))?
     } else {
-        // Unstaged side: index → working dir.
+        // Unstaged side: index → working dir — the only side that can surface an
+        // untracked file, so the untracked options belong here.
+        opts.include_untracked(true)
+            .recurse_untracked_dirs(true)
+            // Without this, an untracked file appears as a delta with NO patch lines —
+            // the UI would show "added" with an empty hunk list. We want its content.
+            .show_untracked_content(true);
         repo.diff_index_to_workdir(None, Some(&mut opts))?
     };
 

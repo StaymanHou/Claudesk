@@ -56,9 +56,15 @@ describe("Workspace auto-focuses the CC pane on the visible edge (QoL-WP3 P1.2)"
   });
 
   it("does NOT send any byte to the PTY on focus (no WP4 spurious-prompt regression)", () => {
-    // The focus path must never write input. If a future edit adds a cc_input / newline
-    // in Workspace, this fails — the left CC pane must stay byte-clean on focus.
+    // The focus path must never write input. The PTY-write seam is `cc_input` (the only
+    // byte-write invoke), so its absence in Workspace is the primary guard.
     expect(workspaceSource).not.toMatch(/cc_input/);
-    expect(workspaceSource).not.toMatch(/\\r\\n|\\r|\\n/);
+    // Scoped newline check: a stray \r/\n is only a regression if it rides a PTY-write
+    // call, so assert no `invoke(...)`/`cc_`-write line in Workspace carries one — rather
+    // than the old whole-file scan, which a future unrelated \n literal (a tooltip, a
+    // multiline template) would trip with a misleading "spurious-prompt regression".
+    const ptyWriteWithNewline =
+      /(?:invoke\(\s*["'`]cc_|cc_input|cc_write)[^\n]*\\(?:r\\n|r|n)/;
+    expect(workspaceSource).not.toMatch(ptyWriteWithNewline);
   });
 });

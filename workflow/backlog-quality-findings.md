@@ -16,18 +16,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# m7-menu-bar-status-item — 2026-06-29
-
-*(feature-review-quality on ship commit 3888dd6; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built, appropriately-scoped... reuses every existing seam, no new dependency/webview/broadcaster change... advances the codebase without accruing debt." All 3 are comment/duplication nits, none backlog-worthy beyond MINOR.)*
-
-## SURFACE-2026-06-29-QUALITY-M7-TRAY-ID-MATCH-DUP
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/tray/commands.rs:147-150` (`handle_tray_menu_event`) vs `src-tauri/src/tray/mod.rs` (`is_tray_menu_id`).
-- **Finding:** `handle_tray_menu_event` re-matches the two tray ids that `is_tray_menu_id` already validated, with a `_ => return false` arm commented "unreachable given the predicate." The tray id set is thus duplicated across two functions; a 3rd tray actuator needs both edited in lockstep.
-- **Suggested action:** Optional — a single `match id` returning bool (no separate predicate) would remove the duplication; or leave as-is (the predicate is unit-tested, the dead arm keeps the match total). Defensible either way.
-- **Priority:** low
-- **Status:** pending
-
 # m6-wp11-multiple-right-panel-terminals — 2026-06-28
 
 *(feature-review-quality on ship commit f9e3292; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built... the only debt is minor — a small logic duplication between the button handlers and the keydown branches that a shared callback would erase. Nothing here warrants a refactor pass.")*
@@ -84,25 +72,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low.
 - **Status:** pending — DEFERRED at debt-paydown WP4 (operator, 2026-06-30), anchored to **M9**. The per-`RightPanelHost` `pip-mode` subscription is the project's INTENDED "all surfaces subscribe to the same backend broadcast" pattern (PiP mode is already an app-global View-menu radio, backend = single source of truth via `pip_set_mode`/`pip_get_mode` + the `pip-mode` event), not a missing-app-state bug — the only real cost is N-1 redundant `pip_get_mode` mount fetches. M9's time-tracking toggle follows the same backend-command + `*-mode`-broadcast + per-consumer-subscribe shape, so there is no shared app-settings store to build once-vs-twice. Fold the dedup into M9's settings work IF an app-settings hook materializes there; else it stays the documented pattern.
 
-# qol-wp8-diff-viewer-polish — 2026-06-25
-
-3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `7385a61`. Reviewer verdict: well-built, tightly-scoped, right mechanism (measured CSS var + ResizeObserver), no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP8-REDUNDANT-COLLAPSE-DEP
-- **Finding:** The sticky-var ResizeObserver effect lists `commitsCollapsed` in its dep array, but the observer already tracks the `.diff-commits` parent's height directly (only `.diff-commits-body` mounts/unmounts inside the observed node), so the re-run on collapse is belt-and-suspenders, not load-bearing. The inline comment slightly overstates that collapse needs the re-attach. The genuinely-needed deps are `view.kind` (banner appears/disappears) + `list.kind`/`commitDiff` (files area mounts).
-- **Where:** `src/components/workspace/diff/DiffPanel.tsx` sticky-var effect (~290-292).
-- **Fix shape:** either drop `commitsCollapsed` from the deps (the observer covers it) OR keep it and reword the comment to mark it belt-and-suspenders so a future trimmer doesn't mistake it for load-bearing. Lowest-risk = comment reword.
-- **Priority:** low
-
 # qol-wp7-filetree-git-bubble-up — 2026-06-25
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `4d384b1`. Reviewer verdict: well-built, right architecture, no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP7-FORIN-NO-HASOWNPROPERTY
-- **Finding:** `dominantStatusByDir` iterates `gitStatus` with `for (const path in gitStatus)` without a `hasOwnProperty` guard. Safe for the serde-serialized backend record, but an unexpected prototype key would inject a bogus dir.
-- **Where:** `src/components/workspace/filetree/gitRollup.ts` `dominantStatusByDir` (~78).
-- **Fix shape:** switch to `for (const path of Object.keys(gitStatus))` — removes the latent footgun at zero cost.
-- **Priority:** low
 
 ## SURFACE-2026-06-25-QUALITY-WP7-CONSIDER-ARRAY-ALLOC
 - **Finding:** the `consider` closure allocates a 1–2-element array per ancestor purely to reuse `dominantStatus`. Cosmetic given the input is changed-paths-only (O(changed × depth)).
@@ -153,18 +125,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** tech-debt (comment accuracy / future-edit safety)
 - **Finding:** The trigger effect reads non-reactive `hasSpawnedRef.current` while keyed on `[active, bridge.phase]`. A narrow async window exists after the nonce bump but before the latch is set where an `active` toggle could fire a second nonce bump. It is SAFE — the spawn effect's per-run `cancelled` closure self-kills the orphan so exactly one session survives — but the trigger effect's comment ("bumps `spawnNonce` exactly once") slightly overstates the guarantee; once-ness is co-enforced downstream by `cancelled`.
 - **Pickup shape:** add a one-line comment at the trigger effect pointing at the `cancelled` backstop (so a future reader doesn't "tighten" the de-dup here and break the StrictMode contract). Comment-only; no behavior change.
-
-# qol-wp3-switch-workspace-autofocus-cc — 2026-06-25
-
-2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `78c76d6`. Reviewer rated the feature well-built and tightly-scoped — minimal correct seam (imperative `focus()`-only handle → single `visible`-edge effect consolidating all four promote triggers), focus-only invariant designed-in AND test-pinned, no debt. Both findings are polish; neither warrants a refactor pass. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP3-OVERBROAD-NEWLINE-GUARD
-- **Files:** `src/components/workspace/__tests__/autofocusCcOnPromote.test.ts` (the `not.toMatch(/\r\n|\r|\n/)` assertion, ~line 63)
-- **Priority:** low
-- **Status:** pending
-- **Type:** tech-debt (test robustness)
-- **Finding:** The no-PTY-byte guard pins the absence of any `\r`/`\n` escape anywhere in Workspace.tsx, not specifically in the focus path. Passes today (zero matches), but it's over-broad — a future unrelated `\n` literal (a tooltip string, a multiline template) would fail this test with a misleading "WP4 spurious-prompt regression" message. The companion `cc_input` assertion is appropriately targeted.
-- **Pickup shape:** scope the assertion to the focus effect or to `invoke(`/PTY-write identifiers instead of the whole file. One small test edit. Dismiss if the broad guard is judged acceptable.
 
 # qol-wp1-close-workspace — 2026-06-25
 
@@ -292,17 +252,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# wp5-frontend-ui-prototype — 2026-06-18
-
-3 MINOR findings from `feature-review-quality` on ship commit `777c0b8` (0 CRITICAL, 0 MAJOR). All cosmetic stylesheet/intent-clarity nits, zero correctness impact. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-18-QUALITY-WP5-XTERMPANE-EFFECT-DEP
-- **File:** `src/components/workspace/XtermPane.tsx:60`
-- **Finding:** the xterm mount `useEffect` keys on `[workspaceId]`, but CenterStage uses `key={ws.id}` so a changed id already forces a fresh component instance. `[]` would express once-per-mount intent more honestly.
-- **Why it matters:** slight intent-obscuring; a maintainer may think id-change-driven re-mount is a supported path when component identity already guarantees it.
-- **Priority:** low
-- **Status:** pending
-
 # m2-wp2-editor-shell — 2026-06-19
 
 2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `a84f3e9` (0 CRITICAL). Feature rated "advances the codebase rather than accruing debt." Auto-backlogged per drive_mode=autopilot (MAJOR → Case B, MINOR → low). The two MAJORs are the load-bearing ones (backend root-trust seam + a doc/behavior security-invariant mismatch), both flagged as Phase-2-hardening candidates, neither refactor-blocking.
@@ -330,45 +279,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# m2-wp4-git-diff-viewer — 2026-06-20
-
-4 MINOR findings from `feature-review-quality` on ship commit `4e2d742` (0 CRITICAL, 0 MAJOR). Reviewer verdict: well-built, advances the codebase, no refactor warranted. Findings are doc-comment drift left by the PB.7 removal sweep (2) + dead diff-option config (1) + a frontend clarity nit (1). All low priority. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-20-QUALITY-WP4-DEAD-UNTRACKED-OPTS-STAGED
-- **File:** `src-tauri/src/git_diff/mod.rs:338-344` (`file_hunks_core` DiffOptions)
-- **Finding:** `include_untracked`/`recurse_untracked_dirs`/`show_untracked_content` are set on the shared `opts` used by both branches, but they're only meaningful on the unstaged `diff_index_to_workdir` path — the staged `diff_tree_to_index` branch can never see an untracked file. Harmless dead config on the staged path.
-- **Why it matters:** minor confusion cost; the shared-`opts` construction obscures that the two branches want different options.
-- **Suggested action:** build the untracked options only on the unstaged branch (or note inline that they're no-ops on the staged path).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-20-QUALITY-WP4-COMMIT-DIFF-GATE-TERNARIES
-- **File:** `src/components/workspace/diff/DiffPanel.tsx:368-379` (commit-diff render gate)
-- **Finding:** the "is this commit diff for the currently-selected commit?" gate is 3 sibling JSX ternaries (`commitDiff?.sha === selectedSha` / `!== selectedSha` + error branch) over the same two values.
-- **Why it matters:** low-effort clarity win in the one part of the component with non-obvious async-staleness handling.
-- **Suggested action:** derive a single `commitReady`/`commitStale` flag above the return; collapse the three branches to loading-vs-loaded-vs-error.
-- **Priority:** low
-- **Status:** pending
-
 # m2-wp4-diff-viewer-polish — 2026-06-20
 
 Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 MINOR. Verdict: well-built, appropriately-scoped polish; no refactor warranted. All three are micro-readability / posture notes.
-
-## SURFACE-2026-06-20-QUALITY-WP4POLISH-DOUBLE-PREDICATE
-- **Source:** feature:review-quality (m2-wp4-diff-viewer-polish)
-- **Type:** tech-debt
-- **Summary:** In `DiffPanel.tsx` `toggleAllCollapsed`, `allCollapsed(prev, visibleKeys)` is recomputed inside the setter while `everyCollapsed` already holds an independent evaluation of the same predicate one line above. Both correct (the setter must read fresh `prev`), but the two call sites could drift if someone edits one predicate.
-- **Suggested action:** Optional — leave as-is (the in-setter fresh-`prev` read is intentional), or add a one-line comment noting the deliberate duplication.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-20-QUALITY-WP4POLISH-USEMEMO-DEP
-- **Source:** feature:review-quality (m2-wp4-diff-viewer-polish)
-- **Type:** tech-debt
-- **Summary:** `visibleKeys` useMemo deps on the whole `list` reducer state object rather than `list.kind`/`list.files`. Correct (listReducer returns a new object per dispatch) but re-derives on list-state transitions (idle→loading) that don't change the key set.
-- **Suggested action:** Optional micro-opt — narrow the dep to `list.kind` + `list.files`. Negligible perf impact.
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-06-20-QUALITY-WP4POLISH-STICKY-ZINDEX-COUPLING
 - **Source:** feature:review-quality (m2-wp4-diff-viewer-polish)
@@ -466,39 +379,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Suggested action:** if it bites, split into separate info/error slots (or a small queue). Acceptable for WP2 scope.
 - **Priority:** low
 - **Status:** pending
-
-# m4-wp3-filmstrip — 2026-06-23
-
-3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `920678a`.
-
-## SURFACE-2026-06-23-QUALITY-WP3-OFFVIEWPORT-A11Y
-- **Finding:** `Workspace.tsx:56-78` — the P1.2 `display:none` → `position:absolute; left:-99999px` switch leaves background workspaces (full editor + live PTY) in the tab order + accessibility tree (display:none had removed them). No `inert`/`aria-hidden` on the non-`visible` branch → keyboard focus can land in an off-screen workspace; screen readers announce N hidden terminals.
-- **Suggested fix:** add `inert` to the hidden branch (doesn't affect FitAddon/serialize, doesn't change layout).
-- **Priority:** low (genuine minor a11y/focus regression; low-effort)
-- **Status:** pending
-
-## SURFACE-2026-06-23-QUALITY-WP3-TICKER-EFFECT-DUAL-RESPONSIBILITY
-- **Finding:** `Filmstrip.tsx:113-126` — the active-tile stale-mirror clear shares the ticker `useEffect` (two responsibilities; a future ticker-dep edit could shift clear timing). Works + commented.
-- **Suggested fix:** split the clear into its own effect keyed on `activeId`.
-- **Priority:** low
-- **Status:** pending
-
-# m4-wp4-filmstrip-collapse — 2026-06-23
-
-2 actionable MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `d06ac50`. Reviewer rated it well-built — idiomatic pure-helper extraction, correct effect lifecycle, dark-only CSS honored, no debt accrued. (A 3rd "finding" was a non-actionable test-count-consistency confirmation, not logged.)
-
-## SURFACE-2026-06-23-QUALITY-WP4-ACTIVE-PILL-NOOP-PROMOTE
-- **Finding:** `Filmstrip.tsx` collapsed branch — the pill row maps over ALL tiles including the active one and gives the active pill `onClick={() => onPromote(tile.id)}`, a silent no-op (focusWorkspace on the already-focused workspace), while still advertising `aria-label="Switch to <name>"` + a pointer cursor. The expanded tiles avoid a click handler on the active tile (promote flows through the strip pointer-up path).
-- **Suggested fix:** no-op guard on the active pill (skip onPromote when `tile.active`) or an `aria-current`-aware disabled affordance, to align the two render branches.
-- **Priority:** low (minor UX/a11y inconsistency between branches; harmless functionally)
-- **Status:** pending
-
-## SURFACE-2026-06-23-QUALITY-WP4-BGIDS-JOIN-SPLIT-ROUNDTRIP
-- **Finding:** `Filmstrip.tsx` ticker effect — `bgSignature ? bgSignature.split(",") : []` re-derives `backgroundIds` by splitting a comma-joined string that was just built from `tiles.filter(...).map(...)` a few lines above. The same id array could be memoized once and reused for both the signature and the iteration.
-- **Suggested fix:** compute the background-id array once; derive `bgSignature` from it (join) for the dep, and reuse the array for iteration.
-- **Priority:** low (trivial readability; join-then-split is a tiny confabulation surface only if an id ever held a comma — not the case today, ids are uuids)
-- **Status:** pending
-- **Note:** the still-pending `SURFACE-2026-06-23-QUALITY-WP3-TICKER-EFFECT-DUAL-RESPONSIBILITY` is in this same ticker effect — WP4 added the `shouldRunMirror` gate but did not split the active-tile clear. The two are natural pickup-together candidates for one `/feature-refactor` pass on the ticker effect.
 
 # dev-prod-isolation — 2026-06-24
 
@@ -609,12 +489,5 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Severity:** MINOR
 - **Finding:** `pip_set_mode(On)` (`pip/commands.rs`) persists `mode` to disk, then routes to `reconcile_on_mode_visibility`, which re-reads the mode back from disk (`resolve_data_dir` → `read_pip_mode`) rather than using the `mode` already in scope — a redundant disk read on a user-click path. Harmless (the read returns the just-persisted value) and arguably consistent with the file's "read fresh from the persisted source of truth" discipline used by the focus handler.
 - **Fix shape:** either pass the in-hand `mode` into a count-only reconcile variant, or add a one-line comment noting the re-read is the deliberate "fresh from persisted truth" pattern. Lean: a comment, unless the hot-path read ever shows up.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-28-QUALITY-WP9-LEN-WITHOUT-IS-EMPTY
-- **Severity:** MINOR
-- **Finding:** `WorkspaceRegistry::len()` (`status_broadcaster/mod.rs`) was un-gated from `#[cfg(test)]` to gain a runtime caller without a companion `is_empty()`. Clippy-clean here (`len_without_is_empty` does not fire) and deliberate (an `is_empty()` was added then removed as dead code) — flagged only so a future reader who expects the idiomatic `len`/`is_empty` pair knows the omission was intentional.
-- **Suggested action:** none now; add `is_empty()` only if/when a caller needs it (clippy will then require the pair).
 - **Priority:** low
 - **Status:** pending

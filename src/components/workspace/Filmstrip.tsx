@@ -164,20 +164,25 @@ export function Filmstrip({
   // changes (a switch promotes/demotes a tile, or a workspace opens/closes), so the
   // newly-backgrounded tile starts mirroring and the newly-active one stops.
   const activeId = tiles.find((t) => t.active)?.id ?? null;
-  const bgSignature = tiles
-    .filter((t) => !t.active)
-    .map((t) => t.id)
-    .join(",");
+  // The background-tile id array, computed once. `bgSignature` (the comma-join) is the
+  // stable effect dep; the array itself is reused for iteration below (no join→split
+  // round-trip). ids are uuids, so the join can never collide on a comma.
+  const backgroundIds = tiles.filter((t) => !t.active).map((t) => t.id);
+  const bgSignature = backgroundIds.join(",");
 
   useEffect(() => {
     // The active tile is a static placeholder: clear any stale mirror HTML the ticker
     // wrote while it was a background (the out-of-React innerHTML isn't React-managed, so
-    // it lingers across a promote unless we clear it here).
+    // it lingers across a promote unless we clear it here). Its own effect keyed on
+    // `activeId` so the clear timing can't be perturbed by a future edit to the ticker
+    // effect's deps.
     if (activeId) {
       const activeMirror = mirrorRefs.current.get(activeId);
       if (activeMirror) activeMirror.innerHTML = "";
     }
+  }, [activeId]);
 
+  useEffect(() => {
     // M4 WP4 P2 — collapsed = no thumbnails to mirror into; gate the ticker entirely so
     // serializeTerminal() is never called and the background-render CPU cost goes to
     // zero. The decision (expanded AND ≥1 background tile) is the pure `shouldRunMirror`
@@ -185,7 +190,6 @@ export function Filmstrip({
     // interval down (cleanup) and expand restarts it (with the immediate first tick()
     // below). The xterm buffers keep updating via write() regardless (M1 rule) — only the
     // *read* pauses.
-    const backgroundIds = bgSignature ? bgSignature.split(",") : [];
     if (!shouldRunMirror(collapsed, backgroundIds.length)) return;
 
     // M5 WP3 Phase 3 + WP5 P2.5: the SERIALIZE happens once in the App-level
@@ -208,7 +212,11 @@ export function Filmstrip({
 
     writeTiles(); // paint an immediate first frame from the latest snapshot (no 1s blank)
     return subscribeMirrorFrame(writeTiles);
-  }, [bgSignature, activeId, collapsed]);
+    // `bgSignature` is the stable string proxy for `backgroundIds` (recompute the iteration
+    // set only when the background roster changes); `collapsed` gates the ticker. The
+    // active-tile clear lives in its own effect above, so `activeId` is no longer a dep here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bgSignature, collapsed]);
 
   return (
     <div
@@ -254,9 +262,17 @@ export function Filmstrip({
               data-testid={`filmstrip-pill-${tile.id}`}
               data-active={tile.active ? "true" : "false"}
               title={tile.display_name}
-              aria-label={`Switch to ${tile.display_name}`}
+              // The active pill is the current workspace — promoting it is a silent no-op,
+              // so don't advertise "Switch to" or wire a click (aligns with the expanded
+              // branch, which routes promote through the strip pointer-up and skips the
+              // active tile). `aria-current` + a disabled, current-labelled affordance.
+              aria-label={
+                tile.active
+                  ? `Current workspace: ${tile.display_name}`
+                  : `Switch to ${tile.display_name}`
+              }
               aria-current={tile.active ? "true" : undefined}
-              onClick={() => onPromote(tile.id)}
+              onClick={tile.active ? undefined : () => onPromote(tile.id)}
             >
               <span className="filmstrip-pill-name">{tile.display_name}</span>
               <WorkspaceStatusIndicator

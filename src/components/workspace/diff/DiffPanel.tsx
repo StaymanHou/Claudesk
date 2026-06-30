@@ -286,9 +286,12 @@ export function DiffPanel({
     if (commits) ro.observe(commits);
     if (banner) ro.observe(banner);
     return () => ro.disconnect();
-    // Re-attach when the observed nodes can appear/disappear: view switch toggles
-    // the banner; commitsCollapsed/list/commitDiff change the Commits body + files
-    // mount. Height changes within a stable structure are caught by the observer.
+    // Re-attach when the observed nodes can appear/disappear: `view.kind` switch toggles
+    // the banner; `list.kind`/`commitDiff` mount the files area. `commitsCollapsed` is
+    // belt-and-suspenders, NOT load-bearing — only `.diff-commits-body` mounts/unmounts
+    // inside the already-observed `.diff-commits` parent, so the observer catches the
+    // height change on its own. Kept for safety; don't mistake it for a required dep.
+    // Height changes within a stable structure are caught by the observer.
   }, [view.kind, commitsCollapsed, list.kind, commitDiff]);
 
   const loadMoreCommits = useCallback(() => {
@@ -390,20 +393,32 @@ export function DiffPanel({
   // files key as `commit:<path>` (matching CommitFiles); working-dir files via
   // fileKey. Empty until the active view's files have loaded. Memoized so the
   // array identity is stable across renders (it's a useCallback dep below).
+  // Is the loaded commit diff the one for the currently-selected commit? (async-staleness
+  // guard: a stale in-flight diff for a previously-selected sha must not render). One flag
+  // derived once, consumed by the commit-area render gate below (loaded vs. loading) and by
+  // `commitFilesLoaded`.
+  const commitReady = commitDiff?.sha === selectedSha;
   const commitFilesLoaded =
-    view.kind === "commit" && commitDiff?.sha === selectedSha
-      ? commitDiff.files
-      : null;
+    view.kind === "commit" && commitReady ? commitDiff.files : null;
+  // The working-dir file list (null unless loaded). Deriving it here lets the memo dep
+  // narrow to just the value it reads (`listFiles`) instead of the whole `list` reducer
+  // object, so a list-state transition that doesn't change the file set (e.g. idle→loading)
+  // no longer re-derives the keys.
+  const listFiles = list.kind === "loaded" ? list.files : null;
   const visibleKeys = useMemo(
     () =>
       commitFilesLoaded != null
         ? commitFilesLoaded.map((d) => `commit:${d.path}`)
-        : list.kind === "loaded"
-          ? list.files.map(fileKey)
+        : listFiles != null
+          ? listFiles.map(fileKey)
           : [],
-    [commitFilesLoaded, list],
+    [commitFilesLoaded, listFiles],
   );
 
+  // `everyCollapsed` is for the button LABEL (current render's `collapsed`); the setter
+  // below re-evaluates `allCollapsed` against fresh `prev` because a queued toggle must
+  // read the latest state, not this render's snapshot. The two `allCollapsed` calls are a
+  // deliberate duplication (label vs. fresh-prev decision), not a drift bug.
   const everyCollapsed = allCollapsed(collapsed, visibleKeys);
   const toggleAllCollapsed = useCallback(() => {
     setCollapsed((prev) =>
@@ -481,7 +496,7 @@ export function DiffPanel({
                 <p className="diff-error-detail">{commitDiffError}</p>
               </div>
             )}
-            {!commitDiffError && commitDiff?.sha === selectedSha && (
+            {!commitDiffError && commitReady && (
               <CommitFiles
                 files={commitDiff.files}
                 collapsed={collapsed}
@@ -491,7 +506,7 @@ export function DiffPanel({
                 onOpenInEditor={onOpenInEditor}
               />
             )}
-            {!commitDiffError && commitDiff?.sha !== selectedSha && (
+            {!commitDiffError && !commitReady && (
               <div className="diff-file-loading">Loading commit diff…</div>
             )}
           </div>

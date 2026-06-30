@@ -257,6 +257,11 @@ export function Workspace({
       className="workspace"
       data-testid={`workspace-${workspace.id}`}
       data-visible={visible ? "true" : "false"}
+      // QoL — a hidden workspace is pushed off-viewport (not `display:none`, which would
+      // break FitAddon/serialize), so it stays in the tab order + a11y tree unless we
+      // mark it `inert`. `inert` removes the off-screen editor + live PTY from keyboard
+      // focus and screen-reader announcement without affecting layout or serialization.
+      inert={!visible}
       // M4 WP4b — only the center-stage workspace lights a half; backgrounds stay "none".
       data-focus-half={visible ? focusHalf : "none"}
       // Always display:grid (real dimensions → FitAddon works); hidden workspaces
