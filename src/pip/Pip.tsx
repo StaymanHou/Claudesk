@@ -23,8 +23,9 @@
 // "fix" this into click-to-focus; the PiP mirrors status, it does not control workspaces.
 //
 // Dark-only (project convention): styles in pip.css, self-contained (the panel webview
-// does NOT load App.css). `data-tauri-drag-region` on the root makes the borderless
-// panel draggable by its body.
+// does NOT load App.css). The borderless panel is dragged by its body via the root's
+// `onMouseDown={startPanelDrag}` → `pip_move` (data-tauri-drag-region is inert on the
+// swizzled NSPanel — see startPanelDrag below).
 
 import { useEffect, useRef, useState } from "react";
 import { emitTo, listen } from "@tauri-apps/api/event";
@@ -156,9 +157,9 @@ export function Pip() {
   // WP4 — the on-panel switcher. Cycle to the next layout (pure nextLayout) and call
   // the backend to PERSIST + broadcast it; the listener above then drives our `layout`
   // state from the broadcast (backend = single source of truth, NOT an optimistic
-  // local set — keeps render/resize/persist reading one value). A drag-region exclusion
-  // (data-tauri-drag-region={false}) is set on the button so a click cycles rather than
-  // starting a window drag.
+  // local set — keeps render/resize/persist reading one value). The switcher button is
+  // excluded from the body-drag in startPanelDrag (`.pip-layout-switch` closest-check)
+  // so a click cycles rather than starting a window drag.
   const cycleLayout = () => {
     void invoke("pip_set_layout", { layout: nextLayout(layout) }).catch(() => {
       // Best-effort; a failed persist leaves the current layout in place.
@@ -244,23 +245,22 @@ export function Pip() {
   return (
     <div
       className={`pip-root pip-layout-${layout}`}
-      data-tauri-drag-region
       data-testid="pip-root"
       data-layout={layout}
       onMouseDown={startPanelDrag}
     >
       {/* Layout switcher — its OWN ROW at the top (NOT an overlay on a tile — that
           overlapped the status dot + was hard to spot; operator feedback 2026-06-26).
-          The row is a drag-region (so the panel still drags by its chrome); the button
-          inside is NOT (so a click cycles rather than dragging). The button shows an icon
+          The whole panel drags by its body via `onMouseDown={startPanelDrag}`; the
+          switcher button opts OUT of the drag (`.pip-layout-switch` is excluded in
+          startPanelDrag) so a click cycles rather than dragging. The button shows an icon
           DEPICTING THE CURRENT LAYOUT — clicking advances to the next, and the icon
           updates. So the control doubles as a layout indicator. */}
-      <div className="pip-switch-row" data-tauri-drag-region>
+      <div className="pip-switch-row">
         <button
           type="button"
           className="pip-layout-switch"
           data-testid="pip-layout-switch"
-          data-tauri-drag-region={false}
           onClick={cycleLayout}
           aria-label={`PiP layout: ${layout} — click to cycle`}
           title={`Layout: ${layout} — click to cycle`}
@@ -405,8 +405,9 @@ function PipTile({
 
   // Mirror layouts (horizontal-mirror / vertical-mirror): the serialized terminal is the
   // BASE layer; the name+dot header is an overlay on top (same structure as WP3 + the
-  // filmstrip tile). data-tauri-drag-region keeps the whole surface draggable. Row-vs-
-  // column flow is decided by `.pip-tiles` CSS per `data-layout` — NOT here.
+  // filmstrip tile). The whole panel stays draggable via the root's `startPanelDrag`
+  // (data-tauri-drag-region is inert on the swizzled NSPanel — see WP4 Phase 5 above).
+  // Row-vs-column flow is decided by `.pip-tiles` CSS per `data-layout` — NOT here.
   return (
     <div
       className="pip-tile pip-tile-mirror-layout"

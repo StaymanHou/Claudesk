@@ -85,7 +85,6 @@ body,
   height: 84px;
   border-bottom: 1px solid rgba(128, 128, 128, 0.3);
   background-color: rgba(255, 255, 255, 0.04);
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -614,7 +613,7 @@ body,
    focusin/focusout — Workspace.tsx). This is the COARSER sibling of the M2 WP3c
    active-editor-pane strip: reuses the same #6ea8ff token + the same ::before-strip
    technique (an inset box-shadow would be painted over by the opaque #000 xterm /
-   #1e1e1e editor backgrounds — the WP3c lesson, see .editor-pane[data-active-pane]).
+   #1e1e1e editor backgrounds — the WP3c lesson, see .editor-split-pane.is-active::before).
 
    COEXISTENCE with the finer WP3c per-editor-pane strip: WP3c paints the INNER edge of
    an editor PANE (the left edge of `.editor-pane`, toward the editor content). WP4b
@@ -793,12 +792,11 @@ body,
   border-top: 1px solid #3c3c3c;
 }
 
-/* (WP3c's active-pane ::before rule formerly lived here, selecting
-   `.editor-pane[data-active-pane="true"]`. The WP11-Phase-5 split refactor moved the
-   `data-active-pane` attribute onto the OUTER `.editor-split-pane` (EditorSplit.tsx) —
-   the inner `.editor-pane` (EditorPanel/SyntheticView) never carries it — so this
-   selector matched nothing and was dead. Removed 2026-06-23 during the WP4b F12 fix;
-   the live active-pane indicator is `.editor-split-pane.is-active::before` above.) */
+/* (WP3c's active-pane ::before rule formerly lived here, selecting the inner
+   `.editor-pane`. The WP11-Phase-5 split refactor moved active-pane styling onto the
+   OUTER `.editor-split-pane.is-active::before` (above) — the live indicator. The old
+   inner-pane rule + its `data-active-pane` attribute were both dead and have been
+   removed.) */
 
 /* WP3c — per-pane close affordance (only rendered when >1 pane). Top-right of the
    pane, above the editor content; subdued until hover. */
@@ -1780,9 +1778,9 @@ body,
    ＋/⊞/✕ buttons (which each carry their own margin); on a dir row this is the
    element that absorbs the free space, so the buttons cluster right after it. The
    roll-up is always visible (unlike the hover-only action buttons). */
-.file-tree-dir-status {
-  margin-left: auto;
-}
+/* (`.file-tree-dir-status` carries no rule of its own — the rollup git glyph is pushed
+   to the row's trailing edge by `.file-tree-name { flex: 1 }`, same as the per-file
+   glyph. The former `margin-left: auto` here was a no-op and was removed.) */
 
 /* QoL-WP5 — per-file delete ✕. Hidden by default; revealed on row hover so it doesn't
    clutter the dense tree. Sits at the row's trailing edge after the git-status glyph. */

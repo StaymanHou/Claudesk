@@ -3,7 +3,7 @@ shape: temporary-wbs
 created: 2026-06-30
 status: written — not yet built
 context: between-milestone debt-paydown sweep, filed after M8 close, before M9 (Time-analytics) planning
-drive_mode: autopilot
+drive_mode: full-autopilot
 ---
 
 # Debt-Paydown Temporary WBS — 2026-06-30
@@ -92,7 +92,8 @@ scores low; translate severity into the impact term, don't auto-prioritize by it
 
 ---
 
-## WP1 — Dead-code & dead-dependency removal  `[impact: Low-Med · effort: XS · risk: XS]`  `← deletions-first`
+## WP1 — Dead-code & dead-dependency removal  `[impact: Low-Med · effort: XS · risk: XS]`  `← deletions-first`  ✅ DONE 2026-06-30
+**Outcome:** All 6 targets deleted + their stale comments rewritten. 7 backlog findings RESOLVED (`WP6-DEAD-IGNORE-DEP` MAJOR, `WP7-DEAD-DIR-STATUS-CSS`, `WP4B-DEAD-DATA-ACTIVE-PANE`, `WP4B-STALE-COMMENT-XREF`, `WP5-FILMSTRIP-FLEX-SHRINK`, `WP2-OVERLAY-DEAD-BACKDROPREF`, `WP4-VESTIGIAL-DRAG-REGION`). Gate green: `cargo build` + 302 lib tests + clippy `-D warnings`; `tsc --noEmit` + `pnpm vite build` + 780 frontend tests + eslint. The `tooling/demo/` dead focus-flag/CSS findings (`M8WP4-DEAD-FOCUS-FLAG/CSS`) were left for WP5 (which owns `tooling/demo/`).
 **Backlog:** `wp6-filetree-shows-ignored-files` (MAJOR dead-`ignore`-crate) + the dead-code set across `m4-wp4b`, `m5-wp4`, `wp5-frontend-ui-prototype`, picker.
 **Why first:** confirmed-dead code is the safest possible change (pure subtraction) and shrinks the surface every later WP reads. Ordering rule #1.
 

@@ -506,7 +506,6 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
               className={`editor-split-pane${pane.id === panes.activePaneId ? " is-active" : ""}`}
               data-testid="editor-split-pane"
               data-pane-id={pane.id}
-              data-active-pane={pane.id === panes.activePaneId}
             >
               <PaneTabs
                 ref={(h) => {

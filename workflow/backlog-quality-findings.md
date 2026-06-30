@@ -234,7 +234,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The `ignore = "0.4"` dependency (`src-tauri/Cargo.toml:61`) is now dead — `walk_project` dropped `ignore::WalkBuilder` and `fs_watch` dropped `GitignoreBuilder`; `grep -rn "ignore::"` over `src-tauri/src/` finds ZERO non-comment references. The Cargo.toml comments around the dep (lines ~55-76) still describe the old gitignore-honoring model (".gitignore contract with the finder + tree"), which is now misleading.
 - **Fix shape:** remove the `ignore = "0.4"` line + rewrite/remove its stale surrounding comments in Cargo.toml; `cargo build` + `cargo test --lib` to confirm nothing else pulls it directly (it remains a transitive dep of other crates, which is fine — only the direct dependency + comments are stale). Small + mechanical, but requires a rebuild → re-verify, which is why Mode-3 backlogs it rather than auto-fixing in the review path.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — `ignore = "0.4"` removed from Cargo.toml + Cargo.lock; the stale `regex`/`notify-debouncer-full` comments claiming a shared `ignore`-walker `.gitignore` contract were rewritten to describe the real manual-DFS heavy-dir walk (`fs_index`). `cargo build` + 302 lib tests + clippy green.
 
 ## SURFACE-2026-06-28-QUALITY-WP6-SYMLINK-SKIP-UNDOCUMENTED
 - **Severity:** MINOR
@@ -363,6 +363,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Where:** `src/App.css` `.file-tree-dir-status` (~1577) + its comment block.
 - **Fix shape:** delete the redundant rule (or, if a dir-specific tweak is later wanted, keep the selector but with a real declaration); correct the comment to name `.file-tree-name flex:1` as the right-push mechanism. Highest-value of the three — it removes a misleading explanation.
 - **Priority:** low
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — redundant `.file-tree-dir-status { margin-left: auto }` deleted (the glyph inherits `margin-left:auto` from `.file-tree-status` and is right-pushed by `.file-tree-name { flex:1 }`); comment replaced to name the real mechanism.
 
 ## SURFACE-2026-06-25-QUALITY-WP7-FORIN-NO-HASOWNPROPERTY
 - **Finding:** `dominantStatusByDir` iterates `gitStatus` with `for (const path in gitStatus)` without a `hasOwnProperty` guard. Safe for the serde-serialized backend record, but an unexpected prototype key would inject a bogus dir.
@@ -571,7 +572,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-23-QUALITY-WP4B-DEAD-DATA-ACTIVE-PANE
 - **Files:** `src/components/workspace/editor/EditorSplit.tsx:426`
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — `data-active-pane` attribute dropped from EditorSplit.tsx; no live selector/test consumed it (live indicator is `.editor-split-pane.is-active::before`). 780 frontend tests green.
 - **Type:** tech-debt (dead surface)
 - **Summary:** The `data-active-pane={pane.id === panes.activePaneId}` attribute rendered on `.editor-split-pane` is now consumed by nothing — the live active-pane indicator selector is `.editor-split-pane.is-active::before` (the `is-active` class), and the only remaining `[data-active-pane]` references are inside `App.css` *comments*. The WP4b F12 fix moved the live selector off `data-active-pane`, leaving it a dangling render-time emit.
 - **Context:** Was load-bearing pre-WP11-Phase-5 (the orphaned WP3c rule keyed off it). A future reader will reasonably assume it's still live and hesitate to remove it.
@@ -581,7 +582,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-23-QUALITY-WP4B-STALE-COMMENT-XREF
 - **Files:** `src/App.css` (WP4b half-accent block, ~line 443)
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — the WP4b comment cross-ref + the tombstone block both repointed off the dead `.editor-pane[data-active-pane]` selector to the live `.editor-split-pane.is-active::before`.
 - **Type:** tech-debt (stale comment)
 - **Summary:** The WP4b block comment cross-references `.editor-pane[data-active-pane]` as the WP3c precedent ("the WP3c lesson, see ..."), but that exact rule is the dead one this same commit deletes ~180 lines below. The live precedent is now `.editor-split-pane.is-active::before`.
 - **Context:** A cross-reference pointing at a selector the same commit removes; stale on arrival. The adjacent removed-rule tombstone comment is accurate — only this one pointer needs the updated target.
@@ -836,7 +837,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** `.filmstrip` declares `flex-shrink: 0`, but its parent `.app-shell` is `display: grid` (not flex) — the property is inert. The grid row sizing (`grid-template-rows: auto 1fr`) is what reserves the strip.
 - **Why it matters:** dead/misleading style declaration in a substrate file Phase 2 (WP16 filmstrip) will build on; a reader may infer a flex layout that doesn't exist.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — inert `flex-shrink: 0` removed from `.filmstrip` (parent `.app-shell` is `display: grid`; the `auto 1fr` row sizing reserves the strip).
 
 ## SURFACE-2026-06-18-QUALITY-WP5-XTERMPANE-EFFECT-DEP
 - **File:** `src/components/workspace/XtermPane.tsx:60`
@@ -1381,7 +1382,7 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Finding:** `backdropRef` is created + attached to the backdrop div but never read (backdrop-close uses `e.target === e.currentTarget`). Dead code implying an abandoned approach.
 - **Suggested action:** remove the unused ref.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — `backdropRef` (decl + `ref=` attr) removed; the now-unused `useRef` import dropped. ESLint + 780 tests green.
 
 # m4-wp3-filmstrip — 2026-06-23
 
@@ -1544,7 +1545,7 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Why it matters:** a future maintainer could "fix" a drag bug by trusting the dead attribute — the exact confusion the Phase-5 work resolved.
 - **Suggested action:** remove the `data-tauri-drag-region` attributes (or leave one with a comment "// inert on NSPanel — see pip_move; kept only as documentation"). Decide remove-vs-annotate.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — DECIDED remove: dropped the 3 vestigial `data-tauri-drag-region` attrs (`pip-root`, `.pip-switch-row`, the `={false}` on the switcher button) + repointed the 3 stale comments that referenced them to the real `startPanelDrag`→`pip_move` path (kept as documentation that the attr is inert). pip wiring tests (38) green.
 
 ## SURFACE-2026-06-26-QUALITY-WP4-DRAG-CLICK-BOUNDARY-IMPLICIT
 - **Finding:** `startPanelDrag` registers window mousemove/up listeners + calls preventDefault even on a zero-distance click (one that never moves); benign because mouseup always fires + cleans up, but the click-vs-drag arbitration on the switch row is implicit.

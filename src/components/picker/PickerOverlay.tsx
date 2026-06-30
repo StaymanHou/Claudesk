@@ -10,7 +10,7 @@
 // First-open (no workspace yet) does NOT use this overlay — App renders the picker
 // full-screen in that case. This component is only the RE-ENTRY path at N>=1.
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { ProjectPicker } from "./ProjectPicker";
 
 interface PickerOverlayProps {
@@ -21,8 +21,6 @@ interface PickerOverlayProps {
 }
 
 export function PickerOverlay({ onOpen, onDismiss }: PickerOverlayProps) {
-  const backdropRef = useRef<HTMLDivElement>(null);
-
   // Esc closes — registered on the document so it fires regardless of focus
   // (the picker's own filter input, a recent row, anywhere inside the overlay).
   useEffect(() => {
@@ -38,7 +36,6 @@ export function PickerOverlay({ onOpen, onDismiss }: PickerOverlayProps) {
 
   return (
     <div
-      ref={backdropRef}
       className="command-palette-backdrop"
       data-testid="picker-overlay"
       // Click outside the panel closes (mousedown so it beats any input blur).
@@ -46,7 +43,11 @@ export function PickerOverlay({ onOpen, onDismiss }: PickerOverlayProps) {
         if (e.target === e.currentTarget) onDismiss();
       }}
     >
-      <div className="picker-overlay-panel" role="dialog" aria-label="Open a project">
+      <div
+        className="picker-overlay-panel"
+        role="dialog"
+        aria-label="Open a project"
+      >
         <button
           type="button"
           className="picker-overlay-close"

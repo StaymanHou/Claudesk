@@ -55,29 +55,22 @@ which = "8"
 # SSH/HTTPS transport we never use (we only open local on-disk repos). We use
 # git2 for *data* only; @codemirror/merge computes + renders the diff itself.
 git2 = { version = "0.21", default-features = false }
-# WP6: Cmd+P fuzzy file finder. ripgrep's directory walker — honors .gitignore /
-# .ignore / global gitignore out of the box, so the fs_index walk returns only the
-# files the operator actually edits (no node_modules/target/.git). Chosen over
-# walkdir + hand-rolled gitignore parsing deliberately so WP7's ripgrep-style
-# content search REUSES the same walker (same ecosystem). Data only — the React
-# overlay does the fuzzy match + render.
-ignore = "0.4"
-# WP7: project-wide content search. The `regex` crate (ripgrep's own matching engine,
-# same ecosystem as `ignore`/`grep`) drives all four search modes — substring (the
-# pattern is regex-escaped), regex, case-sensitivity (the `(?i)` flag), and whole-word
-# (`\b…\b` wrapping). Chosen over shelling out to the `rg` binary so search reuses
-# fs_index's `ignore` walker (one shared .gitignore contract with the finder + tree),
-# needs no user-installed binary, and stays a pure-fn TempDir-testable core. Search is
-# in-process and line-oriented; `regex` gives byte match ranges per line directly.
+# WP7: project-wide content search. The `regex` crate drives all four search modes —
+# substring (the pattern is regex-escaped), regex, case-sensitivity (the `(?i)` flag),
+# and whole-word (`\b…\b` wrapping). Chosen over shelling out to the `rg` binary so
+# search needs no user-installed binary and stays a pure-fn TempDir-testable core.
+# Search walks the SAME manual-DFS `read_dir` index `fs_index` exposes (heavy-dir
+# pruning, NOT gitignore — see `fs_index/mod.rs`); it is in-process and line-oriented,
+# and `regex` gives byte match ranges per line directly.
 regex = "1"
 # QoL-WP0: filesystem watcher (FileTree auto-refresh + editor live-reload). The
 # debouncer re-exports `notify ^8.2` (one dep, not two) and does rename From/To
 # pairing + FSEvents file-ID stitching — exactly the editor/formatter write-then-rename
 # atomic-save case. The lighter notify-debouncer-mini was rejected (no rename pairing);
-# watchexec-as-a-library rejected (full command-runner framework — overkill). Ignored
-# paths are filtered with the SAME `ignore`-crate matcher fs_index uses for the tree
-# walk (one .gitignore contract; .git/ hard-excluded), so the watcher and the tree
-# agree on visibility and we never fire a re-walk storm on build-dir / VCS churn.
+# watchexec-as-a-library rejected (full command-runner framework — overkill). Heavy /
+# generated dirs are filtered with the SAME heavy-dir criterion `fs_index` uses for the
+# tree walk (`.git/` hard-excluded), so the watcher and the tree agree on visibility and
+# we never fire a re-walk storm on build-dir / VCS churn.
 notify-debouncer-full = "0.7"
 # QoL-WP5b: delete-folder. `trash` moves a path to the macOS Trash (NSFileManager
 # under the hood) instead of an unrecoverable `remove_dir_all` — chosen for the

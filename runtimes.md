@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-06-29  # /release v0.2.3 cold build 92s
+updated: 2026-06-30  # debt-paydown WP1 cargo build 47s (post ignore-dep removal)
 ---
 
 # Runtime Registry
@@ -54,9 +54,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo build (src-tauri)
 
-- **Last:** 1s (2026-06-29, M7 WP1: warm rebuild after tray module — tray-icon + image-png feature deps already compiled by the prior `cargo test tray::`)
-- **Use timeout:** 120000
+- **Last:** 47s (2026-06-30, debt-paydown WP1: cold-ish rebuild after removing the `ignore` dep — dependency-graph re-resolve + full relink; 46.76s)
+- **Use timeout:** 131000
 - **History:**
+  - 47s — 2026-06-30 (debt-paydown WP1: dep removal forced re-resolve + relink, 46.76s)
   - 1s — 2026-06-29 (M7 WP1: warm rebuild, tray module + features already compiled)
   - 12s — 2026-06-27 (M5 WP5 Phase 1 compile gate: pip_set_visible/teardown/focus-probe/menu item)
   - 10s — 2026-06-26 (M5 WP3 P1: warm rebuild after pip module rename — compile gate)
