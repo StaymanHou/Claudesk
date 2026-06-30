@@ -839,7 +839,9 @@ export function RightPanelHost({
           <button
             type="button"
             role="tab"
+            id={`paneltab-editor-${workspaceId}`}
             aria-selected={panel === "editor"}
+            aria-controls={`panel-editor-${workspaceId}`}
             className={`panel-tab${panel === "editor" ? " is-active" : ""}`}
             data-testid="panel-tab-editor"
             onClick={() => setPanel((cur) => selectPanel(cur, "editor"))}
@@ -850,7 +852,9 @@ export function RightPanelHost({
           <button
             type="button"
             role="tab"
+            id={`paneltab-diff-${workspaceId}`}
             aria-selected={panel === "diff"}
+            aria-controls={`panel-diff-${workspaceId}`}
             className={`panel-tab${panel === "diff" ? " is-active" : ""}`}
             data-testid="panel-tab-diff"
             onClick={() => setPanel((cur) => selectPanel(cur, "diff"))}
@@ -861,7 +865,9 @@ export function RightPanelHost({
           <button
             type="button"
             role="tab"
+            id={`paneltab-terminal-${workspaceId}`}
             aria-selected={panel === "terminal"}
+            aria-controls={`panel-terminal-${workspaceId}`}
             className={`panel-tab${panel === "terminal" ? " is-active" : ""}`}
             data-testid="panel-tab-terminal"
             onClick={() => setPanel((cur) => selectPanel(cur, "terminal"))}
@@ -948,6 +954,9 @@ export function RightPanelHost({
               have no rail and get full width. */}
         <div
           className="right-panel-slot right-panel-slot--editor"
+          id={`panel-editor-${workspaceId}`}
+          role="tabpanel"
+          aria-labelledby={`paneltab-editor-${workspaceId}`}
           style={{ display: panel === "editor" ? "flex" : "none" }}
         >
           {fileTreeRail}
@@ -968,6 +977,9 @@ export function RightPanelHost({
               front so a backgrounded panel doesn't auto-refresh its file list. */}
         <div
           className="right-panel-slot"
+          id={`panel-diff-${workspaceId}`}
+          role="tabpanel"
+          aria-labelledby={`paneltab-diff-${workspaceId}`}
           style={{ display: panel === "diff" ? "flex" : "none" }}
         >
           <DiffPanel
@@ -987,6 +999,9 @@ export function RightPanelHost({
               guard: selectPanel can return "terminal", so the slot must never be blank). */}
         <div
           className="right-panel-slot right-panel-slot--terminal"
+          id={`panel-terminal-${workspaceId}`}
+          role="tabpanel"
+          aria-labelledby={`paneltab-terminal-${workspaceId}`}
           style={{ display: panel === "terminal" ? "flex" : "none" }}
         >
           {/* Sub-tab row — always shown (plan decision 3): even one terminal gets a
@@ -1001,7 +1016,9 @@ export function RightPanelHost({
               <div
                 key={t.id}
                 role="tab"
+                id={`termtab-${t.id}`}
                 aria-selected={t.id === terminals.activeId}
+                aria-controls={`termpane-${t.id}`}
                 className={`term-tab${t.id === terminals.activeId ? " is-active" : ""}`}
                 data-testid={`term-tab-${t.id}`}
                 onClick={() => switchTerminalTo(t.id)}
@@ -1059,6 +1076,9 @@ export function RightPanelHost({
               <div
                 key={t.id}
                 className="term-pane-slot"
+                id={`termpane-${t.id}`}
+                role="tabpanel"
+                aria-labelledby={`termtab-${t.id}`}
                 style={{
                   display: t.id === terminals.activeId ? "flex" : "none",
                 }}

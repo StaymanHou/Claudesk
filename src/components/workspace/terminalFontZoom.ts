@@ -1,18 +1,21 @@
 // M6 WP4 — pure font-zoom logic for the CC terminal (focus-scoped Cmd+= / Cmd+- / Cmd+0).
 //
-// The verbatim sibling of editor/fontZoom.ts: no React, no xterm, no DOM, so it is
-// unit-testable under vitest (repo posture: pure logic → vitest). The xterm
-// `term.options.fontSize` apply + the focus-scoped keydown routing live in
-// XtermPane / Workspace; this module owns the math (clamp/step), the persistence
-// (localStorage), and the chord matcher.
+// The clamp/step/persist math is the shared makeFontZoom factory (./fontZoomCore) — the
+// verbatim sibling of editor/fontZoom.ts. This module owns the terminal's bounds + key,
+// plus the terminal-only chord matcher; the xterm `term.options.fontSize` apply + the
+// focus-scoped keydown routing live in XtermPane / Workspace. No React, no xterm, no DOM
+// in this file, so it is unit-testable under vitest (repo posture: pure logic → vitest).
 //
-// Scope decision: persisted GLOBALLY under one localStorage key — the lite,
-// frontend-only choice matching fontZoom.ts (the editor zoom) and the WP3 split
-// state. A freshly opened workspace's terminal inherits the last zoom.
+// Scope decision: persisted GLOBALLY under one localStorage key — the lite, frontend-only
+// choice matching fontZoom.ts (the editor zoom) and the WP3 split state. A freshly opened
+// workspace's terminal inherits the last zoom.
 //
-// DEFAULT_TERMINAL_FONT_PX = 11 matches the historical hardcode in the XtermPane
-// `Terminal` constructor, so first run (no persisted value) is visually identical
-// to pre-WP4 — the zoom only ever departs from 11 when the user asks.
+// DEFAULT_TERMINAL_FONT_PX = 11 is the canonical default size for BOTH zoom surfaces
+// (editor/fontZoom.ts derives its DEFAULT_FONT_PX from this one). It matches the historical
+// hardcode in the XtermPane `Terminal` constructor, so first run (no persisted value) is
+// visually identical to pre-WP4 — the zoom only ever departs from 11 when the user asks.
+
+import { makeFontZoom, safeStorage } from "./fontZoomCore";
 
 export const DEFAULT_TERMINAL_FONT_PX = 11;
 export const MIN_TERMINAL_FONT_PX = 6;
@@ -21,13 +24,17 @@ export const TERMINAL_FONT_STEP_PX = 1;
 /** Global localStorage key for the persisted terminal font size. */
 export const TERMINAL_FONT_SIZE_KEY = "claudesk.terminal.fontSize";
 
+const zoom = makeFontZoom({
+  defaultPx: DEFAULT_TERMINAL_FONT_PX,
+  minPx: MIN_TERMINAL_FONT_PX,
+  maxPx: MAX_TERMINAL_FONT_PX,
+  stepPx: TERMINAL_FONT_STEP_PX,
+  storageKey: TERMINAL_FONT_SIZE_KEY,
+});
+
 /** Clamp a candidate size into the supported range. */
 export function clampTerminalFontSize(px: number): number {
-  if (!Number.isFinite(px)) return DEFAULT_TERMINAL_FONT_PX;
-  return Math.min(
-    MAX_TERMINAL_FONT_PX,
-    Math.max(MIN_TERMINAL_FONT_PX, Math.round(px)),
-  );
+  return zoom.clamp(px);
 }
 
 /** The next size for a zoom direction, clamped. "in" grows, "out" shrinks. */
@@ -35,9 +42,7 @@ export function nextTerminalFontSize(
   current: number,
   direction: "in" | "out",
 ): number {
-  const delta =
-    direction === "in" ? TERMINAL_FONT_STEP_PX : -TERMINAL_FONT_STEP_PX;
-  return clampTerminalFontSize(current + delta);
+  return zoom.next(current, direction);
 }
 
 /**
@@ -48,16 +53,7 @@ export function nextTerminalFontSize(
 export function loadTerminalFontSize(
   storage: Storage | undefined = safeStorage(),
 ): number {
-  if (!storage) return DEFAULT_TERMINAL_FONT_PX;
-  try {
-    const raw = storage.getItem(TERMINAL_FONT_SIZE_KEY);
-    if (raw == null) return DEFAULT_TERMINAL_FONT_PX;
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return DEFAULT_TERMINAL_FONT_PX;
-    return clampTerminalFontSize(n);
-  } catch {
-    return DEFAULT_TERMINAL_FONT_PX;
-  }
+  return zoom.load(storage);
 }
 
 /** Persist the font size (clamped). Swallows storage-access errors. */
@@ -65,15 +61,7 @@ export function saveTerminalFontSize(
   px: number,
   storage: Storage | undefined = safeStorage(),
 ): void {
-  if (!storage) return;
-  try {
-    storage.setItem(
-      TERMINAL_FONT_SIZE_KEY,
-      String(clampTerminalFontSize(px)),
-    );
-  } catch {
-    // private mode / quota / disabled — zoom still works for the session.
-  }
+  zoom.save(px, storage);
 }
 
 /** What a terminal-zoom chord asks for: grow, shrink, reset, or not-a-chord. */
@@ -108,14 +96,5 @@ export function terminalZoomForChord(
       return "reset";
     default:
       return null;
-  }
-}
-
-/** localStorage if available, else undefined (SSR / test without DOM). */
-function safeStorage(): Storage | undefined {
-  try {
-    return typeof localStorage !== "undefined" ? localStorage : undefined;
-  } catch {
-    return undefined;
   }
 }

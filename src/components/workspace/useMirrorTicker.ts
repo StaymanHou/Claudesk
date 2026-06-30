@@ -30,7 +30,8 @@
 // — the single source of truth for panel visibility, not a frontend guess.
 
 import { useEffect, useRef, useState } from "react";
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { emitTo } from "@tauri-apps/api/event";
+import { useTauriListen } from "../../useTauriListen";
 import { serializeTerminal } from "./terminalMirror";
 import { setMirrorFrame, mirrorFrameSnapshot } from "./mirrorFrame";
 import {
@@ -45,8 +46,12 @@ import {
   PIP_LAYOUT_EVENT,
 } from "../../pip/pipLayout";
 
-/** ~1 fps — the WP4-probe-validated background mirror rate (shared with the filmstrip). */
-const MIRROR_INTERVAL_MS = 1000;
+/**
+ * ~1 fps — the WP4-probe-validated background mirror rate (shared with the filmstrip).
+ * Exported as the single canonical value so any future ticker/test reads it rather than
+ * re-literaling `1000` (Theme B dedup).
+ */
+export const MIRROR_INTERVAL_MS = 1000;
 
 /** Backend visibility broadcast (mirrors `pip::commands::PIP_VISIBILITY_EVENT`). */
 const PIP_VISIBILITY_EVENT = "pip-visibility";
@@ -97,45 +102,17 @@ export function useMirrorTicker({
   // PiP visibility, from the backend broadcast. Drives both the extra center-stage
   // serialize and the pip-mirror emit.
   const [pipShown, setPipShown] = useState(false);
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen<boolean>(PIP_VISIBILITY_EVENT, (event) => {
-      setPipShown(event.payload);
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  useTauriListen<boolean>(PIP_VISIBILITY_EVENT, (event) =>
+    setPipShown(event.payload),
+  );
 
   // WP4 — the PiP's active layout, from the backend `pip-layout` broadcast (same
   // single-source-of-truth posture as visibility). Compact + minimal render no mirror,
   // so a visible-but-non-mirror PiP must pay NO serialize cost; this is what gates that.
   const [pipLayout, setPipLayout] = useState(DEFAULT_PIP_LAYOUT);
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen<string>(PIP_LAYOUT_EVENT, (event) => {
-      setPipLayout(coercePipLayout(event.payload));
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  useTauriListen<string>(PIP_LAYOUT_EVENT, (event) =>
+    setPipLayout(coercePipLayout(event.payload)),
+  );
 
   // The PiP needs the live mirror only when it's shown AND its layout renders one.
   const pipNeedsMirror = pipShown && layoutNeedsMirror(pipLayout);

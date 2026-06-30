@@ -114,17 +114,7 @@ pub const PIP_LAYOUT_EVENT: &str = "pip-layout";
 /// (the single source of truth — not a frontend guess). WP5 Phase 2 rework.
 pub const PIP_MODE_EVENT: &str = "pip-mode";
 
-/// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists. Mirrors
-/// `config_store::commands::resolve_data_dir` (kept module-local — that one is private).
-fn resolve_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("could not resolve app data dir: {e}"))?;
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("could not create app data dir {}: {e}", dir.display()))?;
-    Ok(dir)
-}
+use crate::config_store::commands::resolve_data_dir;
 
 /// Read the persisted PiP layout (default = horizontal mirror on first run). The PiP
 /// webview queries this on mount to seed its layout to the persisted value rather than

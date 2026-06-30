@@ -11,12 +11,10 @@
 // capture-phase document listener so it fires while focus is inside a CodeMirror
 // editor. See the chord-ownership map in editor/paletteCommands.ts.
 
-/** A minimal keydown shape — just the fields the matcher reads (mirrors ChordEvent). */
-export interface TabSwitchChordEvent {
-  metaKey: boolean;
-  shiftKey: boolean;
-  key: string;
-}
+import type { ChordEvent } from "../chordEvent";
+
+/** A minimal keydown shape — the canonical {@link ChordEvent} (Theme H: shared, not re-declared). */
+export type TabSwitchChordEvent = ChordEvent;
 
 /**
  * If `e` is a tab-switch chord (bare ⌘ + a digit 1–9), return that digit (1-based);

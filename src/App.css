@@ -1347,9 +1347,11 @@ body,
    2026-06-23). z-index:6 draws above the editor (matching the close ✕). Gated on the
    split case (>1 pane) — a single pane has nothing to disambiguate, so no strip.
    COEXISTS with the WP4b half accent (inner-pane edge vs outer-half edge) — see the
-   full coexistence rationale on the `.workspace[data-focus-half] ::before` block above. */
-.editor-split-panes:has(.editor-split-pane + .editor-split-pane)
-  .editor-split-pane.is-active::before {
+   full coexistence rationale on the `.workspace[data-focus-half] ::before` block above.
+   The split gate keys off the JS-set `data-split` attribute (Theme H single-source of the
+   `splitable` predicate), NOT a re-derived `:has(.editor-split-pane + .editor-split-pane)`
+   selector — so the >1-pane threshold lives in one place (EditorSplit), not two languages. */
+.editor-split-panes[data-split="true"] .editor-split-pane.is-active::before {
   content: "";
   position: absolute;
   top: 0;
@@ -1746,7 +1748,9 @@ body,
    rows only; clean files render no glyph. */
 .file-tree-status {
   flex-shrink: 0;
-  margin-left: auto; /* belt-and-suspenders right-pin even if name doesn't fill */
+  /* No margin-left:auto — `.file-tree-name { flex: 1 }` already pushes this glyph to the
+     row's trailing edge (the redundant "belt-and-suspenders" pin was removed; same no-op
+     as the former `.file-tree-dir-status` rule above). */
   padding-left: 0.4em;
   width: auto;
   text-align: right;

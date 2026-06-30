@@ -90,6 +90,8 @@ pub fn status_map_core(repo_root: &Path) -> Result<HashMap<String, GitFileStatus
 
     for entry in statuses.iter() {
         let s = entry.status();
+        // libgit2 returns `None` for a non-UTF-8 path → "" here → skipped (such a file
+        // gets no indicator). Acceptable: paths the in-app tree renders are UTF-8.
         let path = entry.path().unwrap_or("");
         if path.is_empty() {
             continue;

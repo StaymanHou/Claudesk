@@ -14,7 +14,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** Test named "every referenced demo GIF is a real **animated** GIF" but the assertion only checks the 6-byte `GIF89a`/`GIF87a` magic — a single-frame GIF89a would pass. Committed assets are genuinely animated, so no live bug; the name over-claims its coverage.
 - **Suggested action:** Either rename to "...is a real GIF (GIF8[79]a magic)" OR extend to assert >1 frame (count GCE/image-descriptor markers) so the name matches what it proves.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F) — took the stronger fix: the test now counts Graphic Control Extension markers (`0x21 0xF9`) and asserts ≥2 frames, so "animated" is proven, not just the magic. Renamed to "…(magic + >1 frame)". 4/4 readme-assets nodetests green.
 
 ## SURFACE-2026-06-29-QUALITY-M8WP5-STALE-STATUS-BLOCK-NOW-PROMINENT
 - **Severity:** MINOR
@@ -144,7 +144,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The parity claim "matches `DEFAULT_TERMINAL_FONT_PX`" is enforced only by a comment — `DEFAULT_FONT_PX = 11` is an independent literal duplicating the terminal default. If the terminal default is retuned later, the editor silently drifts and the comment becomes a lie. The headline invariant of the change (editor + terminal render at the same size out of the box) has no mechanical guard.
 - **Suggested action:** Either import `DEFAULT_TERMINAL_FONT_PX` and derive `DEFAULT_FONT_PX` from it, or add a structural test asserting `DEFAULT_FONT_PX === DEFAULT_TERMINAL_FONT_PX`. Low cost; makes the parity load-bearing rather than aspirational.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme B) — did BOTH: `DEFAULT_FONT_PX` is now DERIVED from `DEFAULT_TERMINAL_FONT_PX` (the editor module imports it), AND a `===` structural test pins the parity. The two can no longer silently drift.
 
 ## SURFACE-2026-06-28-QUALITY-WP8-SIBLING-TEST-BARE-LITERALS
 - **Severity:** MINOR
@@ -152,7 +152,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** Sibling `clampFontSize`/`nextFontSize` tests still use bare `13` literals as sample inputs, while the round-trip test was deliberately re-anchored off literals onto `DEFAULT_FONT_PX`. The `13`s are now arbitrary in-range sample values (no longer the default), reading slightly inconsistently next to the default-relative round-trip test.
 - **Suggested action:** Optionally swap the bare `13`s for a neutral mid-range constant or a comment clarifying they're arbitrary probes. Trivial; any in-range integer works for clamp/step-math.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F) — bare `13`s replaced with a `SAMPLE_PX` const (commented as an arbitrary in-range probe, deliberately not the default), so they no longer read as default-related next to the default-relative round-trip test.
 
 # m6-wp11-multiple-right-panel-terminals — 2026-06-28
 
@@ -172,7 +172,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The terminal sub-tab row carries `role=tablist`/`role=tab`/`aria-selected` but no `aria-controls` linking each tab to its pane, and the panes have no `role=tabpanel`. Consistent with the existing Editor/Diff/Terminal tab row (NOT a regression), but the fresh row was a low-cost moment to wire the relationship.
 - **Suggested action:** Add `aria-controls` on each tab + `role=tabpanel` on each pane slot (and optionally fix the outer panel-tab row to match). Cosmetic/a11y polish.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme E) — wired `aria-controls`/`role=tabpanel`/`aria-labelledby` on the term-tab-row + panes AND the outer panel-tab row (workspace-scoped ids) AND the PaneTabs editor-file strip (folded in for consistency). `?raw` source-grep test pins the panel-tab id pairing.
 
 ## SURFACE-2026-06-28-QUALITY-WP11-ENTRY-ID-SESSIONID-ALWAYS-EQUAL
 - **Severity:** MINOR
@@ -440,6 +440,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** tech-debt (test redundancy)
 - **Finding:** The repro file restates the four `shouldSpawnOnActive` truth-table cases already covered exhaustively in `respawnGuard.test.ts`. The repro file's unique value is the red-import anchor + the dep-tuple-inertness assertion; the duplicated predicate cases add maintenance surface without new signal.
 - **Pickup shape:** trim the duplicated predicate cases from the repro file, keeping the red-import + dep-tuple-inertness assertions (the bug-specific signal). Small test edit.
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F) — removed the second `describe` block (the 4-case truth table) from the repro; kept its red-import + dep-tuple-inertness assertion + the one predicate case that names the bug (switch-back-after-session), with a pointer to the exhaustive `respawnGuard.test.ts`.
 
 ## SURFACE-2026-06-25-QUALITY-WP4-UNANCHORED-LATCH-ASSERTION
 - **Files:** `src/components/workspace/__tests__/spawnOnceOnReactivate.test.ts` (the "clears the latch on relaunch" assertion, ~line 47)
@@ -448,6 +449,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** tech-debt (test robustness)
 - **Finding:** `/hasSpawnedRef\.current\s*=\s*false/` is a bare substring match not anchored to the relaunch path — it would pass on any `.current = false` assignment in the file. Low-stakes (only one such assignment exists today), but unanchored.
 - **Pickup shape:** anchor the assertion near `handleRelaunch` (or match the relaunch comment context) so an unrelated edit can't satisfy it. One small test edit.
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F) — the assertion now matches `hasSpawnedRef.current = false` followed (within ~120 chars) by `dispatch({ type: "relaunch" })`, so an unrelated ref reset can't satisfy it.
 
 # qol-wp3-switch-workspace-autofocus-cc — 2026-06-25
 
@@ -658,7 +660,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-22-QUALITY-WP13-MINORS
 - **Files:** `PaneTabs.tsx:231-245`; `closeTabChord.ts:1-32`; `__tests__/closeTabChord.test.ts`
 - **Priority:** low (all)
-- **Status:** PARTIAL — #1 RESOLVED 2026-06-30 (debt-paydown WP5); #2 (shared `ChordEvent` type) + #3 (Ctrl/Alt test case) DEFERRED to WP6 (Theme F/H dedup-extraction + test-hygiene — that's where those two land).
+- **Status:** RESOLVED — #1 (WP5); #2 + #3 RESOLVED 2026-06-30 (debt-paydown WP6). #2 (shared `ChordEvent`): created `chordEvent.ts` canonical `ChordEvent`; `CloseTabChordEvent` + `TabSwitchChordEvent` now alias it. #3 (Ctrl/Alt case): added a `{metaKey:true,shiftKey:false,key:"w",ctrlKey:true,altKey:true}` assertion to `closeTabChord.test.ts` (the widened type made the real-flags case possible).
 - **Findings:**
   1. **`closeActiveTabRef` comment duplication** — the ~10-line WHY comment on the render-fresh-ref restates the rationale already documented at PaneTabs.tsx L257-263 (`onActivePathChangeRef`/`onEmptyChangeRef`). A one-liner + back-reference ("same render-fresh-ref pattern as the reporters below, see L257") would cut the dup while keeping the load-bearing vh.3 explanation. — **RESOLVED 2026-06-30 (WP5):** trimmed the `closeActiveTabRef` comment to a one-liner + back-reference to the reporter refs (`onActivePathChangeRef`), keeping the vh.3 stale-closure explanation.
   2. **`CloseTabChordEvent` is a verbatim copy of `TabSwitchChordEvent`** — identical 3-field shape + "mirrors ChordEvent" comment. A shared `ChordEvent` type imported by both pure predicates would remove the dup; per-file self-containment for these seams is arguably a feature, so low-value.
@@ -679,7 +681,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-21-QUALITY-WP11-MINORS
 - **Files:** `git_status/mod.rs:68`; `App.css` + `FileTree.tsx:219`; `gitStatus.ts:16`
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6) — all 3: (1) added the non-UTF-8-path-drop comment at `git_status::status_map_core`'s `entry.path().unwrap_or("")`; (2) removed the redundant `.file-tree-status { margin-left: auto }` (the `.file-tree-name { flex: 1 }` already pushes the glyph right — same no-op as the already-removed `.file-tree-dir-status` rule); (3) [Theme H] closed the `GitFileStatus` TS↔Rust drift channel with a paired exhaustiveness guard — a Rust `changed_status_serde_forms_match_the_frontend_union` test pinning the serde forms + a TS `Record<GitFileStatus, …>` exhaustive-glyph test (compiler-enforced). A new variant now fails a test on whichever side lags.
 - **Summary:** Three cosmetic/clarity nits: (1) `entry.path().unwrap_or("")`+skip silently drops non-UTF-8 paths (libgit2 returns `None`) — add a one-word comment; (2) the indicator right-pin uses BOTH `.file-tree-name {flex:1}` and `.file-tree-status {margin-left:auto}` (self-flagged "belt-and-suspenders" — one redundant); (3) `GitFileStatus` TS union is a prose-only mirror of the Rust serde forms (latent drift channel — a new `ChangedStatus` variant compiles clean both sides + renders no glyph; no exhaustiveness test).
 - **Suggested action:** Quick `/feature-refactor` sweep; all three are low-stakes polish.
 
@@ -1122,7 +1124,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** low cost now; a single source (e.g. a `data-split` attribute on the `.editor-panes` container that the CSS keys off) would collapse the duplication.
 - **Suggested action:** Optionally set `data-split={splitable}` on `.editor-panes` and change the CSS to `.editor-panes[data-split="true"] .editor-pane[data-active-pane="true"]::before`. Low priority / discipline only.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme H) — single-sourced the `splitable` predicate: `data-split={splitable}` set on `.editor-split-panes` (the class was renamed from `.editor-panes` since this finding), CSS now keys off `[data-split="true"] .editor-split-pane.is-active::before` instead of a re-derived `:has(.editor-split-pane + .editor-split-pane)` selector. The >1-pane threshold lives in one place (EditorSplit). (Note: the finding's `.editor-pane`/`data-active-pane` names had drifted — `data-active-pane` was deleted in WP1; the live classes are `.editor-split-pane`/`.is-active`.)
 
 ## SURFACE-2026-06-20-QUALITY-WP3C-REDUNDANT-JSX-COMMENT
 - **File:** `src/components/workspace/editor/EditorPanel.tsx:295` (the `.editor-panes` inline comment)
@@ -1451,7 +1453,7 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Finding (MINOR):** the final case is titled "is permissive on Ctrl/Alt" but the literal sets neither `ctrlKey` nor `altKey` (the `NewWorkspaceChordEvent` interface omits both fields), so it is identical in effect to the earlier uppercase-N positive. The assertion passes but does not exercise the permissiveness its name promises — a reader trusting the title would believe Ctrl/Alt coverage exists when it doesn't.
 - **Fix shape:** either widen the interface to include optional `ctrlKey`/`altKey` and add `ctrlKey: true, altKey: true` to the literal, or simply retitle the case to match what it tests. Trivial.
 - **Priority:** low (test-naming/coverage-honesty nit; predicate behavior is correct).
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F/H) — widened: `NewWorkspaceChordEvent` now aliases the canonical `ChordEvent` (optional `ctrlKey/altKey`), and the case sets both `true`, so it actually exercises the permissiveness its name claims.
 
 ## SURFACE-2026-06-25-QUALITY-WP6-CHORD-MAP-XREF-HYGIENE
 - **File:** `src/components/workspace/newWorkspaceChord.ts:6`

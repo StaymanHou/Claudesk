@@ -13,12 +13,10 @@
 // `view === "workspace-open"` (in "picker" view the full-screen picker is already
 // up, so ⌘⇧N would be a no-op there anyway).
 
-/** A minimal keydown shape — just the fields the matcher reads (mirrors ChordEvent). */
-export interface NewWorkspaceChordEvent {
-  metaKey: boolean;
-  shiftKey: boolean;
-  key: string;
-}
+import type { ChordEvent } from "./chordEvent";
+
+/** A minimal keydown shape — the canonical {@link ChordEvent} (Theme H: shared, not re-declared). */
+export type NewWorkspaceChordEvent = ChordEvent;
 
 /**
  * True iff `e` is the new-workspace chord: ⌘ + Shift + "n" (case-insensitive — with

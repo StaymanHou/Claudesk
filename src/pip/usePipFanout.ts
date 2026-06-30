@@ -14,7 +14,8 @@
 // broadcasts `workspace-status` to all webviews incl. the PiP.
 
 import { useEffect, useRef } from "react";
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { emitTo } from "@tauri-apps/api/event";
+import { useTauriListen } from "../useTauriListen";
 import {
   derivePipFrame,
   PIP_FRAME_EVENT,
@@ -46,28 +47,13 @@ export function usePipFanout(roster: readonly PipRosterEntry[]): void {
   }, [roster]);
 
   // 2. Reply to the PiP's mount-time ping with the current frame (initial-state
-  //    handshake). Registered once for the app lifetime; the `cancelled` guard mirrors
-  //    useWorkspaceStatus — `listen` is async, so a teardown before it resolves must
-  //    still unlisten (else a duplicate listener leaks on a fast remount).
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen(PIP_READY_EVENT, () => {
-      void emitTo(PIP_WINDOW_LABEL, PIP_FRAME_EVENT, frameRef.current).catch(
-        (err) => {
-          console.error("[claudesk] pip-frame handshake reply failed:", err);
-        },
-      );
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  //    handshake). Registered once for the app lifetime; the async-listen + teardown-
+  //    before-resolve guard lives in useTauriListen now.
+  useTauriListen(PIP_READY_EVENT, () => {
+    void emitTo(PIP_WINDOW_LABEL, PIP_FRAME_EVENT, frameRef.current).catch(
+      (err) => {
+        console.error("[claudesk] pip-frame handshake reply failed:", err);
+      },
+    );
+  });
 }

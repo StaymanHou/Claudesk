@@ -13,12 +13,10 @@
 // capture-phase document listener so it fires while focus is inside a CodeMirror
 // editor. See the chord-ownership map in editor/paletteCommands.ts.
 
-/** A minimal keydown shape — just the fields the matcher reads (mirrors ChordEvent). */
-export interface CloseTabChordEvent {
-  metaKey: boolean;
-  shiftKey: boolean;
-  key: string;
-}
+import type { ChordEvent } from "../chordEvent";
+
+/** A minimal keydown shape — the canonical {@link ChordEvent} (Theme H: shared, not re-declared). */
+export type CloseTabChordEvent = ChordEvent;
 
 /**
  * Whether `e` is the close-active-tab chord: bare ⌘ + the "w" key.

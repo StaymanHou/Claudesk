@@ -47,27 +47,12 @@ describe("WP4 fix — the spawn-effect dep tuple is inert across a panel/center-
     // React does not re-run the spawn effect → the shell is not re-spawned. This is the bug
     // fixed: identical tuples across the switch-back edge.
     expect(spawnTriggerDeps(triggers)).toEqual(spawnTriggerDeps({ ...triggers }));
-    // And the deferred-first-spawn predicate declares re-activation a no-op once spawned:
+    // And the deferred-first-spawn predicate declares re-activation a no-op once spawned —
+    // the ONE predicate case that names the bug (switch-back-after-session). The full
+    // four-case truth table is covered exhaustively in respawnGuard.test.ts; this repro
+    // file's unique signal is the red-import anchor (the predicate must exist) + the
+    // dep-tuple-inertness assertion above, so the duplicated truth table was trimmed
+    // (Theme F: qol-wp4 REPRO-TEST-DUP-TRUTH-TABLE).
     expect(shouldSpawnOnActive({ active: true, hasSpawned: true })).toBe(false);
-  });
-});
-
-describe("WP4 repro — terminal must spawn ONCE, never re-spawn on re-activation", () => {
-  it("spawns on the FIRST activation (deferred-spawn: active goes true, no session yet)", () => {
-    expect(shouldSpawnOnActive({ active: true, hasSpawned: false })).toBe(true);
-  });
-
-  it("does NOT spawn while inactive (the deferred gate)", () => {
-    expect(shouldSpawnOnActive({ active: false, hasSpawned: false })).toBe(false);
-  });
-
-  it("does NOT re-spawn on RE-activation — THE BUG: active false→true after a session exists", () => {
-    // This is the exact switch-away-then-back edge that lost the operator's shell history.
-    // Today XtermPane re-runs the spawn effect on this edge and calls term_spawn again.
-    expect(shouldSpawnOnActive({ active: true, hasSpawned: true })).toBe(false);
-  });
-
-  it("does NOT spawn on deactivation (active→false) regardless of session state", () => {
-    expect(shouldSpawnOnActive({ active: false, hasSpawned: true })).toBe(false);
   });
 });

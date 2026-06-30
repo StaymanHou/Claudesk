@@ -48,3 +48,25 @@ describe("statusClass (WP11 — git status → CSS modifier)", () => {
     }
   });
 });
+
+// Theme H (WP6) — the frontend half of the cross-language drift guard. The Rust
+// counterpart (git_diff/mod.rs `changed_status_serde_forms_match_the_frontend_union`)
+// pins the serde forms; this pins that EVERY GitFileStatus variant renders a glyph. The
+// `Record<GitFileStatus, …>` is exhaustive by the TS compiler: add/rename a union member
+// and this object stops type-checking until the new variant gets a glyph here too — so a
+// silently-glyphless status (the latent bug the finding flagged) can't ship green.
+describe("GitFileStatus union is exhaustively glyphed (no silent drift)", () => {
+  it("every variant maps to a non-null glyph + class", () => {
+    const expectedGlyphs: Record<GitFileStatus, string> = {
+      modified: "M",
+      added: "A",
+      deleted: "D",
+      renamed: "R",
+      untracked: "U",
+    };
+    for (const status of Object.keys(expectedGlyphs) as GitFileStatus[]) {
+      expect(statusGlyph(status)).toBe(expectedGlyphs[status]);
+      expect(statusClass(status)).toBe(`file-tree-status--${status}`);
+    }
+  });
+});

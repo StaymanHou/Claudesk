@@ -27,7 +27,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Basename of the persisted project list within the app-data directory.
-const PROJECTS_FILE: &str = "projects.json";
+/// `pub(crate)` so the seed-once path resolution in [`commands`] uses this single
+/// definition rather than its own mirror copy (Theme A dedup).
+pub(crate) const PROJECTS_FILE: &str = "projects.json";
 /// Sidecar temp file used for the atomic write-then-rename.
 const PROJECTS_TMP_FILE: &str = "projects.json.tmp";
 

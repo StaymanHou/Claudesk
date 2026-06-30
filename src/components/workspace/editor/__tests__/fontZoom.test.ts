@@ -9,6 +9,13 @@ import {
   MAX_FONT_PX,
   FONT_SIZE_KEY,
 } from "../fontZoom";
+import { DEFAULT_TERMINAL_FONT_PX } from "../../terminalFontZoom";
+
+// An arbitrary in-range probe size for the clamp/step math — deliberately NOT the
+// default (DEFAULT_FONT_PX), so these cases read as "any in-range integer" rather
+// than implying a relationship to the default the way bare `13` literals did
+// (Theme F: m6-wp8 SIBLING-TEST-BARE-LITERALS). Any value in (MIN, MAX) works.
+const SAMPLE_PX = 13;
 
 // A minimal in-memory Storage stand-in for the persistence tests (no jsdom
 // localStorage dependency; the functions accept an injected Storage).
@@ -26,11 +33,20 @@ function makeStorage(initial?: Record<string, string>): Storage {
   } as Storage;
 }
 
+// Theme B (WP6): the editor default is DERIVED from the terminal default, not a re-typed
+// literal — this pins that they can never silently drift apart (a single edit to either
+// must keep them equal, or the editor zoom no longer ⌘0-resets to the terminal size).
+describe("default-size parity with the terminal zoom", () => {
+  it("DEFAULT_FONT_PX === DEFAULT_TERMINAL_FONT_PX", () => {
+    expect(DEFAULT_FONT_PX).toBe(DEFAULT_TERMINAL_FONT_PX);
+  });
+});
+
 describe("clampFontSize", () => {
   it("keeps in-range values (rounded)", () => {
-    expect(clampFontSize(13)).toBe(13);
-    expect(clampFontSize(13.4)).toBe(13);
-    expect(clampFontSize(13.6)).toBe(14);
+    expect(clampFontSize(SAMPLE_PX)).toBe(SAMPLE_PX);
+    expect(clampFontSize(SAMPLE_PX + 0.4)).toBe(SAMPLE_PX);
+    expect(clampFontSize(SAMPLE_PX + 0.6)).toBe(SAMPLE_PX + 1);
   });
   it("clamps below min and above max", () => {
     expect(clampFontSize(MIN_FONT_PX - 5)).toBe(MIN_FONT_PX);
@@ -44,8 +60,8 @@ describe("clampFontSize", () => {
 
 describe("nextFontSize", () => {
   it("grows on 'in', shrinks on 'out'", () => {
-    expect(nextFontSize(13, "in")).toBe(14);
-    expect(nextFontSize(13, "out")).toBe(12);
+    expect(nextFontSize(SAMPLE_PX, "in")).toBe(SAMPLE_PX + 1);
+    expect(nextFontSize(SAMPLE_PX, "out")).toBe(SAMPLE_PX - 1);
   });
   it("does not exceed bounds", () => {
     expect(nextFontSize(MAX_FONT_PX, "in")).toBe(MAX_FONT_PX);

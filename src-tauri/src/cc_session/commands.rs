@@ -11,7 +11,7 @@
 use std::sync::Mutex;
 
 use base64::Engine as _;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 use super::SessionRegistry;
 
@@ -23,17 +23,7 @@ type Registry = Mutex<SessionRegistry>;
 /// `pip::commands::PIP_MODE_EVENT`.
 pub const CC_YOLO_EVENT: &str = "cc-yolo";
 
-/// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists. Mirrors
-/// `pip::commands::resolve_data_dir` (kept module-local — those are private).
-fn resolve_data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("could not resolve app data dir: {e}"))?;
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("could not create app data dir {}: {e}", dir.display()))?;
-    Ok(dir)
-}
+use crate::config_store::commands::resolve_data_dir;
 
 /// Read the persisted CC yolo setting (default `true` — yolo ON; M6 WP7). The View-menu
 /// `CheckMenuItem` seeds its checkmark from this on mount.

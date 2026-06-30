@@ -499,7 +499,11 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
         {/* WP11 Phase 5 — the dedicated `.editor-split-bar` row was removed; the Split
             control now lives in the active pane's tab strip (PaneTabs onSplit) to
             reclaim its full-width row of vertical space. */}
-        <div className="editor-split-panes">
+        {/* `data-split` single-sources the "is-split" predicate (Theme H): the active-pane
+            accent CSS keys off this attribute instead of re-deriving >1-pane via its own
+            `:has(.editor-split-pane + .editor-split-pane)` selector — so the threshold lives
+            in ONE place (`splitable`), not in two languages that could drift apart. */}
+        <div className="editor-split-panes" data-split={splitable}>
           {panes.panes.map((pane) => (
             <div
               key={pane.id}

@@ -23,7 +23,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { useTauriListen } from "../useTauriListen";
 import {
   applyStatusUpdate,
   emptyStatusMap,
@@ -51,23 +51,10 @@ export function useWorkspaceStatus(
 
   // 1. Subscribe once to the broadcaster. The listener lives for the app's
   //    lifetime; each update folds into the map by workspace_id (verbatim key).
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen<WorkspaceStatusUpdate>(WORKSPACE_STATUS_EVENT, (event) => {
-      setStatusMap((map) => applyStatusUpdate(map, event.payload));
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  //    The async-listen + teardown-before-resolve guard lives in useTauriListen.
+  useTauriListen<WorkspaceStatusUpdate>(WORKSPACE_STATUS_EVENT, (event) =>
+    setStatusMap((map) => applyStatusUpdate(map, event.payload)),
+  );
 
   // 2. Register/deregister as the workspace list changes. We track the set of
   //    (id → project_path) we've registered; on each list change we register any

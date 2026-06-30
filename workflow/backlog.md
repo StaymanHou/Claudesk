@@ -496,16 +496,13 @@ forward — none M5-blocking). No escalations. -->
 - **Status:** pending
 - **Pickup shape:** all three are trivial `/feature-refactor` nits (consolidate a comment; optionally hoist a shared `ChordEvent` type; add one test case). Dismiss any via the WIP's `## Code-Quality Review` section.
 
-## SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP
-- **Source:** feature:verify-codify (WP13 — ⌘W close-active-tab)
-- **Target level:** product:wbs (test-infra decision)
-- **Type:** tech-debt
-- **Summary:** WP13's vh.3 regression (the ⌘W `closeActiveTab` stale-closure bug — the memoized handle read pre-dirty `docs`, so a dirty tab closed silently instead of raising the confirm dialog) had NO automated test that would catch a recurrence. The fix was confirmed only at verify-human.
-- **Context:** The dirty-guard routing lives in the `PaneTabs` React component (reads the parent `docs` store + calls `setClosing`); `openFiles.ts` is dirty-unaware, so there's no pure-logic seam. The repo has no DOM/component test environment — vitest runs node-default, there are zero rendered-component tests, and `pure logic → vitest` is the standing posture. Closure-freshness defects in component event handlers (state X updates without dep Y changing) are a recurring foot-gun (same shape as the `overlayOpenRef`/`closeActiveTabRef` latest-ref patterns WP13 itself used) and are exactly what a component test would guard.
-- **Suggested action:** When a future WP warrants it (or as a deliberate test-infra investment), add jsdom + `@testing-library/react` + a vitest `environment: "jsdom"` config, then write a `PaneTabs` test: render with an open dirty file tab, fire `closeActiveTab()` via the imperative handle, assert the confirm dialog opens (not an immediate close). Pairs with any future component-level coverage (RightPanelHost chord wiring, EditorSplit focus). NOT worth standing up the whole toolchain for this single assertion in isolation.
-- **Priority:** low
-- **Status:** pending
-- **Added 2026-06-24 (app-menu-bar Phase 2):** another instance of the same class — App.tsx's `menu` Tauri-event listener had a StrictMode async-`listen` DOUBLE-REGISTRATION bug (the effect's cleanup ran before the `listen()` promise resolved, so the first subscription's unlisten was never captured → two live listeners → menu clicks double-dispatched → finder/search/palette toggles cancelled out). Caught only at verify-human; fixed with the `cancelled`-flag guard (mirrors `useWorkspaceStatus`). A `renderHook`/component test (render App with a fake `listen`, double-mount, assert exactly one live subscription) would guard this — exactly the kind of effect-lifecycle assertion this gap's toolchain would enable. Same verdict: not worth standing up jsdom for one assertion in isolation; fold into the same future test-infra investment.
+## SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP — BURIED 2026-06-30
+- **Status:** BURIED (debt-paydown WP6) → moved to [`workflow/backlog-archived.md`](backlog-archived.md).
+  Disposition: Low-impact + Medium-effort + Low-risk (the meh zone) — the fix needs a whole
+  jsdom/@testing-library toolchain the repo deliberately lacks; WP6's `?raw`/serde-contract test
+  work did not make it cheap. The two named defects are now partly code-mitigated (the ⌘W
+  stale-closure fix + the shared `useTauriListen` guard for the menu-listener double-register class).
+  See the archived entry for the full context + un-bury conditions.
 
 ## Code-quality findings — m2-wp11-tree-density-git-indicators (2026-06-21)
 - **Pointer:** 1 MAJOR + 3 MINOR from `feature-review-quality` on ship commit `6bcbe1f` (0 CRITICAL). MAJOR: git-status path-keying mismatch — `fs_tree` keys are workspace-relative but `git_file_statuses` keys are git-repo-root-relative, so a workspace nested below its repo root renders NO indicators (silent, graceful). MINORs: non-UTF-8 path drop comment; redundant flex:1/margin-left:auto right-pin; prose-only GitFileStatus TS↔Rust contract. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp11-tree-density-git-indicators — 2026-06-21`.

@@ -28,7 +28,8 @@
 // swizzled NSPanel — see startPanelDrag below).
 
 import { useEffect, useRef, useState } from "react";
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { emitTo } from "@tauri-apps/api/event";
+import { useTauriListen } from "../useTauriListen";
 import { invoke } from "@tauri-apps/api/core";
 import { WorkspaceStatusIndicator } from "../components/workspace/WorkspaceStatusIndicator";
 import {
@@ -78,69 +79,36 @@ export function Pip() {
   const lastMirrorRef = useRef<PipMirrorFrame>({});
 
   // Subscribe to the roster (pip-frame from the main webview) + fire the mount-time
-  // pip-ready ping so the main webview replies with the current frame. The `cancelled`
-  // guard mirrors useWorkspaceStatus (async `listen` must still unlisten if torn down
-  // before it resolves).
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen<PipFrame>(PIP_FRAME_EVENT, (event) => {
-      setFrame(event.payload);
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
+  // pip-ready ping (onSubscribed) so the main webview replies with the current frame.
+  useTauriListen<PipFrame>(
+    PIP_FRAME_EVENT,
+    (event) => setFrame(event.payload),
+    () => {
       // Ask the main webview for the current frame now that we're listening.
       void emitTo("main", PIP_READY_EVENT, {}).catch(() => {
         // Best-effort: if main isn't reachable yet, the next roster change re-emits.
       });
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+    },
+  );
 
   // Subscribe to the same workspace-status broadcast the filmstrip reads (the backend
   // emits to ALL webviews). Honest `unknown` until a workspace's first event.
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen<WorkspaceStatusUpdate>(WORKSPACE_STATUS_EVENT, (event) => {
-      setStatusMap((map) => applyStatusUpdate(map, event.payload));
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  useTauriListen<WorkspaceStatusUpdate>(WORKSPACE_STATUS_EVENT, (event) =>
+    setStatusMap((map) => applyStatusUpdate(map, event.payload)),
+  );
 
   // WP4 — subscribe to the active layout (backend `pip-layout` broadcast). coerce so a
   // stale/corrupt value falls back to the default rather than rendering a broken panel.
+  useTauriListen<string>(PIP_LAYOUT_EVENT, (event) =>
+    setLayout(coercePipLayout(event.payload)),
+  );
+
   // ALSO seed the layout once on mount from the PERSISTED value (pip_get_layout) — a
   // freshly-shown panel must open in the user's last-chosen layout, not the default,
-  // and it missed any prior broadcast (same rationale as the pip-frame handshake).
+  // and it missed any prior broadcast (same rationale as the pip-frame handshake). This
+  // is independent of the subscription lifecycle, so it's its own effect.
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void listen<string>(PIP_LAYOUT_EVENT, (event) => {
-      setLayout(coercePipLayout(event.payload));
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    // Seed from the persisted layout. coerce guards a malformed stored value.
     void invoke<string>("pip_get_layout")
       .then((stored) => {
         if (!cancelled) setLayout(coercePipLayout(stored));
@@ -151,7 +119,6 @@ export function Pip() {
       });
     return () => {
       cancelled = true;
-      unlisten?.();
     };
   }, []);
 
@@ -221,27 +188,13 @@ export function Pip() {
   // single shared ticker). Write each tile's HTML straight into its mirror node (out of
   // React — no 1 fps whole-panel re-render). A tile with no entry this frame keeps its
   // prior content (don't blank it). Stash the frame so a just-mounted tile can paint.
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void listen<PipMirrorFrame>(PIP_MIRROR_EVENT, (event) => {
-      lastMirrorRef.current = event.payload;
-      for (const [id, html] of Object.entries(event.payload)) {
-        const node = mirrorRefs.current.get(id);
-        if (node) node.innerHTML = html;
-      }
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  useTauriListen<PipMirrorFrame>(PIP_MIRROR_EVENT, (event) => {
+    lastMirrorRef.current = event.payload;
+    for (const [id, html] of Object.entries(event.payload)) {
+      const node = mirrorRefs.current.get(id);
+      if (node) node.innerHTML = html;
+    }
+  });
 
   return (
     <div

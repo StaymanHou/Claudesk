@@ -503,6 +503,35 @@ mod tests {
         dir
     }
 
+    /// Theme H (WP6) — pin the `ChangedStatus` serde forms to the frontend `GitFileStatus`
+    /// union (`src/components/workspace/filetree/gitStatus.ts`). The two are a cross-language
+    /// drift pair: a new Rust variant serializes clean, the TS union silently misses it, and
+    /// the tree renders NO glyph for it — a latent bug with no compile error either side.
+    /// This asserts the EXACT lowercase serde set, so adding/renaming a variant here fails
+    /// `cargo test` until the frontend union (+ its statusGlyph/statusClass arms) is updated
+    /// in lockstep. The match is exhaustive, so a new variant also forces an edit HERE.
+    #[test]
+    fn changed_status_serde_forms_match_the_frontend_union() {
+        use ChangedStatus::*;
+        for variant in [Added, Modified, Deleted, Renamed, Untracked] {
+            // Exhaustiveness anchor: a new variant must be added to this match (and then to
+            // the array above + the frontend union) or the code won't compile.
+            let expected = match variant {
+                Added => "added",
+                Modified => "modified",
+                Deleted => "deleted",
+                Renamed => "renamed",
+                Untracked => "untracked",
+            };
+            let json = serde_json::to_string(&variant).unwrap();
+            assert_eq!(
+                json,
+                format!("\"{expected}\""),
+                "ChangedStatus::{variant:?} serde form drifted from the frontend union"
+            );
+        }
+    }
+
     #[test]
     fn clean_repo_has_no_changes() {
         let dir = init_repo();

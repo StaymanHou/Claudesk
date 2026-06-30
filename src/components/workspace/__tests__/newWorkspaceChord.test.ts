@@ -46,6 +46,18 @@ describe("newWorkspaceChord", () => {
   });
 
   it("is permissive on Ctrl/Alt (only Meta+Shift+'n' defines the chord)", () => {
-    expect(newWorkspaceChord({ metaKey: true, shiftKey: true, key: "N" })).toBe(true);
+    // Actually EXERCISE the permissiveness the name claims: Ctrl AND Alt held must not
+    // change the verdict (the predicate reads neither field). The prior version set
+    // neither flag, so it was a duplicate of the uppercase-N positive above and proved
+    // nothing about Ctrl/Alt (Theme F: qol-wp6 TEST-CTRLALT-NAME-OVERPROMISE).
+    expect(
+      newWorkspaceChord({
+        metaKey: true,
+        shiftKey: true,
+        key: "N",
+        ctrlKey: true,
+        altKey: true,
+      }),
+    ).toBe(true);
   });
 });

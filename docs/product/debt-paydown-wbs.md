@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-30
-status: in-progress — WP1, WP2, WP3, WP9, WP4, WP5 DONE; WP6–WP8 remaining
+status: in-progress — WP1, WP2, WP3, WP9, WP4, WP5, WP6 DONE; WP7–WP8 remaining
 context: between-milestone debt-paydown sweep, filed after M8 close, before M9 (Time-analytics) planning
 drive_mode: full-autopilot
 ---
@@ -186,7 +186,52 @@ right after WP3, ahead of the lower-risk WP4–WP8 batch, since it's the highest
 
 ---
 
-## WP6 — Duplication-extraction & test/aria hygiene  `[impact: Low-Med · effort: Small-Med · risk: Low]`
+## WP6 — Duplication-extraction & test/aria hygiene  `[impact: Low-Med · effort: Small-Med · risk: Low]`  ✅ DONE 2026-06-30
+**Outcome:** All six themes shipped, behavior-preserving. Net new shared modules: `fontZoomCore.ts`,
+`chordEvent.ts`, `useTauriListen.ts`. Gate green: `tsc` + eslint (all changed files) + vitest **787 pass**
+(+3 net: fontZoom default-parity `===`, GitFileStatus exhaustiveness, panel-tab aria pairing it.each) +
+8/8 demo nodetests + clean `vite build`; `cargo test --lib` **308 pass** (+1 serde-contract) + clippy
+`-D warnings` + rustdoc `broken_intra_doc_links` clean.
+- **Theme A (Rust dedup):** promoted `config_store::commands::resolve_data_dir` to `pub(crate)` (single
+  definition) + `config_store::PROJECTS_FILE` to `pub(crate)`; `cc_session`/`pip` command modules now
+  import the shared fn and dropped their verbatim copies (cc_session also dropped its now-unused `Manager`).
+- **Theme B (font-zoom factory):** extracted `makeFontZoom(config)` (clamp/step/load/save + `safeStorage`)
+  into `fontZoomCore.ts`; `terminalFontZoom.ts` + `editor/fontZoom.ts` are now thin config wrappers keeping
+  their named exports. `editor`'s `DEFAULT_FONT_PX` is now DERIVED from `DEFAULT_TERMINAL_FONT_PX` (+ a `===`
+  parity test). `MIRROR_INTERVAL_MS` exported as the single canonical value.
+- **Theme E (tab-row aria):** wired `aria-controls`/`role=tabpanel`/`aria-labelledby` across all three tab
+  rows — the panel-tab row (workspace-scoped ids), the term-tab-row (m6-wp11), and the PaneTabs editor-file
+  strip (folded in for consistency — same incompleteness). +`?raw` source-grep test pinning the panel-tab
+  id pairing (extended `terminalSlotGuard.test.ts`). Resolves `WP11-TABLIST-ARIA-CONTROLS`.
+- **Theme F (test hygiene):** m8-wp5 "animated" test EXTENDED to count GCE frame markers (≥2) so the name
+  proves animation, not just magic; m6-wp8 bare-`13` literals → a neutral `SAMPLE_PX` const; qol-wp6 +
+  m2-wp13 #3 Ctrl/Alt cases now actually set `ctrlKey/altKey: true` (real permissiveness coverage); qol-wp4
+  duplicated `shouldSpawnOnActive` truth-table trimmed from the repro (kept its red-import + dep-tuple-
+  inertness signal); qol-wp4 unanchored `hasSpawnedRef.current = false` assertion anchored to the
+  `dispatch({type:"relaunch"})` context.
+- **Theme H (two-language single-source):** created `chordEvent.ts` canonical `ChordEvent` (with optional
+  `ctrlKey/altKey` for test coverage) — `CloseTabChordEvent`/`TabSwitchChordEvent`/`NewWorkspaceChordEvent`
+  now alias it ("mirrors ChordEvent" is literally true). m2-wp3c is-split predicate single-sourced via a
+  JS-set `data-split` attribute the CSS keys off (was a re-derived `:has()` selector — premise had drifted
+  `.editor-pane`→`.editor-split-pane` but the dup was live). m2-wp11 #3 `GitFileStatus` drift closed with a
+  paired exhaustiveness guard: a Rust `changed_status_serde_forms_match_the_frontend_union` test (serde
+  forms) + a TS `Record<GitFileStatus, …>` exhaustive-glyph test (compiler-enforced union completeness).
+- **Theme I (`useTauriListen`):** extracted the 5×-copied async-`listen` + `cancelled`-guard + `unlisten`
+  boilerplate into `useTauriListen(event, handler, onSubscribed?)` (latest-ref handler, `onSubscribed` for
+  the PiP `pip-ready` handshake ping). Converted Pip.tsx ×4, usePipFanout, useMirrorTicker ×2, AND the
+  exemplar useWorkspaceStatus. The PiP layout-seed `invoke` (lifecycle-independent) kept as its own effect.
+  This also structurally retires the App.tsx menu-listener double-register class flagged on the buried gap.
+- **Maybe-fold → BURIED:** `PANETABS-COMPONENT-TEST-GAP` did NOT become cheap (needs a whole
+  jsdom/@testing-library toolchain the repo deliberately lacks; WP6's tests use `?raw`/serde-contract, not
+  rendered components) → moved to `workflow/backlog-archived.md` per the disposition model. Its two named
+  defects are now partly code-mitigated (the ⌘W stale-closure fix + the Theme-I `useTauriListen` guard).
+**Resolved findings:** `WP8-FONT-PARITY-COMMENT-ONLY`, `WP8-SIBLING-TEST-BARE-LITERALS`,
+`WP11-TABLIST-ARIA-CONTROLS`, `M8WP5-TEST-NAME-OVERCLAIMS-ANIMATED`, `WP6-TEST-CTRLALT-NAME-OVERPROMISE`,
+`WP4-REPRO-TEST-DUP-TRUTH-TABLE`, `WP4-UNANCHORED-LATCH-ASSERTION`, `WP13-MINORS #2 (shared ChordEvent)` +
+`#3 (Ctrl/Alt case)`, `WP3C-IS-SPLIT-PREDICATE-DUP`, `WP11-MINORS #3 (GitFileStatus union)`, plus the
+Theme-A `resolve_data_dir`/`PROJECTS_FILE` dedup + Theme-I `useTauriListen` boilerplate (no standalone
+SURFACE — reviewer-noted dup). `PANETABS-COMPONENT-TEST-GAP` BURIED.
+
 **Backlog:** Theme A (data-dir/const dedup), Theme B (Nth-copy extraction), Theme E (tab-row aria), Theme F (test hygiene), Theme H (two-language drift), Theme I (`useTauriListen`).
 **Why here:** the "extract the shared thing" MINORs — real dedup value, behavior-preserving, low-risk. After the comment sweep (WP5) since some extractions sit on those just-corrected comments (co-location, ordering #4).
 

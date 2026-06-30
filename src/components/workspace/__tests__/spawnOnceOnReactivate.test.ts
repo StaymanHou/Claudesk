@@ -45,7 +45,13 @@ describe("XtermPane spawns the shell once — no re-spawn on re-activation (QoL-
   });
 
   it("clears the latch on relaunch so a deliberate fresh spawn is allowed", () => {
-    expect(xtermPaneSource).toMatch(/hasSpawnedRef\.current\s*=\s*false/);
+    // Anchor the clear to the relaunch path (the `dispatch({ type: "relaunch" })` that
+    // follows it), not a bare `.current = false` anywhere in the file — otherwise the
+    // assertion would pass on any unrelated ref reset (Theme F: qol-wp4
+    // UNANCHORED-LATCH-ASSERTION). The two statements are adjacent in handleRelaunch.
+    expect(xtermPaneSource).toMatch(
+      /hasSpawnedRef\.current\s*=\s*false;[\s\S]{0,120}?dispatch\(\{\s*type:\s*"relaunch"\s*\}\)/,
+    );
   });
 
   it("uses spawnNonce===0 as the pre-trigger sentinel (nothing spawns until the trigger bumps it)", () => {

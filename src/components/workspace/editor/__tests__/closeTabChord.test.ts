@@ -42,4 +42,18 @@ describe("isCloseTabChord", () => {
       false,
     );
   });
+
+  it("is permissive on Ctrl/Alt (only Meta + no-Shift + 'w' defines the chord)", () => {
+    // The docstring promises Ctrl/Alt aren't part of the chord; pin it (m2-wp13 #3).
+    // Ctrl AND Alt held must not change the verdict — the predicate reads neither.
+    expect(
+      isCloseTabChord({
+        metaKey: true,
+        shiftKey: false,
+        key: "w",
+        ctrlKey: true,
+        altKey: true,
+      }),
+    ).toBe(true);
+  });
 });

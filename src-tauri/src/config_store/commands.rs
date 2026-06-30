@@ -11,14 +11,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Manager};
 
-use super::{add_or_touch, prune_missing, read_projects, remove as remove_project_inner, Project};
-
-/// Basename of the project-list file (mirrors `super::PROJECTS_FILE`, which is
-/// module-private; kept in sync here for the seed-once path resolution).
-const PROJECTS_FILE: &str = "projects.json";
+use super::{
+    add_or_touch, prune_missing, read_projects, remove as remove_project_inner, Project,
+    PROJECTS_FILE,
+};
 
 /// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists.
-fn resolve_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+/// `pub(crate)` so the `cc_session` / `pip` command modules share this one
+/// definition rather than each keeping a verbatim module-local copy (Theme A dedup).
+pub(crate) fn resolve_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()

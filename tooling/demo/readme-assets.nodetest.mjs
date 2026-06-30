@@ -62,12 +62,25 @@ test("every referenced demo GIF is under the 3 MB README-embed budget", () => {
   }
 });
 
-test("every referenced demo GIF is a real animated GIF (GIF8[79]a magic)", () => {
+test("every referenced demo GIF is a real animated GIF (magic + >1 frame)", () => {
   for (const rel of referencedDemoGifs()) {
-    const head = readFileSync(repoRoot + rel).subarray(0, 6).toString("latin1");
+    const buf = readFileSync(repoRoot + rel);
+    const head = buf.subarray(0, 6).toString("latin1");
     assert.ok(
       head === "GIF89a" || head === "GIF87a",
       `${rel} has magic "${head}" — expected GIF89a/GIF87a`,
+    );
+    // The name claims "animated", so prove it: count frames, not just the magic.
+    // Each frame in a GIF is preceded by a Graphic Control Extension block
+    // (introducer 0x21 'extension', label 0xF9 'GCE'). A single-frame GIF89a has
+    // ≤1 GCE and would pass a magic-only check — this asserts ≥2, i.e. animation.
+    let frames = 0;
+    for (let i = 0; i + 1 < buf.length; i++) {
+      if (buf[i] === 0x21 && buf[i + 1] === 0xf9) frames++;
+    }
+    assert.ok(
+      frames >= 2,
+      `${rel} has ${frames} frame marker(s) — expected ≥2 (a static GIF, not animated)`,
     );
   }
 });

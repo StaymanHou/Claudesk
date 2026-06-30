@@ -342,7 +342,9 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
               <div
                 key={tab.id}
                 role="tab"
+                id={`editortab-${tab.id}`}
                 aria-selected={tab.id === activeTabId}
+                aria-controls={`editorpanel-${tab.id}`}
                 className={`editor-tab${tab.id === activeTabId ? " is-active" : ""}`}
                 data-testid="editor-tab"
                 data-tab-id={tab.id}
@@ -425,6 +427,9 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
                   <div
                     key={tab.id}
                     className="editor-tab-body"
+                    id={`editorpanel-${tab.id}`}
+                    role="tabpanel"
+                    aria-labelledby={`editortab-${tab.id}`}
                     style={{ display: isActive ? "flex" : "none" }}
                   >
                     {tab.kind === "file" && tab.path ? (
