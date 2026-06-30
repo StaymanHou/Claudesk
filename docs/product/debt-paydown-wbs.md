@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-30
-status: written — not yet built
+status: in-progress — WP1, WP2, WP3, WP9 DONE; WP4–WP8 remaining
 context: between-milestone debt-paydown sweep, filed after M8 close, before M9 (Time-analytics) planning
 drive_mode: full-autopilot
 ---
