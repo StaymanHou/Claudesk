@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-30
-status: in-progress — WP1, WP2, WP3, WP9 DONE; WP4–WP8 remaining
+status: in-progress — WP1, WP2, WP3, WP9, WP4 DONE; WP5–WP8 remaining
 context: between-milestone debt-paydown sweep, filed after M8 close, before M9 (Time-analytics) planning
 drive_mode: full-autopilot
 ---
@@ -143,7 +143,16 @@ right after WP3, ahead of the lower-risk WP4–WP8 batch, since it's the highest
 
 ---
 
-## WP4 — `kill_all` serial-grace + effect/listener-thrash cleanup  `[impact: Low-Med · effort: Small · risk: Low]`
+## WP4 — `kill_all` serial-grace + effect/listener-thrash cleanup  `[impact: Low-Med · effort: Small · risk: Low]`  ✅ DONE 2026-06-30
+**Outcome:** Of the 5 findings this WP grouped, **2 were live, 3 were already-resolved-along-the-way (stale premises — the same class this sweep keeps hitting), and 1 was deferred** (operator decision). Net code change: 2 React files (`App.tsx`, `RightPanelHost.tsx`), zero backend.
+- **`CHORD-EFFECT-THRASH` (m4-wp3) — FIXED.** The ⌘⇧+digit `useEffect` (`App.tsx`) depended on `tiles` (re-derives on every workspaces/focus/order change) + `focusWorkspace`, re-registering the capture-phase document listener on that churn. Lifted both into a latest-ref (`switchTilesRef`/`focusWorkspaceRef`, the `focusedPathRef` idiom already used twice in the file); the listener now registers ONCE per `[view]` transition. Behavior-preserving.
+- **`HANDLER-BRANCH-DUPLICATION` (m6-wp11) — FIXED.** The ⌘T/⌘W keydown branches had re-inlined the open/close bodies (`setPanel`+`openTerminal`; `closeTerminal(s.activeId)`) to dodge non-stable listener deps, duplicating the logic vs the ＋/✕ button handlers. Promoted `addTerminal`/`closeTerminalById` to `useCallback` (stable identity) → both the buttons and the keydown branches share ONE impl, and the `[visible, workspaceId]` listener now honestly lists them with no re-registration churn. Behavior-preserving (chord predicates + terminalList reducer already unit-covered).
+- **`KILL-ALL-N-SCALING` (wp7-pty) — ALREADY RESOLVED (M4 WP2).** STALE PREMISE: the WBS cited `lib.rs:30-36` (the call site has since moved to `lib.rs:371`), but `SessionRegistry::kill_all` was PARALLELIZED at M4 WP2 — it drains every session and spawns one thread per `kill()`, so the N×3s grace windows OVERLAP (~one window total), with a passing test `kill_all_runs_grace_windows_in_parallel_not_serially`. No code change; confirmed + marked RESOLVED.
+- **`ONSESSIONID-INLINE-ARROW-DEP` (wp7-pty) — ALREADY RESOLVED.** `XtermPane.tsx` already holds `onSessionId` in `onSessionIdRef` (the documented duplicate-CC-session root-cause fix); the spawn effect does NOT depend on the arrow's identity. No code change; confirmed + marked RESOLVED.
+- **`PIPMODE-STATE-DUP-PER-WORKSPACE` (m5-wp5) — DEFERRED (operator, 2026-06-30).** The plan flagged this as a possible M9-overlap decision. Operator surfaced that PiP mode is ALREADY an app-global tri-state radio under the native View menu, backend-broadcast-driven (`pip_set_mode`/`pip_get_mode` + the `pip-mode` event = single source of truth). So the per-`RightPanelHost` `pip-mode` subscription is the project's INTENDED "all surfaces subscribe to the same broadcast" pattern, not a missing-app-state bug — the only real cost is N-1 redundant `pip_get_mode` mount fetches (cheap). M9's time-tracking toggle will follow the same backend-command+`*-mode`-broadcast+per-consumer-subscribe shape, so there is no shared "app-settings store" to build once-vs-twice. **Kept pending in the backlog, anchored to M9** (fold into the settings work if an app-settings hook materializes there; else it stays the documented pattern). Status: pending (NOT resolved this sweep).
+
+**Gate green:** `tsc --noEmit` + eslint (both changed files) + vitest **784 pass** (no count change — behavior-preserving) + clean `pnpm vite build`; backend untouched, `cargo test --lib` **307 pass** incl. the 3 `kill_all` tests. **Resolved 4 findings** (2 fixed, 2 confirmed-already-resolved); 1 deferred. Live chord/terminal verify forgone — no new observable outcome (refactor of unit-covered paths); `kill_all` timing is operator-visible but untouched.
+
 **Backlog:** `wp7-pty-cc-session` (`KILL-ALL-N-SCALING`) + Theme G (effect/listener re-subscribe thrash): `m4-wp3` `CHORD-EFFECT-THRASH`, `m6-wp11` `HANDLER-BRANCH-DUPLICATION`, `wp7-pty` `ONSESSIONID-INLINE-ARROW-DEP`, `m5-wp5` `PIPMODE-STATE-DUP-PER-WORKSPACE`.
 **Why grouped:** the MINORs with a *behavioral/perf* edge (not pure cosmetics) — serial teardown latency at N>1; redundant re-subscribes/IPC fetches. Low-risk, so it sits in the safe tier; modest impact, so after the MAJORs.
 

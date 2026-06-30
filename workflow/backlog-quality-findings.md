@@ -164,7 +164,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The ⌘T and scoped-⌘W keydown branches deliberately re-inline the open/close bodies (`setPanel(→terminal)` + `setTerminals(openTerminal)`; `setTerminals(s=>closeTerminal(s, s.activeId))`) rather than calling the button handlers, to keep the `[visible, workspaceId]` listener free of non-stable closure deps. Intent is sound + commented, but it duplicates the open/close logic across ~250 lines — a future change to "what happens on open" (e.g. an added focus call) must be made in both the handler and the inline branch or they silently diverge.
 - **Suggested action:** Wrap the bodies in a `useCallback` (or a ref-to-callback) so both call sites share one impl without re-registering the listener. Low cost.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED (debt-paydown WP4, 2026-06-30) — `addTerminal`/`closeTerminalById` promoted to `useCallback`; the ⌘T/⌘W keydown branches now call those shared impls and the `[visible, workspaceId]` listener honestly lists them (stable identity → no churn). One open/close impl.
 
 ## SURFACE-2026-06-28-QUALITY-WP11-TABLIST-ARIA-CONTROLS
 - **Severity:** MINOR
@@ -330,7 +330,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** `RightPanelHost.tsx:136-159` — the `pipMode` state + `pip_get_mode` fetch + `pip-mode` listener are duplicated per RightPanelHost instance (one per mounted workspace), so at N workspaces there are N redundant IPC fetches + N subscriptions for one app-global value. The inline comment acknowledges it's "fine per-RightPanelHost," but it's avoidable at the N>1 the milestone targets.
 - **Fix shape:** lift `pipMode` to App-level state (fetched + subscribed once), passed down as a prop — mirroring how `tiles` is derived once in App. Low effort.
 - **Priority:** low.
-- **Status:** pending
+- **Status:** pending — DEFERRED at debt-paydown WP4 (operator, 2026-06-30), anchored to **M9**. The per-`RightPanelHost` `pip-mode` subscription is the project's INTENDED "all surfaces subscribe to the same backend broadcast" pattern (PiP mode is already an app-global View-menu radio, backend = single source of truth via `pip_set_mode`/`pip_get_mode` + the `pip-mode` event), not a missing-app-state bug — the only real cost is N-1 redundant `pip_get_mode` mount fetches. M9's time-tracking toggle follows the same backend-command + `*-mode`-broadcast + per-consumer-subscribe shape, so there is no shared app-settings store to build once-vs-twice. Fold the dedup into M9's settings work IF an app-settings hook materializes there; else it stays the documented pattern.
 
 # qol-wp8-diff-viewer-polish — 2026-06-25
 
@@ -777,7 +777,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** the N-ready framing invites a future reader to assume `kill_all` scales; it doesn't. Surfaces when the Phase-2 N-clamp lifts.
 - **Suggested action:** at the N-clamp lift (Phase 2 multi-workspace), reap sessions concurrently or use a per-session timeout so window close isn't serialized. Tie to the WP13 multi-workspace work.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED (already fixed at M4 WP2; confirmed at debt-paydown WP4, 2026-06-30) — STALE FILE-REF (`lib.rs:30-36`; the `kill_all` call site moved to `lib.rs:371`). `SessionRegistry::kill_all` was parallelized at M4 WP2: it drains every session and spawns one thread per `kill()`, so the N×3s grace windows OVERLAP (~one window total). Covered by `kill_all_runs_grace_windows_in_parallel_not_serially`.
 
 ## SURFACE-2026-06-19-QUALITY-ONSESSIONID-INLINE-ARROW-DEP
 - **File:** `src/components/workspace/Workspace.tsx:34` + `XtermPane.tsx` spawn-effect dep array
@@ -785,7 +785,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** a future edit weakening the phase guard could turn this into a double-spawn. Make the intent robust.
 - **Suggested action:** wrap the inline arrow in `useCallback` (memoized on `workspace.id` + the stable `onSessionId`) or read `onSessionId` from a ref in the effect. Fold into a `/feature-refactor` pass or Phase-2 picker/workspace work.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED (already fixed; confirmed at debt-paydown WP4, 2026-06-30) — `XtermPane.tsx` holds `onSessionId` in `onSessionIdRef` (the documented duplicate-CC-session root-cause fix, latent-since-WP7); the spawn effect no longer depends on the arrow's identity, so callback-identity churn can't re-fire the spawn.
 
 ## SURFACE-2026-06-19-QUALITY-RAF-FOCUS-DUPLICATION
 - **File:** `src/components/workspace/XtermPane.tsx:159-162 / 91-94`
@@ -1398,7 +1398,7 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Finding:** `App.tsx:62-79` — the ⌘⇧+digit `useEffect` depends on `tiles`, whose identity churns on every reorder-move + status update, so the document keydown listener re-subscribes frequently. Correct but thrashy.
 - **Suggested fix:** hold latest `tiles` in a `useRef`, read it inside a stable handler registered once.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED (debt-paydown WP4, 2026-06-30) — `tiles` + `focusWorkspace` lifted into `switchTilesRef`/`focusWorkspaceRef` (the `focusedPathRef` idiom); the ⌘⇧+digit capture-phase listener now registers ONCE per `[view]` transition instead of re-subscribing on every `tiles` churn.
 
 ## SURFACE-2026-06-23-QUALITY-WP3-TICKER-EFFECT-DUAL-RESPONSIBILITY
 - **Finding:** `Filmstrip.tsx:113-126` — the active-tile stale-mirror clear shares the ticker `useEffect` (two responsibilities; a future ticker-dep edit could shift clear timing). Works + commented.

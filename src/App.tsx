@@ -110,19 +110,30 @@ function App() {
   // pattern): fires regardless of which workspace half holds focus — inside CM6,
   // the terminal, anywhere. Only active when a workspace is open. N past the tile
   // count is a NO-OP (the roster is complete, so there's no Nth tile to switch to).
+  //
+  // The listener reads `tiles` + `focusWorkspace` via a latest-ref (the focusedPathRef
+  // idiom below) so it registers ONCE per view transition, not on every `tiles` change
+  // (which re-derives whenever workspaces/focus/order shift) — re-subscribing the
+  // document listener on that churn was needless add/removeEventListener thrash.
+  const switchTilesRef = useRef(tiles);
+  const focusWorkspaceRef = useRef(focusWorkspace);
+  useEffect(() => {
+    switchTilesRef.current = tiles;
+    focusWorkspaceRef.current = focusWorkspace;
+  }, [tiles, focusWorkspace]);
   useEffect(() => {
     if (view !== "workspace-open") return;
     const onKeyDown = (e: KeyboardEvent) => {
       const n = workspaceSwitchIndex(e);
       if (n === null) return;
-      const tile = tileForSwitchIndex(tiles, n);
+      const tile = tileForSwitchIndex(switchTilesRef.current, n);
       if (!tile) return; // out of range → no-op (roster is complete; no Nth tile)
       e.preventDefault();
-      focusWorkspace(tile.id);
+      focusWorkspaceRef.current(tile.id);
     };
     document.addEventListener("keydown", onKeyDown, true); // capture phase
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [view, tiles, focusWorkspace]);
+  }, [view]);
 
   // M4 WP4 — filmstrip collapse: EXPANDED (full ~1 fps thumbnail tiles, WP3) ↔
   // COLLAPSED (a one-line row of mini status pills). Seeded from the persisted

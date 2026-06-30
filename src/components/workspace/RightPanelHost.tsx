@@ -15,6 +15,7 @@
 // AND across a center-stage switch. `visible` gates the active panel's liveness.
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -384,14 +385,22 @@ export function RightPanelHost({
   }, [terminals]);
   // Open a new terminal (＋ / ⌘T). No-op at MAX_TERMINALS (the reducer guards; the ＋ is
   // also disabled). Flips the panel to terminal so the new one is visible + focusable.
-  const addTerminal = () => {
+  // `useCallback`-stable (deps: only `workspaceId`, itself identity-stable) so BOTH the ＋
+  // button AND the ⌘T keydown branch share this ONE impl — the keydown listener can list it
+  // as a dep without re-registering on every render (resolves the WP11 HANDLER-BRANCH-
+  // DUPLICATION finding: the open/close bodies were previously re-inlined in the keydown
+  // branches to dodge non-stable deps, which duplicated the logic across the file).
+  const addTerminal = useCallback(() => {
     setPanel((cur) => selectPanel(cur, "terminal"));
     setTerminals((s) => openTerminal(s, workspaceId));
-  };
-  // Close a terminal (its ✕). Disallowed for the last one (the reducer + the UI both
-  // guard). Unmounting its pane reaps the shell; the reducer reactivates a sibling.
-  const closeTerminalById = (id: string) =>
-    setTerminals((s) => closeTerminal(s, id));
+  }, [workspaceId]);
+  // Close a terminal (its ✕ / scoped ⌘W). Disallowed for the last one (the reducer + the UI
+  // both guard). Unmounting its pane reaps the shell; the reducer reactivates a sibling.
+  // `useCallback`-stable (no deps) — shared by the ✕ button and the scoped-⌘W keydown branch.
+  const closeTerminalById = useCallback(
+    (id: string) => setTerminals((s) => closeTerminal(s, id)),
+    [],
+  );
   // Switch the active/front terminal (a tab click).
   const switchTerminalTo = (id: string) =>
     setTerminals((s) => switchTerminal(s, id));
@@ -655,10 +664,9 @@ export function RightPanelHost({
       // preventDefault pre-empts any OS "new tab" ⌘T.
       if (newTerminalChord(e)) {
         e.preventDefault();
-        // Inline the stable setters (not the addTerminal closure) so the [visible]-keyed
-        // listener depends on nothing non-stable — same discipline as the other branches.
-        setPanel((cur) => selectPanel(cur, "terminal"));
-        setTerminals((s) => openTerminal(s, workspaceId));
+        // Shared with the ＋ button (one impl). `addTerminal` is useCallback-stable, so
+        // listing it in this listener's deps causes no re-registration churn.
+        addTerminal();
         return;
       }
       // WP12 — ⌘1..⌘9 activates the Nth open-file tab (n past the end → last tab).
@@ -690,9 +698,10 @@ export function RightPanelHost({
       ) {
         e.preventDefault();
         e.stopPropagation();
-        // Inline the stable setter (read latest state in the updater) — keeps the
-        // [visible] listener free of non-stable deps. closeTerminal no-ops on the last.
-        setTerminals((s) => closeTerminal(s, s.activeId));
+        // Shared with the ✕ button (one impl). Close the ACTIVE terminal (the only
+        // visible/focusable one, read via the ref above). `closeTerminalById` is
+        // useCallback-stable. closeTerminal no-ops on the last.
+        closeTerminalById(terminalsRef.current.activeId);
         return;
       }
       // WP13 — ⌘W closes the focused pane's active tab (via its dirty-guard; inert when
@@ -712,11 +721,12 @@ export function RightPanelHost({
     };
     document.addEventListener("keydown", onKeyDown, true); // capture phase
     return () => document.removeEventListener("keydown", onKeyDown, true);
-    // `workspaceId` is referenced by the ⌘T branch (openTerminal needs it). It is
-    // identity-stable for a mounted RightPanelHost (it keys the workspace), so listing it
-    // never causes real re-registration churn — included to satisfy exhaustive-deps
-    // honestly rather than suppress. Everything else read inside is a stable setter/ref.
-  }, [visible, workspaceId]);
+    // All deps are identity-stable, so listing them never causes real re-registration
+    // churn — included to satisfy exhaustive-deps honestly rather than suppress.
+    // `workspaceId` keys the workspace (stable for a mounted host); `addTerminal` /
+    // `closeTerminalById` are useCallback-memoized (the shared open/close impls). Everything
+    // else read inside is a stable setter/ref.
+  }, [visible, workspaceId, addTerminal, closeTerminalById]);
 
   // WP11 Phase 5 — the FileTree rail. Lives INSIDE the editor slot (operator request
   // at review-quality 2026-06-21) so the Editor/Diff/Terminal tab row is the OUTER
