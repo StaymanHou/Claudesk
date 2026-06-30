@@ -76,9 +76,20 @@ describe("coercePipLayout — honest fall-back on a stale/corrupt value", () => 
   });
 });
 
+// The status map now holds `{ state, snippet? }` entries (not bare state strings —
+// the debt-paydown WP2 snippet-tooltip wiring). `mk` wraps a state-by-id literal into
+// that shape so these attention tests read as before.
+const mk = (m: Record<string, string>): Record<string, { state: string }> =>
+  Object.fromEntries(Object.entries(m).map(([k, state]) => [k, { state }]));
+
 describe("Phase 4 — isAwaitingInput (the 'needs me' predicate)", () => {
   it("is true only for the awaiting_input wire state", () => {
-    const map = { a: "awaiting_input", b: "running", c: "idle", d: "unknown" };
+    const map = mk({
+      a: "awaiting_input",
+      b: "running",
+      c: "idle",
+      d: "unknown",
+    });
     expect(isAwaitingInput(map, "a")).toBe(true);
     expect(isAwaitingInput(map, "b")).toBe(false);
     expect(isAwaitingInput(map, "c")).toBe(false);
@@ -95,15 +106,15 @@ describe("Phase 4 — isAwaitingInput (the 'needs me' predicate)", () => {
 });
 
 describe("Phase 4 — orderForAttention (awaiting-input sorts first, stable)", () => {
-  const tiles = [
-    { id: "w1" },
-    { id: "w2" },
-    { id: "w3" },
-    { id: "w4" },
-  ];
+  const tiles = [{ id: "w1" }, { id: "w2" }, { id: "w3" }, { id: "w4" }];
 
   it("pulls awaiting-input workspaces to the front", () => {
-    const map = { w1: "running", w2: "awaiting_input", w3: "idle", w4: "running" };
+    const map = mk({
+      w1: "running",
+      w2: "awaiting_input",
+      w3: "idle",
+      w4: "running",
+    });
     expect(orderForAttention(tiles, map).map((t) => t.id)).toEqual([
       "w2",
       "w1",
@@ -113,12 +124,12 @@ describe("Phase 4 — orderForAttention (awaiting-input sorts first, stable)", (
   });
 
   it("is stable: multiple awaiting-input keep their relative order, as does the rest", () => {
-    const map = {
+    const map = mk({
       w1: "running",
       w2: "awaiting_input",
       w3: "awaiting_input",
       w4: "idle",
-    };
+    });
     // w2 before w3 (both awaiting, original order); w1 before w4 (both rest, original order).
     expect(orderForAttention(tiles, map).map((t) => t.id)).toEqual([
       "w2",
@@ -129,7 +140,12 @@ describe("Phase 4 — orderForAttention (awaiting-input sorts first, stable)", (
   });
 
   it("all-running (or all-idle) keeps the original order untouched", () => {
-    const map = { w1: "running", w2: "running", w3: "running", w4: "running" };
+    const map = mk({
+      w1: "running",
+      w2: "running",
+      w3: "running",
+      w4: "running",
+    });
     expect(orderForAttention(tiles, map).map((t) => t.id)).toEqual([
       "w1",
       "w2",
@@ -139,7 +155,7 @@ describe("Phase 4 — orderForAttention (awaiting-input sorts first, stable)", (
   });
 
   it("does not mutate the input array", () => {
-    const map = { w2: "awaiting_input" };
+    const map = mk({ w2: "awaiting_input" });
     const original = [...tiles];
     orderForAttention(tiles, map);
     expect(tiles).toEqual(original);

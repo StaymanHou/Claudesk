@@ -91,8 +91,10 @@ export function coercePipLayout(value: unknown): PipLayout {
 //      preserving the incoming (persisted filmstrip) order, so "needs me" rises to where
 //      the eye lands first without scrambling the calm row of running/idle dots.
 
-/** A minimal subset of the wire status map this module needs (id → state string). */
-export type AttentionStatusMap = Record<string, string>;
+/** A minimal structural subset of the wire status map this module needs — each entry
+ *  exposes at least a `state` string (`WorkspaceStatusMap` satisfies this). Kept narrow
+ *  so this module doesn't depend on the full `workspaceStatus` types. */
+export type AttentionStatusMap = Record<string, { state: string }>;
 
 /** The wire state literal that means "this workspace is waiting on the operator". Kept
  *  in sync with `WireWorkspaceState`'s `awaiting_input` (snake_case wire contract). */
@@ -103,7 +105,7 @@ export function isAwaitingInput(
   statusMap: AttentionStatusMap,
   workspaceId: string,
 ): boolean {
-  return statusMap[workspaceId] === AWAITING_INPUT_STATE;
+  return statusMap[workspaceId]?.state === AWAITING_INPUT_STATE;
 }
 
 /**

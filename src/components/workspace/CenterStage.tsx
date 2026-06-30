@@ -18,6 +18,8 @@ interface CenterStageProps {
   onSessionId?: (workspaceId: string, ccSessionId: string) => void;
   /** Live CC state lookup by workspace id (M3 WP6 — the `workspace-status` channel). */
   statusFor?: (workspaceId: string) => WireWorkspaceState;
+  /** Last prompt/message snippet lookup by workspace id — the status-dot tooltip. */
+  snippetFor?: (workspaceId: string) => string | undefined;
   /** QoL-WP1 — forwarded to each Workspace so its editor registers a dirty probe with
    *  App's workspace-close guard. */
   registerDirtyProbe?: (
@@ -31,6 +33,7 @@ export function CenterStage({
   focusedId,
   onSessionId,
   statusFor,
+  snippetFor,
   registerDirtyProbe,
 }: CenterStageProps) {
   return (
@@ -43,6 +46,7 @@ export function CenterStage({
           onSessionId={onSessionId}
           registerDirtyProbe={registerDirtyProbe}
           statusState={statusFor?.(ws.id) ?? "unknown"}
+          statusSnippet={snippetFor?.(ws.id)}
         />
       ))}
     </div>

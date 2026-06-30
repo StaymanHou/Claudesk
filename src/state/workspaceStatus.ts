@@ -85,12 +85,25 @@ export function statusPresentation(
 }
 
 /**
- * The live status map: `workspace_id` → its latest wire state. A workspace not
+ * One workspace's latest observation: its wire state plus the optional last
+ * prompt/message snippet the event carried (surfaced as the status-dot tooltip).
+ * The snippet is sticky-per-event — it reflects whatever the *last* event for
+ * this workspace carried (so a later snippet-less event clears it; see
+ * `applyStatusUpdate`). State is always present; snippet is `undefined` until an
+ * event carries `last_output_snippet`.
+ */
+export interface WorkspaceStatusEntry {
+  state: WireWorkspaceState;
+  snippet?: string;
+}
+
+/**
+ * The live status map: `workspace_id` → its latest observation. A workspace not
  * present in the map has never received an event and is treated as `unknown` by
  * the reader (`stateFor` below) — the map only ever holds the last *observed*
- * state, never a fabricated `unknown` entry.
+ * entry, never a fabricated `unknown` one.
  */
-export type WorkspaceStatusMap = Record<string, WireWorkspaceState>;
+export type WorkspaceStatusMap = Record<string, WorkspaceStatusEntry>;
 
 export const emptyStatusMap: WorkspaceStatusMap = {};
 
@@ -103,7 +116,13 @@ export function applyStatusUpdate(
   map: WorkspaceStatusMap,
   update: WorkspaceStatusUpdate,
 ): WorkspaceStatusMap {
-  return { ...map, [update.workspace_id]: update.state };
+  return {
+    ...map,
+    [update.workspace_id]: {
+      state: update.state,
+      snippet: update.last_output_snippet,
+    },
+  };
 }
 
 /**
@@ -115,5 +134,18 @@ export function stateFor(
   map: WorkspaceStatusMap,
   workspaceId: string,
 ): WireWorkspaceState {
-  return map[workspaceId] ?? "unknown";
+  return map[workspaceId]?.state ?? "unknown";
+}
+
+/**
+ * The last prompt/message snippet observed for a workspace id, or `undefined`
+ * if none was carried (or the workspace is unseen). Surfaced as the status-dot
+ * tooltip so hovering a dot shows what CC last said — the indicator falls back
+ * to the status label when this is absent.
+ */
+export function snippetFor(
+  map: WorkspaceStatusMap,
+  workspaceId: string,
+): string | undefined {
+  return map[workspaceId]?.snippet;
 }

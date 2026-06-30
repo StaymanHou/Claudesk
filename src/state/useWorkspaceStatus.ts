@@ -27,6 +27,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   applyStatusUpdate,
   emptyStatusMap,
+  snippetFor,
   stateFor,
   WORKSPACE_STATUS_EVENT,
   type WireWorkspaceState,
@@ -38,6 +39,8 @@ import type { Workspace } from "./workspace";
 export interface WorkspaceStatusApi {
   /** The live state for a workspace id — Unknown until its first hook event. */
   stateFor: (workspaceId: string) => WireWorkspaceState;
+  /** The last prompt/message snippet for a workspace id (tooltip), if any. */
+  snippetFor: (workspaceId: string) => string | undefined;
 }
 
 export function useWorkspaceStatus(
@@ -120,5 +123,6 @@ export function useWorkspaceStatus(
 
   return {
     stateFor: (workspaceId: string) => stateFor(statusMap, workspaceId),
+    snippetFor: (workspaceId: string) => snippetFor(statusMap, workspaceId),
   };
 }

@@ -62,7 +62,7 @@ function App() {
   } = useWorkspaceList();
   // M3 WP6 — live CC status from the `workspace-status` hook channel + the
   // open/close registration that makes WP4's cwd→workspace match resolve.
-  const { stateFor } = useWorkspaceStatus(workspaces);
+  const { stateFor, snippetFor } = useWorkspaceStatus(workspaces);
 
   // M4 WP3 P4 — the user-arranged, persisted filmstrip order (a list of project_paths,
   // localStorage-backed). Read once on mount; a drag-drop updates it + persists. It's the
@@ -377,6 +377,7 @@ function App() {
           <Filmstrip
             tiles={tiles}
             statusFor={stateFor}
+            snippetFor={snippetFor}
             collapsed={collapsed}
             onToggleCollapsed={toggleCollapsed}
             onPromote={focusWorkspace}
@@ -390,6 +391,7 @@ function App() {
             focusedId={focusedId}
             onSessionId={setSessionId}
             statusFor={stateFor}
+            snippetFor={snippetFor}
             registerDirtyProbe={registerDirtyProbe}
           />
           {showPicker && (

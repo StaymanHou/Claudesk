@@ -33,6 +33,8 @@ interface FilmstripProps {
   tiles: FilmstripTile[];
   /** Live CC state lookup by workspace id (M3 WP6 `workspace-status` channel). */
   statusFor: (workspaceId: string) => WireWorkspaceState;
+  /** Last prompt/message snippet lookup by workspace id — the status-dot tooltip. */
+  snippetFor?: (workspaceId: string) => string | undefined;
   /** M4 WP4 — collapsed = one-line status-pill row (no live mirror); expanded = full
    *  thumbnail tiles. Drives both the render mode AND the mirror-ticker gate (P2). */
   collapsed: boolean;
@@ -57,6 +59,7 @@ const DRAG_THRESHOLD_PX = 5;
 export function Filmstrip({
   tiles,
   statusFor,
+  snippetFor,
   collapsed,
   onToggleCollapsed,
   onPromote,
@@ -256,7 +259,10 @@ export function Filmstrip({
               onClick={() => onPromote(tile.id)}
             >
               <span className="filmstrip-pill-name">{tile.display_name}</span>
-              <WorkspaceStatusIndicator state={statusFor(tile.id)} />
+              <WorkspaceStatusIndicator
+                state={statusFor(tile.id)}
+                snippet={snippetFor?.(tile.id)}
+              />
               {/* QoL-WP1 (P3.6 — operator request) — close (×) on the collapsed pill too.
                   stopPropagation so the pill's own onClick (promote) doesn't fire; the
                   click routes through the SAME onClose → App.requestClose (dirty-guard +
@@ -332,7 +338,10 @@ export function Filmstrip({
               </div>
               <div className="filmstrip-tile-header">
                 <span className="filmstrip-tile-name">{tile.display_name}</span>
-                <WorkspaceStatusIndicator state={statusFor(tile.id)} />
+                <WorkspaceStatusIndicator
+                  state={statusFor(tile.id)}
+                  snippet={snippetFor?.(tile.id)}
+                />
                 {/* QoL-WP1 — close (×). stopPropagation on pointerdown so the strip's
                     drag/promote handler (onStripPointerDown) never treats this as a tile
                     press; the click closes via onClose (App runs the dirty guard). The

@@ -10,6 +10,9 @@
 - **Backlog resolved:** SURFACE-2026-06-18-QUALITY-WP5-FILMSTRIP-FLEX-SHRINK — the inert `flex-shrink: 0` removed from the grid-child `.filmstrip`.
 - **Backlog resolved:** SURFACE-2026-06-23-QUALITY-WP2-OVERLAY-DEAD-BACKDROPREF — the unused `backdropRef` (and its now-orphaned `useRef` import) removed from PickerOverlay.
 - **Backlog resolved:** SURFACE-2026-06-26-QUALITY-WP4-VESTIGIAL-DRAG-REGION — the 3 inert `data-tauri-drag-region` attributes removed from the PiP panel and the 3 stale comments repointed to the real `startPanelDrag`→`pip_move` drag path.
+- **Task closed:** Debt-paydown WP2 (thread the status-snippet tooltip) — the live workspace-status map now carries each event's last output/prompt snippet alongside its state (`WorkspaceStatusEntry`), threaded through `useWorkspaceStatus` → `App` → the CenterStage/Workspace header, the filmstrip tiles, and the PiP tiles, so hovering any status dot shows what CC last said (previously the backend sent the snippet but the frontend dropped it and the tooltip always fell back to the status label); the planned git-status path-keying half was dropped as a stale-premise no-op (the nested-repo re-base it targeted already shipped at M2 close).
+- **Backlog resolved:** SURFACE-2026-06-22-QUALITY-WP6-SNIPPET-TOOLTIP-DEAD-PATH — the dead `statusSnippet`/tooltip path threaded end-to-end (map stores `{state, snippet}`, `snippetFor` accessor added, all status surfaces pass the snippet) with 4 new reducer/accessor tests.
+- **Backlog resolved:** SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING — stale detail entry reconciled to RESOLVED; the path-keying re-base it described already shipped at M2 close (task `m2-wp11-git-status-path-keying`), so no further code was needed.
 
 ## 2026-06-29
 

@@ -34,6 +34,7 @@ import { WorkspaceStatusIndicator } from "../components/workspace/WorkspaceStatu
 import {
   applyStatusUpdate,
   emptyStatusMap,
+  snippetFor,
   stateFor,
   WORKSPACE_STATUS_EVENT,
   type WorkspaceStatusMap,
@@ -369,6 +370,7 @@ function PipTile({
   lastMirrorRef: React.MutableRefObject<PipMirrorFrame>;
 }) {
   const state = stateFor(statusMap, tile.id);
+  const snippet = snippetFor(statusMap, tile.id);
 
   if (layout === "minimal") {
     // Dot only — no name, no mirror. `title` keeps it resolvable to a project on hover
@@ -384,7 +386,7 @@ function PipTile({
         data-testid={`pip-tile-${tile.id}`}
         title={tile.display_name}
       >
-        <WorkspaceStatusIndicator state={state} />
+        <WorkspaceStatusIndicator state={state} snippet={snippet} />
       </div>
     );
   }
@@ -398,7 +400,7 @@ function PipTile({
         title={tile.display_name}
       >
         <span className="pip-tile-name">{tile.display_name}</span>
-        <WorkspaceStatusIndicator state={state} />
+        <WorkspaceStatusIndicator state={state} snippet={snippet} />
       </div>
     );
   }
@@ -432,7 +434,7 @@ function PipTile({
       />
       <div className="pip-tile-header">
         <span className="pip-tile-name">{tile.display_name}</span>
-        <WorkspaceStatusIndicator state={state} />
+        <WorkspaceStatusIndicator state={state} snippet={snippet} />
       </div>
     </div>
   );

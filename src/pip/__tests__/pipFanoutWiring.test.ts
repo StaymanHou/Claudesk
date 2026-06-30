@@ -155,7 +155,7 @@ describe("M5 WP4 Phase 2 — the on-panel switcher + persisted-layout wiring", (
     // Guard the row + the icon component so a regression to the old overlay is caught.
     expect(pipSource).toContain("pip-switch-row");
     expect(pipSource).toContain("LayoutIcon");
-    expect(pipSource).toContain("data-testid=\"pip-layout-switch\"");
+    expect(pipSource).toContain('data-testid="pip-layout-switch"');
   });
 });
 
@@ -218,7 +218,9 @@ describe("M5 WP4 Phase 4 — minimal-layout attention weighting wiring", () => {
   it("the minimal dot keeps its project tooltip (a bare dot stays resolvable, P4.3)", () => {
     // No name is rendered in minimal — the title is the only way to resolve a dot to its
     // project on hover. Guard it stays on the minimal tile.
-    expect(pipSource).toMatch(/pip-tile-minimal[\s\S]*?title=\{tile\.display_name\}/);
+    expect(pipSource).toMatch(
+      /pip-tile-minimal[\s\S]*?title=\{tile\.display_name\}/,
+    );
   });
 });
 
@@ -240,13 +242,16 @@ describe("M5 WP4 Phase 5 — cross-layout never-disagree invariant (structural)"
   });
 
   it("every dot in the PiP is the shared WorkspaceStatusIndicator (no hand-rolled status-dot)", () => {
-    // Each layout branch's dot must be `<WorkspaceStatusIndicator state={state} />` — the
-    // ONE palette source shared with the filmstrip. A raw `<div className="status-dot...">`
+    // Each layout branch's dot must be the shared `<WorkspaceStatusIndicator state={state}
+    // snippet={snippet} />` — the ONE palette source shared with the filmstrip (the snippet
+    // prop is the debt-paydown WP2 tooltip wiring). A raw `<div className="status-dot...">`
     // in any branch would be a divergence channel; assert there is none in Pip.tsx, and that
     // the indicator is used for all three rendering branches (minimal/compact/mirror).
     expect(pipSource).not.toMatch(/className=["'`][^"'`]*status-dot/);
     const indicatorUses =
-      pipSource.match(/<WorkspaceStatusIndicator state=\{state\}\s*\/>/g) ?? [];
+      pipSource.match(
+        /<WorkspaceStatusIndicator state=\{state\} snippet=\{snippet\}\s*\/>/g,
+      ) ?? [];
     expect(indicatorUses.length).toBe(3); // minimal + compact + mirror branches
   });
 });
@@ -282,7 +287,9 @@ describe("M5 WP4 Phase 5 — PiP mirror keeps updating while the main window is 
     // whenever the main window lost focus. The fix gates on `&& !pipNeedsMirror` so a
     // mirror-needing PiP keeps ticking while Claudesk is backgrounded. Guard the exact gate
     // — a regression back to the bare `document.hidden` early-return re-freezes the PiP.
-    expect(tickerSource).toContain("if (document.hidden && !pipNeedsMirror) return");
+    expect(tickerSource).toContain(
+      "if (document.hidden && !pipNeedsMirror) return",
+    );
     expect(tickerSource).not.toMatch(/if \(document\.hidden\) return/);
   });
 });
