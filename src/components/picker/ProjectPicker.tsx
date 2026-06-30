@@ -108,7 +108,9 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
       .then((yolo) => {
         if (!cancelled) setCcYolo(yolo);
       })
-      .catch((e) => console.error("[claudesk] cc_get_yolo (picker) failed:", e));
+      .catch((e) =>
+        console.error("[claudesk] cc_get_yolo (picker) failed:", e),
+      );
     void listen<boolean>("cc-yolo", (event) => {
       setCcYolo(event.payload);
     }).then((fn) => {
@@ -130,7 +132,10 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     setCcYolo(next);
     void invoke("cc_set_yolo", { yolo: next }).catch((e) => {
       setCcYolo(!next);
-      setToast({ kind: "error", message: mapIpcError("update yolo setting", e) });
+      setToast({
+        kind: "error",
+        message: mapIpcError("update yolo setting", e),
+      });
     });
   }
 
@@ -157,7 +162,9 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
       // add-no-refresh asymmetry that surfaced once the picker stays mounted in the
       // multi-workspace shell). Prepend-and-dedup: a re-added existing path moves to
       // the front (matching the backend's most-recently-opened-first ordering).
-      const added = await invoke<RecentProject>("add_project", { path: picked });
+      const added = await invoke<RecentProject>("add_project", {
+        path: picked,
+      });
       setRecents((rs) => [
         added,
         ...rs.filter((r) => r.project_path !== added.project_path),

@@ -20,7 +20,10 @@ describe("XtermPane mirror serializes a bottom-anchored tail (not scrollback:0)"
   it("calls serializeAsHTML with a POSITIVE scrollback (tails the latest output)", () => {
     // Match `scrollback: <n>` inside the serializeAsHTML options and assert n > 0.
     const m = xtermSource.match(/serializeAsHTML\(\{[^}]*scrollback:\s*(\d+)/);
-    expect(m, "serializeAsHTML({ scrollback: N }) call not found").not.toBeNull();
+    expect(
+      m,
+      "serializeAsHTML({ scrollback: N }) call not found",
+    ).not.toBeNull();
     expect(Number(m![1])).toBeGreaterThan(0);
   });
 

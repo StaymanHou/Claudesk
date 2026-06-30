@@ -48,7 +48,10 @@ test("README references both M8 demo GIFs (filmstrip + pip)", () => {
 test("every README-referenced demo GIF exists at its relative path", () => {
   for (const rel of referencedDemoGifs()) {
     const abs = repoRoot + rel;
-    assert.ok(existsSync(abs), `README references ${rel} but the file is missing`);
+    assert.ok(
+      existsSync(abs),
+      `README references ${rel} but the file is missing`,
+    );
   }
 });
 

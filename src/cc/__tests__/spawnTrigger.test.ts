@@ -59,7 +59,11 @@ describe("spawnTrigger — blank-cursor + WP4-respawn regression contract", () =
       projectPath: "/Users/x/proj",
       spawnCommand: "term_spawn",
     };
-    expect(spawnTriggerDeps(inputs)).toEqual([2, "/Users/x/proj", "term_spawn"]);
+    expect(spawnTriggerDeps(inputs)).toEqual([
+      2,
+      "/Users/x/proj",
+      "term_spawn",
+    ]);
     // No phase and no `active` smuggled in: the dep tuple is exactly the three triggers.
     expect(spawnTriggerDeps(inputs)).toHaveLength(3);
   });

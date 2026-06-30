@@ -19,7 +19,8 @@ import { closeWorkspaceSpec } from "../confirmDialog";
 /** Open `path` (clean), then optionally edit it dirty by setting a different buffer. */
 function open(state: DocsState, path: string, edit?: string): DocsState {
   let s = docsReducer(state, { type: "open-doc", path });
-  if (edit !== undefined) s = docsReducer(s, { type: "set-doc", path, doc: edit });
+  if (edit !== undefined)
+    s = docsReducer(s, { type: "set-doc", path, doc: edit });
   return s;
 }
 
@@ -65,7 +66,9 @@ describe("closeWorkspaceSpec — QoL-WP1", () => {
     expect(spec.buttons.find((b) => b.value === "cancel")?.variant).toBe(
       "primary",
     );
-    expect(spec.buttons.find((b) => b.value === "close")?.variant).toBe("danger");
+    expect(spec.buttons.find((b) => b.value === "close")?.variant).toBe(
+      "danger",
+    );
   });
 
   it("pluralizes the unsaved-file count in the message", () => {

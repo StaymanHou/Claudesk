@@ -29,9 +29,13 @@ const OUT = resolve(import.meta.dirname, "_dots.generated.css");
 // Brace-balanced so nested rules (none here, but robust) don't truncate early.
 function extractBlock(css, selector) {
   const start = css.indexOf(selector);
-  if (start === -1) throw new Error(`extract-dot-css: selector not found in App.css: ${selector}`);
+  if (start === -1)
+    throw new Error(
+      `extract-dot-css: selector not found in App.css: ${selector}`,
+    );
   const braceOpen = css.indexOf("{", start);
-  if (braceOpen === -1) throw new Error(`extract-dot-css: no '{' after ${selector}`);
+  if (braceOpen === -1)
+    throw new Error(`extract-dot-css: no '{' after ${selector}`);
   let depth = 0;
   for (let i = braceOpen; i < css.length; i++) {
     if (css[i] === "{") depth++;
@@ -50,7 +54,10 @@ function extractBlock(css, selector) {
 function pickAnimation(css, selector) {
   const block = extractBlock(css, selector + " ");
   const m = block.match(/animation:\s*[^;]+;/);
-  if (!m) throw new Error(`extract-dot-css: no animation: declaration in ${selector}`);
+  if (!m)
+    throw new Error(
+      `extract-dot-css: no animation: declaration in ${selector}`,
+    );
   return m[0].replace(/\s+/g, " ").trim();
 }
 
@@ -75,7 +82,10 @@ function generate() {
   // that media block (not hand-copy — the timing/easing must track App.css too),
   // and re-attach them UNWRAPPED so the generated CSS animates regardless of the
   // consuming context's media state.
-  const mediaBlock = extractBlock(css, "@media (prefers-reduced-motion: no-preference)");
+  const mediaBlock = extractBlock(
+    css,
+    "@media (prefers-reduced-motion: no-preference)",
+  );
   const runningAnim = pickAnimation(mediaBlock, ".status-dot-running");
   const awaitingAnim = pickAnimation(mediaBlock, ".status-dot-awaiting");
   const animations = [
@@ -109,7 +119,9 @@ if (a.check) {
   try {
     committed = readFileSync(OUT, "utf8");
   } catch {
-    console.error(`extract-dot-css --check: ${OUT} missing — run \`node extract-dot-css.mjs\` first.`);
+    console.error(
+      `extract-dot-css --check: ${OUT} missing — run \`node extract-dot-css.mjs\` first.`,
+    );
     process.exit(1);
   }
   if (committed !== generated) {

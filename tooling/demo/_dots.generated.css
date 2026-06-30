@@ -50,5 +50,9 @@
 
 /* animations re-attached unconditionally (App.css gates them behind
    @media prefers-reduced-motion: no-preference; capture forces no-preference). */
-.status-dot-running { animation: status-breathe 1.8s ease-in-out infinite; }
-.status-dot-awaiting { animation: status-blink 0.7s steps(1, end) infinite; }
+.status-dot-running {
+  animation: status-breathe 1.8s ease-in-out infinite;
+}
+.status-dot-awaiting {
+  animation: status-blink 0.7s steps(1, end) infinite;
+}

@@ -59,14 +59,30 @@ test("busyAt: tokens tick up from tokensStart", () => {
 });
 
 test("busyAt: stream lines reveal progressively", () => {
-  assert.equal(busyAt(SPEC, 1.0).revealed, 0, "before streamFrom: nothing revealed");
-  assert.equal(busyAt(SPEC, 1.0 + 0.5).revealed, 1, "at streamFrom: first line");
-  assert.equal(busyAt(SPEC, 1.0 + 1.5).revealed, 2, "one streamEach later: two lines");
+  assert.equal(
+    busyAt(SPEC, 1.0).revealed,
+    0,
+    "before streamFrom: nothing revealed",
+  );
+  assert.equal(
+    busyAt(SPEC, 1.0 + 0.5).revealed,
+    1,
+    "at streamFrom: first line",
+  );
+  assert.equal(
+    busyAt(SPEC, 1.0 + 1.5).revealed,
+    2,
+    "one streamEach later: two lines",
+  );
   assert.equal(busyAt(SPEC, 1.0 + 2.5).revealed, 3, "all three revealed");
 });
 
 test("busyAt: revealed never exceeds the stream length", () => {
-  assert.equal(busyAt(SPEC, 1.0 + 3.9).revealed, 3, "clamps at stream.length even late in window");
+  assert.equal(
+    busyAt(SPEC, 1.0 + 3.9).revealed,
+    3,
+    "clamps at stream.length even late in window",
+  );
 });
 
 test("busyAt: open-ended window (no endT) stays active", () => {

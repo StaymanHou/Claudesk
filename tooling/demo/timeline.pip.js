@@ -106,7 +106,11 @@
   function tiles(activeStatus) {
     return [
       { name: "recipe-box", status: "running", body: "● npm test scaler" },
-      { name: "tax-cruncher", status: activeStatus, body: activeStatus === "awaiting" ? "? Tax year" : "● cargo test" },
+      {
+        name: "tax-cruncher",
+        status: activeStatus,
+        body: activeStatus === "awaiting" ? "? Tax year" : "● cargo test",
+      },
     ];
   }
 
@@ -115,21 +119,38 @@
   function taxStageAwaiting(selected) {
     return {
       lines: [
-        { cls: "prompt", text: "❯ handle the 2024 bracket update in the federal calc" },
+        {
+          cls: "prompt",
+          text: "❯ handle the 2024 bracket update in the federal calc",
+        },
         { text: "" },
         { cls: "accent", text: "● Read(src/brackets/federal_2024.rs)" },
         { cls: "dim", text: "  ⎿ Read 142 lines" },
         { text: "" },
         { cls: "askq-tab", text: "☐ Tax year" },
-        { cls: "askq-question", text: "How should the calculator treat a return filed for a prior year?" },
+        {
+          cls: "askq-question",
+          text: "How should the calculator treat a return filed for a prior year?",
+        },
         {
           cls: selected ? "askq-opt sel" : "askq-opt",
-          text: (selected ? "❯ 1." : "&nbsp;&nbsp;1.") + " Use that year's brackets",
+          text:
+            (selected ? "❯ 1." : "&nbsp;&nbsp;1.") +
+            " Use that year's brackets",
         },
-        { cls: "askq-od", text: "Look up the historical bracket table by tax year. Correct for amended + late returns." },
+        {
+          cls: "askq-od",
+          text: "Look up the historical bracket table by tax year. Correct for amended + late returns.",
+        },
         { cls: "askq-opt", text: "&nbsp;&nbsp;2. Always use current-year" },
-        { cls: "askq-od", text: "Simpler, but wrong for amended / late-filed prior-year returns." },
-        { cls: "askq-foot", text: "Enter to select · Tab/Arrow keys to navigate · Esc to cancel" },
+        {
+          cls: "askq-od",
+          text: "Simpler, but wrong for amended / late-filed prior-year returns.",
+        },
+        {
+          cls: "askq-foot",
+          text: "Enter to select · Tab/Arrow keys to navigate · Esc to cancel",
+        },
       ],
       changes: [
         { cls: "dim", text: "awaiting answer…" },
@@ -140,7 +161,10 @@
   function taxStageResumed() {
     return {
       lines: [
-        { cls: "prompt", text: "❯ handle the 2024 bracket update in the federal calc" },
+        {
+          cls: "prompt",
+          text: "❯ handle the 2024 bracket update in the federal calc",
+        },
         { text: "" },
         { cls: "accent", text: "● Edit(src/brackets/federal_2024.rs)" },
         { cls: "ok", text: "  ⎿ Updated with 7 additions" },
@@ -173,13 +197,39 @@
     backdropTitle: "# eng-standup",
     backdropLive: {
       messages: [
-        { at: 0, author: "alex", text: "shipping the auth fix today? blocking the release" },
-        { at: 0, author: "priya", text: "staging deploy is green on my end ✅" },
-        { at: 2.4, author: "you", text: "yep — reviewing the diff now, up within the hour" },
-        { at: 3.2, author: "alex", text: "🙏 also did the prod migration backfill finish?" },
-        { at: 4.0, author: "priya", text: "backfill's done — 1.2M rows, no errors" },
+        {
+          at: 0,
+          author: "alex",
+          text: "shipping the auth fix today? blocking the release",
+        },
+        {
+          at: 0,
+          author: "priya",
+          text: "staging deploy is green on my end ✅",
+        },
+        {
+          at: 2.4,
+          author: "you",
+          text: "yep — reviewing the diff now, up within the hour",
+        },
+        {
+          at: 3.2,
+          author: "alex",
+          text: "🙏 also did the prod migration backfill finish?",
+        },
+        {
+          at: 4.0,
+          author: "priya",
+          text: "backfill's done — 1.2M rows, no errors",
+        },
       ],
-      typing: [{ startT: 1.6, text: "yep — reviewing the diff now, up within the hour", sendAt: 2.4 }],
+      typing: [
+        {
+          startT: 1.6,
+          text: "yep — reviewing the diff now, up within the hour",
+          sendAt: 2.4,
+        },
+      ],
       // the operator REACTS to priya's "staging deploy is green" message (index 1)
       // with a 👍 — the cursor glides to it and clicks at t≈1.0 (see `cursor`).
       // Concrete "I'm actively working in Slack" texture; never touches the PiP.
@@ -195,7 +245,11 @@
         region: "pip",
         pip: [
           { name: "recipe-box", status: "running", mirror: recipeMirror() },
-          { name: "tax-cruncher", status: "running", mirror: taxRunningMirror() },
+          {
+            name: "tax-cruncher",
+            status: "running",
+            mirror: taxRunningMirror(),
+          },
         ],
       },
       {
@@ -204,7 +258,11 @@
         region: "pip",
         pip: [
           { name: "recipe-box", status: "running", mirror: recipeMirror() },
-          { name: "tax-cruncher", status: "running", mirror: taxRunningMirror() },
+          {
+            name: "tax-cruncher",
+            status: "running",
+            mirror: taxRunningMirror(),
+          },
         ],
       },
       {
@@ -213,7 +271,11 @@
         region: "pip",
         pip: [
           { name: "recipe-box", status: "running", mirror: recipeMirror() },
-          { name: "tax-cruncher", status: "awaiting", mirror: taxAwaitingMirror() },
+          {
+            name: "tax-cruncher",
+            status: "awaiting",
+            mirror: taxAwaitingMirror(),
+          },
         ],
       },
       {

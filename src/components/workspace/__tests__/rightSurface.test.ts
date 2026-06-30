@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  deriveRightSurface,
-  TERM_PANE_SELECTOR,
-} from "../rightSurface";
+import { deriveRightSurface, TERM_PANE_SELECTOR } from "../rightSurface";
 
 // The vitest env is node (no DOM — vite.config.ts has no jsdom environment), so we
 // duck-type the bit deriveRightSurface reads: a `closest(sel)` that resolves to the

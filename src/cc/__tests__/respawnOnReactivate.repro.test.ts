@@ -46,7 +46,9 @@ describe("WP4 fix — the spawn-effect dep tuple is inert across a panel/center-
     // tuple is built from the non-`active` triggers, the before/after tuples are equal →
     // React does not re-run the spawn effect → the shell is not re-spawned. This is the bug
     // fixed: identical tuples across the switch-back edge.
-    expect(spawnTriggerDeps(triggers)).toEqual(spawnTriggerDeps({ ...triggers }));
+    expect(spawnTriggerDeps(triggers)).toEqual(
+      spawnTriggerDeps({ ...triggers }),
+    );
     // And the deferred-first-spawn predicate declares re-activation a no-op once spawned —
     // the ONE predicate case that names the bug (switch-back-after-session). The full
     // four-case truth table is covered exhaustively in respawnGuard.test.ts; this repro

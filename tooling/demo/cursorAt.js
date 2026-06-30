@@ -21,7 +21,11 @@
     if (!waypoints || waypoints.length === 0) return null;
     // clamp below first
     if (t <= waypoints[0].t) {
-      return { x: waypoints[0].x, y: waypoints[0].y, click: clickEnergy(waypoints, t) };
+      return {
+        x: waypoints[0].x,
+        y: waypoints[0].y,
+        click: clickEnergy(waypoints, t),
+      };
     }
     // clamp above last
     var last = waypoints[waypoints.length - 1];

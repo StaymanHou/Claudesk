@@ -43,23 +43,37 @@
 
     var elapsed = Math.floor(dt);
 
-    var tokensStart = typeof spec.tokensStart === "number" ? spec.tokensStart : 0;
-    var tokensPerSec = typeof spec.tokensPerSec === "number" ? spec.tokensPerSec : 0;
+    var tokensStart =
+      typeof spec.tokensStart === "number" ? spec.tokensStart : 0;
+    var tokensPerSec =
+      typeof spec.tokensPerSec === "number" ? spec.tokensPerSec : 0;
     var tokens = Math.round(tokensStart + tokensPerSec * dt);
 
     var stream = spec.stream || [];
     var revealed = stream.length;
     if (stream.length) {
       var from = typeof spec.streamFrom === "number" ? spec.streamFrom : 0;
-      var each = typeof spec.streamEach === "number" && spec.streamEach > 0 ? spec.streamEach : 0.4;
+      var each =
+        typeof spec.streamEach === "number" && spec.streamEach > 0
+          ? spec.streamEach
+          : 0.4;
       if (t < spec.startT + from) {
         revealed = 0;
       } else {
-        revealed = Math.min(stream.length, Math.floor((t - spec.startT - from) / each) + 1);
+        revealed = Math.min(
+          stream.length,
+          Math.floor((t - spec.startT - from) / each) + 1,
+        );
       }
     }
 
-    return { glyph: glyph, word: word, elapsed: elapsed, tokens: tokens, revealed: revealed };
+    return {
+      glyph: glyph,
+      word: word,
+      elapsed: elapsed,
+      tokens: tokens,
+      revealed: revealed,
+    };
   }
 
   root.__busyAt = busyAt;

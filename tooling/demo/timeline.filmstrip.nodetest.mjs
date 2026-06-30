@@ -37,23 +37,40 @@ test("filmstrip timeline: has keyframes with ascending t", () => {
       `keyframe ${i} t=${T.keyframes[i].t} must be > previous ${T.keyframes[i - 1].t}`,
     );
   }
-  assert.equal(T.keyframes[0].t, 0, "first keyframe must start at t=0 so t=0 paints");
+  assert.equal(
+    T.keyframes[0].t,
+    0,
+    "first keyframe must start at t=0 so t=0 paints",
+  );
 });
 
 test("filmstrip timeline: every keyframe is well-formed (4 tiles, valid status, active in range)", () => {
   for (const [i, k] of T.keyframes.entries()) {
-    assert.ok(Array.isArray(k.tiles) && k.tiles.length === 4, `kf ${i}: expected 4 tiles`);
+    assert.ok(
+      Array.isArray(k.tiles) && k.tiles.length === 4,
+      `kf ${i}: expected 4 tiles`,
+    );
     for (const tile of k.tiles) {
-      assert.equal(typeof tile.name, "string", `kf ${i}: tile.name must be string`);
+      assert.equal(
+        typeof tile.name,
+        "string",
+        `kf ${i}: tile.name must be string`,
+      );
       assert.ok(tile.name.length > 0, `kf ${i}: tile.name must be non-empty`);
-      assert.ok(STATUS_VOCAB.has(tile.status), `kf ${i}: bad status "${tile.status}"`);
+      assert.ok(
+        STATUS_VOCAB.has(tile.status),
+        `kf ${i}: bad status "${tile.status}"`,
+      );
     }
     assert.ok(
       Number.isInteger(k.active) && k.active >= 0 && k.active < k.tiles.length,
       `kf ${i}: active=${k.active} out of range`,
     );
     // center-stage content present so the stage isn't blank.
-    assert.ok(Array.isArray(k.stage?.lines) && k.stage.lines.length > 0, `kf ${i}: stage.lines`);
+    assert.ok(
+      Array.isArray(k.stage?.lines) && k.stage.lines.length > 0,
+      `kf ${i}: stage.lines`,
+    );
     assert.ok(Array.isArray(k.stage?.changes), `kf ${i}: stage.changes`);
   }
 });
@@ -70,13 +87,21 @@ test("filmstrip timeline: tile identity is stable across keyframes (same project
 });
 
 test("filmstrip narrative: an AWAITING beat exists (the 'one glance, which needs you' signal)", () => {
-  const hasAwaiting = T.keyframes.some((k) => k.tiles.some((t) => t.status === "awaiting"));
-  assert.ok(hasAwaiting, "at least one keyframe must show a tile in 'awaiting'");
+  const hasAwaiting = T.keyframes.some((k) =>
+    k.tiles.some((t) => t.status === "awaiting"),
+  );
+  assert.ok(
+    hasAwaiting,
+    "at least one keyframe must show a tile in 'awaiting'",
+  );
 });
 
 test("filmstrip narrative: the active tile changes (the 'one click jumps there' promote beat)", () => {
   const actives = new Set(T.keyframes.map((k) => k.active));
-  assert.ok(actives.size >= 2, "active index must change across the scenario (a promote beat)");
+  assert.ok(
+    actives.size >= 2,
+    "active index must change across the scenario (a promote beat)",
+  );
 });
 
 test("filmstrip narrative: the tile that goes awaiting is later promoted to active", () => {
@@ -84,11 +109,17 @@ test("filmstrip narrative: the tile that goes awaiting is later promoted to acti
   let awaitingIdx = -1;
   for (const k of T.keyframes) {
     const idx = k.tiles.findIndex((t) => t.status === "awaiting");
-    if (idx !== -1) { awaitingIdx = idx; break; }
+    if (idx !== -1) {
+      awaitingIdx = idx;
+      break;
+    }
   }
   assert.notEqual(awaitingIdx, -1, "expected an awaiting tile");
   const laterPromoted = T.keyframes.some((k) => k.active === awaitingIdx);
-  assert.ok(laterPromoted, `the awaiting tile (index ${awaitingIdx}) must become active in some keyframe`);
+  assert.ok(
+    laterPromoted,
+    `the awaiting tile (index ${awaitingIdx}) must become active in some keyframe`,
+  );
 });
 
 // ---- input-affordance tracks (cursor glide + keycaps) — guard the new fields
@@ -98,29 +129,57 @@ const VIEWPORT_W = 1000;
 const VIEWPORT_H = 600;
 
 test("filmstrip cursor: waypoints ascending in t and within viewport bounds", () => {
-  assert.ok(Array.isArray(T.cursor) && T.cursor.length >= 2, "expected a cursor waypoint track");
+  assert.ok(
+    Array.isArray(T.cursor) && T.cursor.length >= 2,
+    "expected a cursor waypoint track",
+  );
   for (let i = 0; i < T.cursor.length; i++) {
     const w = T.cursor[i];
     assert.equal(typeof w.t, "number", `cursor wp ${i}: t must be number`);
-    assert.ok(w.x >= 0 && w.x <= VIEWPORT_W, `cursor wp ${i}: x=${w.x} out of viewport`);
-    assert.ok(w.y >= 0 && w.y <= VIEWPORT_H, `cursor wp ${i}: y=${w.y} out of viewport`);
+    assert.ok(
+      w.x >= 0 && w.x <= VIEWPORT_W,
+      `cursor wp ${i}: x=${w.x} out of viewport`,
+    );
+    assert.ok(
+      w.y >= 0 && w.y <= VIEWPORT_H,
+      `cursor wp ${i}: y=${w.y} out of viewport`,
+    );
     if (i > 0) {
-      assert.ok(w.t > T.cursor[i - 1].t, `cursor wp ${i}: t must be strictly ascending`);
+      assert.ok(
+        w.t > T.cursor[i - 1].t,
+        `cursor wp ${i}: t must be strictly ascending`,
+      );
     }
   }
 });
 
 test("filmstrip cursor: has at least one click waypoint (the switch gesture is shown)", () => {
-  assert.ok(T.cursor.some((w) => w.click === true), "expected a click:true waypoint (the tile-click)");
+  assert.ok(
+    T.cursor.some((w) => w.click === true),
+    "expected a click:true waypoint (the tile-click)",
+  );
 });
 
 test("filmstrip keycaps: well-formed window + keys (the keyboard approve is shown)", () => {
-  assert.ok(Array.isArray(T.keycaps) && T.keycaps.length >= 1, "expected at least one keycap event");
+  assert.ok(
+    Array.isArray(T.keycaps) && T.keycaps.length >= 1,
+    "expected at least one keycap event",
+  );
   for (const [i, e] of T.keycaps.entries()) {
     assert.ok(e.to > e.from, `keycap ${i}: window must have to > from`);
-    assert.ok(e.x >= 0 && e.x <= VIEWPORT_W && e.y >= 0 && e.y <= VIEWPORT_H, `keycap ${i}: out of viewport`);
-    assert.ok(Array.isArray(e.keys) && e.keys.length > 0, `keycap ${i}: keys must be a non-empty array`);
-    for (const k of e.keys) assert.ok(typeof k === "string" && k.length > 0, `keycap ${i}: each key non-empty string`);
+    assert.ok(
+      e.x >= 0 && e.x <= VIEWPORT_W && e.y >= 0 && e.y <= VIEWPORT_H,
+      `keycap ${i}: out of viewport`,
+    );
+    assert.ok(
+      Array.isArray(e.keys) && e.keys.length > 0,
+      `keycap ${i}: keys must be a non-empty array`,
+    );
+    for (const k of e.keys)
+      assert.ok(
+        typeof k === "string" && k.length > 0,
+        `keycap ${i}: each key non-empty string`,
+      );
   }
 });
 
@@ -128,13 +187,23 @@ test("filmstrip keycaps: well-formed window + keys (the keyboard approve is show
 
 test("filmstrip busy: at least one beat carries a well-formed busy spec (the live-session read)", () => {
   const busyBeats = T.keyframes.filter((k) => k.stage && k.stage.busy);
-  assert.ok(busyBeats.length >= 1, "expected at least one beat with a live busy session");
+  assert.ok(
+    busyBeats.length >= 1,
+    "expected at least one beat with a live busy session",
+  );
   for (const k of busyBeats) {
     const b = k.stage.busy;
     assert.equal(typeof b.startT, "number", "busy.startT must be a number");
-    assert.ok(Array.isArray(b.words) && b.words.length > 0, "busy.words must be a non-empty array");
-    assert.ok(Array.isArray(b.stream) && b.stream.length > 0, "busy.stream must be a non-empty array");
-    if (typeof b.endT === "number") assert.ok(b.endT > b.startT, "busy.endT must be > startT");
+    assert.ok(
+      Array.isArray(b.words) && b.words.length > 0,
+      "busy.words must be a non-empty array",
+    );
+    assert.ok(
+      Array.isArray(b.stream) && b.stream.length > 0,
+      "busy.stream must be a non-empty array",
+    );
+    if (typeof b.endT === "number")
+      assert.ok(b.endT > b.startT, "busy.endT must be > startT");
   }
 });
 
@@ -143,18 +212,30 @@ test("filmstrip busy: at least one busy stream shows a code diff (the 'writing c
     (k) =>
       k.stage &&
       k.stage.busy &&
-      (k.stage.busy.stream || []).some((l) => l.cls === "diff-add" || l.cls === "diff-del"),
+      (k.stage.busy.stream || []).some(
+        (l) => l.cls === "diff-add" || l.cls === "diff-del",
+      ),
   );
-  assert.ok(hasDiff, "expected a busy stream containing diff-add/diff-del lines");
+  assert.ok(
+    hasDiff,
+    "expected a busy stream containing diff-add/diff-del lines",
+  );
 });
 
 test("filmstrip AskUserQuestion: the awaiting-promoted beat renders an AskUserQuestion shape", () => {
   // the beat where the awaiting tile is active (promoted, still awaiting) should
   // carry the askq-* lines: a question + at least 2 options + a selected option.
   const askqBeat = T.keyframes.find(
-    (k) => k.stage && (k.stage.lines || []).some((l) => (l.cls || "").startsWith("askq-question")),
+    (k) =>
+      k.stage &&
+      (k.stage.lines || []).some((l) =>
+        (l.cls || "").startsWith("askq-question"),
+      ),
   );
-  assert.ok(askqBeat, "expected a beat rendering an AskUserQuestion (askq-question line)");
+  assert.ok(
+    askqBeat,
+    "expected a beat rendering an AskUserQuestion (askq-question line)",
+  );
   const lines = askqBeat.stage.lines;
   const opts = lines.filter((l) => (l.cls || "").startsWith("askq-opt"));
   assert.ok(opts.length >= 2, "AskUserQuestion must show at least 2 options");

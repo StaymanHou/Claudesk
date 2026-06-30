@@ -292,14 +292,23 @@ export function Workspace({
             Collapse + cycle are orthogonal: the cycle steps the three ratios; the
             toggles fully hide a half (and restore to the last ratio on re-click).
             At most one half collapsed at a time (toggleCollapse mutual exclusion). */}
-        <div className="workspace-split-control" data-testid="workspace-split-control">
+        <div
+          className="workspace-split-control"
+          data-testid="workspace-split-control"
+        >
           <button
             type="button"
             className={`split-collapse-btn${leftCollapsed ? " is-active" : ""}`}
             data-testid="split-collapse-cc"
-            aria-label={leftCollapsed ? "Show CC terminal" : "Collapse CC terminal"}
+            aria-label={
+              leftCollapsed ? "Show CC terminal" : "Collapse CC terminal"
+            }
             aria-pressed={leftCollapsed}
-            title={leftCollapsed ? "Show CC terminal" : "Collapse CC (show editor only)"}
+            title={
+              leftCollapsed
+                ? "Show CC terminal"
+                : "Collapse CC (show editor only)"
+            }
             onClick={() => toggleSplitCollapse("left")}
           >
             ◀ CC
@@ -319,9 +328,15 @@ export function Workspace({
             type="button"
             className={`split-collapse-btn${rightCollapsed ? " is-active" : ""}`}
             data-testid="split-collapse-ed"
-            aria-label={rightCollapsed ? "Show editor panel" : "Collapse editor panel"}
+            aria-label={
+              rightCollapsed ? "Show editor panel" : "Collapse editor panel"
+            }
             aria-pressed={rightCollapsed}
-            title={rightCollapsed ? "Show editor panel" : "Collapse editor (show CC only)"}
+            title={
+              rightCollapsed
+                ? "Show editor panel"
+                : "Collapse editor (show CC only)"
+            }
             onClick={() => toggleSplitCollapse("right")}
           >
             ED ▶

@@ -5,12 +5,18 @@ src-tauri/target
 src-tauri/gen
 src-tauri/Cargo.lock
 
-# Hand-authored strategic documentation — preserve author's spacing
+# Hand-authored / skill-authored prose — preserve author's spacing (prettier's
+# markdown rewrites — blank-line-before-list, prose-wrap — fight the narrative
+# voice). Same rationale as docs/ + workflow/; the memory files, the CHANGELOG
+# narrative, and the installed skill bodies are all hand/skill-authored prose.
 CLAUDE.md
 README.md
 docs/
 workflow/
 runtimes.md
+CHANGELOG.md
+.claude/memory/
+.claude/skills/
 
 # Nested Homebrew tap — its own independent git repo
 homebrew-claudesk/

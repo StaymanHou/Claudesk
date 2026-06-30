@@ -63,11 +63,7 @@ const SCREEN_CAP = 0.9;
  * At least 1 (a single tile always "fits" even if it alone exceeds the cap — we never
  * return a zero-column grid). Pure integer math.
  */
-function tilesPerAxis(
-  axisAvail: number,
-  stride: number,
-  pad: number,
-): number {
+function tilesPerAxis(axisAvail: number, stride: number, pad: number): number {
   const usable = axisAvail - pad * 2;
   return Math.max(1, Math.floor((usable + TILE.gap) / stride));
 }
@@ -118,7 +114,10 @@ export function computePanelSize(
 
   if (flow === "row") {
     // Primary axis = width. Wrap when unit×n width would exceed SCREEN_CAP * availWidth.
-    const perRow = Math.min(n, tilesPerAxis(screen.availWidth * SCREEN_CAP, unitW + gap, pad));
+    const perRow = Math.min(
+      n,
+      tilesPerAxis(screen.availWidth * SCREEN_CAP, unitW + gap, pad),
+    );
     const rows = Math.ceil(n / perRow);
     const width = pad * 2 + perRow * unitW + (perRow - 1) * gap;
     const height = switchRowH + pad * 2 + rows * unitH + (rows - 1) * gap;

@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-30
-status: in-progress — WP1, WP2, WP3, WP9, WP4, WP5, WP6 DONE; WP7–WP8 remaining
+status: in-progress — WP1, WP2, WP3, WP9, WP4, WP5, WP6, WP7 DONE; WP8 remaining
 context: between-milestone debt-paydown sweep, filed after M8 close, before M9 (Time-analytics) planning
 drive_mode: full-autopilot
 ---
@@ -86,7 +86,7 @@ scores low; translate severity into the impact term, don't auto-prioritize by it
 - **Delete:** `SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES` (marked SUPERSEDED — no longer
   relevant) + any entries found already-resolved-in-place during the sweep.
 
-**Sequence of execution:** WP1 → WP2 → WP3 → WP9 → WP4 → WP5 → WP6 → WP7 → WP8
+**Sequence of execution:** WP1 → WP2 → WP3 → WP9 → WP4 → WP5 → WP6 ✅ → WP7 ✅ → **WP8**
 *(Ordered by the rules above: deletions (WP1) → low-risk real fixes (WP2–WP4) → comment-only bulk
 (WP5) → behavior-preserving dedup (WP6) → infra config (WP7) → README + the one stateful change (WP8).
 **WP9** folded in 2026-06-30 from a user bug report — a behavioral fix with a Low-Med-risk edge; slotted
@@ -248,7 +248,39 @@ SURFACE — reviewer-noted dup). `PANETABS-COMPONENT-TEST-GAP` BURIED.
 
 ---
 
-## WP7 — Lint/test-infra hygiene  `[impact: Med · effort: XS · risk: XS]`  `← one-liners`
+## WP7 — Lint/test-infra hygiene  `[impact: Med · effort: XS · risk: XS]`  `← one-liners`  ✅ DONE 2026-06-30
+**Outcome:** The repo's own quality gates now pass clean on a fresh tree. Gate: `pnpm eslint .` **exits 0**
+(was 63 errors); `pnpm prettier --check .` **clean** (was 64 files); `tsc` + vitest **787 pass** + 8/8 demo
+nodetests; backend untouched (config-only `.mcp.json`).
+- **eslint noise — STALE PREMISE on the cited target, but a real live issue.** `tmp/`+`src-tauri/tmp/` were
+  ALREADY in the flat-config `ignores` (a prior WP added them) — the cited `scratch-a/main.js` no longer
+  fires. The ACTUAL 63-error noise was `tooling/demo/**` (M8 demo scripts with no env block → `no-undef` on
+  `window`/`document`/`console`/`process`). Fixed properly (not blanket-ignored — they're real code with
+  nodetests): added two flat-config blocks — `tooling/demo/**/*.mjs` → Node+browser globals (they drive
+  Playwright `page.evaluate`), `tooling/demo/**/*.js` → browser/script (rendered in the demo page).
+  (The lone remaining `eslint .` output is a pre-existing intentional `exhaustive-deps` WARNING on
+  XtermPane's spread-deps effect — not an error, doesn't fail the gate, out of WP7 scope.)
+- **Prettier drift + brittle raw-regex tests.** Loosened TWO brittle `?raw` source-grep regexes FIRST
+  (so the format pass wouldn't break them): `fileTreeGitRollup.test.ts`'s whitespace-exact `useMemo` match
+  and `terminalListWiring.test.ts`'s exact-string `ref={…}` `toContain` → both now token-order matches
+  tolerant of prettier wrapping (`[\s\S]*?`). Then `pnpm format` normalized the ~58 source/config/demo
+  files. (`terminalListWiring` actually broke on the format pass — caught by the suite, then loosened —
+  proving the brittleness class the SURFACE flagged.)
+- **MEMORY-MD prettier nits + the prose-vs-source split.** Chose the `.prettierignore` route (consistent
+  with the existing `docs/`/`workflow/` prose exemptions): added `.claude/memory/`, `.claude/skills/`, and
+  `CHANGELOG.md` (all hand/skill-authored narrative prettier's markdown rewrites fight). Everything else
+  (source `.ts/.tsx`, `tauri*.json`, `tooling/demo/*`) was `pnpm format`-normalized instead of exempted.
+- **Pinned the MCP server.** `.mcp.json` `@hypothesi/tauri-mcp-server` → `@0.11.2` (verified latest
+  published + matches the Rust `tauri-plugin-mcp-bridge` `0.11` line) so verify-self doesn't float to a
+  broken release on a future `npx -y`.
+- **`no-floating-promises` — DECLINED (documented).** The rule needs type-aware linting
+  (`parserOptions.project`/`recommendedTypeChecked`) the flat config deliberately does NOT have; enabling
+  it is NOT the "cheap + clean" the task gated on (it stands up whole-project type-checked linting + a likely
+  large new error surface). Left for a deliberate future type-aware-lint investment if one is ever made.
+**Resolved findings:** `SURFACE-2026-06-27-ESLINT-WALKS-GITIGNORED-SCRATCH-FIXTURE` (the gitignored-scratch
+case was already ignored; closed the real `tooling/demo/` eslint noise instead), `SURFACE-2026-06-26-PRETTIER-DRIFT-AND-BRITTLE-RAW-REGEX-TEST`, `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS`,
+`SURFACE-2026-06-26-QUALITY-WP2-UNPINNED-MCP-SERVER`.
+
 **Backlog:** `SURFACE-2026-06-27-ESLINT-WALKS-GITIGNORED-SCRATCH-FIXTURE`, `SURFACE-2026-06-26-PRETTIER-DRIFT-AND-BRITTLE-RAW-REGEX-TEST`, `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS`, `m5-wp2` `UNPINNED-MCP-SERVER`.
 **Why here:** makes the repo's OWN quality gates pass clean on a fresh tree (meta-debt).
 

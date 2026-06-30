@@ -14,9 +14,7 @@ describe("computePanelSize — grows with workspace count along the flow axis", 
     // Height unchanged (still one row) when not wrapping.
     expect(three.height).toBe(one.height);
     // Width = pad*2 + 3 tiles + 2 gaps.
-    expect(three.width).toBe(
-      TILE.pad * 2 + 3 * TILE.mirrorW + 2 * TILE.gap,
-    );
+    expect(three.width).toBe(TILE.pad * 2 + 3 * TILE.mirrorW + 2 * TILE.gap);
   });
 
   it("vertical-mirror: height grows with N, width is one tile-column", () => {
@@ -81,8 +79,16 @@ describe("computePanelSize — defensive", () => {
   });
 
   it("never returns a non-positive dimension", () => {
-    for (const layout of ["horizontal-mirror", "vertical-mirror", "compact", "minimal"] as const) {
-      const s = computePanelSize(layout, 1, { availWidth: 100, availHeight: 100 });
+    for (const layout of [
+      "horizontal-mirror",
+      "vertical-mirror",
+      "compact",
+      "minimal",
+    ] as const) {
+      const s = computePanelSize(layout, 1, {
+        availWidth: 100,
+        availHeight: 100,
+      });
       expect(s.width).toBeGreaterThan(0);
       expect(s.height).toBeGreaterThan(0);
     }

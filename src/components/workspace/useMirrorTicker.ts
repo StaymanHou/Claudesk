@@ -143,7 +143,12 @@ export function useMirrorTicker({
       // Compute the needed set (a Set so a workspace shared by both surfaces is
       // serialized once). Pure decision — see computeMirrorSet (vitest-pinned). The
       // PiP contributes ids only when its layout actually renders a mirror.
-      const needed = computeMirrorSet(allIds, focusedId, collapsed, pipNeedsMirror);
+      const needed = computeMirrorSet(
+        allIds,
+        focusedId,
+        collapsed,
+        pipNeedsMirror,
+      );
 
       // Serialize each needed workspace ONCE into the shared frame.
       const next = new Map<string, string>();

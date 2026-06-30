@@ -10,15 +10,15 @@ const chord = (over: Partial<Parameters<typeof newWorkspaceChord>[0]>) => ({
 
 describe("newWorkspaceChord", () => {
   it("matches ⌘⇧N (lowercase key)", () => {
-    expect(newWorkspaceChord(chord({ metaKey: true, shiftKey: true, key: "n" }))).toBe(
-      true,
-    );
+    expect(
+      newWorkspaceChord(chord({ metaKey: true, shiftKey: true, key: "n" })),
+    ).toBe(true);
   });
 
   it("matches ⌘⇧N when macOS reports the shifted uppercase key", () => {
-    expect(newWorkspaceChord(chord({ metaKey: true, shiftKey: true, key: "N" }))).toBe(
-      true,
-    );
+    expect(
+      newWorkspaceChord(chord({ metaKey: true, shiftKey: true, key: "N" })),
+    ).toBe(true);
   });
 
   it("requires Shift — disjoint from the bare ⌘N editor new-file chord", () => {
@@ -34,15 +34,15 @@ describe("newWorkspaceChord", () => {
   });
 
   it("ignores other ⌘⇧-letter chords (⌘⇧E)", () => {
-    expect(newWorkspaceChord(chord({ metaKey: true, shiftKey: true, key: "e" }))).toBe(
-      false,
-    );
+    expect(
+      newWorkspaceChord(chord({ metaKey: true, shiftKey: true, key: "e" })),
+    ).toBe(false);
   });
 
   it("ignores ⌘⇧+digit (the filmstrip switch chord)", () => {
-    expect(newWorkspaceChord(chord({ metaKey: true, shiftKey: true, key: "1" }))).toBe(
-      false,
-    );
+    expect(
+      newWorkspaceChord(chord({ metaKey: true, shiftKey: true, key: "1" })),
+    ).toBe(false);
   });
 
   it("is permissive on Ctrl/Alt (only Meta+Shift+'n' defines the chord)", () => {

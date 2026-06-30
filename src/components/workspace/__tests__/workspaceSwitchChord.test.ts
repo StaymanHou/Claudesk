@@ -12,13 +12,17 @@ describe("workspaceSwitchIndex", () => {
   it("returns the 1-based digit for ⌘⇧1..⌘⇧9", () => {
     for (let n = 1; n <= 9; n++) {
       expect(
-        workspaceSwitchIndex(chord({ metaKey: true, shiftKey: true, key: String(n) })),
+        workspaceSwitchIndex(
+          chord({ metaKey: true, shiftKey: true, key: String(n) }),
+        ),
       ).toBe(n);
     }
   });
 
   it("requires Meta (no bare Shift+digit)", () => {
-    expect(workspaceSwitchIndex(chord({ shiftKey: true, key: "2" }))).toBeNull();
+    expect(
+      workspaceSwitchIndex(chord({ shiftKey: true, key: "2" })),
+    ).toBeNull();
   });
 
   it("requires Shift — disjoint from the bare ⌘+digit editor tab chord", () => {
@@ -36,7 +40,9 @@ describe("workspaceSwitchIndex", () => {
       workspaceSwitchIndex(chord({ metaKey: true, shiftKey: true, key: "e" })),
     ).toBeNull();
     expect(
-      workspaceSwitchIndex(chord({ metaKey: true, shiftKey: true, key: "Enter" })),
+      workspaceSwitchIndex(
+        chord({ metaKey: true, shiftKey: true, key: "Enter" }),
+      ),
     ).toBeNull();
   });
 

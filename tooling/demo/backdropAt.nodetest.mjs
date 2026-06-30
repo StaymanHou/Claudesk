@@ -20,10 +20,21 @@ test("backdropAt: messages reveal progressively by `at`", () => {
       { at: 2, author: "b", text: "second" },
     ],
   };
-  assert.equal(backdropAt(spec, 0).messages.length, 1, "only the at=0 message at t=0");
-  assert.equal(backdropAt(spec, 1.9).messages.length, 1, "still 1 just before t=2");
+  assert.equal(
+    backdropAt(spec, 0).messages.length,
+    1,
+    "only the at=0 message at t=0",
+  );
+  assert.equal(
+    backdropAt(spec, 1.9).messages.length,
+    1,
+    "still 1 just before t=2",
+  );
   assert.equal(backdropAt(spec, 2).messages.length, 2, "both at t=2");
-  assert.deepEqual(backdropAt(spec, 2).messages[1], { author: "b", text: "second" });
+  assert.deepEqual(backdropAt(spec, 2).messages[1], {
+    author: "b",
+    text: "second",
+  });
 });
 
 test("backdropAt: a message with no `at` always shows", () => {
@@ -51,7 +62,11 @@ test("backdropAt: input is empty before startT and after sendAt", () => {
 test("backdropAt: 'sending' flashes in the last 0.15s once fully typed", () => {
   const spec = { typing: [{ startT: 0, text: "x", sendAt: 5 }] };
   assert.equal(backdropAt(spec, 2).sending, false, "not sending mid-window");
-  assert.equal(backdropAt(spec, 4.95).sending, true, "sending in the final 0.15s");
+  assert.equal(
+    backdropAt(spec, 4.95).sending,
+    true,
+    "sending in the final 0.15s",
+  );
 });
 
 test("backdropAt: a reaction attaches to its target message, added once t >= at", () => {
@@ -64,7 +79,11 @@ test("backdropAt: a reaction attaches to its target message, added once t >= at"
   };
   const before = backdropAt(spec, 1).messages;
   assert.equal(before[0].reaction, undefined, "msg 0 has no reaction");
-  assert.deepEqual(before[1].reaction, { emoji: "👍", added: false }, "msg 1 reaction present but not added before `at`");
+  assert.deepEqual(
+    before[1].reaction,
+    { emoji: "👍", added: false },
+    "msg 1 reaction present but not added before `at`",
+  );
   const after = backdropAt(spec, 2).messages;
   assert.equal(after[1].reaction.added, true, "reaction added once t >= at");
 });
@@ -83,5 +102,9 @@ test("backdropAt: reaction msgIndex is the ORIGINAL index (stable as earlier msg
   assert.equal(backdropAt(spec, 1).messages.length, 2, "msg 2 not shown yet");
   const shown = backdropAt(spec, 5).messages;
   assert.equal(shown.length, 3);
-  assert.equal(shown[2].reaction.emoji, "🎉", "reaction landed on the original index-2 message");
+  assert.equal(
+    shown[2].reaction.emoji,
+    "🎉",
+    "reaction landed on the original index-2 message",
+  );
 });

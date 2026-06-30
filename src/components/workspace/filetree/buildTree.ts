@@ -83,7 +83,13 @@ export function buildTree(entries: TreeEntry[]): TreeNode[] {
     }
     const slash = path.lastIndexOf("/");
     const name = slash === -1 ? path : path.slice(slash + 1);
-    const node: TreeNode = { name, path, isDir: true, children: [], pruned: false };
+    const node: TreeNode = {
+      name,
+      path,
+      isDir: true,
+      children: [],
+      pruned: false,
+    };
     byPath.set(path, node);
     if (slash === -1) {
       roots.push(node);
@@ -107,7 +113,13 @@ export function buildTree(entries: TreeEntry[]): TreeNode[] {
     // File leaf: attach under its parent dir (created on demand if unseen).
     const slash = path.lastIndexOf("/");
     const name = slash === -1 ? path : path.slice(slash + 1);
-    const leaf: TreeNode = { name, path, isDir: false, children: [], pruned: false };
+    const leaf: TreeNode = {
+      name,
+      path,
+      isDir: false,
+      children: [],
+      pruned: false,
+    };
     byPath.set(path, leaf);
     if (slash === -1) {
       roots.push(leaf);

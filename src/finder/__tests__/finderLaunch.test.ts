@@ -20,6 +20,9 @@ describe("openFinder", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const invoker: Invoker = () => Promise.reject(new Error("open failed"));
     await expect(openFinder("/p", invoker)).resolves.toBeUndefined();
-    expect(spy).toHaveBeenCalledWith("[finder] open failed:", expect.any(Error));
+    expect(spy).toHaveBeenCalledWith(
+      "[finder] open failed:",
+      expect.any(Error),
+    );
   });
 });

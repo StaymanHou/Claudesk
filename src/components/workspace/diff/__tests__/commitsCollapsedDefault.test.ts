@@ -28,7 +28,9 @@ describe("DiffPanel defaults the Commits section to collapsed (QoL-WP8 item B)",
   });
 
   it("does NOT initialize commitsCollapsed to false", () => {
-    expect(diffPanelSource).not.toMatch(/useState\(\s*false\s*\)\s*;?\s*\/\/.*commitsCollapsed/);
+    expect(diffPanelSource).not.toMatch(
+      /useState\(\s*false\s*\)\s*;?\s*\/\/.*commitsCollapsed/,
+    );
     // Belt-and-suspenders: the exact false-default form must be absent for this hook.
     expect(diffPanelSource).not.toMatch(
       /\[\s*commitsCollapsed\s*,\s*setCommitsCollapsed\s*\]\s*=\s*useState\(\s*false\s*\)/,

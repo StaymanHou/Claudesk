@@ -32,8 +32,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "resources/claudesk-hook.pl"
-    ]
+    "resources": ["resources/claudesk-hook.pl"]
   }
 }

@@ -39,7 +39,9 @@ const appCss = readFileSync(appCssPath, "utf8");
 // that mentions e.g. "not top:0" doesn't trip a property-value assertion.
 const ruleBody = (selector: string): string => {
   const i = appCss.indexOf(selector + " {");
-  expect(i, `rule "${selector}" not found in App.css`).toBeGreaterThanOrEqual(0);
+  expect(i, `rule "${selector}" not found in App.css`).toBeGreaterThanOrEqual(
+    0,
+  );
   const open = appCss.indexOf("{", i);
   const close = appCss.indexOf("}", open);
   return appCss.slice(open + 1, close).replace(/\/\*[\s\S]*?\*\//g, "");

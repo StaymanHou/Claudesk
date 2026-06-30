@@ -42,20 +42,24 @@ describe("cycleRatio", () => {
 
 describe("toggleCollapse", () => {
   it("collapses a half from the none state, preserving ratio", () => {
-    expect(toggleCollapse({ collapsed: "none", ratio: "3:1" }, "left")).toEqual({
-      collapsed: "left",
-      ratio: "3:1",
-    });
+    expect(toggleCollapse({ collapsed: "none", ratio: "3:1" }, "left")).toEqual(
+      {
+        collapsed: "left",
+        ratio: "3:1",
+      },
+    );
     expect(
       toggleCollapse({ collapsed: "none", ratio: "1:3" }, "right"),
     ).toEqual({ collapsed: "right", ratio: "1:3" });
   });
 
   it("restores to none when toggling the already-collapsed half (ratio kept)", () => {
-    expect(toggleCollapse({ collapsed: "left", ratio: "2:2" }, "left")).toEqual({
-      collapsed: "none",
-      ratio: "2:2",
-    });
+    expect(toggleCollapse({ collapsed: "left", ratio: "2:2" }, "left")).toEqual(
+      {
+        collapsed: "none",
+        ratio: "2:2",
+      },
+    );
     expect(
       toggleCollapse({ collapsed: "right", ratio: "3:1" }, "right"),
     ).toEqual({ collapsed: "none", ratio: "3:1" });
@@ -63,12 +67,12 @@ describe("toggleCollapse", () => {
 
   it("mutual exclusion — collapsing one half while the other is collapsed moves the collapse", () => {
     // right was collapsed; collapse left → left collapsed (never both)
-    expect(toggleCollapse({ collapsed: "right", ratio: "2:2" }, "left")).toEqual(
-      { collapsed: "left", ratio: "2:2" },
-    );
-    expect(toggleCollapse({ collapsed: "left", ratio: "2:2" }, "right")).toEqual(
-      { collapsed: "right", ratio: "2:2" },
-    );
+    expect(
+      toggleCollapse({ collapsed: "right", ratio: "2:2" }, "left"),
+    ).toEqual({ collapsed: "left", ratio: "2:2" });
+    expect(
+      toggleCollapse({ collapsed: "left", ratio: "2:2" }, "right"),
+    ).toEqual({ collapsed: "right", ratio: "2:2" });
   });
 
   it("round-trips: collapse then restore returns the exact prior ratio", () => {
@@ -116,12 +120,18 @@ describe("loadSplitState / saveSplitState (localStorage round-trip)", () => {
   });
 
   it("falls back per-field for invalid field values", () => {
-    store[SPLIT_STATE_KEY] = JSON.stringify({ collapsed: "bogus", ratio: "9:9" });
+    store[SPLIT_STATE_KEY] = JSON.stringify({
+      collapsed: "bogus",
+      ratio: "9:9",
+    });
     expect(loadSplitState()).toEqual(DEFAULT_SPLIT);
   });
 
   it("keeps a valid field while defaulting an invalid sibling", () => {
-    store[SPLIT_STATE_KEY] = JSON.stringify({ collapsed: "left", ratio: "9:9" });
+    store[SPLIT_STATE_KEY] = JSON.stringify({
+      collapsed: "left",
+      ratio: "9:9",
+    });
     expect(loadSplitState()).toEqual({
       collapsed: "left",
       ratio: DEFAULT_SPLIT.ratio,

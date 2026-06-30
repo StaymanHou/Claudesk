@@ -74,22 +74,26 @@ describe("loadTerminalFontSize / saveTerminalFontSize (persistence)", () => {
     expect(loadTerminalFontSize(s)).toBe(18);
   });
   it("clamps an out-of-range persisted value on read", () => {
-    expect(loadTerminalFontSize(makeStorage({ [TERMINAL_FONT_SIZE_KEY]: "999" }))).toBe(
-      MAX_TERMINAL_FONT_PX,
-    );
-    expect(loadTerminalFontSize(makeStorage({ [TERMINAL_FONT_SIZE_KEY]: "1" }))).toBe(
-      MIN_TERMINAL_FONT_PX,
-    );
+    expect(
+      loadTerminalFontSize(makeStorage({ [TERMINAL_FONT_SIZE_KEY]: "999" })),
+    ).toBe(MAX_TERMINAL_FONT_PX);
+    expect(
+      loadTerminalFontSize(makeStorage({ [TERMINAL_FONT_SIZE_KEY]: "1" })),
+    ).toBe(MIN_TERMINAL_FONT_PX);
   });
   it("falls back to default for a corrupt persisted value", () => {
     expect(
-      loadTerminalFontSize(makeStorage({ [TERMINAL_FONT_SIZE_KEY]: "not-a-number" })),
+      loadTerminalFontSize(
+        makeStorage({ [TERMINAL_FONT_SIZE_KEY]: "not-a-number" }),
+      ),
     ).toBe(DEFAULT_TERMINAL_FONT_PX);
   });
   it("saveTerminalFontSize clamps before persisting", () => {
     const s = makeStorage();
     saveTerminalFontSize(100, s);
-    expect(s.getItem(TERMINAL_FONT_SIZE_KEY)).toBe(String(MAX_TERMINAL_FONT_PX));
+    expect(s.getItem(TERMINAL_FONT_SIZE_KEY)).toBe(
+      String(MAX_TERMINAL_FONT_PX),
+    );
   });
   it("returns default and does not throw when storage is undefined", () => {
     expect(loadTerminalFontSize(undefined)).toBe(DEFAULT_TERMINAL_FONT_PX);

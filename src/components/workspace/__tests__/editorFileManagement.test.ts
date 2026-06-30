@@ -87,8 +87,12 @@ describe("FileTree create-in-folder wiring (WP5b P1.1)", () => {
   });
 
   it("renders the input at body-top for root (null) and inline under the dir otherwise", () => {
-    expect(fileTreeSource).toMatch(/newFileDir === null && renderNewFileInput\(\)/);
-    expect(fileTreeSource).toMatch(/newFileDir === node\.path &&\s*\n?\s*renderNewFileInput/);
+    expect(fileTreeSource).toMatch(
+      /newFileDir === null && renderNewFileInput\(\)/,
+    );
+    expect(fileTreeSource).toMatch(
+      /newFileDir === node\.path &&\s*\n?\s*renderNewFileInput/,
+    );
   });
 });
 
@@ -162,7 +166,9 @@ describe("new-folder + nested-file create wiring (WP5b P3.3)", () => {
   });
 
   it("createFile creates a nested path's parent (mkdir -p) before writing (allowNested)", () => {
-    expect(rightPanelSource).toMatch(/proposeNewFilePath\(dir, name, \/\* allowNested \*\/ true\)/);
+    expect(rightPanelSource).toMatch(
+      /proposeNewFilePath\(dir, name, \/\* allowNested \*\/ true\)/,
+    );
     // The nested-file path ensures the parent dir exists via create_dir before write_file.
     expect(rightPanelSource).toMatch(/create_dir/);
   });

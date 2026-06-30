@@ -66,8 +66,16 @@ window.TIMELINE = window.TIMELINE || {
       // ● tool bullet → ⎿ result).
       t: 0,
       tiles: [
-        { name: "catan-companion", status: "running", body: "● Edit ScoreView.swift" },
-        { name: "tax-cruncher", status: "running", body: "● Bash · cargo test" },
+        {
+          name: "catan-companion",
+          status: "running",
+          body: "● Edit ScoreView.swift",
+        },
+        {
+          name: "tax-cruncher",
+          status: "running",
+          body: "● Bash · cargo test",
+        },
         { name: "hugo-blog", status: "idle", body: "idle" },
         { name: "recipe-box", status: "unknown", body: "—" },
       ],
@@ -102,13 +110,22 @@ window.TIMELINE = window.TIMELINE || {
             { cls: "diff-add", text: "    44 +    turnDeadline = .now + 90" },
             { cls: "diff-add", text: "    45 +    onTimeout?()" },
             { cls: "diff-ctx", text: "    46      advanceToNextPlayer()" },
-            { cls: "accent", text: "● Bash(xcodebuild -scheme CatanCompanion)" },
+            {
+              cls: "accent",
+              text: "● Bash(xcodebuild -scheme CatanCompanion)",
+            },
             { cls: "dim", text: "  ⎿ Compiling Models (12 sources)" },
             { cls: "dim", text: "  ⎿ Compiling Views (18 sources)" },
             { cls: "dim", text: "  ⎿ Linking CatanCompanion.app" },
             { cls: "ok", text: "  ⎿ Build succeeded in 4.2s" },
-            { cls: "accent", text: "● Bash(swift test --filter TurnTimerTests)" },
-            { cls: "ok", text: "  ⎿ Test Suite 'TurnTimerTests' passed (9 tests)" },
+            {
+              cls: "accent",
+              text: "● Bash(swift test --filter TurnTimerTests)",
+            },
+            {
+              cls: "ok",
+              text: "  ⎿ Test Suite 'TurnTimerTests' passed (9 tests)",
+            },
           ],
         },
         changes: [
@@ -126,7 +143,11 @@ window.TIMELINE = window.TIMELINE || {
       // pulls the eye to the filmstrip, not the stage.
       t: 2.0,
       tiles: [
-        { name: "catan-companion", status: "running", body: "● Bash · xcodebuild" },
+        {
+          name: "catan-companion",
+          status: "running",
+          body: "● Bash · xcodebuild",
+        },
         { name: "tax-cruncher", status: "awaiting", body: "? Tax year" },
         { name: "hugo-blog", status: "idle", body: "idle" },
         { name: "recipe-box", status: "unknown", body: "—" },
@@ -156,7 +177,11 @@ window.TIMELINE = window.TIMELINE || {
       // permission prompt is on screen, nothing approved yet. Switch ≠ approve.
       t: 4.0,
       tiles: [
-        { name: "catan-companion", status: "running", body: "● Bash · xcodebuild" },
+        {
+          name: "catan-companion",
+          status: "running",
+          body: "● Bash · xcodebuild",
+        },
         { name: "tax-cruncher", status: "awaiting", body: "? Tax year" },
         { name: "hugo-blog", status: "idle", body: "idle" },
         { name: "recipe-box", status: "unknown", body: "—" },
@@ -168,19 +193,34 @@ window.TIMELINE = window.TIMELINE || {
         // options with the ❯-selected row + dimmed description-below, footer hint.
         // Rendered via the askq-* classes (shell.css); no new shell.js path.
         lines: [
-          { cls: "prompt", text: "❯ handle the 2024 bracket update in the federal calc" },
+          {
+            cls: "prompt",
+            text: "❯ handle the 2024 bracket update in the federal calc",
+          },
           { text: "" },
           { cls: "accent", text: "● Read(src/brackets/federal_2024.rs)" },
           { cls: "dim", text: "  ⎿ Read 142 lines" },
           { text: "" },
           { cls: "askq-tab", text: "☐ Tax year" },
-          { cls: "askq-question", text: "How should the calculator treat a return filed for a prior year?" },
+          {
+            cls: "askq-question",
+            text: "How should the calculator treat a return filed for a prior year?",
+          },
           { cls: "askq-opt sel", text: "❯ 1. Use that year's brackets" },
-          { cls: "askq-od", text: "Look up the historical bracket table by tax year. Correct for amended + late returns." },
+          {
+            cls: "askq-od",
+            text: "Look up the historical bracket table by tax year. Correct for amended + late returns.",
+          },
           { cls: "askq-opt", text: "&nbsp;&nbsp;2. Always use current-year" },
-          { cls: "askq-od", text: "Simpler, but wrong for amended / late-filed prior-year returns." },
+          {
+            cls: "askq-od",
+            text: "Simpler, but wrong for amended / late-filed prior-year returns.",
+          },
           { cls: "askq-opt", text: "&nbsp;&nbsp;3. Prompt per calculation" },
-          { cls: "askq-foot", text: "Enter to select · Tab/Arrow keys to navigate · Esc to cancel" },
+          {
+            cls: "askq-foot",
+            text: "Enter to select · Tab/Arrow keys to navigate · Esc to cancel",
+          },
         ],
         changes: [
           { cls: "dim", text: "awaiting answer…" },
@@ -194,7 +234,11 @@ window.TIMELINE = window.TIMELINE || {
       // tool proceeds.
       t: 6.0,
       tiles: [
-        { name: "catan-companion", status: "running", body: "● Bash · xcodebuild" },
+        {
+          name: "catan-companion",
+          status: "running",
+          body: "● Bash · xcodebuild",
+        },
         { name: "tax-cruncher", status: "running", body: "● cargo test" },
         { name: "hugo-blog", status: "idle", body: "idle" },
         { name: "recipe-box", status: "unknown", body: "—" },
@@ -202,7 +246,10 @@ window.TIMELINE = window.TIMELINE || {
       active: 1,
       stage: {
         lines: [
-          { cls: "prompt", text: "❯ handle the 2024 bracket update in the federal calc" },
+          {
+            cls: "prompt",
+            text: "❯ handle the 2024 bracket update in the federal calc",
+          },
           { text: "" },
           { cls: "accent", text: "● Edit(src/brackets/federal_2024.rs)" },
           { cls: "ok", text: "  ⎿ Updated with 7 additions" },

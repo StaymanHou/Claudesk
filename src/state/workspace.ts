@@ -155,9 +155,7 @@ export function closeWorkspace(
   // Closed the focused one: promote the left neighbour (the workspace now at idx-1
   // in the FILTERED list), or the new leftmost if it was index 0, or null if empty.
   const focusedId =
-    workspaces.length === 0
-      ? null
-      : workspaces[Math.max(0, idx - 1)].id;
+    workspaces.length === 0 ? null : workspaces[Math.max(0, idx - 1)].id;
   return { workspaces, focusedId };
 }
 

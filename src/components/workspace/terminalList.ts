@@ -92,9 +92,7 @@ export function closeTerminal(
   const entries = state.entries.filter((e) => e.id !== id);
   // If the closed one was active, reactivate the left neighbour (clamp to the new first).
   const activeId =
-    state.activeId === id
-      ? entries[Math.max(0, idx - 1)].id
-      : state.activeId;
+    state.activeId === id ? entries[Math.max(0, idx - 1)].id : state.activeId;
   return { ...state, entries, activeId };
 }
 

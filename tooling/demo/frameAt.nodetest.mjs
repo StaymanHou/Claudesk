@@ -11,7 +11,11 @@ import "./frameAt.js";
 
 const frameAt = globalThis.__frameAt;
 
-const KF = [{ t: 0, n: "a" }, { t: 1.4, n: "b" }, { t: 2.6, n: "c" }];
+const KF = [
+  { t: 0, n: "a" },
+  { t: 1.4, n: "b" },
+  { t: 2.6, n: "c" },
+];
 
 test("frameAt.js loaded and exposed __frameAt", () => {
   assert.equal(typeof frameAt, "function");

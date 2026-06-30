@@ -18,6 +18,9 @@
  * @param collapsed       filmstrip collapse state (collapsed → no thumbnails → no loop)
  * @param backgroundCount number of background (non-active) tiles to mirror
  */
-export function shouldRunMirror(collapsed: boolean, backgroundCount: number): boolean {
+export function shouldRunMirror(
+  collapsed: boolean,
+  backgroundCount: number,
+): boolean {
   return !collapsed && backgroundCount > 0;
 }

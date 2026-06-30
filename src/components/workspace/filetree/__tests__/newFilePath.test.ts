@@ -54,10 +54,12 @@ describe("proposeNewFilePath", () => {
   // STILL be a single segment (no nested-dir create), and the result is dir-scoped.
   describe("create-in-folder (WP5b — real dir arg)", () => {
     it("composes a dir-scoped path from a nested dir + single-segment name", () => {
-      expect(proposeNewFilePath("src/components/workspace", "Foo.tsx")).toEqual({
-        ok: true,
-        path: "src/components/workspace/Foo.tsx",
-      });
+      expect(proposeNewFilePath("src/components/workspace", "Foo.tsx")).toEqual(
+        {
+          ok: true,
+          path: "src/components/workspace/Foo.tsx",
+        },
+      );
     });
 
     it("still rejects a separator in the name even with a dir (no nested create)", () => {

@@ -30,7 +30,9 @@
   const frameAt = globalThis.__frameAt;
   const T = window.TIMELINE;
   if (!T) {
-    console.error("shell.js: window.TIMELINE not set — load a timeline before shell.js");
+    console.error(
+      "shell.js: window.TIMELINE not set — load a timeline before shell.js",
+    );
     return;
   }
 
@@ -97,7 +99,8 @@
       bdInput.hidden = false;
       bdInput.classList.toggle("sending", b.sending);
       bdInput.innerHTML =
-        `<span class="bd-author">you</span>${b.input}` + '<span class="bd-caret"></span>';
+        `<span class="bd-author">you</span>${b.input}` +
+        '<span class="bd-caret"></span>';
     }
   }
   // PiP panel placement (pip region) — corner-pinned like the real NSPanel.
@@ -118,7 +121,9 @@
     strip.innerHTML = (k.tiles || [])
       .map((tile, i) => {
         const active = i === k.active ? " active" : "";
-        const body = tile.body ? `<div class="tile-body">${tile.body}</div>` : "";
+        const body = tile.body
+          ? `<div class="tile-body">${tile.body}</div>`
+          : "";
         return (
           `<div class="tile${active}" data-i="${i}">` +
           `<div class="tile-head">${dot(tile.status)}${tile.name}</div>` +
@@ -130,7 +135,9 @@
   }
 
   function fmtTokens(n) {
-    return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
+    return n >= 1000
+      ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k"
+      : String(n);
   }
 
   function renderStage(k, t) {
@@ -146,7 +153,9 @@
         const b = busyAt(k.stage.busy, t);
         if (b) {
           const stream = (k.stage.busy.stream || []).slice(0, b.revealed);
-          html += stream.map((l) => `<div class="${l.cls || ""}">${l.text}</div>`).join("");
+          html += stream
+            .map((l) => `<div class="${l.cls || ""}">${l.text}</div>`)
+            .join("");
           // working line, real-TUI shape: "✻ Wrangling… (12s · ↓ 1.5k tokens) (esc to interrupt)"
           html +=
             `<div class="busy"><span class="busy-glyph">${b.glyph}</span> ${b.word}… ` +
@@ -174,7 +183,9 @@
       const b = busyAt(m.busy, t);
       if (b) {
         const stream = (m.busy.stream || []).slice(0, b.revealed);
-        html += stream.map((l) => `<div class="${l.cls || ""}">${l.text}</div>`).join("");
+        html += stream
+          .map((l) => `<div class="${l.cls || ""}">${l.text}</div>`)
+          .join("");
         html +=
           `<div class="busy"><span class="busy-glyph">${b.glyph}</span> ${b.word}… ` +
           `<span class="busy-meta">(${b.elapsed}s · ↓ ${fmtTokens(b.tokens)} tokens)</span></div>`;
@@ -208,7 +219,8 @@
           const b = busyAt(row.busy, t);
           if (b) meta = `${b.elapsed}s · ↓ ${fmtTokens(b.tokens)} tokens`;
         }
-        const rowCls = row.status === "awaiting" ? "pip-row awaiting" : "pip-row";
+        const rowCls =
+          row.status === "awaiting" ? "pip-row awaiting" : "pip-row";
         return (
           `<div class="${rowCls}">${dot(row.status)}` +
           `<span class="name">${row.name}</span>` +
@@ -274,7 +286,9 @@
     keycapEl.hidden = false;
     keycapEl.style.left = ev.x + "px";
     keycapEl.style.top = ev.y + "px";
-    keycapEl.innerHTML = (ev.keys || []).map((k) => `<span class="key">${k}</span>`).join("");
+    keycapEl.innerHTML = (ev.keys || [])
+      .map((k) => `<span class="key">${k}</span>`)
+      .join("");
   }
 
   window.__render = function (t) {

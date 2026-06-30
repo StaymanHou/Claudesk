@@ -225,7 +225,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
     // Same key space as the per-file lookup (gitStatus[node.path]), recomputed on the
     // same `gitStatus` source the leaf indicators use — so a folder's roll-up agrees
     // with the indicators on the rows inside it. Empty until the first fetch resolves.
-    const rollupByDir = useMemo(() => dominantStatusByDir(gitStatus), [gitStatus]);
+    const rollupByDir = useMemo(
+      () => dominantStatusByDir(gitStatus),
+      [gitStatus],
+    );
 
     // QoL-WP5 — submit the inline new-file input: hand the name + the current tree path
     // set + the target dir (QoL-WP5b) up to the parent (which validates collision,
@@ -284,7 +287,9 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
             placeholder={
               newFileMode === "dir" ? "new-folder-name" : "new-file-name.ext"
             }
-            aria-label={newFileMode === "dir" ? "New folder name" : "New file name"}
+            aria-label={
+              newFileMode === "dir" ? "New folder name" : "New file name"
+            }
             onChange={(e) => {
               setNewFileName(e.target.value);
               if (newFileError) setNewFileError(null);

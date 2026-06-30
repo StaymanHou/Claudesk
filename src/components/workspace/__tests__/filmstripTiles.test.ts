@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { deriveTiles, orderWorkspaces, tileForSwitchIndex } from "../filmstripTiles";
+import {
+  deriveTiles,
+  orderWorkspaces,
+  tileForSwitchIndex,
+} from "../filmstripTiles";
 import { makeWorkspace } from "../../../state/workspace";
 
 const wsA = makeWorkspace("/Users/me/projects/alpha");
@@ -10,7 +14,11 @@ describe("deriveTiles", () => {
   it("renders one tile per workspace in WorkspaceList order with no persisted order", () => {
     const tiles = deriveTiles([wsA, wsB, wsC], wsB.id);
     expect(tiles.map((t) => t.id)).toEqual([wsA.id, wsB.id, wsC.id]);
-    expect(tiles.map((t) => t.display_name)).toEqual(["alpha", "beta", "gamma"]);
+    expect(tiles.map((t) => t.display_name)).toEqual([
+      "alpha",
+      "beta",
+      "gamma",
+    ]);
   });
 
   it("MARKS the focused workspace active — does not exclude it (complete roster)", () => {

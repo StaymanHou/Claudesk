@@ -12,7 +12,9 @@ import { isPaletteChord } from "../editor/paletteCommands";
 // The exclusivity matrix here is the chord-ownership guard (mirrors panelHost.test.ts /
 // paletteCommands.test.ts): a single keydown must fire at most one chord handler.
 
-const ev = (over: Partial<{ metaKey: boolean; shiftKey: boolean; key: string }>) => ({
+const ev = (
+  over: Partial<{ metaKey: boolean; shiftKey: boolean; key: string }>,
+) => ({
   metaKey: false,
   shiftKey: false,
   key: "",
@@ -33,9 +35,9 @@ describe("newTerminalChord (⌘T — new terminal)", () => {
   });
 
   it("does NOT fire WITH Shift — that's ⌘⇧T (panel-select), a different chord", () => {
-    expect(newTerminalChord(ev({ metaKey: true, shiftKey: true, key: "t" }))).toBe(
-      false,
-    );
+    expect(
+      newTerminalChord(ev({ metaKey: true, shiftKey: true, key: "t" })),
+    ).toBe(false);
   });
 
   it("does NOT fire on other letters", () => {
@@ -45,9 +47,9 @@ describe("newTerminalChord (⌘T — new terminal)", () => {
   });
 
   it("is permissive on Ctrl/Alt (strict only on ⌘ present, Shift absent, key 't')", () => {
-    expect(
-      newTerminalChord({ metaKey: true, shiftKey: false, key: "t" }),
-    ).toBe(true);
+    expect(newTerminalChord({ metaKey: true, shiftKey: false, key: "t" })).toBe(
+      true,
+    );
   });
 });
 

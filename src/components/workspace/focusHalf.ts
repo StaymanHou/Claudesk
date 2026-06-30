@@ -31,7 +31,8 @@ export type FocusHalf = "left" | "right" | "none";
  */
 export function deriveFocusHalf(target: EventTarget | null): FocusHalf {
   // Non-Elements (text nodes, window, null, the document) have no `closest` → none.
-  if (!target || typeof (target as Element).closest !== "function") return "none";
+  if (!target || typeof (target as Element).closest !== "function")
+    return "none";
   const half = (target as Element).closest(".workspace-left, .workspace-right");
   if (!half) return "none";
   return half.classList.contains("workspace-left") ? "left" : "right";

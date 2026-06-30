@@ -32,7 +32,8 @@ function validateRelSegments(trimmed: string): string | null {
   }
   const segments = trimmed.split(/[/\\]/);
   for (const seg of segments) {
-    if (seg === "") return "Path has an empty segment (no leading/trailing/double /).";
+    if (seg === "")
+      return "Path has an empty segment (no leading/trailing/double /).";
     if (seg === "." || seg === "..") return "Path can't contain '.' or '..'.";
   }
   return null;

@@ -45,7 +45,10 @@ test("cursorAt: exactly at a waypoint returns that point", () => {
 
 test("cursorAt: interpolates between waypoints (midpoint is between endpoints)", () => {
   const c = cursorAt(WP, 0.5);
-  assert.ok(c.x > 100 && c.x < 300, `x=${c.x} should be strictly between 100 and 300`);
+  assert.ok(
+    c.x > 100 && c.x < 300,
+    `x=${c.x} should be strictly between 100 and 300`,
+  );
   assert.equal(c.y, 100);
 });
 

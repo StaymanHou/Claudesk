@@ -20,7 +20,9 @@ import { parseArgs, num } from "./args.mjs";
 
 const a = parseArgs();
 if (!a.html || !a.out) {
-  console.error("build.mjs: --html <shell.html> and --out <path.gif> are required");
+  console.error(
+    "build.mjs: --html <shell.html> and --out <path.gif> are required",
+  );
   process.exit(2);
 }
 
@@ -41,7 +43,14 @@ function run(script, args) {
 
 try {
   // 1. Capture
-  const capArgs = ["--html", a.html, "--out", framesDir, "--width", String(captureWidth)];
+  const capArgs = [
+    "--html",
+    a.html,
+    "--out",
+    framesDir,
+    "--width",
+    String(captureWidth),
+  ];
   if (a.height) capArgs.push("--height", String(a.height));
   if (a.fps) capArgs.push("--fps", String(a.fps));
   if (a.duration) capArgs.push("--duration", String(a.duration));
@@ -51,7 +60,14 @@ try {
   // 2. Render
   const outDir = dirname(a.out);
   if (outDir && !existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-  const renArgs = ["--frames", framesDir, "--out", a.out, "--width", String(renderWidth)];
+  const renArgs = [
+    "--frames",
+    framesDir,
+    "--out",
+    a.out,
+    "--width",
+    String(renderWidth),
+  ];
   if (a.fps) renArgs.push("--fps", String(a.fps));
   if (a["max-bytes"]) renArgs.push("--max-bytes", String(a["max-bytes"]));
   if (a.webp) renArgs.push("--webp");

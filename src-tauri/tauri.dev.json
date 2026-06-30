@@ -16,7 +16,12 @@
           "identifier": "mcp-bridge-dev",
           "description": "M5 WP2 PROBE / WP3 (dev-only): grant the MCP bridge plugin's permissions to the main window AND the PiP NSPanel (so agent-driven verify-self can reach `windowId:'pip'` — WP2 ADOPT). Declared inline in tauri.dev.json — which overlays ONLY under `pnpm tauri:dev` (--config src-tauri/tauri.dev.json) — so `tauri build` (release) never references the mcp-bridge permission set and capability validation does not fail (the plugin itself is `#[cfg(debug_assertions)]`-gated out of release in lib.rs). NOTE: an inline config capability targeting a window suppresses the file-based `default` capability for that window, so the base permissions (core/opener/dialog) MUST be re-listed here or the app's own `core:event:allow-listen` is denied (cc_spawn output streaming + the PiP status fan-out break — observed 2026-06-26).",
           "windows": ["main", "pip"],
-          "permissions": ["core:default", "opener:default", "dialog:default", "mcp-bridge:default"]
+          "permissions": [
+            "core:default",
+            "opener:default",
+            "dialog:default",
+            "mcp-bridge:default"
+          ]
         }
       ]
     }

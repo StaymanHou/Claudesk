@@ -80,9 +80,13 @@ for (let f = 0; f < total; f++) {
 await browser.close();
 
 if (errors.length) {
-  console.error(`capture.mjs: ${errors.length} console/page error(s) during render:`);
+  console.error(
+    `capture.mjs: ${errors.length} console/page error(s) during render:`,
+  );
   for (const e of errors) console.error("  " + e);
   process.exit(1);
 }
 
-console.log(`captured ${total} frames (${WIDTH}x${HEIGHT}@${FPS}fps, ${DUR}s) -> ${OUT}`);
+console.log(
+  `captured ${total} frames (${WIDTH}x${HEIGHT}@${FPS}fps, ${DUR}s) -> ${OUT}`,
+);

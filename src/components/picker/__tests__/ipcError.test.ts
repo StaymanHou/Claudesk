@@ -32,7 +32,9 @@ describe("mapIpcError — picker IPC error-surfacing (M4 WP2 P4.2)", () => {
 
   it("falls back to a bare message when the detail is empty/blank (never silent)", () => {
     expect(mapIpcError("load projects", "")).toBe("Could not load projects.");
-    expect(mapIpcError("load projects", "   ")).toBe("Could not load projects.");
+    expect(mapIpcError("load projects", "   ")).toBe(
+      "Could not load projects.",
+    );
   });
 
   it("always returns a non-empty surfaced string (a rejection is never swallowed)", () => {

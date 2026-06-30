@@ -1471,6 +1471,7 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Where:** `.mcp.json:1-9`.
 - **Fix shape:** pin the version (`@hypothesi/tauri-mcp-server@0.11.2`, matching the Rust plugin 0.11.2) in the `args` array, OR add a one-line note in the wbs.md verdict's wiring-disposition acknowledging the unpinned surface. Lowest-risk = pin the version.
 - **Priority:** low
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP7) — pinned `.mcp.json` `args` to `@hypothesi/tauri-mcp-server@0.11.2` (verified the latest published version + matches the Rust `tauri-plugin-mcp-bridge` `0.11` line).
 
 ## SURFACE-2026-06-26-QUALITY-WP2-LINGERING-ALLOW-UNUSED-MUT
 - **Finding:** The dev-only bridge block mutates `builder` after the initial `.plugin(...)` chain, requiring `#[allow(unused_mut)] let mut builder`. Correct idiom for conditional plugin registration, but the `#[allow(unused_mut)]` masks the release-build case where `builder` is never reassigned — a small latent lint-suppression.

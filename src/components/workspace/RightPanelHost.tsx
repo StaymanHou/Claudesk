@@ -1084,11 +1084,15 @@ export function RightPanelHost({
                 }}
               >
                 <TerminalPane
-                  ref={t.id === terminals.activeId ? terminalPaneRef : undefined}
+                  ref={
+                    t.id === terminals.activeId ? terminalPaneRef : undefined
+                  }
                   sessionId={t.sessionId}
                   projectPath={projectPath}
                   active={
-                    visible && panel === "terminal" && t.id === terminals.activeId
+                    visible &&
+                    panel === "terminal" &&
+                    t.id === terminals.activeId
                   }
                 />
               </div>

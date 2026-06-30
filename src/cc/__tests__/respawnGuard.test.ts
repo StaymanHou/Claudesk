@@ -25,7 +25,9 @@ describe("shouldSpawnOnActive — spawn on first activation only", () => {
   });
 
   it("does NOT spawn while inactive once a session exists (deactivation is inert)", () => {
-    expect(shouldSpawnOnActive({ active: false, hasSpawned: true })).toBe(false);
+    expect(shouldSpawnOnActive({ active: false, hasSpawned: true })).toBe(
+      false,
+    );
   });
 
   it("is a pure function of (active && !hasSpawned) — no other state", () => {

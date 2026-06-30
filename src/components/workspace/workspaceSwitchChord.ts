@@ -31,7 +31,9 @@ export interface WorkspaceSwitchChordEvent {
  * shifted symbol as `e.key` (e.g. "!"), but on macOS `⌘⇧1` reports `e.key === "1"`
  * (the digit), so matching on the digit key is correct for the target platform.
  */
-export function workspaceSwitchIndex(e: WorkspaceSwitchChordEvent): number | null {
+export function workspaceSwitchIndex(
+  e: WorkspaceSwitchChordEvent,
+): number | null {
   if (!e.metaKey || !e.shiftKey) return null;
   if (e.key.length === 1 && e.key >= "1" && e.key <= "9") {
     return Number(e.key);

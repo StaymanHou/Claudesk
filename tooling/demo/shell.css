@@ -57,7 +57,11 @@ body {
   gap: 6px;
   padding: 6px 8px;
   font-size: 11px;
-  background: linear-gradient(180deg, rgba(13, 17, 23, 0.9), rgba(13, 17, 23, 0));
+  background: linear-gradient(
+    180deg,
+    rgba(13, 17, 23, 0.9),
+    rgba(13, 17, 23, 0)
+  );
 }
 .tile-body {
   padding: 26px 8px 8px;
@@ -186,7 +190,9 @@ h4 {
 /* the ping: the awaiting cell lifts — blue ring + a "needs you" badge. */
 .pip-cell.awaiting {
   border-color: #539bf5;
-  box-shadow: 0 0 0 1px #539bf5, 0 0 16px rgba(83, 155, 245, 0.45);
+  box-shadow:
+    0 0 0 1px #539bf5,
+    0 0 16px rgba(83, 155, 245, 0.45);
 }
 .pip-cell.awaiting .pip-cell-head {
   background: rgba(83, 155, 245, 0.16);
@@ -242,8 +248,7 @@ h4 {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(1100px 600px at 28% 18%, #1a212c 0%, #0e131a 62%),
-    #0e131a;
+    radial-gradient(1100px 600px at 28% 18%, #1a212c 0%, #0e131a 62%), #0e131a;
 }
 /* a channel/document header bar */
 .backdrop .bd-title {
@@ -260,8 +265,7 @@ h4 {
    purpose — the foreground app is intentionally NOT the star of the demo. */
 .backdrop .bd-lines {
   padding: 16px 24px;
-  font-family:
-    -apple-system, "SF Pro Text", system-ui, sans-serif;
+  font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.55;
   color: #768390;
@@ -391,7 +395,11 @@ h4 {
   height: 34px;
   margin: -17px 0 0 -17px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(83, 155, 245, 0.85) 0%, rgba(83, 155, 245, 0) 70%);
+  background: radial-gradient(
+    circle,
+    rgba(83, 155, 245, 0.85) 0%,
+    rgba(83, 155, 245, 0) 70%
+  );
   opacity: 0;
   transform: scale(0.4);
   pointer-events: none;
@@ -469,12 +477,42 @@ body[data-region="pip"] .stage {
    Matches the real CC AskUserQuestion TUI: a tab label, bold question, numbered
    options with the ❯-selected row, each description on a dimmed line below, and
    a footer hint. No box/chip — the real UI is flat. */
-.askq-tabs { margin-top: 6px; }
-.askq-tab { font-size: 11px; color: #6e7681; }
-.askq-tab.active { color: #e6edf3; background: #16314e; padding: 1px 7px; border-radius: 4px; }
-.askq-question { color: #e6edf3; font-weight: 600; margin: 8px 0 6px; }
-.askq-opt { color: #c9d1d9; }
-.askq-opt.sel .askq-num, .askq-opt.sel .askq-label { color: #539bf5; font-weight: 600; }
-.askq-num { color: #6e7681; }
-.askq-od { color: #6e7681; padding-left: 24px; margin-bottom: 4px; }
-.askq-foot { color: #484f58; margin-top: 8px; font-size: 11px; }
+.askq-tabs {
+  margin-top: 6px;
+}
+.askq-tab {
+  font-size: 11px;
+  color: #6e7681;
+}
+.askq-tab.active {
+  color: #e6edf3;
+  background: #16314e;
+  padding: 1px 7px;
+  border-radius: 4px;
+}
+.askq-question {
+  color: #e6edf3;
+  font-weight: 600;
+  margin: 8px 0 6px;
+}
+.askq-opt {
+  color: #c9d1d9;
+}
+.askq-opt.sel .askq-num,
+.askq-opt.sel .askq-label {
+  color: #539bf5;
+  font-weight: 600;
+}
+.askq-num {
+  color: #6e7681;
+}
+.askq-od {
+  color: #6e7681;
+  padding-left: 24px;
+  margin-bottom: 4px;
+}
+.askq-foot {
+  color: #484f58;
+  margin-top: 8px;
+  font-size: 11px;
+}

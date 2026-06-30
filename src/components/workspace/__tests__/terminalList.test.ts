@@ -22,16 +22,19 @@ describe("terminalSessionId / initialTerminalList", () => {
   it("seeds a fresh workspace with exactly one terminal (-term-0), active", () => {
     const s = initialTerminalList(WS);
     expect(s.entries).toHaveLength(1);
-    expect(s.entries[0]).toEqual({ id: "ws-abc-term-0", sessionId: "ws-abc-term-0" });
+    expect(s.entries[0]).toEqual({
+      id: "ws-abc-term-0",
+      sessionId: "ws-abc-term-0",
+    });
     expect(s.activeId).toBe("ws-abc-term-0");
     expect(s.counter).toBe(1); // next suffix to assign
   });
 
   it("the seed session id is collision-free with the CC session id (no -term- suffix)", () => {
     // The CC pane keys on the bare workspaceId; a terminal id always carries -term-.
-    expect(initialTerminalList(WS).entries[0].sessionId.startsWith(`${WS}-term-`)).toBe(
-      true,
-    );
+    expect(
+      initialTerminalList(WS).entries[0].sessionId.startsWith(`${WS}-term-`),
+    ).toBe(true);
     expect(`${WS}-term-0`).not.toBe(WS);
   });
 });
@@ -41,7 +44,10 @@ describe("openTerminal", () => {
     const s1 = initialTerminalList(WS);
     const s2 = openTerminal(s1, WS);
     expect(s2.entries).toHaveLength(2);
-    expect(s2.entries[1]).toEqual({ id: "ws-abc-term-1", sessionId: "ws-abc-term-1" });
+    expect(s2.entries[1]).toEqual({
+      id: "ws-abc-term-1",
+      sessionId: "ws-abc-term-1",
+    });
     expect(s2.activeId).toBe("ws-abc-term-1"); // the new one is front
     expect(s2.counter).toBe(2);
   });
@@ -73,7 +79,10 @@ describe("openTerminal", () => {
     const s2 = openTerminal(s1, WS); // [term-0, term-1], active term-1
     const s3 = closeTerminal(s2, "ws-abc-term-1"); // back to [term-0]
     const s4 = openTerminal(s3, WS); // the next is term-2, NOT a reused term-1
-    expect(s4.entries.map((e) => e.id)).toEqual(["ws-abc-term-0", "ws-abc-term-2"]);
+    expect(s4.entries.map((e) => e.id)).toEqual([
+      "ws-abc-term-0",
+      "ws-abc-term-2",
+    ]);
   });
 });
 
@@ -87,7 +96,10 @@ describe("closeTerminal", () => {
 
   it("removes the terminal by id", () => {
     const s = closeTerminal(three(), "ws-abc-term-1");
-    expect(s.entries.map((e) => e.id)).toEqual(["ws-abc-term-0", "ws-abc-term-2"]);
+    expect(s.entries.map((e) => e.id)).toEqual([
+      "ws-abc-term-0",
+      "ws-abc-term-2",
+    ]);
   });
 
   it("reactivates the LEFT neighbour when the active terminal is closed", () => {

@@ -28,8 +28,11 @@ describe("FileTree consumes the gitRollup derivation (QoL-WP7 P2.1)", () => {
 
   it("memoizes the dir roll-up off the same gitStatus source as the leaf indicators", () => {
     // rollupByDir = useMemo(() => dominantStatusByDir(gitStatus), [gitStatus])
+    // Match on the tokens + their order, tolerant of prettier's line-wrapping
+    // (`[\s\S]*?` spans any whitespace/newlines) — the earlier whitespace-exact
+    // regex broke whenever prettier re-wrapped the useMemo (SURFACE PRETTIER-DRIFT).
     expect(fileTreeSource).toMatch(
-      /const\s+rollupByDir\s*=\s*useMemo\(\s*\(\)\s*=>\s*dominantStatusByDir\(gitStatus\)\s*,\s*\[\s*gitStatus\s*\]\s*\)/,
+      /const\s+rollupByDir\s*=\s*useMemo\([\s\S]*?dominantStatusByDir\(gitStatus\)[\s\S]*?\[\s*gitStatus\s*\][\s\S]*?\)/,
     );
   });
 

@@ -41,7 +41,10 @@
       // a chip: outline before `at`, filled after — the operator reacting.
       for (var r = 0; r < reactions.length; r++) {
         if (reactions[r].msgIndex === origIdx) {
-          out.reaction = { emoji: reactions[r].emoji, added: t >= reactions[r].at };
+          out.reaction = {
+            emoji: reactions[r].emoji,
+            added: t >= reactions[r].at,
+          };
         }
       }
       messages.push(out);
@@ -60,7 +63,8 @@
         var chars = Math.floor((t - d.startT) * TYPE_CPS);
         input = (d.text || "").slice(0, chars);
         // "sending" flash in the last ~0.15s before sendAt once fully typed.
-        if (input.length >= (d.text || "").length && send - t < 0.15) sending = true;
+        if (input.length >= (d.text || "").length && send - t < 0.15)
+          sending = true;
         break;
       }
     }

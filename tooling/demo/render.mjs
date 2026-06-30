@@ -29,9 +29,14 @@ if (!existsSync(FRAMES)) {
 }
 
 function ffmpeg(args) {
-  const r = spawnSync("ffmpeg", args, { stdio: ["ignore", "ignore", "inherit"] });
+  const r = spawnSync("ffmpeg", args, {
+    stdio: ["ignore", "ignore", "inherit"],
+  });
   if (r.error) {
-    console.error("render.mjs: failed to spawn ffmpeg — is it on PATH?", r.error.message);
+    console.error(
+      "render.mjs: failed to spawn ffmpeg — is it on PATH?",
+      r.error.message,
+    );
     process.exit(2);
   }
   if (r.status !== 0) {
@@ -50,9 +55,12 @@ const palette = join(tmp, "palette.png");
 try {
   ffmpeg([
     "-y",
-    "-framerate", String(FPS),
-    "-i", input,
-    "-vf", `${scale},palettegen=stats_mode=diff`,
+    "-framerate",
+    String(FPS),
+    "-i",
+    input,
+    "-vf",
+    `${scale},palettegen=stats_mode=diff`,
     palette,
   ]);
 
@@ -60,11 +68,16 @@ try {
   // avoids the "swarming"/shimmer naive single-pass GIF produces). -loop 0 loops.
   ffmpeg([
     "-y",
-    "-framerate", String(FPS),
-    "-i", input,
-    "-i", palette,
-    "-lavfi", `${scale}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3`,
-    "-loop", "0",
+    "-framerate",
+    String(FPS),
+    "-i",
+    input,
+    "-i",
+    palette,
+    "-lavfi",
+    `${scale}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3`,
+    "-loop",
+    "0",
     OUT,
   ]);
 
@@ -72,13 +85,20 @@ try {
     const webpOut = OUT.replace(/\.gif$/i, "") + ".webp";
     ffmpeg([
       "-y",
-      "-framerate", String(FPS),
-      "-i", input,
-      "-vf", scale,
-      "-loop", "0",
-      "-c:v", "libwebp_anim",
-      "-lossless", "0",
-      "-q:v", "70",
+      "-framerate",
+      String(FPS),
+      "-i",
+      input,
+      "-vf",
+      scale,
+      "-loop",
+      "0",
+      "-c:v",
+      "libwebp_anim",
+      "-lossless",
+      "0",
+      "-q:v",
+      "70",
       webpOut,
     ]);
     reportSize(webpOut);
@@ -104,6 +124,8 @@ function reportSize(path) {
   const bytes = statSync(path).size;
   const kb = (bytes / 1024).toFixed(1);
   const within = bytes <= MAX_BYTES;
-  console.log(`  ${path}: ${kb} KB ${within ? "(under budget)" : "(OVER BUDGET)"}`);
+  console.log(
+    `  ${path}: ${kb} KB ${within ? "(under budget)" : "(OVER BUDGET)"}`,
+  );
   return within;
 }

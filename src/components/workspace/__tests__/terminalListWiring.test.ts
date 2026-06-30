@@ -63,7 +63,9 @@ describe("RightPanelHost wires the WP11 Phase-2 chords (⌘T + scoped ⌘W)", ()
 
   it("routes scoped ⌘W via shouldCloseTerminalOnChord + deriveRightSurface", () => {
     expect(hostSource).toContain("shouldCloseTerminalOnChord");
-    expect(hostSource).toContain('deriveRightSurface(document.activeElement) === "terminal"');
+    expect(hostSource).toContain(
+      'deriveRightSurface(document.activeElement) === "terminal"',
+    );
   });
 
   it("ORDERS the scoped-⌘W terminal branch BEFORE the editor close-tab branch", () => {
@@ -72,7 +74,9 @@ describe("RightPanelHost wires the WP11 Phase-2 chords (⌘T + scoped ⌘W)", ()
     // never both fire. A refactor that reordered them would silently re-introduce a
     // double-close. Assert the source position of the terminal branch precedes the editor's.
     const terminalBranch = hostSource.indexOf("shouldCloseTerminalOnChord");
-    const editorCloseBranch = hostSource.indexOf("editorSplitRef.current?.closeActiveTab()");
+    const editorCloseBranch = hostSource.indexOf(
+      "editorSplitRef.current?.closeActiveTab()",
+    );
     expect(terminalBranch).toBeGreaterThan(-1);
     expect(editorCloseBranch).toBeGreaterThan(-1);
     expect(terminalBranch).toBeLessThan(editorCloseBranch);
@@ -93,8 +97,11 @@ describe("RightPanelHost Phase-3 zoom coupling — the ref binds to the ACTIVE t
     // FOCUSED one (the focused terminal is always the active one — the rest are
     // display:none/unfocusable). A refactor that bound the ref to a fixed/first terminal,
     // or to all of them, would break zoom-follows-focused. Pin the conditional binding.
-    expect(hostSource).toContain(
-      "ref={t.id === terminals.activeId ? terminalPaneRef : undefined}",
+    // Match the tokens tolerant of prettier's line-wrapping (it splits the `ref={…}`
+    // attribute across lines) — an exact-string `toContain` broke on a format pass
+    // (SURFACE PRETTIER-DRIFT-AND-BRITTLE-RAW-REGEX-TEST).
+    expect(hostSource).toMatch(
+      /ref=\{[\s\S]*?t\.id === terminals\.activeId\s*\?\s*terminalPaneRef\s*:\s*undefined[\s\S]*?\}/,
     );
   });
 });

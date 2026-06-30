@@ -85,7 +85,11 @@ describe("buildTree — flat fs_tree entries → nested tree", () => {
   // M6 WP6 — the pruned flag rides from the wire TreeEntry onto the TreeNode so the
   // FileTree can render "(not indexed)" on a heavy dir vs. a genuinely-empty one.
   it("carries the pruned flag onto a heavy-dir node (and leaves it empty)", () => {
-    const tree = buildTree([ep("node_modules"), e("src", true), e("src/x.ts", false)]);
+    const tree = buildTree([
+      ep("node_modules"),
+      e("src", true),
+      e("src/x.ts", false),
+    ]);
     const nm = tree.find((n) => n.name === "node_modules");
     expect(nm).toBeDefined();
     expect(nm!.isDir).toBe(true);
@@ -94,7 +98,11 @@ describe("buildTree — flat fs_tree entries → nested tree", () => {
   });
 
   it("ordinary dirs and files are pruned=false", () => {
-    const tree = buildTree([e("src", true), e("src/x.ts", false), e("readme.md", false)]);
+    const tree = buildTree([
+      e("src", true),
+      e("src/x.ts", false),
+      e("readme.md", false),
+    ]);
     const src = tree.find((n) => n.name === "src")!;
     expect(src.pruned).toBe(false);
     expect(src.children[0].pruned).toBe(false); // the file leaf

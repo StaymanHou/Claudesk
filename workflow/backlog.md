@@ -88,7 +88,7 @@
 - **Context:** the scratch dirs were added for live verify-self (CLAUDE.md). `tmp/` at repo root is gitignored; this one is under `src-tauri/tmp/`. The eslint config should ignore `**/tmp/**` (or `src-tauri/tmp/`) to match.
 - **Suggested action:** add `tmp/` / `src-tauri/tmp/` to the eslint flat-config `ignores`. One-line config edit; do at the next `/feature-refactor` or whenever the lint noise becomes annoying.
 - **Priority:** low (cosmetic lint noise; changed-file lint is unaffected — scoped lint of WP4 files is clean)
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP7) — STALE PREMISE on the cited target: `tmp/`+`src-tauri/tmp/` were ALREADY in the flat-config `ignores` (a prior WP added them), so `scratch-a/main.js` no longer fires. The real `pnpm eslint .` non-zero-exit noise (63 errors) was `tooling/demo/**` (M8 scripts lacking an env block); fixed by adding `tooling/demo/**/*.mjs` (Node+browser) and `tooling/demo/**/*.js` (browser) flat-config blocks. `pnpm eslint .` now exits 0.
 
 ## SURFACE-2026-06-27-RIGHT-PANEL-TERMINAL-ZOOM-AND-MULTIPLE
 - **Source:** operator, at WP4 verify-human (2026-06-27) — "this reminds me of another thing"
@@ -596,7 +596,7 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** `.prettierignore` lists `docs/`, `workflow/`, `CLAUDE.md`, `runtimes.md` as hand-authored prose exempt from Prettier, but NOT `.claude/memory/`. These memory files are likewise hand-authored prose and arguably belong in the ignore list — or should be one-shot `prettier --write`-formatted. Either way, not WP6's job.
 - **Suggested action:** Either add `.claude/memory/` to `.prettierignore` (consistent with the other hand-authored-prose exemptions) OR run `pnpm format` once to normalize them. Decide in a housekeeping pass.
 - **Priority:** low
-- **Status:** deferred — carry to next cycle (Phase 2); housekeeping, not Phase 1 scope (Phase 1 cycle-close sweep 2026-06-19)
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP7) — took the `.prettierignore` route (the consistent choice): added `.claude/memory/`, `.claude/skills/`, and `CHANGELOG.md` to the hand/skill-authored-prose exemption block alongside `docs/`/`workflow/`. `prettier --check .` now passes clean.
 
 ## SURFACE-2026-06-18-PICKER-SCALES-TO-MANY-PROJECTS
 - **Source:** feature:build (WP5 Phase 2 verify-human — operator request)
@@ -919,7 +919,7 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** discovered at WP3 ship when an over-broad `prettier --write src/**` swept in 21 unrelated files + broke that test. Reverted the out-of-scope reformats; WP3's own files are prettier-clean. The drift means `pnpm format` on the whole tree produces a large noisy diff + one test failure.
 - **Suggested action:** a dedicated `/feature-refactor` (or `/task`) pass: run `pnpm format` tree-wide once to normalize, and loosen the fileTreeGitRollup `?raw` regex to tolerate prettier's wrapping (match on the call + deps tokens, not whitespace shape). Commit as a pure formatting normalization.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP7) — loosened TWO brittle `?raw` regexes to token-order matches (`fileTreeGitRollup`'s `useMemo` + `terminalListWiring`'s `ref={…}` — the latter actually broke on the format pass, caught by the suite) then ran `pnpm format` tree-wide; hand-authored prose moved to `.prettierignore` instead of being reformatted. `prettier --check .` clean, 787 tests green.
 
 ## Code-quality findings — m5-wp3-pip-nspanel-status-core (2026-06-26)
 - **Pointer:** 2 MAJOR + 3 MINOR (0 CRITICAL) from `feature-review-quality` on ship commit `95292d6`. The 2 MAJOR are latent desyncs that the **M5 WP5 lifecycle work will trip over** (not bugs at the WP3 baseline): (1) the filmstrip keeps a SECOND unsynchronized 1fps DOM-write interval alongside the App-level serialize ticker (phase drift / up-to-1s stale reads); (2) `pip::teardown()` skips the `pip-visibility false` broadcast, so the cost gate desyncs once a non-toggle close path exists. 3 MINORs: duplicated `MIRROR_INTERVAL_MS` literal, un-diffed full-frame `pip-mirror` emit, 5× duplicated `listen().then()` boilerplate (→ `useTauriListen` helper). Full entries in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp3-pip-nspanel-status-core — 2026-06-26`.
