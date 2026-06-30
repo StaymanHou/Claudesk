@@ -44,7 +44,7 @@ use thiserror::Error;
 /// The Sublime Text app name passed to the `open -a` fallback.
 const ST_APP_NAME: &str = "Sublime Text";
 /// The stable in-bundle CLI path. Both ST and SM have shipped this layout for many
-/// versions (WP3 probe §Decision point 2).
+/// versions (WP3 probe).
 const ST_BUNDLE_BIN: &str = "/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl";
 
 /// The Sublime Merge app name passed to the `open -a` fallback.
@@ -124,7 +124,7 @@ pub fn find_smerge() -> SublTool {
 /// - `<cli> <dir>` (or `open -a "<App>" <dir>`) — opens the dir as a folder and
 ///   **activates** the app (the user pressed the key / clicked the button because
 ///   they want to be in that app).
-/// - **No `--project`** — does NOT activate ST on cold start (WP3 T3); `<cli> <dir>`
+/// - **No `--project`** — does NOT activate ST on cold start (WP3 probe T3); `<cli> <dir>`
 ///   already auto-loads any project file it finds in the folder.
 /// - **No `--new-window`** — bring the existing window forward, not a duplicate.
 fn tool_command(tool: &SublTool, app_name: &str, project_dir: &str) -> (String, Vec<String>) {

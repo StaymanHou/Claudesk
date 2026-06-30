@@ -28,14 +28,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-06-29-QUALITY-M7-TRAY-ID-UNUSED-LOOKUP
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/tray/commands.rs:54` (`TRAY_ID`).
-- **Finding:** `TRAY_ID` ("claudesk-tray") is passed to `TrayIconBuilder::with_id`, but nothing looks the tray up by that id (the handle is stashed in `TrayState.icon`). Harmless; a one-line note that it exists for future `get_by_id` reachability would clarify intent.
-- **Suggested action:** Add a one-line comment, or leave (good hygiene for future lookup). Cosmetic.
-- **Priority:** low
-- **Status:** pending
-
 # m6-wp11-multiple-right-panel-terminals — 2026-06-28
 
 *(feature-review-quality on ship commit f9e3292; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built... the only debt is minor — a small logic duplication between the button handlers and the keydown branches that a shared callback would erase. Nothing here warrants a refactor pass.")*
@@ -52,60 +44,10 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit baaaa4c; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR — both cosmetic clarity/traceability nits. Reviewer: "well-built, tightly-scoped... only nits are cosmetic comment-clarity + a bundled-but-tracked eslint tweak; neither warrants a refactor pass.")*
 
-## SURFACE-2026-06-28-QUALITY-WP10-SHARED-KEY-LAG-COMMENT
-- **Severity:** MINOR
-- **Finding:** `Workspace.tsx:158-182` — the shared-key zoom applies the new size only to the *focused* pane; an already-mounted background terminal re-seeds on next mount/refit. Intended + benign for the single-foreground use case, but the comment frames re-seed as "on its next mount/refit" without noting a *persistently mounted* background terminal will visibly lag until something forces a refit.
-- **Fix shape:** one-line caveat in the `applyTerminalZoom` comment ("a persistently-mounted background terminal lags until its next refit"). No behavior change.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-06-28-QUALITY-WP10-ESLINT-IGNORE-BUNDLED
 - **Severity:** MINOR
 - **Finding:** `eslint.config.js:18-21` — the `tmp/**` + `src-tauri/tmp/**` ignore addition is an in-scope incidental fix bundled into the feature commit. Correctly commented + flagged in the WIP Build notes, so tracked not silent. Noted for traceability only; not a defect.
 - **Fix shape:** none required (informational). If a future cleanup wants strict commit-atomicity, scratch-repo lint-ignore config could move to its own commit — not worth a dedicated pass.
-- **Priority:** low
-- **Status:** pending
-
-# m6-wp7-no-yolo-setting — 2026-06-28
-
-*(feature-review-quality on ship commit 4db7b82; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR — all clarity/consistency nits the existing pip-mode pattern already shares. Reviewer: "well-built, low-risk polish... accrues no meaningful debt; no refactor warranted.")*
-
-## SURFACE-2026-06-28-QUALITY-WP7-MENU-WRITE-FAILURE-SILENT
-- **Severity:** MINOR
-- **Finding:** The two `cc_set_yolo` write paths handle a rejection inconsistently: the picker (`ProjectPicker.tsx` `handleToggleYolo`) does optimistic-flip + revert + error toast; the App.tsx menu-listener path only `console.error`s with no user-visible signal. On a menu-path persist failure the checkmark (driven by the `cc-yolo` broadcast that never fires) silently diverges from reality until the next successful toggle. Pattern-consistent with the existing PiP-mode menu path (also silent) — not a regression vs the established pattern.
-- **Fix shape:** either surface the menu-path failure (harder — App.tsx has no toast surface like the picker) OR add a one-line comment noting menu-path write failures are deliberately silent (mirrors pip_set_mode). Lean: the comment, unless a toast surface is added app-wide.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-28-QUALITY-WP7-DOUBLE-CC-YOLO-SUBSCRIBE
-- **Severity:** MINOR
-- **Finding:** Two independent `cc-yolo` listeners are mounted — App.tsx's `ccYoloRef` effect + the picker's `setCcYolo` effect — each with its own `cc_get_yolo` seed call. Harmless (the picker only mounts on the picker screen; the ref-tracker lives at App root; the ref-vs-state split is deliberate) but reads as accidental duplication absent a note.
-- **Fix shape:** a one-line comment on each effect noting the deliberate double-subscribe (ref for the menu-listener's invert-current; state for the picker's visible checkbox).
-- **Priority:** low
-- **Status:** pending
-
-# wp6-filetree-shows-ignored-files — 2026-06-28
-
-*(feature-review-quality on ship commit 61db3d4; Mode 3 autopilot auto-backlog. 0 CRITICAL / 1 MAJOR / 3 MINOR. The MAJOR is a load-bearing-but-trivial cleanup — remove the now-dead `ignore` crate; the MINORs are doc/cosmetic. Reviewer: "well-built; the only follow-up is removing the now-unused dependency.")*
-
-## SURFACE-2026-06-28-QUALITY-WP6-SYMLINK-SKIP-UNDOCUMENTED
-- **Severity:** MINOR
-- **Finding:** `walk_project` (`src-tauri/src/fs_index/mod.rs` ~202) skips symlinks (the un-traversed `file_type` is neither `is_dir()` nor `is_file()`) — correct + cycle-safe, but this visibility exclusion is documented only as an inline aside, not in the function/module doc that enumerates the contract (where `.git` + heavy-dir exclusions ARE spelled out). A symlinked source dir an operator edits would be silently invisible to tree/finder/search.
-- **Fix shape:** add a one-line bullet to the `walk_project` / module "Exclusion model" doc naming the symlink skip alongside `.git` + heavy dirs.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-28-QUALITY-WP6-DETECTED-BIG-SYSCALL-COST
-- **Severity:** MINOR
-- **Finding:** `dir_is_heavy` (`src-tauri/src/fs_index/mod.rs` ~147) does a `read_dir` on every non-name-matched directory during the tree walk (the detected-big check), doubling directory-open syscalls vs. the walk's own. Acceptable for the single-user target + short-circuited at threshold+1, but the per-dir cost isn't called out next to the threshold constant.
-- **Fix shape:** add a one-line cost note next to `HEAVY_DIR_CHILD_THRESHOLD` documenting the per-dir `read_dir` (short-circuited).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-28-QUALITY-WP6-DOC-WRAP-NIT
-- **Severity:** MINOR
-- **Finding:** A reflowed doc-comment line in `project_search::search_core` (`src-tauri/src/project_search/mod.rs` ~172) runs slightly long past the file's otherwise-consistent wrap width. Cosmetic.
-- **Fix shape:** re-wrap the line.
 - **Priority:** low
 - **Status:** pending
 
@@ -117,20 +59,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Severity:** MINOR
 - **Finding:** `EditorPanel.tsx` `onToggleWrap` (~110-118) duplicates the live compartment-reconfigure dispatch that `coreKeymap.applyWrap` already performs, AND the extensions memo (deps include `lineWrap`) rebuilds on the resulting state change — so a button click triggers two reconfigure paths (imperative dispatch + memo rebuild). Idempotent/harmless, but two call sites for one effect is a latent drift seam.
 - **Fix shape:** route the button through the same `applyWrap` keymap entry, OR rely solely on the memo rebuild (pure-state toggle) so there's one reconfigure path. Leave-as-is is also defensible (the imperative dispatch avoids a render-cycle delay).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-27-QUALITY-WP5-CLOSED-OVER-FLAG-INVARIANT
-- **Severity:** MINOR
-- **Finding:** The `Mod-\` `run` (editorExtensions.ts ~160-169) closes over `lineWrap` from the latest `buildEditorExtensions` call; correctness depends on the memo rebuilding (and @uiw reconfiguring the keymap) on every `lineWrap` change. The deps array is correct, but the load-bearing invariant is only lightly documented inline.
-- **Fix shape:** add a one-line note that this relies on the memo's `lineWrap` dep, to harden against a future deps-array edit. (Identical mechanism to the fontSize chord — same latent fragility, same cheap mitigation.)
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-27-QUALITY-WP5-TITLE-STATE-VS-ACTION
-- **Severity:** MINOR
-- **Finding:** The wrap toggle's `title` reads "Soft-wrap on (⌘\)" when wrap is currently ON — a state label, while `aria-pressed` already conveys state and the click toggles. Slight affordance ambiguity (is the tooltip the current state or what the click does?). Cosmetic copy nit.
-- **Fix shape:** either accept as-is (state-label tooltips are common) or reword to describe the action ("Toggle soft-wrap (⌘\)"). Trivial.
 - **Priority:** low
 - **Status:** pending
 
@@ -166,18 +94,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Fix shape:** either drop `commitsCollapsed` from the deps (the observer covers it) OR keep it and reword the comment to mark it belt-and-suspenders so a future trimmer doesn't mistake it for load-bearing. Lowest-risk = comment reword.
 - **Priority:** low
 
-## SURFACE-2026-06-25-QUALITY-WP8-COMMENT-COPYEDIT-SLIP
-- **Finding:** The `.diff-commits` comment reads "at the top:0 of .diff-scroll" — the inserted "the" is a copy-edit slip ("at top:0 of" or "at the top of" was intended).
-- **Where:** `src/App.css` `.diff-commits` comment (~1726).
-- **Fix shape:** one-word comment fix.
-- **Priority:** low
-
-## SURFACE-2026-06-25-QUALITY-WP8-FALLBACK-COUPLING
-- **Finding:** The CSS first-paint fallback `--diff-commits-h: 2rem` is coupled to today's `.diff-commits-header` padding/font (≈2rem total); if those change later, the pre-observer first-paint offset drifts until the ResizeObserver fires. Harmless (observer corrects within a frame) but undocumented coupling.
-- **Where:** `src/App.css` `.diff-scroll` `--diff-commits-h` default (~1714) ↔ `.diff-commits-header`.
-- **Fix shape:** add a one-line comment cross-referencing `.diff-commits-header`'s height so the `2rem` guess's provenance is pinned.
-- **Priority:** low
-
 # qol-wp7-filetree-git-bubble-up — 2026-06-25
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `4d384b1`. Reviewer verdict: well-built, right architecture, no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
@@ -204,12 +120,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Fix shape:** surface the trash failure inline/toast (reuse the new-file inline-error pattern). Pairs with the WP5 `SURFACE-2026-06-25-QUALITY-WP5-DELETE-FAILURE-NOT-SURFACED` toast item — one fix covers both delete paths.
 - **Priority:** low
 
-## SURFACE-2026-06-25-QUALITY-WP5B-GUARD-PARITY-COMMENT
-- **Finding:** `validateRelSegments` rejects a leading `~` on the whole string, but the backend `resolve_within_lexical` has no `~` notion (treats `~` as a normal segment) — the two guards disagree on `~` (frontend stricter → safe, backend still contains under root). The "mirrors the backend lexical guard" comment slightly overstates parity.
-- **Where:** `src/components/workspace/filetree/newFilePath.ts` `validateRelSegments` (~70).
-- **Fix shape:** reword the comment to "stricter than / defense-in-depth over the backend guard" (or drop the `~`-whole-string check, since the backend contains it anyway). Cosmetic comment-accuracy.
-- **Priority:** low
-
 ## SURFACE-2026-06-25-QUALITY-WP5B-DESCENDANT-COUNT-STALE
 - **Finding:** the folder-delete confirm's descendant `count` (`countDescendants` over the loaded `fs_tree` entries) reflects the tree as last refreshed; if the folder grew on disk since the last `fsTreeRefreshKey` bump, the displayed number understates the blast radius. The trash itself is correct (backend trashes the live subtree) — only the advisory number can lag.
 - **Where:** `src/components/workspace/editor/confirmDialog.ts` `deleteFolderSpec` consumer in `RightPanelHost.tsx` (count source).
@@ -230,12 +140,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** `onDeleteConfirm` surfaces a failed `delete_file` only via `console.error` (the inline comment itself flags "a future toast could show it"). Every other failure path in the feature surfaces visibly (create errors render inline; fs_tree errors render a row). A delete that fails (e.g. permission) leaves the tree unchanged with no user-visible signal — the operator can't distinguish a no-op cancel from a silent failure.
 - **Where:** `src/components/workspace/RightPanelHost.tsx` `onDeleteConfirm` (~320-327).
 - **Fix shape:** surface the delete error inline (a transient row/toast near the tree, or reuse the inline-error pattern the new-file input already has). Consistent with the feature's surfaced-not-swallowed discipline.
-- **Priority:** low
-
-## SURFACE-2026-06-25-QUALITY-WP5-NEWFILE-BLUR-DISCARDS
-- **Finding:** the new-file input's `onBlur={cancelNewFile}` silently discards a partially-typed name on any focus-steal (clicking elsewhere in the rail). Enter-submit is safe (keydown precedes blur), but blur-cancels-silently is an undocumented UX choice.
-- **Where:** `src/components/workspace/filetree/FileTree.tsx` the new-file input (~165).
-- **Fix shape:** either a one-line comment marking blur-cancel as deliberate, or keep the input open on blur (cancel only on Esc). Cosmetic.
 - **Priority:** low
 
 # qol-wp4-terminal-respawn-on-switch — 2026-06-25
@@ -265,22 +169,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # qol-wp1-close-workspace — 2026-06-25
 
 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9`. Reviewer rated the feature well-built and idiomatic — the standout being the per-pane `cc_kill`-on-unmount that reaps both PTY panes generically and closes a latent WP7 lifecycle gap. All findings are low-risk: two over-narrated comments + one accepted test-boundary gap. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP1-OVERNARRATED-X-COMMENT
-- **Files:** `src/components/workspace/Filmstrip.tsx` (expanded × ~252-280 + collapsed-pill × ~308-340)
-- **Priority:** low
-- **Status:** pending
-- **Type:** tech-debt (comment clarity)
-- **Finding:** The × button comment narrates a rejected "invalid nested `<button>`" alternative before stating the actual `<span role="button">` choice — a future reader scanning it may think there's a nested-button bug. Trim to state only what shipped (and why span-over-button: to avoid invalid nesting inside the tile/pill button).
-- **Pickup shape:** one-line comment edit at both × sites. Dismiss if the historical context is judged useful.
-
-## SURFACE-2026-06-25-QUALITY-WP1-DOCSREF-FORWARD-REF-COMMENT
-- **Files:** `src/components/workspace/editor/EditorSplit.tsx:137-141`
-- **Priority:** low
-- **Status:** pending
-- **Type:** tech-debt (comment drift risk)
-- **Finding:** The "(A live `docsRef` mirror of `docs` already exists below — reused by…)" comment forward-references the `docsRef` declared ~50 lines down (line ~188), restating a relationship the `docsRef.current` read at the handle already makes obvious. Drifts if the file is reordered.
-- **Pickup shape:** delete the forward-referencing comment (or move it adjacent to the actual `docsRef` declaration). Trivial.
 
 ## SURFACE-2026-06-25-QUALITY-WP1-APP-WIRING-UNTESTED
 - **Files:** `src/components/workspace/Filmstrip.tsx`, `src/App.tsx` (requestClose / resolveClose / dirty-probe registry)
@@ -392,25 +280,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-06-19-QUALITY-WP9-CLASSIFY-CASEFOLD-COMMENT
-- **File:** `src-tauri/src/cc_session/mod.rs` (`classify_spawn_error`)
-- **Finding:** The classifier lowercases the raw message then matches lowercase literal markers; a one-line comment noting the `to_lowercase()` is what makes the literals safe (vs the markers being pre-lowered by coincidence) would help a future editor. Existing comment explains liberality but not the case-folding contract.
-- **Why it matters:** Readability only; logic is correct.
-- **Suggested action:** Add the one-line comment in a future touch of this fn. Trivial.
-- **Priority:** low
-- **Status:** pending
-
 # wp8-sublime-hotkey — 2026-06-19
 
 3 MINOR findings from `feature-review-quality` on ship commit `74dfc2c` (0 CRITICAL, 0 MAJOR). The feature survived a mid-flight OS-global→in-app spec reversal with no live remnants; findings are all doc-accuracy/cosmetic. MINOR #1 (stale "global-shortcut handler" rationale) was FIXED IN-PLACE at finalize-prep time in both the WIP Discoveries and the backlog SURFACE entry — not pending. The 2 below are the remaining cosmetic nits. Auto-backlogged per drive_mode=autopilot (MINOR).
-
-## SURFACE-2026-06-19-QUALITY-WP3-PROBE-SECTION-SHORTHAND
-- **File:** `src-tauri/src/sublime/mod.rs:46-47` vs `:99`
-- **Finding:** `ST_BUNDLE_BIN`'s doc cites "WP3 probe §Decision point 2" while the module header cites "WP3 T3" for the `--project` finding — inconsistent shorthand for the same archived probe source.
-- **Why it matters:** trivial cross-reference polish; a reader can't tell if they're distinct citations. Both point at `workflow/archive/wp3-sublime-cli-probe.md`.
-- **Suggested action:** normalize both to one citation style. Trivial.
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-06-19-QUALITY-CHORD-TS-PHASE-TAG
 - **File:** `src/sublime/chord.ts:1`
@@ -428,13 +300,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **File:** `src/components/workspace/XtermPane.tsx:60`
 - **Finding:** the xterm mount `useEffect` keys on `[workspaceId]`, but CenterStage uses `key={ws.id}` so a changed id already forces a fresh component instance. `[]` would express once-per-mount intent more honestly.
 - **Why it matters:** slight intent-obscuring; a maintainer may think id-change-driven re-mount is a supported path when component identity already guarantees it.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-18-QUALITY-WP5-GLOBAL-H1-RULE
-- **File:** `src/components/picker/ProjectPicker.tsx:91` (+ `src/App.css` global `h1`)
-- **Finding:** the global `h1 { text-align: center }` rule now has a single consumer (the picker heading); reads as leftover scaffold generality.
-- **Why it matters:** trivial; cosmetic clarity of the stylesheet's global section.
 - **Priority:** low
 - **Status:** pending
 
@@ -458,64 +323,10 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** medium
 - **Status:** PARTIAL (D2, debt-paydown WP5, operator decision 2026-06-30) — DOC stated now, HARDENING deferred. The `editor_fs/commands.rs` module doc now explicitly says `root` is frontend-supplied/-trusted (not re-validated against config_store) — acceptable for the single-user local editor where the frontend shares the trust boundary; the guard's job is to confine the *file path* to `root`, not authenticate `root`. The actual validate-`root`-against-config_store hardening stays **Deferred** to a future pass (anchored here, pairs with the leaf-symlink item above).
 
-## SURFACE-2026-06-19-QUALITY-WP2-SAVEKEYMAP-CHURN
-- **File:** `src/components/workspace/editor/EditorPanel.tsx:73-87`
-- **Finding:** `doSave` depends on `save.kind` (to enable retry-after-error) → rebuilds `saveKeymap` → reconfigures the CM6 view on every save-status transition. Functionally correct (WP1 confirmed reconfigure-on-identity-change works) but the status-driven keymap churn is a non-obvious cost.
-- **Suggested action:** Add a short comment, or decouple the retry path so `doSave`'s identity doesn't depend on save status. Low effort.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-06-19-QUALITY-WP2-EDITORLOAD-UNDERSCORE-PARAM
 - **File:** `src/components/workspace/editor/editorLoad.ts:24`
 - **Finding:** Reducer parameter named `_state` (underscore signals "unused") but it IS used in the `default` branch (`return _state`); `editorSave.ts:26` correctly names the same param `state`. Inconsistent within the same feature.
 - **Suggested action:** Rename `_state` → `state` in `editorLoad.ts`.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-19-QUALITY-WP2-LANGUAGE-TEST-SPECULATIVE-COMMENT
-- **File:** `src/components/workspace/editor/__tests__/language.test.ts:73`
-- **Finding:** Test comment "json ... not wired yet (WP3 may add)" — speculative forward-guess that ages into noise.
-- **Suggested action:** Drop the parenthetical; the assertion (json → plaintext) stands on its own.
-- **Priority:** low
-- **Status:** pending
-
-# m2-wp3a-editor-core-editing — 2026-06-20
-
-3 MINOR findings from `feature-review-quality` on ship commit `59cc324` (0 CRITICAL, 0 MAJOR). The feature is well-built and low-debt; findings are cosmetic comment-triplication and a benign self-flagged double-bind. Auto-backlogged per drive_mode=autopilot (MINOR).
-
-## SURFACE-2026-06-20-QUALITY-WP3A-MOD-D-DOUBLE-BIND
-- **File:** `src/components/workspace/editor/editorExtensions.ts:92,125`
-- **Finding:** `Mod-d` (`selectNextOccurrence`) is bound explicitly at `Prec.highest` AND is also present in the spread `...searchKeymap`, so the binding appears twice in the same keymap.
-- **Why it matters:** CM6 resolves first-match-wins so behavior is correct; the author flagged it in-line as intentional belt-and-suspenders. Mild dead weight only.
-- **Suggested action:** Optionally drop the explicit `Mod-d` line (rely on searchKeymap) OR keep with the existing comment. Trivial.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-20-QUALITY-WP3A-MOD-R-COMMENT-OVERSELL
-- **File:** `src/components/workspace/editor/editorExtensions.ts:97`
-- **Finding:** `Mod-r` runs `openSearchPanel`, which opens the same panel as Cmd+F (the replace row is visible by default). The comment frames it as "the replace chord," slightly overselling a functional distinction from find.
-- **Why it matters:** Behavior satisfies the operator's intent (replace fields present), but the comment could mislead a future reader into thinking Cmd+R does something Cmd+F doesn't. Trivial.
-- **Suggested action:** Soften the comment, or add `replace`-focus behavior if a real distinction is wanted later.
-- **Priority:** low
-- **Status:** pending
-
-# m2-wp3c-editor-split-panes — 2026-06-20
-
-3 MINOR findings from `feature-review-quality` on ship commit `b72ed30` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built, low-debt, fitting the codebase grain (pure minimal pane reducer, panel-level shared-document boundary respected end-to-end, proportionate tests asserting reference identity for no-ops). All three are cosmetic comment/duplication nits. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-20-QUALITY-WP3C-MIDDLE-CLOSE-INDEX-COMMENT
-- **File:** `src/components/workspace/editor/editorPanes.ts:69-72` (the `close` focus-reassign)
-- **Finding:** The middle-close focus-reassign `panes[Math.min(idx, panes.length - 1)]` is correct and tested, but relies on `idx` being the PRE-filter index while `panes` is the POST-filter array — so after filtering, `idx` points at the element that slid up into the closed slot. The current comment ("prefer the pane that took its slot") states the intent but not the index-shift mechanism.
-- **Why it matters:** the off-by-one surface here is exactly where a future edit could silently break focus reassignment; the test guards the behavior but not the reasoning. A one-line comment naming the index-shift assumption lowers future-reader cost.
-- **Suggested action:** Add a one-line comment: "idx is the pre-filter index; after filtering it points at the element that slid up into the closed slot." No code change.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-20-QUALITY-WP3C-REDUNDANT-JSX-COMMENT
-- **File:** `src/components/workspace/editor/EditorPanel.tsx:295` (the `.editor-panes` inline comment)
-- **Finding:** The inline JSX comment restates the shared-doc rationale ("vertical stack of panes… each pane is a viewport onto the shared doc") that is already stated authoritatively in the file header and in `editorPanes.ts` — WHAT-not-WHY redundancy.
-- **Why it matters:** minor comment redundancy; the canonical explanation lives in two better places.
-- **Suggested action:** Trim the inline comment to a brief pointer or drop it. No code change.
 - **Priority:** low
 - **Status:** pending
 
@@ -589,14 +400,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Finding:** While the Cmd+P finder overlay is open, a panel chord (⌘⇧E/⌘⇧D) still fires and switches the right-half panel *underneath* the still-visible overlay — the listener doesn't early-return on `finderOpen`.
 - **Why it matters:** UX seam, not a correctness bug; a future reader will wonder whether interleaving panel-switch with an open overlay was intended.
 - **Suggested action:** Guard panel chords on `!finderOpen` (or add a one-line note that the interleave is acceptable). Trivial.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-20-QUALITY-WP6-DOT-BOUNDARY-RATIONALE
-- **File:** `src/components/workspace/finder/fuzzyMatch.ts:32-34` (`isBoundary`)
-- **Finding:** `isBoundary` includes `.`, so the char after an extension dot earns the +8 segment-boundary bonus (e.g. `m` in `file.md`). Harmless given the "deliberately simple" ranker and current tests, but why `.` is a boundary is undocumented.
-- **Why it matters:** the dot-boundary is the least obvious of the four boundary chars; a half-line of rationale would prevent a future reader second-guessing it.
-- **Suggested action:** Add a one-line comment explaining the `.` inclusion (matches extension chars after a dot), or drop `.` if it ever distorts ordering. No correctness impact now.
 - **Priority:** low
 - **Status:** pending
 
@@ -701,15 +504,11 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 
 3 MINOR findings from `feature-review-quality` on ship commit `5f9a86a` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built and advancing the codebase: single-root-cause design (identifier is the one source of truth), exemplary pure/impure split mirroring the config_store/hook_install precedent, the substring trap closed with exact-match + a both-directions regression test, and WHY-encoding doc comments. All three findings are low-risk coupling/drift seams, none affecting correctness. Auto-backlogged per drive_mode=autopilot.
 
-## SURFACE-2026-06-24-QUALITY-DEVPROD-BASENAME-SPACE-ASSUMPTION
-- **File:** `src-tauri/src/hook_install/mod.rs:84-90`
-- **Finding (MINOR):** `script_basename_of_command` matches the last whitespace token ending in `.pl` (after quote-stripping). Correct for all command shapes Claudesk emits and for the real macOS `/Application Support/…` path (the `.pl` tail token survives the split), but it assumes no `.pl`-suffixed path *segment* contains a space. Inputs are app-controlled → defensive-only.
-- **Fix shape:** add a one-line comment documenting the no-spaces-in-`.pl`-segments assumption for any future reuser. Optional.
-
 ## SURFACE-2026-06-24-QUALITY-DEVPROD-OVERLAY-WINDOW-SIZE-COUPLING
 - **File:** `src-tauri/tauri.dev.json:6-12`
 - **Finding (MINOR):** the dev overlay re-declares `width`/`height` in `app.windows[0]` only because Tauri's array-merge replaces the whole window object (the sole intended override is `title`). Documented in the WIP (P1.1) but not at the file site → a future editor changing the prod window size would see dev silently keep 1280×800.
 - **Fix shape:** add an inline comment in tauri.dev.json noting the array-replace coupling, or track window size in a shared place. Optional.
+- **Status:** BURY (sweep #2 WP2, 2026-06-30). The cheap comment-form is INFEASIBLE — `tauri.dev.json` is parsed as strict JSON by serde, so a `//` comment breaks config parsing. The only remaining fix ("track window size in a shared place") is medium-effort + low-value + low-risk = the meh zone → Bury per the disposition model. Moved to WP4's bury list.
 
 # qol-wp6-new-workspace-hotkey — 2026-06-25
 

@@ -303,6 +303,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(
                 cancelNewFile();
               }
             }}
+            // Deliberate: blur (any focus-steal) silently cancels a partially-typed
+            // name. Enter-submit stays safe — keydown fires before blur.
             onBlur={cancelNewFile}
           />
           {newFileError && (

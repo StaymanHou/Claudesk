@@ -71,7 +71,7 @@ describe("languageForExtension", () => {
 
   it("returns the empty plaintext extension for unknown types", () => {
     expect(languageForExtension("txt")).toEqual([]);
-    expect(languageForExtension("json")).toEqual([]); // not wired yet (WP3 may add)
+    expect(languageForExtension("json")).toEqual([]);
     expect(languageForExtension("")).toEqual([]);
   });
 

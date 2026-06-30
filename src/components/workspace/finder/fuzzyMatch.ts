@@ -28,7 +28,8 @@ export interface FileMatch {
   score: number;
 }
 
-/** True when `ch` is a path-segment boundary char (we bonus the char AFTER it). */
+/** True when `ch` is a path-segment boundary char (we bonus the char AFTER it).
+ *  `.` counts so the first char of a file extension (e.g. `m` in `file.md`) earns the bonus. */
 function isBoundary(ch: string): boolean {
   return ch === "/" || ch === "_" || ch === "-" || ch === ".";
 }

@@ -50,7 +50,9 @@ const NEUTRAL_GLYPH: &[u8] = include_bytes!("../../icons/tray/neutral.png");
 const ATTENTION_GLYPH: &[u8] = include_bytes!("../../icons/tray/attention.png");
 
 /// A stable id for the tray icon (one per running identity — dev/prod isolation holds
-/// because each identity is a separate process with its own tray).
+/// because each identity is a separate process with its own tray). Nothing looks the tray
+/// up by this id today (the handle is stashed in `TrayState.icon`); it exists for future
+/// `TrayIcon::with_id` / `get_by_id` reachability.
 const TRAY_ID: &str = "claudesk-tray";
 
 /// Managed state for the tray: the built [`TrayIcon`] handle (so the listener can swap its

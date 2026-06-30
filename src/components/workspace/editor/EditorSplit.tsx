@@ -149,8 +149,6 @@ export const EditorSplit = forwardRef<EditorSplitHandle, EditorSplitProps>(
 
     // The per-workspace SHARED document store (keyed by path, ref-counted).
     const [docs, dispatchDocs] = useReducer(docsReducer, initialDocsState);
-    // (A live `docsRef` mirror of `docs` already exists below — reused by the QoL-WP1
-    // `dirtyDocCount` handle as well as the disk-conflict machinery.)
 
     // Synthetic read-only tab content (the WP7 Find-Results seam), keyed by the
     // synthetic tab's id. Content is in `state` so a setSyntheticContent re-renders the

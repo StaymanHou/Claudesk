@@ -87,6 +87,9 @@ pub enum CcError {
 /// in, error out) so it is unit-testable without spawning a real `claude`.
 fn classify_spawn_error(raw: &str) -> CcError {
     let lower = raw.to_lowercase();
+    // The to_lowercase() is what makes the lowercase literal markers below safe — they
+    // match case-insensitively against the lowered string, not by coincidence of the
+    // raw message's casing.
     // macOS/Linux: "No such file or directory" / "os error 2"; be liberal so a
     // portable-pty message-shape change doesn't silently regress to the raw string.
     if lower.contains("no such file or directory")

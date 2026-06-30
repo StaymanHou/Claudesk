@@ -73,6 +73,8 @@ export function panesReducer(state: PanesState, event: PanesEvent): PanesState {
       const panes = state.panes.filter((p) => p.id !== event.id);
       // Reassign focus only if the closed pane was the active one: prefer the
       // pane that took its slot (sibling), else the new last pane.
+      // `idx` is the PRE-filter index; after filtering it points at the element that
+      // slid up into the closed slot (Math.min clamps when the closed pane was last).
       let activePaneId = state.activePaneId;
       if (event.id === state.activePaneId) {
         const sibling = panes[Math.min(idx, panes.length - 1)];

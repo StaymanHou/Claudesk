@@ -23,8 +23,10 @@ export type ProposeResult =
  * Validate a project-relative path's SEGMENTS — each non-empty, not "." / "..", and the
  * whole thing not absolute (`/`- or `~`-leading). Backslash is treated as a separator too
  * (defensive on a macOS-only app). Returns null on success, or a human-readable reason.
- * QoL-WP5b: shared by the file + dir proposers; the segment rules mirror the backend's
- * lexical guard (reject `..`/empty/absolute) so the UI rejects before the IPC does.
+ * QoL-WP5b: shared by the file + dir proposers; the segment rules are defense-in-depth
+ * over (stricter than) the backend's lexical guard — e.g. a leading `~` is rejected here
+ * though the backend treats `~` as an ordinary contained segment — so the UI rejects
+ * before the IPC does.
  */
 function validateRelSegments(trimmed: string): string | null {
   if (trimmed.startsWith("/") || trimmed.startsWith("~")) {

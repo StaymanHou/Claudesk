@@ -27,7 +27,9 @@
 //! [`HEAVY_DIR_CHILD_THRESHOLD`] on a shallow `read_dir`). Heavy dirs are **listed as a
 //! row but not descended into** (presence at ~zero cost); every other path — including
 //! gitignored config — is shown. The `.git/` directory is still excluded explicitly (it
-//! isn't a heavy dir by name, but its churn is never useful). The content search
+//! isn't a heavy dir by name, but its churn is never useful). **Symlinks are also skipped**
+//! (an entry that is neither a file nor a dir is not emitted) — cycle-safe, but a symlinked
+//! source dir an operator edits is silently invisible to tree/finder/search. The content search
 //! ([`crate::project_search`]) and the fs watcher ([`crate::fs_watch`]) share this same
 //! heavy-dir basis so tree / finder / search / watcher never disagree on visibility.
 //!
@@ -125,6 +127,11 @@ pub(crate) const HEAVY_DIR_NAMES: &[&str] = &[
 /// source dir's direct-child count yet well below a dependency/cache dir's top level.
 /// The check is SHALLOW (immediate children only) so it costs ~one `read_dir`, never a
 /// recursive count.
+///
+/// Cost note: this detected-big check runs an extra `read_dir` on every non-name-matched
+/// directory during the walk (doubling directory-open syscalls vs. the walk's own), but
+/// it's short-circuited at threshold+1 children (`.take(THRESHOLD + 1)`) — acceptable for
+/// the single-user target.
 pub(crate) const HEAVY_DIR_CHILD_THRESHOLD: usize = 500;
 
 /// Whether a directory base name is a known-heavy generated/dependency dir (pure; the

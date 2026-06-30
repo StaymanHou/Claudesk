@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: between-M8-and-M9
 created: 2026-06-30
-status: not-started
+status: in-progress (WP1 ✓, WP2 ✓ — 2026-06-30)
 parent-backlog: workflow/backlog-quality-findings.md (+ workflow/backlog.md)
 drive-mode: autopilot
 ---
@@ -130,7 +130,10 @@ predicate+match), `WP3A-MOD-D-DOUBLE-BIND` (if not folded to B1), `WP5-XTERMPANE
 `WP9-PLAN-IMPL-DRIFT-CCNOTFOUND` (ack-close), `M8WP3-EVAL-CLASSIC-SCRIPT-IN-TEST`,
 `WP10-ESLINT-IGNORE-BUNDLED` (ack), `WP5-SPLIT-LISTENER-CROSSPOINTER` (verify the ⌘⇧O ref isn't
 stale post-WP8 first; if stale, fold the fix into WP2 instead), `WP4-TRIGGER-ONCE-UNDERFLAGGED`
-(comment touches a StrictMode invariant — bury as documented-WAI rather than risk the edit).
+(comment touches a StrictMode invariant — bury as documented-WAI rather than risk the edit),
+**`DEVPROD-OVERLAY-WINDOW-SIZE-COUPLING` (added at WP2 — the cheap comment-form is infeasible:
+`tauri.dev.json` is strict JSON, a `//` comment breaks parsing; the remaining "track in a shared
+place" fix is meh-zone)**.
 
 **Resolves:** ~17 findings buried.
 

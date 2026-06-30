@@ -127,14 +127,17 @@ function coreKeymap(opts: EditorExtensionOptions): Extension {
         },
       },
       // VS-Code-style "select next occurrence of the current selection/word".
-      // selectNextOccurrence is in searchKeymap by default under Mod-d already,
-      // but we bind it explicitly at highest prec so it can never be shadowed by
-      // a future lower-prec binding and reads clearly as a core gesture.
+      // selectNextOccurrence is ALSO in the spread `...searchKeymap` below under
+      // Mod-d, so this binding appears twice in the same keymap — deliberate
+      // belt-and-suspenders: CM6 resolves first-match-wins, so this explicit
+      // highest-prec entry can never be shadowed by a future lower-prec binding and
+      // reads clearly as a core gesture.
       { key: "Mod-d", run: selectNextOccurrence, preventDefault: true },
-      // Cmd+R → open the find/replace panel (operator's chosen replace chord,
-      // verify-human 2026-06-20). openSearchPanel opens the panel; the panel
-      // includes the replace fields. preventDefault so the browser's Cmd+R
-      // reload never fires while focus is in the editor.
+      // Cmd+R → openSearchPanel (operator's chosen "replace" entry point,
+      // verify-human 2026-06-20). This opens the SAME panel as Cmd+F — the replace
+      // row is visible by default — so it's a convenience alias, not a functionally
+      // distinct replace mode. preventDefault so the browser's Cmd+R reload never
+      // fires while focus is in the editor.
       { key: "Mod-r", run: openSearchPanel, preventDefault: true },
       // Font-size zoom (Sublime parity). Cmd+= grows, Cmd+- shrinks, Cmd+0
       // resets. preventDefault so the browser's native page-zoom never fires
@@ -163,7 +166,9 @@ function coreKeymap(opts: EditorExtensionOptions): Extension {
       // M6 WP5 — ⌘\ toggles soft line-wrap (Sublime convention; confirmed disjoint
       // from every chord in paletteCommands.ts's ownership map). preventDefault so
       // the OS/browser never sees it. Reads the CURRENT `lineWrap` (closed over from
-      // the latest buildEditorExtensions call) and flips it.
+      // the latest buildEditorExtensions call) and flips it. Correctness relies on the
+      // memo's `lineWrap` dep rebuilding this keymap on every change (CM6 reconfigures);
+      // do NOT drop `lineWrap` from that deps array. (Same invariant as the fontSize chord.)
       {
         key: "Mod-\\",
         preventDefault: true,

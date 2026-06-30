@@ -277,7 +277,7 @@ export function EditorPanel({
             className="editor-wrap-toggle"
             data-testid="editor-wrap-toggle"
             aria-pressed={lineWrap}
-            title={lineWrap ? "Soft-wrap on (⌘\\)" : "Soft-wrap off (⌘\\)"}
+            title="Toggle soft-wrap (⌘\\)"
             onClick={onToggleWrap}
           >
             {lineWrap ? "wrap" : "no wrap"}

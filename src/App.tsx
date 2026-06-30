@@ -256,6 +256,9 @@ function App() {
   // once-subscribed `menu` listener can invert it on a CC_YOLO_TOGGLE click. The backend
   // is the source of truth: seed from cc_get_yolo on mount, update on each `cc-yolo`
   // broadcast (also fired by cc_set_yolo, so this ref re-syncs to the persisted value).
+  // Deliberate double-subscribe: ProjectPicker ALSO listens to `cc-yolo` (for its visible
+  // checkbox STATE); this App-root ref exists for the menu-listener's invert-current. Both
+  // seed from the same backend value, so they never diverge.
   const ccYoloRef = useRef<boolean>(true); // default ON until the first read resolves
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -328,6 +331,9 @@ function App() {
       if (action.callback === "ccYoloToggle") {
         const next = !ccYoloRef.current;
         void invoke("cc_set_yolo", { yolo: next }).catch((e) => {
+          // Menu-path write failures are deliberately silent (console-only) — App.tsx has
+          // no toast surface like the picker, and this mirrors the pip_set_mode menu path
+          // above. The picker's checkbox handler keeps its optimistic-flip + revert + toast.
           console.error("[claudesk] cc_set_yolo (menu) failed:", e);
         });
         return;

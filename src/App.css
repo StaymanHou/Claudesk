@@ -29,6 +29,8 @@ a:hover {
   color: #24c8db;
 }
 
+/* Global, but the only consumer is the picker heading (`.picker h1`); kept as a global
+   rule rather than scoped because the app renders a single <h1> (the picker title). */
 h1 {
   text-align: center;
 }
@@ -1917,7 +1919,9 @@ body,
      height of the .diff-commits section, set by a ResizeObserver in DiffPanel.tsx
      (it's dynamic: collapsed = header-only, expanded = header + a 33vh body). The
      fallback (~2rem) matches the collapsed header height so first paint is correct
-     before the observer fires. */
+     before the observer fires. NOTE: this 2rem is coupled to `.diff-commits-header`'s
+     padding + font (≈2rem total) — if that header's height changes, update this default
+     too, or the pre-observer first-paint offset drifts until the ResizeObserver fires. */
   --diff-commits-h: 2rem;
 }
 
@@ -1930,7 +1934,7 @@ body,
 
 /* ── Commits section (collapsible top region) ── */
 /* Pin the WHOLE commits section (header + the bounded, scrollable commit list)
-   at the top:0 of .diff-scroll so the files area scrolls underneath it. The body is
+   at top:0 of .diff-scroll so the files area scrolls underneath it. The body is
    max-height:33vh;overflow-y:auto, so the pinned panel stays a bounded region.
    z-index above the file headers (z-index: 1) + the commit banner (z-index: 2 too,
    but the banner pins lower). WP8 item 2/A: its measured height feeds the

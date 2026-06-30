@@ -100,7 +100,9 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   // M6 WP7 Phase 3 — seed the yolo checkbox from the backend on mount, then track the
   // `cc-yolo` broadcast so toggling the native View-menu item keeps this box in sync
   // (third surface, one source of truth — same pattern App.tsx uses for ccYoloRef + the
-  // menu's apply_cc_yolo_to_menu). `cancelled` guards the async listen under StrictMode.
+  // menu's apply_cc_yolo_to_menu). Deliberate double-subscribe: this effect holds the
+  // visible-checkbox STATE; App.tsx's `cc-yolo` listener holds a REF for the menu's
+  // invert-current. `cancelled` guards the async listen under StrictMode.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let cancelled = false;

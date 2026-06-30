@@ -91,6 +91,10 @@ pub enum HookInstallError {
 /// substring of `claudesk-hook-dev.pl`, so a `.contains()` test would make prod
 /// falsely adopt/replace dev's group (the "substring trap").
 fn script_basename_of_command(command: &str) -> Option<&str> {
+    // ASSUMPTION: no `.pl`-suffixed path segment contains a space — the split_whitespace
+    // would break the `.pl` tail token off. Holds for every command Claudesk emits and for
+    // the real macOS `/Application Support/…` path (the `.pl` tail token survives the split);
+    // defensive-only since inputs are app-controlled.
     command
         .split_whitespace()
         .map(|tok| tok.trim_matches('\''))

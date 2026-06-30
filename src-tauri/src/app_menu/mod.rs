@@ -464,6 +464,10 @@ mod tests {
 
     #[test]
     fn label_only_ids_are_not_functional() {
+        // These label-only ids (`file.save.label`, etc.) exist ONLY so `is_functional_id`
+        // returns false — they're carried by disabled cheat-sheet rows that never fire
+        // `on_menu_event` (disabled items don't emit), so don't hunt for where they're
+        // dispatched: they aren't. This test guards that negative space.
         // The disabled cheat-sheet rows must never be treated as functional.
         for id in [
             "file.save.label",

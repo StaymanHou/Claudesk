@@ -159,7 +159,8 @@ export function Workspace({
   // one useState store — so a zoom in either terminal moves the persisted size, and the
   // OTHER terminal re-seeds from it on its next mount/refit (the shared-key decision). We
   // apply the new size to ONLY the focused terminal here so the gesture zooms the one the
-  // user is looking at; the other catches up when re-seeded. Both share the batch-safe
+  // user is looking at; the other catches up when re-seeded (a persistently-mounted
+  // background terminal lags until its next refit). Both share the batch-safe
   // functional updater so several chords in one React batch read the latest committed size.
   const applyTerminalZoom = (
     action: "in" | "out" | "reset",

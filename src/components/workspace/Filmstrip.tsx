@@ -344,10 +344,9 @@ export function Filmstrip({
                 />
                 {/* QoL-WP1 — close (×). stopPropagation on pointerdown so the strip's
                     drag/promote handler (onStripPointerDown) never treats this as a tile
-                    press; the click closes via onClose (App runs the dirty guard). The
-                    button is a child of the tile <button> — invalid nested <button> in
-                    strict HTML, but it renders + works in WKWebView; rendered as a <span>
-                    role=button to stay valid and avoid the nested-button warning. */}
+                    press; the click closes via onClose (App runs the dirty guard). Rendered
+                    as a <span role=button> to avoid nesting a <button> inside the tile
+                    <button> (invalid HTML). */}
                 <span
                   role="button"
                   tabIndex={0}

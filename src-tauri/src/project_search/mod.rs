@@ -146,10 +146,10 @@ fn build_regex(query: &SearchQuery) -> Result<Regex, ProjectSearchError> {
 /// Search `root` for `query` and return per-file matches.
 ///
 /// Walks the project via the shared [`walk_project`] (heavy dirs pruned, gitignore NOT
-/// honored, `.git/` excluded — identical to the finder/tree), reads each file as UTF-8, and records
-/// every line containing a match. Non-UTF-8 (binary) files and unreadable entries are
-/// skipped. Results are sorted by file path for a deterministic order; matches within
-/// a file are in document order. Files with zero matches are omitted.
+/// honored, `.git/` excluded — identical to the finder/tree), reads each file as UTF-8,
+/// and records every line containing a match. Non-UTF-8 (binary) files and unreadable
+/// entries are skipped. Results are sorted by file path for a deterministic order;
+/// matches within a file are in document order. Files with zero matches are omitted.
 ///
 /// # Errors
 /// - [`ProjectSearchError::BadRoot`] if `root` does not exist or is not a directory.
