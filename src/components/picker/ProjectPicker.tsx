@@ -151,7 +151,17 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     try {
       const picked = await openDialog({ directory: true });
       if (typeof picked !== "string") return; // user cancelled (null) or multi (array)
-      await invoke("add_project", { path: picked });
+      // `add_project` returns the persisted record; reflect it in local `recents`
+      // immediately so a newly-added folder appears at the top without a remount
+      // (symmetry with `handleRemove`, which prunes locally — fixes the
+      // add-no-refresh asymmetry that surfaced once the picker stays mounted in the
+      // multi-workspace shell). Prepend-and-dedup: a re-added existing path moves to
+      // the front (matching the backend's most-recently-opened-first ordering).
+      const added = await invoke<RecentProject>("add_project", { path: picked });
+      setRecents((rs) => [
+        added,
+        ...rs.filter((r) => r.project_path !== added.project_path),
+      ]);
       onOpen(picked);
     } catch (e) {
       setToast({ kind: "error", message: mapIpcError("open folder", e) });

@@ -97,11 +97,25 @@ fn seed_dev_projects(
 }
 
 /// Current wall-clock time in unix epoch milliseconds.
+///
+/// `duration_since(UNIX_EPOCH)` only errors if the system clock is set before 1970
+/// — not a real condition, but if it ever fires we must NOT fall back to `0`: the
+/// store sorts most-recently-opened first by descending `last_opened_at`
+/// (`super::sort_by_recency`), so a `0` stamp would silently sink the just-opened
+/// project to the BOTTOM of recents — the exact opposite of what the user just did.
+/// Instead we log the anomaly and stamp `i64::MAX` so the actively-opened record
+/// sorts FIRST, matching intent, and surface the clock fault rather than swallowing it.
 fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_millis() as i64,
+        Err(e) => {
+            eprintln!(
+                "[claudesk] system clock is before the unix epoch ({e}); \
+                 stamping recency as i64::MAX so the just-opened project sorts first"
+            );
+            i64::MAX
+        }
+    }
 }
 
 /// List remembered projects, most-recently-opened first.
@@ -112,6 +126,14 @@ pub fn list_projects(app: AppHandle) -> Result<Vec<Project>, String> {
 }
 
 /// Add a project (or refresh its recency if already present). Returns the record.
+///
+/// NOTE: this body is DELIBERATELY identical to [`record_open`] — both are thin
+/// aliases over `add_or_touch(.., now_ms())`. They are kept as two distinct IPC
+/// commands for frontend readability (the picker calls `add_project` from "Open
+/// Folder…" and `record_open` from clicking a recent — the names document intent at
+/// the call site). The single point of truth is `add_or_touch`; if its contract ever
+/// needs to differ per entry point, split it there, not by editing one wrapper and
+/// not the other. Do not "dedupe" these into one command.
 #[tauri::command]
 pub fn add_project(app: AppHandle, path: String) -> Result<Project, String> {
     let dir = resolve_data_dir(&app)?;
@@ -120,6 +142,8 @@ pub fn add_project(app: AppHandle, path: String) -> Result<Project, String> {
 
 /// Stamp `last_opened_at = now` for a project (adding it if unknown). Returns the
 /// record so the frontend can reflect the new recency immediately.
+///
+/// Deliberately a byte-identical alias of [`add_project`] — see the note there.
 #[tauri::command]
 pub fn record_open(app: AppHandle, path: String) -> Result<Project, String> {
     let dir = resolve_data_dir(&app)?;

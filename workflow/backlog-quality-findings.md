@@ -544,7 +544,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-24-QUALITY-APPMENU-CROSS-LANG-ID-CONTRACT
 - **Files:** `src-tauri/src/app_menu/mod.rs:33` (`ids` module / `FUNCTIONAL_IDS`) ↔ `src/menu/menuBridge.ts:16` (`MENU_IDS`)
 - **Priority:** medium (the MAJOR)
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP3) — added pickup-shape option (a): a Rust test `functional_ids_are_pinned_to_the_frontend_bridge` (`app_menu/mod.rs` tests) reads `../src/menu/menuBridge.ts` as TEXT and asserts every `FUNCTIONAL_IDS` literal appears as a quoted `MENU_IDS` value. A one-char id drift on either side now fails `cargo test` instead of silently dead-clicking a menu item with green tests. Pins Rust ⊆ TS (each emitted id is mapped); the reverse is a dead switch arm, covered by `menuBridge`'s own vitest. No-codegen, fits the repo posture.
 - **Type:** tech-debt (unguarded cross-language contract)
 - **Finding:** The 11 functional menu-item id strings are duplicated across Rust (`app_menu::ids`) and TS (`MENU_IDS`) with NO mechanical link — only prose ("keep in sync" / "byte-identical"). A one-character drift on either side silently dead-clicks exactly one menu item: Rust emits an id, the TS `menuActionFor` switch falls through to `default → null`, the click does nothing. Crucially this ships with GREEN tests — the Rust tests only check `FUNCTIONAL_IDS` internal uniqueness, and `menuBridge.test.ts` references `MENU_IDS.*` symbolically (so it passes regardless of what the literal strings are). This is the feature's single load-bearing cross-language contract and the most likely future-regression vector (rename a panel id, ship, lose one menu item, no test fails).
 - **Pickup shape:** add a mechanical pin — cheapest options: (a) a Rust test that reads `src/menu/menuBridge.ts` as text and asserts each `ids::*` literal appears as a `MENU_IDS` value (string-grep assertion); (b) generate the shared id list at build time from one source; (c) a small TS test that imports a JSON/generated list emitted by the Rust side. (a) is the lowest-effort guard and fits the repo's no-codegen posture. Dismiss via the WIP `## Code-Quality Review` section if judged not worth it.
@@ -721,7 +721,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** both IPC calls realistically succeed/fail together and empty-recents is an acceptable fallback, so it's low-risk — but the partial-failure ordering isn't visible to a future reader. The inline comment already points at the broader picker IPC error-surfacing item.
 - **Suggested action:** Fold into the existing picker IPC error-surfacing work (`SURFACE-2026-06-18-QUALITY-*`, the wp6 picker MAJORs) rather than a standalone fix — surface IPC failures to the user there. Trivial alone.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED — folded into the picker IPC error-surfacing fix at M4 WP2, confirmed at debt-paydown WP3 (2026-06-30). The prune+list mount loader's shared `try/catch` now ends in `setToast({kind:"error", …})` via `mapIpcError`, so the prune-succeeds-then-list-throws window surfaces an error toast instead of leaving recents silently empty.
 
 ## SURFACE-2026-06-19-QUALITY-WP9-PLAN-IMPL-DRIFT-CCNOTFOUND
 - **File:** `workflow/archive/wp9-phase1-polish.md` P1.1 outcome line vs `src-tauri/src/cc_session/mod.rs`
@@ -805,28 +805,28 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** the backend's deliberate no-silent-wipe / typed-error posture is partially neutralized at the UI boundary where every failure path is dropped. Load-bearing for the Phase 2 multi-workspace shell where the picker stays mounted and errors must surface.
 - **Suggested action:** add a shared error-surfacing path (toast / inline message) and `.catch` on the mount loader that realizes the documented graceful-empty fallback while distinguishing it from a real error. Fold into a `/feature-refactor` pass or the Phase 2 picker work.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** RESOLVED — implemented at M4 WP2 (P4.1/P4.2), confirmed at debt-paydown WP3 (2026-06-30). `ProjectPicker.tsx` now has a `PickerToast {kind:"info"|"error"}` surface, a pure `mapIpcError` helper (`picker/ipcError.ts`, unit-tested), a `.catch` on the mount loader distinguishing graceful-empty (backend returns `[]` for an absent file, no toast) from a real error (malformed `projects.json` → error toast), and try/catch on all three mutation handlers (`record_open`/`add_project`/`remove_project`). WP3 verified the fix is fully in place — the WBS task was written on the stale premise it was still open.
 
 ## SURFACE-2026-06-18-QUALITY-PICKER-ADD-NO-REFRESH
 - **File:** `src/components/picker/ProjectPicker.tsx:78-79`
 - **Finding:** `handleOpenFolder` calls `add_project` then `onOpen(picked)` but never refreshes local `recents` state (unlike `handleRemove`, which does). A newly added folder doesn't appear in the list until the picker remounts. State-sync asymmetry between the two mutation paths.
 - **Why it matters:** minor in Phase 1 (picker likely unmounts on open), but a reader will trip over the asymmetry when the picker stays mounted in the multi-workspace shell.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP3) — `handleOpenFolder` now consumes `add_project`'s returned `Project` record and prepend-and-dedups it into local `recents` (newly-added/re-added path moves to front, matching the backend's most-recently-opened-first order), restoring symmetry with `handleRemove`.
 
 ## SURFACE-2026-06-18-QUALITY-CMD-ADD-RECORD-IDENTICAL
 - **File:** `src-tauri/src/config_store/commands.rs:42-55`
 - **Finding:** `add_project` and `record_open` have byte-identical bodies (both delegate to `add_or_touch(&dir, ..., now_ms())`). The distinction is purely nominal at the IPC surface.
 - **Why it matters:** harmless and arguably intentional for frontend readability, but two identical implementations invite drift (a future maintainer "fixes" one, not the other). A one-line doc note that they are deliberately aliased — or collapsing to one command — would prevent it.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP3) — kept the two distinct IPC commands (the call-site names document intent: `add_project` from "Open Folder…", `record_open` from clicking a recent) and added a doc note on `add_project` stating the alias is deliberate + that the single point of truth is `add_or_touch` (split there if a per-entry-point contract ever diverges, not by editing one wrapper). `record_open`'s doc cross-references it.
 
 ## SURFACE-2026-06-18-QUALITY-NOW-MS-EPOCH-SENTINEL
 - **File:** `src-tauri/src/config_store/commands.rs:28-33`
 - **Finding:** `now_ms()` swallows a pre-1970 `SystemTime` error with `.unwrap_or(0)`. A timestamp of `0` would silently sort that record last forever rather than surfacing the anomaly — `0` collides with the recency-ordering invariant if it ever fires.
 - **Why it matters:** trivial in practice (clock-before-epoch is not real); flagged only because `0` is a sentinel colliding with an invariant.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP3) — `now_ms` no longer falls back to `0`. On the (unreal) pre-epoch-clock error it logs the clock fault and stamps `i64::MAX`, so a just-opened project sorts FIRST (matching the user's intent) instead of silently sinking to the bottom of recents. The sentinel/invariant collision is gone and the anomaly is surfaced, not swallowed.
 
 # wp5-frontend-ui-prototype — 2026-06-18
 

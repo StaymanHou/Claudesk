@@ -432,6 +432,37 @@ mod tests {
     }
 
     #[test]
+    fn functional_ids_are_pinned_to_the_frontend_bridge() {
+        // Cross-language contract pin (WP3 MAJOR `app-menu-bar`). The 11+ functional ids
+        // are duplicated Rust (`FUNCTIONAL_IDS`) ↔ TS (`MENU_IDS` in `menuBridge.ts`) with
+        // only a prose "keep these in sync" comment linking them. A one-char drift on
+        // either side silently dead-clicks an item (Rust emits an id the frontend's
+        // `menuActionFor` switch falls through to `null`) and ships GREEN. This test makes
+        // that drift a build failure: it reads `menuBridge.ts` as TEXT and asserts every
+        // `FUNCTIONAL_IDS` literal appears as a quoted `MENU_IDS` value. A string-grep is
+        // the cheapest faithful guard — it doesn't parse TS, it just proves each id string
+        // the Rust side will emit is present verbatim in the frontend map.
+        //
+        // Direction: this pins Rust ⊆ TS (every functional id the backend emits is mapped
+        // on the frontend). The reverse — a TS id with no Rust counterpart — is a dead
+        // switch arm, not a dead click, and `menuActionFor`'s own vitest covers each arm.
+        let bridge_src = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/menu/menuBridge.ts"
+        ))
+        .expect("menuBridge.ts must be readable at ../src/menu/menuBridge.ts");
+        for id in FUNCTIONAL_IDS {
+            let quoted = format!("\"{id}\"");
+            assert!(
+                bridge_src.contains(&quoted),
+                "functional menu id {id} (FUNCTIONAL_IDS) has no matching MENU_IDS value \
+                 {quoted} in src/menu/menuBridge.ts — the Rust↔TS id contract has drifted; \
+                 a click on this item would dead-end in the frontend's menuActionFor switch"
+            );
+        }
+    }
+
+    #[test]
     fn label_only_ids_are_not_functional() {
         // The disabled cheat-sheet rows must never be treated as functional.
         for id in [
