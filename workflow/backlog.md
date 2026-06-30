@@ -1,11 +1,5 @@
 # Backlog
 
-## Code-quality findings — m8-wp3-filmstrip-demo (2026-06-29)
-- **Pointer:** 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `a42ba61`: (1) stale four-beat JSDoc cast names in `timeline.filmstrip.js` (comment says api-gateway/web-client; data is catan-companion/tax-cruncher — doc/data drift); (2) WP2 smoke timeline still uses the "one-system" naming this file's comment flags as the anti-pattern (align at WP5); (3) test loads the classic-script timeline via `eval` against a bare `window` shim (on-record, dismiss-candidate). All low-priority polish on dev-only demo tooling. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m8-wp3-filmstrip-demo — 2026-06-29`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** address at a future `/feature-refactor` (cleanup-only), or fold into WP4/WP5 build (they touch the same harness). #1 (JSDoc cast) is the highest-value one-liner. Dismiss any by marking it `[DISMISSED]` in the WIP's `## Code-Quality Review` section.
-
 > **M8 (Demo assets — filmstrip & PiP value showcase) cycle-close — backlog sweep 2026-06-29 (`/product-finalize`).** M8 complete — all 5 WPs shipped (WP1 probe→synthesized-GIF/Playwright/ffmpeg pipeline; WP2 shared harness `cbe2922`+`9cff1b1`; WP3 filmstrip GIF `a42ba61`; WP4 PiP GIF `5625658`; WP5 embed+README-restructure+push `f7b1310`/`157242d`/`c34925a`, finalize `f5cc431`; WBS archived to `docs/product/archive/milestone-8-demo-assets/`). Sweep disposition: this cycle's one newly-resolvable item is the milestone-level **`SURFACE-2026-06-29-DEMO-ASSETS-FILMSTRIP-AND-PIP`** (RESOLVED — both demos shipped as looping GIFs + embedded + operator-approved on the github.com render). M8 added **2 MINOR code-quality findings** (`Code-quality findings — m8-wp5-embed-place`: test-name over-claims "animated"; stale README Status block now prominent) — **DEFERRED** to a future `/feature-refactor` (by design), the stale-Status one a natural fold into a README-freshen task. M8 was a pure docs/marketing-asset cycle (no app code, no new dep, dev-only `tooling/demo/`), so it resolved none of the standing carry-forward items, all still **DEFERRED → carry forward** (anchors intact): the **code-quality `/feature-refactor` batch** (now incl. m8-wp2/wp3/wp4/wp5 MINOR batches — all dev-only `tooling/demo/` polish + the README-freshen); forward-look SURFACEs — `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` (→ **M9, the next execution milestone**), `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` (→ **M10** docs-viewer, re-anchored off the cut M7 popover), `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (→ M9 startup-trim), `SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE` (unblocked post-v0.2.2, keep-or-demote decision pending), `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP` (→ test-infra), `SURFACE-2026-06-27-ESLINT-WALKS-GITIGNORED-SCRATCH-FIXTURE` (→ one-line eslint-ignore at next refactor), `SURFACE-2026-06-25-FILMSTRIP-MIRROR-BANNER-OCCLUDED-AT-SESSION-START` (cosmetic). Also note: M7's **OC.1–OC.4 DEFERRED-TO-RELEASE** checklist (`workflow/archive/m7-menu-bar-status-item.md`) is still pending its next `/release` gate — M8 shipped no installed-`.app` change, so it didn't touch that. **Nothing escalated.** Each item keeps its own `Status:` detail; this note records the en-masse disposition. Next execution milestone: **M9 (Time-analytics panel — absorb claude-time).**
 
 > **M7 (Menu-bar status item) cycle-close — backlog sweep 2026-06-29 (`/product-finalize`).** M7 complete — all 3 WPs shipped in commit `3888dd6` (WP1 tray icon + ambient alarm, WP2 actuator menu, WP3 milestone-exit verify; WBS archived to `docs/product/archive/milestone-7-menu-bar-status-item/`). Sweep disposition: this cycle's only newly-resolvable items were the 2 M7 arch-doc-name SURFACEs — **`SURFACE-2026-06-29-M7-TRAY-ATOMIC-ICON-METHOD-NAME`** (RESOLVED — `set_icon_with_as_template` is the real method; corrected across wbs/roadmap/arch/CLAUDE.md) and **`SURFACE-2026-06-29-M7-TRAY-NO-CONFIG-BLOCK`** (RESOLVED — glyphs embedded via `include_bytes!`, no `trayIcon` config block; corrected likewise). M7 added 3 MINOR code-quality findings (`Code-quality findings — m7-menu-bar-status-item`) — **DEFERRED** to a future `/feature-refactor` (by design, not cycle-resolved). M7 also carries the **OC.1–OC.4 DEFERRED-TO-RELEASE operator-carry checklist** (in `workflow/archive/m7-menu-bar-status-item.md`) — native glyph badge-transition + out-of-focus/cross-Space + installed-`.app` parity, to verify at the next `/release` gate. M7 was net-new tray work, so it resolved none of the standing carry-forward items: the **code-quality `/feature-refactor` batch** + forward-look SURFACEs (`SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE` now unblocked post-v0.2.2; `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` → M9; `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` → M9; `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` → M8, the now-current docs-viewer milestone; the various PANETABS/eslint/cosmetic carries) all remain **DEFERRED**, anchors intact. **Nothing escalated.** Next execution milestone: **M8 (workflow-docs markdown viewer)**.
@@ -17,24 +11,6 @@
 > **M5 (Picture-in-picture) cycle-close — backlog sweep 2026-06-27 (`/product-finalize`).** M5 complete (WP1–WP6 all shipped; WBS archived to `docs/product/archive/milestone-5-picture-in-picture/`). Sweep disposition: M5's per-WP resolutions were recorded incrementally at each WP's `feature-finalize` (`SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI` RESOLVED at WP2; WP3-quality items at their finalizes), so this sweep found **no newly-resolvable items**. WP6 was verification-only and resolved nothing new but **surfaced one carry-forward**: `SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE` (**high**, pending) — the M5 exit criterion (installed-`.app` out-of-focus visibility) + native menu glyph + ⌘Tab-away auto-summon + dev/prod isolation + tauri#5566 caveat are operator-deferred to the `/release` gate; resolves when the release is verified before the Homebrew bump. Still-pending otherwise: (a) the standing **code-quality MINOR/MAJOR findings** batch (held for a future `/feature-refactor` — by design, not cycle-resolved); (b) forward-look SURFACEs with intact anchors — `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1` + `SURFACE-2026-06-25-STATUS-STUCK-RUNNING-AFTER-CLEAN-TURN-END` (→ **M6**, the latter is M6's LEAD item), `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` (→ M8), `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (→ M9), `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP` (→ test-infra), `SURFACE-2026-06-25-FILMSTRIP-MIRROR-BANNER-OCCLUDED-AT-SESSION-START` (DEFERRED — the M5 PiP-fold-in opportunity passed without a fix; the shared `serializeAsHTML()` occlusion remains a cosmetic carry-forward), editor-polish + workflow-doc-watcher items unchanged. **Nothing escalated.** Each item keeps its own `Status:` detail; this note records the en-masse disposition.
 
 > **QoL/lifecycle sweep finalize — backlog sweep 2026-06-25 (`/product-finalize`, operator-requested between-milestone run).** The QoL scratch sweep (WP0–WP8, not a roadmap milestone) is complete; `qol-wbs.md` retired. Sweep disposition: **all of this cycle's resolutions were already recorded incrementally at each WP's own `feature-finalize`** — every `SURFACE-2026-06-24-*` item is RESOLVED (WP1–WP7) and `SURFACE-2026-06-20-WP4-DIFF-VIEWER-POLISH-FOLLOWUPS` was closed at WP8 finalize — so this sweep found **no newly-resolvable items**. The ~37 still-`pending` entries are: (a) ~32 **code-quality MINOR/MAJOR findings** held for a future `/feature-refactor` batch (standing by design — not cycle-resolved), and (b) the substantive forward-look SURFACEs, all **DEFERRED → carry forward** with existing anchors intact: `SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI` (→ M5 planning), `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP` (→ test-infra investment), `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (→ M9 startup-trim), `SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET` + independent-pane (→ later editor-polish), `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` (→ M6). `SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE` was already RESOLVED 2026-06-21. **Nothing escalated; nothing blocks M5 (PiP).** Each item keeps its own `Status:` detail; this note records the en-masse disposition. Next `/product-wbs` should re-triage the forward-look SURFACEs against M5's scope.
-
-## Code-quality findings — m6-wp11-multiple-right-panel-terminals (2026-06-28)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `f9e3292`: (1) the ⌘T/⌘W keydown branches re-inline the open/close bodies (vs calling `addTerminal`/`closeTerminalById`) to keep the `[visible, workspaceId]` listener free of non-stable deps — a logic duplication that could diverge; (2) the `term-tab-row` has `role=tablist`/`tab`/`aria-selected` but no `aria-controls`→pane / `role=tabpanel` (consistent with the existing panel-tab row, a11y polish); (3) `TerminalEntry`'s `id`/`sessionId` are always-equal in v1 (speculative-generality seam). Reviewer: "well-built... nothing here warrants a refactor pass." See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m6-wp11-multiple-right-panel-terminals — 2026-06-28`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** (1) a `useCallback`/ref-to-callback to share one impl across both call sites; (2) add `aria-controls`+`role=tabpanel`; (3) collapse to one field or annotate always-equal. A single trivial `/feature-refactor` pass covers all three. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — wp9-suppress-empty-pip (2026-06-28)
-- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7b36853`: (1) `pip_set_mode(On)` re-reads the just-persisted mode from disk inside `reconcile_on_mode_visibility` instead of reusing the in-scope `mode` — redundant disk read on a click path, harmless + arguably the "fresh from persisted truth" pattern; (2) `WorkspaceRegistry::len()` un-gated without a companion `is_empty()` (clippy-clean here, deliberate). Reviewer: "well-built, low-risk polish... no refactor warranted." See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp9-suppress-empty-pip — 2026-06-28`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** both are one-line comment edits (or no-op) — a trivial `/feature-refactor` pass, or fold into the standing MINOR batch. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m6-wp7-no-yolo-setting (2026-06-28)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `4db7b82`: (1) the App.tsx menu-path `cc_set_yolo` failure is silent (`console.error` only) vs the picker's optimistic-revert+toast — pattern-consistent with pip-mode's menu path; (2) two deliberate `cc-yolo` listeners (App.tsx ref + picker state) read as duplication absent a note; (3) a third module-local `resolve_data_dir` copy (config_store/pip/cc_session). Reviewer: "well-built, low-risk polish; no refactor warranted." See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m6-wp7-no-yolo-setting — 2026-06-28`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all three are one-line comment/note edits (or no-op until a 4th consumer for #3) — a single trivial `/feature-refactor` pass. Dismiss any via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK
 - **Source:** operator request + analysis (2026-06-26 session) — "move the claude-time feature into this claudesk app"
@@ -68,95 +44,17 @@
 - **Priority:** low-medium (cosmetic; only the first ~10–20 lines of a fresh session, only on background tiles, self-corrects once output grows — but the CC banner is exactly what you glance at to confirm a workspace started cleanly).
 - **Status:** pending (root-caused-not-fixed; relates to the M4 WP3 live-mirror work — could fold into M5 PiP-layout work since the PiP surface mirrors the same `serializeAsHTML()` block and will hit the identical occlusion).
 
-## Code-quality findings — wp6-filetree-shows-ignored-files (2026-06-28)
-- **Pointer:** 1 MAJOR + 3 MINOR findings (0 CRITICAL) from `feature-review-quality` on ship commit `61db3d4`: MAJOR — the `ignore = "0.4"` crate is now DEAD in `src-tauri` (walk_project dropped `WalkBuilder`, fs_watch dropped `GitignoreBuilder`; zero non-comment refs), but it + its stale Cargo.toml comments still assert a gitignore posture the code abandoned. MINORs — (1) walk_project's symlink-skip undocumented at the contract level; (2) `dir_is_heavy` per-dir `read_dir` cost not noted next to the threshold; (3) a long doc-wrap line in project_search. Reviewer: "well-built; the only follow-up is removing the now-unused dependency." See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp6-filetree-shows-ignored-files — 2026-06-28`.
-- **Priority:** medium (the MAJOR dead-dep), low (the 3 MINORs)
-- **Status:** pending
-- **Pickup shape:** remove `ignore = "0.4"` + rewrite its Cargo.toml comments → `cargo build` + `cargo test --lib` to confirm; then the 3 one-line doc/comment notes. A single `/feature-refactor` pass covers all four (the dep removal needs a rebuild → why Mode-3 backlogged rather than auto-fixed in the review path). Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m6-wp5-editor-wrap-toggle (2026-06-27)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `16ce60a`: (1) `EditorPanel.tsx` `onToggleWrap` duplicates the compartment reconfigure that `coreKeymap.applyWrap` already does AND the memo rebuilds on the state change — two reconfigure paths for one flag (idempotent, but a drift seam); (2) the `Mod-\` `run` closes over `lineWrap` from the latest builder call — load-bearing memo-dep invariant only lightly documented (mirrors the fontSize chord); (3) the wrap toggle `title` is a state label ("Soft-wrap on") while `aria-pressed` already conveys state — slight state-vs-action affordance ambiguity (cosmetic copy). Reviewer: well-built, low-risk, near-textbook fontZoom clone; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m6-wp5-editor-wrap-toggle — 2026-06-27`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** (1) route the button through `applyWrap` or rely on the memo rebuild (or leave as-is); (2) one-line comment; (3) accept or reword to "Toggle soft-wrap". A single trivial `/feature-refactor` pass covers all three. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — wp4-terminal-font-zoom (2026-06-27)
-- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `67c3f54`, BOTH reviewer-flagged "not a defect / not a finding to act on" (forward-looking notes only): (1) `Workspace.tsx` keeps a `useState` whose value binding is intentionally unused (only the setter, read in the batch-safe functional updater) — a readability puzzle, not a bug; (2) `terminalFontZoom.ts` is the third near-verbatim copy of the per-surface zoom module (editor + now terminal) — flagged so a FUTURE fourth zoom surface prompts a deliberate extract-`makeFontZoom`-vs-copy decision. Reviewer: well-built, low-risk, advances the codebase; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp4-terminal-font-zoom — 2026-06-27`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** finding (1) is leave-as-is or a one-line useState→useRef swap; finding (2) needs no action until a 4th zoom surface lands (WP10 likely reuses the module directly). Dismiss either via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — wp3-split-ratio-control (2026-06-27)
-- **Pointer:** 4 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `0b68f5a`: (1) "app-global shared state" prose overstates live cross-workspace sync (per-Workspace useState + shared localStorage key; sync is by remount); (2) `effectiveRailWidth` docstring's two guarantees can conflict in principle if stored < RAIL_MIN (unreachable; min-wins undocumented); (3) the un-collapse refit nudge is left-(CC)-only — the asymmetry (only xterm has the WKWebView display-flip race) isn't commented; (4) intra-feature "Phase 1/Phase 2" comments now describe build history, not pending work. Reviewer: well-built, low-debt, no correctness impact — all 4 are prose/comment-accuracy nits; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp3-split-ratio-control — 2026-06-27`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all four are one-line comment/docstring edits — a single trivial `/feature-refactor` pass. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m5-wp4-pip-layout-modes-switcher-resize (2026-06-26)
-- **Pointer:** 4 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `d38a191`: (1) `pip_move`'s doc comment claims the "same raw-msg_send path `set_content_size` uses" but `set_content_size` is a tauri-nspanel wrapper, not raw msg_send — inaccurate safety basis for the `unsafe` block; (2) stale "CSS scales + glows the dot" comment in pipFanoutWiring.test.ts — the dot-size scale was dropped (P4.2), glow-only now; (3) vestigial `data-tauri-drag-region` on pip-root/.pip-switch-row — inert on this swizzled NSPanel (real drag is JS startPanelDrag→pip_move); (4) startPanelDrag's click-vs-drag boundary on the switch row is implicit (benign; a comment would help). Reviewer: well-built, high-discipline, negligible debt — all comment/vestige drift, no correctness impact; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp4-pip-layout-modes-switcher-resize — 2026-06-26`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all four are one-line comment/attribute edits — a single trivial `/feature-refactor` pass (findings 1+2 reword comments; finding 3 remove-or-annotate the dead attribute; finding 4 add a clarifying comment). Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — qol-wp8-diff-viewer-polish (2026-06-25)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7385a61`: (1) the sticky-var ResizeObserver effect's `commitsCollapsed` dep is belt-and-suspenders (the observer already tracks the parent `.diff-commits` height) — comment slightly overstates it as load-bearing; (2) a one-word copy-edit slip in the `.diff-commits` comment ("at the top:0 of"); (3) the `--diff-commits-h: 2rem` first-paint fallback is undocumented-coupled to `.diff-commits-header`'s height. Reviewer: well-built, tightly-scoped, right mechanism (measured CSS var + ResizeObserver), no debt — no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp8-diff-viewer-polish — 2026-06-25`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** three trivial `/feature-refactor` nits — (1) drop the dep or reword the comment; (2) one-word comment fix; (3) add a cross-reference comment. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — qol-wp6-new-workspace-hotkey (2026-06-25)
-- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `47fdeb9`: (1) the `newWorkspaceChord` unit test's "is permissive on Ctrl/Alt" case sets neither `ctrlKey` nor `altKey` (interface omits them) so it duplicates the uppercase-N positive — name overpromises coverage; (2) the `newWorkspaceChord.ts` header's cross-reference to the `paletteCommands.ts` chord-ownership map is a drift seam if that map ever relocates (confirmed present + correct today — no action needed now). Reviewer: clean, convention-adherent, near-verbatim clone of the proven ⌘⇧+digit listener, accrues no debt, no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp6-new-workspace-hotkey — 2026-06-25`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** finding (1) is a one-line `/feature-refactor` nit — retitle the test case or widen the interface + add `ctrlKey/altKey: true`; finding (2) needs no standalone fix (only act if the chord map is ever moved). Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — qol-wp5b-editor-folder-depth (2026-06-25)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `374f7cb`: (1) a failed `trash_path` in `onDeleteFolderConfirm` is swallowed to `console.error` only (folder appears to still exist — pairs with the WP5 delete-toast item); (2) the `validateRelSegments` "mirrors the backend lexical guard" comment overstates parity (frontend rejects leading `~`, backend treats it as a normal segment — frontend stricter, safe); (3) the folder-delete confirm's descendant `count` can lag the live subtree if it grew since the last tree refresh (advisory only; the trash is correct). Reviewer: well-built, security-conscious, ship-quality; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp5b-editor-folder-depth — 2026-06-25`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** three quick `/feature-refactor` nits — (1) surface the trash failure inline/toast (one fix covers both delete paths with the WP5 item); (2) reword the guard-parity comment (or drop the `~`-check); (3) accept as cosmetic or re-walk on confirm-open. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — qol-wp5-editor-file-management (2026-06-25)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `3abfe59`: (1) the `createFile` collision check (`collides` over the `fs_tree` set) can't see gitignored files, so a root-level name colliding with a gitignored file is overwritten silently — the `collides` "don't clobber" doc is overstated; (2) `onDeleteConfirm` surfaces a failed `delete_file` only via `console.error`, inconsistent with the feature's own inline-surfacing discipline; (3) the new-file input's `onBlur` silently discards a partial name (undocumented UX choice). Reviewer: well-built, low-debt; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp5-editor-file-management — 2026-06-25`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** three quick `/feature-refactor` nits — (1) a pre-write `stat_file` existence check or a doc caveat on `collides`; (2) surface the delete error inline (reuse the new-file inline-error pattern); (3) a one-line comment marking blur-cancel deliberate (or keep-open-on-blur). Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — qol-wp4-terminal-respawn-on-switch (2026-06-25)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `10c604f`: (1) the deferred-spawn trigger effect's "bumps spawnNonce exactly once" comment slightly overstates the guarantee — once-ness is co-enforced downstream by the spawn effect's `cancelled` closure (XtermPane.tsx ~418-425); (2) `respawnOnReactivate.repro.test.ts` duplicates the `shouldSpawnOnActive` truth table already exhaustive in `respawnGuard.test.ts`; (3) the "clears the latch on relaunch" assertion in `spawnOnceOnReactivate.test.ts` (~line 47) is an unanchored substring match. Reviewer: well-built, appropriately-scoped, "advances rather than accrues debt"; no finding warrants a refactor pass. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp4-terminal-respawn-on-switch — 2026-06-25`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** three quick `/feature-refactor` polish nits — (1) add a one-line comment at the trigger effect pointing at the `cancelled` backstop; (2) trim the duplicated truth-table cases from the repro test; (3) anchor the latch assertion near `handleRelaunch`. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — qol-wp3-switch-workspace-autofocus-cc (2026-06-25)
-- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `78c76d6`: (1) the no-PTY-byte test guard (`not.toMatch(/\r\n|\r|\n/)` in `autofocusCcOnPromote.test.ts`) is over-broad — pins absence of any newline anywhere in Workspace.tsx, so a future unrelated `\n` literal would fail with a misleading WP4-regression message; (2) the WP3 `visible`-edge effect comment block (Workspace.tsx ~69-79) triplicates the commit + WIP rationale. Reviewer: well-built, tightly-scoped, minimal correct seam, no debt — neither finding warrants a refactor pass. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp3-switch-workspace-autofocus-cc — 2026-06-25`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** two quick `/feature-refactor` polish nits — (1) scope the newline assertion to the focus effect / `invoke(`; (2) trim the effect comment to the WKWebview-rAF rationale. Dismiss either via the WIP's `## Code-Quality Review` section.
-
 ## Code-quality findings — qol-wp1-close-workspace (2026-06-25)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9` — all low-risk: (1) the filmstrip × comment over-narrates a rejected nested-`<button>` alternative (Filmstrip.tsx); (2) a forward-referencing `docsRef` comment in EditorSplit.tsx; (3) the App-level close wiring (`requestClose`/`resolveClose`/dirty-probe registry) + the × routing are untested by automation (accepted per the manual-host-UI convention + live 9/9 verification). Reviewer: well-built, idiomatic, closes a latent WP7 lifecycle gap. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp1-close-workspace — 2026-06-25`.
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** two are one-line comment trims (`/feature-refactor`); the third is a test-harness gap that only matters once the project adopts RTL/E2E (deferred per Phase-1 convention). Dismiss any via the WIP's `## Code-Quality Review` section.
 
-## Code-quality findings — qol-wp0-fs-watcher (2026-06-24)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `d893254` — all forward-looking, none a defect at current scope: (1) `fs-change` re-walk amplification under bulk external ops (RightPanelHost.tsx); (2) steady-state emit-failure invisibility in the debouncer callback (fs_watch/commands.rs); (3) `is_ignored` `is_dir=false` documented-sound edge (fs_watch/mod.rs). Reviewer: well-built, textbook instance of repo conventions. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp0-fs-watcher — 2026-06-24`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all three are optional `/feature-refactor` items (a trailing-edge re-walk coalesce; a watcher-degraded signal; or dismiss the `is_dir` note). None changes correctness or a hand-off contract. Dismiss any via the WIP's `## Code-Quality Review` section.
-
 ## Code-quality findings — app-menu-bar (2026-06-24)
 - **Pointer:** 1 MAJOR + 2 MINOR from `feature-review-quality` on ship commit `f815154` (0 CRITICAL). MAJOR: the 11 functional menu-item id strings are duplicated across Rust `app_menu::ids` and TS `MENU_IDS` with NO mechanical guard — a one-char drift silently dead-clicks one menu item with green tests. MINORs: label-only-id test needs a one-line comment; the App.tsx `menu` listener isn't extracted to a pure testable seam. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# app-menu-bar — 2026-06-24`.
 - **Priority:** medium (the MAJOR) + low (the 2 MINORs)
 - **Status:** pending
 - **Pickup shape:** the MAJOR is the highest value — add a mechanical id-contract pin (cheapest: a Rust test that reads menuBridge.ts and asserts each `ids::*` literal appears as a `MENU_IDS` value). The 2 MINORs are a one-line comment + an optional listener extraction. One `/feature-refactor` pass. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — dev-prod-isolation (2026-06-24)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `5f9a86a` — all low-risk coupling/drift seams: a duplicated `PROJECTS_FILE` const, an undocumented no-spaces-in-`.pl`-segments assumption in the basename matcher, and an implicit prod↔overlay window-size coupling in `tauri.dev.json`. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# dev-prod-isolation — 2026-06-24`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all three are trivial doc/refactor nits in one `/feature-refactor` pass (or opportunistically); none changes correctness or any hand-off contract. The `pub(crate)` const dedup is the only code change; the other two are one-line comments. Dismiss any via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY
 - **What:** M3 WP5 (specced as a `workflow/.session.md` file-watcher → broadcaster) is **DROPPED**. The WBS framed `.session.md` as a real-time second workflow-state signal — but it isn't: `.session.md` is a *manual handoff bookmark* created **only** by `/session-pause` and deleted by `/session-resume` (verified against `~/.claude/skills/session-pause` + `session-resume` SKILL.md). It is absent during all active work, present only in the parked gap between sessions, binary, and known to the user before any watcher could report it. Watching it yields a near-constant, trivially-derivable signal — no live workflow state to detect.
@@ -168,24 +66,6 @@
 - **RE-ANCHORED M7 → M8 (2026-06-29), reinforced by the M7 shrink.** Initially (at the M7 `/product-wbs`) this was re-anchored to M8 over M7 because the workflow-position line is value-unproven and drags in tree-visualization surface. **Then the M7 spec debate SHRUNK the menu-bar item to an ambient alarm + actuator and CUT the popover entirely** (design-prior [[new-surface-must-earn-its-place-against-existing-ones]] — a popover list was a PiP subset). So the watcher's intended form factor (a workflow-position line *in the popover*) no longer exists in M7 at all — its home is firmly **M8 (workflow-docs markdown viewer)**, the rendering counterpart ("where does each project sit" as a status line is adjacent to "render the docs themselves"; the `notify` watcher seam — shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER` — can be built there). Decide at M8's JIT decomposition whether it feeds the M8 doc panel, promotes to a standalone tree view, or is dropped.
 - **RENUMBERED M8 → M10 (2026-06-29b), no semantic change.** The watcher's home is still the **workflow-docs markdown viewer** — that milestone was renumbered M8 → **M10** by the 2026-06-29b roadmap reorder (a new demo-assets milestone took M8; time-analytics ↔ docs-viewer swapped). Same milestone, same decision; only the number moved. Decide at the docs-viewer's (M10) JIT decomposition whether it feeds that doc panel, promotes to a standalone tree view, or is dropped.
 - **Status:** WP5 dropped (recorded in M3 wbs.md, archived); new WP idea deferred → re-anchored to the **workflow-docs markdown viewer (now M10)** JIT decomposition (was M6 → M7 → M8 → M10; M7's popover form-factor was cut at the 2026-06-29 spec-debate shrink, then the milestone renumbered M8→M10 at the 2026-06-29b reorder).
-
-## Code-quality findings — m3-wp6-frontend-status-indicator (2026-06-22)
-- **Pointer:** 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `b377a97` (0 CRITICAL). MAJOR: the `statusSnippet`/tooltip path is wired end-to-end (DTO `last_output_snippet` → prop → indicator `title`) but fed by nothing — `applyStatusUpdate` discards the snippet, no accessor, CenterStage never passes it, so the tooltip always falls to the label (contradicts the WIP's verify-human note). MINORs: `stateFor` closure re-created each render (Phase-2 perf nit); comment accuracy on the unfed snippet field. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp6-frontend-status-indicator — 2026-06-22`.
-- **Priority:** medium (the MAJOR), low (the 2 MINORs)
-- **Status:** pending
-- **Pickup shape:** the MAJOR is a one-commit `/feature-refactor` fix-or-remove (thread the snippet ~15 lines across reducer+hook+CenterStage — the higher-value path, surfaces the Notification payload on hover — OR drop the unused frontend snippet surface). The 2 MINORs are trivial; minor #2 resolves automatically if the MAJOR's thread-it path is chosen. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m3-wp4-status-broadcaster (2026-06-22)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `8bc2d68` (0 CRITICAL, 0 MAJOR). All cosmetic docstring drift in `status_broadcaster/commands.rs`: (1) `start_broadcaster` docstring describes a `Result`-style error contract the `JoinHandle`-returning signature lacks; (2) `.expect()` on the thread spawn is a non-test panic path (mirrors WP3's `spawn_listener` precedent — convention judgment call); (3) the detached-handle asymmetry vs WP3's retained `_handle` is correct but undocumented. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp4-status-broadcaster — 2026-06-22`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** trivial `/feature-refactor` doc-fix nits in one file; none changes correctness, emit behavior, or any hand-off contract. Items 1+3 are pure docstring corrections; item 2 is dismissable if WP3's `.expect` precedent stands. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m3-wp3-socket-listener (2026-06-22)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `4355e00` (0 CRITICAL, 0 MAJOR). All polish-tier: (1) `hook_socket_path` carries a hidden `create_dir_all` side effect (path-resolver name understates it); (2) accept-loop `BufReader::lines()` has no per-line length cap (trusted local writer, low risk); (3) `HOOK_SOCKET_NAME` `pub const` is over-exported (module-private suffices). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp3-socket-listener — 2026-06-22`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** trivial `/feature-refactor` nits / opportunistic fixes; none changes correctness or the WP4 hand-off contract. Dismiss any via the WIP's `## Code-Quality Review` section.
 
 ## Code-quality findings — m3-wp2-hook-install (2026-06-22)
 - **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `77d6a6e` (0 CRITICAL, 0 MAJOR). All cosmetic/opportunistic: (1) chmod/`/usr/bin/perl` exec-bit mismatch + inaccurate comment; (2) Perl hook write-side blocking heads-up (best addressed in WP3 when the listener lands); (3) `NotAnObject` error-variant coarseness; (4) pre-existing stale `sublime_open` comment at lib.rs:62. Reviewer: well-built, defensively-minded, standout test suite, no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m3-wp2-hook-install — 2026-06-22`.
@@ -208,36 +88,6 @@
 - **Suggested action:** add per-result + per-file replace when there's a writable result surface — e.g. clickable per-file "replace in this file" markers rendered into the Find Results tab (via the synthetic click-line callback, the same seam clicks already use), or a richer results panel. Backend `project_replace` already does per-file rewrite; a scope param + a file-filter would extend it.
 - **Priority:** medium
 - **Status:** pending
-
-## Code-quality findings — m2-wp3c-editor-split-panes (2026-06-20)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `b72ed30` (0 CRITICAL, 0 MAJOR). All cosmetic: (1) the middle-close focus-reassign in `editorPanes.ts` relies on a pre-filter-index shift that's correct + tested but under-commented; (2) the "is-split" predicate is encoded twice (JS `splitable` const vs CSS `:has(.editor-pane + .editor-pane)`) — a drift pair; (3) a redundant inline JSX comment restating the shared-doc rationale already stated in the file header. Reviewer rated the feature well-built, low-debt, fitting the codebase grain. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp3c-editor-split-panes — 2026-06-20`.
-- **Priority:** low (all)
-- **Pickup shape:** all three are quick `/feature-refactor` comment/duplication nits (add an index-shift comment; optionally a `data-split` attribute to single-source the split predicate; trim the redundant comment). Dismiss any via the WIP's `## Code-Quality Review` section.
-- **Status:** pending
-
-## Code-quality findings — m2-wp3a-editor-core-editing (2026-06-20)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `59cc324` (0 CRITICAL, 0 MAJOR). All cosmetic: (1) `Mod-d` double-bound (explicit + in spread `searchKeymap`) — behavior correct, author-flagged belt-and-suspenders; (2) `Mod-r` comment slightly oversells the replace-vs-find distinction (same panel, replace row visible by default); (3) the `Prec.highest`/`@uiw array-identity` rationale is triplicated across editorExtensions.ts + EditorPanel.tsx. Reviewer rated the feature well-built, low-debt. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp3a-editor-core-editing — 2026-06-20` section.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all three are trivial tidy-ups (drop a line / soften a comment / consolidate prose). Fold into a `/feature-refactor` pass or leave. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — wp9-phase1-polish (2026-06-19)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). All low-stakes: (1) picker mount effect's empty `catch {}` over prune+list has a partial-failure window (fold into the existing picker IPC error-surfacing item, `SURFACE-2026-06-18-QUALITY-*`); (2) plan-text/impl drift — plan said `CcError::Spawn`, code shipped the cleaner dedicated `CcError::CcNotFound` (informational, no change); (3) `classify_spawn_error` would benefit from a one-line `to_lowercase()` case-folding comment. Reviewer rated the feature well-built, no debt accrued. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp9-phase1-polish — 2026-06-19` section.
-- **Priority:** low (all)
-- **Status:** **#1 (picker empty `catch {}` partial-failure window) RESOLVED 2026-06-23 by M4 WP2 P4.1 (`b48ccce`)** — the mount loader catch now surfaces an error toast. #2 (informational drift) + #3 (1-line comment) remain pending.
-- **Pickup shape:** #2 is informational (dismiss/ack); #3 is a 1-line comment. Fold into a `/feature-refactor` pass or leave. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — wp8-sublime-hotkey (2026-06-19)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `74dfc2c` (0 CRITICAL, 0 MAJOR). MINOR #1 (stale "global-shortcut handler" rationale) was FIXED IN-PLACE at the time. Of the 2 that remained: the `chord.ts` "Phase 2" header-tag nit is **MOOTED** — `chord.ts` was DELETED by the redefined WP8 (2026-06-20, commit `62869de`). The `sublime/mod.rs` WP3 probe-citation-shorthand nit is the **only one still pending** (backend untouched by the redefined WP8). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp8-sublime-hotkey — 2026-06-19` section.
-- **Priority:** low
-- **Status:** pending (1 of 3 remaining — the `sublime/mod.rs` citation nit; the other 2 are resolved/mooted)
-- **Pickup shape:** the lone remaining MINOR is a 1-line backend comment edit in `sublime/mod.rs` — fold into a `/feature-refactor` pass or leave. Dismiss via a WIP `## Code-Quality Review` section if not worth it.
-
-## Code-quality findings — wp5-frontend-ui-prototype (2026-06-18)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `777c0b8` (0 CRITICAL, 0 MAJOR). All cosmetic stylesheet/intent-clarity nits, zero correctness impact: inert `flex-shrink` on `.filmstrip` (grid parent), `XtermPane` effect dep could be `[]`, single-consumer global `h1` rule. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp5-frontend-ui-prototype — 2026-06-18` section.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** address in a `/feature-refactor` pass (or fold into WP16 filmstrip work for the `.filmstrip` nit); dismiss via the WIP's `## Code-Quality Review` section if not worth it.
 
 ## SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD
 - **Source:** feature:build (WP2 Phase 1)
@@ -275,12 +125,6 @@
 - **Priority:** medium (load-bearing for WP4 acceptance; already in active build)
 - **Status:** pending
 
-## Code-quality findings — m2-wp4-git-diff-viewer (2026-06-20)
-- **Pointer:** 4 MINOR findings from `feature-review-quality` on ship commit `4e2d742` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, no refactor warranted. Doc-comment drift from the PB.7 removal sweep (stale `[file_base_core]` doc-link + wrong `diff_*` API name) + dead untracked-opts on the staged path + a 3-ternary commit-diff gate. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp4-git-diff-viewer — 2026-06-20`.
-- **Priority:** low (all)
-- **Status:** PARTIALLY RESOLVED 2026-06-20 — the **2 git_diff/mod.rs doc-drift MINORs** (stale `[file_base_core]` link → `[file_hunks_core]`; wrong `diff_*` API name → `diff_index_to_workdir`/`diff_tree_to_index`) were **fixed by m2-wp4-diff-viewer-polish P1.5** (commit 5051bd4). REMAINING pending: the dead untracked-opts on the staged path + the 3-ternary commit-diff gate in DiffPanel.tsx (both trivial polish).
-- **Pickup shape:** the 2 highest-value doc fixes are DONE; the dead-opts + ternary nits remain as trivial `/feature-refactor` polish.
-
 ## SURFACE-2026-06-20-WP4-OPEN-IN-EDITOR-BLOB-AT-REV
 - **Source:** feature:build (WP4 diff-viewer polish, item 3)
 - **Target level:** product:wbs
@@ -291,56 +135,8 @@
 - **Priority:** low (current behavior is useful; this is a fidelity enhancement)
 - **Status:** DISMISSED 2026-06-20 (WP5 spec) — **working-as-intended, not a bug.** Operator confirmed "open" always opens the live working-tree file regardless of which view (working-dir or commit) it was clicked from. Inspecting a file's content at a past commit is what Sublime Merge is for — and Sublime Merge is now a permanent surface (see SURFACE-2026-06-20-WP5-SUBLIME-MERGE-PERMANENT). The only code change is correcting the stale "deferred to WP5" comment at `DiffPanel.tsx:47-55` during WP5.
 
-## Code-quality findings — m2-wp4-diff-viewer-polish (2026-06-20)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `5051bd4` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, appropriately-scoped, no refactor warranted. All micro-readability/posture: a deliberate double-predicate eval in `toggleAllCollapsed`, a broad `visibleKeys` useMemo dep, and the sticky-layout z-index coupling (no visual-regression harness to guard it). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp4-diff-viewer-polish — 2026-06-20`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all three are optional — none affect correctness; the useMemo dep narrowing is the only one with any (negligible) runtime effect. Dismiss via the WIP's `## Code-Quality Review` section if not worth a `/feature-refactor`.
-
-## Code-quality findings — m2-wp5-right-panel-host (2026-06-20)
-- **Pointer:** 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `4546ffb` (0 CRITICAL). Reviewer: well-built refactor-plus-feature (faithful Workspace→RightPanelHost extraction, root-cause item-7 resolver fix + targeted regression guards, standout cross-predicate chord-exclusivity test). MAJOR: the `"terminal"` panel seam is reachable from `panelForChord` (⌘⇧T) but swallowed by `selectPanel`'s static guard — when WP9 adds `"terminal"` to `AVAILABLE_PANELS` the right half goes blank (no slot in JSX), untested. MINORs: split-listener cross-pointer comment; WP2 open-bar stopgap relocated (WP6 removes). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp5-right-panel-host — 2026-06-20`.
-- **Priority:** medium (the WP9-handoff terminal-seam guard) + low (MINORs)
-- **Status:** pending
-- **Pickup shape:** the MAJOR is a **WP9 pickup** — when WP9 enables the terminal panel, add the JSX slot + a render test in the same change that adds `"terminal"` to `AVAILABLE_PANELS` (or add a render-time fallback-to-editor guard now). The MINORs are trivial `/feature-refactor` nits. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m2-wp6-file-finder (2026-06-20)
-- **Pointer:** 3 MINOR findings from `feature-review-quality` on ship commit `fc77ad4` (0 CRITICAL, 0 MAJOR). Reviewer: well-built, low-debt, consistent with repo seams; correctness validated (deterministic tiebreak sort, greedy subsequence matcher, async cancellation, chord exclusivity). All cosmetic overlay/doc nits: (1) a panel chord (⌘⇧E) fires under the open finder overlay (no `!finderOpen` guard); (2) the `.` segment-boundary in `isBoundary` is undocumented rationale; (3) `onMouseEnter→setActiveIndex` couples hover to the keyboard cursor (mirrors CommandPalette). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m2-wp6-file-finder — 2026-06-20`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all three are trivial `/feature-refactor` nits (or leave — #3 matches the existing CommandPalette pattern, arguably WAI). Dismiss any via the WIP's `## Code-Quality Review` section.
-
 ## SURFACE-2026-06-20-WP10-ARROW-KEY-TREE-NAV
 - **Status:** DROPPED 2026-06-24 (operator decision during QoL-WBS triage) — arrow-key FileTree nav is not wanted; click-to-open + click-to-toggle suffices.
-
-## Code-quality findings — m4-wp1-n-workspace-cost-probe (2026-06-22)
-- **Pointer:** 2 MINOR findings from `feature-review-quality` on ship commit `9f3e0fe` (0 CRITICAL, 0 MAJOR). Both robustness/precision nits in the throwaway `measure.sh`: (1) the `pgrep -fc` N-alive guard degraded to `?` during the run (operator confirmed 8 sessions manually); (2) percentile indexing is the lower-median truncation (sub-sample at 110+ samples, matches the `cm6/measure.sh` baseline). Reviewer rated the probe well-built, effectively zero durable debt. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp1-n-workspace-cost-probe — 2026-06-22`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** both relevant only if the throwaway probe is resurrected (it is archived-or-deleted at finalize); neither is worth a `/feature-refactor` pass. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m4-wp2-n1-lift (2026-06-23)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `b48ccce` — all low-effort polish in the new PickerOverlay/ProjectPicker code (unconditional Esc preventDefault, single-slot toast multiplexing, dead `backdropRef`). Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp2-n1-lift — 2026-06-23`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all 3 are quick `/feature-refactor` items localized to PickerOverlay.tsx + ProjectPicker.tsx; the Esc-scope + single-slot-toast ones pair naturally with WP3/WP4 when more overlays land on the same surfaces. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m4-wp3-filmstrip (2026-06-23)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `920678a` — all low-effort polish: off-viewport bg workspaces lack `inert` (a11y/focus leak — the highest-value one), ⌘⇧+digit `useEffect` re-subscribe thrash on `tiles` identity churn, ticker `useEffect` dual-responsibility. Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp3-filmstrip — 2026-06-23`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** quick `/feature-refactor` items; the `inert` a11y fix is the highest-value (genuine focus-leak from the P1.2 mount-strategy change). Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m4-wp4-filmstrip-collapse (2026-06-23)
-- **Pointer:** 2 actionable MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `d06ac50` — both low-effort polish: active pill in the collapsed row has a no-op promote `onClick` while advertising a Switch-to aria-label/cursor (branch inconsistency vs expanded tiles); the ticker effect re-derives `backgroundIds` by splitting a string it just joined (memoize once). Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp4-filmstrip-collapse — 2026-06-23`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** quick `/feature-refactor` items; the join/split round-trip + the still-pending WP3 ticker-effect-dual-responsibility finding both live in the SAME ticker effect — natural to fix together in one pass. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — qol-wp7-filetree-git-bubble-up (2026-06-25)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `4d384b1` — all low-effort polish: (1) `.file-tree-dir-status { margin-left:auto }` is a dead/redundant CSS rule whose comment misattributes the right-push (the real mechanism is `.file-tree-name`'s `flex:1`) — highest-value; (2) `dominantStatusByDir` uses `for...in` without a `hasOwnProperty` guard (latent proto-key footgun on a serde record); (3) the `consider` closure allocates a 1–2-elem array per ancestor (dismiss-candidate — favors single-source-of-precedence clarity). Reviewer verdict: well-built, right architecture, no debt. Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp7-filetree-git-bubble-up — 2026-06-25`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** finding #1 (dead CSS + misleading comment) is the only one worth a touch — a one-line `/feature-refactor`; #2 is a zero-cost `Object.keys` swap if bundled; #3 is a dismiss-candidate. Dismiss any via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-06-26-MCP-BRIDGE-RELEASE-ACL-STRINGS
 - **Source:** feature:build (M5 WP2 probe, P2.3 release-exclusion check)
@@ -351,18 +147,6 @@
 - **Suggested action:** Optional. If a fully-clean release ACL is wanted, move `tauri-plugin-mcp-bridge` from `[dependencies]` to a dev-only dependency surface that the build-time permission codegen also skips (e.g. a `[target.'cfg(debug_assertions)'.dependencies]` entry or a feature-gated optional dep), and re-confirm `pnpm tauri:dev` still gets the bridge. Verify with `strings target/release/claudesk | grep -i mcp-bridge` → empty. Low value; the current state is functionally release-safe.
 - **Priority:** low
 - **Status:** pending
-
-## Code-quality findings — m5-wp2-probe-agent-ui-driver (2026-06-26)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `f18f1e0` — all low-stakes polish: (1) `.mcp.json` registers an **unpinned** `npx -y @hypothesi/tauri-mcp-server` (pin to @0.11.2); (2) a lingering `#[allow(unused_mut)]` in lib.rs's dev-only bridge block (track-only — drop if WP2 wiring ever goes unconditional); (3) the wbs.md verify-self recipe's wait-token says `":9223 LISTEN"` but the real stdout token is `"WebSocket server listening on…"` (`LISTEN` is an lsof artifact). Reviewer verdict: well-built knowledge-probe, every trap documented at its site, no refactor warranted. Full detail in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp2-probe-agent-ui-driver — 2026-06-26`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** finding #1 (pin the npx version) + #3 (reword the recipe wait-token) are each a one-line `/feature-refactor` touch; #2 is track-only. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m5-wp3-pip-nspanel-status-core (2026-06-26)
-- **Pointer:** 2 MAJOR + 3 MINOR (0 CRITICAL) from `feature-review-quality` on ship commit `95292d6`. The 2 MAJOR are latent desyncs that the **M5 WP5 lifecycle work will trip over** (not bugs at the WP3 baseline): (1) the filmstrip keeps a SECOND unsynchronized 1fps DOM-write interval alongside the App-level serialize ticker (phase drift / up-to-1s stale reads); (2) `pip::teardown()` skips the `pip-visibility false` broadcast, so the cost gate desyncs once a non-toggle close path exists. 3 MINORs: duplicated `MIRROR_INTERVAL_MS` literal, un-diffed full-frame `pip-mirror` emit, 5× duplicated `listen().then()` boilerplate (→ `useTauriListen` helper). Full entries in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp3-pip-nspanel-status-core — 2026-06-26`.
-- **Priority:** medium (2 MAJOR), low (3 MINOR)
-- **Status:** pending
-- **Pickup shape:** fold the 2 MAJOR into **M5 WP5** planning (they ARE the lifecycle/cost-gate concerns WP5 owns — the reviewer's explicit recommendation: WP5 scope, not a standalone refactor). The 3 MINORs ride a future `/feature-refactor` batch (the `useTauriListen` extraction is repo-wide — useWorkspaceStatus shares the shape). Dismiss any via the WIP's `## Code-Quality Review` section.
 
 ## Code-quality findings — m5-wp5-pip-toggle-lifecycle-autosummon (2026-06-27)
 - **Pointer:** 0 CRITICAL / 2 MAJOR / 2 MINOR from `feature-review-quality` on ship commit `f6e3929`. The 2 MAJOR are one issue cluster: the View-menu PiP-mode CheckMarks are built-once + never refreshed on the `pip-mode` broadcast (stale + non-exclusive after any mode change — functional click path works + was operator-verified; only the displayed checkmark is wrong), plus a comment that misdescribes a non-existent rebuild. 2 MINORs: stale `pip_toggle` rustdoc/module-header refs (`pip/commands.rs`); per-RightPanelHost duplication of the app-global `pipMode` fetch/listener. Full entries in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp5-pip-toggle-lifecycle-autosummon — 2026-06-27`.
@@ -380,20 +164,5 @@
 - **Priority:** high (gates the next public release; it's the milestone's reason for being)
 - **Status:** pending
 
-## Code-quality findings — wp2-stuck-running-dot-fix (2026-06-27)
-- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `bafee80`: (1) `resolve_cwd`'s longest-wins uses string-length as a proxy for path-component depth (consider `Path::components().count()` for consistency with `is_path_ancestor`); (2) `resolve_cwd` is now an `O(n)` scan over registered entries instead of `O(1)` map-get — negligible at ≤100 workspaces, recorded as a conscious tradeoff. Reviewer: well-built, tightly-scoped, telemetry-grounded; both notes are polish, not debt; no refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# wp2-stuck-running-dot-fix — 2026-06-27`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** both are one-line polish in `status_broadcaster/mod.rs::resolve_cwd` — fold into any future `/feature-refactor` touching the registry, or dismiss. No standalone pass warranted.
-
-## Code-quality findings — m6-wp10-right-panel-terminal-zoom (2026-06-28)
-- **Pointer:** 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `baaaa4c`: (1) `Workspace.tsx` `applyTerminalZoom` comment doesn't note that a *persistently-mounted* background terminal lags until its next refit (shared-key behavior is intended + verified — comment-clarity only); (2) the `eslint.config.js` `tmp/**` scratch-ignore is an in-scope incidental fix bundled into the feature commit (tracked in the WIP Build notes — traceability note, not a defect). Reviewer: well-built, tightly-scoped, faithful to the `focusHalf.ts`/WP4 patterns; neither nit warrants a refactor pass. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m6-wp10-right-panel-terminal-zoom — 2026-06-28`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** finding 1 is a one-line comment edit in `Workspace.tsx`; finding 2 is informational (no action). Fold into any future `/feature-refactor`, or dismiss. No standalone pass warranted.
-
-## Code-quality findings — m7-menu-bar-status-item (2026-06-29)
-- **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `3888dd6`: (1) `handle_tray_menu_event` re-matches the tray ids `is_tray_menu_id` already validated (id set duplicated across two fns); (2) `apply_update`'s "callable from tests' shape" doc comment oversells (no test calls it); (3) `TRAY_ID` passed to `with_id` but never looked up by id. Reviewer: "well-built, appropriately-scoped... advances the codebase without accruing debt." All comment/duplication nits. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m7-menu-bar-status-item — 2026-06-29`.
-- **Priority:** low (all)
-- **Status:** pending
-- **Pickup shape:** all 3 are one-line comment edits / an optional predicate-merge; fold into any future `/feature-refactor`, or dismiss via the WIP's `## Code-Quality Review` section. No standalone pass warranted.
+## Code-quality findings — file-op-error-surface (2026-06-30)
+- **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
