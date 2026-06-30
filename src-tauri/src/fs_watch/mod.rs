@@ -86,13 +86,24 @@ pub enum FsKind {
 ///
 /// `paths` are project-relative POSIX strings (via [`rel_posix`], same as the tree /
 /// finder), already filtered against the ignore matcher — every path here is one the
-/// FileTree would show. An empty `paths` is never emitted (the transform returns
-/// `None`), so a subscriber that receives an `FsChange` always has at least one path.
+/// FileTree would show. `.git/`-internal paths are NEVER in `paths` (the tree must not
+/// re-walk on git churn).
+///
+/// `git_meta` (WP9) is the git-status-only signal: `true` when the batch touched a
+/// git-status-relevant `.git/` meta path (index / HEAD / MERGE_HEAD / refs) — i.e. a
+/// pure-`.git/` op like `git add` / `commit` / `stash` / `checkout` that flips a file's
+/// status with NO working-tree content change. The frontend uses it to re-fetch the
+/// git-status map WITHOUT re-walking the tree (route it to `gitStatusRefreshKey` only).
+///
+/// An `FsChange` with `paths` empty AND `git_meta == false` is never emitted (the
+/// transform returns `None`) — so a subscriber always has SOMETHING to act on: at least
+/// one path, or the git-meta signal, or both.
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct FsChange {
     pub workspace_id: String,
     pub paths: Vec<String>,
     pub kind: FsKind,
+    pub git_meta: bool,
 }
 
 /// Whether an absolute changed `path` under `root` should be IGNORED (not emitted).
@@ -118,14 +129,51 @@ pub fn is_ignored(root: &Path, path: &Path) -> bool {
     })
 }
 
-/// The pure transform: given the workspace id, root, the absolute paths from a
-/// debounced event batch, a coarse [`FsKind`], and the root's ignore matcher → the
-/// [`FsChange`] to emit, or `None` if every path was filtered (nothing the UI cares
-/// about changed — e.g. a pure `.git/` churn batch).
+/// Whether an absolute changed `path` under `root` is a git-status-RELEVANT `.git/`
+/// meta path (WP9). These are the files git rewrites when a file's status flips with no
+/// working-tree change — staging, commit, stash, checkout, merge — and they are the
+/// signal the FileTree's git-status badge must re-fetch on, even though they're
+/// (correctly) kept out of the tree re-walk by [`is_ignored`].
 ///
-/// This is the one piece of logic in the watcher; the debouncer callback in
-/// [`commands`] is plumbing around it (classify the batch, call this, `emit` the
-/// `Some`). Dedups paths so a batch touching one path N ways emits it once.
+/// Deliberately NARROW: only `.git/index` (staging area), `.git/HEAD` + `.git/MERGE_HEAD`
+/// (current ref / in-progress merge), and anything under `.git/refs/` (branch/tag refs
+/// move on commit/checkout). We do NOT treat `.git/objects/**`, `.git/logs/**`, or
+/// `.git/*.lock` as status-relevant: object writes and reflog appends don't by
+/// themselves change `git status` output, and the transient `index.lock` would fire a
+/// redundant re-fetch mid-operation. Narrowing here keeps the git-status re-fetch
+/// proportional to actual status changes, not raw `.git/` churn.
+pub fn is_git_meta(root: &Path, path: &Path) -> bool {
+    let Ok(rel) = path.strip_prefix(root) else {
+        return false;
+    };
+    let mut comps = rel.components();
+    // First component must be `.git`.
+    if comps.next().map(|c| c.as_os_str().to_string_lossy()) != Some(".git".into()) {
+        return false;
+    }
+    let Some(second) = comps.next() else {
+        return false; // a change to `.git` itself (the dir) — not a meta-file write
+    };
+    let name = second.as_os_str().to_string_lossy();
+    name == "index" || name == "HEAD" || name == "MERGE_HEAD" || name == "refs"
+}
+
+/// The pure transform: given the workspace id, root, the absolute paths from a
+/// debounced event batch, and a coarse [`FsKind`] → the [`FsChange`] to emit, or `None`
+/// if nothing the UI cares about changed.
+///
+/// Two independent signals come out of one batch (WP9):
+/// - **`paths`** — the tracked/tree-visible changes (worktree files), ignore-filtered
+///   via [`is_ignored`] (heavy dirs + ALL of `.git/` dropped here). These drive the tree
+///   re-walk + editor re-stat.
+/// - **`git_meta`** — `true` iff the batch touched a git-status-relevant `.git/` meta
+///   path ([`is_git_meta`]: index / HEAD / MERGE_HEAD / refs). This drives a git-status
+///   re-fetch WITHOUT a tree re-walk. The meta paths themselves are NEVER added to
+///   `paths` — so a `git add` with no worktree edit emits `paths:[], git_meta:true`.
+///
+/// Returns `None` only when BOTH signals are empty (e.g. a pure `.git/objects` /
+/// heavy-dir churn batch). This is the one piece of logic in the watcher; the debouncer
+/// callback in [`commands`] is plumbing around it. Dedups `paths`.
 pub fn paths_to_change(
     workspace_id: &str,
     root: &Path,
@@ -133,7 +181,16 @@ pub fn paths_to_change(
     kind: FsKind,
 ) -> Option<FsChange> {
     let mut rels: Vec<String> = Vec::new();
+    let mut git_meta = false;
     for p in abs_paths {
+        // The git-status signal is checked BEFORE the ignore filter — `.git/` paths are
+        // ignored for `paths` (no tree re-walk) but a status-relevant one still flips
+        // `git_meta`. A path can't be both (git-meta paths live under `.git/`, which
+        // `is_ignored` always drops from `paths`).
+        if is_git_meta(root, p) {
+            git_meta = true;
+            continue;
+        }
         if is_ignored(root, p) {
             continue;
         }
@@ -143,13 +200,14 @@ pub fn paths_to_change(
     }
     rels.sort();
     rels.dedup();
-    if rels.is_empty() {
+    if rels.is_empty() && !git_meta {
         return None;
     }
     Some(FsChange {
         workspace_id: workspace_id.to_string(),
         paths: rels,
         kind,
+        git_meta,
     })
 }
 
@@ -232,7 +290,7 @@ mod tests {
         let dir = root();
         let r: &Path = dir.path();
         let abs = vec![
-            r.join(".git/index"),          // ignored (.git)
+            r.join(".git/index"),          // .git/ → not in paths, but flips git_meta (WP9)
             r.join("node_modules/x/y.js"), // ignored (heavy name)
             r.join(".env"),                // KEPT now (gitignored-but-non-heavy)
             r.join("src/main.rs"),         // kept
@@ -251,15 +309,83 @@ mod tests {
                 "src/main.rs".to_string()
             ]
         );
+        // The `.git/index` write flips git_meta but is NOT added to paths (no tree re-walk).
+        assert!(change.git_meta, ".git/index in the batch must flip git_meta");
+    }
+
+    #[test]
+    fn transform_pure_git_meta_emits_status_only_signal() {
+        // WP9 core: a `git add` with NO worktree edit is a pure `.git/index` batch. It
+        // must now emit Some{ paths: [], git_meta: true } — previously this returned None
+        // and the FileTree badge went stale until a remount (the friend's bug report).
+        let dir = root();
+        let r: &Path = dir.path();
+        let abs = vec![r.join(".git/index")];
+        let change = paths_to_change("ws-1", r, &abs, FsKind::Modified)
+            .expect("a git-meta-only batch must emit (status-only signal)");
+        assert!(change.paths.is_empty(), "no tree-visible path → empty paths");
+        assert!(change.git_meta, "git_meta must be set");
+    }
+
+    #[test]
+    fn transform_git_refs_and_head_are_meta() {
+        // commit/checkout move refs + HEAD; both are status-relevant.
+        let dir = root();
+        let r: &Path = dir.path();
+        for p in [".git/HEAD", ".git/refs/heads/main", ".git/MERGE_HEAD"] {
+            let abs = vec![r.join(p)];
+            let change = paths_to_change("ws-1", r, &abs, FsKind::Modified)
+                .unwrap_or_else(|| panic!("{p} must emit a git-meta signal"));
+            assert!(change.paths.is_empty());
+            assert!(change.git_meta, "{p} must flip git_meta");
+        }
+    }
+
+    #[test]
+    fn transform_non_status_git_churn_returns_none() {
+        // WP9 narrowness: object writes + the transient index.lock + reflog appends are
+        // NOT status-relevant — they must NOT fire a redundant re-fetch. A batch of only
+        // those (no worktree path, no index/HEAD/refs) → None, same as before.
+        let dir = root();
+        let r: &Path = dir.path();
+        let abs = vec![
+            r.join(".git/objects/ab/cdef"),
+            r.join(".git/index.lock"),
+            r.join(".git/logs/HEAD"),
+        ];
+        assert!(
+            paths_to_change("ws-1", r, &abs, FsKind::Modified).is_none(),
+            "non-status .git/ churn must not emit"
+        );
     }
 
     #[test]
     fn transform_all_ignored_returns_none() {
         let dir = root();
         let r: &Path = dir.path();
-        let abs = vec![r.join(".git/HEAD"), r.join("target/x")];
-        // A pure .git/ + heavy-dir churn batch → nothing to emit.
+        let abs = vec![r.join("node_modules/x"), r.join("target/x")];
+        // A pure heavy-dir churn batch (no worktree path, no git-meta) → nothing to emit.
         assert!(paths_to_change("ws-1", r, &abs, FsKind::Modified).is_none());
+    }
+
+    #[test]
+    fn is_git_meta_narrowness() {
+        let dir = root();
+        let r: &Path = dir.path();
+        // status-relevant
+        assert!(is_git_meta(r, &r.join(".git/index")));
+        assert!(is_git_meta(r, &r.join(".git/HEAD")));
+        assert!(is_git_meta(r, &r.join(".git/MERGE_HEAD")));
+        assert!(is_git_meta(r, &r.join(".git/refs/heads/feature")));
+        // NOT status-relevant
+        assert!(!is_git_meta(r, &r.join(".git/objects/ab/cdef")));
+        assert!(!is_git_meta(r, &r.join(".git/index.lock")));
+        assert!(!is_git_meta(r, &r.join(".git/logs/HEAD")));
+        assert!(!is_git_meta(r, &r.join(".git/config")));
+        // a worktree file is never git-meta
+        assert!(!is_git_meta(r, &r.join("src/main.rs")));
+        // `.git` the dir itself is not a meta-file write
+        assert!(!is_git_meta(r, &r.join(".git")));
     }
 
     #[test]
@@ -283,6 +409,7 @@ mod tests {
             workspace_id: "ws-1".to_string(),
             paths: vec!["src/main.rs".to_string()],
             kind: FsKind::Renamed,
+            git_meta: true,
         };
         let v = serde_json::to_value(&change).unwrap();
         assert!(
@@ -295,7 +422,10 @@ mod tests {
             "renamed",
             "snake_case enum rendering"
         );
+        // WP9: the git-status-only signal crosses the wire as snake_case `git_meta`.
+        assert_eq!(v.get("git_meta").unwrap(), true, "git_meta key present");
         // No camelCase leakage.
         assert!(v.get("workspaceId").is_none());
+        assert!(v.get("gitMeta").is_none());
     }
 }

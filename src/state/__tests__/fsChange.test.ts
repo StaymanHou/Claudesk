@@ -13,14 +13,29 @@ describe("fsChange DTO contract", () => {
       workspace_id: "ws-1",
       paths: ["src/main.rs", "docs/product/qol-wbs.md"],
       kind: "created",
+      git_meta: false,
     };
     expect(wire.workspace_id).toBe("ws-1");
     expect(wire.paths).toHaveLength(2);
     expect(wire.kind).toBe("created");
+    expect(wire.git_meta).toBe(false);
   });
 
   it("pins the event name the backend emits", () => {
     expect(FS_CHANGE_EVENT).toBe("fs-change");
+  });
+
+  it("carries the WP9 git-meta signal (pure `.git/` op → status-only refresh)", () => {
+    // A `git add` with no worktree edit arrives as paths:[] + git_meta:true. The
+    // RightPanelHost listener routes this to gitStatusRefreshKey ONLY (no tree re-walk).
+    const gitOnly: FsChange = {
+      workspace_id: "ws-1",
+      paths: [],
+      kind: "modified",
+      git_meta: true,
+    };
+    expect(gitOnly.paths).toHaveLength(0);
+    expect(gitOnly.git_meta).toBe(true);
   });
 });
 
@@ -29,6 +44,7 @@ describe("appliesToWorkspace", () => {
     workspace_id: "ws-1",
     paths: ["a.txt"],
     kind: "modified",
+    git_meta: false,
   };
 
   it("is true when the event's workspace_id matches", () => {

@@ -86,9 +86,12 @@ scores low; translate severity into the impact term, don't auto-prioritize by it
 - **Delete:** `SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES` (marked SUPERSEDED — no longer
   relevant) + any entries found already-resolved-in-place during the sweep.
 
-**Sequence of execution:** WP1 → WP2 → WP3 → WP4 → WP5 → WP6 → WP7 → WP8
+**Sequence of execution:** WP1 → WP2 → WP3 → WP9 → WP4 → WP5 → WP6 → WP7 → WP8
 *(Ordered by the rules above: deletions (WP1) → low-risk real fixes (WP2–WP4) → comment-only bulk
-(WP5) → behavior-preserving dedup (WP6) → infra config (WP7) → README + the one stateful change (WP8).)*
+(WP5) → behavior-preserving dedup (WP6) → infra config (WP7) → README + the one stateful change (WP8).
+**WP9** folded in 2026-06-30 from a user bug report — a behavioral fix with a Low-Med-risk edge; slotted
+right after WP3, ahead of the lower-risk WP4–WP8 batch, since it's the highest-impact item in the sweep
+[user-reported, dogfooded feature] and high-impact-fixes-before-cosmetics matches the spirit of the ordering.)*
 
 ---
 
@@ -208,6 +211,20 @@ scores low; translate severity into the impact term, don't auto-prioritize by it
 - **(D3 — KEEP + SIZE-CAP/ROTATE) status-log.** The prod logger (`status_log/mod.rs`, one line/event, append-mode) was built for the stuck-dot probe (now fixed in v0.2.2); its own doc-comment predicted a demote, but operator chose **keep + bound**. Implement a size-cap or rotation (e.g. truncate-or-rotate when the file exceeds N MB) so it stays a standing diagnostic without unbounded growth. Update the module doc-comment (currently says "WP2 will likely demote this") to reflect the keep+cap decision. Files: `src-tauri/src/status_log/mod.rs` + the drain-loop bind site.
 
 **Verify:** README renders clean on github.com (operator confirms at verify-human — it's the front page); `cargo test` green incl. a new unit test for the rotation/size-cap boundary.
+
+---
+
+## WP9 — Git-status live-refresh on `.git/` ops (folded-in bug report)  `[impact: High · effort: Small-Med · risk: Low-Med]`  `← folded 2026-06-30 (Discuss → operator chose new WP)`  ✅ DONE 2026-06-30
+**Outcome:** Backend (`fs_watch`): added `git_meta: bool` to the `FsChange` DTO + a narrow pure `is_git_meta(root, path)` helper (`.git/{index,HEAD,MERGE_HEAD,refs/**}` only — NOT objects/`*.lock`/logs). `paths_to_change` now checks git-meta BEFORE the ignore filter: a `.git/`-meta path flips `git_meta` without entering `paths` (no tree re-walk), and a pure-git-meta batch returns `Some{paths:[], git_meta:true}` instead of `None`. Frontend: the `RightPanelHost` `fs-change` listener bumps `fsTreeRefreshKey` only when `paths.length>0` and `gitStatusRefreshKey` when `paths.length>0 || git_meta`; `checkDiskForPaths` runs on real paths only; the TS `FsChange` mirror gained `git_meta`. Gate green: `cargo test --lib` **307 pass** (+5 transform/meta/narrowness tests) + clippy `-D warnings`; `tsc --noEmit` + vitest **784 pass** (+1 DTO contract). **App compiles + launches cleanly with the change** (verified: `pnpm tauri:dev` built + the MCP bridge bound on 9223, no panic). Live git-op-transition matrix (M→staged→clean across `git add`/commit/stash/checkout WITHOUT a remount + tree-no-rewalk) CARRIED to release gate (DEFERRED-TO-RELEASE) — the notify→emit round-trip is backend-process behavior, and the in-session MCP bridge tools weren't reachable in this headless context to drive a real `git add`; the transform seam is fully unit-covered. **Resolved `SURFACE-2026-06-30-GIT-STATUS-STALE-ON-GIT-OPS`.**
+**Source:** a friend's bug report (2026-06-30): the FileTree git-status badge (the `M`/etc. marker) doesn't auto-refresh — you must reload/remount the workspace before it shows the latest status. **NOT a pre-existing backlog item** — a net-new user-reported behavioral bug, scored against the disposition model (High-impact / Small-Med-effort / Low-Med-risk) → routed to **Discuss**; operator chose to fold it in as this WP and build it this session.
+**Root cause:** the QoL-WP0 `fs-change` watcher (`fs_watch/`) **hard-excludes ALL of `.git/`** (`is_ignored`: `name == ".git"`) to avoid a tree re-walk storm on every git op. That's correct for the *tree* re-walk, but it also kills *git-status* refresh for any change that flips a file's status WITHOUT a working-tree content change — i.e. every pure-`.git/` op: `git add` (M→staged), `git commit` (→clean), `git stash`, `git checkout`. Those emit no `fs-change` → neither refresh key bumps → the badge stays stale until a remount. (A working-tree *content* edit DOES refresh today — but the friend's case is the staging/commit class, which is `.git/`-internal only.)
+**Decision (operator, 2026-06-30):** stop swallowing `.git/`-meta events; route them to a **git-status-ONLY** refresh — bump `gitStatusRefreshKey`, NEVER `fsTreeRefreshKey` — so the badge re-fetches without re-walking the tree (the storm the exclusion guarded against is avoided by routing, not by suppression).
+
+**Tasks:**
+- **(Backend) git-meta signal on `FsChange`.** Add `git_meta: bool` to the `FsChange` DTO (snake_case, mirrored on the TS type). In `paths_to_change`: detect whether the batch touched a git-status-relevant `.git/` meta path (`.git/index`, `.git/HEAD`, `.git/MERGE_HEAD`, `.git/refs/**` — NOT `.git/`-everything, to avoid lock/log churn re-fetch storms) and set `git_meta=true`. Those meta paths are STILL kept out of `FsChange.paths` (the tree must not see them) and a pure-git-meta batch now returns `Some{paths:[], git_meta:true}` instead of `None`. Heavy dirs (`node_modules/`, `target/`, …) stay fully excluded — unchanged. Tests: pure-`.git/index` batch → `Some{paths:[], git_meta:true}`; `.git/` + worktree mix → both populated; heavy-dir-only batch → still `None`; a `.git/objects/**`/`.git/*.lock` churn-only batch → `None` (not status-relevant).
+- **(Frontend) route git_meta to the git-status key only.** In `RightPanelHost`'s `fs-change` listener: bump `gitStatusRefreshKey` when `paths.length > 0 || git_meta`; bump `fsTreeRefreshKey` only when `paths.length > 0`. `checkDiskForPaths` still runs on real `paths` only. Add `git_meta` to the `FsChange` TS type.
+
+**Verify:** `cargo test` (new transform cases) + `pnpm test` green. Live-verify via the MCP bridge against a scratch repo (`tmp/scratch/scratch-a`): open it, modify a tracked file in the in-app editor or externally, then `git add` it from a terminal — confirm the FileTree badge transitions (M→staged) WITHOUT a remount and the tree does NOT re-walk (scroll/expand preserved). Carry the full live git-op matrix (commit/stash/checkout) to the release gate if the bridge can't drive a real `git add` in-session.
 
 ---
 

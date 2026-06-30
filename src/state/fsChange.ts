@@ -21,11 +21,17 @@ export type FsChangeKind =
 
 /** One debounced filesystem-change notification for a single workspace. `paths` are
  *  project-relative POSIX strings, already ignore-filtered (every path is one the
- *  FileTree would show); never empty (the backend returns None instead of emitting). */
+ *  FileTree would show) and NEVER include `.git/`-internal paths. `git_meta` (WP9) is
+ *  the git-status-only signal: true when the batch touched a `.git/` meta path
+ *  (index/HEAD/MERGE_HEAD/refs) — i.e. a `git add`/commit/stash/checkout that flips a
+ *  file's status with no working-tree change. Route it to a git-status re-fetch ONLY,
+ *  never a tree re-walk. The backend never emits with `paths` empty AND `git_meta`
+ *  false — a consumer always has at least one path, the git-meta signal, or both. */
 export interface FsChange {
   workspace_id: string;
   paths: string[];
   kind: FsChangeKind;
+  git_meta: boolean;
 }
 
 /**

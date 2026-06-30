@@ -256,12 +256,10 @@ export function RightPanelHost({
   // the deferred real-time path.)
   const [gitStatusRefreshKey, setGitStatusRefreshKey] = useState(0);
 
-  // QoL-WP0 — bumped on every `fs-change` event for THIS workspace (an external
-  // on-disk create/remove/rename/modify caught by the backend notify watcher). Passed
-  // to FileTree, which re-walks `fs_tree` on the bump so the rail reflects on-disk
-  // reality without a manual collapse/expand. The same event also bumps
-  // gitStatusRefreshKey (an external change can flip a file's git status too), so the
-  // row indicators refresh on the same signal for free.
+  // QoL-WP0 — bumped on every `fs-change` event for THIS workspace that touched a
+  // tree-visible path (an external on-disk create/remove/rename/modify caught by the
+  // backend notify watcher). Passed to FileTree, which re-walks `fs_tree` on the bump so
+  // the rail reflects on-disk reality without a manual collapse/expand.
   const [fsTreeRefreshKey, setFsTreeRefreshKey] = useState(0);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -273,13 +271,22 @@ export function RightPanelHost({
       // Only act on changes for THIS workspace (the watcher tags each event with its
       // workspace_id). Other workspaces' events are ignored here.
       if (!appliesToWorkspace(event.payload, workspaceId)) return;
-      setFsTreeRefreshKey((k) => k + 1);
-      setGitStatusRefreshKey((k) => k + 1);
+      const { paths, git_meta } = event.payload;
+      // WP9 — two independent signals from one event:
+      //  - a tree-visible path changed → re-walk the tree AND re-fetch git status.
+      //  - git_meta (a `.git/` index/HEAD/refs write: `git add`/commit/stash/checkout
+      //    that flips status with no worktree edit) → re-fetch git status ONLY, never a
+      //    tree re-walk (the `.git/` exclusion that guards against a re-walk storm stays;
+      //    we route the meta signal past it instead of suppressing it). This fixes the
+      //    stale-badge-until-remount bug: a pure `git add` now refreshes the indicator.
+      if (paths.length > 0) setFsTreeRefreshKey((k) => k + 1);
+      if (paths.length > 0 || git_meta) setGitStatusRefreshKey((k) => k + 1);
       // QoL-WP0 Phase 3 — also live-reload any OPEN editor doc whose file changed on
       // disk (reuse via the same single per-workspace listener instead of a second one
       // in EditorSplit). `checkDiskForPaths` re-stats only the changed paths that are
-      // open, then reload-when-clean / conflict-when-dirty via the existing seam.
-      editorSplitRef.current?.checkDiskForPaths(event.payload.paths);
+      // open, then reload-when-clean / conflict-when-dirty via the existing seam. Only
+      // real `paths` are relevant here — a git-meta-only event has none.
+      if (paths.length > 0) editorSplitRef.current?.checkDiskForPaths(paths);
     }).then((fn) => {
       if (cancelled) {
         fn();

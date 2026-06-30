@@ -20,6 +20,8 @@
 - **Backlog resolved:** SURFACE-2026-06-18-QUALITY-PICKER-ADD-NO-REFRESH — Open Folder… now prepends `add_project`'s returned record into local recents, restoring symmetry with the remove path.
 - **Backlog resolved:** SURFACE-2026-06-18-QUALITY-CMD-ADD-RECORD-IDENTICAL — documented `add_project`/`record_open` as a deliberate alias over `add_or_touch` (the single point of truth) instead of collapsing the two IPC commands.
 - **Backlog resolved:** SURFACE-2026-06-18-QUALITY-NOW-MS-EPOCH-SENTINEL — `now_ms` no longer falls back to `0` on a pre-epoch clock (which would sink a just-opened project to the bottom of recents); it logs the fault and stamps `i64::MAX` so the record sorts first.
+- **Task closed:** Debt-paydown WP9 (git-status live-refresh on `.git/` ops — folded-in user bug report) — the FileTree git-status badge no longer goes stale after a `git add`/commit/stash/checkout: the `fs-change` watcher now classifies `.git/{index,HEAD,MERGE_HEAD,refs}` writes as a git-status-only signal (`FsChange.git_meta`) that re-fetches the indicator map without re-walking the tree (the `.git/` exclusion that guards the tree against a re-walk storm is kept; the meta signal is routed past it rather than suppressed), where previously a pure-`.git/` op that flipped a file's status with no working-tree change emitted nothing and the badge stayed stale until a remount; gated green by 307 Rust tests + clippy and `tsc`/784 frontend tests, with the live git-op-transition matrix carried to the release gate.
+- **Backlog resolved:** SURFACE-2026-06-30-GIT-STATUS-STALE-ON-GIT-OPS — the friend-reported stale-git-badge-until-remount bug fixed by routing `.git/` index/HEAD/refs writes to a git-status-only refresh.
 
 ## 2026-06-29
 
