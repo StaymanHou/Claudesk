@@ -4,70 +4,9 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
-# m8-wp5-embed-place — 2026-06-29
-
-*(feature-review-quality on ship commit c34925a; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Reviewer: "well-built, appropriately-scoped documentation/marketing work that accrues no debt... the one executable artifact is a useful, correctly-isolated, passing dev-only codify guard." Both MINORs are cosmetic.)*
-
-## SURFACE-2026-06-29-QUALITY-M8WP5-TEST-NAME-OVERCLAIMS-ANIMATED
-- **Severity:** MINOR
-- **Location:** `tooling/demo/readme-assets.nodetest.mjs:65` (+ header comment)
-- **Finding:** Test named "every referenced demo GIF is a real **animated** GIF" but the assertion only checks the 6-byte `GIF89a`/`GIF87a` magic — a single-frame GIF89a would pass. Committed assets are genuinely animated, so no live bug; the name over-claims its coverage.
-- **Suggested action:** Either rename to "...is a real GIF (GIF8[79]a magic)" OR extend to assert >1 frame (count GCE/image-descriptor markers) so the name matches what it proves.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F) — took the stronger fix: the test now counts Graphic Control Extension markers (`0x21 0xF9`) and asserts ≥2 frames, so "animated" is proven, not just the magic. Renamed to "…(magic + >1 frame)". 4/4 readme-assets nodetests green.
-
-## SURFACE-2026-06-29-QUALITY-M8WP5-STALE-STATUS-BLOCK-NOW-PROMINENT
-- **Severity:** MINOR
-- **Location:** `README.md:45-53` (the `> **Status: …**` block)
-- **Finding:** The WP5 restructure put the new pitch + demos above an unchanged stale "Status" block (claims "Milestones 1–4 shipped", lists the superseded M5–M9 roadmap; reality is M1–M7 shipped + released v0.2.3 with a resequenced roadmap). It's now the first thing a reader hits under the polished new top. Operator-acknowledged + logged as out-of-WP-scope.
-- **Suggested action:** Freshen the Status block (current milestone reality + resequenced roadmap) — natural fit for the next README-freshen task or `/product-finalize` durable-doc resync.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP8) — rewrote the block to "Milestones 1–8 shipped — released as v0.2.3", named the PiP + menu-bar surfaces, and listed the current roadmap (M9 time-analytics → M10 docs-viewer → M11 auto-resume → M12 skill-orch → M13 polish). github.com render confirm carried to the next `/release` gate (text-only markdown, low-risk).
-
-# m8-wp4-pip-demo-asset — 2026-06-29
-
-*(feature-review-quality on ship commit 5625658; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built dev-only tooling that advances rather than accretes... the only debt is dead focus-ring scaffolding left over from the round-2 design [superseded by the round-3 region switch] + a duplicated comment — both cosmetic five-minute deletions, neither worth a refactor pass." All dev-only `tooling/demo/` polish.)*
-
-## SURFACE-2026-06-29-QUALITY-M8WP4-DUP-CURSOR-COMMENT
-- **Severity:** MINOR
-- **Location:** `tooling/demo/timeline.pip.js:247-259`
-- **Finding:** Two near-identical 6-line cursor-track comment blocks back-to-back (copy-paste artifact from the round-4b cursor edit). Delete one.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — deleted the first of the two duplicated cursor-track comment blocks (kept the more-accurate "leaves the viewport" wording). pip nodetest green.
-
-## SURFACE-2026-06-29-QUALITY-M8WP4-DEAD-FOCUS-FLAG
-- **Severity:** MINOR
-- **Location:** `tooling/demo/shell.js:184,191`
-- **Finding:** `pip.classList.toggle("focused", !!k.pipFocused)` + the per-row `row.focused ? " focused" : ""` are dead in the PiP timeline — the round-3 region switch replaced the PiP focus-ring beat, so `pipFocused`/`row.focused` are never set anywhere. Either wire a focus-ring frame or drop the flag.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — DECIDED drop: deleted the dead `pip.classList.toggle("focused", …)` line + its comment and the per-row `row.focused` flag in `shell.js` (paired with the dead-focus-CSS removal below).
-
-## SURFACE-2026-06-29-QUALITY-M8WP4-DEAD-FOCUS-CSS
-- **Severity:** MINOR
-- **Location:** `tooling/demo/shell.css:201` (`.pip.focused` / `.pip-cell.focused`)
-- **Finding:** The focus-ring CSS ships with no producer (same root cause as the dead flag above). Remove alongside it.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — deleted the orphaned `.pip.focused` rule from `shell.css` (the producer flag was removed above; `.pip-cell.focused` never existed).
-
 # m8-wp3-filmstrip-demo — 2026-06-29
 
 *(feature-review-quality on ship commit a42ba61; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built, well-scoped dev tooling that does exactly what its plan said and no more... advances the codebase (reusable cursor/keycap tracks WP4's PiP demo can lean on) rather than accruing debt; the only debt is cosmetic comment/data drift." Nothing rises to a refactor trigger for author-controlled, gitignored-output, dev-only marketing tooling.)*
-
-## SURFACE-2026-06-29-QUALITY-M8WP3-STALE-JSDOC-CAST
-- **Severity:** MINOR
-- **Location:** `tooling/demo/timeline.filmstrip.js:9-17` (four-beat JSDoc header) vs the keyframe data below it.
-- **Finding:** The JSDoc beat descriptions still name the OLD cast ("api-gateway running on center stage" / "web-client needs input"), but the data was recast during the verify-human round to `catan-companion` (active 0) + `tax-cruncher` (awaiting→promoted). Doc/data drift inside one file — a future reader (likely WP5) will mis-map beats to tiles.
-- **Suggested action:** Update the four-beat JSDoc to name the actual cast (catan-companion / tax-cruncher). One-line-per-beat comment fix.
-- **Priority:** low
-- **Status:** RESOLVED (already corrected in place; confirmed at debt-paydown WP5, 2026-06-30) — STALE PREMISE: the `timeline.filmstrip.js` four-beat JSDoc already names catan-companion (beat 1) + tax-cruncher (beats 2-4); a grep finds ZERO api-gateway/web-client references. No edit.
-
-## SURFACE-2026-06-29-QUALITY-M8WP3-SMOKE-TIMELINE-ONE-SYSTEM-NAMING
-- **Severity:** MINOR
-- **Location:** `tooling/demo/timeline.smoke.js` (WP2 smoke fallback cast: api-gateway / web-client / infra-tf / docs-site).
-- **Finding:** The WP2 smoke timeline still uses the "four services of one system" naming that timeline.filmstrip.js's comment now explicitly flags as the anti-pattern to avoid (per the README parallelism-across-projects philosophy). Out of scope for WP3 (smoke = verify-self artifact, not a shipped demo), but worth aligning so published-adjacent surfaces don't contradict the stated philosophy.
-- **Suggested action:** At WP5 (or a refactor), recast the smoke timeline's 4 names to unrelated projects too. Low cost.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — recast the 4 smoke-timeline names api-gateway/web-client/infra-tf/docs-site → tax-cruncher/recipe-box/blog-engine/catan-companion (4 unrelated domains) + added a header note citing the parallelism-across-projects philosophy. Stage labels/comments updated to match; demo nodetests green.
 
 ## SURFACE-2026-06-29-QUALITY-M8WP3-EVAL-CLASSIC-SCRIPT-IN-TEST
 - **Severity:** MINOR
@@ -76,34 +15,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** None now. If the timeline ever references browser globals beyond `window`, extend the shim. Dismiss-candidate.
 - **Priority:** low
 - **Status:** pending
-
-# m8-wp2-demo-build-harness — 2026-06-29
-
-*(feature-review-quality on ship commit cbe2922; Mode 3 autopilot. 0 CRITICAL / 1 MAJOR / 3 MINOR. The MAJOR — animation-timing fork in extract-dot-css.mjs — was FIXED in-place during review-quality (now sourced from App.css's @media block via pickAnimation(); drift-guard proven to catch a timing change). The 3 MINOR below are low-priority polish, backlogged. Reviewer: "well-built dev tooling that takes its one load-bearing invariant seriously... advances the codebase.")*
-
-## SURFACE-2026-06-29-QUALITY-M8WP2-README-DURATION-DRIFT
-- **Severity:** MINOR
-- **Location:** `tooling/demo/README.md` (build.mjs example, `--duration 5.4`) vs `tooling/demo/package.json` (`smoke` script, `--duration 3.2`).
-- **Finding:** The README's example build command uses `--duration 5.4` (a WP1-probe leftover), but the wired `smoke` script uses `3.2` (the smoke timeline's last keyframe is at t=2.6). A reader copy-pasting the README captures ~2s of dead tail.
-- **Suggested action:** Update the README example duration to match (or note it's illustrative). One-line doc fix.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — README example durations → `3.2` (matching the wired `smoke` script) + a `--timeline timeline.smoke.js` flag + a note that `--duration` is per-timeline (the capture default `5.4` is a probe-era value). No dead-tail for a copy-paster.
-
-## SURFACE-2026-06-29-QUALITY-M8WP2-COMMITTED-GENERATED-CSS-UNDOCUMENTED
-- **Severity:** MINOR
-- **Location:** `tooling/demo/.gitignore` + `tooling/demo/README.md` ("what's committed" prose).
-- **Finding:** `_dots.generated.css` is a generated artifact that is intentionally committed (the `--check` drift-guard needs a committed baseline to diff), yet `.gitignore` blanket-ignores `*.png`/`*.gif`/`*.webp` and the README doesn't mention the committed generated CSS. A future reader may be surprised a `*.generated.*` file is tracked.
-- **Suggested action:** One-line note in the README ("the generated dot CSS is committed as the drift-guard baseline").
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — added a "What's committed" note to `tooling/demo/README.md` explaining `_dots.generated.css` is committed (despite `*.generated.*`) because `extract-dot-css.mjs --check` diffs against it as the drift-guard baseline.
-
-## SURFACE-2026-06-29-QUALITY-M8WP2-SHELL-INNERHTML-RAW-MARKUP
-- **Severity:** MINOR
-- **Location:** `tooling/demo/shell.js` (`dot()`, tile bodies, stage/PiP content injected via `innerHTML` from timeline data).
-- **Finding:** Timeline string fields (`tile.body`, `l.text`, etc.) are injected as raw HTML (some legitimately contain markup like `<span class="cursor">`). Not a security issue (dev-only, author-controlled input), but a sharp edge: WP3/WP4 scenario authors must remember every string field is raw HTML.
-- **Suggested action:** One-line caution in the TIMELINE shape doc-comment in shell.js so a future author doesn't pass an escape-expecting string.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — added a CAUTION block to the TIMELINE-shape doc-comment in `shell.js`: every timeline string field is injected as raw HTML via innerHTML; scenario authors must HTML-escape any literal-render string.
 
 # m7-menu-bar-status-item — 2026-06-29
 
@@ -117,14 +28,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-06-29-QUALITY-M7-APPLY-UPDATE-COMMENT-OVERSELL
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/tray/commands.rs:188-199` (`apply_update`).
-- **Finding:** The doc comment says it was "pulled out ... callable from tests' shape," but no test calls `apply_update` (the runtime path is AppHandle-bound and explicitly carried to bridge verify-self). The comment slightly overstates the test coverage.
-- **Suggested action:** Trim the "callable from tests' shape" clause, or add an AppHandle-free seam test if one is cheap. Trivial.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — trimmed the "callable from tests' shape" overclaim; the doc now says the runtime path is AppHandle-bound and the pure fold it drives (`aggregate_alarm`) is what's unit-tested, not this wrapper.
-
 ## SURFACE-2026-06-29-QUALITY-M7-TRAY-ID-UNUSED-LOOKUP
 - **Severity:** MINOR
 - **Location:** `src-tauri/src/tray/commands.rs:54` (`TRAY_ID`).
@@ -133,46 +36,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-
-# m6-wp8-milestone-exit-verification — 2026-06-28
-
-*(feature-review-quality on ship commit 3895a32; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Verification-only WP; the only code change was the editor default-font 13→11 parity edit. Reviewer: "well-built, appropriately-tiny... no debt, no scope creep. Only standing weakness: the editor+terminal shared-default invariant lives in a comment, not code.")*
-
-## SURFACE-2026-06-28-QUALITY-WP8-FONT-PARITY-COMMENT-ONLY
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/editor/fontZoom.ts:14` (`DEFAULT_FONT_PX`) vs `src/components/workspace/terminalFontZoom.ts` (`DEFAULT_TERMINAL_FONT_PX`).
-- **Finding:** The parity claim "matches `DEFAULT_TERMINAL_FONT_PX`" is enforced only by a comment — `DEFAULT_FONT_PX = 11` is an independent literal duplicating the terminal default. If the terminal default is retuned later, the editor silently drifts and the comment becomes a lie. The headline invariant of the change (editor + terminal render at the same size out of the box) has no mechanical guard.
-- **Suggested action:** Either import `DEFAULT_TERMINAL_FONT_PX` and derive `DEFAULT_FONT_PX` from it, or add a structural test asserting `DEFAULT_FONT_PX === DEFAULT_TERMINAL_FONT_PX`. Low cost; makes the parity load-bearing rather than aspirational.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme B) — did BOTH: `DEFAULT_FONT_PX` is now DERIVED from `DEFAULT_TERMINAL_FONT_PX` (the editor module imports it), AND a `===` structural test pins the parity. The two can no longer silently drift.
-
-## SURFACE-2026-06-28-QUALITY-WP8-SIBLING-TEST-BARE-LITERALS
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/editor/__tests__/fontZoom.test.ts:31-33,47-48`.
-- **Finding:** Sibling `clampFontSize`/`nextFontSize` tests still use bare `13` literals as sample inputs, while the round-trip test was deliberately re-anchored off literals onto `DEFAULT_FONT_PX`. The `13`s are now arbitrary in-range sample values (no longer the default), reading slightly inconsistently next to the default-relative round-trip test.
-- **Suggested action:** Optionally swap the bare `13`s for a neutral mid-range constant or a comment clarifying they're arbitrary probes. Trivial; any in-range integer works for clamp/step-math.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F) — bare `13`s replaced with a `SAMPLE_PX` const (commented as an arbitrary in-range probe, deliberately not the default), so they no longer read as default-related next to the default-relative round-trip test.
-
 # m6-wp11-multiple-right-panel-terminals — 2026-06-28
 
 *(feature-review-quality on ship commit f9e3292; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built... the only debt is minor — a small logic duplication between the button handlers and the keydown branches that a shared callback would erase. Nothing here warrants a refactor pass.")*
-
-## SURFACE-2026-06-28-QUALITY-WP11-HANDLER-BRANCH-DUPLICATION
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/RightPanelHost.tsx` — the ⌘T/⌘W keydown branches vs the `addTerminal` / `closeTerminalById` helpers.
-- **Finding:** The ⌘T and scoped-⌘W keydown branches deliberately re-inline the open/close bodies (`setPanel(→terminal)` + `setTerminals(openTerminal)`; `setTerminals(s=>closeTerminal(s, s.activeId))`) rather than calling the button handlers, to keep the `[visible, workspaceId]` listener free of non-stable closure deps. Intent is sound + commented, but it duplicates the open/close logic across ~250 lines — a future change to "what happens on open" (e.g. an added focus call) must be made in both the handler and the inline branch or they silently diverge.
-- **Suggested action:** Wrap the bodies in a `useCallback` (or a ref-to-callback) so both call sites share one impl without re-registering the listener. Low cost.
-- **Priority:** low
-- **Status:** RESOLVED (debt-paydown WP4, 2026-06-30) — `addTerminal`/`closeTerminalById` promoted to `useCallback`; the ⌘T/⌘W keydown branches now call those shared impls and the `[visible, workspaceId]` listener honestly lists them (stable identity → no churn). One open/close impl.
-
-## SURFACE-2026-06-28-QUALITY-WP11-TABLIST-ARIA-CONTROLS
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/RightPanelHost.tsx` — the `.term-tab-row` (`role=tablist`/`tab` + `aria-selected`) + the `.term-pane-slot` panes.
-- **Finding:** The terminal sub-tab row carries `role=tablist`/`role=tab`/`aria-selected` but no `aria-controls` linking each tab to its pane, and the panes have no `role=tabpanel`. Consistent with the existing Editor/Diff/Terminal tab row (NOT a regression), but the fresh row was a low-cost moment to wire the relationship.
-- **Suggested action:** Add `aria-controls` on each tab + `role=tabpanel` on each pane slot (and optionally fix the outer panel-tab row to match). Cosmetic/a11y polish.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme E) — wired `aria-controls`/`role=tabpanel`/`aria-labelledby` on the term-tab-row + panes AND the outer panel-tab row (workspace-scoped ids) AND the PaneTabs editor-file strip (folded in for consistency). `?raw` source-grep test pins the panel-tab id pairing.
 
 ## SURFACE-2026-06-28-QUALITY-WP11-ENTRY-ID-SESSIONID-ALWAYS-EQUAL
 - **Severity:** MINOR
@@ -228,13 +94,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # wp6-filetree-shows-ignored-files — 2026-06-28
 
 *(feature-review-quality on ship commit 61db3d4; Mode 3 autopilot auto-backlog. 0 CRITICAL / 1 MAJOR / 3 MINOR. The MAJOR is a load-bearing-but-trivial cleanup — remove the now-dead `ignore` crate; the MINORs are doc/cosmetic. Reviewer: "well-built; the only follow-up is removing the now-unused dependency.")*
-
-## SURFACE-2026-06-28-QUALITY-WP6-DEAD-IGNORE-DEP
-- **Severity:** MAJOR
-- **Finding:** The `ignore = "0.4"` dependency (`src-tauri/Cargo.toml:61`) is now dead — `walk_project` dropped `ignore::WalkBuilder` and `fs_watch` dropped `GitignoreBuilder`; `grep -rn "ignore::"` over `src-tauri/src/` finds ZERO non-comment references. The Cargo.toml comments around the dep (lines ~55-76) still describe the old gitignore-honoring model (".gitignore contract with the finder + tree"), which is now misleading.
-- **Fix shape:** remove the `ignore = "0.4"` line + rewrite/remove its stale surrounding comments in Cargo.toml; `cargo build` + `cargo test --lib` to confirm nothing else pulls it directly (it remains a transitive dep of other crates, which is fine — only the direct dependency + comments are stale). Small + mechanical, but requires a rebuild → re-verify, which is why Mode-3 backlogs it rather than auto-fixing in the review path.
-- **Priority:** medium
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — `ignore = "0.4"` removed from Cargo.toml + Cargo.lock; the stale `regex`/`notify-debouncer-full` comments claiming a shared `ignore`-walker `.gitignore` contract were rewritten to describe the real manual-DFS heavy-dir walk (`fs_index`). `cargo build` + 302 lib tests + clippy green.
 
 ## SURFACE-2026-06-28-QUALITY-WP6-SYMLINK-SKIP-UNDOCUMENTED
 - **Severity:** MINOR
@@ -304,27 +163,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on ship commit f6e3929; Mode 3 autopilot auto-backlog. 0 CRITICAL / 2 MAJOR / 2 MINOR.)*
 
-## SURFACE-2026-06-27-QUALITY-WP5-VIEWMENU-MODE-CHECKMARK-STALE
-- **Severity:** MAJOR
-- **Finding:** The three PiP-mode `CheckMenuItem`s (`app_menu/mod.rs:198-216`, ids `view.pip.mode.{off,on,auto}`) are built ONCE at `build_menu` (called once at setup, `lib.rs:105`) with checkmarks seeded from the persisted mode, but nothing updates them afterward — no listener rebuilds the menu or calls `set_checked` on the `pip-mode` broadcast. After ANY mode change (icon button OR a menu item), the View-menu checkmarks go stale until relaunch. And three independent CheckMenuItems are NOT a radio group: a native click toggles only the clicked item's own check → the menu can display contradictory state (e.g. Off still checked after picking Auto). The functional path (click → `pip_set_mode`) works + was operator-verified; only the menu's DISPLAYED checkmark is unreliable.
-- **Fix shape:** subscribe to the `pip-mode` event (backend or a small frontend bridge) and update the three items' checked-state on change — either rebuild the View submenu or hold `CheckMenuItem` handles in managed state + `set_checked(mode==X)` for each on each broadcast (+ on launch-restore). Make them mutually exclusive (only the active mode checked). Pairs with fixing the misdescribing comment below.
-- **Priority:** medium — worth a `/feature-refactor` pass before M6 layers more onto `build_menu` (M6's menu-bar work touches the same seam).
-- **Status:** RESOLVED 2026-06-27 (`/feature-refactor`) — `build_menu` now clones the three `CheckMenuItem` handles into a managed `PipModeMenuItems<R>` struct; a `pip-mode` listener wired in `lib.rs` setup parses the broadcast payload and calls the new `apply_pip_mode_to_menu`, which `set_checked(mode==X)`s all three exclusively (only the active mode checked) on every broadcast. Launch-seed already correct (build-time `.checked` reads the same persisted mode), so no extra launch-restore call needed. Both surfaces (icon button + menu click) route through `pip_set_mode` → `pip-mode` emit → this listener. clippy `-D warnings` clean, 266/266 cargo tests pass (pure refactor, no behavior change). Live checkmark-updates carried to operator verify-human (AppKit observable, MCP bridge disconnected this session).
-
-## SURFACE-2026-06-27-QUALITY-WP5-MENU-COMMENT-MISDESCRIBES-REBUILD
-- **Severity:** MAJOR
-- **Finding:** `app_menu/mod.rs:199` comment asserts "the menu is rebuilt on the `pip-mode` broadcast so the checkmark tracks the backend" — that rebuild does NOT exist. A WHAT-comment describing unimplemented behavior; it hides + compounds the staleness bug above (a future maintainer trusts it, doesn't look for the missing listener).
-- **Fix shape:** fix together with the checkmark-refresh above — once the refresh is real, the comment becomes accurate; until then, correct the comment to state the items are seeded-once-not-refreshed.
-- **Priority:** medium (bundle with the finding above).
-- **Status:** RESOLVED 2026-06-27 (`/feature-refactor`, same pass as the finding above) — the misdescribing "the menu is rebuilt on the `pip-mode` broadcast" comment (`app_menu/mod.rs:198-199`) is gone; the refresh is now real (via `apply_pip_mode_to_menu`, NOT a rebuild — there is no rebuild path), and the comment + the new `PipModeMenuItems` doc accurately describe the seeded-once-then-re-checked mechanism.
-
-## SURFACE-2026-06-27-QUALITY-WP5-STALE-PIP-TOGGLE-DOC-REFS
-- **Severity:** MINOR
-- **Finding:** `pip/commands.rs:206` `pip_set_visible` rustdoc uses intra-doc link `[pip_toggle]` (the command was removed in the rework → broken rustdoc link); the module header `commands.rs:3` still narrates "`pip_toggle` builds (once) and then shows/hides…". Stale post-rework; the live entry point is `pip_set_mode`/`pip_set_visible`.
-- **Fix shape:** update the two doc references to `pip_set_mode`/`pip_set_visible`; drop the `[pip_toggle]` intra-doc link.
-- **Priority:** low.
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — `pip/commands.rs` module header + the `pip_set_mode`/`pip_set_visible` doc-comments repointed `pip_toggle`→`pip_set_mode`/`pip_set_visible`; the broken `[pip_toggle]` intra-doc link is gone (`rustdoc -D broken_intra_doc_links` clean). The `lib.rs:333` "replaces the old pip_toggle" note left intact (accurate historical context, not a broken link).
-
 ## SURFACE-2026-06-27-QUALITY-WP5-PIPMODE-STATE-DUP-PER-WORKSPACE
 - **Severity:** MINOR
 - **Finding:** `RightPanelHost.tsx:136-159` — the `pipMode` state + `pip_get_mode` fetch + `pip-mode` listener are duplicated per RightPanelHost instance (one per mounted workspace), so at N workspaces there are N redundant IPC fetches + N subscriptions for one app-global value. The inline comment acknowledges it's "fine per-RightPanelHost," but it's avoidable at the N>1 the milestone targets.
@@ -357,13 +195,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # qol-wp7-filetree-git-bubble-up — 2026-06-25
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `4d384b1`. Reviewer verdict: well-built, right architecture, no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP7-DEAD-DIR-STATUS-CSS
-- **Finding:** `.file-tree-dir-status { margin-left: auto }` re-declares a property the element already inherits from its `file-tree-status` class (which already sets `margin-left:auto`). The actual right-push comes from `.file-tree-name`'s `flex:1`. The rule is a no-op, and its comment ("this is the element that absorbs the free space") misattributes the layout mechanism.
-- **Where:** `src/App.css` `.file-tree-dir-status` (~1577) + its comment block.
-- **Fix shape:** delete the redundant rule (or, if a dir-specific tweak is later wanted, keep the selector but with a real declaration); correct the comment to name `.file-tree-name flex:1` as the right-push mechanism. Highest-value of the three — it removes a misleading explanation.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — redundant `.file-tree-dir-status { margin-left: auto }` deleted (the glyph inherits `margin-left:auto` from `.file-tree-status` and is right-pushed by `.file-tree-name { flex:1 }`); comment replaced to name the real mechanism.
 
 ## SURFACE-2026-06-25-QUALITY-WP7-FORIN-NO-HASOWNPROPERTY
 - **Finding:** `dominantStatusByDir` iterates `gitStatus` with `for (const path in gitStatus)` without a `hasOwnProperty` guard. Safe for the serde-serialized backend record, but an unexpected prototype key would inject a bogus dir.
@@ -433,24 +264,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The trigger effect reads non-reactive `hasSpawnedRef.current` while keyed on `[active, bridge.phase]`. A narrow async window exists after the nonce bump but before the latch is set where an `active` toggle could fire a second nonce bump. It is SAFE — the spawn effect's per-run `cancelled` closure self-kills the orphan so exactly one session survives — but the trigger effect's comment ("bumps `spawnNonce` exactly once") slightly overstates the guarantee; once-ness is co-enforced downstream by `cancelled`.
 - **Pickup shape:** add a one-line comment at the trigger effect pointing at the `cancelled` backstop (so a future reader doesn't "tighten" the de-dup here and break the StrictMode contract). Comment-only; no behavior change.
 
-## SURFACE-2026-06-25-QUALITY-WP4-REPRO-TEST-DUP-TRUTH-TABLE
-- **Files:** `src/cc/__tests__/respawnOnReactivate.repro.test.ts` (the first `describe` block restating the predicate truth table, ~lines 32-53)
-- **Priority:** low
-- **Status:** pending
-- **Type:** tech-debt (test redundancy)
-- **Finding:** The repro file restates the four `shouldSpawnOnActive` truth-table cases already covered exhaustively in `respawnGuard.test.ts`. The repro file's unique value is the red-import anchor + the dep-tuple-inertness assertion; the duplicated predicate cases add maintenance surface without new signal.
-- **Pickup shape:** trim the duplicated predicate cases from the repro file, keeping the red-import + dep-tuple-inertness assertions (the bug-specific signal). Small test edit.
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F) — removed the second `describe` block (the 4-case truth table) from the repro; kept its red-import + dep-tuple-inertness assertion + the one predicate case that names the bug (switch-back-after-session), with a pointer to the exhaustive `respawnGuard.test.ts`.
-
-## SURFACE-2026-06-25-QUALITY-WP4-UNANCHORED-LATCH-ASSERTION
-- **Files:** `src/components/workspace/__tests__/spawnOnceOnReactivate.test.ts` (the "clears the latch on relaunch" assertion, ~line 47)
-- **Priority:** low
-- **Status:** pending
-- **Type:** tech-debt (test robustness)
-- **Finding:** `/hasSpawnedRef\.current\s*=\s*false/` is a bare substring match not anchored to the relaunch path — it would pass on any `.current = false` assignment in the file. Low-stakes (only one such assignment exists today), but unanchored.
-- **Pickup shape:** anchor the assertion near `handleRelaunch` (or match the relaunch comment context) so an unrelated edit can't satisfy it. One small test edit.
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F) — the assertion now matches `hasSpawnedRef.current = false` followed (within ~120 chars) by `dispatch({ type: "relaunch" })`, so an unrelated ref reset can't satisfy it.
-
 # qol-wp3-switch-workspace-autofocus-cc — 2026-06-25
 
 2 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `78c76d6`. Reviewer rated the feature well-built and tightly-scoped — minimal correct seam (imperative `focus()`-only handle → single `visible`-edge effect consolidating all four promote triggers), focus-only invariant designed-in AND test-pinned, no debt. Both findings are polish; neither warrants a refactor pass. Auto-backlogged per drive_mode=autopilot.
@@ -462,26 +275,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** tech-debt (test robustness)
 - **Finding:** The no-PTY-byte guard pins the absence of any `\r`/`\n` escape anywhere in Workspace.tsx, not specifically in the focus path. Passes today (zero matches), but it's over-broad — a future unrelated `\n` literal (a tooltip string, a multiline template) would fail this test with a misleading "WP4 spurious-prompt regression" message. The companion `cc_input` assertion is appropriately targeted.
 - **Pickup shape:** scope the assertion to the focus effect or to `invoke(`/PTY-write identifiers instead of the whole file. One small test edit. Dismiss if the broad guard is judged acceptable.
-
-## SURFACE-2026-06-25-QUALITY-WP3-TRIPLICATED-EFFECT-RATIONALE
-- **Files:** `src/components/workspace/Workspace.tsx` (the WP3 `visible`-edge focus effect comment block, ~lines 69-79)
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — trimmed the 11-line comment to the non-obvious WKWebview-rAF rationale (parked-element + always-active gap) + focus-only-no-PTY invariant; dropped the operator-decision/bug-class sentences (now a "see commit + WIP" pointer).
-- **Type:** tech-debt (comment clarity)
-- **Finding:** The 11-line comment block over a 4-line effect body restates the commit message + WIP near-verbatim (operator-decision + bug-class sentences). Triplicated rationale (comment + commit + WIP) is a future-drift surface.
-- **Pickup shape:** trim to just the non-obvious WKWebview-rAF rationale (the parked-element + always-active=true gap); drop the operator-decision/bug-class sentences already captured in commit + WIP. One small comment edit. Dismiss if the redundancy is judged helpful.
-
-# qol-wp2-status-busy-vs-awaiting — 2026-06-25
-
-1 MINOR finding (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `7cfc464`. Reviewer rated the feature well-built and tightly-scoped — root cause diagnosed empirically (live hook-stream capture), fix in exactly one place, docs resynced same-commit. The other MINOR (a duplicate dangling `verify-codify` checkbox in the WIP) was resolved in-place before archive. This remaining finding is low-risk comment cleanup. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP2-TRIPLE-RATIONALE-COMMENT
-- **Files:** `src-tauri/src/status_broadcaster/mod.rs` (`INPUT_NEEDED_NOTIFICATION_TYPES` const doc + `notification_awaits_input` + `is_known_informational_notification`)
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — consolidated the unknown-`notification_type`→AwaitingInput rationale to the `INPUT_NEEDED_NOTIFICATION_TYPES` const doc as the canonical anchor; trimmed the `notification_awaits_input` + `is_known_informational_notification` fn/match-arm copies to a back-reference. `cargo test --lib` 307 + clippy clean.
-- **Type:** tech-debt (comment clarity)
-- **Finding:** The unknown-`notification_type`-falls-back-to-AwaitingInput rationale is restated in three places (const doc, fn doc, inline match-arm comments) — ~25 lines of doc for ~15 of logic. The WHY is genuinely non-obvious and worth documenting once, but the triple-restatement means a future editor changing the allow-list must keep three prose copies in sync.
-- **Pickup shape:** consolidate the rationale to one anchor (e.g. the const doc) and trim the fn/match-arm copies to a back-reference. One small comment edit. Dismiss if the redundancy is judged helpful.
 
 # qol-wp1-close-workspace — 2026-06-25
 
@@ -543,14 +336,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 1 MAJOR + 2 MINOR from `feature-review-quality` on ship commit `f815154` (0 CRITICAL). Reviewer rated the feature well-built, appropriately-scoped, adds zero new behavior, integrates through existing chord predicates. The MAJOR is the one real durability concern: an unguarded cross-language id contract. Auto-backlogged per drive_mode=autopilot.
 
-## SURFACE-2026-06-24-QUALITY-APPMENU-CROSS-LANG-ID-CONTRACT
-- **Files:** `src-tauri/src/app_menu/mod.rs:33` (`ids` module / `FUNCTIONAL_IDS`) ↔ `src/menu/menuBridge.ts:16` (`MENU_IDS`)
-- **Priority:** medium (the MAJOR)
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP3) — added pickup-shape option (a): a Rust test `functional_ids_are_pinned_to_the_frontend_bridge` (`app_menu/mod.rs` tests) reads `../src/menu/menuBridge.ts` as TEXT and asserts every `FUNCTIONAL_IDS` literal appears as a quoted `MENU_IDS` value. A one-char id drift on either side now fails `cargo test` instead of silently dead-clicking a menu item with green tests. Pins Rust ⊆ TS (each emitted id is mapped); the reverse is a dead switch arm, covered by `menuBridge`'s own vitest. No-codegen, fits the repo posture.
-- **Type:** tech-debt (unguarded cross-language contract)
-- **Finding:** The 11 functional menu-item id strings are duplicated across Rust (`app_menu::ids`) and TS (`MENU_IDS`) with NO mechanical link — only prose ("keep in sync" / "byte-identical"). A one-character drift on either side silently dead-clicks exactly one menu item: Rust emits an id, the TS `menuActionFor` switch falls through to `default → null`, the click does nothing. Crucially this ships with GREEN tests — the Rust tests only check `FUNCTIONAL_IDS` internal uniqueness, and `menuBridge.test.ts` references `MENU_IDS.*` symbolically (so it passes regardless of what the literal strings are). This is the feature's single load-bearing cross-language contract and the most likely future-regression vector (rename a panel id, ship, lose one menu item, no test fails).
-- **Pickup shape:** add a mechanical pin — cheapest options: (a) a Rust test that reads `src/menu/menuBridge.ts` as text and asserts each `ids::*` literal appears as a `MENU_IDS` value (string-grep assertion); (b) generate the shared id list at build time from one source; (c) a small TS test that imports a JSON/generated list emitted by the Rust side. (a) is the lowest-effort guard and fits the repo's no-codegen posture. Dismiss via the WIP `## Code-Quality Review` section if judged not worth it.
-
 ## SURFACE-2026-06-24-QUALITY-APPMENU-LABEL-ONLY-ID-COMMENT
 - **Files:** `src-tauri/src/app_menu/mod.rs` (label-only disabled items + the `label_only_ids_are_not_functional` test)
 - **Priority:** low
@@ -567,53 +352,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The `menu` listener body (id→action mapping, key re-dispatch, the 4 callback branches with the focused-path-ref lookup) lives inline in `App()` — the one piece of menu logic not extracted to a pure testable seam (unlike `menuBridge`). Extracting the action-dispatch (given an action + a small effects object) would let the callback-vs-key branching be unit-tested. LOW priority — consistent with the repo's "runtime-bound listeners are not unit-tested" posture (XtermPane, useWorkspaceStatus); the pure `menuBridge` mapping IS fully tested, which is the higher-value half.
 - **Pickup shape:** optional extraction of a pure `dispatchMenuAction(action, effects)` + its unit test. Defer unless the listener grows.
 
-# m4-wp4b-focus-indicator — 2026-06-23
-
-3 MINOR findings from `feature-review-quality` on ship commit `647148f` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built with negligible (cosmetic) debt: clean pure/impure seam (`deriveFocusHalf`), well-justified duck-typed guard, correct `relatedTarget`-based `focusout`, and the atomically-landed F12 fix that repaired a pre-existing regression + deleted a dead rule. All three findings are leftover cosmetic dust from the F12 fix. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-23-QUALITY-WP4B-DEAD-DATA-ACTIVE-PANE
-- **Files:** `src/components/workspace/editor/EditorSplit.tsx:426`
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — `data-active-pane` attribute dropped from EditorSplit.tsx; no live selector/test consumed it (live indicator is `.editor-split-pane.is-active::before`). 780 frontend tests green.
-- **Type:** tech-debt (dead surface)
-- **Summary:** The `data-active-pane={pane.id === panes.activePaneId}` attribute rendered on `.editor-split-pane` is now consumed by nothing — the live active-pane indicator selector is `.editor-split-pane.is-active::before` (the `is-active` class), and the only remaining `[data-active-pane]` references are inside `App.css` *comments*. The WP4b F12 fix moved the live selector off `data-active-pane`, leaving it a dangling render-time emit.
-- **Context:** Was load-bearing pre-WP11-Phase-5 (the orphaned WP3c rule keyed off it). A future reader will reasonably assume it's still live and hesitate to remove it.
-- **Suggested action:** Drop the `data-active-pane` attribute from EditorSplit.tsx:426 (the `is-active` class already carries the state). One-line. Pairs with finding #2 (the stale comment cross-ref) — one `/feature-refactor` pass.
-- **Pickup shape:** trivial `/feature-refactor` item. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## SURFACE-2026-06-23-QUALITY-WP4B-STALE-COMMENT-XREF
-- **Files:** `src/App.css` (WP4b half-accent block, ~line 443)
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — the WP4b comment cross-ref + the tombstone block both repointed off the dead `.editor-pane[data-active-pane]` selector to the live `.editor-split-pane.is-active::before`.
-- **Type:** tech-debt (stale comment)
-- **Summary:** The WP4b block comment cross-references `.editor-pane[data-active-pane]` as the WP3c precedent ("the WP3c lesson, see ..."), but that exact rule is the dead one this same commit deletes ~180 lines below. The live precedent is now `.editor-split-pane.is-active::before`.
-- **Context:** A cross-reference pointing at a selector the same commit removes; stale on arrival. The adjacent removed-rule tombstone comment is accurate — only this one pointer needs the updated target.
-- **Suggested action:** Update the comment's cross-ref to point at `.editor-split-pane.is-active::before`. Pairs with finding #1.
-- **Pickup shape:** trivial `/feature-refactor` item. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## SURFACE-2026-06-23-QUALITY-WP4B-COEXISTENCE-COMMENT-DUP
-- **Files:** `src/App.css` (WP4b half-accent block + the F12 `.editor-split-pane.is-active::before` block)
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — consolidated to one canonical comment: the WP4b half-accent block holds the full outer-vs-inner-edge / framed-vs-striped / z-index:6 rationale; the F12 `.is-active::before` block trimmed to a one-line back-reference. vite build + 784 tests green.
-- **Type:** tech-debt (comment duplication)
-- **Summary:** The coexistence rationale (outer-edge vs inner-edge, "framed vs striped", z-index:6 parity) is documented near-verbatim in two CSS blocks; they will drift if the edge convention ever changes.
-- **Context:** Belt-and-suspenders given the genuine cross-rule coupling, but a drift hazard. Acceptable as-is; noted for completeness.
-- **Suggested action:** Optionally consolidate to a single canonical comment with a one-line back-reference from the other block. Lowest-value of the three.
-- **Pickup shape:** trivial `/feature-refactor` item. Dismiss via the WIP's `## Code-Quality Review` section.
-
 # m3-wp6-frontend-status-indicator — 2026-06-22
 
 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `b377a97` (0 CRITICAL). Reviewer rated it well-built — clean pure/runtime/render layering, faithful wire-contract mirror, exemplary dead-code-allow retirement. The one real blemish is a dead snippet/tooltip path. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-22-QUALITY-WP6-SNIPPET-TOOLTIP-DEAD-PATH
-- **Files:** `src/state/workspaceStatus.ts:38-39,93-98` (`applyStatusUpdate` reducer); `src/state/useWorkspaceStatus.ts:53-55` (no snippet accessor); `src/components/workspace/CenterStage.tsx` (never passes `statusSnippet`); `src/components/workspace/Workspace.tsx:33` + `WorkspaceStatusIndicator.tsx:18` (prop + `title={snippet ?? label}`)
-- **Priority:** medium
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP2, D1 — THREAD IT) — the status map now stores `{state, snippet?}` entries (`WorkspaceStatusEntry`); `applyStatusUpdate` folds in `last_output_snippet` (sticky-per-event: a later snippet-less event clears it); added `snippetFor(map, id)` + exposed it on `useWorkspaceStatus`; `App` threads `snippetFor` to both `CenterStage` (→ `Workspace` `statusSnippet`) and `Filmstrip`, and `Pip` derives `snippet` for its tile indicators. Hovering any status dot now shows CC's last output/prompt line. The `AttentionStatusMap` subset (`pipLayout.ts`) widened to `{state}` entries. +4 reducer/accessor codify tests (snippet folds in, clears on snippet-less event, `snippetFor` reads it/defaults undefined). `tsc` + 784 frontend tests green.
-- **Type:** tech-debt (dead surface)
-- **Summary:** The `statusSnippet`/tooltip path is wired end-to-end (wire DTO `last_output_snippet` → `snippet` prop → indicator `title`) but **fed by nothing**: `applyStatusUpdate` stores only `update.state`, discarding `last_output_snippet`; the hook exposes only `stateFor` (no snippet accessor); `CenterStage` never passes `statusSnippet`. So the indicator tooltip always falls to `label`.
-- **Context:** The WIP's Phase-3 verify-human note claims the captured `Notification` snippet "shows in the indicator's title/tooltip if surfaced" — it cannot, the reducer drops it before it reaches the component. The test baseline missed it (no test asserts snippet→tooltip). Genuine but small.
-- **Suggested action:** Fix-or-remove, one commit. EITHER thread the snippet — extend the map to store `{state, snippet}` (or a parallel map), add a `snippetFor(id)` accessor, pass `statusSnippet={snippetFor(ws.id)}` in CenterStage — OR remove the unused `snippet` prop + the `last_output_snippet` frontend DTO field (keep the backend field; drop the unused frontend surface). Threading it is the higher-value path (it makes the Notification payload visible on hover, which was the WP6 intent).
-- **Pickup shape:** a `/feature-refactor` item; threading is ~15 lines across reducer+hook+CenterStage. Pairs naturally with any future status-detail UI. Dismiss via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-06-22-QUALITY-WP6-MINORS
 - **Files:** `src/state/useWorkspaceStatus.ts:53-55`; `src/state/workspaceStatus.ts:38-39` + `WorkspaceStatusIndicator.tsx` snippet prop
@@ -653,77 +394,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
   4. **Stale `sublime_open` comment (pre-existing)** — `lib.rs:62` still reads "Transitional — removed at WP8 once editor parity," contradicting CLAUDE.md's normative "both Sublime launchers KEPT permanently (revised 2026-06-20)." NOT WP2-introduced (inherited), but sits 2 lines above WP2's new registration and is demonstrably wrong against the style guide. Trivial comment fix.
 - **Pickup shape:** all four are trivial `/feature-refactor` nits. #2 is best deferred to WP3 (the listener WP). #1, #3, #4 are quick opportunistic fixes. Dismiss any via the WIP's `## Code-Quality Review` section.
 
-# m2-wp13-close-tab-chord — 2026-06-22
-
-3 MINOR findings from `feature-review-quality` on ship commit `f8d6761` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built, tightly-scoped, no debt; the stale-closure fix matches existing in-file prior art and the codification gap was honestly surfaced (SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP). All cosmetic. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-22-QUALITY-WP13-MINORS
-- **Files:** `PaneTabs.tsx:231-245`; `closeTabChord.ts:1-32`; `__tests__/closeTabChord.test.ts`
-- **Priority:** low (all)
-- **Status:** RESOLVED — #1 (WP5); #2 + #3 RESOLVED 2026-06-30 (debt-paydown WP6). #2 (shared `ChordEvent`): created `chordEvent.ts` canonical `ChordEvent`; `CloseTabChordEvent` + `TabSwitchChordEvent` now alias it. #3 (Ctrl/Alt case): added a `{metaKey:true,shiftKey:false,key:"w",ctrlKey:true,altKey:true}` assertion to `closeTabChord.test.ts` (the widened type made the real-flags case possible).
-- **Findings:**
-  1. **`closeActiveTabRef` comment duplication** — the ~10-line WHY comment on the render-fresh-ref restates the rationale already documented at PaneTabs.tsx L257-263 (`onActivePathChangeRef`/`onEmptyChangeRef`). A one-liner + back-reference ("same render-fresh-ref pattern as the reporters below, see L257") would cut the dup while keeping the load-bearing vh.3 explanation. — **RESOLVED 2026-06-30 (WP5):** trimmed the `closeActiveTabRef` comment to a one-liner + back-reference to the reporter refs (`onActivePathChangeRef`), keeping the vh.3 stale-closure explanation.
-  2. **`CloseTabChordEvent` is a verbatim copy of `TabSwitchChordEvent`** — identical 3-field shape + "mirrors ChordEvent" comment. A shared `ChordEvent` type imported by both pure predicates would remove the dup; per-file self-containment for these seams is arguably a feature, so low-value.
-  3. **Missing Ctrl/Alt-permissive test case** — `closeTabChord.ts:27-29` docstring promises Ctrl/Alt aren't part of the chord, but no test pins it. A `{metaKey:true,shiftKey:false,ctrlKey:true,key:"w"}` assertion would lock the documented invariant (safe today — the predicate doesn't read those fields).
-- **Pickup shape:** all three are trivial `/feature-refactor` nits (consolidate a comment; optionally hoist a shared `ChordEvent` type; add one test case). Dismiss any via the WIP's `## Code-Quality Review` section.
-
-# m2-wp11-tree-density-git-indicators — 2026-06-21
-
-1 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `6bcbe1f` (0 CRITICAL). Reviewer rated it ship-quality; backend (git_status `pub(crate)` reuse of git_diff's git2 plumbing, non-git-dir-is-not-an-error semantics, per-path staged-wins fold) the standout; Phase-5 layout churn well-annotated. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-21-QUALITY-WP11-GIT-STATUS-PATH-KEYING
-- **File:** `src/components/workspace/filetree/FileTree.tsx:203` (`gitStatus[node.path]`) × `src-tauri/src/git_status/mod.rs` (`status_map_core`)
-- **Priority:** medium
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP2) — STALE DETAIL ENTRY, fix already shipped at M2 close (2026-06-22, task `m2-wp11-git-status-path-keying`; see `backlog.md:507`). `status_map_core` already re-bases each git path to the workspace root (`within_repo_prefix` + `rebase_to_workspace`: strip the within-repo prefix, drop out-of-subtree entries, empty-prefix short-circuit preserves ws==repo-root) and the exact nested-workspace regression test (`workspace_nested_below_repo_root_is_keyed_workspace_relative`) passes. Only THIS detail entry was left `pending` when the M2 task closed. The debt-paydown-WBS WP2 plan to add an "indicators unavailable" signage state was written on this stale premise + DROPPED at WP2 build (operator decision 2026-06-30): the re-base already handles the nested case, and the operator always opens repo roots so it never fires anyway — adding signage would be dead defensive code, the opposite of the sweep's de-clutter intent. No code change; entry reconciled to the as-shipped reality.
-- **Summary:** The tree keys the git-status map by `node.path`, which is **workspace-root-relative** (`fs_tree` strips `projectPath`), but `git_file_statuses` returns **git-repo-root-relative** paths (libgit2 `repo.statuses()` + `open_repo`'s `Repository::discover` support a workspace nested below the repo root). When `projectPath` is a subdirectory of the enclosing repo, the two key spaces diverge → every git indicator silently fails to render (no error, blank). The verify-human passes ran against a workspace that WAS the repo root, so the green baseline never exercised the nested case.
-- **Suggested action:** Re-base the command's returned paths to `root` (compute repo-root → strip the `root`-relative prefix so keys match `fs_tree`), OR assert + document a root==repo-root precondition and surface a clear state when violated. Graceful failure today (no crash, just no indicators) → MAJOR not CRITICAL. Natural to fold into WP13 or a quick task.
-
-## SURFACE-2026-06-21-QUALITY-WP11-MINORS
-- **Files:** `git_status/mod.rs:68`; `App.css` + `FileTree.tsx:219`; `gitStatus.ts:16`
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6) — all 3: (1) added the non-UTF-8-path-drop comment at `git_status::status_map_core`'s `entry.path().unwrap_or("")`; (2) removed the redundant `.file-tree-status { margin-left: auto }` (the `.file-tree-name { flex: 1 }` already pushes the glyph right — same no-op as the already-removed `.file-tree-dir-status` rule); (3) [Theme H] closed the `GitFileStatus` TS↔Rust drift channel with a paired exhaustiveness guard — a Rust `changed_status_serde_forms_match_the_frontend_union` test pinning the serde forms + a TS `Record<GitFileStatus, …>` exhaustive-glyph test (compiler-enforced). A new variant now fails a test on whichever side lags.
-- **Summary:** Three cosmetic/clarity nits: (1) `entry.path().unwrap_or("")`+skip silently drops non-UTF-8 paths (libgit2 returns `None`) — add a one-word comment; (2) the indicator right-pin uses BOTH `.file-tree-name {flex:1}` and `.file-tree-status {margin-left:auto}` (self-flagged "belt-and-suspenders" — one redundant); (3) `GitFileStatus` TS union is a prose-only mirror of the Rust serde forms (latent drift channel — a new `ChangedStatus` variant compiles clean both sides + renders no glyph; no exhaustiveness test).
-- **Suggested action:** Quick `/feature-refactor` sweep; all three are low-stakes polish.
-
-# m2-wp3b-command-palette — 2026-06-20
-
-1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `3699a22` (0 CRITICAL). The feature is well-built (registry seam genuinely extensible, render-time override derivation idiomatic, well-aimed tests). Findings are comment-vs-code drift around a vestigial language Compartment (MAJOR), a duplicated language-pack switch (MINOR), and an optional-vs-required `active` prop asymmetry (MINOR). Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-20-QUALITY-WP3B-VESTIGIAL-LANGUAGE-COMPARTMENT
-- **File:** `src/components/workspace/editor/theme.ts:176` (`languageCompartment`) + `editorExtensions.ts:60-65, 188-194`
-- **Finding:** `languageCompartment` is `.of()`-seeded but never `.reconfigure()`d — the palette syntax swap happens purely via the `languageOverrideId` useMemo dep forcing an array-identity rebuild (which `@uiw/react-codemirror` applies as a full reconfigure). The WHY-comments claim two contradictory mechanisms ("reconfigure it without rebuilding the editor — same pattern as `fontSizeCompartment`" vs "the palette reconfigures the override by rebuilding the extensions"), and neither matches: the font-size compartment IS live-`reconfigure`d in `applyZoom`, the language one is not.
-- **Why it matters:** the compartment wrapper adds no behavior the array rebuild doesn't already provide (vestigial), and a maintainer extending syntax-switching will hunt for a live `reconfigure` call that doesn't exist. Comment-vs-code drift is the actively-misleading kind.
-- **Suggested action:** Either (a) drop the compartment and seed the language directly in the array (simplest — the rebuild already does the work), OR (b) actually live-`reconfigure` `languageCompartment` from the palette command and stop rebuilding the array on `languageOverrideId` change (mirrors `applyZoom`, avoids a full reconfigure per syntax pick). Reconcile the theme.ts + editorExtensions.ts comments to the chosen mechanism either way. Lean (a) for simplicity unless the per-switch full-reconfigure cost ever shows up.
-- **Priority:** medium
-- **Status:** RESOLVED 2026-06-20 (`/feature-refactor`) — took fix (a): `languageCompartment` removed from theme.ts, the resolved language placed directly in the `buildEditorExtensions` array (the openPath/languageOverrideId memo rebuild already swaps it via @uiw's full reconfigure), and the theme.ts + editorExtensions.ts + EditorPanel.tsx comments reconciled to that mechanism. `fontSizeCompartment` kept (it IS genuinely live-reconfigured). 118/118 tests, language-facet assertions still green.
-
-## SURFACE-2026-06-20-QUALITY-WP3B-DUP-LANGUAGE-SWITCH
-- **File:** `src/components/workspace/editor/language.ts:80-97` (`languageForId`) vs `:16-39` (`languageForExtension`)
-- **Finding:** `languageForId`'s switch duplicates `languageForExtension`'s pack-mapping arms (`javascript({jsx:true})`, `javascript({typescript:true})`, `rust()`, `markdown()`). The header comment claims "the same packs back both paths, so there's no second source of truth," but there are two parallel switches that can drift — the extension path maps `js/cjs/mjs`, the id path only `javascript`.
-- **Why it matters:** adding or retuning a language requires editing both switches; the "single source of truth" comment overstates the design.
-- **Suggested action:** Route both through a shared id→Extension map keyed off a canonical mode id (extensionOf → id, then one id→Extension lookup). Low-cost; makes the comment true.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-20 (`/feature-refactor`) — `languageForId` is now the SINGLE id→Extension switch (the only place pack constructors live); `languageForExtension` maps extension→canonical id via a new private `idForExtension` then delegates to `languageForId`. No duplicated pack arms; header comment rewritten to a single-source-of-truth note. 39/39 language+extensions tests green.
-
-## SURFACE-2026-06-20-QUALITY-WP3B-ACTIVE-PROP-ASYMMETRY
-- **File:** `src/components/workspace/editor/EditorPanel.tsx:36` vs `src/components/workspace/SublimeToolbar.tsx:22`
-- **Finding:** `EditorPanel.active` is optional with a `true` default while the mirrored `SublimeToolbar.active` is a required boolean. A future caller can forget to pass `active` to `EditorPanel` and silently get an always-listening palette in a backgrounded tab, whereas the same mistake on `SublimeToolbar` is a compile-time type error.
-- **Why it matters:** trades a compile-time gating guard for standalone-mount convenience on a multi-workspace gating prop; not load-bearing at N=1 but a latent multi-workspace foot-gun.
-- **Suggested action:** Consider making `active` required (drop the default) and pass it explicitly everywhere, or document why the default is safe. Pairs naturally with any Phase-2-milestone multi-workspace wiring.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-20 (`/feature-refactor`) — `EditorPanel.active` made required (dropped the `= true` default), now a compile-time obligation mirroring `SublimeToolbar.active`. The sole caller (`Workspace.tsx`) already passes `active={visible}`; tsc confirms no caller omits it.
-
 # wp9-phase1-polish — 2026-06-19
 
 3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). The feature is well-built; findings are a partial-failure window already triaged elsewhere, a plan/impl drift note, and a missing clarifying comment. Auto-backlogged per drive_mode=autopilot (MINOR).
-
-## SURFACE-2026-06-19-QUALITY-WP9-PICKER-PARTIAL-FAILURE-WINDOW
-- **File:** `src/components/picker/ProjectPicker.tsx` (mount effect: prune + list)
-- **Finding:** `prune_missing_projects` + `list_projects` share one `try { } catch {}` with an empty body; a prune-succeeds-then-list-throws window would leave the toast set while recents stay empty (transient inconsistent state).
-- **Why it matters:** both IPC calls realistically succeed/fail together and empty-recents is an acceptable fallback, so it's low-risk — but the partial-failure ordering isn't visible to a future reader. The inline comment already points at the broader picker IPC error-surfacing item.
-- **Suggested action:** Fold into the existing picker IPC error-surfacing work (`SURFACE-2026-06-18-QUALITY-*`, the wp6 picker MAJORs) rather than a standalone fix — surface IPC failures to the user there. Trivial alone.
-- **Priority:** low
-- **Status:** RESOLVED — folded into the picker IPC error-surfacing fix at M4 WP2, confirmed at debt-paydown WP3 (2026-06-30). The prune+list mount loader's shared `try/catch` now ends in `setToast({kind:"error", …})` via `mapIpcError`, so the prune-succeeds-then-list-throws window surfaces an error toast instead of leaving recents silently empty.
 
 ## SURFACE-2026-06-19-QUALITY-WP9-PLAN-IMPL-DRIFT-CCNOTFOUND
 - **File:** `workflow/archive/wp9-phase1-polish.md` P1.1 outcome line vs `src-tauri/src/cc_session/mod.rs`
@@ -761,85 +434,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# wp7-pty-cc-session — 2026-06-19
-
-4 MINOR findings from `feature-review-quality` on ship commit `50ca322` (0 CRITICAL, 0 MAJOR). Backend module rated the strongest part of the diff; all findings are low-stakes comment/framing drift + one incidental effect-dep robustness gap. Auto-backlogged per drive_mode=autopilot (MINOR).
-
-## SURFACE-2026-06-19-QUALITY-CC-KILL-SIGTERM-COMMENT-DRIFT
-- **File:** `src-tauri/src/cc_session/commands.rs:64` (+ WIP AC#6)
-- **Finding:** The `cc_kill` doc comment and the WIP acceptance criterion both say "SIGTERM → SIGKILL after a grace window," but `PtyCcSession::kill` actually goes `/exit\r` → poll `try_wait` ~3s → `child.kill()` (SIGKILL via portable-pty) — there is no SIGTERM step.
-- **Why it matters:** comment-vs-code drift; a future maintainer will look for a SIGTERM path that doesn't exist. The behavior is correct (clean `/exit\r` first is better than SIGTERM); the fix is to the comment wording, not the code.
-- **Suggested action:** reword the `cc_kill` doc comment to "`/exit\r` graceful, then SIGKILL after a grace window." Trivial.
-- **Priority:** low
-- **Status:** RESOLVED (already corrected in place; confirmed at debt-paydown WP5, 2026-06-30) — STALE PREMISE: the `cc_kill` doc already reads "(`/exit\r`, then SIGKILL fallback)" and a repo-wide grep finds ZERO "SIGTERM" strings. No code change.
-
-## SURFACE-2026-06-19-QUALITY-KILL-ALL-N-SCALING
-- **File:** `src-tauri/src/lib.rs:30-36` + `cc_session/mod.rs` `kill_all`/`kill`
-- **Finding:** `kill_all()` runs inside the `CloseRequested` handler while holding the registry `Mutex`, and each `kill()` polls `try_wait` for up to 3s. At Phase-1 N=1 this is invisible, but the loop is explicitly written "for N" — at N>1 it serializes 3s grace windows and can block window close for up to 3s×N.
-- **Why it matters:** the N-ready framing invites a future reader to assume `kill_all` scales; it doesn't. Surfaces when the Phase-2 N-clamp lifts.
-- **Suggested action:** at the N-clamp lift (Phase 2 multi-workspace), reap sessions concurrently or use a per-session timeout so window close isn't serialized. Tie to the WP13 multi-workspace work.
-- **Priority:** low
-- **Status:** RESOLVED (already fixed at M4 WP2; confirmed at debt-paydown WP4, 2026-06-30) — STALE FILE-REF (`lib.rs:30-36`; the `kill_all` call site moved to `lib.rs:371`). `SessionRegistry::kill_all` was parallelized at M4 WP2: it drains every session and spawns one thread per `kill()`, so the N×3s grace windows OVERLAP (~one window total). Covered by `kill_all_runs_grace_windows_in_parallel_not_serially`.
-
-## SURFACE-2026-06-19-QUALITY-ONSESSIONID-INLINE-ARROW-DEP
-- **File:** `src/components/workspace/Workspace.tsx:34` + `XtermPane.tsx` spawn-effect dep array
-- **Finding:** `onSessionId` is passed to `XtermPane` as an inline arrow (`(sid) => onSessionId?.(workspace.id, sid)`), a fresh reference every render, yet it sits in the spawn effect's dependency array. The `if (bridge.phase !== "spawning") return` guard makes the re-run a cheap no-op today, so this is NOT a live bug — but the dep array reads as if `onSessionId` identity is meaningful when the "spawn exactly once" safety is incidental (the phase guard), not structural.
-- **Why it matters:** a future edit weakening the phase guard could turn this into a double-spawn. Make the intent robust.
-- **Suggested action:** wrap the inline arrow in `useCallback` (memoized on `workspace.id` + the stable `onSessionId`) or read `onSessionId` from a ref in the effect. Fold into a `/feature-refactor` pass or Phase-2 picker/workspace work.
-- **Priority:** low
-- **Status:** RESOLVED (already fixed; confirmed at debt-paydown WP4, 2026-06-30) — `XtermPane.tsx` holds `onSessionId` in `onSessionIdRef` (the documented duplicate-CC-session root-cause fix, latent-since-WP7); the spawn effect no longer depends on the arrow's identity, so callback-identity churn can't re-fire the spawn.
-
-## SURFACE-2026-06-19-QUALITY-RAF-FOCUS-DUPLICATION
-- **File:** `src/components/workspace/XtermPane.tsx:159-162 / 91-94`
-- **Finding:** The rAF-deferred `fitAndResize` + `focus` pattern is duplicated at mount and post-spawn with near-identical inline comments explaining the 80-col layout-timing rationale.
-- **Why it matters:** low-stakes, but the doubled prose comment restates the same WHY twice; drift risk if the rAF rationale ever changes.
-- **Suggested action:** extract a tiny `rafFitFocus()` helper or have one comment cross-reference the other. Cleanup-only.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — took the comment-cross-reference path (no helper extraction): the mount-site rAF comment is now the CANONICAL 80-col-timing rationale; the post-spawn + on-active rAF sites trimmed to "rAF for the same layout-timing reason as the mount fit above." (Stale line-refs `159-162/91-94` → the three live sites are the mount fit, the post-spawn sync, and the on-active repaint.)
-
-# wp6-project-config-store — 2026-06-18
-
-2 MAJOR + 3 MINOR findings from `feature-review-quality` on ship commit `525b7e8` (0 CRITICAL). Backend rated exemplary; all findings are on the frontend picker's IPC boundary + two small backend nits. Auto-backlogged per drive_mode=autopilot (MAJOR + MINOR).
-
-## SURFACE-2026-06-18-QUALITY-PICKER-IPC-NO-ERROR-HANDLING
-- **File:** `src/components/picker/ProjectPicker.tsx:60-63` (mount loader) + `:69-85` (handlers)
-- **Finding:** Every `await invoke(...)` in the picker assumes success. (1) The mount `useEffect` loader has no `.catch` — its comment claims "a failed load leaves the list empty," but a rejected `list_projects` (e.g. backend `ConfigError::Parse` on a malformed `projects.json`, mapped to a `String` error) throws inside the async IIFE and is silently swallowed, so corruption presents as an empty recents list rather than a surfaced error. (2) `handleOpenRecent` / `handleOpenFolder` / `handleRemove` `await invoke(...)` with no error handling, dispatched via `onClick={() => void handle...()}` — a rejected command becomes an unhandled promise rejection with no user feedback (a dead click). ESLint config does not enable type-checked rules, so `no-floating-promises` does not catch it.
-- **Why it matters:** the backend's deliberate no-silent-wipe / typed-error posture is partially neutralized at the UI boundary where every failure path is dropped. Load-bearing for the Phase 2 multi-workspace shell where the picker stays mounted and errors must surface.
-- **Suggested action:** add a shared error-surfacing path (toast / inline message) and `.catch` on the mount loader that realizes the documented graceful-empty fallback while distinguishing it from a real error. Fold into a `/feature-refactor` pass or the Phase 2 picker work.
-- **Priority:** medium
-- **Status:** RESOLVED — implemented at M4 WP2 (P4.1/P4.2), confirmed at debt-paydown WP3 (2026-06-30). `ProjectPicker.tsx` now has a `PickerToast {kind:"info"|"error"}` surface, a pure `mapIpcError` helper (`picker/ipcError.ts`, unit-tested), a `.catch` on the mount loader distinguishing graceful-empty (backend returns `[]` for an absent file, no toast) from a real error (malformed `projects.json` → error toast), and try/catch on all three mutation handlers (`record_open`/`add_project`/`remove_project`). WP3 verified the fix is fully in place — the WBS task was written on the stale premise it was still open.
-
-## SURFACE-2026-06-18-QUALITY-PICKER-ADD-NO-REFRESH
-- **File:** `src/components/picker/ProjectPicker.tsx:78-79`
-- **Finding:** `handleOpenFolder` calls `add_project` then `onOpen(picked)` but never refreshes local `recents` state (unlike `handleRemove`, which does). A newly added folder doesn't appear in the list until the picker remounts. State-sync asymmetry between the two mutation paths.
-- **Why it matters:** minor in Phase 1 (picker likely unmounts on open), but a reader will trip over the asymmetry when the picker stays mounted in the multi-workspace shell.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP3) — `handleOpenFolder` now consumes `add_project`'s returned `Project` record and prepend-and-dedups it into local `recents` (newly-added/re-added path moves to front, matching the backend's most-recently-opened-first order), restoring symmetry with `handleRemove`.
-
-## SURFACE-2026-06-18-QUALITY-CMD-ADD-RECORD-IDENTICAL
-- **File:** `src-tauri/src/config_store/commands.rs:42-55`
-- **Finding:** `add_project` and `record_open` have byte-identical bodies (both delegate to `add_or_touch(&dir, ..., now_ms())`). The distinction is purely nominal at the IPC surface.
-- **Why it matters:** harmless and arguably intentional for frontend readability, but two identical implementations invite drift (a future maintainer "fixes" one, not the other). A one-line doc note that they are deliberately aliased — or collapsing to one command — would prevent it.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP3) — kept the two distinct IPC commands (the call-site names document intent: `add_project` from "Open Folder…", `record_open` from clicking a recent) and added a doc note on `add_project` stating the alias is deliberate + that the single point of truth is `add_or_touch` (split there if a per-entry-point contract ever diverges, not by editing one wrapper). `record_open`'s doc cross-references it.
-
-## SURFACE-2026-06-18-QUALITY-NOW-MS-EPOCH-SENTINEL
-- **File:** `src-tauri/src/config_store/commands.rs:28-33`
-- **Finding:** `now_ms()` swallows a pre-1970 `SystemTime` error with `.unwrap_or(0)`. A timestamp of `0` would silently sort that record last forever rather than surfacing the anomaly — `0` collides with the recency-ordering invariant if it ever fires.
-- **Why it matters:** trivial in practice (clock-before-epoch is not real); flagged only because `0` is a sentinel colliding with an invariant.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP3) — `now_ms` no longer falls back to `0`. On the (unreal) pre-epoch-clock error it logs the clock fault and stamps `i64::MAX`, so a just-opened project sorts FIRST (matching the user's intent) instead of silently sinking to the bottom of recents. The sentinel/invariant collision is gone and the anomaly is surfaced, not swallowed.
-
 # wp5-frontend-ui-prototype — 2026-06-18
 
 3 MINOR findings from `feature-review-quality` on ship commit `777c0b8` (0 CRITICAL, 0 MAJOR). All cosmetic stylesheet/intent-clarity nits, zero correctness impact. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-18-QUALITY-WP5-FILMSTRIP-FLEX-SHRINK
-- **File:** `src/App.css:88`
-- **Finding:** `.filmstrip` declares `flex-shrink: 0`, but its parent `.app-shell` is `display: grid` (not flex) — the property is inert. The grid row sizing (`grid-template-rows: auto 1fr`) is what reserves the strip.
-- **Why it matters:** dead/misleading style declaration in a substrate file Phase 2 (WP16 filmstrip) will build on; a reader may infer a flex layout that doesn't exist.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — inert `flex-shrink: 0` removed from `.filmstrip` (parent `.app-shell` is `display: grid`; the `auto 1fr` row sizing reserves the strip).
 
 ## SURFACE-2026-06-18-QUALITY-WP5-XTERMPANE-EFFECT-DEP
 - **File:** `src/components/workspace/XtermPane.tsx:60`
@@ -1098,14 +695,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-06-20-QUALITY-WP3A-COMMENT-TRIPLICATION
-- **File:** `src/components/workspace/editor/editorExtensions.ts:1-19` + `EditorPanel.tsx:97-104`
-- **Finding:** The `Prec.highest` / `@uiw reconfigures on array-identity` rationale is restated across three prose blocks (builder header, `coreKeymap` doc, EditorPanel `useMemo`).
-- **Why it matters:** Accurate and WHY-focused, but a future edit to the precedence story must touch three places — a mild maintenance smell.
-- **Suggested action:** Consolidate to one canonical note and reference it from the others.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — the `languageOverrideId` doc in `editorExtensions.ts` (which already carries the fullest array-identity-reconfigure rationale + the `cm6-dont-copy-compartment-by-analogy` memory link) is the canonical anchor; the `EditorPanel.tsx` `useMemo` comment trimmed to a back-reference to it. The builder header keeps its `Prec.highest`-specific note (a different axis). 784 tests green.
-
 # m2-wp3c-editor-split-panes — 2026-06-20
 
 3 MINOR findings from `feature-review-quality` on ship commit `b72ed30` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built, low-debt, fitting the codebase grain (pure minimal pane reducer, panel-level shared-document boundary respected end-to-end, proportionate tests asserting reference identity for no-ops). All three are cosmetic comment/duplication nits. Auto-backlogged per drive_mode=autopilot.
@@ -1118,14 +707,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-06-20-QUALITY-WP3C-IS-SPLIT-PREDICATE-DUP
-- **File:** `src/components/workspace/editor/EditorPanel.tsx` (`splitable = panes.panes.length > 1`) vs `src/App.css` (`.editor-panes:has(.editor-pane + .editor-pane)`)
-- **Finding:** The "is-split" condition is encoded in two languages — the JS `splitable` const (gates the close ✕) and the CSS `:has(.editor-pane + .editor-pane)` selector (gates the active-pane accent). They agree today but are a drift pair if the split-threshold ever changes.
-- **Why it matters:** low cost now; a single source (e.g. a `data-split` attribute on the `.editor-panes` container that the CSS keys off) would collapse the duplication.
-- **Suggested action:** Optionally set `data-split={splitable}` on `.editor-panes` and change the CSS to `.editor-panes[data-split="true"] .editor-pane[data-active-pane="true"]::before`. Low priority / discipline only.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme H) — single-sourced the `splitable` predicate: `data-split={splitable}` set on `.editor-split-panes` (the class was renamed from `.editor-panes` since this finding), CSS now keys off `[data-split="true"] .editor-split-pane.is-active::before` instead of a re-derived `:has(.editor-split-pane + .editor-split-pane)` selector. The >1-pane threshold lives in one place (EditorSplit). (Note: the finding's `.editor-pane`/`data-active-pane` names had drifted — `data-active-pane` was deleted in WP1; the live classes are `.editor-split-pane`/`.is-active`.)
-
 ## SURFACE-2026-06-20-QUALITY-WP3C-REDUNDANT-JSX-COMMENT
 - **File:** `src/components/workspace/editor/EditorPanel.tsx:295` (the `.editor-panes` inline comment)
 - **Finding:** The inline JSX comment restates the shared-doc rationale ("vertical stack of panes… each pane is a viewport onto the shared doc") that is already stated authoritatively in the file header and in `editorPanes.ts` — WHAT-not-WHY redundancy.
@@ -1137,22 +718,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 # m2-wp4-git-diff-viewer — 2026-06-20
 
 4 MINOR findings from `feature-review-quality` on ship commit `4e2d742` (0 CRITICAL, 0 MAJOR). Reviewer verdict: well-built, advances the codebase, no refactor warranted. Findings are doc-comment drift left by the PB.7 removal sweep (2) + dead diff-option config (1) + a frontend clarity nit (1). All low priority. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-20-QUALITY-WP4-STALE-FILE-BASE-DOCLINK
-- **File:** `src-tauri/src/git_diff/mod.rs:49` (`ChangedFile.path` rustdoc)
-- **Finding:** rustdoc links to `[file_base_core]`, which was deleted in PB.7. Dangling intra-doc link (rustdoc::broken-intra-doc-links isn't in the clippy gate, so it slipped the green baseline).
-- **Why it matters:** future reader follows a link to a function that no longer exists; the WP's own removal-sweep discipline missed its own doc reference.
-- **Suggested action:** drop the `[file_base_core]` reference from the doc-comment (the path is the key passed to `git_file_hunks` + `read_file` now).
-- **Priority:** low
-- **Status:** RESOLVED (already corrected in place; confirmed at debt-paydown WP5, 2026-06-30) — STALE PREMISE: `git_diff/mod.rs`'s `ChangedFile.path` rustdoc already links `[file_hunks_core]` (no `file_base_core` anywhere in the tree); `rustdoc -D broken_intra_doc_links` clean. No edit.
-
-## SURFACE-2026-06-20-QUALITY-WP4-WRONG-DIFF-API-COMMENT
-- **File:** `src-tauri/src/git_diff/mod.rs:327` (`file_hunks_core` doc-comment)
-- **Finding:** doc describes the unstaged path as `diff_tree_to_workdir_with_index`, but the code (line ~352) calls `diff_index_to_workdir` (working-tree-vs-index). Different diff semantics; the comment names the wrong API on the subtle staged/unstaged split.
-- **Why it matters:** a maintainer reasoning about staged/unstaged correctness from the comment would be misled — and that split is the trickiest part of the module.
-- **Suggested action:** correct the comment to `diff_index_to_workdir` (or, if vs-HEAD-merged was actually intended, change the code — but the tests pin the current `diff_index_to_workdir` behavior, so fix the comment).
-- **Priority:** low
-- **Status:** RESOLVED (already corrected in place; confirmed at debt-paydown WP5, 2026-06-30) — STALE PREMISE: `file_hunks_core`'s doc already names `diff_index_to_workdir` for the unstaged path (no `diff_tree_to_workdir_with_index` anywhere); matches the code. No edit.
 
 ## SURFACE-2026-06-20-QUALITY-WP4-DEAD-UNTRACKED-OPTS-STAGED
 - **File:** `src-tauri/src/git_diff/mod.rs:338-344` (`file_hunks_core` DiffOptions)
@@ -1219,14 +784,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-06-20-QUALITY-WP5-WP2-OPENBAR-STOPGAP-RELOCATED
-- **File:** `src/components/workspace/RightPanelHost.tsx:38-44` (`pathInput`/`openPath` open-bar)
-- **Finding:** The WP2 temporary open-file path-box was lifted verbatim into RightPanelHost and still carries its "temporary until WP6 finder" comment, now one layer from where WP6 will replace it. Correctly out of scope to remove in WP5.
-- **Why it matters:** trivial; flagged only to confirm the stopgap wasn't accidentally promoted to permanent during the lift. No new debt — just relocated.
-- **Suggested action:** WP6 removes it when the Cmd+P finder lands. No action now.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-20 — WP6 (commit fc77ad4) removed the `editor-open-bar` form + `pathInput` state from RightPanelHost (and its orphaned CSS); the Cmd+P FileFinder replaces it. The `openPath`/`setOpenPath` seam stays (now driven by the finder + diff "Open").
-
 # m2-wp6-file-finder — 2026-06-20
 
 3 MINOR findings from `feature-review-quality` on ship commit `fc77ad4` (0 CRITICAL, 0 MAJOR). The feature is well-built and low-debt — reviewer validated correctness (deterministic tiebreak sort, greedy subsequence matcher, async cancellation, chord exclusivity) and consistency with repo seams. All three are minor overlay/doc nits. Auto-backlogged per drive_mode=autopilot.
@@ -1254,74 +811,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Suggested action:** Optionally gate the hover-set on actual pointer movement, or leave (matches CommandPalette). Low value.
 - **Priority:** low
 - **Status:** pending
-
-# m2-wp12-editor-tab-strip — 2026-06-21
-
-_From `feature-review-quality` on ship commit `f2c86d7`. 0 CRITICAL, 0 MAJOR, 3 MINOR (all priority: low). Reviewer rated the feature well-built, low-debt, advancing the codebase; no refactor pass warranted. WP12 = editor multi-file tab strip (per-pane split-editor groups + shared document store + disk-change detection + synthetic read-only buffer hook)._
-
-## SURFACE-2026-06-21-QUALITY-WP12-DEAD-TAB-DIRTY-FIELD
-- **Severity:** MINOR (priority: low)
-- **Location:** `src/components/workspace/editor/openFiles.ts:39-40, 66-68, 150-161` (+ its tests in `__tests__/openFiles.test.ts:196-227`)
-- **Finding:** `OpenFile.dirty` field + the `set-dirty` event are DEAD in production. After the Phase-2S back-loop moved dirty to the shared document store, `PaneTabs.tabIsDirty` reads `isDirty(docs.byPath[path])`; nothing dispatches `set-dirty` outside its own unit test.
-- **Why it matters:** a future reader will assume the tab-level `dirty` flag is load-bearing and try to keep it in sync, reintroducing the per-view dirty-tracking the shared-doc model deliberately removed.
-- **Pickup:** remove the `dirty` field from `OpenFile`, the `set-dirty` event from the reducer, and the 3 `set-dirty` tests. Quick `/feature-refactor`.
-- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — deleted the `OpenFile.dirty` field, the `set-dirty` event from the reducer + its `case`, the two `dirty: false` literals (file/synthetic tab builders), and the 4-test `set-dirty` describe block + the `dirty: false` assertion lines in `openFiles.test.ts`. Header comment rewritten to point at the `editorDocs` store as the dirty source of truth. vitest 297 (was 301; −4), tsc/eslint/prettier clean.
-
-## SURFACE-2026-06-21-QUALITY-WP12-CLOSE-GUARD-OVERWARNS-MULTIVIEW
-- **Severity:** MINOR (priority: low)
-- **Location:** `src/components/workspace/editor/PaneTabs.tsx:186-206` (the dirty-close guard) — needs the store's refCount, which lives in `editorDocs.DocEntry.refCount`.
-- **Finding:** the dirty-close guard prompts save/discard/cancel whenever `tabIsDirty`, but when the same dirty file is open in another pane (refCount > 1) closing THIS tab loses nothing — the buffer survives in the other view. The operator is warned about changes that aren't at risk.
-- **Why it matters:** a spurious "unsaved changes" modal on every multi-view tab close trains the operator to click through it reflexively, eroding the guard for the case that matters. Not a correctness bug (no data loss either way) → MINOR.
-- **Pickup:** only raise the close guard when it's the LAST view of a dirty doc (dirty AND `docs.byPath[path].refCount <= 1`); a non-last view closes immediately. Needs threading refCount into `PaneTabs` (it already receives `docs`). Quick `/feature-refactor`.
-- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — `PaneTabs.requestClose` now reads `docs.byPath[path].refCount` and only raises the unsaved-changes confirm when the tab is dirty AND `refCount <= 1` (the last view); a non-last view of a dirty doc closes immediately since the buffer survives in the other pane. WHY-comment added explaining the multi-view case. All gates green (vitest 297, tsc/eslint/prettier).
-
-## SURFACE-2026-06-21-QUALITY-WP12-INTRA-FEATURE-PHASE-TAGS
-- **Severity:** MINOR (priority: low)
-- **Location:** file headers of `EditorSplit.tsx` / `PaneTabs.tsx` (Phase 4/2S) / `confirmDialog.ts` (Phase 3) / `diskConflict.ts` (Phase 3) / `editorDocs.ts` (Phase 2S).
-- **Finding:** intra-feature build-phase tags ("Phase 2S/3/4") are internal to this one feature's build and reference no shared roadmap; they'll read as dangling references to a future maintainer.
-- **Why it matters:** trivial, but the inconsistent intra-feature phase labels age poorly; a single "WP12" prefix would be self-explanatory.
-- **Pickup:** s/Phase 2S|3|4/WP12/ in the affected file-header comments. Trivial `/feature-refactor` or leave.
-- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — stripped all intra-feature `Phase 2S/3/4` build-phase tags from the comments in `EditorSplit.tsx`, `PaneTabs.tsx`, `confirmDialog.ts`, `diskConflict.ts`, and `editorDocs.ts` (the `WP12` feature prefix on the file-header lines is kept; the dangling sub-phase qualifiers are gone). No code change; tsc/eslint/prettier clean.
-
-# m2-wp7-project-search — 2026-06-21
-
-_From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`. 0 CRITICAL, 2 MAJOR, 2 MINOR. Reviewer rated the feature well-built, advancing the codebase more than it accrues debt; no refactor pass warranted. The 2 MAJORs are latent design seams for a single-user app (auto-backlogged per drive_mode=autopilot, Case B); the 2 MINORs are polish (auto-backlogged). WP7 = project-wide find/replace: Phase 2 (search → Find Results synthetic tab) + Phase 3 (project-wide Replace All)._
-
-## SURFACE-2026-06-21-QUALITY-WP7-REPLACE-THEN-RESEARCH-TWO-WALKS
-- **Severity:** MAJOR (priority: medium)
-- **Location:** `src-tauri/src/project_search/mod.rs` `replace_core` + `src/components/workspace/RightPanelHost.tsx` `onReplaceConfirm`
-- **Finding:** Replace All runs `project_replace` then issues a SEPARATE `project_search` to refresh the Find Results tab — two independent, unsynchronized full-tree walks with no locking between them. A file changing on disk between the two walks (CC writing in the workspace, the open editor saving) can make the refreshed tab + the `lastCounts` gate disagree with what was actually written. The `ReplaceSummary` the backend already computes + returns is discarded in favor of the second walk.
-- **Why it matters:** the authoritative replace count is thrown away and reconstructed via a racy second pass. Low-probability for a single-user app, but the read-after-write-across-two-walks assumption is unrecorded.
-- **Suggested action:** use the returned `ReplaceSummary` for the post-replace count surface; if a refreshed result LIST is still wanted, accept it's a best-effort re-walk (document that) OR have `project_replace` return the post-replace matches in one pass. Pairs with any future replace-scope work (the deferred per-result/per-file item).
-- **Priority:** medium
-- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — documented the two walks as deliberate: the re-search IS the tab-refresh mechanism (the tab shows the post-replace result SET, not just a count), explicitly best-effort for this single-user app (the disk-change-between-walks case is the deferred-watcher's domain), and surfacing the `ReplaceSummary` count as a toast is intentionally out-of-scope-for-v1 NEW UX. Comment added in `RightPanelHost.onReplaceConfirm`. No behavior change (a summary toast would be a feature, not cleanup).
-
-## SURFACE-2026-06-21-QUALITY-WP7-PERLINE-COUNT-VS-MULTILINE-REPLACE
-- **Severity:** MAJOR (priority: medium)
-- **Location:** `src-tauri/src/project_search/mod.rs:246-262` (`replace_core` match-count loop)
-- **Finding:** `matches_replaced` is computed by a per-line `re.find_iter(l).count()` sum, but the actual mutation is whole-file `re.replace_all(&contents, …)`. In regex mode an operator can supply a cross-line pattern (`(?s)…`, explicit `\n`) where `replace_all` mutates spans the per-line counter never counted — so the confirm's "Replace N matches" count under-reports vs the on-disk effect. Search shares the per-line limitation (so the Find Results tab stays self-consistent with the count), but the summary count and the on-disk mutation can silently diverge once multiline regex is in play. No test/guard covers the cross-line case.
-- **Why it matters:** the count the operator approves in the confirm is not guaranteed to equal what replace mutates under a multiline regex; the blast-radius number could mislead.
-- **Suggested action:** either count from the `replace_all` result so count == effect, OR explicitly reject/guard multiline patterns in replace with a clear error. Tie to whichever lands first.
-- **Priority:** medium
-- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — took the count-from-whole-file fix: `replace_core` now counts `re.find_iter(&contents).count()` over the SAME whole-file string `replace_all` mutates (was a per-line sum). For a line-oriented pattern this equals the per-line count (so it still agrees with search for today's queries); under a multiline `(?s)` pattern count == effect, no divergence. Pinned by a new test `replace_count_matches_whole_file_effect_under_multiline_regex` (cargo 121, +1). No behavior change for current inputs.
-
-## SURFACE-2026-06-21-QUALITY-WP7-SYNTHETIC-FONT-NOT-LIVE
-- **Severity:** MINOR (priority: low)
-- **Location:** `src/components/workspace/editor/SyntheticView.tsx:60-78`
-- **Finding:** `loadFontSize()` is captured once inside a `useMemo` keyed on `[onLineClick, highlights]`, so the Find Results tab only picks up the persisted zoom when those deps change (e.g. a re-search) — unlike `EditorPanel`, which reconfigures font size LIVE via the `fontSizeCompartment`. Zooming the file editor while the Find Results tab is the active view (no re-search) won't update the tab until the next search.
-- **Why it matters:** small UX inconsistency vs the editor's live zoom; the WP7 verify-human fix targeted open-time parity, so it's likely acceptable, but the divergence is undocumented at the call site. (NB: the global memory `cm6-dont-copy-compartment-by-analogy` warns against reflexively adding a live compartment — so a one-shot read may be the deliberate choice; this is a doc/clarity nit, NOT a directive to add the compartment.)
-- **Suggested action:** add a one-line comment noting the synthetic view reads zoom at render-time (not live, by design), or wire a live re-read if a future cycle wants the tab to track zoom. Lowest priority.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — added a comment at the `fontSizeTheme(loadFontSize())` call in `SyntheticView` explaining it's read ONCE by design (not live like EditorPanel's compartment), why (read-only result buffer; a live compartment here would be the [[cm6-dont-copy-compartment-by-analogy]] trap), and that a re-render (e.g. re-search) is when it updates. Comment-only.
-
-## SURFACE-2026-06-21-QUALITY-WP7-PLURAL-DUP
-- **Severity:** MINOR (priority: low)
-- **Location:** `src/components/workspace/search/findResultsBuffer.ts:96` & `src/components/workspace/search/replaceConfirm.ts:14`
-- **Finding:** The two-noun `plural()` helper (identical body, identical `"file" | "match"` union) is duplicated verbatim across both new modules.
-- **Why it matters:** low-cost dedup; two copies drift independently if a third noun is ever added.
-- **Suggested action:** hoist one shared `plural()` into `searchModel.ts` (where `totalMatchCount` already lives) and import it in both. Trivial `/feature-refactor`.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-21 (`/feature-refactor`) — hoisted to `searchModel.ts` as exported `pluralCount(n, "file"|"match")`; `findResultsBuffer.ts` + `replaceConfirm.ts` both import it; the two local copies deleted. vitest 308 still green (the existing formatter/confirm tests cover the output).
 
 # m3-wp4-status-broadcaster — 2026-06-22
 
@@ -1379,13 +868,6 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-06-23-QUALITY-WP2-OVERLAY-DEAD-BACKDROPREF
-- **File:** `src/components/picker/PickerOverlay.tsx:24,41`
-- **Finding:** `backdropRef` is created + attached to the backdrop div but never read (backdrop-close uses `e.target === e.currentTarget`). Dead code implying an abandoned approach.
-- **Suggested action:** remove the unused ref.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — `backdropRef` (decl + `ref=` attr) removed; the now-unused `useRef` import dropped. ESLint + 780 tests green.
-
 # m4-wp3-filmstrip — 2026-06-23
 
 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship `920678a`.
@@ -1395,12 +877,6 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Suggested fix:** add `inert` to the hidden branch (doesn't affect FitAddon/serialize, doesn't change layout).
 - **Priority:** low (genuine minor a11y/focus regression; low-effort)
 - **Status:** pending
-
-## SURFACE-2026-06-23-QUALITY-WP3-CHORD-EFFECT-THRASH
-- **Finding:** `App.tsx:62-79` — the ⌘⇧+digit `useEffect` depends on `tiles`, whose identity churns on every reorder-move + status update, so the document keydown listener re-subscribes frequently. Correct but thrashy.
-- **Suggested fix:** hold latest `tiles` in a `useRef`, read it inside a stable handler registered once.
-- **Priority:** low
-- **Status:** RESOLVED (debt-paydown WP4, 2026-06-30) — `tiles` + `focusWorkspace` lifted into `switchTilesRef`/`focusWorkspaceRef` (the `focusedPathRef` idiom); the ⌘⇧+digit capture-phase listener now registers ONCE per `[view]` transition instead of re-subscribing on every `tiles` churn.
 
 ## SURFACE-2026-06-23-QUALITY-WP3-TICKER-EFFECT-DUAL-RESPONSIBILITY
 - **Finding:** `Filmstrip.tsx:113-126` — the active-tile stale-mirror clear shares the ticker `useEffect` (two responsibilities; a future ticker-dep edit could shift clear timing). Works + commented.
@@ -1448,13 +924,6 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 
 2 MINOR findings from `feature-review-quality` on ship commit `47fdeb9` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature clean and convention-adherent — pure-predicate + app-level-listener split is the right factoring, disjointness vs the neighbouring ⌘N chord is bidirectionally documented, the listener is a near-verbatim clone of the proven ⌘⇧+digit effect. Accrues no debt. Both findings are low-effort honesty/hygiene nits, neither a behavior bug. Auto-backlogged per drive_mode=autopilot.
 
-## SURFACE-2026-06-25-QUALITY-WP6-TEST-CTRLALT-NAME-OVERPROMISE
-- **File:** `src/components/workspace/__tests__/newWorkspaceChord.test.ts:46-49`
-- **Finding (MINOR):** the final case is titled "is permissive on Ctrl/Alt" but the literal sets neither `ctrlKey` nor `altKey` (the `NewWorkspaceChordEvent` interface omits both fields), so it is identical in effect to the earlier uppercase-N positive. The assertion passes but does not exercise the permissiveness its name promises — a reader trusting the title would believe Ctrl/Alt coverage exists when it doesn't.
-- **Fix shape:** either widen the interface to include optional `ctrlKey`/`altKey` and add `ctrlKey: true, altKey: true` to the literal, or simply retitle the case to match what it tests. Trivial.
-- **Priority:** low (test-naming/coverage-honesty nit; predicate behavior is correct).
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP6, Theme F/H) — widened: `NewWorkspaceChordEvent` now aliases the canonical `ChordEvent` (optional `ctrlKey/altKey`), and the case sets both `true`, so it actually exercises the permissiveness its name claims.
-
 ## SURFACE-2026-06-25-QUALITY-WP6-CHORD-MAP-XREF-HYGIENE
 - **File:** `src/components/workspace/newWorkspaceChord.ts:6`
 - **Finding (MINOR):** header cites "the chord-ownership map in editor/paletteCommands.ts" (same citation as sibling `workspaceSwitchChord.ts`) — a cross-reference that drifts silently if the map ever moves/renames. Confirmed present + correct this session, so no action needed today; flagged only as cross-reference hygiene for a future map-relocation.
@@ -1466,43 +935,15 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `f18f1e0`. Knowledge-producing probe (VERDICT: ADOPT); minimal executable footprint (dev-only bridge wiring), correctly release-gated three ways. Reviewer verdict: well-built, every non-obvious trap documented at its site, no refactor warranted. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
 
-## SURFACE-2026-06-26-QUALITY-WP2-UNPINNED-MCP-SERVER
-- **Finding:** Tracked `.mcp.json` registers `npx -y @hypothesi/tauri-mcp-server` (unpinned — runs latest each invocation) for every checkout, so any MCP-aware client in the repo can auto-fetch + launch a third-party npm package that drives the live WKWebView. Intentional per the ADOPT verdict and read-only/dev-facing, but the unpinned auto-`npx -y` is a small standing supply-chain/reproducibility surface.
-- **Where:** `.mcp.json:1-9`.
-- **Fix shape:** pin the version (`@hypothesi/tauri-mcp-server@0.11.2`, matching the Rust plugin 0.11.2) in the `args` array, OR add a one-line note in the wbs.md verdict's wiring-disposition acknowledging the unpinned surface. Lowest-risk = pin the version.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP7) — pinned `.mcp.json` `args` to `@hypothesi/tauri-mcp-server@0.11.2` (verified the latest published version + matches the Rust `tauri-plugin-mcp-bridge` `0.11` line).
-
 ## SURFACE-2026-06-26-QUALITY-WP2-LINGERING-ALLOW-UNUSED-MUT
 - **Finding:** The dev-only bridge block mutates `builder` after the initial `.plugin(...)` chain, requiring `#[allow(unused_mut)] let mut builder`. Correct idiom for conditional plugin registration, but the `#[allow(unused_mut)]` masks the release-build case where `builder` is never reassigned — a small latent lint-suppression.
 - **Where:** `src-tauri/src/lib.rs:65-72` (approx; the `let mut builder` restructure).
 - **Fix shape:** no action needed while the bridge stays dev-only-conditional; if WP2 wiring is ever torn down or made unconditional, drop the `#[allow]` rather than let it linger. Track-only.
 - **Priority:** low
 
-## SURFACE-2026-06-26-QUALITY-WP2-RECIPE-WRONG-WAIT-TOKEN
-- **Finding:** The verify-self invocation recipe (wbs.md WP2 verdict, step 1) says wait for `":9223 LISTEN"`, but the actual dev-server stdout tokens are `"MCP Bridge plugin initialized … 127.0.0.1:9223"` / `"WebSocket server listening on: 127.0.0.1:9223"`. `LISTEN` is an `lsof`/`netstat` artifact, not a stdout string — a future session grepping stdout for `LISTEN` will miss it and waste a cycle.
-- **Where:** `docs/product/wbs.md`, WP2 verdict, recipe step 1.
-- **Fix shape:** reword the recipe's wait-token to the real stdout line (`"WebSocket server listening on"`), or note that `LISTEN` requires `lsof -iTCP:9223 -sTCP:LISTEN` rather than a stdout grep. One-line doc edit.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-26 (M5 WP3 P1.5) — wbs.md recipe step 1 now waits for `"WebSocket server listening on: 127.0.0.1:9223"` with a note that `LISTEN` is an lsof/netstat artifact, not a stdout token.
-
 # m5-wp3-pip-nspanel-status-core — 2026-06-26
 
 2 MAJOR + 3 MINOR findings (0 CRITICAL) from `feature-review-quality` on ship commit `95292d6`. Reviewer verdict: well-built, advances the codebase more than it accrues debt; the 2 MAJOR are NOT bugs at the shipped baseline (both benign on WP3's only lifecycle path) but are latent desyncs the **M5 WP5 lifecycle work will trip over** — carry into WP5 scope, not a standalone refactor. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-26-QUALITY-WP3-UNSYNCED-FILMSTRIP-INTERVAL
-- **Finding:** The filmstrip retains its OWN `setInterval(1000)` DOM-write loop (Filmstrip.tsx ~199-212), unsynchronized with the App-level `useMirrorTicker` serialize loop (also 1000ms). The two intervals start at different times and drift in phase, so the filmstrip can read a `mirrorFrame` snapshot up to ~1s stale relative to the serialize. "Exactly ONE serialize ticker" holds for *serialize*, but the codebase now has two unsynced 1fps intervals doing mirror work.
-- **Where:** `src/components/workspace/Filmstrip.tsx` mirror useEffect (~199-212) vs `src/components/workspace/useMirrorTicker.ts` interval.
-- **Fix shape:** have `useMirrorTicker` push directly into the filmstrip's mirror refs (as it already conceptually does for the PiP via emit), eliminating the filmstrip's second interval — OR phase-lock them. Defer to WP5 (lifecycle/cost work) so the render-cost story is consolidated there.
-- **Priority:** medium
-- **Status:** RESOLVED 2026-06-27 (M5 WP5 P2.5, commit f6e3929) — added `subscribeMirrorFrame` to `mirrorFrame.ts`; the Filmstrip's 2nd `setInterval` is gone, replaced by a subscription fired in-lockstep from `useMirrorTicker.setMirrorFrame` (one mirror loop, no phase drift).
-
-## SURFACE-2026-06-26-QUALITY-WP3-TEARDOWN-SKIPS-VISIBILITY-BROADCAST
-- **Finding:** `pip::commands::teardown()` (called from lib.rs CloseRequested) closes the panel but does NOT emit `pip-visibility false`, so `useMirrorTicker.pipShown` stays `true` after a programmatic teardown — the ticker keeps serializing the full N set (incl. center stage) + attempting `pip-mirror` emits to a dead label. Harmless on app-close (the only current teardown path), but a latent cost-gate desync the moment a non-toggle close path is added.
-- **Where:** `src-tauri/src/pip/commands.rs` `teardown()`; `src-tauri/src/lib.rs` CloseRequested handler.
-- **Fix shape:** emit `pip-visibility false` in `teardown()` (or wherever WP5 adds a programmatic hide/close), so the cost gate stays honest. Natural WP5 scope (WP5 builds the toggle + lifecycle).
-- **Priority:** medium
-- **Status:** RESOLVED 2026-06-27 (M5 WP5 P1.3, commit f6e3929) — `teardown()` now emits `pip-visibility false` after `to_window().close()`.
 
 ## SURFACE-2026-06-26-QUALITY-WP3-DUP-MIRROR-INTERVAL-CONST
 - **Finding:** `MIRROR_INTERVAL_MS = 1000` is duplicated as a module literal in both `Filmstrip.tsx` and `useMirrorTicker.ts`. The rate is meant to be shared ("the WP4-probe-validated background mirror rate"); two independent literals can drift on a future tuning change.
@@ -1528,27 +969,6 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 # m5-wp4-pip-layout-modes-switcher-resize — 2026-06-26
 
 4 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `d38a191`. Reviewer verdict: well-built, high-discipline, negligible debt — all four are comment/vestige drift, none affecting correctness. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-26-QUALITY-WP4-PIPMOVE-COMMENT-INACCURATE
-- **Finding:** `pip_move`'s doc comment (src-tauri/src/pip/commands.rs) claims it uses "the same raw-msg_send path `set_content_size` uses safely" — but `set_content_size` (used by `pip_resize`) is a tauri-nspanel WRAPPER method, while `pip_move` uses a raw `msg_send!` on `panel.as_panel()`. Both are safe AppKit frame-mutations, but the stated equivalence is inaccurate.
-- **Why it matters:** the comment is load-bearing safety justification for an `unsafe` block; an inaccurate basis weakens it for a future auditor.
-- **Suggested action:** reword to "a safe AppKit frame-mutation like `set_content_size` (which wraps `setContentSize:`); here we send `setFrameOrigin:` directly" — distinguish wrapper vs raw.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — `pip_move`'s doc reworded to distinguish wrapper-vs-raw: "a safe AppKit frame-mutation like `set_content_size` (tauri-nspanel's wrapper over `setContentSize:`); here we send `setFrameOrigin:` as a raw `msg_send!` directly. Both are frame changes, NOT a style-mask transition." cargo + clippy clean.
-
-## SURFACE-2026-06-26-QUALITY-WP4-STALE-AWAITING-SCALE-COMMENT
-- **Finding:** pipFanoutWiring.test.ts (~line 211) comment says ".pip-tile-awaiting is the EMPHASIS hook (CSS scales + glows the dot)" — but the dot-size scale was DROPPED per operator feedback (P4.2 refinement); the shipped CSS adds only a glow halo, no transform.
-- **Why it matters:** contradicts shipped behavior + the corrected Pip.tsx/CSS comments; mild confabulation risk for the next reader.
-- **Suggested action:** update the test comment to "glows the dot (no size scale — operator dropped the scale, blink + glow only)".
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — `pipFanoutWiring.test.ts` comment corrected to "glows the dot — no size scale; operator dropped the scale in P4.2, blink + glow only," matching the shipped `.pip-tile-awaiting` CSS (glow halo, no transform). 784 tests green.
-
-## SURFACE-2026-06-26-QUALITY-WP4-VESTIGIAL-DRAG-REGION
-- **Finding:** `pip-root` + `.pip-switch-row` still carry `data-tauri-drag-region`, which the commit itself establishes is INERT on this swizzled borderless NonactivatingPanel (the real drag is the JS `startPanelDrag` → `pip_move`). The attributes are harmless but misleading.
-- **Why it matters:** a future maintainer could "fix" a drag bug by trusting the dead attribute — the exact confusion the Phase-5 work resolved.
-- **Suggested action:** remove the `data-tauri-drag-region` attributes (or leave one with a comment "// inert on NSPanel — see pip_move; kept only as documentation"). Decide remove-vs-annotate.
-- **Priority:** low
-- **Status:** RESOLVED 2026-06-30 (debt-paydown WP1) — DECIDED remove: dropped the 3 vestigial `data-tauri-drag-region` attrs (`pip-root`, `.pip-switch-row`, the `={false}` on the switcher button) + repointed the 3 stale comments that referenced them to the real `startPanelDrag`→`pip_move` path (kept as documentation that the attr is inert). pip wiring tests (38) green.
 
 ## SURFACE-2026-06-26-QUALITY-WP4-DRAG-CLICK-BOUNDARY-IMPLICIT
 - **Finding:** `startPanelDrag` registers window mousemove/up listeners + calls preventDefault even on a zero-distance click (one that never moves); benign because mouseup always fires + cleans up, but the click-vs-drag arbitration on the switch row is implicit.
