@@ -84,13 +84,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-06-28-QUALITY-WP7-THIRD-RESOLVE-DATA-DIR-COPY
-- **Severity:** MINOR
-- **Finding:** `cc_session/commands.rs` adds a third module-local copy of `resolve_data_dir` (originals in `config_store::commands` + `pip::commands`), each with the same "kept module-local — those are private" comment. Trivial drift risk.
-- **Fix shape:** if a fourth consumer ever appears, promote to a shared `pub(crate)` helper (e.g. in `config_store`) and retire the three copies. No action needed at three.
-- **Priority:** low
-- **Status:** pending
-
 # wp6-filetree-shows-ignored-files — 2026-06-28
 
 *(feature-review-quality on ship commit 61db3d4; Mode 3 autopilot auto-backlog. 0 CRITICAL / 1 MAJOR / 3 MINOR. The MAJOR is a load-bearing-but-trivial cleanup — remove the now-dead `ignore` crate; the MINORs are doc/cosmetic. Reviewer: "well-built; the only follow-up is removing the now-unused dependency.")*
@@ -149,13 +142,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Severity:** MINOR
 - **Finding:** `Workspace.tsx` `const [, setTerminalFontSize] = useState<number>(loadTerminalFontSize)` keeps a state cell whose VALUE binding is intentionally unused — only the setter is read, inside `applyTerminalZoom`'s functional updater (the batch-safe prior-size source). The empty destructure + the "value never drives a render" shape can puzzle a future maintainer.
 - **Fix shape:** either leave as-is (the functional-updater read is genuinely the cleanest batch-safe pattern; the in-code comment already justifies it) OR swap to a `useRef` updated inside the same updater body for the same prior-value semantics without an unused state slot. Reviewer called it a defensible tradeoff, not a defect.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-27-QUALITY-WP4-THIRD-ZOOM-MODULE-COPY
-- **Severity:** MINOR
-- **Finding:** `terminalFontZoom.ts` is a near-verbatim duplicate of `editor/fontZoom.ts` (clamp/next/load/save/safeStorage differ only in constant values + the localStorage key string). This is the third per-surface zoom module (editor, now terminal) following the established copy convention — consistent with the repo's per-pref-helper pattern, so not a finding to act on now.
-- **Fix shape:** when a FOURTH zoom surface appears (e.g. WP10 right-panel terminal zoom — though that likely reuses `terminalFontZoom.ts` directly), make a deliberate "extract a shared `makeFontZoom(config)` factory vs. keep copying" decision rather than a reflexive next copy. No action until then.
 - **Priority:** low
 - **Status:** pending
 
@@ -357,13 +343,13 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `b377a97` (0 CRITICAL). Reviewer rated it well-built — clean pure/runtime/render layering, faithful wire-contract mirror, exemplary dead-code-allow retirement. The one real blemish is a dead snippet/tooltip path. Auto-backlogged per drive_mode=autopilot.
 
 ## SURFACE-2026-06-22-QUALITY-WP6-MINORS
-- **Files:** `src/state/useWorkspaceStatus.ts:53-55`; `src/state/workspaceStatus.ts:38-39` + `WorkspaceStatusIndicator.tsx` snippet prop
-- **Priority:** low (all)
+- **Files:** `src/state/useWorkspaceStatus.ts:53-55`
+- **Priority:** low
 - **Status:** pending
 - **Findings:**
   1. **`stateFor` re-created every render** (`useWorkspaceStatus.ts:53-55`) — a fresh closure each render, consumed per-workspace in CenterStage. Harmless at N≤1; a `useCallback` keyed on `statusMap` would avoid re-running the lookup chain as the list grows in Phase 2 (multi-workspace).
-  2. **Comment accuracy on the unfed snippet** (`workspaceStatus.ts:38-39` + indicator `snippet` prop) — companion to the MAJOR: the `last_output_snippet` field + `snippet` prop are documented as "telemetry"/tooltip but have no live consumer; a `// not yet consumed — deferred` note would stop a future reader assuming it's wired. (Resolved automatically if the MAJOR's thread-it path is chosen.)
-- **Pickup shape:** trivial `/feature-refactor` nits. Dismiss any via the WIP's `## Code-Quality Review` section.
+- **Pickup shape:** trivial `/feature-refactor` nit. Dismiss via the WIP's `## Code-Quality Review` section.
+- *(Sub-finding #2 — the unfed `last_output_snippet`/`snippet`-prop tooltip path — RESOLVED 2026-06-30 by debt-paydown WP2, which threaded the snippet end-to-end via `snippetFor`. Removed here in sweep #2.)*
 
 # m3-wp3-socket-listener — 2026-06-22
 
@@ -451,188 +437,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** trivial; cosmetic clarity of the stylesheet's global section.
 - **Priority:** low
 - **Status:** pending
-
-# wp1-tauri-scaffold — 2026-06-16
-
-> **ALL RESOLVED 2026-06-17 (refactor pass).** All 9 findings fixed. See `workflow/backlog.md` → wp1 pointer for the per-fix summary.
-
-## SURFACE-2026-06-16-QUALITY-WP1-HTML-TITLE
-- **File:** `index.html:7`
-- **Severity:** MAJOR
-- **Finding:** `<title>Tauri + React + Typescript</title>` is the scaffold default; Tauri's window title overrides for the native window but the HTML title leaks into devtools / web inspector.
-- **Fix shape:** one-line edit to `<title>Claudesk</title>`.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP1-README-SCAFFOLD-TEXT
-- **File:** `README.md`
-- **Severity:** MAJOR
-- **Finding:** README contains pure scaffold-default text asserting the project is a "template."
-- **Fix shape:** replace with a single-line `# Claudesk` pointer to `CLAUDE.md` and `docs/product/vision.md`. (Full README lands in Phase 4 WP34.)
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP1-WINDOW-SIZE
-- **File:** `src-tauri/tauri.conf.json:14-18`
-- **Severity:** MAJOR
-- **Finding:** Default window size 800x600 is too small for the product vision's Mission-Control-style center-stage + filmstrip layout, even at N=1.
-- **Fix shape:** bump to ~1280x800 (or similar). Real default will be re-tuned in WP5/Phase 1 polish; this fixes the dev-loop UX in the interim.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP1-DEMO-GREET-COMMAND
-- **File:** `src-tauri/src/lib.rs:2-5`
-- **Severity:** MAJOR
-- **Finding:** The scaffold's `greet` Tauri command + `invoke_handler!` registration is dead code reachable from any frontend code with `@tauri-apps/api/core` access. WP7 will define the real CC-session command surface; the demo command is a permanent reachable surface the team has no plan to support.
-- **Fix shape:** remove the `greet` fn and update `invoke_handler!` to `[]` (or remove the call). ~3 lines.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP1-PRETTIER-CONFIG-EMPTY
-- **File:** `.prettierrc.json:1`
-- **Severity:** MINOR
-- **Finding:** `{}` is a no-op; future contributors can't tell whether defaults were deliberate or just unconfigured.
-- **Fix shape:** add at least one explicit property documenting intent (e.g. `"trailingComma": "all"`).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP1-ESLINT-CONFIG-NO-COMMENTS
-- **File:** `eslint.config.js:7-37`
-- **Severity:** MINOR
-- **Finding:** No comment explains the flat-config layering or the `react/react-in-jsx-scope: off` + `react/jsx-uses-react: off` new-JSX-transform shim.
-- **Fix shape:** 2-line comment block at top.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP1-SMOKE-VALUE-MISMATCH
-- **File:** `src/__tests__/smoke.test.ts:5` and `src-tauri/src/lib.rs:20`
-- **Severity:** MINOR
-- **Finding:** Vitest smoke uses `1+1`, Rust smoke uses `2+2`. Cosmetic inconsistency.
-- **Fix shape:** pick one value pair for both.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP1-PNPM-WORKSPACE-COMMENT
-- **File:** `pnpm-workspace.yaml:1-2`
-- **Severity:** MINOR
-- **Finding:** `allowBuilds: { esbuild: true }` ships without comment; the pnpm-v11 migration story (auto-generated stub with literal `set this to true or false` placeholder) is non-obvious.
-- **Fix shape:** one-line comment at top citing pnpm v11 migration.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP1-VITE-CONFIG-PROCESS
-- **File:** `vite.config.ts:4`
-- **Severity:** MINOR
-- **Finding:** `// @ts-expect-error process is a nodejs global` is scaffold-default; the proper fix is `import { env } from "node:process"`. The directive will silently bit-rot if `process` ever gets typed.
-- **Fix shape:** replace the `@ts-expect-error` line with the proper import.
-- **Priority:** low
-- **Status:** pending
-
-# wp2-cc-pty-probe — 2026-06-16
-
-> **RESOLVED 2026-06-17 (refactor pass):** 3 fixed (shutdown-divergence comment, reader-thread EOF lifecycle comment, stale `**State:**` line). 1 DISMISSED: `ReaderSink` enum — explicit inline readers are clearer for reference/`examples/` code; the EOF invariant is now single-sourced by the lifecycle comment.
-
-## SURFACE-2026-06-16-QUALITY-WP2-SHUTDOWN-DUPLICATION
-- **File:** `src-tauri/examples/cc_pty_probe.rs:169` and `:309`
-- **Severity:** MINOR
-- **Finding:** The 6-line "CC requires Ctrl+D twice" cleanup block is duplicated verbatim between `run_inject` and `run_resize`.
-- **Fix shape:** extract a `shutdown_cc(writer, child)` helper so the "send-twice with 300ms gap then drop writer" pattern is grep-able as one canonical reference for WP7.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP2-READER-THREAD-LIFECYCLE-COMMENT
-- **File:** `src-tauri/examples/cc_pty_probe.rs:79, 133, 189, 257`
-- **Severity:** MINOR
-- **Finding:** Reader threads spawn but are inconsistently joined (`_reader_thread` dropped in 3 modes; `drain.join()` used in `run_exit_via`). Lifecycle invariant ("reader thread terminates on PTY EOF when child exits and drops the slave") is load-bearing but not documented in the code.
-- **Fix shape:** add a one-line comment at the first reader spawn explaining the EOF-termination invariant.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP2-WIP-STATE-MARKER-DRIFT
-- **File:** `workflow/wip/wp2-cc-pty-probe.md:3` vs `:10-11`
-- **Severity:** MINOR
-- **Finding:** Frontmatter `state: ship (complete)` but body `**State:** plan (complete)` — staleness between the two markers. Frontmatter is canonical per project convention; body line is stale.
-- **Fix shape:** drop the redundant body `**State:** ...` line; rely on frontmatter as the single source. (Will be archived by feature-finalize regardless.)
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP2-READER-SINK-ENUM
-- **File:** `src-tauri/examples/cc_pty_probe.rs:78, 131, 188, 255`
-- **Severity:** MINOR
-- **Finding:** Four near-identical reader-thread bodies (Stdout / Channel / CountBytes sinks) — consolidating into a `ReaderSink` enum would single-source the "reader thread pattern" question for WP7 readers.
-- **Fix shape:** add `enum ReaderSink { Stdout, Channel(mpsc::Sender<Vec<u8>>), CountBytes }` + one `spawn_reader(reader, sink)` helper.
-- **Priority:** low
-- **Status:** pending
-
-# wp3-sublime-cli-probe — 2026-06-16
-
-> **ALL RESOLVED 2026-06-17 (refactor pass).** All 6 findings fixed (2 MAJOR + 4 MINOR). See `workflow/backlog.md` → wp3 pointer for the per-fix summary.
-
-## SURFACE-2026-06-16-QUALITY-WP3-STUCK-SURFACED-LEAF
-- **File:** `workflow/wip/wp3-sublime-cli-probe.md` (Work Tree, leaf below P1.4)
-- **Severity:** MAJOR
-- **Finding:** Work Tree contains an unchecked leaf `- [ ] SURFACED — ST 'osascript activate' …` under Phase 1, but Phase 1's parent is `[x]`. Violates the global "parent's checkbox may only be `[x]` when ALL children are `[x]`" invariant. The discovery is correctly logged in §Discoveries and the feedback memory exists; the leaf should either be marked `[x]` (closed via the memory artifact) or removed from the tree (SURFACED belongs in §Discoveries, not as a perpetually-open child).
-- **Fix shape:** delete the leaf line from the Work Tree (the §Discoveries entry already captures the lesson; no work-item action remains).
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP3-OBSERVATION-VS-INFERENCE-FLATTENING
-- **File:** `workflow/wip/wp3-sublime-cli-probe.md` (Invocation matrix tables, T8/T9/T11 rows)
-- **Severity:** MAJOR
-- **Finding:** T8/T9/T11 rows present inference-grade data (footnoted inconclusive, race-affected, or derived from `--help`) in the same shape as observation-grade rows (T7, T10). A future contributor cannot tell at-a-glance which rows are runtime-reproducible vs. documentation-derived; this asymmetry is load-bearing because the §Decision relies on the matrix.
-- **Fix shape:** add a column "Source" with values `observed | inferred` (or a leading row-prefix marker like ⚠️/†), and a one-line legend above the table.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP3-STATE-PROSE-DRIFT
-- **File:** `workflow/wip/wp3-sublime-cli-probe.md:15`
-- **Severity:** MINOR
-- **Finding:** Frontmatter says `state: ship (complete)` but the H2-equivalent prose line on line 15 says `**State:** plan (complete)`. Dual-source state representations drift; the prose line should mirror frontmatter or be removed.
-- **Fix shape:** remove the duplicated `**State:**` prose line (frontmatter is canonical), or align it.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP3-FOOTNOTE-MARKERS
-- **File:** `workflow/wip/wp3-sublime-cli-probe.md` (Invocation matrix footnotes)
-- **Severity:** MINOR
-- **Finding:** Superscript ¹/² footnote markers force readers to scroll; table headers don't carry the numbers. Grep-unfriendly.
-- **Fix shape:** use `[note 1]` style or inline parenthetical at the row, or move the inconclusive notes into the "Notes" column directly.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP3-UNVISITED-STALE
-- **File:** `workflow/wip/wp3-sublime-cli-probe.md:50` (Current Node block)
-- **Severity:** MINOR
-- **Finding:** `Unvisited:` lists `ship → review-quality → finalize` but ship is already complete (per frontmatter + `ship_commit: cc72c4d`). The sequence-of-execution field wasn't refreshed when the state advanced. Per SURFACE-2026-05-06-FINALIZE-BEFORE-SHIP-ORDER-FLIP rationale, stale `Unvisited:` is a small confabulation channel for downstream skills.
-- **Fix shape:** finalize will overwrite this anyway; the discipline of updating `Unvisited:` on every state exit is the load-bearing rule worth noting.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-16-QUALITY-WP3-RUNTIMES-TIMEOUT-FORMULA
-- **File:** `runtimes.md` (multiple entries)
-- **Severity:** MINOR
-- **Finding:** All four sub-3s entries (`pnpm install`, `pnpm test`, `pnpm lint`, `cargo test`) record `**Use timeout:** 120000` instead of the formula's `ceil(observed * 1.5 + 60) * 1000` (which would yield ~62000–65000 ms). The 120000 matches the Bash tool's default; the registry is recording a constant rather than computing from data.
-- **Fix shape:** either apply the formula consistently to all entries, or document the override policy (e.g., "clamp small values to a 120s safety floor") in `~/.claude/CLAUDE.md`'s registry rules.
-- **Priority:** low
-- **Status:** pending
-
-# wp4-thumbnail-rendering-probe — 2026-06-17
-
-> **ALL RESOLVED 2026-06-17 (refactor pass).** Both MINOR findings fixed. See `workflow/backlog.md` → wp4 pointer for the per-fix summary.
-
-## SURFACE-2026-06-17-QUALITY-WP4-CENTER-SERIALIZER-COMMENT
-- **Severity:** MINOR (low)
-- **Location:** src/probe/Harness.tsx (center terminal build, ~L84-101)
-- **Finding:** The center (active) terminal is built without a `SerializeAddon` while every background terminal loads one. This is correct (the center is rendered normally, never serialized into a tile) but silent — a one-line comment ("center renders normally; no serializer needed") would save the next reader a double-take.
-- **Suggested action:** Add the clarifying comment. Throwaway-code polish; trivial.
-
-## SURFACE-2026-06-17-QUALITY-WP4-REPLAY-VOID-DURATION
-- **Severity:** MINOR (low)
-- **Location:** src/probe/replay.ts (~L99-103)
-- **Finding:** The `if (events.length === 0) return {stop}` early-out followed by `void duration;` with a "touch duration" comment reads as leftover scaffolding rather than load-bearing logic — minor dead-code smell in otherwise clean durable code.
-- **Suggested action:** Drop the `void duration;` no-op (and its comment), or fold the empty-events guard more cleanly. `replay.ts` is the durable piece Phase 2 may lift, so worth a quick tidy then.
-
-(Note: a third MINOR — Phase 3 Work Tree header stale at NOT-STARTED — was RESOLVED in-place at review time, not backlogged.)
 
 # m2-wp2-editor-shell — 2026-06-19
 
@@ -768,14 +572,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 
 1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `4546ffb` (0 CRITICAL). Reviewer: well-built refactor-plus-feature — faithful Workspace→RightPanelHost extraction, root-cause item-7 resolver fix with targeted regression guards, standout cross-predicate chord-exclusivity test, above-average chord-ownership doc discipline. Auto-backlogged per drive_mode=autopilot.
 
-## SURFACE-2026-06-20-QUALITY-WP5-TERMINAL-SEAM-UNTESTED
-- **File:** `src/components/workspace/panelHost.ts:34-40` (`selectPanel` terminal guard) + `src/components/workspace/RightPanelHost.tsx` (JSX renders only editor + diff slots)
-- **Finding:** The `"terminal"` panel is reachable from `panelForChord` (⌘⇧T → `"terminal"`) but swallowed by `selectPanel`'s static `!AVAILABLE_PANELS.includes("terminal")` guard (always-true today). When WP9 adds `"terminal"` to `AVAILABLE_PANELS`, the guard flips and `RightPanelHost` will set `panel="terminal"` — but the JSX renders only editor + diff slots, so the right half goes **blank**. No test pins the "what renders when terminal is selected" side, so the regression lands silently at WP9.
-- **Why it matters:** a reserved-but-unreachable path that flips reachable on a one-line future edit, with no test guarding the slot-rendering side, is the latent gap that bites the downstream WP. *(Not a WP5 defect — ⌘⇧T correctly no-ops today; this is a WP9-handoff guard.)*
-- **Suggested action:** WP9, when enabling terminal: add the terminal slot to RightPanelHost's JSX in the SAME change that adds `"terminal"` to `AVAILABLE_PANELS`, and add a test that selecting `"terminal"` renders the terminal slot (not a blank). Optionally, until then, add a render-time guard/fallback in RightPanelHost (if `panel` has no slot, fall back to editor) + a test. Cheapest pickup: a one-line note in `panelHost.ts` AVAILABLE_PANELS pointing WP9 at the JSX-slot coupling.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-06-20-QUALITY-WP5-SPLIT-LISTENER-CROSSPOINTER
 - **File:** `src/components/workspace/RightPanelHost.tsx:30-36` (document+capture, ⌘⇧E/D/T) vs `src/components/workspace/SublimeToolbar.tsx:35-45` (window+bubble, ⌘⇧O)
 - **Finding:** Two separate keydown listeners now exist per visible workspace with split chord-ownership (host owns the panel chords on document+capture; toolbar owns the Sublime-Text pop on window+bubble). Functionally disjoint by chord letter (no conflict — confirmed), but the partition is only discoverable by reading both files.
@@ -905,11 +701,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 
 3 MINOR findings from `feature-review-quality` on ship commit `5f9a86a` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built and advancing the codebase: single-root-cause design (identifier is the one source of truth), exemplary pure/impure split mirroring the config_store/hook_install precedent, the substring trap closed with exact-match + a both-directions regression test, and WHY-encoding doc comments. All three findings are low-risk coupling/drift seams, none affecting correctness. Auto-backlogged per drive_mode=autopilot.
 
-## SURFACE-2026-06-24-QUALITY-DEVPROD-PROJECTS-FILE-DUP
-- **File:** `src-tauri/src/config_store/commands.rs:18`
-- **Finding (MINOR):** `PROJECTS_FILE` const is duplicated here (with a "kept in sync" comment) from the module-private `super::PROJECTS_FILE`. Two literals that must agree = a latent drift seam: a rename of the project-list filename would silently diverge the seed path from the read/write path.
-- **Fix shape:** make `super::PROJECTS_FILE` `pub(crate)` and import it; delete the local copy. Trivial.
-
 ## SURFACE-2026-06-24-QUALITY-DEVPROD-BASENAME-SPACE-ASSUMPTION
 - **File:** `src-tauri/src/hook_install/mod.rs:84-90`
 - **Finding (MINOR):** `script_basename_of_command` matches the last whitespace token ending in `.pl` (after quote-stripping). Correct for all command shapes Claudesk emits and for the real macOS `/Application Support/…` path (the `.pl` tail token survives the split), but it assumes no `.pl`-suffixed path *segment* contains a space. Inputs are app-controlled → defensive-only.
@@ -945,24 +736,10 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 
 2 MAJOR + 3 MINOR findings (0 CRITICAL) from `feature-review-quality` on ship commit `95292d6`. Reviewer verdict: well-built, advances the codebase more than it accrues debt; the 2 MAJOR are NOT bugs at the shipped baseline (both benign on WP3's only lifecycle path) but are latent desyncs the **M5 WP5 lifecycle work will trip over** — carry into WP5 scope, not a standalone refactor. Auto-backlogged per drive_mode=autopilot.
 
-## SURFACE-2026-06-26-QUALITY-WP3-DUP-MIRROR-INTERVAL-CONST
-- **Finding:** `MIRROR_INTERVAL_MS = 1000` is duplicated as a module literal in both `Filmstrip.tsx` and `useMirrorTicker.ts`. The rate is meant to be shared ("the WP4-probe-validated background mirror rate"); two independent literals can drift on a future tuning change.
-- **Where:** `src/components/workspace/Filmstrip.tsx:34`, `src/components/workspace/useMirrorTicker.ts:~39`.
-- **Fix shape:** export one shared const (e.g. from mirrorFrame.ts or mirrorTicker.ts) and import in both. Likely subsumed by the unsynced-interval fix above.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-06-26-QUALITY-WP3-UNDIFFED-MIRROR-EMIT
 - **Finding:** The `pip-mirror` emit sends `mirrorFrameSnapshot()` — the full serialized HTML for every needed workspace — every tick while shown, no per-tile diffing. Correct at dogfood N; worth a comment noting it's intentionally un-diffed.
 - **Where:** `src/components/workspace/useMirrorTicker.ts` (~130, the emit).
 - **Fix shape:** add `// full-frame each tick — no diff; revisit if N grows` (WP4/WP5 scaling territory). Optionally diff if N grows.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-26-QUALITY-WP3-LISTEN-BOILERPLATE-DUP
-- **Finding:** The `listen(...).then(...)` + `cancelled`/`unlisten` async-unlisten boilerplate is copy-pasted 5× across Pip.tsx (×3), usePipFanout, and useMirrorTicker. Correct and consistently applied, but wide enough to name.
-- **Where:** `src/pip/Pip.tsx` (3 effects), `src/pip/usePipFanout.ts`, `src/components/workspace/useMirrorTicker.ts`.
-- **Fix shape:** extract a `useTauriListen(event, handler)` helper that encapsulates the async-register + cancelled-guard + unlisten. Repo-wide (useWorkspaceStatus has the same shape) — a small cross-cutting refactor.
 - **Priority:** low
 - **Status:** pending
 
