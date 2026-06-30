@@ -24,7 +24,6 @@ describe("terminalSessionId / initialTerminalList", () => {
     expect(s.entries).toHaveLength(1);
     expect(s.entries[0]).toEqual({
       id: "ws-abc-term-0",
-      sessionId: "ws-abc-term-0",
     });
     expect(s.activeId).toBe("ws-abc-term-0");
     expect(s.counter).toBe(1); // next suffix to assign
@@ -33,7 +32,7 @@ describe("terminalSessionId / initialTerminalList", () => {
   it("the seed session id is collision-free with the CC session id (no -term- suffix)", () => {
     // The CC pane keys on the bare workspaceId; a terminal id always carries -term-.
     expect(
-      initialTerminalList(WS).entries[0].sessionId.startsWith(`${WS}-term-`),
+      initialTerminalList(WS).entries[0].id.startsWith(`${WS}-term-`),
     ).toBe(true);
     expect(`${WS}-term-0`).not.toBe(WS);
   });
@@ -46,7 +45,6 @@ describe("openTerminal", () => {
     expect(s2.entries).toHaveLength(2);
     expect(s2.entries[1]).toEqual({
       id: "ws-abc-term-1",
-      sessionId: "ws-abc-term-1",
     });
     expect(s2.activeId).toBe("ws-abc-term-1"); // the new one is front
     expect(s2.counter).toBe(2);
@@ -55,7 +53,7 @@ describe("openTerminal", () => {
   it("assigns monotonic, unique session ids across many opens", () => {
     let s = initialTerminalList(WS);
     for (let i = 0; i < 3; i++) s = openTerminal(s, WS);
-    const ids = s.entries.map((e) => e.sessionId);
+    const ids = s.entries.map((e) => e.id);
     expect(ids).toEqual([
       "ws-abc-term-0",
       "ws-abc-term-1",

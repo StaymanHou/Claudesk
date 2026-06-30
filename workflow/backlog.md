@@ -312,14 +312,6 @@
 ## SURFACE-2026-06-20-WP10-ARROW-KEY-TREE-NAV
 - **Status:** DROPPED 2026-06-24 (operator decision during QoL-WBS triage) — arrow-key FileTree nav is not wanted; click-to-open + click-to-toggle suffices.
 
-## Code-quality findings — m2-wp9-second-terminal (2026-06-21)
-- **Pointer:** 2 MAJOR + 2 MINOR from `feature-review-quality` on ship commit `70a7576` (0 CRITICAL). Both MAJORs RESOLVED in the post-ship `/feature-refactor` (commit `a8db974`): stale spawn-effect comment rewritten; active-churn double-spawn fixed via the closure-`cancelled` primitive (a ref-latch attempt regressed StrictMode → reverted; live-verified 1 shell + 1 CC, prompt paints). Remaining = the 2 MINORs below.
-- **MINOR #1 — `mark_ready` drain→emit not atomic across the seam** (`cc_session/mod.rs`): `drain_backlog` releases the backlog lock (Some→None) then emits the drained chunks unlocked, so a reader-thread chunk produced in that gap can emit ahead of a buffered one. No loss/dup (unit-tested), only an ordering window on a one-shot prompt (microseconds, effectively unobservable). The inline "no lost/duplicated chunk at the seam" comment slightly overstates the guarantee (it's no-loss, not ordering-safe). Fix if it ever matters: hold the lock across the flush, or emit-under-lock.
-- **MINOR #2 — `cc_ready` holds the registry mutex across `mark_ready`'s emits** (`cc_session/commands.rs`): briefly serializes other session commands behind the (tiny) backlog flush. Tighter: `drain` returns chunks, emit after the lock drops.
-- **Priority:** low (both)
-- **Status:** pending (MINORs); MAJORs resolved in a8db974
-- **Pickup shape:** two small `/feature-refactor` items in the cc_session backend; neither is behavioral at the shipped baseline. Dismiss via the WIP `## Code-Quality Review` section if not worth it.
-
 ## Code-quality findings — m4-wp1-n-workspace-cost-probe (2026-06-22)
 - **Pointer:** 2 MINOR findings from `feature-review-quality` on ship commit `9f3e0fe` (0 CRITICAL, 0 MAJOR). Both robustness/precision nits in the throwaway `measure.sh`: (1) the `pgrep -fc` N-alive guard degraded to `?` during the run (operator confirmed 8 sessions manually); (2) percentile indexing is the lower-median truncation (sub-sample at 110+ samples, matches the `cm6/measure.sh` baseline). Reviewer rated the probe well-built, effectively zero durable debt. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m4-wp1-n-workspace-cost-probe — 2026-06-22`.
 - **Priority:** low (all)

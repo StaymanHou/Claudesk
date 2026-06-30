@@ -99,6 +99,14 @@ pub fn cc_input(
 /// this call instead of being emitted before any listener exists). Idempotent.
 #[tauri::command]
 pub fn cc_ready(registry: State<'_, Registry>, session_id: String) -> Result<(), String> {
+    // ACCEPTED TRADEOFF (m2-wp9 MINOR #2): `reg.ready` → `mark_ready` flushes the backlog
+    // while this holds the registry mutex, briefly serializing other session commands
+    // behind the flush. Avoiding it would mean storing sessions as `Arc<dyn CcSession>`
+    // (clone the Arc, drop the registry lock, then flush) — but `Registry` owns sessions
+    // as `Box<dyn CcSession>` and `get()` borrows under the lock, so that's an ownership
+    // migration across every command (insert/get/kill_all). The flush is microseconds (a
+    // handful of startup chunks), so the migration's risk in this concurrency-critical
+    // path isn't worth shaving a sub-millisecond serialization. Kept deliberately.
     let reg = registry
         .lock()
         .map_err(|_| "session registry lock poisoned".to_string())?;

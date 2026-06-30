@@ -714,6 +714,10 @@ export function RightPanelHost({
         editorSplitRef.current?.closeActiveTab();
         return;
       }
+      // ⌘⇧E/⌘⇧D/⌘⇧T panel-select. Deliberately NOT gated on `finderOpen`/`searchOpen`:
+      // switching the panel underneath an open Cmd+P/⌘⇧F overlay is an acceptable
+      // interleave (the overlay floats above; the panel behind it just changes), so no
+      // !overlayOpen guard here — cf. SURFACE-2026-06-20-QUALITY-WP6-PANEL-CHORD-UNDER-OVERLAY.
       const target = panelForChord(e);
       if (target === null) return;
       e.preventDefault();
@@ -1087,7 +1091,7 @@ export function RightPanelHost({
                   ref={
                     t.id === terminals.activeId ? terminalPaneRef : undefined
                   }
-                  sessionId={t.sessionId}
+                  sessionId={t.id}
                   projectPath={projectPath}
                   active={
                     visible &&

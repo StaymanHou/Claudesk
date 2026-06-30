@@ -206,13 +206,21 @@ fn route_chunk(backlog: &Mutex<Option<Vec<String>>>, chunk: String) -> Option<St
     }
 }
 
-/// Take the buffered backlog and flip the session to live mode (`Some`→`None`).
-/// Returns the chunks to flush in order (empty if already live or never buffered).
-/// Pure + lock-scoped → unit-testable without an AppHandle.
-fn drain_backlog(backlog: &Mutex<Option<Vec<String>>>) -> Vec<String> {
-    match backlog.lock() {
-        Ok(mut guard) => guard.take().unwrap_or_default(),
-        Err(_) => Vec::new(),
+/// Flip the session to live mode AND flush the buffered chunks **while still holding the
+/// lock**, calling `emit` for each in order. Holding the lock across the flush closes the
+/// ordering window the plain drain-then-emit had: with the guard held, a reader-thread
+/// chunk can't acquire the lock to take the `None`/live path and emit AHEAD of a buffered
+/// chunk still being flushed. The reader simply blocks on `route_chunk`'s `lock()` until
+/// the flush completes, then emits after — preserving produce order at the seam. The flush
+/// is microseconds (a handful of startup chunks), so the brief reader stall is immaterial.
+/// (m2-wp9 MINOR #1.) A poisoned lock drops the flush, matching `route_chunk`/`drain`.
+fn drain_backlog_emitting(backlog: &Mutex<Option<Vec<String>>>, mut emit: impl FnMut(String)) {
+    if let Ok(mut guard) = backlog.lock() {
+        if let Some(pending) = guard.take() {
+            for chunk in pending {
+                emit(chunk);
+            }
+        }
     }
 }
 
@@ -445,11 +453,13 @@ impl CcSession for PtyCcSession {
     /// to live mode (`backlog` → `None`). Idempotent: a second call is a no-op (backlog
     /// already taken). The consumer of the spawn-time buffering — closes the shell race.
     fn mark_ready(&self) {
-        // drain_backlog flips Some→None (reader switches to live) and returns the
-        // buffered chunks; emit them in order so the frontend sees nothing-lost output.
-        for chunk in drain_backlog(&self.backlog) {
+        // Flip Some→None (reader switches to live) and flush the buffered chunks in order,
+        // ALL under one backlog-lock hold (drain_backlog_emitting) so a reader-thread chunk
+        // produced during the flush can't emit ahead of a buffered one (m2-wp9 MINOR #1 —
+        // the prior drain-then-emit released the lock before flushing, leaving that window).
+        drain_backlog_emitting(&self.backlog, |chunk| {
             let _ = self.app.emit(&self.output_event, chunk);
-        }
+        });
     }
 }
 
@@ -679,15 +689,22 @@ mod tests {
         );
     }
 
+    /// Collect what `drain_backlog_emitting` flushes, for assertions.
+    fn drain_collect(backlog: &Mutex<Option<Vec<String>>>) -> Vec<String> {
+        let mut out = Vec::new();
+        drain_backlog_emitting(backlog, |c| out.push(c));
+        out
+    }
+
     #[test]
-    fn drain_backlog_returns_buffered_in_order_and_flips_to_live() {
+    fn drain_backlog_emits_buffered_in_order_and_flips_to_live() {
         let backlog: Mutex<Option<Vec<String>>> = Mutex::new(Some(vec![
             "1".to_string(),
             "2".to_string(),
             "3".to_string(),
         ]));
-        // Flush returns the buffered chunks in order...
-        assert_eq!(drain_backlog(&backlog), vec!["1", "2", "3"]);
+        // Flush emits the buffered chunks in order...
+        assert_eq!(drain_collect(&backlog), vec!["1", "2", "3"]);
         // ...and flips the session to live (None).
         assert!(backlog.lock().unwrap().is_none());
         // Now route_chunk emits live (returns the chunk) instead of buffering.
@@ -700,9 +717,9 @@ mod tests {
     #[test]
     fn drain_backlog_is_idempotent() {
         let backlog: Mutex<Option<Vec<String>>> = Mutex::new(Some(vec!["x".to_string()]));
-        assert_eq!(drain_backlog(&backlog), vec!["x"]);
+        assert_eq!(drain_collect(&backlog), vec!["x"]);
         // A second drain (e.g. a duplicate cc_ready) yields nothing and stays live.
-        assert!(drain_backlog(&backlog).is_empty());
+        assert!(drain_collect(&backlog).is_empty());
         assert!(backlog.lock().unwrap().is_none());
     }
 
@@ -713,13 +730,35 @@ mod tests {
         // or emitted live) — none dropped, none duplicated.
         let backlog: Mutex<Option<Vec<String>>> = Mutex::new(Some(Vec::new()));
         assert_eq!(route_chunk(&backlog, "prompt".to_string()), None); // buffered pre-ready
-        let flushed = drain_backlog(&backlog); // frontend readied → flush
+        let flushed = drain_collect(&backlog); // frontend readied → flush
         assert_eq!(flushed, vec!["prompt"]);
         // Post-ready chunks go live.
         assert_eq!(
             route_chunk(&backlog, "typed".to_string()),
             Some("typed".to_string())
         );
+    }
+
+    #[test]
+    fn drain_emitting_holds_the_lock_across_the_whole_flush() {
+        // m2-wp9 MINOR #1: the flush must happen under the lock so a concurrent reader
+        // can't interleave a live chunk between buffered ones. We can't easily race a
+        // thread deterministically here, but we CAN prove the invariant the fix relies on:
+        // the backlog is still observably held/locked-and-mutated as a single critical
+        // section — re-entrant access from the emit closure sees the guard already taken.
+        let backlog: Mutex<Option<Vec<String>>> =
+            Mutex::new(Some(vec!["a".to_string(), "b".to_string()]));
+        drain_backlog_emitting(&backlog, |_chunk| {
+            // While the flush runs, the lock is held: a try_lock from "another path"
+            // (simulating the reader thread's route_chunk) must fail to acquire it, so it
+            // can't take the live path and emit ahead of the remaining buffered chunks.
+            assert!(
+                backlog.try_lock().is_err(),
+                "backlog lock must stay held across the flush"
+            );
+        });
+        // After the flush the session is live and the lock is free again.
+        assert!(backlog.lock().unwrap().is_none());
     }
 
     // --- classify_spawn_error: friendly "claude not on PATH" mapping (P1.1) ---

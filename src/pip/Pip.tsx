@@ -163,6 +163,9 @@ export function Pip() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
+    // Click-vs-drag is implicit but safe: a zero-distance click (mousedown→mouseup with
+    // no move) sends NO pip_move (each onMove early-returns on dx==dy==0), and mouseup
+    // ALWAYS fires + tears the listeners down — so a plain click on the body is inert.
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };

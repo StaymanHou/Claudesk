@@ -19,8 +19,10 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::{bind_listener, spawn_listener, HookEvent};
 
-/// Basename of the Claudesk-owned hook socket under the app-data dir.
-pub const HOOK_SOCKET_NAME: &str = "hook.sock";
+/// Basename of the Claudesk-owned hook socket under the app-data dir. Module-private —
+/// the only consumer is `hook_socket_path` below (the old `hook_install` copy was retired
+/// in favor of delegating to it); re-widen to `pub(crate)` only if another module needs it.
+const HOOK_SOCKET_NAME: &str = "hook.sock";
 
 /// Resolve the hook socket path: `<app-data>/hook.sock`. Always via
 /// `app_data_dir()` — on macOS this resolves to the bundle *identifier*

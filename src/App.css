@@ -454,8 +454,8 @@ body,
 
 /* M6 WP3 — the split-ratio control in the header. Sits between the project name
    and the status dot; `margin-left:auto` pushes it (and the dot) to the trailing
-   edge so the name keeps the left. Phase 1 holds the single cycle button; Phase 2
-   adds the two collapse toggles into this same row. */
+   edge so the name keeps the left. The row holds the cycle button flanked by the
+   two collapse toggles. */
 .workspace-split-control {
   display: flex;
   align-items: center;
@@ -487,7 +487,7 @@ body,
   cursor: default;
 }
 
-/* M6 WP3 Phase 2 — the two collapse toggles flanking the cycle button. Same chrome
+/* M6 WP3 — the two collapse toggles flanking the cycle button. Same chrome
    as the cycle button; .is-active marks the currently-collapsed half (pressed look). */
 .split-collapse-btn {
   padding: 0.1rem 0.4rem;

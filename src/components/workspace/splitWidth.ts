@@ -15,10 +15,9 @@
 // App.css `grid-template-columns: 1fr 1fr` rule remains the FALLBACK default; once
 // a state is stored, an inline style on `.workspace` overrides it.
 //
-// Phase 1 ships the three ratio presets + the cycle control. Collapse (the two
-// `◀ CC` / `ED ▶` toggles, the `collapsed` field) arrives in Phase 2 — the state
-// shape already carries `collapsed` so persistence is forward-compatible, and
-// `gridColumnsFor` already handles every value.
+// Ships the three ratio presets + the cycle control AND the collapse selector (the
+// two `◀ CC` / `ED ▶` toggles drive the `collapsed` field). `gridColumnsFor` handles
+// every value of both fields.
 
 /** Which half is fully collapsed (0 width). `none` = both visible at `ratio`. */
 export type CollapsedHalf = "none" | "left" | "right";

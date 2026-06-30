@@ -71,6 +71,13 @@ export const RAIL_MAX_PANEL_FRACTION = 0.5;
  * stored width (widening the panel restores exactly the dragged width). A
  * non-positive/non-finite panelWidth (not yet measured) → the stored width
  * unchanged, so first paint matches today.
+ *
+ * The "never below RAIL_MIN" and "never above the stored width" guarantees could
+ * conflict in principle if `storedWidth < RAIL_MIN`, but that is unreachable: every
+ * caller funnels the stored value through `clampRailWidth` (load + drag), which pins
+ * stored ≥ RAIL_MIN. Relying on that invariant, the final `Math.min(storedWidth, cap)`
+ * resolves the edge safely — min wins, so the result is always ≤ the (≥RAIL_MIN) stored
+ * width and the cap's RAIL_MIN floor never has to override it.
  */
 export function effectiveRailWidth(
   storedWidth: number,

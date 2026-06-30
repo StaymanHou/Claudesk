@@ -100,12 +100,15 @@ export function Workspace({
     return () => cancelAnimationFrame(raf);
   }, [visible]);
 
-  // M6 WP3 — the outer left/right split ratio. App-global (one state shared by all
-  // workspaces, mirroring the file-tree rail's app-global model — UI chrome, not
-  // project data). The derived `grid-template-columns` overrides the App.css 1fr/1fr
-  // default via an inline style on `.workspace`. Phase 1: the three ratio presets,
-  // cycled by the header button. Collapse toggles arrive in Phase 2 (the state shape
-  // already carries `collapsed`, so persistence is forward-compatible).
+  // M6 WP3 — the outer left/right split ratio. App-global-PERSISTED (one localStorage
+  // key, mirroring the file-tree rail's model — UI chrome, not project data), but held
+  // in per-Workspace useState: each mounted workspace keeps its OWN live copy. So
+  // "app-global" means the shared key, not shared live state — cross-workspace sync is
+  // by REMOUNT (a fresh workspace seeds from the key), not cross-instance live updates.
+  // Fine for the single-window switch-on-display pattern. The derived
+  // `grid-template-columns` overrides the App.css 1fr/1fr default via an inline style on
+  // `.workspace`. The three ratio presets are cycled by the header button; the two
+  // collapse toggles (◀ CC / ED ▶) hide a half (the state shape carries `collapsed`).
   const [splitState, setSplitState] = useState<SplitState>(loadSplitState);
   const cycleSplit = () =>
     setSplitState((s) => {
@@ -113,7 +116,7 @@ export function Workspace({
       saveSplitState(next);
       return next;
     });
-  // M6 WP3 Phase 2 — collapse a half (◀ CC / ED ▶). The collapsed half gets
+  // M6 WP3 — collapse a half (◀ CC / ED ▶). The collapsed half gets
   // display:none (below), which makes XtermPane's existing offsetParent===null
   // fit-guard skip fitting to 0 — no crash, PTY stays alive. Toggling the same
   // half restores to the last ratio (toggleCollapse preserves `ratio`).
@@ -126,12 +129,14 @@ export function Workspace({
   const leftCollapsed = splitState.collapsed === "left";
   const rightCollapsed = splitState.collapsed === "right";
 
-  // M6 WP3 Phase 2 — nudge a terminal re-fit when the CC half un-collapses
+  // M6 WP3 — nudge a terminal re-fit when the CC half un-collapses
   // (display:none → shown). The ResizeObserver on the xterm host usually catches the
   // box going 0 → real, but a display flip is not guaranteed to fire it under
   // WKWebView, so we explicitly refit on the leftCollapsed false-edge. rAF-deferred
   // so the layout settles first (same pattern as the visible-edge focus above);
-  // fitAndResize's offsetParent guard makes it a no-op if still hidden.
+  // fitAndResize's offsetParent guard makes it a no-op if still hidden. Left-only by
+  // design — the right half needs no nudge: only xterm's FitAddon has the display-flip
+  // race; RightPanelHost's own ResizeObserver handles the editor side.
   useEffect(() => {
     if (leftCollapsed) return;
     const raf = requestAnimationFrame(() => ccPaneRef.current?.refit());

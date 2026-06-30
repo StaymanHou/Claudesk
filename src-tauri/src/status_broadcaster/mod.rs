@@ -238,10 +238,11 @@ impl WorkspaceRegistry {
         self.by_path
             .iter()
             .filter(|(registered, _)| is_path_ancestor(Path::new(registered), cwd_path))
-            // Longest registered key wins (nearest enclosing workspace). Comparing by the
-            // canonicalized string length is a valid proxy for component depth here since
-            // every key is an ancestor of the same cwd (so they're prefixes of each other).
-            .max_by_key(|(registered, _)| registered.len())
+            // Longest registered key wins (nearest enclosing workspace). Rank by path-
+            // component count — the precise depth measure. (A string-length proxy also
+            // works here since every candidate is an ancestor of the same cwd, but counting
+            // components says exactly what we mean and can't be skewed by a trailing slash.)
+            .max_by_key(|(registered, _)| Path::new(registered).components().count())
             .map(|(_, ws)| ws.clone())
     }
 

@@ -21,7 +21,7 @@
 // XtermPane's listeners + the WP4 emit). The pure fold/lookup it delegates to
 // (`applyStatusUpdate`/`stateFor`) is covered in workspaceStatus.test.ts.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTauriListen } from "../useTauriListen";
 import {
@@ -108,8 +108,20 @@ export function useWorkspaceStatus(
     }
   }, [workspaces]);
 
+  // Memoize the accessors on `statusMap` so a re-render that doesn't change the map
+  // doesn't hand each per-workspace consumer (CenterStage, filmstrip tiles) a fresh
+  // closure — keeps the lookup chain from re-running as the workspace list grows (N>1).
+  const stateForCb = useCallback(
+    (workspaceId: string) => stateFor(statusMap, workspaceId),
+    [statusMap],
+  );
+  const snippetForCb = useCallback(
+    (workspaceId: string) => snippetFor(statusMap, workspaceId),
+    [statusMap],
+  );
+
   return {
-    stateFor: (workspaceId: string) => stateFor(statusMap, workspaceId),
-    snippetFor: (workspaceId: string) => snippetFor(statusMap, workspaceId),
+    stateFor: stateForCb,
+    snippetFor: snippetForCb,
   };
 }

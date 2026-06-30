@@ -107,6 +107,14 @@ export function EditorPanel({
   // chord does (no remount), via the captured view, then sync state + persist. Falls
   // back to state-only if the view isn't ready yet (the memo rebuild applies it on
   // the next render).
+  //
+  // TWO RECONFIGURE PATHS BY DESIGN, both idempotent: (1) the imperative
+  // `lineWrapCompartment.reconfigure` dispatch below, then (2) the `extensions` memo
+  // rebuild that the resulting `lineWrap` state change triggers (its deps include
+  // `lineWrap`). The imperative dispatch is deliberate — it applies the wrap in the same
+  // tick rather than waiting a render cycle for the memo. Reconfiguring the same
+  // compartment to the same value twice is a no-op, so the double-apply is harmless; do
+  // NOT collapse to one path (SURFACE-2026-06-27-QUALITY-WP5-DUAL-RECONFIGURE-PATH).
   const onToggleWrap = useCallback(() => {
     const next = !lineWrap;
     viewRef.current?.dispatch({

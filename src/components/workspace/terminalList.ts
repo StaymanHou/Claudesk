@@ -27,12 +27,13 @@
 /** A soft cap on simultaneously-open terminals per workspace (UI disables ＋ at this). */
 export const MAX_TERMINALS = 8;
 
-/** One terminal in the list. `id` is the stable React key + tab handle; `sessionId` is
- *  the backend PTY session key (XtermPane's `workspaceId` prop). For v1 `id === sessionId`
- *  — kept as distinct fields so a future rename/label can diverge the display id. */
+/** One terminal in the list. `id` is the stable React key + tab handle AND the backend PTY
+ *  session key (passed as XtermPane's `workspaceId` prop). These were once two fields
+ *  (`id`/`sessionId`) carried for a possible future display-id/session-id divergence, but
+ *  they were always set equal — collapsed to one until a rename/label feature actually
+ *  needs the split (re-add a `displayId` then, rather than carry an always-equal pair). */
 export interface TerminalEntry {
   id: string;
-  sessionId: string;
 }
 
 /** The per-workspace terminal-list state: the open entries, which one is front/active,
@@ -54,7 +55,7 @@ export function terminalSessionId(workspaceId: string, n: number): string {
  *  Called once per workspace on mount (ephemeral — no restore from persistence). */
 export function initialTerminalList(workspaceId: string): TerminalListState {
   const sid = terminalSessionId(workspaceId, 0);
-  return { entries: [{ id: sid, sessionId: sid }], activeId: sid, counter: 1 };
+  return { entries: [{ id: sid }], activeId: sid, counter: 1 };
 }
 
 /**
@@ -69,7 +70,7 @@ export function openTerminal(
   if (state.entries.length >= MAX_TERMINALS) return state;
   const sid = terminalSessionId(workspaceId, state.counter);
   return {
-    entries: [...state.entries, { id: sid, sessionId: sid }],
+    entries: [...state.entries, { id: sid }],
     activeId: sid,
     counter: state.counter + 1,
   };

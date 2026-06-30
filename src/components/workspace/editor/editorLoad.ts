@@ -21,7 +21,7 @@ export type LoadEvent =
 
 export const initialLoadState: LoadState = { kind: "idle" };
 
-export function loadReducer(_state: LoadState, event: LoadEvent): LoadState {
+export function loadReducer(state: LoadState, event: LoadEvent): LoadState {
   switch (event.type) {
     case "load-start":
       return { kind: "loading", path: event.path };
@@ -30,6 +30,6 @@ export function loadReducer(_state: LoadState, event: LoadEvent): LoadState {
     case "load-fail":
       return { kind: "error", path: event.path, message: event.message };
     default:
-      return _state;
+      return state;
   }
 }
