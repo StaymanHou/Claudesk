@@ -82,17 +82,13 @@ export function Workspace({
   const rootRef = useRef<HTMLDivElement>(null);
   const [focusHalf, setFocusHalf] = useState<FocusHalf>("none");
 
-  // QoL-WP3 — auto-focus the LEFT CC terminal when this workspace becomes the center
-  // stage. The promote path (filmstrip click / ⌘⇧+digit / picker overlay / close
-  // re-pick) only flips `focusedId` → our `visible` prop; the CC XtermPane is always
-  // active=true, so its own mount/active-transition focus never re-fires on a switch.
-  // This effect closes that gap: on the false→true `visible` edge (and on mount when
-  // already visible), call the pane's imperative focus() so keystrokes land in this
-  // project's CC session with zero clicks. Operator decision: ALWAYS focus CC-left for
-  // v1 (no last-focused-half restore). rAF-deferred so the off-viewport→on-viewport
-  // layout flip settles first (focusing a parked element is unreliable in WKWebview —
-  // mirrors XtermPane's existing rAF-then-focus pattern). It calls focus() only — it
-  // NEVER sends a byte to the PTY, so a switch can't inject a spurious prompt line.
+  // QoL-WP3 — auto-focus the LEFT CC terminal on the false→true `visible` edge (and on
+  // mount when already visible), since the always-active XtermPane's own focus never
+  // re-fires on a center-stage switch. rAF-deferred: focusing a parked element is
+  // unreliable in WKWebview, so we wait for the off-viewport→on-viewport layout flip to
+  // settle (the non-obvious bit — mirrors XtermPane's own rAF-then-focus). focus() only,
+  // never a PTY byte, so a switch can't inject a spurious prompt line. (See commit + WIP
+  // for the operator decision to always focus CC-left for v1.)
   const ccPaneRef = useRef<XtermPaneHandle>(null);
   // M6 WP10 — handle for the RIGHT-panel second terminal (TerminalPane → XtermPane),
   // threaded down through RightPanelHost. Lives here beside ccPaneRef + the zoom router

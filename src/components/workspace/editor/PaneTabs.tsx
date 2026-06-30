@@ -232,15 +232,11 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
     const doClose = (id: string) => dispatch({ type: "close", id });
 
     // WP13 — ⌘W closes THIS pane's active tab via the same dirty-guard the per-tab ✕
-    // uses (requestClose). No-op when no tab is open (Sublime parity).
-    //
-    // `requestClose` reads the dirty state from the parent `docs` store, which changes
-    // WITHOUT changing this pane's `activeTabId`. A memoized callback keyed on
-    // `[activeTabId]` would therefore capture a STALE requestClose (pre-dirty docs) and
-    // skip the guard — the vh.3 bug. So we stash the render-fresh closure in a ref every
-    // render and let the (stable) imperative handle call through it: the handle method
-    // always invokes the latest closure, which sees the latest docs/requestClose. Same
-    // reason the per-tab ✕ works — it calls requestClose inline each render.
+    // uses (requestClose). No-op when no tab is open (Sublime parity). Render-fresh ref
+    // (same pattern as the reporter refs below, see `onActivePathChangeRef`): a callback
+    // memoized on `[activeTabId]` would capture a STALE requestClose — the dirty state in
+    // the parent `docs` store changes WITHOUT changing `activeTabId` — and skip the guard
+    // (the vh.3 bug). The stable imperative handle calls through the ref to the latest closure.
     const closeActiveTabRef = useRef<() => void>(() => {});
     closeActiveTabRef.current = () => {
       if (activeTabId) requestClose(activeTabId);

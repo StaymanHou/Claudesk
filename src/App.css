@@ -1346,9 +1346,8 @@ body,
    a box-shadow, silently reintroducing the bug (caught at WP4b coexistence verify-human,
    2026-06-23). z-index:6 draws above the editor (matching the close ✕). Gated on the
    split case (>1 pane) — a single pane has nothing to disambiguate, so no strip.
-   COEXISTS with the WP4b half accent: that strip is on the OUTER right edge of
-   `.workspace-right`; this is on the INNER left edge of a pane — opposite edges, no
-   overlap, two distinct levels (a half is framed, the active pane is striped). */
+   COEXISTS with the WP4b half accent (inner-pane edge vs outer-half edge) — see the
+   full coexistence rationale on the `.workspace[data-focus-half] ::before` block above. */
 .editor-split-panes:has(.editor-split-pane + .editor-split-pane)
   .editor-split-pane.is-active::before {
   content: "";

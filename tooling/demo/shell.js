@@ -15,6 +15,12 @@
 //   }
 // status is one of: 'running' | 'idle' | 'awaiting' | 'unknown' (the app's vocab).
 //
+// CAUTION: every timeline string field (tile.body, stage line .text, PiP meta, etc.)
+// is injected as RAW HTML via innerHTML below — some intentionally carry markup like
+// <span class="cursor">. Scenario authors must HTML-escape any string that should
+// render literally; passing an escape-expecting string will inject markup. (Dev-only,
+// author-controlled input — not a security boundary, but a sharp edge for WP3/WP4 authors.)
+//
 // Classic <script> (NOT a module — file:// blocks ES module imports in Chromium).
 // The pure frameAt() helper is loaded as globalThis.__frameAt by frameAt.js,
 // which shell.html includes BEFORE this file. (frameAt.js is the single source of
@@ -179,17 +185,13 @@
 
   function renderPip(k, t) {
     if (!pip) return;
-    // Panel-level focus ring: lifts when the operator ⌘-Tabs to Claudesk (the
-    // switch beat). Per-keyframe flag.
-    pip.classList.toggle("focused", !!k.pipFocused);
     pip.innerHTML = (k.pip || [])
       .map((row) => {
         // A row may be a CC MIRROR (vertical active-mirror cell: a compact live
         // CC session) or a simple status row (legacy fallback).
         if (row.mirror) {
           const awaiting = row.status === "awaiting";
-          const focused = row.focused ? " focused" : "";
-          const cls = `pip-cell${awaiting ? " awaiting" : ""}${focused}`;
+          const cls = `pip-cell${awaiting ? " awaiting" : ""}`;
           return (
             `<div class="${cls}">` +
             `<div class="pip-cell-head">${dot(row.status)}` +

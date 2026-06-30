@@ -43,12 +43,9 @@ pub const STATUS_EVENT: &str = "workspace-status";
 /// [`init_registry`] before this is called); the drain thread reads it per event so
 /// a future WP6 register/deregister command and the broadcaster share one instance.
 /// Returns the drain thread's [`JoinHandle`](thread::JoinHandle) — the caller may
-/// hold it (its lifetime is tied to the running app) or detach it.
-///
-/// Errors are returned as a human-readable string for the caller to surface (never
-/// swallow — the WP6/WP7-M2 IPC-error lesson); the only failure here is the receiver
-/// already having been taken (a double-start bug), which we treat as an error rather
-/// than a panic.
+/// hold it (its lifetime is tied to the running app) or detach it. There is no error
+/// channel: the spawn either succeeds or panics via `.expect`. The double-start guard
+/// (the `Receiver` can only be taken once) lives at the `lib.rs` call site, not here.
 pub fn start_broadcaster(app: AppHandle, receiver: Receiver<HookEvent>) -> thread::JoinHandle<()> {
     // M6 WP1: resolve the status-channel log path ONCE at thread start (not per event).
     // `app_data_dir()` is per-identity (`com.claudesk.app` vs `.dev`), so the log is

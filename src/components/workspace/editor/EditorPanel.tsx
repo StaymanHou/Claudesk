@@ -171,9 +171,10 @@ export function EditorPanel({
   }, [active, hasFile]);
 
   // The full extension set (core keymap incl. Mod-s save → doSave, multi-cursor,
-  // find/replace, font-zoom). Rebuilt when doSave / fontSize / override / openPath
-  // change; @uiw reconfigures the view on array-identity change so the binding always
-  // calls the current closure.
+  // find/replace, font-zoom). Rebuilt when doSave / fontSize / override / openPath /
+  // lineWrap change; @uiw applies the new-identity array as a full CM6 reconfigure (see
+  // the `languageOverrideId` doc in editorExtensions.ts for why this — not a compartment
+  // — drives the language swap), so the keymap always calls the current closure.
   const extensions = useMemo(
     () =>
       buildEditorExtensions({

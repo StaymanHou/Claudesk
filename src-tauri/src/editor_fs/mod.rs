@@ -16,10 +16,16 @@
 //!
 //! ## Safety: the workspace-root guard
 //! Both operations confine the target to `root`. A path that escapes the
-//! workspace (via `..`, an absolute path elsewhere, or a symlink pointing out) is
-//! rejected with [`EditorFsError::OutsideWorkspace`]. The editor only ever edits
-//! files belonging to the open project; this guard makes that an invariant, not a
-//! convention, so a malformed or hostile path can't read/write arbitrary disk.
+//! workspace via `..` or an absolute path elsewhere is rejected with
+//! [`EditorFsError::OutsideWorkspace`]. Symlinks are handled at directory
+//! granularity: because [`resolve_within`] canonicalizes the target's *parent* and
+//! re-attaches the raw leaf name, a symlinked **directory** component escaping root
+//! IS rejected, but a **leaf** symlink (the final path component itself pointing
+//! outside) is NOT followed-and-validated — see [`resolve_within`]. `root` itself is
+//! supplied by the (trusted, single-user) frontend, not validated against the
+//! config store. The editor only ever edits files belonging to the open project;
+//! this guard makes that an invariant for the path-traversal class, not a
+//! convention, so a malformed `..`/absolute path can't read/write arbitrary disk.
 //!
 //! ## Durability
 //! Writes are atomic: `contents → <file>.tmp → fs::rename`, matching
@@ -73,8 +79,12 @@ pub enum EditorFsError {
 /// security boundary: we canonicalize `root` (it must exist) and the *parent* of
 /// the resolved target (for a not-yet-existing file on write, the file itself may
 /// not exist but its directory must), then assert the resolved target's directory
-/// is `root` or a descendant. Canonicalizing resolves `..` and symlinks, so a
-/// symlink inside `root` that points outside is also rejected.
+/// is `root` or a descendant. Canonicalizing the parent resolves `..` and any
+/// symlinked **directory** component, so a non-leaf symlink escaping `root` is
+/// rejected. The raw leaf name is re-attached afterward (NOT canonicalized — it may
+/// not exist yet on write), so a **leaf** symlink that itself points outside `root`
+/// is NOT caught here. That gap is accepted for the trusted single-user editor;
+/// hardening it (canonicalize the full target when it exists) is a deferred pass.
 fn resolve_within(root: &Path, requested: &Path) -> Result<PathBuf, EditorFsError> {
     let root_canon = root.canonicalize().map_err(|e| {
         EditorFsError::Io(std::io::Error::new(e.kind(), format!("root {root:?}: {e}")))

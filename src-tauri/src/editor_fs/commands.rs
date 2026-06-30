@@ -5,7 +5,10 @@
 //! (Tauri requires command errors to be `Serialize`). The frontend passes both
 //! the workspace project dir (`root`) and the file path so the root guard is
 //! enforced on every read/write — the editor only ever touches files inside the
-//! open project.
+//! open project. NOTE: `root` is **frontend-supplied and trusted** (not re-validated
+//! against the config store) — acceptable for the single-user local editor, where the
+//! frontend shares the app's trust boundary; the guard's job is to confine the *file
+//! path* to that `root`, not to authenticate `root` itself.
 
 use std::path::Path;
 

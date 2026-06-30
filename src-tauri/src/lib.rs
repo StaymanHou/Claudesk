@@ -253,9 +253,11 @@ pub fn run() {
             // `cc-yolo` so the menu re-checks. Read at spawn time → takes effect next spawn.
             cc_session::commands::cc_get_yolo,
             cc_session::commands::cc_set_yolo,
-            // WP8: Sublime Text pop. Invoked from the frontend (right-panel button
-            // and the in-app ⌘⇧O keybinding — was ⌘⇧E pre-WP5) with the focused
-            // workspace's path. Transitional — removed at WP8 once editor parity.
+            // WP8: Sublime Text pop. Invoked from the frontend right-panel button with
+            // the focused workspace's path. PERMANENT (WP8 redefinition 2026-06-20) — the
+            // in-app editor is the primary surface, but Sublime Text stays as a one-click
+            // escape hatch (the ⌘⇧O keydown hotkey was dropped; the button is the sole
+            // affordance now).
             sublime::commands::sublime_open,
             // WP5: Sublime Merge open. Permanent companion surface (NOT removed by
             // WP8) — staging/blame/history/blob-at-rev the inline diff viewer omits.

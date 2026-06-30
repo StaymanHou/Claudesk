@@ -6,22 +6,26 @@
 // Guarded as a FALLBACK: capture.mjs --timeline <file> injects a scenario via
 // addInitScript BEFORE this runs, so this only applies when the shell is opened
 // standalone (or built with no --timeline). Don't clobber an injected timeline.
+//
+// Cast: FOUR UNRELATED projects (a Rust tax CLI, a recipe web app, a Go blog engine,
+// a board-game iOS app) — NOT four services of one system, matching the README's
+// parallelism-across-projects philosophy + timeline.filmstrip.js's cast note.
 window.TIMELINE = window.TIMELINE || {
   region: "filmstrip",
   keyframes: [
     {
       t: 0,
       tiles: [
-        { name: "api-gateway", status: "running", body: "● Refactoring…" },
-        { name: "web-client", status: "running", body: "● Running tests…" },
-        { name: "infra-tf", status: "idle", body: "idle" },
-        { name: "docs-site", status: "unknown", body: "—" },
+        { name: "tax-cruncher", status: "running", body: "● Refactoring…" },
+        { name: "recipe-box", status: "running", body: "● Running tests…" },
+        { name: "blog-engine", status: "idle", body: "idle" },
+        { name: "catan-companion", status: "unknown", body: "—" },
       ],
       active: 0,
       stage: {
         lines: [
           { cls: "prompt", text: "❯ claude" },
-          { cls: "dim", text: "─ api-gateway ─ yolo ─────────────" },
+          { cls: "dim", text: "─ tax-cruncher ─ yolo ─────────────" },
           { cls: "accent", text: "● Refactoring auth middleware…" },
           { cls: "dim", text: "  · editing token_store.rs" },
           { text: '<span class="cursor"></span>' },
@@ -34,19 +38,19 @@ window.TIMELINE = window.TIMELINE || {
       },
     },
     {
-      // web-client needs input — flips to AWAITING (blue blink).
+      // recipe-box needs input — flips to AWAITING (blue blink).
       t: 1.4,
       tiles: [
-        { name: "api-gateway", status: "running", body: "● Refactoring…" },
-        { name: "web-client", status: "awaiting", body: "? Approve change" },
-        { name: "infra-tf", status: "idle", body: "idle" },
-        { name: "docs-site", status: "unknown", body: "—" },
+        { name: "tax-cruncher", status: "running", body: "● Refactoring…" },
+        { name: "recipe-box", status: "awaiting", body: "? Approve change" },
+        { name: "blog-engine", status: "idle", body: "idle" },
+        { name: "catan-companion", status: "unknown", body: "—" },
       ],
       active: 0,
       stage: {
         lines: [
           { cls: "prompt", text: "❯ claude" },
-          { cls: "dim", text: "─ api-gateway ─ yolo ─────────────" },
+          { cls: "dim", text: "─ tax-cruncher ─ yolo ─────────────" },
           { cls: "accent", text: "● Refactoring auth middleware…" },
           { cls: "dim", text: "  · editing token_store.rs" },
           { text: '<span class="cursor"></span>' },
@@ -59,19 +63,19 @@ window.TIMELINE = window.TIMELINE || {
       },
     },
     {
-      // user clicks web-client -> it promotes to center stage.
+      // user clicks recipe-box -> it promotes to center stage.
       t: 2.6,
       tiles: [
-        { name: "api-gateway", status: "running", body: "● Refactoring…" },
-        { name: "web-client", status: "running", body: "● Building…" },
-        { name: "infra-tf", status: "idle", body: "idle" },
-        { name: "docs-site", status: "unknown", body: "—" },
+        { name: "tax-cruncher", status: "running", body: "● Refactoring…" },
+        { name: "recipe-box", status: "running", body: "● Building…" },
+        { name: "blog-engine", status: "idle", body: "idle" },
+        { name: "catan-companion", status: "unknown", body: "—" },
       ],
       active: 1,
       stage: {
         lines: [
           { cls: "prompt", text: "❯ claude" },
-          { cls: "dim", text: "─ web-client ─ yolo ─────────────" },
+          { cls: "dim", text: "─ recipe-box ─ yolo ─────────────" },
           { cls: "ok", text: "● Tests passed (42/42)" },
           { cls: "dim", text: "  · npm run build" },
           { text: '<span class="cursor"></span>' },

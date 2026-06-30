@@ -88,25 +88,20 @@ pub enum WorkspaceState {
 const INPUT_NEEDED_NOTIFICATION_TYPES: [&str; 2] = ["permission_prompt", "elicitation_dialog"];
 
 /// Whether a `Notification`'s `notification_type` means "awaiting genuine user input."
-/// `None`/absent or an unrecognized type → `true` (honest fallback). A recognized
-/// informational type → `false` (no-op; the prior state is preserved).
+/// The unknown/absent→AwaitingInput honest-fallback rationale is on
+/// [`INPUT_NEEDED_NOTIFICATION_TYPES`] (the canonical anchor); this just folds it into a bool.
 fn notification_awaits_input(notification_type: Option<&str>) -> bool {
     match notification_type {
-        // Absent type → conservative AwaitingInput (older CC, or a type CC didn't tag).
         None => true,
         Some(t) if INPUT_NEEDED_NOTIFICATION_TYPES.contains(&t) => true,
-        // A recognized non-input type (idle_prompt, auth_success, elicitation_complete,
-        // elicitation_response, …) → informational, not a fresh input request.
         Some(t) if is_known_informational_notification(t) => false,
-        // An UNKNOWN type → honest fallback to AwaitingInput (don't swallow a future type).
         Some(_) => true,
     }
 }
 
 /// The recognized informational `notification_type`s that do NOT mean "awaiting input."
-/// Kept explicit (not "anything not input-needed") so a genuinely unknown future type
-/// falls through to the conservative AwaitingInput default rather than being silently
-/// treated as informational.
+/// Kept explicit so an unknown future type falls through to the AwaitingInput default
+/// rather than being treated as informational (see [`INPUT_NEEDED_NOTIFICATION_TYPES`]).
 fn is_known_informational_notification(t: &str) -> bool {
     matches!(
         t,

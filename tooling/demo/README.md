@@ -27,17 +27,22 @@ Requires **ffmpeg** on `PATH` (host dev box has 7.1.1) and **Node** ≥ 20.
 A demo is one command — capture frames + render the GIF:
 
 ```bash
-node build.mjs --html shell.html --out out/smoke.gif \
-  --width 1000 --height 600 --fps 15 --duration 5.4 \
+node build.mjs --html shell.html --timeline timeline.smoke.js --out out/smoke.gif \
+  --width 1000 --height 600 --fps 15 --duration 3.2 \
   --render-width 800 --webp
 ```
+
+`--duration` is per-timeline (set it just past the last keyframe `t` — `3.2` for the
+smoke timeline whose last beat is `t=2.6`; the polished `filmstrip`/`pip` timelines use
+longer values, see `package.json`). The capture default is `5.4` (a probe-era value), so
+always pass `--duration` explicitly for a tight loop.
 
 Or run the two stages independently:
 
 ```bash
 # 1. Capture: seek-per-frame screenshots into a frames dir
-node capture.mjs --html shell.html --out frames/ \
-  --width 1000 --height 600 --fps 15 --duration 5.4
+node capture.mjs --html shell.html --timeline timeline.smoke.js --out frames/ \
+  --width 1000 --height 600 --fps 15 --duration 3.2
 
 # 2. Render: PNG frames -> looping GIF (+ optional --webp), assert under budget
 node render.mjs --frames frames/ --out out.gif --fps 15 --width 800 --webp
@@ -74,3 +79,7 @@ The scripts (`*.mjs`), the shell HTML/CSS, and this README are tracked.
 `node_modules/`, scratch `frames/`, and rendered `*.gif`/`*.webp`/`*.png` are
 gitignored — the **final** demo GIFs are committed elsewhere (WP5, e.g.
 `docs/demo/`), not here.
+
+`_dots.generated.css` is a generated artifact that **is** committed (despite being
+`*.generated.*`): `extract-dot-css.mjs --check` diffs the freshly-extracted dot CSS
+against this committed baseline as a drift-guard, so the baseline must be tracked.

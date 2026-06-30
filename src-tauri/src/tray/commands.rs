@@ -186,7 +186,8 @@ fn toggle_pip(app: &AppHandle) {
 }
 
 /// Record one workspace's new state and reconcile the glyph. Pulled out of the listener so
-/// the map-update + fold + swap path reads top-to-bottom and is callable from tests' shape.
+/// the map-update + fold + swap path reads top-to-bottom. (Runtime path is AppHandle-bound;
+/// the pure fold it drives — `aggregate_alarm` — is what's unit-tested, not this wrapper.)
 fn apply_update(app: &AppHandle, update: WorkspaceStatusUpdate) {
     let Some(state) = app.try_state::<TrayState>() else {
         return;

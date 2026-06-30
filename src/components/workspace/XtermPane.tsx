@@ -269,9 +269,11 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
         );
       }
 
-      // Fit AFTER layout settles. On first mount the flex/grid cell may not have its
-      // final width during the synchronous effect, so a synchronous fit() computes a
-      // too-narrow size (the 80-col bug). rAF defers until the browser has laid out.
+      // CANONICAL rAF-fit-focus rationale (the post-spawn + on-active sites below
+      // back-reference here): fit AFTER layout settles. On first mount the flex/grid
+      // cell may not have its final width during the synchronous effect, so a
+      // synchronous fit() computes a too-narrow size (the 80-col bug). rAF defers until
+      // the browser has laid out; we focus in the same frame.
       const raf = requestAnimationFrame(() => {
         fit.fit();
         term.focus();
@@ -417,8 +419,8 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           dispatch({ type: "spawned", sessionId });
 
           // The PTY was opened at a default 80x24; sync it to the real fitted size now
-          // that we have a session id. rAF ensures layout has settled so fit() reads the
-          // true pane width. Refocus so the freshly live terminal takes keystrokes.
+          // that we have a session id, and refocus so the freshly live terminal takes
+          // keystrokes. rAF for the same layout-timing reason as the mount fit above.
           requestAnimationFrame(() => {
             fitAndResize();
             termRef.current?.focus();
@@ -471,8 +473,9 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // Repaint on becoming active. A pane hidden with display:none has zero size, so xterm
     // output written/laid-out while hidden is degenerate; on reveal we refit (recompute
     // cols/rows for the now-real width) + push the size to the PTY (SIGWINCH → the shell
-    // repaints its prompt) and refocus. No-op for the always-active CC pane (active never
-    // flips, so this fires once at mount — harmless, same as the post-spawn rAF).
+    // repaints its prompt) and refocus. rAF for the same layout-timing reason as the mount
+    // fit above. No-op for the always-active CC pane (active never flips, so this fires
+    // once at mount — harmless, same as the post-spawn rAF).
     useEffect(() => {
       if (!active) return;
       const raf = requestAnimationFrame(() => {

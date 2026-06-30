@@ -208,7 +208,8 @@ describe("M5 WP4 Phase 4 — minimal-layout attention weighting wiring", () => {
   });
 
   it("an awaiting-input minimal tile gets the POP class (emphasis, not a new color)", () => {
-    // .pip-tile-awaiting is the EMPHASIS hook (CSS scales + glows the dot); the COLOR stays
+    // .pip-tile-awaiting is the EMPHASIS hook (CSS glows the dot — no size scale; operator
+    // dropped the scale in P4.2, blink + glow only); the COLOR stays
     // the shared status-dot-awaiting palette via WorkspaceStatusIndicator (never-disagree).
     // A regression dropping the class defeats the "needs me reads loud" cue.
     expect(pipSource).toContain("isAwaitingInput");

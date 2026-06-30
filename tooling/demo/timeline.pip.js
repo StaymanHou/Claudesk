@@ -248,13 +248,6 @@
     // reaction at t≈1.05 (the operator actively working in Slack), then moves to
     // the input box as they start typing (t≈1.6), then rests. It NEVER touches
     // the PiP (display-only) — coords stay in the Slack backdrop (top-left).
-    // After the ⌘+Tab region switch (t=5.8) the cursor track has ended (clamped
-    // off-screen-ish) so it doesn't wander the Claudesk window — the answer there
-    // is keyboard (1 + ⏎).
-    // Mouse cursor (pip beats only): glides to priya's message and CLICKS a 👍
-    // reaction at t≈1.05 (the operator actively working in Slack), then moves to
-    // the input box as they start typing (t≈1.6), then rests. It NEVER touches
-    // the PiP (display-only) — coords stay in the Slack backdrop (top-left).
     // After the ⌘+Tab region switch (t=5.8) the cursor leaves the viewport so it
     // doesn't wander the Claudesk window — the answer there is keyboard (1 + ⏎).
     cursor: [

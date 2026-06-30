@@ -33,21 +33,21 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** `tooling/demo/timeline.pip.js:247-259`
 - **Finding:** Two near-identical 6-line cursor-track comment blocks back-to-back (copy-paste artifact from the round-4b cursor edit). Delete one.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — deleted the first of the two duplicated cursor-track comment blocks (kept the more-accurate "leaves the viewport" wording). pip nodetest green.
 
 ## SURFACE-2026-06-29-QUALITY-M8WP4-DEAD-FOCUS-FLAG
 - **Severity:** MINOR
 - **Location:** `tooling/demo/shell.js:184,191`
 - **Finding:** `pip.classList.toggle("focused", !!k.pipFocused)` + the per-row `row.focused ? " focused" : ""` are dead in the PiP timeline — the round-3 region switch replaced the PiP focus-ring beat, so `pipFocused`/`row.focused` are never set anywhere. Either wire a focus-ring frame or drop the flag.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — DECIDED drop: deleted the dead `pip.classList.toggle("focused", …)` line + its comment and the per-row `row.focused` flag in `shell.js` (paired with the dead-focus-CSS removal below).
 
 ## SURFACE-2026-06-29-QUALITY-M8WP4-DEAD-FOCUS-CSS
 - **Severity:** MINOR
 - **Location:** `tooling/demo/shell.css:201` (`.pip.focused` / `.pip-cell.focused`)
 - **Finding:** The focus-ring CSS ships with no producer (same root cause as the dead flag above). Remove alongside it.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — deleted the orphaned `.pip.focused` rule from `shell.css` (the producer flag was removed above; `.pip-cell.focused` never existed).
 
 # m8-wp3-filmstrip-demo — 2026-06-29
 
@@ -59,7 +59,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The JSDoc beat descriptions still name the OLD cast ("api-gateway running on center stage" / "web-client needs input"), but the data was recast during the verify-human round to `catan-companion` (active 0) + `tax-cruncher` (awaiting→promoted). Doc/data drift inside one file — a future reader (likely WP5) will mis-map beats to tiles.
 - **Suggested action:** Update the four-beat JSDoc to name the actual cast (catan-companion / tax-cruncher). One-line-per-beat comment fix.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED (already corrected in place; confirmed at debt-paydown WP5, 2026-06-30) — STALE PREMISE: the `timeline.filmstrip.js` four-beat JSDoc already names catan-companion (beat 1) + tax-cruncher (beats 2-4); a grep finds ZERO api-gateway/web-client references. No edit.
 
 ## SURFACE-2026-06-29-QUALITY-M8WP3-SMOKE-TIMELINE-ONE-SYSTEM-NAMING
 - **Severity:** MINOR
@@ -67,7 +67,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The WP2 smoke timeline still uses the "four services of one system" naming that timeline.filmstrip.js's comment now explicitly flags as the anti-pattern to avoid (per the README parallelism-across-projects philosophy). Out of scope for WP3 (smoke = verify-self artifact, not a shipped demo), but worth aligning so published-adjacent surfaces don't contradict the stated philosophy.
 - **Suggested action:** At WP5 (or a refactor), recast the smoke timeline's 4 names to unrelated projects too. Low cost.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — recast the 4 smoke-timeline names api-gateway/web-client/infra-tf/docs-site → tax-cruncher/recipe-box/blog-engine/catan-companion (4 unrelated domains) + added a header note citing the parallelism-across-projects philosophy. Stage labels/comments updated to match; demo nodetests green.
 
 ## SURFACE-2026-06-29-QUALITY-M8WP3-EVAL-CLASSIC-SCRIPT-IN-TEST
 - **Severity:** MINOR
@@ -87,7 +87,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The README's example build command uses `--duration 5.4` (a WP1-probe leftover), but the wired `smoke` script uses `3.2` (the smoke timeline's last keyframe is at t=2.6). A reader copy-pasting the README captures ~2s of dead tail.
 - **Suggested action:** Update the README example duration to match (or note it's illustrative). One-line doc fix.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — README example durations → `3.2` (matching the wired `smoke` script) + a `--timeline timeline.smoke.js` flag + a note that `--duration` is per-timeline (the capture default `5.4` is a probe-era value). No dead-tail for a copy-paster.
 
 ## SURFACE-2026-06-29-QUALITY-M8WP2-COMMITTED-GENERATED-CSS-UNDOCUMENTED
 - **Severity:** MINOR
@@ -95,7 +95,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** `_dots.generated.css` is a generated artifact that is intentionally committed (the `--check` drift-guard needs a committed baseline to diff), yet `.gitignore` blanket-ignores `*.png`/`*.gif`/`*.webp` and the README doesn't mention the committed generated CSS. A future reader may be surprised a `*.generated.*` file is tracked.
 - **Suggested action:** One-line note in the README ("the generated dot CSS is committed as the drift-guard baseline").
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — added a "What's committed" note to `tooling/demo/README.md` explaining `_dots.generated.css` is committed (despite `*.generated.*`) because `extract-dot-css.mjs --check` diffs against it as the drift-guard baseline.
 
 ## SURFACE-2026-06-29-QUALITY-M8WP2-SHELL-INNERHTML-RAW-MARKUP
 - **Severity:** MINOR
@@ -103,7 +103,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** Timeline string fields (`tile.body`, `l.text`, etc.) are injected as raw HTML (some legitimately contain markup like `<span class="cursor">`). Not a security issue (dev-only, author-controlled input), but a sharp edge: WP3/WP4 scenario authors must remember every string field is raw HTML.
 - **Suggested action:** One-line caution in the TIMELINE shape doc-comment in shell.js so a future author doesn't pass an escape-expecting string.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — added a CAUTION block to the TIMELINE-shape doc-comment in `shell.js`: every timeline string field is injected as raw HTML via innerHTML; scenario authors must HTML-escape any literal-render string.
 
 # m7-menu-bar-status-item — 2026-06-29
 
@@ -123,7 +123,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The doc comment says it was "pulled out ... callable from tests' shape," but no test calls `apply_update` (the runtime path is AppHandle-bound and explicitly carried to bridge verify-self). The comment slightly overstates the test coverage.
 - **Suggested action:** Trim the "callable from tests' shape" clause, or add an AppHandle-free seam test if one is cheap. Trivial.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — trimmed the "callable from tests' shape" overclaim; the doc now says the runtime path is AppHandle-bound and the pure fold it drives (`aggregate_alarm`) is what's unit-tested, not this wrapper.
 
 ## SURFACE-2026-06-29-QUALITY-M7-TRAY-ID-UNUSED-LOOKUP
 - **Severity:** MINOR
@@ -323,7 +323,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** `pip/commands.rs:206` `pip_set_visible` rustdoc uses intra-doc link `[pip_toggle]` (the command was removed in the rework → broken rustdoc link); the module header `commands.rs:3` still narrates "`pip_toggle` builds (once) and then shows/hides…". Stale post-rework; the live entry point is `pip_set_mode`/`pip_set_visible`.
 - **Fix shape:** update the two doc references to `pip_set_mode`/`pip_set_visible`; drop the `[pip_toggle]` intra-doc link.
 - **Priority:** low.
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — `pip/commands.rs` module header + the `pip_set_mode`/`pip_set_visible` doc-comments repointed `pip_toggle`→`pip_set_mode`/`pip_set_visible`; the broken `[pip_toggle]` intra-doc link is gone (`rustdoc -D broken_intra_doc_links` clean). The `lib.rs:333` "replaces the old pip_toggle" note left intact (accurate historical context, not a broken link).
 
 ## SURFACE-2026-06-27-QUALITY-WP5-PIPMODE-STATE-DUP-PER-WORKSPACE
 - **Severity:** MINOR
@@ -464,7 +464,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-25-QUALITY-WP3-TRIPLICATED-EFFECT-RATIONALE
 - **Files:** `src/components/workspace/Workspace.tsx` (the WP3 `visible`-edge focus effect comment block, ~lines 69-79)
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — trimmed the 11-line comment to the non-obvious WKWebview-rAF rationale (parked-element + always-active gap) + focus-only-no-PTY invariant; dropped the operator-decision/bug-class sentences (now a "see commit + WIP" pointer).
 - **Type:** tech-debt (comment clarity)
 - **Finding:** The 11-line comment block over a 4-line effect body restates the commit message + WIP near-verbatim (operator-decision + bug-class sentences). Triplicated rationale (comment + commit + WIP) is a future-drift surface.
 - **Pickup shape:** trim to just the non-obvious WKWebview-rAF rationale (the parked-element + always-active=true gap); drop the operator-decision/bug-class sentences already captured in commit + WIP. One small comment edit. Dismiss if the redundancy is judged helpful.
@@ -476,7 +476,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-25-QUALITY-WP2-TRIPLE-RATIONALE-COMMENT
 - **Files:** `src-tauri/src/status_broadcaster/mod.rs` (`INPUT_NEEDED_NOTIFICATION_TYPES` const doc + `notification_awaits_input` + `is_known_informational_notification`)
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — consolidated the unknown-`notification_type`→AwaitingInput rationale to the `INPUT_NEEDED_NOTIFICATION_TYPES` const doc as the canonical anchor; trimmed the `notification_awaits_input` + `is_known_informational_notification` fn/match-arm copies to a back-reference. `cargo test --lib` 307 + clippy clean.
 - **Type:** tech-debt (comment clarity)
 - **Finding:** The unknown-`notification_type`-falls-back-to-AwaitingInput rationale is restated in three places (const doc, fn doc, inline match-arm comments) — ~25 lines of doc for ~15 of logic. The WHY is genuinely non-obvious and worth documenting once, but the triple-restatement means a future editor changing the allow-list must keep three prose copies in sync.
 - **Pickup shape:** consolidate the rationale to one anchor (e.g. the const doc) and trim the fn/match-arm copies to a back-reference. One small comment edit. Dismiss if the redundancy is judged helpful.
@@ -592,7 +592,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-23-QUALITY-WP4B-COEXISTENCE-COMMENT-DUP
 - **Files:** `src/App.css` (WP4b half-accent block + the F12 `.editor-split-pane.is-active::before` block)
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — consolidated to one canonical comment: the WP4b half-accent block holds the full outer-vs-inner-edge / framed-vs-striped / z-index:6 rationale; the F12 `.is-active::before` block trimmed to a one-line back-reference. vite build + 784 tests green.
 - **Type:** tech-debt (comment duplication)
 - **Summary:** The coexistence rationale (outer-edge vs inner-edge, "framed vs striped", z-index:6 parity) is documented near-verbatim in two CSS blocks; they will drift if the edge convention ever changes.
 - **Context:** Belt-and-suspenders given the genuine cross-rule coupling, but a drift hazard. Acceptable as-is; noted for completeness.
@@ -643,7 +643,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-22-QUALITY-WP2-MINORS
 - **Files:** `src-tauri/src/hook_install/commands.rs:42` + `mod.rs:78`; `src-tauri/resources/claudesk-hook.pl:66`; `src-tauri/src/hook_install/mod.rs:101`; `src-tauri/src/lib.rs:62`
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** PARTIAL — #4 (stale `sublime_open` "removed at WP8" comment) RESOLVED 2026-06-30 (debt-paydown WP5): the `lib.rs` `sublime_open` registration comment now states the WP8-redefinition permanent-escape-hatch reality (in-app editor primary, Sublime Text stays one-click, `⌘⇧O` dropped) instead of "Transitional — removed at WP8." #2 already PARTIALLY-ADDRESSED (99a48d5). #1 (chmod/invocation mismatch) + #3 (`NotAnObject` coarseness) remain pending (not in the WP5 comment-drift scope — #1 is a behavior decision, #3 an error-variant refactor).
 - **Findings:**
   1. **chmod/`/usr/bin/perl` mismatch** — the registered command runs `/usr/bin/perl <script>` (not `<script>` directly), so the `chmod 0o755` in `deploy_hook_script` + the script's shebang are never exercised; the `commands.rs`/`mod.rs:78` comment "CC invokes it directly" is inaccurate. Either drop the chmod (dead effort) or invoke the script directly. *(Mild — keeping chmod is harmless future-proofing if the command form ever changes; pick one and reconcile the comment.)* **— PARTIALLY ADDRESSED 2026-06-22 (commit 99a48d5):** the related "shell-form is fine, paths are app-controlled" assumption was the leading edge of a real word-split bug (spaced app-data path) — now fixed (paths shell-quoted). The chmod-vs-invocation cosmetic mismatch itself remains open (low pri).
   2. **Perl hook write-side blocking (WP3 heads-up)** — `print $sock $line` (claudesk-hook.pl:66) can block if WP3's listener accepts the connection but stalls on read (`Timeout=>1` covers connect, not write). Not a defect in WP2 (no listener exists yet), but the WP3 author must keep the accept-loop draining promptly to preserve the "never block CC" invariant on the write side. Best addressed when WP3 builds the listener.
@@ -658,9 +658,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-06-22-QUALITY-WP13-MINORS
 - **Files:** `PaneTabs.tsx:231-245`; `closeTabChord.ts:1-32`; `__tests__/closeTabChord.test.ts`
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** PARTIAL — #1 RESOLVED 2026-06-30 (debt-paydown WP5); #2 (shared `ChordEvent` type) + #3 (Ctrl/Alt test case) DEFERRED to WP6 (Theme F/H dedup-extraction + test-hygiene — that's where those two land).
 - **Findings:**
-  1. **`closeActiveTabRef` comment duplication** — the ~10-line WHY comment on the render-fresh-ref restates the rationale already documented at PaneTabs.tsx L257-263 (`onActivePathChangeRef`/`onEmptyChangeRef`). A one-liner + back-reference ("same render-fresh-ref pattern as the reporters below, see L257") would cut the dup while keeping the load-bearing vh.3 explanation.
+  1. **`closeActiveTabRef` comment duplication** — the ~10-line WHY comment on the render-fresh-ref restates the rationale already documented at PaneTabs.tsx L257-263 (`onActivePathChangeRef`/`onEmptyChangeRef`). A one-liner + back-reference ("same render-fresh-ref pattern as the reporters below, see L257") would cut the dup while keeping the load-bearing vh.3 explanation. — **RESOLVED 2026-06-30 (WP5):** trimmed the `closeActiveTabRef` comment to a one-liner + back-reference to the reporter refs (`onActivePathChangeRef`), keeping the vh.3 stale-closure explanation.
   2. **`CloseTabChordEvent` is a verbatim copy of `TabSwitchChordEvent`** — identical 3-field shape + "mirrors ChordEvent" comment. A shared `ChordEvent` type imported by both pure predicates would remove the dup; per-file self-containment for these seams is arguably a feature, so low-value.
   3. **Missing Ctrl/Alt-permissive test case** — `closeTabChord.ts:27-29` docstring promises Ctrl/Alt aren't part of the chord, but no test pins it. A `{metaKey:true,shiftKey:false,ctrlKey:true,key:"w"}` assertion would lock the documented invariant (safe today — the predicate doesn't read those fields).
 - **Pickup shape:** all three are trivial `/feature-refactor` nits (consolidate a comment; optionally hoist a shared `ChordEvent` type; add one test case). Dismiss any via the WIP's `## Code-Quality Review` section.
@@ -769,7 +769,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** comment-vs-code drift; a future maintainer will look for a SIGTERM path that doesn't exist. The behavior is correct (clean `/exit\r` first is better than SIGTERM); the fix is to the comment wording, not the code.
 - **Suggested action:** reword the `cc_kill` doc comment to "`/exit\r` graceful, then SIGKILL after a grace window." Trivial.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED (already corrected in place; confirmed at debt-paydown WP5, 2026-06-30) — STALE PREMISE: the `cc_kill` doc already reads "(`/exit\r`, then SIGKILL fallback)" and a repo-wide grep finds ZERO "SIGTERM" strings. No code change.
 
 ## SURFACE-2026-06-19-QUALITY-KILL-ALL-N-SCALING
 - **File:** `src-tauri/src/lib.rs:30-36` + `cc_session/mod.rs` `kill_all`/`kill`
@@ -793,7 +793,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** low-stakes, but the doubled prose comment restates the same WHY twice; drift risk if the rAF rationale ever changes.
 - **Suggested action:** extract a tiny `rafFitFocus()` helper or have one comment cross-reference the other. Cleanup-only.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — took the comment-cross-reference path (no helper extraction): the mount-site rAF comment is now the CANONICAL 80-col-timing rationale; the post-spawn + on-active rAF sites trimmed to "rAF for the same layout-timing reason as the mount fit above." (Stale line-refs `159-162/91-94` → the three live sites are the mount fit, the post-spawn sync, and the on-active repaint.)
 
 # wp6-project-config-store — 2026-06-18
 
@@ -1045,7 +1045,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** A future reader trusts "invariant not convention" and won't re-audit. Low exploitability (single-user local tool, user picks in-project files) but the doc/behavior mismatch is the debt.
 - **Suggested action:** Canonicalize the resolved target when it exists and re-check `starts_with(root_canon)`; OR downgrade the doc claim to match. Pairs with the Phase-2 backend-hardening item below.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** PARTIAL (D2, debt-paydown WP5, operator decision 2026-06-30) — DOC downgraded now, HARDENING deferred. The `editor_fs` module header + `resolve_within` doc were narrowed to state the actual guarantee: a non-leaf (directory-component) symlink escaping root IS rejected (parent canonicalize), but a LEAF symlink is NOT followed-and-validated; the over-claim is gone. The actual fix (canonicalize the full target when it exists) stays **Deferred** to a future hardening pass (anchored here), NOT done this sweep.
 
 ## SURFACE-2026-06-19-QUALITY-WP2-BACKEND-TRUSTS-FRONTEND-ROOT
 - **File:** `src-tauri/src/editor_fs/commands.rs:18-26` (`read_file`/`write_file`)
@@ -1053,7 +1053,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** Phase 2 (multi-workspace) multiplies the IPC callers and surface; this is the seam to tighten before more callers depend on it. Acceptable for the single-user PoC today.
 - **Suggested action:** Consider having the backend validate `root` against the known project list (config_store) before honoring it, so a malformed/hostile root can't widen the guard. Pairs with the leaf-symlink item above (same module, same Phase-2 hardening pass).
 - **Priority:** medium
-- **Status:** pending
+- **Status:** PARTIAL (D2, debt-paydown WP5, operator decision 2026-06-30) — DOC stated now, HARDENING deferred. The `editor_fs/commands.rs` module doc now explicitly says `root` is frontend-supplied/-trusted (not re-validated against config_store) — acceptable for the single-user local editor where the frontend shares the trust boundary; the guard's job is to confine the *file path* to `root`, not authenticate `root`. The actual validate-`root`-against-config_store hardening stays **Deferred** to a future pass (anchored here, pairs with the leaf-symlink item above).
 
 ## SURFACE-2026-06-19-QUALITY-WP2-SAVEKEYMAP-CHURN
 - **File:** `src/components/workspace/editor/EditorPanel.tsx:73-87`
@@ -1102,7 +1102,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** Accurate and WHY-focused, but a future edit to the precedence story must touch three places — a mild maintenance smell.
 - **Suggested action:** Consolidate to one canonical note and reference it from the others.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — the `languageOverrideId` doc in `editorExtensions.ts` (which already carries the fullest array-identity-reconfigure rationale + the `cm6-dont-copy-compartment-by-analogy` memory link) is the canonical anchor; the `EditorPanel.tsx` `useMemo` comment trimmed to a back-reference to it. The builder header keeps its `Prec.highest`-specific note (a different axis). 784 tests green.
 
 # m2-wp3c-editor-split-panes — 2026-06-20
 
@@ -1142,7 +1142,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** future reader follows a link to a function that no longer exists; the WP's own removal-sweep discipline missed its own doc reference.
 - **Suggested action:** drop the `[file_base_core]` reference from the doc-comment (the path is the key passed to `git_file_hunks` + `read_file` now).
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED (already corrected in place; confirmed at debt-paydown WP5, 2026-06-30) — STALE PREMISE: `git_diff/mod.rs`'s `ChangedFile.path` rustdoc already links `[file_hunks_core]` (no `file_base_core` anywhere in the tree); `rustdoc -D broken_intra_doc_links` clean. No edit.
 
 ## SURFACE-2026-06-20-QUALITY-WP4-WRONG-DIFF-API-COMMENT
 - **File:** `src-tauri/src/git_diff/mod.rs:327` (`file_hunks_core` doc-comment)
@@ -1150,7 +1150,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** a maintainer reasoning about staged/unstaged correctness from the comment would be misled — and that split is the trickiest part of the module.
 - **Suggested action:** correct the comment to `diff_index_to_workdir` (or, if vs-HEAD-merged was actually intended, change the code — but the tests pin the current `diff_index_to_workdir` behavior, so fix the comment).
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED (already corrected in place; confirmed at debt-paydown WP5, 2026-06-30) — STALE PREMISE: `file_hunks_core`'s doc already names `diff_index_to_workdir` for the unstaged path (no `diff_tree_to_workdir_with_index` anywhere); matches the code. No edit.
 
 ## SURFACE-2026-06-20-QUALITY-WP4-DEAD-UNTRACKED-OPTS-STAGED
 - **File:** `src-tauri/src/git_diff/mod.rs:338-344` (`file_hunks_core` DiffOptions)
@@ -1328,9 +1328,9 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 ## SURFACE-2026-06-22-QUALITY-WP4-MINORS
 - **Files:** `src-tauri/src/status_broadcaster/commands.rs:41-47,48-53`
 - **Priority:** low (all)
-- **Status:** pending
+- **Status:** PARTIAL — #1 RESOLVED 2026-06-30 (debt-paydown WP5); #2 (`.expect` convention judgment) DISMISSED (WP3's `spawn_listener` `.expect` precedent is the accepted house style for infallible thread spawns); #3 (detached-handle WHY) folded into #1's rewrite (the new doc states there's no error channel + the guard lives at the lib.rs call site — the "may hold or detach" framing is gone).
 - **Findings:**
-  1. **`start_broadcaster` docstring describes a `Result`-style error contract the signature lacks** (`commands.rs:43-47`) — the doc says "errors returned as a human-readable string for the caller to surface… the only failure here is the receiver already having been taken," but the function returns `thread::JoinHandle<()>` with no error channel, and the double-start (receiver-already-taken) guard actually lives in `lib.rs`. The prose has drifted from the signature + call site. *(Fix: trim the docstring to match — the spawn either succeeds or panics via `.expect`; the receiver-take guard is documented at the lib.rs call site.)*
+  1. **`start_broadcaster` docstring describes a `Result`-style error contract the signature lacks** (`commands.rs:43-47`) — the doc says "errors returned as a human-readable string for the caller to surface… the only failure here is the receiver already having been taken," but the function returns `thread::JoinHandle<()>` with no error channel, and the double-start (receiver-already-taken) guard actually lives in `lib.rs`. The prose has drifted from the signature + call site. *(Fix: trim the docstring to match — the spawn either succeeds or panics via `.expect`; the receiver-take guard is documented at the lib.rs call site.)* — **RESOLVED 2026-06-30 (WP5):** trimmed the docstring to "no error channel: the spawn either succeeds or panics via `.expect`; the double-start guard (the `Receiver` can only be taken once) lives at the `lib.rs` call site."
   2. **`.expect()` on the thread spawn is a non-test panic path** (`commands.rs:48-53`) — `Builder::spawn(...).expect(...)` violates the "no unwrap outside tests" convention, though it mirrors WP3's `spawn_listener` precedent (`hook_socket/mod.rs`) and thread-spawn failure is near-impossible in practice. Borderline; flagged for convention-consistency only. *(If WP3's pattern is accepted as the house style for infallible thread spawns, dismiss.)*
   3. **Detached-handle asymmetry is undocumented** (`commands.rs:41-42`) — the docstring says the caller "may hold or detach" the `JoinHandle`, and `lib.rs` discards it (detached) while WP3's listener retains `_handle` in `HookSocketState`. The asymmetry is correct (the drain thread self-terminates on channel close, so no cleanup handle is needed) but the WHY is unstated. *(Fix: one-line note "detached — exits on channel close, no cleanup needed.")*
 - **Pickup shape:** all three are trivial `/feature-refactor` doc-fix nits in one file; none changes correctness, the emit behavior, or any hand-off contract. Items 1 + 3 are pure docstring corrections; item 2 is a convention judgment call (dismiss if WP3's `.expect` precedent stands). Dismiss any via the WIP's `## Code-Quality Review` section.
@@ -1531,14 +1531,14 @@ _From `feature-review-quality` (code-quality-reviewer) on ship commit `8a788bf`.
 - **Why it matters:** the comment is load-bearing safety justification for an `unsafe` block; an inaccurate basis weakens it for a future auditor.
 - **Suggested action:** reword to "a safe AppKit frame-mutation like `set_content_size` (which wraps `setContentSize:`); here we send `setFrameOrigin:` directly" — distinguish wrapper vs raw.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — `pip_move`'s doc reworded to distinguish wrapper-vs-raw: "a safe AppKit frame-mutation like `set_content_size` (tauri-nspanel's wrapper over `setContentSize:`); here we send `setFrameOrigin:` as a raw `msg_send!` directly. Both are frame changes, NOT a style-mask transition." cargo + clippy clean.
 
 ## SURFACE-2026-06-26-QUALITY-WP4-STALE-AWAITING-SCALE-COMMENT
 - **Finding:** pipFanoutWiring.test.ts (~line 211) comment says ".pip-tile-awaiting is the EMPHASIS hook (CSS scales + glows the dot)" — but the dot-size scale was DROPPED per operator feedback (P4.2 refinement); the shipped CSS adds only a glow halo, no transform.
 - **Why it matters:** contradicts shipped behavior + the corrected Pip.tsx/CSS comments; mild confabulation risk for the next reader.
 - **Suggested action:** update the test comment to "glows the dot (no size scale — operator dropped the scale, blink + glow only)".
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP5) — `pipFanoutWiring.test.ts` comment corrected to "glows the dot — no size scale; operator dropped the scale in P4.2, blink + glow only," matching the shipped `.pip-tile-awaiting` CSS (glow halo, no transform). 784 tests green.
 
 ## SURFACE-2026-06-26-QUALITY-WP4-VESTIGIAL-DRAG-REGION
 - **Finding:** `pip-root` + `.pip-switch-row` still carry `data-tauri-drag-region`, which the commit itself establishes is INERT on this swizzled borderless NonactivatingPanel (the real drag is the JS `startPanelDrag` → `pip_move`). The attributes are harmless but misleading.

@@ -1,7 +1,8 @@
 //! M5 — PiP NSPanel window-mechanics commands. See `mod.rs`.
 //!
-//! `pip_toggle` builds (once) and then shows/hides the NSPanel with the exact M5
-//! PiP window contract: non-activating, floating, all-Spaces, over-fullscreen,
+//! [`pip_set_mode`] is the single user-facing control; [`pip_set_visible`] builds
+//! (once) and then shows/hides the NSPanel with the exact M5 PiP window contract:
+//! non-activating, floating, all-Spaces, over-fullscreen,
 //! stationary. The panel's content is a bundled app route (`pip.html` — the React
 //! status surface); content is the frontend's concern, window mechanics are this
 //! module's.
@@ -178,8 +179,10 @@ pub fn pip_resize(app: AppHandle, width: f64, height: f64) -> Result<(), String>
 /// 2026-06-26: setPosition no-ops). And we can't drop `.borderless()` to get AppKit's own
 /// `movableByWindowBackground` drag — that re-triggers the WP1 setStyleMask: NSRangeException
 /// (also confirmed 2026-06-26, crash on PanelBuilder::build). So we move the panel directly
-/// via AppKit `setFrameOrigin:` (the same raw-msg_send path `set_content_size` uses safely —
-/// a frame change, NOT a style-mask transition). NSWindow frame origin is BOTTOM-LEFT with
+/// via AppKit `setFrameOrigin:` — a safe AppKit frame-mutation like `set_content_size`
+/// (which is tauri-nspanel's wrapper over `setContentSize:`); here we send `setFrameOrigin:`
+/// as a raw `msg_send!` directly. Both are frame changes, NOT a style-mask transition (the
+/// crash class). NSWindow frame origin is BOTTOM-LEFT with
 /// y measured UP from the screen bottom, so a webview dy (down-positive) maps to origin.y
 /// MINUS dy. No-op if the panel isn't built. Best-effort — never returns an error to the UI.
 #[tauri::command]
@@ -218,7 +221,7 @@ pub fn pip_get_mode(app: AppHandle) -> Result<PipMode, String> {
 ///                `WindowEvent::Focused` handler drives summon-on-blur / dismiss-on-focus
 ///                from here on.
 ///
-/// This replaces the old `pip_toggle` + `manual_off`/`origin` bookkeeping: the regime is
+/// This replaced the old toggle + `manual_off`/`origin` bookkeeping: the regime is
 /// the explicit mode, so there is no inferred state and no dead-end (you can select `Auto`
 /// from any mode). Show/hide still routes through the single [`pip_set_visible`] path so
 /// the `pip-visibility` broadcast + mirror-cost gate stay coherent.
@@ -256,7 +259,7 @@ pub fn pip_set_mode(app: AppHandle, mode: PipMode) -> Result<(), String> {
 }
 
 /// Show or hide the PiP NSPanel, building it on first show. The SINGLE
-/// show/hide path (WP5 P1.2): both the user toggle ([`pip_toggle`]) and the
+/// show/hide path (WP5 P1.2): both the user control ([`pip_set_mode`]) and the
 /// auto-summon/dismiss state machine (WP5 Phase 2) call this, so the
 /// `pip-visibility` broadcast is emitted from exactly one place and never
 /// drifts from the panel's real state. Returns the new visibility
