@@ -42,15 +42,15 @@ workflow in **one window with multiple virtual workspaces inside it**. Pick a pr
 inside a workspace — no more "open terminal → `cd` → `claude`" every time, across 20+
 rotating projects.
 
-> **Status: Milestones 1–4 shipped — daily-driver ready.** Click a project → a working
-> CC session in the project dir inside a workspace; a built-in lite editor + git-diff
-> viewer in the right half; Sublime Text / Sublime Merge / Reveal-in-Finder one click
-> away; N projects open concurrently as workspaces switched via a live filmstrip with
-> per-workspace idle/running/awaiting-input status. **M3+M4 is the dogfood-replace
-> point** — Claudesk now replaces the terminal + Sublime daily-driver setup, and is
-> installable via a [Homebrew tap](#install). Next: M5 picture-in-picture, M6 menu-bar
-> status, M7 auto-resume, M8 skill orchestration, M9 polish (Developer-ID signing +
-> notarization + auto-update).
+> **Status: Milestones 1–8 shipped — released as v0.2.3, daily-driver ready.** Click a
+> project → a working CC session in the project dir inside a workspace; a built-in lite
+> editor + git-diff viewer in the right half; Sublime Text / Sublime Merge / Reveal-in-Finder
+> one click away; N projects open concurrently as workspaces switched via a live filmstrip
+> with per-workspace idle/running/awaiting-input status; an always-on-top picture-in-picture
+> panel that keeps sessions watchable from any other app; and a menu-bar status item that
+> lights up when any project needs input. Installable via a [Homebrew tap](#install). Next:
+> M9 time-analytics, M10 workflow-docs viewer, M11 auto-resume, M12 skill orchestration,
+> M13 polish (Developer-ID signing + notarization + auto-update).
 
 ## Install
 

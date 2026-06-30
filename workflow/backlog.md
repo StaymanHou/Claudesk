@@ -349,7 +349,7 @@ forward — none M5-blocking). No escalations. -->
 - **Context:** The log is currently the ONLY confirmation channel for WP2's DEFERRED-TO-RELEASE live verify — a post-fix subdir-cwd `Stop` logging `resolved=ws-N emitted` is how we'll confirm the fix in prod. So it MUST stay through the v0.2.2 patch + the operator's real-use confirmation.
 - **Suggested action:** after v0.2.2 confirms the dot-flip, decide: (a) keep as-is, (b) demote to debug-only, or (c) add log rotation/size-cap if kept. Lean (a)+(c).
 - **Priority:** low
-- **Status:** pending (blocked-until v0.2.2 live-confirms WP2)
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP8, D3 ruling) — took (a)+(c): KEEP as a standing prod diagnostic (it self-confirms a future status bug) + size-cap. `status_log` now rotates the live `status-channel.log` to `.1` when it reaches `MAX_LOG_BYTES` (5 MiB), bounding disk to ~2× the cap; best-effort (a rotate failure falls through to a normal append). Module doc-comment rewritten from "WP2 will likely demote this" to the keep+cap reality; +4 rotation-boundary unit tests (312 lib tests green).
 
 ## SURFACE-2026-06-24-NEW-WORKSPACE-HOTKEY
 - **Source:** operator question during app-menu verify-human (2026-06-24)

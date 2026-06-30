@@ -1,7 +1,7 @@
 ---
 shape: temporary-wbs
 created: 2026-06-30
-status: in-progress — WP1, WP2, WP3, WP9, WP4, WP5, WP6, WP7 DONE; WP8 remaining
+status: in-progress — ALL WPs DONE (WP1–WP9 shipped); sweep-completion/fold-back pending (operator pause-point)
 context: between-milestone debt-paydown sweep, filed after M8 close, before M9 (Time-analytics) planning
 drive_mode: full-autopilot
 ---
@@ -86,7 +86,7 @@ scores low; translate severity into the impact term, don't auto-prioritize by it
 - **Delete:** `SURFACE-2026-06-16-CC-EXIT-REQUIRES-TWO-KEYSTROKES` (marked SUPERSEDED — no longer
   relevant) + any entries found already-resolved-in-place during the sweep.
 
-**Sequence of execution:** WP1 → WP2 → WP3 → WP9 → WP4 → WP5 → WP6 ✅ → WP7 ✅ → **WP8**
+**Sequence of execution:** WP1 → WP2 → WP3 → WP9 → WP4 → WP5 → WP6 ✅ → WP7 ✅ → WP8 ✅ — **ALL DONE**
 *(Ordered by the rules above: deletions (WP1) → low-risk real fixes (WP2–WP4) → comment-only bulk
 (WP5) → behavior-preserving dedup (WP6) → infra config (WP7) → README + the one stateful change (WP8).
 **WP9** folded in 2026-06-30 from a user bug report — a behavioral fix with a Low-Med-risk edge; slotted
@@ -295,7 +295,31 @@ case was already ignored; closed the real `tooling/demo/` eslint noise instead),
 
 ---
 
-## WP8 — README freshen + status-log size-cap (D3)  `[impact: Med-High (README) · effort: Small · risk: Low]`  `← last; the one stateful change`
+## WP8 — README freshen + status-log size-cap (D3)  `[impact: Med-High (README) · effort: Small · risk: Low]`  `← last; the one stateful change`  ✅ DONE 2026-06-30
+**Outcome:** Both tasks shipped. The one prod-runtime-behavior change in the whole sweep (the status-log
+rotation) landed last, as planned. Gate: `cargo test --lib` **312 pass** (+4 rotation-boundary tests) +
+clippy `-D warnings`.
+- **README Status freshen** — rewrote the stale `> **Status:**` block (was "Milestones 1–4 shipped" + the
+  old M5–M9 roadmap, sitting prominently right under the new demo GIFs): now "Milestones 1–8 shipped —
+  released as v0.2.3", names the PiP + menu-bar surfaces that landed since, and lists the current
+  resequenced roadmap (M9 time-analytics → M10 docs-viewer → M11 auto-resume → M12 skill-orch → M13 polish).
+  Kept terse. README is `.prettierignore`'d (WP7), so the edit is prose-clean by policy. The github.com
+  render confirm is **carried to the next `/release` gate** (DEFERRED-TO-RELEASE — the front-page render is
+  an installed/published-surface check, same class as the OC.* operator-carry checklists; a text-only
+  markdown edit, low-risk).
+- **(D3 — KEEP + SIZE-CAP/ROTATE) status-log** — implemented best-effort size-cap rotation in
+  `status_log/mod.rs`: before each append, if the live `status-channel.log` is ≥ `MAX_LOG_BYTES` (5 MiB) it
+  rotates to `status-channel.log.1` (replacing any prior generation) and a fresh live file starts, so disk
+  stays bounded to ~2× the cap (one live + one rotated). Rotation is best-effort like the rest (a
+  stat/rename failure falls through to a normal append — a too-large log beats a broken status path; never
+  panics, never propagates into the drain loop). Rewrote the module doc-comment from "WP2 will likely demote
+  this" to the keep+cap reality (operator chose KEEP it as a standing prod diagnostic — it self-confirms a
+  future status bug — but BOUND its growth). +4 unit tests (no-op below cap; rotate at/over cap; integrated
+  append-rotates-then-writes-fresh; rotation replaces a prior `.1`). No drain-loop bind-site change needed —
+  rotation is internal to `write_line`, so all callers (`status_broadcaster::commands`) benefit unchanged.
+**Resolved findings:** `SURFACE-2026-06-29-QUALITY-M8WP5-STALE-STATUS-BLOCK-NOW-PROMINENT` (README freshen),
+`SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE` (D3 keep+cap).
+
 **Backlog:** `m8-wp5` #2 (`STALE-STATUS-BLOCK-NOW-PROMINENT`) + D3 (`SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE`).
 **Why last + elevated:** README is the open-source front door (M13 launch) and the M8 restructure left a **stale Status block** sitting prominently right under the new demo GIFs. The status-log change is the only WP that alters prod runtime behavior → last (highest-risk tier, though still Low).
 

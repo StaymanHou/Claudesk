@@ -24,14 +24,29 @@
 //! - **Append-mode:** one line per event, opened-and-closed per write (no held handle
 //!   to leak across the drain thread's lifetime; the volume is one line per CC turn,
 //!   not a hot loop).
-//! - **WP2 will likely demote this** to `#[cfg(debug_assertions)]`/env-gated once the
-//!   bug is named — prod should not write a status log forever (WBS WP2 task).
+//! - **KEPT as a standing prod diagnostic, size-capped** (debt-paydown D3, 2026-06-30).
+//!   The earlier note here predicted WP2 would demote this to debug-only; the operator
+//!   instead chose to KEEP it in prod (it's the channel that self-confirms a future
+//!   status bug) but BOUND its growth so it can't grow forever. Before each append, if
+//!   the live file exceeds [`MAX_LOG_BYTES`] it is rotated (`status-channel.log` →
+//!   `status-channel.log.1`, replacing any prior `.1`) and a fresh live file started, so
+//!   on-disk usage stays bounded to ~2× the cap (one live + one rotated generation). The
+//!   rotation is itself best-effort — a rotate failure falls through to a normal append
+//!   (a too-large log beats a broken status path).
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Basename of the status-channel log within the app-data directory.
 pub const STATUS_LOG_FILE: &str = "status-channel.log";
+
+/// Basename of the single rotated generation (`status-channel.log.1`).
+pub const STATUS_LOG_ROTATED_FILE: &str = "status-channel.log.1";
+
+/// Size cap (bytes) for the live status log before it rotates (D3 keep+cap). 5 MiB —
+/// generous for the one-line-per-CC-turn volume (tens of thousands of events), small
+/// enough that the worst case (live + one rotated generation) stays ~10 MiB on disk.
+pub const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
 
 /// A best-effort append-mode logger bound to a resolved log path. Constructed once at
 /// drain-thread start from the `AppHandle`'s `app_data_dir()`; cloned cheaply (it is
@@ -55,6 +70,12 @@ impl StatusLog {
         &self.path
     }
 
+    /// The rotated-generation path (`<live>.1`) — the single prior generation kept after
+    /// a size-cap rotation.
+    pub fn rotated_path(&self) -> PathBuf {
+        self.path.with_file_name(STATUS_LOG_ROTATED_FILE)
+    }
+
     /// Append one already-formatted line (a trailing newline is added). **Best-effort:**
     /// any IO error is swallowed — never panics, never propagates. The drain loop must
     /// not be slowed or broken by a logging failure.
@@ -68,11 +89,39 @@ impl StatusLog {
     /// place ([`write_line`](Self::write_line)) and the formatting/IO is unit-testable
     /// against a real (temp) path.
     fn append(&self, line: &str) -> std::io::Result<()> {
+        // Size-cap (D3 keep+cap): rotate BEFORE the append if the live file is already
+        // at/over the cap, so the file we open is fresh (or under-cap) and growth stays
+        // bounded to ~one cap per generation. Rotation is best-effort — a failure here
+        // falls through to a normal append (a too-large log beats a dropped status line).
+        self.rotate_if_oversized();
         let mut f = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)?;
         writeln!(f, "{line}")
+    }
+
+    /// If the live log is at/over [`MAX_LOG_BYTES`], move it to the single rotated
+    /// generation (`<live>.1`), replacing any prior one, so the next append starts a
+    /// fresh live file. Best-effort: a stat or rename failure is swallowed (the caller's
+    /// append then just grows the existing file — never a panic, never a dropped event).
+    /// Factored out so the boundary is unit-testable with a small cap via [`rotate_at`].
+    fn rotate_if_oversized(&self) {
+        self.rotate_at(MAX_LOG_BYTES);
+    }
+
+    /// [`rotate_if_oversized`](Self::rotate_if_oversized) with an injectable cap (tests
+    /// drive a tiny cap rather than writing 5 MiB). `>=` so a file exactly at the cap
+    /// rotates. A missing/unstattable live file is a no-op (nothing to rotate).
+    fn rotate_at(&self, cap_bytes: u64) {
+        let oversized = std::fs::metadata(&self.path)
+            .map(|m| m.len() >= cap_bytes)
+            .unwrap_or(false);
+        if oversized {
+            // `rename` replaces an existing `.1` atomically on the same volume; a failure
+            // (e.g. a transient lock) is swallowed — the append below still proceeds.
+            let _ = std::fs::rename(&self.path, self.rotated_path());
+        }
     }
 }
 
@@ -197,6 +246,69 @@ mod tests {
 
         let contents = std::fs::read_to_string(log.path()).unwrap();
         assert_eq!(contents, "line one\nline two\n");
+    }
+
+    #[test]
+    fn rotate_at_is_a_noop_below_the_cap() {
+        let dir = TempDir::new().unwrap();
+        let log = StatusLog::new(dir.path());
+        log.write_line("small"); // "small\n" = 6 bytes
+        // Cap well above the current size → no rotation, live file untouched, no .1.
+        log.rotate_at(1000);
+        assert!(log.path().exists());
+        assert!(!log.rotated_path().exists());
+        assert_eq!(std::fs::read_to_string(log.path()).unwrap(), "small\n");
+    }
+
+    #[test]
+    fn rotate_at_moves_live_to_rotated_when_at_or_over_cap() {
+        let dir = TempDir::new().unwrap();
+        let log = StatusLog::new(dir.path());
+        log.write_line("0123456789"); // "0123456789\n" = 11 bytes
+        // Cap below the current size → rotate: live becomes .1, live no longer exists.
+        log.rotate_at(11);
+        assert!(!log.path().exists());
+        assert!(log.rotated_path().exists());
+        assert_eq!(
+            std::fs::read_to_string(log.rotated_path()).unwrap(),
+            "0123456789\n"
+        );
+    }
+
+    #[test]
+    fn append_rotates_then_writes_fresh_when_over_cap() {
+        // The integrated path through write_line: an oversized live file is rotated and
+        // the new line lands in a FRESH live file (so growth is bounded per generation).
+        let dir = TempDir::new().unwrap();
+        let log = StatusLog::new(dir.path());
+        // Seed the live file at/over the 5 MiB cap with one big line.
+        let big = "x".repeat(MAX_LOG_BYTES as usize);
+        log.write_line(&big);
+        assert!(log.path().exists());
+        // Next write sees the over-cap file, rotates it, and writes fresh.
+        log.write_line("after rotate");
+        // Live file now holds ONLY the post-rotation line; the big line is in .1.
+        assert_eq!(
+            std::fs::read_to_string(log.path()).unwrap(),
+            "after rotate\n"
+        );
+        assert!(log.rotated_path().exists());
+        assert!(std::fs::metadata(log.rotated_path()).unwrap().len() >= MAX_LOG_BYTES);
+    }
+
+    #[test]
+    fn rotate_replaces_a_prior_rotated_generation() {
+        // Only ONE rotated generation is kept — a second rotation overwrites .1 (so disk
+        // stays bounded to ~2× the cap, never an unbounded .1/.2/.3 chain).
+        let dir = TempDir::new().unwrap();
+        let log = StatusLog::new(dir.path());
+        std::fs::write(log.rotated_path(), b"OLD rotated\n").unwrap();
+        log.write_line("0123456789");
+        log.rotate_at(5); // over the tiny cap → rotate, replacing the OLD .1
+        assert_eq!(
+            std::fs::read_to_string(log.rotated_path()).unwrap(),
+            "0123456789\n"
+        );
     }
 
     #[test]

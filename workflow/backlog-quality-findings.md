@@ -22,7 +22,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** The WP5 restructure put the new pitch + demos above an unchanged stale "Status" block (claims "Milestones 1–4 shipped", lists the superseded M5–M9 roadmap; reality is M1–M7 shipped + released v0.2.3 with a resequenced roadmap). It's now the first thing a reader hits under the polished new top. Operator-acknowledged + logged as out-of-WP-scope.
 - **Suggested action:** Freshen the Status block (current milestone reality + resequenced roadmap) — natural fit for the next README-freshen task or `/product-finalize` durable-doc resync.
 - **Priority:** low
-- **Status:** pending
+- **Status:** RESOLVED 2026-06-30 (debt-paydown WP8) — rewrote the block to "Milestones 1–8 shipped — released as v0.2.3", named the PiP + menu-bar surfaces, and listed the current roadmap (M9 time-analytics → M10 docs-viewer → M11 auto-resume → M12 skill-orch → M13 polish). github.com render confirm carried to the next `/release` gate (text-only markdown, low-risk).
 
 # m8-wp4-pip-demo-asset — 2026-06-29
 
