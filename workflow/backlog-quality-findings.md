@@ -4,18 +4,6 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
-# m8-wp3-filmstrip-demo — 2026-06-29
-
-*(feature-review-quality on ship commit a42ba61; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built, well-scoped dev tooling that does exactly what its plan said and no more... advances the codebase (reusable cursor/keycap tracks WP4's PiP demo can lean on) rather than accruing debt; the only debt is cosmetic comment/data drift." Nothing rises to a refactor trigger for author-controlled, gitignored-output, dev-only marketing tooling.)*
-
-## SURFACE-2026-06-29-QUALITY-M8WP3-EVAL-CLASSIC-SCRIPT-IN-TEST
-- **Severity:** MINOR
-- **Location:** `tooling/demo/timeline.filmstrip.nodetest.mjs:31` (loads the timeline via `eval(readFileSync(...))` against a bare `window` shim).
-- **Finding:** The only viable read path for a non-module classic script, and well-commented — but `eval` of file contents is brittle if the timeline ever gains a reference the shim doesn't provide (e.g. `document`). On-record only; not worth changing while the timeline stays data-only.
-- **Suggested action:** None now. If the timeline ever references browser globals beyond `window`, extend the shim. Dismiss-candidate.
-- **Priority:** low
-- **Status:** pending
-
 # m6-wp11-multiple-right-panel-terminals — 2026-06-28
 
 *(feature-review-quality on ship commit f9e3292; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: "well-built... the only debt is minor — a small logic duplication between the button handlers and the keydown branches that a shared callback would erase. Nothing here warrants a refactor pass.")*
@@ -25,17 +13,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** `src/components/workspace/terminalList.ts` — `TerminalEntry { id; sessionId }`.
 - **Finding:** `id` and `sessionId` are kept as distinct fields "so a future rename/label can diverge," but in v1 they are always set equal (`{ id: sid, sessionId: sid }` at every construction site). A speculative-generality seam carried into the data model before the feature that needs it; cheap + documented, so borderline — noted only because always-equal fields invite a reader to wonder whether they can drift today (they can't).
 - **Suggested action:** Either collapse to one field until a rename/label feature lands, or add a one-line note that they're intentionally always-equal in v1. Or leave as-is (the seam is cheap).
-- **Priority:** low
-- **Status:** pending
-
-# m6-wp10-right-panel-terminal-zoom — 2026-06-28
-
-*(feature-review-quality on ship commit baaaa4c; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR — both cosmetic clarity/traceability nits. Reviewer: "well-built, tightly-scoped... only nits are cosmetic comment-clarity + a bundled-but-tracked eslint tweak; neither warrants a refactor pass.")*
-
-## SURFACE-2026-06-28-QUALITY-WP10-ESLINT-IGNORE-BUNDLED
-- **Severity:** MINOR
-- **Finding:** `eslint.config.js:18-21` — the `tmp/**` + `src-tauri/tmp/**` ignore addition is an in-scope incidental fix bundled into the feature commit. Correctly commented + flagged in the WIP Build notes, so tracked not silent. Noted for traceability only; not a defect.
-- **Fix shape:** none required (informational). If a future cleanup wants strict commit-atomicity, scratch-repo lint-ignore config could move to its own commit — not worth a dedicated pass.
 - **Priority:** low
 - **Status:** pending
 
@@ -72,16 +49,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low.
 - **Status:** pending — DEFERRED at debt-paydown WP4 (operator, 2026-06-30), anchored to **M9**. The per-`RightPanelHost` `pip-mode` subscription is the project's INTENDED "all surfaces subscribe to the same backend broadcast" pattern (PiP mode is already an app-global View-menu radio, backend = single source of truth via `pip_set_mode`/`pip_get_mode` + the `pip-mode` event), not a missing-app-state bug — the only real cost is N-1 redundant `pip_get_mode` mount fetches. M9's time-tracking toggle follows the same backend-command + `*-mode`-broadcast + per-consumer-subscribe shape, so there is no shared app-settings store to build once-vs-twice. Fold the dedup into M9's settings work IF an app-settings hook materializes there; else it stays the documented pattern.
 
-# qol-wp7-filetree-git-bubble-up — 2026-06-25
-
-3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `4d384b1`. Reviewer verdict: well-built, right architecture, no debt accrued; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP7-CONSIDER-ARRAY-ALLOC
-- **Finding:** the `consider` closure allocates a 1–2-element array per ancestor purely to reuse `dominantStatus`. Cosmetic given the input is changed-paths-only (O(changed × depth)).
-- **Where:** `src/components/workspace/filetree/gitRollup.ts` `consider` closure (~79).
-- **Fix shape:** a direct precedence-index compare would avoid the per-step array, but the current form favors single-source-of-precedence clarity — defensible as-is; dismiss-candidate.
-- **Priority:** low
-
 # qol-wp5b-editor-folder-depth — 2026-06-25
 
 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `374f7cb`. Reviewer verdict: well-built, security-conscious, ship-quality; no finding warrants a refactor pass. Priority: low (all). Auto-backlogged per drive_mode=autopilot.
@@ -90,12 +57,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** a failed `trash_path` in `onDeleteFolderConfirm` is swallowed to `console.error` only — the tree isn't refreshed and no user-visible surface reports it, so the folder silently appears to still exist. Consistent with the single-file delete's existing behavior (and the WIP flags a future toast), but the folder-delete blast radius makes the silent-failure window more consequential.
 - **Where:** `src/components/workspace/RightPanelHost.tsx` `onDeleteFolderConfirm` (~410).
 - **Fix shape:** surface the trash failure inline/toast (reuse the new-file inline-error pattern). Pairs with the WP5 `SURFACE-2026-06-25-QUALITY-WP5-DELETE-FAILURE-NOT-SURFACED` toast item — one fix covers both delete paths.
-- **Priority:** low
-
-## SURFACE-2026-06-25-QUALITY-WP5B-DESCENDANT-COUNT-STALE
-- **Finding:** the folder-delete confirm's descendant `count` (`countDescendants` over the loaded `fs_tree` entries) reflects the tree as last refreshed; if the folder grew on disk since the last `fsTreeRefreshKey` bump, the displayed number understates the blast radius. The trash itself is correct (backend trashes the live subtree) — only the advisory number can lag.
-- **Where:** `src/components/workspace/editor/confirmDialog.ts` `deleteFolderSpec` consumer in `RightPanelHost.tsx` (count source).
-- **Fix shape:** accept as cosmetic (the WP0 watcher keeps the tree fresh in practice), or re-walk on confirm-open for an exact count. Lowest value of the three.
 - **Priority:** low
 
 # qol-wp5-editor-file-management — 2026-06-25
@@ -114,18 +75,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Fix shape:** surface the delete error inline (a transient row/toast near the tree, or reuse the inline-error pattern the new-file input already has). Consistent with the feature's surfaced-not-swallowed discipline.
 - **Priority:** low
 
-# qol-wp4-terminal-respawn-on-switch — 2026-06-25
-
-3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `10c604f`. Reviewer rated the fix well-built and appropriately-scoped — the `active`-in-deps conflation was split cleanly into a pure `shouldSpawnOnActive` predicate + a tiny `[active, bridge.phase]` trigger effect + the single-source-of-truth `spawnTriggerDeps` contract; "change advances rather than accrues debt" for a file with a documented spawn-lifecycle bug history. All three findings are polish; none warrants a refactor pass. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP4-TRIGGER-ONCE-UNDERFLAGGED
-- **Files:** `src/components/workspace/XtermPane.tsx` (the deferred-spawn trigger effect, ~lines 418-425; cross-refs the spawn effect's `hasSpawnedRef.current = true` at ~line 365)
-- **Priority:** low
-- **Status:** pending
-- **Type:** tech-debt (comment accuracy / future-edit safety)
-- **Finding:** The trigger effect reads non-reactive `hasSpawnedRef.current` while keyed on `[active, bridge.phase]`. A narrow async window exists after the nonce bump but before the latch is set where an `active` toggle could fire a second nonce bump. It is SAFE — the spawn effect's per-run `cancelled` closure self-kills the orphan so exactly one session survives — but the trigger effect's comment ("bumps `spawnNonce` exactly once") slightly overstates the guarantee; once-ness is co-enforced downstream by `cancelled`.
-- **Pickup shape:** add a one-line comment at the trigger effect pointing at the `cancelled` backstop (so a future reader doesn't "tighten" the de-dup here and break the StrictMode contract). Comment-only; no behavior change.
-
 # qol-wp1-close-workspace — 2026-06-25
 
 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9`. Reviewer rated the feature well-built and idiomatic — the standout being the per-pane `cc_kill`-on-unmount that reaps both PTY panes generically and closes a latent WP7 lifecycle gap. All findings are low-risk: two over-narrated comments + one accepted test-boundary gap. Auto-backlogged per drive_mode=autopilot.
@@ -137,34 +86,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Type:** test-coverage gap
 - **Finding:** Only the pure layer (reducer, `dirtyDocCount`, `closeWorkspaceSpec`) is unit-covered. No component test for the × (stopPropagation routing, keyboard Enter/Space) and no App-level test for the probe-registry / focus-repick wiring. Accepted boundary per the project's manual-host-UI convention + the live 9/9 operator verification — but the App wiring (`requestClose` reading the `workspaces` closure, `resolveClose` clearing `pendingClose`) is the part most likely to regress silently.
 - **Pickup shape:** if/when the project adopts a component-test harness (RTL) or E2E (deferred per Phase-1 convention), add a Filmstrip-×-routing test + an App close-handler test. Low value until then; dismiss if the manual-verification posture holds.
-
-# qol-wp0-fs-watcher — 2026-06-24
-
-3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `d893254`. Reviewer rated the feature well-built, advancing the codebase — a textbook instance of the repo's conventions (status_broadcaster split, reused `ignore`/`diskConflict` seams, lifecycle through the existing register/deregister diff loop, IPC snake_case pinned both sides). All findings are forward-looking, none a defect at current scope. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-24-QUALITY-FSWATCH-REWALK-AMPLIFICATION
-- **Files:** `src/components/workspace/RightPanelHost.tsx:162-163`
-- **Priority:** low
-- **Status:** pending
-- **Type:** tech-debt (latent scaling cost)
-- **Finding:** Each `fs-change` event bumps BOTH `fsTreeRefreshKey` and `gitStatusRefreshKey`, each triggering a full `fs_tree` re-walk + `git_file_statuses` IPC. With the 200ms debounce, a bulk external op (`git checkout`, branch switch) still produces multiple batches → several back-to-back full-tree re-walks. Acceptable at the operator's repo sizes (the `build_ignore` doc-comment already accepts "a harmless extra re-walk"); the only place in the design where event→work amplification is unbounded.
-- **Pickup shape:** a trailing-edge coalesce on the consumer side (collapse rapid `fs-change` bumps into one re-walk), OR raise the backend debounce window. Reassess if/when N-workspace concurrent dogfooding shows real cost. Dismiss if the re-walk stays imperceptible.
-
-## SURFACE-2026-06-24-QUALITY-FSWATCH-EMIT-FAILURE-INVISIBLE
-- **Files:** `src-tauri/src/fs_watch/commands.rs:143,161`
-- **Priority:** low
-- **Status:** pending
-- **Type:** tech-debt (observability gap)
-- **Finding:** Debouncer-callback failures (debounce errors, emit failures) go to `eprintln!` — consistent with the file's "log, don't crash the callback thread" intent and the repo's no-structured-logger posture, BUT a persistent emit failure means the tree/editor silently stop updating, invisible to the operator. The surfaced-error discipline applied to `workspace_watch_start`/`stop` doesn't reach the steady-state emit path.
-- **Pickup shape:** low-value unless emit failures are seen in practice — there's no clean IPC channel back from a detached callback thread to surface a toast. Could set a "watcher degraded" flag the next command reads, or emit a one-shot `fs-watch-error` event. Likely dismiss (FSEvents emit failures are vanishingly rare on a healthy local app).
-
-## SURFACE-2026-06-24-QUALITY-FSWATCH-ISDIR-FALSE
-- **Files:** `src-tauri/src/fs_watch/mod.rs:119`
-- **Priority:** low
-- **Status:** pending
-- **Type:** polish (documented-sound edge)
-- **Finding:** `is_ignored` always passes `is_dir=false` to `matched_path_or_any_parents`; the doc-comment correctly explains parent-matching covers directory-only patterns (`foo/`). Non-issue for the watcher's actual inputs (every emitted event path is a file or a path under an ignored dir). Noted only because the comment's reasoning is load-bearing; the reviewer checked the matcher edge and found it sound.
-- **Pickup shape:** no action needed — effectively a confirmation the edge was reviewed. Dismiss unless a future case feeds bare directory paths through `is_ignored`.
 
 # app-menu-bar — 2026-06-24
 
@@ -228,18 +149,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
   4. **Stale `sublime_open` comment (pre-existing)** — `lib.rs:62` still reads "Transitional — removed at WP8 once editor parity," contradicting CLAUDE.md's normative "both Sublime launchers KEPT permanently (revised 2026-06-20)." NOT WP2-introduced (inherited), but sits 2 lines above WP2's new registration and is demonstrably wrong against the style guide. Trivial comment fix.
 - **Pickup shape:** all four are trivial `/feature-refactor` nits. #2 is best deferred to WP3 (the listener WP). #1, #3, #4 are quick opportunistic fixes. Dismiss any via the WIP's `## Code-Quality Review` section.
 
-# wp9-phase1-polish — 2026-06-19
-
-3 MINOR findings from `feature-review-quality` on ship commit `91fae7f` (0 CRITICAL, 0 MAJOR). The feature is well-built; findings are a partial-failure window already triaged elsewhere, a plan/impl drift note, and a missing clarifying comment. Auto-backlogged per drive_mode=autopilot (MINOR).
-
-## SURFACE-2026-06-19-QUALITY-WP9-PLAN-IMPL-DRIFT-CCNOTFOUND
-- **File:** `workflow/archive/wp9-phase1-polish.md` P1.1 outcome line vs `src-tauri/src/cc_session/mod.rs`
-- **Finding:** The Phase-1 observable-outcome text said the not-found case maps to "a friendly `CcError::Spawn` variant/message"; the shipped code introduces a dedicated `CcError::CcNotFound` variant instead (cleaner than overloading `Spawn`).
-- **Why it matters:** Pure plan-text/impl drift note — the implementation choice is better than the planned one; recorded only so the divergence is on file. No code change wanted.
-- **Suggested action:** None (informational). Resolve by acknowledging the better-than-planned choice.
-- **Priority:** low
-- **Status:** pending
-
 # wp8-sublime-hotkey — 2026-06-19
 
 3 MINOR findings from `feature-review-quality` on ship commit `74dfc2c` (0 CRITICAL, 0 MAJOR). The feature survived a mid-flight OS-global→in-app spec reversal with no live remnants; findings are all doc-accuracy/cosmetic. MINOR #1 (stale "global-shortcut handler" rationale) was FIXED IN-PLACE at finalize-prep time in both the WIP Discoveries and the backlog SURFACE entry — not pending. The 2 below are the remaining cosmetic nits. Auto-backlogged per drive_mode=autopilot (MINOR).
@@ -279,31 +188,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-# m2-wp4-diff-viewer-polish — 2026-06-20
-
-Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 MINOR. Verdict: well-built, appropriately-scoped polish; no refactor warranted. All three are micro-readability / posture notes.
-
-## SURFACE-2026-06-20-QUALITY-WP4POLISH-STICKY-ZINDEX-COUPLING
-- **Source:** feature:review-quality (m2-wp4-diff-viewer-polish)
-- **Type:** tech-debt
-- **Summary:** The whole-commits-sticky layout relies on z-index ordering (2 vs 2 vs 1) across `.diff-commits` / `.diff-commit-banner` / `.diff-file-header`, all pinning at `top:0` in `.diff-scroll`. No mechanical guard (no CSS/visual-regression harness per repo posture) — a future top/z-index edit could silently restack. Comments document the coupling.
-- **Context:** Inherent to UI polish in a repo whose posture is pure-fn vitest + live operator verify-human; not a defect, a fragility note.
-- **Suggested action:** None required. If a visual-regression harness is ever added (Phase 4 polish?), pin this invariant.
-- **Priority:** low
-- **Status:** pending
-
-# m2-wp5-right-panel-host — 2026-06-20
-
-1 MAJOR + 2 MINOR findings from `feature-review-quality` on ship commit `4546ffb` (0 CRITICAL). Reviewer: well-built refactor-plus-feature — faithful Workspace→RightPanelHost extraction, root-cause item-7 resolver fix with targeted regression guards, standout cross-predicate chord-exclusivity test, above-average chord-ownership doc discipline. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-20-QUALITY-WP5-SPLIT-LISTENER-CROSSPOINTER
-- **File:** `src/components/workspace/RightPanelHost.tsx:30-36` (document+capture, ⌘⇧E/D/T) vs `src/components/workspace/SublimeToolbar.tsx:35-45` (window+bubble, ⌘⇧O)
-- **Finding:** Two separate keydown listeners now exist per visible workspace with split chord-ownership (host owns the panel chords on document+capture; toolbar owns the Sublime-Text pop on window+bubble). Functionally disjoint by chord letter (no conflict — confirmed), but the partition is only discoverable by reading both files.
-- **Why it matters:** low-cost clarity for a deliberately partitioned listener set; a maintainer touching one may not realize the other exists.
-- **Suggested action:** a one-line comment in RightPanelHost noting "SublimeToolbar owns ⌘⇧O separately (window+bubble)". Trivial `/feature-refactor` nit.
-- **Priority:** low
-- **Status:** pending
-
 # m2-wp6-file-finder — 2026-06-20
 
 3 MINOR findings from `feature-review-quality` on ship commit `fc77ad4` (0 CRITICAL, 0 MAJOR). The feature is well-built and low-debt — reviewer validated correctness (deterministic tiebreak sort, greedy subsequence matcher, async cancellation, chord exclusivity) and consistency with repo seams. All three are minor overlay/doc nits. Auto-backlogged per drive_mode=autopilot.
@@ -313,14 +197,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Finding:** While the Cmd+P finder overlay is open, a panel chord (⌘⇧E/⌘⇧D) still fires and switches the right-half panel *underneath* the still-visible overlay — the listener doesn't early-return on `finderOpen`.
 - **Why it matters:** UX seam, not a correctness bug; a future reader will wonder whether interleaving panel-switch with an open overlay was intended.
 - **Suggested action:** Guard panel chords on `!finderOpen` (or add a one-line note that the interleave is acceptable). Trivial.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-20-QUALITY-WP6-HOVER-COUPLES-KEYBOARD-CURSOR
-- **File:** `src/components/workspace/finder/FileFinder.tsx:177` (`onMouseEnter`)
-- **Finding:** `onMouseEnter={() => setActiveIndex(i)}` couples mouse-hover to the keyboard cursor — a mouse resting over the list can yank the active row out from under an arrow-key user.
-- **Why it matters:** minor interaction nit; negligible at the 100-row cap. Mirrors the same pattern in CommandPalette (consistency), so arguably WAI.
-- **Suggested action:** Optionally gate the hover-set on actual pointer movement, or leave (matches CommandPalette). Low value.
 - **Priority:** low
 - **Status:** pending
 
@@ -362,34 +238,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Suggested action:** None recommended (matching the baseline is intentional). If a future probe wants exact percentiles, fix both `measure.sh` copies together. Throwaway code.
 - **Pickup shape:** no action; informational. Dismiss via the WIP's `## Code-Quality Review` section.
 
-# m4-wp2-n1-lift — 2026-06-23
-
-3 MINOR findings from `feature-review-quality` on ship commit `b48ccce` (0 CRITICAL, 0 MAJOR). Reviewer rated it well-built + scope-disciplined; the `kill_all` parallelization was the standout (sound ownership reasoning + deterministic timing test). All 3 are low-effort polish in the new picker-overlay code. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-23-QUALITY-WP2-OVERLAY-ESC-PREVENTDEFAULT
-- **File:** `src/components/picker/PickerOverlay.tsx:28-37`
-- **Finding:** the document-level Esc handler calls `preventDefault()` unconditionally → suppresses the picker search input's native Esc-to-clear, and is a latent conflict if another document Esc consumer (command palette / finder share the `command-palette-backdrop` shell) is ever co-mounted.
-- **Suggested action:** scope the Esc handling (only preventDefault when the overlay is the topmost consumer, or only when Esc isn't being used to clear the focused input).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-06-23-QUALITY-WP2-TOAST-SINGLE-SLOT-MULTIPLEX
-- **File:** `src/components/picker/ProjectPicker.tsx:131-149`
-- **Finding:** the single `toast` slot multiplexes two independent signals (benign `info` prune-note vs surfaced `error` IPC failure) — a transient prune note can be clobbered the instant a mutation fails (or vice versa).
-- **Suggested action:** if it bites, split into separate info/error slots (or a small queue). Acceptable for WP2 scope.
-- **Priority:** low
-- **Status:** pending
-
-# dev-prod-isolation — 2026-06-24
-
-3 MINOR findings from `feature-review-quality` on ship commit `5f9a86a` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature well-built and advancing the codebase: single-root-cause design (identifier is the one source of truth), exemplary pure/impure split mirroring the config_store/hook_install precedent, the substring trap closed with exact-match + a both-directions regression test, and WHY-encoding doc comments. All three findings are low-risk coupling/drift seams, none affecting correctness. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-24-QUALITY-DEVPROD-OVERLAY-WINDOW-SIZE-COUPLING
-- **File:** `src-tauri/tauri.dev.json:6-12`
-- **Finding (MINOR):** the dev overlay re-declares `width`/`height` in `app.windows[0]` only because Tauri's array-merge replaces the whole window object (the sole intended override is `title`). Documented in the WIP (P1.1) but not at the file site → a future editor changing the prod window size would see dev silently keep 1280×800.
-- **Fix shape:** add an inline comment in tauri.dev.json noting the array-replace coupling, or track window size in a shared place. Optional.
-- **Status:** BURY (sweep #2 WP2, 2026-06-30). The cheap comment-form is INFEASIBLE — `tauri.dev.json` is parsed as strict JSON by serde, so a `//` comment breaks config parsing. The only remaining fix ("track window size in a shared place") is medium-effort + low-value + low-risk = the meh zone → Bury per the disposition model. Moved to WP4's bury list.
-
 # qol-wp6-new-workspace-hotkey — 2026-06-25
 
 2 MINOR findings from `feature-review-quality` on ship commit `47fdeb9` (0 CRITICAL, 0 MAJOR). Reviewer rated the feature clean and convention-adherent — pure-predicate + app-level-listener split is the right factoring, disjointness vs the neighbouring ⌘N chord is bidirectionally documented, the listener is a near-verbatim clone of the proven ⌘⇧+digit effect. Accrues no debt. Both findings are low-effort honesty/hygiene nits, neither a behavior bug. Auto-backlogged per drive_mode=autopilot.
@@ -410,17 +258,6 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Where:** `src-tauri/src/lib.rs:65-72` (approx; the `let mut builder` restructure).
 - **Fix shape:** no action needed while the bridge stays dev-only-conditional; if WP2 wiring is ever torn down or made unconditional, drop the `#[allow]` rather than let it linger. Track-only.
 - **Priority:** low
-
-# m5-wp3-pip-nspanel-status-core — 2026-06-26
-
-2 MAJOR + 3 MINOR findings (0 CRITICAL) from `feature-review-quality` on ship commit `95292d6`. Reviewer verdict: well-built, advances the codebase more than it accrues debt; the 2 MAJOR are NOT bugs at the shipped baseline (both benign on WP3's only lifecycle path) but are latent desyncs the **M5 WP5 lifecycle work will trip over** — carry into WP5 scope, not a standalone refactor. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-26-QUALITY-WP3-UNDIFFED-MIRROR-EMIT
-- **Finding:** The `pip-mirror` emit sends `mirrorFrameSnapshot()` — the full serialized HTML for every needed workspace — every tick while shown, no per-tile diffing. Correct at dogfood N; worth a comment noting it's intentionally un-diffed.
-- **Where:** `src/components/workspace/useMirrorTicker.ts` (~130, the emit).
-- **Fix shape:** add `// full-frame each tick — no diff; revisit if N grows` (WP4/WP5 scaling territory). Optionally diff if N grows.
-- **Priority:** low
-- **Status:** pending
 
 # m5-wp4-pip-layout-modes-switcher-resize — 2026-06-26
 
@@ -478,16 +315,5 @@ Reviewer (code-quality-reviewer on ship commit 5051bd4): 0 CRITICAL, 0 MAJOR, 3 
 - **Severity:** MINOR
 - **Finding:** `resolve_cwd` (`mod.rs:239-246`) now scans all registered entries (`O(n)`) instead of the previous `O(1)` HashMap lookup. Negligible at the documented scale (≤100 workspaces, one CC hook event at a time) — flagged only so the linear scan is a recorded, conscious tradeoff rather than silent drift.
 - **Suggested action:** none now; revisit only if a high-frequency event source is ever added that would inherit the scan.
-- **Priority:** low
-- **Status:** pending
-
-# wp9-suppress-empty-pip — 2026-06-28
-
-*(feature-review-quality on ship commit 7b36853; Mode 3 autopilot auto-backlog. 0 CRITICAL / 0 MAJOR / 2 MINOR. Reviewer: "well-built, low-risk polish that does exactly what its plan said... the two nits are backlog-or-dismiss at most; no refactor warranted.")*
-
-## SURFACE-2026-06-28-QUALITY-WP9-REDUNDANT-MODE-REREAD
-- **Severity:** MINOR
-- **Finding:** `pip_set_mode(On)` (`pip/commands.rs`) persists `mode` to disk, then routes to `reconcile_on_mode_visibility`, which re-reads the mode back from disk (`resolve_data_dir` → `read_pip_mode`) rather than using the `mode` already in scope — a redundant disk read on a user-click path. Harmless (the read returns the just-persisted value) and arguably consistent with the file's "read fresh from the persisted source of truth" discipline used by the focus handler.
-- **Fix shape:** either pass the in-hand `mode` into a count-only reconcile variant, or add a one-line comment noting the re-read is the deliberate "fresh from persisted truth" pattern. Lean: a comment, unless the hot-path read ever shows up.
 - **Priority:** low
 - **Status:** pending

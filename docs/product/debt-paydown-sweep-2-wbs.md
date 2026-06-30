@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: between-M8-and-M9
 created: 2026-06-30
-status: in-progress (WP1 ✓, WP2 ✓, WP3 ✓ — 2026-06-30)
+status: in-progress (WP1 ✓, WP2 ✓, WP3 ✓, WP4 ✓ — 2026-06-30; WP5 remaining)
 parent-backlog: workflow/backlog-quality-findings.md (+ workflow/backlog.md)
 drive-mode: autopilot
 ---
