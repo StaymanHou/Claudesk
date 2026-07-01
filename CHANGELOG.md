@@ -97,6 +97,7 @@
 - **Backlog resolved:** SURFACE-2026-06-27-QUALITY-WP4-UNUSED-STATE-VALUE-BINDING, SURFACE-2026-06-25-QUALITY-WP6-CHORD-MAP-XREF-HYGIENE, SURFACE-2026-06-26-QUALITY-WP2-LINGERING-ALLOW-UNUSED-MUT — ack-closed (already-documented / track-only, no action warranted).
 - **Backlog resolved:** SURFACE-2026-06-19-QUALITY-CHORD-TS-PHASE-TAG, SURFACE-2026-06-22-QUALITY-WP1-MEASURE-PGREP-GUARD-DEGRADED, SURFACE-2026-06-22-QUALITY-WP1-MEASURE-PERCENTILE-OFFBYONE — closed as dead (the `chord.ts` file + the `measure.sh` probe were deleted/archived).
 - **Product cycle complete:** Between-M8-and-M9 debt-paydown sweep #2 (Full Rule-1 reconciliation) — the code-quality backlog went 114 → 7 surviving anchors across 5 WPs (delete-stale → comment sweep → tiny-logic+test → bury meh-zone → backend-polish refactor), with the temporary WBS folded back and deleted; the 3 silent file-op-failure findings collapsed into one anchored "file-op error surface" Defer (net-new UX), 16 meh-zone findings buried, and every remaining survivor is a genuine M9/M10/D2-hardening/release-gate/test-infra anchor.
+- **Backlog resolved:** SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE — the installed-build verification carry closed at the v0.2.4 release gate (brew version 0.2.4, quarantine-clear launch, m2-wp9 PTY-startup-output + subdir-cwd Idle-flip both confirmed on the Finder-launched `.app`).
 
 ## 2026-06-29
 

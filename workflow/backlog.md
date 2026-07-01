@@ -162,7 +162,7 @@
 - **Context:** Operator: "we will package and run the release build, and I will verify at that time right before we distribute to homebrew." M5 closes on agent-verified-only evidence; the installed-build out-of-focus behavior is the whole reason PiP exists, so it MUST be exercised before publishing.
 - **Suggested action:** The next `/release` run (or the `release` skill) MUST verify checks (1)–(5) above on the freshly-built `.app`, launched from Finder/Dock, BEFORE bumping the Homebrew tap. If any fails, it's an M5 regression — back-loop before distributing.
 - **Priority:** high (gates the next public release; it's the milestone's reason for being)
-- **Status:** pending
+- **Status:** RESOLVED (2026-06-30, v0.2.4 release gate) — installed-`.app` smoke test passed: `brew list --cask --versions claudesk` = 0.2.4, app launches quarantine-clear, and the DEFERRED-TO-RELEASE checks (m2-wp9 fresh-session PTY-startup-output paints; stuck-`Running` subdir-cwd dot flips to Idle on `Stop`) both confirmed. The M5 PiP-specific out-of-focus criteria were already operator-verified at the v0.2.0 gate; v0.2.4 confirms nothing in the two debt-paydown sweeps regressed the installed build.
 
 ## Code-quality findings — file-op-error-surface (2026-06-30)
 - **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
