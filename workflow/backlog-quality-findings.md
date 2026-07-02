@@ -4,6 +4,34 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# cc-permission-mode-dropdown — 2026-07-02
+
+*(feature-review-quality on ship commit 1624e2e; Mode 2 orchestrated. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: well-built, advances the codebase; wire contract + migration are the standouts. None warrant a refactor pass.)*
+
+## SURFACE-2026-07-02-QUALITY-CCMODE-DEFAULT-ARGV-NOOP-UNTESTED
+- **Severity:** MINOR
+- **File:** `src-tauri/src/cc_session/mod.rs` (~205, `build_cc_argv`)
+- **Finding:** `Default` now emits an explicit `--permission-mode default` (vs. the old bare `["claude"]`); the "harmless no-op" claim in the doc comment is load-bearing but rests on an untested CC-CLI behavioral assumption. The argv unit test pins the mapping, not the behavioral equivalence.
+- **Fix shape:** documentation-hardening — note that the equivalence is a verify-human/release check (live spawn IS verify-human-covered; it passed 2026-07-02). No code change strictly needed.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-02-QUALITY-CCMODE-SELECT-A11Y-NAME
+- **Severity:** MINOR
+- **File:** `src/components/picker/ProjectPicker.tsx` (207-222)
+- **Finding:** the `<select>`'s accessible name comes only from implicit label-nesting (`<label><span>Permission mode</span><select>…</label>`), no `htmlFor`/`id` or `aria-label`. Works today; would silently lose its name if the markup is refactored.
+- **Fix shape:** add an explicit `aria-label="Permission mode"` on the `<select>` (or a label testid + `htmlFor`).
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-02-QUALITY-CCMODE-BARE-DOC-COMMENTS
+- **Severity:** MINOR
+- **File:** `src-tauri/src/cc_session/mod.rs` (~55-70, `CcPermissionMode` variants)
+- **Finding:** `Auto` / `DontAsk` doc comments are bare restatements ("CC's `auto` mode") vs. the semantic WHY the `Default`/`Plan`/`AcceptEdits`/`BypassPermissions` comments carry.
+- **Fix shape:** enrich with the semantic distinction, or drop to match the enum's self-documenting naming.
+- **Priority:** low.
+- **Status:** pending.
+
 # m5-wp5-pip-toggle-lifecycle-autosummon — 2026-06-27
 
 *(feature-review-quality on ship commit f6e3929; Mode 3 autopilot auto-backlog. 0 CRITICAL / 2 MAJOR / 2 MINOR.)*

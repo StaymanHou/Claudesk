@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-02
+
+- **Feature shipped:** Replaced the project-picker's binary yolo checkbox with a dropdown of all six Claude Code `--permission-mode` values (default, plan, acceptEdits, auto, dontAsk, bypassPermissions), persisted app-global, mirrored in a native View-menu radio submenu, with legacy `cc_yolo` migration on upgrade.
+
 ## 2026-06-30
 
 - **Task closed:** Debt-paydown WP1 (dead-code & dead-dependency removal) — the deletions-first work package of the between-M8/M9 code-quality sweep: removed the dead `ignore = "0.4"` crate (and rewrote the `regex`/`notify-debouncer-full` Cargo.toml comments that falsely claimed a shared `ignore`-walker `.gitignore` contract to describe the real manual-DFS heavy-dir walk), the dead `data-active-pane` JSX attribute + its stale CSS comment cross-refs, the inert `.filmstrip { flex-shrink }` and `.file-tree-dir-status { margin-left }` rules, the unused `backdropRef` in the picker, and the 3 vestigial-on-NSPanel `data-tauri-drag-region` attrs in the PiP panel — all behavior-preserving, gated green by `cargo build`/clippy/302 Rust tests + `tsc`/`vite build`/eslint/780 frontend tests.
