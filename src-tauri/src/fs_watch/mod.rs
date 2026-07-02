@@ -310,7 +310,10 @@ mod tests {
             ]
         );
         // The `.git/index` write flips git_meta but is NOT added to paths (no tree re-walk).
-        assert!(change.git_meta, ".git/index in the batch must flip git_meta");
+        assert!(
+            change.git_meta,
+            ".git/index in the batch must flip git_meta"
+        );
     }
 
     #[test]
@@ -323,7 +326,10 @@ mod tests {
         let abs = vec![r.join(".git/index")];
         let change = paths_to_change("ws-1", r, &abs, FsKind::Modified)
             .expect("a git-meta-only batch must emit (status-only signal)");
-        assert!(change.paths.is_empty(), "no tree-visible path → empty paths");
+        assert!(
+            change.paths.is_empty(),
+            "no tree-visible path → empty paths"
+        );
         assert!(change.git_meta, "git_meta must be set");
     }
 

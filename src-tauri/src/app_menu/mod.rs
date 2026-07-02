@@ -39,7 +39,37 @@ use tauri::menu::{
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
+use crate::cc_session::CcPermissionMode;
 use crate::pip::layout::PipMode;
+
+/// The six CC permission modes in the order they appear in the View-menu submenu,
+/// paired with their display label. Iterated by both `build_menu` (to construct the
+/// items) and [`apply_cc_permission_mode_to_menu`] (to re-check them) so the two can't
+/// drift. Order is coarse-to-permissive.
+const CC_PERMISSION_MODE_ITEMS: &[(&str, CcPermissionMode, &str)] = &[
+    (
+        ids::CC_MODE_DEFAULT,
+        CcPermissionMode::Default,
+        "Default (ask each time)",
+    ),
+    (ids::CC_MODE_PLAN, CcPermissionMode::Plan, "Plan"),
+    (
+        ids::CC_MODE_ACCEPT_EDITS,
+        CcPermissionMode::AcceptEdits,
+        "Accept Edits",
+    ),
+    (ids::CC_MODE_AUTO, CcPermissionMode::Auto, "Auto"),
+    (
+        ids::CC_MODE_DONT_ASK,
+        CcPermissionMode::DontAsk,
+        "Don't Ask",
+    ),
+    (
+        ids::CC_MODE_BYPASS,
+        CcPermissionMode::BypassPermissions,
+        "Bypass Permissions (yolo)",
+    ),
+];
 
 /// The Tauri event name the menu emits a clicked item's id on. The frontend
 /// (`App.tsx`) subscribes once and dispatches by id (`menu/menuBridge.ts`).
@@ -81,26 +111,33 @@ pub fn apply_pip_mode_to_menu<R: Runtime>(app: &AppHandle<R>, mode: PipMode) {
     }
 }
 
-/// Handle to the single View-menu CC-yolo `CheckMenuItem`, stashed in managed state by
-/// [`build_menu`] so its checkmark can be re-set AFTER the menu is built. Same pattern as
-/// [`PipModeMenuItems`]: the item is built once (at `.setup()`) seeded from the persisted
-/// `cc_yolo`, but the value changes at runtime (a menu click → `cc_set_yolo` → `cc-yolo`
-/// broadcast), and a `cc-yolo` listener (wired in `lib.rs`) calls [`apply_cc_yolo_to_menu`]
-/// to re-check it — there is no menu-rebuild path.
-pub struct CcYoloMenuItem<R: Runtime> {
-    toggle: CheckMenuItem<R>,
+/// Handles to the six View-menu CC permission-mode `CheckMenuItem`s (radio-style —
+/// exactly one checked), stashed in managed state by [`build_menu`] so the active mode can
+/// be re-checked AFTER the menu is built. Same pattern as [`PipModeMenuItems`]: the items
+/// are built once (at `.setup()`) seeded from the persisted mode, but the value changes at
+/// runtime (a menu click OR the picker dropdown → `cc_set_permission_mode` →
+/// `cc-permission-mode` broadcast), and a listener (wired in `lib.rs`) calls
+/// [`apply_cc_permission_mode_to_menu`] to re-check them — there is no menu-rebuild path.
+/// The items are kept in the [`CC_PERMISSION_MODE_ITEMS`] order, paired with their mode.
+pub struct CcPermissionModeMenuItems<R: Runtime> {
+    items: Vec<(CheckMenuItem<R>, CcPermissionMode)>,
 }
 
-/// Set the CC-yolo `CheckMenuItem`'s checked-state to `yolo`. Called on every `cc-yolo`
-/// broadcast so the View-menu checkmark always matches the backend's persisted value (the
-/// single source of truth). No-op if the menu hasn't been built yet (no managed handle).
-/// Best-effort — a `set_checked` failure is logged, never propagated.
-pub fn apply_cc_yolo_to_menu<R: Runtime>(app: &AppHandle<R>, yolo: bool) {
-    let Some(item) = app.try_state::<CcYoloMenuItem<R>>() else {
+/// Set the six CC permission-mode `CheckMenuItem`s' checked-state to reflect `mode`,
+/// mutually exclusively (exactly one checked). Called on every `cc-permission-mode`
+/// broadcast so the View-menu radio always matches the backend's persisted mode (the
+/// single source of truth). No-op if the menu hasn't been built yet (no managed handles).
+/// Best-effort per item — a `set_checked` failure is logged, never propagated.
+pub fn apply_cc_permission_mode_to_menu<R: Runtime>(app: &AppHandle<R>, mode: CcPermissionMode) {
+    let Some(state) = app.try_state::<CcPermissionModeMenuItems<R>>() else {
         return;
     };
-    if let Err(e) = item.toggle.set_checked(yolo) {
-        eprintln!("[claudesk] cc-yolo menu set_checked failed: {e}");
+    for (item, item_mode) in &state.items {
+        if let Err(e) = item.set_checked(mode == *item_mode) {
+            eprintln!(
+                "[claudesk] cc-permission-mode menu set_checked failed for {item_mode:?}: {e}"
+            );
+        }
     }
 }
 
@@ -127,10 +164,15 @@ pub mod ids {
     pub const PIP_MODE_OFF: &str = "view.pip.mode.off";
     pub const PIP_MODE_ON: &str = "view.pip.mode.on";
     pub const PIP_MODE_AUTO: &str = "view.pip.mode.auto";
-    // M6 WP7 — the CC yolo (`--dangerously-skip-permissions`) opt-out, a single
-    // `CheckMenuItem` (checked = yolo ON). A click sets the INVERTED state via
-    // `cc_set_yolo` (the frontend reads current state from the `cc-yolo` broadcast).
-    pub const CC_YOLO_TOGGLE: &str = "view.cc.yolo";
+    // The CC permission-mode radio (friend-requested dropdown, mirrored in the menu) — six
+    // radio-style CheckMenuItems, the active one checked. A click sets that mode via
+    // `cc_set_permission_mode` (the frontend reads current from `cc-permission-mode`).
+    pub const CC_MODE_DEFAULT: &str = "view.cc.mode.default";
+    pub const CC_MODE_PLAN: &str = "view.cc.mode.plan";
+    pub const CC_MODE_ACCEPT_EDITS: &str = "view.cc.mode.acceptEdits";
+    pub const CC_MODE_AUTO: &str = "view.cc.mode.auto";
+    pub const CC_MODE_DONT_ASK: &str = "view.cc.mode.dontAsk";
+    pub const CC_MODE_BYPASS: &str = "view.cc.mode.bypassPermissions";
 }
 
 /// Every functional menu-item id, in one place. `is_functional_id` checks membership
@@ -152,7 +194,12 @@ pub const FUNCTIONAL_IDS: &[&str] = &[
     ids::PIP_MODE_OFF,
     ids::PIP_MODE_ON,
     ids::PIP_MODE_AUTO,
-    ids::CC_YOLO_TOGGLE,
+    ids::CC_MODE_DEFAULT,
+    ids::CC_MODE_PLAN,
+    ids::CC_MODE_ACCEPT_EDITS,
+    ids::CC_MODE_AUTO,
+    ids::CC_MODE_DONT_ASK,
+    ids::CC_MODE_BYPASS,
 ];
 
 /// Whether a menu-item id is one the frontend acts on (i.e. the click should emit
@@ -291,23 +338,35 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         on: pip_on.clone(),
         auto: pip_auto.clone(),
     });
-    // M6 WP7 — the CC yolo (`--dangerously-skip-permissions`) opt-out, a single
-    // CheckMenuItem (checked = yolo ON, the default). A click sets the INVERTED value via
-    // cc_set_yolo (the frontend reads current state from `cc-yolo`); the backend broadcasts
-    // `cc-yolo` so apply_cc_yolo_to_menu re-checks it. Seeded from the persisted value (a
-    // read failure falls back to ON, the default). NO accelerator (native-menu pattern).
-    let cc_yolo = app
+    // The CC permission-mode radio (friend-requested dropdown, mirrored here) — a
+    // "Permission Mode ▸" submenu of six radio-style CheckMenuItems, the active one
+    // checked from the persisted mode (default Default). A click sets that mode via
+    // `cc_set_permission_mode` (the frontend bridge); the backend broadcasts
+    // `cc-permission-mode` so `apply_cc_permission_mode_to_menu` re-checks them. NO
+    // accelerators (native-menu pattern). Read failure falls back to Default.
+    //
+    // Built ONCE here; the handles are stashed in managed state (`CcPermissionModeMenuItems`)
+    // so the `cc-permission-mode` listener (wired in `lib.rs`) can re-check them — there is
+    // NO menu-rebuild. Items + labels come from `CC_PERMISSION_MODE_ITEMS` so build + refresh
+    // can't drift.
+    let cc_mode = app
         .path()
         .app_data_dir()
         .ok()
-        .and_then(|dir| crate::config_store::settings::read_cc_yolo(&dir).ok())
-        .unwrap_or(true);
-    let cc_yolo_toggle =
-        CheckMenuItemBuilder::with_id(ids::CC_YOLO_TOGGLE, "Skip Permission Prompts (yolo)")
-            .checked(cc_yolo)
+        .and_then(|dir| crate::config_store::settings::read_cc_permission_mode(&dir).ok())
+        .unwrap_or_default();
+    let mut cc_mode_submenu = SubmenuBuilder::new(app, "Permission Mode");
+    let mut cc_mode_handles: Vec<(CheckMenuItem<R>, CcPermissionMode)> = Vec::new();
+    for (id, mode, label) in CC_PERMISSION_MODE_ITEMS {
+        let item = CheckMenuItemBuilder::with_id(*id, *label)
+            .checked(cc_mode == *mode)
             .build(app)?;
-    app.manage(CcYoloMenuItem {
-        toggle: cc_yolo_toggle.clone(),
+        cc_mode_submenu = cc_mode_submenu.item(&item);
+        cc_mode_handles.push((item, *mode));
+    }
+    let cc_mode_submenu = cc_mode_submenu.build()?;
+    app.manage(CcPermissionModeMenuItems {
+        items: cc_mode_handles,
     });
     let zoom_reset = MenuItemBuilder::with_id("view.zoomReset.label", "Reset Zoom\t⌘0")
         .enabled(false)
@@ -327,7 +386,7 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .item(&pip_on)
         .item(&pip_auto)
         .separator()
-        .item(&cc_yolo_toggle)
+        .item(&cc_mode_submenu)
         .build()?;
 
     // ── Workspace ───────────────────────────────────────────────────────────────
@@ -422,13 +481,21 @@ mod tests {
     }
 
     #[test]
-    fn cc_yolo_toggle_is_a_functional_menu_id() {
-        // M6 WP7: the View-menu yolo toggle must be in FUNCTIONAL_IDS so its click emits
-        // the `menu` event the frontend turns into cc_set_yolo. (Uniqueness is covered by
-        // functional_ids_are_unique_and_non_empty; this pins WP7's id specifically.)
-        assert!(is_functional_id(ids::CC_YOLO_TOGGLE));
-        assert!(FUNCTIONAL_IDS.contains(&ids::CC_YOLO_TOGGLE));
-        assert_eq!(ids::CC_YOLO_TOGGLE, "view.cc.yolo");
+    fn cc_permission_mode_ids_are_functional_and_cover_every_variant() {
+        // Each of the six permission-mode menu items must be in FUNCTIONAL_IDS so its
+        // click emits the `menu` event the frontend turns into cc_set_permission_mode.
+        // Also pin that CC_PERMISSION_MODE_ITEMS covers all six CcPermissionMode variants
+        // exactly once (the build + refresh source of truth).
+        for (id, _mode, _label) in CC_PERMISSION_MODE_ITEMS {
+            assert!(is_functional_id(id), "{id} should be functional");
+            assert!(FUNCTIONAL_IDS.contains(id));
+        }
+        assert_eq!(CC_PERMISSION_MODE_ITEMS.len(), 6);
+        let modes: std::collections::HashSet<_> = CC_PERMISSION_MODE_ITEMS
+            .iter()
+            .map(|(_, m, _)| *m)
+            .collect();
+        assert_eq!(modes.len(), 6, "each mode must appear exactly once");
     }
 
     #[test]

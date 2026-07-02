@@ -33,16 +33,67 @@ use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use thiserror::Error;
 
 /// The external CLI Claudesk drives.
 const CC_CMD: &str = "claude";
-/// Yolo mode by default (`docs/product/arch.md` Key Decisions). The opt-out is the
-/// M6 WP7 `AppSettings.cc_yolo` setting (default ON) — gated in [`build_cc_argv`] and
-/// read at spawn time from the persisted settings; a change takes effect on the next
-/// spawn (the argv is fixed once per CC process).
-const CC_ARG_YOLO: &str = "--dangerously-skip-permissions";
+/// CC's `--permission-mode` flag. A CC session's permission behavior is chosen once
+/// per process via this flag (see [`build_cc_argv`]); the value is one of
+/// [`CcPermissionMode`]'s wire strings.
+const CC_ARG_PERMISSION_MODE: &str = "--permission-mode";
+
+/// The Claude Code permission mode a spawned CC session runs under — the full
+/// `--permission-mode` choice set from `claude --help` (friend-requested, replacing the
+/// earlier yolo on/off boolean). The setting is app-global, persisted in
+/// `AppSettings.cc_permission_mode`, read at spawn time (a change takes effect on the
+/// NEXT `cc_spawn`, since the flag is fixed once per CC process).
+///
+/// Serializes camelCase to match CC's own `--permission-mode` values **byte-for-byte**
+/// (`"default"`, `"plan"`, `"acceptEdits"`, `"auto"`, `"dontAsk"`, `"bypassPermissions"`)
+/// — the serialized string is passed straight to the CLI, and the TS union in
+/// `src/cc/permissionMode.ts` mirrors these same strings across the IPC boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum CcPermissionMode {
+    /// Normal permission prompts (CC's out-of-the-box behavior). The Claudesk default
+    /// when unset / first run.
+    #[default]
+    #[serde(rename = "default")]
+    Default,
+    /// Plan mode — CC plans without making edits until approved.
+    #[serde(rename = "plan")]
+    Plan,
+    /// Auto-accept file edits; still prompts for other actions.
+    #[serde(rename = "acceptEdits")]
+    AcceptEdits,
+    /// CC's `auto` mode.
+    #[serde(rename = "auto")]
+    Auto,
+    /// CC's `dontAsk` mode.
+    #[serde(rename = "dontAsk")]
+    DontAsk,
+    /// Bypass all permission checks — the old "yolo" behavior
+    /// (`--dangerously-skip-permissions` equivalent).
+    #[serde(rename = "bypassPermissions")]
+    BypassPermissions,
+}
+
+impl CcPermissionMode {
+    /// The wire string CC's `--permission-mode` flag expects (identical to the serde
+    /// rename). Kept as an explicit method so [`build_cc_argv`] doesn't round-trip through
+    /// serde just to get the CLI token.
+    pub fn as_flag_value(self) -> &'static str {
+        match self {
+            CcPermissionMode::Default => "default",
+            CcPermissionMode::Plan => "plan",
+            CcPermissionMode::AcceptEdits => "acceptEdits",
+            CcPermissionMode::Auto => "auto",
+            CcPermissionMode::DontAsk => "dontAsk",
+            CcPermissionMode::BypassPermissions => "bypassPermissions",
+        }
+    }
+}
 /// Chunk size for the PTY reader. WP2 saw multi-KB redraws; 4 KB matches the probe.
 const READ_CHUNK: usize = 4096;
 /// Fallback shell for the WP9 second-terminal panel when `$SHELL` is unset (macOS
@@ -145,18 +196,19 @@ pub fn resolve_shell_argv(env_shell: Option<String>) -> Vec<String> {
     vec![shell, "-l".to_string(), "-i".to_string()]
 }
 
-/// Build the argv for a CC spawn, gating the yolo flag on the WP7 setting.
+/// Build the argv for a CC spawn from the persisted permission mode.
 ///
-/// `yolo == true` (the default) → `["claude", "--dangerously-skip-permissions"]`; `false`
-/// → `["claude"]`, so CC shows its permission prompts. Pure (bool in → argv out) so the
-/// gate is unit-testable without spawning a real `claude`; the setting read happens at the
-/// call site ([`SessionRegistry::spawn`]) and is injected here.
-fn build_cc_argv(yolo: bool) -> Vec<String> {
-    let mut argv = vec![CC_CMD.to_string()];
-    if yolo {
-        argv.push(CC_ARG_YOLO.to_string());
-    }
-    argv
+/// Every mode maps to an explicit `--permission-mode <value>` pair (including
+/// `Default` — passing `--permission-mode default` is a harmless no-op that keeps the
+/// mapping uniform and makes the chosen mode visible in the process args). Pure
+/// (mode in → argv out) so the mapping is unit-testable without spawning a real
+/// `claude`; the setting read happens at the call site ([`SessionRegistry::spawn`]).
+fn build_cc_argv(mode: CcPermissionMode) -> Vec<String> {
+    vec![
+        CC_CMD.to_string(),
+        CC_ARG_PERMISSION_MODE.to_string(),
+        mode.as_flag_value().to_string(),
+    ]
 }
 
 /// Claudesk's seam for driving a Claude Code session. Never bypass this trait when
@@ -246,18 +298,23 @@ pub struct PtyCcSession {
 }
 
 impl PtyCcSession {
-    /// Spawn `claude` (with the yolo flag when `yolo`) with `cwd = project_path`.
+    /// Spawn `claude` under the given permission `mode` with `cwd = project_path`.
     ///
-    /// Builds CC's argv via [`build_cc_argv`] (gating `--dangerously-skip-permissions` on
-    /// the WP7 setting) + the explicit color-TTY env, then delegates to the generic
-    /// [`Self::spawn_argv`] core. The `TERM`/`COLORTERM` overrides are required: WP2
-    /// ran under a terminal that exported `TERM`, but a Tauri app has none, so CC
-    /// would not detect a color TTY without this (`wp2-cc-pty-probe.md:67,176`).
-    fn spawn(app: AppHandle, id: String, project_path: &str, yolo: bool) -> Result<Self, CcError> {
+    /// Builds CC's argv via [`build_cc_argv`] (mapping the mode to `--permission-mode`)
+    /// plus the explicit color-TTY env, then delegates to the generic [`Self::spawn_argv`]
+    /// core. The `TERM`/`COLORTERM` overrides are required because WP2 ran under a
+    /// terminal that exported `TERM`, but a Tauri app has none, so CC would not detect a
+    /// color TTY without this (`wp2-cc-pty-probe.md:67,176`).
+    fn spawn(
+        app: AppHandle,
+        id: String,
+        project_path: &str,
+        mode: CcPermissionMode,
+    ) -> Result<Self, CcError> {
         Self::spawn_argv(
             app,
             id,
-            &build_cc_argv(yolo),
+            &build_cc_argv(mode),
             project_path,
             &color_tty_env(),
             "/exit",
@@ -495,18 +552,18 @@ impl SessionRegistry {
         id
     }
 
-    /// Spawn a real CC session for `project_path` and register it. Reads the WP7
-    /// `cc_yolo` setting at spawn time (default ON) to decide whether to pass
-    /// `--dangerously-skip-permissions` — a change takes effect on the next spawn.
+    /// Spawn a real CC session for `project_path` and register it. Reads the persisted
+    /// `cc_permission_mode` setting at spawn time (default [`CcPermissionMode::Default`])
+    /// to pick CC's `--permission-mode` — a change takes effect on the next spawn.
     pub fn spawn(&mut self, app: AppHandle, project_path: &str) -> Result<String, CcError> {
-        let yolo = app
+        let mode = app
             .path()
             .app_data_dir()
             .ok()
-            .and_then(|dir| crate::config_store::settings::read_cc_yolo(&dir).ok())
-            .unwrap_or(true);
+            .and_then(|dir| crate::config_store::settings::read_cc_permission_mode(&dir).ok())
+            .unwrap_or_default();
         let id = self.mint_id();
-        let session = PtyCcSession::spawn(app, id.clone(), project_path, yolo)?;
+        let session = PtyCcSession::spawn(app, id.clone(), project_path, mode)?;
         self.sessions.insert(id.clone(), Box::new(session));
         Ok(id)
     }
@@ -625,21 +682,57 @@ mod tests {
         assert_eq!(slash_command_bytes("/model opus"), b"/model opus\r");
     }
 
-    // --- build_cc_argv: WP7 yolo gate (pure) ---
+    // --- build_cc_argv: permission-mode mapping (pure) ---
 
     #[test]
-    fn cc_argv_includes_yolo_when_enabled() {
-        let argv = build_cc_argv(true);
-        assert_eq!(argv[0], CC_CMD);
-        assert!(argv.contains(&CC_ARG_YOLO.to_string()));
+    fn cc_argv_passes_permission_mode_for_every_variant() {
+        // Each mode maps to `claude --permission-mode <wire-value>`, and the wire value
+        // is exactly the CLI token CC accepts.
+        for (mode, expected) in [
+            (CcPermissionMode::Default, "default"),
+            (CcPermissionMode::Plan, "plan"),
+            (CcPermissionMode::AcceptEdits, "acceptEdits"),
+            (CcPermissionMode::Auto, "auto"),
+            (CcPermissionMode::DontAsk, "dontAsk"),
+            (CcPermissionMode::BypassPermissions, "bypassPermissions"),
+        ] {
+            let argv = build_cc_argv(mode);
+            assert_eq!(
+                argv,
+                vec![
+                    CC_CMD.to_string(),
+                    CC_ARG_PERMISSION_MODE.to_string(),
+                    expected.to_string(),
+                ],
+                "argv for {mode:?} should pass --permission-mode {expected}"
+            );
+        }
     }
 
     #[test]
-    fn cc_argv_omits_yolo_when_disabled() {
-        // The opt-out: CC then shows its permission prompts.
-        let argv = build_cc_argv(false);
-        assert_eq!(argv, vec![CC_CMD.to_string()]);
-        assert!(!argv.contains(&CC_ARG_YOLO.to_string()));
+    fn cc_permission_mode_default_is_default_variant() {
+        assert_eq!(CcPermissionMode::default(), CcPermissionMode::Default);
+    }
+
+    #[test]
+    fn cc_permission_mode_serde_matches_cli_tokens() {
+        // The serde wire string, the CLI flag value, and CC's `--permission-mode` choice
+        // set must all agree — this is the cross-boundary contract (TS union ↔ persisted
+        // JSON ↔ CLI token).
+        for (mode, wire) in [
+            (CcPermissionMode::Default, "\"default\""),
+            (CcPermissionMode::Plan, "\"plan\""),
+            (CcPermissionMode::AcceptEdits, "\"acceptEdits\""),
+            (CcPermissionMode::Auto, "\"auto\""),
+            (CcPermissionMode::DontAsk, "\"dontAsk\""),
+            (CcPermissionMode::BypassPermissions, "\"bypassPermissions\""),
+        ] {
+            assert_eq!(serde_json::to_string(&mode).unwrap(), wire);
+            let back: CcPermissionMode = serde_json::from_str(wire).unwrap();
+            assert_eq!(back, mode);
+            // The bare (unquoted) token equals the flag value.
+            assert_eq!(format!("\"{}\"", mode.as_flag_value()), wire);
+        }
     }
 
     // --- resolve_shell_argv: WP9 second-terminal shell resolution (pure) ---

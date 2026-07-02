@@ -2406,21 +2406,23 @@ body,
   margin-bottom: 1rem;
 }
 
-/* M6 WP7 Phase 3 — the yolo opt-out checkbox under the title (app-global; synced with
-   the native View-menu item via the `cc-yolo` broadcast). Dark tokens only. */
-.picker-yolo {
+/* The CC permission-mode dropdown under the title (app-global; synced with the native
+   View-menu "Permission Mode" radio via the `cc-permission-mode` broadcast). Replaces the
+   old yolo checkbox. Dark tokens only. */
+.picker-permission-mode {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 1.25rem;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
-  cursor: pointer;
   user-select: none;
 }
 
-.picker-yolo input {
+.picker-permission-mode select {
   cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .picker-recents {

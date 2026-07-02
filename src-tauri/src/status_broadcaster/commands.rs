@@ -172,9 +172,9 @@ pub fn workspace_register(
         reg.register(Path::new(&project_path), workspace_id);
         reg.len()
     }; // drop the registry lock before the AppKit reconcile (don't hold it across a window op).
-    // M6 WP9 Phase 2: a workspace just opened — reconcile the `On`-mode PiP visibility against
-    // the new count (shows the pinned panel once ≥1 workspace is open). No-op in Auto/Off.
-    // This command body runs on the main thread, so the AppKit show inside is safe.
+       // M6 WP9 Phase 2: a workspace just opened — reconcile the `On`-mode PiP visibility against
+       // the new count (shows the pinned panel once ≥1 workspace is open). No-op in Auto/Off.
+       // This command body runs on the main thread, so the AppKit show inside is safe.
     crate::pip::commands::reconcile_pip_for_workspace_count(&app, open_count);
     Ok(())
 }
@@ -202,7 +202,7 @@ pub fn workspace_deregister(
         reg.deregister(Path::new(&project_path));
         (reg.len(), closed_id)
     }; // drop the registry lock before the AppKit reconcile (don't hold it across a window op).
-    // M7: forget the closed workspace's last state so the aggregate alarm re-folds without it.
+       // M7: forget the closed workspace's last state so the aggregate alarm re-folds without it.
     if let Some(ws_id) = closed_workspace_id {
         crate::tray::commands::forget_workspace(&app, &ws_id);
     }

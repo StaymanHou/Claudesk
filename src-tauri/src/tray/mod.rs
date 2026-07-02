@@ -122,10 +122,7 @@ mod tests {
         );
         // Multiple awaiting → lit (one bit, no count).
         assert_eq!(
-            aggregate_alarm(&[
-                WorkspaceState::AwaitingInput,
-                WorkspaceState::AwaitingInput,
-            ]),
+            aggregate_alarm(&[WorkspaceState::AwaitingInput, WorkspaceState::AwaitingInput,]),
             AlarmState::Attention
         );
     }

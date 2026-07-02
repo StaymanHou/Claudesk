@@ -22,6 +22,13 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
+import {
+  CC_PERMISSION_MODE_EVENT,
+  CC_PERMISSION_MODE_OPTIONS,
+  DEFAULT_CC_PERMISSION_MODE,
+  coerceCcPermissionMode,
+  type CcPermissionMode,
+} from "../../cc/permissionMode";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
 // an ERROR (an IPC rejection that must surface, not be swallowed — the WP6 MAJOR). The
@@ -61,12 +68,16 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   // The picker toast: an info note (prune-on-mount) or a surfaced IPC error. `null` =
   // no toast (the common case). Both kinds are dismissible.
   const [toast, setToast] = useState<PickerToast | null>(null);
-  // M6 WP7 Phase 3 — the CC yolo opt-out, surfaced ALSO on the picker (the app-global
-  // home screen) as a checkbox synced with the native View-menu item. The backend is the
-  // single source of truth: seed from cc_get_yolo on mount, stay in sync via the `cc-yolo`
-  // broadcast (so a native-menu toggle flips this box too), and on change call cc_set_yolo
-  // (which persists + re-broadcasts, re-checking the menu). Default ON until the read lands.
-  const [ccYolo, setCcYolo] = useState(true);
+  // The CC permission-mode dropdown (friend-requested, replacing the old yolo checkbox),
+  // surfaced on the picker (the app-global home screen) and synced with the native
+  // View-menu "Permission Mode" radio. The backend is the single source of truth: seed
+  // from cc_get_permission_mode on mount, stay in sync via the `cc-permission-mode`
+  // broadcast (so a native-menu pick updates this dropdown too), and on change call
+  // cc_set_permission_mode (which persists + re-broadcasts, re-checking the menu). Starts
+  // at the default until the read lands.
+  const [ccPermissionMode, setCcPermissionMode] = useState<CcPermissionMode>(
+    DEFAULT_CC_PERMISSION_MODE,
+  );
 
   useEffect(() => {
     // Load recents on mount. First prune any project whose folder was deleted
@@ -97,24 +108,24 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     };
   }, []);
 
-  // M6 WP7 Phase 3 — seed the yolo checkbox from the backend on mount, then track the
-  // `cc-yolo` broadcast so toggling the native View-menu item keeps this box in sync
-  // (third surface, one source of truth — same pattern App.tsx uses for ccYoloRef + the
-  // menu's apply_cc_yolo_to_menu). Deliberate double-subscribe: this effect holds the
-  // visible-checkbox STATE; App.tsx's `cc-yolo` listener holds a REF for the menu's
-  // invert-current. `cancelled` guards the async listen under StrictMode.
+  // Seed the mode dropdown from the backend on mount, then track the `cc-permission-mode`
+  // broadcast so picking a mode on the native View-menu radio keeps this dropdown in sync
+  // (both surfaces share one source of truth — the persisted cc_permission_mode setting,
+  // mirrored on the menu by apply_cc_permission_mode_to_menu). Reads are coerced so a
+  // stale/corrupt persisted value falls back to the default rather than an impossible
+  // selection. `cancelled` guards the async listen under StrictMode.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
-    void invoke<boolean>("cc_get_yolo")
-      .then((yolo) => {
-        if (!cancelled) setCcYolo(yolo);
+    void invoke<CcPermissionMode>("cc_get_permission_mode")
+      .then((mode) => {
+        if (!cancelled) setCcPermissionMode(coerceCcPermissionMode(mode));
       })
       .catch((e) =>
-        console.error("[claudesk] cc_get_yolo (picker) failed:", e),
+        console.error("[claudesk] cc_get_permission_mode (picker) failed:", e),
       );
-    void listen<boolean>("cc-yolo", (event) => {
-      setCcYolo(event.payload);
+    void listen<CcPermissionMode>(CC_PERMISSION_MODE_EVENT, (event) => {
+      setCcPermissionMode(coerceCcPermissionMode(event.payload));
     }).then((fn) => {
       if (cancelled) {
         fn();
@@ -128,15 +139,17 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     };
   }, []);
 
-  function handleToggleYolo(next: boolean) {
-    // Optimistic flip; the `cc-yolo` broadcast (fired by cc_set_yolo) re-confirms it and
-    // re-checks the menu. A rejection reverts the optimistic state + surfaces the error.
-    setCcYolo(next);
-    void invoke("cc_set_yolo", { yolo: next }).catch((e) => {
-      setCcYolo(!next);
+  function handleChangeMode(next: CcPermissionMode) {
+    // Optimistic set; the `cc-permission-mode` broadcast (fired by cc_set_permission_mode)
+    // re-confirms it and re-checks the menu radio. A rejection reverts to the prior mode +
+    // surfaces the error toast.
+    const prev = ccPermissionMode;
+    setCcPermissionMode(next);
+    void invoke("cc_set_permission_mode", { mode: next }).catch((e) => {
+      setCcPermissionMode(prev);
       setToast({
         kind: "error",
-        message: mapIpcError("update yolo setting", e),
+        message: mapIpcError("update permission mode", e),
       });
     });
   }
@@ -191,13 +204,21 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   return (
     <div className="picker" data-testid="picker">
       <h1>Claudesk</h1>
-      <label className="picker-yolo" data-testid="picker-yolo">
-        <input
-          type="checkbox"
-          checked={ccYolo}
-          onChange={(e) => handleToggleYolo(e.target.checked)}
-        />
-        <span>Skip Permission Prompts (yolo)</span>
+      <label className="picker-permission-mode">
+        <span>Permission mode</span>
+        <select
+          data-testid="picker-permission-mode"
+          value={ccPermissionMode}
+          onChange={(e) =>
+            handleChangeMode(coerceCcPermissionMode(e.target.value))
+          }
+        >
+          {CC_PERMISSION_MODE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </label>
       {toast !== null && (
         <div

@@ -13,36 +13,38 @@ use std::sync::Mutex;
 use base64::Engine as _;
 use tauri::{AppHandle, Emitter, State};
 
-use super::SessionRegistry;
+use super::{CcPermissionMode, SessionRegistry};
 
 type Registry = Mutex<SessionRegistry>;
 
-/// The Tauri event name broadcast when the CC yolo setting changes (WP7). The menu's
-/// `CheckMenuItem` (re-checked in `lib.rs`) + any frontend display listen for it so the
-/// affordance always reflects the persisted value (the single source of truth). Mirrors
-/// `pip::commands::PIP_MODE_EVENT`.
-pub const CC_YOLO_EVENT: &str = "cc-yolo";
+/// The Tauri event name broadcast when the CC permission mode changes. The View-menu's
+/// mode `CheckMenuItem`s (re-checked in `lib.rs`) + the picker dropdown + App.tsx's mode
+/// ref listen for it so every affordance reflects the persisted value (the single source
+/// of truth). Mirrors `pip::commands::PIP_MODE_EVENT`.
+pub const CC_PERMISSION_MODE_EVENT: &str = "cc-permission-mode";
 
 use crate::config_store::commands::resolve_data_dir;
 
-/// Read the persisted CC yolo setting (default `true` — yolo ON; M6 WP7). The View-menu
-/// `CheckMenuItem` seeds its checkmark from this on mount.
+/// Read the persisted CC permission mode (default [`CcPermissionMode::Default`]). The
+/// picker dropdown + App.tsx mode ref + the View-menu mode items seed from this on mount.
 #[tauri::command]
-pub fn cc_get_yolo(app: AppHandle) -> Result<bool, String> {
+pub fn cc_get_permission_mode(app: AppHandle) -> Result<CcPermissionMode, String> {
     let dir = resolve_data_dir(&app)?;
-    crate::config_store::settings::read_cc_yolo(&dir).map_err(|e| e.to_string())
+    crate::config_store::settings::read_cc_permission_mode(&dir).map_err(|e| e.to_string())
 }
 
-/// Set the CC yolo setting (M6 WP7 opt-out). Persists it + broadcasts `cc-yolo` so the
-/// View-menu checkmark re-checks. The flag is an argv chosen once per CC process, so this
-/// takes effect on the NEXT `cc_spawn`, not any already-running session. Mirrors
-/// `pip::commands::pip_set_mode` (minus the panel side-effect — there is none).
+/// Set the CC permission mode (the friend-requested dropdown). Persists it + broadcasts
+/// `cc-permission-mode` so the View-menu items + picker dropdown re-render. The mode is an
+/// argv chosen once per CC process, so this takes effect on the NEXT `cc_spawn`, not any
+/// already-running session. Mirrors `pip::commands::pip_set_mode` (minus the panel
+/// side-effect — there is none).
 #[tauri::command]
-pub fn cc_set_yolo(app: AppHandle, yolo: bool) -> Result<(), String> {
+pub fn cc_set_permission_mode(app: AppHandle, mode: CcPermissionMode) -> Result<(), String> {
     let dir = resolve_data_dir(&app)?;
-    crate::config_store::settings::write_cc_yolo(&dir, yolo).map_err(|e| e.to_string())?;
-    // Broadcast so the View-menu CheckMenuItem (and any frontend display) re-render.
-    let _ = app.emit(CC_YOLO_EVENT, yolo);
+    crate::config_store::settings::write_cc_permission_mode(&dir, mode)
+        .map_err(|e| e.to_string())?;
+    // Broadcast so the View-menu CheckMenuItems (and the picker dropdown) re-render.
+    let _ = app.emit(CC_PERMISSION_MODE_EVENT, mode);
     Ok(())
 }
 

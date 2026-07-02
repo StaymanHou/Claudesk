@@ -510,12 +510,20 @@ mod tests {
 
         // Re-registering an already-open path keeps the count (same canonical key).
         reg.register(a.path(), "ws-a".to_string());
-        assert_eq!(reg.len(), 2, "re-register of the same path must not double-count");
+        assert_eq!(
+            reg.len(),
+            2,
+            "re-register of the same path must not double-count"
+        );
 
         reg.deregister(a.path());
         assert_eq!(reg.len(), 1);
         reg.deregister(b.path());
-        assert_eq!(reg.len(), 0, "all workspaces closed → count back to zero (PiP hides)");
+        assert_eq!(
+            reg.len(),
+            0,
+            "all workspaces closed → count back to zero (PiP hides)"
+        );
     }
 
     #[test]

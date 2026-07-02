@@ -116,31 +116,71 @@ describe("menuBridge — callback ids", () => {
       kind: "callback",
       callback: "pipModeAuto",
     });
-    // M6 WP7 — the CC yolo toggle maps to its callback tag.
-    expect(menuActionFor(MENU_IDS.CC_YOLO_TOGGLE)).toEqual({
+    // Each of the six CC permission-mode radio items maps to setCcPermissionMode carrying
+    // its target mode (no invert — unlike the old yolo toggle).
+    expect(menuActionFor(MENU_IDS.CC_MODE_DEFAULT)).toEqual({
       kind: "callback",
-      callback: "ccYoloToggle",
+      callback: "setCcPermissionMode",
+      mode: "default",
+    });
+    expect(menuActionFor(MENU_IDS.CC_MODE_PLAN)).toEqual({
+      kind: "callback",
+      callback: "setCcPermissionMode",
+      mode: "plan",
+    });
+    expect(menuActionFor(MENU_IDS.CC_MODE_ACCEPT_EDITS)).toEqual({
+      kind: "callback",
+      callback: "setCcPermissionMode",
+      mode: "acceptEdits",
+    });
+    expect(menuActionFor(MENU_IDS.CC_MODE_AUTO)).toEqual({
+      kind: "callback",
+      callback: "setCcPermissionMode",
+      mode: "auto",
+    });
+    expect(menuActionFor(MENU_IDS.CC_MODE_DONT_ASK)).toEqual({
+      kind: "callback",
+      callback: "setCcPermissionMode",
+      mode: "dontAsk",
+    });
+    expect(menuActionFor(MENU_IDS.CC_MODE_BYPASS)).toEqual({
+      kind: "callback",
+      callback: "setCcPermissionMode",
+      mode: "bypassPermissions",
     });
   });
 });
 
-describe("M6 WP7 — the View-menu yolo toggle wires to cc_set_yolo", () => {
-  // The toggle (in menuBridge) maps to the ccYoloToggle callback, which App.tsx turns
-  // into invoke("cc_set_yolo", {yolo: !current}), tracking current via cc_get_yolo + the
-  // `cc-yolo` broadcast. Source guards pin the menu path so a refactor can't sever it.
-  // Live spawn-argv behavior is verify-human-covered (installed .app), not re-asserted here.
-  it("the toggle id is byte-identical to the Rust app_menu::ids constant", () => {
+describe("the View-menu CC permission-mode radio wires to cc_set_permission_mode", () => {
+  // Each menu id (in menuBridge) maps to setCcPermissionMode carrying that mode, which
+  // App.tsx turns into invoke("cc_set_permission_mode", {mode}). No current-state tracking
+  // is needed (the menu carries the target). Source guards pin the menu path so a refactor
+  // can't sever it. Live spawn-argv behavior is verify-human-covered, not re-asserted here.
+  it("the mode ids are byte-identical to the Rust app_menu::ids constants", () => {
     // CRITICAL contract: MENU_IDS must match app_menu::ids (Rust) byte-for-byte.
-    expect(MENU_IDS.CC_YOLO_TOGGLE).toBe("view.cc.yolo");
+    expect(MENU_IDS.CC_MODE_DEFAULT).toBe("view.cc.mode.default");
+    expect(MENU_IDS.CC_MODE_PLAN).toBe("view.cc.mode.plan");
+    expect(MENU_IDS.CC_MODE_ACCEPT_EDITS).toBe("view.cc.mode.acceptEdits");
+    expect(MENU_IDS.CC_MODE_AUTO).toBe("view.cc.mode.auto");
+    expect(MENU_IDS.CC_MODE_DONT_ASK).toBe("view.cc.mode.dontAsk");
+    expect(MENU_IDS.CC_MODE_BYPASS).toBe("view.cc.mode.bypassPermissions");
   });
-  it("App.tsx's menu listener inverts current state + invokes cc_set_yolo", () => {
-    expect(appTsx).toContain('action.callback === "ccYoloToggle"');
-    expect(appTsx).toContain('invoke("cc_set_yolo"');
-    expect(appTsx).toContain("!ccYoloRef.current");
+  it("App.tsx's menu listener invokes cc_set_permission_mode with the carried mode", () => {
+    expect(appTsx).toContain('action.callback === "setCcPermissionMode"');
+    expect(appTsx).toContain(
+      'invoke("cc_set_permission_mode", { mode: action.mode })',
+    );
   });
-  it("App.tsx seeds + tracks the current yolo state from the backend", () => {
-    expect(appTsx).toContain('invoke<boolean>("cc_get_yolo")');
-    expect(appTsx).toContain('listen<boolean>("cc-yolo"');
+  it("App.tsx no longer references the removed yolo names", () => {
+    for (const stale of [
+      "cc_get_yolo",
+      "cc_set_yolo",
+      "cc-yolo",
+      "ccYoloRef",
+      "ccYoloToggle",
+    ]) {
+      expect(appTsx).not.toContain(stale);
+    }
   });
 });
 

@@ -23,6 +23,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::ConfigError;
+use crate::cc_session::CcPermissionMode;
 use crate::pip::layout::{PipLayout, PipMode};
 
 /// Basename of the app-settings file within the app-data directory.
@@ -49,12 +50,19 @@ pub struct AppSettings {
     /// dead-end (no return to auto without relaunch).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pip_mode: Option<PipMode>,
-    /// Whether new CC sessions spawn with `--dangerously-skip-permissions` ("yolo")
-    /// — the M6 WP7 opt-out. `None` = never set → the reader applies the default
-    /// **`true`** (yolo ON, vision-explicit; `docs/product/arch.md` Key Decisions +
-    /// `design-priors.md` operator-helpful-friend-misfiring-as-offswitchable-setting —
-    /// off-switchable, default to operator benefit). App-global, not per-project; the
-    /// flag is chosen once per CC process, so a change takes effect on the next spawn.
+    /// The Claude Code permission mode new CC sessions spawn under — the friend-requested
+    /// dropdown (all six `--permission-mode` choices). `None` = never set → the reader
+    /// applies the default [`CcPermissionMode::Default`] (CC's normal prompts). App-global,
+    /// not per-project; the mode is chosen once per CC process, so a change takes effect on
+    /// the next spawn. **Replaces** the earlier `cc_yolo: bool` field — an on-disk `cc_yolo`
+    /// from a pre-dropdown build is migrated on read (see [`read_cc_permission_mode`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cc_permission_mode: Option<CcPermissionMode>,
+    /// LEGACY (pre-dropdown) yolo boolean. Retained ONLY so an existing `settings.json`
+    /// written by an older build round-trips: [`read_cc_permission_mode`] migrates a
+    /// present `cc_yolo` (`true` → [`CcPermissionMode::BypassPermissions`], `false` →
+    /// [`CcPermissionMode::Default`]) when `cc_permission_mode` is absent. Never written by
+    /// current code (`skip_serializing_if` drops it on the next write), so it self-cleans.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cc_yolo: Option<bool>,
 }
@@ -113,18 +121,45 @@ pub fn write_pip_mode(data_dir: &Path, mode: PipMode) -> Result<(), ConfigError>
     write_settings(data_dir, &settings)
 }
 
-/// Read the CC yolo setting, defaulting **`true`** (yolo ON) when unset / first run —
-/// the vision-explicit, operator-benefit default (M6 WP7). The single reader the
-/// `cc_get_yolo` command + the spawn-time gate call. (Mirror of `read_pip_mode`.)
-pub fn read_cc_yolo(data_dir: &Path) -> Result<bool, ConfigError> {
-    Ok(read_settings(data_dir)?.cc_yolo.unwrap_or(true))
+/// Read the CC permission mode, defaulting [`CcPermissionMode::Default`] when unset /
+/// first run. The single reader the `cc_get_permission_mode` command + the spawn-time
+/// call. (Mirror of `read_pip_mode`.)
+///
+/// **Migration:** when `cc_permission_mode` is absent but a legacy `cc_yolo` boolean is
+/// present (a `settings.json` written by a pre-dropdown build), map it — `true` →
+/// [`CcPermissionMode::BypassPermissions`] (the old yolo-ON behavior), `false` →
+/// [`CcPermissionMode::Default`]. This preserves an existing user's chosen behavior on
+/// upgrade without a write; the next `write_cc_permission_mode` persists the new field and
+/// drops the legacy one.
+pub fn read_cc_permission_mode(data_dir: &Path) -> Result<CcPermissionMode, ConfigError> {
+    let settings = read_settings(data_dir)?;
+    Ok(resolve_cc_permission_mode(&settings))
 }
 
-/// Persist the CC yolo setting, preserving other fields (read-modify-write). The single
-/// writer `cc_set_yolo` calls. (Mirror of `write_pip_mode`.)
-pub fn write_cc_yolo(data_dir: &Path, yolo: bool) -> Result<(), ConfigError> {
+/// Pure resolution of the effective permission mode from a settings struct, applying the
+/// legacy-`cc_yolo` migration. Split out so the migration precedence is unit-testable
+/// without filesystem I/O.
+fn resolve_cc_permission_mode(settings: &AppSettings) -> CcPermissionMode {
+    if let Some(mode) = settings.cc_permission_mode {
+        return mode;
+    }
+    match settings.cc_yolo {
+        Some(true) => CcPermissionMode::BypassPermissions,
+        Some(false) => CcPermissionMode::Default,
+        None => CcPermissionMode::default(),
+    }
+}
+
+/// Persist the CC permission mode, preserving other fields (read-modify-write). Also
+/// clears any legacy `cc_yolo` so the migrated field is the single source of truth going
+/// forward. The single writer `cc_set_permission_mode` calls. (Mirror of `write_pip_mode`.)
+pub fn write_cc_permission_mode(
+    data_dir: &Path,
+    mode: CcPermissionMode,
+) -> Result<(), ConfigError> {
     let mut settings = read_settings(data_dir)?;
-    settings.cc_yolo = Some(yolo);
+    settings.cc_permission_mode = Some(mode);
+    settings.cc_yolo = None; // the new field is authoritative; drop the legacy boolean
     write_settings(data_dir, &settings)
 }
 
@@ -193,7 +228,8 @@ mod tests {
         let written = AppSettings {
             pip_layout: Some(PipLayout::VerticalMirror),
             pip_mode: Some(PipMode::On),
-            cc_yolo: Some(false),
+            cc_permission_mode: Some(CcPermissionMode::AcceptEdits),
+            cc_yolo: None,
         };
         write_settings(dir.path(), &written).unwrap();
         let read = read_settings(dir.path()).unwrap();
@@ -231,48 +267,122 @@ mod tests {
     }
 
     #[test]
-    fn cc_yolo_defaults_to_true_when_unset() {
-        // Vision-explicit default: a fresh install / missing field reads as yolo ON.
+    fn cc_permission_mode_defaults_to_default_when_unset() {
+        // A fresh install / missing field reads as CC's normal permission prompts.
         let dir = TempDir::new().unwrap();
-        assert!(read_cc_yolo(dir.path()).unwrap());
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::Default
+        );
     }
 
     #[test]
-    fn cc_yolo_absent_in_present_file_reads_as_true() {
-        // Forward-compat: the realistic upgrade case — a user who already had pip
-        // settings on disk (so the file EXISTS) but predates the cc_yolo field. The
-        // missing key must read as the default `true` (yolo ON), not `false`.
+    fn cc_permission_mode_absent_in_present_file_reads_as_default() {
+        // Forward-compat: a file that predates the cc_permission_mode field (and has no
+        // legacy cc_yolo either) reads as the Default mode.
         let dir = TempDir::new().unwrap();
         std::fs::write(
             dir.path().join(SETTINGS_FILE),
             br#"{"pip_layout":"compact","pip_mode":"auto"}"#,
         )
         .unwrap();
-        assert!(read_cc_yolo(dir.path()).unwrap());
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::Default
+        );
     }
 
     #[test]
-    fn cc_yolo_round_trips() {
+    fn cc_permission_mode_round_trips_each_variant() {
         let dir = TempDir::new().unwrap();
-        write_cc_yolo(dir.path(), false).unwrap();
-        assert!(!read_cc_yolo(dir.path()).unwrap());
-        write_cc_yolo(dir.path(), true).unwrap();
-        assert!(read_cc_yolo(dir.path()).unwrap());
+        for m in [
+            CcPermissionMode::Default,
+            CcPermissionMode::Plan,
+            CcPermissionMode::AcceptEdits,
+            CcPermissionMode::Auto,
+            CcPermissionMode::DontAsk,
+            CcPermissionMode::BypassPermissions,
+        ] {
+            write_cc_permission_mode(dir.path(), m).unwrap();
+            assert_eq!(read_cc_permission_mode(dir.path()).unwrap(), m);
+        }
     }
 
     #[test]
-    fn cc_yolo_independent_of_pip_fields() {
-        // Writing cc_yolo must not clobber the pip settings, and vice versa
+    fn legacy_cc_yolo_true_migrates_to_bypass_permissions() {
+        // The realistic upgrade case: a settings.json written by a pre-dropdown build
+        // that had yolo ON. On read it must map to BypassPermissions (the equivalent
+        // behavior) so the user's choice survives the upgrade.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(SETTINGS_FILE),
+            br#"{"pip_mode":"auto","cc_yolo":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::BypassPermissions
+        );
+    }
+
+    #[test]
+    fn legacy_cc_yolo_false_migrates_to_default() {
+        // A pre-dropdown build with yolo explicitly OFF maps to Default (normal prompts).
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join(SETTINGS_FILE), br#"{"cc_yolo":false}"#).unwrap();
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::Default
+        );
+    }
+
+    #[test]
+    fn cc_permission_mode_wins_over_legacy_cc_yolo() {
+        // If BOTH the new field and the legacy boolean are present (a mixed file), the
+        // explicit new field is authoritative — the legacy value is ignored.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(SETTINGS_FILE),
+            br#"{"cc_permission_mode":"plan","cc_yolo":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::Plan
+        );
+    }
+
+    #[test]
+    fn write_cc_permission_mode_clears_legacy_cc_yolo() {
+        // After a write, the legacy boolean must be gone from disk — the new field is the
+        // single source of truth, so the migration self-cleans on first write.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join(SETTINGS_FILE), br#"{"cc_yolo":true}"#).unwrap();
+        write_cc_permission_mode(dir.path(), CcPermissionMode::AcceptEdits).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(raw.contains("acceptEdits"));
+        assert!(
+            !raw.contains("cc_yolo"),
+            "legacy cc_yolo must be dropped on write: {raw}"
+        );
+    }
+
+    #[test]
+    fn cc_permission_mode_independent_of_pip_fields() {
+        // Writing cc_permission_mode must not clobber the pip settings, and vice versa
         // (read-modify-write across all three fields).
         let dir = TempDir::new().unwrap();
         write_pip_layout(dir.path(), PipLayout::Minimal).unwrap();
         write_pip_mode(dir.path(), PipMode::Off).unwrap();
-        write_cc_yolo(dir.path(), false).unwrap();
+        write_cc_permission_mode(dir.path(), CcPermissionMode::Plan).unwrap();
         assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::Minimal);
         assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
-        assert!(!read_cc_yolo(dir.path()).unwrap());
-        // ...and updating cc_yolo leaves the pip settings intact.
-        write_cc_yolo(dir.path(), true).unwrap();
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::Plan
+        );
+        // ...and updating cc_permission_mode leaves the pip settings intact.
+        write_cc_permission_mode(dir.path(), CcPermissionMode::Auto).unwrap();
         assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::Minimal);
         assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
     }

@@ -145,21 +145,28 @@ pub fn run() {
                     }
                 });
             }
-            // M6 WP7: keep the View-menu CC-yolo checkmark in sync with the backend. The
-            // CheckMenuItem is seeded once in build_menu, but the value changes at runtime
-            // (menu click → cc_set_yolo → `cc-yolo` broadcast). Re-check on every broadcast
-            // so the checkmark always matches the persisted value (single source of truth).
+            // Keep the View-menu CC permission-mode radio in sync with the backend. The
+            // CheckMenuItems are seeded once in build_menu, but the value changes at runtime
+            // (menu click / picker dropdown → cc_set_permission_mode → `cc-permission-mode`
+            // broadcast). Re-check on every broadcast so exactly the active mode is checked
+            // (single source of truth).
             {
                 let menu_handle = handle.clone();
-                handle.listen(cc_session::commands::CC_YOLO_EVENT, move |event| {
-                    match serde_json::from_str::<bool>(event.payload()) {
-                        Ok(yolo) => app_menu::apply_cc_yolo_to_menu(&menu_handle, yolo),
-                        Err(e) => eprintln!(
-                            "[claudesk] cc-yolo menu sync: could not parse payload {:?}: {e}",
-                            event.payload()
-                        ),
-                    }
-                });
+                handle.listen(
+                    cc_session::commands::CC_PERMISSION_MODE_EVENT,
+                    move |event| {
+                        match serde_json::from_str::<cc_session::CcPermissionMode>(event.payload())
+                        {
+                            Ok(mode) => {
+                                app_menu::apply_cc_permission_mode_to_menu(&menu_handle, mode)
+                            }
+                            Err(e) => eprintln!(
+                                "[claudesk] cc-permission-mode menu sync: could not parse payload {:?}: {e}",
+                                event.payload()
+                            ),
+                        }
+                    },
+                );
             }
             // Dev/prod isolation (2026-06-24): on a DEV build's first launch, seed
             // its projects.json from the prod list so dogfooding starts with the
@@ -248,11 +255,12 @@ pub fn run() {
             // (closes the shell-prompt race where a shell's one-shot prompt emitted
             // before the frontend's listener attached).
             cc_session::commands::cc_ready,
-            // M6 WP7: read/persist the CC yolo (--dangerously-skip-permissions) opt-out.
-            // get seeds the View-menu checkmark on mount; set persists + broadcasts
-            // `cc-yolo` so the menu re-checks. Read at spawn time → takes effect next spawn.
-            cc_session::commands::cc_get_yolo,
-            cc_session::commands::cc_set_yolo,
+            // Read/persist the CC permission mode (the friend-requested dropdown).
+            // get seeds the picker dropdown + View-menu radio on mount; set persists +
+            // broadcasts `cc-permission-mode` so both re-render. Read at spawn time →
+            // takes effect next spawn.
+            cc_session::commands::cc_get_permission_mode,
+            cc_session::commands::cc_set_permission_mode,
             // WP8: Sublime Text pop. Invoked from the frontend right-panel button with
             // the focused workspace's path. PERMANENT (WP8 redefinition 2026-06-20) — the
             // in-app editor is the primary surface, but Sublime Text stays as a one-click

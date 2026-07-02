@@ -20,6 +20,8 @@
 // Pure (no React/DOM/IPC) → vitest-testable: the tests assert each "key" action's
 // synthetic init actually satisfies the matching existing chord predicate.
 
+import type { CcPermissionMode } from "../cc/permissionMode";
+
 /** Functional menu-item ids — must match `app_menu::ids` (Rust) byte-for-byte. */
 export const MENU_IDS = {
   // Re-dispatch a synthetic KeyboardEvent (app-level document chords).
@@ -40,9 +42,15 @@ export const MENU_IDS = {
   PIP_MODE_OFF: "view.pip.mode.off",
   PIP_MODE_ON: "view.pip.mode.on",
   PIP_MODE_AUTO: "view.pip.mode.auto",
-  // M6 WP7 — CC yolo (--dangerously-skip-permissions) opt-out toggle (checked = yolo ON).
-  // A click sets the INVERTED state via cc_set_yolo (App.tsx reads current from `cc-yolo`).
-  CC_YOLO_TOGGLE: "view.cc.yolo",
+  // CC permission-mode radio (friend-requested dropdown, mirrored in the menu). Each item
+  // sets that mode via cc_set_permission_mode; the backend broadcasts `cc-permission-mode`
+  // so the menu radio + picker dropdown re-render. Ids must match `app_menu::ids` (Rust).
+  CC_MODE_DEFAULT: "view.cc.mode.default",
+  CC_MODE_PLAN: "view.cc.mode.plan",
+  CC_MODE_ACCEPT_EDITS: "view.cc.mode.acceptEdits",
+  CC_MODE_AUTO: "view.cc.mode.auto",
+  CC_MODE_DONT_ASK: "view.cc.mode.dontAsk",
+  CC_MODE_BYPASS: "view.cc.mode.bypassPermissions",
 } as const;
 
 /** A callback action's tag — App.tsx switches on this to call the right seam. */
@@ -54,17 +62,20 @@ export type MenuCallback =
   | "pipModeOff"
   | "pipModeOn"
   | "pipModeAuto"
-  | "ccYoloToggle";
+  | "setCcPermissionMode";
 
 /**
  * The action a functional menu-item id maps to:
  *  - `{ kind: "key", init }` — dispatch `new KeyboardEvent("keydown", init)` on document.
- *  - `{ kind: "callback", callback }` — run the named React-side seam.
+ *  - `{ kind: "callback", callback }` — run the named React-side seam. The CC
+ *    permission-mode radio carries the target `mode` on the action (no invert — unlike
+ *    the old yolo toggle, each of the six items sets one specific mode directly).
  *  - `null` — unknown id (defensive; the Rust side only emits functional ids).
  */
 export type MenuAction =
   | { kind: "key"; init: KeyboardEventInit }
-  | { kind: "callback"; callback: MenuCallback };
+  | { kind: "callback"; callback: Exclude<MenuCallback, "setCcPermissionMode"> }
+  | { kind: "callback"; callback: "setCcPermissionMode"; mode: CcPermissionMode };
 
 // The synthetic-key inits, each reproducing one existing chord. macOS reports the
 // digit/letter in `e.key`; the predicates match on `metaKey` + `shiftKey` + `key`
@@ -133,10 +144,30 @@ export function menuActionFor(id: string): MenuAction | null {
       return { kind: "callback", callback: "pipModeOn" };
     case MENU_IDS.PIP_MODE_AUTO:
       return { kind: "callback", callback: "pipModeAuto" };
-    // M6 WP7 — CC yolo toggle. App.tsx inverts the current state + invokes cc_set_yolo;
-    // the backend broadcasts `cc-yolo` so the menu checkmark re-checks.
-    case MENU_IDS.CC_YOLO_TOGGLE:
-      return { kind: "callback", callback: "ccYoloToggle" };
+    // CC permission-mode radio (friend-requested dropdown, mirrored in the menu). Each of
+    // the six items carries its target mode; App.tsx invokes cc_set_permission_mode with
+    // that mode (no invert). The backend broadcasts `cc-permission-mode` so the menu radio
+    // + picker dropdown re-render. Takes effect on the NEXT cc_spawn.
+    case MENU_IDS.CC_MODE_DEFAULT:
+      return { kind: "callback", callback: "setCcPermissionMode", mode: "default" };
+    case MENU_IDS.CC_MODE_PLAN:
+      return { kind: "callback", callback: "setCcPermissionMode", mode: "plan" };
+    case MENU_IDS.CC_MODE_ACCEPT_EDITS:
+      return {
+        kind: "callback",
+        callback: "setCcPermissionMode",
+        mode: "acceptEdits",
+      };
+    case MENU_IDS.CC_MODE_AUTO:
+      return { kind: "callback", callback: "setCcPermissionMode", mode: "auto" };
+    case MENU_IDS.CC_MODE_DONT_ASK:
+      return { kind: "callback", callback: "setCcPermissionMode", mode: "dontAsk" };
+    case MENU_IDS.CC_MODE_BYPASS:
+      return {
+        kind: "callback",
+        callback: "setCcPermissionMode",
+        mode: "bypassPermissions",
+      };
     default:
       return null;
   }

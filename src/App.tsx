@@ -252,36 +252,12 @@ function App() {
     focusedPathRef.current = focused ? focused.project_path : null;
   }, [workspaces, focusedId]);
 
-  // M6 WP7 — track the current CC yolo setting (latest-ref, like focusedPathRef) so the
-  // once-subscribed `menu` listener can invert it on a CC_YOLO_TOGGLE click. The backend
-  // is the source of truth: seed from cc_get_yolo on mount, update on each `cc-yolo`
-  // broadcast (also fired by cc_set_yolo, so this ref re-syncs to the persisted value).
-  // Deliberate double-subscribe: ProjectPicker ALSO listens to `cc-yolo` (for its visible
-  // checkbox STATE); this App-root ref exists for the menu-listener's invert-current. Both
-  // seed from the same backend value, so they never diverge.
-  const ccYoloRef = useRef<boolean>(true); // default ON until the first read resolves
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void invoke<boolean>("cc_get_yolo")
-      .then((yolo) => {
-        ccYoloRef.current = yolo;
-      })
-      .catch((e) => console.error("[claudesk] cc_get_yolo failed:", e));
-    void listen<boolean>("cc-yolo", (event) => {
-      ccYoloRef.current = event.payload;
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // CC permission mode (friend-requested dropdown, replacing the old yolo toggle) is the
+  // backend's source of truth (persisted via cc_set_permission_mode, broadcast on
+  // `cc-permission-mode`). Unlike the old yolo toggle, the View-menu radio carries the
+  // TARGET mode on each item, so the menu handler invokes cc_set_permission_mode with that
+  // mode directly — no current-state tracking is needed here (App.tsx no longer holds a
+  // ref for it). The picker dropdown owns the visible seed/sync of the current value.
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -324,17 +300,17 @@ function App() {
         });
         return;
       }
-      // M6 WP7 — CC yolo toggle is app-global (not workspace-scoped), so it runs BEFORE the
-      // focused-path guard too. The menu emits only the id, so invert the tracked current
-      // state; cc_set_yolo persists + broadcasts `cc-yolo`, which re-syncs ccYoloRef + the
-      // menu checkmark. Takes effect on the NEXT cc_spawn (argv is chosen once per process).
-      if (action.callback === "ccYoloToggle") {
-        const next = !ccYoloRef.current;
-        void invoke("cc_set_yolo", { yolo: next }).catch((e) => {
+      // CC permission mode is app-global (not workspace-scoped), so it runs BEFORE the
+      // focused-path guard too. Each View-menu radio item carries its TARGET mode, so we
+      // invoke cc_set_permission_mode with that mode directly (no invert). The backend
+      // persists + broadcasts `cc-permission-mode`, which re-checks the menu radio + the
+      // picker dropdown. Takes effect on the NEXT cc_spawn (argv is chosen once per process).
+      if (action.callback === "setCcPermissionMode") {
+        void invoke("cc_set_permission_mode", { mode: action.mode }).catch((e) => {
           // Menu-path write failures are deliberately silent (console-only) — App.tsx has
           // no toast surface like the picker, and this mirrors the pip_set_mode menu path
-          // above. The picker's checkbox handler keeps its optimistic-flip + revert + toast.
-          console.error("[claudesk] cc_set_yolo (menu) failed:", e);
+          // above. The picker's dropdown handler keeps its optimistic-set + revert + toast.
+          console.error("[claudesk] cc_set_permission_mode (menu) failed:", e);
         });
         return;
       }

@@ -253,7 +253,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let log = StatusLog::new(dir.path());
         log.write_line("small"); // "small\n" = 6 bytes
-        // Cap well above the current size → no rotation, live file untouched, no .1.
+                                 // Cap well above the current size → no rotation, live file untouched, no .1.
         log.rotate_at(1000);
         assert!(log.path().exists());
         assert!(!log.rotated_path().exists());
@@ -265,7 +265,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let log = StatusLog::new(dir.path());
         log.write_line("0123456789"); // "0123456789\n" = 11 bytes
-        // Cap below the current size → rotate: live becomes .1, live no longer exists.
+                                      // Cap below the current size → rotate: live becomes .1, live no longer exists.
         log.rotate_at(11);
         assert!(!log.path().exists());
         assert!(log.rotated_path().exists());
