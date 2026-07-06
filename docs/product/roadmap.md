@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-06-29  # M8 (Demo assets) COMPLETE 2026-06-29 — all WPs shipped (WP1 probe→synthesized-GIF/Playwright pipeline; WP3 filmstrip GIF; WP4 PiP GIF; WP5 embed+README-restructure+push, operator-approved on the github.com render). Exit criteria MET; cycle archived to docs/product/archive/milestone-8-demo-assets/. Next execution milestone: M9 (time-analytics). | Revision 2026-06-29b: NEW M8 "Demo assets" (filmstrip + PiP value GIF/videos, probe-first, agent-produced) inserted as the next execution milestone; M8↔M9 swapped so Time-analytics (M9) precedes Docs-viewer (M10); tail slides +1 → auto-resume M11 / skill-orch M12 / polish M13. | 2026-06-29  # M7 (menu-bar) deliverables SHRUNK at the spec debate — ambient alarm + actuator only; popover list + navigate + tauri-plugin-positioner CUT as a PiP subset (design-prior new-surface-must-earn-its-place-against-existing-ones); watcher re-anchored M7→M8. | 2026-06-28  # M6 COMPLETE 2026-06-28 — all 12 WPs shipped (WP8 milestone-exit verify closed it; agent GREEN'd all bridge-observable exit criteria, operator-carry checklist DEFERRED-TO-RELEASE for v0.2.2). | M6 WP6 (gitignore→heavy-dir re-base) SHIPPED 2026-06-28 (commit 61db3d4). | M6 WBS WRITTEN 2026-06-27 (docs/product/wbs.md; 8 WPs, lead = stuck-Running dot fix). | Revision 2026-06-27: M5 (PiP) COMPLETE — all 6 WPs shipped, agent-verified PASS via the MCP bridge; installed-build out-of-focus confirmation deferred to /release. Next execution milestone: M6 (friend-QoL, lead item = fix the stuck-`Running` status dot). | Revision 2026-06-26b: friend-QoL milestone inserted as M6 (slides menu-bar→M7, docs-viewer→M8, time-analytics→M9, auto-resume→M10, skill-orch→M11, polish→M12). Earlier same-day (2026-06-26): time-analytics absorb-claude-time inserted.
+updated: 2026-07-06  # Revision 2026-07-06: In-app auto-updater inserted as M10 (right after M9, before next release) — check/download/install updates with user control (skip version / disable notifications / cancel-confirm, no silent updates). Tail slides +1: docs-viewer M11, auto-resume M12, skill-orch M13, polish M14. Two decisions PENDING operator confirm: (1) Homebrew coexist via auto_updates true stanza [leaning coexist]; (2) $99 notarize vs stay-unsigned (updater minisign keypair is free/no-Apple-account, but Claudesk ships unsigned so post-update relaunch hits Gatekeeper unless notarized). | M9 (Time-analytics panel — absorb claude-time) DECOMPOSED 2026-07-06 via /product-wbs → docs/product/wbs.md (7 WPs: WP1 probe contract-freeze+dark-render → WP2 hook+write-gated SQLite → WP3 reclassifier port → WP4 segment-model query layer → WP5 tracking toggle [default OFF] → WP6 dark dashboard tab [+CM6 lazy-load fold-in] → WP7 deprecate+exit-verify). Sizing surprise: the 4065-line dashboard.jsx + 54KB viz_data.py ports dominate risk, NOT the 368-line reclassifier — WP1 front-loads it. Folded in SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD (→WP6). Next: /product-context then feature workflow for WP1. | 2026-06-29  # M8 (Demo assets) COMPLETE 2026-06-29 — all WPs shipped (WP1 probe→synthesized-GIF/Playwright pipeline; WP3 filmstrip GIF; WP4 PiP GIF; WP5 embed+README-restructure+push, operator-approved on the github.com render). Exit criteria MET; cycle archived to docs/product/archive/milestone-8-demo-assets/. Next execution milestone: M9 (time-analytics). | Revision 2026-06-29b: NEW M8 "Demo assets" (filmstrip + PiP value GIF/videos, probe-first, agent-produced) inserted as the next execution milestone; M8↔M9 swapped so Time-analytics (M9) precedes Docs-viewer (M10); tail slides +1 → auto-resume M11 / skill-orch M12 / polish M13. | 2026-06-29  # M7 (menu-bar) deliverables SHRUNK at the spec debate — ambient alarm + actuator only; popover list + navigate + tauri-plugin-positioner CUT as a PiP subset (design-prior new-surface-must-earn-its-place-against-existing-ones); watcher re-anchored M7→M8. | 2026-06-28  # M6 COMPLETE 2026-06-28 — all 12 WPs shipped (WP8 milestone-exit verify closed it; agent GREEN'd all bridge-observable exit criteria, operator-carry checklist DEFERRED-TO-RELEASE for v0.2.2). | M6 WP6 (gitignore→heavy-dir re-base) SHIPPED 2026-06-28 (commit 61db3d4). | M6 WBS WRITTEN 2026-06-27 (docs/product/wbs.md; 8 WPs, lead = stuck-Running dot fix). | Revision 2026-06-27: M5 (PiP) COMPLETE — all 6 WPs shipped, agent-verified PASS via the MCP bridge; installed-build out-of-focus confirmation deferred to /release. Next execution milestone: M6 (friend-QoL, lead item = fix the stuck-`Running` status dot). | Revision 2026-06-26b: friend-QoL milestone inserted as M6 (slides menu-bar→M7, docs-viewer→M8, time-analytics→M9, auto-resume→M10, skill-orch→M11, polish→M12). Earlier same-day (2026-06-26): time-analytics absorb-claude-time inserted.
 ---
 
 # Roadmap
@@ -162,7 +162,26 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** With the tracking toggle ON, a day of CC usage produces a per-project time breakdown rendered in a native Claudesk panel; with the toggle OFF, the feature adds zero storage/IO and the live status dots are unaffected. The standalone `claude-time` tool is retired.
 
-### Milestone 10: Workflow-docs markdown viewer *(was Milestone 7 → M8 → demoted to M10 in the 2026-06-29b swap)*
+### Milestone 10: In-app auto-updater *(NEW — inserted 2026-07-06, Revision 2026-07-06; see below)*
+
+> **Why here (operator decision 2026-07-06):** inserted **right after M9 and before the next release** so that whatever version ships next carries an update mechanism — the milestone is about *how future versions reach users*, so it must precede a publish to be useful (a v0.2.x cut without it can't self-update; the first release that *includes* it is the first that later versions can update *from*).
+
+**Goal:** Claudesk can check for updates, and download/install a newer version, from inside the app — with the user always in control: **skip a version**, **disable update notifications**, and **cancel / confirm** each install. No silent forced updates.
+
+**Research findings + LOCKED decisions (2026-07-06):**
+- **Homebrew coexistence → DECIDED: detect-and-defer (the "even-cleaner alternative").** Claudesk is distributed via a Homebrew *cask* today. A cask app that self-updates **desyncs `brew`** (brew keeps recording the old version; a later `brew upgrade` could even *downgrade*). **Locked approach (operator, 2026-07-06):** the updater **detects whether the running app was installed via Homebrew** (e.g. bundle path under a Caskroom-linked location / an install-source marker) and, if so, **does NOT self-install — it points the user to `brew upgrade`** instead; only **direct-download installs self-update in-app.** This keeps `brew`'s version tracking correct (no desync, no downgrade risk) with no mixed-updater confusion. *(The `auto_updates true`-stanza variant was the simpler-but-desync-tolerant alternative; the operator chose the correctness path.)* WP-decomposition owns the install-source detection mechanism.
+- **Signing → DECIDED: stay UNSIGNED for now; updater surfaces the quarantine-clear step.** The two signing systems are independent: (1) the **updater's minisign keypair** (`tauri signer generate`) is **free, no Apple account**, and verifies update-artifact authenticity; (2) **macOS notarization** needs the **$99/yr Apple Developer Program** — separate. **Locked (operator, 2026-07-06): do NOT pay the $99 yet.** Claudesk stays unsigned (as today — `/release` already ships the `xattr -dr com.apple.quarantine` guidance). Consequence the updater MUST handle: a freshly-downloaded `.app` hits the **Gatekeeper "unverified/damaged" block on relaunch**, so **the updater surfaces the quarantine-clear step** to the user (show the `xattr` command / run it on its own bundle before relaunch if feasible — mechanism TBD at WP-decomposition). Revisit notarization later (a future call, not this milestone).
+
+**Deliverables:**
+- [ ] **Update check + notify** — on launch (and/or on demand) check for a newer published version; show a non-modal notification when one exists. Respects the disable-notifications preference and the per-version skip list.
+- [ ] **Download + install with explicit confirm** — on user confirm, download the new version, verify its signature (minisign, per `tauri-plugin-updater`), install, and relaunch. **Cancel** at any point leaves the current version untouched.
+- [ ] **User controls (the operator's three asks):** **skip this version** (never re-notify for that exact version), **disable update notifications** (a setting; the app stops proactively checking/notifying but a manual "check now" still works), **cancel / confirm** each install (never silent, never forced). Preferences persist per bundle-identity (consistent with `pip_mode` / the M9 tracking toggle).
+- [ ] **Homebrew detect-and-defer** — detect a brew-managed install; in that case DON'T self-install — surface "installed via Homebrew → run `brew upgrade`" instead. Direct-download installs self-update. (No desync because the updater never touches a brew-managed bundle.)
+- [ ] **Unsigned-relaunch quarantine handling** — the updater surfaces the `xattr -dr com.apple.quarantine` step (or self-runs it on its own bundle pre-relaunch, feasibility TBD) so the post-update relaunch isn't a silent Gatekeeper "damaged" failure. Updates the `/release` skill to publish the update manifest + minisign signature per release (no notarization — staying unsigned).
+
+**Exit Criteria:** From an older **direct-download** installed build, Claudesk detects a newer published version, the user can skip it / disable notifications / confirm the install, and on confirm the app downloads, verifies (minisign), installs, and relaunches into the new version — handling the unsigned-Gatekeeper quarantine step so relaunch isn't a silent failure. A **Homebrew-installed** build instead detects its brew origin and directs the user to `brew upgrade` (no self-install, no desync). The `/release` skill publishes the update manifest + signature per release.
+
+### Milestone 11: Workflow-docs markdown viewer *(was Milestone 7 → M8 → M10 → demoted to M11 by the 2026-07-06 auto-updater insert)*
 
 **Goal:** Read the conventional product/workflow docs as formatted markdown without leaving Claudesk or popping an external editor — so the workflow document hierarchy (vision → roadmap → wbs → wip → backlog) is glanceable inside the workspace it belongs to. *(Depends on Milestone 2's right-half panel model.)*
 
@@ -173,7 +192,7 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** From any workspace, the `Docs` tab renders that project's conventional product/workflow docs as formatted, scrollable, link-navigable markdown, read-only, with no external editor pop.
 
-### Milestone 11: Smart auto-resume + drive mode *(was Milestone 4 → M8 → M9 → M10; slid +1 again by the 2026-06-29b demo-milestone insert; livable-without for now)*
+### Milestone 12: Smart auto-resume + drive mode *(was Milestone 4 → M8 → M9 → M10 → M11; slid +1 again by the 2026-07-06 auto-updater insert; livable-without for now)*
 
 **Goal:** Opening a workspace lands on the correct resumption command automatically, and the active drive mode is always visible and one-click changeable.
 
@@ -188,7 +207,7 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 **Exit Criteria:** Workspace open always fires the right resumption command without manual selection; the active drive mode is visible in the header and switchable in one click.
 
-### Milestone 12: Skill orchestration *(was Milestone 5 → M9 → M10 → M11; slid +1 again by the 2026-06-29b demo-milestone insert; livable-without for now)*
+### Milestone 13: Skill orchestration *(was Milestone 5 → M9 → M10 → M11 → M12; slid +1 again by the 2026-07-06 auto-updater insert; livable-without for now)*
 
 **Goal:** Common workflow operations are clicks, not typed slash commands.
 
@@ -202,9 +221,11 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 
 ## Group D — Polish & open-source release
 
-### Milestone 13: Polish & Open-Source Release
+### Milestone 14: Polish & Open-Source Release
 
-**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)* *(2026-06-25: the workflow-docs markdown viewer was inserted as Milestone 7, sliding Skill orchestration to M9 and this Polish milestone to M10.)* *(2026-06-26: the time-analytics panel was inserted as Milestone 8, sliding Skill orchestration to M10 and this Polish milestone to M11.)* *(2026-06-26b: the friend-QoL milestone was inserted as Milestone 6, sliding everything after it +1 — time-analytics → M9, Skill orchestration → M11, this Polish milestone → M12.)* *(2026-06-29b: the demo-assets milestone was inserted as Milestone 8 and the time-analytics ↔ docs-viewer pair swapped, sliding the tail +1 again — time-analytics → M9, docs-viewer → M10, auto-resume → M11, Skill orchestration → M12, this Polish milestone → M13.)*
+**Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)* *(2026-06-25: the workflow-docs markdown viewer was inserted as Milestone 7, sliding Skill orchestration to M9 and this Polish milestone to M10.)* *(2026-06-26: the time-analytics panel was inserted as Milestone 8, sliding Skill orchestration to M10 and this Polish milestone to M11.)* *(2026-06-26b: the friend-QoL milestone was inserted as Milestone 6, sliding everything after it +1 — time-analytics → M9, Skill orchestration → M11, this Polish milestone → M12.)* *(2026-06-29b: the demo-assets milestone was inserted as Milestone 8 and the time-analytics ↔ docs-viewer pair swapped, sliding the tail +1 again — time-analytics → M9, docs-viewer → M10, auto-resume → M11, Skill orchestration → M12, this Polish milestone → M13.)* *(2026-07-06: the in-app auto-updater was inserted as Milestone 10, sliding the tail +1 again — docs-viewer → M11, auto-resume → M12, Skill orchestration → M13, this Polish milestone → M14.)*
+
+> **Overlap note (2026-07-06):** M14 deliverable "code-signing / notarization strategy decided and documented" now **overlaps** M10 (auto-updater), which forces the sign-vs-unsigned decision earlier because the updater's post-install relaunch depends on it. At M10 the decision gets *made*; M14 inherits it as *documented/finalized for the public release* rather than deciding it fresh. Reconcile at M10 close.
 
 **Deliverables:**
 - [ ] **Settings UI:** project list management, hotkeys, default CLI args for `claude` (e.g. yolo-mode toggle), menu-bar / PiP visibility toggles.
@@ -213,6 +234,26 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 - [ ] **Public repo + open-source license** chosen and added.
 
 **Exit Criteria:** A stranger with the workflow system installed at `~/.claude/skills/` can clone the repo, build Claudesk, and use it on their own macOS machine without further help from the author.
+
+## Revision 2026-07-06 — In-app auto-updater inserted as Milestone 10 (right after M9, before the next release)
+
+**Operator-directed insert (2026-07-06):** a new **Milestone 10 — In-app auto-updater** placed immediately after M9 (time-analytics) and **before the next release**. Claudesk gains an in-app "check for updates → download/install newer version" flow with the user in control: **skip a version, disable update notifications, cancel/confirm each install** (no silent/forced updates). Rationale for the slot: the milestone governs *how future versions reach users*, so it must ship before a publish to be useful.
+
+**Two decisions this milestone turns on — BOTH LOCKED (operator, 2026-07-06):**
+1. **Homebrew → detect-and-defer.** A self-updating cask desyncs `brew`. Chosen (the correctness path over the simpler `auto_updates true` stanza): the updater **detects a brew-managed install and directs the user to `brew upgrade`** there; only direct-download installs self-update in-app. No desync.
+2. **Signing → stay UNSIGNED (no $99 yet).** The updater's minisign keypair is free (no Apple account); notarization is a separate $99/yr Apple Developer Program requirement. Operator: **not paying $99 yet.** Claudesk stays unsigned, so the updater **surfaces the `xattr` quarantine-clear step** on the post-update relaunch (Gatekeeper would otherwise block the fresh bundle). Notarization revisitable later.
+
+**Old → new mapping** (tail slides +1; M1–M9 unchanged):
+
+| Was | Now | Milestone |
+|-----|-----|-----------|
+| — | **M10** | In-app auto-updater *(new)* |
+| M10 | **M11** | Workflow-docs markdown viewer |
+| M11 | **M12** | Smart auto-resume + drive mode |
+| M12 | **M13** | Skill orchestration |
+| M13 | **M14** | Polish & Open-Source Release |
+
+> **Note:** the M14 (Polish) "code-signing / notarization strategy" deliverable now overlaps M10 — the decision is *made* at M10 (the updater forces it), *finalized/documented for public release* at M14. Also: the Group-C exit block still references the six vision metrics at "M11/M12" by their pre-insert numbers — those metrics now land at M12/M13; re-number at the next finalize sweep (non-load-bearing prose).
 
 ## Revision 2026-06-29b — Demo-assets milestone inserted as M8; time-analytics ↔ docs-viewer swapped
 

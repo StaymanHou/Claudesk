@@ -4,6 +4,7 @@
 
 - **Feature shipped:** Filmstrip + PiP live-mirror tiles now fill from the bottom — a fresh CC session's banner bottom-anchors at the tile edge clear of the header (instead of being occluded), via a trailing-blank-row trim at the single shared serialize seam so both surfaces inherit the fix.
 - **Backlog resolved:** SURFACE-2026-06-25-FILMSTRIP-MIRROR-BANNER-OCCLUDED-AT-SESSION-START — closed by the mirror-fill-from-bottom feature (trimTrailingBlankRows wraps the XtermPane serializer thunk; filmstrip + PiP both inherit it downstream of mirrorFrame).
+- **Feature shipped:** M9 WP1 time-analytics probe — froze the segment-model JSON contract (oracle-cited), enumerated the hook delta (4→10 events + 4 wire fields, length-only privacy invariant), and proved `dashboard.jsx` ports mechanically to a dark React-19 TSX tab (verdict GO-WITH-SPLIT into WP6a/6b/6c; darker-fill palette + luminance `textOn` ink locked as the WP6 starting point).
 
 ## 2026-07-02
 
