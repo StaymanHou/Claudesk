@@ -40,8 +40,9 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 
 ## Work Packages
 
-### WP1: Probe — data-model contract freeze + dashboard-port feasibility
+### WP1: Probe — data-model contract freeze + dashboard-port feasibility — ✅ COMPLETE (2026-07-06, shipped `720542e`)
 **Type:** probe
+**Outcome:** all 4 criteria answered in `docs/product/wp1-time-analytics-probe-outcome.md`. (a) contract frozen; (b) dark render PASS (day+week); (c) **verdict = GO-WITH-SPLIT → WP6a/6b/6c** (recorded in WP6 below); (d) hook delta = **4→10 events + 4 wire fields** (`PostToolUseFailure` confirmed distinct). Darker-fill palette + `textOn` ink locked as WP6 starting point.
 **Milestone:** 9 (must precede WP4 + WP6, which depend on the frozen contract + dark-render verdict)
 **Dependencies:** none
 **Size:** M
@@ -51,10 +52,10 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 **Timebox:** half-day
 **Success criterion:** A written probe outcome (`docs/product/wp1-time-analytics-probe-outcome.md`) containing: (a) the frozen segment-model JSON schema (every key + type, `kind` enum, unit conventions), captured from `test_viz_data.py`'s fixtures as the oracle; (b) a static-fixture render of the dashboard's day-view as a dark-theme TSX component inside a throwaway Vite entry (screenshot), proving feasibility; (c) a port-size estimate + a go/split verdict for WP6 (single WP vs. phased sub-views: day / week-rollup / selected-bar side panel); (d) confirmation the extra hook fields the reclassifier needs (`tool_use_id`, `agent_type`, `source`) + the 5 extra event registrations are the complete delta over the current 4-event wire.
 **Tasks:**
-- [ ] Extract the segment-model schema from `viz_data.py` + `test/test_viz_data.py` fixtures; write it as a typed schema doc (the WP4↔WP6 contract).
-- [ ] Enumerate the exact event-set + field delta vs. `CLAUDESK_EVENTS` + the current `HookEvent`/wire contract (confirms WP2's scope).
-- [ ] Port the `CT_TOKENS` block to Claudesk dark tokens; render the dashboard day-view against a static fixture in a throwaway Vite entry; screenshot.
-- [ ] Write the probe outcome doc with the go/split verdict for WP6 and the frozen contract.
+- [x] Extract the segment-model schema from `viz_data.py` + `test/test_viz_data.py` fixtures; write it as a typed schema doc (the WP4↔WP6 contract).
+- [x] Enumerate the exact event-set + field delta vs. `CLAUDESK_EVENTS` + the current `HookEvent`/wire contract (confirms WP2's scope) — 4→10 events, +4 fields.
+- [x] Port the `CT_TOKENS` block to Claudesk dark tokens; render the dashboard day-view against a static fixture in a throwaway Vite entry; screenshot — day+week both rendered.
+- [x] Write the probe outcome doc with the go/split verdict for WP6 and the frozen contract — GO-WITH-SPLIT.
 
 **WP1 → WP2 rationale:** Freeze the wire/event delta (what fields + events the writer must persist) before extending the hook + DB — so WP2 builds the SQLite schema and the extended `HookEvent` against a known-complete field set, not a guessed one.
 
@@ -121,17 +122,28 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 - [ ] Empty-state in the tab when OFF ("enable tracking…"); tab still mountable, just data-empty.
 - [ ] Contract test: OFF → event received → status updates → no row written; ON → row written.
 
-### WP6: Native dashboard right-panel tab (dark-theme TSX port + lazy-load)
-**Description:** Port `viz/dashboard.jsx` (4065 lines) to a React-19 TSX right-panel tab, **dark-themed** (Claudesk dark-only), fed by WP4's Tauri command. Add `"dashboard"` to the `RightPanel` union, a `⌘⇧`-chord (next free — confirm disjoint from `⌘⇧E`/`⌘⇧D`/`⌘⇧T`/`⌘⇧O`/`⌘⇧P` and `⌘⇧+digit`), a clickable tab in the `RightPanelHost` tab row, and a mountable slot. Renders in-window — no unpkg/Babel CDN, no separate browser window, no stale-snapshot-vs-moving-cursor problem. **Lazy-load the dashboard chunk** (`React.lazy`) so the heavy render code loads on first tab open, not app boot — and **fold in `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD`** by lazy-loading the EditorPanel/CM6 chunk the same way (both are the milestone's startup-trim lever). WP1's verdict decides single-WP vs. phased sub-views (day / week-rollup / selected-bar side panel).
+### WP6: Native dashboard right-panel tab (dark-theme TSX port + lazy-load) — **SPLIT into 6a/6b/6c per WP1's verdict**
+**Description:** Port `viz/dashboard.jsx` (4065 lines, 28 top-level components) to a React-19 TSX right-panel tab, **dark-themed** (Claudesk dark-only), fed by WP4's Tauri command. **WP1 RESOLVED the split question (2026-07-06): verdict = GO-WITH-SPLIT** — the port is de-risked (self-contained; namespace-form hooks → a single `import React`; hand-rolled SVG = no chart dep; mechanical dark token swap proven rendering for day + week views), but 4065 lines / 28 components is too large for one WP and the surfaces separate cleanly along the existing `variant` prop + the `window.CT_DATA` key each reads. **Starting palette + contrast rule locked at WP1** (darker-fill deep semantic tokens + luminance `textOn(bg)` ink — see `wp1-...-outcome.md` §b). Renders in-window — no unpkg/Babel CDN, no separate browser window, no stale-snapshot-vs-moving-cursor problem.
 **Milestone:** 9
-**Dependencies:** WP1 (dark-render verdict + frozen contract), WP4 (data source), WP5 (toggle-gated enable + empty state)
-**Size:** XL (largest WP — the 4065-line port; may split into sub-phases per WP1's verdict)
-**Tasks:**
-- [ ] Add `"dashboard"` to `RightPanel`, a chord in `panelForChord`, a tab + slot in `RightPanelHost` (mirror the editor/diff/terminal wiring).
-- [ ] Port `dashboard.jsx` → dark-theme TSX (day view first), consuming WP4's segment-model command; light→dark token swap on `CT_TOKENS`.
-- [ ] Port the week-rollup view + selected-bar side panel (or defer per WP1's split verdict — log the deferral in backlog if split).
+**Dependencies:** WP1 (dark-render verdict + frozen contract + starting palette — DONE), WP4 (data source), WP5 (toggle-gated enable + empty state). **WP6c additionally depends on WP3** (its surfaces consume `metrics`/`comparison` shapes WP3 redesigns).
+**Size:** XL total, split into L (6a) + M (6b) + M (6c).
+
+#### WP6a: Day-view MVP + tab wiring + lazy-load scaffold **(the shippable MVP)**
+The `DayTimeline` chain (`SegmentBar`/`SessionRow`/`ProjectHeaderRow`/`HourRuler`/`HourGridBackground`/`OverlapMarkerLayer`/`CollapsedTrackRow`) + chrome (`Toolbar`/`SummaryStrip`/`Legend`/`ProjectFilterPopover`/`Icon`) — ~55% of the file, all proven rendering in the WP1 spike. **Folds in `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD`.**
+- [ ] Add `"dashboard"` to `RightPanel`, a `⌘⇧`-chord in `panelForChord` (next free — confirm disjoint from `⌘⇧E`/`⌘⇧D`/`⌘⇧T`/`⌘⇧O`/`⌘⇧P` and `⌘⇧+digit`), a tab + slot in `RightPanelHost` (mirror editor/diff/terminal wiring).
+- [ ] Port the day-view chain + chrome → dark TSX consuming WP4's command; lift the WP1 dark `CT_TOKENS` (darker-fill) + `textOn()` ink helper verbatim.
 - [ ] Lazy-load the dashboard chunk (`React.lazy` + Suspense); fold in CM6/EditorPanel lazy-load (`SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD`); confirm the 500 KB chunk-size warning clears / main bundle shrinks.
-- [ ] Live verify-self via the MCP bridge: open a scratch workspace, enable tracking, drive a CC turn, open the Dashboard tab, confirm a dark-themed per-project breakdown renders.
+- [ ] Live verify-self via the MCP bridge: open a scratch workspace, enable tracking, drive a CC turn, open the Dashboard tab, confirm a dark per-project day breakdown renders.
+
+#### WP6b: Week / Month / Minimap / SidePanel + range navigation
+The remaining time-*shape* surfaces (`WeekTimeline` proven in the WP1 spike; `MonthView`/`MonthNavToast`/`Minimap`/`SidePanel`/`RangePicker` share the same primitives). ~30% of the file.
+- [ ] Port `WeekTimeline` + `MonthView`/`Minimap` (variant switch in `Toolbar`).
+- [ ] Port `SidePanel` (selected-bar detail) + `RangePicker` (custom window).
+
+#### WP6c: Metrics / Headline / Compare panels — **AFTER WP3 defs lock**
+The aggregate-metric surfaces (`MetricsPanel`/`HeadlineCard`/`CompareView`/`EffectivenessRow`/`PresetSelector`) consume `window.CT_DATA.metrics`/`.comparison` — whose *definitions WP3 redesigns*. Porting their pixels is mechanical; their inputs aren't frozen until WP3. ~15% of the file. **Sequence last.**
+- [ ] After WP3 locks metric definitions: port the metrics/headline/compare panels against the redesigned `metrics`/`comparison` shapes.
+- [ ] Apply the WP3 AI-vs-human color families (`SURFACE-2026-07-06-M9-COLOR-FAMILIES-AI-VS-HUMAN`) across all surfaces once the kind→family mapping is locked.
 
 ### WP7: Deprecate standalone claude-time + milestone-exit verify
 **Description:** Retire the standalone tool now that Claudesk owns the capability (decision 1). Remove the separate `claude-time-hook.pl` registration from `~/.claude/settings.json` (Claudesk's `hook_install` un-registers it / the user's own copy is left inert — decide the least-surprising path: Claudesk should NOT delete a hook it didn't install, but should stop *depending* on it; document the manual removal in the retirement note). Update `CLAUDE.md` + `arch.md` to record the absorbed hook/DB/reclassifier/dashboard as-built and the tool's deprecation. Milestone-exit verification of the exit criteria against the installed `.app` (per the installed-build smoke-test convention — this feature touches the hook registration + external-process env, so it MUST be smoke-tested from a Finder-launched `.app`, not just `pnpm tauri:dev`).
@@ -152,7 +164,7 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 3. **WP3 (reclassifier)** — the pure logic, oracle'd 1:1 against `test_reclassify.py`, over the WP2 schema.
 4. **WP4 (query layer)** — the synchronous data path (rows → segment JSON), oracle'd against `test_viz_data.py`.
 5. **WP5 (toggle)** — the control layer wrapped around the working data path (§5 spirit: core before the gate).
-6. **WP6 (dashboard tab)** — the render, fed by WP4, gated by WP5, dark-themed, lazy-loaded (+ CM6 fold-in).
+6. **WP6 (dashboard tab)** — the render, fed by WP4, gated by WP5, dark-themed, lazy-loaded (+ CM6 fold-in). **SPLIT per WP1's verdict into 6a (day-view MVP + lazy-load) → 6b (week/month/side-panel) → 6c (metrics/compare, after WP3 defs lock).**
 7. **WP7 (deprecate + exit verify)** — retire the source only after the capability is fully in-app + verified on the installed build.
 
 **No async/orchestration layer** in M9 — the write path is a synchronous INSERT on an existing event stream, the query path is a synchronous SQLite read. §5 (orchestration-after-sync) has no applicable async wrapper to defer.
@@ -182,7 +194,7 @@ WP1 (probe: contract + dark-render verdict)
 - **config.json tuning surface** (`chars_per_sec`, thresholds, `project_names`) as a Claudesk setting vs. hardcode — resolve at WP3 (lean: hardcode claude-time defaults; add a setting only if a tuning need surfaces).
 - **Panel scope** — global all-projects vs. per-workspace — resolve at WP4 (lean: global with per-project breakdown; the cross-project view is the value).
 - **Toggle persistence location** — `projects.json` app-settings vs. a sibling file — resolve at WP5 (lean: reuse the existing settings surface the no-yolo setting uses).
-- **WP6 single-WP vs. split** into day / week-rollup / selected-bar sub-phases — resolve at WP1's verdict.
+- **WP6 single-WP vs. split** into day / week-rollup / selected-bar sub-phases — ✅ RESOLVED at WP1 (2026-07-06): **GO-WITH-SPLIT → 6a/6b/6c** (see WP6 above).
 
 ## Architecture check
 
