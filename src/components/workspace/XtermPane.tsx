@@ -40,6 +40,7 @@ import {
   registerTerminalSerializer,
   unregisterTerminalSerializer,
 } from "./terminalMirror";
+import { trimTrailingBlankRows } from "./mirrorTrim";
 import { loadTerminalFontSize } from "./terminalFontZoom";
 
 /**
@@ -261,11 +262,22 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
         // tail keeps it current and the tile clips to show the bottom (App.css).
         // includeGlobalBackground:true → the block carries the dark bg (#1e1e1e) so the tile
         // is dark, not white (P3 verify-human dark-theme fix).
+        //
+        // trimTrailingBlankRows: serializeAsHTML emits the FULL active screen (~40 rows) even
+        // when a fresh session has only ~10–20 real rows — the trailing rows are blank. Since
+        // the mirror node is BOTTOM-anchored (App.css / pip.css), a block whose last rows are
+        // blank pushes the real content up under the tile header (the CC banner was occluded
+        // at session start — SURFACE-2026-06-25). Trimming trailing blanks makes the block end
+        // at real content, so it "fills from the bottom first" and STILL tails once output
+        // overflows. This is the single shared serialize seam → both the filmstrip and the PiP
+        // (via mirrorFrame) inherit the fix with no per-surface change.
         registerTerminalSerializer(workspaceId, () =>
-          serialize.serializeAsHTML({
-            scrollback: 40,
-            includeGlobalBackground: true,
-          }),
+          trimTrailingBlankRows(
+            serialize.serializeAsHTML({
+              scrollback: 40,
+              includeGlobalBackground: true,
+            }),
+          ),
         );
       }
 

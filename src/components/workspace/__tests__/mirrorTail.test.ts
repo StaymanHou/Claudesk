@@ -30,4 +30,27 @@ describe("XtermPane mirror serializes a bottom-anchored tail (not scrollback:0)"
   it("includes the global background so the mirror is dark, not white", () => {
     expect(xtermSource).toMatch(/includeGlobalBackground:\s*true/);
   });
+
+  // Mirror fill-from-bottom (SURFACE-2026-06-25-FILMSTRIP-MIRROR-BANNER-OCCLUDED-AT-SESSION-START).
+  //
+  // The single-seam contract: the serializer thunk must WRAP serializeAsHTML(...) in
+  // trimTrailingBlankRows(...) so a sparse fresh session's real content bottom-anchors at the
+  // tile edge (clear of the header) instead of being pushed up under it. This is the ONE serialize
+  // site; both the filmstrip and the PiP read downstream of it (via mirrorFrame), so unwrapping it
+  // silently re-breaks BOTH surfaces with green unit tests (mirrorTrim.test.ts still passes because
+  // the function itself is untouched — only the call site regressed). Same failure-mode + same
+  // ?raw source-assertion guard style as the scrollback pin above. Verified live on both surfaces
+  // by the operator at verify-human (2026-07-06).
+  it("wraps the serializeAsHTML call in trimTrailingBlankRows (fill-from-bottom, both surfaces)", () => {
+    // The trim must be imported...
+    expect(xtermSource).toMatch(
+      /import\s*\{\s*trimTrailingBlankRows\s*\}\s*from\s*["']\.\/mirrorTrim["']/,
+    );
+    // ...AND the serializer thunk's serializeAsHTML(...) must be enclosed by a
+    // trimTrailingBlankRows( ... ) call. Match the wrapper open before the call and allow the
+    // options object + close paren in between (the call spans multiple lines).
+    expect(xtermSource).toMatch(
+      /trimTrailingBlankRows\(\s*serialize\.serializeAsHTML\(/,
+    );
+  });
 });

@@ -17,9 +17,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm vite build
 
-- **Last:** 1s (2026-06-28, WP6 Phase 3: built in 1.10s — frontend-only `pnpm vite build`)
+- **Last:** 2s (2026-07-06, mirror-fill-from-bottom verify-self: built in 1.96s — frontend-only `pnpm vite build`)
 - **Use timeout:** 180000
 - **History:**
+  - 1.96s — 2026-07-06 (mirror-fill-from-bottom)
   - 1.10s — 2026-06-28 (WP6 P3)
 
 ## pnpm install
