@@ -4,6 +4,26 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# mirror-fill-from-bottom — 2026-07-06
+
+*(feature-review-quality on ship commit 99aca94; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: well-built, tightly-scoped fix at the shared seam; correctness verified against the vendored xterm source. One MINOR (count-drift typo) was fixed in-place; the two below are auto-backlogged. None warrant a refactor pass.)*
+
+## SURFACE-2026-07-06-QUALITY-MIRRORTRIM-LOSSY-RECONSTRUCTION
+- **Severity:** MINOR
+- **File:** `src/components/workspace/mirrorTrim.ts` (~77-92, the `rows.match(ROW_RE)` + `rows.slice(0, end).join("")` rebuild)
+- **Finding:** The block is reconstructed by re-joining matched `<div>…</div>` rows, which silently drops any inter-row text that isn't a row match. Safe today because `@xterm/addon-serialize`'s `_rowEnd` emits rows contiguously (nothing between them), but the reconstruction is lossier than the prefix/suffix splice implies. The module's "return input unchanged on structural surprise" contract mitigates changes it *detects*, not this silent one — if a future xterm interleaved row separators, surviving rows would be re-joined without them.
+- **Fix shape:** documentation-hardening — add a one-line header-comment note that reconstruction assumes zero inter-row content. No behavior change needed today.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-06-QUALITY-MIRRORTRIM-FIXTURE-REALISM
+- **Severity:** MINOR
+- **File:** `src/components/workspace/mirrorTrim.ts` (~32, 36-37 comments) + `src/components/workspace/__tests__/mirrorTrim.test.ts` (fixtures)
+- **Finding:** The fixtures + comments use the simple `<div><span>text</span></div>` row shape, but real styled CC output produces intra-row `</span><span style='…'>` transitions (from xterm's `_nextCell` style diffs). The non-greedy `ROW_RE` handles the styled shape correctly (spans close with `</span>`; the first `</div>` still wins), so this is not a correctness gap — but the test fixtures under-represent the actual serializer output, which is a future-reader trap.
+- **Fix shape:** add one styled-multi-span row fixture to `mirrorTrim.test.ts` documenting the real case; optionally soften the "spans hold text only" comment to acknowledge multi-span rows.
+- **Priority:** low.
+- **Status:** pending.
+
 # cc-permission-mode-dropdown — 2026-07-02
 
 *(feature-review-quality on ship commit 1624e2e; Mode 2 orchestrated. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: well-built, advances the codebase; wire contract + migration are the standouts. None warrant a refactor pass.)*

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-06
+
+- **Feature shipped:** Filmstrip + PiP live-mirror tiles now fill from the bottom — a fresh CC session's banner bottom-anchors at the tile edge clear of the header (instead of being occluded), via a trailing-blank-row trim at the single shared serialize seam so both surfaces inherit the fix.
+- **Backlog resolved:** SURFACE-2026-06-25-FILMSTRIP-MIRROR-BANNER-OCCLUDED-AT-SESSION-START — closed by the mirror-fill-from-bottom feature (trimTrailingBlankRows wraps the XtermPane serializer thunk; filmstrip + PiP both inherit it downstream of mirrorFrame).
+
 ## 2026-07-02
 
 - **Feature shipped:** Replaced the project-picker's binary yolo checkbox with a dropdown of all six Claude Code `--permission-mode` values (default, plan, acceptEdits, auto, dontAsk, bypassPermissions), persisted app-global, mirrored in a native View-menu radio submenu, with legacy `cc_yolo` migration on upgrade.
