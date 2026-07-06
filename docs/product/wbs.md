@@ -79,17 +79,45 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 
 **WP2 → WP3 rationale:** The DB + schema must exist and be populated (real rows, real shape) before building the reclassifier — the reclassifier reads rows; building it against a live schema (not a mock) de-risks the row-shape assumptions.
 
+### WP2.5: Claudesk-native signal source (focus/blur + PTY keystrokes + registry attribution) — **NEW** (`SURFACE-2026-07-06-M9-NATIVE-SIGNALS-BEAT-GAP-INFERENCE`)
+**Why this WP exists:** claude-time could only *infer* the human states (`reading`/`thinking`/`away`) from CC-hook-stream gaps + a guessed typing rate + magic thresholds — it had no other signal. **Claudesk, being the terminal + window, can OBSERVE the exact gap claude-time guesses about.** This WP captures those native signals as a **second event source** alongside the CC hook stream (WP2), so WP3's redesign can *measure* where claude-time could only estimate. This is the core "measure, don't guess" lever the milestone gained by moving in-app.
+**Native signals to capture (persist into the same `time_store`, same toggle-gate as WP2):**
+  - **Window focus/blur** — Claudesk window focused vs blurred (Tauri `on_window_event` focus events, already used by the PiP auto-summon path — reuse the seam). The strongest present-vs-away signal.
+  - **PTY keystroke activity** — real bytes flowing INTO a workspace's CC PTY (and editor/terminal), with real timing. Replaces the `chars_per_sec` typing-debit *guess* with observed typing spans. **Privacy: activity/timing + counts only — NEVER the keystroke content** (same length-only invariant as `prompt_length_chars`).
+  - **Workspace-registry attribution** — the active workspace's exact project (cwd→workspace map Claudesk already owns), replacing claude-time's git-root guess. Also which workspace was *focused* when an event fired.
+**⚠️ HARD CONSTRAINT — signals are better, NOT perfect; NO naive rules (operator-directed).** This WP CAPTURES signals; it does NOT decide their interpretation (that's WP3's spec). But it must capture enough context to let WP3 disambiguate the known-hard scenarios, because a naive mapping is actively wrong. Concrete scenarios WP2.5's captured data must be able to distinguish (enumerated with the operator 2026-07-06 — this list is the WP3 spec input, and WP2.5 must not lose the information needed to resolve them):
+  - **blur-but-working:** CC runs `open <screenshot>` / a browser / an external viewer → operator is reading/thinking WHILE Claudesk is blurred. "Blur → away" would be WRONG. (Capture: was the blur *preceded by* a Claudesk-initiated external launch? / blur duration / did focus return to the same workspace?)
+  - **focused-but-idle:** window focused, no keystrokes, CC idle — reading vs thinking (this one likely stays partly inferred even with native signals).
+  - **keystrokes-to-editor-vs-CC:** typing in the in-app editor (human work) vs typing a CC prompt vs a right-panel terminal — different attribution.
+  - **second-monitor / different-Space:** blurred because on another Space, possibly still glancing at a PiP mirror.
+  - **left-the-machine:** genuinely away (long blur + no keystrokes anywhere + no Claudesk-launched external).
+**Milestone:** 9
+**Dependencies:** WP2 (the `time_store` + schema exist — WP2.5 adds event *kinds*/columns to the same store). **Note:** the schema (WP2's `events` table) may need a `source` discriminator (cc-hook vs claudesk-native) + extra `meta` keys for focus/keystroke events — reconcile with WP2's schema.
+**Size:** M *(a capture layer + schema extension; interpretation is WP3's)*
+**Tasks:**
+- [ ] Extend the `time_store` schema (or add a sibling table) to hold native-signal events (focus/blur transitions with timestamps + which workspace; keystroke-activity spans with counts/timing, no content; active-workspace attribution) — add a `source` discriminator vs. CC-hook rows.
+- [ ] Capture window focus/blur (reuse the `on_window_event` seam the PiP auto-summon uses); write gated on the tracking toggle (same rule as WP2).
+- [ ] Capture PTY-keystroke activity per workspace (bytes-in timing/counts only — privacy: NO content); attribute to the focused workspace.
+- [ ] Capture the Claudesk-initiated-external-launch signal (so WP3 can resolve the `open <screenshot>` blur-but-working case) — e.g. mark blurs that follow a `sublime_open`/`open`-class launch.
+- [ ] Privacy assertion test: native-signal rows carry timing/counts/attribution only — never keystroke content, never file paths beyond what attribution needs.
+- [ ] Document the captured native-signal schema as the WP3 spec input (the scenario list above + what data resolves each).
+
+**WP2.5 → WP3 rationale:** WP3 can't design "measure vs. infer" rules without the native-signal inventory in hand. WP2.5 makes the signals real + captured (with enough context to disambiguate the hard scenarios) so WP3's spec decides interpretation against actual data, not a hypothetical.
+
 ### WP3: Reclassifier — REDESIGN (metric definitions), not a straight port
 **⚠️ REDESIGN, not a port (operator flag 2026-07-06).** The operator has stated **the current claude-time classifier is NOT exactly what he wants**. So this WP is a **feature (spec-first) redesign**, not a 1:1 port. `reclassify.py` (368 lines, pure — `gap_buckets` reading/thinking/away with typing-debit + cross-session reattribution; `tool_durations_ms`/`tool_intervals`; `subagent_intervals`/`subagent_durations_ms`; `active_bursts`/`session_active_ms`) and its 29 `test_reclassify.py` assertions are the **starting reference** that documents *how it currently measures* — NOT the target behavior and NOT the porting oracle.
 
 **MANDATORY spec discussion before any code (operator-directed):** WP3 opens with a `/feature-spec` conversation that clarifies, per metric: **(a) the precise definition** the operator wants (what "active" / "reading" / "thinking" / "away" / tool-time / subagent-time / per-project attribution each *mean*), and **(b) exactly how each is measured** from the event stream (which event pairs, which debits/reattributions, which thresholds, which edge-case rules). The gap between "how claude-time currently does it" and "what the operator wants" is the actual work of this WP; capture each delta explicitly. Only after the definitions are locked does the Rust module get built. The new definitions then drive the WP4 segment model + the WP6 dashboard (both may shift from claude-time's shapes as a consequence).
 
+**⭐ MEASURE-vs-INFER agenda item (NEW — `SURFACE-2026-07-06-M9-NATIVE-SIGNALS-BEAT-GAP-INFERENCE`):** the spec's central new question. With WP2.5's native-signal inventory (focus/blur, real keystrokes, registry attribution, Claudesk-launched-external marks) in hand, decide **per human-state which is MEASURED from native signals vs. must stay INFERRED from CC-hook gaps** (as a fallback when Claudesk isn't the active window / the signal is ambiguous). **Operator constraint: native signals are better but NOT perfect — no naive rules; play out the concrete scenarios.** The WP2.5 scenario list (blur-but-working via `open <screenshot>`; focused-but-idle; keystrokes-to-editor-vs-CC; second-monitor/different-Space; left-the-machine) MUST each get an explicit resolution rule (or an honest "this stays inferred / ambiguous"). The output is a per-state measurement rule that fuses both sources — not a swap of one guess for another. **Also the AI-vs-human color-family split** (`SURFACE-2026-07-06-M9-COLOR-FAMILIES-AI-VS-HUMAN`, incl. the "reasoning vs doing/tool-call" sub-split — tool-time is hook-observable, pure reasoning stays inference-based) is locked here since it depends on which kinds are AI-execution vs human.
+
 **Description:** After the definitions are locked: build a pure Rust reclassifier module (no DB I/O — row-slice in, typed metric structs out) implementing the *agreed* definitions. Reuse claude-time's mechanics where they already match the operator's intent; change them where they don't. Grouping logic (git-root + `project_names`-style aliasing) stays here as the single source of truth. Write a **fresh** test suite pinning the *new* agreed definitions (adapt the reference assertions only where behavior is unchanged; the reference suite is not a pass/fail oracle).
 **Milestone:** 9
-**Dependencies:** WP2 (row schema exists). **Note:** WP3's outcome (the locked metric definitions + resulting metric/segment shapes) may adjust the WP1-frozen segment-model contract → feed the delta forward to WP4/WP6.
-**Size:** L *(upsized M→L — a definitions-redesign + spec discussion, not a mechanical port)*
+**Dependencies:** WP2 (CC-hook row schema exists) **+ WP2.5 (native-signal rows exist)** — the reclassifier reads BOTH sources. **Note:** WP3's outcome (the locked metric definitions + resulting metric/segment shapes) may adjust the WP1-frozen segment-model contract → feed the delta forward to WP4/WP6.
+**Size:** L→XL *(a definitions-redesign + spec discussion + a two-source measure-vs-infer fusion — not a mechanical port; upsized again by the native-signal integration)*
 **Tasks:**
-- [ ] **`/feature-spec` metric-definitions discussion (operator, blocking):** for each metric (active / reading / thinking / away / tool-time / subagent-time / per-project attribution), lock (a) the definition and (b) the measurement rule from the event stream. Record each as a delta vs. claude-time's current behavior. *(This task gates all others.)*
+- [ ] **`/feature-spec` metric-definitions discussion (operator, blocking):** for each metric (active / reading / thinking / away / tool-time / subagent-time / per-project attribution), lock (a) the definition and (b) the measurement rule — **fusing CC-hook gaps + WP2.5 native signals**, deciding per-state measured-vs-inferred (see the MEASURE-vs-INFER agenda above; resolve each hard scenario explicitly). Record each as a delta vs. claude-time's current behavior. *(This task gates all others.)*
+- [ ] Lock the AI-vs-human color families + reasoning-vs-doing sub-split (`SURFACE-2026-07-06-M9-COLOR-FAMILIES-AI-VS-HUMAN`) as part of the definitions (which kinds are AI-execution vs human drives the palette).
 - [ ] Build the pure Rust reclassifier implementing the agreed definitions (reuse claude-time mechanics where they match; change where they don't).
 - [ ] Fresh test suite pinning the NEW definitions (reference `test_reclassify.py` assertions adapted only where behavior is unchanged — not treated as a 1:1 oracle).
 - [ ] Feed any segment-model-shape delta forward to WP4/WP6 (the definitions may change what the query layer emits + what the dashboard renders).
@@ -161,7 +189,8 @@ The aggregate-metric surfaces (`MetricsPanel`/`HeadlineCard`/`CompareView`/`Effe
 
 1. **WP1 (probe)** — freeze the data-model contract + prove dark-dashboard feasibility. The riskiest unknown (4065-line JSX port + the WP4↔WP6 contract) resolved first, cheaply, before any port commits to a shape.
 2. **WP2 (hook + write-gated DB)** — the substrate. Real rows in a real schema before anything reads them.
-3. **WP3 (reclassifier)** — the pure logic, oracle'd 1:1 against `test_reclassify.py`, over the WP2 schema.
+2.5. **WP2.5 (native-signal source)** — capture Claudesk's own focus/blur + keystroke + registry signals into the same store (second event source). The "measure, don't guess" lever; makes the signals real before WP3 designs how to use them.
+3. **WP3 (reclassifier REDESIGN)** — the pure logic, spec-first; fuses CC-hook gaps + native signals (measure-vs-infer per state), over the WP2+WP2.5 schema. NOT a 1:1 port.
 4. **WP4 (query layer)** — the synchronous data path (rows → segment JSON), oracle'd against `test_viz_data.py`.
 5. **WP5 (toggle)** — the control layer wrapped around the working data path (§5 spirit: core before the gate).
 6. **WP6 (dashboard tab)** — the render, fed by WP4, gated by WP5, dark-themed, lazy-loaded (+ CM6 fold-in). **SPLIT per WP1's verdict into 6a (day-view MVP + lazy-load) → 6b (week/month/side-panel) → 6c (metrics/compare, after WP3 defs lock).**
@@ -177,20 +206,22 @@ There is no *external network* API here, but the **Python↔Rust behavioral cont
 
 ```
 WP1 (probe: contract + dark-render verdict)
- ├─→ WP2 (hook + write-gated DB) ──→ WP3 (reclassifier) ──┐
- │                                                         ├─→ WP4 (query layer) ──┐
- │                                                         │                        ├─→ WP6 (dashboard tab)
- └─────────────────────────────────────────────────────────────────────────────────┤
-                                        WP5 (toggle) ───────────────────────────────┘
-                                                                                      └─→ WP7 (deprecate + exit verify)
+ ├─→ WP2 (CC-hook + write-gated DB) ──┬─→ WP2.5 (native-signal source) ──→ WP3 (reclassifier: fuse both) ──┐
+ │                                     │        (both sources feed WP3)                                      ├─→ WP4 (query layer) ──┐
+ │                                     └──────────────────────────────────────────────────────────────────┘                        ├─→ WP6 (dashboard tab)
+ └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+                                        WP5 (toggle: gates BOTH write paths) ─────────────────────────────────────────────────────┘
+                                                                                                                └─→ WP7 (deprecate + exit verify)
 ```
 
-**Critical path:** WP1 → WP2 → WP3 → WP4 → WP6 → WP7 (the reclassifier + query-layer + dashboard chain).
-**Parallel track:** WP5 (toggle) can proceed alongside WP3/WP4 once WP2's write-gate hook point exists — it only needs to *land* before WP6 (which shows the toggle-gated tab) and its gate-read merges into WP2.
+**Critical path:** WP1 → WP2 → WP2.5 → WP3 → WP4 → WP6 → WP7 (WP2.5 lands on the critical path — WP3's measure-vs-infer redesign needs the native signals captured first).
+**Parallel track:** WP5 (toggle) can proceed alongside WP2.5/WP3/WP4 once WP2's write-gate hook point exists — it only needs to *land* before WP6, and its gate-read merges into WP2 **and WP2.5** (the toggle gates BOTH the CC-hook writes and the native-signal writes). WP2.5 could partly parallelize with WP3's *spec* discussion, but WP3's *build* needs WP2.5's captured schema.
 
 ## Open sub-decisions (resolve at each WP's spec/build — from the SURFACE)
 
 - **DB path** under `app_data_dir()` — resolve at WP2 (lean: `<app-data>/time-analytics.sqlite`, sibling to `hook.sock`).
+- **Native-signal schema shape** — one `events` table with a `source` discriminator (cc-hook vs claudesk-native) vs. a sibling table — resolve at WP2.5 (lean: same table + `source` column + `meta` keys, so WP3/WP4 read one stream).
+- **Measure-vs-infer per human-state** (which states use native signals vs. stay CC-hook-gap-inferred; how each hard scenario resolves) — resolve at **WP3's `/feature-spec`** (the central new design question; `SURFACE-2026-07-06-M9-NATIVE-SIGNALS-BEAT-GAP-INFERENCE`). Operator constraint: signals are better not perfect — no naive rules.
 - **config.json tuning surface** (`chars_per_sec`, thresholds, `project_names`) as a Claudesk setting vs. hardcode — resolve at WP3 (lean: hardcode claude-time defaults; add a setting only if a tuning need surfaces).
 - **Panel scope** — global all-projects vs. per-workspace — resolve at WP4 (lean: global with per-project breakdown; the cross-project view is the value).
 - **Toggle persistence location** — `projects.json` app-settings vs. a sibling file — resolve at WP5 (lean: reuse the existing settings surface the no-yolo setting uses).
