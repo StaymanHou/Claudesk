@@ -181,3 +181,39 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why it matters:** trivial clarity; behavior is acceptable as-is. Folds with the triple-lock cleanup.
 - **Priority:** low.
 - **Status:** pending.
+
+# m9-wp3-reclassifier-redesign — 2026-07-07
+
+*(feature-review-quality on ship commit ebe9f31; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 2 MINOR. Reviewer: well-built, carefully-scoped phase — pure-transform architecture + SSOT notification reuse + 1:1 scenario suite. The 2 MAJORs are untested behavioral edges at the classification boundary; WP4 should close them before the query layer trusts the tail of the stream. All auto-backlogged; none blocking.)*
+
+## SURFACE-2026-07-07-QUALITY-WP3-TRAILING-OPEN-AWAIT-FALLS-TO-AWAY
+- **Severity:** MAJOR
+- **File:** `src-tauri/src/reclassify/mod.rs` (~710, `awaiting_input_spans` — the unclosed-await drop at the session's last event)
+- **Finding:** A still-open AwaitingInput span at the data tail is dropped ("conservative"), but the downstream effect is NOT conservative in the intended direction: an operator actively servicing a still-open prompt gets no working-credit in `classify_gap` branch 2 → falls through to branch 3 → **Away** instead of the intended capped-working. This is the most-recent slice any live dashboard renders (B2b/B4 — "doing the thing CC is blocked on right now"), so it directly undercuts the "measure, don't infer" headline. Unpinned by tests (no trailing-open-await fixture).
+- **Fix shape:** bound an open await at the window end (or the last-known ts) instead of dropping it, and add a trailing-open-await test asserting capped-working (not Away). Natural WP4 tightening (WP4 owns the window bounds).
+- **Priority:** medium (correctness edge on the freshest data slice; cheap fix; consume-before-trust for WP4/WP6).
+- **Status:** pending.
+
+## SURFACE-2026-07-07-QUALITY-WP3-SURFACE-TIE-BREAK-ORDER-DEPENDENT
+- **Severity:** MAJOR
+- **File:** `src-tauri/src/reclassify/mod.rs` (~879, `surface_is_editor_at`)
+- **Finding:** The latest-surface scan's equal-ts tie-break favors the first-seen slice row (`Some((prev_ts,_)) if *prev_ts >= e.ts => {}` refuses to update on `==`), so two same-epoch-ms surface rows resolve by input order — which `group_by_session` explicitly documents is NOT guaranteed. A same-ms surface flip decides Typing-vs-Reviewing for a whole gap (an unstated input-order dependence, the confabulation-channel class the `Unvisited`-ordering convention guards against).
+- **Fix shape:** last-wins on `>=` (or sort native rows by ts first, like the other helpers) + a same-ms tie-break test. One-line fix.
+- **Priority:** medium (deterministic-classification correctness; trivial fix; untested at the tie).
+- **Status:** pending.
+
+## SURFACE-2026-07-07-QUALITY-WP3-SURFACE-HELPER-NOT-IN-GAPCONTEXT
+- **Severity:** MINOR
+- **File:** `src-tauri/src/reclassify/mod.rs` (~879, `surface_is_editor_at` vs `GapContext`)
+- **Finding:** `surface_is_editor_at` is the one hot-path helper not folded into `GapContext`; `human_segments_for_window` calls it once per gap → O(gaps × events) while every other per-gap input is precomputed once in `GapContext::build`. Harmless for a day-window; the place a WP6 month-view would first feel a scan cost, and inconsistent with the deliberate precompute design.
+- **Fix shape:** hoist surface resolution into `GapContext::build` (e.g. a sorted surface-change vector + a point lookup).
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-07-QUALITY-WP3-WORKING-CREDIT-PREDICATE-INLINE-RESCAN
+- **Severity:** MINOR
+- **File:** `src-tauri/src/reclassify/mod.rs` (~851, `classify_gap` branch 2)
+- **Finding:** The working-credit predicate combines `awaiting_at(gap_start)` with an inline `awaiting.iter().any(|&(s,_)| s >= gap_start && s < gap_end)` re-scan; the two overlap and the second re-walks the awaiting vector inline rather than via a named `GapContext` helper like `launch_precedes`/`awaiting_at`. Readability nit on a load-bearing predicate.
+- **Fix shape:** extract a `GapContext::awaiting_in_gap(start, end)` method matching the surrounding style.
+- **Priority:** low.
+- **Status:** pending.

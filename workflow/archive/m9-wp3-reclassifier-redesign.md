@@ -1,7 +1,7 @@
 # Feature: M9 WP3 — Reclassifier REDESIGN (metric definitions, not a port)
 
 **Workflow:** feature
-**State:** ship (complete) → review-quality
+**State:** COMPLETED 2026-07-07 (shipped `ebe9f31`, finalized)
 **Created:** 2026-07-07
 **Entry:** spec (complex feature)
 **Milestone:** M9 (time-analytics panel — absorb claude-time + MEASURE, don't infer)
@@ -236,10 +236,10 @@ Logged + confirmed for the WP4/WP6 hand-off (P4.3).
   - [x] verify-codify  <!-- status: [x] — Phase 4 IS the codify deliverable (fresh scenario suite pins the redesigned defs). Assessed complete against ALL WP acceptance criteria; no new tests needed. Final gate: 433 lib + 5 integ = 438 pass, 0 fail. The 2 open items (chars_per_sec, B2a/B2b split) are documented WP4-boundary decisions, not gaps. -->
 
 ## Current Node
-- **Path:** Feature > (all phases complete) > ship
-- **Active scope:** ALL 4 phases COMPLETE (every verify node [x]). Ready for `/feature-ship`.
+- **Path:** Feature > review-quality (complete) > finalize
+- **Active scope:** ship [x] (commit `ebe9f31`) + review-quality [x] (0 CRITICAL, 2 MAJOR + 2 MINOR auto-backlogged to backlog-quality-findings.md). Ready for `/feature-finalize`.
 - **Blocked:** none
-- **Unvisited (sequence-of-execution):** ship → review-quality → finalize
+- **Unvisited (sequence-of-execution):** finalize
 - **Open discoveries:** notification_type persist RESOLVED (P1); chars_per_sec possibly-vestigial → WP4 decision; B2a/B2b not command-shape-split → documented fallback. See `## Discoveries`.
 - **All 4 phases COMPLETE.** 438 tests pass (433 lib + 5 integ), clippy + fmt clean.
 
@@ -260,3 +260,37 @@ Logged + confirmed for the WP4/WP6 hand-off (P4.3).
 ## Verification posture (WP3-specific)
 
 Pure-logic Rust reclassifier → per the "verify-self on backend-lifecycle features is agent-drivable statically" posture, verify-self for every phase is `cargo test` + `cargo clippy -- -D warnings` + `cargo fmt --check` on the new files. There is NO live/running-app surface to drive (the module has no IPC command, no PTY, no window) — so verify-human is a code+test review, not an operator live-drive. No MCP-bridge session needed. (WP4 is where this module first gets an IPC command + real DB rows; live verification lives there.)
+
+## Code-Quality Review — m9-wp3-reclassifier-redesign
+
+*(Advisory review against ship commit `ebe9f31`, Autopilot Mode 3. 0 CRITICAL, 2 MAJOR, 2 MINOR — all findings auto-backlogged; none blocking. Operator escape hatch: mark a finding `[DISMISSED]` here before finalize archives this file.)*
+
+### Strengths
+- Exemplary module-level documentation (REDESIGN-not-a-port stance, pure-by-construction contract, dormant-`dead_code` lifecycle — a WP4 consumer can pick it up cold).
+- Clean pure-transform seam — every fn takes `&[EventRow]`, returns typed values, zero DB/AppHandle coupling (mirrors the `time_store` split).
+- Single-source-of-truth reuse of `status_broadcaster::notification_awaits_input` structurally guarantees the live dot + analytics agree; `pub(crate)` widening documented at the definition.
+- Scenario suite maps 1:1 to the locked spec truth-table; the cap-reset test pair proves the load-bearing distinction, not just the easy short-gap case.
+- The deliberate NON-PORT is encoded AS a test with a comment pointing at the superseded reference thresholds.
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR**
+- [reclassify/mod.rs ~710, `awaiting_input_spans`] A still-open AwaitingInput span at the session's last event is dropped ("conservative"), but the downstream effect is NOT conservative in the intended direction: an operator actively servicing a still-open prompt at the data tail gets no working-credit → branch 3 → **Away** instead of capped-working. It's the most-recent slice a live dashboard renders, and it's unpinned by tests (no trailing-open-await test). → auto-backlogged.
+- [reclassify/mod.rs ~879, `surface_is_editor_at`] Equal-ts tie-break favors first-seen slice row (`>=` refuses to update on `==`); same-ms surface rows resolve by input order, which `group_by_session` explicitly does NOT guarantee. A same-ms surface flip decides Typing-vs-Reviewing for a whole gap. Cheap fix (last-wins on `>=`, or sort by ts first); untested at the tie. → auto-backlogged.
+
+**MINOR**
+- [reclassify/mod.rs ~879] `surface_is_editor_at` is the one hot-path helper not folded into `GapContext` — `human_segments_for_window` calls it once per gap → O(gaps × events) while every other per-gap input is precomputed once. Hoist into `GapContext::build`. → auto-backlogged.
+- [reclassify/mod.rs ~851] Branch 2's working-credit predicate combines `awaiting_at(gap_start)` with an inline `awaiting.iter().any(...)` re-scan; reads clearer as one named `GapContext::awaiting_in_gap` helper matching `launch_precedes`/`awaiting_at`. Readability nit. → auto-backlogged.
+
+### Assessment
+Well-built, carefully-scoped phase. Pure-transform architecture + SSOT notification reuse + 1:1 scenario suite make it clear and maintainable; reused claude-time mechanics are faithfully ported with explicit "unchanged" markers. Advances the codebase rather than accruing debt — the three pre-documented deferrals are honest forward-decisions. The two MAJORs are behavioral edges at the classification boundary (trailing-open await → Away; same-ms surface tie-break order-dependence), both cheap to close and both currently *unpinned by tests* — the machine is right on every tested path but has two untested corners where "measure, don't infer" quietly degrades. WP4 should tighten those before the query layer trusts the tail of the stream.
+
+### If you disagree
+Mark a finding `[DISMISSED]` in this section before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** The operator-led scenario walk-through collapsed a sprawling "which app / related-vs-unrelated / monitoring" tangle into a much smaller machine via one realization — **focus/blur is only consulted during AI-idle gaps**, and the read-vs-act distinction keys on **CC's hook state, not the launched command**. "Unrelated app" turned out to be *undetectable*, so it dissolved into the same CC-state + cap rule rather than needing its own logic.
+- **Assumptions that held:** claude-time's tool/subagent/active-burst *mechanics* matched the operator's intent as-is and ported verbatim (only the human-state buckets were redesigned). The pure-logic module boundary (row-slice in, typed structs out) held cleanly. Reusing `status_broadcaster`'s notification classifier as the single source of truth was the right structural call.
+- **Assumptions that were wrong:** the plan carried `chars_per_sec` forward from claude-time, but the redesigned classifier is presence/threshold-based (not typing-debit-based), leaving the constant possibly-vestigial (logged for WP4). The B2a/B2b command-shape split the spec described isn't achievable with the stored schema (`tool_use_id`, not the `open` args) — collapsed to a safe-but-looser CC-state rule (outcome still lands right).
+- **Approach delta:** implementation matched the 4-phase plan closely. The one honest simplification: B2a/B2b are not command-shape-distinguished (documented fallback). The code-quality review surfaced 2 genuine untested edges (trailing-open await → Away; same-ms surface tie-break order-dependence) — both backlogged as medium for WP4 to absorb, since they're tail-of-stream correctness the query layer will consume.
