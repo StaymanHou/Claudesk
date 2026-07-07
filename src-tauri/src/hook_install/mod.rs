@@ -46,19 +46,45 @@ use std::path::Path;
 use serde_json::{json, Map, Value};
 use thiserror::Error;
 
-/// The lifecycle events Claudesk registers for. The state mapping itself lives in
-/// the broadcaster (`status_broadcaster::event_to_state`), not here:
-/// `UserPromptSubmit` → Running, `Stop` → Idle, `Notification` → AwaitingInput
-/// (gated on `notification_type`), `PostToolUse` → Running.
+/// The lifecycle events Claudesk registers for.
+///
+/// **Two distinct consumers, one registered set (M9 WP2, 2026-07-07).** The status
+/// machine (`status_broadcaster::event_to_state`) maps only FOUR of these — the rest
+/// exist to feed the **time-analytics writer** (`time_store`, the second gated drain):
+/// - `UserPromptSubmit` → Running, `Stop` → Idle, `Notification` → AwaitingInput
+///   (gated on `notification_type`), `PostToolUse` → Running — the STATUS events.
+/// - `PreToolUse`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`,
+///   `SessionStart`, `SessionEnd` — TIME-ANALYTICS-only; `event_to_state` returns
+///   `None` for each (its `_ => None` fall-through), so registering them does NOT
+///   flip any dot. They give the reclassifier (WP3) tool durations (`PreToolUse` +
+///   `PostToolUse`/`PostToolUseFailure` paired by `tool_use_id`), subagent intervals
+///   (`SubagentStart`/`Stop` by `agent_type`), and session boundaries.
 ///
 /// `PostToolUse` was added (QoL-WP2, 2026-06-25) as the **resume signal**: when a
 /// user answers an `AskUserQuestion`/permission prompt mid-turn, CC fires
 /// `PostToolUse` and resumes working, but emits NO `UserPromptSubmit` (that's
 /// top-level prompts only). Without registering `PostToolUse` the indicator stayed
-/// stuck at AwaitingInput until the eventual `Stop`. `PreToolUse` is deliberately
-/// NOT registered — the initial `UserPromptSubmit`→Running already covers a turn's
-/// pre-tool state, and `PostToolUse` alone clears AwaitingInput on resume.
-pub const CLAUDESK_EVENTS: [&str; 4] = ["UserPromptSubmit", "Stop", "Notification", "PostToolUse"];
+/// stuck at AwaitingInput until the eventual `Stop`.
+///
+/// **History:** was 4 events (status only) through M8. M9 WP2 extended it to 10 to
+/// absorb `claude-time` — see `docs/product/wp1-time-analytics-probe-outcome.md` §(d)
+/// (the 4→10 delta; `PostToolUseFailure` confirmed a distinct CC-emitted event).
+/// `PreToolUse` was deliberately UNregistered pre-M9 (the status machine didn't need
+/// it); M9's time writer does, so it is now registered but status-neutral.
+pub const CLAUDESK_EVENTS: [&str; 10] = [
+    // --- status events (mapped by event_to_state) ---
+    "UserPromptSubmit",
+    "Stop",
+    "Notification",
+    "PostToolUse",
+    // --- time-analytics-only events (status-neutral; consumed by time_store) ---
+    "PreToolUse",
+    "PostToolUseFailure",
+    "SubagentStart",
+    "SubagentStop",
+    "SessionStart",
+    "SessionEnd",
+];
 
 /// Basename of the settings file's sidecar temp used for the atomic write.
 const SETTINGS_TMP_SUFFIX: &str = ".claudesk.tmp";
@@ -286,29 +312,25 @@ mod tests {
     /// A settings value pre-populated with a claude-time entry on every event
     /// (and an extra notify-telegram group on Notification), mirroring the real
     /// machine's config so the additive-merge invariant is tested against the
-    /// production shape, not an empty file.
+    /// production shape, not an empty file. Covers all 10 CLAUDESK_EVENTS (M9 WP2
+    /// added the 6 time-analytics events) so the merge is exercised at N=10 — and
+    /// claude-time itself registers this same superset, so this stays faithful.
     fn settings_with_claude_time() -> Value {
-        json!({
-            "model": "opus",
-            "hooks": {
-                "UserPromptSubmit": [
-                    { "hooks": [ { "type": "command", "command": OTHER } ] }
-                ],
-                "Stop": [
-                    { "hooks": [ { "type": "command", "command": OTHER } ] }
-                ],
-                "Notification": [
-                    { "matcher": "", "hooks": [ { "type": "command", "command": "$HOME/.claude/hooks/notify-telegram.sh", "timeout": 10 } ] },
-                    { "hooks": [ { "type": "command", "command": OTHER } ] }
-                ],
-                // claude-time also taps PostToolUse on the real machine — keep the
-                // fixture faithful so the additive-merge invariant is tested against
-                // the production shape for every CLAUDESK_EVENT (QoL-WP2 added it).
-                "PostToolUse": [
-                    { "hooks": [ { "type": "command", "command": OTHER } ] }
-                ]
+        // One claude-time matcher-group per event; the notify-telegram group is an
+        // extra co-resident group on Notification (the real machine's shape).
+        let ct_group = json!({ "hooks": [ { "type": "command", "command": OTHER } ] });
+        let mut hooks = serde_json::Map::new();
+        for event in CLAUDESK_EVENTS {
+            let mut groups = vec![ct_group.clone()];
+            if event == "Notification" {
+                groups.insert(
+                    0,
+                    json!({ "matcher": "", "hooks": [ { "type": "command", "command": "$HOME/.claude/hooks/notify-telegram.sh", "timeout": 10 } ] }),
+                );
             }
-        })
+            hooks.insert(event.to_string(), Value::Array(groups));
+        }
+        json!({ "model": "opus", "hooks": hooks })
     }
 
     fn claudesk_group_count(settings: &Value, event: &str) -> usize {
@@ -329,22 +351,39 @@ mod tests {
     }
 
     #[test]
-    fn claudesk_events_includes_post_tool_use_resume_signal() {
+    fn claudesk_events_is_the_full_ten_event_set() {
         // QoL-WP2: PostToolUse is the resume signal that clears stuck AwaitingInput
-        // after an answered AskUserQuestion/permission prompt. Pin that it's
-        // registered (and PreToolUse deliberately is NOT — see the const doc).
-        assert!(
-            CLAUDESK_EVENTS.contains(&"PostToolUse"),
-            "PostToolUse must be registered as the answer-resume signal"
-        );
-        assert!(
-            !CLAUDESK_EVENTS.contains(&"PreToolUse"),
-            "PreToolUse is deliberately NOT registered (UserPromptSubmit covers pre-tool state)"
-        );
-        // The three original M3 events are still present.
-        for ev in ["UserPromptSubmit", "Stop", "Notification"] {
-            assert!(CLAUDESK_EVENTS.contains(&ev), "{ev} must remain registered");
+        // after an answered AskUserQuestion/permission prompt — still registered.
+        // The four STATUS events are all present.
+        for ev in ["UserPromptSubmit", "Stop", "Notification", "PostToolUse"] {
+            assert!(CLAUDESK_EVENTS.contains(&ev), "{ev} (status) must be registered");
         }
+        // M9 WP2: the six TIME-ANALYTICS events are now registered (they feed
+        // time_store; event_to_state returns None for each so no dot flips). This
+        // supersedes the pre-M9 "PreToolUse is deliberately NOT registered" assertion.
+        for ev in [
+            "PreToolUse",
+            "PostToolUseFailure",
+            "SubagentStart",
+            "SubagentStop",
+            "SessionStart",
+            "SessionEnd",
+        ] {
+            assert!(
+                CLAUDESK_EVENTS.contains(&ev),
+                "{ev} (time-analytics) must be registered (M9 WP2)"
+            );
+        }
+        // Exactly 10, no duplicates.
+        assert_eq!(
+            CLAUDESK_EVENTS.len(),
+            10,
+            "the registered set is exactly 10 events"
+        );
+        let mut sorted = CLAUDESK_EVENTS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), 10, "no duplicate events in CLAUDESK_EVENTS");
     }
 
     #[test]

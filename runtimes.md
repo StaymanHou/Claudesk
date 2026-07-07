@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-02  # /release v0.2.5 cold tauri build 88s
+updated: 2026-07-07  # M9 WP2 P3 codify: cargo test 350 pass (+fan-out gate-OFF test)
 ---
 
 # Runtime Registry
@@ -115,9 +115,12 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.69s (2026-06-29, M7 WP2 verify-codify: +tray menu toggle + routing tests → 302 pass; warm run 0.69s)
+- **Last:** 0.69s (2026-07-07, M9 WP2 P3 verify-codify: 345 lib + 5 hook_pl_output integ → 350 pass; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.69s — 2026-07-07 (M9 WP2 P3 codify: +1 fan-out gate-OFF stream test [socket_stream_fans_out_but_gate_off_writes_nothing], 345 lib + 5 integ = 350 pass; warm)
+  - 0.75s — 2026-07-07 (M9 WP2 P2 codify: +time_store module 17 tests [15 build + 2 real-file WAL/persist codify], 341 lib + 5 integ = 346 pass; warm)
+  - 0.72s — 2026-07-07 (M9 WP2 P1 codify: +5 hook_pl_output integration tests [Perl hook output + privacy invariant], 324 lib + 5 integ = 329 pass; warm)
   - 0.69s — 2026-06-29 (M7 WP2 codify: +toggle_pip_cycles + tray_menu_ids_route tests, 302 pass; warm)
   - 0.69s — 2026-06-29 (M7 WP1 codify: +1 DTO serde round-trip test, 300 pass; warm)
   - 40s — 2026-06-29 (M7 WP1 build: +4 tray tests, 299 pass; cold compile of new tray-icon + image-png deps ~40s, run ~0s)

@@ -41,6 +41,11 @@ mod status_broadcaster;
 // probe) — readable from the launchd-launched prod `.app` where stderr is invisible.
 mod status_log;
 mod sublime;
+// M9 WP2: time-analytics store (absorb claude-time) — the SECOND, gated consumer of
+// the HookEvent stream. Pure schema/mapping in time_store/mod.rs; the per-identity
+// SQLite connection holder + gated write + toggle hook-point in time_store/commands.rs.
+// Phase 2 = the module + tests (dormant); Phase 3 fans the stream out to its drain.
+mod time_store;
 // M7: menu-bar (system-tray) status item — the ambient 2-state ALARM. A template
 // tray glyph lit when ANY workspace is AwaitingInput, neutral otherwise. Subscribes
 // to the existing M3 `workspace-status` broadcast (no broadcaster change). The pure
@@ -193,13 +198,12 @@ pub fn run() {
             // swallowed — status then defaults to Unknown, never PTY-inferred.
             match hook_socket::commands::start_on_launch(&handle) {
                 Ok(state) => {
-                    // M3 WP4: hand the held HookEvent receiver to the status
-                    // broadcaster's drain thread — it maps each event to a
-                    // WorkspaceStatusUpdate and emits it on `workspace-status`. Take
-                    // it out of the HookSocketState holder (the WP3→WP4 seam); a
-                    // double-start (receiver already taken) is a bug, so we log and
-                    // skip rather than panic.
-                    match state.receiver.lock() {
+                    // M3 WP4: hand the held status-receiver to the status broadcaster's
+                    // drain thread — it maps each event to a WorkspaceStatusUpdate and
+                    // emits it on `workspace-status`. Take it out of the HookSocketState
+                    // holder (the WP3→WP4 seam); a double-start (receiver already taken)
+                    // is a bug, so we log and skip rather than panic.
+                    match state.status_receiver.lock() {
                         Ok(mut guard) => {
                             if let Some(rx) = guard.take() {
                                 status_broadcaster::commands::start_broadcaster(
@@ -212,6 +216,34 @@ pub fn run() {
                         }
                         Err(e) => eprintln!(
                             "[claudesk] status-broadcaster: could not lock hook receiver: {e}"
+                        ),
+                    }
+                    // M9 WP2 Phase 3: the SECOND, gated consumer of the SAME fan-out
+                    // stream — the time-analytics writer. Open the per-identity SQLite
+                    // DB, manage it, and drain the time-receiver into it (write_gated,
+                    // default OFF until WP5's toggle). INDEPENDENT of the status path:
+                    // a DB-open failure is surfaced but must NOT take down the dots —
+                    // if the store fails to open we simply don't start the writer, and
+                    // the status broadcaster above is entirely unaffected.
+                    match time_store::commands::open_and_bootstrap(&handle) {
+                        Ok(store) => {
+                            app.manage(store);
+                            match state.time_receiver.lock() {
+                                Ok(mut guard) => {
+                                    if let Some(rx) = guard.take() {
+                                        time_store::commands::start_writer(handle.clone(), rx);
+                                    } else {
+                                        eprintln!("[claudesk] time-store: time receiver already taken; not starting writer thread");
+                                    }
+                                }
+                                Err(e) => eprintln!(
+                                    "[claudesk] time-store: could not lock time receiver: {e}"
+                                ),
+                            }
+                        }
+                        // Surfaced, never fatal — the status path keeps working.
+                        Err(e) => eprintln!(
+                            "[claudesk] time-store: could not open analytics DB (writer not started, status unaffected): {e}"
                         ),
                     }
                     app.manage(state);

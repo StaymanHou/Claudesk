@@ -21,12 +21,21 @@
 //! status `Unknown` (arch.md failure mode), never inferred.
 //!
 //! ## Wire contract (the line the hook writes, parsed here)
-//! `{"hook_event_name":..,"session_id":..,"cwd":..,"timestamp":<ms>,"prompt"?:..,"message"?:..,"notification_type"?:..}`
-//! `prompt` is present only on `UserPromptSubmit`; `message` + `notification_type`
-//! only on `Notification` (the latter added QoL-WP2 to gate AwaitingInput on genuine
-//! input-needed types). Keys are **snake_case end-to-end** — the Rust struct mirrors
-//! the wire field names verbatim (NO `rename_all`), so the frontend (WP6) and the
-//! hook agree with no camelCase drift (folds toward
+//! Always: `hook_event_name`, `session_id`, `cwd`, `timestamp`(<ms>). Event-specific
+//! optional fields:
+//! - `prompt` + `prompt_length_chars` — `UserPromptSubmit` (`prompt` for the status
+//!   snippet; `prompt_length_chars` for the time-row — **length only, never text**).
+//! - `message` + `notification_type` — `Notification` (`notification_type` added
+//!   QoL-WP2 to gate AwaitingInput on genuine input-needed types).
+//! - `tool_name` + `tool_use_id` — `PreToolUse` / `PostToolUse` / `PostToolUseFailure`.
+//! - `agent_type` — `SubagentStart` / `SubagentStop`.
+//! - `source` — `SessionStart`.
+//!
+//! The `tool_*` / `agent_type` / `source` / `prompt_length_chars` fields are the M9
+//! WP2 time-analytics additions (`time_store` consumes them; the status machine reads
+//! none of them). Keys are **snake_case end-to-end** — the Rust struct mirrors the
+//! wire field names verbatim (NO `rename_all`), so the frontend (WP6) and the hook
+//! agree with no camelCase drift (folds toward
 //! `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE`, which WP4's DTO
 //! key-shape test fully closes).
 
@@ -81,6 +90,34 @@ pub struct HookEvent {
     /// AwaitingInput on this (see `status_broadcaster::event_to_state`).
     #[serde(default)]
     pub notification_type: Option<String>,
+
+    // ---- M9 WP2 time-analytics fields (consumed by `time_store`, NOT the status
+    // machine — `event_to_state` reads none of these). All snake_case verbatim, all
+    // optional/`#[serde(default)]`, each present only on its own event(s). See
+    // `docs/product/wp1-time-analytics-probe-outcome.md` §(d). ----
+    /// Length (chars) of the user prompt — present only on `UserPromptSubmit`.
+    /// **PRIVACY INVARIANT: length only, never the prompt text.** The Perl hook
+    /// forwards `length($prompt)` here; the full `prompt` (above) is kept only for
+    /// the status snippet and never reaches a time-analytics row.
+    #[serde(default)]
+    pub prompt_length_chars: Option<u64>,
+    /// CC's tool-use id — present on `PreToolUse` / `PostToolUse` /
+    /// `PostToolUseFailure`. The pairing key the reclassifier uses to compute a
+    /// tool's duration (Pre→Post interval).
+    #[serde(default)]
+    pub tool_use_id: Option<String>,
+    /// Tool name — present on `PreToolUse` / `PostToolUse` / `PostToolUseFailure`
+    /// (CC's `tool_name`). Used for per-tool rollups.
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    /// Subagent type — present on `SubagentStart` / `SubagentStop` (CC sends it as
+    /// `subagent_type`; the hook forwards it under `agent_type`). Pairs subagent
+    /// start/stop intervals FIFO and labels subagent segments.
+    #[serde(default)]
+    pub agent_type: Option<String>,
+    /// Session `source` tag — present on `SessionStart` (e.g. `startup`/`resume`).
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 /// Errors from the socket listener's IO/lifecycle (bind, remove-stale, accept).
@@ -134,19 +171,45 @@ pub fn bind_listener(socket_path: &Path) -> Result<UnixListener, HookSocketError
 /// `tx`; a closed receiver (`SendError`) means the core is shutting down, so the
 /// loop exits cleanly.
 ///
-/// Returns the [`thread::JoinHandle`] so the caller can hold it (or detach it).
+/// Single-consumer wrapper over [`spawn_listener_fanout`] — the historical M3
+/// contract (one receiver). Returns the [`thread::JoinHandle`] so the caller can hold
+/// it (or detach it).
+///
+/// `#[cfg(test)]`: production wires two consumers via [`spawn_listener_fanout`] (M9 WP2
+/// Phase 3), so the single-sender form now has only test callers (the hook_socket +
+/// broadcaster end-to-end tests). Kept as a convenience so those tests read cleanly.
+#[cfg(test)]
 pub fn spawn_listener(listener: UnixListener, tx: Sender<HookEvent>) -> thread::JoinHandle<()> {
+    spawn_listener_fanout(listener, vec![tx])
+}
+
+/// Fan-out variant (M9 WP2 Phase 3): send each parsed [`HookEvent`] to **every**
+/// sender in `txs` (a clone per sender — `HookEvent` is cheap to clone). This is the
+/// tee that lets one socket stream feed BOTH the status broadcaster AND the
+/// time-analytics writer, each holding its own single-consumer `mpsc::Receiver` (so
+/// each consumer's semantics — blocking `recv`, clean-exit-on-drop — are unchanged;
+/// only the send side multiplexes). A sender whose receiver has dropped is removed
+/// from the set; the loop exits only once **all** receivers are gone (so tearing down
+/// one consumer never deafens the other). Empty `txs` → the loop exits immediately.
+pub fn spawn_listener_fanout(
+    listener: UnixListener,
+    txs: Vec<Sender<HookEvent>>,
+) -> thread::JoinHandle<()> {
     thread::Builder::new()
         .name("claudesk-hook-socket".into())
-        .spawn(move || accept_loop(listener, tx))
+        .spawn(move || accept_loop(listener, txs))
         .expect("failed to spawn hook-socket accept thread")
 }
 
 /// The accept-loop body — extracted so it reads top-to-bottom. Mirrors the WP1
 /// probe's structure: accept → `BufReader::lines()` → trim-empty-skip → parse →
-/// send. Accept errors are logged and the loop continues (one bad accept must not
-/// kill the listener); a `tx.send` failure (receiver dropped) ends the loop.
-fn accept_loop(listener: UnixListener, tx: Sender<HookEvent>) {
+/// fan-out-send. Accept errors are logged and the loop continues (one bad accept must
+/// not kill the listener); the loop ends only when EVERY sender's receiver has dropped
+/// (all consumers gone).
+fn accept_loop(listener: UnixListener, mut txs: Vec<Sender<HookEvent>>) {
+    if txs.is_empty() {
+        return; // no consumers — nothing to deliver to.
+    }
     for conn in listener.incoming() {
         let stream = match conn {
             Ok(s) => s,
@@ -171,8 +234,14 @@ fn accept_loop(listener: UnixListener, tx: Sender<HookEvent>) {
             }
             match parse_line(&raw) {
                 Ok(event) => {
-                    if tx.send(event).is_err() {
-                        // Receiver dropped → core shutting down. Exit cleanly.
+                    // Fan out: send a clone to each live sender; drop any whose
+                    // receiver has gone. `retain` keeps only senders that accepted
+                    // the event. When the LAST receiver drops, `txs` empties and the
+                    // loop exits cleanly (one consumer tearing down never deafens the
+                    // other — that is the whole point of the fan-out).
+                    txs.retain(|tx| tx.send(event.clone()).is_ok());
+                    if txs.is_empty() {
+                        // All consumers gone → nothing more to deliver. Exit cleanly.
                         return;
                     }
                 }
@@ -263,6 +332,82 @@ mod tests {
             r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","timestamp":1718000000000}"#;
         let ev = parse_line(line).unwrap();
         assert_eq!(ev.timestamp, Some(1_718_000_000_000));
+    }
+
+    // ---- M9 WP2: the 10-event / time-analytics wire fields ----
+
+    #[test]
+    fn parses_user_prompt_submit_length_only_field() {
+        // The privacy invariant on the wire: UserPromptSubmit carries
+        // `prompt_length_chars` (int) IN ADDITION TO `prompt` (kept for the status
+        // snippet). The time-store path reads the length; the raw text never reaches
+        // a row. Pin the length field deserializes into Option<u64> from snake_case.
+        let line = r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hello world","prompt_length_chars":11}"#;
+        let ev = parse_line(line).unwrap();
+        assert_eq!(ev.prompt_length_chars, Some(11));
+        assert_eq!(ev.prompt.as_deref(), Some("hello world")); // status snippet still present
+    }
+
+    #[test]
+    fn parses_pre_and_post_tool_use_pairing_fields() {
+        // PreToolUse / PostToolUse / PostToolUseFailure carry tool_name + tool_use_id;
+        // the reclassifier pairs Pre↔Post by tool_use_id to get a tool duration.
+        let pre = r#"{"hook_event_name":"PreToolUse","session_id":"s","cwd":"/p","tool_name":"Edit","tool_use_id":"tu_123"}"#;
+        let ev = parse_line(pre).unwrap();
+        assert_eq!(ev.hook_event_name, "PreToolUse");
+        assert_eq!(ev.tool_name.as_deref(), Some("Edit"));
+        assert_eq!(ev.tool_use_id.as_deref(), Some("tu_123"));
+
+        let fail = r#"{"hook_event_name":"PostToolUseFailure","session_id":"s","cwd":"/p","tool_name":"Bash","tool_use_id":"tu_9"}"#;
+        let ev = parse_line(fail).unwrap();
+        assert_eq!(ev.hook_event_name, "PostToolUseFailure");
+        assert_eq!(ev.tool_name.as_deref(), Some("Bash"));
+        assert_eq!(ev.tool_use_id.as_deref(), Some("tu_9"));
+    }
+
+    #[test]
+    fn parses_subagent_and_session_fields() {
+        let sub = r#"{"hook_event_name":"SubagentStart","session_id":"s","cwd":"/p","agent_type":"Explore"}"#;
+        let ev = parse_line(sub).unwrap();
+        assert_eq!(ev.hook_event_name, "SubagentStart");
+        assert_eq!(ev.agent_type.as_deref(), Some("Explore"));
+
+        let ses = r#"{"hook_event_name":"SessionStart","session_id":"s","cwd":"/p","source":"startup"}"#;
+        let ev = parse_line(ses).unwrap();
+        assert_eq!(ev.hook_event_name, "SessionStart");
+        assert_eq!(ev.source.as_deref(), Some("startup"));
+
+        // SessionEnd carries no extra fields — parses cleanly, all time fields None.
+        let end = r#"{"hook_event_name":"SessionEnd","session_id":"s","cwd":"/p"}"#;
+        let ev = parse_line(end).unwrap();
+        assert_eq!(ev.hook_event_name, "SessionEnd");
+        assert_eq!(ev.agent_type, None);
+        assert_eq!(ev.source, None);
+        assert_eq!(ev.tool_use_id, None);
+    }
+
+    #[test]
+    fn time_analytics_fields_default_absent_on_status_events() {
+        // A plain Stop line (no time-analytics fields) leaves all of them None —
+        // the #[serde(default)] path, so one struct still parses every event kind.
+        let ev = parse_line(STOP_LINE).unwrap();
+        assert_eq!(ev.prompt_length_chars, None);
+        assert_eq!(ev.tool_use_id, None);
+        assert_eq!(ev.tool_name, None);
+        assert_eq!(ev.agent_type, None);
+        assert_eq!(ev.source, None);
+    }
+
+    #[test]
+    fn time_analytics_fields_are_snake_case_verbatim() {
+        // Guard the new fields against a camelCase drift the same way the core fields
+        // are guarded: camelCase keys must NOT populate the snake_case fields.
+        let camel = r#"{"hook_event_name":"PreToolUse","session_id":"s","cwd":"/p","toolName":"Edit","toolUseId":"tu_1","agentType":"X","promptLengthChars":5}"#;
+        let ev = parse_line(camel).unwrap();
+        assert_eq!(ev.tool_name, None, "toolName (camel) must not populate tool_name");
+        assert_eq!(ev.tool_use_id, None);
+        assert_eq!(ev.agent_type, None);
+        assert_eq!(ev.prompt_length_chars, None);
     }
 
     #[test]
@@ -389,7 +534,7 @@ mod tests {
         let (tx, rx) = mpsc::channel::<HookEvent>();
         drop(rx); // receiver gone before any event arrives
 
-        let handle = thread::spawn(move || accept_loop(listener, tx));
+        let handle = thread::spawn(move || accept_loop(listener, vec![tx]));
 
         let mut client = UnixStream::connect(&path).unwrap();
         client
@@ -400,5 +545,73 @@ mod tests {
         // The loop should return (the send fails on the dropped receiver) rather
         // than hang or panic — join completes.
         handle.join().expect("accept-loop thread must not panic");
+    }
+
+    // ---- M9 WP2 Phase 3: fan-out (one stream → two consumers) ----
+
+    #[test]
+    fn fanout_delivers_every_event_to_both_consumers() {
+        // The core fan-out property: one socket stream, two receivers, each gets a
+        // clone of EVERY event. This is what lets the status broadcaster and the
+        // time-analytics writer both drain the same hook stream.
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("hook.sock");
+        let listener = bind_listener(&path).unwrap();
+        let (status_tx, status_rx) = mpsc::channel::<HookEvent>();
+        let (time_tx, time_rx) = mpsc::channel::<HookEvent>();
+        let handle = spawn_listener_fanout(listener, vec![status_tx, time_tx]);
+
+        let mut client = UnixStream::connect(&path).unwrap();
+        client
+            .write_all(b"{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"s\",\"cwd\":\"/p\",\"prompt\":\"go\"}\n")
+            .unwrap();
+        client
+            .write_all(b"{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"/p\"}\n")
+            .unwrap();
+        client.shutdown(std::net::Shutdown::Both).unwrap();
+
+        // BOTH consumers receive BOTH events, in order.
+        for rx in [&status_rx, &time_rx] {
+            let first = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert_eq!(first.hook_event_name, "UserPromptSubmit");
+            let second = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert_eq!(second.hook_event_name, "Stop");
+        }
+        drop((status_rx, time_rx));
+        drop(handle);
+    }
+
+    #[test]
+    fn fanout_survives_one_consumer_dropping() {
+        // Independence invariant: if ONE consumer's receiver drops, the OTHER keeps
+        // receiving (the loop only exits when ALL receivers are gone). This is why
+        // tearing down the time-store writer can never deafen the status dots.
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("hook.sock");
+        let listener = bind_listener(&path).unwrap();
+        let (status_tx, status_rx) = mpsc::channel::<HookEvent>();
+        let (time_tx, time_rx) = mpsc::channel::<HookEvent>();
+        let handle = spawn_listener_fanout(listener, vec![status_tx, time_tx]);
+
+        // Drop the time consumer up front — the status consumer must still work.
+        drop(time_rx);
+
+        let mut client = UnixStream::connect(&path).unwrap();
+        client
+            .write_all(b"{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"s\",\"cwd\":\"/p\"}\n")
+            .unwrap();
+        client
+            .write_all(b"{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"/p\"}\n")
+            .unwrap();
+        client.shutdown(std::net::Shutdown::Both).unwrap();
+
+        // The surviving (status) consumer still gets both events.
+        let first = status_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(first.hook_event_name, "UserPromptSubmit");
+        let second = status_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(second.hook_event_name, "Stop");
+
+        drop(status_rx);
+        drop(handle);
     }
 }

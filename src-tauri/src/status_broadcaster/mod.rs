@@ -314,6 +314,12 @@ mod tests {
             prompt: None,
             message: None,
             notification_type: None,
+            // M9 WP2 time-analytics fields — absent on the status-path fixtures.
+            prompt_length_chars: None,
+            tool_use_id: None,
+            tool_name: None,
+            agent_type: None,
+            source: None,
         }
     }
 
@@ -327,6 +333,11 @@ mod tests {
             prompt: None,
             message: Some("a notification".to_string()),
             notification_type: notification_type.map(str::to_string),
+            prompt_length_chars: None,
+            tool_use_id: None,
+            tool_name: None,
+            agent_type: None,
+            source: None,
         }
     }
 
@@ -409,6 +420,44 @@ mod tests {
         assert_eq!(
             event_to_state(&ev("PostToolUse", "/p")),
             Some(WorkspaceState::Running)
+        );
+    }
+
+    #[test]
+    fn m9_time_analytics_events_are_status_neutral() {
+        // M9 WP2 registered 6 new events (PreToolUse / PostToolUseFailure /
+        // SubagentStart / SubagentStop / SessionStart / SessionEnd) purely to feed
+        // the time_store writer. The STATUS machine must ignore them — each maps to
+        // None (the `_ => None` fall-through), so a PreToolUse arriving now can NEVER
+        // flip a dot. This is the "status path unchanged" invariant from the WP2 plan.
+        for name in [
+            "PreToolUse",
+            "PostToolUseFailure",
+            "SubagentStart",
+            "SubagentStop",
+            "SessionStart",
+            "SessionEnd",
+        ] {
+            assert_eq!(
+                event_to_state(&ev(name, "/p")),
+                None,
+                "{name} must be status-neutral (time-analytics-only)"
+            );
+        }
+        // And the 4 STATUS events still map exactly as before — the additions didn't
+        // perturb the mapped set.
+        assert_eq!(
+            event_to_state(&ev("UserPromptSubmit", "/p")),
+            Some(WorkspaceState::Running)
+        );
+        assert_eq!(event_to_state(&ev("Stop", "/p")), Some(WorkspaceState::Idle));
+        assert_eq!(
+            event_to_state(&ev("PostToolUse", "/p")),
+            Some(WorkspaceState::Running)
+        );
+        assert_eq!(
+            event_to_state(&ev("Notification", "/p")),
+            Some(WorkspaceState::AwaitingInput)
         );
     }
 

@@ -17,7 +17,7 @@ use std::thread::JoinHandle;
 
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::{bind_listener, spawn_listener, HookEvent};
+use super::{bind_listener, spawn_listener_fanout, HookEvent};
 
 /// Basename of the Claudesk-owned hook socket under the app-data dir. Module-private —
 /// the only consumer is `hook_socket_path` below (the old `hook_install` copy was retired
@@ -41,22 +41,30 @@ pub fn hook_socket_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 /// Managed-state holder for the live listener: the accept-loop's [`JoinHandle`],
-/// the resolved socket path (for cleanup on shutdown), and the [`Receiver`] end of
-/// the event channel. WP4's broadcaster will take/drain the receiver; until then
-/// it is held (dead-code-allowed in [`super`]). The handle is kept so the thread's
-/// lifetime is tied to the holder; the path is kept so `CloseRequested` can unlink
-/// the socket file.
+/// the resolved socket path (for cleanup on shutdown), and the [`Receiver`] ends of
+/// the fan-out channels. Each consumer takes its own receiver in `lib.rs` setup:
+/// - [`status_receiver`](Self::status_receiver) → the M3/M4 status broadcaster.
+/// - [`time_receiver`](Self::time_receiver) → the M9 WP2 time-analytics writer.
+///
+/// The listener sends every parsed event to BOTH channels (see
+/// [`super::spawn_listener_fanout`]). The handle is kept so the thread's lifetime is
+/// tied to the holder; the path is kept so `CloseRequested` can unlink the socket file.
 pub struct HookSocketState {
     pub socket_path: PathBuf,
-    pub receiver: Mutex<Option<Receiver<HookEvent>>>,
+    /// The status-broadcaster's event stream (M3 WP4 takes this).
+    pub status_receiver: Mutex<Option<Receiver<HookEvent>>>,
+    /// The time-analytics writer's event stream (M9 WP2 Phase 3 takes this). A second,
+    /// independent drain of the SAME socket stream — status path unaffected.
+    pub time_receiver: Mutex<Option<Receiver<HookEvent>>>,
     _handle: JoinHandle<()>,
 }
 
 /// Start the hook-socket listener on launch: resolve the path, bind (clearing a
-/// stale file), spawn the accept-loop thread, and return the managed-state holder
-/// for `app.manage(...)`. Returns a human-readable error (the caller surfaces it —
-/// never swallow, per the WP6/WP7-M2 IPC-error lesson; a failed bind leaves status
-/// `Unknown`, never PTY-inferred). Called from the Tauri `setup` hook in `lib.rs`.
+/// stale file), spawn the fan-out accept-loop thread feeding TWO channels (status +
+/// time-analytics), and return the managed-state holder for `app.manage(...)`.
+/// Returns a human-readable error (the caller surfaces it — never swallow, per the
+/// WP6/WP7-M2 IPC-error lesson; a failed bind leaves status `Unknown`, never
+/// PTY-inferred). Called from the Tauri `setup` hook in `lib.rs`.
 pub fn start_on_launch(app: &AppHandle) -> Result<HookSocketState, String> {
     let socket_path = hook_socket_path(app)?;
     let listener = bind_listener(&socket_path).map_err(|e| {
@@ -65,11 +73,15 @@ pub fn start_on_launch(app: &AppHandle) -> Result<HookSocketState, String> {
             socket_path.display()
         )
     })?;
-    let (tx, rx) = mpsc::channel::<HookEvent>();
-    let handle = spawn_listener(listener, tx);
+    // Two independent channels — the listener fans each event out to both. Each
+    // consumer owns a single-consumer Receiver (semantics unchanged from M3).
+    let (status_tx, status_rx) = mpsc::channel::<HookEvent>();
+    let (time_tx, time_rx) = mpsc::channel::<HookEvent>();
+    let handle = spawn_listener_fanout(listener, vec![status_tx, time_tx]);
     Ok(HookSocketState {
         socket_path,
-        receiver: Mutex::new(Some(rx)),
+        status_receiver: Mutex::new(Some(status_rx)),
+        time_receiver: Mutex::new(Some(time_rx)),
         _handle: handle,
     })
 }
