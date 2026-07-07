@@ -128,3 +128,34 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Why deferred (operator ruling, debt-paydown sweep #2, 2026-06-30):** building the error surface is net-new UX, not a debt sweep — it needs a toast/inline-error component in RightPanelHost that does not exist. Honor the recorded "intentionally deferred" intent. The three original findings (WP5-DELETE-FAILURE-NOT-SURFACED, WP5B-TRASH-FAILURE-NOT-SURFACED, WP5-CREATE-COLLISION-GITIGNORE) collapse into this one anchor — one error-surface feature closes all three.
 - **Anchor:** a future error-surface feature (whenever RightPanelHost gains a toast/inline-error affordance).
 - **Status:** DEFERRED (anchored — net-new UX)
+
+# m9-wp2-absorbed-hook-write-gated-sqlite-writer — 2026-07-07
+
+*(feature-review-quality on ship commit dc3b89e; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: well-built feature landing a tricky change — teeing a single-consumer stream into two independent drains while holding the M3 status path byte-for-byte constant — with invariants defended by construction + test-pinned. All findings MINOR polish; nothing warrants a refactor pass.)*
+
+## SURFACE-2026-07-07-QUALITY-PRIVACY-TEST-COINCIDENTAL-SUBSTRING
+- **Severity:** MINOR
+- **File:** `src-tauri/tests/hook_pl_output.rs` (~124, the `!s.contains("SECRET")` privacy leak assertion)
+- **Finding:** The privacy leak assertion checks `!s.contains("SECRET")` against a hardcoded literal, while the injected prompt is `"SUPER SECRET PROMPT…"`. The test only catches a leak because the operator happened to embed the substring `SECRET` in the prompt — it does not assert against the actual `secret` variable. A future author who changes the prompt string could silently weaken this to a no-op guard.
+- **Fix shape:** compare against the real `secret` value (or a distinctive sentinel derived from it) so the privacy check is self-consistent regardless of the prompt string.
+- **Why it matters:** the privacy invariant is the feature's most important contract; its end-to-end test should not depend on a coincidental substring.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-07-QUALITY-TS-SILENT-EPOCH-FALLBACK
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/mod.rs` (~123, `ts` falls back to `0` when `HookEvent::timestamp` is absent)
+- **Finding:** `ts` defaults to `0` on an absent `HookEvent::timestamp`. Unreachable today (the production Perl hook always stamps `timestamp`), but a `ts=0` row sorts to the epoch and could corrupt WP3's time-ordered reclassification if any non-hook source (WP2.5 native signals) ever forgets to stamp. The `source`-discriminator design explicitly anticipates a second writer.
+- **Fix shape:** a debug-log or a `None`-drop on absent timestamp — cheaper guard than a silent 0. Consider closing during WP2.5 (native signal source) when the second writer lands.
+- **Why it matters:** a load-bearing ordering key silently defaulting to a sentinel is a latent data-quality trap for the downstream consumer this feature exists to feed.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-07-QUALITY-SCHEMA-COLUMN-VS-META-ASYMMETRY
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/mod.rs` (~62, SCHEMA_SQL / the events table shape)
+- **Finding:** `tool_name` and `agent_type` are first-class columns, but `source` (SessionStart) and `prompt_length_chars` (UserPromptSubmit) live inside the `meta` JSON blob. Faithfully mirrors claude-time (defensible), but WP3 must query two shapes (columns for some fields, JSON extraction for others).
+- **Fix shape:** a one-line note in the schema doc-comment on *why* `tool_name`/`agent_type` earned columns while the others stayed in `meta` (query-frequency? claude-time parity?). Documentation nit; the shape is intentional.
+- **Why it matters:** reduces WP3 onboarding cost.
+- **Priority:** low.
+- **Status:** pending.

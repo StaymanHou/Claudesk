@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-07-07
+
+- **Feature shipped:** M9 WP2 — Claudesk's CC hook now forwards the full 10-event set with 5 wire fields (length-only prompt privacy), and a new `time_store` rusqlite module persists every event into a per-identity SQLite DB as a second, gated drain of the hook stream (fanned out so the M3 status dots stay byte-for-byte unchanged, live-verified idle→running→idle on the real binary); the write path ships dormant (gate defaults OFF until WP5) with a `source` discriminator seeded for WP2.5's native signals.
+- **Milestone:** M9 WP2 — Absorbed hook + write-gated SQLite writer.
+
 ## 2026-07-06
 
 - **Feature shipped:** Filmstrip + PiP live-mirror tiles now fill from the bottom — a fresh CC session's banner bottom-anchors at the tile edge clear of the header (instead of being occluded), via a trailing-blank-row trim at the single shared serialize seam so both surfaces inherit the fix.

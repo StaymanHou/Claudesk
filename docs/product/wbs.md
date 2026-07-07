@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: 9
-updated: 2026-07-06
+updated: 2026-07-07
 ---
 
 # WBS — Milestone 9: Time-analytics panel (absorb claude-time)
@@ -59,7 +59,7 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 
 **WP1 → WP2 rationale:** Freeze the wire/event delta (what fields + events the writer must persist) before extending the hook + DB — so WP2 builds the SQLite schema and the extended `HookEvent` against a known-complete field set, not a guessed one.
 
-### WP2: Absorbed hook + write-gated SQLite writer (Rust, in `hook_socket`)
+### WP2: Absorbed hook + write-gated SQLite writer (Rust, in `hook_socket`) — ✅ SHIPPED 2026-07-07 (commit `dc3b89e`)
 **Description:** Extend the CC hook + wire contract + listener to persist the full event set the reclassifier needs, **gated on the tracking toggle** (decision 3). Persistence lives in Claudesk's existing `AF_UNIX` listener — NOT a second Perl hook.
   - Extend `CLAUDESK_EVENTS` (4 → the full set: add `PreToolUse`, `SubagentStart`, `SubagentStop`, `SessionStart`, `SessionEnd`; `PostToolUseFailure` if CC emits it — confirm at WP1) and re-register additively/idempotently/reversibly (preserving the existing state-machine behavior + coexisting hooks).
   - Extend `claudesk-hook.pl` to forward the extra fields (`prompt_length_chars` — length only, never text; `tool_use_id`; `agent_type` from `subagent_type`; `source`), preserving the exits-0-unconditionally + privacy invariants.
@@ -70,12 +70,12 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 **Dependencies:** WP1 (frozen event/field delta)
 **Size:** L
 **Tasks:**
-- [ ] Extend `CLAUDESK_EVENTS` + `hook_install` registration to the full event set; keep the existing 4-event state behavior + additive/idempotent/reversible + coexistence tests green.
-- [ ] Extend `claudesk-hook.pl` to forward `prompt_length_chars` / `tool_use_id` / `agent_type` / `source`; preserve exit-0 + privacy (length-only) invariants.
-- [ ] Extend `HookEvent` + `parse_line` + wire-contract doc + snake_case key-shape test for the new fields.
-- [ ] New `time_store` module: per-identity `app_data_dir()` SQLite path (bundle-id-derived), schema bootstrap, gated INSERT (write iff toggle ON).
-- [ ] Wire `time_store` as a second consumer of the `HookEvent` stream, parallel to `status_broadcaster` (status path untouched).
-- [ ] Privacy assertion test (Claudesk-side port of `privacy_check.sh`): no prompt text / tool I/O ever reaches a row.
+- [x] Extend `CLAUDESK_EVENTS` + `hook_install` registration to the full event set; keep the existing 4-event state behavior + additive/idempotent/reversible + coexistence tests green. *(10-event set incl. `PostToolUseFailure`, confirmed distinct at WP1.)*
+- [x] Extend `claudesk-hook.pl` to forward `prompt_length_chars` / `tool_use_id` / `agent_type` / `source`; preserve exit-0 + privacy (length-only) invariants. *(+`tool_name` beyond the plan's 4 — reclassifier needs per-tool rollups, WP1 §d.)*
+- [x] Extend `HookEvent` + `parse_line` + wire-contract doc + snake_case key-shape test for the new fields.
+- [x] New `time_store` module: per-identity `app_data_dir()` SQLite path (bundle-id-derived), schema bootstrap, gated INSERT (write iff toggle ON). *(rusqlite bundled; schema carries the `source` discriminator for WP2.5.)*
+- [x] Wire `time_store` as a second consumer of the `HookEvent` stream, parallel to `status_broadcaster` (status path untouched). *(fan-out tee: `spawn_listener_fanout`; DB-open failure never deafens the dots — independent drains. Live-verified idle→running→idle on the real binary.)*
+- [x] Privacy assertion test (Claudesk-side port of `privacy_check.sh`): no prompt text / tool I/O ever reaches a row. *(defended at 3 layers: Perl, Rust mapping, persistence — each test-pinned.)*
 
 **WP2 → WP3 rationale:** The DB + schema must exist and be populated (real rows, real shape) before building the reclassifier — the reclassifier reads rows; building it against a live schema (not a mock) de-risks the row-shape assumptions.
 
@@ -92,7 +92,7 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
   - **second-monitor / different-Space:** blurred because on another Space, possibly still glancing at a PiP mirror.
   - **left-the-machine:** genuinely away (long blur + no keystrokes anywhere + no Claudesk-launched external).
 **Milestone:** 9
-**Dependencies:** WP2 (the `time_store` + schema exist — WP2.5 adds event *kinds*/columns to the same store). **Note:** the schema (WP2's `events` table) may need a `source` discriminator (cc-hook vs claudesk-native) + extra `meta` keys for focus/keystroke events — reconcile with WP2's schema.
+**Dependencies:** WP2 (the `time_store` + schema exist — WP2.5 adds event *kinds*/columns to the same store). **Note (reconciled at WP2 ship `dc3b89e`):** WP2 shipped the `source` discriminator column (`cc-hook` on every WP2 row) precisely so WP2.5 writes `claudesk-native` rows into the same `events` table. WP2.5 still likely needs extra `meta` keys (or a sibling table) for focus/keystroke spans — that shape decision is WP2.5's, but the `source` split is already in place.
 **Size:** M *(a capture layer + schema extension; interpretation is WP3's)*
 **Tasks:**
 - [ ] Extend the `time_store` schema (or add a sibling table) to hold native-signal events (focus/blur transitions with timestamps + which workspace; keystroke-activity spans with counts/timing, no content; active-workspace attribution) — add a `source` discriminator vs. CC-hook rows.

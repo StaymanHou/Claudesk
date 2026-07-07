@@ -1,7 +1,7 @@
 # Feature: M9 WP2 — Absorbed hook + write-gated SQLite writer
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-07-07 — shipped dc3b89e (local); review-quality clean (3 MINOR auto-backlogged); archived at finalize.
 **Created:** 2026-07-07
 **drive_mode:** autopilot
 
@@ -74,8 +74,8 @@ M9 absorbs the standalone `claude-time` tracker into Claudesk. WP1 (probe) froze
 
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** All 3 phases COMPLETE (all impl + verify nodes [x]). Phase 3 verify-codify done (350 pass, +1 fan-out gate-OFF test; clippy clean). NEXT: F16 → /feature-ship (autopilot chains).
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** All 3 phases COMPLETE + shipped (dc3b89e) + review-quality done (0 CRITICAL / 0 MAJOR / 3 MINOR, all auto-backlogged to backlog-quality-findings.md under `# m9-wp2… — 2026-07-07`; pointer in backlog.md). NEXT: F39 → /feature-finalize (autopilot chains).
 - **Blocked:** none.
 - **Open discoveries:** none
 - **Carried to WP5:** P3.verify-human.1 (rows-land needs WP5's real toggle ON — verifying a non-shipped state now would be throwaway).
@@ -98,3 +98,36 @@ M9 absorbs the standalone `claude-time` tracker into Claudesk. WP1 (probe) froze
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow/backlog.md -->
+
+## Retrospect
+- **What changed in our understanding:** The single hardest thing wasn't the SQLite write — it was that the M3 `HookEvent` receiver is a single-consumer `mpsc::Receiver`, so adding a second drain required a genuine fan-out (`spawn_listener_fanout` with `retain`-until-all-drop), not just a `.clone()`. The `retain` semantics (loop exits only when ALL receivers drop) is what makes the independence invariant hold by construction — a time-store teardown can never deafen the status dots.
+- **Assumptions that held:** The plan's seam survey was accurate — `CLAUDESK_EVENTS` extended cleanly (registration loop untouched), `status_broadcaster::event_to_state` dropped the 6 new events to `None` with no dot flip, and the port of claude-time's field-extraction + schema mapped directly. The "Rust owns the write, Perl stays a pure forwarder" absorption decision was right — no `sqlite3` subprocess needed.
+- **Assumptions that were wrong:** None material. Two small superset decisions beyond the plan's stated 4 wire fields: added `tool_name` (reclassifier needs per-tool rollups, WP1 §d) and extracted `open_at_path(&Path)` so real-file WAL/persistence is testable without an `AppHandle`. Both were harmless, additive, and made the tests stronger.
+- **Approach delta:** Implementation matched the plan's 3-phase structure exactly (hook+wire → time_store module → fan-out). The only process delta was verify-human: the live dot-flip check was blocked one session because the MCP bridge had been disabled in `settings.local.json` (re-enabled, driven in the resumed session). The load-bearing behavior (clean two-drain launch + gate-OFF dormancy) was confirmed either way; the visual dot transition was the last live confirmation.
+
+## Code-Quality Review — m9-wp2-absorbed-hook-write-gated-sqlite-writer
+
+### Strengths
+- The independence invariant (DB-open failure never deafens the status dots) is genuinely load-bearing and is enforced structurally, not just by comment: the `lib.rs` setup wires the time-store in a self-contained `match` arm whose `Err` branch only declines to start the writer, and `spawn_listener_fanout`'s `retain`-until-all-drop loop means one consumer teardown can't kill the other. Both are pinned by tests (`fanout_survives_one_consumer_dropping`, `socket_stream_fans_out_but_gate_off_writes_nothing_status_still_flows`).
+- The privacy invariant is defended at three layers — Perl (`length($prompt)+0`, never re-emitting text), Rust mapping (`event_to_row` reads only `prompt_length_chars`), and persistence — and each layer has a dedicated regression test, including an end-to-end Perl-subprocess test that asserts no non-`prompt` field carries the text.
+- Parameterized `insert_row` (`rusqlite::params!`) is a clean, deliberate improvement over claude-time's hand-quoted `sql_q` string interpolation — SQL-injection-safe by construction, and the doc-comment calls out the delta.
+- The pure/wiring split (`time_store/mod.rs` pure functions over `Connection`; `commands.rs` owns `AppHandle` path resolution + the managed holder) mirrors the established `hook_socket`/`config_store` module shape, and the in-memory-vs-real-file test split (`open_at_path` extracted so WAL/persistence is testable without an `AppHandle`) is thoughtful.
+- `CLAUDESK_EVENTS` growth from 4→10 was done without touching the registration loop (`merge_claudesk_hooks` iterates the const), and the `settings_with_claude_time` fixture was refactored to build from the const so it can never drift out of sync with the event set.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- (none)
+
+**MINOR**
+- [src-tauri/tests/hook_pl_output.rs:124] The privacy leak assertion checks `!s.contains("SECRET")` against a hardcoded literal, while the injected prompt is `"SUPER SECRET PROMPT…"`. The test only catches a leak because the operator happened to embed the substring `SECRET` in the prompt — it does not assert against the actual `secret` variable. A future author who changes the prompt string could silently weaken this to a no-op guard. Comparing against the real `secret` value (or a distinctive sentinel derived from it) would make the privacy check self-consistent. — *Why it matters: the privacy invariant is the feature's most important contract; its end-to-end test should not depend on a coincidental substring.*
+- [src-tauri/src/time_store/mod.rs:123] `ts` falls back to `0` when `HookEvent::timestamp` is absent. The production Perl hook always stamps `timestamp`, so this is unreachable today, but a `ts=0` row would sort to the epoch and could corrupt WP3's time-ordered reclassification if any non-hook source (WP2.5 native signals) ever forgets to stamp. Given the `source`-discriminator design explicitly anticipates a second writer, a debug-log or a `None`-drop on absent timestamp would be a cheaper guard than a silent 0. — *Why it matters: a load-bearing ordering key silently defaulting to a sentinel is a latent data-quality trap for the downstream consumer this feature exists to feed.*
+- [src-tauri/src/time_store/mod.rs:62] Minor schema asymmetry: `tool_name` and `agent_type` are first-class columns, but `source` (SessionStart) and `prompt_length_chars` (UserPromptSubmit) live inside the `meta` JSON blob. This faithfully mirrors claude-time, so it's defensible, but it means WP3 must query two shapes (columns for some fields, JSON extraction for others). A one-line note in the schema doc-comment on *why* `tool_name`/`agent_type` earned columns while the others stayed in `meta` (query-frequency? claude-time parity?) would save the WP3 author a spelunk. — *Why it matters: reduces WP3 onboarding cost; purely a documentation nit since the shape is intentional.*
+
+### Assessment
+This is a well-built feature that lands a genuinely tricky change — teeing a single-consumer stream into two independent drains while holding the M3 status path byte-for-byte constant — cleanly and with the invariants defended by construction rather than by hope. The fan-out, the gate-OFF zero-IO fast path, and the DB-open-failure isolation are each both commented *and* test-pinned, and the tests read as behavioral contracts (independence, gate ON/OFF, privacy) rather than line coverage. It advances the codebase: the `source` discriminator and the pure/wiring split visibly pre-pay for WP2.5 and WP3 without over-building, and the one net-new dependency (rusqlite bundled) is scoped and documented against the "flat JSON, no DB" convention it appears to violate. Future readers will find it clear — the doc-comments carry the *why*. The findings are all MINOR polish; nothing here warrants a refactor pass.
+
+### If you disagree
+Operator: dismiss any finding by editing this section in the WIP file and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
