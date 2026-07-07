@@ -32,6 +32,11 @@ mod hook_socket;
 // pip/mod.rs.
 mod pip;
 mod project_search;
+// M9 WP3: the pure-logic reclassifier (metric-definitions REDESIGN). Row-slice in,
+// typed metric structs out — NO DB I/O (WP4 owns the SQLite read + maps rows into
+// EventRow). Phase 2 = AI kinds (ai-doing/subagent/ai-reasoning) + reused interval
+// mechanics; Phase 3 = the human-state gap machine (focus-fusion + capped-working).
+mod reclassify;
 // M3 WP4: status broadcaster — normalizes each HookEvent to a workspace state,
 // maps cwd→open-workspace, and emits WorkspaceStatusUpdate on `workspace-status`.
 // Phase 1 = the pure transform core + DTO + registry; Phase 2 drains WP3's receiver

@@ -115,7 +115,7 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.69s (2026-07-07, M9 WP2.5 P4 codify: +4 launch/active-surface tests → 367 lib + 5 integ = 372 pass; warm)
+- **Last:** 0.69s (2026-07-07, M9 WP3 P4 verify-auto: reclassify scenario suite → 433 lib pass; warm)
 - **Use timeout:** 120000
 - **History:**
   - 0.69s — 2026-07-07 (M9 WP2.5 P4 codify [FINAL]: +4 tests [launch tool-id all 3, launch gate-off, ActiveSurface attribution, surface-change detect], 367 lib + 5 integ = 372 pass; warm)

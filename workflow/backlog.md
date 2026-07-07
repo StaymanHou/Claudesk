@@ -56,6 +56,16 @@
 - **Priority:** low
 - **Status:** pending
 
+## SURFACE-2026-07-07-M9-NOTIFICATION-TYPE-NOT-PERSISTED
+- **Source:** feature:spec (M9 WP3 metric-definitions discussion)
+- **Target level:** feature (M9 WP3 plan; possibly a tiny WP2 amendment)
+- **Type:** schema-gap (small)
+- **Summary:** `time_store::event_to_row` persists only `prompt_length_chars`/`tool_use_id`/`source` into a row's `meta` — NOT `notification_type` (which `HookEvent` carries). WP3's B2/B4 human-state rule keys on "CC in AwaitingInput," derived from a `Notification`'s `notification_type` (`permission_prompt`/`elicitation_dialog` = AwaitingInput; `idle_prompt` etc. = informational). Without it, the reclassifier can't tell an input-needed Notification from an informational one.
+- **Context:** Surfaced while locking the measure-vs-infer scenario rules. The B2b ("CC opened a Playwright login → I'm working") and B4 ("CC blocked on me → I go to the browser") branches both need the AwaitingInput signal to credit that time as working-vs-away correctly. Same follow-up class the WP2.5 schema doc §4 anticipated ("PostToolUse command shape not stored").
+- **Suggested action:** Fold into WP3's plan (P1): one-line add in `event_to_row` to write `notification_type` into `meta` for `Notification` rows + a parallel meta-key test. Same privacy class as the other meta keys (an enum tag, not content). If deferred, the B2b/B4 branch degrades to a safe-but-looser "any blur-after-CC-activity → capped-working" fallback.
+- **Priority:** medium (unblocks the exact-classification path for two locked scenarios; cheap)
+- **Status:** pending (WP3 plan will decide fix-vs-fallback)
+
 ## SURFACE-2026-07-06-M10-IN-APP-AUTO-UPDATER
 - **Source:** operator request (2026-07-06) — "insert a milestone after M9 and before the next release: an in-app updater"
 - **Target level:** product (a roadmap milestone) — **inserted as Milestone 10** (Revision 2026-07-06)
@@ -83,7 +93,7 @@
   2. **Measure-vs-infer architecture NOT pre-committed — decided at WP3 `/feature-spec`.** WP3's mandatory spec (already spec-first per `SURFACE-2026-07-06-M9-RECLASSIFIER-IS-REDESIGN-NOT-PORT`) gains a first-class agenda item: with the full native-signal inventory in hand, decide per human-state which is MEASURED (from native signals) vs. must stay INFERRED (from CC-hook gaps, as a fallback when Claudesk isn't the active window / signal is ambiguous). The scenario enumeration above IS the spec input.
 - **Ripple:** WP2.5 is NEW (between WP2 and WP3 on the critical path). WP3's spec + reclassifier grow (two input sources, per-scenario rules). WP4's query layer may carry richer segment kinds. WP1's frozen contract already carries the "may shift" caveat, which now also covers native-signal-driven kinds. WP5's tracking toggle must gate the native-signal writes too (same write-only-when-on rule).
 - **Priority:** high (reshapes the milestone's core value prop — "measure, don't guess" — and adds a WP on the critical path; must be settled before WP3 designs the metrics)
-- **Status:** IN-PROGRESS — **WP2.5 SHIPPED 2026-07-07** (native-signal capture layer: window focus/blur + PTY keystroke activity + active-surface + Claudesk-external-launch marks + registry attribution, all gated + privacy-by-closed-enum; schema + 5-scenario resolution handed to WP3 in `docs/product/wp2.5-native-signal-schema.md`). Half the SURFACE (capture) is now done; **resolves fully when WP3 locks the measure-vs-infer rules** over the captured signals. WP3 spec agenda + WP1 outcome-doc caveat already updated.
+- **Status:** IN-PROGRESS — **WP2.5 SHIPPED 2026-07-07** (native-signal capture layer: window focus/blur + PTY keystroke activity + active-surface + Claudesk-external-launch marks + registry attribution, all gated + privacy-by-closed-enum; schema + 5-scenario resolution handed to WP3 in `docs/product/wp2.5-native-signal-schema.md`). **WP3 SPEC LOCKED the measure-vs-infer rules 2026-07-07** (`workflow/wip/m9-wp3-reclassifier-redesign.md` → `## Metric Definitions`): full scenario truth-table resolved (A1–A5, B1/B2a/B2b/B3/B4/B5; B6 cut), focus consulted only in AI-idle gaps, `launch/AwaitingInput → capped-working` with a 10-min reset-on-activity cap, new 6-kind enum. **Resolves fully when WP3 ships** (spec→plan→build). Remaining half is the build.
 
 ## SURFACE-2026-07-06-M9-COLOR-FAMILIES-AI-VS-HUMAN
 - **Source:** operator design intent (2026-07-06, at M9 WP1 verify-human)

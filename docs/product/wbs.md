@@ -79,7 +79,7 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 
 **WP2 → WP3 rationale:** The DB + schema must exist and be populated (real rows, real shape) before building the reclassifier — the reclassifier reads rows; building it against a live schema (not a mock) de-risks the row-shape assumptions.
 
-### WP2.5: Claudesk-native signal source (focus/blur + PTY keystrokes + registry attribution) — ✅ SHIPPED 2026-07-07 (commit `b572938`) — **NEW** (`SURFACE-2026-07-06-M9-NATIVE-SIGNALS-BEAT-GAP-INFERENCE`)
+### WP2.5: Claudesk-native signal source (focus/blur + PTY keystrokes + registry attribution) — ✅ SHIPPED 2026-07-07 (commit `3c56062`) — **NEW** (`SURFACE-2026-07-06-M9-NATIVE-SIGNALS-BEAT-GAP-INFERENCE`)
 **Why this WP exists:** claude-time could only *infer* the human states (`reading`/`thinking`/`away`) from CC-hook-stream gaps + a guessed typing rate + magic thresholds — it had no other signal. **Claudesk, being the terminal + window, can OBSERVE the exact gap claude-time guesses about.** This WP captures those native signals as a **second event source** alongside the CC hook stream (WP2), so WP3's redesign can *measure* where claude-time could only estimate. This is the core "measure, don't guess" lever the milestone gained by moving in-app.
 **Native signals to capture (persist into the same `time_store`, same toggle-gate as WP2):**
   - **Window focus/blur** — Claudesk window focused vs blurred (Tauri `on_window_event` focus events, already used by the PiP auto-summon path — reuse the seam). The strongest present-vs-away signal.

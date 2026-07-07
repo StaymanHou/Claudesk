@@ -90,7 +90,12 @@ const INPUT_NEEDED_NOTIFICATION_TYPES: [&str; 2] = ["permission_prompt", "elicit
 /// Whether a `Notification`'s `notification_type` means "awaiting genuine user input."
 /// The unknown/absent→AwaitingInput honest-fallback rationale is on
 /// [`INPUT_NEEDED_NOTIFICATION_TYPES`] (the canonical anchor); this just folds it into a bool.
-fn notification_awaits_input(notification_type: Option<&str>) -> bool {
+///
+/// `pub(crate)` so the M9 WP3 reclassifier ([`crate::reclassify`]) derives its
+/// CC-AwaitingInput spans from the SAME classification (single source of truth) — the
+/// live status dot and the retrospective analytics agree on "was CC blocked on input"
+/// by construction.
+pub(crate) fn notification_awaits_input(notification_type: Option<&str>) -> bool {
     match notification_type {
         None => true,
         Some(t) if INPUT_NEEDED_NOTIFICATION_TYPES.contains(&t) => true,
@@ -450,7 +455,10 @@ mod tests {
             event_to_state(&ev("UserPromptSubmit", "/p")),
             Some(WorkspaceState::Running)
         );
-        assert_eq!(event_to_state(&ev("Stop", "/p")), Some(WorkspaceState::Idle));
+        assert_eq!(
+            event_to_state(&ev("Stop", "/p")),
+            Some(WorkspaceState::Idle)
+        );
         assert_eq!(
             event_to_state(&ev("PostToolUse", "/p")),
             Some(WorkspaceState::Running)

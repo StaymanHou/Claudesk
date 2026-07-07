@@ -233,9 +233,10 @@ pub struct TimeRow {
 ///
 /// The `meta` blob is assembled from the event's time-analytics fields — the SAME
 /// keys `claude-time`'s hook emitted (`prompt_length_chars` / `tool_use_id` /
-/// `source`) — so the reclassifier reads the identical shape. **Privacy: only
-/// `prompt_length_chars` (the LENGTH) is read; `HookEvent::prompt` (the text) is
-/// never touched here.** `source = "cc-hook"` is stamped unconditionally.
+/// `source`) PLUS `notification_type` (the `Notification` type tag, WP3 needs it to
+/// derive CC's AwaitingInput state) — so the reclassifier reads the identical shape.
+/// **Privacy: only `prompt_length_chars` (the LENGTH) is read; `HookEvent::prompt`
+/// (the text) is never touched here.** `source = "cc-hook"` is stamped unconditionally.
 ///
 /// `ts` uses the hook-side `timestamp` (epoch ms) when present, else 0 — the caller
 /// (the drain thread) does not re-stamp; the hook's send-time is the event time.
@@ -246,7 +247,8 @@ pub fn event_to_row(event: &HookEvent) -> Option<TimeRow> {
 
     // Assemble meta from whichever extras this event carries. Mirrors claude-time's
     // per-event meta: UserPromptSubmit → {prompt_length_chars}; Pre/Post tool events →
-    // {tool_use_id}; SessionStart → {source}. Multiple keys can co-exist harmlessly.
+    // {tool_use_id}; SessionStart → {source}; Notification → {notification_type}.
+    // Multiple keys can co-exist harmlessly.
     let mut meta = serde_json::Map::new();
     if let Some(len) = event.prompt_length_chars {
         // LENGTH only — never the prompt text (the privacy invariant).
@@ -257,6 +259,14 @@ pub fn event_to_row(event: &HookEvent) -> Option<TimeRow> {
     }
     if let Some(src) = &event.source {
         meta.insert("source".into(), json!(src));
+    }
+    if let Some(ntype) = &event.notification_type {
+        // The Notification's type tag (`permission_prompt` / `elicitation_dialog` /
+        // `idle_prompt` / …). The WRITER is meaning-agnostic — it just persists the tag;
+        // the WP3 reclassifier decides which types mean "CC AwaitingInput" (reusing
+        // `status_broadcaster`'s classifier). An enum tag, never content — same privacy
+        // class as the keys above. Needed by WP3's B2/B4 human-state rule.
+        meta.insert("notification_type".into(), json!(ntype));
     }
     let meta = if meta.is_empty() {
         None
@@ -417,6 +427,43 @@ mod tests {
         let row = event_to_row(&ev).unwrap();
         let meta: serde_json::Value = serde_json::from_str(&row.meta.unwrap()).unwrap();
         assert_eq!(meta["source"], json!("startup"));
+    }
+
+    #[test]
+    fn notification_row_carries_notification_type_in_meta() {
+        // WP3 (M9): the reclassifier derives CC's AwaitingInput state from a
+        // Notification's type tag, so the writer must persist it. The writer is
+        // MEANING-AGNOSTIC — BOTH an input-needed type and an informational type
+        // round-trip identically; the reclassifier (not this writer) decides which
+        // types mean "awaiting input".
+        for ntype in ["permission_prompt", "idle_prompt"] {
+            let mut ev = base_event("Notification");
+            ev.notification_type = Some(ntype.to_string());
+            ev.message = Some("NOTIFMSG-DO-NOT-PERSIST".to_string());
+            let row = event_to_row(&ev).unwrap();
+            assert_eq!(row.event, "Notification");
+            let meta = row.meta.expect("Notification with a type has meta");
+            let parsed: serde_json::Value = serde_json::from_str(&meta).unwrap();
+            assert_eq!(parsed["notification_type"], json!(ntype));
+            // Privacy: the Notification's human-readable MESSAGE body is never persisted
+            // (only the type TAG is). Pins that adding notification_type didn't open a
+            // content channel via `message` (row_never_carries_prompt_text guards `prompt`,
+            // not `message` — this closes that Notification-specific gap).
+            assert!(
+                !meta.contains("NOTIFMSG"),
+                "Notification message body must not appear in the row meta"
+            );
+        }
+    }
+
+    #[test]
+    fn notification_row_without_type_has_no_notification_type_key() {
+        // A Notification with no type tag (absent field) → no notification_type in meta
+        // (and, with no other extras, no meta blob at all). Guards the optional-key
+        // pattern: we never write a null/empty tag.
+        let ev = base_event("Notification");
+        let row = event_to_row(&ev).unwrap();
+        assert_eq!(row.meta, None);
     }
 
     #[test]
