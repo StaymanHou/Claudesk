@@ -79,7 +79,7 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 
 **WP2 → WP3 rationale:** The DB + schema must exist and be populated (real rows, real shape) before building the reclassifier — the reclassifier reads rows; building it against a live schema (not a mock) de-risks the row-shape assumptions.
 
-### WP2.5: Claudesk-native signal source (focus/blur + PTY keystrokes + registry attribution) — **NEW** (`SURFACE-2026-07-06-M9-NATIVE-SIGNALS-BEAT-GAP-INFERENCE`)
+### WP2.5: Claudesk-native signal source (focus/blur + PTY keystrokes + registry attribution) — ✅ SHIPPED 2026-07-07 (commit `b572938`) — **NEW** (`SURFACE-2026-07-06-M9-NATIVE-SIGNALS-BEAT-GAP-INFERENCE`)
 **Why this WP exists:** claude-time could only *infer* the human states (`reading`/`thinking`/`away`) from CC-hook-stream gaps + a guessed typing rate + magic thresholds — it had no other signal. **Claudesk, being the terminal + window, can OBSERVE the exact gap claude-time guesses about.** This WP captures those native signals as a **second event source** alongside the CC hook stream (WP2), so WP3's redesign can *measure* where claude-time could only estimate. This is the core "measure, don't guess" lever the milestone gained by moving in-app.
 **Native signals to capture (persist into the same `time_store`, same toggle-gate as WP2):**
   - **Window focus/blur** — Claudesk window focused vs blurred (Tauri `on_window_event` focus events, already used by the PiP auto-summon path — reuse the seam). The strongest present-vs-away signal.
@@ -95,12 +95,12 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 **Dependencies:** WP2 (the `time_store` + schema exist — WP2.5 adds event *kinds*/columns to the same store). **Note (reconciled at WP2 ship `dc3b89e`):** WP2 shipped the `source` discriminator column (`cc-hook` on every WP2 row) precisely so WP2.5 writes `claudesk-native` rows into the same `events` table. WP2.5 still likely needs extra `meta` keys (or a sibling table) for focus/keystroke spans — that shape decision is WP2.5's, but the `source` split is already in place.
 **Size:** M *(a capture layer + schema extension; interpretation is WP3's)*
 **Tasks:**
-- [ ] Extend the `time_store` schema (or add a sibling table) to hold native-signal events (focus/blur transitions with timestamps + which workspace; keystroke-activity spans with counts/timing, no content; active-workspace attribution) — add a `source` discriminator vs. CC-hook rows.
-- [ ] Capture window focus/blur (reuse the `on_window_event` seam the PiP auto-summon uses); write gated on the tracking toggle (same rule as WP2).
-- [ ] Capture PTY-keystroke activity per workspace (bytes-in timing/counts only — privacy: NO content); attribute to the focused workspace.
-- [ ] Capture the Claudesk-initiated-external-launch signal (so WP3 can resolve the `open <screenshot>` blur-but-working case) — e.g. mark blurs that follow a `sublime_open`/`open`-class launch.
-- [ ] Privacy assertion test: native-signal rows carry timing/counts/attribution only — never keystroke content, never file paths beyond what attribution needs.
-- [ ] Document the captured native-signal schema as the WP3 spec input (the scenario list above + what data resolves each).
+- [x] Extend the `time_store` schema (or add a sibling table) to hold native-signal events (focus/blur transitions with timestamps + which workspace; keystroke-activity spans with counts/timing, no content; active-workspace attribution) — add a `source` discriminator vs. CC-hook rows. *(Same `events` table; `source="claudesk-native"`; extras in the `meta` JSON blob.)*
+- [x] Capture window focus/blur (reuse the `on_window_event` seam the PiP auto-summon uses); write gated on the tracking toggle (same rule as WP2). *(Additive to the `lib.rs` `Focused(bool)` handler; independent of PiP auto-summon.)*
+- [x] Capture PTY-keystroke activity per workspace (bytes-in timing/counts only — privacy: NO content); attribute to the focused workspace. *(`cc_input` choke-point; byte-count + ts only; live-proven "ZZZ" appears in 0 DB rows + 0 raw file bytes.)*
+- [x] Capture the Claudesk-initiated-external-launch signal (so WP3 can resolve the `open <screenshot>` blur-but-working case) — e.g. mark blurs that follow a `sublime_open`/`open`-class launch. *(`ExternalLaunch` rows from `sublime_open`/`smerge_open`/`finder_open`; `preceded_by_launch` correlation deferred to WP3 by-ts join.)*
+- [x] Privacy assertion test: native-signal rows carry timing/counts/attribution only — never keystroke content, never file paths beyond what attribution needs. *(Enforced by closed `NativeSignal`/`NativeLaunchTool` enums — structurally no content channel; pinned by structured-field test.)*
+- [x] Document the captured native-signal schema as the WP3 spec input (the scenario list above + what data resolves each). *(`docs/product/wp2.5-native-signal-schema.md`.)*
 
 **WP2.5 → WP3 rationale:** WP3 can't design "measure vs. infer" rules without the native-signal inventory in hand. WP2.5 makes the signals real + captured (with enough context to disambiguate the hard scenarios) so WP3's spec decides interpretation against actual data, not a hypothetical.
 

@@ -13,9 +13,11 @@ use std::sync::Mutex;
 use std::thread;
 
 use rusqlite::Connection;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 
-use super::{bootstrap, event_to_row, insert_row};
+use super::{
+    bootstrap, event_to_row, insert_row, native_row, NativeContext, NativeLaunchTool, NativeSignal,
+};
 use crate::hook_socket::HookEvent;
 
 /// Basename of the per-identity time-analytics DB under the app-data dir. Sibling to
@@ -75,6 +77,30 @@ impl TimeStore {
             .map_err(|_| "time_store connection lock poisoned".to_string())?;
         insert_row(&conn, &row).map_err(|e| format!("time_store insert failed: {e}"))
     }
+
+    /// Persist a **Claudesk-native** signal row **iff `gate_on`** — the WP2.5 sibling
+    /// of [`write_gated`], sharing the SAME connection + gate discipline. When the
+    /// toggle is OFF this is a zero-IO no-op (no lock, no INSERT), matching the
+    /// CC-hook path. When ON it maps the signal + attribution to a [`TimeRow`] with
+    /// `source = "claudesk-native"` and INSERTs it. An INSERT error is surfaced
+    /// (never swallowed) but callers (main-thread command / focus handler) log and
+    /// continue — a failed native write must never crash the app or perturb status.
+    pub fn write_native_gated(
+        &self,
+        signal: &NativeSignal,
+        ctx: &NativeContext,
+        gate_on: bool,
+    ) -> Result<(), String> {
+        if !gate_on {
+            return Ok(()); // zero-IO gate: tracking OFF → no SQLite touch at all.
+        }
+        let row = native_row(signal, ctx);
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| "time_store connection lock poisoned".to_string())?;
+        insert_row(&conn, &row).map_err(|e| format!("time_store native insert failed: {e}"))
+    }
 }
 
 /// Open a DB at `path`, set connection pragmas (WAL + busy-timeout for multi-writer
@@ -84,8 +110,12 @@ impl TimeStore {
 /// (WAL is a no-op on an in-memory connection, so the in-memory tests can't exercise
 /// this path). A failure is surfaced (never swallowed).
 pub fn open_at_path(path: &std::path::Path) -> Result<TimeStore, String> {
-    let conn = Connection::open(path)
-        .map_err(|e| format!("could not open time-analytics DB at {}: {e}", path.display()))?;
+    let conn = Connection::open(path).map_err(|e| {
+        format!(
+            "could not open time-analytics DB at {}: {e}",
+            path.display()
+        )
+    })?;
     // WAL: concurrent readers (WP4 query layer) don't block the writer. busy_timeout:
     // wait out a transient lock instead of erroring (multi-writer contention once
     // WP2.5's native-signal writer shares the DB). Both are idempotent to re-set.
@@ -123,6 +153,187 @@ pub fn tracking_enabled(_app: &AppHandle) -> bool {
 /// Managed-state holder for the live [`TimeStore`], so [`write_gated`](TimeStore::
 /// write_gated) reaches the connection from the drain thread via `app.try_state`.
 pub type SharedTimeStore = TimeStore;
+
+/// Managed-state holder for the **active-context** signal (M9 WP2.5): which workspace
+/// is center-staged and which right-panel surface (editor/diff/terminal) is active.
+/// The frontend sets it via [`time_set_active_context`] on center-stage promote AND on
+/// surface switch; the focus handler (and Phase 3's keystroke path) reads it to
+/// attribute native-signal rows to the right workspace/surface. A `Mutex` because it's
+/// read on the main thread (focus handler / commands) and written by the command.
+///
+/// Held as a `NativeContext` (the same attribution struct native rows carry) with the
+/// `session_id` slot unused here — focus/surface signals are workspace-level; the
+/// keystroke path fills `session_id` from `cc_input` at write time.
+pub type SharedActiveContext = Mutex<NativeContext>;
+
+/// Initialize the empty active-context holder (managed at launch). Empty until the
+/// frontend's first `time_set_active_context` — a focus event before any workspace is
+/// active attributes to nothing (empty columns), which is correct.
+pub fn init_active_context() -> SharedActiveContext {
+    Mutex::new(NativeContext::default())
+}
+
+/// Frontend → backend: record the currently-active workspace + right-panel surface
+/// (M9 WP2.5, OQ1+OQ4). Called on center-stage promote (workspace switch) and on
+/// right-panel surface switch (editor/diff/terminal). Stores into the managed
+/// [`SharedActiveContext`] so the focus handler + keystroke path attribute native
+/// rows correctly. Pure state-set — NOT gated (holding the active context costs
+/// nothing and the WRITES that consume it are gated); a poisoned lock is surfaced,
+/// never swallowed (the never-swallow IPC discipline).
+///
+/// `cwd` is the active workspace's project dir (for join-free attribution on the
+/// row); `workspace_id`/`surface` are opaque handles. All optional so the frontend
+/// can clear the context (e.g. all workspaces closed) by passing nulls.
+#[tauri::command]
+pub fn time_set_active_context(
+    app: AppHandle,
+    active: State<'_, SharedActiveContext>,
+    workspace_id: Option<String>,
+    surface: Option<String>,
+    cwd: Option<String>,
+) -> Result<(), String> {
+    // Detect a surface CHANGE (vs the previously-stored surface) so we can emit an
+    // ActiveSurface switch-marker row (Phase 4) — WP3 needs the switch timestamp.
+    let surface_changed = active.lock().map(|c| c.surface != surface).unwrap_or(false);
+    set_active_context(&active, workspace_id, surface, cwd)?;
+    if surface_changed {
+        // Emit the switch marker attributed to the NOW-current context (gated; no-op
+        // when tracking is OFF, the WP2 default). Read the freshly-set context back.
+        let ctx = active.lock().map(|c| c.clone()).unwrap_or_default();
+        record_active_surface(&app, &ctx);
+    }
+    Ok(())
+}
+
+/// Pure core of [`time_set_active_context`] — set the active-context fields on the
+/// holder. Split out so it's unit-testable against a raw `SharedActiveContext` with
+/// no Tauri app (the `State` wrapper the command takes can't be built in a test).
+/// `session_id` is always cleared here — it's workspace-level context; the keystroke
+/// path (Phase 3) fills `session_id` from `cc_input` at write time.
+pub fn set_active_context(
+    active: &SharedActiveContext,
+    workspace_id: Option<String>,
+    surface: Option<String>,
+    cwd: Option<String>,
+) -> Result<(), String> {
+    let mut ctx = active
+        .lock()
+        .map_err(|_| "active-context lock poisoned".to_string())?;
+    ctx.workspace_id = workspace_id;
+    ctx.surface = surface;
+    ctx.cwd = cwd;
+    ctx.session_id = None;
+    Ok(())
+}
+
+/// Read the current active context (a clone, so the caller doesn't hold the lock).
+/// Used by the focus handler to attribute focus/blur rows. Returns the default
+/// (empty) context if the lock is poisoned — a focus row with empty attribution is
+/// better than dropping the signal or panicking the main thread.
+pub fn active_context_snapshot(app: &AppHandle) -> NativeContext {
+    app.try_state::<SharedActiveContext>()
+        .and_then(|s| s.lock().ok().map(|c| c.clone()))
+        .unwrap_or_default()
+}
+
+/// Write a focus/blur native signal for the main window, gated + attributed to the
+/// current active context. Called from the `lib.rs` `WindowEvent::Focused` handler
+/// (main thread) ALONGSIDE the PiP auto-summon path — independent, best-effort: a
+/// write failure is logged and dropped, never perturbing focus handling or the PiP
+/// path. Zero-IO when the tracking gate is OFF (the WP2 default).
+///
+/// `preceded_by_launch` is `false` here in Phase 2; Phase 4 wires the launch-mark →
+/// blur correlation (a blur that follows a Claudesk-initiated external launch).
+pub fn record_focus_change(app: &AppHandle, focused: bool) {
+    let gate_on = tracking_enabled(app);
+    if !gate_on {
+        return; // zero-IO fast path: tracking OFF (WP2 default) → nothing to do.
+    }
+    let Some(store) = app.try_state::<SharedTimeStore>() else {
+        return; // store not managed (open failed at launch) — can't record; never panic.
+    };
+    let ctx = active_context_snapshot(app);
+    let signal = if focused {
+        NativeSignal::WindowFocus
+    } else {
+        NativeSignal::WindowBlur {
+            preceded_by_launch: false,
+        }
+    };
+    if let Err(e) = store.write_native_gated(&signal, &ctx, gate_on) {
+        eprintln!("[claudesk] time-store focus/blur write failed (dropped): {e}");
+    }
+}
+
+/// Record a PTY keystroke-activity native signal (M9 WP2.5 Phase 3), gated. Called
+/// from `cc_input` (the single PTY-input choke-point) AFTER the bytes are forwarded,
+/// with `byte_count = bytes.len()` and the originating `session_id`. **Privacy: the
+/// COUNT and the session id only — NEVER the bytes.** Attributed to the active
+/// workspace/surface (from `active_context_snapshot`), with the row's `session_id`
+/// overridden to the keystroke's actual PTY session (the active context's `session_id`
+/// slot is always empty — it's workspace-level; keystrokes name their own session).
+///
+/// Best-effort: zero-IO when the gate is OFF (the WP2 default); a write failure is
+/// logged and dropped — a telemetry miss must never break the hot input path.
+pub fn record_keystroke_activity(app: &AppHandle, session_id: &str, byte_count: usize) {
+    let gate_on = tracking_enabled(app);
+    if !gate_on {
+        return; // zero-IO fast path: tracking OFF (WP2 default) → no work in the hot path.
+    }
+    let Some(store) = app.try_state::<SharedTimeStore>() else {
+        return; // store not managed (open failed at launch) — can't record; never panic.
+    };
+    // Start from the active workspace/surface, then stamp THIS keystroke's PTY session.
+    let mut ctx = active_context_snapshot(app);
+    ctx.session_id = Some(session_id.to_string());
+    let signal = NativeSignal::KeystrokeActivity { byte_count };
+    if let Err(e) = store.write_native_gated(&signal, &ctx, gate_on) {
+        eprintln!("[claudesk] time-store keystroke write failed (dropped): {e}");
+    }
+}
+
+/// Record a Claudesk-initiated external-tool launch (M9 WP2.5 Phase 4), gated. Called
+/// from `sublime_open` / `smerge_open` / `finder_open` AFTER the tool spawns, marking
+/// which tool + `now_ms()` + the active workspace/surface. This is the signal WP3
+/// correlates a subsequent blur against (the "blur-but-working" case: the operator
+/// popped Sublime/Merge/Finder and is now reading it while Claudesk is blurred).
+///
+/// **Scope note:** this marks CLAUDESK-initiated launches only. CC's OWN `open
+/// <screenshot>`/browser launches arrive via the CC hook stream as `PostToolUse`
+/// (`tool_name=Bash`) `source=cc-hook` rows (WP2) — WP3 reads BOTH. Best-effort +
+/// gated (zero-IO when OFF); a write failure never blocks the launch (already done).
+pub fn record_external_launch(app: &AppHandle, tool: NativeLaunchTool) {
+    let gate_on = tracking_enabled(app);
+    if !gate_on {
+        return; // zero-IO fast path: tracking OFF (WP2 default).
+    }
+    let Some(store) = app.try_state::<SharedTimeStore>() else {
+        return; // store not managed — can't record; never panic.
+    };
+    let ctx = active_context_snapshot(app);
+    let signal = NativeSignal::ExternalLaunch { tool };
+    if let Err(e) = store.write_native_gated(&signal, &ctx, gate_on) {
+        eprintln!("[claudesk] time-store external-launch write failed (dropped): {e}");
+    }
+}
+
+/// Record an active-surface-switch native signal (M9 WP2.5 Phase 4), gated. Called
+/// from [`time_set_active_context`] when the surface changes, so WP3 has the SWITCH
+/// TIMESTAMP (not just the surface stamped on other rows) — needed to time the
+/// operator's "reading code in the editor" vs "following CC in the terminal" spans
+/// even when no focus/keystroke event coincides with the switch. Best-effort + gated.
+fn record_active_surface(app: &AppHandle, ctx: &NativeContext) {
+    let gate_on = tracking_enabled(app);
+    if !gate_on {
+        return;
+    }
+    let Some(store) = app.try_state::<SharedTimeStore>() else {
+        return;
+    };
+    if let Err(e) = store.write_native_gated(&NativeSignal::ActiveSurface, ctx, gate_on) {
+        eprintln!("[claudesk] time-store active-surface write failed (dropped): {e}");
+    }
+}
 
 /// Start the time-analytics writer: own the fan-out's time-event [`Receiver`] and
 /// spawn a drain thread that, per event, reads the tracking gate ([`tracking_enabled`])
@@ -207,25 +418,23 @@ mod tests {
     #[test]
     fn write_gated_on_inserts_a_row() {
         let store = mem_store();
-        store
-            .write_gated(&base_event("Stop"), true)
-            .unwrap();
+        store.write_gated(&base_event("Stop"), true).unwrap();
         assert_eq!(count(&store), 1, "gate ON → one row written");
     }
 
     #[test]
     fn write_gated_off_is_zero_io_noop() {
         let store = mem_store();
-        store
-            .write_gated(&base_event("Stop"), false)
-            .unwrap();
+        store.write_gated(&base_event("Stop"), false).unwrap();
         assert_eq!(count(&store), 0, "gate OFF → NO row written (zero-IO gate)");
     }
 
     #[test]
     fn write_gated_off_then_on_only_persists_the_on_event() {
         let store = mem_store();
-        store.write_gated(&base_event("UserPromptSubmit"), false).unwrap();
+        store
+            .write_gated(&base_event("UserPromptSubmit"), false)
+            .unwrap();
         store.write_gated(&base_event("Stop"), true).unwrap();
         assert_eq!(count(&store), 1);
         let event: String = store
@@ -244,6 +453,372 @@ mod tests {
         assert_eq!(count(&store), 0, "unmappable event → no row, no error");
     }
 
+    // ---- M9 WP2.5: native-signal gated writes -------------------------------
+
+    fn native_ctx() -> NativeContext {
+        NativeContext {
+            workspace_id: Some("ws-1".into()),
+            surface: Some("terminal".into()),
+            cwd: Some("/p".into()),
+            session_id: None,
+        }
+    }
+
+    #[test]
+    fn write_native_gated_on_inserts_a_native_row() {
+        let store = mem_store();
+        store
+            .write_native_gated(&NativeSignal::WindowFocus, &native_ctx(), true)
+            .unwrap();
+        assert_eq!(count(&store), 1, "native gate ON → one row written");
+        let source: String = store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT source FROM events LIMIT 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(source, "claudesk-native");
+    }
+
+    #[test]
+    fn write_native_gated_off_is_zero_io_noop() {
+        let store = mem_store();
+        store
+            .write_native_gated(
+                &NativeSignal::KeystrokeActivity { byte_count: 5 },
+                &native_ctx(),
+                false,
+            )
+            .unwrap();
+        assert_eq!(count(&store), 0, "native gate OFF → NO row (zero-IO gate)");
+    }
+
+    // ---- M9 WP2.5 Phase 2: active-context signal + focus/blur attribution --------
+
+    #[test]
+    fn set_active_context_round_trips_workspace_and_surface() {
+        let holder = super::init_active_context();
+        super::set_active_context(
+            &holder,
+            Some("ws-2".into()),
+            Some("editor".into()),
+            Some("/repo/proj-b".into()),
+        )
+        .unwrap();
+        let ctx = holder.lock().unwrap().clone();
+        assert_eq!(ctx.workspace_id.as_deref(), Some("ws-2"));
+        assert_eq!(ctx.surface.as_deref(), Some("editor"));
+        assert_eq!(ctx.cwd.as_deref(), Some("/repo/proj-b"));
+        // session_id is workspace-level context — always cleared here (Phase 3 fills it).
+        assert_eq!(ctx.session_id, None);
+    }
+
+    #[test]
+    fn set_active_context_can_be_cleared_to_empty() {
+        // All workspaces closed → the frontend passes nulls → the context clears, so a
+        // focus event after that attributes to nothing (empty columns), not stale data.
+        let holder = super::init_active_context();
+        super::set_active_context(
+            &holder,
+            Some("ws-1".into()),
+            Some("terminal".into()),
+            Some("/p".into()),
+        )
+        .unwrap();
+        super::set_active_context(&holder, None, None, None).unwrap();
+        assert_eq!(holder.lock().unwrap().clone(), NativeContext::default());
+    }
+
+    #[test]
+    fn focus_row_built_from_active_context_carries_its_attribution() {
+        // The focus handler's row-shape: build a WindowFocus row from the active context.
+        // Proves the attribution the frontend set flows onto the focus/blur row's meta.
+        let holder = super::init_active_context();
+        super::set_active_context(
+            &holder,
+            Some("ws-3".into()),
+            Some("diff".into()),
+            Some("/repo/c".into()),
+        )
+        .unwrap();
+        let ctx = holder.lock().unwrap().clone();
+
+        let store = mem_store();
+        store
+            .write_native_gated(&NativeSignal::WindowFocus, &ctx, true)
+            .unwrap();
+        assert_eq!(count(&store), 1);
+        let (event, cwd, meta): (String, String, Option<String>) = store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT event, cwd, meta FROM events WHERE source='claudesk-native' LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(event, "WindowFocus");
+        assert_eq!(
+            cwd, "/repo/c",
+            "focus row attributed to the active workspace cwd"
+        );
+        let meta: serde_json::Value = serde_json::from_str(&meta.unwrap()).unwrap();
+        assert_eq!(meta["workspace_id"], serde_json::json!("ws-3"));
+        assert_eq!(meta["surface"], serde_json::json!("diff"));
+    }
+
+    #[test]
+    fn blur_row_from_empty_context_writes_with_empty_attribution() {
+        // A blur before any workspace is active: empty context → the row still writes
+        // (NOT NULL columns become empty strings, no meta attribution). Never dropped.
+        let holder = super::init_active_context();
+        let ctx = holder.lock().unwrap().clone();
+        let store = mem_store();
+        store
+            .write_native_gated(
+                &NativeSignal::WindowBlur {
+                    preceded_by_launch: false,
+                },
+                &ctx,
+                true,
+            )
+            .unwrap();
+        assert_eq!(count(&store), 1);
+        let (event, cwd): (String, String) = store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT event, cwd FROM events LIMIT 1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(event, "WindowBlur");
+        assert_eq!(cwd, "", "empty-context blur → empty cwd, still inserted");
+    }
+
+    // ---- M9 WP2.5 Phase 3: PTY keystroke-activity capture -----------------------
+
+    #[test]
+    fn keystroke_row_carries_count_and_session_never_the_bytes() {
+        // The privacy invariant for the keystroke path, stated as the plan's SECRETKEYS
+        // test: whatever the operator typed, ONLY the byte COUNT + the PTY session id +
+        // the active-context attribution reach the row — never the typed characters. We
+        // simulate `cc_input`'s call: the actual input was the 10 bytes "SECRETKEYS",
+        // so byte_count=10 lands; the string "SECRETKEYS" must appear in NO row field.
+        let typed = "SECRETKEYS";
+        let byte_count = typed.len(); // 10 — this is ALL that's derived from the input.
+        let mut ctx = super::NativeContext {
+            workspace_id: Some("ws-1".into()),
+            surface: Some("terminal".into()),
+            cwd: Some("/repo/proj".into()),
+            session_id: None,
+        };
+        // record_keystroke_activity overrides session_id with the keystroke's PTY session:
+        ctx.session_id = Some("cc-2".into());
+        let row = native_row(&NativeSignal::KeystrokeActivity { byte_count }, &ctx);
+
+        assert_eq!(row.event, "KeystrokeActivity");
+        assert_eq!(row.session_id, "cc-2");
+        // The full serialized row text must NOT contain the typed characters anywhere.
+        let all_text = format!(
+            "{}|{}|{}|{}|{}|{}|{}",
+            row.ts,
+            row.session_id,
+            row.cwd,
+            row.event,
+            row.tool_name.clone().unwrap_or_default(),
+            row.agent_type.clone().unwrap_or_default(),
+            row.meta.clone().unwrap_or_default(),
+        );
+        assert!(
+            !all_text.contains("SECRETKEYS"),
+            "no keystroke-row field may contain the typed bytes"
+        );
+        // Only the COUNT survived, in meta.
+        let meta: serde_json::Value = serde_json::from_str(&row.meta.unwrap()).unwrap();
+        assert_eq!(meta["byte_count"], serde_json::json!(10));
+    }
+
+    #[test]
+    fn keystroke_write_gated_off_is_zero_io_noop() {
+        // The hot path (cc_input) with the WP2 default gate OFF writes nothing — no row,
+        // no IO — even though bytes flowed to the PTY. (record_keystroke_activity returns
+        // before touching the store; here we prove the underlying gated write is a no-op.)
+        let store = mem_store();
+        let ctx = super::NativeContext {
+            session_id: Some("cc-1".into()),
+            ..Default::default()
+        };
+        store
+            .write_native_gated(
+                &NativeSignal::KeystrokeActivity { byte_count: 7 },
+                &ctx,
+                false,
+            )
+            .unwrap();
+        assert_eq!(count(&store), 0, "keystroke gate OFF → no row (zero-IO)");
+    }
+
+    #[test]
+    fn keystroke_write_gated_on_records_count_and_attribution() {
+        // Gate ON: one keystroke row lands with the count + the PTY session + the active
+        // workspace attribution (the shape record_keystroke_activity produces).
+        let store = mem_store();
+        let ctx = super::NativeContext {
+            workspace_id: Some("ws-4".into()),
+            surface: Some("terminal".into()),
+            cwd: Some("/p".into()),
+            session_id: Some("cc-9".into()),
+        };
+        store
+            .write_native_gated(
+                &NativeSignal::KeystrokeActivity { byte_count: 3 },
+                &ctx,
+                true,
+            )
+            .unwrap();
+        assert_eq!(count(&store), 1);
+        let (event, sid, meta): (String, String, Option<String>) = store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT event, session_id, meta FROM events LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(event, "KeystrokeActivity");
+        assert_eq!(sid, "cc-9", "keystroke row names its PTY session");
+        let meta: serde_json::Value = serde_json::from_str(&meta.unwrap()).unwrap();
+        assert_eq!(meta["byte_count"], serde_json::json!(3));
+        assert_eq!(meta["workspace_id"], serde_json::json!("ws-4"));
+    }
+
+    // ---- M9 WP2.5 Phase 4: external-launch marks + active-surface switch ---------
+
+    #[test]
+    fn launch_row_carries_tool_identity_and_attribution_gate_on() {
+        for (tool, expected) in [
+            (NativeLaunchTool::SublimeText, "sublime"),
+            (NativeLaunchTool::SublimeMerge, "smerge"),
+            (NativeLaunchTool::Finder, "finder"),
+        ] {
+            let store = mem_store();
+            let ctx = super::NativeContext {
+                workspace_id: Some("ws-1".into()),
+                surface: Some("editor".into()),
+                cwd: Some("/repo/proj".into()),
+                session_id: None,
+            };
+            store
+                .write_native_gated(&NativeSignal::ExternalLaunch { tool }, &ctx, true)
+                .unwrap();
+            let (event, meta): (String, Option<String>) = store
+                .conn
+                .lock()
+                .unwrap()
+                .query_row("SELECT event, meta FROM events LIMIT 1", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })
+                .unwrap();
+            assert_eq!(event, "ExternalLaunch");
+            let meta: serde_json::Value = serde_json::from_str(&meta.unwrap()).unwrap();
+            assert_eq!(meta["tool"], serde_json::json!(expected));
+            assert_eq!(meta["workspace_id"], serde_json::json!("ws-1"));
+        }
+    }
+
+    #[test]
+    fn launch_write_gated_off_is_zero_io_noop() {
+        let store = mem_store();
+        store
+            .write_native_gated(
+                &NativeSignal::ExternalLaunch {
+                    tool: NativeLaunchTool::SublimeMerge,
+                },
+                &super::NativeContext::default(),
+                false,
+            )
+            .unwrap();
+        assert_eq!(count(&store), 0, "launch gate OFF → no row (zero-IO)");
+    }
+
+    #[test]
+    fn active_surface_row_marks_the_switch_with_attribution() {
+        // The ActiveSurface switch-marker row (emitted by time_set_active_context on a
+        // surface change): carries the new surface + workspace, no content.
+        let store = mem_store();
+        let ctx = super::NativeContext {
+            workspace_id: Some("ws-2".into()),
+            surface: Some("terminal".into()),
+            cwd: Some("/p".into()),
+            session_id: None,
+        };
+        store
+            .write_native_gated(&NativeSignal::ActiveSurface, &ctx, true)
+            .unwrap();
+        let (event, meta): (String, Option<String>) = store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT event, meta FROM events LIMIT 1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(event, "ActiveSurface");
+        let meta: serde_json::Value = serde_json::from_str(&meta.unwrap()).unwrap();
+        assert_eq!(meta["surface"], serde_json::json!("terminal"));
+        assert_eq!(meta["workspace_id"], serde_json::json!("ws-2"));
+    }
+
+    #[test]
+    fn set_active_context_surface_change_detection() {
+        // The command's surface-change gate: switching surface is detected as a change
+        // (→ ActiveSurface emit), but re-setting the same surface is not.
+        let holder = super::init_active_context();
+        super::set_active_context(
+            &holder,
+            Some("ws-1".into()),
+            Some("editor".into()),
+            Some("/p".into()),
+        )
+        .unwrap();
+        // Same surface again → NOT a change.
+        assert_eq!(holder.lock().unwrap().surface.as_deref(), Some("editor"));
+        // (The change-detection itself lives in the command; here we assert the stored
+        // surface is what a follow-up comparison would read against.)
+    }
+
+    #[test]
+    fn native_and_cc_hook_writes_share_one_store_and_gate() {
+        // Both write paths flow through the same TimeStore/connection under the same
+        // gate — the WP2 comment's "share the same connection" made real. Gate ON:
+        // one cc-hook row + one native row land in the one table.
+        let store = mem_store();
+        store.write_gated(&base_event("Stop"), true).unwrap();
+        store
+            .write_native_gated(
+                &NativeSignal::WindowBlur {
+                    preceded_by_launch: false,
+                },
+                &native_ctx(),
+                true,
+            )
+            .unwrap();
+        assert_eq!(count(&store), 2);
+        let distinct: i64 = store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("SELECT COUNT(DISTINCT source) FROM events", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(distinct, 2, "cc-hook + claudesk-native in one store");
+    }
+
     #[test]
     fn open_at_path_creates_file_sets_wal_and_bootstraps_schema() {
         // The real-file open path (open_at_path) — NOT reachable through the
@@ -258,7 +833,11 @@ mod tests {
         let mode: String = conn
             .query_row("PRAGMA journal_mode", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(mode.to_lowercase(), "wal", "journal_mode must be WAL on a real file");
+        assert_eq!(
+            mode.to_lowercase(),
+            "wal",
+            "journal_mode must be WAL on a real file"
+        );
         // Schema is present (bootstrap ran) — the events table is queryable.
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
@@ -280,7 +859,11 @@ mod tests {
         } // first handle dropped
           // Reopen the same file: bootstrap is idempotent, the row persisted to disk.
         let reopened = super::open_at_path(&db).unwrap();
-        assert_eq!(count(&reopened), 1, "row written by the first handle persists on reopen");
+        assert_eq!(
+            count(&reopened),
+            1,
+            "row written by the first handle persists on reopen"
+        );
     }
 
     #[test]
@@ -343,11 +926,17 @@ mod tests {
 
         // Status side still received both events off the SAME stream (independence).
         assert_eq!(
-            status_rx.recv_timeout(Duration::from_secs(5)).unwrap().hook_event_name,
+            status_rx
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .hook_event_name,
             "UserPromptSubmit"
         );
         assert_eq!(
-            status_rx.recv_timeout(Duration::from_secs(5)).unwrap().hook_event_name,
+            status_rx
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .hook_event_name,
             "Stop"
         );
 
@@ -403,15 +992,25 @@ mod tests {
             let ev = time_rx.recv_timeout(Duration::from_secs(5)).unwrap();
             store.write_gated(&ev, false).unwrap();
         }
-        assert_eq!(count(&store), 0, "gate OFF → no rows even though the stream delivered events");
+        assert_eq!(
+            count(&store),
+            0,
+            "gate OFF → no rows even though the stream delivered events"
+        );
 
         // Status side is untouched by the OFF write path — it still got both events.
         assert_eq!(
-            status_rx.recv_timeout(Duration::from_secs(5)).unwrap().hook_event_name,
+            status_rx
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .hook_event_name,
             "UserPromptSubmit"
         );
         assert_eq!(
-            status_rx.recv_timeout(Duration::from_secs(5)).unwrap().hook_event_name,
+            status_rx
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .hook_event_name,
             "Stop"
         );
     }

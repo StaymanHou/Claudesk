@@ -18,11 +18,22 @@
 /// stealing focus (WP3 contract). Errors — e.g. spawn failure — cross the boundary
 /// as `String`; the frontend surfaces them rather than dead-clicking (WP6 lesson).
 ///
-/// **Transitional (WP5→WP8):** the Sublime *Text* pop is removed once the in-app
-/// editor proves parity. Sublime *Merge* ([`smerge_open`]) is permanent.
+/// **PERMANENT (WP8, revised 2026-06-20):** both Sublime launchers stay — the in-app
+/// editor is the primary routine-editing surface, but Sublime *Text* remains a one-click
+/// escape hatch alongside Sublime *Merge* ([`smerge_open`]). (The earlier "Text pop is
+/// transitional, removed once the editor proves parity" framing is superseded — see
+/// `CLAUDE.md` → Key Decisions / the WP8 redefinition.)
+///
+/// M9 WP2.5: on a successful spawn, record a Claudesk-initiated external-launch marker
+/// (gated; the tool identity only) so WP3 can resolve the blur-but-working case.
 #[tauri::command]
-pub fn sublime_open(project_path: String) -> Result<(), String> {
-    super::launch(&project_path).map_err(|e| e.to_string())
+pub fn sublime_open(app: tauri::AppHandle, project_path: String) -> Result<(), String> {
+    super::launch(&project_path).map_err(|e| e.to_string())?;
+    crate::time_store::commands::record_external_launch(
+        &app,
+        crate::time_store::NativeLaunchTool::SublimeText,
+    );
+    Ok(())
 }
 
 /// Open Sublime Merge at `project_path` (the focused workspace's directory).
@@ -33,6 +44,11 @@ pub fn sublime_open(project_path: String) -> Result<(), String> {
 /// Merge is a **permanent** companion surface (NOT removed by WP8): the inline diff
 /// viewer covers *viewing*, but staging/blame/history/blob-at-rev live here.
 #[tauri::command]
-pub fn smerge_open(project_path: String) -> Result<(), String> {
-    super::launch_merge(&project_path).map_err(|e| e.to_string())
+pub fn smerge_open(app: tauri::AppHandle, project_path: String) -> Result<(), String> {
+    super::launch_merge(&project_path).map_err(|e| e.to_string())?;
+    crate::time_store::commands::record_external_launch(
+        &app,
+        crate::time_store::NativeLaunchTool::SublimeMerge,
+    );
+    Ok(())
 }

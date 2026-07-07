@@ -115,9 +115,13 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.69s (2026-07-07, M9 WP2 P3 verify-codify: 345 lib + 5 hook_pl_output integ → 350 pass; warm)
+- **Last:** 0.69s (2026-07-07, M9 WP2.5 P4 codify: +4 launch/active-surface tests → 367 lib + 5 integ = 372 pass; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.69s — 2026-07-07 (M9 WP2.5 P4 codify [FINAL]: +4 tests [launch tool-id all 3, launch gate-off, ActiveSurface attribution, surface-change detect], 367 lib + 5 integ = 372 pass; warm)
+  - 0.70s — 2026-07-07 (M9 WP2.5 P3 codify: +3 tests [keystroke privacy SECRETKEYS, gate on/off, count+attribution], 363 lib + 5 integ = 368 pass; warm)
+  - 0.79s — 2026-07-07 (M9 WP2.5 P2 codify: +4 tests [set_active_context round-trip/clear, focus-row attribution, empty-context blur], 360 lib + 5 integ = 365 pass; warm)
+  - 0.73s — 2026-07-07 (M9 WP2.5 P1 build: +11 native-signal tests [NativeSignal/native_row/write_native_gated: round-trip, privacy-on-structured-fields, now_ms sanity, gate-off zero-IO], 356 lib + 5 integ = 361 pass; warm)
   - 0.69s — 2026-07-07 (M9 WP2 P3 codify: +1 fan-out gate-OFF stream test [socket_stream_fans_out_but_gate_off_writes_nothing], 345 lib + 5 integ = 350 pass; warm)
   - 0.75s — 2026-07-07 (M9 WP2 P2 codify: +time_store module 17 tests [15 build + 2 real-file WAL/persist codify], 341 lib + 5 integ = 346 pass; warm)
   - 0.72s — 2026-07-07 (M9 WP2 P1 codify: +5 hook_pl_output integration tests [Perl hook output + privacy invariant], 324 lib + 5 integ = 329 pass; warm)

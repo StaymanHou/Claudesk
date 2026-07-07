@@ -11,6 +11,12 @@
 /// boundary as `String`; the frontend surfaces them rather than dead-clicking
 /// (the WP6 picker lesson).
 #[tauri::command]
-pub fn finder_open(project_path: String) -> Result<(), String> {
-    super::launch(&project_path).map_err(|e| e.to_string())
+pub fn finder_open(app: tauri::AppHandle, project_path: String) -> Result<(), String> {
+    super::launch(&project_path).map_err(|e| e.to_string())?;
+    // M9 WP2.5: mark the Claudesk-initiated Finder launch (gated, tool identity only).
+    crate::time_store::commands::record_external_launch(
+        &app,
+        crate::time_store::NativeLaunchTool::Finder,
+    );
+    Ok(())
 }

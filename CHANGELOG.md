@@ -4,6 +4,8 @@
 
 - **Feature shipped:** M9 WP2 — Claudesk's CC hook now forwards the full 10-event set with 5 wire fields (length-only prompt privacy), and a new `time_store` rusqlite module persists every event into a per-identity SQLite DB as a second, gated drain of the hook stream (fanned out so the M3 status dots stay byte-for-byte unchanged, live-verified idle→running→idle on the real binary); the write path ships dormant (gate defaults OFF until WP5) with a `source` discriminator seeded for WP2.5's native signals.
 - **Milestone:** M9 WP2 — Absorbed hook + write-gated SQLite writer.
+- **Feature shipped:** M9 WP2.5 — Claudesk now captures its own native signals (window focus/blur, real PTY keystroke activity, active right-panel surface, and Claudesk-initiated Sublime/Merge/Finder launches) as a second `source="claudesk-native"` event stream into the same gated `time_store`, attributed to the focused workspace — giving WP3's reclassifier real data to *measure* the human states claude-time could only infer from hook-stream gaps; privacy is enforced by closed-enum type shape (counts/timing/attribution only, never keystroke content — live-proven that injected text appears in 0 DB rows and 0 raw file bytes), all writes gated OFF by default until WP5.
+- **Milestone:** M9 WP2.5 — Claudesk-native signal source (focus/blur + PTY keystrokes + registry attribution).
 
 ## 2026-07-06
 

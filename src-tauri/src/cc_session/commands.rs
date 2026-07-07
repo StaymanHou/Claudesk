@@ -82,6 +82,7 @@ pub fn term_spawn(
 /// Forward keystroke bytes (base64-encoded) to a session's PTY.
 #[tauri::command]
 pub fn cc_input(
+    app: AppHandle,
     registry: State<'_, Registry>,
     session_id: String,
     data: String,
@@ -89,10 +90,18 @@ pub fn cc_input(
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data.as_bytes())
         .map_err(|e| format!("invalid base64 input: {e}"))?;
-    let reg = registry
-        .lock()
-        .map_err(|_| "session registry lock poisoned".to_string())?;
-    reg.input(&session_id, &bytes).map_err(|e| e.to_string())
+    let byte_count = bytes.len();
+    {
+        let reg = registry
+            .lock()
+            .map_err(|_| "session registry lock poisoned".to_string())?;
+        reg.input(&session_id, &bytes).map_err(|e| e.to_string())?;
+    } // drop the registry lock before the (independent, gated) telemetry write.
+      // M9 WP2.5 Phase 3: record keystroke ACTIVITY (byte count + attribution) — NEVER
+      // the bytes. Best-effort + gated (zero-IO when tracking is OFF, the WP2 default);
+      // a telemetry miss must not affect input delivery, which already succeeded above.
+    crate::time_store::commands::record_keystroke_activity(&app, &session_id, byte_count);
+    Ok(())
 }
 
 /// Signal that the frontend has attached its `cc-output-<sid>` listener and is ready to

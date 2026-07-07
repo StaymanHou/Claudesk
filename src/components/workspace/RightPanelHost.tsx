@@ -366,6 +366,26 @@ export function RightPanelHost({
   // stay mounted (display:none toggle) so each keeps its state across switches.
   const [panel, setPanel] = useState<RightPanel>("editor");
 
+  // M9 WP2.5 — report the ACTIVE CONTEXT (workspace + right-panel surface) to the
+  // backend so native-signal rows (focus/blur, keystrokes) attribute correctly. This
+  // RightPanelHost owns BOTH the workspace identity AND the active surface, so it is the
+  // single emitter: fire whenever THIS workspace is the visible/center-staged tab and
+  // its surface changes. A center-stage SWITCH makes the newly-focused workspace's host
+  // `visible` → this fires with its current surface (covers OQ1's workspace-switch case);
+  // a surface SWITCH while visible fires with the new surface (OQ4). Not gated here — the
+  // backend gates the WRITES this context feeds; setting the context is always cheap.
+  useEffect(() => {
+    if (!visible) return; // only the center-staged workspace defines the active context.
+    void invoke("time_set_active_context", {
+      workspaceId,
+      surface: panel,
+      cwd: projectPath,
+    }).catch((e) => {
+      // Best-effort telemetry attribution — never disrupt the UI on a failed report.
+      console.error("[claudesk] time_set_active_context failed:", e);
+    });
+  }, [visible, panel, workspaceId, projectPath]);
+
   // M6 WP11 — the right-panel TERMINAL LIST (N terminals per workspace). Seeded with one
   // terminal (`-term-0`); open/switch/close drive the pure terminalList reducer ops. All
   // entries stay MOUNTED (display:none for the non-active one) so each shell + scrollback

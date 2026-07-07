@@ -149,7 +149,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Fix shape:** a debug-log or a `None`-drop on absent timestamp — cheaper guard than a silent 0. Consider closing during WP2.5 (native signal source) when the second writer lands.
 - **Why it matters:** a load-bearing ordering key silently defaulting to a sentinel is a latent data-quality trap for the downstream consumer this feature exists to feed.
 - **Priority:** low.
-- **Status:** pending.
+- **Status:** pending — **WP2.5 update (2026-07-07):** the second writer (native signals) landed and uses `now_ms()` (a real `SystemTime` epoch-ms), so it NEVER hits this fallback — the "if WP2.5 forgets to stamp" risk this finding anticipated did NOT materialize. But the finding stands as-is: it's about the **CC-hook** `event_to_row` path (`ts` from `HookEvent::timestamp`), which WP2.5 did not touch. Still low-priority pending for a future guard.
 
 ## SURFACE-2026-07-07-QUALITY-SCHEMA-COLUMN-VS-META-ASYMMETRY
 - **Severity:** MINOR
@@ -157,5 +157,27 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** `tool_name` and `agent_type` are first-class columns, but `source` (SessionStart) and `prompt_length_chars` (UserPromptSubmit) live inside the `meta` JSON blob. Faithfully mirrors claude-time (defensible), but WP3 must query two shapes (columns for some fields, JSON extraction for others).
 - **Fix shape:** a one-line note in the schema doc-comment on *why* `tool_name`/`agent_type` earned columns while the others stayed in `meta` (query-frequency? claude-time parity?). Documentation nit; the shape is intentional.
 - **Why it matters:** reduces WP3 onboarding cost.
+- **Priority:** low.
+- **Status:** pending.
+
+# m9-wp2.5-claudesk-native-signal-source — 2026-07-07
+
+*(feature-review-quality, uncommitted working-tree baseline; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: well-built, disciplined, no debt; privacy-by-closed-enum is the standout. One MINOR — stale Sublime "transitional" doc-comment — was FIXED INLINE at review time. The two below are auto-backlogged; both fold into one small readability pass on `time_set_active_context`. None warrant a refactor now.)*
+
+## SURFACE-2026-07-07-QUALITY-ACTIVECTX-TRIPLE-LOCK
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/commands.rs` (~197-204, `time_set_active_context`)
+- **Finding:** The command locks the `SharedActiveContext` mutex three times (read-for-compare → `set_active_context` re-lock-and-write → re-lock-and-clone for the `ActiveSurface` emit). No TOCTOU/correctness risk — it's the sole writer and all `#[tauri::command]` fns run on the main thread (reviewer confirmed) — but the three-acquisition dance reads as if it were concurrency-sensitive.
+- **Fix shape:** collapse to a single lock scope returning `(surface_changed, snapshot)`. Readability polish only.
+- **Why it matters:** the signal path is re-touched in WP3/WP5; clearer code lowers that cost. Not a bug.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-07-QUALITY-ACTIVECTX-POISON-DISPOSITION
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/commands.rs` (~197, the surface-change compare)
+- **Finding:** The surface-change check swallows a poisoned lock as `unwrap_or(false)` (silently skip the `ActiveSurface` emit), while the immediately-following `set_active_context` surfaces the same poison as `Err`. Two dispositions for one lock in one function — both defensible for telemetry, but the asymmetry reads as an oversight.
+- **Fix shape:** a one-line comment on the `unwrap_or(false)` ("poison here just skips the marker; the write below surfaces it"), OR fold into the single-lock refactor above (which removes the second acquisition entirely).
+- **Why it matters:** trivial clarity; behavior is acceptable as-is. Folds with the triple-lock cleanup.
 - **Priority:** low.
 - **Status:** pending.

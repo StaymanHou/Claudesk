@@ -107,6 +107,11 @@ pub fn run() {
         // M7: the menu-bar tray state (built tray handle + per-workspace alarm map). Managed
         // before `init_tray` runs in setup so the `workspace-status` listener can reach it.
         .manage(tray::commands::TrayState::default())
+        // M9 WP2.5: the active-context signal (which workspace/right-panel surface is
+        // active) — set by the frontend's time_set_active_context, read by the focus
+        // handler + keystroke path to attribute native-signal rows. Managed early so the
+        // focus handler can reach it from the first Focused event.
+        .manage(time_store::commands::init_active_context())
         // M3 WP2: register Claudesk's CC hook in ~/.claude/settings.json on launch
         // (deploy the bundled script to app-data, chmod +x, additive-merge the three
         // M3 events). Idempotent + additive + reversible (see hook_install). A
@@ -388,6 +393,12 @@ pub fn run() {
             // setFrameOrigin: (the Tauri move path + movableByWindowBackground are both inert
             // on this borderless NonactivatingPanel — see pip_move's doc comment).
             pip::commands::pip_move,
+            // M9 WP2.5: the frontend reports the active workspace + right-panel surface
+            // (editor/diff/terminal) here on center-stage promote AND surface switch, so
+            // the focus handler + keystroke path attribute native-signal rows to the
+            // right workspace/surface (OQ1 + OQ4). Pure state-set; the WRITES it feeds are
+            // gated on the tracking toggle.
+            time_store::commands::time_set_active_context,
         ])
         .on_window_event(|window, event| {
             // M5 WP5 Phase 2 — auto-summon/dismiss state machine, driven by the MAIN
@@ -402,6 +413,11 @@ pub fn run() {
                     // low-noise breadcrumb for live focus debugging).
                     eprintln!("[claudesk] focus-probe: main window focused={focused}");
                     pip::commands::pip_on_main_focus_changed(window.app_handle(), *focused);
+                    // M9 WP2.5: record the focus/blur transition as a native-signal row,
+                    // gated + attributed to the active context. Independent of the PiP
+                    // path above — best-effort, zero-IO when the tracking gate is OFF
+                    // (the WP2 default). Must not perturb focus handling or PiP.
+                    time_store::commands::record_focus_change(window.app_handle(), *focused);
                 }
             }
             // WP7 shutdown: kill every CC child on window close so we never leak an

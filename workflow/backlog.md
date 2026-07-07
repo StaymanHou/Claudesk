@@ -12,6 +12,12 @@
 
 > **QoL/lifecycle sweep finalize — backlog sweep 2026-06-25 (`/product-finalize`, operator-requested between-milestone run).** The QoL scratch sweep (WP0–WP8, not a roadmap milestone) is complete; `qol-wbs.md` retired. Sweep disposition: **all of this cycle's resolutions were already recorded incrementally at each WP's own `feature-finalize`** — every `SURFACE-2026-06-24-*` item is RESOLVED (WP1–WP7) and `SURFACE-2026-06-20-WP4-DIFF-VIEWER-POLISH-FOLLOWUPS` was closed at WP8 finalize — so this sweep found **no newly-resolvable items**. The ~37 still-`pending` entries are: (a) ~32 **code-quality MINOR/MAJOR findings** held for a future `/feature-refactor` batch (standing by design — not cycle-resolved), and (b) the substantive forward-look SURFACEs, all **DEFERRED → carry forward** with existing anchors intact: `SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI` (→ M5 planning), `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP` (→ test-infra investment), `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (→ M9 startup-trim), `SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET` + independent-pane (→ later editor-polish), `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` (→ M6). `SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE` was already RESOLVED 2026-06-21. **Nothing escalated; nothing blocks M5 (PiP).** Each item keeps its own `Status:` detail; this note records the en-masse disposition. Next `/product-wbs` should re-triage the forward-look SURFACEs against M5's scope.
 
+## Code-quality findings — m9-wp2.5-claudesk-native-signal-source (2026-07-07)
+- **Pointer:** 2 MINOR findings auto-backlogged (0 CRITICAL, 0 MAJOR; a 3rd MINOR — a stale "Sublime Text pop is transitional" doc-comment contradicting the WP8-kept-both decision — was FIXED INLINE at review time) from `feature-review-quality` on the uncommitted WP2.5 working tree. Both remaining are readability polish on `time_set_active_context` and fold into ONE small pass: (1) it triple-locks the `SharedActiveContext` mutex (compare → set → clone-for-emit) — harmless (sole writer, main-thread) but reads as concurrency-sensitive; collapse to a single lock returning `(changed, snapshot)`; (2) the surface-change compare swallows a poisoned lock as `unwrap_or(false)` while the following `set_active_context` surfaces the same poison as `Err` — inconsistent disposition; a one-line comment or the single-lock refactor resolves it. Reviewer: well-built + disciplined, no debt, privacy-by-closed-enum is the standout; nothing warrants a refactor now. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m9-wp2.5-claudesk-native-signal-source — 2026-07-07`.
+- **Priority:** low (all)
+- **Status:** pending
+- **Pickup shape:** one tiny `/feature-refactor` pass — collapse the `time_set_active_context` triple-lock to a single lock scope (absorbs both findings). Dismiss either via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — m9-wp2-absorbed-hook-write-gated-sqlite-writer (2026-07-07)
 - **Pointer:** 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `dc3b89e` — all low-risk: (1) the end-to-end privacy leak test (`hook_pl_output.rs`) asserts `!contains("SECRET")` against a hardcoded literal that only coincidentally overlaps the injected prompt — should compare the real `secret` var so it can't silently weaken; (2) `time_store/mod.rs` `ts` silently falls back to epoch `0` on an absent timestamp (unreachable via the Perl hook today, but a data-quality trap once WP2.5's native-signal writer shares the store — consider closing at WP2.5); (3) schema doc-nit — `tool_name`/`agent_type` are columns while `source`/`prompt_length_chars` live in the `meta` JSON blob, undocumented why (WP3 must query two shapes). Reviewer: well-built, invariants (fan-out independence, gate-OFF zero-IO, privacy) defended by construction + test-pinned; nothing warrants a refactor pass. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m9-wp2-absorbed-hook-write-gated-sqlite-writer — 2026-07-07`.
 - **Priority:** low (all)
@@ -29,6 +35,26 @@
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** one `/feature-refactor` pass — a one-line `aria-label`, plus two comment enrichments. Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL
+- **Source:** operator request (2026-07-07, during M9 WP2.5)
+- **Target level:** product:roadmap (anchored on Milestone 11 — workflow-docs markdown viewer)
+- **Type:** new-work (improvement / UX refinement)
+- **Summary:** When a WIP/doc `.md` file rendered in the (future M11) Docs viewer changes on disk, the reload currently scrolls the view back to the top. The Docs viewer must reload the file content **in place, preserving scroll position** (offset or anchor), so watching a live-updating WIP file doesn't yank the reader to the top on every change.
+- **Context:** The operator watches `workflow/wip/*.md` update live in the editor/viewer as CC edits it (exactly this session's flow). The naive "re-read → replace content" reload resets scroll to top — disruptive precisely in the live-watch case the viewer is most useful for. This is M11's surface (the Docs panel rendering conventional docs + the `fs-change` watcher that already exists from QoL-WP0).
+- **Suggested action:** In the M11 Docs-viewer render path, on an `fs-change`-triggered reload, capture the scrollTop (or a stable anchor — e.g. nearest heading/line) before replacing content and restore it after. Applies to the read-only markdown render specifically; if the same scroll-jump affects the *editor* on external reload, fold that in too. Added as an M11 deliverable bullet in roadmap.md + its exit criterion.
+- **Priority:** medium (real daily-use friction, but on M11 which is a few milestones out; no rush)
+- **Status:** pending (roadmap-anchored on M11)
+
+## SURFACE-2026-07-07-WP2-FMT-DRIFT
+- **Source:** feature:build (M9 WP2.5 Phase 1)
+- **Target level:** product:wbs
+- **Type:** tech-debt
+- **Summary:** `cargo fmt --check` exits 1 on pre-existing formatting drift in `src-tauri/src/hook_install/mod.rs:356` and `src-tauri/src/hook_socket/mod.rs:372` — both committed by M9 WP2 (`dc3b89e`), NOT touched by WP2.5.
+- **Context:** WP2.5 leaves these unformatted to avoid sweeping WP2's files into a WP2.5 commit. WP2.5's own files (`time_store/*`) are fmt-clean. The drift is a long-assert-macro rewrite + a long-string-literal wrap that `rustfmt` wants.
+- **Suggested action:** `cargo fmt` these two files in a `/feature-refactor` pass or the next WP2-adjacent touch (single command, cosmetic).
+- **Priority:** low
+- **Status:** pending
 
 ## SURFACE-2026-07-06-M10-IN-APP-AUTO-UPDATER
 - **Source:** operator request (2026-07-06) — "insert a milestone after M9 and before the next release: an in-app updater"
@@ -57,7 +83,7 @@
   2. **Measure-vs-infer architecture NOT pre-committed — decided at WP3 `/feature-spec`.** WP3's mandatory spec (already spec-first per `SURFACE-2026-07-06-M9-RECLASSIFIER-IS-REDESIGN-NOT-PORT`) gains a first-class agenda item: with the full native-signal inventory in hand, decide per human-state which is MEASURED (from native signals) vs. must stay INFERRED (from CC-hook gaps, as a fallback when Claudesk isn't the active window / signal is ambiguous). The scenario enumeration above IS the spec input.
 - **Ripple:** WP2.5 is NEW (between WP2 and WP3 on the critical path). WP3's spec + reclassifier grow (two input sources, per-scenario rules). WP4's query layer may carry richer segment kinds. WP1's frozen contract already carries the "may shift" caveat, which now also covers native-signal-driven kinds. WP5's tracking toggle must gate the native-signal writes too (same write-only-when-on rule).
 - **Priority:** high (reshapes the milestone's core value prop — "measure, don't guess" — and adds a WP on the critical path; must be settled before WP3 designs the metrics)
-- **Status:** RECORDED — WP2.5 added to `docs/product/wbs.md`; WP3 spec agenda + WP1 outcome-doc caveat updated. Resolves when WP2.5 ships + WP3 locks the measure-vs-infer rules.
+- **Status:** IN-PROGRESS — **WP2.5 SHIPPED 2026-07-07** (native-signal capture layer: window focus/blur + PTY keystroke activity + active-surface + Claudesk-external-launch marks + registry attribution, all gated + privacy-by-closed-enum; schema + 5-scenario resolution handed to WP3 in `docs/product/wp2.5-native-signal-schema.md`). Half the SURFACE (capture) is now done; **resolves fully when WP3 locks the measure-vs-infer rules** over the captured signals. WP3 spec agenda + WP1 outcome-doc caveat already updated.
 
 ## SURFACE-2026-07-06-M9-COLOR-FAMILIES-AI-VS-HUMAN
 - **Source:** operator design intent (2026-07-06, at M9 WP1 verify-human)
