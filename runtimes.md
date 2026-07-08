@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-07  # M9 WP2 P3 codify: cargo test 350 pass (+fan-out gate-OFF test)
+updated: 2026-07-08  # M9 WP4 P1 build: cargo test 435 lib pass (+2 reclassify correctness tests)
 ---
 
 # Runtime Registry
@@ -68,9 +68,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.37s (2026-06-28, M6 WP8 static gate: 780 pass / 79 files, no new tests — verification-only WP baseline)
+- **Last:** 1.48s (2026-07-08, M9 WP4 P3 build: +5 timeAnalytics DTO-contract + wiring tests → 82 files / 806 pass)
 - **Use timeout:** 120000
 - **History:**
+  - 1.48s — 2026-07-08 (M9 WP4 P3 build: +5 timeAnalytics.test.ts [DTO shape + ?raw invoke-wiring guards] → 82 files / 806 pass)
   - 1.37s — 2026-06-28 (M6 WP8 static gate: 780 pass / 79 files, verification-only baseline)
   - 1.3s — 2026-06-28 (M6 WP7 P3 build: 731 pass / 75 files, +5 pickerYoloWiring guards)
   - 1.3s — 2026-06-28 (M6 WP7 P2 build: 726 pass / 74 files, +3 cc-yolo menuBridge + App.tsx wiring guards)
@@ -115,9 +116,12 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.69s (2026-07-07, M9 WP3 P4 verify-auto: reclassify scenario suite → 433 lib pass; warm)
+- **Last:** 0.80s (2026-07-08, M9 WP4 P3 build: +7 command tests [time_analytics_query window deser/resolve/query_window/result-tag], 457 lib + 5 integ = 462 pass; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.80s — 2026-07-08 (M9 WP4 P3 build: +7 time_store::commands tests [time_analytics_query], 457 lib + 5 integ = 462 pass; warm)
+  - 1.00s — 2026-07-08 (M9 WP4 P2 build: +15 time_store::query tests [day/range/week builders + snake_case DTO key-shape], 450 lib + 5 integ = 455 pass; warm. Cold compile of the new chrono dep was ~12s.)
+  - 0.72s — 2026-07-08 (M9 WP4 P1 build: +2 reclassify tests [surface_tie_break_is_last_wins_same_ms, trailing_open_await_is_bounded_at_window_end_not_dropped], 435 lib pass; warm)
   - 0.69s — 2026-07-07 (M9 WP2.5 P4 codify [FINAL]: +4 tests [launch tool-id all 3, launch gate-off, ActiveSurface attribution, surface-change detect], 367 lib + 5 integ = 372 pass; warm)
   - 0.70s — 2026-07-07 (M9 WP2.5 P3 codify: +3 tests [keystroke privacy SECRETKEYS, gate on/off, count+attribution], 363 lib + 5 integ = 368 pass; warm)
   - 0.79s — 2026-07-07 (M9 WP2.5 P2 codify: +4 tests [set_active_context round-trip/clear, focus-row attribution, empty-context blur], 360 lib + 5 integ = 365 pass; warm)

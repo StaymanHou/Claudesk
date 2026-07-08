@@ -404,6 +404,10 @@ pub fn run() {
             // right workspace/surface (OQ1 + OQ4). Pure state-set; the WRITES it feeds are
             // gated on the tracking toggle.
             time_store::commands::time_set_active_context,
+            // M9 WP4: the segment-model query command — reads the events rows for a
+            // window (day/week/custom), runs the WP3 reclassifier + WP4 transform, and
+            // returns the DayPayload/WeekPayload the dashboard (WP6) will render.
+            time_store::commands::time_analytics_query,
         ])
         .on_window_event(|window, event| {
             // M5 WP5 Phase 2 — auto-summon/dismiss state machine, driven by the MAIN

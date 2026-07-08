@@ -89,6 +89,13 @@ trash = "5"
 # gated INSERT); the Perl hook stays a pure socket-forwarder (NOT claude-time's
 # sqlite3-subprocess-in-the-hook design). Reconciled into arch.md at WP7.
 rusqlite = { version = "0.32", features = ["bundled"] }
+# M9 WP4 (time-analytics query layer): local-timezone day/window math. The segment
+# model's coordinate system is "minutes-from-LOCAL-midnight" and days are bucketed on
+# the operator's local calendar (per the WP1-frozen contract). `chrono` with `clock`
+# (local-tz) is the standard, sound way to do that boundary math; `default-features =
+# false` keeps it lean (no `oldtime`/serde-of-Duration surface we don't use). Used only
+# by `time_store::query`.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 # M5 WP2 (PROBE — agent UI-driver adopt/reject): the MCP bridge plugin that drives
 # the real WKWebView with live Tauri IPC (so a workspace actually mounts under an

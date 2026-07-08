@@ -34,6 +34,9 @@
 //!   live in [`commands`].
 
 pub mod commands;
+// M9 WP4: the segment-model query layer — reads `events` rows for a window, runs the
+// WP3 reclassifier, emits the DayPayload/WeekPayload/RangePayload segment-model DTOs.
+pub mod query;
 
 use rusqlite::Connection;
 use serde_json::json;

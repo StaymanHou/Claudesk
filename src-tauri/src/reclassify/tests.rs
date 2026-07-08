@@ -844,6 +844,33 @@ fn surface_editor_reads_latest_active_surface_row() {
     assert!(surface_is_editor_at(&events, 600)); // latest at-or-before 600 is editor
 }
 
+#[test]
+fn surface_tie_break_is_last_wins_same_ms() {
+    // WP4 fix (SURFACE-2026-07-07-QUALITY-WP3-SURFACE-TIE-BREAK-ORDER-DEPENDENT): two
+    // surface rows at the SAME ts must resolve deterministically, NOT by input order
+    // (group_by_session/row source do not guarantee order). We sort by (ts, surface) and
+    // take the last, so `"terminal" > "editor"` lexically → terminal wins REGARDLESS of the
+    // order the two same-ms rows appear in the slice. Feed both orderings; the verdict must
+    // be identical (and false, since terminal is the deterministic winner).
+    let editor_first = [
+        native_meta(500, "ActiveSurface", r#"{"surface":"editor"}"#),
+        native_meta(500, "ActiveSurface", r#"{"surface":"terminal"}"#),
+    ];
+    let terminal_first = [
+        native_meta(500, "ActiveSurface", r#"{"surface":"terminal"}"#),
+        native_meta(500, "ActiveSurface", r#"{"surface":"editor"}"#),
+    ];
+    assert_eq!(
+        surface_is_editor_at(&editor_first, 600),
+        surface_is_editor_at(&terminal_first, 600),
+        "a same-ms surface tie must not depend on input order"
+    );
+    assert!(
+        !surface_is_editor_at(&editor_first, 600),
+        "with a (ts, surface) sort, `terminal` deterministically wins the same-ms tie"
+    );
+}
+
 // ---- human_segments_for_window end-to-end (P3.5) --------------------------
 
 #[test]
@@ -1013,6 +1040,48 @@ fn scenario_b4_awaiting_collapses_to_capped_working_idle_collapses_to_away() {
     assert_eq!(
         classify_gap(&ctx_i, 0, 11 * 60_000, false),
         HumanState::Away
+    );
+}
+
+#[test]
+fn trailing_open_await_is_bounded_at_window_end_not_dropped() {
+    // WP4 fix (SURFACE-2026-07-07-QUALITY-WP3-TRAILING-OPEN-AWAIT-FALLS-TO-AWAY): an
+    // AwaitingInput span still OPEN at the data tail (operator servicing a prompt CC is
+    // blocked on RIGHT NOW — the freshest slice a live dashboard renders) must be BOUNDED at
+    // the window end so classify_gap branch 2 can grant capped-working credit — NOT silently
+    // dropped. The window-aware entry point (awaiting_input_spans_bounded / build_with_window,
+    // used by human_segments_for_window) produces the span; the bare entry point (window_end
+    // = None, used where no window is known) keeps the historical drop.
+    let window_end = 1000 + 12 * 60 * 1000;
+    let events = [notif(1000, "permission_prompt")]; // opens AwaitingInput, never closed
+
+    // Bounded: the open await becomes a real [1000, window_end] span (working-credit source).
+    assert_eq!(
+        awaiting_input_spans_bounded(&events, Some(window_end)),
+        vec![(1000, window_end)],
+        "an unclosed await must be bounded at window_end, not dropped"
+    );
+    // Bare (no window): historical drop preserved (nothing to close it against).
+    assert!(
+        awaiting_input_spans(&events).is_empty(),
+        "with no window bound the unclosed await is still dropped (conservative fallback)"
+    );
+
+    // Consequence in classify_gap: the bounded context grants working-credit at gap_start,
+    // so branch 2 owns the classification (capped-working) rather than falling through to the
+    // no-credit Away branch. (With the operator's LOCKED equal thresholds — SILENCE_CAP ==
+    // AWAY_THRESHOLD, both 10min — the *verdict* for a silent long gap is Away either way;
+    // see the discovery note. The fix's value is decoupling correctness from that threshold
+    // coincidence: the moment the caps diverge, the dropped span would misclassify and the
+    // bounded one would not. We pin the STRUCTURAL fix — the span exists — which is the
+    // behavior-independent guarantee.)
+    let ctx_bounded = GapContext::build_with_window(&events, Some(window_end));
+    // A SHORT bounded-await gap is Reviewing (working-credit, under the cap) — the everyday
+    // "servicing the prompt" slice a live dashboard shows.
+    assert_eq!(
+        classify_gap(&ctx_bounded, 1000, 1000 + 3 * 60_000, false),
+        HumanState::Reviewing,
+        "a bounded open-await gap reads as capped-working while under the silence cap"
     );
 }
 

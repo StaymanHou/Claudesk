@@ -276,3 +276,24 @@
 
 ## Code-quality findings — file-op-error-surface (2026-06-30)
 - **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
+
+## SURFACE-2026-07-08-QUALITY-WP4-P20-ALLOW-STAYS-MULTI-WP-CONSUMER
+- **Source:** feature:build (M9 WP4 Phase 2, P2.0)
+- **Target level:** product:wbs
+- **Type:** gap (plan-assumption correction)
+- **Summary:** WP4 P2.0 planned to REMOVE `reclassify`'s module-level `#![allow(dead_code)]` once the query layer imported the module. That premise was too strong: importing a SUBSET doesn't make the whole module used. WP4 consumes only the tiling subset (`EventRow`/`Kind`/`Segment`/`ai_busy_intervals`/`ai_segments_for_window`/`human_segments_for_window`); the derived-metric helpers (`tool_durations_ms`/`subagent_durations_ms`/`session_active_ms`/`active_bursts`/`tool_intervals`) are WP6c-metrics-bound with no WP4 caller (removing the allow → 61 dead-code errors).
+- **Context:** the reclassify surface is an analytics-primitives library whose consumers span multiple M9 WPs (WP4 tiling + WP6c metrics) + internal/test-only helpers — not fully consumed until M9 completes. Deleting WP6c-bound-but-tested helpers or fabricating callers would both be wrong.
+- **Resolution (done this WP):** kept a module-scoped allow on `reclassify` (re-documented rationale). The `time_store::query` allow was added at P2.0 then REMOVED at P3.2 once the `time_analytics_query` command consumed `build_range`/`build_week`/`rows_in_window` (clippy `-D warnings` clean without it) — so only the reclassify allow remains. Honest dead-code signal survives within-phase.
+- **Suggested action:** at WP6c, once the metrics panels consume the derived-metric helpers (`tool_durations_ms`/`subagent_durations_ms`/`session_active_ms`/`active_bursts`), re-evaluate whether the remaining reclassify allow can be narrowed to targeted per-item allows or removed. Track as the natural close of the "allow comes off when M9's WPs collectively consume the surface" note.
+- **Priority:** low (documented + working; a tidy-up opportunity at WP6c, not a defect)
+- **Status:** pending (WP6c re-evaluation — the query-module half already resolved at P3.2).
+
+## SURFACE-2026-07-08-WP4-CHRONO-DEP-ADDED
+- **Source:** feature:build (M9 WP4 Phase 2, P2.3)
+- **Target level:** product:arch
+- **Type:** new-work (dependency + arch-resync note)
+- **Summary:** Added `chrono` 0.4 (`default-features=false`, features `clock`+`std`) as a direct dependency of `src-tauri` for the time-analytics query layer's local-timezone day-boundary math (minutes-from-local-midnight coordinate system + local-calendar day bucketing, per the WP1-frozen contract).
+- **Context:** no direct date/time crate existed; `time` 0.3 is transitively compiled but its local-offset path is soundness-guarded/finicky, and `chrono` was lockfile-only for a non-compiled target. Mechanical dep-add within WP4's accepted scope (contract already mandates local-tz coords), NOT an arch change.
+- **Suggested action:** reconcile into `arch.md` at WP7 alongside the SQLite-store note (the M9 arch-resync).
+- **Priority:** low (reconcile at WP7).
+- **Status:** pending (WP7 arch-resync).

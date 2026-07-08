@@ -34,14 +34,23 @@
 //! `active` is NOT a segment kind in the redesign — `active_bursts`/`session_active_ms`
 //! survive only to feed the DERIVED "engaged time" summary metric.
 //!
-//! ## Dormant until WP4 (the `dead_code` allow)
-//! Every public item here is exercised by this module's own tests but has **no
-//! non-test caller yet** — WP4 (the segment-model query layer) is the first consumer:
-//! it will read the SQLite rows, map them into [`EventRow`], and call this module.
-//! Until then the whole surface is "dead code" to the non-test build, so a module-wide
-//! `#![allow(dead_code)]` keeps `-D warnings` green during the phased build. Mirrors how
-//! `time_store` carried its dormant WP2.5 layer. **Remove this allow at WP4** once the
-//! query layer imports the module (the same discipline `time_store` followed).
+//! ## Consumers span multiple WPs (the `dead_code` allow, narrowed rationale)
+//! This module is an analytics-primitives library whose consumers land across M9's
+//! remaining WPs, NOT all at once:
+//! - **WP4 (`time_store::query`)** consumes the *tiling* subset — [`EventRow`],
+//!   [`Kind`], [`Segment`], [`ai_busy_intervals`], [`ai_segments_for_window`],
+//!   [`human_segments_for_window`] — to build the segment model.
+//! - **WP6c (dashboard metrics/compare panels)** will consume the *derived-metric*
+//!   subset — [`tool_durations_ms`], [`subagent_durations_ms`], [`session_active_ms`],
+//!   [`active_bursts`] — which WP4 does NOT call.
+//! - Several helpers ([`classify_gap`], [`awaiting_input_spans`], [`launch_marks`], …)
+//!   are `pub` for the test suite + called *internally*; they have no external caller.
+//!
+//! So a module-wide `#![allow(dead_code)]` stays: WP4 P2.0's premise (that importing
+//! the module makes the whole surface used) was too strong — WP4 imports only a
+//! subset, and deleting the WP6c-bound helpers (tested + needed next WP) or fabricating
+//! callers would both be wrong. The allow is removed when M9's WPs collectively consume
+//! the surface (WP6c is the last). See `SURFACE-2026-07-08` in the WIP Discoveries.
 #![allow(dead_code)]
 
 use std::collections::HashMap;
@@ -616,10 +625,12 @@ pub mod constants {
     /// precede the blur. Leaned to 30s.
     pub const BLUR_LAUNCH_CORRELATION_MS: i64 = 30 * 1000;
 
-    /// Typing-rate fallback (chars/sec) used ONLY when a gap has no native
-    /// `KeystrokeActivity` coverage (pre-capture sessions / native signals off). With
-    /// native rows present, real keystroke timestamps supersede this. `claude-time`'s value.
-    pub const CHARS_PER_SEC_FALLBACK: f64 = 6.0;
+    // NOTE (WP4, chars_per_sec drop-vs-wire — DROPPED): claude-time carried a
+    // `CHARS_PER_SEC_FALLBACK` typing-rate constant to *estimate* typing time from a
+    // prompt's character count. The WP3 redesign made the human classifier
+    // presence/threshold-based (real `KeystrokeActivity` presence + silence caps), so no
+    // code multiplies a char count by a rate — the constant had no consumer. Removed here
+    // rather than carried dead. (`SURFACE-2026-07-07-*` WP4-boundary decision.)
 }
 
 /// The human states a gap can be classified as (the [`Kind`] subset produced by the gap
@@ -677,6 +688,26 @@ pub fn ai_busy_intervals(events: &[EventRow]) -> Vec<(i64, i64)> {
 /// the same conservative choice — an unrecognized/absent notification is assumed to be a
 /// real prompt.
 pub fn awaiting_input_spans(events: &[EventRow]) -> Vec<(i64, i64)> {
+    awaiting_input_spans_bounded(events, None)
+}
+
+/// [`awaiting_input_spans`] with an explicit `window_end` bound for a still-open await.
+///
+/// When `window_end` is `Some(end)`, an AwaitingInput span still open at the session's
+/// last event is closed at `end` (clamped so it never runs backwards) rather than dropped.
+/// This is the WP4 tail-of-stream fix (`SURFACE-2026-07-07-QUALITY-WP3-TRAILING-OPEN-AWAIT-
+/// FALLS-TO-AWAY`): an operator actively servicing a prompt CC is blocked on RIGHT NOW is
+/// the freshest slice a live dashboard renders; dropping the open span left `classify_gap`
+/// branch 2 with no working-credit → the gap fell through to **Away** instead of the
+/// intended capped-working. Bounding it at the window end restores the working-credit so
+/// the tail classifies as Reviewing (capped-working), matching "measure, don't infer".
+///
+/// `window_end == None` preserves the historical drop-behavior (used by the bare
+/// [`awaiting_input_spans`] entry point + its tests, which have no window bound).
+pub fn awaiting_input_spans_bounded(
+    events: &[EventRow],
+    window_end: Option<i64>,
+) -> Vec<(i64, i64)> {
     use crate::status_broadcaster::notification_awaits_input;
     let mut spans: Vec<(i64, i64)> = Vec::new();
     for sid_events in group_by_session(events, |_| true).values() {
@@ -707,10 +738,15 @@ pub fn awaiting_input_spans(events: &[EventRow]) -> Vec<(i64, i64)> {
                 _ => {}
             }
         }
-        // An await still open at the session's last event: leave open-ended (no close).
-        // The gap machine treats "inside an await span" via point-membership, so an
-        // unclosed await simply has no upper bound here and is handled by the caller's
-        // window clamp. We drop it (can't bound it) — conservative.
+        // An await still open at the session's last event: bound it at `window_end` when
+        // one is supplied (the WP4 fix), so the operator servicing the still-open prompt
+        // gets capped-working credit for the freshest slice — not a silent drop to Away.
+        // Without a window bound we can't close it, so we drop it (conservative fallback).
+        if let (Some(start), Some(end)) = (open, window_end) {
+            if end > start {
+                spans.push((start, end));
+            }
+        }
     }
     merge_spans(&mut spans)
 }
@@ -768,15 +804,25 @@ pub struct GapContext {
 
 impl GapContext {
     /// Precompute the awaiting-input spans, launch marks, activity marks, and keystroke
-    /// timestamps for a full event set.
+    /// timestamps for a full event set. A still-open await at the data tail is DROPPED
+    /// (no window bound). Prefer [`GapContext::build_with_window`] from the query layer,
+    /// which bounds a trailing-open await at the window end (the WP4 tail-of-stream fix).
     pub fn build(events: &[EventRow]) -> Self {
+        Self::build_with_window(events, None)
+    }
+
+    /// [`GapContext::build`] with an explicit `window_end` so a still-open AwaitingInput
+    /// span at the data tail is bounded at the window end instead of dropped
+    /// (`SURFACE-2026-07-07-QUALITY-WP3-TRAILING-OPEN-AWAIT-FALLS-TO-AWAY`). The query
+    /// layer ([`human_segments_for_window`]) passes its real `window_end` here.
+    pub fn build_with_window(events: &[EventRow], window_end: Option<i64>) -> Self {
         let keystrokes = events
             .iter()
             .filter(|e| e.source == "claudesk-native" && e.event == "KeystrokeActivity")
             .map(|e| e.ts)
             .collect();
         GapContext {
-            awaiting: awaiting_input_spans(events),
+            awaiting: awaiting_input_spans_bounded(events, window_end),
             launches: launch_marks(events),
             activity: activity_marks(events),
             keystrokes,
@@ -877,7 +923,12 @@ pub fn classify_gap(
 /// dominant idle state — which the machine measures as Typing-family human work (per the
 /// locked definition: "editor-active + no PTY keystrokes" is the reading signal). (P3.5.)
 pub fn surface_is_editor_at(events: &[EventRow], ts: i64) -> bool {
-    let mut latest: Option<(i64, String)> = None;
+    // Collect every native surface-bearing row at-or-before `ts`, then pick the latest
+    // deterministically. `group_by_session`/the row source do NOT guarantee input order,
+    // so a same-`ts` surface flip must NOT resolve by iteration order (the confabulation-
+    // channel class). We sort by `(ts, surface)` and take the last — last-wins on ts, and
+    // a stable secondary key (`surface`) breaks a genuine same-ms tie deterministically.
+    let mut candidates: Vec<(i64, String)> = Vec::new();
     for e in events {
         if e.source != "claudesk-native" {
             continue;
@@ -890,14 +941,12 @@ pub fn surface_is_editor_at(events: &[EventRow], ts: i64) -> bool {
             "ActiveSurface" | "WindowFocus" | "WindowBlur"
         ) {
             if let Some(surface) = e.meta_str("surface") {
-                match &latest {
-                    Some((prev_ts, _)) if *prev_ts >= e.ts => {}
-                    _ => latest = Some((e.ts, surface)),
-                }
+                candidates.push((e.ts, surface));
             }
         }
     }
-    matches!(latest, Some((_, s)) if s == "editor")
+    candidates.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    matches!(candidates.last(), Some((_, s)) if s == "editor")
 }
 
 /// Merge overlapping/adjacent spans into a sorted, non-overlapping cover. `spans` is
@@ -931,7 +980,7 @@ pub fn human_segments_for_window(
     if window_end <= window_start {
         return Vec::new();
     }
-    let ctx = GapContext::build(events);
+    let ctx = GapContext::build_with_window(events, Some(window_end));
     let mut busy = ai_busy_intervals(events);
     let gaps = complement(window_start, window_end, &mut busy);
 

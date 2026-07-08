@@ -15,10 +15,12 @@ use std::thread;
 use rusqlite::Connection;
 use tauri::{AppHandle, Manager, State};
 
+use super::query::{build_range, build_week, RangePayload, WeekPayload};
 use super::{
     bootstrap, event_to_row, insert_row, native_row, NativeContext, NativeLaunchTool, NativeSignal,
 };
 use crate::hook_socket::HookEvent;
+use crate::reclassify::EventRow;
 
 /// Basename of the per-identity time-analytics DB under the app-data dir. Sibling to
 /// `hook.sock` (both resolved from `app_data_dir()`), so it inherits the same dev/prod
@@ -100,6 +102,19 @@ impl TimeStore {
             .lock()
             .map_err(|_| "time_store connection lock poisoned".to_string())?;
         insert_row(&conn, &row).map_err(|e| format!("time_store native insert failed: {e}"))
+    }
+
+    /// Read the `events` rows in `[start_ms, end_ms)` for the WP4 query layer. Locks
+    /// the same `Mutex<Connection>` the writers use; WAL lets a concurrent reader not
+    /// block a writer, and the single-webview read is serialized by the Mutex (cheap).
+    /// A poisoned lock or a query error is surfaced (never swallowed). (WP4 P3.2.)
+    pub fn query_window(&self, start_ms: i64, end_ms: i64) -> Result<Vec<EventRow>, String> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| "time_store connection lock poisoned".to_string())?;
+        super::query::rows_in_window(&conn, start_ms, end_ms)
+            .map_err(|e| format!("time_store query failed: {e}"))
     }
 }
 
@@ -377,6 +392,152 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>) {
         }
     }
     // recv Err: the listener dropped this sender (shutdown). Exit cleanly.
+}
+
+// ===========================================================================
+// M9 WP4 P3.1 — the segment-model query command.
+// ===========================================================================
+
+/// The window an analytics query covers. Internally-tagged (`{ "kind": "day" }` /
+/// `{ "kind": "week" }` / `{ "kind": "custom", "start_ms": …, "end_ms": … }`) so the
+/// frontend sends a discriminated union. `day` = today (local); `week` = the current
+/// ISO week (Mon–Sun containing today); `custom` = an explicit epoch-ms span. All
+/// resolution is on the operator's LOCAL calendar (the frozen-contract coordinate
+/// system). snake_case field names (the project IPC convention).
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum QueryWindow {
+    Day,
+    Week,
+    Custom { start_ms: i64, end_ms: i64 },
+}
+
+/// The result of a [`time_analytics_query`] — a range payload (day/custom) or a week
+/// rollup. Internally-tagged (`{ "kind": "range", … }` / `{ "kind": "week", … }`) so
+/// the WP6 dashboard branches on `kind`. snake_case end-to-end (NO `rename_all` on the
+/// payload structs themselves — they're already snake_case; only the tag is added).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TimeAnalyticsResult {
+    Range(RangePayload),
+    Week(WeekPayload),
+}
+
+/// Frontend → backend: build the segment-model payload for `window`, scoped `global`
+/// (all-projects, per-project breakdown — the resolved M9 WP4 scope). Reads the
+/// `events` rows in the resolved window from the managed [`TimeStore`], runs the WP4
+/// query transform (which runs the WP3 reclassifier), and returns the DTO.
+///
+/// `scope` is accepted for forward-compat but only `"global"` is implemented in v1
+/// (any other value → an explicit error, so a future per-workspace scope is a visible
+/// TODO, not a silent global fallback). When the store isn't managed (open failed at
+/// launch) the query returns an empty payload for the window rather than erroring —
+/// the read path must degrade gracefully (the dots + app keep working).
+///
+/// Note: this reads whatever rows EXIST; at WP4 the write-gate defaults OFF (WP2), so
+/// on a fresh install the DB is empty and the payload is empty — that is correct, and
+/// proves the read path. WP5's toggle turns writing on.
+#[tauri::command]
+pub fn time_analytics_query(
+    app: AppHandle,
+    scope: String,
+    window: QueryWindow,
+) -> Result<TimeAnalyticsResult, String> {
+    if scope != "global" {
+        return Err(format!(
+            "time_analytics_query: unsupported scope {scope:?} (only \"global\" is implemented in v1)"
+        ));
+    }
+    let (start_ms, end_ms, mode) = resolve_window(&window);
+    // Read rows (empty when the store isn't managed or the window is empty).
+    let rows: Vec<EventRow> = match app.try_state::<SharedTimeStore>() {
+        Some(store) => store.query_window(start_ms, end_ms)?,
+        None => Vec::new(),
+    };
+    let project_names = std::collections::HashMap::new(); // WP4: no explicit aliasing yet
+    match mode {
+        WindowMode::Range { start_day, end_day } => {
+            let payload = build_range(start_day, end_day, &rows, &project_names)?;
+            Ok(TimeAnalyticsResult::Range(payload))
+        }
+        WindowMode::Week { monday } => {
+            let payload = build_week(monday, &rows, &project_names)?;
+            Ok(TimeAnalyticsResult::Week(payload))
+        }
+    }
+}
+
+/// Which builder a resolved window maps to.
+enum WindowMode {
+    Range {
+        start_day: chrono::NaiveDate,
+        end_day: chrono::NaiveDate,
+    },
+    Week {
+        monday: chrono::NaiveDate,
+    },
+}
+
+/// Resolve a [`QueryWindow`] to `(start_ms, end_ms, WindowMode)` on the LOCAL calendar.
+/// `day` → today's [local-midnight, next-local-midnight); `week` → the ISO week
+/// (Mon 00:00 local .. next Mon 00:00 local) containing today; `custom` → the explicit
+/// span (mapped to the day-range builder over the local days it touches).
+fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
+    use chrono::{Datelike, Duration, Local};
+    let today = Local::now().date_naive();
+    match window {
+        QueryWindow::Day => {
+            let start = local_midnight_ms_of(today);
+            let end = local_midnight_ms_of(today + Duration::days(1));
+            (
+                start,
+                end,
+                WindowMode::Range {
+                    start_day: today,
+                    end_day: today,
+                },
+            )
+        }
+        QueryWindow::Week => {
+            // Monday of the ISO week containing today.
+            let days_from_monday = today.weekday().num_days_from_monday() as i64;
+            let monday = today - Duration::days(days_from_monday);
+            let sunday_end = monday + Duration::days(7);
+            let start = local_midnight_ms_of(monday);
+            let end = local_midnight_ms_of(sunday_end);
+            (start, end, WindowMode::Week { monday })
+        }
+        QueryWindow::Custom { start_ms, end_ms } => {
+            // Map the explicit span to the local days it touches (inclusive).
+            let start_day = local_date_of_ms(*start_ms);
+            let end_day = local_date_of_ms(*end_ms);
+            (*start_ms, *end_ms, WindowMode::Range { start_day, end_day })
+        }
+    }
+}
+
+/// Local-midnight epoch-ms for a `NaiveDate` (command-side; mirrors the query module's
+/// private helper — duplicated rather than exported to keep the query module's API
+/// surface minimal).
+fn local_midnight_ms_of(day: chrono::NaiveDate) -> i64 {
+    use chrono::{Local, TimeZone};
+    let naive = day.and_hms_opt(0, 0, 0).expect("00:00:00 valid");
+    Local
+        .from_local_datetime(&naive)
+        .earliest()
+        .or_else(|| Local.from_local_datetime(&naive).latest())
+        .map(|dt| dt.timestamp_millis())
+        .unwrap_or_else(|| naive.and_utc().timestamp_millis())
+}
+
+/// The local calendar date an epoch-ms timestamp falls on (command-side).
+fn local_date_of_ms(ts_ms: i64) -> chrono::NaiveDate {
+    use chrono::{Local, TimeZone};
+    Local
+        .timestamp_millis_opt(ts_ms)
+        .single()
+        .map(|dt| dt.date_naive())
+        .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
 }
 
 #[cfg(test)]
@@ -1013,5 +1174,113 @@ mod tests {
                 .hook_event_name,
             "Stop"
         );
+    }
+
+    // ---- M9 WP4 P3: time_analytics_query wiring ---------------------------
+
+    #[test]
+    fn query_window_deserializes_the_tagged_union_the_frontend_sends() {
+        // The three shapes WP6's invoke() will send.
+        let day: QueryWindow = serde_json::from_value(serde_json::json!({"kind": "day"})).unwrap();
+        assert!(matches!(day, QueryWindow::Day));
+        let week: QueryWindow =
+            serde_json::from_value(serde_json::json!({"kind": "week"})).unwrap();
+        assert!(matches!(week, QueryWindow::Week));
+        let custom: QueryWindow = serde_json::from_value(
+            serde_json::json!({"kind": "custom", "start_ms": 1000, "end_ms": 2000}),
+        )
+        .unwrap();
+        assert!(matches!(
+            custom,
+            QueryWindow::Custom {
+                start_ms: 1000,
+                end_ms: 2000
+            }
+        ));
+    }
+
+    #[test]
+    fn resolve_window_day_is_a_single_local_day_range() {
+        let (start, end, mode) = resolve_window(&QueryWindow::Day);
+        assert!(end > start, "a day window has positive width");
+        // 24h ± a DST hour.
+        let width_h = (end - start) / 3_600_000;
+        assert!(
+            (23..=25).contains(&width_h),
+            "day width ~24h, got {width_h}h"
+        );
+        match mode {
+            WindowMode::Range { start_day, end_day } => assert_eq!(start_day, end_day),
+            _ => panic!("day → Range mode with start_day == end_day"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_week_is_a_seven_day_span_anchored_on_monday() {
+        use chrono::Datelike;
+        let (start, end, mode) = resolve_window(&QueryWindow::Week);
+        let width_d = (end - start) / 86_400_000;
+        assert!((6..=8).contains(&width_d), "week width ~7d, got {width_d}d");
+        match mode {
+            WindowMode::Week { monday } => {
+                assert_eq!(
+                    monday.weekday(),
+                    chrono::Weekday::Mon,
+                    "week anchors on Monday"
+                )
+            }
+            _ => panic!("week → Week mode"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_custom_passes_the_explicit_span_through() {
+        let (start, end, mode) = resolve_window(&QueryWindow::Custom {
+            start_ms: 1_700_000_000_000,
+            end_ms: 1_700_100_000_000,
+        });
+        assert_eq!(start, 1_700_000_000_000);
+        assert_eq!(end, 1_700_100_000_000);
+        assert!(matches!(mode, WindowMode::Range { .. }));
+    }
+
+    #[test]
+    fn query_window_on_empty_store_returns_no_rows() {
+        let store = mem_store();
+        let rows = store.query_window(0, i64::MAX).unwrap();
+        assert!(rows.is_empty(), "empty store → no rows");
+    }
+
+    #[test]
+    fn query_window_returns_rows_in_the_span_ordered_by_ts() {
+        let store = mem_store();
+        // Insert three rows at ts 3000, 1000, 2000 (out of order).
+        for ts in [3000i64, 1000, 2000] {
+            let mut e = base_event("UserPromptSubmit");
+            e.timestamp = Some(ts as u64);
+            store.write_gated(&e, true).unwrap();
+        }
+        // Window [1000, 3000) includes 1000 and 2000, excludes 3000 (half-open).
+        let rows = store.query_window(1000, 3000).unwrap();
+        let tss: Vec<i64> = rows.iter().map(|r| r.ts).collect();
+        assert_eq!(
+            tss,
+            vec![1000, 2000],
+            "in-span rows, ordered by ts, end exclusive"
+        );
+    }
+
+    #[test]
+    fn time_analytics_result_serializes_internally_tagged() {
+        // The Week variant → {"kind":"week", label, days, projects}.
+        let week = TimeAnalyticsResult::Week(WeekPayload {
+            label: "WEEK 1".to_string(),
+            days: vec!["MON 01".to_string()],
+            projects: vec![],
+        });
+        let v = serde_json::to_value(&week).unwrap();
+        assert_eq!(v["kind"], serde_json::json!("week"));
+        assert_eq!(v["label"], serde_json::json!("WEEK 1"));
+        assert!(v.get("days").is_some());
     }
 }
