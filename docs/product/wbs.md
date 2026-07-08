@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: 9
-updated: 2026-07-07
+updated: 2026-07-08
 ---
 
 # WBS — Milestone 9: Time-analytics panel (absorb claude-time)
@@ -123,16 +123,17 @@ The SURFACE framed the reclassifier as "the one piece of real logic." True — b
 - [x] Feed any segment-model-shape delta forward to WP4/WP6 (the definitions may change what the query layer emits + what the dashboard renders). — DONE: the new 6-kind enum + the as-built API hand-off recorded in the WIP `### Segment-contract DELTA` (archived).
 - [x] Config surface (`chars_per_sec`, thresholds, `project_names`) — hardcode-vs-setting decided as part of the definitions discussion. — DONE: ALL thresholds hardcoded (`reclassify::constants`; design-prior `explicit-selectable-mode-over-inferred-mode` — no user-settings); `project_names` deferred to WP4 as a grouping param.
 
-### WP4: Segment-model query layer ported to Rust
+### WP4: Segment-model query layer ported to Rust — ✅ SHIPPED 2026-07-08 (commit `d8b308e`)
 **Description:** Adapt `viz_data.py` (~54 KB — events → segment-model JSON) to a Rust query layer that reads the SQLite rows, runs the **WP3 (redesigned) reclassifier**, and emits the segment-model contract consumed by the WP6 dashboard. **The emitted shape is the WP1-frozen contract as revised by WP3's locked metric definitions** — where WP3 changed a metric, the segment model changes with it (not a straight port of `viz_data.py`'s current shape). Exposed as a Tauri command (e.g. `time_analytics_query { scope, window }`). `test_viz_data.py` (1503 lines) is a **structural reference** for the transform mechanics (segment splitting, subagent-in-active splitting, per-project rollups, day/week/custom windows) — port the assertions that survive WP3's redefinitions; write fresh ones where the definitions changed. Scope decision (open sub-decision → resolve here): **global all-projects view vs. per-workspace** — lean **global with a per-project breakdown** (the value is cross-project "where did the week go", matching the filmstrip/PiP cross-project thesis), rendered from any workspace's tab.
 **Milestone:** 9
 **Dependencies:** WP1 (initial contract), WP2 (DB rows), WP3 (redesigned reclassifier + revised metric definitions — WP3's outcome may reshape what this layer emits)
 **Size:** L
 **Tasks:**
-- [ ] Adapt `viz_data.py`'s event→segment transform to Rust (day / week-rollup / custom-window builders), emitting the WP1-contract-as-revised-by-WP3.
-- [ ] Rust query layer over the per-identity SQLite DB feeding the transform; expose as a Tauri command.
-- [ ] Test the transform (port surviving `test_viz_data.py` assertions; fresh assertions where WP3's definitions changed the shape).
-- [ ] Snake_case DTO + parallel key-shape test for the query result (IPC-casing convention).
+- [x] Adapt `viz_data.py`'s event→segment transform to Rust (day / week-rollup / custom-window builders), emitting the WP1-contract-as-revised-by-WP3. — DONE: `time_store::query` (`build_day`/`build_range`/`build_week`), composing the WP3 two-tiler (`ai_segments_for_window` + `human_segments_for_window`); local-tz day math via a new `chrono` dep.
+- [x] Rust query layer over the per-identity SQLite DB feeding the transform; expose as a Tauri command. — DONE: `TimeStore::query_window` accessor + `time_analytics_query { scope, window }` command (day/week/custom; scope=global, per-project breakdown); live-verified via the MCP bridge.
+- [x] Test the transform (port surviving `test_viz_data.py` assertions; fresh assertions where WP3's definitions changed the shape). — DONE: 15 oracle tests in `time_store/query/tests.rs` (empty-day, single-burst 6-kind, subagent-label, alias, hour-range, range union, week rollup) + 6 command tests; metrics/comparison classes SKIPPED (WP6c).
+- [x] Snake_case DTO + parallel key-shape test for the query result (IPC-casing convention). — DONE: `SegPayload`/`Session`/`Project`/`Day`/`Week`/`Range` DTOs (NO `rename_all`; `kind` → `Kind::as_str()` kebab tag) + `dto_serde_shape_is_snake_case_and_kind_is_kebab_tag` test + FE `src/state/timeAnalytics.ts` mirror.
+- [x] **Bonus (folded from the WP3 review):** closed the 2 carried MAJOR reclassify findings (trailing-open-await bounded at window_end; deterministic surface tie-break) with pinning tests; dropped the unused `chars_per_sec` const.
 
 **WP4 → WP5 rationale:** The query path (data in → segment JSON out) is the synchronous core; the toggle that gates writing + surfaces the tab is the control layer wrapped around a working data path. Prove the data flows end-to-end before wiring the on/off control (§5 spirit: core path before the control that gates it).
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-08
+
+- **Feature shipped:** M9 WP4 — a native Rust query layer (`time_store::query`) reads the time-analytics SQLite events for a day/week/custom window, runs the WP3 reclassifier, and emits the segment-model contract (WP1-frozen shape revised to WP3's 6-kind enum) as `DayPayload`/`WeekPayload` over a `time_analytics_query { scope, window }` Tauri command — global all-projects view with a per-project breakdown, snake_case DTOs pinned on both IPC sides, live-verified against the real app via the MCP bridge (the week query returned real rows with git-basename alias resolution).
+- **Backlog resolved:** SURFACE-2026-07-07-QUALITY-WP3-TRAILING-OPEN-AWAIT-FALLS-TO-AWAY — closed by WP4 Phase 1 (a still-open AwaitingInput span at the data tail is now bounded at the window end instead of dropped, with a pinning test; kept as defensive correctness since the symptom is latent under the operator's equal silence/away thresholds).
+- **Backlog resolved:** SURFACE-2026-07-07-QUALITY-WP3-SURFACE-TIE-BREAK-ORDER-DEPENDENT — closed by WP4 Phase 1 (`surface_is_editor_at` now sorts candidates by `(ts, surface)` and takes the last, making a same-ms surface tie deterministic regardless of input order, with a both-orderings pinning test).
+- **Milestone:** M9 WP4 — Segment-model query layer ported to Rust.
+
 ## 2026-07-07
 
 - **Feature shipped:** M9 WP2 — Claudesk's CC hook now forwards the full 10-event set with 5 wire fields (length-only prompt privacy), and a new `time_store` rusqlite module persists every event into a per-identity SQLite DB as a second, gated drain of the hook stream (fanned out so the M3 status dots stay byte-for-byte unchanged, live-verified idle→running→idle on the real binary); the write path ships dormant (gate defaults OFF until WP5) with a `source` discriminator seeded for WP2.5's native signals.

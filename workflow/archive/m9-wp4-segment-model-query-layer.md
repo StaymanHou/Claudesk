@@ -1,8 +1,9 @@
 # Feature: M9 WP4 — Segment-model query layer ported to Rust
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** COMPLETED 2026-07-08
 **Created:** 2026-07-08
+**Ship commit:** d8b308e (LOCAL only — NOT pushed, per commit-only-when-asked)
 **Drive mode:** autopilot
 
 ## Problem Statement
@@ -58,10 +59,10 @@ M9 WP4 adapts claude-time's `viz_data.py` (~1348 lines — events → segment-mo
   - [x] verify-codify  <!-- status: [x] — 11 tests (6 Rust command + 5 FE, TDD during build) + the live verify-self capture cover the command. Boundary end-to-end requirement met by the live time_analytics_query invocation (the command's AppHandle/State glue is unconstructable in a unit test; its decomposed logic — resolve_window/query_window/result-serialization — is fully unit-pinned, and the FE ?raw guard catches a severed command binding at CI). No coverage gap. Full suite: Rust 457+5=462 pass, FE 806 pass, 0 fail. -->
 
 ## Current Node
-- **Path:** Feature > (all phases complete) > ship
-- **Active scope:** ALL 3 WP4 phases COMPLETE (Phase 1, 2, 3 all `[x]`). Rust 457+5=462 pass, FE 806 pass, clippy/tsc/eslint/fmt clean, live-verified. → `/feature-ship`.
+- **Path:** Feature > review-quality (complete) > finalize
+- **Active scope:** Ship `d8b308e` + review-quality complete (0 CRITICAL / 0 MAJOR / 4 MINOR, all auto-backlogged low). → `/feature-finalize`.
 - **Blocked:** none
-- **Unvisited:** none (ship next)
+- **Unvisited:** none (finalize next)
 - **Open discoveries:** 5 logged (trailing-await equal-thresholds nuance; chars_per_sec DROP; P1.5→P2.0 relocation; P2.0 allow — reclassify allow STAYS but the query-module allow was removed at P3.2 as planned; chrono dep-add) — none blocking
 
 ## Notes / Constraints (carried from WP3 hand-off + WBS)
@@ -81,3 +82,35 @@ M9 WP4 adapts claude-time's `viz_data.py` (~1348 lines — events → segment-mo
 - [SURFACED-2026-07-08] Phase 1 (P1.5→P2.0) — The module-level `#![allow(dead_code)]` removal was RELOCATED from Phase 1 to Phase 2 (new leaf P2.0). Reason: `reclassify` currently has ZERO external (non-test) consumers, so removing the allow while nothing imports the module would flood `clippy -D warnings` with dead-code errors. The allow can only come off once Phase 2's query layer imports the module — the same discipline `time_store` followed. Phase 1's two allow-related observable outcomes moved to Phase 2 accordingly.
 - [SURFACED-2026-07-08] Phase 2 (P2.0) — **The P2.0 premise was wrong; the allow STAYS (narrowed).** Importing `reclassify` from the query layer did NOT make the whole module used: WP4 calls only the TILING subset (`EventRow`/`Kind`/`Segment`/`ai_busy_intervals`/`ai_segments_for_window`/`human_segments_for_window`). The DERIVED-METRIC helpers (`tool_durations_ms`/`subagent_durations_ms`/`session_active_ms`/`active_bursts`/`tool_intervals`) are WP6c-metrics-bound — no WP4 caller. Removing the allow produced 61 dead-code errors. Deleting the WP6c helpers (tested + needed next WP) or fabricating callers would both be wrong. RESOLUTION: kept a module-scoped allow on `reclassify` (re-documented: analytics library, consumers span WP4 tiling + WP6c metrics + internal/test) + a fresh module-scoped allow on `time_store::query` (its builders' consumer is the Phase 3 command). Honest dead-code signal survives within-phase. Logged as `SURFACE-2026-07-08-QUALITY-WP4-P20-ALLOW-STAYS-MULTI-WP-CONSUMER`.
 - [SURFACED-2026-07-08] Phase 2 (P2.3) — **New dependency: `chrono` 0.4** (`default-features=false`, features `clock`+`std`), added to `src-tauri/Cargo.toml`. The query layer needs local-timezone day-boundary math (the frozen contract's coordinate system is minutes-from-LOCAL-midnight; days bucket on the operator's local calendar). No direct date/time crate existed (`time` 0.3 is transitively compiled via tauri→cookie but its local-offset path is soundness-guarded/finicky; `chrono` was in the lockfile only for a non-compiled target). This is a mechanical dep-add within WP4's accepted scope (the frozen contract already mandates local-tz coordinates) — NOT an arch change; the arch already accepts the SQLite store + segment model. Used only by `time_store::query`. To reconcile into `arch.md` at WP7 alongside the SQLite note.
+
+## Code-Quality Review — m9-wp4-segment-model-query-layer
+
+*(feature-review-quality on ship commit d8b308e; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 4 MINOR. All MINOR auto-backlogged to `workflow/backlog-quality-findings.md` → `# m9-wp4-segment-model-query-layer — 2026-07-08`; pointer in `backlog.md`. To dismiss any, mark it `[DISMISSED]` here before finalize archives the WIP.)*
+
+### Strengths
+- The WP3 tail-of-stream fixes are additive: `awaiting_input_spans_bounded`/`build_with_window` keep the historical drop on the bare entry point and only bound at a supplied `window_end` — a clean seam, not a behavior swap.
+- The trailing-open-await pinning test is honest about the equal-thresholds nuance (asserts the structural guarantee, not a spurious verdict divergence); the discovery note documents why the fix is defensive.
+- `surface_is_editor_at` tie-break test feeds both input orderings and asserts an identical verdict — pins order-independence, closing the confabulation-channel class.
+- `dto_serde_shape_is_snake_case_and_kind_is_kebab_tag` pins exact wire keys + kebab tag + skip-serializing; FE `?raw` guard catches a severed command binding at CI.
+- Graceful-degrade on unmanaged store + explicit non-`global` scope rejection match the project's degrade-cleanly-but-never-silently posture.
+
+### Issues
+**CRITICAL** — (none)
+**MAJOR** — (none)
+**MINOR**
+- [commands.rs:~483-505] `local_midnight_ms_of`/`local_date_of_ms` are near-verbatim copies of `query::local_midnight_ms`/`local_date_of` — two copies of tz-boundary math drift silently. Prefer `pub(crate)`-exporting the query helpers.
+- [query.rs:~114-127, ~503-519] `DayPayload.empty` never reaches the IPC surface (`RangePayload`/FE have no `empty`; command returns only `TimeAnalyticsResult::Range`) → either dead on the IPC path or a latent WP6 gap; deliberate decision worth making now.
+- [query.rs:~255-273] `segments_for_window` computes `ai_busy_intervals` twice (directly + inside `human_segments_for_window`) — harmless at current volumes; documented redundancy.
+- [commands.rs:~462-467] a Custom window whose `end_ms` lands exactly on a local midnight emits one extra all-empty trailing day (half-open `ts < end` vs `end_day` resolving to the next day) — cosmetic boundary edge, untested.
+
+### Assessment
+Well-built phase: correctly re-expresses the transform against WP3's 6-kind enum, keeps the two-tiler composition faithful, and lands the two carried MAJOR reclassify findings with genuine pinning tests. Densely-but-usefully documented; DTO/serde contract pinned on both IPC sides; degrade/scope-guard match convention. Debt minimal + honestly tracked (allow-narrowing re-scoped with a logged discovery; chrono dep queued for WP7 resync). Only real accrued cost is the duplicated tz-math pair (the finding worth addressing before drift); the rest are boundary edges + a possibly-dead contract field for a WP6-facing decision.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** (1) The "remove the `#![allow(dead_code)]` once the query layer imports the module" plan assumption (P2.0) was too strong — importing a *subset* of `reclassify` doesn't make the whole module used; the derived-metric helpers are WP6c-bound. The allow narrows across WPs rather than lifting at once. (2) The TRAILING-OPEN-AWAIT MAJOR's stated "→ Away" symptom doesn't currently manifest because the operator locked `SILENCE_CAP == AWAY_THRESHOLD` (both 10min) — the drop was a LATENT bug; the fix is defensive, not behavior-correcting today. (3) The query layer needed a real date/time crate (`chrono`) for local-tz day math — no direct dep existed.
+- **Assumptions that held:** the WP3 two-tiler hand-off (`ai_segments_for_window` + `human_segments_for_window` composition) mapped cleanly onto the viz-session structure; the snake_case-no-`rename_all` IPC convention + key-shape-test pattern transferred directly; the MCP-bridge live verify-self path worked exactly as the CLAUDE.md convention described (fire-then-poll, `__TAURI_INTERNALS__.invoke`, the eval-timeout-is-expected behavior).
+- **Assumptions that were wrong:** the segment production is NOT a line-by-line port of `viz_data.py`'s `_build_viz_sessions` (bursts + gap_buckets) — WP3's redesign replaced that model entirely, so the Rust segs come from the two tilers, not the old active/reading/thinking machinery. Caught at planning; the WIP scoped it correctly.
+- **Approach delta:** matched the plan's 3-phase shape (correctness prereqs → query core → command+wiring). One in-flight plan correction: P1.5 (allow removal) relocated Phase 1→Phase 2 (sequencing — the module must be imported first), then re-scoped again at P2.0 (the allow stays for `reclassify`, only the query-module allow lifts). Both corrections logged as discoveries, not silent. The live verify-self surfaced richer-than-expected evidence (the `week` query returned real populated data with live git-basename alias resolution), which validated the transform against real rows, not just the empty path.

@@ -4,6 +4,42 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m9-wp4-segment-model-query-layer — 2026-07-08
+
+*(feature-review-quality on ship commit `d8b308e`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 4 MINOR — all auto-backlogged, priority low. Reviewer: well-built phase — correctly re-expresses the transform against WP3's 6-kind enum, lands both carried MAJOR reclassify findings with genuine pinning tests, DTO/serde pinned both IPC sides, debt minimal + honestly tracked. The 4 MINORs are boundary edges + one drift-risk duplication + a possibly-dead contract field.)*
+
+## SURFACE-2026-07-08-QUALITY-WP4-DUP-TZ-MATH-HELPERS
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/commands.rs` (~483-505) vs `src-tauri/src/time_store/query.rs` (`local_midnight_ms`/`local_date_of`)
+- **Finding:** `local_midnight_ms_of`/`local_date_of_ms` in commands.rs are near-verbatim copies of the query module's `local_midnight_ms`/`local_date_of` (same DST-earliest-else-latest-else-UTC fallback). The comment justifies the copy ("keep the query API surface minimal") but two copies of tz-boundary math drift silently when one is later patched for a DST edge and the other isn't.
+- **Fix shape:** `pub(crate)`-export the query helpers and drop the commands.rs copies (one fix-site). The API-surface cost is lower than the divergence risk. **This is the one MINOR worth addressing before drift.**
+- **Priority:** low (no current bug; drift-prevention).
+- **Status:** pending.
+
+## SURFACE-2026-07-08-QUALITY-WP4-DAYPAYLOAD-EMPTY-NOT-ON-IPC-SURFACE
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`DayPayload.empty` ~114-127; `build_range` single-day path ~503-519)
+- **Finding:** `DayPayload` carries `empty: Some(true)`, but `build_range`'s single-day path propagates only `iso`/`hour_range` (drops `empty`), and the command returns only `TimeAnalyticsResult::Range(RangePayload)` — which has no `empty` field (nor does the FE `RangePayload`). So a WP6 day-query consumer can't read the empty-day hint; it must infer emptiness from `projects.is_empty()`. Either the flag is dead on the IPC path (its test only exercises the internal `DayPayload`) or WP6 needs it surfaced on `RangePayload`.
+- **Fix shape:** a deliberate WP6-facing decision — surface `empty` on `RangePayload`, OR document that WP6 infers emptiness from `projects.is_empty()` and the `DayPayload.empty` flag is internal-only. Decide while the shape is fresh.
+- **Priority:** low (WP6-facing contract decision).
+- **Status:** pending.
+
+## SURFACE-2026-07-08-QUALITY-WP4-AI-BUSY-COMPUTED-TWICE
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`segments_for_window` ~255-273)
+- **Finding:** `segments_for_window` computes `ai_busy_intervals(events)` directly for the AI half, then calls `human_segments_for_window` which recomputes `ai_busy_intervals` internally for the complement — the AI-busy set is walked twice per session window. Correct, harmless at current row volumes.
+- **Fix shape:** if session windows ever get large, thread the computed busy-set into the human tiler (or note as a known redundancy). No action needed now.
+- **Priority:** low (perf, negligible at current scale).
+- **Status:** pending.
+
+## SURFACE-2026-07-08-QUALITY-WP4-CUSTOM-WINDOW-MIDNIGHT-EXTRA-DAY
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/commands.rs` (`resolve_window` Custom arm ~462-467)
+- **Finding:** a Custom window whose `end_ms` lands exactly on a local midnight → `rows_in_window` excludes that instant (half-open `ts < end`) while `end_day = local_date_of_ms(end_ms)` resolves to the next day, so `build_range` emits one extra all-empty trailing day. Cosmetic; untested at the boundary.
+- **Fix shape:** clamp `end_day` back by one when `end_ms` is exactly local-midnight, or add a boundary test documenting the artifact.
+- **Priority:** low (cosmetic range-widget edge).
+- **Status:** pending.
+
 # mirror-fill-from-bottom — 2026-07-06
 
 *(feature-review-quality on ship commit 99aca94; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer: well-built, tightly-scoped fix at the shared seam; correctness verified against the vendored xterm source. One MINOR (count-drift typo) was fixed in-place; the two below are auto-backlogged. None warrant a refactor pass.)*
