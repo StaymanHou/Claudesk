@@ -945,6 +945,15 @@ body,
   padding: 2rem;
 }
 
+/* M9 WP6a Phase 4 — Suspense fallbacks while the lazy CM6 chunk resolves on first
+   editor/diff use. Deliberately blank (just fill the slot with the panel background) —
+   CM6 loads in ms off local disk, so a spinner would flash and read as jank. */
+.editor-loading,
+.diff-loading {
+  flex: 1;
+  background: var(--bg, #1e1e1e);
+}
+
 .editor-error {
   margin: auto;
   text-align: center;
@@ -1208,6 +1217,142 @@ body,
    selector explicit + room for future terminal-specific rules.) */
 .right-panel-slot--terminal {
   flex-direction: column;
+}
+
+/* M9 WP6a — the GLOBAL time-analytics dashboard. NOT a right-panel slot: a top-level
+   view (mounted once) that OVERLAYS the center stage. Positioned absolutely over the
+   whole app-shell so the CenterStage + workspaces stay mounted underneath (the
+   PickerOverlay pattern). Dark tokens only. */
+.global-dashboard {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  color: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+}
+
+/* Header bar: title + all-projects scope note + close button. */
+.global-dashboard-header {
+  flex-shrink: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: #252525;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.global-dashboard-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.global-dashboard-scope {
+  font-size: 0.75rem;
+  opacity: 0.55;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.global-dashboard-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.global-dashboard-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.global-dashboard-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* M9 WP6a Phase 3 — the Legend sits in a thin strip under the SummaryStrip; the
+   Toolbar/SummaryStrip carry their own inline borders (ported idiom), so this row
+   just pads the legend + separates it from the timeline below. The DayTimeline flexes
+   to fill the remaining height. */
+.dashboard-legend-row {
+  flex-shrink: 0;
+  padding: 8px 20px;
+  border-bottom: 1px solid oklch(1 0 0 / 0.1);
+  background: #252526;
+}
+
+/* Centered empty-state / placeholder message (tracking OFF, or no data yet). */
+.dashboard-empty {
+  margin: auto;
+  max-width: 22rem;
+  text-align: center;
+  padding: 2rem;
+}
+
+.dashboard-empty-title {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.dashboard-empty-hint {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Suspense fallback while the lazy dashboard chunk loads on first open. */
+.global-dashboard-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e1e1e;
+  opacity: 0.85;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* The Filmstrip analytics button (opens the global dashboard; ⌘⇧A parity). Smaller
+   than the workspace tiles + the "+" — it is an app-level action, not a tile. */
+.filmstrip-open-dashboard {
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.filmstrip-open-dashboard:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
 /* M6 WP11 — the terminal sub-tab row (●1 │ ●2 │ ＋). Mirrors the .right-panel-toggle
@@ -2304,8 +2449,45 @@ body,
   flex-direction: column;
 }
 
+/* M9 WP6a — the picker header row: title on the left, the global-analytics entry point
+   on the right (the dashboard is reachable from the picker scene at launch, not only after
+   a workspace opens). The 1.5rem gap the bare <h1> used to carry moves onto the row. */
+.picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.picker-header h1 {
+  margin: 0;
+}
+
+/* Kept for the overlay-panel variant (filmstrip "+" re-entry) where the picker has no
+   header row — a bare <h1> there still needs its own spacing. */
 .picker h1 {
   margin-bottom: 1.5rem;
+}
+
+.picker-open-dashboard {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.picker-open-dashboard:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
 /* When the picker is shown as the modal overlay panel (filmstrip "+" re-entry), it is
@@ -2423,6 +2605,23 @@ body,
   cursor: pointer;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* M9 WP5 — the time-analytics tracking toggle. A checkbox row sharing the permission-
+   mode row's dark idiom (muted label, tight gap), sitting just below it. */
+.picker-time-tracking {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  user-select: none;
+  cursor: pointer;
+}
+
+.picker-time-tracking input {
+  cursor: pointer;
 }
 
 .picker-recents {

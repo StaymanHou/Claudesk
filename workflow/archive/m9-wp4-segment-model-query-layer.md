@@ -59,10 +59,10 @@ M9 WP4 adapts claude-time's `viz_data.py` (~1348 lines — events → segment-mo
   - [x] verify-codify  <!-- status: [x] — 11 tests (6 Rust command + 5 FE, TDD during build) + the live verify-self capture cover the command. Boundary end-to-end requirement met by the live time_analytics_query invocation (the command's AppHandle/State glue is unconstructable in a unit test; its decomposed logic — resolve_window/query_window/result-serialization — is fully unit-pinned, and the FE ?raw guard catches a severed command binding at CI). No coverage gap. Full suite: Rust 457+5=462 pass, FE 806 pass, 0 fail. -->
 
 ## Current Node
-- **Path:** Feature > review-quality (complete) > finalize
-- **Active scope:** Ship `d8b308e` + review-quality complete (0 CRITICAL / 0 MAJOR / 4 MINOR, all auto-backlogged low). → `/feature-finalize`.
+- **Path:** Feature > finalize (COMPLETE) — WP4 shipped + archived
+- **Active scope:** DONE. Ship `d8b308e` + finalize `6bdca6f` (both local, unpushed). WBS §WP4 ✅ SHIPPED; CHANGELOG + retrospect + review recorded. M9 continues (WP5/WP6/WP7 remain) → session-reflect next, NOT product-finalize.
 - **Blocked:** none
-- **Unvisited:** none (finalize next)
+- **Unvisited:** none
 - **Open discoveries:** 5 logged (trailing-await equal-thresholds nuance; chars_per_sec DROP; P1.5→P2.0 relocation; P2.0 allow — reclassify allow STAYS but the query-module allow was removed at P3.2 as planned; chrono dep-add) — none blocking
 
 ## Notes / Constraints (carried from WP3 hand-off + WBS)

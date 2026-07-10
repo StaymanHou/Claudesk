@@ -65,6 +65,14 @@ describe("panelForChord (⌘⇧+mnemonic → panel)", () => {
     );
   });
 
+  it("returns null for ⌘⇧A — the global-dashboard chord is app-level, NOT a panel (M9 WP6a)", () => {
+    // ⌘⇧A toggles the global time-analytics view (App.tsx / dashboardChord.ts); it must
+    // NOT resolve to a right-panel here, or a panel switch would fire alongside it.
+    expect(
+      panelForChord({ metaKey: true, shiftKey: true, key: "a" }),
+    ).toBeNull();
+  });
+
   it("returns null without Cmd", () => {
     expect(
       panelForChord({ metaKey: false, shiftKey: true, key: "e" }),
@@ -77,12 +85,17 @@ describe("panelForChord (⌘⇧+mnemonic → panel)", () => {
     ).toBeNull();
   });
 
-  it("returns null for non-panel letters (P palette, O sublime)", () => {
+  it("returns null for non-panel letters (P palette, O sublime, F search)", () => {
+    // Exclusivity guard: the ⌘⇧ chords owned by OTHER subsystems must NOT resolve to a
+    // panel. A (dashboard), E/D/T (editor/diff/terminal) are the only panel letters.
     expect(
       panelForChord({ metaKey: true, shiftKey: true, key: "p" }),
     ).toBeNull();
     expect(
       panelForChord({ metaKey: true, shiftKey: true, key: "o" }),
+    ).toBeNull();
+    expect(
+      panelForChord({ metaKey: true, shiftKey: true, key: "f" }),
     ).toBeNull();
   });
 });

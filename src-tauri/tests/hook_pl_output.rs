@@ -173,6 +173,20 @@ fn session_start_emits_source() {
 }
 
 #[test]
+fn session_end_emits_reason() {
+    // M9 WP6.5: the hook forwards SessionEnd's `reason` (prompt_input_exit / other) so the
+    // session-end model can honor SessionEnd as an authoritative end (reason persisted for
+    // debugging). Mirrors session_start_emits_source.
+    if !perl_available() {
+        return;
+    }
+    let payload = r#"{"hook_event_name":"SessionEnd","session_id":"s","cwd":"/p","reason":"prompt_input_exit"}"#;
+    let v = as_json(&run_hook_capture_line(payload).expect("line"));
+    assert_eq!(v["hook_event_name"].as_str(), Some("SessionEnd"));
+    assert_eq!(v["reason"].as_str(), Some("prompt_input_exit"));
+}
+
+#[test]
 fn status_event_shape_is_unchanged() {
     if !perl_available() {
         return;

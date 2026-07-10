@@ -26,6 +26,10 @@
 //   ⌘⇧E  → Editor panel-select     (WP5; RightPanelHost — panelHost.panelForChord)
 //   ⌘⇧D  → Diff panel-select       (WP5; RightPanelHost)
 //   ⌘⇧T  → Terminal panel-select   (WP5 scheme; live binding lands with WP9)
+//   ⌘⇧A  → GLOBAL time-analytics dashboard (M9 WP6a — App.tsx app-level chord, NOT a
+//                                   panel-select; toggles the full-window global view.
+//                                   dashboard/dashboardChord.ts isDashboardChord. Letter
+//                                   'a' for Analytics, disjoint from E/D/T/O/P/F.)
 //   ⌘⇧O  → FREED (WP8 deleted the Sublime-Text chord; both Sublime launchers are
 //                                   now click-only icon buttons in the panel tab row
 //                                   — see sublime/sublimeLaunch.ts + RightPanelHost)

@@ -238,6 +238,30 @@ pub fn run() {
                     match time_store::commands::open_and_bootstrap(&handle) {
                         Ok(store) => {
                             app.manage(store);
+                            // M9 WP6.5 Phase 4: startup reconciliation. Close out sessions
+                            // left dangling by a prior crash / power-loss / force-quit / ⌘Q
+                            // that never wrote a session-end marker (the P3 finding: a
+                            // force-quit bypasses CloseRequested, so the marker is the read-
+                            // time cap's safety net here). Gated on tracking_enabled (zero
+                            // work OFF) + best-effort (a reconcile failure must not block
+                            // launch or perturb status).
+                            if time_store::commands::tracking_enabled(&handle) {
+                                if let Some(store) =
+                                    handle.try_state::<time_store::commands::TimeStore>()
+                                {
+                                    let now = time_store::now_ms();
+                                    let cap = crate::reclassify::constants::SESSION_IDLE_CAP_MS;
+                                    match store.reconcile_dangling(now, cap) {
+                                        Ok(0) => {}
+                                        Ok(n) => eprintln!(
+                                            "[claudesk] time-store: reconciled {n} dangling session(s) at startup"
+                                        ),
+                                        Err(e) => eprintln!(
+                                            "[claudesk] time-store: startup reconciliation failed (dropped): {e}"
+                                        ),
+                                    }
+                                }
+                            }
                             match state.time_receiver.lock() {
                                 Ok(mut guard) => {
                                     if let Some(rx) = guard.take() {
@@ -408,6 +432,12 @@ pub fn run() {
             // window (day/week/custom), runs the WP3 reclassifier + WP4 transform, and
             // returns the DayPayload/WeekPayload the dashboard (WP6) will render.
             time_store::commands::time_analytics_query,
+            // M9 WP5: the tracking toggle (universal-vs-workflow-coupled feature flag,
+            // default OFF). get seeds the picker checkbox + the WP6 empty-state; set
+            // persists + broadcasts `time-tracking-enabled` and takes effect on the next
+            // event (the write-gate reads the persisted flag per event).
+            time_store::commands::time_get_tracking_enabled,
+            time_store::commands::time_set_tracking_enabled,
         ])
         .on_window_event(|window, event| {
             // M5 WP5 Phase 2 — auto-summon/dismiss state machine, driven by the MAIN
@@ -432,10 +462,20 @@ pub fn run() {
             // WP7 shutdown: kill every CC child on window close so we never leak an
             // orphaned `claude`. Backend-driven (robust against a frozen webview).
             if let WindowEvent::CloseRequested { .. } = event {
+                // Kill every CC child, capturing the ids killed OK so we can write the
+                // explicit session-end marker per session (M9 WP6.5 signal 1) — the
+                // authoritative end for the app-quit path. The registry lock is released
+                // before the (independent, gated) marker writes.
+                let mut killed_ids: Vec<String> = Vec::new();
                 if let Some(registry) = window.try_state::<Mutex<SessionRegistry>>() {
                     if let Ok(mut reg) = registry.lock() {
-                        reg.kill_all();
+                        killed_ids = reg.kill_all();
                     }
+                }
+                // M9 WP6.5: explicit close marker per killed session (best-effort + gated;
+                // zero-IO when tracking is OFF). Must not panic the quit path.
+                for sid in &killed_ids {
+                    time_store::commands::record_workspace_close(window.app_handle(), sid);
                 }
                 // M3 WP3: unlink the hook socket on close (mirror the kill_all
                 // reaping discipline). Belt to bind_listener's stale-file removal.

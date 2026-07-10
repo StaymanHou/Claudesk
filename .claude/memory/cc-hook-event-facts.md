@@ -1,8 +1,10 @@
 ---
 name: cc-hook-event-facts
-description: Concrete Claude Code v2.1.x hook-event facts for Claudesk's status channel (live-captured)
-metadata:
+description: "Concrete Claude Code v2.1.x hook-event facts for Claudesk's status channel (live-captured)"
+metadata: 
+  node_type: memory
   type: reference
+  originSessionId: 5bf200e8-8da9-4d78-b2bf-6eb78d945880
 ---
 
 Live-captured CC (v2.1.x) hook-event facts for Claudesk's status channel (QoL-WP2,
@@ -23,5 +25,17 @@ commit 7cfc464; as-built in CLAUDE.md + arch.md §A + status_broadcaster/mod.rs)
   (NOT `PreToolUse`); `Notification→AwaitingInput` is gated on `notification_type`
   (input-needed: `permission_prompt` / `elicitation_dialog`; unknown/absent → AwaitingInput
   fallback; recognized informational → no-op).
+
+**SessionStart / SessionEnd lifecycle (M9 WP6.5, live-captured 2026-07-08, CC v2.1.204):**
+- **`SessionEnd` fires on clean/graceful close only:** `/exit` (`reason:prompt_input_exit`),
+  `/exit`-then-SIGKILL (= Claudesk's `cc_kill` `kill()` sequence — the `/exit` exits cleanly
+  within the grace window before the backstop SIGKILL, so the hook DOES fire), and SIGTERM
+  (`reason:other`). It does **NOT** fire on bare SIGKILL / crash / power-loss / force-quit.
+- **`SessionEnd` payload:** `{session_id, transcript_path, cwd, prompt_id?, hook_event_name, reason}`.
+  **`SessionStart` payload:** `{session_id, transcript_path, cwd, hook_event_name, source, model}`.
+- **Consequence (M9 WP6.5 session-end model):** `SessionEnd` is the PRIMARY authoritative
+  session-end for a clean/graceful close (nearly free — just consume the persisted row); the
+  hard-kill case (no `SessionEnd`) needs the explicit `WorkspaceClose` marker + startup
+  reconciliation to cover it.
 
 Verify these still hold (CC version-drifts) via the harness in [[cc-hook-capture-beats-docs]].

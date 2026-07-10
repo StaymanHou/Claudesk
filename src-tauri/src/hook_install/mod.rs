@@ -356,7 +356,10 @@ mod tests {
         // after an answered AskUserQuestion/permission prompt — still registered.
         // The four STATUS events are all present.
         for ev in ["UserPromptSubmit", "Stop", "Notification", "PostToolUse"] {
-            assert!(CLAUDESK_EVENTS.contains(&ev), "{ev} (status) must be registered");
+            assert!(
+                CLAUDESK_EVENTS.contains(&ev),
+                "{ev} (status) must be registered"
+            );
         }
         // M9 WP2: the six TIME-ANALYTICS events are now registered (they feed
         // time_store; event_to_state returns None for each so no dot flips). This

@@ -13,11 +13,12 @@ use std::sync::Mutex;
 use std::thread;
 
 use rusqlite::Connection;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::query::{build_range, build_week, RangePayload, WeekPayload};
 use super::{
     bootstrap, event_to_row, insert_row, native_row, NativeContext, NativeLaunchTool, NativeSignal,
+    TimeRow,
 };
 use crate::hook_socket::HookEvent;
 use crate::reclassify::EventRow;
@@ -116,6 +117,45 @@ impl TimeStore {
         super::query::rows_in_window(&conn, start_ms, end_ms)
             .map_err(|e| format!("time_store query failed: {e}"))
     }
+
+    /// Startup reconciliation (M9 WP6.5 Phase 4): close out sessions left **dangling** by a
+    /// prior crash / power-loss / force-quit / ⌘Q that never wrote a session-end marker.
+    /// Reads every row, computes the dangling set ([`reclassify::dangling_sessions`] — no
+    /// authoritative marker + last event older than `cap_ms` before `now_ms`), and writes a
+    /// `WorkspaceClose` marker **at each dangling session's last-seen ts** (NOT `now`).
+    ///
+    /// **Idempotent:** after the first run each closed session HAS a `WorkspaceClose` marker,
+    /// so `authoritative_end` is `Some` and it is no longer dangling — a second run writes
+    /// nothing. Read-time capping ([`resolve_session_end`]) already bounds the render; this
+    /// makes the row STREAM honest so the data matches the display. Returns the count closed.
+    /// All under one lock (read + writes atomic w.r.t. the drain thread). Errors surfaced.
+    pub fn reconcile_dangling(&self, now_ms: i64, cap_ms: i64) -> Result<usize, String> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| "time_store connection lock poisoned".to_string())?;
+        // Read all rows up to now (inclusive) — window end is exclusive, so +1.
+        let rows = super::query::rows_in_window(&conn, i64::MIN, now_ms.saturating_add(1))
+            .map_err(|e| format!("time_store reconcile read failed: {e}"))?;
+        let dangling = crate::reclassify::dangling_sessions(&rows, now_ms, cap_ms);
+        for d in &dangling {
+            // A WorkspaceClose marker AT the last-seen ts (the true end), NOT now_ms —
+            // reconciliation records where the session actually went silent.
+            let row = TimeRow {
+                ts: d.last_ts,
+                session_id: d.session_id.clone(),
+                cwd: d.cwd.clone(),
+                event: crate::reclassify::EVENT_WORKSPACE_CLOSE.to_string(),
+                tool_name: None,
+                agent_type: None,
+                source: super::SOURCE_CLAUDESK_NATIVE.to_string(),
+                meta: None,
+            };
+            insert_row(&conn, &row)
+                .map_err(|e| format!("time_store reconcile insert failed: {e}"))?;
+        }
+        Ok(dangling.len())
+    }
 }
 
 /// Open a DB at `path`, set connection pragmas (WAL + busy-timeout for multi-writer
@@ -154,15 +194,53 @@ pub fn open_and_bootstrap(app: &AppHandle) -> Result<TimeStore, String> {
 /// are enabled. **Defaults OFF** (M9 decision 2 — zero cost for users who don't want
 /// tracking); WP2's job is this call-site, not the toggle UI.
 ///
-/// **WP5 replaces the body** with a read of the persisted universal-vs-workflow-coupled
-/// feature flag (in `projects.json` app-level settings or a sibling). Until then it is
-/// a hardcoded `false`, so WP2 ships with the write path built but dormant — the
-/// fan-out drain (WP3) still runs `write_gated(event, tracking_enabled(app))`, which
-/// is a zero-IO no-op while this returns `false`. Kept as a single function so WP5
-/// changes one body, not every call-site.
-pub fn tracking_enabled(_app: &AppHandle) -> bool {
-    // WP2: default OFF. WP5 wires this to the persisted toggle.
-    false
+/// **WP5 (2026-07-08)** wired the body to the persisted universal-vs-workflow-coupled
+/// feature flag in `AppSettings` (`settings.json`, bundle-identity-isolated). Reads
+/// [`read_time_tracking_enabled`], which **defaults `false`** — so a fresh install ships
+/// with the write path built but dormant (the WP3 fan-out drain still runs
+/// `write_gated(event, tracking_enabled(app))`, a zero-IO no-op while this is off). Kept
+/// as a single function so the gate is one body, not a call-site sweep.
+///
+/// **Degrades to OFF on any error.** This is called from the hook-stream drain thread; a
+/// missing/malformed settings file (or an unresolvable data dir) must NOT panic the drain
+/// — the universal status dots ride the same stream and must survive. A read failure
+/// therefore returns `false` (tracking off) rather than propagating.
+pub fn tracking_enabled(app: &AppHandle) -> bool {
+    let dir = match crate::config_store::commands::resolve_data_dir(app) {
+        Ok(d) => d,
+        Err(_) => return false,
+    };
+    crate::config_store::settings::read_time_tracking_enabled(&dir).unwrap_or(false)
+}
+
+/// Broadcast fired when the tracking toggle changes, so every surface that reflects it
+/// (the picker checkbox now; the WP6 dashboard tab's empty-state later) re-renders off
+/// the single backend source of truth. Mirrors `cc_session::commands::CC_PERMISSION_MODE_EVENT`.
+pub const TIME_TRACKING_ENABLED_EVENT: &str = "time-tracking-enabled";
+
+/// Read the persisted time-analytics tracking toggle (default `false`). The picker
+/// checkbox seeds from this on mount; the WP6 dashboard tab reads it to decide between
+/// the analytics view and the "enable tracking…" empty-state. Thin wrapper over
+/// [`read_time_tracking_enabled`](crate::config_store::settings::read_time_tracking_enabled)
+/// — mirror of `cc_get_permission_mode`.
+#[tauri::command]
+pub fn time_get_tracking_enabled(app: AppHandle) -> Result<bool, String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    crate::config_store::settings::read_time_tracking_enabled(&dir).map_err(|e| e.to_string())
+}
+
+/// Set the tracking toggle. Persists it, then broadcasts [`TIME_TRACKING_ENABLED_EVENT`]
+/// so the picker checkbox (and any future surface) re-renders. Takes effect immediately —
+/// the write-gate ([`tracking_enabled`]) reads the persisted flag per event, so the very
+/// next hook/native signal after a set is gated by the new value. Mirror of
+/// `cc_set_permission_mode` (minus the argv-per-spawn caveat — there is no spawn here).
+#[tauri::command]
+pub fn time_set_tracking_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    crate::config_store::settings::write_time_tracking_enabled(&dir, enabled)
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit(TIME_TRACKING_ENABLED_EVENT, enabled);
+    Ok(())
 }
 
 /// Managed-state holder for the live [`TimeStore`], so [`write_gated`](TimeStore::
@@ -329,6 +407,37 @@ pub fn record_external_launch(app: &AppHandle, tool: NativeLaunchTool) {
     let signal = NativeSignal::ExternalLaunch { tool };
     if let Err(e) = store.write_native_gated(&signal, &ctx, gate_on) {
         eprintln!("[claudesk] time-store external-launch write failed (dropped): {e}");
+    }
+}
+
+/// Record an explicit workspace-close session-end marker (M9 WP6.5 signal 1), gated.
+/// Called when Claudesk tears down a CC PTY: from `cc_kill` (per-workspace close) and from
+/// the `CloseRequested` handler's `kill_all` (app quit), once per killed `session_id`.
+///
+/// This is the authoritative, synchronously-recorded session end the reclassifier's
+/// `authoritative_end` reads at top precedence — the backstop for the hard-kill/crash case
+/// where CC cannot emit a `SessionEnd` (research 2026-07-08). The row carries the closed
+/// session handle + `now_ms()` only (privacy: no content).
+///
+/// Best-effort: zero-IO when the gate is OFF (the default); a write failure is logged and
+/// dropped — a telemetry miss must NEVER block or panic the teardown path (a panic here
+/// would abort workspace-close / app-quit).
+pub fn record_workspace_close(app: &AppHandle, session_id: &str) {
+    let gate_on = tracking_enabled(app);
+    if !gate_on {
+        return; // zero-IO fast path: tracking OFF (the default) → nothing to do.
+    }
+    let Some(store) = app.try_state::<SharedTimeStore>() else {
+        return; // store not managed (open failed at launch) — can't record; never panic.
+    };
+    // The marker is attributed to the closed PTY session (workspace-level attribution from
+    // the active context is not meaningful at close — the session id is the anchor).
+    let ctx = NativeContext {
+        session_id: Some(session_id.to_string()),
+        ..NativeContext::default()
+    };
+    if let Err(e) = store.write_native_gated(&NativeSignal::WorkspaceClose, &ctx, gate_on) {
+        eprintln!("[claudesk] time-store workspace-close write failed (dropped): {e}");
     }
 }
 
@@ -558,6 +667,7 @@ mod tests {
             tool_name: None,
             agent_type: None,
             source: None,
+            reason: None,
         }
     }
 
@@ -612,6 +722,81 @@ mod tests {
         let store = mem_store();
         store.write_gated(&base_event(""), true).unwrap();
         assert_eq!(count(&store), 0, "unmappable event → no row, no error");
+    }
+
+    // ---- M9 WP6.5 Phase 4: startup reconciliation ---------------------------
+
+    /// An event for session `sid` at absolute epoch-ms `ts` (reconcile tests need control
+    /// of session id + ts).
+    fn ev_at(sid: &str, ts: i64, name: &str) -> HookEvent {
+        let mut e = base_event(name);
+        e.session_id = sid.to_string();
+        e.cwd = format!("/repo/{sid}");
+        e.timestamp = Some(ts as u64);
+        e
+    }
+
+    fn ws_close_count(store: &TimeStore) -> i64 {
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM events WHERE event='WorkspaceClose'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    const CAP: i64 = crate::reclassify::constants::SESSION_IDLE_CAP_MS;
+
+    #[test]
+    fn reconcile_closes_dangling_sessions_at_their_last_seen_ts() {
+        let store = mem_store();
+        // Two sessions, each last-active at 10_000/20_000ms; `now` far past the cap.
+        store.write_gated(&ev_at("dead-1", 5_000, "UserPromptSubmit"), true).unwrap();
+        store.write_gated(&ev_at("dead-1", 10_000, "Stop"), true).unwrap();
+        store.write_gated(&ev_at("dead-2", 20_000, "Stop"), true).unwrap();
+        let now = 20_000 + CAP + 60_000; // both silent past the cap
+        let closed = store.reconcile_dangling(now, CAP).unwrap();
+        assert_eq!(closed, 2, "both dangling sessions closed");
+        assert_eq!(ws_close_count(&store), 2);
+        // The markers land at each session's LAST-seen ts, not `now`.
+        let rows: Vec<(String, i64)> = {
+            let conn = store.conn.lock().unwrap();
+            let mut stmt = conn
+                .prepare("SELECT session_id, ts FROM events WHERE event='WorkspaceClose' ORDER BY session_id")
+                .unwrap();
+            let mapped = stmt
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+                .unwrap()
+                .map(|x| x.unwrap())
+                .collect();
+            mapped
+        };
+        assert_eq!(rows, vec![("dead-1".into(), 10_000), ("dead-2".into(), 20_000)]);
+    }
+
+    #[test]
+    fn reconcile_is_idempotent_second_run_writes_nothing() {
+        let store = mem_store();
+        store.write_gated(&ev_at("dead-1", 10_000, "Stop"), true).unwrap();
+        let now = 10_000 + CAP + 60_000;
+        assert_eq!(store.reconcile_dangling(now, CAP).unwrap(), 1);
+        assert_eq!(ws_close_count(&store), 1);
+        // Second run: the session now HAS a WorkspaceClose marker → no longer dangling.
+        assert_eq!(store.reconcile_dangling(now, CAP).unwrap(), 0, "idempotent");
+        assert_eq!(ws_close_count(&store), 1, "no duplicate marker");
+    }
+
+    #[test]
+    fn reconcile_leaves_a_recent_session_alone() {
+        let store = mem_store();
+        store.write_gated(&ev_at("live-1", 10_000, "Stop"), true).unwrap();
+        let now = 10_000 + 5 * 60_000; // 5min silent < 30min cap → still live
+        assert_eq!(store.reconcile_dangling(now, CAP).unwrap(), 0);
+        assert_eq!(ws_close_count(&store), 0);
     }
 
     // ---- M9 WP2.5: native-signal gated writes -------------------------------
@@ -1028,21 +1213,92 @@ mod tests {
     }
 
     #[test]
-    fn tracking_defaults_off_at_wp2() {
-        // WP2 ships the gate defaulting OFF (M9 decision 2). This test pins that the
-        // default is OFF so WP5's flip to a real toggle is a deliberate, visible change
-        // (the test updates when WP5 wires the persisted flag). AppHandle isn't needed —
-        // the WP2 body ignores it — so we can't construct one here; instead assert the
-        // documented contract via the write path: a store fed through a gate that is
-        // OFF writes nothing. (The AppHandle-bound tracking_enabled is exercised live in
-        // Phase 3 verify-self once the flag source lands in WP5.)
+    fn tracking_gate_defaults_off_when_unpersisted() {
+        // M9 decision 2: OFF out of the box. `tracking_enabled(app)` delegates to
+        // `read_time_tracking_enabled`, which defaults `false` on a fresh (never-written)
+        // settings dir. AppHandle isn't constructable in a unit test, so we exercise the
+        // exact function the gate delegates to (same code path, minus the app→dir hop —
+        // which is itself covered live in Phase 3 verify-self).
+        use crate::config_store::settings::read_time_tracking_enabled;
+        let dir = tempfile::TempDir::new().unwrap();
+        let gate_on = read_time_tracking_enabled(dir.path()).unwrap();
+        assert!(!gate_on, "fresh dir → gate OFF");
+        // ...and a store fed that gate writes nothing (the drain's OFF path).
         let store = mem_store();
-        // Simulate the drain calling write_gated with the WP2 default (false).
-        let wp2_default_gate = false;
+        store.write_gated(&base_event("Stop"), gate_on).unwrap();
+        assert_eq!(count(&store), 0, "gate OFF → no writes");
+    }
+
+    #[test]
+    fn tracking_gate_degrades_to_off_on_malformed_settings() {
+        // The drain-safety contract: `tracking_enabled` calls
+        // `read_time_tracking_enabled(&dir).unwrap_or(false)`, so a corrupt settings.json
+        // must NOT propagate an error into the hook-stream drain thread (the universal
+        // status dots ride the same stream and must survive) — it degrades to OFF. We
+        // can't construct an AppHandle here, so pin the two facts the degradation relies
+        // on: (1) a malformed file makes the reader return Err (so the caller's
+        // unwrap_or(false) is load-bearing, not dead), and (2) that Err unwraps to OFF.
+        use crate::config_store::settings::read_time_tracking_enabled;
+        let dir = tempfile::TempDir::new().unwrap();
+        std::fs::write(dir.path().join("settings.json"), b"{ not valid json").unwrap();
+        let read = read_time_tracking_enabled(dir.path());
+        assert!(read.is_err(), "malformed settings → reader returns Err");
+        let gate_on = read.unwrap_or(false); // exactly what tracking_enabled does
+        assert!(!gate_on, "error degrades to gate OFF (drain must never die on a bad file)");
+        // ...and a store fed that OFF gate writes nothing.
+        let store = mem_store();
+        store.write_gated(&base_event("Stop"), gate_on).unwrap();
+        assert_eq!(count(&store), 0, "degraded-OFF gate → no writes");
+    }
+
+    #[test]
+    fn time_tracking_enabled_event_name_is_stable() {
+        // Name-contract pin (WP5 Phase 2): the FE picker checkbox listens on this exact
+        // string (`TIME_TRACKING_ENABLED_EVENT`) and invokes `time_get/set_tracking_enabled`.
+        // A rename here without the matching FE change is a silent stringly-typed break
+        // (see the `tauri-command-removal-needs-invoke-sweep` project memory) — this test
+        // is the cheapest tripwire. The FE end of the contract is pinned by the Phase-3
+        // Vitest wiring test.
+        assert_eq!(TIME_TRACKING_ENABLED_EVENT, "time-tracking-enabled");
+    }
+
+    #[test]
+    fn tracking_gate_reflects_persisted_flag_both_ways() {
+        // WP5 contract: the persisted flag is the gate source. Flip it ON via the writer,
+        // read it back the way `tracking_enabled` does, feed the write path → a row lands.
+        // Flip it OFF → the write path is a zero-IO no-op. This is the settings→gate→write
+        // seam WP5 introduced (the app→dir resolution is the only piece left to verify-self).
+        use crate::config_store::settings::{read_time_tracking_enabled, write_time_tracking_enabled};
+        let dir = tempfile::TempDir::new().unwrap();
+
+        write_time_tracking_enabled(dir.path(), true).unwrap();
+        let store = mem_store();
+        let gate_on = read_time_tracking_enabled(dir.path()).unwrap();
+        assert!(gate_on, "persisted ON → gate ON");
+        store.write_gated(&base_event("Stop"), gate_on).unwrap();
+        // native path shares the same gate — assert it's gated identically.
         store
-            .write_gated(&base_event("Stop"), wp2_default_gate)
+            .write_native_gated(
+                &NativeSignal::ActiveSurface,
+                &NativeContext::default(),
+                gate_on,
+            )
             .unwrap();
-        assert_eq!(count(&store), 0, "WP2 default gate OFF → no writes");
+        assert_eq!(count(&store), 2, "gate ON → both write paths persist");
+
+        write_time_tracking_enabled(dir.path(), false).unwrap();
+        let store_off = mem_store();
+        let gate_off = read_time_tracking_enabled(dir.path()).unwrap();
+        assert!(!gate_off, "persisted OFF → gate OFF");
+        store_off.write_gated(&base_event("Stop"), gate_off).unwrap();
+        store_off
+            .write_native_gated(
+                &NativeSignal::ActiveSurface,
+                &NativeContext::default(),
+                gate_off,
+            )
+            .unwrap();
+        assert_eq!(count(&store_off), 0, "gate OFF → both write paths are zero-IO no-ops");
     }
 
     #[test]

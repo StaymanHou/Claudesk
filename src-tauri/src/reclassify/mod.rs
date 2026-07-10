@@ -625,12 +625,209 @@ pub mod constants {
     /// precede the blur. Leaned to 30s.
     pub const BLUR_LAUNCH_CORRELATION_MS: i64 = 30 * 1000;
 
+    /// **Session-termination** idle cap (M9 WP6.5, operator-locked 2026-07-08 at 30 min).
+    /// This is a **different axis** from [`AWAY_THRESHOLD_MS`]/[`SILENCE_CAP_MS`] (both
+    /// 10 min): those color a *human gap INSIDE a live session* (`Reviewing`→`Away`);
+    /// this decides whether the **session itself has ENDED**. A session with no
+    /// authoritative end marker (no CC `SessionEnd`, no explicit `WorkspaceClose`) whose
+    /// event stream contains an inter-event gap longer than this — and which is not the
+    /// current live session — is treated as having terminated at the last event *before*
+    /// that oversized gap; the stray trailing events (a late idle `Notification`, etc.) are
+    /// dropped from the session window. Set well ABOVE the 10-min away threshold so a
+    /// genuine lunch/think break on a LIVE session (AC3) is NOT mistaken for a termination.
+    /// See `SURFACE-2026-07-08-M9-SESSION-TERMINATION-NOT-TRACKED` + the WP6.5 spec.
+    pub const SESSION_IDLE_CAP_MS: i64 = 30 * 60 * 1000;
+
     // NOTE (WP4, chars_per_sec drop-vs-wire — DROPPED): claude-time carried a
     // `CHARS_PER_SEC_FALLBACK` typing-rate constant to *estimate* typing time from a
     // prompt's character count. The WP3 redesign made the human classifier
     // presence/threshold-based (real `KeystrokeActivity` presence + silence caps), so no
     // code multiplies a char count by a rate — the constant had no consumer. Removed here
     // rather than carried dead. (`SURFACE-2026-07-07-*` WP4-boundary decision.)
+}
+
+// ===========================================================================
+// M9 WP6.5 — Session-termination model (measure session END, don't infer it).
+// ===========================================================================
+//
+// A viz-session's window used to be `[first event ts, last event ts]` — "end" was
+// simply the last hook event. A session that was closed / crashed / lost to power had
+// no *termination* concept, so a stray late event (a delayed idle `Notification`) or a
+// long trailing gap made a dead session read as "running all day", corrupting every
+// duration/away/longest-session number (operator saw scratch-b 10:54→13:42 with no live
+// workspace — `SURFACE-2026-07-08-M9-SESSION-TERMINATION-NOT-TRACKED`).
+//
+// [`resolve_session_end`] replaces the bare `last ts` with a resolved end, fusing the
+// four operator-chosen signals (D3 precedence: explicit-marker > `SessionEnd` >
+// max-idle-cap > live). Phase 1 (this) implements the **max-idle cap + live-preservation**
+// levels; the `authoritative_end` argument (explicit close marker / CC `SessionEnd`) is
+// wired by Phase 2 — Phase 1 callers pass `None`.
+//
+// **Why the cap keys on IDLE gaps, not raw inter-event gaps (P1.2, corrected during
+// build):** a first cut walked raw consecutive-event gaps — but that wrongly caps a
+// legitimately-long ACTIVE session (a `UserPromptSubmit` at 9:00 → `Stop` at 17:00 where
+// the AI genuinely ran for 8 hours is ONE `active_burst`, no idle at all). The cap must
+// fire only on **idle** silence — a gap NOT covered by AI-busy activity
+// ([`ai_busy_intervals`]: tool/subagent/burst cover). This is the D2/AC7 reconciliation in
+// action: "session-ended" keys on the same AI-idle complement the human tiler uses, just at
+// a looser (30-min) threshold than the human away-threshold (10-min). So a UPS→long-run→Stop
+// session is preserved; only a genuine idle silence (the 13:42-stray-after-death shape)
+// caps.
+//
+// **Why no `now` parameter:** the resolved END VALUE never depends on `now` — the cap fires
+// on an internal idle gap, and the no-cap case ends at `last`. `now` is only needed to
+// CLASSIFY a session as dangling for the Phase 4 reconciliation WRITE, at the command layer
+// where `time_store::now_ms()` is available. Keeping the pure core `now`-free avoids a dead
+// parameter.
+
+/// The event name of the explicit close marker Claudesk writes on workspace-close / app-quit
+/// (M9 WP6.5 signal 1, a `claudesk-native` row). Phase 3 writes it via a `NativeSignal`
+/// variant mapping to this string; [`authoritative_end`] reads it as the top-precedence end.
+pub const EVENT_WORKSPACE_CLOSE: &str = "WorkspaceClose";
+/// CC's session-end hook event name (signal 3, a `cc-hook` row). Live-confirmed to fire on
+/// clean/graceful close (`/exit`, `/exit`-then-SIGKILL, SIGTERM), NOT on bare SIGKILL/crash.
+pub const EVENT_SESSION_END: &str = "SessionEnd";
+
+/// The authoritative session-end ts from an observed teardown, or `None`. Scans the
+/// session's events for an explicit [`EVENT_WORKSPACE_CLOSE`] marker (signal 1) FIRST — it
+/// is Claudesk's synchronous ground truth — else a CC [`EVENT_SESSION_END`] (signal 3).
+/// Within a kind, the EARLIEST matching ts wins (a session ends once; a later duplicate is
+/// ignored). Feeds [`resolve_session_end`]'s level-1 precedence (D3).
+///
+/// Precedence rationale (D3): a `WorkspaceClose` and a `SessionEnd` typically co-occur on a
+/// clean Claudesk close (the close both writes the marker AND causes CC's `/exit`→
+/// `SessionEnd`); the explicit marker wins as the synchronously-recorded truth, but either
+/// alone suffices. They disagree only by milliseconds — immaterial to the rendered minute.
+pub fn authoritative_end(session_events: &[EventRow]) -> Option<i64> {
+    let earliest = |name: &str| -> Option<i64> {
+        session_events
+            .iter()
+            .filter(|e| e.event == name)
+            .map(|e| e.ts)
+            .min()
+    };
+    earliest(EVENT_WORKSPACE_CLOSE).or_else(|| earliest(EVENT_SESSION_END))
+}
+
+/// One dangling session to reconcile: its id + the `cwd` of its last event + the last-seen
+/// event ts (the end to record). Emitted by [`dangling_sessions`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DanglingSession {
+    pub session_id: String,
+    pub cwd: String,
+    pub last_ts: i64,
+}
+
+/// Pure detector for **dangling** sessions (M9 WP6.5 Phase 4, startup reconciliation).
+/// A session is dangling when it has **no authoritative end marker** ([`authoritative_end`]
+/// returns `None` — no `WorkspaceClose`, no `SessionEnd`) AND its last event is older than
+/// `cap_ms` before `now_ms` (silent past the session-idle cap). These are the sessions left
+/// open by a crash / power-loss / force-quit / ⌘Q that never wrote a marker (the P3 finding
+/// widened this from "crash/power-loss" to include force-quit). The caller writes a
+/// `WorkspaceClose` marker at `last_ts` so the row stream itself becomes honest (the read-time
+/// cap in [`resolve_session_end`] already bounds the render; this makes the DATA match).
+///
+/// `now_ms` is a PARAMETER (determinism — the command layer supplies `time_store::now_ms()`).
+/// Sessions with an empty id are skipped (window-level native rows aren't sessions). The
+/// returned `last_ts`/`cwd` come from the chronologically-last event of the session.
+pub fn dangling_sessions(events: &[EventRow], now_ms: i64, cap_ms: i64) -> Vec<DanglingSession> {
+    let mut out = Vec::new();
+    let by_sid = group_by_session(events, |_| true); // all events, non-empty sid only
+    // Deterministic order (sort ids) so the write order + tests are stable.
+    let mut sids: Vec<&String> = by_sid.keys().collect();
+    sids.sort();
+    for sid in sids {
+        let evs = &by_sid[sid];
+        // group_by_session sorts each session's events by ts, so last() is the latest.
+        let Some(last) = evs.last() else { continue };
+        // Already has an authoritative end (WorkspaceClose/SessionEnd) → not dangling.
+        // (`authoritative_end` wants &[EventRow]; we hold &[&EventRow], so map to owned.)
+        let owned: Vec<EventRow> = evs.iter().map(|e| (*e).clone()).collect();
+        if authoritative_end(&owned).is_some() {
+            continue;
+        }
+        // Still within the idle cap of now → treat as live/recent, not dangling.
+        if now_ms - last.ts <= cap_ms {
+            continue;
+        }
+        out.push(DanglingSession {
+            session_id: sid.clone(),
+            cwd: last.cwd.clone(),
+            last_ts: last.ts,
+        });
+    }
+    out
+}
+
+/// Resolve a session's true end timestamp (epoch-ms) from its events + any authoritative
+/// end marker. Pure; deterministic (no wall-clock read).
+///
+/// Inputs:
+/// - `session_events` — the session's rows (any order; sorted internally). Non-empty; a
+///   single-event / zero-span session returns its first ts.
+/// - `authoritative_end` — the end from an explicit `WorkspaceClose` (signal 1) or CC
+///   `SessionEnd` (signal 3), if present. Phase 1 always passes `None`; Phase 2 computes it
+///   and it takes top precedence when present.
+///
+/// Precedence (D3):
+/// 1. **`authoritative_end`** — if present, that IS the end (an observed teardown), clamped
+///    into `[first, last]`.
+/// 2. **Max-idle cap** — else, the first **IDLE** gap (a span with no AI-busy cover) longer
+///    than [`constants::SESSION_IDLE_CAP_MS`] terminates the session at the last event
+///    before that gap. Stray trailing events after a dead session are dropped; an active
+///    UPS→run→Stop span (AI-busy the whole time) is NOT capped.
+/// 3. **No oversized idle gap** — else end = last event ts. A genuine sub-cap lunch/think
+///    break on a live session is preserved (AC3).
+///
+/// Returns the resolved end ts (always `>= first ts`).
+pub fn resolve_session_end(session_events: &[EventRow], authoritative_end: Option<i64>) -> i64 {
+    if session_events.is_empty() {
+        return 0; // defensive; callers guarantee non-empty
+    }
+    let mut tss: Vec<i64> = session_events.iter().map(|e| e.ts).collect();
+    tss.sort_unstable();
+    let first = *tss.first().unwrap();
+    let last = *tss.last().unwrap();
+
+    // Level 1 — an observed teardown is authoritative. Clamp into the session's span so a
+    // marker slightly before the first event (impossible in practice) can't invert it.
+    if let Some(end) = authoritative_end {
+        return end.clamp(first, last);
+    }
+
+    // Level 2 — max-idle cap over IDLE gaps only. Build the AI-busy cover; a gap between
+    // consecutive events counts toward the cap only for the portion NOT covered by AI
+    // activity. The first idle gap exceeding the cap ends the session at the event before it.
+    let busy = ai_busy_intervals(session_events); // merged, sorted (start, end) spans
+    for w in tss.windows(2) {
+        let (prev, next) = (w[0], w[1]);
+        let idle = idle_ms_in_gap(prev, next, &busy);
+        if idle > constants::SESSION_IDLE_CAP_MS {
+            return prev;
+        }
+    }
+
+    // Level 3 — no oversized idle gap: end at the last event.
+    last
+}
+
+/// Milliseconds of the `[gap_start, gap_end]` span NOT covered by any AI-busy interval in
+/// `busy` (which is merged + sorted by [`ai_busy_intervals`]). Used by
+/// [`resolve_session_end`] so the idle cap ignores time the AI was actually working.
+fn idle_ms_in_gap(gap_start: i64, gap_end: i64, busy: &[(i64, i64)]) -> i64 {
+    let total = (gap_end - gap_start).max(0);
+    if total == 0 {
+        return 0;
+    }
+    let mut covered = 0i64;
+    for &(bs, be) in busy {
+        let lo = bs.max(gap_start);
+        let hi = be.min(gap_end);
+        if hi > lo {
+            covered += hi - lo;
+        }
+    }
+    (total - covered).max(0)
 }
 
 /// The human states a gap can be classified as (the [`Kind`] subset produced by the gap

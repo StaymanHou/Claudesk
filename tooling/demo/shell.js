@@ -116,7 +116,13 @@
     return `<span class="status-dot status-dot-${s}"></span>`;
   }
 
-  function renderFilmstrip(k) {
+  // renderFilmstrip(k, t): t is optional (existing callers/timelines that never
+  // set tile.busy don't need it). When a tile carries a `busy` spec (Scene 6
+  // filmstrip variant — see timeline.filmstrip.scene6.js), append a compact
+  // glyph + ticking token-count line under the tile body, driven by busyAt()
+  // against the raw capture time — same mechanism as the center-stage busy
+  // line, scaled down for the small tile. No-op for tiles without tile.busy.
+  function renderFilmstrip(k, t) {
     if (!strip) return;
     strip.innerHTML = (k.tiles || [])
       .map((tile, i) => {
@@ -124,10 +130,20 @@
         const body = tile.body
           ? `<div class="tile-body">${tile.body}</div>`
           : "";
+        let tileBusy = "";
+        if (busyAt && tile.busy && typeof t === "number") {
+          const b = busyAt(tile.busy, t);
+          if (b) {
+            tileBusy =
+              `<div class="tile-busy">${b.glyph} ${b.word}… ` +
+              `<span class="tile-busy-meta">↓ ${fmtTokens(b.tokens)}</span></div>`;
+          }
+        }
         return (
           `<div class="tile${active}" data-i="${i}">` +
           `<div class="tile-head">${dot(tile.status)}${tile.name}</div>` +
           body +
+          tileBusy +
           `</div>`
         );
       })
@@ -305,7 +321,7 @@
       renderBackdrop(t);
       renderPip(k, t);
     } else {
-      renderFilmstrip(k);
+      renderFilmstrip(k, t);
       renderStage(k, t);
     }
     renderCursor(t);

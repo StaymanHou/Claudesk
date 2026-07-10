@@ -141,9 +141,20 @@ pub fn cc_resize(
 
 /// Terminate a session (`/exit\r`, then SIGKILL fallback) and drop it.
 #[tauri::command]
-pub fn cc_kill(registry: State<'_, Registry>, session_id: String) -> Result<(), String> {
-    let mut reg = registry
-        .lock()
-        .map_err(|_| "session registry lock poisoned".to_string())?;
-    reg.kill(&session_id).map_err(|e| e.to_string())
+pub fn cc_kill(
+    app: AppHandle,
+    registry: State<'_, Registry>,
+    session_id: String,
+) -> Result<(), String> {
+    {
+        let mut reg = registry
+            .lock()
+            .map_err(|_| "session registry lock poisoned".to_string())?;
+        reg.kill(&session_id).map_err(|e| e.to_string())?;
+    } // drop the registry lock before the (independent, gated) telemetry write.
+      // M9 WP6.5 signal 1: record the explicit session-end marker for the closed session.
+      // Best-effort + gated (zero-IO when tracking is OFF); a telemetry miss must not affect
+      // the kill, which already succeeded above.
+    crate::time_store::commands::record_workspace_close(&app, &session_id);
+    Ok(())
 }

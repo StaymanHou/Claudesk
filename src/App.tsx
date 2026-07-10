@@ -1,5 +1,13 @@
 import "./App.css";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useWorkspaceList } from "./state/useWorkspaceList";
 import { useWorkspaceStatus } from "./state/useWorkspaceStatus";
 import { CenterStage } from "./components/workspace/CenterStage";
@@ -10,6 +18,7 @@ import {
 } from "./components/workspace/filmstripTiles";
 import { workspaceSwitchIndex } from "./components/workspace/workspaceSwitchChord";
 import { newWorkspaceChord } from "./components/workspace/newWorkspaceChord";
+import { isDashboardChord } from "./components/workspace/dashboard/dashboardChord";
 import {
   loadOrder,
   reorder,
@@ -34,6 +43,14 @@ import { openSublime, openSublimeMerge } from "./sublime/sublimeLaunch";
 import { openFinder } from "./finder/finderLaunch";
 import { usePipFanout } from "./pip/usePipFanout";
 import { useMirrorTicker } from "./components/workspace/useMirrorTicker";
+
+// M9 WP6a — the GLOBAL time-analytics dashboard is a top-level view, mounted ONCE,
+// overlaying the center stage (the PickerOverlay pattern). LAZY: its chunk (the
+// ported dashboard surface) loads on first open, not at app boot (folds in
+// SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD).
+const GlobalDashboard = lazy(
+  () => import("./components/workspace/dashboard/GlobalDashboard"),
+);
 
 // WP5 app shell. The view is a state machine over WorkspaceList:
 //   - "picker"         → Project Picker, full-screen (no workspace open yet)
@@ -179,6 +196,35 @@ function App() {
     document.addEventListener("keydown", onKeyDown, true); // capture phase
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [view]);
+
+  // M9 WP6a — the GLOBAL time-analytics dashboard, a top-level view that overlays whichever
+  // scene is up (NOT a per-workspace panel — its data is all-projects). Because it is global,
+  // it is reachable from BOTH the picker scene at launch AND an open workspace
+  // (SURFACE-2026-07-08-M9-WP6A-DASHBOARD-FROM-PICKER) — so this chord is NOT gated on `view`
+  // (unlike ⌘⇧N / ⌘⇧+digit, which only make sense with a workspace open). ⌘⇧A toggles it;
+  // Esc closes it while open. Same APP-LEVEL capture-phase pattern. `showDashboard` mounts a
+  // single <GlobalDashboard> (lazy), rendered at the app-shell top level below.
+  const [showDashboard, setShowDashboard] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isDashboardChord(e)) {
+        e.preventDefault();
+        setShowDashboard((prev) => !prev); // toggle open/closed
+        return;
+      }
+      // Esc closes the dashboard when it's the front surface (does not steal Esc
+      // otherwise — only acts while showDashboard is true).
+      if (e.key === "Escape") {
+        setShowDashboard((prev) => {
+          if (!prev) return prev; // not open → leave Esc for whoever else wants it
+          e.preventDefault();
+          return false;
+        });
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true); // capture phase
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, []);
 
   // QoL-WP1 — per-workspace unsaved-doc probe registry. Each workspace's RightPanelHost
   // registers `() => editor.dirtyDocCount()` on mount (cleared on unmount). The close
@@ -364,7 +410,10 @@ function App() {
   return (
     <div className="app-shell" data-testid="app-shell">
       {view === "picker" ? (
-        <ProjectPicker onOpen={openWorkspace} />
+        <ProjectPicker
+          onOpen={openWorkspace}
+          onOpenDashboard={() => setShowDashboard(true)}
+        />
       ) : (
         <>
           <Filmstrip
@@ -377,6 +426,7 @@ function App() {
             onReorder={reorderTiles}
             onReorderCommit={commitOrder}
             onAddWorkspace={() => setShowPicker(true)}
+            onOpenDashboard={() => setShowDashboard(true)}
             onClose={requestClose}
           />
           <CenterStage
@@ -402,6 +452,27 @@ function App() {
             />
           )}
         </>
+      )}
+      {/* M9 WP6a — the GLOBAL time-analytics dashboard is app-level (NOT inside the
+          workspace-open branch), so it overlays whichever scene is up — the picker at
+          launch OR an open workspace — reachable in both (its data is all-projects;
+          SURFACE-2026-07-08-M9-WP6A-DASHBOARD-FROM-PICKER). Mounted ONCE, lazy — the chunk
+          loads on first open. Opened via ⌘⇧A, the Filmstrip analytics button, or the picker
+          analytics button; dismissed via its own close button or Esc. Whatever is beneath
+          (picker or CenterStage + workspaces) stays mounted underneath. */}
+      {showDashboard && (
+        <Suspense
+          fallback={
+            <div
+              className="global-dashboard-loading"
+              data-testid="global-dashboard-loading"
+            >
+              Loading analytics…
+            </div>
+          }
+        >
+          <GlobalDashboard onClose={() => setShowDashboard(false)} />
+        </Suspense>
       )}
     </div>
   );

@@ -49,6 +49,9 @@ interface FilmstripProps {
   onReorderCommit: () => void;
   /** Open the ProjectPicker overlay to add another workspace (M4 WP2). */
   onAddWorkspace: () => void;
+  /** Open the GLOBAL time-analytics dashboard (M9 WP6a — the analytics button;
+   *  ⌘⇧A is the keyboard parity). Global, not per-workspace. */
+  onOpenDashboard: () => void;
   /** Close a workspace (QoL-WP1 — the per-tile × button). App runs the dirty guard. */
   onClose: (workspaceId: string) => void;
 }
@@ -66,6 +69,7 @@ export function Filmstrip({
   onReorder,
   onReorderCommit,
   onAddWorkspace,
+  onOpenDashboard,
   onClose,
 }: FilmstripProps) {
   // M4 WP3 P4 — POINTER-based live (WYSIWYG) reorder. A press that stays under
@@ -397,6 +401,29 @@ export function Filmstrip({
         onClick={onAddWorkspace}
       >
         +
+      </button>
+      {/* M9 WP6a — open the GLOBAL time-analytics dashboard (⌘⇧A parity). Global,
+            not tied to any workspace tile — sits after the "+" as an app-level action. */}
+      <button
+        type="button"
+        className="filmstrip-open-dashboard"
+        data-testid="filmstrip-open-dashboard"
+        aria-label="Open time analytics"
+        title="Time analytics (⌘⇧A)"
+        onClick={onOpenDashboard}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          {/* Simple bar-chart glyph — three ascending bars. */}
+          <rect x="2" y="9" width="3" height="5" rx="0.5" fill="currentColor" />
+          <rect x="6.5" y="6" width="3" height="8" rx="0.5" fill="currentColor" />
+          <rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor" />
+        </svg>
       </button>
     </div>
   );

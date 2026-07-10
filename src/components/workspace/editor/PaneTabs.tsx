@@ -16,6 +16,8 @@
 
 import {
   forwardRef,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -23,9 +25,22 @@ import {
   useRef,
   useState,
 } from "react";
-import { EditorPanel } from "./EditorPanel";
 import { SplitIcon } from "./SplitIcon";
-import { SyntheticView, type SyntheticHighlight } from "./SyntheticView";
+import { EditorEmpty } from "./EditorEmpty";
+import type { SyntheticHighlight } from "./SyntheticView";
+// M9 WP6a Phase 4 — CM6 lazy-load (SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD).
+// EditorPanel + SyntheticView are the CodeMirror-bearing leaves; lazy-loading them here
+// (rather than the EditorSplit ref-handle above) hoists all @codemirror/@uiw code into a
+// shared async chunk that leaves `main`, loads on first FILE tab render — NOT at
+// workspace-open (an empty pane renders the no-CM6 EditorEmpty). EditorSplit's synchronous
+// PaneTabs ref contract is untouched (no ref-race). The fallback is a bare div: CM6 loads
+// in ms off local disk, so the flash is imperceptible; the pane stays mounted after.
+const EditorPanel = lazy(() =>
+  import("./EditorPanel").then((m) => ({ default: m.EditorPanel })),
+);
+const SyntheticView = lazy(() =>
+  import("./SyntheticView").then((m) => ({ default: m.SyntheticView })),
+);
 import { ConfirmModal } from "./ConfirmModal";
 import { closeDirtySpec, type CloseChoice } from "./confirmDialog";
 import {
@@ -414,12 +429,15 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
         </div>
 
         {isEmpty ? (
-          // Empty pane → the editor's "No file open" placeholder below the strip.
-          // EditorSplit collapses an emptied pane when >1 pane exists; the SOLE pane
-          // stays and shows this.
-          <EditorPanel openPath={null} active={false} />
+          // Empty pane → the "No file open" placeholder below the strip (no CM6, so a
+          // fresh workspace doesn't load the editor chunk). EditorSplit collapses an
+          // emptied pane when >1 pane exists; the SOLE pane stays and shows this.
+          <EditorEmpty />
         ) : (
-          <>
+          // Non-empty → real CM6 views (lazy). One Suspense wraps all tab bodies: the
+          // CM6 chunk loads once on the first file/synthetic tab render, then every pane
+          // stays mounted (display:none-toggled) with its state — mount-once preserved.
+          <Suspense fallback={<div className="editor-loading" data-testid="editor-loading" />}>
             <div className="editor-tab-bodies">
               {tabs.map((tab) => {
                 const isActive = tab.id === activeTabId;
@@ -454,7 +472,7 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
                 );
               })}
             </div>
-          </>
+          </Suspense>
         )}
 
         {closingTab && (

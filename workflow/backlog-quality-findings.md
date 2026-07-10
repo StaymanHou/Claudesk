@@ -4,6 +4,74 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m9-wp6.5-session-termination-model — 2026-07-08
+
+*(feature-review-quality on the WP6.5 working-tree diff [uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 2 MINOR — all auto-backlogged, priority low. Reviewer: well-built feature that advances the codebase; read-time-capping architecture + P1.2 idle-gap correction + D3 precedence all hold up under reading; comprehensive coverage. Only 2 minor observations — no refactor warranted.)*
+
+## SURFACE-2026-07-08-QUALITY-WP6.5-DANGLING-CLONE-PER-SESSION
+- **Severity:** MINOR
+- **File:** `src-tauri/src/reclassify/mod.rs` (`dangling_sessions`, ~L715)
+- **Finding:** Per candidate session, clones the entire event slice (`evs.iter().map(|e| (*e).clone()).collect()`) purely to satisfy `authoritative_end`'s `&[EventRow]` signature, then only scans for two event-name matches. An avoidable O(events) allocation on the startup reconciliation path (which reads the whole table). Negligible at current DB scale.
+- **Fix shape:** change `authoritative_end` to take `&[&EventRow]` (or a generic `IntoIterator`) so the clone drops; update its one other caller (`build_viz_session` passes an owned slice already — check both).
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-08-QUALITY-WP6.5-FIRST-GAP-WINS-IMPLICIT
+- **Severity:** MINOR
+- **File:** `src-tauri/src/reclassify/mod.rs` (`resolve_session_end` level-2 loop, `return prev;`)
+- **Finding:** The cap loop returns at the FIRST oversized idle gap — correct per D3 ("a session ends once"), but the "long idle → genuine resumed active burst → idle again" shape (session cut at the first gap, discarding a later real burst) has no test or comment. Load-bearing choice left implicit.
+- **Fix shape:** add a one-line comment at `return prev;` stating "first oversized idle gap wins even if activity resumes (D3: a session ends once; real resumes are covered by SessionEnd/reconciliation)" + optionally a pinning test.
+- **Priority:** low.
+- **Status:** pending.
+
+# m9-wp6a-day-view-dashboard — 2026-07-08
+
+*(feature-review-quality on the WP6a working-tree diff [uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all auto-backlogged, priority low. Reviewer: well-built feature that advances the codebase; the 4065-line-source port was executed as specced, both scrutinized design decisions [overlap per-project scoping; CM6 lazy boundary below the eager ref handle] hold up under reading. Only cosmetic findings — no refactor warranted.)*
+
+## SURFACE-2026-07-08-QUALITY-WP6A-DAYSTATS-DOUBLE-SUMACTIVE
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/dayStats.ts` (~L60-62)
+- **Finding:** `computeDayTotals` calls `sumActive(segs)` twice per session (`active += sumActive(segs)` then a separate `const sessActive = sumActive(segs)`). A trivial redundant filter+reduce; harmless (day payloads are small).
+- **Fix shape:** hoist to one `const sessActive = sumActive(segs); active += sessActive;`.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-08-QUALITY-WP6A-EDITORPANEL-DEAD-EMPTY-BRANCH
+- **Severity:** MINOR
+- **File:** `src/components/workspace/editor/EditorPanel.tsx` (~L249-250)
+- **Finding:** The `openPath == null → <EditorEmpty/>` branch is now dead in the shipped wiring: PaneTabs renders `<EditorEmpty/>` directly for the empty pane and only mounts the lazy EditorPanel for a non-null `tab.path`. Defensive-but-unreachable — a future reader may assume EditorPanel still renders the empty pane.
+- **Fix shape:** add a one-line "defensive-only; PaneTabs owns the empty case" comment (or drop the branch). `lazyBundleWiring.test.ts` already guards the regression.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-08-QUALITY-WP6A-ONOPENDASHBOARD-PROP-ASYMMETRY
+- **Severity:** MINOR
+- **File:** `src/components/workspace/Filmstrip.tsx` vs `src/components/picker/ProjectPicker.tsx`
+- **Finding:** `onOpenDashboard` is a REQUIRED prop on `Filmstrip` but OPTIONAL (`?`) on `ProjectPicker`, though App.tsx always threads it to both. The picker guards its button with `{onOpenDashboard && …}`; the filmstrip does not. Inconsistent prop contracts for the same affordance (not wrong — picker button optional-by-design for test callers).
+- **Fix shape:** align the two (both required, or both optional-with-guard) or add a one-line comment noting why they differ.
+- **Priority:** low.
+- **Status:** pending.
+
+# m9-wp5-tracking-toggle — 2026-07-08
+
+*(feature-review-quality on the WP5 working-tree diff [uncommitted per commit-only-when-asked; HEAD `6bdca6f`]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 2 MINOR — all auto-backlogged, priority low. Reviewer: well-built, low-risk feature — faithful mirror of the pip_mode/cc_permission_mode trio, single-hook-point gate discipline held, drain-safety degrade-to-OFF tested at the seam, event-name contract pinned both IPC sides. The 2 MINORs are an intrinsic auto-tier blind spot + a naming footgun.)*
+
+## SURFACE-2026-07-08-QUALITY-WP5-GATE-BODY-APPHANDLE-HOP-UNTESTED
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/commands.rs` (`tracking_enabled(app)` ~1088-1094)
+- **Finding:** The gate's own body — the `resolve_data_dir(app)` → `read_time_tracking_enabled(&dir).unwrap_or(false)` hop — is not unit-covered. Every gate test exercises `read_time_tracking_enabled` directly ("same code path, minus the app→dir hop"); the hop itself (the one line WP5 added to the gate) is proven only at bridge verify-self. A regression in the resolve-then-read wiring (e.g. a wrong data-dir resolver) would pass the auto-tier suite.
+- **Fix shape:** intrinsic AppHandle-constructability constraint — a unit test can't build an AppHandle. Options: (a) accept it (live verify-self covers it, as done); (b) if a future test-seam for AppHandle-bound commands materializes, add a gate-body test then. No action needed now; on record so the blind spot is known.
+- **Priority:** low (live-verified; auto-tier blind spot only).
+- **Status:** pending.
+
+## SURFACE-2026-07-08-QUALITY-WP5-SETTER-UNDERSCORE-FOOTGUN
+- **Severity:** MINOR
+- **File:** `src/components/picker/ProjectPicker.tsx` (~90, + call sites in the seed effect + `handleToggleTracking`)
+- **Finding:** The React state setter is named `setTimeTrackingEnabled_` (trailing underscore) solely to avoid colliding with the imported IPC wrapper `setTimeTrackingEnabled`. Reads as a typo at call sites; a future editor could "fix" the underscore and break the build.
+- **Fix shape:** alias the import for clarity — e.g. `import { setTimeTrackingEnabled as persistTimeTracking }` — then the state setter can take the clean `setTimeTrackingEnabled` name. Cosmetic, low effort. One `/feature-refactor` fix-site.
+- **Priority:** low (cosmetic footgun).
+- **Status:** pending.
+
 # m9-wp4-segment-model-query-layer — 2026-07-08
 
 *(feature-review-quality on ship commit `d8b308e`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 4 MINOR — all auto-backlogged, priority low. Reviewer: well-built phase — correctly re-expresses the transform against WP3's 6-kind enum, lands both carried MAJOR reclassify findings with genuine pinning tests, DTO/serde pinned both IPC sides, debt minimal + honestly tracked. The 4 MINORs are boundary edges + one drift-risk duplication + a possibly-dead contract field.)*

@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- Dots: sourced from src/App.css (single source of truth). Chrome: authored. -->
+    <link rel="stylesheet" href="_dots.generated.css" />
+    <link rel="stylesheet" href="shell.css" />
+    <style>
+      /* A4 (Scene 6) override, SCOPED TO THIS FILE ONLY — shell.css / shell.html
+         (the shared WP3/WP4 harness) are untouched.
+
+         WP4's .pip is a small corner-pinned vertical stack of 2 mirror cells
+         over a Slack backdrop. Scene 6 needs a genuine Zoom-style GRID of 4
+         equal-weight panes filling the frame, with no backdrop at all (no
+         human webcam tile — the joke is that every pane is an agent and the
+         presenter is off-camera). Re-lays the SAME .pip / .pip-cell elements
+         shell.js already renders (mirrorBody() + busyAt() drive the live
+         streaming content unchanged) into a full-bleed 2x2 grid instead. */
+      body[data-region="pip"] .backdrop {
+        display: none;
+      }
+      body[data-region="pip"] .pip {
+        position: absolute;
+        inset: 0;
+        width: auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        gap: 14px;
+        padding: 18px;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+        background: #0d1117;
+      }
+      body[data-region="pip"] .pip-cell {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      body[data-region="pip"] .pip-cell-term {
+        flex: 1;
+        height: auto;
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      body[data-region="pip"] .pip-cell-head {
+        font-size: 12px;
+        padding: 9px 12px;
+      }
+    </style>
+  </head>
+  <body data-region="pip">
+    <div class="app">
+      <!-- ===== filmstrip + center stage (unused in this scenario; kept only
+           because shell.js unconditionally queries these ids) ===== -->
+      <div class="filmstrip" id="strip"></div>
+      <div class="stage">
+        <div class="left" id="term"></div>
+        <div class="right" id="changes">
+          <h4>Changes</h4>
+          <div id="changes-body"></div>
+        </div>
+      </div>
+
+      <!-- ===== backdrop (force-hidden above via CSS; kept only because
+           shell.js unconditionally queries these ids) ===== -->
+      <div class="backdrop">
+        <div class="bd-title" id="bd-title">— another app —</div>
+        <div class="bd-lines" id="bd-lines"></div>
+        <div class="bd-input" id="bd-input" hidden></div>
+      </div>
+
+      <!-- ===== the 2x2 agent grid (region:'pip', re-laid-out above) ===== -->
+      <div class="pip" id="pip"></div>
+
+      <!-- ===== user-input affordances (unused — no cursor/keycaps in this
+           scenario; kept only because shell.js unconditionally queries these
+           ids) ===== -->
+      <div class="mouse-cursor" id="cursor" hidden>
+        <div class="mouse-cursor-flash" id="cursor-flash"></div>
+        <div class="mouse-cursor-ripple ring2" id="cursor-ripple2"></div>
+        <div class="mouse-cursor-ripple" id="cursor-ripple"></div>
+      </div>
+      <div class="keycap" id="keycap" hidden></div>
+    </div>
+
+    <!-- The scenario TIMELINE is injected by capture.mjs's --timeline flag
+         (addInitScript, runs before shell.js). For standalone opening, the
+         default smoke timeline is loaded if none is present. -->
+    <script src="timeline.smoke.js"></script>
+    <script src="frameAt.js"></script>
+    <script src="cursorAt.js"></script>
+    <script src="busyAt.js"></script>
+    <script src="backdropAt.js"></script>
+    <script src="shell.js"></script>
+  </body>
+</html>

@@ -118,6 +118,13 @@ pub struct HookEvent {
     /// Session `source` tag — present on `SessionStart` (e.g. `startup`/`resume`).
     #[serde(default)]
     pub source: Option<String>,
+    /// Session-end `reason` tag — present on `SessionEnd` (M9 WP6.5; e.g.
+    /// `prompt_input_exit` on `/exit`, `other` on SIGTERM — live-captured 2026-07-08).
+    /// The session-end model honors `SessionEnd` as an authoritative end; this tag is
+    /// persisted to the row `meta` for debugging (the derivation does not branch on it
+    /// in v1). Enum-ish tag, never content.
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 /// Errors from the socket listener's IO/lifecycle (bind, remove-stale, accept).
@@ -372,18 +379,33 @@ mod tests {
         assert_eq!(ev.hook_event_name, "SubagentStart");
         assert_eq!(ev.agent_type.as_deref(), Some("Explore"));
 
-        let ses = r#"{"hook_event_name":"SessionStart","session_id":"s","cwd":"/p","source":"startup"}"#;
+        let ses =
+            r#"{"hook_event_name":"SessionStart","session_id":"s","cwd":"/p","source":"startup"}"#;
         let ev = parse_line(ses).unwrap();
         assert_eq!(ev.hook_event_name, "SessionStart");
         assert_eq!(ev.source.as_deref(), Some("startup"));
 
-        // SessionEnd carries no extra fields — parses cleanly, all time fields None.
+        // SessionEnd with no reason — parses cleanly, all time fields (incl. reason) None.
         let end = r#"{"hook_event_name":"SessionEnd","session_id":"s","cwd":"/p"}"#;
         let ev = parse_line(end).unwrap();
         assert_eq!(ev.hook_event_name, "SessionEnd");
         assert_eq!(ev.agent_type, None);
         assert_eq!(ev.source, None);
         assert_eq!(ev.tool_use_id, None);
+        assert_eq!(ev.reason, None);
+    }
+
+    #[test]
+    fn parses_session_end_reason_field() {
+        // M9 WP6.5: SessionEnd carries a `reason` tag (the shape the updated
+        // claudesk-hook.pl emits — see tests/hook_pl_output.rs::session_end_emits_reason,
+        // live-captured values prompt_input_exit / other). Pin that the snake_case key
+        // deserializes into the Option<String> field — the emit→parse→persist chain link
+        // between the Perl hook and event_to_row's meta write.
+        let line = r#"{"hook_event_name":"SessionEnd","session_id":"s","cwd":"/p","reason":"prompt_input_exit"}"#;
+        let ev = parse_line(line).unwrap();
+        assert_eq!(ev.hook_event_name, "SessionEnd");
+        assert_eq!(ev.reason.as_deref(), Some("prompt_input_exit"));
     }
 
     #[test]
@@ -404,7 +426,10 @@ mod tests {
         // are guarded: camelCase keys must NOT populate the snake_case fields.
         let camel = r#"{"hook_event_name":"PreToolUse","session_id":"s","cwd":"/p","toolName":"Edit","toolUseId":"tu_1","agentType":"X","promptLengthChars":5}"#;
         let ev = parse_line(camel).unwrap();
-        assert_eq!(ev.tool_name, None, "toolName (camel) must not populate tool_name");
+        assert_eq!(
+            ev.tool_name, None,
+            "toolName (camel) must not populate tool_name"
+        );
         assert_eq!(ev.tool_use_id, None);
         assert_eq!(ev.agent_type, None);
         assert_eq!(ev.prompt_length_chars, None);
@@ -598,7 +623,9 @@ mod tests {
 
         let mut client = UnixStream::connect(&path).unwrap();
         client
-            .write_all(b"{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"s\",\"cwd\":\"/p\"}\n")
+            .write_all(
+                b"{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"s\",\"cwd\":\"/p\"}\n",
+            )
             .unwrap();
         client
             .write_all(b"{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"/p\"}\n")

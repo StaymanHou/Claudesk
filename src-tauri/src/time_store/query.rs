@@ -41,7 +41,8 @@ use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone};
 use serde::Serialize;
 
 use crate::reclassify::{
-    ai_busy_intervals, ai_segments_for_window, human_segments_for_window, EventRow, Kind, Segment,
+    ai_busy_intervals, ai_segments_for_window, authoritative_end, human_segments_for_window,
+    resolve_session_end, EventRow, Kind, Segment,
 };
 
 // ===========================================================================
@@ -290,18 +291,31 @@ fn build_viz_session(
     if sid_events.is_empty() {
         return None;
     }
-    // Session window = [first event ts, last event ts]. Events arrive sorted by ts
-    // from the SQL query (ORDER BY ts), but sort defensively.
+    // Session start = first event ts. Session END is RESOLVED (M9 WP6.5) — not the bare
+    // last event. `resolve_session_end` applies D3 precedence: an authoritative end marker
+    // (explicit `WorkspaceClose` / CC `SessionEnd`, via `authoritative_end`) wins; else the
+    // max-idle cap bounds a dead session with a stray late event (`SURFACE-2026-07-08-M9-
+    // SESSION-TERMINATION-NOT-TRACKED`); else the last event. Events arrive sorted (SQL
+    // `ORDER BY ts`); sort defensively.
     let mut tss: Vec<i64> = sid_events.iter().map(|e| e.ts).collect();
     tss.sort_unstable();
     let s_start_ts = *tss.first().unwrap();
-    let s_end_ts = *tss.last().unwrap();
+    let s_end_ts = resolve_session_end(sid_events, authoritative_end(sid_events));
     if s_end_ts <= s_start_ts {
-        // A single-instant session (e.g. one lone event) has no tile-able window.
+        // A single-instant session (or one capped to its first event) has no tile-able
+        // window.
         return None;
     }
 
-    let segs_ms = segments_for_window(sid_events, s_start_ts, s_end_ts);
+    // Late-event guard: everything past the resolved end is dropped from tiling AND the
+    // prompt/tool tallies (stray events after a dead session are not this session's work).
+    let clipped: Vec<EventRow> = sid_events
+        .iter()
+        .filter(|e| e.ts <= s_end_ts)
+        .cloned()
+        .collect();
+
+    let segs_ms = segments_for_window(&clipped, s_start_ts, s_end_ts);
     let segs: Vec<SegPayload> = segs_ms
         .into_iter()
         .map(|s| SegPayload {
@@ -313,9 +327,10 @@ fn build_viz_session(
         .collect();
 
     // Prompt count = UserPromptSubmit events; tool tally = PreToolUse by tool_name.
+    // (Over the clipped set — post-end strays excluded.)
     let mut prompts = 0i64;
     let mut tools: HashMap<String, i64> = HashMap::new();
-    for e in sid_events {
+    for e in &clipped {
         match e.event.as_str() {
             "UserPromptSubmit" => prompts += 1,
             "PreToolUse" => {

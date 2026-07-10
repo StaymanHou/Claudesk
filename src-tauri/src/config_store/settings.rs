@@ -65,6 +65,16 @@ pub struct AppSettings {
     /// current code (`skip_serializing_if` drops it on the next write), so it self-cleans.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cc_yolo: Option<bool>,
+    /// M9 WP5 — the time-analytics tracking toggle (the universal-vs-workflow-coupled
+    /// feature flag). `None` = never set → the reader applies the default **`false`**
+    /// (M9 decision 2 — tracking is OFF out of the box so users who don't want it pay
+    /// zero storage/IO; the CC-hook + native-signal write paths stay dormant while this
+    /// is off — see [`crate::time_store::commands::tracking_enabled`]). App-global, not
+    /// per-project. When `true`, both `TimeStore::write_gated` (CC-hook rows) and
+    /// `write_native_gated` (WP2.5 native-signal rows) persist; the status dots are
+    /// unaffected either way. Mirrors the `pip_mode` field's optional-with-default shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_tracking_enabled: Option<bool>,
 }
 
 /// Read the app settings. A missing file is normal (first run) and returns the
@@ -163,6 +173,22 @@ pub fn write_cc_permission_mode(
     write_settings(data_dir, &settings)
 }
 
+/// Read the time-analytics tracking toggle, defaulting **`false`** when unset / first run
+/// (M9 WP5, decision 2 — OFF out of the box). The single reader the
+/// `time_get_tracking_enabled` command AND the write-gate
+/// ([`crate::time_store::commands::tracking_enabled`]) call. (Mirror of `read_pip_mode`.)
+pub fn read_time_tracking_enabled(data_dir: &Path) -> Result<bool, ConfigError> {
+    Ok(read_settings(data_dir)?.time_tracking_enabled.unwrap_or(false))
+}
+
+/// Persist the tracking toggle, preserving other fields (read-modify-write). The single
+/// writer `time_set_tracking_enabled` calls. (Mirror of `write_pip_mode`.)
+pub fn write_time_tracking_enabled(data_dir: &Path, enabled: bool) -> Result<(), ConfigError> {
+    let mut settings = read_settings(data_dir)?;
+    settings.time_tracking_enabled = Some(enabled);
+    write_settings(data_dir, &settings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,6 +256,7 @@ mod tests {
             pip_mode: Some(PipMode::On),
             cc_permission_mode: Some(CcPermissionMode::AcceptEdits),
             cc_yolo: None,
+            time_tracking_enabled: Some(true),
         };
         write_settings(dir.path(), &written).unwrap();
         let read = read_settings(dir.path()).unwrap();
@@ -385,6 +412,54 @@ mod tests {
         write_cc_permission_mode(dir.path(), CcPermissionMode::Auto).unwrap();
         assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::Minimal);
         assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
+    }
+
+    #[test]
+    fn time_tracking_defaults_to_false_when_unset() {
+        // M9 WP5 / decision 2: OFF out of the box. A fresh install / missing field reads
+        // as false — no SQLite touch until the user opts in.
+        let dir = TempDir::new().unwrap();
+        assert!(!read_time_tracking_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn time_tracking_absent_in_present_file_reads_as_false() {
+        // Forward-compat: a settings.json that predates the field reads as OFF.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(SETTINGS_FILE),
+            br#"{"pip_mode":"auto","cc_permission_mode":"plan"}"#,
+        )
+        .unwrap();
+        assert!(!read_time_tracking_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn time_tracking_round_trips_both_values() {
+        let dir = TempDir::new().unwrap();
+        write_time_tracking_enabled(dir.path(), true).unwrap();
+        assert!(read_time_tracking_enabled(dir.path()).unwrap());
+        write_time_tracking_enabled(dir.path(), false).unwrap();
+        assert!(!read_time_tracking_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn time_tracking_independent_of_other_fields() {
+        // Writing the tracking flag must not clobber pip/cc settings, and vice versa
+        // (read-modify-write across all fields).
+        let dir = TempDir::new().unwrap();
+        write_pip_mode(dir.path(), PipMode::Off).unwrap();
+        write_cc_permission_mode(dir.path(), CcPermissionMode::Plan).unwrap();
+        write_time_tracking_enabled(dir.path(), true).unwrap();
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::Plan
+        );
+        assert!(read_time_tracking_enabled(dir.path()).unwrap());
+        // ...and updating another field leaves the tracking flag intact.
+        write_pip_mode(dir.path(), PipMode::On).unwrap();
+        assert!(read_time_tracking_enabled(dir.path()).unwrap());
     }
 
     #[test]

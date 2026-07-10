@@ -29,6 +29,11 @@ import {
   coerceCcPermissionMode,
   type CcPermissionMode,
 } from "../../cc/permissionMode";
+import {
+  TIME_TRACKING_ENABLED_EVENT,
+  getTimeTrackingEnabled,
+  setTimeTrackingEnabled,
+} from "../../state/timeAnalytics";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
 // an ERROR (an IPC rejection that must surface, not be swallowed — the WP6 MAJOR). The
@@ -60,9 +65,14 @@ function labelFor(project: RecentProject): string {
 
 interface ProjectPickerProps {
   onOpen: (projectPath: string) => void;
+  // M9 WP6a — the time-analytics dashboard is a GLOBAL (all-projects) surface, so it
+  // must be reachable from the picker scene at launch, not only after a workspace opens
+  // (SURFACE-2026-07-08-M9-WP6A-DASHBOARD-FROM-PICKER). When provided, the picker shows an
+  // analytics entry point that toggles the same single <GlobalDashboard> App.tsx owns.
+  onOpenDashboard?: () => void;
 }
 
-export function ProjectPicker({ onOpen }: ProjectPickerProps) {
+export function ProjectPicker({ onOpen, onOpenDashboard }: ProjectPickerProps) {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [filter, setFilter] = useState("");
   // The picker toast: an info note (prune-on-mount) or a surfaced IPC error. `null` =
@@ -78,6 +88,13 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
   const [ccPermissionMode, setCcPermissionMode] = useState<CcPermissionMode>(
     DEFAULT_CC_PERMISSION_MODE,
   );
+  // M9 WP5 — the time-analytics tracking toggle (universal-vs-workflow-coupled feature
+  // flag, default OFF). Same backend-is-source-of-truth discipline as the permission
+  // dropdown: seed from time_get_tracking_enabled on mount, stay in sync via the
+  // `time-tracking-enabled` broadcast, and on change call time_set_tracking_enabled
+  // (persists + re-broadcasts). OFF = zero SQLite IO; status dots are unaffected either
+  // way. Starts OFF until the read lands (matches the backend default, so no flicker).
+  const [timeTrackingEnabled, setTimeTrackingEnabled_] = useState(false);
 
   useEffect(() => {
     // Load recents on mount. First prune any project whose folder was deleted
@@ -154,6 +171,51 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
     });
   }
 
+  // Seed the tracking toggle from the backend on mount, then track the
+  // `time-tracking-enabled` broadcast (so any other surface flipping it — or a future
+  // WP6 empty-state — keeps this checkbox in sync). Backend is the single source of
+  // truth. `cancelled` guards the async listen under StrictMode. (Mirror of the
+  // cc-permission-mode seed+listen effect above.)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void getTimeTrackingEnabled()
+      .then((enabled) => {
+        if (!cancelled) setTimeTrackingEnabled_(enabled);
+      })
+      .catch((e) =>
+        console.error("[claudesk] time_get_tracking_enabled (picker) failed:", e),
+      );
+    void listen<boolean>(TIME_TRACKING_ENABLED_EVENT, (event) => {
+      setTimeTrackingEnabled_(event.payload);
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  function handleToggleTracking(next: boolean) {
+    // Optimistic set; the `time-tracking-enabled` broadcast (fired by the set command)
+    // re-confirms it. A rejection reverts + surfaces the error toast. (Mirror of
+    // handleChangeMode.)
+    const prev = timeTrackingEnabled;
+    setTimeTrackingEnabled_(next);
+    void setTimeTrackingEnabled(next).catch((e) => {
+      setTimeTrackingEnabled_(prev);
+      setToast({
+        kind: "error",
+        message: mapIpcError("update time tracking", e),
+      });
+    });
+  }
+
   async function handleOpenRecent(projectPath: string) {
     // Stamp recency before handing off so the next list_projects reflects it. A
     // rejection surfaces as an error toast (P4.2) — never dropped as an unhandled
@@ -203,7 +265,27 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
 
   return (
     <div className="picker" data-testid="picker">
-      <h1>Claudesk</h1>
+      <div className="picker-header">
+        <h1>Claudesk</h1>
+        {onOpenDashboard && (
+          <button
+            type="button"
+            className="picker-open-dashboard"
+            data-testid="picker-open-dashboard"
+            aria-label="Open time analytics"
+            title="Time analytics (⌘⇧A)"
+            onClick={onOpenDashboard}
+          >
+            {/* Bar-chart glyph — mirrors the Filmstrip analytics button. */}
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="1" y="9" width="3" height="6" rx="0.5" fill="currentColor" />
+              <rect x="6.5" y="5" width="3" height="10" rx="0.5" fill="currentColor" />
+              <rect x="12" y="2" width="3" height="13" rx="0.5" fill="currentColor" />
+            </svg>
+            <span>Analytics</span>
+          </button>
+        )}
+      </div>
       <label className="picker-permission-mode">
         <span>Permission mode</span>
         <select
@@ -219,6 +301,15 @@ export function ProjectPicker({ onOpen }: ProjectPickerProps) {
             </option>
           ))}
         </select>
+      </label>
+      <label className="picker-time-tracking">
+        <input
+          type="checkbox"
+          data-testid="picker-time-tracking"
+          checked={timeTrackingEnabled}
+          onChange={(e) => handleToggleTracking(e.target.checked)}
+        />
+        <span>Time tracking</span>
       </label>
       {toast !== null && (
         <div

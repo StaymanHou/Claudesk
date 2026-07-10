@@ -32,6 +32,7 @@ import { loadWrap, saveWrap } from "./editorWrapToggle";
 import { CommandPalette } from "./CommandPalette";
 import { isPaletteChord, type PaletteCommand } from "./paletteCommands";
 import { SYNTAX_MODES } from "./language";
+import { EditorEmpty } from "./EditorEmpty";
 
 interface EditorPanelProps {
   /** File to open, relative to projectPath (or absolute inside it). Null = no file. */
@@ -243,14 +244,10 @@ export function EditorPanel({
     view.focus();
   }, [highlightTarget, loadedPath, openPath]);
 
-  // No file open is derived from the prop.
+  // No file open is derived from the prop. (Markup lives in EditorEmpty — the same
+  // no-CM6 placeholder PaneTabs renders for an empty pane so the CM6 chunk defers.)
   if (openPath == null) {
-    return (
-      <div className="editor-empty" data-testid="editor-empty">
-        <p className="placeholder-coming">No file open</p>
-        <p className="placeholder-detail">Open a file to start editing.</p>
-      </div>
-    );
+    return <EditorEmpty />;
   }
 
   if (load.kind === "error") {

@@ -18,6 +18,9 @@
 //   ⌘⇧E → Editor   ⌘⇧D → Diff   ⌘⇧T → Terminal (WP9)
 //   ⌘⇧O → Sublime Text pop (transitional)   ⌘⇧P → palette
 //   ⌘P → finder (WP6 — LIVE; bare meta, no shift; finder/finderChord.ts)
+//   ⌘⇧A → GLOBAL time-analytics dashboard (M9 WP6a) — NOT a panel; an app-level
+//         chord in App.tsx (dashboard/dashboardChord.ts). Listed here only so the
+//         ownership map stays complete; panelForChord deliberately does NOT map "a".
 // All app-level chords use the WP1-proven capture-phase document listener.
 
 /** Which right-half panel is front. All three are live as of WP9. */
@@ -69,6 +72,8 @@ export interface PanelChordEvent {
  * ⌘⇧ family); `key` is matched case-insensitively because Shift uppercases it.
  * Distinct from ⌘⇧P (palette) and ⌘⇧O (Sublime) by letter, and from bare ⌘P
  * (finder) by the required Shift — so no two predicates fire on one event.
+ * NOTE (M9 WP6a): ⌘⇧A is the GLOBAL dashboard chord, handled app-level in App.tsx
+ * (dashboard/dashboardChord.ts) — NOT a panel, so it is deliberately absent here.
  */
 export function panelForChord(e: PanelChordEvent): RightPanel | null {
   if (!e.metaKey || !e.shiftKey) return null;

@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- Dots: sourced from src/App.css (single source of truth). Chrome: authored. -->
+    <link rel="stylesheet" href="_dots.generated.css" />
+    <link rel="stylesheet" href="shell.css" />
+    <style>
+      /* "1+1 mode" (Scene 6, "The New Bandwidth" — third demo clip, a script
+         beat added in a later revision pass), SCOPED TO THIS FILE ONLY —
+         shell.css / shell.html (the shared WP3/WP4 harness) are untouched, and
+         neither is timeline.pip.js (WP4's own narrative) nor
+         shell.pip.scene6.html / timeline.pip.scene6.js (Scene 6's earlier A4
+         fork, the 2x2 "four of me" grid — a DIFFERENT scenario, not touched).
+
+         Physical layout: reuses WP4's ORIGINAL corner-PiP-over-backdrop shape
+         as-is — a large "main app" backdrop filling the frame with a small
+         PiP pinned in a corner. That shape already models "one big thing +
+         one small monitored thing" almost exactly, so no grid/position
+         overrides are needed (unlike the A4 fork, which had to re-lay the PiP
+         into a full-bleed 2x2 grid). A single PiP cell (this scenario has
+         only one background project, not WP4's two) already fits the
+         existing .pip/.pip-cell chrome with zero layout changes.
+
+         The one visual delta: retint the backdrop from WP4's cool blue-gray
+         "generic work Slack" wash to a warm violet "new idea scratchpad"
+         wash. The brief is explicit that the exploratory main view must read
+         as a DIFFERENT KIND of space than the PiP's familiar CC coding
+         session — not just a different Slack channel with different words.
+         Retinting (plus non-code, conversational copy authored in the
+         timeline file) carries that distinction without any structural
+         change to the shared chrome. */
+      body[data-region="pip"] .backdrop {
+        background:
+          radial-gradient(1100px 620px at 26% 20%, #241b2c 0%, #120e17 62%),
+          #120e17;
+      }
+      body[data-region="pip"] .backdrop .bd-title {
+        background: #17111d;
+        border-bottom-color: #241a2c;
+        color: #c9b8d6;
+      }
+      body[data-region="pip"] .backdrop .bd-lines b {
+        color: #c9b8d6;
+      }
+      body[data-region="pip"] .backdrop .bd-input {
+        background: #17111d;
+        border-color: #2b2033;
+        color: #8f84a3;
+      }
+      body[data-region="pip"] .backdrop .bd-input .bd-author {
+        color: #8f84a3;
+      }
+      body[data-region="pip"] .backdrop .bd-input .bd-caret {
+        background: #a371f7;
+      }
+      body[data-region="pip"] .backdrop .bd-input .bd-author + .bd-caret,
+      body[data-region="pip"] .backdrop .bd-input.sending {
+        border-color: #a371f7;
+      }
+      body[data-region="pip"] .backdrop .bd-input.sending {
+        background: #241a3a;
+        color: #e2d9ea;
+      }
+    </style>
+  </head>
+  <body data-region="pip">
+    <div class="app">
+      <!-- ===== filmstrip + center stage (unused in this scenario; kept only
+           because shell.js unconditionally queries these ids) ===== -->
+      <div class="filmstrip" id="strip"></div>
+      <div class="stage">
+        <div class="left" id="term"></div>
+        <div class="right" id="changes">
+          <h4>Changes</h4>
+          <div id="changes-body"></div>
+        </div>
+      </div>
+
+      <!-- ===== the exploratory/learning "new idea scratchpad" backdrop (main,
+           large view) — retinted above, content authored per-frame by
+           renderBackdrop()/backdropAt() from the timeline's backdropLive
+           spec ===== -->
+      <div class="backdrop">
+        <div class="bd-title" id="bd-title">— another app —</div>
+        <div class="bd-lines" id="bd-lines"></div>
+        <div class="bd-input" id="bd-input" hidden></div>
+      </div>
+
+      <!-- ===== the single corner PiP tile (a familiar coding project quietly
+           ticking along — monitored, not attended) ===== -->
+      <div class="pip" id="pip"></div>
+
+      <!-- ===== user-input affordances (unused — this beat has no clicking or
+           key-pressing, only ambient typing in the backdrop input box; kept
+           only because shell.js unconditionally queries these ids) ===== -->
+      <div class="mouse-cursor" id="cursor" hidden>
+        <div class="mouse-cursor-flash" id="cursor-flash"></div>
+        <div class="mouse-cursor-ripple ring2" id="cursor-ripple2"></div>
+        <div class="mouse-cursor-ripple" id="cursor-ripple"></div>
+      </div>
+      <div class="keycap" id="keycap" hidden></div>
+    </div>
+
+    <!-- The scenario TIMELINE is injected by capture.mjs's --timeline flag
+         (addInitScript, runs before shell.js). For standalone opening, the
+         default smoke timeline is loaded if none is present. -->
+    <script src="timeline.smoke.js"></script>
+    <script src="frameAt.js"></script>
+    <script src="cursorAt.js"></script>
+    <script src="busyAt.js"></script>
+    <script src="backdropAt.js"></script>
+    <script src="shell.js"></script>
+  </body>
+</html>

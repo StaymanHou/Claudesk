@@ -70,6 +70,24 @@ body {
   line-height: 1.5;
   font-family: "SF Mono", ui-monospace, monospace;
 }
+/* Optional per-tile live indicator (Scene 6 filmstrip variant): a compact glyph
+   + ticking token count under the body line, driven by busyAt() against a
+   tile.busy spec — sells "this tile is genuinely streaming right now" even
+   when it isn't the focused/center-stage workspace. Additive-only: existing
+   timelines that never set tile.busy never render this (renderFilmstrip only
+   emits it when the spec is present), so WP3/WP4 README-GIF output is
+   unaffected. */
+.tile-busy {
+  color: #d97757;
+  font-size: 8px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-busy-meta {
+  color: #6e7681;
+}
 
 /* ---- center stage ---- */
 .stage {

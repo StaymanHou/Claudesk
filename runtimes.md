@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-08  # M9 WP4 P1 build: cargo test 435 lib pass (+2 reclassify correctness tests)
+updated: 2026-07-08  # M9 WP5 P1: cargo test 463 lib + 5 integ = 468 pass (+7 tracking-toggle tests)
 ---
 
 # Runtime Registry
@@ -68,9 +68,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.48s (2026-07-08, M9 WP4 P3 build: +5 timeAnalytics DTO-contract + wiring tests → 82 files / 806 pass)
+- **Last:** 1.6s (2026-07-08, M9 WP6a P3 F12 back-loop: dropped Most-used-tool stat + retuned palette → 89 files / 857 pass)
 - **Use timeout:** 120000
 - **History:**
+  - 1.5s — 2026-07-08 (M9 WP5 P3: +7 pickerTimeTrackingWiring.test.ts → 83 files / 813 pass)
   - 1.48s — 2026-07-08 (M9 WP4 P3 build: +5 timeAnalytics.test.ts [DTO shape + ?raw invoke-wiring guards] → 82 files / 806 pass)
   - 1.37s — 2026-06-28 (M6 WP8 static gate: 780 pass / 79 files, verification-only baseline)
   - 1.3s — 2026-06-28 (M6 WP7 P3 build: 731 pass / 75 files, +5 pickerYoloWiring guards)
@@ -116,9 +117,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.80s (2026-07-08, M9 WP4 P3 build: +7 command tests [time_analytics_query window deser/resolve/query_window/result-tag], 457 lib + 5 integ = 462 pass; warm)
+- **Last:** 0.72s (2026-07-08, M9 WP5 P1: +7 tracking-toggle tests [4 settings: default/absent/round-trip/field-independence; 3 time_store gate: default-off/both-ways/degrade-on-malformed], 463 lib + 5 integ = 468 pass; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.72s — 2026-07-08 (M9 WP5 P1: +7 tracking-toggle tests [time_tracking_enabled settings + write-gate seam], 463 lib + 5 integ = 468 pass; warm)
   - 0.80s — 2026-07-08 (M9 WP4 P3 build: +7 time_store::commands tests [time_analytics_query], 457 lib + 5 integ = 462 pass; warm)
   - 1.00s — 2026-07-08 (M9 WP4 P2 build: +15 time_store::query tests [day/range/week builders + snake_case DTO key-shape], 450 lib + 5 integ = 455 pass; warm. Cold compile of the new chrono dep was ~12s.)
   - 0.72s — 2026-07-08 (M9 WP4 P1 build: +2 reclassify tests [surface_tie_break_is_last_wins_same_ms, trailing_open_await_is_bounded_at_window_end_not_dropped], 435 lib pass; warm)

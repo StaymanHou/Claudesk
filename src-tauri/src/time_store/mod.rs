@@ -100,6 +100,14 @@ pub enum NativeSignal {
     /// Finder). The tool IDENTITY only — never the launched path. The signal a
     /// subsequent blur can be correlated against.
     ExternalLaunch { tool: NativeLaunchTool },
+    /// A workspace's CC session was torn down by Claudesk — an explicit **session-end
+    /// marker** (M9 WP6.5 signal 1). Written when Claudesk kills a PTY on workspace-close
+    /// (`cc_kill`) or app-quit (`kill_all` on `CloseRequested`). This is the authoritative,
+    /// synchronously-recorded end the reclassifier's [`crate::reclassify::authoritative_end`]
+    /// reads at top precedence — the backstop for the hard-kill/crash case where CC cannot
+    /// emit a `SessionEnd` (live-confirmed 2026-07-08). The row carries only the session
+    /// handle + `now_ms()` (privacy: no content).
+    WorkspaceClose,
 }
 
 /// Which Claudesk-initiated external tool a [`NativeSignal::ExternalLaunch`] marks.
@@ -170,6 +178,10 @@ pub fn native_row(signal: &NativeSignal, ctx: &NativeContext) -> TimeRow {
             meta.insert("tool".into(), json!(tool.as_str()));
             "ExternalLaunch"
         }
+        // M9 WP6.5 signal 1 — must match `reclassify::EVENT_WORKSPACE_CLOSE`. No extra meta
+        // beyond the attribution already inserted above; the session handle (in
+        // `session_id`) + `ts` ARE the marker.
+        NativeSignal::WorkspaceClose => "WorkspaceClose",
     };
 
     let meta = if meta.is_empty() {
@@ -237,7 +249,8 @@ pub struct TimeRow {
 /// The `meta` blob is assembled from the event's time-analytics fields — the SAME
 /// keys `claude-time`'s hook emitted (`prompt_length_chars` / `tool_use_id` /
 /// `source`) PLUS `notification_type` (the `Notification` type tag, WP3 needs it to
-/// derive CC's AwaitingInput state) — so the reclassifier reads the identical shape.
+/// derive CC's AwaitingInput state) PLUS `reason` (the `SessionEnd` tag, M9 WP6.5) —
+/// so the reclassifier reads the identical shape.
 /// **Privacy: only `prompt_length_chars` (the LENGTH) is read; `HookEvent::prompt`
 /// (the text) is never touched here.** `source = "cc-hook"` is stamped unconditionally.
 ///
@@ -270,6 +283,13 @@ pub fn event_to_row(event: &HookEvent) -> Option<TimeRow> {
         // `status_broadcaster`'s classifier). An enum tag, never content — same privacy
         // class as the keys above. Needed by WP3's B2/B4 human-state rule.
         meta.insert("notification_type".into(), json!(ntype));
+    }
+    if let Some(reason) = &event.reason {
+        // The SessionEnd `reason` tag (`prompt_input_exit` / `other` / …). M9 WP6.5: the
+        // session-end model honors SessionEnd as an authoritative end; the reason is
+        // persisted for debugging (the derivation does not branch on it in v1). An enum-ish
+        // tag, never content — same privacy class as `source`/`notification_type`.
+        meta.insert("reason".into(), json!(reason));
     }
     let meta = if meta.is_empty() {
         None
@@ -337,6 +357,7 @@ mod tests {
             tool_name: None,
             agent_type: None,
             source: None,
+            reason: None,
         }
     }
 
@@ -457,6 +478,36 @@ mod tests {
                 "Notification message body must not appear in the row meta"
             );
         }
+    }
+
+    #[test]
+    fn session_end_row_carries_reason_in_meta_not_message() {
+        // M9 WP6.5: a SessionEnd row persists its `reason` tag (prompt_input_exit / other)
+        // into meta so the session-end model + debugging can read it. The event's message
+        // body (if any) is NOT persisted — same privacy class as notification_type.
+        for reason in ["prompt_input_exit", "other"] {
+            let mut ev = base_event("SessionEnd");
+            ev.reason = Some(reason.to_string());
+            ev.message = Some("ENDMSG-DO-NOT-PERSIST".to_string());
+            let row = event_to_row(&ev).unwrap();
+            assert_eq!(row.event, "SessionEnd");
+            assert_eq!(row.source, SOURCE_CC_HOOK);
+            let meta = row.meta.expect("SessionEnd with a reason has meta");
+            let parsed: serde_json::Value = serde_json::from_str(&meta).unwrap();
+            assert_eq!(parsed["reason"], json!(reason));
+            assert!(
+                !meta.contains("ENDMSG"),
+                "SessionEnd message body must not appear in the row meta"
+            );
+        }
+    }
+
+    #[test]
+    fn session_end_row_without_reason_has_no_reason_key() {
+        // A SessionEnd with no reason tag → no reason in meta (and no meta blob at all).
+        let ev = base_event("SessionEnd");
+        let row = event_to_row(&ev).unwrap();
+        assert_eq!(row.meta, None);
     }
 
     #[test]
@@ -617,6 +668,24 @@ mod tests {
             let meta: serde_json::Value = serde_json::from_str(&row.meta.unwrap()).unwrap();
             assert_eq!(meta["tool"], json!(expected));
         }
+    }
+
+    #[test]
+    fn native_workspace_close_row_is_the_session_end_marker() {
+        // M9 WP6.5 signal 1: WorkspaceClose maps to event "WorkspaceClose" on a
+        // claudesk-native row, matching reclassify::EVENT_WORKSPACE_CLOSE (the reclassifier
+        // reads it at top precedence). The session handle + ts ARE the marker — no
+        // content. Attributed to the session it closes.
+        let mut c = ctx();
+        c.session_id = Some("cc-7".into());
+        let row = native_row(&NativeSignal::WorkspaceClose, &c);
+        assert_eq!(row.event, "WorkspaceClose");
+        assert_eq!(row.event, crate::reclassify::EVENT_WORKSPACE_CLOSE);
+        assert_eq!(row.source, SOURCE_CLAUDESK_NATIVE);
+        assert_eq!(row.session_id, "cc-7", "marker attributed to the closed session");
+        assert!(row.ts > 1_577_836_800_000, "carries a real ts");
+        assert_eq!(row.tool_name, None);
+        assert_eq!(row.agent_type, None);
     }
 
     #[test]

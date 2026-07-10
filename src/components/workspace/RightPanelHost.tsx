@@ -15,6 +15,8 @@
 // AND across a center-stage switch. `visible` gates the active panel's liveness.
 
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -29,7 +31,15 @@ import { isCloseTabChord } from "./editor/closeTabChord";
 import { newTerminalChord } from "./newTerminalChord";
 import { shouldCloseTerminalOnChord } from "./closeTerminalChord";
 import { deriveRightSurface } from "./rightSurface";
-import { DiffPanel } from "./diff/DiffPanel";
+// M9 WP6a Phase 4 — DiffPanel + ProjectSearch (below) are the other two CodeMirror-bearing
+// surfaces; lazy-loading them alongside the editor (PaneTabs) lets Rollup hoist all
+// @codemirror/@uiw code into ONE shared async chunk that leaves `main`. Neither has a
+// synchronous ref contract from here, so lazy is safe (SURFACE-2026-06-19-CM6-BUNDLE-SIZE-
+// LAZY-LOAD). DiffPanel stays mounted (display:none-toggled) once resolved; ProjectSearch
+// is already conditionally rendered with lifted state.
+const DiffPanel = lazy(() =>
+  import("./diff/DiffPanel").then((m) => ({ default: m.DiffPanel })),
+);
 import { TerminalPane } from "./TerminalPane";
 import {
   canOpenTerminal,
@@ -56,7 +66,9 @@ import {
   saveRailWidth,
   effectiveRailWidth,
 } from "./filetree/railWidth";
-import { ProjectSearch } from "./search/ProjectSearch";
+const ProjectSearch = lazy(() =>
+  import("./search/ProjectSearch").then((m) => ({ default: m.ProjectSearch })),
+);
 import { isSearchChord } from "./search/searchChord";
 import {
   matchTargetFor,
@@ -1006,13 +1018,17 @@ export function RightPanelHost({
           aria-labelledby={`paneltab-diff-${workspaceId}`}
           style={{ display: panel === "diff" ? "flex" : "none" }}
         >
-          <DiffPanel
-            projectPath={projectPath}
-            active={visible && panel === "diff"}
-            // "Open" always opens the live working-tree file (by design — see
-            // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
-            onOpenInEditor={openFile}
-          />
+          <Suspense
+            fallback={<div className="diff-loading" data-testid="diff-loading" />}
+          >
+            <DiffPanel
+              projectPath={projectPath}
+              active={visible && panel === "diff"}
+              // "Open" always opens the live working-tree file (by design — see
+              // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
+              onOpenInEditor={openFile}
+            />
+          </Suspense>
         </div>
 
         {/* WP9/M6-WP11 — the TERMINAL panel: now a LIST of login shells. A sub-tab row
@@ -1142,25 +1158,27 @@ export function RightPanelHost({
           tab (handleSearchResults), NOT this overlay — so the operator clicks through
           matches in the tab and the overlay stays a thin query box. */}
       {visible && searchOpen && (
-        <ProjectSearch
-          projectPath={projectPath}
-          query={searchQuery}
-          onQueryChange={(q) => {
-            setSearchQuery(q);
-            // Editing the query invalidates the last search's counts — Replace All
-            // re-gates until a fresh search runs (so we never replace against a query
-            // the displayed count no longer matches).
-            setLastCounts(null);
-          }}
-          replacement={replacement}
-          onReplacementChange={setReplacement}
-          error={searchError}
-          onError={setSearchError}
-          onResults={handleSearchResults}
-          canReplace={lastCounts !== null && lastCounts.matches > 0}
-          onReplaceAll={onReplaceAll}
-          onClose={() => setSearchOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <ProjectSearch
+            projectPath={projectPath}
+            query={searchQuery}
+            onQueryChange={(q) => {
+              setSearchQuery(q);
+              // Editing the query invalidates the last search's counts — Replace All
+              // re-gates until a fresh search runs (so we never replace against a query
+              // the displayed count no longer matches).
+              setLastCounts(null);
+            }}
+            replacement={replacement}
+            onReplacementChange={setReplacement}
+            error={searchError}
+            onError={setSearchError}
+            onResults={handleSearchResults}
+            canReplace={lastCounts !== null && lastCounts.matches > 0}
+            onReplaceAll={onReplaceAll}
+            onClose={() => setSearchOpen(false)}
+          />
+        </Suspense>
       )}
 
       {/* WP7 Phase 3 — Replace-All confirm (blast-radius counts). Reuses the shared

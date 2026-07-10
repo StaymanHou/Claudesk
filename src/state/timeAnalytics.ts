@@ -120,3 +120,29 @@ export async function queryTimeAnalytics(
 ): Promise<TimeAnalyticsResult> {
   return invoke<TimeAnalyticsResult>("time_analytics_query", { scope, window });
 }
+
+// ── M9 WP5 — tracking toggle (universal-vs-workflow-coupled feature flag) ──────────
+//
+// The toggle gates BOTH write paths (CC-hook + native signals); default OFF. The picker
+// checkbox is the surface: it seeds from `time_get_tracking_enabled`, stays in sync via
+// the `time-tracking-enabled` broadcast (a future surface — the WP6 empty-state — reads
+// the same signal), and sets via `time_set_tracking_enabled`. Mirrors the cc-permission-
+// mode event/command trio in `cc/permissionMode.ts`. The event-name string is pinned on
+// the backend by `time_tracking_enabled_event_name_is_stable`.
+
+/** Broadcast fired when the tracking toggle changes (backend `TIME_TRACKING_ENABLED_EVENT`).
+ *  Any surface reflecting the flag (picker checkbox now; WP6 empty-state later) listens. */
+export const TIME_TRACKING_ENABLED_EVENT = "time-tracking-enabled";
+
+/** Read the persisted tracking toggle (default `false`). Thin typed wrapper over the
+ *  `time_get_tracking_enabled` command. */
+export async function getTimeTrackingEnabled(): Promise<boolean> {
+  return invoke<boolean>("time_get_tracking_enabled");
+}
+
+/** Persist the tracking toggle. The backend re-broadcasts `time-tracking-enabled` so
+ *  every surface re-renders; takes effect on the next hook/native event. Thin typed
+ *  wrapper over the `time_set_tracking_enabled` command. */
+export async function setTimeTrackingEnabled(enabled: boolean): Promise<void> {
+  return invoke<void>("time_set_tracking_enabled", { enabled });
+}

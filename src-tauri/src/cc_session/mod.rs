@@ -603,7 +603,9 @@ impl SessionRegistry {
     }
 
     /// Kill every live session (window-close shutdown). Best-effort: a failure on one
-    /// session does not stop the others. Returns the count terminated.
+    /// session does not stop the others. Returns the **ids of the sessions killed OK**
+    /// (M9 WP6.5: the `CloseRequested` handler writes an explicit session-end marker per
+    /// killed id; callers wanting the count use `.len()`).
     ///
     /// PARALLELIZED (M4 WP2): each `kill()` blocks up to a 3s SIGKILL grace window
     /// ([`PtyCcSession::kill`]). At N>1 a sequential loop would serialize to N×3s of
@@ -613,23 +615,25 @@ impl SessionRegistry {
     /// `Mutex` (held by the `CloseRequested` caller) is released the moment this returns;
     /// the threads are joined inside this call so no kill is orphaned. Sessions are
     /// `Send` (the [`CcSession`] supertrait), so moving each `Box` into its thread is sound.
-    pub fn kill_all(&mut self) -> usize {
+    pub fn kill_all(&mut self) -> Vec<String> {
         // Drain ownership of every session out of the map first (so the threads own
-        // them outright — no shared borrow of `self` across threads).
-        let sessions: Vec<Box<dyn CcSession>> = self.sessions.drain().map(|(_, s)| s).collect();
+        // them outright — no shared borrow of `self` across threads). Keep the id paired
+        // with its session so we can report which ids killed OK.
+        let sessions: Vec<(String, Box<dyn CcSession>)> = self.sessions.drain().collect();
 
-        let handles: Vec<thread::JoinHandle<bool>> = sessions
+        let handles: Vec<thread::JoinHandle<Option<String>>> = sessions
             .into_iter()
-            .map(|session| thread::spawn(move || session.kill().is_ok()))
+            .map(|(id, session)| {
+                thread::spawn(move || session.kill().is_ok().then_some(id))
+            })
             .collect();
 
-        // Join all — the slowest grace window bounds the total, not the sum. A thread
-        // that panicked (join Err) simply isn't counted (best-effort).
+        // Join all — the slowest grace window bounds the total, not the sum. A thread that
+        // panicked (join Err) or whose kill failed contributes no id (best-effort).
         handles
             .into_iter()
-            .filter_map(|h| h.join().ok())
-            .filter(|&ok| ok)
-            .count()
+            .filter_map(|h| h.join().ok().flatten())
+            .collect()
     }
 
     fn get(&self, id: &str) -> Result<&dyn CcSession, CcError> {
@@ -1023,12 +1027,20 @@ mod tests {
 
     #[test]
     fn kill_all_drains_every_session() {
-        let (mut reg, killed, _ids) = reg_with_fakes(4);
+        let (mut reg, killed, ids) = reg_with_fakes(4);
         assert_eq!(reg.len(), 4);
-        let killed_count = reg.kill_all();
-        assert_eq!(killed_count, 4);
+        let killed_ids = reg.kill_all();
+        assert_eq!(killed_ids.len(), 4);
         assert_eq!(reg.len(), 0);
         assert_eq!(killed.load(Ordering::SeqCst), 4);
+        // M9 WP6.5 id-fidelity: the returned ids must be EXACTLY the inserted set — the
+        // WorkspaceClose markers on app-quit are keyed on these ids, so a regression that
+        // kept the count but returned wrong/empty ids would silently misattribute (or
+        // drop) markers. A count check alone would miss it.
+        use std::collections::BTreeSet;
+        let got: BTreeSet<&str> = killed_ids.iter().map(String::as_str).collect();
+        let want: BTreeSet<&str> = ids.iter().map(String::as_str).collect();
+        assert_eq!(got, want, "kill_all must return exactly the killed session ids");
     }
 
     #[test]
@@ -1043,11 +1055,11 @@ mod tests {
         assert_eq!(reg.len(), 4);
 
         let start = Instant::now();
-        let killed_count = reg.kill_all();
+        let killed_ids = reg.kill_all();
         let elapsed = start.elapsed();
 
         // All four were killed and drained...
-        assert_eq!(killed_count, 4);
+        assert_eq!(killed_ids.len(), 4);
         assert_eq!(reg.len(), 0);
         assert_eq!(killed.load(Ordering::SeqCst), 4);
         // ...and the wall-clock proves the windows overlapped (parallel), not summed.
@@ -1084,10 +1096,10 @@ mod tests {
         reg.insert(|_id| Box::new(FailingSession));
         assert_eq!(reg.len(), 4);
 
-        let killed_count = reg.kill_all();
+        let killed_ids = reg.kill_all();
 
-        // The failing session is NOT counted as terminated...
-        assert_eq!(killed_count, 3);
+        // The failing session is NOT reported as terminated...
+        assert_eq!(killed_ids.len(), 3);
         // ...but every session (incl. the failing one) is drained from the registry...
         assert_eq!(reg.len(), 0);
         // ...and the 3 successes all ran (the failing one didn't short-circuit them).

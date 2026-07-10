@@ -1139,3 +1139,314 @@ fn nonport_marker_reading_thinking_buckets_superseded_by_reviewing() {
     assert_eq!(medium_gap, HumanState::Reviewing);
     assert_eq!(short_gap, medium_gap, "reading+thinking are one bucket now");
 }
+
+// ===========================================================================
+// M9 WP6.5 — resolve_session_end (session-termination model, Phase 1).
+// ===========================================================================
+
+const CAP: i64 = constants::SESSION_IDLE_CAP_MS; // 30 min in ms
+const MIN: i64 = 60_000;
+
+/// Build a session's rows from `(minute, event)` pairs (session id fixed). The cap keys on
+/// IDLE gaps (spans with no AI-busy cover), so tests must model real event semantics: a
+/// `UserPromptSubmit`→`Stop` pair is an AI-busy burst (NOT idle); a `Stop` then a much-later
+/// stray event is a genuine idle gap.
+fn sess(pairs: &[(i64, &str)]) -> Vec<EventRow> {
+    pairs.iter().map(|(m, e)| ev(m * MIN, "s6.5", e)).collect()
+}
+
+#[test]
+#[allow(clippy::assertions_on_constants)] // deliberately pins a design invariant on the consts
+fn session_cap_constant_is_30_min_and_distinct_from_away_threshold() {
+    // D2: the session-termination cap is a DIFFERENT axis from the human-away threshold.
+    assert_eq!(constants::SESSION_IDLE_CAP_MS, 30 * 60 * 1000);
+    assert_ne!(
+        constants::SESSION_IDLE_CAP_MS,
+        constants::AWAY_THRESHOLD_MS,
+        "session-ended (30m) and human-away (10m) are different thresholds"
+    );
+    assert!(
+        constants::SESSION_IDLE_CAP_MS > constants::AWAY_THRESHOLD_MS,
+        "the session cap must be looser than the away threshold (AC3)"
+    );
+}
+
+#[test]
+fn resolve_end_no_gap_returns_last_event() {
+    // A tightly-spaced burst (UPS→Post→Stop, all sub-cap) ends at its last event.
+    let events = sess(&[(0, "UserPromptSubmit"), (5, "Stop"), (12, "Stop")]);
+    assert_eq!(resolve_session_end(&events, None), 12 * MIN);
+}
+
+#[test]
+fn resolve_end_long_active_run_is_not_capped() {
+    // The regression the raw-gap version caused: a UPS→(long AI run)→Stop is ONE active
+    // burst — AI-busy the whole 40 min — so there is NO idle gap and the session is NOT
+    // capped even though the two events are >30 min apart.
+    let events = sess(&[(0, "UserPromptSubmit"), (40, "Stop")]);
+    assert_eq!(
+        resolve_session_end(&events, None),
+        40 * MIN,
+        "an active UPS→run→Stop span is AI-busy, not idle — must not cap"
+    );
+}
+
+#[test]
+fn resolve_end_live_idle_under_cap_is_preserved() {
+    // AC3: a genuine idle break UNDER the cap between two bursts is NOT a termination.
+    // burst1 [0,5], 20-min idle gap [5,25] (< 30), burst2 [25,30].
+    let events = sess(&[
+        (0, "UserPromptSubmit"),
+        (5, "Stop"),
+        (25, "UserPromptSubmit"),
+        (30, "Stop"),
+    ]);
+    assert_eq!(
+        resolve_session_end(&events, None),
+        30 * MIN,
+        "a sub-cap idle gap must not terminate a live session"
+    );
+}
+
+#[test]
+fn resolve_end_oversized_idle_gap_caps_at_event_before_gap() {
+    // AC2: a burst, then a huge IDLE gap, then a stray late event. The session ended at the
+    // last event BEFORE the oversized idle gap; the stray is dropped.
+    let last_real = 6; // min — end of the real burst
+    let stray = last_real + 40; // > 30-min idle later — a lone late Notification
+    let events = sess(&[
+        (0, "UserPromptSubmit"),
+        (last_real, "Stop"),
+        (stray, "Notification"),
+    ]);
+    assert_eq!(
+        resolve_session_end(&events, None),
+        last_real * MIN,
+        "the session terminated in the silent gap; the stray event is dropped"
+    );
+}
+
+#[test]
+fn resolve_end_the_10_54_to_13_42_defect_repro() {
+    // The exact operator-reported shape: real work ended ~11:00; a stray event landed at
+    // 13:42 (~2h42m idle later, far > the 30-min cap). Resolved end = last real event, NOT
+    // 13:42 — the row must stop stretching to the day edge.
+    let t_last_real = 6; // min — ~11:00 real activity tail (after a 10:54 start)
+    let t_1342 = 168; // min — 2h48m after start, a lone stray
+    let events = sess(&[
+        (0, "UserPromptSubmit"),
+        (t_last_real, "Stop"),
+        (t_1342, "Notification"),
+    ]);
+    let end = resolve_session_end(&events, None);
+    assert_eq!(end, t_last_real * MIN, "cap at real activity, not the 13:42 stray");
+    assert!(end < t_1342 * MIN, "the dead session no longer reaches the stray");
+}
+
+#[test]
+fn resolve_end_authoritative_marker_wins_and_clamps_into_span() {
+    // Level 1 precedence: an explicit/SessionEnd end wins over the cap + last event, clamped
+    // into [first, last] defensively.
+    let events = sess(&[(0, "UserPromptSubmit"), (5, "Stop"), (10, "Stop")]);
+    assert_eq!(resolve_session_end(&events, Some(7 * MIN)), 7 * MIN); // between events
+    assert_eq!(resolve_session_end(&events, Some(99 * MIN)), 10 * MIN); // clamps down
+    assert_eq!(resolve_session_end(&events, Some(-5)), 0); // clamps up to first
+}
+
+#[test]
+fn resolve_end_authoritative_marker_beats_an_oversized_gap() {
+    // BOTH an oversized idle gap AND an authoritative marker → the marker (level 1) wins.
+    let events = sess(&[(0, "UserPromptSubmit"), (3, "Stop"), (3 + 40, "Notification")]);
+    assert_eq!(resolve_session_end(&events, None), 3 * MIN); // cap fires without a marker
+    assert_eq!(resolve_session_end(&events, Some(4 * MIN)), 4 * MIN); // marker overrides
+}
+
+#[test]
+fn resolve_end_single_event_returns_that_event() {
+    assert_eq!(resolve_session_end(&sess(&[(42, "Stop")]), None), 42 * MIN);
+}
+
+#[test]
+fn resolve_end_partial_ai_cover_keeps_idle_under_cap_not_capped() {
+    // The idle-gap subtlety (P1.2 correction) pinned permanently: a raw event-to-event
+    // span exceeds the cap, BUT a mid-span tool run covers most of it, leaving the IDLE
+    // remainder < 30 min. Must NOT cap — the cap keys on idle, not raw gaps.
+    // Stop@0 (no live burst), then a 45-min tool [5,50] (AI busy), then Stop@52.
+    // Raw span 0->52 = 52 min (> cap); idle = (5-0) + (52-50) = 7 min (< cap).
+    let events = vec![
+        ev(0, "s6.5", "Stop"), // minute 0
+        with_tool(ev(5 * MIN, "s6.5", "PreToolUse"), "Bash", "tp1"),
+        with_tool(ev(50 * MIN, "s6.5", "PostToolUse"), "Bash", "tp1"),
+        ev(52 * MIN, "s6.5", "Stop"),
+    ];
+    assert_eq!(
+        resolve_session_end(&events, None),
+        52 * MIN,
+        "AI-busy time inside the span shrinks idle below the cap — no termination"
+    );
+}
+
+#[test]
+fn resolve_end_idle_after_ai_activity_exceeds_cap_caps_at_last_activity() {
+    // Complement of the above: AI runs early, then a long idle tail crosses the cap. The
+    // session ends at the last event before the oversized IDLE portion. Tool [5,10]
+    // (AI busy), Stop@10, then a 40-min idle to a stray Notification@50 (> cap).
+    let events = vec![
+        ev(0, "s6.5", "UserPromptSubmit"), // minute 0
+        with_tool(ev(5 * MIN, "s6.5", "PreToolUse"), "Bash", "tp2"),
+        with_tool(ev(10 * MIN, "s6.5", "PostToolUse"), "Bash", "tp2"),
+        ev(10 * MIN, "s6.5", "Stop"),
+        ev(50 * MIN, "s6.5", "Notification"),
+    ];
+    assert_eq!(
+        resolve_session_end(&events, None),
+        10 * MIN,
+        "the idle tail past AI activity exceeds the cap → end at last real event"
+    );
+}
+
+// ---- Phase 2: authoritative_end + resolver precedence + late-event guard ----
+
+/// A `claudesk-native` row (source override), for the explicit WorkspaceClose marker.
+fn native_ev(ts: i64, event: &str) -> EventRow {
+    let mut e = ev(ts, "s6.5", event);
+    e.source = "claudesk-native".to_string();
+    e
+}
+
+#[test]
+fn authoritative_end_none_when_no_marker() {
+    let events = sess(&[(0, "UserPromptSubmit"), (5, "Stop")]);
+    assert_eq!(authoritative_end(&events), None);
+}
+
+#[test]
+fn authoritative_end_honors_session_end() {
+    let events = sess(&[(0, "UserPromptSubmit"), (5, "Stop"), (6, "SessionEnd")]);
+    assert_eq!(authoritative_end(&events), Some(6 * MIN));
+}
+
+#[test]
+fn authoritative_end_explicit_marker_beats_session_end() {
+    // D3: an explicit WorkspaceClose (native) wins over a CC SessionEnd, even if the
+    // SessionEnd is earlier — the marker is Claudesk's synchronous ground truth.
+    let mut events = sess(&[(0, "UserPromptSubmit"), (5, "Stop")]);
+    events.push(ev(6 * MIN, "s6.5", "SessionEnd")); // cc-hook
+    events.push(native_ev(7 * MIN, "WorkspaceClose")); // native marker
+    assert_eq!(
+        authoritative_end(&events),
+        Some(7 * MIN),
+        "WorkspaceClose (signal 1) takes precedence over SessionEnd (signal 3)"
+    );
+}
+
+#[test]
+fn authoritative_end_earliest_of_a_kind_wins() {
+    // A session ends once; a duplicate marker of the same kind → the earliest ts.
+    let mut events = sess(&[(0, "UserPromptSubmit"), (5, "Stop")]);
+    events.push(ev(6 * MIN, "s6.5", "SessionEnd"));
+    events.push(ev(9 * MIN, "s6.5", "SessionEnd"));
+    assert_eq!(authoritative_end(&events), Some(6 * MIN));
+}
+
+#[test]
+fn resolve_end_honors_session_end_even_with_a_later_stray_event() {
+    // The late-event guard at the resolver level: a SessionEnd@6 followed by a stray
+    // Notification@50 → the session ends at 6 (the authoritative end wins; the stray is
+    // past it and does not extend the window).
+    let mut events = sess(&[(0, "UserPromptSubmit"), (5, "Stop")]);
+    events.push(ev(6 * MIN, "s6.5", "SessionEnd"));
+    events.push(ev(50 * MIN, "s6.5", "Notification"));
+    let ae = authoritative_end(&events);
+    assert_eq!(ae, Some(6 * MIN));
+    assert_eq!(
+        resolve_session_end(&events, ae),
+        6 * MIN,
+        "SessionEnd is authoritative; the later stray does not extend the session"
+    );
+}
+
+#[test]
+fn resolve_end_explicit_marker_overrides_the_cap_and_last_event() {
+    // Composed: an oversized idle gap (would cap at 5) AND an explicit WorkspaceClose@7 →
+    // the marker (level 1) wins over the cap (level 2).
+    let mut events = sess(&[(0, "UserPromptSubmit"), (5, "Stop"), (5 + 40, "Notification")]);
+    events.push(native_ev(7 * MIN, "WorkspaceClose"));
+    let ae = authoritative_end(&events);
+    assert_eq!(resolve_session_end(&events, ae), 7 * MIN);
+}
+
+// ---- Phase 4: dangling_sessions (startup reconciliation detector) ----------
+
+/// Build a session's rows with an explicit session id + cwd (dangling tests need multiple
+/// distinct sessions).
+fn sess_id(id: &str, cwd: &str, pairs: &[(i64, &str)]) -> Vec<EventRow> {
+    pairs
+        .iter()
+        .map(|(m, e)| {
+            let mut r = ev(m * MIN, id, e);
+            r.cwd = cwd.to_string();
+            r
+        })
+        .collect()
+}
+
+#[test]
+fn dangling_detects_a_session_silent_past_the_cap_with_no_marker() {
+    // A session whose last event is > cap before `now`, no WorkspaceClose/SessionEnd →
+    // dangling; reconciliation should close it at its last-seen ts.
+    let now = 200 * MIN;
+    let events = sess_id("dead-1", "/repo/a", &[(0, "UserPromptSubmit"), (10, "Stop")]);
+    // last event at 10min; now at 200min → 190min silent >> 30min cap.
+    let d = dangling_sessions(&events, now, CAP);
+    assert_eq!(d.len(), 1);
+    assert_eq!(d[0].session_id, "dead-1");
+    assert_eq!(d[0].cwd, "/repo/a");
+    assert_eq!(d[0].last_ts, 10 * MIN, "closes at the last-seen event");
+}
+
+#[test]
+fn dangling_ignores_a_recent_session_within_the_cap() {
+    // A session whose last event is WITHIN the cap of `now` is live/recent → NOT dangling.
+    let now = 20 * MIN; // last event at 10min → 10min silent < 30min cap
+    let events = sess_id("live-1", "/repo/a", &[(0, "UserPromptSubmit"), (10, "Stop")]);
+    assert!(dangling_sessions(&events, now, CAP).is_empty());
+}
+
+#[test]
+fn dangling_ignores_a_session_that_already_has_a_marker() {
+    // A session past the cap but WITH a WorkspaceClose (or SessionEnd) is already closed →
+    // NOT dangling. This is what makes reconciliation idempotent.
+    let now = 200 * MIN;
+    let mut ws_closed = sess_id("closed-1", "/repo/a", &[(0, "UserPromptSubmit"), (10, "Stop")]);
+    let mut mk = ev(10 * MIN, "closed-1", "WorkspaceClose");
+    mk.source = "claudesk-native".to_string();
+    mk.cwd = "/repo/a".to_string();
+    ws_closed.push(mk);
+    assert!(dangling_sessions(&ws_closed, now, CAP).is_empty(), "WorkspaceClose → not dangling");
+
+    let mut se_closed = sess_id("closed-2", "/repo/b", &[(0, "UserPromptSubmit"), (10, "Stop")]);
+    se_closed.push(ev(11 * MIN, "closed-2", "SessionEnd"));
+    assert!(dangling_sessions(&se_closed, now, CAP).is_empty(), "SessionEnd → not dangling");
+}
+
+#[test]
+fn dangling_reports_multiple_sessions_deterministically() {
+    // Two dangling sessions → both reported, sorted by id (stable write order).
+    let now = 300 * MIN;
+    let mut events = sess_id("aaa", "/repo/a", &[(0, "UserPromptSubmit"), (5, "Stop")]);
+    events.extend(sess_id("bbb", "/repo/b", &[(0, "UserPromptSubmit"), (8, "Stop")]));
+    let d = dangling_sessions(&events, now, CAP);
+    assert_eq!(d.iter().map(|x| x.session_id.as_str()).collect::<Vec<_>>(), ["aaa", "bbb"]);
+    assert_eq!(d[0].last_ts, 5 * MIN);
+    assert_eq!(d[1].last_ts, 8 * MIN);
+}
+
+#[test]
+fn dangling_skips_empty_session_id_window_level_rows() {
+    // Native window-level rows (empty session_id) are not sessions → never dangling.
+    let now = 300 * MIN;
+    let mut r = ev(0, "", "WindowFocus");
+    r.source = "claudesk-native".to_string();
+    assert!(dangling_sessions(&[r], now, CAP).is_empty());
+}

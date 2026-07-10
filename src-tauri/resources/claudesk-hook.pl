@@ -12,6 +12,7 @@
 #   tool_name, tool_use_id        (Pre/PostToolUse, PostToolUseFailure)
 #   agent_type                    (SubagentStart/Stop; from CC's subagent_type)
 #   source                        (SessionStart)
+#   reason                        (SessionEnd; e.g. prompt_input_exit / other — WP6.5)
 # `notification_type` (QoL-WP2) lets the broadcaster gate AwaitingInput on genuine
 # input-needed types (permission_prompt / elicitation_dialog) vs informational ones
 # (idle_prompt / auth_success) — so an idle nudge doesn't flip a busy dot blue. The
@@ -103,6 +104,13 @@ if ($event eq 'SubagentStart' || $event eq 'SubagentStop') {
 # SessionStart carries a `source` tag (startup / resume / …).
 if ($event eq 'SessionStart') {
     $out{source} = $payload->{source} if defined $payload->{source};
+}
+# SessionEnd carries a `reason` tag (prompt_input_exit / other / …). M9 WP6.5: the
+# time-analytics session-end model honors SessionEnd as an authoritative end; `reason`
+# is persisted into the row meta for debugging (the derivation does not branch on it in
+# v1). A short enum-ish tag, never content — same privacy class as `source`.
+if ($event eq 'SessionEnd') {
+    $out{reason} = $payload->{reason} if defined $payload->{reason};
 }
 
 my $line = encode_json(\%out) . "\n";

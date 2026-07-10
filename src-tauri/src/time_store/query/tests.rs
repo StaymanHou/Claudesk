@@ -500,3 +500,179 @@ fn dto_serde_shape_is_snake_case_and_kind_is_kebab_tag() {
         "bare-day session omits day_iso"
     );
 }
+
+// ---- M9 WP6.5: session-termination model — the day-level defect repro --------
+
+#[test]
+fn dead_session_with_stray_late_event_does_not_stretch_to_the_day_edge() {
+    // The operator's exact defect (SURFACE-2026-07-08): a session's real work ended
+    // shortly after it began, but a stray late event (a lone idle Notification) landed
+    // hours later, making the row render as if the session ran all day. With the WP6.5
+    // read-time cap, build_day must bound the session at its last REAL event, dropping the
+    // stray — the row no longer stretches to the stray's minute.
+    let d = day(2026, 5, 13);
+    // Real activity 10:54 (654') -> a short burst -> ends ~11:00 (660').
+    let real_end_min = 660;
+    // A lone stray event at 13:42 (822') — 2h42m after real activity, far > the 30-min cap.
+    let stray_min = 822;
+    let events = [
+        ev(at_minute(d, 654), "deadsessabcd", "/repo/proj-x", "UserPromptSubmit"),
+        with_tool(
+            ev(at_minute(d, 655), "deadsessabcd", "/repo/proj-x", "PreToolUse"),
+            "Edit",
+            "t1",
+        ),
+        with_tool(
+            ev(at_minute(d, 656), "deadsessabcd", "/repo/proj-x", "PostToolUse"),
+            "Edit",
+            "t1",
+        ),
+        ev(at_minute(d, real_end_min), "deadsessabcd", "/repo/proj-x", "Stop"),
+        // The stray — a delayed idle Notification long after the session died.
+        ev(at_minute(d, stray_min), "deadsessabcd", "/repo/proj-x", "Notification"),
+    ];
+    let payload = build_day(d, &events, &no_names());
+    let sess = &payload.projects[0].sessions[0];
+    assert_eq!(sess.start, 654, "session starts at the first real event");
+    assert_eq!(
+        sess.end, real_end_min,
+        "session ends at its last real event, NOT the 13:42 stray (was the bug)"
+    );
+    assert!(
+        sess.end < stray_min,
+        "the dead session no longer reaches the stray event's minute"
+    );
+    // The last tiled segment must also stop at the real end (no giant trailing away seg
+    // stretching to 13:42).
+    assert_eq!(
+        sess.segs.last().unwrap().end,
+        real_end_min,
+        "no phantom trailing segment past the real end"
+    );
+}
+
+#[test]
+fn session_end_hook_bounds_the_session_at_its_true_end_dropping_a_later_stray() {
+    // M9 WP6.5 Phase 2 — replay the research-captured clean stream
+    // (SessionStart → UPS → Stop → SessionEnd) PLUS a later stray Notification. The
+    // built session must end at the SessionEnd minute, NOT the Stop minute nor the stray.
+    let d = day(2026, 5, 13);
+    let events = [
+        ev(at_minute(d, 600), "endsessabcd", "/repo/proj-z", "SessionStart"),
+        ev(at_minute(d, 601), "endsessabcd", "/repo/proj-z", "UserPromptSubmit"),
+        ev(at_minute(d, 604), "endsessabcd", "/repo/proj-z", "Stop"),
+        // SessionEnd fires 2 min after Stop (clean /exit) — the authoritative end.
+        ev(at_minute(d, 606), "endsessabcd", "/repo/proj-z", "SessionEnd"),
+        // A stray idle Notification 50 min later — must be dropped, not extend the row.
+        ev(at_minute(d, 656), "endsessabcd", "/repo/proj-z", "Notification"),
+    ];
+    let payload = build_day(d, &events, &no_names());
+    let sess = &payload.projects[0].sessions[0];
+    assert_eq!(sess.start, 600, "starts at SessionStart");
+    assert_eq!(
+        sess.end, 606,
+        "ends at the authoritative SessionEnd, not the Stop (604) or the stray (656)"
+    );
+    assert!(sess.end < 656, "the later stray does not extend the session");
+    assert_eq!(sess.segs.last().unwrap().end, 606, "no phantom trailing seg past SessionEnd");
+}
+
+#[test]
+fn explicit_workspace_close_marker_bounds_the_session_over_a_later_session_end() {
+    // D3 precedence at the day level: an explicit WorkspaceClose (native) wins over a CC
+    // SessionEnd. Marker@605 (native), SessionEnd@607 (cc-hook) → session ends at 605.
+    let d = day(2026, 5, 13);
+    let mut close = ev(at_minute(d, 605), "wscloseabcd", "/repo/proj-z", "WorkspaceClose");
+    close.source = "claudesk-native".to_string();
+    let events = [
+        ev(at_minute(d, 600), "wscloseabcd", "/repo/proj-z", "UserPromptSubmit"),
+        ev(at_minute(d, 604), "wscloseabcd", "/repo/proj-z", "Stop"),
+        close,
+        ev(at_minute(d, 607), "wscloseabcd", "/repo/proj-z", "SessionEnd"),
+    ];
+    let payload = build_day(d, &events, &no_names());
+    let sess = &payload.projects[0].sessions[0];
+    assert_eq!(
+        sess.end, 605,
+        "the explicit WorkspaceClose marker (signal 1) wins over the SessionEnd (signal 3)"
+    );
+}
+
+#[test]
+fn live_idle_session_under_cap_is_not_truncated() {
+    // AC3 at the day level: a session with a genuine 25-min think/lunch gap (< 30-min cap)
+    // between two real bursts stays ONE session spanning both — not cut at the gap.
+    let d = day(2026, 5, 13);
+    let events = [
+        ev(at_minute(d, 600), "livesessabcd", "/repo/proj-y", "UserPromptSubmit"),
+        ev(at_minute(d, 605), "livesessabcd", "/repo/proj-y", "Stop"),
+        // 25-min idle gap (605 -> 630), under the 30-min cap.
+        ev(at_minute(d, 630), "livesessabcd", "/repo/proj-y", "UserPromptSubmit"),
+        ev(at_minute(d, 640), "livesessabcd", "/repo/proj-y", "Stop"),
+    ];
+    let payload = build_day(d, &events, &no_names());
+    let sess = &payload.projects[0].sessions[0];
+    assert_eq!(sess.start, 600);
+    assert_eq!(
+        sess.end, 640,
+        "a sub-cap idle gap must not terminate the session (AC3)"
+    );
+    assert_eq!(sess.prompts, 2, "both bursts' prompts counted");
+}
+
+// ---- M9 WP6.5 Phase 4: end-to-end four-signal composition through build_day ----
+
+#[test]
+fn end_to_end_all_four_termination_signals_compose_in_one_day() {
+    // One day, four sessions — each terminated by a DIFFERENT signal — all resolve to the
+    // correct end through the real build_day path. Sessions are placed in distinct cwds so
+    // each becomes its own project row (deterministic lookup).
+    let d = day(2026, 5, 13);
+    // A native WorkspaceClose marker at minute `m` for session `sid`/`cwd`.
+    let ws_close = |m: i64, sid: &str, cwd: &str| {
+        let mut r = ev(at_minute(d, m), sid, cwd, "WorkspaceClose");
+        r.source = "claudesk-native".to_string();
+        r
+    };
+    let events: Vec<EventRow> = vec![
+        // (A) SIGNAL 3 — CC SessionEnd: burst 600–604, SessionEnd@606, stray Notif@700.
+        //     → ends at 606 (SessionEnd wins; stray dropped).
+        ev(at_minute(d, 600), "sess-A", "/repo/a", "UserPromptSubmit"),
+        ev(at_minute(d, 604), "sess-A", "/repo/a", "Stop"),
+        ev(at_minute(d, 606), "sess-A", "/repo/a", "SessionEnd"),
+        ev(at_minute(d, 700), "sess-A", "/repo/a", "Notification"),
+        // (B) SIGNAL 1 — explicit WorkspaceClose@607. → ends at 607.
+        ev(at_minute(d, 600), "sess-B", "/repo/b", "UserPromptSubmit"),
+        ev(at_minute(d, 605), "sess-B", "/repo/b", "Stop"),
+        ws_close(607, "sess-B", "/repo/b"),
+        // (C) SIGNAL 2 — max-idle cap (no marker): burst 600–606, stray@700 (>30min idle).
+        //     → capped at 606 (last real event before the oversized idle gap).
+        ev(at_minute(d, 600), "sess-C", "/repo/c", "UserPromptSubmit"),
+        ev(at_minute(d, 606), "sess-C", "/repo/c", "Stop"),
+        ev(at_minute(d, 700), "sess-C", "/repo/c", "Notification"),
+        // (D) SIGNAL 4 — a reconciled dangling session: WorkspaceClose written AT its
+        //     last-seen ts (610). From the query layer this is identical to signal 1 —
+        //     ends at 610. Proves the reconciliation WRITE + read path compose.
+        ev(at_minute(d, 600), "sess-D", "/repo/d", "UserPromptSubmit"),
+        ev(at_minute(d, 610), "sess-D", "/repo/d", "Stop"),
+        ws_close(610, "sess-D", "/repo/d"),
+    ];
+
+    let payload = build_day(d, &events, &no_names());
+    // Collect each session's resolved end by its project cwd tail.
+    let mut ends: HashMap<String, i64> = HashMap::new();
+    for p in &payload.projects {
+        for s in &p.sessions {
+            ends.insert(s.id.clone(), s.end);
+        }
+    }
+    // session ids are truncated to first 8 chars ("sess-A" etc. are <8, so unchanged).
+    assert_eq!(ends.get("sess-A"), Some(&606), "SessionEnd honored (not the 700 stray)");
+    assert_eq!(ends.get("sess-B"), Some(&607), "explicit WorkspaceClose honored");
+    assert_eq!(ends.get("sess-C"), Some(&606), "max-idle cap bounds the dead session");
+    assert_eq!(ends.get("sess-D"), Some(&610), "reconciled marker honored");
+    // And none stretched to the 700 stray.
+    for (id, end) in &ends {
+        assert!(*end <= 610, "session {id} must not stretch to the stray (end={end})");
+    }
+}

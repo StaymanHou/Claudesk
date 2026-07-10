@@ -325,6 +325,7 @@ mod tests {
             tool_name: None,
             agent_type: None,
             source: None,
+            reason: None,
         }
     }
 
@@ -343,6 +344,7 @@ mod tests {
             tool_name: None,
             agent_type: None,
             source: None,
+            reason: None,
         }
     }
 
