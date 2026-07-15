@@ -4,6 +4,127 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m9-wp6b-4-multiday-timeline — 2026-07-15
+
+*(feature-review-quality on the WP6b-4 flexible-timeline RE-SPEC [continuous no-mode video-editor timeline; fixed-origin coordinate model; uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 2 MINOR — all auto-backlogged. Reviewer: well-built, structurally sound; the hard part [continuous camera over auto-extending data, no viewport jumps] solved cleanly via fixed origin + pure unit-pinned helpers + a backward-compatible seedKey decoupling. The 2 MAJOR are in the genuinely-new complexity zone, neither a crash, both small localized fixes — appropriate for the standing refactor batch, not a feature reopen.)*
+
+## SURFACE-2026-07-15-QUALITY-WP6B4-FRAMEDRANGE-PICKER-OFFBYONE
+- **Severity:** MAJOR
+- **File:** `src/components/workspace/dashboard/viewport.ts` (`framedRange` L224-243) ↔ `src/components/workspace/dashboard/RangePicker.tsx` (`MAX_RANGE_DAYS = 30`)
+- **Finding:** `framedRange` can emit a 31-inclusive-day span from a LEGAL 30-day-span viewport that is day-MISALIGNED. `clampViewport` caps the visible *span* at `MAX_ZOOM_OUT_SPAN_MIN = 30*1440`, but `framedRange` maps to lanes via `floor(start/1440)` … `ceil(end/1440)-1`; a max-span viewport shifted by a fractional day yields `endLane - startLane + 1 === 31` (e.g. `[5.5d, 5.5d+30d)` → 31 days). That value feeds `RangePicker`, whose `validateRange(…, MAX_RANGE_DAYS=30)` flags it → at maximum zoom-out with a pan-misaligned camera the reactive readout sticks in a **permanent red-border error on a value the operator never typed**. No crash (the commit guard holds; only the readout display is affected).
+- **Fix shape:** reconcile the two "30" bounds — the 30-*lane* span cap (`MAX_ZOOM_OUT_SPAN_MIN`) vs. the 30-*inclusive-day* picker max (`MAX_RANGE_DAYS`) are off-by-one relative to each other. Either cap the span at `29*1440 + something` so a misaligned max window spans ≤30 lanes, or clamp `framedRange`'s span to `MAX_RANGE_DAYS` days, or make the picker tolerate the 31st lane at max zoom. Pick one; pin it.
+- **Priority:** medium.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6B4-AUTOEXTEND-FIRINGREF-LATCH
+- **Severity:** MAJOR
+- **File:** `src/components/workspace/dashboard/GlobalDashboard.tsx` (`AutoExtendWatcher` firingRef + clearing effect ↔ `extendLoaded` early-returns)
+- **Finding:** `AutoExtendWatcher.firingRef` can latch `true` permanently and gates BOTH extend directions. The watcher sets `firingRef.current = true` before calling `onExtend`; only the `useEffect([lo, hi])` clears it. But `extendLoaded` early-returns WITHOUT changing `loadedStartIso`/`loadedEndIso` when already at the origin floor / at today (`if (clamped === loadedStartIso) return`). In that path `[lo,hi]` never changes → the guard never clears → and because a single `firingRef` gates both `older` and `newer`, a latched `older` guard could block a later legitimate `newer` extend at the opposite edge.
+- **Fix shape:** clear `firingRef` inside the watcher's debounced callback when `needsExtend` returns null, OR have `extendLoaded` signal the no-op back so the watcher clears the guard. Small localized fix.
+- **Trigger probability:** low — requires panning to one hard edge (latching the guard via a no-op extend) then to the opposite edge before any window-changing extend re-runs; `needsExtend` returning null at a reached edge masks the same-direction case (hence MAJOR not CRITICAL). But it's a genuine latent state-machine bug in the load-bearing new complexity.
+- **Priority:** medium.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6B4-DEAD-VIEWPORTFROMRANGE
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/viewport.ts` (`viewportFromRange` L144-177 + its `describe` block in `viewport.test.ts`)
+- **Finding:** `viewportFromRange` is now DEAD in live code — it was the D1-mode "seed on the most-recent day of a picked range" helper, superseded by `seedViewportToday`. Grep finds no live caller (only its own def, its test, and jsdoc mentions). It's still exported + unit-tested, so it reads as live and a future reader spends time reconciling two seed functions. Debt introduced BY this rework (the model swap left the old seed helper carried forward).
+- **Fix shape:** delete `viewportFromRange` + its `describe` block (clarifies `seedViewportToday` is the sole seed path). Harmless if left; pure clarity.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6B4-RANGEPICKER-STALE-HEADER
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/RangePicker.tsx` (file header L1-16)
+- **Finding:** The file header still describes the superseded WP6b-2 model ("single day OR arbitrary multi-day span … which the Phase-2 multi-day timeline renders", "≤31 days — D3"). The component is now the D8 REACTIVE framed-span readout of a continuous camera + `MAX_RANGE_DAYS=30`. Header prose predates the re-spec and will mislead the next reader about what drives the picker. (The `MAX_RANGE_DAYS` jsdoc at :22-24 is already correct — only the top-of-file block drifted.)
+- **Fix shape:** two-line header update to the D8 reactive-readout model + 30-day cap.
+- **Priority:** low.
+- **Status:** pending.
+
+# m9-wp6b-3-week-nav — 2026-07-14
+
+*(feature-review-quality on the WP6b-3 working-tree change [Week-nav: backend `QueryWindow::Week` monday anchor + frontend weekMath/WeekNav/GlobalDashboard wiring + the F12 empty-period nav-trap class fix; uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all auto-backlogged [low]. Reviewer: well-built, tightly-scoped; correct anchor design + sound F12 fix; only debt is MINOR duplication, appropriate for backlog not a refactor pass.)*
+
+## SURFACE-2026-07-14-QUALITY-WP6B3-WEEKNAV-MONTHNAV-DUP
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/Chrome.tsx` (`WeekNav` L254-326 vs `MonthNav` L171-246)
+- **Finding:** `WeekNav` is a near-verbatim copy of `MonthNav` — the `arrowStyle` closure, container `<div>` styling, and both `<button>` blocks are duplicated, differing only in `data-*` attr names, titles, `minWidth` (100 vs 116), and the `data-month-iso` span attr. ~60 duplicated lines that will drift under future styling changes.
+- **Fix shape:** extract a shared `NavPill`/`ArrowNav` primitive parameterized on the data-attr prefix + label; collapse both `MonthNav` + `WeekNav` onto it. (Also relevant to any future Day-nav-pill unification.)
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-14-QUALITY-WP6B3-WEEKMATH-MONTHMATH-HELPER-DUP
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/weekMath.ts` (L150-174 `dateToIso` + `mondayIdx`)
+- **Finding:** `dateToIso` + `mondayIdx` are byte-identical private re-implementations of `monthMath.todayDateIso` / `monthMath.mondayIndex` (both already `export`ed). The "keep this module's import graph flat" rationale is weak — `GlobalDashboard.tsx` already imports from both `monthMath` and `weekMath`, so a cross-import adds no new edge. Divergent copies of a date-format helper are a latent inconsistency risk.
+- **Fix shape:** import the existing `monthMath` exports instead of re-implementing (or, if a shared `dateMath.ts` is warranted once WP6b-4 lands more date helpers, extract there).
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-14-QUALITY-WP6B3-ISFUTUREMONDAY-GUARD-CLARITY
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/weekMath.ts` (`isFutureMonday` L226-229)
+- **Finding:** The parsed `d` is used only as a validity guard (`if (!d) return true`) then discarded — the actual comparison is the lexicographic `mondayIso > mondayOfDate(now)`. Correct + documented, but the parse-then-ignore reads as if `d` should participate in the compare.
+- **Fix shape:** replace `const d = isoToDate(mondayIso); if (!d) return true;` with `if (!isoToDate(mondayIso)) return true;` (guard-only, no bound var), OR add a one-line comment that `d` is a validity guard only. Cosmetic clarity, no behavior change.
+- **Priority:** low.
+- **Status:** pending.
+
+# m9-wp6b-2-week-month-sidepanel-range (Phase 4) — 2026-07-14
+
+*(feature-review-quality on the WP6b-2 Phase-4 working-tree change [SidePanel + click-to-select seam; uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 2 MINOR — both auto-backlogged [low]. Reviewer: clean, well-disciplined render-surface port; no refactor warranted. Both MINORs are polish/awareness, not correctness.)*
+
+## SURFACE-2026-07-14-QUALITY-WP6B2P4-CLEAR-PIN-NOT-SCOPED
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/__tests__/dashboardWiring.test.ts` (the WP6b-2 P4 "clears it on view-switch, day-change, and close" pin)
+- **Finding:** The pin asserts `setSelectedSegId(null)` appears (bare whole-file substring) + `onCloseSidePanel={() => setSelectedSegId(null)}` once, but does NOT distinguish the `changeView` clear from the `changeDay` clear (both are bare `setSelectedSegId(null)` lines). A regression that dropped the clear from *one* of `changeView`/`changeDay` would still leave the substring present → the pin passes silently.
+- **Fix shape:** assert the `setSelectedSegId(null)` clear within each handler's source slice (`changeView` block + `changeDay` block separately), the way the Day-view-only pin already slices the `WeekView`/`MonthViewContainer` blocks to assert `<SidePanel>` is absent from each. One-test tightening.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-14-QUALITY-WP6B2P4-WALLTIME-QUANTIZATION-BASIS
+- **Severity:** MINOR (doc/awareness only)
+- **File:** `src/components/workspace/dashboard/SidePanel.tsx` (L65 `wallTime = Math.max(0, session.end - session.start)`)
+- **Finding:** `wallTime` uses the minute-quantized session endpoints, so the "active of Xh Ym wall" denominator + the mini-timeline seg span are on a MINUTE grid, while the numerator (`sumActive`) is true-`dur_ms`. For a sub-minute session this reads "0m active of 0m wall". This is FAITHFUL + internally consistent for POSITIONING (the mini-timeline positions legitimately live on the minute grid, matching the main timeline's `viewportPct`), NOT a defect.
+- **Fix shape:** none needed. Recorded only so a future reader doesn't "fix" the mini-timeline to a `dur_ms` basis + break the wall-relative layout (the positions MUST stay on the minute grid to align with the main timeline). If the wall FIGURE (not the positions) ever needs sub-minute precision, sum `dur_ms` across the session's segs for the denominator label only — but leave the positioning math alone.
+- **Priority:** low (awareness; likely a no-op / won't-fix).
+- **Status:** pending.
+
+# m9-wp6b-1-interactive-viewport-minimap — 2026-07-13
+
+*(feature-review-quality on the WP6b-1 working-tree diff [uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 1 MAJOR / 3 MINOR — all auto-backlogged. Reviewer: well-built, above-bar; pure math core under a single-writer clamped context, 3 source-bug fixes each test-guarded, both in-cycle verify-human regressions fixed at the right layer. Only structural debt is the duplicated RAF/scheduleSet machinery. No refactor auto-invoked — MAJOR is a dedup opportunity, not a CRITICAL.)*
+
+## SURFACE-2026-07-13-QUALITY-WP6B1-DUP-RAF-SCHEDULESET
+- **Severity:** MAJOR
+- **File:** `src/components/workspace/dashboard/useTimelineGestures.ts` (L63-83) & `src/components/workspace/dashboard/Minimap.tsx` (L68-84)
+- **Finding:** The `scheduleSet` RAF-coalescing helper (functional-updater form, cancel-and-reschedule) + the unmount-cancel `useEffect` are **duplicated byte-for-byte** across both gesture consumers. This is the load-bearing "one write per frame + no leak on unmount" mechanism (the exact code the spec calls out as a source-bug fix) living in two places — a future throttling-policy change must be made twice + the copies can silently drift.
+- **Fix shape:** extract a small `useRafViewportSetter()` hook (owns the `rafRef` + the unmount-cancel effect; returns a `scheduleSet` bound to the context setter). Collapse both call sites onto it. Gives the invariant a single home.
+- **Priority:** medium.
+- **Status:** pending.
+
+## SURFACE-2026-07-13-QUALITY-WP6B1-DAYTIMELINE-DOC-MIXED-VIEWPORT
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/DayTimeline.tsx` (L826-834, the DayTimeline docstring)
+- **Finding:** The docstring says the viewport is "passed DOWN as a plain `viewport` prop," but `HourRuler`/`HourGridBackground` now read `useViewport()` directly (they also need the adaptive interval) while `SegmentBar`/overlap/collapsed rows still take a `viewport` prop. The mixed convention is defensible but the doc understates it — a reader trips on why two sibling patterns coexist.
+- **Fix shape:** one clarifying sentence in the docstring (ruler/grid read context for the interval; leaf seg-renderers take the prop).
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-13-QUALITY-WP6B1-MINIMAP-STOPPROP-COMMENT
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/Minimap.tsx` (L126-128)
+- **Finding:** The `stopPropagation()` comment claims it prevents "the timeline's gesture handler from also reacting," but the Minimap is a SIBLING of DayTimeline (not nested) and fires on `mousedown` vs the timeline's `pointerdown` — cross-handler propagation isn't the actual mechanism. The call is harmless (`preventDefault` suppresses text-selection), but the stated *why* is inaccurate + misleads the next editor about the surfaces' coupling.
+- **Fix shape:** correct the comment (the effective purpose is text-selection suppression via `preventDefault`; `stopPropagation` is belt-and-suspenders, not the timeline-decoupling mechanism).
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-13-QUALITY-WP6B1-DERIVEDATAWINDOW-UNUSED-PARAM
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/viewport.ts` (L82-85, `deriveDataWindow`)
+- **Finding:** `deriveDataWindow(_data: RangePayload)` ignores its param entirely (eslint-disabled unused-var) "for signature stability / forward-compat." Speculative generality — the single caller could pass nothing today; the forward-compat variant can add the param when it actually exists.
+- **Fix shape:** either drop the param (caller updated) or leave as-is if a padded-relative-to-`hour_range` variant is genuinely near-term. Low-grade YAGNI; not worth churn on its own — fold into a future refactor pass.
+- **Priority:** low.
+- **Status:** pending.
+
 # m9-wp6.5-session-termination-model — 2026-07-08
 
 *(feature-review-quality on the WP6.5 working-tree diff [uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 2 MINOR — all auto-backlogged, priority low. Reviewer: well-built feature that advances the codebase; read-time-capping architecture + P1.2 idle-gap correction + D3 precedence all hold up under reading; comprehensive coverage. Only 2 minor observations — no refactor warranted.)*
@@ -319,5 +440,34 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **File:** `src-tauri/src/reclassify/mod.rs` (~851, `classify_gap` branch 2)
 - **Finding:** The working-credit predicate combines `awaiting_at(gap_start)` with an inline `awaiting.iter().any(|&(s,_)| s >= gap_start && s < gap_end)` re-scan; the two overlap and the second re-walks the awaiting vector inline rather than via a named `GapContext` helper like `launch_precedes`/`awaiting_at`. Readability nit on a load-bearing predicate.
 - **Fix shape:** extract a `GapContext::awaiting_in_gap(start, end)` method matching the surrounding style.
+- **Priority:** low.
+- **Status:** pending.
+
+# m9-fix-minute-quantization-ai-doing — 2026-07-13
+
+*(feature-review-quality on the working-tree diff [uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 1 MAJOR / 2 MINOR — all auto-backlogged. Reviewer: well-built, appropriately-scoped; contract-additive `dur_ms` fix, precision-disciplined [sum ms, round once], anti-pattern signposted at the type def + both sum sites, discriminating repro tests. Only real gap: a THIRD copy of the fixed `end - start` anti-pattern in a sibling file the blast-radius analysis missed. No refactor auto-invoked — MAJOR is a same-pattern follow-up on a lower-susceptibility kind, not a CRITICAL.)*
+
+## SURFACE-2026-07-13-QUALITY-MINQUANT-DAYTIMELINE-SUMKIND-DUP
+- **Severity:** MAJOR
+- **File:** `src/components/workspace/dashboard/DayTimeline.tsx:138-142` (local `sumKind`; feeds `ProjectTotals.away` at L859)
+- **Finding:** A THIRD copy of the exact anti-pattern this feature fixed: `sumKind` sums the minute-quantized `(s.end - s.start)` instead of `dur_ms`. It feeds the day-view project pill's `away` total. The fix corrected the same pattern in `kinds.ts` (`sumByKind`/`sumActive`) + the two backend sites, but the WIP's blast-radius analysis enumerated those and missed this sibling-file copy. **Verified real by the orchestrator** (confirmed at L138-142 → `away: sumKind(allSegs, "away")` at L859).
+- **Why lower-severity than the original:** `away` is minute-scale (idle gaps are minutes, not the sub-minute Pre→Post spans that zeroed ai-doing), so the under-report is smaller — but a session with many sub-minute away gaps still under-counts, and leaving a live copy of the killed pattern invites copy-forward.
+- **Fix shape:** route `DayTimeline`'s local `sumKind` through `dur_ms` (round-half-up), or delete it and use `kinds.ts::sumByKind` (now the corrected version). One `/feature-refactor` line.
+- **Priority:** medium.
+- **Status:** pending.
+
+## SURFACE-2026-07-13-QUALITY-MINQUANT-HELPER-PARITY-UNPINNED
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`ms_to_minutes_round`) + `src/components/workspace/dashboard/kinds.ts` (`msToMinutesRound`)
+- **Finding:** The FE/BE round-half-up helpers are an intentional documented mirror, but no single test asserts they AGREE on the same inputs — each is pinned independently (Rust `ms_to_minutes_round_is_round_half_up_and_zero_clamped`, FE sub-minute pin). The 30_000ms pivot + formula are duplicated in 3 places (2 helpers + WIP prose). Parity is currently correct + both sides pinned, so not a bug — a latent drift channel (change one pivot, no test fails on the divergence).
+- **Fix shape:** a shared input→output fixture table asserted on both sides.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-13-QUALITY-MINQUANT-DOUBLE-NEGATIVE-GUARD
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs:376`
+- **Finding:** `dur_ms: (s.end_ms - s.start_ms).max(0)` clamps a negative span to 0, and `ms_to_minutes_round` ALSO guards negatives — a reversed segment is defended twice, so the helper's negative branch can only ever fire on a summed total, never a single seg. Harmless redundancy.
+- **Fix shape:** none needed; noting the double-guard so a future reader doesn't assume `dur_ms` can be negative downstream.
 - **Priority:** low.
 - **Status:** pending.

@@ -38,3 +38,20 @@ export function IconChevDown(p: { size?: number }) {
 export function IconChevRight(p: { size?: number }) {
   return <Icon {...p} d={<polyline points="6,4 10,8 6,12" />} />;
 }
+
+/** Calendar glyph for the WP6b-2 Custom-range picker (ported from dashboard.jsx L275). */
+export function IconCalendar(p: { size?: number }) {
+  return (
+    <Icon
+      {...p}
+      d={
+        <>
+          <rect x="2.5" y="3.5" width="11" height="10" rx="1" />
+          <line x1="2.5" y1="6.5" x2="13.5" y2="6.5" />
+          <line x1="5.5" y1="2" x2="5.5" y2="5" />
+          <line x1="10.5" y1="2" x2="10.5" y2="5" />
+        </>
+      }
+    />
+  );
+}

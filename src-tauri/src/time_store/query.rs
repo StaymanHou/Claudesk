@@ -61,9 +61,18 @@ use crate::reclassify::{
 pub struct SegPayload {
     #[serde(serialize_with = "serialize_kind")]
     pub kind: Kind,
-    /// Minutes-from-local-midnight, `start <= end`.
+    /// Minutes-from-local-midnight, `start <= end`. RENDER POSITION only — quantized to
+    /// the minute (WP1 frozen contract). Do NOT derive duration from `end - start`: a
+    /// sub-minute segment floors both to the same minute → 0. Use `dur_ms` for duration.
     pub start: i64,
     pub end: i64,
+    /// The segment's TRUE duration in milliseconds (`end_ms - start_ms` from the
+    /// reclassifier, pre-quantization). This is the ONLY correct source for per-kind
+    /// duration totals — AI tool-execution is intrinsically sub-minute, so summing the
+    /// quantized `end - start` silently zeroes it (SURFACE-2026-07-13-M9-WP4-MINUTE-
+    /// QUANTIZATION-ZEROES-SUBMINUTE-AI-DOING). Consumers sum `dur_ms` per kind, then
+    /// convert the TOTAL to minutes once (round-half-up).
+    pub dur_ms: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
 }
@@ -139,6 +148,35 @@ pub struct RollupCell {
     pub prompts: i64,
 }
 
+/// Internal ms-precision accumulator for the week rollup. Durations are summed here at
+/// full ms precision, then converted to the minute-unit [`RollupCell`] once per kind
+/// (round-half-up) — so sub-minute AI-doing segments accrue their real time instead of
+/// each flooring to zero. Not serialized; never leaves the query layer.
+#[derive(Debug, Clone, Copy, Default)]
+struct RollupCellMs {
+    ai_doing_ms: i64,
+    subagent_ms: i64,
+    ai_reasoning_ms: i64,
+    typing_ms: i64,
+    reviewing_ms: i64,
+    away_ms: i64,
+    prompts: i64,
+}
+
+impl RollupCellMs {
+    fn into_rollup_cell(self) -> RollupCell {
+        RollupCell {
+            ai_doing: ms_to_minutes_round(self.ai_doing_ms),
+            subagent: ms_to_minutes_round(self.subagent_ms),
+            ai_reasoning: ms_to_minutes_round(self.ai_reasoning_ms),
+            typing: ms_to_minutes_round(self.typing_ms),
+            reviewing: ms_to_minutes_round(self.reviewing_ms),
+            away: ms_to_minutes_round(self.away_ms),
+            prompts: self.prompts,
+        }
+    }
+}
+
 /// One project's week rollup (7 cells, Mon→Sun).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WeekProject {
@@ -181,6 +219,18 @@ fn local_midnight_ms(day: NaiveDate) -> i64 {
 fn ts_to_minutes(ts_ms: i64, day_start_ms: i64) -> i64 {
     let minutes = (ts_ms - day_start_ms).div_euclid(60_000);
     minutes.clamp(0, 1440)
+}
+
+/// Convert a DURATION in milliseconds to whole minutes, round-half-up. Used to convert a
+/// per-kind `dur_ms` TOTAL to the minute unit the rollups/stats report — summing at ms
+/// precision then rounding ONCE, so sub-minute segments accrue their real time instead of
+/// each flooring to zero (SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION-…). Negative
+/// inputs clamp to 0.
+fn ms_to_minutes_round(dur_ms: i64) -> i64 {
+    if dur_ms <= 0 {
+        return 0;
+    }
+    (dur_ms + 30_000) / 60_000
 }
 
 /// The local calendar date an epoch-ms timestamp falls on.
@@ -322,6 +372,8 @@ fn build_viz_session(
             kind: s.kind,
             start: ts_to_minutes(s.start_ms, day_start_ms),
             end: ts_to_minutes(s.end_ms, day_start_ms),
+            // TRUE duration (pre-quantization) — the only correct source for summing.
+            dur_ms: (s.end_ms - s.start_ms).max(0),
             label: s.label,
         })
         .collect();
@@ -356,12 +408,16 @@ fn build_viz_session(
 /// (the "was the machine working for this project" signal — matches `viz_data`'s
 /// active+subagent sort key, remapped to the AI family).
 fn project_ai_minutes(p: &ProjectPayload) -> i64 {
-    p.sessions
+    // Sum TRUE ms duration (not the minute-quantized `end - start`, which zeroes
+    // sub-minute AI work), then convert the total to minutes once.
+    let total_ms: i64 = p
+        .sessions
         .iter()
         .flat_map(|s| &s.segs)
         .filter(|seg| matches!(seg.kind, Kind::AiDoing | Kind::Subagent | Kind::AiReasoning))
-        .map(|seg| seg.end - seg.start)
-        .sum()
+        .map(|seg| seg.dur_ms)
+        .sum();
+    ms_to_minutes_round(total_ms)
 }
 
 // ===========================================================================
@@ -694,30 +750,42 @@ pub fn build_week(
 
     let range = build_range(monday, sunday, events, project_names)?;
 
-    // alias → 7-cell rollup.
-    let mut rollups: HashMap<String, Vec<RollupCell>> = HashMap::new();
+    // alias → 7-cell rollup. Accumulate per-kind duration at MS precision (`RollupCellMs`),
+    // then convert each cell's per-kind total to minutes ONCE (round-half-up) — summing
+    // the minute-quantized `seg.end - seg.start` would zero every sub-minute AI segment
+    // (SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION-…). Prompts are counts, not durations.
+    let mut rollups_ms: HashMap<String, Vec<RollupCellMs>> = HashMap::new();
     for proj in &range.projects {
-        let cells = rollups
+        let cells = rollups_ms
             .entry(proj.alias.clone())
-            .or_insert_with(|| vec![RollupCell::default(); 7]);
+            .or_insert_with(|| vec![RollupCellMs::default(); 7]);
         for s in &proj.sessions {
             let Some(&i) = s.day_iso.as_ref().and_then(|iso| day_index.get(iso)) else {
                 continue;
             };
             cells[i].prompts += s.prompts;
             for seg in &s.segs {
-                let dur = seg.end - seg.start;
+                let d = seg.dur_ms;
                 match seg.kind {
-                    Kind::AiDoing => cells[i].ai_doing += dur,
-                    Kind::Subagent => cells[i].subagent += dur,
-                    Kind::AiReasoning => cells[i].ai_reasoning += dur,
-                    Kind::Typing => cells[i].typing += dur,
-                    Kind::Reviewing => cells[i].reviewing += dur,
-                    Kind::Away => cells[i].away += dur,
+                    Kind::AiDoing => cells[i].ai_doing_ms += d,
+                    Kind::Subagent => cells[i].subagent_ms += d,
+                    Kind::AiReasoning => cells[i].ai_reasoning_ms += d,
+                    Kind::Typing => cells[i].typing_ms += d,
+                    Kind::Reviewing => cells[i].reviewing_ms += d,
+                    Kind::Away => cells[i].away_ms += d,
                 }
             }
         }
     }
+
+    // Convert each ms-cell to the minute-unit RollupCell (one round per kind per cell).
+    let rollups: HashMap<String, Vec<RollupCell>> = rollups_ms
+        .into_iter()
+        .map(|(alias, ms_cells)| {
+            let cells = ms_cells.into_iter().map(|c| c.into_rollup_cell()).collect();
+            (alias, cells)
+        })
+        .collect();
 
     let mut projects: Vec<(i64, WeekProject)> = rollups
         .into_iter()

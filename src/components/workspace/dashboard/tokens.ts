@@ -48,6 +48,11 @@ export const CT_TOKENS = {
   gridHour: "oklch(1 0 0 / 0.04)",
   gridDay: "oklch(1 0 0 / 0.10)",
   rowAlt: "oklch(1 0 0 / 0.02)",
+  // Live "now" marker (WP6b-4) — a warm accent DISTINCT from the neutral grid + from
+  // the cool AI / green human seg families, so the current-time line reads as chrome
+  // (a "you are here" tick), not as a segment. Deliberately the one warm hue on the
+  // surface; low-chroma so it's a hairline, not an alarm.
+  nowMarker: "oklch(0.70 0.15 45)",
 
   sans: '"Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   mono: '"Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',

@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-08  # M9 WP5 P1: cargo test 463 lib + 5 integ = 468 pass (+7 tracking-toggle tests)
+updated: 2026-07-14  # M9 WP6b-2 P4: pnpm test 99 files / 1015 pass (SidePanel + click-to-select)
 ---
 
 # Runtime Registry
@@ -68,9 +68,16 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.6s (2026-07-08, M9 WP6a P3 F12 back-loop: dropped Most-used-tool stat + retuned palette → 89 files / 857 pass)
+- **Last:** 1.68s (2026-07-15, M9 WP6b-4 re-spec P2 verify-codify: +1 dashboardWiring Minimap-alignment pin [P2.7 dayOffset-shift + shared-dataWindow regression guard] → 99 files / 1083 pass)
 - **Use timeout:** 120000
 - **History:**
+  - 1.68s — 2026-07-15 (M9 WP6b-4 re-spec P2 verify-codify: +1 Minimap-alignment pin → 99 files / 1083 pass)
+  - 1.67s — 2026-07-15 (M9 WP6b-4 re-spec P2: +3 dashboardWiring pins → 99 files / 1082 pass)
+  - 1.84s — 2026-07-15 (M9 WP6b-4 re-spec P1: +18 flexible-timeline math pins → 99 files / 1079 pass)
+  - 2.68s — 2026-07-15 (M9 WP6b-4 P2: +6 nowMarkerAbsMin pins → 99 files / 1061 pass)
+  - 1.64s — 2026-07-15 (M9 WP6b-4 P1: multi-day coordinate core pins → 99 files / 1055 pass)
+  - 1.62s — 2026-07-14 (M9 WP6b-2 P4: SidePanel + click-to-select seam → 99 files / 1015 pass)
+  - 1.6s — 2026-07-08 (M9 WP6a P3 F12 back-loop: dropped Most-used-tool stat + retuned palette → 89 files / 857 pass)
   - 1.5s — 2026-07-08 (M9 WP5 P3: +7 pickerTimeTrackingWiring.test.ts → 83 files / 813 pass)
   - 1.48s — 2026-07-08 (M9 WP4 P3 build: +5 timeAnalytics.test.ts [DTO shape + ?raw invoke-wiring guards] → 82 files / 806 pass)
   - 1.37s — 2026-06-28 (M6 WP8 static gate: 780 pass / 79 files, verification-only baseline)
@@ -117,7 +124,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.72s (2026-07-08, M9 WP5 P1: +7 tracking-toggle tests [4 settings: default/absent/round-trip/field-independence; 3 time_store gate: default-off/both-ways/degrade-on-malformed], 463 lib + 5 integ = 468 pass; warm)
+- **Last:** 3.74s (2026-07-14, M9 WP6b-3 P1: +4 week-anchor tests [anchored-Monday / non-Monday-snap / malformed-fallback + updated deserialize], 504 lib pass; cold-ish first compile this session)
+- **Use timeout:** 120000
+- **History:**
+  - 3.74s — 2026-07-14 (M9 WP6b-3 P1; cold-ish first compile)
+  - 0.72s — 2026-07-08 (M9 WP5 P1; warm)
 - **Use timeout:** 120000
 - **History:**
   - 0.72s — 2026-07-08 (M9 WP5 P1: +7 tracking-toggle tests [time_tracking_enabled settings + write-gate seam], 463 lib + 5 integ = 468 pass; warm)

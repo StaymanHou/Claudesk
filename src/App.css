@@ -1299,12 +1299,41 @@ body,
   background: #252526;
 }
 
+/* M9 WP6b-2 Phase 4 — the Day view's timeline + SidePanel share the remaining height in
+   a horizontal flex row. DayTimeline is `flex:1` (grows to fill); the SidePanel is a
+   fixed-width `flexShrink:0` sibling that only appears when a segment is selected.
+   `min-height:0` lets the timeline's own inner scroll work inside the flex child. */
+.dashboard-day-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
 /* Centered empty-state / placeholder message (tracking OFF, or no data yet). */
 .dashboard-empty {
   margin: auto;
   max-width: 22rem;
   text-align: center;
   padding: 2rem;
+}
+
+/* Inline empty body shown INSIDE a data view (Day/Week) when the shown period has no
+   rows — the toolbar + period-nav render above it. `flex:1` (set inline) makes it fill
+   the remaining height; this centers the message block within that space (the base
+   `margin:auto` is inert once flex-grown, so center via flex here). */
+.dashboard-empty-inline {
+  margin: 0;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-empty-inline .dashboard-empty-title,
+.dashboard-empty-inline .dashboard-empty-hint {
+  max-width: 22rem;
 }
 
 .dashboard-empty-title {

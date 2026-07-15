@@ -2,7 +2,9 @@
 
 base=MEMORY.md
 - [bash-cargo-env.md](bash-cargo-env.md) — Bash subshells in Claude Code sessions do not inherit ~/.cargo/env from the user's login shell; cargo/rustc invocations require an explicit PATH prefix.
-- [verify-self-dev-vs-prod-process-name-collision.md](verify-self-dev-vs-prod-process-name-collision.md) — osascript "process whose name is claudesk" hits the PROD app during dev verify-self (same process name); target the dev app by window title / bundle id, or avoid OS-focus driving entirely.
+- [verify-self-dev-vs-prod-process-name-collision.md](verify-self-dev-vs-prod-process-name-collision.md) — osascript "process whose name is claudesk" hits the PROD app during dev verify-self (same process name); target the dev app by window title / bundle id, or avoid OS-focus driving entirely. Teardown must be PID-scoped — never blanket pkill/port-kill (killed operator's live app 2026-07-13).
+- [time-tracking-capture-is-machine-global.md](time-tracking-capture-is-machine-global.md) — time-analytics capture is machine-global + gated by a live tracking-ON instance; any tracking-on Claudesk logs ALL CC sessions on the machine (incl. the other app's). Expected behavior — flag proactively when reading the dashboard.
+- [day-view-flexible-timeline-model.md](day-view-flexible-timeline-model.md) — M9 Day view = continuous video-editor flexible timeline (SHIPPED 2026-07-15, fixed-origin @ today-29d); coordinate frame has ONE source of truth (ViewportContext dataWindow + DayWindowContext windowStartIso) — every consumer READS it, never recomputes (the P2.7 Minimap regression).
 base=bash-cargo-env.md
 desc='Bash subshells in Claude Code sessions do not inherit ~/.cargo/env from the user'\''s login shell; cargo/rustc invocations require an explicit PATH prefix.'
 - [brew-cask-manual-delete-desync.md](brew-cask-manual-delete-desync.md) — "Why \"brew won't reinstall claudesk after I deleted the app\" happens, and the fix"

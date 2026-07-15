@@ -1,34 +1,68 @@
-// M9 WP6a — dashboard chrome: Toolbar + SummaryStrip + Legend.
+// M9 WP6a → WP6b-2 — dashboard chrome: Toolbar + SummaryStrip + Legend.
 //
 // Ported from dashboard.jsx (Toolbar L319, SummaryStrip L691, Legend L1734), stripped
-// to the WP6a day-view MVP:
-//   - Toolbar: the 5-mode view tabs (Day/Week/Month/Custom/Compare) with ONLY Day
-//     enabled — the others render disabled/inert so the toolbar's final geometry is
-//     stable and WP6b just wires them (resolved decision 2026-07-08). No month/week/
-//     custom nav controls (those come with 6b). No wordmark (Claudesk isn't claude-time).
-//   - SummaryStrip: the 4 day stats. The filter-chip cluster is DROPPED (no filter in
-//     6a — resolved decision; WP6b adds the ProjectFilterPopover + chips together).
-//   - Legend: a STATIC 6-kind key (swatch + label). The source Legend was clickable
-//     (FilterContext toggles) — WP6a has no filter, so it's display-only.
+// to the WP6a day-view MVP then extended by WP6b-2:
+//   - Toolbar: the view-mode tabs. WP6a shipped ONLY Day functional (the rest inert);
+//     WP6b-2 makes the toolbar VIEW-DRIVEN — `view` + `onViewChange` props select the
+//     active tab and switch the body. Phase 1 enables Week; Month/Custom light up in
+//     Phases 2/3 (their `enabled` flags flip as each lands). Compare stays disabled
+//     (WP6c). The right-side slot is view-specific: Day shows the "Fit day" button;
+//     other views get their own controls in later phases. No wordmark.
+//   - SummaryStrip: the 4 day stats. The filter-chip cluster is DROPPED.
+//   - Legend: a STATIC 6-kind key (swatch + label), display-only.
 //
 // Palette + kind model come from tokens.ts / kinds.ts (single source of truth).
 
+import type { ReactNode } from "react";
 import { CT_TOKENS } from "./tokens";
 import { ALL_KINDS, colorForKind, segStyle, labelForKind } from "./kinds";
 import type { DayStat } from "./dayStats";
 
 // ── Toolbar ───────────────────────────────────────────────────────────────
-const VIEW_MODES = [
-  { value: "day", label: "Day", enabled: true },
-  { value: "week", label: "Week", enabled: false },
-  { value: "month", label: "Month", enabled: false },
-  { value: "custom", label: "Custom", enabled: false },
-  { value: "compare", label: "Compare", enabled: false },
-] as const;
+/** The view modes the dashboard exposes. `day` is the interactive single-day timeline
+ *  (WP6b-2 P3 gave it a date picker so it shows ANY day — the Custom→Day merge folded the
+ *  former separate "Custom" range tab into Day); `week` is the rollup grid (P1); `month`
+ *  is the contribution calendar (P2); `compare` is WP6c. */
+export type DashboardView = "day" | "week" | "month" | "compare";
 
-/** The view-mode tab strip. Day is the only functional mode in WP6a; the rest are
- *  disabled placeholders (WP6b/6c wire them) so the toolbar layout never shifts. */
-export function Toolbar({ dateLabel }: { dateLabel: string }) {
+interface ViewMode {
+  value: DashboardView;
+  label: string;
+  enabled: boolean;
+}
+
+// Enabled set grows phase-by-phase. Day + Week (P1), Month (P2). Compare = WP6c.
+// (The standalone Custom tab was REMOVED at P3 — merged into Day's date picker.)
+const VIEW_MODES: readonly ViewMode[] = [
+  { value: "day", label: "Day", enabled: true },
+  { value: "week", label: "Week", enabled: true },
+  { value: "month", label: "Month", enabled: true },
+  { value: "compare", label: "Compare", enabled: false },
+];
+
+/** The view-mode tab strip. `view` selects the active tab; clicking an enabled tab
+ *  fires `onViewChange`. The right-side slot is view-specific:
+ *   - Day: the "Fit day" button (resets the interactive viewport — WP6b-1), when
+ *     `onFitDay` is supplied.
+ *   - other views: `rightSlot` (Phases 2/3 pass month-nav / range-picker controls).
+ *  `dateLabel` renders in the label slot for views that want a plain read-only label
+ *  (Day/Week); views with their own nav control pass a `rightSlot` instead. */
+export function Toolbar({
+  view,
+  onViewChange,
+  dateLabel,
+  onFitDay,
+  fitLabel = "Fit day",
+  rightSlot,
+}: {
+  view: DashboardView;
+  onViewChange: (view: DashboardView) => void;
+  dateLabel: string;
+  onFitDay?: () => void;
+  /** Label for the fit/reset button — "Fit day" (single-day) or "Fit range" (multi-day). */
+  fitLabel?: string;
+  rightSlot?: ReactNode;
+}) {
   return (
     <div
       className="dashboard-toolbar"
@@ -57,7 +91,7 @@ export function Toolbar({ dateLabel }: { dateLabel: string }) {
         }}
       >
         {VIEW_MODES.map((m) => {
-          const current = m.value === "day";
+          const current = m.value === view;
           return (
             <button
               key={m.value}
@@ -67,6 +101,7 @@ export function Toolbar({ dateLabel }: { dateLabel: string }) {
               aria-selected={current}
               aria-disabled={!m.enabled}
               disabled={!m.enabled}
+              onClick={m.enabled ? () => onViewChange(m.value) : undefined}
               title={m.enabled ? undefined : "Coming in a later update"}
               style={{
                 background: current ? CT_TOKENS.surfaceAlt : "transparent",
@@ -101,6 +136,197 @@ export function Toolbar({ dateLabel }: { dateLabel: string }) {
       >
         {dateLabel}
       </span>
+
+      <span style={{ flex: 1 }} />
+
+      {rightSlot}
+
+      {onFitDay && (
+        <button
+          type="button"
+          className="dashboard-fit-day"
+          data-testid="dashboard-fit-day"
+          onClick={onFitDay}
+          title="Fit the whole window in view (reset zoom/pan · press 0)"
+          style={{
+            background: CT_TOKENS.surfaceDim,
+            color: CT_TOKENS.textSecondary,
+            border: `1px solid ${CT_TOKENS.border}`,
+            borderRadius: 6,
+            padding: "5px 12px",
+            fontSize: 12,
+            fontWeight: 450,
+            fontFamily: CT_TOKENS.sans,
+            cursor: "pointer",
+          }}
+        >
+          {fitLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── MonthNav ────────────────────────────────────────────────────────────────
+/** The Month view's prev/next-month nav control (Toolbar `rightSlot` for `view==="month"`).
+ *  Ported from dashboard.jsx's month-nav arrows (L520-557). `label` is the month name
+ *  ("July 2026"); `nextDisabled` blocks stepping past the current month. */
+export function MonthNav({
+  label,
+  monthIso,
+  onPrev,
+  onNext,
+  nextDisabled,
+}: {
+  label: string;
+  monthIso: string;
+  onPrev: () => void;
+  onNext: () => void;
+  nextDisabled: boolean;
+}) {
+  const arrowStyle = (disabled: boolean) => ({
+    height: 28,
+    width: 28,
+    border: "none",
+    background: "transparent",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 5,
+    cursor: disabled ? ("not-allowed" as const) : ("pointer" as const),
+    color: CT_TOKENS.textSecondary,
+    opacity: disabled ? 0.4 : 1,
+    fontSize: 14,
+    fontFamily: CT_TOKENS.mono,
+  });
+  return (
+    <div
+      data-testid="dashboard-month-nav"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        background: CT_TOKENS.surfaceDim,
+        borderRadius: 8,
+        border: `1px solid ${CT_TOKENS.border}`,
+        padding: 2,
+      }}
+    >
+      <button
+        type="button"
+        data-month-nav="prev"
+        onClick={onPrev}
+        title="Previous month"
+        style={arrowStyle(false)}
+      >
+        {"‹"}
+      </button>
+      <span
+        data-month-iso={monthIso}
+        style={{
+          fontFamily: CT_TOKENS.mono,
+          fontSize: 12,
+          color: CT_TOKENS.textPrimary,
+          padding: "0 8px",
+          minWidth: 100,
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </span>
+      <button
+        type="button"
+        data-month-nav="next"
+        onClick={nextDisabled ? undefined : onNext}
+        disabled={nextDisabled}
+        title="Next month"
+        style={arrowStyle(nextDisabled)}
+      >
+        {"›"}
+      </button>
+    </div>
+  );
+}
+
+// ── WeekNav ───────────────────────────────────────────────────────────────
+/** The Week view's prev/next-week nav control (Toolbar `rightSlot` for `view==="week"`).
+ *  A sibling of `MonthNav` (same arrow styling), ported from the reference's `data-week-nav`
+ *  arrows (viz/dashboard.jsx L472-515). `label` is the week span ("Jul 7 – Jul 13");
+ *  `nextDisabled` blocks stepping into a future week. `mondayIso` is exposed as a data attr
+ *  for the live verify-self assertions. */
+export function WeekNav({
+  label,
+  mondayIso,
+  onPrev,
+  onNext,
+  nextDisabled,
+}: {
+  label: string;
+  mondayIso: string;
+  onPrev: () => void;
+  onNext: () => void;
+  nextDisabled: boolean;
+}) {
+  const arrowStyle = (disabled: boolean) => ({
+    height: 28,
+    width: 28,
+    border: "none",
+    background: "transparent",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 5,
+    cursor: disabled ? ("not-allowed" as const) : ("pointer" as const),
+    color: CT_TOKENS.textSecondary,
+    opacity: disabled ? 0.4 : 1,
+    fontSize: 14,
+    fontFamily: CT_TOKENS.mono,
+  });
+  return (
+    <div
+      data-testid="dashboard-week-nav"
+      data-week-monday={mondayIso}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        background: CT_TOKENS.surfaceDim,
+        borderRadius: 8,
+        border: `1px solid ${CT_TOKENS.border}`,
+        padding: 2,
+      }}
+    >
+      <button
+        type="button"
+        data-week-nav="prev"
+        onClick={onPrev}
+        title="Previous week"
+        style={arrowStyle(false)}
+      >
+        {"‹"}
+      </button>
+      <span
+        style={{
+          fontFamily: CT_TOKENS.mono,
+          fontSize: 12,
+          color: CT_TOKENS.textPrimary,
+          padding: "0 8px",
+          minWidth: 116,
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </span>
+      <button
+        type="button"
+        data-week-nav="next"
+        onClick={nextDisabled ? undefined : onNext}
+        disabled={nextDisabled}
+        title="Next week"
+        style={arrowStyle(nextDisabled)}
+      >
+        {"›"}
+      </button>
     </div>
   );
 }

@@ -7,8 +7,11 @@ import {
 } from "../dayStats";
 import type { RangePayload, SegKind } from "../../../../state/timeAnalytics";
 
-function seg(kind: SegKind, start: number, end: number) {
-  return { kind, start, end };
+// `dur_ms` defaults to the minute-span in ms (these fixtures are all minute-scale, so the
+// duration sums equal the minute spans). Pass an explicit `durMs` to model a sub-minute
+// segment whose true duration differs from its quantized end - start.
+function seg(kind: SegKind, start: number, end: number, durMs?: number) {
+  return { kind, start, end, dur_ms: durMs ?? (end - start) * 60_000 };
 }
 
 // A 2-project fixture: proj-a has a big AI-family session (10+5+3=18 active) + away 30;

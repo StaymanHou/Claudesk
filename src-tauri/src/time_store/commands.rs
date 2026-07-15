@@ -509,15 +509,24 @@ fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>) {
 
 /// The window an analytics query covers. Internally-tagged (`{ "kind": "day" }` /
 /// `{ "kind": "week" }` / `{ "kind": "custom", "start_ms": …, "end_ms": … }`) so the
-/// frontend sends a discriminated union. `day` = today (local); `week` = the current
-/// ISO week (Mon–Sun containing today); `custom` = an explicit epoch-ms span. All
-/// resolution is on the operator's LOCAL calendar (the frozen-contract coordinate
-/// system). snake_case field names (the project IPC convention).
+/// frontend sends a discriminated union. `day` = today (local); `week` = a Mon–Sun ISO
+/// week — the one containing today by default, or the week containing an optional
+/// `monday` anchor (`"YYYY-MM-DD"`) so the dashboard's Week-nav can step to a PAST week
+/// (M9 WP6b-3); `custom` = an explicit epoch-ms span. All resolution is on the operator's
+/// LOCAL calendar (the frozen-contract coordinate system). snake_case field names (the
+/// project IPC convention).
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum QueryWindow {
     Day,
-    Week,
+    /// `monday` is the anchor date the week is derived from. Omitted (`None`) on a bare
+    /// `{ "kind": "week" }` → today's week (back-compat, byte-unchanged). When present it
+    /// is snapped to its own Monday defensively (the FE always sends a Monday, but the
+    /// wire is never trusted).
+    Week {
+        #[serde(default)]
+        monday: Option<String>,
+    },
     Custom { start_ms: i64, end_ms: i64 },
 }
 
@@ -592,7 +601,7 @@ enum WindowMode {
 /// (Mon 00:00 local .. next Mon 00:00 local) containing today; `custom` → the explicit
 /// span (mapped to the day-range builder over the local days it touches).
 fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
-    use chrono::{Datelike, Duration, Local};
+    use chrono::{Duration, Local};
     let today = Local::now().date_naive();
     match window {
         QueryWindow::Day => {
@@ -607,10 +616,16 @@ fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
                 },
             )
         }
-        QueryWindow::Week => {
-            // Monday of the ISO week containing today.
-            let days_from_monday = today.weekday().num_days_from_monday() as i64;
-            let monday = today - Duration::days(days_from_monday);
+        QueryWindow::Week { monday } => {
+            // The anchor day: the parsed `monday` (WP6b-3 Week-nav to a past week) or, on a
+            // bare `{"kind":"week"}`, today. Either way, `monday_of` snaps it to its own
+            // Monday, so the anchor need not literally be a Monday (defensive) and the
+            // default path (today) is byte-identical to the pre-WP6b-3 behavior.
+            let anchor = monday
+                .as_deref()
+                .and_then(|iso| chrono::NaiveDate::parse_from_str(iso, "%Y-%m-%d").ok())
+                .unwrap_or(today);
+            let monday = monday_of(anchor);
             let sunday_end = monday + Duration::days(7);
             let start = local_midnight_ms_of(monday);
             let end = local_midnight_ms_of(sunday_end);
@@ -623,6 +638,14 @@ fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
             (*start_ms, *end_ms, WindowMode::Range { start_day, end_day })
         }
     }
+}
+
+/// The Monday of the ISO week containing `day` (Monday-first). `day` itself when it is a
+/// Monday; else steps back to it. Used to snap a Week-window anchor defensively.
+fn monday_of(day: chrono::NaiveDate) -> chrono::NaiveDate {
+    use chrono::{Datelike, Duration};
+    let days_from_monday = day.weekday().num_days_from_monday() as i64;
+    day - Duration::days(days_from_monday)
 }
 
 /// Local-midnight epoch-ms for a `NaiveDate` (command-side; mirrors the query module's
@@ -1439,9 +1462,18 @@ mod tests {
         // The three shapes WP6's invoke() will send.
         let day: QueryWindow = serde_json::from_value(serde_json::json!({"kind": "day"})).unwrap();
         assert!(matches!(day, QueryWindow::Day));
+        // Bare `{"kind":"week"}` still deserializes (back-compat) — `monday` defaults to
+        // `None` (today's week). WP6b-3 added the optional anchor field.
         let week: QueryWindow =
             serde_json::from_value(serde_json::json!({"kind": "week"})).unwrap();
-        assert!(matches!(week, QueryWindow::Week));
+        assert!(matches!(week, QueryWindow::Week { monday: None }));
+        // With an anchor (the WP6b-3 Week-nav shape).
+        let week_anchored: QueryWindow =
+            serde_json::from_value(serde_json::json!({"kind": "week", "monday": "2026-06-15"}))
+                .unwrap();
+        assert!(
+            matches!(week_anchored, QueryWindow::Week { monday: Some(ref m) } if m == "2026-06-15")
+        );
         let custom: QueryWindow = serde_json::from_value(
             serde_json::json!({"kind": "custom", "start_ms": 1000, "end_ms": 2000}),
         )
@@ -1474,7 +1506,8 @@ mod tests {
     #[test]
     fn resolve_window_week_is_a_seven_day_span_anchored_on_monday() {
         use chrono::Datelike;
-        let (start, end, mode) = resolve_window(&QueryWindow::Week);
+        // Bare week (no anchor) — today's week, the default/back-compat path.
+        let (start, end, mode) = resolve_window(&QueryWindow::Week { monday: None });
         let width_d = (end - start) / 86_400_000;
         assert!((6..=8).contains(&width_d), "week width ~7d, got {width_d}d");
         match mode {
@@ -1485,6 +1518,58 @@ mod tests {
                     "week anchors on Monday"
                 )
             }
+            _ => panic!("week → Week mode"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_week_anchor_selects_the_anchored_monday() {
+        // 2026-06-15 IS a Monday → the window's monday is exactly it.
+        let (start, end, mode) = resolve_window(&QueryWindow::Week {
+            monday: Some("2026-06-15".to_string()),
+        });
+        let width_d = (end - start) / 86_400_000;
+        assert!((6..=8).contains(&width_d), "week width ~7d, got {width_d}d");
+        match mode {
+            WindowMode::Week { monday } => assert_eq!(
+                monday,
+                chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(),
+                "anchored Monday is used verbatim"
+            ),
+            _ => panic!("week → Week mode"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_week_anchor_snaps_a_non_monday_to_its_monday() {
+        // 2026-06-18 is a Thursday → snaps back to Mon 2026-06-15 (defensive; the FE
+        // always sends a Monday, but the wire is never trusted).
+        let (_start, _end, mode) = resolve_window(&QueryWindow::Week {
+            monday: Some("2026-06-18".to_string()),
+        });
+        match mode {
+            WindowMode::Week { monday } => assert_eq!(
+                monday,
+                chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(),
+                "a non-Monday anchor snaps back to its Monday"
+            ),
+            _ => panic!("week → Week mode"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_week_malformed_anchor_falls_back_to_today() {
+        use chrono::Datelike;
+        // Garbage anchor → today's week (never panics; matches the None path).
+        let (_start, _end, mode) = resolve_window(&QueryWindow::Week {
+            monday: Some("not-a-date".to_string()),
+        });
+        match mode {
+            WindowMode::Week { monday } => assert_eq!(
+                monday.weekday(),
+                chrono::Weekday::Mon,
+                "malformed anchor falls back to today's Monday"
+            ),
             _ => panic!("week → Week mode"),
         }
     }

@@ -52,6 +52,35 @@ fn at_minute(d: chrono::NaiveDate, minute: i64) -> i64 {
     super::local_midnight_ms(d) + minute * 60_000
 }
 
+/// Local-midnight epoch-ms for a test date + an offset in MILLISECONDS — for placing
+/// SUB-MINUTE events (a real CC tool call is Pre→Post ~1s apart). Used to reproduce the
+/// minute-quantization bug where sub-minute AI work must still accrue duration.
+fn at_ms(d: chrono::NaiveDate, ms: i64) -> i64 {
+    super::local_midnight_ms(d) + ms
+}
+
+// ---- ms_to_minutes_round: the round-half-up duration→minutes helper --------
+// Pins the load-bearing arithmetic of the minute-quantization fix
+// (SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION-…). This is what lets per-kind ms
+// totals accrue to real minutes instead of per-segment flooring to zero. Boundary
+// behavior is round-half-up with a 30_000ms pivot; must match the FE `msToMinutesRound`.
+
+#[test]
+fn ms_to_minutes_round_is_round_half_up_and_zero_clamped() {
+    assert_eq!(super::ms_to_minutes_round(0), 0);
+    assert_eq!(super::ms_to_minutes_round(-5_000), 0, "negative clamps to 0");
+    assert_eq!(super::ms_to_minutes_round(29_999), 0, "just under half a min → 0");
+    assert_eq!(super::ms_to_minutes_round(30_000), 1, "exactly half → rounds up");
+    assert_eq!(super::ms_to_minutes_round(59_999), 1);
+    assert_eq!(super::ms_to_minutes_round(60_000), 1);
+    assert_eq!(super::ms_to_minutes_round(89_999), 1, "1m29.999s → 1");
+    assert_eq!(super::ms_to_minutes_round(90_000), 2, "1m30s → 2 (half up)");
+    // The bug's shape: many sub-minute spans that individually floor to 0 but SUM to
+    // real minutes — the helper is only ever fed the per-kind TOTAL, never per-segment.
+    let total: i64 = 6 * 18_000; // 6 × 18s = 108s
+    assert_eq!(super::ms_to_minutes_round(total), 2, "108s total → 2m (not 0)");
+}
+
 // ---- build_day: empty day (oracle: test_empty_day, L59) -------------------
 
 #[test]
@@ -141,6 +170,126 @@ fn single_burst_one_project_one_session_tiled_in_six_kind_enum() {
             .iter()
             .all(|k| matches!(*k, "ai-doing" | "ai-reasoning" | "subagent")),
         "a fully AI-busy burst has only AI-family segs; got {kinds:?}"
+    );
+}
+
+// ---- REGRESSION (SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION-ZEROES-SUBMINUTE-AI-DOING) --
+// Bug: sub-minute AI tool-execution contributes 0 minutes to `ai-doing` because query.rs
+// floors each segment's ms endpoints to integer minutes (ts_to_minutes) BEFORE summing
+// per-kind durations (seg.end - seg.start). A real CC tool call is Pre→Post ~1s apart, so
+// its [start,end] floors to the SAME minute → end-start == 0 → the AI's actual work
+// vanishes from the rollup while the minute-scale reviewing gaps survive + over-report.
+// Empirically: neo session df2a3051 (92 tool events over 11 min) reclassified to
+// {ai_doing:0, reviewing:11}. This test packs several sub-minute tool calls whose SUMMED
+// duration exceeds a minute, and asserts ai-doing accrues real time. RED before the fix.
+
+#[test]
+fn subminute_tool_calls_accrue_ai_doing_minutes_not_zero() {
+    // 2026-05-11 is a Monday (day_index 0 in the week rollup).
+    let monday = day(2026, 5, 11);
+    // A single AI-busy session at ~09:00. Six back-to-back tool calls, each Pre→Post
+    // ~18s apart, spanning 09:00:00 → ~09:01:48 (6 × 18s = 108s ≈ 2 min of tool
+    // execution), then a Stop. NO human idle — the whole window is AI-busy, so the AI
+    // tiler yields ai-doing (the tool spans) + thin ai-reasoning (inter-tool gaps).
+    //
+    // Assert on the WEEK ROLLUP's `ai_doing` ALONE (the exact user-visible number that
+    // was wrong — neo showed a 1m pill). We deliberately do NOT assert on
+    // `ai_doing + ai_reasoning` (the pre-existing week tests do, which is WHY they never
+    // caught this — ai_reasoning's minute-scale gaps mask a zeroed ai_doing). We also do
+    // NOT read `seg.end - seg.start` on the payload: the fix KEEPS start/end
+    // minute-quantized for render position, so those stay same-minute; the fix is that
+    // the rollup sums TRUE duration. RED today (ai_doing == 0), GREEN after the fix.
+    let base = 540 * 60_000; // 09:00:00 in ms-from-midnight
+    let mut events = vec![ev(
+        at_ms(monday, base),
+        "sess1234abcd",
+        "/repo/proj-a",
+        "UserPromptSubmit",
+    )];
+    for i in 0..6 {
+        let pre = base + i * 18_000;
+        let post = pre + 18_000; // 18s of execution, back-to-back
+        let tuid = format!("t{i}");
+        events.push(with_tool(
+            ev(at_ms(monday, pre), "sess1234abcd", "/repo/proj-a", "PreToolUse"),
+            "Bash",
+            &tuid,
+        ));
+        events.push(with_tool(
+            ev(at_ms(monday, post), "sess1234abcd", "/repo/proj-a", "PostToolUse"),
+            "Bash",
+            &tuid,
+        ));
+    }
+    events.push(ev(
+        at_ms(monday, base + 108_000 + 12_000),
+        "sess1234abcd",
+        "/repo/proj-a",
+        "Stop",
+    ));
+
+    let week = build_week(monday, &events, &no_names()).unwrap();
+    assert_eq!(week.projects.len(), 1, "one project expected");
+    let mon_cell = &week.projects[0].rollup[0];
+    // 6 tool calls × 18s = 108s = 1.8 min of TRUE ai-doing → round-half-up = 2 min.
+    // The buggy per-segment minute-floor reports ai_doing=1 (only the one tool span that
+    // happens to straddle the 09:00→09:01 boundary survives with end-start=1; the other
+    // five floor to same-minute zero-width). So >=2 is the discriminating assertion:
+    // RED today (==1), GREEN after the fix (sums true duration → 2).
+    assert!(
+        mon_cell.ai_doing >= 2,
+        "sub-minute tool execution must accrue its TRUE ai-doing minutes (108s ≈ 2 min) \
+         in the week rollup, not the minute-floored residue; got ai_doing={} \
+         (full Monday cell: {mon_cell:?})",
+        mon_cell.ai_doing
+    );
+}
+
+#[test]
+fn tool_calls_within_a_single_minute_still_accrue_ai_doing() {
+    // The starkest form of the quantization bug: several tool calls ALL inside one
+    // clock-minute → every seg floors to the SAME minute → end-start==0 for all → the
+    // buggy rollup reports ai_doing=0 even though the AI worked ~48s. A correct impl
+    // rounds 48s → 1 min. RED today (==0), GREEN after the fix.
+    let monday = day(2026, 5, 11);
+    let base = 540 * 60_000; // 09:00:00
+    // 4 calls, each 12s of execution, all between 09:00:00 and 09:00:52 (one minute).
+    let mut events = vec![ev(
+        at_ms(monday, base),
+        "sess1234abcd",
+        "/repo/proj-a",
+        "UserPromptSubmit",
+    )];
+    for i in 0..4 {
+        let pre = base + i * 13_000;
+        let post = pre + 12_000;
+        let tuid = format!("u{i}");
+        events.push(with_tool(
+            ev(at_ms(monday, pre), "sess1234abcd", "/repo/proj-a", "PreToolUse"),
+            "Bash",
+            &tuid,
+        ));
+        events.push(with_tool(
+            ev(at_ms(monday, post), "sess1234abcd", "/repo/proj-a", "PostToolUse"),
+            "Bash",
+            &tuid,
+        ));
+    }
+    events.push(ev(
+        at_ms(monday, base + 55_000),
+        "sess1234abcd",
+        "/repo/proj-a",
+        "Stop",
+    ));
+
+    let week = build_week(monday, &events, &no_names()).unwrap();
+    let mon_cell = &week.projects[0].rollup[0];
+    // 4 × 12s = 48s of ai-doing → round-half-up = 1 min. Buggy floor → 0.
+    assert!(
+        mon_cell.ai_doing >= 1,
+        "within-one-minute tool execution must still accrue ai-doing; got ai_doing={} \
+         (Monday cell: {mon_cell:?})",
+        mon_cell.ai_doing
     );
 }
 
@@ -416,6 +565,7 @@ fn dto_serde_shape_is_snake_case_and_kind_is_kebab_tag() {
         kind: crate::reclassify::Kind::Subagent,
         start: 10,
         end: 20,
+        dur_ms: 600_000,
         label: Some("Explore".to_string()),
     };
     let seg_val = serde_json::to_value(&seg).unwrap();
@@ -425,6 +575,7 @@ fn dto_serde_shape_is_snake_case_and_kind_is_kebab_tag() {
     assert_eq!(
         seg_keys,
         vec![
+            &"dur_ms".to_string(),
             &"end".to_string(),
             &"kind".to_string(),
             &"label".to_string(),
@@ -433,12 +584,15 @@ fn dto_serde_shape_is_snake_case_and_kind_is_kebab_tag() {
     );
     // kind serializes to the WP3 kebab tag, NOT the Rust variant name.
     assert_eq!(seg_obj["kind"], serde_json::json!("subagent"));
+    // dur_ms is the true ms duration (snake_case wire key; FE mirror must match).
+    assert_eq!(seg_obj["dur_ms"], serde_json::json!(600_000));
 
-    // A non-subagent seg omits `label` entirely (skip_serializing_if).
+    // A non-subagent seg omits `label` entirely (skip_serializing_if) but always carries dur_ms.
     let ai = SegPayload {
         kind: crate::reclassify::Kind::AiDoing,
         start: 0,
         end: 5,
+        dur_ms: 18_000,
         label: None,
     };
     let ai_obj = serde_json::to_value(&ai).unwrap();
@@ -447,6 +601,7 @@ fn dto_serde_shape_is_snake_case_and_kind_is_kebab_tag() {
         "label omitted when None"
     );
     assert_eq!(ai_obj["kind"], serde_json::json!("ai-doing"));
+    assert_eq!(ai_obj["dur_ms"], serde_json::json!(18_000));
 
     // DayPayload key-shape: exactly {label, iso, projects, hour_range} on a non-empty
     // day (no `empty` key), + `empty` present only on an empty day.

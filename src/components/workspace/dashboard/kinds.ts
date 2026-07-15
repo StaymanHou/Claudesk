@@ -91,30 +91,45 @@ export const RENDER_ORDER: readonly SegKind[] = [
   "subagent",
 ];
 
-/** One tiled segment (mirrors `timeAnalytics.SegPayload` sans `label`). */
+/** One tiled segment (mirrors `timeAnalytics.SegPayload` sans `label`). `dur_ms` is the
+ *  TRUE duration; `start`/`end` are minute-quantized render positions. Duration sums MUST
+ *  use `dur_ms` — subtracting the quantized endpoints zeroes sub-minute AI work
+ *  (SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION-…). */
 interface KindSpan {
   kind: SegKind;
   start: number;
   end: number;
+  dur_ms: number;
 }
 
-/** Total minutes of segments of exactly `kind`. (Ported `sumKind`, L54.) */
+/** Milliseconds → whole minutes, round-half-up. Mirror of the backend
+ *  `ms_to_minutes_round`: sum durations at ms precision, convert the TOTAL once, so
+ *  sub-minute segments accrue their real time instead of each flooring to zero. */
+function msToMinutesRound(durMs: number): number {
+  return durMs <= 0 ? 0 : Math.floor((durMs + 30_000) / 60_000);
+}
+
+/** Total minutes of segments of exactly `kind`. Sums TRUE `dur_ms` (not the quantized
+ *  `end - start`), then rounds the total to minutes once. (Ported `sumKind`, L54.) */
 export function sumByKind(segs: readonly KindSpan[], kind: SegKind): number {
-  return segs
+  const totalMs = segs
     .filter((s) => s.kind === kind)
-    .reduce((a, s) => a + (s.end - s.start), 0);
+    .reduce((a, s) => a + s.dur_ms, 0);
+  return msToMinutesRound(totalMs);
 }
 
 /**
  * Total "active work" minutes = the AI-execution family (ai-doing + subagent +
  * ai-reasoning). Ported from `sumActive` (L53) — the old code summed `active`+`subagent`;
  * the 6-kind analogue is the whole AI family (the agent doing real work), which is what
- * the SummaryStrip "Active" stat + the longest-session ranking measure.
+ * the SummaryStrip "Active" stat + the longest-session ranking measure. Sums TRUE
+ * `dur_ms` then rounds once (see {@link sumByKind}).
  */
 export function sumActive(segs: readonly KindSpan[]): number {
-  return segs
+  const totalMs = segs
     .filter((s) => AI_KINDS.includes(s.kind))
-    .reduce((a, s) => a + (s.end - s.start), 0);
+    .reduce((a, s) => a + s.dur_ms, 0);
+  return msToMinutesRound(totalMs);
 }
 
 /** Human-facing legend label per kind. */

@@ -38,4 +38,19 @@ commit 7cfc464; as-built in CLAUDE.md + arch.md §A + status_broadcaster/mod.rs)
   hard-kill case (no `SessionEnd`) needs the explicit `WorkspaceClose` marker + startup
   reconciliation to cover it.
 
+**PreToolUse/PostToolUse timing — dispatch boundary, NOT tool wall-time (M9, observed 2026-07-13):**
+- **`PreToolUse` and `PostToolUse` fire ~30ms–1s apart** — they bracket the tool DISPATCH /
+  permission boundary, NOT the tool's actual execution. Live-observed Pre→Post spans in a
+  tool-heavy session were 27ms–48ms each (Bash/Edit/Read/Skill/Write). The gap is Perl-hook +
+  dispatch latency, not "how long the tool ran."
+- **Consequence for time-analytics:** `ai-doing` measured strictly as the `PreToolUse`→`PostToolUse`
+  span is intrinsically tiny (tens of ms/call) → it systematically UNDER-represents real
+  AI-execution time. This is separate from (and survives) the minute-quantization `dur_ms` fix
+  (`SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION-…`): even with exact-ms summing, a session with
+  60+ tool calls totals only ~1–2 min of `ai-doing` because each Pre→Post span is ~30ms. The
+  between-tool gaps (the real "AI working" time) land in `ai-reasoning`, not `ai-doing`.
+- **Bears on:** WP6c metrics + any "how much was the AI actually working" measurement. If a truer
+  AI-execution number is wanted, Pre→Post spans are the wrong signal — consider the AI-busy-window
+  (UPS→Stop minus human gaps) or tool-call COUNT instead of Pre→Post duration.
+
 Verify these still hold (CC version-drifts) via the harness in [[cc-hook-capture-beats-docs]].

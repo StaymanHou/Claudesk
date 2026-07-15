@@ -23,12 +23,17 @@ export type SegKind =
   | "reviewing"
   | "away";
 
-/** One tiled segment. `start`/`end` are minutes-from-local-midnight (`start <= end`).
- *  `label` is present only on `subagent` segments (the `agent_type`). */
+/** One tiled segment. `start`/`end` are minutes-from-local-midnight (`start <= end`) —
+ *  RENDER POSITION only, quantized to the minute. `dur_ms` is the segment's TRUE
+ *  duration in ms (pre-quantization) — the only correct source for summing per-kind
+ *  duration, since AI tool-execution is sub-minute and `end - start` floors it to zero
+ *  (SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION-…). `label` is present only on
+ *  `subagent` segments (the `agent_type`). */
 export interface SegPayload {
   kind: SegKind;
   start: number;
   end: number;
+  dur_ms: number;
   label?: string;
 }
 
@@ -97,11 +102,13 @@ export type TimeAnalyticsResult =
   | ({ kind: "week" } & WeekPayload);
 
 /** The window a query covers (the tagged union the command deserializes). `day` =
- *  today (local); `week` = the ISO week containing today; `custom` = an explicit
- *  epoch-ms span. */
+ *  today (local); `week` = an ISO week — the one containing today by default, or (WP6b-3
+ *  Week-nav) the week containing the optional `monday` anchor (`"YYYY-MM-DD"`, snapped to
+ *  its Monday backend-side) so the Week view can step to a PAST week; `custom` = an
+ *  explicit epoch-ms span. */
 export type QueryWindow =
   | { kind: "day" }
-  | { kind: "week" }
+  | { kind: "week"; monday?: string }
   | { kind: "custom"; start_ms: number; end_ms: number };
 
 /** The query scope. v1 implements only `"global"` (all-projects, per-project
