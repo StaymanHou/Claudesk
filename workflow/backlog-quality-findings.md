@@ -4,6 +4,42 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m9-wp6c-2-compare-view — 2026-07-15
+
+*(feature-review-quality on the WP6c-2 working-tree change [Rust `build_comparison_data` + `ComparisonPayload` DTO + `{kind:"compare"}` command; FE Compare tab: `compareMath.ts` + `CompareView.tsx` + GlobalDashboard wiring + tab enable; uncommitted per commit-only-when-asked, the M9 tree local carry]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 4 MINOR — all auto-backlogged. Reviewer: well-built, advances the codebase more than it accrues debt; disciplined re-derivation reusing the shipped `build_metrics` per side + FE-side delta recompute (serde-pinned no-`deltas` contract) + strong oracle coverage. All 4 MINOR are backlog-tier polish, none blocking.)*
+
+## SURFACE-2026-07-15-QUALITY-WP6C2-LOCAL-DATE-OF-MS-DUP
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`local_date_of_ms` ~L1260) ↔ pre-existing `local_date_of` (~L417, same module)
+- **Finding:** `local_date_of_ms` byte-duplicates the WP4 `local_date_of` in the SAME module (differs only in name + the `.expect()` message). `events_in_days` could have called the existing `local_date_of`. ADDS to the standing WP6c-1 query.rs duplication-of-composition cluster.
+- **Fix shape:** delete `local_date_of_ms`, point `events_in_days` at `local_date_of` — folds into the single `query.rs` consolidation pass the WP6c-1 cluster already needs.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6C2-TOPBLOCKINGSHIFT-DEAD-BRANCH
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/compareMath.ts` (`topBlockingShift` ~L129)
+- **Finding:** the `human→agent` branch is effectively UNREACHABLE. After the verify-self fix normalized `blockingShares` to a split summing to 100, `humanToAgent === 100 − agentToHuman` for both sides → `haShift === −ahShift` → `|ahShift| === |haShift|` always, so the `>=` tie-break always returns the `agent→human` label. The Δ column never displays `human→agent`. (No correctness impact — the pp magnitude is right; only the label choice is dead.)
+- **Fix shape:** collapse to a single fixed `agent→human` label (report `ahShift` directly), or keep the two-component shift on an un-normalized basis if a `human→agent`-labeled delta is actually wanted. Pin whichever.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6C2-COMPARESIDE-RANGE-UNCONSUMED
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`CompareSide.range` ~L349) + `src/state/timeAnalytics.ts` (`CompareSide.range` ~L204)
+- **Finding:** `CompareSide.range` is an UNCONSUMED contract field — CompareView reads only `a.metrics`/`b.metrics`/`meta`; `range` duplicates `metrics.window` (the DTO comment admits it). Mildly contradicts D2's own "no unconsumed contract" discipline (which dropped `_computeMetricsView` for exactly this reason).
+- **Fix shape:** drop `CompareSide.range` from both the Rust DTO + the TS type (CompareView already has `metrics.window` if it ever needs the per-side bounds); or, if kept for future per-side labeling, note the intended consumer.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6C2-CHROME-HEADER-COMMENT-DRIFT
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/Chrome.tsx` (file-header comment ~L8)
+- **Finding:** the file-header comment still says "Compare stays disabled (WP6c)" though the tab is now `enabled: true` (the `VIEW_MODES` inline comment at ~L35-37 is already correct). Header/body comment drift.
+- **Fix shape:** one-line comment update to reflect all 5 views enabled as of WP6c-2.
+- **Priority:** low.
+- **Status:** pending.
+
 # m9-wp6b-4-multiday-timeline — 2026-07-15
 
 *(feature-review-quality on the WP6b-4 flexible-timeline RE-SPEC [continuous no-mode video-editor timeline; fixed-origin coordinate model; uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 2 MINOR — all auto-backlogged. Reviewer: well-built, structurally sound; the hard part [continuous camera over auto-extending data, no viewport jumps] solved cleanly via fixed origin + pure unit-pinned helpers + a backward-compatible seedKey decoupling. The 2 MAJOR are in the genuinely-new complexity zone, neither a crash, both small localized fixes — appropriate for the standing refactor batch, not a feature reopen.)*
@@ -447,15 +483,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality on the working-tree diff [uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 1 MAJOR / 2 MINOR — all auto-backlogged. Reviewer: well-built, appropriately-scoped; contract-additive `dur_ms` fix, precision-disciplined [sum ms, round once], anti-pattern signposted at the type def + both sum sites, discriminating repro tests. Only real gap: a THIRD copy of the fixed `end - start` anti-pattern in a sibling file the blast-radius analysis missed. No refactor auto-invoked — MAJOR is a same-pattern follow-up on a lower-susceptibility kind, not a CRITICAL.)*
 
-## SURFACE-2026-07-13-QUALITY-MINQUANT-DAYTIMELINE-SUMKIND-DUP
-- **Severity:** MAJOR
-- **File:** `src/components/workspace/dashboard/DayTimeline.tsx:138-142` (local `sumKind`; feeds `ProjectTotals.away` at L859)
-- **Finding:** A THIRD copy of the exact anti-pattern this feature fixed: `sumKind` sums the minute-quantized `(s.end - s.start)` instead of `dur_ms`. It feeds the day-view project pill's `away` total. The fix corrected the same pattern in `kinds.ts` (`sumByKind`/`sumActive`) + the two backend sites, but the WIP's blast-radius analysis enumerated those and missed this sibling-file copy. **Verified real by the orchestrator** (confirmed at L138-142 → `away: sumKind(allSegs, "away")` at L859).
-- **Why lower-severity than the original:** `away` is minute-scale (idle gaps are minutes, not the sub-minute Pre→Post spans that zeroed ai-doing), so the under-report is smaller — but a session with many sub-minute away gaps still under-counts, and leaving a live copy of the killed pattern invites copy-forward.
-- **Fix shape:** route `DayTimeline`'s local `sumKind` through `dur_ms` (round-half-up), or delete it and use `kinds.ts::sumByKind` (now the corrected version). One `/feature-refactor` line.
-- **Priority:** medium.
-- **Status:** pending.
-
 ## SURFACE-2026-07-13-QUALITY-MINQUANT-HELPER-PARITY-UNPINNED
 - **Severity:** MINOR
 - **File:** `src-tauri/src/time_store/query.rs` (`ms_to_minutes_round`) + `src/components/workspace/dashboard/kinds.ts` (`msToMinutesRound`)
@@ -469,5 +496,49 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **File:** `src-tauri/src/time_store/query.rs:376`
 - **Finding:** `dur_ms: (s.end_ms - s.start_ms).max(0)` clamps a negative span to 0, and `ms_to_minutes_round` ALSO guards negatives — a reversed segment is defended twice, so the helper's negative branch can only ever fire on a summed total, never a single seg. Harmless redundancy.
 - **Fix shape:** none needed; noting the double-guard so a future reader doesn't assume `dur_ms` can be negative downstream.
+- **Priority:** low.
+- **Status:** pending.
+
+# m9-wp6c-metrics-compare-panels — 2026-07-15
+
+Findings from the WP6c-1 (Metrics tab + build_metrics producer) review. Coherent theme: duplication-of-composition in `time_store/query.rs` — correct today, well-commented, none blocking. Good WP-refactor-batch scope; joins the standing M9 dedup debt (the WP6b-1/6b-2/6b-3 + minquant findings above).
+
+## SURFACE-2026-07-15-QUALITY-WP6C1-AI-COMPONENT-SPAN-DUP
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`build_metrics`, ~1094-1116)
+- **Finding:** `ai_component_spans` re-implements the exact span-union body of `reclassify::ai_busy_intervals` (mod.rs:862-873) — `tool_intervals` + `subagent_intervals` + positive bursts — differing ONLY in that it omits the final `merge_spans`. The effort/wallclock pair is literally "the same span set, merged (via `ai_busy_intervals`) vs. un-merged (this inline loop)," but the two halves are computed by two separately-authored walks. So the AI-family membership rule is encoded in two places; a future kind added to the AI family must be edited in both or the effort/wallclock pair desyncs.
+- **Fix shape:** expose a `reclassify` primitive returning the UN-MERGED AI-component spans (which `ai_busy_intervals` then merges); `build_metrics` reads it for effort and `ai_busy_intervals` for wallclock — one source.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6C1-MERGE-INTERVALS-DUP
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`merge_intervals` ~986) vs `src-tauri/src/reclassify/mod.rs` (`merge_spans` ~1151)
+- **Finding:** `merge_intervals` is a near-verbatim copy of the private `merge_spans` (retain-positive → sort → coalesce); the doc-comment openly says "Local mirror of reclassify's private `merge_spans`." Two interval-merge impls to keep in step.
+- **Fix shape:** promote `merge_spans` to `pub(crate)` and delete `merge_intervals`, reusing it (query.rs already imports heavily from `reclassify`).
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6C1-BY-SID-GROUPING-DUP
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`capped_events` ~1017-1035 + `human_kind_ms` ~1160-1175)
+- **Finding:** Both functions independently rebuild the same per-session grouping with the identical `<unknown>`-empty-sid fallback (`by_sid: HashMap<String, Vec<EventRow>>`, clone-per-event), and `human_kind_ms` re-groups events `capped_events` already grouped moments earlier. A 3rd copy of the session-keying idiom in the file (`build_range`/`build_day` have their own inline copy too).
+- **Fix shape:** a shared `group_by_session`-style helper (one exists in `reclassify` for `active_bursts`) encoding the empty-sid sentinel once.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6C1-PRIMITIVE-REWALK-UNCOMMENTED
+- **Severity:** MINOR
+- **File:** `src-tauri/src/time_store/query.rs` (`build_metrics`, ~1094-1116)
+- **Finding:** `build_metrics` calls `active_bursts`/`tool_intervals`/`subagent_intervals` directly AND calls `ai_busy_intervals(&ev)`, which internally recomputes all three again → each primitive runs 2-3× on the same event slice. Correctness-neutral + perf-neutral (windows are small), but a reader tracing the data flow sees the same reclassifier walk fan out several times with no note that `ai_busy_intervals` is itself a composite of the primitives above it.
+- **Fix shape:** a one-line comment ("`ai_busy_intervals` re-derives the tool/subagent/burst spans it merges") — or fold into the AI-component-span primitive from the first finding.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-15-QUALITY-WP6C1-FMTMSDUR-SUBSECOND-COMMENT
+- **Severity:** MINOR
+- **File:** `src/components/workspace/dashboard/__tests__/metricsMath.test.ts:17` (+ `metricsMath.ts` `fmtMsDur`)
+- **Finding:** The test pins `fmtMsDur(143)` → `"0s"` (a 143ms total renders "0s" — rounds below one second). Defensible, but the feature's headline invariant is "sub-minute tool work must be VISIBLE, not 0", and "0s" reads to a user like the "0m" this path exists to avoid. A future reader might "fix" it into a misleading floor-up.
+- **Fix shape:** a one-line comment at the display seam clarifying the guarded anti-pattern is MINUTE-flooring (per-segment quantization), NOT sub-second display; sub-second flooring to "0s" is expected + correct.
 - **Priority:** low.
 - **Status:** pending.

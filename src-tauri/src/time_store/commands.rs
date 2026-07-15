@@ -15,7 +15,11 @@ use std::thread;
 use rusqlite::Connection;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use super::query::{build_range, build_week, RangePayload, WeekPayload};
+use super::query::{
+    build_comparison_data, build_metrics, build_range, build_week, compare_day_vs_trailing_bounds,
+    compare_month_over_month_bounds, compare_week_over_week_bounds, ComparisonPayload,
+    MetricsPayload, RangePayload, WeekPayload,
+};
 use super::{
     bootstrap, event_to_row, insert_row, native_row, NativeContext, NativeLaunchTool, NativeSignal,
     TimeRow,
@@ -528,6 +532,48 @@ pub enum QueryWindow {
         monday: Option<String>,
     },
     Custom { start_ms: i64, end_ms: i64 },
+    /// `{ "kind": "metrics", "window": { "kind": "day" | "week" | "custom", … } }`
+    /// (M9 WP6c-1) — the AGGREGATE-metrics query. The nested `window` selects the span
+    /// (reusing the same day/week/custom resolution); the result is a [`MetricsPayload`]
+    /// (window-level analytics) rather than a per-session Range/Week payload. Boxed to
+    /// keep the enum from being recursively unsized.
+    Metrics { window: Box<QueryWindow> },
+    /// `{ "kind": "compare", "spec": … }` (M9 WP6c-2) — the A/B comparison query. `spec`
+    /// selects a named preset (WoW / MoM / today-vs-trailing) or a custom A/B pair; the
+    /// result is a [`ComparisonPayload`] (`{a, b, meta}`, each side a full metrics tree).
+    /// Preset day-math is resolved backend-side on the LOCAL calendar (the FE sends only
+    /// the preset string); custom sends two explicit epoch-ms spans.
+    Compare { spec: CompareSpec },
+}
+
+/// The A/B window selector for a `{ "kind": "compare" }` query. Internally-tagged so the FE
+/// sends `{"kind":"compare","spec":{"preset":"wow"}}` or
+/// `{"kind":"compare","spec":{"custom":{"a":{…},"b":{…}}}}`.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompareSpec {
+    /// A named preset — bounds resolved from today (local). Wire: `{"preset":"wow"}`.
+    Preset(ComparePreset),
+    /// Two explicit epoch-ms spans; each maps to the local days it touches. Wire:
+    /// `{"custom":{"a":{start_ms,end_ms},"b":{…}}}`.
+    Custom { a: CustomSide, b: CustomSide },
+}
+
+/// One side of a custom A/B comparison — an explicit epoch-ms span.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct CustomSide {
+    pub start_ms: i64,
+    pub end_ms: i64,
+}
+
+/// The three named comparison presets. `today_vs_trailing` compares today against the
+/// trailing 7-day baseline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComparePreset {
+    Wow,
+    Mom,
+    TodayVsTrailing,
 }
 
 /// The result of a [`time_analytics_query`] — a range payload (day/custom) or a week
@@ -539,6 +585,12 @@ pub enum QueryWindow {
 pub enum TimeAnalyticsResult {
     Range(RangePayload),
     Week(WeekPayload),
+    /// `{ "kind": "metrics", … }` — the M9 WP6c-1 window-level aggregate metrics.
+    Metrics(MetricsPayload),
+    /// `{ "kind": "compare", … }` — the M9 WP6c-2 A/B comparison (`{a, b, meta}`). Boxed:
+    /// it carries TWO full metrics trees, so it dwarfs the other variants (clippy
+    /// `large_enum_variant`); the Box is a serde no-op, so the wire shape is unchanged.
+    Compare(Box<ComparisonPayload>),
 }
 
 /// Frontend → backend: build the segment-model payload for `window`, scoped `global`
@@ -582,6 +634,26 @@ pub fn time_analytics_query(
             let payload = build_week(monday, &rows, &project_names)?;
             Ok(TimeAnalyticsResult::Week(payload))
         }
+        WindowMode::Metrics { start_day, end_day } => {
+            // Window-level aggregate metrics (M9 WP6c-1) — build_metrics runs the WP3
+            // reclassifier over the WP6.5-capped events and re-derives the aggregate
+            // shape. Global scope only (window-global, no per-project rollup).
+            let payload = build_metrics(start_day, end_day, &rows);
+            Ok(TimeAnalyticsResult::Metrics(payload))
+        }
+        WindowMode::Compare {
+            a_start,
+            a_end,
+            b_start,
+            b_end,
+        } => {
+            // A/B comparison (M9 WP6c-2) — `rows` was read over the UNION span (see
+            // resolve_window); build_comparison_data partitions per side by local day and
+            // runs build_metrics per side. `{a, b, meta}` — no `deltas` (CompareView
+            // recomputes FE-side).
+            let payload = build_comparison_data(a_start, a_end, b_start, b_end, &rows);
+            Ok(TimeAnalyticsResult::Compare(Box::new(payload)))
+        }
     }
 }
 
@@ -593,6 +665,21 @@ enum WindowMode {
     },
     Week {
         monday: chrono::NaiveDate,
+    },
+    /// M9 WP6c-1 — the aggregate-metrics builder over `[start_day, end_day]` inclusive
+    /// (the days the nested window resolved to).
+    Metrics {
+        start_day: chrono::NaiveDate,
+        end_day: chrono::NaiveDate,
+    },
+    /// M9 WP6c-2 — the A/B comparison builder over two inclusive local-day windows. The
+    /// command reads rows once over the UNION span, then `build_comparison_data` partitions
+    /// per side.
+    Compare {
+        a_start: chrono::NaiveDate,
+        a_end: chrono::NaiveDate,
+        b_start: chrono::NaiveDate,
+        b_end: chrono::NaiveDate,
     },
 }
 
@@ -636,6 +723,63 @@ fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
             let start_day = local_date_of_ms(*start_ms);
             let end_day = local_date_of_ms(*end_ms);
             (*start_ms, *end_ms, WindowMode::Range { start_day, end_day })
+        }
+        QueryWindow::Metrics { window } => {
+            // Resolve the nested window for its span + days, then re-tag as Metrics so the
+            // dispatch calls build_metrics over the same days (reuses all span logic; no
+            // duplication). The nested window's day bounds come from whichever mode it is.
+            let (start_ms, end_ms, inner) = resolve_window(window);
+            let (start_day, end_day) = match inner {
+                WindowMode::Range { start_day, end_day } => (start_day, end_day),
+                // A Week resolves to its Mon..next-Mon span → days Mon..Sun (6 days later).
+                WindowMode::Week { monday } => (monday, monday + Duration::days(6)),
+                // Defensive: a nested Metrics window is not a valid shape, but map it to
+                // the days its own span touches rather than panicking.
+                WindowMode::Metrics { start_day, end_day } => (start_day, end_day),
+                // Defensive: a nested Compare window is not a valid shape either; map it to
+                // the union of its two sides' days rather than panicking.
+                WindowMode::Compare {
+                    a_start,
+                    a_end,
+                    b_start,
+                    b_end,
+                } => (a_start.min(b_start), a_end.max(b_end)),
+            };
+            (start_ms, end_ms, WindowMode::Metrics { start_day, end_day })
+        }
+        QueryWindow::Compare { spec } => {
+            // Resolve both sides' inclusive local-day bounds, then compute the UNION span
+            // (min start .. max end) as epoch-ms so the command does a SINGLE DB read;
+            // build_comparison_data partitions the rows per side by local day.
+            let (a_start, a_end, b_start, b_end) = match spec {
+                CompareSpec::Preset(preset) => match preset {
+                    ComparePreset::Wow => compare_week_over_week_bounds(monday_of(today)),
+                    ComparePreset::Mom => compare_month_over_month_bounds(today),
+                    ComparePreset::TodayVsTrailing => compare_day_vs_trailing_bounds(today, 7),
+                },
+                CompareSpec::Custom { a, b } => (
+                    local_date_of_ms(a.start_ms),
+                    local_date_of_ms(a.end_ms),
+                    local_date_of_ms(b.start_ms),
+                    local_date_of_ms(b.end_ms),
+                ),
+            };
+            let union_start_day = a_start.min(b_start);
+            let union_end_day = a_end.max(b_end);
+            let start_ms = local_midnight_ms_of(union_start_day);
+            // End = next local midnight after the last day (exclusive upper bound, matching
+            // the day/week span convention).
+            let end_ms = local_midnight_ms_of(union_end_day + Duration::days(1));
+            (
+                start_ms,
+                end_ms,
+                WindowMode::Compare {
+                    a_start,
+                    a_end,
+                    b_start,
+                    b_end,
+                },
+            )
         }
     }
 }
@@ -1583,6 +1727,131 @@ mod tests {
         assert_eq!(start, 1_700_000_000_000);
         assert_eq!(end, 1_700_100_000_000);
         assert!(matches!(mode, WindowMode::Range { .. }));
+    }
+
+    #[test]
+    fn query_window_deserializes_the_compare_spec_the_frontend_sends() {
+        // WP6c-2: the compare query — preset form and custom form.
+        let wow: QueryWindow = serde_json::from_value(
+            serde_json::json!({"kind": "compare", "spec": {"preset": "wow"}}),
+        )
+        .unwrap();
+        assert!(matches!(
+            wow,
+            QueryWindow::Compare {
+                spec: CompareSpec::Preset(ComparePreset::Wow)
+            }
+        ));
+        let mom: QueryWindow = serde_json::from_value(
+            serde_json::json!({"kind": "compare", "spec": {"preset": "mom"}}),
+        )
+        .unwrap();
+        assert!(matches!(
+            mom,
+            QueryWindow::Compare {
+                spec: CompareSpec::Preset(ComparePreset::Mom)
+            }
+        ));
+        let tvt: QueryWindow = serde_json::from_value(
+            serde_json::json!({"kind": "compare", "spec": {"preset": "today_vs_trailing"}}),
+        )
+        .unwrap();
+        assert!(matches!(
+            tvt,
+            QueryWindow::Compare {
+                spec: CompareSpec::Preset(ComparePreset::TodayVsTrailing)
+            }
+        ));
+        // Custom form — two explicit epoch-ms spans.
+        let custom: QueryWindow = serde_json::from_value(serde_json::json!({
+            "kind": "compare",
+            "spec": {"custom": {
+                "a": {"start_ms": 1000, "end_ms": 2000},
+                "b": {"start_ms": 3000, "end_ms": 4000}
+            }}
+        }))
+        .unwrap();
+        match custom {
+            QueryWindow::Compare {
+                spec: CompareSpec::Custom { a, b },
+            } => {
+                assert_eq!(a.start_ms, 1000);
+                assert_eq!(a.end_ms, 2000);
+                assert_eq!(b.start_ms, 3000);
+                assert_eq!(b.end_ms, 4000);
+            }
+            _ => panic!("custom compare spec should deserialize to CompareSpec::Custom"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_compare_preset_reads_the_union_span_and_tags_compare() {
+        // A WoW preset → the union DB-read span covers both weeks (14 days ± DST), and the
+        // mode carries both sides' bounds. The exact dates depend on today (LOCAL), so we
+        // assert the STRUCTURE + relative shape rather than fixed dates.
+        let (start, end, mode) = resolve_window(&QueryWindow::Compare {
+            spec: CompareSpec::Preset(ComparePreset::Wow),
+        });
+        assert!(end > start, "union span has positive width");
+        let width_d = (end - start) / 86_400_000;
+        assert!(
+            (13..=15).contains(&width_d),
+            "WoW union span ~14 days, got {width_d}d"
+        );
+        match mode {
+            WindowMode::Compare {
+                a_start,
+                a_end,
+                b_start,
+                b_end,
+            } => {
+                // A is the prior week, B the current — A entirely before B, each 7 days.
+                assert_eq!((a_end - a_start).num_days() + 1, 7);
+                assert_eq!((b_end - b_start).num_days() + 1, 7);
+                assert!(a_end < b_start, "A week precedes B week");
+                assert_eq!(a_end + chrono::Duration::days(1), b_start, "contiguous weeks");
+            }
+            _ => panic!("compare → Compare mode"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_compare_custom_maps_each_span_to_its_local_days() {
+        // Custom A/B → each side's epoch-ms span maps to the local days it touches; the
+        // union read span spans min(start)..max(end)+1day.
+        let a_start_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());
+        let a_end_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 6).unwrap());
+        let b_start_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
+        let b_end_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 13).unwrap());
+        let (start, end, mode) = resolve_window(&QueryWindow::Compare {
+            spec: CompareSpec::Custom {
+                a: CustomSide {
+                    start_ms: a_start_ms,
+                    end_ms: a_end_ms,
+                },
+                b: CustomSide {
+                    start_ms: b_start_ms,
+                    end_ms: b_end_ms,
+                },
+            },
+        });
+        // Union read starts at the earliest local midnight (A's start).
+        assert_eq!(start, a_start_ms);
+        assert!(end > b_end_ms, "union end is the day AFTER B's last day (exclusive)");
+        match mode {
+            WindowMode::Compare {
+                a_start,
+                a_end,
+                b_start,
+                b_end,
+            } => {
+                assert_eq!(a_start, chrono::NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());
+                assert_eq!(a_end, chrono::NaiveDate::from_ymd_opt(2026, 5, 6).unwrap());
+                assert_eq!(b_start, chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
+                assert_eq!(b_end, chrono::NaiveDate::from_ymd_opt(2026, 5, 13).unwrap());
+            }
+            _ => panic!("custom compare → Compare mode"),
+        }
     }
 
     #[test]

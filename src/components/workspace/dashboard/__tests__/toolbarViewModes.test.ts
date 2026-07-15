@@ -25,10 +25,11 @@ describe("M9 WP6b-2 P1 — Toolbar VIEW_MODES enablement (staged per phase)", ()
     expect(chrome).not.toContain('label: "Custom"');
   });
 
-  it("Compare is still DISABLED (out of scope for WP6b-2 — it's a WP6c metrics surface)", () => {
-    // Regression guard: Compare must not be enabled before WP6c lands its metrics panels.
+  it("Compare is ENABLED (WP6c-2 landed the A/B compare surface)", () => {
+    // Regression guard: as of WP6c-2 the Compare tab is enabled (producer + CompareView
+    // shipped + live-verified). A flip back to `false` should fail here.
     expect(chrome).toContain(
-      '{ value: "compare", label: "Compare", enabled: false }',
+      '{ value: "compare", label: "Compare", enabled: true }',
     );
   });
 });

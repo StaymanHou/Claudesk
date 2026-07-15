@@ -162,6 +162,27 @@ describe("M9 WP6a Phase 2 / WP6b-2 P1 — GlobalDashboard fetches the active-vie
     expect(chrome).toContain('data-week-nav="next"');
   });
 
+  it("WP6c-2: Chrome enables the Metrics AND Compare tabs (all 5 views enabled)", () => {
+    // The tab must be ENABLED (`enabled: true`) or the tab strip greys it out. As of
+    // WP6c-2 the Compare tab is enabled too (its producer + CompareView shipped). A
+    // regression that flips either back to `false` should fail here.
+    expect(chrome).toMatch(/value:\s*"metrics",\s*label:\s*"Metrics",\s*enabled:\s*true/);
+    expect(chrome).toMatch(/value:\s*"compare",\s*label:\s*"Compare",\s*enabled:\s*true/);
+    // The DashboardView union carries the metrics + compare members.
+    expect(chrome).toContain('"metrics"');
+    expect(chrome).toContain('"compare"');
+  });
+
+  it("WP6c-1: GlobalDashboard wires the metrics window/branch/view", () => {
+    // The Metrics tab fetches the `{kind:"metrics"}` query, branches on
+    // `result.kind === "metrics"`, and renders <MetricsView>. A regression dropping any
+    // of these silently loses the tab's data path.
+    expect(globalDashboard).toContain('kind: "metrics"');
+    expect(globalDashboard).toContain('result.kind === "metrics"');
+    expect(globalDashboard).toContain("<MetricsView");
+    expect(globalDashboard).toContain("metricsData");
+  });
+
   it("WP6b-3 (F12): empty-period nav trap fixed — nav-bearing views always render their nav + an INLINE empty body", () => {
     // The empty-period nav-trap fix (SURFACE-2026-07-14-M9-EMPTY-PERIOD-NAV-TRAP): a
     // regression that reverts `hasData` to the per-view row-count would drop the nav on an

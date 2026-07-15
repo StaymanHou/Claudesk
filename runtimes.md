@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-14  # M9 WP6b-2 P4: pnpm test 99 files / 1015 pass (SidePanel + click-to-select)
+updated: 2026-07-15  # M9 WP6c-2 P1 verify-auto: cargo test 523 lib pass (+11 Compare producer tests)
 ---
 
 # Runtime Registry
@@ -17,9 +17,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm vite build
 
-- **Last:** 2s (2026-07-06, mirror-fill-from-bottom verify-self: built in 1.96s — frontend-only `pnpm vite build`)
+- **Last:** 1.19s (2026-07-15, WP6c-1 P2: Metrics tab + HeadlineCard/MetricsPanel — built clean, MetricsView folded into the lazy GlobalDashboard chunk)
 - **Use timeout:** 180000
 - **History:**
+  - 1.19s — 2026-07-15 (WP6c-1 P2)
   - 1.96s — 2026-07-06 (mirror-fill-from-bottom)
   - 1.10s — 2026-06-28 (WP6 P3)
 
@@ -68,9 +69,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.68s (2026-07-15, M9 WP6b-4 re-spec P2 verify-codify: +1 dashboardWiring Minimap-alignment pin [P2.7 dayOffset-shift + shared-dataWindow regression guard] → 99 files / 1083 pass)
+- **Last:** 2s (2026-07-15, M9 WP6c-2 P2 verify-codify: +21 compareMath pins + 2 Compare-enabled test updates → 101 files / 1120 pass)
 - **Use timeout:** 120000
 - **History:**
+  - 2s — 2026-07-15 (M9 WP6c-2 P2 verify-codify: +21 compareMath pins + 2 Compare-enabled updates → 101 files / 1120 pass)
   - 1.68s — 2026-07-15 (M9 WP6b-4 re-spec P2 verify-codify: +1 Minimap-alignment pin → 99 files / 1083 pass)
   - 1.67s — 2026-07-15 (M9 WP6b-4 re-spec P2: +3 dashboardWiring pins → 99 files / 1082 pass)
   - 1.84s — 2026-07-15 (M9 WP6b-4 re-spec P1: +18 flexible-timeline math pins → 99 files / 1079 pass)
@@ -124,9 +126,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 3.74s (2026-07-14, M9 WP6b-3 P1: +4 week-anchor tests [anchored-Monday / non-Monday-snap / malformed-fallback + updated deserialize], 504 lib pass; cold-ish first compile this session)
+- **Last:** 1s (2026-07-15, M9 WP6c-2 P1 verify-auto: +11 WP6c-2 tests [Compare producer + preset day-math + no-`deltas` serde shape + wire deserialize], 523 lib pass; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 1s — 2026-07-15 (M9 WP6c-2 P1; warm, 523 lib pass)
   - 3.74s — 2026-07-14 (M9 WP6b-3 P1; cold-ish first compile)
   - 0.72s — 2026-07-08 (M9 WP5 P1; warm)
 - **Use timeout:** 120000

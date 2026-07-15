@@ -30,7 +30,7 @@ import type {
   SegPayload,
 } from "../../../state/timeAnalytics";
 import { CT_TOKENS, textOn } from "./tokens";
-import { segStyle, colorForKind, RENDER_ORDER, sumActive } from "./kinds";
+import { segStyle, colorForKind, RENDER_ORDER, sumActive, sumByKind } from "./kinds";
 import { IconChevDown, IconChevRight } from "./Icon";
 import {
   dayOffsetMin,
@@ -135,13 +135,6 @@ export function detectSessionOverlaps(projects: ProjectPayload[]): OverlapMap {
 interface ProjectTotals {
   activePlusSub: number;
   away: number;
-}
-
-/** Total minutes of `kind` across all segs (ported `sumKind`, L54). */
-function sumKind(segs: SegPayload[], kind: SegPayload["kind"]): number {
-  return segs
-    .filter((s) => s.kind === kind)
-    .reduce((a, s) => a + (s.end - s.start), 0);
 }
 
 // ── HourRuler ────────────────────────────────────────────────────────────────
@@ -956,7 +949,7 @@ export function DayTimeline({
         // the SessionRow pill + the Phase-3 SummaryStrip use, so the day view reports
         // one consistent "active work" number everywhere.
         activePlusSub: sumActive(allSegs),
-        away: sumKind(allSegs, "away"),
+        away: sumByKind(allSegs, "away"),
       };
     }
     return out;

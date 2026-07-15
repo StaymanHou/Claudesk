@@ -41,8 +41,9 @@ use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone};
 use serde::Serialize;
 
 use crate::reclassify::{
-    ai_busy_intervals, ai_segments_for_window, authoritative_end, human_segments_for_window,
-    resolve_session_end, EventRow, Kind, Segment,
+    active_bursts, ai_busy_intervals, ai_segments_for_window, authoritative_end,
+    human_segments_for_window, resolve_session_end, subagent_intervals, tool_intervals, EventRow,
+    Kind, Segment,
 };
 
 // ===========================================================================
@@ -193,6 +194,185 @@ pub struct WeekPayload {
     /// 7 day labels (`"MON 11"` …).
     pub days: Vec<String>,
     pub projects: Vec<WeekProject>,
+}
+
+// ===========================================================================
+// Metrics DTOs (M9 WP6c-1) — window-level AGGREGATE analytics.
+//
+// The Rust re-derivation of claude-time's `build_metrics`, mapped onto WP3's 6-kind
+// model. Every duration field is RAW milliseconds (`*_ms: i64`) — NOT minute-quantized.
+// The metrics path never uses a minute coordinate (unlike the SegPayload render
+// coordinate); the frontend formats ms → display units at render. Summing at ms and
+// formatting once is what keeps sub-minute AI tool-execution from vanishing (the
+// SURFACE-2026-07-13-M9-WP4-MINUTE-QUANTIZATION anti-pattern) — validated on real data:
+// tool-call effort = 356 min at ms precision vs 309 min if floored per-interval.
+//
+// snake_case END-TO-END (mirrors SegPayload/DayPayload — the project IPC convention);
+// `metrics_dto_serde_shape_is_snake_case` pins the wire keys. Locked re-derivations
+// (operator, 2026-07-15): `ai-reasoning` FOLDS INTO `ai_agent` (no separate line);
+// `human` = `typing + reviewing` (NOT away, NOT ai-reasoning); `blocking
+// .human_blocking_agent_ms` = `reviewing` only (reading = agent-idle; ai-reasoning is
+// AI work). Engaged sessions consume the WP6.5-capped bursts (dangling sessions bounded
+// at `resolve_session_end`, so a dead session doesn't inflate engaged time).
+// ===========================================================================
+
+/// The window an aggregate-metrics payload covers. `day_count` is inclusive.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MetricsWindowMeta {
+    /// `"YYYY-MM-DD"` (local).
+    pub start: String,
+    /// `"YYYY-MM-DD"` (local).
+    pub end: String,
+    pub day_count: i64,
+}
+
+/// Wall-clock (merged/union, elapsed) vs effort-time (summed per-session, parallel adds
+/// up) for engaged sessions. `multiplier` = effort ÷ wallclock (parallelism compression),
+/// 0.0 when wallclock is 0. `session_count` = sessions with >0 engaged ms.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EngagedSession {
+    pub wallclock_ms: i64,
+    pub effort_ms: i64,
+    pub multiplier: f64,
+    pub session_count: i64,
+}
+
+/// Wall-clock/effort/multiplier for the subagent SUBSET of AI-agent activity.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct SubagentMetric {
+    pub wallclock_ms: i64,
+    pub effort_ms: i64,
+    pub multiplier: f64,
+}
+
+/// AI-agent activity = the AI-family union `{ai-doing, subagent, ai-reasoning}` — the
+/// AI-busy cover over the WP6.5-capped bursts. `ai-reasoning` folds in here (no separate
+/// line, operator-locked); `subagent` is broken out as a subset.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AiAgentMetric {
+    pub wallclock_ms: i64,
+    pub effort_ms: i64,
+    pub multiplier: f64,
+    pub subagent: SubagentMetric,
+}
+
+/// One tool's wall-clock/effort/multiplier (for the `tool_call.top` list).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ToolSummary {
+    pub name: String,
+    pub wallclock_ms: i64,
+    pub effort_ms: i64,
+    pub multiplier: f64,
+}
+
+/// Tool-execution time = the `ai-doing` intervals (measured Pre→Post spans). `top` = the
+/// top-5 tools by effort-time desc.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ToolCallMetric {
+    pub wallclock_ms: i64,
+    pub effort_ms: i64,
+    pub multiplier: f64,
+    pub top: Vec<ToolSummary>,
+}
+
+/// Human activity = `typing + reviewing` (one brain, no parallelism → `multiplier` is
+/// always 1.0 and `effort_ms == wallclock_ms`). `away` is NOT included here (reported
+/// separately in the HeadlineCard); `ai-reasoning` is AI work, also excluded.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct HumanMetric {
+    pub wallclock_ms: i64,
+    pub effort_ms: i64,
+    pub multiplier: f64,
+    pub typing_ms: i64,
+    pub reviewing_ms: i64,
+    /// `away` ms over the window — carried so the HeadlineCard Away tile reads it directly
+    /// (it is NOT part of `wallclock_ms`/`effort_ms`).
+    pub away_ms: i64,
+}
+
+/// One engaged-session concurrency stratum. `k` = number of simultaneously-engaged
+/// sessions; `wallclock_ms` = elapsed time at that level; `effort_ms` = wallclock × k.
+/// The k=4 row aggregates k≥4 and carries `is_plus: true`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ConcurrencyStratum {
+    pub k: i64,
+    pub wallclock_ms: i64,
+    pub effort_ms: i64,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub is_plus: bool,
+}
+
+/// Blocking metrics. `human_blocking_agent_ms` = time the human made the agent wait =
+/// `reviewing` (reading = agent idle; NOT ai-reasoning — that's AI work, the WP3
+/// re-derivation). `agent_blocking_human_ms` = time the human waited on the agent =
+/// AI-family wallclock (identity: `== ai_agent.wallclock_ms`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BlockingMetric {
+    pub human_blocking_agent_ms: i64,
+    pub agent_blocking_human_ms: i64,
+}
+
+/// The window-level aggregate-metrics payload (`metrics` in the frozen contract, WP3-
+/// re-derived). Window-global (no per-project rollup — per-project data lives in the
+/// RangePayload the timeline surfaces use). All durations are RAW ms.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct MetricsPayload {
+    pub window: MetricsWindowMeta,
+    pub engaged_session: EngagedSession,
+    pub ai_agent: AiAgentMetric,
+    pub tool_call: ToolCallMetric,
+    pub human: HumanMetric,
+    /// Exactly 4 strata: k=1, k=2, k=3, k=4+ (`is_plus`).
+    pub concurrency: Vec<ConcurrencyStratum>,
+    pub blocking: BlockingMetric,
+}
+
+// ===========================================================================
+// Comparison DTOs (M9 WP6c-2) — A/B side-by-side aggregate metrics.
+//
+// The Rust re-derivation of claude-time's `build_comparison_data`, trimmed to what the
+// dark-TSX CompareView actually consumes (`dashboard.jsx:1271` reads `a.metrics`/
+// `b.metrics` + `meta` ONLY). The source's `deltas` map is DEAD (CompareView recomputes
+// every delta frontend-side from the two metrics trees) — so it is NOT emitted here
+// (WP6c-research finding; ~46 lines of `_compute_deltas` porting reclaimed).
+//
+// Each side carries its full [`MetricsPayload`] (window-level aggregate, WP6.5-capped,
+// raw ms) plus a `range` label block so CompareView's window-label header + length-
+// mismatch banner have the inclusive ISO bounds + day count. snake_case END-TO-END
+// (mirrors MetricsPayload); the wire keys are pinned by
+// `comparison_dto_serde_shape_has_no_deltas`. All resolution is on the operator's LOCAL
+// calendar (the frozen-contract coordinate system).
+// ===========================================================================
+
+/// One side of an A/B comparison: the side's aggregate metrics + its range label. `range`
+/// duplicates `metrics.window` for CompareView convenience (the header reads `meta`, but a
+/// side-local range keeps the DTO self-describing).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CompareSide {
+    pub metrics: MetricsPayload,
+    pub range: MetricsWindowMeta,
+}
+
+/// A/B comparison window bounds + day counts (what CompareView's window-label header and
+/// length-mismatch banner render). ISO `YYYY-MM-DD`, inclusive.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ComparisonMeta {
+    pub a_start: String,
+    pub a_end: String,
+    pub b_start: String,
+    pub b_end: String,
+    pub a_day_count: i64,
+    pub b_day_count: i64,
+}
+
+/// The A/B comparison payload (`comparison` in the frozen contract, WP3-re-derived, WP6c-2
+/// producer). `{a, b, meta}` — NO `deltas` (CompareView recomputes FE-side). Each side's
+/// `metrics` equals a direct [`build_metrics`] over that side's day-bounds.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ComparisonPayload {
+    pub a: CompareSide,
+    pub b: CompareSide,
+    pub meta: ComparisonMeta,
 }
 
 // ===========================================================================
@@ -846,6 +1026,435 @@ pub fn rows_in_window(
         })
     })?;
     rows.collect()
+}
+
+// ===========================================================================
+// Metrics builder (M9 WP6c-1) — window-level AGGREGATE analytics.
+// ===========================================================================
+
+/// Merge overlapping/adjacent `(start, end)` intervals into a minimal non-overlapping
+/// set (sorted). Used for WALL-CLOCK totals (union — elapsed time). Local mirror of
+/// reclassify's private `merge_spans`.
+fn merge_intervals(mut spans: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+    spans.retain(|(s, e)| e > s);
+    spans.sort_unstable();
+    let mut out: Vec<(i64, i64)> = Vec::with_capacity(spans.len());
+    for (s, e) in spans {
+        if let Some(last) = out.last_mut() {
+            if s <= last.1 {
+                last.1 = last.1.max(e);
+                continue;
+            }
+        }
+        out.push((s, e));
+    }
+    out
+}
+
+/// Sum the durations of a set of intervals WITHOUT merging (EFFORT total — parallel work
+/// adds up). Negative spans contribute 0.
+fn sum_intervals(spans: &[(i64, i64)]) -> i64 {
+    spans.iter().map(|(s, e)| (e - s).max(0)).sum()
+}
+
+/// Effort ÷ wall-clock, guarded against div-by-zero (0.0 when wallclock is 0). Mirrors
+/// `viz_data._multiplier`.
+fn multiplier(wallclock_ms: i64, effort_ms: i64) -> f64 {
+    if wallclock_ms > 0 {
+        effort_ms as f64 / wallclock_ms as f64
+    } else {
+        0.0
+    }
+}
+
+/// Per-session, clip events at the WP6.5-resolved session end (so a dangling / dead
+/// session's stray-late-event or never-Stopped burst is bounded, not stretched to the
+/// window edge). Returns the concatenation of every session's clipped events. This is the
+/// SAME capping `build_viz_session` applies (query.rs), so the aggregate metrics agree
+/// with the timeline surfaces by construction. `SURFACE-2026-07-08-M9-SESSION-TERMINATION`
+/// + the WP6c research finding (an 885-min dangling burst on real data).
+fn capped_events(events: &[EventRow]) -> Vec<EventRow> {
+    let mut by_sid: HashMap<String, Vec<EventRow>> = HashMap::new();
+    for e in events {
+        let sid = if e.session_id.is_empty() {
+            "<unknown>".to_string()
+        } else {
+            e.session_id.clone()
+        };
+        by_sid.entry(sid).or_default().push(e.clone());
+    }
+    let mut out: Vec<EventRow> = Vec::with_capacity(events.len());
+    // Deterministic order (sort sids) so any downstream ordering is stable.
+    let mut sids: Vec<&String> = by_sid.keys().collect();
+    sids.sort();
+    for sid in sids {
+        let sid_events = &by_sid[sid];
+        let s_end = resolve_session_end(sid_events, authoritative_end(sid_events));
+        out.extend(sid_events.iter().filter(|e| e.ts <= s_end).cloned());
+    }
+    out
+}
+
+/// Build the window-level [`MetricsPayload`] — the WP3-re-derived aggregate metrics over
+/// `[start_day, end_day]` (inclusive, local). Consumes the reclassifier primitives over
+/// the WP6.5-**capped** events (dangling sessions bounded at their true end). All totals
+/// are summed at ms precision (NO minute-quantization — the metrics contract is raw ms).
+///
+/// Re-derivation (operator-locked 2026-07-15): `ai_agent` = AI-busy cover
+/// `{ai-doing, subagent, ai-reasoning}` (ai-reasoning folds in); `subagent` broken out;
+/// `tool_call` = ai-doing (tool) intervals; `human` = typing + reviewing (away separate);
+/// `blocking.human_blocking_agent_ms` = reviewing only; `engaged_session` from capped
+/// `active_bursts`.
+pub fn build_metrics(
+    start_day: chrono::NaiveDate,
+    end_day: chrono::NaiveDate,
+    events: &[EventRow],
+) -> MetricsPayload {
+    let window = MetricsWindowMeta {
+        start: start_day.format("%Y-%m-%d").to_string(),
+        end: end_day.format("%Y-%m-%d").to_string(),
+        day_count: (end_day - start_day).num_days() + 1,
+    };
+
+    // Cap every session at its resolved end BEFORE running any primitive.
+    let ev = capped_events(events);
+
+    // ---- Engaged sessions (capped UPS→Stop bursts) ----
+    // effort = Σ per-session burst durations (un-merged); wallclock = merged across all
+    // sessions (elapsed); session_count = sessions with >0 engaged ms.
+    let bursts_by_sid = active_bursts(&ev);
+    let mut engaged_intervals: Vec<(i64, i64)> = Vec::new();
+    let mut per_session_effort: HashMap<String, i64> = HashMap::new();
+    for (sid, bursts) in &bursts_by_sid {
+        let mut sess_ms = 0i64;
+        for b in bursts {
+            if b.end_ts > b.start_ts {
+                engaged_intervals.push((b.start_ts, b.end_ts));
+                sess_ms += b.end_ts - b.start_ts;
+            }
+        }
+        per_session_effort.insert(sid.clone(), sess_ms);
+    }
+    let engaged_wallclock = sum_intervals(&merge_intervals(engaged_intervals.clone()));
+    let engaged_effort: i64 = per_session_effort.values().sum();
+    let session_count = per_session_effort.values().filter(|&&v| v > 0).count() as i64;
+    let engaged_session = EngagedSession {
+        wallclock_ms: engaged_wallclock,
+        effort_ms: engaged_effort,
+        multiplier: multiplier(engaged_wallclock, engaged_effort),
+        session_count,
+    };
+
+    // ---- AI agent = AI-busy cover {ai-doing, subagent, ai-reasoning} ----
+    // `ai_busy_intervals` already unions tool + subagent + burst spans (merged), which IS
+    // the AI-family cover (ai-reasoning = the burst residual not covered by a tool/subagent
+    // interval, so the burst span carries it — folding ai-reasoning in, per the lock).
+    let busy = ai_busy_intervals(&ev); // already merged
+    let agent_wallclock = sum_intervals(&busy);
+    // Effort = un-merged sum of the component spans (tools + subagents + bursts) so
+    // parallel AI work across sessions adds up.
+    let mut ai_component_spans: Vec<(i64, i64)> = Vec::new();
+    for ivs in tool_intervals(&ev).values() {
+        ai_component_spans.extend(ivs.iter().copied());
+    }
+    ai_component_spans.extend(subagent_intervals(&ev));
+    for bursts in bursts_by_sid.values() {
+        for b in bursts {
+            if b.end_ts > b.start_ts {
+                ai_component_spans.push((b.start_ts, b.end_ts));
+            }
+        }
+    }
+    let agent_effort = sum_intervals(&ai_component_spans);
+
+    // Subagent subset.
+    let sa_intervals = subagent_intervals(&ev);
+    let subagent_wallclock = sum_intervals(&merge_intervals(sa_intervals.clone()));
+    let subagent_effort = sum_intervals(&sa_intervals);
+    let ai_agent = AiAgentMetric {
+        wallclock_ms: agent_wallclock,
+        effort_ms: agent_effort,
+        multiplier: multiplier(agent_wallclock, agent_effort),
+        subagent: SubagentMetric {
+            wallclock_ms: subagent_wallclock,
+            effort_ms: subagent_effort,
+            multiplier: multiplier(subagent_wallclock, subagent_effort),
+        },
+    };
+
+    // ---- Tool calls (ai-doing = measured Pre→Post intervals) ----
+    let tool_iv_by_name = tool_intervals(&ev);
+    let mut all_tool_iv: Vec<(i64, i64)> = Vec::new();
+    for ivs in tool_iv_by_name.values() {
+        all_tool_iv.extend(ivs.iter().copied());
+    }
+    let tool_wallclock = sum_intervals(&merge_intervals(all_tool_iv.clone()));
+    let tool_effort = sum_intervals(&all_tool_iv);
+    // Top-5 tools by effort desc (name asc tiebreak for determinism).
+    let mut per_tool: Vec<ToolSummary> = tool_iv_by_name
+        .iter()
+        .map(|(name, ivs)| {
+            let eff = sum_intervals(ivs);
+            let wc = sum_intervals(&merge_intervals(ivs.clone()));
+            ToolSummary {
+                name: name.clone(),
+                wallclock_ms: wc,
+                effort_ms: eff,
+                multiplier: multiplier(wc, eff),
+            }
+        })
+        .collect();
+    per_tool.sort_by(|a, b| b.effort_ms.cmp(&a.effort_ms).then_with(|| a.name.cmp(&b.name)));
+    per_tool.truncate(5);
+    let tool_call = ToolCallMetric {
+        wallclock_ms: tool_wallclock,
+        effort_ms: tool_effort,
+        multiplier: multiplier(tool_wallclock, tool_effort),
+        top: per_tool,
+    };
+
+    // ---- Human activity = typing + reviewing (away tracked separately) ----
+    // Sum per-kind `dur_ms` over the human segments of every session's window
+    // (AI-idle complement). One brain → no parallelism (multiplier 1.0).
+    let (typing_ms, reviewing_ms, away_ms) = human_kind_ms(&ev);
+    let human_total = typing_ms + reviewing_ms;
+    let human = HumanMetric {
+        wallclock_ms: human_total,
+        effort_ms: human_total,
+        multiplier: 1.0,
+        typing_ms,
+        reviewing_ms,
+        away_ms,
+    };
+
+    // ---- Concurrency stratification (engaged-interval sweep-line) ----
+    let concurrency = concurrency_strata(&engaged_intervals);
+
+    // ---- Blocking metrics ----
+    let blocking = BlockingMetric {
+        // human blocks agent = human reading/reviewing (agent idle waiting). ai-reasoning
+        // is AI work, NOT the human blocking — the WP3 re-derivation (was reading+thinking).
+        human_blocking_agent_ms: reviewing_ms,
+        // agent blocks human = the human waited on AI = AI wallclock (identity).
+        agent_blocking_human_ms: agent_wallclock,
+    };
+
+    MetricsPayload {
+        window,
+        engaged_session,
+        ai_agent,
+        tool_call,
+        human,
+        concurrency,
+        blocking,
+    }
+}
+
+// ===========================================================================
+// Comparison producer (M9 WP6c-2) — A/B side-by-side aggregate metrics.
+// ===========================================================================
+
+/// The local calendar date an epoch-ms timestamp falls on. Mirrors the command-side
+/// `local_date_of_ms`; kept query.rs-local so the producer partitions events without a
+/// cross-module dependency. Uses the system local tz (the frozen-contract coordinate).
+fn local_date_of_ms(ts_ms: i64) -> NaiveDate {
+    Local
+        .timestamp_millis_opt(ts_ms)
+        .single()
+        .map(|dt| dt.date_naive())
+        .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).expect("epoch is valid"))
+}
+
+/// The subset of `events` whose local calendar day falls in `[start, end]` inclusive.
+/// Mirrors `viz_data._partition_events_by_day` (used so each comparison side's
+/// [`build_metrics`] runs over exactly its own window's rows — `build_metrics` reclassifies
+/// EVERY row it is handed, so the caller must pre-partition).
+fn events_in_days(events: &[EventRow], start: NaiveDate, end: NaiveDate) -> Vec<EventRow> {
+    events
+        .iter()
+        .filter(|e| {
+            let d = local_date_of_ms(e.ts);
+            start <= d && d <= end
+        })
+        .cloned()
+        .collect()
+}
+
+/// Build the A/B [`ComparisonPayload`] over two inclusive local-day windows. `events` is
+/// the full union-span rows (the command reads once over `[min(a_start,b_start),
+/// max(a_end,b_end)]`); this fn partitions per side by local day, then calls
+/// [`build_metrics`] per side. Emits `{a, b, meta}` — NO `deltas` (CompareView recomputes
+/// FE-side; WP6c-research). Each side's `metrics` equals a direct `build_metrics` over that
+/// side's days by construction (same partition, same fn).
+pub fn build_comparison_data(
+    a_start: NaiveDate,
+    a_end: NaiveDate,
+    b_start: NaiveDate,
+    b_end: NaiveDate,
+    events: &[EventRow],
+) -> ComparisonPayload {
+    let a_events = events_in_days(events, a_start, a_end);
+    let b_events = events_in_days(events, b_start, b_end);
+    let a_metrics = build_metrics(a_start, a_end, &a_events);
+    let b_metrics = build_metrics(b_start, b_end, &b_events);
+    let a_days = (a_end - a_start).num_days() + 1;
+    let b_days = (b_end - b_start).num_days() + 1;
+    let a_range = a_metrics.window.clone();
+    let b_range = b_metrics.window.clone();
+    ComparisonPayload {
+        a: CompareSide {
+            metrics: a_metrics,
+            range: a_range,
+        },
+        b: CompareSide {
+            metrics: b_metrics,
+            range: b_range,
+        },
+        meta: ComparisonMeta {
+            a_start: a_start.format("%Y-%m-%d").to_string(),
+            a_end: a_end.format("%Y-%m-%d").to_string(),
+            b_start: b_start.format("%Y-%m-%d").to_string(),
+            b_end: b_end.format("%Y-%m-%d").to_string(),
+            a_day_count: a_days,
+            b_day_count: b_days,
+        },
+    }
+}
+
+/// Week-over-week comparison bounds anchored on `this_monday` (a Monday). A = the prior 7
+/// days `[this_monday-7, this_monday-1]`; B = the current 7 days `[this_monday,
+/// this_monday+6]`. Mirrors `viz_data.compare_week_over_week`. Returns
+/// `(a_start, a_end, b_start, b_end)` — pure date math, DB-independent.
+pub fn compare_week_over_week_bounds(
+    this_monday: NaiveDate,
+) -> (NaiveDate, NaiveDate, NaiveDate, NaiveDate) {
+    let a_start = this_monday - Duration::days(7);
+    let a_end = this_monday - Duration::days(1);
+    let b_start = this_monday;
+    let b_end = this_monday + Duration::days(6);
+    (a_start, a_end, b_start, b_end)
+}
+
+/// Month-over-month comparison bounds for the calendar month containing `any_day_this_month`.
+/// A = the full prior calendar month; B = the full current calendar month. Mirrors
+/// `viz_data.compare_month_over_month`. Returns `(a_start, a_end, b_start, b_end)`.
+pub fn compare_month_over_month_bounds(
+    any_day_this_month: NaiveDate,
+) -> (NaiveDate, NaiveDate, NaiveDate, NaiveDate) {
+    let year = any_day_this_month.year();
+    let month = any_day_this_month.month();
+    let (prev_year, prev_month) = if month == 1 {
+        (year - 1, 12)
+    } else {
+        (year, month - 1)
+    };
+    let b_start = NaiveDate::from_ymd_opt(year, month, 1).expect("day 1 always valid");
+    let b_end = last_day_of_month(year, month);
+    let a_start = NaiveDate::from_ymd_opt(prev_year, prev_month, 1).expect("day 1 always valid");
+    let a_end = last_day_of_month(prev_year, prev_month);
+    (a_start, a_end, b_start, b_end)
+}
+
+/// Day-vs-trailing-window comparison bounds. A = the `window_days`-day baseline ending the
+/// day before `target` (`[target-window_days, target-1]`); B = the single target day
+/// `[target, target]`. Mirrors `viz_data.compare_day_vs_trailing_window` (default 7-day
+/// baseline). Returns `(a_start, a_end, b_start, b_end)`.
+pub fn compare_day_vs_trailing_bounds(
+    target: NaiveDate,
+    window_days: i64,
+) -> (NaiveDate, NaiveDate, NaiveDate, NaiveDate) {
+    let wd = window_days.max(1);
+    let a_start = target - Duration::days(wd);
+    let a_end = target - Duration::days(1);
+    (a_start, a_end, target, target)
+}
+
+/// The last calendar day of `(year, month)`. Steps to the first of the next month and back
+/// one day (handles 28/29/30/31 + year rollover).
+fn last_day_of_month(year: i32, month: u32) -> NaiveDate {
+    let (ny, nm) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+    NaiveDate::from_ymd_opt(ny, nm, 1).expect("day 1 always valid") - Duration::days(1)
+}
+
+/// Per-kind human `dur_ms` totals `(typing, reviewing, away)` over the window, summed
+/// across every session's human segments. Runs `human_segments_for_window` per session
+/// over the session's own `[start, resolved_end]` span (the events are already capped;
+/// each session's window is its first→last capped event). All ms.
+fn human_kind_ms(events: &[EventRow]) -> (i64, i64, i64) {
+    let mut by_sid: HashMap<String, Vec<EventRow>> = HashMap::new();
+    for e in events {
+        let sid = if e.session_id.is_empty() {
+            "<unknown>".to_string()
+        } else {
+            e.session_id.clone()
+        };
+        by_sid.entry(sid).or_default().push(e.clone());
+    }
+    let (mut typing, mut reviewing, mut away) = (0i64, 0i64, 0i64);
+    for sid_events in by_sid.values() {
+        let mut tss: Vec<i64> = sid_events.iter().map(|e| e.ts).collect();
+        tss.sort_unstable();
+        let (Some(&s), Some(&e)) = (tss.first(), tss.last()) else {
+            continue;
+        };
+        if e <= s {
+            continue;
+        }
+        for seg in human_segments_for_window(sid_events, s, e) {
+            let dur = (seg.end_ms - seg.start_ms).max(0);
+            match seg.kind {
+                Kind::Typing => typing += dur,
+                Kind::Reviewing => reviewing += dur,
+                Kind::Away => away += dur,
+                // AI kinds are not produced by the human tiler.
+                _ => {}
+            }
+        }
+    }
+    (typing, reviewing, away)
+}
+
+/// Engaged-session concurrency stratification via sweep-line. Returns exactly 4 strata
+/// (k=1, k=2, k=3, k=4+); `wallclock_ms` = elapsed at that concurrency level, `effort_ms`
+/// = wallclock × k, the k=4 row aggregates k≥4 with `is_plus: true`. Mirrors `viz_data`.
+fn concurrency_strata(engaged_intervals: &[(i64, i64)]) -> Vec<ConcurrencyStratum> {
+    // (ts, delta) sweep; +1 on start, -1 on end.
+    let mut sweep: Vec<(i64, i64)> = Vec::with_capacity(engaged_intervals.len() * 2);
+    for &(s, e) in engaged_intervals {
+        if e > s {
+            sweep.push((s, 1));
+            sweep.push((e, -1));
+        }
+    }
+    // Sort by ts; on ties process ends (-1) before starts (+1) so a zero-width touch does
+    // not spuriously bump the count. (Sort key: (ts, delta) — -1 sorts before +1.)
+    sweep.sort_unstable();
+    let mut by_k: HashMap<i64, i64> = HashMap::new();
+    let mut active = 0i64;
+    let mut prev_ts: Option<i64> = None;
+    for (ts, delta) in sweep {
+        if let Some(p) = prev_ts {
+            if active > 0 && ts > p {
+                *by_k.entry(active).or_insert(0) += ts - p;
+            }
+        }
+        active += delta;
+        prev_ts = Some(ts);
+    }
+    let c1 = *by_k.get(&1).unwrap_or(&0);
+    let c2 = *by_k.get(&2).unwrap_or(&0);
+    let c3 = *by_k.get(&3).unwrap_or(&0);
+    let c4plus: i64 = by_k.iter().filter(|(k, _)| **k >= 4).map(|(_, v)| *v).sum();
+    vec![
+        ConcurrencyStratum { k: 1, wallclock_ms: c1, effort_ms: c1, is_plus: false },
+        ConcurrencyStratum { k: 2, wallclock_ms: c2, effort_ms: c2 * 2, is_plus: false },
+        ConcurrencyStratum { k: 3, wallclock_ms: c3, effort_ms: c3 * 3, is_plus: false },
+        ConcurrencyStratum { k: 4, wallclock_ms: c4plus, effort_ms: c4plus * 4, is_plus: true },
+    ]
 }
 
 #[cfg(test)]

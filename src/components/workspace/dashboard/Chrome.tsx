@@ -22,8 +22,9 @@ import type { DayStat } from "./dayStats";
 /** The view modes the dashboard exposes. `day` is the interactive single-day timeline
  *  (WP6b-2 P3 gave it a date picker so it shows ANY day — the Custom→Day merge folded the
  *  former separate "Custom" range tab into Day); `week` is the rollup grid (P1); `month`
- *  is the contribution calendar (P2); `compare` is WP6c. */
-export type DashboardView = "day" | "week" | "month" | "compare";
+ *  is the contribution calendar (P2); `metrics` is the window-level aggregate-metrics view
+ *  (WP6c-1); `compare` is the A/B comparison (WP6c-2). */
+export type DashboardView = "day" | "week" | "month" | "metrics" | "compare";
 
 interface ViewMode {
   value: DashboardView;
@@ -31,13 +32,15 @@ interface ViewMode {
   enabled: boolean;
 }
 
-// Enabled set grows phase-by-phase. Day + Week (P1), Month (P2). Compare = WP6c.
-// (The standalone Custom tab was REMOVED at P3 — merged into Day's date picker.)
+// Enabled set grows phase-by-phase. Day + Week (P1), Month (P2), Metrics (WP6c-1),
+// Compare (WP6c-2). (The standalone Custom tab was REMOVED at P3 — merged into Day's
+// date picker.)
 const VIEW_MODES: readonly ViewMode[] = [
   { value: "day", label: "Day", enabled: true },
   { value: "week", label: "Week", enabled: true },
   { value: "month", label: "Month", enabled: true },
-  { value: "compare", label: "Compare", enabled: false },
+  { value: "metrics", label: "Metrics", enabled: true },
+  { value: "compare", label: "Compare", enabled: true },
 ];
 
 /** The view-mode tab strip. `view` selects the active tab; clicking an enabled tab

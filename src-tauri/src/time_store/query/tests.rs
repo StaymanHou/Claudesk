@@ -831,3 +831,421 @@ fn end_to_end_all_four_termination_signals_compose_in_one_day() {
         assert!(*end <= 610, "session {id} must not stretch to the stray (end={end})");
     }
 }
+
+// ===========================================================================
+// M9 WP6c-1 — build_metrics oracle + regression tests.
+//
+// The window-level aggregate metrics, re-derived onto WP3's 6-kind model. These pin the
+// four load-bearing WP6c-1 findings: (a) ms-precision tool-effort (NO minute-quant);
+// (b) WP6.5 session-cap of a dangling burst; (c) the family mapping (human = typing +
+// reviewing; blocking.human_blocking_agent = reviewing only); (d) snake_case wire shape.
+// ===========================================================================
+
+/// Build a UserPromptSubmit → (tool pairs) → Stop burst for one session, returning the
+/// events. Tool pairs are placed at sub-minute spacing (real CC tool calls are ~ms apart).
+fn burst_with_tools(
+    sid: &str,
+    cwd: &str,
+    ups_ms: i64,
+    stop_ms: i64,
+    tool_pairs: &[(&str, i64, i64)], // (tool, pre_ms, post_ms)
+) -> Vec<EventRow> {
+    let mut out = vec![ev(ups_ms, sid, cwd, "UserPromptSubmit")];
+    for (i, (tool, pre, post)) in tool_pairs.iter().enumerate() {
+        let tuid = format!("{sid}-t{i}");
+        out.push(with_tool(ev(*pre, sid, cwd, "PreToolUse"), tool, &tuid));
+        out.push(with_tool(ev(*post, sid, cwd, "PostToolUse"), tool, &tuid));
+    }
+    out.push(ev(stop_ms, sid, cwd, "Stop"));
+    out
+}
+
+#[test]
+fn build_metrics_tool_effort_sums_at_ms_precision_not_floored() {
+    // OUTCOME (a): N sub-minute Pre→Post tool pairs must accrue their REAL ms to
+    // tool_call.effort_ms — NOT floor to 0 (the SURFACE-2026-07-13 minute-quantization
+    // anti-pattern). Three tool calls, each ~50ms, inside one burst.
+    let d = day(2026, 5, 13);
+    let ups = at_minute(d, 600); // 10:00
+    // Three sub-minute tool pairs (53ms, 49ms, 41ms) — real-data-shaped.
+    let pairs = [
+        ("Edit", at_ms(d, 600 * 60_000 + 1_000), at_ms(d, 600 * 60_000 + 1_053)),
+        ("Bash", at_ms(d, 600 * 60_000 + 2_000), at_ms(d, 600 * 60_000 + 2_049)),
+        ("Bash", at_ms(d, 600 * 60_000 + 3_000), at_ms(d, 600 * 60_000 + 3_041)),
+    ];
+    let stop = at_minute(d, 605);
+    let events = burst_with_tools("sess-A", "/p", ups, stop, &pairs);
+
+    let m = build_metrics(d, d, &events);
+
+    // The three intervals sum to 53+49+41 = 143 ms. If each were floored to whole minutes
+    // first, they'd all be 0 → effort 0 (the bug). At ms precision the total is 143.
+    assert_eq!(
+        m.tool_call.effort_ms, 143,
+        "sub-minute tool effort must sum at ms precision (got {}), not floor to 0",
+        m.tool_call.effort_ms
+    );
+    assert!(m.tool_call.wallclock_ms >= 143, "wallclock (merged) at least the summed span");
+    // Top tools: Bash (49+41=90) ranks above Edit (53) by effort.
+    assert_eq!(m.tool_call.top.len(), 2, "two distinct tool names");
+    assert_eq!(m.tool_call.top[0].name, "Bash");
+    assert_eq!(m.tool_call.top[0].effort_ms, 90);
+    assert_eq!(m.tool_call.top[1].name, "Edit");
+}
+
+#[test]
+fn build_metrics_engaged_is_capped_at_resolved_session_end_not_stretched() {
+    // OUTCOME (b): a dangling burst (UPS→Stop) followed by a >30min idle gap and a stray
+    // late event must be CAPPED at the Stop (the WP6.5 max-idle cap), NOT stretched to the
+    // stray — otherwise the 885-min-dangling-burst inflation the research found recurs.
+    let d = day(2026, 5, 13);
+    let ups = at_minute(d, 600); // 10:00
+    let stop = at_minute(d, 610); // 10:10 → a real 10-minute engaged burst
+    let mut events = burst_with_tools("sess-A", "/p", ups, stop, &[]);
+    // A stray event 40 minutes later (past the 30-min idle cap) — the "dead session".
+    events.push(ev(at_minute(d, 650), "sess-A", "/p", "PostToolUse"));
+
+    let m = build_metrics(d, d, &events);
+
+    // Engaged effort = the burst only (10 min = 600_000 ms). If the cap were ignored, the
+    // burst/engaged would balloon toward the stray at minute 650.
+    assert_eq!(
+        m.engaged_session.effort_ms, 600_000,
+        "engaged must be the 10-min burst, capped at Stop (got {} ms)",
+        m.engaged_session.effort_ms
+    );
+    assert_eq!(m.engaged_session.session_count, 1);
+}
+
+#[test]
+fn build_metrics_human_is_typing_plus_reviewing_blocking_is_reviewing_only() {
+    // OUTCOME (c): the family re-derivation. human.wallclock = typing + reviewing (NOT
+    // away, NOT ai-reasoning); blocking.human_blocking_agent = reviewing only.
+    // Construct a session with a burst then a human gap that classifies as reviewing.
+    let d = day(2026, 5, 13);
+    // Burst 1: 10:00 → 10:05 (a real engaged span).
+    let mut events = burst_with_tools(
+        "sess-A",
+        "/p",
+        at_minute(d, 600),
+        at_minute(d, 605),
+        &[("Edit", at_ms(d, 600 * 60_000 + 1_000), at_ms(d, 600 * 60_000 + 1_050))],
+    );
+    // A second burst at 10:15 → 10:16; the 10:05→10:15 gap is human time between bursts.
+    events.extend(burst_with_tools("sess-A", "/p", at_minute(d, 615), at_minute(d, 616), &[]));
+
+    let m = build_metrics(d, d, &events);
+
+    // Human wallclock is exactly typing + reviewing (identity by construction).
+    assert_eq!(
+        m.human.wallclock_ms,
+        m.human.typing_ms + m.human.reviewing_ms,
+        "human.wallclock = typing + reviewing (away + ai-reasoning excluded)"
+    );
+    assert_eq!(m.human.effort_ms, m.human.wallclock_ms, "one brain → effort == wallclock");
+    assert!((m.human.multiplier - 1.0).abs() < 1e-9, "human multiplier is 1.0");
+    // Blocking: human_blocking_agent is reviewing only (NOT + ai-reasoning/away).
+    assert_eq!(
+        m.blocking.human_blocking_agent_ms, m.human.reviewing_ms,
+        "human_blocking_agent = reviewing only (WP3 re-derivation)"
+    );
+    // agent_blocking_human == ai_agent.wallclock (the identity claude-time's JSX asserts).
+    assert_eq!(m.blocking.agent_blocking_human_ms, m.ai_agent.wallclock_ms);
+}
+
+#[test]
+fn build_metrics_subagent_is_a_subset_of_ai_agent() {
+    // ai_agent folds in ai-reasoning + subagent; subagent is broken out as a subset, so
+    // subagent effort/wallclock <= ai_agent's.
+    let d = day(2026, 5, 13);
+    let mut events = burst_with_tools("sess-A", "/p", at_minute(d, 600), at_minute(d, 610), &[]);
+    // A subagent Start→Stop inside the burst.
+    events.push(with_agent(ev(at_minute(d, 602), "sess-A", "/p", "SubagentStart"), "explorer"));
+    events.push(with_agent(ev(at_minute(d, 604), "sess-A", "/p", "SubagentStop"), "explorer"));
+
+    let m = build_metrics(d, d, &events);
+    assert!(m.ai_agent.wallclock_ms > 0);
+    assert_eq!(m.ai_agent.subagent.wallclock_ms, 2 * 60_000, "2-min subagent span");
+    assert!(
+        m.ai_agent.subagent.wallclock_ms <= m.ai_agent.wallclock_ms,
+        "subagent is a subset of ai_agent"
+    );
+}
+
+#[test]
+fn build_metrics_empty_window_is_fully_shaped_zeros() {
+    let d = day(2026, 5, 13);
+    let m = build_metrics(d, d, &[]);
+    assert_eq!(m.window.day_count, 1);
+    assert_eq!(m.engaged_session.effort_ms, 0);
+    assert_eq!(m.engaged_session.multiplier, 0.0);
+    assert_eq!(m.ai_agent.effort_ms, 0);
+    assert_eq!(m.tool_call.top.len(), 0);
+    assert_eq!(m.human.wallclock_ms, 0);
+    assert_eq!(m.concurrency.len(), 4, "always 4 strata");
+    assert_eq!(m.concurrency[3].k, 4);
+    assert!(m.concurrency[3].is_plus);
+    assert_eq!(m.blocking.human_blocking_agent_ms, 0);
+}
+
+#[test]
+fn build_metrics_concurrency_two_overlapping_sessions_lands_in_k2() {
+    // Two sessions engaged over the SAME 10:00→10:10 span → that elapsed time is k=2.
+    let d = day(2026, 5, 13);
+    let mut events = burst_with_tools("sess-A", "/pa", at_minute(d, 600), at_minute(d, 610), &[]);
+    events.extend(burst_with_tools("sess-B", "/pb", at_minute(d, 600), at_minute(d, 610), &[]));
+    let m = build_metrics(d, d, &events);
+    let k2 = &m.concurrency[1];
+    assert_eq!(k2.k, 2);
+    assert_eq!(k2.wallclock_ms, 10 * 60_000, "10 min at concurrency 2");
+    assert_eq!(k2.effort_ms, 10 * 60_000 * 2, "effort = wallclock * k");
+    // No k=1 time (fully overlapping).
+    assert_eq!(m.concurrency[0].wallclock_ms, 0);
+
+    // Parallelism compression: two fully-overlapping 10-min sessions → effort 20 min,
+    // wallclock (merged/union) 10 min → multiplier 2.0. This is the core "running N
+    // projects in parallel compresses effort into less elapsed time" metric — it breaks
+    // silently if build_metrics merged effort or summed wallclock. (WP6c-1 codify pin.)
+    assert_eq!(m.engaged_session.effort_ms, 20 * 60_000, "effort = both sessions summed");
+    assert_eq!(m.engaged_session.wallclock_ms, 10 * 60_000, "wallclock = merged union");
+    assert!(
+        (m.engaged_session.multiplier - 2.0).abs() < 1e-9,
+        "parallelism multiplier is 2.0 (got {})",
+        m.engaged_session.multiplier
+    );
+    assert_eq!(m.engaged_session.session_count, 2);
+}
+
+#[test]
+fn metrics_dto_serde_shape_is_snake_case() {
+    // OUTCOME (d): pin the wire keys — snake_case end-to-end, matching the FE TS types.
+    let d = day(2026, 5, 13);
+    let events = burst_with_tools(
+        "sess-A",
+        "/p",
+        at_minute(d, 600),
+        at_minute(d, 610),
+        &[("Edit", at_ms(d, 600 * 60_000 + 1_000), at_ms(d, 600 * 60_000 + 1_050))],
+    );
+    let m = build_metrics(d, d, &events);
+    let json = serde_json::to_string(&m).unwrap();
+    for key in [
+        "\"window\"", "\"start\"", "\"end\"", "\"day_count\"",
+        "\"engaged_session\"", "\"wallclock_ms\"", "\"effort_ms\"", "\"multiplier\"",
+        "\"session_count\"", "\"ai_agent\"", "\"subagent\"", "\"tool_call\"", "\"top\"",
+        "\"name\"", "\"human\"", "\"typing_ms\"", "\"reviewing_ms\"", "\"away_ms\"",
+        "\"concurrency\"", "\"k\"", "\"blocking\"", "\"human_blocking_agent_ms\"",
+        "\"agent_blocking_human_ms\"",
+    ] {
+        assert!(json.contains(key), "metrics JSON must contain snake_case key {key}; got {json}");
+    }
+    // is_plus only appears on the k=4 stratum.
+    assert!(json.contains("\"is_plus\":true"), "k=4 stratum carries is_plus");
+}
+
+#[test]
+fn time_analytics_result_metrics_tag_serializes() {
+    // The command result enum tags the metrics variant as {"kind":"metrics", ...}.
+    use crate::time_store::commands::TimeAnalyticsResult;
+    let d = day(2026, 5, 13);
+    let m = build_metrics(d, d, &[]);
+    let json = serde_json::to_string(&TimeAnalyticsResult::Metrics(m)).unwrap();
+    assert!(json.contains("\"kind\":\"metrics\""), "result tagged metrics; got {json}");
+}
+
+// ===========================================================================
+// M9 WP6c-2 — build_comparison_data + preset day-math oracle tests.
+//
+// The A/B comparison producer. These pin: (D4) the three presets' inclusive day-bounds
+// for a fixed anchor (DB-independent pure date math); (D3) the DTO shape has NO `deltas`
+// key and each side's `metrics == build_metrics` over that side's days; the union-span
+// event partition per side; the `compare` result tag; and the empty-side shape.
+// ===========================================================================
+
+#[test]
+fn compare_week_over_week_bounds_are_prior_and_current_7_days() {
+    // D4: anchor = Monday 2026-05-11. A = prior week [05-04, 05-10]; B = this week
+    // [05-11, 05-17]. Both exactly 7 days, contiguous, no overlap.
+    let this_monday = day(2026, 5, 11);
+    let (a_start, a_end, b_start, b_end) = compare_week_over_week_bounds(this_monday);
+    assert_eq!(a_start, day(2026, 5, 4));
+    assert_eq!(a_end, day(2026, 5, 10));
+    assert_eq!(b_start, day(2026, 5, 11));
+    assert_eq!(b_end, day(2026, 5, 17));
+    assert_eq!((a_end - a_start).num_days() + 1, 7);
+    assert_eq!((b_end - b_start).num_days() + 1, 7);
+    // Contiguous: A ends the day before B starts.
+    assert_eq!(a_end + chrono::Duration::days(1), b_start);
+}
+
+#[test]
+fn compare_month_over_month_bounds_span_full_calendar_months() {
+    // D4: anchor anywhere in March 2026 → A = full Feb (28d, 2026 not leap), B = full March
+    // (31d). Full-month spans regardless of the anchor day-of-month.
+    let (a_start, a_end, b_start, b_end) = compare_month_over_month_bounds(day(2026, 3, 15));
+    assert_eq!(a_start, day(2026, 2, 1));
+    assert_eq!(a_end, day(2026, 2, 28), "2026 is not a leap year → Feb has 28 days");
+    assert_eq!(b_start, day(2026, 3, 1));
+    assert_eq!(b_end, day(2026, 3, 31));
+}
+
+#[test]
+fn compare_month_over_month_bounds_handle_january_rollover_and_leap() {
+    // January anchor → prior month is Dec of the PRIOR year. And a leap-Feb (2024) gets 29.
+    let (a_start, a_end, b_start, b_end) = compare_month_over_month_bounds(day(2026, 1, 1));
+    assert_eq!(a_start, day(2025, 12, 1));
+    assert_eq!(a_end, day(2025, 12, 31));
+    assert_eq!(b_start, day(2026, 1, 1));
+    assert_eq!(b_end, day(2026, 1, 31));
+    // Leap-year Feb.
+    let (_, feb_end, _, _) = compare_month_over_month_bounds(day(2024, 3, 10));
+    assert_eq!(feb_end, day(2024, 2, 29), "2024 is a leap year → Feb has 29 days");
+}
+
+#[test]
+fn compare_day_vs_trailing_bounds_are_baseline_then_single_day() {
+    // D4: target = 2026-05-13 → A = 7-day baseline [05-06, 05-12]; B = single day
+    // [05-13, 05-13]. B is 1 day; A is `window_days` days ending the day before target.
+    let target = day(2026, 5, 13);
+    let (a_start, a_end, b_start, b_end) = compare_day_vs_trailing_bounds(target, 7);
+    assert_eq!(a_start, day(2026, 5, 6));
+    assert_eq!(a_end, day(2026, 5, 12));
+    assert_eq!(b_start, target);
+    assert_eq!(b_end, target);
+    assert_eq!((a_end - a_start).num_days() + 1, 7);
+    assert_eq!((b_end - b_start).num_days() + 1, 1);
+    // window_days is floored at 1 (a <1 request doesn't produce an inverted range).
+    let (z_start, z_end, _, _) = compare_day_vs_trailing_bounds(target, 0);
+    assert_eq!(z_start, day(2026, 5, 12));
+    assert_eq!(z_end, day(2026, 5, 12));
+}
+
+#[test]
+fn build_comparison_each_side_equals_build_metrics_over_its_days() {
+    // D3 identity: build_comparison_data partitions the union rows per side by local day,
+    // then runs build_metrics per side. So each side's `metrics` MUST equal a direct
+    // build_metrics over that side's own day-partitioned events.
+    let a_day = day(2026, 5, 4);
+    let b_day = day(2026, 5, 11);
+    // A-window burst on a_day; B-window burst on b_day. Union rows = both.
+    let a_events = burst_with_tools(
+        "sess-A",
+        "/pa",
+        at_minute(a_day, 600),
+        at_minute(a_day, 620),
+        &[("Edit", at_ms(a_day, 600 * 60_000 + 1_000), at_ms(a_day, 600 * 60_000 + 1_500))],
+    );
+    let b_events = burst_with_tools(
+        "sess-B",
+        "/pb",
+        at_minute(b_day, 540),
+        at_minute(b_day, 570),
+        &[("Bash", at_ms(b_day, 540 * 60_000 + 1_000), at_ms(b_day, 540 * 60_000 + 3_000))],
+    );
+    let mut union: Vec<EventRow> = a_events.clone();
+    union.extend(b_events.clone());
+
+    let cmp = build_comparison_data(a_day, a_day, b_day, b_day, &union);
+
+    // Each side's metrics equals build_metrics over ONLY that side's events (partition
+    // isolation — the A-side must not see the B-day burst and vice-versa).
+    assert_eq!(cmp.a.metrics, build_metrics(a_day, a_day, &a_events));
+    assert_eq!(cmp.b.metrics, build_metrics(b_day, b_day, &b_events));
+    // Range labels + meta reflect the bounds.
+    assert_eq!(cmp.a.range.start, "2026-05-04");
+    assert_eq!(cmp.b.range.start, "2026-05-11");
+    assert_eq!(cmp.meta.a_start, "2026-05-04");
+    assert_eq!(cmp.meta.a_end, "2026-05-04");
+    assert_eq!(cmp.meta.b_start, "2026-05-11");
+    assert_eq!(cmp.meta.a_day_count, 1);
+    assert_eq!(cmp.meta.b_day_count, 1);
+    // The A-side effort is Edit's 500ms; the B-side is Bash's 2000ms — proving the
+    // partition (a cross-leak would inflate one side).
+    assert_eq!(cmp.a.metrics.tool_call.effort_ms, 500);
+    assert_eq!(cmp.b.metrics.tool_call.effort_ms, 2000);
+}
+
+#[test]
+fn build_comparison_empty_side_is_fully_shaped_zeros() {
+    // A side with no events in its window → a fully-shaped zeros MetricsPayload (no panic,
+    // no NaN). B side has real activity. Mirrors build_metrics's empty-window guarantee.
+    let a_day = day(2026, 5, 4);
+    let b_day = day(2026, 5, 11);
+    let b_events = burst_with_tools("sess-B", "/pb", at_minute(b_day, 540), at_minute(b_day, 570), &[]);
+
+    let cmp = build_comparison_data(a_day, a_day, b_day, b_day, &b_events);
+
+    assert_eq!(cmp.a.metrics.engaged_session.session_count, 0);
+    assert_eq!(cmp.a.metrics.ai_agent.effort_ms, 0);
+    assert_eq!(cmp.a.metrics.human.wallclock_ms, 0);
+    assert!(cmp.a.metrics.engaged_session.multiplier.is_finite(), "multiplier is 0.0, not NaN");
+    assert!(cmp.b.metrics.engaged_session.session_count >= 1, "B side has the real burst");
+}
+
+#[test]
+fn build_comparison_overlapping_custom_windows_count_shared_days_on_both_sides() {
+    // Codify the OVERLAP semantic (custom A/B can overlap — a legitimate user action the 3
+    // presets never produce). `events_in_days` uses INCLUSIVE [start,end] on each side
+    // independently, so an event on a day inside BOTH windows is counted on BOTH sides —
+    // each side is the independent what-if for its own range. Guards against a future
+    // "optimization" that partitions events exclusively and silently drops the overlap day.
+    // A = [05-04, 05-06]; B = [05-05, 05-07]  → the shared day 05-05 belongs to both.
+    let a_start = day(2026, 5, 4);
+    let a_end = day(2026, 5, 6);
+    let b_start = day(2026, 5, 5);
+    let b_end = day(2026, 5, 7);
+    // One burst on the shared day 05-05 (a 30-min engaged session).
+    let shared_day = day(2026, 5, 5);
+    let events =
+        burst_with_tools("sess-S", "/ps", at_minute(shared_day, 540), at_minute(shared_day, 570), &[]);
+
+    let cmp = build_comparison_data(a_start, a_end, b_start, b_end, &events);
+
+    // The shared-day burst appears on BOTH sides (inclusive overlap, not exclusive).
+    assert_eq!(
+        cmp.a.metrics.engaged_session.session_count, 1,
+        "A window [05-04,05-06] includes the shared day 05-05 → 1 engaged session"
+    );
+    assert_eq!(
+        cmp.b.metrics.engaged_session.session_count, 1,
+        "B window [05-05,05-07] also includes 05-05 → 1 engaged session (double-counted by design)"
+    );
+    // Each side equals build_metrics over its own inclusive window (the overlap is not a
+    // special case — it falls out of the independent per-side partition).
+    assert_eq!(cmp.a.metrics, build_metrics(a_start, a_end, &events));
+    assert_eq!(cmp.b.metrics, build_metrics(b_start, b_end, &events));
+    assert_eq!(cmp.meta.a_day_count, 3);
+    assert_eq!(cmp.meta.b_day_count, 3);
+}
+
+#[test]
+fn comparison_dto_serde_shape_has_no_deltas() {
+    // D3: the wire shape is {a:{metrics,range}, b:{metrics,range}, meta:{…}} — snake_case,
+    // and there is NO `deltas` key (CompareView recomputes deltas FE-side).
+    let a_day = day(2026, 5, 4);
+    let b_day = day(2026, 5, 11);
+    let cmp = build_comparison_data(a_day, a_day, b_day, b_day, &[]);
+    let json = serde_json::to_string(&cmp).unwrap();
+    for key in [
+        "\"a\"", "\"b\"", "\"metrics\"", "\"range\"", "\"meta\"",
+        "\"a_start\"", "\"a_end\"", "\"b_start\"", "\"b_end\"",
+        "\"a_day_count\"", "\"b_day_count\"",
+    ] {
+        assert!(json.contains(key), "comparison JSON must contain key {key}; got {json}");
+    }
+    assert!(
+        !json.contains("\"deltas\""),
+        "comparison JSON must NOT contain a `deltas` key (CompareView recomputes FE-side); got {json}"
+    );
+}
+
+#[test]
+fn time_analytics_result_compare_tag_serializes() {
+    // The command result enum tags the compare variant as {"kind":"compare", ...}.
+    use crate::time_store::commands::TimeAnalyticsResult;
+    let a_day = day(2026, 5, 4);
+    let b_day = day(2026, 5, 11);
+    let cmp = build_comparison_data(a_day, a_day, b_day, b_day, &[]);
+    let json = serde_json::to_string(&TimeAnalyticsResult::Compare(Box::new(cmp))).unwrap();
+    assert!(json.contains("\"kind\":\"compare\""), "result tagged compare; got {json}");
+}

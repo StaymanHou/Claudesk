@@ -33,11 +33,16 @@ import {
   queryTimeAnalytics,
   type RangePayload,
   type WeekPayload,
+  type MetricsPayload,
+  type ComparisonPayload,
+  type CompareSpec,
 } from "../../../state/timeAnalytics";
 import { dashboardMode } from "./dashboardState";
 import { DayTimeline } from "./DayTimeline";
 import { WeekTimeline } from "./WeekTimeline";
 import { MonthView } from "./MonthView";
+import { MetricsView } from "./MetricsView";
+import { CompareViewContainer, type ComparePresetOrCustom } from "./CompareView";
 import { RangePicker } from "./RangePicker";
 import { SidePanel } from "./SidePanel";
 import { resolveSelectedSeg } from "./sidePanelMath";
@@ -480,6 +485,21 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
   const [dayData, setDayData] = useState<RangePayload | null>(null);
   const [weekData, setWeekData] = useState<WeekPayload | null>(null);
   const [monthData, setMonthData] = useState<RangePayload | null>(null);
+  // WP6c-1: the window-level aggregate metrics (Metrics tab). v1 window = today (day).
+  const [metricsData, setMetricsData] = useState<MetricsPayload | null>(null);
+  // WP6c-2: the A/B comparison (Compare tab). `comparePreset` drives the fetch (default
+  // WoW); `custom` uses the two RangePicker spans. Custom A/B default to the two prior
+  // weeks (a sensible non-empty default until the operator picks).
+  const [compareData, setCompareData] = useState<ComparisonPayload | null>(null);
+  const [comparePreset, setComparePreset] = useState<ComparePresetOrCustom>("wow");
+  const [compareCustomA, setCompareCustomA] = useState<{ start: string; end: string }>(() => ({
+    start: stepIso(todayDateIso(new Date()), -13),
+    end: stepIso(todayDateIso(new Date()), -7),
+  }));
+  const [compareCustomB, setCompareCustomB] = useState<{ start: string; end: string }>(() => ({
+    start: stepIso(todayDateIso(new Date()), -6),
+    end: todayDateIso(new Date()),
+  }));
   const [loading, setLoading] = useState(false);
   // WP6b-4 re-spec (D10): SINGLE-OPEN project accordion. Rows start ALL COLLAPSED
   // (`[]`); expanding one auto-collapses the others → at most ONE id here at a time.
@@ -532,10 +552,37 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
   // a stale-closure refetch). Synced in an effect (never written during render) so a
   // tracking-ON flip refetches the CURRENTLY active view (day/week/month) with its
   // current shown day / month.
-  const navRef = useRef({ view, monthIso, loadedStartIso, loadedEndIso, mondayIso });
+  const navRef = useRef({
+    view,
+    monthIso,
+    loadedStartIso,
+    loadedEndIso,
+    mondayIso,
+    comparePreset,
+    compareCustomA,
+    compareCustomB,
+  });
   useEffect(() => {
-    navRef.current = { view, monthIso, loadedStartIso, loadedEndIso, mondayIso };
-  }, [view, monthIso, loadedStartIso, loadedEndIso, mondayIso]);
+    navRef.current = {
+      view,
+      monthIso,
+      loadedStartIso,
+      loadedEndIso,
+      mondayIso,
+      comparePreset,
+      compareCustomA,
+      compareCustomB,
+    };
+  }, [
+    view,
+    monthIso,
+    loadedStartIso,
+    loadedEndIso,
+    mondayIso,
+    comparePreset,
+    compareCustomA,
+    compareCustomB,
+  ]);
 
   // Fetch the active view's global (all-projects) breakdown. Dispatches on `v` to the
   // matching QueryWindow and stores the result in its typed slot, branching on
@@ -552,6 +599,9 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
         loadedStartIso?: string;
         loadedEndIso?: string;
         mondayIso?: string;
+        comparePreset?: ComparePresetOrCustom;
+        compareCustomA?: { start: string; end: string };
+        compareCustomB?: { start: string; end: string };
       },
     ) => {
       setLoading(true);
@@ -570,6 +620,36 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
         window = bounds
           ? { kind: "custom", start_ms: bounds.start_ms, end_ms: bounds.end_ms }
           : { kind: "day" };
+      } else if (v === "metrics") {
+        // WP6c-1 v1: the aggregate metrics over TODAY (a `{kind:"metrics"}` wrapping the
+        // day window). A window selector (day/week/custom parity with the timeline views)
+        // is a deliberate WP6c follow-up; v1 answers "today's aggregate".
+        window = { kind: "metrics", window: { kind: "day" } };
+      } else if (v === "compare") {
+        // WP6c-2: the A/B comparison. A named preset resolves its bounds backend-side (from
+        // today, local); Custom sends the two RangePicker spans as explicit epoch-ms. The
+        // preset/custom params come through `nav` (avoids a stale-closure read of state).
+        const p = nav?.comparePreset ?? "wow";
+        let spec: CompareSpec;
+        if (p === "custom") {
+          const ca = nav?.compareCustomA ?? { start: todayDateIso(new Date()), end: todayDateIso(new Date()) };
+          const cb = nav?.compareCustomB ?? { start: todayDateIso(new Date()), end: todayDateIso(new Date()) };
+          const aMs = rangeToMs(ca.start, ca.end);
+          const bMs = rangeToMs(cb.start, cb.end);
+          // Malformed custom span (should not happen — RangePicker gates) → fall back to WoW.
+          spec =
+            aMs && bMs
+              ? {
+                  custom: {
+                    a: { start_ms: aMs.start_ms, end_ms: aMs.end_ms },
+                    b: { start_ms: bMs.start_ms, end_ms: bMs.end_ms },
+                  },
+                }
+              : { preset: "wow" };
+        } else {
+          spec = { preset: p };
+        }
+        window = { kind: "compare", spec };
       } else {
         // Day (WP6b-4 re-spec): the flexible timeline fetches the LOADED WINDOW (a span,
         // default the last 14 days, grown by auto-extend). Always a `{kind:"custom"}`
@@ -591,6 +671,10 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
         .then((result) => {
           if (result.kind === "week") {
             setWeekData(result);
+          } else if (result.kind === "metrics") {
+            setMetricsData(result);
+          } else if (result.kind === "compare") {
+            setCompareData(result);
           } else if (result.kind === "range") {
             if (v === "month") {
               setMonthData(result);
@@ -604,6 +688,8 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
           console.error(`[claudesk] time_analytics_query (${v}) failed:`, e);
           if (v === "week") setWeekData(null);
           else if (v === "month") setMonthData(null);
+          else if (v === "metrics") setMetricsData(null);
+          else if (v === "compare") setCompareData(null);
           else setDayData(null);
         })
         .finally(() => setLoading(false));
@@ -646,10 +732,41 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
             ? dayNav
             : v === "week"
               ? { mondayIso: thisMonday }
-              : undefined;
+              : v === "compare"
+                ? { comparePreset, compareCustomA, compareCustomB }
+                : undefined;
       if (trackingEnabled) fetchView(v, nav);
     },
-    [trackingEnabled, fetchView, monthIso],
+    [trackingEnabled, fetchView, monthIso, comparePreset, compareCustomA, compareCustomB],
+  );
+
+  // WP6c-2: Compare preset switch → set the preset + refetch. Custom keeps the current
+  // spans (the RangePickers already show them); a preset selection fetches immediately.
+  const changeComparePreset = useCallback(
+    (p: ComparePresetOrCustom) => {
+      setComparePreset(p);
+      if (trackingEnabled)
+        fetchView("compare", { comparePreset: p, compareCustomA, compareCustomB });
+    },
+    [trackingEnabled, fetchView, compareCustomA, compareCustomB],
+  );
+
+  // WP6c-2: Custom A/B range change → update the side's span + refetch (only meaningful when
+  // the Custom preset is active, which is the only time the RangePickers render).
+  const changeCompareRange = useCallback(
+    (side: "a" | "b", start: string, end: string) => {
+      const nextA = side === "a" ? { start, end } : compareCustomA;
+      const nextB = side === "b" ? { start, end } : compareCustomB;
+      if (side === "a") setCompareCustomA(nextA);
+      else setCompareCustomB(nextB);
+      if (trackingEnabled)
+        fetchView("compare", {
+          comparePreset: "custom",
+          compareCustomA: nextA,
+          compareCustomB: nextB,
+        });
+    },
+    [trackingEnabled, fetchView, compareCustomA, compareCustomB],
   );
 
   // JUMP-TO (D8): the RangePicker's typed span + the Month drill-down land here. Move the
@@ -747,6 +864,9 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
               loadedStartIso: n.loadedStartIso,
               loadedEndIso: n.loadedEndIso,
               mondayIso: n.mondayIso,
+              comparePreset: n.comparePreset,
+              compareCustomA: n.compareCustomA,
+              compareCustomB: n.compareCustomB,
             });
           }
         }
@@ -768,6 +888,9 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
           loadedStartIso: n.loadedStartIso,
           loadedEndIso: n.loadedEndIso,
           mondayIso: n.mondayIso,
+          comparePreset: n.comparePreset,
+          compareCustomA: n.compareCustomA,
+          compareCustomB: n.compareCustomB,
         });
       }
     }).then((fn) => {
@@ -805,7 +928,22 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
   // (the toolbar + nav still render around it). A null payload (fetch not yet settled) also
   // counts as empty for this flag; the `&& xData` guards on the render branches keep the
   // grid components from receiving null.
-  const activeEmpty = !activeData || activeData.projects.length === 0;
+  // Metrics has no `projects` array (it's window-global) — its emptiness is "no engaged
+  // sessions AND no human/AI activity"; MetricsView renders its own inline zero-state, so
+  // this flag only gates the shell, like the other nav-bearing views.
+  const metricsEmpty =
+    !metricsData ||
+    (metricsData.engaged_session.session_count === 0 &&
+      metricsData.ai_agent.effort_ms === 0 &&
+      metricsData.human.wallclock_ms === 0);
+  const activeEmpty =
+    view === "metrics"
+      ? metricsEmpty
+      : view === "compare"
+        ? // CompareView handles its own null/empty rendering (it takes `comparison`), so the
+          // shell's emptiness flag is irrelevant here — never trips the full-screen path.
+          false
+        : !activeData || activeData.projects.length === 0;
   const mode = dashboardMode(trackingEnabled, hasData);
   const monthLabel = monthIsoToLabel(monthIso);
   const nextMonthDisabled =
@@ -877,6 +1015,32 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
             onNextMonth={() => changeMonth("next")}
             payload={monthData}
             onDayClick={(iso) => changeRange(iso, iso)}
+          />
+        ) : mode === "data" && view === "metrics" ? (
+          // WP6c-1: window-level aggregate metrics (HeadlineCard + MetricsPanel). Renders
+          // whenever tracking is ON (an empty window shows MetricsView's inline zero-state,
+          // keeping the tab strip — same nav-bearing convention as Day/Week/Month), so it's
+          // gated on `view === "metrics"`, not on a row count.
+          <MetricsView
+            view={view}
+            onViewChange={changeView}
+            data={metricsData}
+            isEmpty={metricsEmpty}
+          />
+        ) : mode === "data" && view === "compare" ? (
+          // WP6c-2: A/B comparison (PresetSelector + CompareView). Renders whenever
+          // tracking is ON (CompareView shows its own inline empty/absent states, keeping
+          // the tab strip + preset selector — same nav-bearing convention as the others),
+          // so it's gated on `view === "compare"`, not on a row count.
+          <CompareViewContainer
+            view={view}
+            onViewChange={changeView}
+            comparison={compareData}
+            preset={comparePreset}
+            customA={compareCustomA}
+            customB={compareCustomB}
+            onPresetChange={changeComparePreset}
+            onCustomRangeChange={changeCompareRange}
           />
         ) : mode === "data" && view === "day" && dayData ? (
           // WP6b-4 re-spec — the flexible timeline. One continuous camera over a FIXED
