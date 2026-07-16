@@ -4,6 +4,26 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m9-wp7-deprecate-claude-time — 2026-07-16
+
+*(feature-review-quality on the WP7 working-tree change [DOCS-ONLY resync: arch.md event-set/SQLite/deprecation Key Decisions + new "Milestone 9 architecture" section; CLAUDE.md Current-Milestone refresh; wbs.md pause-footer strip; runtimes.md build-observation]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer cross-checked every material architectural claim against source — all held. MINOR #1 [arch.md hook-schema omitted `source`/`prompt_length_chars`] was FIXED IN PLACE during review-quality [not backlogged], since it was a self-introduced one-line gap in the exact section under review. The 2 below are out-of-scope for WP7 — auto-backlogged.)*
+
+## SURFACE-2026-07-16-QUALITY-WP7-WBS-FRONTMATTER-STALE
+- **Severity:** MINOR
+- **File:** `docs/product/wbs.md` (frontmatter, ~L5)
+- **Finding:** After WP7 completed, the wbs.md frontmatter still reads `updated: 2026-07-15`, `state: complete`, and a comment "Only WP7 … remains for M9" — now stale (WP7 is done). The WP7 diff correctly only stripped the resolved session-pause block; the frontmatter/roadmap resync + WBS archival is deferred to `/product-finalize` by design.
+- **Fix shape:** `/product-finalize` sweeps this when it closes the M9 cycle (bumps `updated:`, archives the WBS to `docs/product/archive/milestone-9-time-analytics/`). No standalone action needed — flagged so finalize doesn't skip it.
+- **Priority:** low.
+- **Status:** pending (expected to resolve at `/product-finalize`).
+
+## SURFACE-2026-07-16-QUALITY-WP7-CLAUDEMD-WP2-WIREFIELD-COUNT
+- **Severity:** MINOR
+- **File:** `CLAUDE.md` (Current Milestone, WP2 status line, ~L162)
+- **Finding:** The unchanged WP2 status line says "10-event hook + **5 wire fields**"; the actual new-field count is 6 (`prompt_length_chars`, `tool_name`, `tool_use_id`, `agent_type`, `source`, `reason`). Pre-existing WP2-era text (not introduced by the WP7 diff), but the WP7 M9-complete resync was the natural moment to correct it.
+- **Fix shape:** one-word edit "5 wire fields" → "6 wire fields" in the WP2 status line; fold into the next CLAUDE.md touch or `/product-finalize`'s durable-doc resync.
+- **Priority:** low.
+- **Status:** pending.
+
 # m9-wp6c-2-compare-view — 2026-07-15
 
 *(feature-review-quality on the WP6c-2 working-tree change [Rust `build_comparison_data` + `ComparisonPayload` DTO + `{kind:"compare"}` command; FE Compare tab: `compareMath.ts` + `CompareView.tsx` + GlobalDashboard wiring + tab enable; uncommitted per commit-only-when-asked, the M9 tree local carry]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 4 MINOR — all auto-backlogged. Reviewer: well-built, advances the codebase more than it accrues debt; disciplined re-derivation reusing the shipped `build_metrics` per side + FE-side delta recompute (serde-pinned no-`deltas` contract) + strong oracle coverage. All 4 MINOR are backlog-tier polish, none blocking.)*

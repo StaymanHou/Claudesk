@@ -2,11 +2,8 @@
 stage: wbs
 state: complete
 milestone: 9
-updated: 2026-07-15  # WP6c COMPLETE — WP6c-2 (A/B Compare view + build_comparison_data producer) SHIPPED, local-only carry. Only WP7 (deprecate + exit-verify) remains for M9.
+updated: 2026-07-16  # WP7 SHIPPED (deprecate claude-time + doc-resync) — ALL M9 WPs now done. Cycle-close (roadmap resync + WBS archival) belongs to /product-finalize next.
 ---
-
-## Session Pause — 2026-07-15 (session pause)
-Paused between M9 WPs — WP6c-2 (A/B Compare view) COMPLETE (shipped + finalized + archived + reflected end-to-end this session; completes WP6c + fully resolves the COLOR-FAMILIES SURFACE). Next: **WP7** (deprecate standalone claude-time + installed-`.app` milestone-exit verify) — the M9 closer, then `/product-finalize`. All M9-tree work is LOCAL-ONLY staged/uncommitted (commit-only-when-asked). See `workflow/.session.md` to resume via `/session-start`.
 
 # WBS — Milestone 9: Time-analytics panel (absorb claude-time)
 
@@ -241,15 +238,16 @@ The aggregate-metric surfaces (`MetricsPanel`/`HeadlineCard`/`CompareView`/`Effe
 - [x] Implement: explicit end-marker on workspace close (`NativeSignal::WorkspaceClose` via `record_workspace_close` from `cc_kill`+`kill_all`), max-idle cap (`SESSION_IDLE_CAP_MS`=30min, idle-gap keyed) + startup reconciliation (`reconcile_dangling` at `.setup()`) in the reclassifier; read-time capping self-fixes historical rows (no destructive migration). `SessionEnd` honored as authoritative end (`reason`→meta). Precedence D3: explicit-marker > `SessionEnd` > max-idle-cap > live.
 - [x] Verify: a closed/crashed session's row ends at its true end (not the day edge) — reconciliation LIVE-proven via MCP bridge (seed→relaunch→close at true ts; idempotent); a live-idle-under-cap session NOT prematurely capped (AC3 tested); 498 lib + 6 integ pass, clippy --all-targets clean. Dashboard-visual "not running all day" + installed-`.app` close/quit smoke CARRIED to the release gate (operator standing preference). Force-quit-no-marker limitation accepted (2/4 cover it; `SURFACE-2026-07-08-M9-WP6.5-CLOSE-MARKER-MISSES-FORCE-QUIT`).
 
-### WP7: Deprecate standalone claude-time + milestone-exit verify
+### WP7: Deprecate standalone claude-time + milestone-exit verify — ✅ SHIPPED 2026-07-16 (local/uncommitted-then-batched per commit-only-when-asked; the M9-tree local carry)
 **Description:** Retire the standalone tool now that Claudesk owns the capability (decision 1). Remove the separate `claude-time-hook.pl` registration from `~/.claude/settings.json` (Claudesk's `hook_install` un-registers it / the user's own copy is left inert — decide the least-surprising path: Claudesk should NOT delete a hook it didn't install, but should stop *depending* on it; document the manual removal in the retirement note). Update `CLAUDE.md` + `arch.md` to record the absorbed hook/DB/reclassifier/dashboard as-built and the tool's deprecation. Milestone-exit verification of the exit criteria against the installed `.app` (per the installed-build smoke-test convention — this feature touches the hook registration + external-process env, so it MUST be smoke-tested from a Finder-launched `.app`, not just `pnpm tauri:dev`).
 **Milestone:** 9
 **Dependencies:** WP2–WP6 + **WP6.5** (the capability must be fully in-app AND the session-end data model trustworthy before deprecating the source + exit-verifying)
 **Size:** S
+**As-built (2026-07-16):** DOCS-ONLY resync feature (`/feature-plan` → single phase; no app code). (1) Confirmed **zero runtime dependency** on the standalone `claude-time-hook.pl` — Claudesk installs its own `claudesk-hook.pl`; the only in-tree `claude-time` refs are port-lineage comments + a `hook_install` preservation test-fixture (`merge_is_additive_and_preserves_existing_hooks`, itself the *proof* of the "stop depending, do not delete" posture); retirement note authored in `arch.md`. (2) Resynced `arch.md` (event set 4→10 + status/time-analytics-only split; SQLite scoped-exception carve-out at the flat-JSON Key Decision; coexistence→deprecation; new **`## Milestone 9 architecture`** section covering `time_store`/native-signals/`reclassify`-REDESIGN/session-termination/query-layer/GLOBAL-dashboard-mount-scope/universal-feature-flag) + `CLAUDE.md` (Current-Milestone → M9 all-WPs-shipped). (3) Milestone-exit verify: the doc/decoupling + build-smoke slice done in-session (13/13 content greps; tsc + cargo build exit 0; 524+6 backend / 1120 FE regression green); the **installed-`.app`** exit-verify (Finder-launched, GUI-PATH + hook-registration parity, toggle ON→breakdown/OFF→zero-IO) is operator-only per `[[installed-build-verify-deferred-to-release]]` → CARRIED to the next `/release` gate (as M5/M6/M7 exits were). review-quality: 0 CRITICAL / 0 MAJOR / 3 MINOR (1 fixed in place, 2 backlogged). Archived: `workflow/archive/m9-wp7-deprecate-claude-time.md`.
 **Tasks:**
-- [ ] Document the standalone claude-time retirement (README/note in the source repo is out of Claudesk's tree — record the deprecation in Claudesk's `arch.md` + a backlog closure); confirm Claudesk no longer depends on `claude-time-hook.pl`.
-- [ ] Resync `CLAUDE.md` + `arch.md`: absorbed hook event-set, `time_store` + per-identity DB, reclassifier module, dashboard tab, the universal feature-flag pattern.
-- [ ] Milestone-exit verify: toggle ON → a day of usage → per-project breakdown renders in the native tab; toggle OFF → zero storage/IO + status dots unaffected; installed-`.app` smoke test (Finder-launched, GUI-PATH parity, hook registration).
+- [x] Document the standalone claude-time retirement (README/note in the source repo is out of Claudesk's tree — record the deprecation in Claudesk's `arch.md` + a backlog closure); confirm Claudesk no longer depends on `claude-time-hook.pl`.
+- [x] Resync `CLAUDE.md` + `arch.md`: absorbed hook event-set, `time_store` + per-identity DB, reclassifier module, dashboard tab, the universal feature-flag pattern.
+- [x] Milestone-exit verify: toggle ON → a day of usage → per-project breakdown renders in the native tab; toggle OFF → zero storage/IO + status dots unaffected; installed-`.app` smoke test (Finder-launched, GUI-PATH parity, hook registration). *(Agent-verifiable doc/build slice done; the installed-`.app` half CARRIED to the operator / `/release` gate.)*
 
 ---
 

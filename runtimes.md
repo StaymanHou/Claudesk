@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-15  # M9 WP6c-2 P1 verify-auto: cargo test 523 lib pass (+11 Compare producer tests)
+updated: 2026-07-16  # M9 WP7 build smoke: cargo build 13.6s incremental (docs-only change, no-op recompile)
 ---
 
 # Runtime Registry
@@ -58,9 +58,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo build (src-tauri)
 
-- **Last:** 47s (2026-06-30, debt-paydown WP1: cold-ish rebuild after removing the `ignore` dep — dependency-graph re-resolve + full relink; 46.76s)
+- **Last:** 13.6s (2026-07-16, M9 WP7 build smoke: docs-only change, incremental no-op recompile of claudesk crate)
 - **Use timeout:** 131000
 - **History:**
+  - 13.6s — 2026-07-16 (M9 WP7 build smoke: docs-only change, incremental recompile 13.60s — timeout kept at the 47s-cold sizing)
   - 47s — 2026-06-30 (debt-paydown WP1: dep removal forced re-resolve + relink, 46.76s)
   - 1s — 2026-06-29 (M7 WP1: warm rebuild, tray module + features already compiled)
   - 12s — 2026-06-27 (M5 WP5 Phase 1 compile gate: pip_set_visible/teardown/focus-probe/menu item)
