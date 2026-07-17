@@ -97,15 +97,14 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # by `time_store::query`.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
-# M10 WP1 (PROBE — in-app auto-updater): the official Tauri 2 updater + the process
-# plugin needed for the post-install relaunch. `tauri-plugin-updater` provides
-# check()/download()/install() (we use the SPLIT download()/install() so a cancel
-# has a clean pre-install boundary — cancel-before-install leaves the running app
-# untouched); `tauri-plugin-process` supplies relaunch() after install. Artifact
-# authenticity is verified with a free minisign keypair (pubkey in tauri.conf.json →
-# plugins.updater.pubkey; private key a release secret, NEVER committed — the probe's
-# key lives in the session scratchpad). This is the WP1 spike wiring; WP2 rebuilds the
-# production flow folding in WP1's GO/FALLBACK verdict. See docs/product/wbs.md → M10.
+# M10 (in-app auto-updater): the official Tauri 2 updater + the process plugin needed
+# for the post-install relaunch. `tauri-plugin-updater` provides check()/download()/
+# install() (we use the SPLIT download()/install() so a cancel has a clean pre-install
+# boundary — cancel-before-install leaves the running app untouched); `tauri-plugin-
+# process` supplies relaunch() after install. Artifact authenticity is verified with a
+# free minisign keypair (pubkey in tauri.conf.json → plugins.updater.pubkey; private key
+# a release secret supplied to /release, NEVER committed). The production flow lives in
+# src/updater/ (self-clear + WP3 brew detect-and-defer). See docs/product/wbs.md → M10.
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 

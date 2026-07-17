@@ -130,9 +130,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.76s (2026-07-17, M10 WP1 probe Phase 2 verify-codify: +6 updater_probe unit tests [bundle-path resolve + xattr-command shape + no-sudo], 530 lib pass; warm)
+- **Last:** 0.82s (2026-07-17, M10 WP3 verify-codify: full lib suite 539 pass + 6 integ pass, no new tests beyond the 9 TDD-written at build [7 install_source path-shape + 3 command]; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.82s — 2026-07-17 (M10 WP3 verify-codify: full lib 539 pass + 6 integ pass; warm)
+  - 0.58s — 2026-07-17 (M10 WP3 verify-auto: +9 updater tests [install_source detection + brew-defer command shape], 539 lib pass; warm)
   - 0.76s — 2026-07-17 (M10 WP1 P2 verify-codify; warm, 530 lib pass, +6 updater_probe tests)
   - 0.81s — 2026-07-17 (M10 WP1 P1 verify-codify regression; warm, 524 lib pass, no new tests)
   - 1s — 2026-07-15 (M9 WP6c-2 P1; warm, 523 lib pass)

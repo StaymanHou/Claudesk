@@ -4,27 +4,40 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m10-wp3-brew-detect-and-defer — 2026-07-17
+
+*(feature-review-quality on the WP3 working-tree diff [uncommitted, on HEAD `2592b2d`]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all documentary/cosmetic, auto-backlogged. Reviewer verdict: "well-built, appropriately-scoped… advances the codebase and accrues no meaningful debt." NOTE: this WP's P1.5 doc-drift fold RESOLVED the two `m10-wp2-updater-core` findings below [WP2-LIBRS-INVOKE-COMMENT-STALE + WP2-CARGO-DEP-COMMENT-STALE] — those close at finalize.)*
+
+## SURFACE-2026-07-17-QUALITY-WP3-MOD-LAYOUT-LIST-INCOMPLETE
+- **Severity:** MINOR
+- **File:** `src-tauri/src/updater/mod.rs` (module header `## Layout` bullet list, ~lines 26-45)
+- **Finding:** The `## Layout` list enumerates the pure-core functions (`resolve_bundle_path`, `quarantine_clear_command`, `clear_own_quarantine`, `commands`) but was not extended to list WP3's two new public functions (`install_source_from_bundle`, `install_source`).
+- **Fix shape:** Add two bullets to the `## Layout` list for the install-source pair. One-line-each edit.
+- **Why it matters:** the header is an otherwise carefully-maintained map of the module surface; a reader scanning it will miss the install-source pair.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-17-QUALITY-WP3-RESOLUTION-ASYMMETRY-UNREMARKED
+- **Severity:** MINOR
+- **File:** `src-tauri/src/updater/mod.rs` (`install_source()` ~L181 canonicalizes; `clear_own_quarantine` ~L194 does not)
+- **Finding:** `install_source()` canonicalizes the bundle path before classifying; WP2's `clear_own_quarantine` operates on the non-canonicalized `resolve_bundle_path` output. Benign today (the brew branch is gated out before `clear_own_quarantine` ever runs; the direct-download path has no symlink to resolve), but the two bundle-resolution paths now differ in one step without a note.
+- **Fix shape:** Add a one-line comment on `install_source()`'s canonicalize (or on `clear_own_quarantine`) explaining why one resolves the symlink chain and one doesn't, so a future maintainer doesn't wrongly "unify these."
+- **Why it matters:** prevents a wrong unification refactor that could break brew detection (which NEEDS canonicalize to see the real Caskroom path behind the /Applications symlink) or add an unnecessary stat to the self-clear path.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-17-QUALITY-WP3-SHORTCIRCUIT-TEST-PINS-SHAPE-NOT-ORDERING
+- **Severity:** MINOR
+- **File:** `src-tauri/src/updater/commands.rs` (`homebrew_source_short_circuits_to_defer_with_no_available_version`, ~L196-211)
+- **Finding:** The test reconstructs the `UpdateCheckResult` by hand rather than invoking `updater_check` (the `AppHandle` dependency makes a true command-level test awkward), so it pins the expected *shape* but not that `updater_check` actually orders the brew short-circuit BEFORE the network `check()`. That load-bearing invariant (Homebrew never hits the network) rests on code inspection + the live bridge verify-self, not the unit test. The limitation is honestly noted in the test comment.
+- **Fix shape:** If/when the command layer becomes testable (a mockable updater seam, or a `tauri::test` harness), add a test asserting no network call fires for a Homebrew source. Otherwise accept as a documented structural limitation.
+- **Why it matters:** the most load-bearing WP3 invariant is asserted by structure, not test — a future refactor of `updater_check`'s ordering could silently break the short-circuit.
+- **Priority:** low.
+- **Status:** pending.
+
 # m10-wp2-updater-core — 2026-07-17
 
-*(feature-review-quality on the WP2 working-tree diff [uncommitted, on HEAD `27743ff`]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all doc-drift/cosmetic, auto-backlogged. Reviewer verdict: "well-built engineering-grade work"; the only debt is stale WP1-probe comments that survived the production reframe. All three are one-line fixes, natural fold into any future `/feature-refactor` or the WP3 wiring pass.)*
-
-## SURFACE-2026-07-17-QUALITY-WP2-LIBRS-INVOKE-COMMENT-STALE
-- **Severity:** MINOR
-- **File:** `src-tauri/src/lib.rs` (invoke_handler comment above the two updater entries)
-- **Finding:** The comment above `updater::commands::updater_check`/`updater_apply` in `invoke_handler` still reads "M10 WP1 (PROBE — throwaway)" and references the retired command names `_check`/`_run` + the WP1 GO/FALLBACK operator-observation purpose. WP2's P1.3 reframed the sibling `mod updater;` block and the plugin-registration block to production wording, but this one comment was missed.
-- **Fix shape:** Reframe the comment to production wording (mirror the already-corrected `mod updater;` block: production updater flow, `updater_check`/`updater_apply`). One-line edit.
-- **Why it matters:** a future reader (esp. WP4 doing the trigger cleanup, or WP3 wiring the brew gate in front of `check()`) may believe these are throwaway probe commands and delete/mis-map them.
-- **Priority:** low.
-- **Status:** pending.
-
-## SURFACE-2026-07-17-QUALITY-WP2-CARGO-DEP-COMMENT-STALE
-- **Severity:** MINOR
-- **File:** `src-tauri/Cargo.toml` (lines ~100-108, the `tauri-plugin-updater`/`tauri-plugin-process` dep comment)
-- **Finding:** The dependency comment is entirely WP1-probe framing ("WP1 spike wiring; WP2 rebuilds the production flow folding in WP1's GO/FALLBACK verdict"). WP2 IS that rebuild and has shipped, so the comment describes the deps as spike-only when they are now the production wiring.
-- **Fix shape:** Reframe the dep comment to production wording (these ARE the shipping updater engine). One-block edit.
-- **Why it matters:** same doc-drift class as the lib.rs comment; a maintainer reading Cargo.toml would think the updater is still probe-scaffolding subject to removal.
-- **Priority:** low.
-- **Status:** pending.
+*(feature-review-quality on the WP2 working-tree diff [uncommitted, on HEAD `27743ff`]; Mode 3 autopilot. Originally 0 CRITICAL / 0 MAJOR / 3 MINOR — all doc-drift/cosmetic. **2 of 3 RESOLVED by M10 WP3's P1.5 doc-drift fold** [WP2-LIBRS-INVOKE-COMMENT-STALE + WP2-CARGO-DEP-COMMENT-STALE — closed 2026-07-17 at WP3 finalize, see CHANGELOG]. 1 MINOR survives below.)*
 
 ## SURFACE-2026-07-17-QUALITY-WP2-CURRENT-VERSION-DUAL-PROVENANCE
 - **Severity:** MINOR

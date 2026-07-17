@@ -20,6 +20,11 @@ interface UpdateCheckResult {
   current_version: string;
   available_version: string | null;
   status: string;
+  // WP3: "homebrew" (self-update deferred to `brew upgrade`) | "direct-download".
+  // A brew install short-circuits the backend check to available_version: null, so the
+  // confirm branch never fires — this field is the explicit seam WP4's polished UX
+  // branches on (e.g. show a "run brew upgrade" note instead of an Update button).
+  install_source: string;
 }
 
 type Phase = "idle" | "checking" | "confirm" | "applying";
@@ -28,6 +33,7 @@ export function UpdaterTrigger() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [status, setStatus] = useState<string>("idle");
   const [available, setAvailable] = useState<string | null>(null);
+  const [isBrew, setIsBrew] = useState<boolean>(false);
 
   const onCheck = async () => {
     setPhase("checking");
@@ -35,6 +41,10 @@ export function UpdaterTrigger() {
     try {
       const r = await invoke<UpdateCheckResult>("updater_check");
       setStatus(r.status);
+      // WP3: a Homebrew install defers — the backend already returned no
+      // available_version, so the confirm/Update button never shows; record the
+      // brew flag so the UI can be explicit about WHY (and WP4 can style it).
+      setIsBrew(r.install_source === "homebrew");
       if (r.available_version) {
         setAvailable(r.available_version);
         setPhase("confirm");
@@ -137,6 +147,15 @@ export function UpdaterTrigger() {
       >
         {status}
       </div>
+
+      {isBrew ? (
+        <div
+          data-testid="updater-brew-defer"
+          style={{ marginTop: 4, opacity: 0.7, fontStyle: "italic" }}
+        >
+          Homebrew install — in-app update disabled.
+        </div>
+      ) : null}
     </div>
   );
 }

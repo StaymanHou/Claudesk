@@ -1,10 +1,26 @@
 # Backlog
 
-## Code-quality findings — m10-wp2-updater-core (2026-07-17)
-- **Pointer:** 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on the WP2 working-tree diff (uncommitted, HEAD `27743ff`), Mode-3 autopilot auto-backlogged. All doc-drift/cosmetic: (1) **lib.rs invoke_handler comment stale** — still says "WP1 PROBE — throwaway" + old `_check`/`_run` names (sibling blocks were reframed; this one missed); (2) **Cargo.toml dep comment stale** — describes the shipped production updater deps as WP1 spike-only; (3) **updater_check dual-provenance** — current version read from `package_info()` vs `update.current_version` in the two branches (cosmetic, both correct). Reviewer verdict: well-built engineering-grade work; only debt is the surviving WP1-probe comments. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10-wp2-updater-core — 2026-07-17`.
+## SURFACE-2026-07-17-M10-WP3-BREW-DETECTION-LIVE-DEFERRED
+- **Source:** feature:verify-human (M10 WP3, operator "defer" 2026-07-17)
+- **Target level:** product:wbs (M10 WP6 milestone-exit verify)
+- **Type:** deferred-verification (agent work complete; live brew observation postponed)
+- **Summary:** WP3's install-source detection (brew detect-and-defer) is BUILT + agent-verified — 7 path-shape unit tests (arm64/Intel `/Caskroom/`→Homebrew, `/Applications`/`None`/translocation→DirectDownload, 2 substring false-positive guards) + 3 command tests + a live MCP-bridge run proving the dev binary classifies DirectDownload (both `updater_check`/`updater_apply` reached `updater.check()` — NOT the brew short-circuit). Two verify-human leaves DEFERRED to WP6: (1) confirm the REAL Claudesk cask layout — a `brew install`ed build's resolved `current_exe()` contains `/Caskroom/` → `install_source()==Homebrew` → defers to `brew upgrade`; (2) document/observe the App-Translocation interaction.
+- **Context:** the brew-positive case needs a real brew install of an **updater-capable** build, which requires WP5's `/release` pipeline to exist first (not runnable at WP3 close). This IS the operator's stated brew-first real end-to-end test — same gate as `SURFACE-2026-07-17-M10-WP1-LIVE-VERIFY-DEFERRED`. The path-shape logic is fully pinned by unit tests meanwhile.
+- **Suggested action:** at WP6, after WP5 publishes an updatable release: `brew install` the Claudesk cask (or `brew upgrade` to an updater build), launch the installed `.app`, confirm the updater defers (shows `brew upgrade`, does NOT self-install, no brew version desync). Fold into WP6's brew-install test leaf.
+- **Priority:** medium (does not block building WP4/WP5; the deferred verdict is the milestone-exit gate).
+- **Status:** pending (deferred verification → feeds M10 WP6).
+
+## Code-quality findings — m10-wp3-brew-detect-and-defer (2026-07-17)
+- **Pointer:** 3 MINOR findings (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on the WP3 working-tree diff (uncommitted, on HEAD `2592b2d`), Mode-3 autopilot auto-backlogged. All documentary/cosmetic: (1) **mod.rs `## Layout` list incomplete** — the 2 new public fns (`install_source_from_bundle`/`install_source`) not added to the module-header map; (2) **resolution asymmetry unremarked** — `install_source()` canonicalizes the bundle path, WP2's `clear_own_quarantine` doesn't (benign — brew gated out first — but a one-line comment would prevent a wrong unify-refactor); (3) **short-circuit test pins shape not ordering** — `homebrew_source_short_circuits…` reconstructs the struct by hand (AppHandle dep), so the "Homebrew never hits the network" invariant rests on code-inspection + live bridge verify-self, not the unit test. Reviewer verdict: "well-built, appropriately-scoped… advances the codebase and accrues no meaningful debt." **NOTE:** WP3's P1.5 doc-drift fold RESOLVED the two `m10-wp2-updater-core` findings (WP2-LIBRS-INVOKE-COMMENT-STALE + WP2-CARGO-DEP-COMMENT-STALE) — those close at WP3 finalize. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10-wp3-brew-detect-and-defer — 2026-07-17`.
 - **Priority:** low (all).
 - **Status:** pending.
-- **Pickup shape:** one `/feature-refactor` pass — (1)+(2) are one-line comment reframes (natural fold into the WP3 wiring pass, which touches lib.rs anyway); (3) rides along or defer. Dismiss any via the WIP's `## Code-Quality Review` section.
+- **Pickup shape:** one `/feature-refactor` pass — (1)+(2) are one-line/two-line comment additions (natural fold into any future updater/ touch, e.g. WP4's UX work in `updater/`); (3) is accept-as-documented-limitation unless a mockable updater seam appears. Dismiss any via the WIP's `## Code-Quality Review` section.
+
+## Code-quality findings — m10-wp2-updater-core (2026-07-17)
+- **Pointer:** 1 MINOR finding surviving (originally 3; **2 RESOLVED by M10 WP3's P1.5 doc-drift fold** — the stale lib.rs invoke_handler comment + the stale Cargo.toml dep comment, closed 2026-07-17 at WP3 finalize, see CHANGELOG). Remaining: **updater_check dual-provenance** — current version read from `package_info()` vs `update.current_version` in the two branches (cosmetic, both correct; not touched by WP3). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10-wp2-updater-core — 2026-07-17`.
+- **Priority:** low.
+- **Status:** pending.
+- **Pickup shape:** the one surviving finding is a one-line comment (or a hoist of the current-version read to a single `let`) — rides any future `updater/commands.rs` touch (e.g. WP4). Dismiss via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-07-17-M10-WP2-PROBE-HARNESS-STALE-SIG
 - **Source:** feature:verify-auto (M10 WP2 Phase 1)

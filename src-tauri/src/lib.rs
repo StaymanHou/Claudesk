@@ -56,11 +56,12 @@ mod time_store;
 // to the existing M3 `workspace-status` broadcast (no broadcaster change). The pure
 // `aggregate_alarm` fold lives in tray/mod.rs; the tray-icon ops in tray/commands.rs.
 mod tray;
-// M10 (in-app auto-updater): the production update flow. The pure self-clear core
-// (bundle-path resolution + `xattr -dr com.apple.quarantine` on the own bundle) lives
-// in updater/mod.rs; the flow commands (updater_check + updater_apply — the full
-// check→download→install→self-clear→relaunch) in updater/commands.rs. WP2 promoted
-// the durable core here from the WP1 probe and built the production commands around it.
+// M10 (in-app auto-updater): the production update flow. The pure core lives in
+// updater/mod.rs — self-clear (bundle-path resolution + `xattr -dr com.apple.quarantine`
+// on the own bundle) plus WP3's install-source detection (`/Caskroom/` segment →
+// Homebrew, else DirectDownload). The flow commands (updater_check + updater_apply —
+// the full check→download→install→self-clear→relaunch, gated so a Homebrew install
+// defers to `brew upgrade` instead of self-installing) live in updater/commands.rs.
 mod updater;
 
 use std::sync::Mutex;
@@ -451,11 +452,11 @@ pub fn run() {
             // event (the write-gate reads the persisted flag per event).
             time_store::commands::time_get_tracking_enabled,
             time_store::commands::time_set_tracking_enabled,
-            // M10 WP1 (PROBE — throwaway): drive the unsigned-relaunch self-clear
-            // update flow from the installed build. `_check` reports current→available
-            // versions; `_run` executes check→download(minisign-verified)→install→
-            // self-`xattr`-clear→relaunch so the operator can observe whether the
-            // relaunch opens clean past Gatekeeper (GO) or hits "damaged" (FALLBACK).
+            // M10 (in-app auto-updater): the production update flow. `updater_check`
+            // reports current→available versions (short-circuiting to a `brew upgrade`
+            // defer on a Homebrew install — WP3); `updater_apply` executes the full
+            // check→download(minisign-verified)→install→self-`xattr`-clear→relaunch
+            // (refusing on a Homebrew install). See docs/product/wbs.md → M10 WP2/WP3.
             updater::commands::updater_check,
             updater::commands::updater_apply,
         ])
