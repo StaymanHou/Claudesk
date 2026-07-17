@@ -1,0 +1,139 @@
+---
+stage: wbs
+state: complete
+milestone: 10
+updated: 2026-07-17  # M10 WP2 (updater core) SHIPPED — production updater/ module (updater_check/updater_apply + migrated self-clear core), probe scaffolding removed, minimal throwaway trigger; WP1 (probe) agent-work done, live verdict deferred→WP6. Remaining: WP3 (brew gate) ∥ WP4 (UX) ∥ WP5 (/release) → WP6 (exit). Local/uncommitted (batched M10 tree, commit-only-when-asked).
+---
+
+# WBS — Milestone 10: In-app auto-updater
+
+**Scope of this WBS pass:** Milestone 10 only (the immediate next execution milestone). Future milestones (M10.5 QoL bucket, M11 docs-viewer, M12 auto-resume, M13 skill-orch, M14 polish) stay headline-only in `roadmap.md` and are decomposed just-in-time when reached.
+
+**Milestone goal (from roadmap.md):** Claudesk checks for updates and downloads/installs a newer version from inside the app, with the user always in control — **skip a version, disable update notifications, cancel/confirm each install** (no silent/forced updates). Placed after M9 and **before the next release** because it governs how future versions reach users. See `roadmap.md` → "Milestone 10" + "Revision 2026-07-06".
+
+**Primary inputs:** `research.md` (M10 — stack + the 3 hard problems resolved) + `arch.md` → "Milestone 10 architecture" (as-designed mechanisms). `SURFACE-2026-07-06-M10-IN-APP-AUTO-UPDATER`.
+
+## Locked decisions (constraints, not choices — operator, 2026-07-06)
+
+1. **Homebrew → detect-and-defer.** A brew-managed install does NOT self-install — it points the user to `brew upgrade`; only direct-download installs self-update in-app (no brew version desync). WP3 owns the detection mechanism.
+2. **Signing → stay UNSIGNED, no $99 Apple Developer Program.** The updater's free **minisign** keypair verifies artifacts; macOS *notarization* is NOT purchased. Consequence: the unsigned-relaunch Gatekeeper block is handled in-app (WP1 probe → self-clear or instruct-user).
+
+## Design-prior consult (Step 0)
+
+Two recorded priors bear on the M10 UX WP boundaries — both **agree with the common-sense default (rule 2: take, higher confidence)**, neither fires as a tie-break or contradiction:
+- **`operator-helpful-friend-misfiring-as-offswitchable-setting`** → `update_notifications_enabled` is exactly this shape: **default ON** (operator benefit), off-switchable (a friend who dislikes update nags turns it off). Confirms WP4's default-ON design.
+- **`explicit-selectable-mode-over-inferred-mode`** (esp. its **risk-surface-vs-value** decision rule) → keep the M10 UX **low-surface**: plain confirm dialogs + a skip-list + a boolean pref, NOT an elaborate update-preferences panel; and its risk calculus backs **front-loading the WP1 spike** to resolve the high-bug-surface unsigned-relaunch unknown cheaply before the UX commits.
+
+No new design prior surfaced to capture (the WP boundaries are dependency/risk-driven, not a product-design lean).
+
+---
+
+## Work Packages
+
+### WP1: Probe — unsigned-relaunch self-quarantine-clear (the central risk; GATES the rest)
+**Type:** probe
+**Milestone:** 10
+**Dependencies:** none (front-loaded)
+**Size:** M
+**Learning objective:** On a **real unsigned installed `.app`**, does the updater path `createUpdaterArtifacts` build → minisign-verify → `install()` extract/replace → **self-run `xattr -dr com.apple.quarantine <own bundle>`** → `relaunch()` open **clean** (no Gatekeeper "damaged" block)? If not, is the **instruct-the-user** dialog fallback the required UX? Settle the **App-Translocation** caveat (must run from a properly-installed `/Applications` bundle, not a translocated one).
+**Timebox:** 1–1.5 days (includes 2 real builds — a "from" version and a "to" version — and a minisign keypair).
+**Success criterion:** a documented **GO / FALLBACK verdict** in `wbs.md` "Probe outcomes": either (a) **GO** — self-clear-then-relaunch opens clean, seamless UX viable; or (b) **FALLBACK** — self-clear insufficient, M10 ships the instruct-the-user quarantine dialog. Plus: confirmed whether `install()` even permits a pre-relaunch hook (does it relaunch synchronously?), and the App-Translocation behavior for a `/Applications` install.
+**Tasks:**
+- [ ] Generate a minisign keypair (`tauri signer generate`); set the pubkey in `tauri.conf.json` `plugins.updater.pubkey`; store the private key locally (NOT committed).
+- [ ] Enable `bundle.createUpdaterArtifacts: true`; build TWO unsigned versions (e.g. 0.2.5 "from" + a bumped "to"), each producing `.app.tar.gz` + `.sig`; sign + hand-author a `latest.json`.
+- [ ] Install the "from" build to `/Applications` as a real (non-brew, non-translocated) bundle; host `latest.json` + the "to" artifact somewhere the updater can reach (local static server or a scratch GH pre-release).
+- [ ] Drive the full path from the installed "from" app: `check()` → `download()` → `install()` → attempt self-`xattr`-clear on its own bundle → `relaunch()`. Observe: does it relaunch into the "to" version, or hit the Gatekeeper "damaged" block?
+- [ ] Determine WHERE the self-clear must run (before `install()` relaunches vs. a `RunEvent`/pre-relaunch hook) and whether it needs the app to spawn a detached helper. Record the exact working sequence (or the fallback verdict).
+- [ ] Write the GO/FALLBACK verdict + the working mechanism to "Probe outcomes"; note any reshaping of WP2/WP4.
+
+### WP2: Updater core — plugin wiring + check→download→install→relaunch flow ✅ SHIPPED 2026-07-17 (uncommitted — batched on the unpushed M9+M10 tree, HEAD `27743ff`)
+**Description:** Add the updater engine and the minimal working update path (no UX polish, no brew gate yet). `tauri-plugin-updater` v2 + `tauri-plugin-process` deps; `tauri.conf.json` `plugins.updater` block (pubkey from WP1 + the static `latest.json` GH-Releases endpoint); the Rust/JS flow using the **split `download()` then `install()`** (for the cancel boundary) + `relaunch()`; wire minisign verification; fold in WP1's self-clear (or fallback) mechanism at the correct point in the flow.
+**Milestone:** 10
+**Dependencies:** WP1 (the self-clear verdict shapes where/whether the xattr step sits in `install()→relaunch()`)
+**Size:** M
+**As-built:** production `src-tauri/src/updater/` module — `mod.rs` (self-clear pure-core `resolve_bundle_path`/`quarantine_clear_command`/`clear_own_quarantine` + 6 tests, MIGRATED intact from the WP1 probe; `UpdaterError`) + `commands.rs` (`updater_check` → `UpdateCheckResult`; `updater_apply` = full `check → download[minisign] → install → clear_own_quarantine → app.restart()`, self-clear at the WP1-frozen seam AFTER install() returns / BEFORE relaunch, split download/install for WP4's cancel boundary). Minimal THROWAWAY trigger `src/updater/UpdaterTrigger.tsx` (check → bare inline confirm → apply; WP4 replaces with the polished UX). WP1 probe scaffolding (`updater_probe/` + `UpdaterProbePanel`) removed. Deps/config/capabilities were already production-shaped from WP1 (no drift). Live verify-self via MCP bridge: widget renders + `updater_check` IPC round-trip fires (returns expected "no latest.json published yet" error — WP5's job). Destructive download→install→relaunch + Gatekeeper self-clear carried to WP6 (operator-deferred, SURFACE-2026-07-17-M10-WP1-LIVE-VERIFY-DEFERRED). Review-quality: 0 CRIT / 0 MAJOR / 3 MINOR (doc-drift, auto-backlogged).
+**Tasks:**
+- [x] Add `tauri-plugin-updater` + `tauri-plugin-process` to `Cargo.toml` + register in the Tauri builder; add the JS `@tauri-apps/plugin-updater` + `plugin-process`. (already in place from WP1; verified no drift)
+- [x] `tauri.conf.json` `plugins.updater` { pubkey, endpoints: [static latest.json on GH Releases] }; `bundle.createUpdaterArtifacts: true`. (already in place from WP1; verified)
+- [x] Implement the core flow (Rust command(s) + a thin frontend caller): `check()` → returns update-available (version, notes); `download()` (with the progress callback surfaced); `install()`; the WP1 self-clear step; `relaunch()`.
+- [x] Verify minisign rejection: a tampered/wrong-key artifact fails verification (don't install). (re-proven via the WP1 verify-harness: VERIFY_OK real / VERIFY_FAIL tamper / VERIFY_FAIL wrong-sig)
+- [x] Unit/wiring tests where the seam allows (the network + install are live-only → carried to WP6 installed-build verify). (6 self-clear pure-core tests pin the durable core; live flow carried to WP6)
+
+### WP3: Install-source detection — the brew detect-and-defer gate
+**Description:** Detect whether the running bundle is Homebrew-managed and gate self-update accordingly. Resolve the canonical bundle path (`current_exe()` → `.app` → `canonicalize()`); a `/Caskroom/` segment ⇒ **brew-managed ⇒ defer** (surface "installed via Homebrew → run `brew upgrade`", do NOT self-install); a real `/Applications` dir ⇒ **direct-download ⇒ self-update allowed**. Baked-marker fallback if path-resolution proves fragile.
+**Milestone:** 10
+**Dependencies:** WP2 (gates the WP2 flow — a pure decision function feeding the check/notify path; parallelizable with WP4 once WP2 lands)
+**Size:** S
+**Tasks:**
+- [ ] Pure Rust fn `install_source() -> {Homebrew, DirectDownload}` from the canonicalized bundle path (`/Caskroom/` check); unit-test both path shapes.
+- [ ] Wire the gate: brew-managed ⇒ the update flow short-circuits to a "run `brew upgrade`" affordance (no `download()`/`install()`); direct-download ⇒ normal flow.
+- [ ] Verify against the ACTUAL Claudesk cask symlink layout on a real brew install (confirm the resolved path contains Caskroom). Document the App-Translocation interaction (WP1 finding).
+- [ ] (If path-resolution fragile) implement the baked install-source marker fallback + note the `/release` change it implies.
+
+### WP4: User-control UX + persistence (skip / disable-notifications / cancel-confirm)
+**Description:** The user-facing control surface, kept **low-surface** per `[[explicit-selectable-mode-over-inferred-mode]]`. Non-modal update notification; a "Check for updates…" affordance (menu item / settings); skip-this-version; disable-notifications (default ON per `[[operator-helpful-friend-misfiring-as-offswitchable-setting]]`); cancel/confirm dialogs; a download progress bar. Prefs (`skipped_version: Option<String>`, `update_notifications_enabled: bool`) persist in `config_store` **per bundle-identity** (mirror `time_tracking_enabled`/`pip_mode`).
+**Milestone:** 10
+**Dependencies:** WP2 (consumes the flow); parallelizable with WP3. WP1's verdict may add an instruct-user quarantine dialog here.
+**Size:** M
+**Tasks:**
+- [ ] `config_store` prefs: `skipped_version` + `update_notifications_enabled` (default ON), per-identity read/write (mirror the M9 tracking-toggle plumbing).
+- [ ] Check-on-launch gated by the pref + not-in-skip-list → non-modal notify; a manual "Check for updates…" affordance (app-menu item + settings) that always checks (ignores skip).
+- [ ] Confirm dialog → progress bar (from WP2's download callback) → cancel (before `install()`, leaves app untouched) / confirm (proceed to install+relaunch). Skip-this-version persists the tag + suppresses future notifies.
+- [ ] If WP1 = FALLBACK: the instruct-user quarantine dialog (show the exact `xattr` command post-install).
+- [ ] Frontend tests for the pure UX-state logic (skip-list suppression, pref gating, cancel-boundary); live paths carried to WP6.
+
+### WP5: `/release` publishing pipeline — manifest + signature + artifact
+**Description:** Extend the `/release` skill (`.claude/skills/release/SKILL.md`) to publish the updater artifacts. Today it builds + publishes only the `.dmg`; it gains: build the `.app.tar.gz` + `.sig` (via `createUpdaterArtifacts`), generate + minisign-sign `latest.json` (version derived from the existing `tauri.conf.json`/`Cargo.toml` source-of-truth), and upload all (dmg + tar.gz + sig + latest.json) to the GH release. The `.dmg` stays (first-install/Homebrew). Manage the minisign private key as a release secret (documented, not committed).
+**Milestone:** 10
+**Dependencies:** WP1 (needs the keypair + confirmed artifact set) + WP2 (the pubkey/endpoint config must exist so the manifest shape is final). Somewhat independent of WP3/WP4 — release-tooling, can proceed in parallel with the UX WPs once WP1/WP2 land.
+**Size:** S
+**Tasks:**
+- [ ] Add the `createUpdaterArtifacts` build outputs to the `/release` build step; capture the `.app.tar.gz` + `.sig` paths.
+- [ ] Generate + sign `latest.json` (darwin-aarch64: version, url→GH-release asset, signature←.sig contents, notes/pub_date); minisign-sign with the private key (secret).
+- [ ] `gh release create` uploads dmg + tar.gz + sig + latest.json; verify the endpoint URL (`releases/latest/download/latest.json`) resolves.
+- [ ] Document the private-key handling (where stored, how supplied at release) + the "first updatable release is the floor" note in the skill.
+
+### WP6: Milestone-exit verify (real older unsigned installed build)
+**Description:** End-to-end verification of the exit criteria on a REAL older unsigned installed `.app` (Finder-launched, `/Applications`, not translocated) — per the installed-build smoke-test convention (M10 touches lifecycle + external-process + Gatekeeper). Full check→confirm→download→install→relaunch into the newer version; brew-install correctly defers to `brew upgrade`; skip/disable/cancel all behave; the unsigned-relaunch quarantine handled (self-clear or instruct-user per WP1).
+**Milestone:** 10
+**Dependencies:** WP2–WP5 (the capability must be fully built + a real published-shaped release to update from)
+**Size:** S
+**Tasks:**
+- [ ] From an older direct-download install: detect newer → confirm → download (progress) → install → relaunch into the new version, quarantine handled (no silent Gatekeeper failure).
+- [ ] From a brew-cask install: the updater defers (shows `brew upgrade`, does NOT self-install); confirm no brew desync.
+- [ ] Skip-version suppresses re-notify; disable-notifications stops auto-check (manual still works); cancel leaves the app untouched.
+- [ ] Installed-`.app` smoke: GUI-PATH parity, per-identity pref isolation (dev vs prod), no regression to status dots / existing surfaces.
+
+---
+
+## Learning-Sequence Ordering
+
+1. **WP1 (PROBE) — the unsigned-relaunch self-clear.** The riskiest unknown (does an unsigned self-updated bundle even relaunch clean?) resolved FIRST, cheaply, before any UX or release-tooling commits to the seamless-vs-instruct-user shape. Mirrors M9 WP1 (front-load the dominant risk) and the `[[explicit-selectable-mode-over-inferred-mode]]` risk-surface-vs-value rule.
+2. **WP2 (updater core)** — the working synchronous update path over the frozen plugin config, folding in WP1's verdict. The engine before the polish.
+3. **WP3 (brew detect-and-defer) + WP4 (user-control UX)** — parallel tracks over WP2's flow: WP3 is a pure decision-gate; WP4 is the control surface. Neither depends on the other.
+4. **WP5 (`/release` pipeline)** — release-tooling; can start once WP1 (keypair + artifact set) + WP2 (final config shape) land, in parallel with WP3/WP4.
+5. **WP6 (milestone-exit verify)** — end-to-end on a real installed build after everything's built; the exit gate.
+
+**WP1 → WP2 rationale:** prove the unsigned self-updated bundle relaunches clean before building the flow around it — a FALLBACK verdict reshapes WP2's install→relaunch step and adds a WP4 dialog.
+**WP2 → WP3/WP4 rationale:** the core flow must exist before the brew-gate can short-circuit it and before the UX can wrap it; WP3/WP4 are independent of each other → parallel.
+**WP2 → WP5 rationale:** the `plugins.updater` config (pubkey + endpoint) must be final so the published `latest.json` shape matches what the app verifies against.
+
+**No async/orchestration layer** — the updater flow is a synchronous check→download→install→relaunch; §5 (orchestration-after-sync) has no applicable async wrapper to defer. (`download()` is I/O-bound but the plugin owns its own async internally; there's no Claudesk-side queue/worker to sequence.)
+
+## 3rd-Party Integration Note (§4 applied)
+
+`tauri-plugin-updater` + the GitHub Releases update endpoint + minisign are the 3rd-party surfaces. **WP1 is the probe** that de-risks them: it verifies the artifact/manifest/verification shapes AND the macOS-unsigned install behavior on a real build before WP2 builds the dependent flow — the §4 "probe the integration before the dependent WP" discipline. (The `latest.json` manifest shape + minisign flow are already documented in `research.md` from the web pass; WP1 confirms them empirically on Claudesk's actual unsigned build.)
+
+## Dependency Map
+
+```
+WP1 (PROBE: unsigned self-clear verdict) ── gates ──┐
+                                                     ├─→ WP2 (updater core) ──┬─→ WP3 (brew detect-and-defer) ──┐
+                                                     │                        ├─→ WP4 (user-control UX) ────────┤
+                                                     └────────────────────────┴─→ WP5 (/release pipeline) ──────┼─→ WP6 (milestone-exit verify)
+                                                                                                                 ┘
+```
+
+**Critical path:** WP1 → WP2 → (WP3 ∥ WP4 ∥ WP5) → WP6. WP1 is the gate; WP3/WP4/WP5 parallelize after WP2; WP6 is the exit.
+
+**One net-new arch element** (already recorded in `arch.md` → "Milestone 10 architecture"): the update-artifact/manifest/minisign publishing pipeline + install-source detection + self-quarantine-clear mechanism. No new runtime data store; prefs ride the existing `config_store` per-identity pattern.

@@ -4,6 +4,37 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m10-wp2-updater-core — 2026-07-17
+
+*(feature-review-quality on the WP2 working-tree diff [uncommitted, on HEAD `27743ff`]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all doc-drift/cosmetic, auto-backlogged. Reviewer verdict: "well-built engineering-grade work"; the only debt is stale WP1-probe comments that survived the production reframe. All three are one-line fixes, natural fold into any future `/feature-refactor` or the WP3 wiring pass.)*
+
+## SURFACE-2026-07-17-QUALITY-WP2-LIBRS-INVOKE-COMMENT-STALE
+- **Severity:** MINOR
+- **File:** `src-tauri/src/lib.rs` (invoke_handler comment above the two updater entries)
+- **Finding:** The comment above `updater::commands::updater_check`/`updater_apply` in `invoke_handler` still reads "M10 WP1 (PROBE — throwaway)" and references the retired command names `_check`/`_run` + the WP1 GO/FALLBACK operator-observation purpose. WP2's P1.3 reframed the sibling `mod updater;` block and the plugin-registration block to production wording, but this one comment was missed.
+- **Fix shape:** Reframe the comment to production wording (mirror the already-corrected `mod updater;` block: production updater flow, `updater_check`/`updater_apply`). One-line edit.
+- **Why it matters:** a future reader (esp. WP4 doing the trigger cleanup, or WP3 wiring the brew gate in front of `check()`) may believe these are throwaway probe commands and delete/mis-map them.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-17-QUALITY-WP2-CARGO-DEP-COMMENT-STALE
+- **Severity:** MINOR
+- **File:** `src-tauri/Cargo.toml` (lines ~100-108, the `tauri-plugin-updater`/`tauri-plugin-process` dep comment)
+- **Finding:** The dependency comment is entirely WP1-probe framing ("WP1 spike wiring; WP2 rebuilds the production flow folding in WP1's GO/FALLBACK verdict"). WP2 IS that rebuild and has shipped, so the comment describes the deps as spike-only when they are now the production wiring.
+- **Fix shape:** Reframe the dep comment to production wording (these ARE the shipping updater engine). One-block edit.
+- **Why it matters:** same doc-drift class as the lib.rs comment; a maintainer reading Cargo.toml would think the updater is still probe-scaffolding subject to removal.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-07-17-QUALITY-WP2-CURRENT-VERSION-DUAL-PROVENANCE
+- **Severity:** MINOR
+- **File:** `src-tauri/src/updater/commands.rs` (lines ~52-56, `updater_check`)
+- **Finding:** The no-update branch reads the running version from `app.package_info()` while the update-available branch reads it from `update.current_version` — two provenances for the same "current version" field. Not a correctness bug (in the no-update path `update` is `None`, so `package_info` is the only option; both resolve to the bundle version), but the divergence is worth a one-line note or unification for the reader.
+- **Fix shape:** Add a one-line comment explaining the two sources, or hoist the current-version read to a single `let current = app.package_info().version.to_string();` used by both branches. Cosmetic.
+- **Why it matters:** a reader may wonder why `current_version` has two provenances.
+- **Priority:** low.
+- **Status:** pending.
+
 # m9-wp7-deprecate-claude-time — 2026-07-16
 
 *(feature-review-quality on the WP7 working-tree change [DOCS-ONLY resync: arch.md event-set/SQLite/deprecation Key Decisions + new "Milestone 9 architecture" section; CLAUDE.md Current-Milestone refresh; wbs.md pause-footer strip; runtimes.md build-observation]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer cross-checked every material architectural claim against source — all held. MINOR #1 [arch.md hook-schema omitted `source`/`prompt_length_chars`] was FIXED IN PLACE during review-quality [not backlogged], since it was a self-introduced one-line gap in the exact section under review. The 2 below are out-of-scope for WP7 — auto-backlogged.)*

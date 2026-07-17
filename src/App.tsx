@@ -43,6 +43,10 @@ import { openSublime, openSublimeMerge } from "./sublime/sublimeLaunch";
 import { openFinder } from "./finder/finderLaunch";
 import { usePipFanout } from "./pip/usePipFanout";
 import { useMirrorTicker } from "./components/workspace/useMirrorTicker";
+// M10 WP2 (TEMPORARY): minimal corner widget to trigger the update flow
+// (check → confirm → download → install → self-clear → relaunch). WP4 replaces
+// this with the polished non-modal notify / menu-item / skip-list UX.
+import { UpdaterTrigger } from "./updater/UpdaterTrigger";
 
 // M9 WP6a — the GLOBAL time-analytics dashboard is a top-level view, mounted ONCE,
 // overlaying the center stage (the PickerOverlay pattern). LAZY: its chunk (the
@@ -474,6 +478,11 @@ function App() {
           <GlobalDashboard onClose={() => setShowDashboard(false)} />
         </Suspense>
       )}
+      {/* M10 WP2 (TEMPORARY): always-mounted corner trigger for the update flow.
+          Reachable in the RELEASE build (the only tier that reproduces Gatekeeper —
+          WP6 drives the real installed-build end-to-end verify here). WP4 replaces
+          this with the polished user-control UX. */}
+      <UpdaterTrigger />
     </div>
   );
 }

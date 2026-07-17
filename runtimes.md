@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-16  # M9 WP7 build smoke: cargo build 13.6s incremental (docs-only change, no-op recompile)
+updated: 2026-07-17  # M10 WP1 probe Phase 1: tauri build 99s (fresh updater/process plugin compile) + cargo test 0.81s (524 lib, regression check)
 ---
 
 # Runtime Registry
@@ -42,9 +42,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 88s (2026-07-02, /release v0.2.5: COLD build after `cargo clean` removed 6.9GiB — full dep-tree recompile incl. tauri-nspanel + .app + .dmg; rust ~63s + bundle)
+- **Last:** 99s (2026-07-17, M10 WP1 probe "from" build: fresh compile of the two net-new updater/process plugins + full dep tree, ~1m39s rust + bundle triad [.app/.dmg/.app.tar.gz]; the "to" build right after was 20.84s warm-incremental)
 - **Use timeout:** 600000
 - **History:**
+  - 99s — 2026-07-17 (M10 WP1 probe "from" 0.2.5: fresh tauri-plugin-updater+process compile, 1m39s rust + bundle; "to" 0.2.6 warm-incremental 20.84s)
   - 88s — 2026-07-02 (/release v0.2.5 cold build: cargo clean removed 6.9GiB, full recompile ~63s incl. tauri-nspanel + bundle)
   - 91s — 2026-06-30 (/release v0.2.4 cold build: cargo clean removed 7.5GiB, full recompile ~67s incl. tauri-nspanel + bundle)
   - 92s — 2026-06-29 (/release v0.2.3 cold build: cargo clean removed 7.3GiB, full recompile ~67s incl. tauri-nspanel + bundle)
@@ -58,9 +59,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo build (src-tauri)
 
-- **Last:** 13.6s (2026-07-16, M9 WP7 build smoke: docs-only change, incremental no-op recompile of claudesk crate)
-- **Use timeout:** 131000
+- **Last:** 14.1s (2026-07-17, M10 WP2 P1: new production `updater` module wired [updater_check/updater_apply + migrated self-clear core], probe module removed — incremental recompile of claudesk crate)
+- **Use timeout:** 131000  <!-- 14.1s warm; cold (dep re-resolve) has hit 47s → the 131000 floor still covers it -->
 - **History:**
+  - 14.1s — 2026-07-17 (M10 WP2 P1: new production updater module wired, probe module removed — incremental recompile)
   - 13.6s — 2026-07-16 (M9 WP7 build smoke: docs-only change, incremental recompile 13.60s — timeout kept at the 47s-cold sizing)
   - 47s — 2026-06-30 (debt-paydown WP1: dep removal forced re-resolve + relink, 46.76s)
   - 1s — 2026-06-29 (M7 WP1: warm rebuild, tray module + features already compiled)
@@ -70,9 +72,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 2s (2026-07-15, M9 WP6c-2 P2 verify-codify: +21 compareMath pins + 2 Compare-enabled test updates → 101 files / 1120 pass)
+- **Last:** 2.21s (2026-07-17, M10 WP2 P2 verify-auto regression: probe UI removed + throwaway UpdaterTrigger added [no dedicated test] → 101 files / 1120 pass, unchanged)
 - **Use timeout:** 120000
 - **History:**
+  - 2.43s — 2026-07-17 (M10 WP1 P2 verify-codify regression; 101 files / 1120 pass, no new FE tests)
   - 2s — 2026-07-15 (M9 WP6c-2 P2 verify-codify: +21 compareMath pins + 2 Compare-enabled updates → 101 files / 1120 pass)
   - 1.68s — 2026-07-15 (M9 WP6b-4 re-spec P2 verify-codify: +1 Minimap-alignment pin → 99 files / 1083 pass)
   - 1.67s — 2026-07-15 (M9 WP6b-4 re-spec P2: +3 dashboardWiring pins → 99 files / 1082 pass)
@@ -127,9 +130,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 1s (2026-07-15, M9 WP6c-2 P1 verify-auto: +11 WP6c-2 tests [Compare producer + preset day-math + no-`deltas` serde shape + wire deserialize], 523 lib pass; warm)
+- **Last:** 0.76s (2026-07-17, M10 WP1 probe Phase 2 verify-codify: +6 updater_probe unit tests [bundle-path resolve + xattr-command shape + no-sudo], 530 lib pass; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.76s — 2026-07-17 (M10 WP1 P2 verify-codify; warm, 530 lib pass, +6 updater_probe tests)
+  - 0.81s — 2026-07-17 (M10 WP1 P1 verify-codify regression; warm, 524 lib pass, no new tests)
   - 1s — 2026-07-15 (M9 WP6c-2 P1; warm, 523 lib pass)
   - 3.74s — 2026-07-14 (M9 WP6b-3 P1; cold-ish first compile)
   - 0.72s — 2026-07-08 (M9 WP5 P1; warm)
