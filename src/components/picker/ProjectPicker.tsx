@@ -76,10 +76,10 @@ interface ProjectPickerProps {
   // analytics entry point that toggles the same single <GlobalDashboard> App.tsx owns.
   onOpenDashboard?: () => void;
   // M10 WP4 — manual "Check for updates" from the picker. App owns the `useUpdater` hook,
-  // so the picker calls up; App's checkNow ignores skip/disable, shows the banner for an
-  // available update, and returns a `{ outcome }` report the picker toasts (up-to-date /
-  // brew-defer have no banner). null = the check errored (e.g. offline). Optional (the
-  // dev-seam picker may not pass it).
+  // so the picker just KICKS the check; App's checkNow ignores skip/disable, shows the
+  // banner for an available update, and surfaces up-to-date / brew-defer / error via the
+  // single App-level updater status row (WP6 P1.4 — the picker no longer toasts these; the
+  // return value is unused now). Optional (the dev-seam picker may not pass it).
   onCheckForUpdates?: () => Promise<{ outcome: string } | null>;
 }
 
@@ -281,22 +281,13 @@ export function ProjectPicker({
 
   function handleCheckForUpdates() {
     if (!onCheckForUpdates) return;
-    void onCheckForUpdates().then((report) => {
-      // An available update surfaces via App's banner (no toast needed). Up-to-date /
-      // brew-defer have no banner, so the picker gives explicit feedback. A null report
-      // means the check errored (offline / endpoint unreachable).
-      if (report === null) {
-        setToast({ kind: "error", message: "Could not check for updates." });
-      } else if (report.outcome === "up-to-date") {
-        setToast({ kind: "info", message: "Claudesk is up to date." });
-      } else if (report.outcome === "brew-defer") {
-        setToast({
-          kind: "info",
-          message: "Installed via Homebrew — run `brew upgrade claudesk` to update.",
-        });
-      }
-      // outcome === "update-available" → App's banner shows it; no picker toast.
-    });
+    // WP6 P1.4: manual-check feedback (up-to-date / brew-defer / error) is now surfaced by
+    // the SINGLE App-level updater status row (useUpdater.statusNote), which renders over
+    // BOTH the picker and workspace scenes — so the picker no longer toasts these itself
+    // (that was a duplicate surface, and the native-menu path had no equivalent). The
+    // update-available case still shows App's banner. We only need to KICK the check here;
+    // useUpdater owns all feedback. Kept as `void` — the returned report is unused now.
+    void onCheckForUpdates();
   }
 
   async function handleOpenRecent(projectPath: string) {

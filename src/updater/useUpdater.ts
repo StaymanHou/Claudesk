@@ -27,7 +27,10 @@ import { shouldAutoNotify, manualCheckOutcome } from "./updateNotifyState";
 import {
   progressPercent,
   QUARANTINE_FALLBACK_ACTIVE,
+  statusNoteForOutcome,
+  statusNoteForCheckError,
   type UpdateFlowPhase,
+  type UpdaterStatusNote,
 } from "./updateFlowState";
 
 /** What a manual "Check for Updates…" produced, for the caller to surface (Phase 5). */
@@ -36,6 +39,9 @@ export interface ManualCheckReport {
   result: UpdateCheckResult;
 }
 
+// UpdaterStatusNote lives in updateFlowState.ts (the pure flow model) — imported above so
+// the outcome→note mapping is unit-tested there, not duplicated here.
+
 export interface UseUpdater {
   /** The check result currently offered by the banner, or null when nothing is shown. */
   banner: UpdateCheckResult | null;
@@ -43,8 +49,14 @@ export interface UseUpdater {
   phase: UpdateFlowPhase;
   /** Latest download progress percent (0–100) while applying, or null (indeterminate). */
   applyingPercent: number | null;
-  /** An error message when phase === "error" (apply failed, no relaunch). */
+  /** An error message when phase === "error" (apply failed, no relaunch). Consumed by the
+   *  App-level error affordance (WP6 P1.1) — an apply failure MUST surface, not silently
+   *  revert the banner. */
   errorMessage: string | null;
+  /** A transient info/error note for the App-level status row (WP6 P1.4) — e.g. the
+   *  native-menu manual-check "up to date" / "Homebrew — brew upgrade" outcome that
+   *  previously had no App-side surface. `null` = no note. */
+  statusNote: UpdaterStatusNote | null;
   /** WP1-fallback: the bundle path to show in the quarantine dialog, or null when the
    *  fallback isn't active/triggered. (Default GO path leaves this null.) */
   fallbackBundlePath: string | null;
@@ -57,10 +69,16 @@ export interface UseUpdater {
   skipVersion: () => void;
   /** Banner action: transient dismiss (re-notifies next launch). */
   dismissBanner: () => void;
+  /** Error-affordance action: clear the error surface, back to idle (WP6 P1.2). */
+  dismissError: () => void;
+  /** Status-note action: clear the transient status note (WP6 P1.4). */
+  dismissStatusNote: () => void;
   /** Dismiss the WP1-fallback quarantine dialog. */
   dismissFallback: () => void;
   /** Manual check (menu item / picker button) — ignores skip + disable; returns the
-   *  classified outcome for the caller to surface, and shows the banner if applicable. */
+   *  classified outcome for the caller to surface, and shows the banner if applicable.
+   *  ALSO sets `statusNote` for the up-to-date outcome so the native-menu path (which
+   *  discards the returned report) still gives feedback (WP6 P1.4). */
   checkNow: () => Promise<ManualCheckReport | null>;
 }
 
@@ -69,6 +87,7 @@ export function useUpdater(): UseUpdater {
   const [phase, setPhase] = useState<UpdateFlowPhase>("idle");
   const [applyingPercent, setApplyingPercent] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [statusNote, setStatusNote] = useState<UpdaterStatusNote | null>(null);
   const [fallbackBundlePath, setFallbackBundlePath] = useState<string | null>(null);
 
   // Check-on-launch: gated by the notifications pref + skip-list (frontend filter). Runs
@@ -131,10 +150,16 @@ export function useUpdater(): UseUpdater {
         // so the success path never returns here. Any resolution/rejection = a failure
         // stage (no update / download+verify / install / self-clear).
         const msg = await applyUpdate();
-        // If we got here without relaunch AND the WP1 fallback is active, the self-clear
-        // path is the suspected culprit → show the instruct-user quarantine dialog.
+        // Single-post-install-surface invariant (WP6 P1.3, reconciles
+        // SURFACE-2026-07-17-QUALITY-WP4-FALLBACK-VS-ERROR-RACE): the fallback quarantine
+        // dialog and the error affordance must NOT both fire on this same resolution. When
+        // the WP1 fallback is active the self-clear is the suspected culprit → the
+        // instruct-user quarantine dialog is the SOLE surface; return before setting the
+        // error phase. Default GO path (const false) falls through to the error surface.
         if (QUARANTINE_FALLBACK_ACTIVE) {
           setFallbackBundlePath("/Applications/Claudesk.app");
+          setPhase("idle"); // leave the fallback dialog as the only post-install surface
+          return;
         }
         setErrorMessage(`Update did not relaunch: ${msg}`);
         setPhase("error");
@@ -157,18 +182,37 @@ export function useUpdater(): UseUpdater {
     setPhase("idle");
   }, []);
 
+  const dismissError = useCallback(() => {
+    // Clear the error affordance → back to idle (WP6 P1.2). The banner already reverted
+    // to null in most failure paths; this returns the flow to a clean resting state.
+    setErrorMessage(null);
+    setPhase("idle");
+  }, []);
+
+  const dismissStatusNote = useCallback(() => setStatusNote(null), []);
+
   const dismissFallback = useCallback(() => setFallbackBundlePath(null), []);
 
   const checkNow = useCallback(async (): Promise<ManualCheckReport | null> => {
     // Manual check: IGNORE skip + disable (the user explicitly asked). Surface the truth.
+    setStatusNote(null); // clear any prior note before the new check
     try {
       const result = await checkForUpdate();
       const outcome = manualCheckOutcome(result);
-      // Show the banner for an available direct-download update (the same UX as
-      // auto-notify, but here it fires even for a skipped version — manual re-offers it).
+      // Show the banner for an available update — direct-download OR brew (reshaped M10
+      // WP6: brew now checks for real; the banner's isBrew branch shows the copy-to-
+      // clipboard `brew upgrade` affordance instead of an Update button). Fires even for a
+      // skipped version — a manual check re-offers it. For up-to-date, set the SINGLE
+      // App-level status note (WP6 P1.4) so the native-menu path — which discards the
+      // returned report (App.tsx has no toast like the picker) — still gives feedback. The
+      // picker is KICKS-only, so this is the sole surface for both. update-available → null.
       if (outcome === "update-available") setBanner(result);
+      setStatusNote(statusNoteForOutcome(outcome));
       return { outcome, result };
     } catch {
+      // A manual check failure now surfaces at the App level (was silent from the menu
+      // path; the picker previously toasted it — the App status row now owns it).
+      setStatusNote(statusNoteForCheckError());
       return null;
     }
   }, []);
@@ -178,12 +222,15 @@ export function useUpdater(): UseUpdater {
     phase,
     applyingPercent,
     errorMessage,
+    statusNote,
     fallbackBundlePath,
     requestUpdate,
     confirmUpdate,
     cancelUpdate,
     skipVersion,
     dismissBanner,
+    dismissError,
+    dismissStatusNote,
     dismissFallback,
     checkNow,
   };

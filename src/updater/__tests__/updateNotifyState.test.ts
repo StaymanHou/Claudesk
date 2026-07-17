@@ -53,12 +53,36 @@ describe("shouldAutoNotify — the auto-check-on-launch gate", () => {
     expect(shouldAutoNotify(result({ available_version: null }), prefs())).toBe(false);
   });
 
-  it("does NOT notify for a Homebrew install (defer to brew upgrade), even if a version leaked through", () => {
-    // Belt-and-suspenders: the backend returns no available_version for brew, but if a
-    // future change leaked one, the homebrew branch must still suppress the self-notify.
+  it("DOES notify for a Homebrew install with a newer version (reshaped M10 WP6 — symmetric with direct)", () => {
+    // Reshaped M10 WP6: brew is no longer suppressed here — a brew user gets the same
+    // auto-notify as direct-download when a newer version exists (the banner then shows a
+    // copy-to-clipboard `brew upgrade` affordance instead of an Update button). The gate is
+    // now install-source-agnostic: {enabled, newer, not-skipped} alone.
     expect(
       shouldAutoNotify(
         result({ install_source: "homebrew", available_version: "0.2.6" }),
+        prefs(),
+      ),
+    ).toBe(true);
+  });
+
+  it("still suppresses a Homebrew install when disabled / skipped / up-to-date (source-agnostic gate)", () => {
+    // The reshape only dropped the source check — the other suppressors still apply to brew.
+    expect(
+      shouldAutoNotify(
+        result({ install_source: "homebrew", available_version: "0.2.6" }),
+        prefs({ notificationsEnabled: false }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldAutoNotify(
+        result({ install_source: "homebrew", available_version: "0.2.6" }),
+        prefs({ skippedVersion: "0.2.6" }),
+      ),
+    ).toBe(false);
+    expect(
+      shouldAutoNotify(
+        result({ install_source: "homebrew", available_version: null }),
         prefs(),
       ),
     ).toBe(false);
@@ -90,17 +114,16 @@ describe("manualCheckOutcome — a manual check ignores skip + disable, reports 
     expect(manualCheckOutcome(result({ available_version: null }))).toBe("up-to-date");
   });
 
-  it("classifies a Homebrew install as brew-defer", () => {
+  it("classifies a Homebrew install by version, same as direct-download (reshaped M10 WP6)", () => {
+    // Reshaped M10 WP6: the `brew-defer` outcome is retired. A brew install classifies by
+    // available_version exactly like direct-download — brew+available → update-available,
+    // brew+none → up-to-date. The brew-ness rides result.install_source (the banner branches
+    // on it for the copy affordance), NOT a separate outcome.
+    expect(
+      manualCheckOutcome(result({ install_source: "homebrew", available_version: "0.2.6" })),
+    ).toBe("update-available");
     expect(
       manualCheckOutcome(result({ install_source: "homebrew", available_version: null })),
-    ).toBe("brew-defer");
-  });
-
-  it("brew-defer wins even if an available version is present (brew never self-installs)", () => {
-    expect(
-      manualCheckOutcome(
-        result({ install_source: "homebrew", available_version: "0.2.6" }),
-      ),
-    ).toBe("brew-defer");
+    ).toBe("up-to-date");
   });
 });

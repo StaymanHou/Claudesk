@@ -4,6 +4,8 @@ import {
   progressPercent,
   quarantineFallbackSpec,
   QUARANTINE_FALLBACK_ACTIVE,
+  statusNoteForOutcome,
+  statusNoteForCheckError,
 } from "../updateFlowState";
 import type { DownloadProgress } from "../updaterPrefs";
 
@@ -63,5 +65,31 @@ describe("QUARANTINE_FALLBACK_ACTIVE — the WP1 seam default", () => {
     // Operator Q4 decision: build the fallback seam now, default OFF. WP6 flips this
     // one const to true if the live Gatekeeper verdict requires the instruct-user path.
     expect(QUARANTINE_FALLBACK_ACTIVE).toBe(false);
+  });
+});
+
+// WP6 P1.4 — the manual-check outcome → App-level status note mapping. This is the
+// feedback the native-menu "Check for Updates…" path had no surface for (App.tsx has no
+// toast like the picker: SURFACE-2026-07-17-QUALITY-WP4-MENU-CHECK-DISCARDS-OUTCOME).
+describe("statusNoteForOutcome — manual-check outcome → App status note", () => {
+  it("returns null for update-available (the banner surfaces it — no duplicate note)", () => {
+    expect(statusNoteForOutcome("update-available")).toBeNull();
+  });
+
+  it("returns an info 'up to date' note for up-to-date", () => {
+    const note = statusNoteForOutcome("up-to-date");
+    expect(note).toEqual({ kind: "info", message: "Claudesk is up to date." });
+  });
+
+  // Reshaped M10 WP6: the `brew-defer` outcome is retired (brew now classifies as
+  // update-available / up-to-date like direct-download; the brew-specific `brew upgrade`
+  // affordance moved into the banner's isBrew branch). statusNoteForOutcome only handles
+  // the two remaining outcomes — a brew "update available" shows the banner (null note),
+  // a brew "up to date" is just the shared up-to-date note.
+
+  it("statusNoteForCheckError returns an error-kind 'could not check' note", () => {
+    const note = statusNoteForCheckError();
+    expect(note.kind).toBe("error");
+    expect(note.message).toContain("Could not check for updates");
   });
 });

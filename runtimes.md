@@ -17,9 +17,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm vite build
 
-- **Last:** 1.19s (2026-07-15, WP6c-1 P2: Metrics tab + HeadlineCard/MetricsPanel — built clean, MetricsView folded into the lazy GlobalDashboard chunk)
+- **Last:** 1.23s (2026-07-17, M10 WP6 P1: error-surface fold — UpdaterStatusRow + useUpdater statusNote/dismissError; built clean)
 - **Use timeout:** 180000
 - **History:**
+  - 1.23s — 2026-07-17 (M10 WP6 P1)
   - 1.19s — 2026-07-15 (WP6c-1 P2)
   - 1.96s — 2026-07-06 (mirror-fill-from-bottom)
   - 1.10s — 2026-06-28 (WP6 P3)
@@ -72,7 +73,7 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.78s (2026-07-17, M10 WP4 P5 build: +9 tests [menuBridge CHECK_FOR_UPDATES case + 8 pickerUpdateNotificationsWiring guards] → 106 files / 1154 pass; vite build 1.11s)
+- **Last:** 1.99s (2026-07-17, M10 WP6 P2 brew real-check-and-notify: +6 net [copyToClipboard ×4 + banner copy guards + reshaped brew tests] → 106 files / 1170 pass)
 - **Use timeout:** 120000
 - **History:**
   - 1.78s — 2026-07-17 (M10 WP4 P5 build: +9 menu/picker-updates tests → 106 files / 1154 pass)
@@ -135,7 +136,7 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.92s (2026-07-17, M10 WP4 P2 build: +2 tests [download-progress event-name-stable + payload snake_case serde shape], 547 lib + 6 integ pass; warm)
+- **Last:** 0.67s (2026-07-17, M10 WP6 P2 codify: brew real-check reshape — 548 lib pass [+1 updater test net], warm)
 - **Use timeout:** 120000
 - **History:**
   - 0.92s — 2026-07-17 (M10 WP4 P2 build: +2 download-progress tests, 547 lib + 6 integ pass; warm)

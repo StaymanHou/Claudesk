@@ -1767,6 +1767,16 @@ body,
   border-radius: 3px;
   font-size: 0.78rem;
 }
+/* Error variant (WP6 P1.1) — an apply-failure or a manual-check error note. Amber-red
+   accent over the same in-flow row; distinct from the neutral notify/info banner. */
+.update-banner-error {
+  background-color: #3a2323;
+  border-bottom-color: #6b3a3a;
+  color: #f0c9c9;
+}
+.update-banner-error .update-banner-icon {
+  color: #ff8a8a;
+}
 .update-banner-actions {
   display: flex;
   gap: 0.4rem;
@@ -1791,6 +1801,20 @@ body,
 }
 .update-banner-btn-primary:hover {
   background-color: #35588c;
+}
+/* Homebrew copy-command button (WP6 Phase 2): a monospace command + a copy glyph; flips
+   to "Copied!" on click via data-copied. The inline <code> inherits readable-on-primary. */
+.update-banner-btn-copy code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.76rem;
+}
+.update-banner-btn-copy[data-copied="true"] {
+  border-color: #4ec98a;
+  background-color: #245c3f;
+  color: #dfffef;
 }
 /* Progress bar (replaces the action buttons while a download is applying). */
 .update-banner-progress {

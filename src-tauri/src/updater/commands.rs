@@ -15,12 +15,23 @@
 //! the minisign signature internally, so a tampered/wrong-key artifact fails there,
 //! before any install (the cancel-safe boundary).
 //!
-//! ## WP3 — brew detect-and-defer gate
-//! Both commands first classify the install source ([`super::install_source`]). A
-//! Homebrew-cask install must NOT self-install (it would desync brew's version
-//! bookkeeping) — so `updater_check` short-circuits BEFORE any network `check()` and
-//! reports a "run `brew upgrade`" defer status, and `updater_apply` refuses before any
-//! download/install. Only a `DirectDownload` install runs the normal flow.
+//! ## WP3 — brew detect-and-defer gate (reshaped M10 WP6: check for real, defer the ACTION)
+//! Both commands classify the install source ([`super::install_source`]). A Homebrew-cask
+//! install must NOT self-**install** (it would desync brew's version bookkeeping) — but it
+//! SHOULD still **check** for real, so brew users get the same "an update is available"
+//! notification as direct-download, with the ACTION deferred to `brew upgrade`:
+//! - `updater_check` runs the SAME real network `check()` for Homebrew as for direct
+//!   download, returning `available_version` when a newer version exists (with
+//!   `install_source:"homebrew"` so the UI swaps the in-app Update button for a
+//!   copy-to-clipboard `brew upgrade claudesk` instruction). Only CHECKING is harmless;
+//!   only self-INSTALLING causes the desync.
+//! - `updater_apply` still refuses for Homebrew (belt-and-suspenders — the brew UI never
+//!   offers an in-app Update button, and no caller may drive a self-install into a
+//!   brew-managed bundle).
+//!
+//! Earlier WP3 behavior short-circuited `updater_check` BEFORE the network call, telling
+//! brew users "run brew upgrade" even when up to date — reshaped at M10 WP6 Phase 2
+//! (SURFACE-2026-07-17-M10-WP3-BREW-REALCHECK-RESHAPE).
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -66,13 +77,15 @@ fn install_source_str(src: InstallSource) -> &'static str {
 pub struct UpdateCheckResult {
     /// The running app's version (from the bundle).
     pub current_version: String,
-    /// `Some(v)` when the manifest advertises a (newer) version; `None` when up to date
-    /// OR when the install is Homebrew-managed (self-update deferred to `brew upgrade`).
+    /// `Some(v)` when the manifest advertises a newer version; `None` when up to date.
+    /// (Independent of install source now — brew installs also report the available
+    /// version so they get the same notification; only the ACTION defers to brew.)
     pub available_version: Option<String>,
     /// Human-readable status line for the UI.
     pub status: String,
-    /// Where this build was installed from: `"homebrew"` (defer to `brew upgrade`) or
-    /// `"direct-download"` (in-app self-update allowed). WP4's UX branches on this.
+    /// Where this build was installed from: `"homebrew"` (in-app self-install disabled →
+    /// the UI shows a copy-to-clipboard `brew upgrade` instruction) or `"direct-download"`
+    /// (in-app self-update allowed). The UX branches on this; both CHECK for real.
     pub install_source: String,
 }
 
@@ -85,18 +98,12 @@ pub struct UpdateCheckResult {
 pub async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, String> {
     let current = app.package_info().version.to_string();
 
-    // WP3: brew detect-and-defer — a Homebrew install never self-updates. Short-circuit
-    // BEFORE the network check(): report the defer status, no available version.
-    if super::install_source() == InstallSource::Homebrew {
-        return Ok(UpdateCheckResult {
-            current_version: current,
-            available_version: None,
-            status: BREW_DEFER_MSG.to_string(),
-            install_source: install_source_str(InstallSource::Homebrew).to_string(),
-        });
-    }
-
-    let direct = install_source_str(InstallSource::DirectDownload).to_string();
+    // WP3 (reshaped M10 WP6): brew installs CHECK for real (same as direct-download) — only
+    // the ACTION differs. Classify the source, run the SAME network check() for both, and
+    // report install_source so the UI branches on it (brew → copy-to-clipboard `brew
+    // upgrade` instruction; direct → in-app Update button). Only self-INSTALLING desyncs
+    // brew's bookkeeping; CHECKING is harmless and gives brew users the same notification.
+    let source = install_source_str(super::install_source()).to_string();
     let updater = app.updater().map_err(|e| format!("updater init: {e}"))?;
     match updater.check().await.map_err(|e| format!("check: {e}"))? {
         Some(update) => Ok(UpdateCheckResult {
@@ -106,7 +113,7 @@ pub async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, String> 
                 "Update available: {} → {}",
                 update.current_version, update.version
             ),
-            install_source: direct,
+            install_source: source,
         }),
         None => {
             // No Update returned — running version already read from package info above.
@@ -114,7 +121,7 @@ pub async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, String> 
                 current_version: current.clone(),
                 available_version: None,
                 status: format!("Up to date (running {current})"),
-                install_source: direct,
+                install_source: source,
             })
         }
     }
@@ -330,19 +337,40 @@ mod tests {
     }
 
     #[test]
-    fn homebrew_source_short_circuits_to_defer_with_no_available_version() {
-        // Reconstruct the exact response updater_check builds for a Homebrew install
-        // (the command needs an AppHandle for the network path, but the brew branch is
-        // pure — this pins its shape: no available version, brew defer status/source).
-        let src = InstallSource::Homebrew;
+    fn homebrew_check_carries_the_real_available_version_no_short_circuit() {
+        // RESHAPED (M10 WP6 Phase 2): updater_check no longer short-circuits for Homebrew.
+        // It runs the SAME real check() as direct-download and reports install_source
+        // "homebrew" ALONGSIDE the real available_version — so a brew user gets the same
+        // "an update is available" notification (only the ACTION defers to brew upgrade).
+        // The command needs an AppHandle for the live network path (the documented
+        // structural limitation), so we pin the SHAPE the reshaped update-available arm
+        // now produces for a Homebrew source: install_source "homebrew" + Some(version)
+        // + an "Update available" status (NOT the old always-defer/no-version shape).
         let result = UpdateCheckResult {
             current_version: "0.2.5".to_string(),
-            available_version: None,
-            status: BREW_DEFER_MSG.to_string(),
-            install_source: install_source_str(src).to_string(),
+            available_version: Some("0.2.6".to_string()),
+            status: "Update available: 0.2.5 → 0.2.6".to_string(),
+            install_source: install_source_str(InstallSource::Homebrew).to_string(),
         };
         assert_eq!(result.install_source, "homebrew");
-        assert!(result.available_version.is_none());
-        assert!(result.status.contains("brew upgrade"));
+        assert_eq!(
+            result.available_version.as_deref(),
+            Some("0.2.6"),
+            "a Homebrew install must now surface the real available version (no short-circuit)"
+        );
+        assert!(result.status.contains("Update available"));
+    }
+
+    #[test]
+    fn apply_still_refuses_homebrew() {
+        // The check reshape does NOT change updater_apply: brew must STILL refuse to
+        // self-install (that is what would desync brew's bookkeeping — only self-install,
+        // not check). The refusal derives from BREW_DEFER_MSG. (The command needs an
+        // AppHandle for the full path; the refusal branch is a pure source-classification
+        // guard — pinned here via the message it returns.)
+        assert!(
+            BREW_DEFER_MSG.contains("brew upgrade"),
+            "apply's Homebrew refusal must still point the user to `brew upgrade`"
+        );
     }
 }

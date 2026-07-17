@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 // banner/flow DOM behavior is verify-self-covered via the MCP bridge, not re-asserted
 // here — the project has no jsdom/testing-library, so component DOM is driven live).
 import appTsx from "../../App.tsx?raw";
+import useUpdaterSrc from "../useUpdater.ts?raw";
+import bannerSrc from "../UpdateNotifyBanner.tsx?raw";
 // App.css is read via fs (Vite's CSS plugin intercepts `?raw` on .css and doesn't return
 // the plain file text, so we read the source file directly for the layout-invariant guard).
 const appCss = readFileSync(
@@ -53,5 +55,87 @@ describe("App.tsx updater wiring (M10 WP4 Phase 4)", () => {
     const block = appCss.slice(start, appCss.indexOf("}", start));
     expect(block).not.toContain("position: absolute");
     expect(block).toContain("flex: 0 0 auto"); // the in-flow row declaration
+  });
+});
+
+// WP6 P1.1 — the error surface (SURFACE-2026-07-17-QUALITY-WP4-ERROR-STATE-UNCONSUMED):
+// useUpdater produced phase==="error" + errorMessage that App.tsx consumed NOWHERE, so a
+// failed apply silently reverted the banner. The UpdaterStatusRow now consumes both.
+describe("App.tsx error-surface wiring (WP6 P1.1)", () => {
+  it("mounts UpdaterStatusRow and feeds it the error phase + message", () => {
+    expect(appTsx).toContain("UpdaterStatusRow");
+    expect(appTsx).toContain('updater.phase === "error"');
+    expect(appTsx).toContain("updater.errorMessage");
+    expect(appTsx).toContain("updater.dismissError");
+  });
+
+  it("feeds the manual-check status note + dismiss to the status row (WP6 P1.4)", () => {
+    expect(appTsx).toContain("updater.statusNote");
+    expect(appTsx).toContain("updater.dismissStatusNote");
+  });
+
+  it("renders the status row BEFORE the app-shell-scene (in-flow, misclick-safe like the banner)", () => {
+    const rowIdx = appTsx.indexOf("<UpdaterStatusRow");
+    const sceneIdx = appTsx.indexOf('data-testid="app-shell-scene"');
+    expect(rowIdx).toBeGreaterThan(-1);
+    expect(rowIdx).toBeLessThan(sceneIdx);
+  });
+
+  it(".update-banner-error variant exists in the CSS", () => {
+    expect(appCss).toContain(".update-banner-error");
+  });
+});
+
+// WP6 P1.3 — the single-post-install-surface invariant
+// (SURFACE-2026-07-17-QUALITY-WP4-FALLBACK-VS-ERROR-RACE): when QUARANTINE_FALLBACK_ACTIVE
+// the quarantine dialog is the SOLE surface — confirmUpdate must NOT also set phase="error"
+// on that path (it returns early). Guarded structurally on the hook source.
+describe("useUpdater fallback-vs-error reconciliation (WP6 P1.3)", () => {
+  it("returns early on the QUARANTINE_FALLBACK_ACTIVE branch (no double post-install surface)", () => {
+    // Isolate the confirmUpdate fallback branch and assert the early-return precedes any
+    // setPhase("error") that follows it in the same try block.
+    const branchIdx = useUpdaterSrc.indexOf("if (QUARANTINE_FALLBACK_ACTIVE)");
+    expect(branchIdx).toBeGreaterThan(-1);
+    const afterBranch = useUpdaterSrc.slice(branchIdx);
+    // The fallback branch sets the dialog path then returns BEFORE the error-phase set.
+    const returnIdx = afterBranch.indexOf("return;");
+    const errorPhaseIdx = afterBranch.indexOf('setPhase("error")');
+    expect(returnIdx).toBeGreaterThan(-1);
+    expect(errorPhaseIdx).toBeGreaterThan(-1);
+    expect(returnIdx).toBeLessThan(errorPhaseIdx); // return happens first → no double surface
+  });
+
+  it("the menu-check path routes its outcome to a status note (WP6 P1.4, no longer discarded)", () => {
+    expect(useUpdaterSrc).toContain("statusNoteForOutcome");
+    expect(useUpdaterSrc).toContain("statusNoteForCheckError");
+  });
+});
+
+// WP6 Phase 2 — the banner's Homebrew branch: same "available" text as direct-download,
+// but the in-app Update button is replaced by a one-click-to-copy `brew upgrade claudesk`
+// button (flashes "Copied!"), and there is NO in-app Update button for brew. Source-text
+// guards (no jsdom for components; live behavior is bridge-verified).
+describe("UpdateNotifyBanner Homebrew copy-to-clipboard branch (WP6 Phase 2)", () => {
+  it("renders a copy button wired to the clipboard helper (not a plain note)", () => {
+    expect(bannerSrc).toContain("copyToClipboard");
+    expect(bannerSrc).toContain("BREW_UPGRADE_CMD");
+    expect(bannerSrc).toContain('data-testid="update-banner-brew-copy"');
+  });
+
+  it("shows a Copied! affordance and toggles data-copied", () => {
+    expect(bannerSrc).toContain("Copied!");
+    expect(bannerSrc).toContain('data-copied');
+  });
+
+  it("does NOT offer an in-app Update button on the brew branch (brew never self-installs)", () => {
+    // The Update button (data-testid update-banner-update) must live ONLY in the
+    // direct-download branch. Assert the brew branch's copy button precedes it and that
+    // the brew branch itself carries no update-banner-update testid.
+    const brewIdx = bannerSrc.indexOf('data-testid="update-banner-brew-copy"');
+    const directUpdateIdx = bannerSrc.indexOf('data-testid="update-banner-update"');
+    expect(brewIdx).toBeGreaterThan(-1);
+    expect(directUpdateIdx).toBeGreaterThan(-1);
+    // brew branch (isBrew ? ...) is authored before the direct-download branch (: ...)
+    expect(brewIdx).toBeLessThan(directUpdateIdx);
   });
 });

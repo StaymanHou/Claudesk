@@ -48,6 +48,7 @@ import { useMirrorTicker } from "./components/workspace/useMirrorTicker";
 // dialog. Replaces WP2's throwaway corner UpdaterTrigger (now deleted). Mounted ONCE at
 // App level so the banner reads over BOTH the picker and an open-workspace scene.
 import { useUpdater } from "./updater/useUpdater";
+import { UpdaterStatusRow } from "./updater/UpdaterStatusRow";
 import { UpdateNotifyBanner } from "./updater/UpdateNotifyBanner";
 import {
   updateConfirmSpec,
@@ -461,6 +462,19 @@ function App() {
           onDismiss={updater.dismissBanner}
         />
       )}
+      {/* M10 WP6 P1.1/P1.4 — the updater STATUS row: surfaces an apply FAILURE
+          (phase==="error" + errorMessage — the WP4 MAJOR gap, previously unconsumed so a
+          failed update silently reverted the banner) and the manual-check NOTE
+          (up-to-date / brew-defer / check-failed — the native-menu path had no App-side
+          surface). Same in-flow, misclick-safe app-shell row as the notify banner above;
+          renders null (zero height) when there's nothing to show. Error > note precedence. */}
+      <UpdaterStatusRow
+        isError={updater.phase === "error"}
+        errorMessage={updater.errorMessage}
+        note={updater.statusNote}
+        onDismissError={updater.dismissError}
+        onDismissNote={updater.dismissStatusNote}
+      />
       <div className="app-shell-scene" data-testid="app-shell-scene">
         {view === "picker" ? (
         <ProjectPicker

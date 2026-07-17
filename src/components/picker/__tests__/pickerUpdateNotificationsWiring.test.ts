@@ -41,11 +41,17 @@ describe("picker manual 'Check for updates' button wires to App's checkNow", () 
     expect(pickerSrc).toContain("onCheckForUpdates &&");
   });
 
-  it("toasts the up-to-date and brew-defer outcomes (available surfaces via App's banner)", () => {
-    expect(pickerSrc).toContain("Claudesk is up to date.");
-    expect(pickerSrc).toContain("brew upgrade claudesk");
-    expect(pickerSrc).toContain('report.outcome === "up-to-date"');
-    expect(pickerSrc).toContain('report.outcome === "brew-defer"');
+  // WP6 P1.4: manual-check feedback (up-to-date / brew-defer / error) moved to the SINGLE
+  // App-level updater status row (useUpdater.statusNote), which renders over both scenes —
+  // so the picker KICKS-only and no longer toasts these outcomes itself (removing the
+  // duplicate surface, and giving the native-menu path — which discards the report — the
+  // same feedback). The outcome→note mapping is unit-tested in updateFlowState.test.ts; the
+  // App-side render is guarded in updaterWiring.test.ts.
+  it("kicks the check without consuming the report (feedback is App-owned now)", () => {
+    expect(pickerSrc).toContain("void onCheckForUpdates()");
+    // the removed duplicate-toast branches are gone
+    expect(pickerSrc).not.toContain('report.outcome === "up-to-date"');
+    expect(pickerSrc).not.toContain('report.outcome === "brew-defer"');
   });
 });
 

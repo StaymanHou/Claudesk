@@ -79,3 +79,38 @@ export function quarantineFallbackSpec(bundlePath: string): ConfirmSpec<Quaranti
  * and the seam is built now (operator decision, Q4).
  */
 export const QUARANTINE_FALLBACK_ACTIVE = false;
+
+/** A transient info/error note surfaced to the App-level updater status row (WP6 P1.4). */
+export interface UpdaterStatusNote {
+  kind: "info" | "error";
+  message: string;
+}
+
+/**
+ * Map a manual-check outcome to the App-level status note (WP6 P1.4). This is the feedback
+ * the native-menu "Check for Updates…" path had no surface for (App.tsx has no toast like
+ * the picker: SURFACE-2026-07-17-QUALITY-WP4-MENU-CHECK-DISCARDS-OUTCOME). The
+ * `update-available` outcome shows the banner instead → no note (returns null). Pure so
+ * the outcome→note mapping is vitest-testable without driving the hook.
+ *
+ * Reshaped M10 WP6: the `"brew-defer"` outcome is retired (brew now checks for real and
+ * classifies as update-available / up-to-date like direct-download — the brew-specific
+ * `brew upgrade` affordance moved into the banner's isBrew branch). So a brew "update
+ * available" shows the banner (returns null here); a brew "up to date" is just "up to
+ * date" — no more brew-defer note.
+ */
+export function statusNoteForOutcome(
+  outcome: "update-available" | "up-to-date",
+): UpdaterStatusNote | null {
+  switch (outcome) {
+    case "update-available":
+      return null; // the banner surfaces this; no status note
+    case "up-to-date":
+      return { kind: "info", message: "Claudesk is up to date." };
+  }
+}
+
+/** The note shown when a manual check itself fails (offline / endpoint unreachable). */
+export function statusNoteForCheckError(): UpdaterStatusNote {
+  return { kind: "error", message: "Could not check for updates." };
+}
