@@ -74,11 +74,25 @@ body,
 }
 
 .app-shell {
+  /* M10 WP4 — a flex column so the (optional) update-notify banner is an IN-FLOW leading
+     row and the scene region fills the rest. The banner reserving its own row is what
+     keeps it from overlaying filmstrip click-targets (P4.verify-human.1). When the banner
+     is absent it contributes zero height, so there's no reserved gap. */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* The scene region below the (optional) banner — this is the grid the Filmstrip + Center
+   Stage map into (formerly `.app-shell` itself). Fills the remaining column height. */
+.app-shell-scene {
+  flex: 1 1 auto;
+  min-height: 0; /* let the CenterStage's internal scroll chain bound correctly */
   display: grid;
   /* Filmstrip slot reserves a fixed strip; Center Stage takes the rest. */
   grid-template-rows: auto 1fr;
-  height: 100vh;
-  width: 100vw;
   overflow: hidden;
 }
 
@@ -1716,6 +1730,96 @@ body,
   background-color: #4a2020;
 }
 
+/* ── M10 WP4 update-notify banner (top-of-window, non-modal) ──────────────── */
+/* Full-width strip across the top of the app shell, above every scene. Non-modal:
+   sits over the content without a backdrop, the app stays usable behind it. Dark
+   tokens matched to the confirm-dialog palette. */
+.update-banner {
+  /* IN-FLOW leading row of the app-shell flex column (NOT an absolute overlay) — so the
+     scene below is pushed down and never covered. `flex: 0 0 auto` = intrinsic height,
+     never shrinks. The bottom border separates it from the filmstrip/picker beneath. */
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.8rem;
+  background-color: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  font-size: 0.82rem;
+  color: #d4d4d4;
+}
+.update-banner-icon {
+  color: #6ea8ff;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.update-banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.update-banner-text strong {
+  color: #f6f6f6;
+}
+.update-banner-text code {
+  padding: 0.05rem 0.3rem;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  font-size: 0.78rem;
+}
+.update-banner-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+.update-banner-btn {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.78rem;
+  color: #d4d4d4;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.update-banner-btn:hover {
+  background-color: #2d2d2d;
+}
+.update-banner-btn-primary {
+  color: #ffffff;
+  border-color: #6ea8ff;
+  background-color: #2a4a78;
+}
+.update-banner-btn-primary:hover {
+  background-color: #35588c;
+}
+/* Progress bar (replaces the action buttons while a download is applying). */
+.update-banner-progress {
+  flex: 0 0 40%;
+  height: 0.5rem;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.update-banner-progress-fill {
+  height: 100%;
+  background-color: #6ea8ff;
+  transition: width 0.15s linear;
+}
+/* Indeterminate: no known total → a slim animated sweep instead of a fixed width. */
+.update-banner-progress-fill.indeterminate {
+  width: 35%;
+  animation: update-banner-indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes update-banner-indeterminate {
+  0% {
+    margin-left: -35%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+
 /* ── WP10 file-tree left rail + right-half restructure ────────────────── */
 /* The right-half body is a horizontal row beneath the panel tab row:
    [ FileTree rail | panel column ]. Fills the remaining height; min-height:0 keeps
@@ -2642,7 +2746,7 @@ body,
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.6rem;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
   user-select: none;
@@ -2651,6 +2755,43 @@ body,
 
 .picker-time-tracking input {
   cursor: pointer;
+}
+
+/* M10 WP4 — the update-notification toggle + manual "Check for updates" button, one row. */
+.picker-updates {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.picker-update-notifications-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  user-select: none;
+  cursor: pointer;
+}
+
+.picker-update-notifications-label input {
+  cursor: pointer;
+}
+
+.picker-check-updates {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  color: #d4d4d4;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.picker-check-updates:hover {
+  background-color: #2d2d2d;
 }
 
 .picker-recents {

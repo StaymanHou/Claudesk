@@ -34,6 +34,11 @@ import {
   getTimeTrackingEnabled,
   setTimeTrackingEnabled,
 } from "../../state/timeAnalytics";
+import {
+  UPDATER_NOTIFICATIONS_ENABLED_EVENT,
+  getUpdateNotificationsEnabled,
+  setUpdateNotificationsEnabled,
+} from "../../updater/updaterPrefs";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
 // an ERROR (an IPC rejection that must surface, not be swallowed — the WP6 MAJOR). The
@@ -70,9 +75,19 @@ interface ProjectPickerProps {
   // (SURFACE-2026-07-08-M9-WP6A-DASHBOARD-FROM-PICKER). When provided, the picker shows an
   // analytics entry point that toggles the same single <GlobalDashboard> App.tsx owns.
   onOpenDashboard?: () => void;
+  // M10 WP4 — manual "Check for updates" from the picker. App owns the `useUpdater` hook,
+  // so the picker calls up; App's checkNow ignores skip/disable, shows the banner for an
+  // available update, and returns a `{ outcome }` report the picker toasts (up-to-date /
+  // brew-defer have no banner). null = the check errored (e.g. offline). Optional (the
+  // dev-seam picker may not pass it).
+  onCheckForUpdates?: () => Promise<{ outcome: string } | null>;
 }
 
-export function ProjectPicker({ onOpen, onOpenDashboard }: ProjectPickerProps) {
+export function ProjectPicker({
+  onOpen,
+  onOpenDashboard,
+  onCheckForUpdates,
+}: ProjectPickerProps) {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [filter, setFilter] = useState("");
   // The picker toast: an info note (prune-on-mount) or a surfaced IPC error. `null` =
@@ -95,6 +110,12 @@ export function ProjectPicker({ onOpen, onOpenDashboard }: ProjectPickerProps) {
   // (persists + re-broadcasts). OFF = zero SQLite IO; status dots are unaffected either
   // way. Starts OFF until the read lands (matches the backend default, so no flicker).
   const [timeTrackingEnabled, setTimeTrackingEnabled_] = useState(false);
+  // M10 WP4 — the update-notification toggle (default ON per design-prior
+  // operator-helpful-friend-misfiring-as-offswitchable-setting). Same backend-is-source-of-
+  // truth discipline: seed from getUpdateNotificationsEnabled on mount, sync via the
+  // `updater-notifications-enabled` broadcast, set via setUpdateNotificationsEnabled. Starts
+  // true (matches the backend default, so no flicker toward the common case).
+  const [updateNotificationsEnabled, setUpdateNotificationsEnabled_] = useState(true);
 
   useEffect(() => {
     // Load recents on mount. First prune any project whose folder was deleted
@@ -216,6 +237,68 @@ export function ProjectPicker({ onOpen, onOpenDashboard }: ProjectPickerProps) {
     });
   }
 
+  // M10 WP4 — seed + sync the update-notification toggle (mirror of the tracking effect).
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void getUpdateNotificationsEnabled()
+      .then((enabled) => {
+        if (!cancelled) setUpdateNotificationsEnabled_(enabled);
+      })
+      .catch((e) =>
+        console.error(
+          "[claudesk] updater_get_notifications_enabled (picker) failed:",
+          e,
+        ),
+      );
+    void listen<boolean>(UPDATER_NOTIFICATIONS_ENABLED_EVENT, (event) => {
+      setUpdateNotificationsEnabled_(event.payload);
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  function handleToggleUpdateNotifications(next: boolean) {
+    // Optimistic set + revert-on-reject (mirror of handleToggleTracking).
+    const prev = updateNotificationsEnabled;
+    setUpdateNotificationsEnabled_(next);
+    void setUpdateNotificationsEnabled(next).catch((e) => {
+      setUpdateNotificationsEnabled_(prev);
+      setToast({
+        kind: "error",
+        message: mapIpcError("update notification setting", e),
+      });
+    });
+  }
+
+  function handleCheckForUpdates() {
+    if (!onCheckForUpdates) return;
+    void onCheckForUpdates().then((report) => {
+      // An available update surfaces via App's banner (no toast needed). Up-to-date /
+      // brew-defer have no banner, so the picker gives explicit feedback. A null report
+      // means the check errored (offline / endpoint unreachable).
+      if (report === null) {
+        setToast({ kind: "error", message: "Could not check for updates." });
+      } else if (report.outcome === "up-to-date") {
+        setToast({ kind: "info", message: "Claudesk is up to date." });
+      } else if (report.outcome === "brew-defer") {
+        setToast({
+          kind: "info",
+          message: "Installed via Homebrew — run `brew upgrade claudesk` to update.",
+        });
+      }
+      // outcome === "update-available" → App's banner shows it; no picker toast.
+    });
+  }
+
   async function handleOpenRecent(projectPath: string) {
     // Stamp recency before handing off so the next list_projects reflects it. A
     // rejection surfaces as an error toast (P4.2) — never dropped as an unhandled
@@ -311,6 +394,30 @@ export function ProjectPicker({ onOpen, onOpenDashboard }: ProjectPickerProps) {
         />
         <span>Time tracking</span>
       </label>
+      {/* M10 WP4 — update-notification toggle (default ON) + a manual "Check for updates"
+          affordance. The toggle gates the auto-check-on-launch notify; the button runs a
+          MANUAL check (ignores skip/disable) via App's useUpdater.checkNow. */}
+      <div className="picker-updates">
+        <label className="picker-update-notifications-label">
+          <input
+            type="checkbox"
+            data-testid="picker-update-notifications"
+            checked={updateNotificationsEnabled}
+            onChange={(e) => handleToggleUpdateNotifications(e.target.checked)}
+          />
+          <span>Update notifications</span>
+        </label>
+        {onCheckForUpdates && (
+          <button
+            type="button"
+            className="picker-check-updates"
+            data-testid="picker-check-updates"
+            onClick={handleCheckForUpdates}
+          >
+            Check for updates
+          </button>
+        )}
+      </div>
       {toast !== null && (
         <div
           className={`picker-toast${toast.kind === "error" ? " picker-toast-error" : ""}`}

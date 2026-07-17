@@ -23,10 +23,31 @@
 //! download/install. Only a `DirectDownload` install runs the normal flow.
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 
 use super::InstallSource;
+
+/// Broadcast fired when the update-notification toggle changes (M10 WP4). The picker
+/// checkbox listens so a change from any surface re-syncs it. Pinned stable by a test.
+pub const UPDATER_NOTIFICATIONS_ENABLED_EVENT: &str = "updater-notifications-enabled";
+
+/// Event emitted from [`updater_apply`]'s `download()` callback carrying real download
+/// progress (M10 WP4 Phase 2, Q2 — a REAL progress bar, not an indeterminate spinner).
+/// The frontend subscribes and renders a `%` bar. Pinned stable by a test.
+pub const UPDATER_DOWNLOAD_PROGRESS_EVENT: &str = "updater-download-progress";
+
+/// Download-progress payload. `downloaded` is the CUMULATIVE bytes received so far
+/// (`updater_apply` accumulates the plugin's per-chunk length); `total` is the
+/// content-length the server reported (`None` when the server omits it — the FE then
+/// shows an indeterminate bar). `done` marks the final emit fired from the plugin's
+/// `on_download_finish` (so the FE can flip to 100%/installing without a divide).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DownloadProgress {
+    pub downloaded: u64,
+    pub total: Option<u64>,
+    pub done: bool,
+}
 
 /// The user-facing defer message for a Homebrew-managed install. Kept as one const so
 /// `updater_check`'s status and `updater_apply`'s refusal error agree verbatim.
@@ -136,11 +157,41 @@ pub async fn updater_apply(app: AppHandle) -> Result<String, String> {
     let to = update.version.clone();
 
     // download() streams the artifact and verifies its minisign signature internally.
-    // Progress callback is a no-op here (a real progress bar is WP4). Split from
-    // install() so a future cancel (WP4) has a clean boundary — cancel before install
-    // leaves the running app untouched.
+    // WP4 Phase 2 (Q2): a REAL progress bar. The plugin's `on_chunk(chunk_len,
+    // content_length)` fires per chunk with the chunk's length (NOT cumulative), so we
+    // accumulate `downloaded` ourselves; `content_length` is the server's total (`None`
+    // when omitted → the FE shows an indeterminate bar). Each chunk emits an
+    // `updater-download-progress` event the frontend subscribes to; `on_download_finish`
+    // emits a final `done: true`. `app.emit` is thread-safe (no main-thread marshal
+    // needed here — unlike PiP window ops). Split from install() so cancel has a clean
+    // boundary — cancel before install leaves the running app untouched.
+    let progress_app = app.clone();
+    let finish_app = app.clone();
+    let mut downloaded: u64 = 0;
     let bytes = update
-        .download(|_chunk, _total| {}, || {})
+        .download(
+            move |chunk_len, content_length| {
+                downloaded = downloaded.saturating_add(chunk_len as u64);
+                let _ = progress_app.emit(
+                    UPDATER_DOWNLOAD_PROGRESS_EVENT,
+                    DownloadProgress {
+                        downloaded,
+                        total: content_length,
+                        done: false,
+                    },
+                );
+            },
+            move || {
+                let _ = finish_app.emit(
+                    UPDATER_DOWNLOAD_PROGRESS_EVENT,
+                    DownloadProgress {
+                        downloaded: 0,
+                        total: None,
+                        done: true,
+                    },
+                );
+            },
+        )
         .await
         .map_err(|e| format!("download+verify (minisign) failed: {e}"))?;
 
@@ -170,6 +221,52 @@ pub async fn updater_apply(app: AppHandle) -> Result<String, String> {
     app.restart();
 }
 
+// ── M10 WP4 — user-control prefs (get/set over config_store, per bundle-identity) ──
+//
+// Two prefs mirror M9's `time_get/set_tracking_enabled`: `update_notifications_enabled`
+// (default ON — the auto-check-on-launch gate) and `skipped_version` (the tag the user
+// chose to never re-notify about; the frontend notify layer suppresses it, a manual
+// check ignores it). The skip/disable FILTERING is frontend-side (Q1, arch.md): these
+// commands just persist + read the raw values; `updater_check`/`updater_apply` stay pure.
+
+/// Read the update-notification toggle (default `true`/ON). Thin wrapper over
+/// [`read_update_notifications_enabled`](crate::config_store::settings::read_update_notifications_enabled).
+#[tauri::command]
+pub fn updater_get_notifications_enabled(app: AppHandle) -> Result<bool, String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    crate::config_store::settings::read_update_notifications_enabled(&dir)
+        .map_err(|e| e.to_string())
+}
+
+/// Set the update-notification toggle. Persists it, then broadcasts
+/// [`UPDATER_NOTIFICATIONS_ENABLED_EVENT`] so the picker checkbox re-syncs. Mirror of
+/// `time_set_tracking_enabled`.
+#[tauri::command]
+pub fn updater_set_notifications_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    crate::config_store::settings::write_update_notifications_enabled(&dir, enabled)
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit(UPDATER_NOTIFICATIONS_ENABLED_EVENT, enabled);
+    Ok(())
+}
+
+/// Read the skipped-version tag (`None` when nothing skipped). Thin wrapper over
+/// [`read_skipped_version`](crate::config_store::settings::read_skipped_version).
+#[tauri::command]
+pub fn updater_get_skipped_version(app: AppHandle) -> Result<Option<String>, String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    crate::config_store::settings::read_skipped_version(&dir).map_err(|e| e.to_string())
+}
+
+/// Persist the skipped-version tag (`None` clears the skip). No broadcast — the skip is
+/// a single-consumer pref (the notify gate reads it on the next check); add one only if
+/// a second live surface appears. Mirror of `write_skipped_version`.
+#[tauri::command]
+pub fn updater_set_skipped_version(app: AppHandle, version: Option<String>) -> Result<(), String> {
+    let dir = crate::config_store::commands::resolve_data_dir(&app)?;
+    crate::config_store::settings::write_skipped_version(&dir, version).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +278,45 @@ mod tests {
             install_source_str(InstallSource::DirectDownload),
             "direct-download"
         );
+    }
+
+    #[test]
+    fn notifications_enabled_event_name_is_stable() {
+        // The frontend `updaterPrefs.ts` hardcodes this string to listen for the toggle
+        // broadcast — pin it so a rename can't silently desync the two sides.
+        assert_eq!(UPDATER_NOTIFICATIONS_ENABLED_EVENT, "updater-notifications-enabled");
+    }
+
+    #[test]
+    fn download_progress_event_name_is_stable() {
+        // The frontend `updaterPrefs.ts` subscribes to this exact string for the progress
+        // bar — pin it so a rename can't silently break the bar.
+        assert_eq!(UPDATER_DOWNLOAD_PROGRESS_EVENT, "updater-download-progress");
+    }
+
+    #[test]
+    fn download_progress_payload_serializes_snake_case_shape() {
+        // The FE `DownloadProgress` TS interface reads `downloaded`/`total`/`done` — pin
+        // the serde field names + Option/bool shape so the two sides can't drift.
+        let mid = DownloadProgress {
+            downloaded: 1024,
+            total: Some(4096),
+            done: false,
+        };
+        let json = serde_json::to_value(&mid).unwrap();
+        assert_eq!(json["downloaded"], 1024);
+        assert_eq!(json["total"], 4096);
+        assert_eq!(json["done"], false);
+
+        // The finish emit: total absent (null), done true — the FE flips to 100%/installing.
+        let fin = DownloadProgress {
+            downloaded: 0,
+            total: None,
+            done: true,
+        };
+        let json = serde_json::to_value(&fin).unwrap();
+        assert!(json["total"].is_null());
+        assert_eq!(json["done"], true);
     }
 
     #[test]

@@ -459,6 +459,13 @@ pub fn run() {
             // (refusing on a Homebrew install). See docs/product/wbs.md → M10 WP2/WP3.
             updater::commands::updater_check,
             updater::commands::updater_apply,
+            // M10 WP4 (user-control prefs): the notification toggle (default ON) + the
+            // skipped-version tag, persisted per bundle-identity in config_store. The
+            // skip/disable FILTERING is frontend-side; these just get/set the raw values.
+            updater::commands::updater_get_notifications_enabled,
+            updater::commands::updater_set_notifications_enabled,
+            updater::commands::updater_get_skipped_version,
+            updater::commands::updater_set_skipped_version,
         ])
         .on_window_event(|window, event| {
             // M5 WP5 Phase 2 — auto-summon/dismiss state machine, driven by the MAIN

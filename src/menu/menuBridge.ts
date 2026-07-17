@@ -33,6 +33,9 @@ export const MENU_IDS = {
   FIND_IN_FILES: "find.findInFiles", // ⌘⇧F search
   CLOSE_TAB: "file.closeTab", // ⌘W
   // React callbacks (no existing accelerator).
+  // M10 WP4 — "Check for Updates…" (manual check, ignores skip/disable). Value must
+  // match `app_menu::ids::CHECK_FOR_UPDATES` byte-for-byte.
+  CHECK_FOR_UPDATES: "app.checkForUpdates",
   NEW_WORKSPACE: "file.newWorkspace",
   OPEN_SUBLIME_TEXT: "workspace.openSublimeText",
   OPEN_SUBLIME_MERGE: "workspace.openSublimeMerge",
@@ -55,6 +58,7 @@ export const MENU_IDS = {
 
 /** A callback action's tag — App.tsx switches on this to call the right seam. */
 export type MenuCallback =
+  | "checkForUpdates"
   | "newWorkspace"
   | "openSublimeText"
   | "openSublimeMerge"
@@ -128,6 +132,10 @@ export function menuActionFor(id: string): MenuAction | null {
         init: { ...KEY_BASE, key: "w", metaKey: true, shiftKey: false },
       };
     // React callbacks.
+    // M10 WP4 — manual "Check for Updates…" (App.tsx calls useUpdater.checkNow, which
+    // ignores the skip-list + disable pref and surfaces the outcome).
+    case MENU_IDS.CHECK_FOR_UPDATES:
+      return { kind: "callback", callback: "checkForUpdates" };
     case MENU_IDS.NEW_WORKSPACE:
       return { kind: "callback", callback: "newWorkspace" };
     case MENU_IDS.OPEN_SUBLIME_TEXT:

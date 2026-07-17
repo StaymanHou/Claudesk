@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-17  # M10 WP1 probe Phase 1: tauri build 99s (fresh updater/process plugin compile) + cargo test 0.81s (524 lib, regression check)
+updated: 2026-07-17  # M10 WP4 P5: pnpm test 1.78s (106 files / 1154, +9 menu/picker tests)
 ---
 
 # Runtime Registry
@@ -72,9 +72,14 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 2.21s (2026-07-17, M10 WP2 P2 verify-auto regression: probe UI removed + throwaway UpdaterTrigger added [no dedicated test] → 101 files / 1120 pass, unchanged)
+- **Last:** 1.78s (2026-07-17, M10 WP4 P5 build: +9 tests [menuBridge CHECK_FOR_UPDATES case + 8 pickerUpdateNotificationsWiring guards] → 106 files / 1154 pass; vite build 1.11s)
 - **Use timeout:** 120000
 - **History:**
+  - 1.78s — 2026-07-17 (M10 WP4 P5 build: +9 menu/picker-updates tests → 106 files / 1154 pass)
+  - 2.38s — 2026-07-17 (M10 WP4 P4 codify: +2 layout-invariant guards → 104 files / 1145 pass)
+  - 2.72s — 2026-07-17 (M10 WP4 P4 build: +11 updateFlowState/updaterWiring tests → 104 files / 1143 pass)
+  - ~2s — 2026-07-17 (M10 WP4 P3 build: +12 updateNotifyState pure-gate tests → 102 files / 1132 pass)
+  - 2.21s — 2026-07-17 (M10 WP2 P2 verify-auto regression: probe UI removed + throwaway UpdaterTrigger added [no dedicated test] → 101 files / 1120 pass, unchanged)
   - 2.43s — 2026-07-17 (M10 WP1 P2 verify-codify regression; 101 files / 1120 pass, no new FE tests)
   - 2s — 2026-07-15 (M9 WP6c-2 P2 verify-codify: +21 compareMath pins + 2 Compare-enabled updates → 101 files / 1120 pass)
   - 1.68s — 2026-07-15 (M9 WP6b-4 re-spec P2 verify-codify: +1 Minimap-alignment pin → 99 files / 1083 pass)
@@ -130,9 +135,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.82s (2026-07-17, M10 WP3 verify-codify: full lib suite 539 pass + 6 integ pass, no new tests beyond the 9 TDD-written at build [7 install_source path-shape + 3 command]; warm)
+- **Last:** 0.92s (2026-07-17, M10 WP4 P2 build: +2 tests [download-progress event-name-stable + payload snake_case serde shape], 547 lib + 6 integ pass; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.92s — 2026-07-17 (M10 WP4 P2 build: +2 download-progress tests, 547 lib + 6 integ pass; warm)
+  - 0.72s — 2026-07-17 (M10 WP4 P1 build: +6 updater-prefs tests, 545 lib + 6 integ pass; warm)
   - 0.82s — 2026-07-17 (M10 WP3 verify-codify: full lib 539 pass + 6 integ pass; warm)
   - 0.58s — 2026-07-17 (M10 WP3 verify-auto: +9 updater tests [install_source detection + brew-defer command shape], 539 lib pass; warm)
   - 0.76s — 2026-07-17 (M10 WP1 P2 verify-codify; warm, 530 lib pass, +6 updater_probe tests)

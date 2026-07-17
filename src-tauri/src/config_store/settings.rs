@@ -75,6 +75,25 @@ pub struct AppSettings {
     /// unaffected either way. Mirrors the `pip_mode` field's optional-with-default shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_tracking_enabled: Option<bool>,
+    /// M10 WP4 — the in-app-updater notification toggle. `None` = never set → the reader
+    /// applies the default **`true`** (ON) — the operator-benefit default: the operator
+    /// wants to hear about updates out of the box, and a friend who dislikes update nags
+    /// turns it off (design-prior
+    /// `operator-helpful-friend-misfiring-as-offswitchable-setting`, same shape as
+    /// `pip_mode`'s off-switchable default). When `false`: no auto-check-on-launch + no
+    /// proactive notify, but a manual "Check for Updates…" still works. App-global, not
+    /// per-project; per bundle-identity via the app-data dir (`com.claudesk.app` vs
+    /// `.dev`). Read by [`read_update_notifications_enabled`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_notifications_enabled: Option<bool>,
+    /// M10 WP4 — the exact version tag the user chose to SKIP (never re-notify about).
+    /// `None` = nothing skipped (the common case). The updater's `check()` still returns
+    /// this version; the frontend notify layer suppresses it (a manual "Check for
+    /// Updates…" ignores the skip and reports the truth). A NEWER version than the
+    /// skipped one still notifies. App-global, per bundle-identity. Read by
+    /// [`read_skipped_version`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skipped_version: Option<String>,
 }
 
 /// Read the app settings. A missing file is normal (first run) and returns the
@@ -189,6 +208,46 @@ pub fn write_time_tracking_enabled(data_dir: &Path, enabled: bool) -> Result<(),
     write_settings(data_dir, &settings)
 }
 
+/// Read the update-notification toggle, defaulting **`true`** (ON) when unset / first run
+/// (M10 WP4 — the operator-benefit default). The single reader the
+/// `updater_get_notifications_enabled` command AND the auto-check-on-launch gate call.
+/// (Mirror of `read_pip_mode`, minus that this defaults to `true` not a variant.)
+pub fn read_update_notifications_enabled(data_dir: &Path) -> Result<bool, ConfigError> {
+    Ok(read_settings(data_dir)?
+        .update_notifications_enabled
+        .unwrap_or(true))
+}
+
+/// Persist the update-notification toggle, preserving other fields (read-modify-write).
+/// The single writer `updater_set_notifications_enabled` calls. (Mirror of
+/// `write_time_tracking_enabled`.)
+pub fn write_update_notifications_enabled(
+    data_dir: &Path,
+    enabled: bool,
+) -> Result<(), ConfigError> {
+    let mut settings = read_settings(data_dir)?;
+    settings.update_notifications_enabled = Some(enabled);
+    write_settings(data_dir, &settings)
+}
+
+/// Read the skipped-version tag, `None` when unset / first run (M10 WP4). The single
+/// reader the `updater_get_skipped_version` command call.
+pub fn read_skipped_version(data_dir: &Path) -> Result<Option<String>, ConfigError> {
+    Ok(read_settings(data_dir)?.skipped_version)
+}
+
+/// Persist the skipped-version tag, preserving other fields (read-modify-write). A
+/// `None` clears the skip (used by "unskip"/a manual check that offers the version
+/// again). The single writer `updater_set_skipped_version` calls.
+pub fn write_skipped_version(
+    data_dir: &Path,
+    version: Option<String>,
+) -> Result<(), ConfigError> {
+    let mut settings = read_settings(data_dir)?;
+    settings.skipped_version = version;
+    write_settings(data_dir, &settings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,10 +316,80 @@ mod tests {
             cc_permission_mode: Some(CcPermissionMode::AcceptEdits),
             cc_yolo: None,
             time_tracking_enabled: Some(true),
+            update_notifications_enabled: Some(false),
+            skipped_version: Some("0.9.9".to_string()),
         };
         write_settings(dir.path(), &written).unwrap();
         let read = read_settings(dir.path()).unwrap();
         assert_eq!(read, written);
+    }
+
+    // ── M10 WP4 — updater prefs ────────────────────────────────────────────────
+    #[test]
+    fn update_notifications_default_on_when_unset() {
+        // Operator-benefit default: a fresh install / missing field reads as ON.
+        let dir = TempDir::new().unwrap();
+        assert!(read_update_notifications_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn update_notifications_round_trips() {
+        let dir = TempDir::new().unwrap();
+        write_update_notifications_enabled(dir.path(), false).unwrap();
+        assert!(!read_update_notifications_enabled(dir.path()).unwrap());
+        write_update_notifications_enabled(dir.path(), true).unwrap();
+        assert!(read_update_notifications_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn skipped_version_defaults_to_none_and_round_trips() {
+        let dir = TempDir::new().unwrap();
+        assert_eq!(read_skipped_version(dir.path()).unwrap(), None);
+        write_skipped_version(dir.path(), Some("1.2.3".to_string())).unwrap();
+        assert_eq!(
+            read_skipped_version(dir.path()).unwrap(),
+            Some("1.2.3".to_string())
+        );
+        // A None clears the skip (unskip).
+        write_skipped_version(dir.path(), None).unwrap();
+        assert_eq!(read_skipped_version(dir.path()).unwrap(), None);
+    }
+
+    #[test]
+    fn updater_prefs_independent_of_other_fields() {
+        // Writing an updater pref must not clobber pip_mode / time_tracking, and vice versa.
+        let dir = TempDir::new().unwrap();
+        write_pip_mode(dir.path(), PipMode::Off).unwrap();
+        write_time_tracking_enabled(dir.path(), true).unwrap();
+        write_update_notifications_enabled(dir.path(), false).unwrap();
+        write_skipped_version(dir.path(), Some("0.5.0".to_string())).unwrap();
+        // All four survive independently.
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
+        assert!(read_time_tracking_enabled(dir.path()).unwrap());
+        assert!(!read_update_notifications_enabled(dir.path()).unwrap());
+        assert_eq!(
+            read_skipped_version(dir.path()).unwrap(),
+            Some("0.5.0".to_string())
+        );
+        // ...and updating one updater pref leaves the other intact.
+        write_update_notifications_enabled(dir.path(), true).unwrap();
+        assert_eq!(
+            read_skipped_version(dir.path()).unwrap(),
+            Some("0.5.0".to_string())
+        );
+    }
+
+    #[test]
+    fn updater_prefs_absent_in_present_file_read_as_defaults() {
+        // Forward-compat: a file predating the M10 fields reads ON + no-skip.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(SETTINGS_FILE),
+            br#"{"pip_mode":"auto","time_tracking_enabled":true}"#,
+        )
+        .unwrap();
+        assert!(read_update_notifications_enabled(dir.path()).unwrap());
+        assert_eq!(read_skipped_version(dir.path()).unwrap(), None);
     }
 
     #[test]

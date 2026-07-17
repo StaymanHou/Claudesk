@@ -155,6 +155,10 @@ pub mod ids {
 
     // Class 2b — call a React callback (no existing accelerator).
     pub const NEW_WORKSPACE: &str = "file.newWorkspace"; // opens the picker
+    // M10 WP4 — the "Check for Updates…" app-menu item (macOS-conventional, in the
+    // Claudesk app menu near About). A click triggers a MANUAL update check (ignores the
+    // skip-list + disable pref) via the frontend `useUpdater.checkNow`.
+    pub const CHECK_FOR_UPDATES: &str = "app.checkForUpdates";
     pub const OPEN_SUBLIME_TEXT: &str = "workspace.openSublimeText";
     pub const OPEN_SUBLIME_MERGE: &str = "workspace.openSublimeMerge";
     pub const REVEAL_IN_FINDER: &str = "workspace.revealInFinder";
@@ -180,6 +184,7 @@ pub mod ids {
 /// is the single source of truth (a new functional item adds its id here AND to its
 /// `MenuItemBuilder::with_id` call). Also lets the tests pin uniqueness + non-emptiness.
 pub const FUNCTIONAL_IDS: &[&str] = &[
+    ids::CHECK_FOR_UPDATES,
     ids::PANEL_EDITOR,
     ids::PANEL_DIFF,
     ids::PANEL_TERMINAL,
@@ -222,10 +227,17 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build();
 
     // ── Claudesk (app menu) ───────────────────────────────────────────────────
-    // About (native panel, version) + the standard macOS app-menu service/hide/quit
-    // chain. `.about(Some(meta))` and `.quit()` are PredefinedMenuItems.
+    // About (native panel, version) + "Check for Updates…" (M10 WP4 — functional, a
+    // MANUAL update check) + the standard macOS app-menu service/hide/quit chain.
+    // `.about(Some(meta))` and `.quit()` are PredefinedMenuItems; "Check for Updates…"
+    // is a functional MenuItem placed right after About (the macOS convention). No
+    // accelerator (the native-menu pattern).
+    let check_for_updates =
+        MenuItemBuilder::with_id(ids::CHECK_FOR_UPDATES, "Check for Updates…").build(app)?;
     let app_menu = SubmenuBuilder::new(app, "Claudesk")
         .about(Some(about_metadata))
+        .separator()
+        .item(&check_for_updates)
         .separator()
         .services()
         .separator()

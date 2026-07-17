@@ -43,10 +43,16 @@ import { openSublime, openSublimeMerge } from "./sublime/sublimeLaunch";
 import { openFinder } from "./finder/finderLaunch";
 import { usePipFanout } from "./pip/usePipFanout";
 import { useMirrorTicker } from "./components/workspace/useMirrorTicker";
-// M10 WP2 (TEMPORARY): minimal corner widget to trigger the update flow
-// (check → confirm → download → install → self-clear → relaunch). WP4 replaces
-// this with the polished non-modal notify / menu-item / skip-list UX.
-import { UpdaterTrigger } from "./updater/UpdaterTrigger";
+// M10 WP4 — the polished in-app updater UX: an App-level hook driving a top-of-window
+// non-modal notify banner + confirm/progress/cancel flow + the WP1-fallback quarantine
+// dialog. Replaces WP2's throwaway corner UpdaterTrigger (now deleted). Mounted ONCE at
+// App level so the banner reads over BOTH the picker and an open-workspace scene.
+import { useUpdater } from "./updater/useUpdater";
+import { UpdateNotifyBanner } from "./updater/UpdateNotifyBanner";
+import {
+  updateConfirmSpec,
+  quarantineFallbackSpec,
+} from "./updater/updateFlowState";
 
 // M9 WP6a — the GLOBAL time-analytics dashboard is a top-level view, mounted ONCE,
 // overlaying the center stage (the PickerOverlay pattern). LAZY: its chunk (the
@@ -254,6 +260,13 @@ function App() {
     count: number;
   } | null>(null);
 
+  // M10 WP4 — the in-app updater. One App-level hook drives the notify banner, the
+  // confirm/progress/cancel flow, skip-this-version, and the WP1-fallback dialog. The
+  // Phase 5 menu item + picker button call `updater.checkNow()` (a manual check that
+  // ignores skip/disable); auto-check-on-launch is internal to the hook (gated by the
+  // notifications pref + skip-list).
+  const updater = useUpdater();
+
   // Close a workspace from the filmstrip × (QoL-WP1). If its editor has unsaved docs,
   // open the discard-or-cancel confirm; otherwise close immediately. The actual teardown
   // (CC + second-terminal kill on unmount, workspace_deregister, workspace_watch_stop)
@@ -302,6 +315,15 @@ function App() {
     focusedPathRef.current = focused ? focused.project_path : null;
   }, [workspaces, focusedId]);
 
+  // M10 WP4 — latest-ref for the updater's manual-check so the once-registered `menu`
+  // listener can trigger "Check for Updates…" without re-subscribing (same latest-ref
+  // pattern as focusedPathRef). checkNow ignores the skip-list + disable pref and shows
+  // the banner if an update is available.
+  const checkNowRef = useRef(updater.checkNow);
+  useEffect(() => {
+    checkNowRef.current = updater.checkNow;
+  }, [updater.checkNow]);
+
   // CC permission mode (friend-requested dropdown, replacing the old yolo toggle) is the
   // backend's source of truth (persisted via cc_set_permission_mode, broadcast on
   // `cc-permission-mode`). Unlike the old yolo toggle, the View-menu radio carries the
@@ -329,6 +351,13 @@ function App() {
         return;
       }
       // callback actions
+      // M10 WP4 — manual "Check for Updates…" (app-global, runs before the focused-path
+      // guard). checkNow ignores the skip-list + disable pref and surfaces the outcome
+      // (shows the banner when an update is available; no-op-ish otherwise).
+      if (action.callback === "checkForUpdates") {
+        void checkNowRef.current();
+        return;
+      }
       if (action.callback === "newWorkspace") {
         setShowPicker(true);
         return;
@@ -413,10 +442,31 @@ function App() {
 
   return (
     <div className="app-shell" data-testid="app-shell">
-      {view === "picker" ? (
+      {/* M10 WP4 — the update-notify banner is an IN-FLOW leading row of the app-shell
+          (NOT an absolute overlay), so the scene below it (picker or filmstrip+stage) is
+          pushed down and NEVER covered. This removes the operator-flagged misclick hazard
+          (P4.verify-human.1): an absolute banner would overlay the filmstrip's top ~35px,
+          so a slow-network late-load could obscure/steal a tile click. Reserving the row
+          means the filmstrip can't be clicked-through by the banner. The banner is
+          conditional, so when absent it occupies zero height (no reserved gap). */}
+      {updater.banner && (
+        <UpdateNotifyBanner
+          version={updater.banner.available_version ?? ""}
+          isBrew={updater.banner.install_source === "homebrew"}
+          applyingPercent={
+            updater.phase === "applying" ? updater.applyingPercent : undefined
+          }
+          onUpdate={updater.requestUpdate}
+          onSkip={updater.skipVersion}
+          onDismiss={updater.dismissBanner}
+        />
+      )}
+      <div className="app-shell-scene" data-testid="app-shell-scene">
+        {view === "picker" ? (
         <ProjectPicker
           onOpen={openWorkspace}
           onOpenDashboard={() => setShowDashboard(true)}
+          onCheckForUpdates={updater.checkNow}
         />
       ) : (
         <>
@@ -457,6 +507,7 @@ function App() {
           )}
         </>
       )}
+      </div>
       {/* M9 WP6a — the GLOBAL time-analytics dashboard is app-level (NOT inside the
           workspace-open branch), so it overlays whichever scene is up — the picker at
           launch OR an open workspace — reachable in both (its data is all-projects;
@@ -478,11 +529,26 @@ function App() {
           <GlobalDashboard onClose={() => setShowDashboard(false)} />
         </Suspense>
       )}
-      {/* M10 WP2 (TEMPORARY): always-mounted corner trigger for the update flow.
-          Reachable in the RELEASE build (the only tier that reproduces Gatekeeper —
-          WP6 drives the real installed-build end-to-end verify here). WP4 replaces
-          this with the polished user-control UX. */}
-      <UpdaterTrigger />
+      {/* M10 WP4 — the confirm + WP1-fallback dialogs are modal OVERLAYS (they SHOULD
+          cover the scene while active), unlike the notify banner (an in-flow row, hoisted
+          to the top of the app-shell above). Update… opens this confirm; confirm drives
+          download (progress bar in the banner) → install → self-clear → relaunch. The
+          fallback quarantine dialog shows only if the self-clear proves insufficient
+          (default GO path leaves fallbackBundlePath null). */}
+      {updater.phase === "confirming" && updater.banner?.available_version && (
+        <ConfirmModal
+          spec={updateConfirmSpec(updater.banner.available_version)}
+          onChoose={(v) =>
+            v === "update" ? updater.confirmUpdate() : updater.cancelUpdate()
+          }
+        />
+      )}
+      {updater.fallbackBundlePath && (
+        <ConfirmModal
+          spec={quarantineFallbackSpec(updater.fallbackBundlePath)}
+          onChoose={() => updater.dismissFallback()}
+        />
+      )}
     </div>
   );
 }

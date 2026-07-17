@@ -87,6 +87,12 @@ describe("menuBridge — re-dispatch ids satisfy the existing chord predicates",
 
 describe("menuBridge — callback ids", () => {
   it("maps each callback id to its tag", () => {
+    // M10 WP4 — "Check for Updates…" maps to the checkForUpdates callback (App runs the
+    // manual check, ignoring skip/disable).
+    expect(menuActionFor(MENU_IDS.CHECK_FOR_UPDATES)).toEqual({
+      kind: "callback",
+      callback: "checkForUpdates",
+    });
     expect(menuActionFor(MENU_IDS.NEW_WORKSPACE)).toEqual({
       kind: "callback",
       callback: "newWorkspace",
