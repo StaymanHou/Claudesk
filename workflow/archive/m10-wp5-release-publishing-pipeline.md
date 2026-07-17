@@ -1,9 +1,10 @@
 # Feature: M10 WP5 — `/release` publishing pipeline (updater artifacts + signed manifest)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** COMPLETED
 **Created:** 2026-07-17
-**Shipped:** 2026-07-17 (commit `011aea7`, local-only — batched on the unpushed M9+M10 tree, 20 ahead of origin/main)
+**Completed:** 2026-07-17
+**Shipped:** 2026-07-17 (commit `5a72738`, local-only — batched on the unpushed M9+M10 tree, 20 ahead of origin/main; review fixes amended in)
 **Entry:** spec (complex feature)
 **Milestone:** 10 (In-app auto-updater), WP5
 **Drive mode:** autopilot
@@ -43,10 +44,10 @@
   - [x] verify-codify  <!-- status: DONE — NO new tests warranted: deliverable is a manual-only skill PROCEDURE DOC (.claude/skills/release/SKILL.md), no runtime code surface to regression-test. A string-presence test = brittle change-detector (negative value); executing latest.json-gen needs the SECRET key + a real artifact (uncommittable, not CI-runnable) → the real end-to-end is WP6's operator/installed-build gate. No project test references the skill/latest.json (grep: 1 doc-comment only). Phase 2 touched ZERO app code (git status: only SKILL.md + Phase-1's tauri.conf.json + the WIP); no key material leaked to git. No Test Triage (nothing to run). Correctness was proven in verify-self (manifest-sig → configured pubkey → VERIFY_OK). -->
 
 ## Current Node
-- **Path:** Feature > COMPLETE (all phases + verify groups done) → ready to ship
-- **Active scope:** none — WP5 build+verify complete
+- **Path:** Feature > ship (complete) + review-quality (complete, 0C/2M/1m all resolved in-place) → ready for finalize
+- **Active scope:** none — WP5 build+verify+ship+review complete; next = feature-finalize
 - **Blocked:** none
-- **Unvisited:** none (Phase 1 + Phase 2 both `[x]`)
+- **Unvisited:** none (Phase 1 + Phase 2 both `[x]`; review resolved)
 - **Open discoveries:** none open (password-file pattern applied in the docs; newline sanity-check subtlety fixed)
 
 ## Discoveries
@@ -82,7 +83,11 @@ Operator: dismiss any finding by editing this section and marking the line `[DIS
 
 ---
 
-## Original spec (preserved)
+## Retrospect
+- **What changed in our understanding:** Almost nothing — WP1's probe had already de-risked the entire integration (artifact set, manifest shape, both signing gotchas, the verify chain), so WP5 was execution against a proven design. The one operator decision at spec entry (fresh key vs promote-probe-key) reshaped Phase 1 from "no-op, key already in config" to "mint + rotate + re-prove," but that was a clean, bounded change.
+- **Assumptions that held:** The two captured signing gotchas (string-not-path env var; `.sig` verbatim in `latest.json`) applied exactly as recorded — no surprises. The WP1 minisign verify-harness re-pointed at the fresh key with zero modification. `createUpdaterArtifacts`/endpoint config was already production-shaped from WP1/WP2 (only the pubkey needed swapping). The end-to-end proof (manifest-sig → configured pubkey → VERIFY_OK) worked first try.
+- **Assumptions that were wrong:** None material. Two small in-flight refinements: (1) the operator's "password in a file" idea — tauri signer/build take the password as a STRING, not a file, so the file-pattern works via `$(cat …)` rather than natively; (2) the `latest.json` signature field is content-equal (not byte-equal) to the `.sig` because `jq` strips the trailing newline — harmless (verifies fine) but it forced changing the sanity-check from `diff` to a newline-insensitive compare.
+- **Approach delta:** Matched the plan's two-phase shape (key+config first, skill-doc second) exactly. The only additions beyond plan were the two review-quality MAJOR fixes ($VER convention, latest.json cleanup) — both trivial doc corrections folded into the ship commit, not scope creep.
 
 ## Problem Statement
 

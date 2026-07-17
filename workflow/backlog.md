@@ -43,17 +43,6 @@
 - **Priority:** medium (does not block building WP2+; the deferred verdict is the milestone-exit gate, not a per-WP blocker).
 - **Status:** pending (deferred verification).
 
-## SURFACE-2026-07-17-M10-WP5-SIGNING-KEY-ENV-VAR-IS-STRING-NOT-PATH
-- **Source:** feature:build (M10 WP1 probe, Phase 1)
-- **Target level:** product:wbs (M10 WP5 — /release publishing pipeline)
-- **Type:** gap (release-tooling constraint discovered empirically)
-- **Summary:** `pnpm tauri build`'s auto-sign step for the updater artifact reads **`TAURI_SIGNING_PRIVATE_KEY`** (the private-key CONTENTS as a string), NOT `TAURI_SIGNING_PRIVATE_KEY_PATH`. With only `..._PATH` set, the build completes bundling then FAILS at the end with `"A public key has been found, but no private key. Make sure to set TAURI_SIGNING_PRIVATE_KEY environment variable"` (exit 1) — the `.app.tar.gz` is produced but unsigned (no `.sig`). `tauri signer sign --private-key-path <file>` works post-hoc, but the integrated build path needs the string.
-- **Context:** `tauri signer generate` documents BOTH env vars as usable, which is misleading for the *build* auto-sign path. WP5 wires signing into `/release`; it must `export TAURI_SIGNING_PRIVATE_KEY="$(cat <keyfile>)"` (+ `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), not point at the path, or the release build's updater artifact ships unsigned and the updater rejects it.
-- **Suggested action:** In WP5, load the minisign private key from its secret store into `TAURI_SIGNING_PRIVATE_KEY` as a string before `pnpm tauri build`; document this in the /release skill. (Confirmed: the "to" 0.2.6 probe build auto-signed correctly once the string env var was used.)
-- **Second WP5 finding (latest.json signature-field shape, M10 WP1 Phase 2):** the `latest.json` `platforms.<target>.signature` field must hold the **`.app.tar.gz.sig` file contents VERBATIM**. That `.sig` is ALREADY base64 (tauri signer output); the plugin's `verify_signature` calls `base64_to_string(signature)` which base64-DECODES the field ONCE to recover the raw minisign text. So do NOT base64-encode the `.sig` again when composing `latest.json` — paste its contents as-is. (Empirically confirmed via a minisign-verify 0.2.5 harness: verbatim-.sig verifies; double-encoded fails `Signature::decode`.) WP5's `latest.json` generator must `cat` the `.sig` into the field, not re-encode it.
-- **Priority:** medium (blocks correct WP5 signing/manifest; cheap to apply, but a silent-unsigned-artifact / verify-fail trap if missed).
-- **Status:** pending (feeds M10 WP5).
-
 ## SURFACE-2026-07-16-M10.5-QOL-BUCKET
 - **Source:** operator request (2026-07-16 session, after the M9 close) — "a few QoL to implement before the next release."
 - **Target level:** product:roadmap — a NEW **Milestone 10.5** (a QoL *collection bucket*, like the completed M6 friend-QoL; sits **after M10 auto-updater, before the next release cut**). An OPEN bucket — more QoL items may land here before it's decomposed.
