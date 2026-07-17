@@ -52,3 +52,8 @@ dist-ssr
 # Machine-local scratch: throwaway projects used to drive verify-self (each is its
 # own git repo). Per the GLOBAL artifact-tracking MAP, tmp/ is ignore-by-default.
 tmp/
+
+# Transient updater manifest produced at repo root by the /release skill (step 5b),
+# uploaded to the GH release, then removed at step 12. Ignored so a mid-release run
+# never trips the skill's own clean-working-tree precondition and it's never committed.
+/latest.json
