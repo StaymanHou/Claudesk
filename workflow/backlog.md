@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m10-wp4-updater-user-control-ux (2026-07-17)
+- **Pointer:** 1 MAJOR + 3 MINOR (0 CRITICAL) from `feature-review-quality` on ship commit `ee7bad7`, Mode-3 autopilot auto-backlogged. **MAJOR: `error` phase / `errorMessage` produced by `useUpdater` but has ZERO consumers** — an `updater_apply` failure surfaces nothing (banner silently reverts), a real gap in the "user always in control" promise; a few-line FE add (render `errorMessage` when `phase==="error"`), a STRONG WP6 fold (WP6 first exercises the failure path live). The 3 MINORs: (1) native-menu check discards the `ManualCheckReport` → no up-to-date/brew feedback from the menu path (picker path toasts them); (2) fallback-dialog + error-phase both fire on the same path (dormant behind the default-false `QUARANTINE_FALLBACK_ACTIVE`; WP6's flip should reconcile them); (3) `on_download_finish` emit zeroes the final `downloaded` byte count (harmless, cosmetic). Reviewer verdict: "well-built feature that advances the codebase rather than accruing debt… nothing blocks ship." See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10-wp4-updater-user-control-ux — 2026-07-17`.
+- **Priority:** medium (the MAJOR) + low (the 3 MINORs).
+- **Status:** pending.
+- **Pickup shape:** the MAJOR + MINOR (2) fold naturally into **WP6** (the error surface + the fallback-vs-error reconciliation are both exercised/flipped there); MINOR (1) rides WP6's native-menu live verify; MINOR (3) rides any future `updater/commands.rs` touch. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## SURFACE-2026-07-17-M10-WP3-BREW-DETECTION-LIVE-DEFERRED
 - **Source:** feature:verify-human (M10 WP3, operator "defer" 2026-07-17)
 - **Target level:** product:wbs (M10 WP6 milestone-exit verify)

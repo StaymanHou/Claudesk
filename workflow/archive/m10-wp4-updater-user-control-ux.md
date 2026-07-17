@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: M10 WP4 — Updater user-control UX + persistence
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete) → ready for /feature-ship
+**State:** ship (complete) — committed `ee7bad7` local-only (22 ahead of origin, NOT pushed); → review-quality
 **Created:** 2026-07-17
 **Entry:** spec (complex feature — new prefs + a new user-facing control surface; > ~200 LOC across backend prefs + frontend UX)
 **Milestone:** M10 (in-app auto-updater) — WP4 of 6. WP2 (updater core) + WP3 (brew gate) + WP5 (`/release` pipeline) already SHIPPED (local, unpushed). WP4 is the last build WP before WP6's exit gate.
@@ -215,9 +215,44 @@ Two MINOR code-quality batches are flagged as natural folds into a WP4 `updater/
     - [x] P5.verify-human.2 — picker controls' visual placement  <!-- status: [x] — operator approved -->
   - [x] verify-codify  <!-- status: [x] — menu id-contract + menuBridge case + picker wiring (8 guards) pin the behavior; full suite cargo 547+6, FE 1154 pass, no regression -->
 
+## Code-Quality Review — m10-wp4-updater-user-control-ux
+*(feature-review-quality, ship commit `ee7bad7`, Mode-3 autopilot — 0 CRITICAL / 1 MAJOR / 3 MINOR, all auto-backlogged)*
+
+### Strengths
+- Clean pure-logic/wiring split (`updateNotifyState.ts` gating + `updateFlowState.ts` specs/%, React/DOM-free, exhaustively unit-tested) matching the `confirmDialog.ts` posture.
+- Backend prefs land exactly on the `read/write_pip_mode` + `time_tracking_enabled` template (optional `skip_serializing_if` fields, forward-compat + independence tested).
+- IPC-contract drift pinned both sides (event-name consts + snake_case payload serde ↔ FE strings, with cross-ref comments).
+- The F12 layout fix defended by 2 source-text guards (banner-before-scene + not-`position:absolute`).
+- Design-prior reasoning disciplined + honest (default-ON via `operator-helpful-friend-misfiring-as-offswitchable-setting` Rule 2; low-surface per `new-surface-must-earn-its-place`).
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR**
+- [src/updater/useUpdater.ts:47,71,139-143,180 + src/App.tsx] `error` phase + `errorMessage` are produced by the hook + exported, but have **zero consumers** — nothing renders `errorMessage` or branches on `phase === "error"`. On apply failure the banner silently reverts with no signal, undercutting the "user always in control" promise. Destructive apply is legitimately carried to WP6, but the error-surfacing wiring is FE-only + could have been wired here; WP6's real-endpoint verify will hit this first.
+
+**MINOR**
+- [src/App.tsx (menu checkForUpdates)] The native-menu manual check discards the returned `ManualCheckReport`, so a menu-invoked check that resolves `up-to-date`/`brew-defer` gives no feedback (the picker path toasts these; the menu path doesn't). Native-menu live outcomes carried to WP6.
+- [src/updater/useUpdater.ts:136-139] When `QUARANTINE_FALLBACK_ACTIVE` is true, the fallback dialog AND `errorMessage`/`phase="error"` both fire on the same path — two surfaces race. Dormant behind the default-false const; WP6's one-line flip activates it — worth an early-return/comment so the flip is truly one-line-safe.
+- [src-tauri/src/updater/commands.rs:184-193] `on_download_finish` emits `downloaded: 0, total: None, done: true`, zeroing the final byte count. Harmless (`progressPercent` short-circuits on `done`) but reads as a lost value to a future maintainer.
+
+### Assessment
+Well-built feature that advances the codebase — slots into three established seams without reshaping them; pure/wiring split + dual-side contract pinning make future edits test-guarded; WHY-not-WHAT comments throughout. The one real gap is the orphaned `error`/`errorMessage` state: the failure path terminates in state nothing renders. WP6 should close it (ideally wiring the FE error surface). Nothing blocks ship.
+
+### If you disagree
+Operator: dismiss any finding by editing this section + marking the line `[DISMISSED]` before finalize archives the WIP.
+
+**Disposition (Mode 3 autopilot):** 1 MAJOR + 3 MINOR auto-backlogged to `workflow/backlog-quality-findings.md` → `# m10-wp4-updater-user-control-ux — 2026-07-17`; pointer in `workflow/backlog.md`. The MAJOR (error-surfacing gap) is a strong WP6 candidate — a few-line FE addition (render `errorMessage` when `phase==="error"`), naturally folded into WP6's real-endpoint verify where the failure path is first exercised live.
+
+## Retrospect
+- **What changed in our understanding:** the `position: absolute` banner (the first, "obvious" placement) avoided layout *shift* but introduced an *overlay* misclick hazard on the workspace scene — the operator caught this at verify-human before it shipped. The fix (an in-flow app-shell grid/flex row) is the structurally-correct answer; it's now regression-guarded. Also confirmed empirically: the `tauri-plugin-updater` `download()` callback fires per-chunk with the *chunk* length (not cumulative), so the accumulator lives caller-side.
+- **Assumptions that held:** the config_store per-identity prefs slotted onto the `time_tracking_enabled`/`pip_mode` template with zero friction; the FUNCTIONAL_IDS menu-bridge contract + the picker settings-toggle pattern extended cleanly; the split `download()`/`install()` gave a clean cancel boundary as WP2 designed; the MCP bridge drove the whole banner→confirm→progress→cancel flow live (fiber setState injection for the gated banner + the fire-then-poll invoke pattern).
+- **Assumptions that were wrong:** (1) an absolute-positioned banner is safe because "it doesn't shift layout" — WRONG, overlay-occlusion is a distinct hazard (F12 back-loop). (2) `App.css?raw` returns raw text in vitest — WRONG, Vite's CSS plugin intercepts `?raw` on `.css`, so the layout-invariant guard reads the file via `fs` instead.
+- **Approach delta:** delivered as planned (5 phases, all Q1–Q4 resolved answers held) EXCEPT the one operator-driven F12 layout back-loop at P4 verify-human (absolute→in-flow banner). The WP1-fallback dialog was built as a `ConfirmModal` + spec (not a bespoke component) — simpler than the plan's "QuarantineFallbackDialog.tsx". The `error`/`errorMessage` hook state was built but left unconsumed (review-quality MAJOR) — a deliberate WP6 fold since the failure path first fires live there.
+
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** All 5 phases `[x]` (P1 backend prefs, P2 progress event, P3 FE gating logic, P4 banner+flow+fallback [+F12 layout back-loop], P5 menu item + picker controls). WP4 ready for `/feature-ship`.
+- **Path:** Feature > review-quality (complete) → finalize
+- **Active scope:** All 5 phases `[x]`; shipped `ee7bad7`; review-quality done (0 CRIT / 1 MAJOR / 3 MINOR, all Mode-3 auto-backlogged → `# m10-wp4…` in backlog-quality-findings.md + pointer in backlog.md; MAJOR = error-surfacing gap, strong WP6 fold). Ready for `/feature-finalize`.
 - **Blocked:** none
 - **Unvisited:** none — WP4 build complete.
 - **Open discoveries:** none

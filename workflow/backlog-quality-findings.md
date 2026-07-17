@@ -4,6 +4,42 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m10-wp4-updater-user-control-ux — 2026-07-17
+
+*(feature-review-quality on ship commit `ee7bad7`; Mode 3 autopilot. 0 CRITICAL / 1 MAJOR / 3 MINOR — all auto-backlogged. Reviewer verdict: "well-built feature that advances the codebase rather than accruing debt… nothing blocks ship." The MAJOR is the one substantive gap — the error-surfacing wiring — and is a strong WP6 fold.)*
+
+## SURFACE-2026-07-17-QUALITY-WP4-ERROR-STATE-UNCONSUMED
+- **Severity:** MAJOR
+- **Location:** `src/updater/useUpdater.ts` (`error` phase + `errorMessage`, ~L47/71/139-143/180) + `src/App.tsx` (banner/dialog render block)
+- **Finding:** `useUpdater` sets `phase="error"` + `errorMessage` on any `applyUpdate` rejection or non-relaunch resolution, and exports both on the `UseUpdater` interface — but **nothing consumes them**: App.tsx renders neither `errorMessage` nor branches on `phase === "error"`. On an apply failure the banner silently reverts to Update…/Skip/Dismiss (applyingPercent is `undefined` outside `applying`) — the user gets no signal the update failed.
+- **Why it matters:** "the user is always in control" is the milestone's load-bearing promise; a failed download/install that surfaces nothing is a silent dead-end. The destructive apply path is legitimately carried to WP6, but the error-surfacing is FE-only and could have been wired at WP4.
+- **Priority:** medium
+- **Pickup shape:** a few-line FE addition — render `errorMessage` in the banner (or a small error affordance) when `phase === "error"`. **Strong WP6 fold:** WP6 exercises the real download→install→relaunch against a published endpoint, which is where the failure path first fires live — wire + verify the error surface there. Dismiss via the WIP's `## Code-Quality Review` section.
+
+## SURFACE-2026-07-17-QUALITY-WP4-MENU-CHECK-DISCARDS-OUTCOME
+- **Severity:** MINOR
+- **Location:** `src/App.tsx` (the `menu` listener's `checkForUpdates` case — `void checkNowRef.current()`)
+- **Finding:** the native-menu "Check for Updates…" discards the returned `ManualCheckReport`, so a menu-invoked check that resolves `up-to-date` or `brew-defer` produces no feedback (the picker button path toasts these; the menu path doesn't).
+- **Why it matters:** the affordance's point is on-demand feedback; a menu check that finds you current looks like a no-op. Native-menu live outcomes are carried to WP6 per the WIP → thin spot, not a blocker.
+- **Priority:** low
+- **Pickup shape:** route the menu check through a feedback surface (a small toast/status), or accept the picker button as the feedback-carrying affordance. Fold into WP6 (native-menu live verify) or dismiss. 
+
+## SURFACE-2026-07-17-QUALITY-WP4-FALLBACK-VS-ERROR-RACE
+- **Severity:** MINOR
+- **Location:** `src/updater/useUpdater.ts` (~L136-139, the `QUARANTINE_FALLBACK_ACTIVE` branch)
+- **Finding:** when `QUARANTINE_FALLBACK_ACTIVE` is `true`, the fallback quarantine dialog is shown AND `errorMessage`/`phase="error"` are set on the same path — two post-install surfaces would race. Dormant while the const is `false` (default GO path), but WP6's one-line flip activates it.
+- **Why it matters:** the seam WP6 flips should have an unambiguous single post-install surface; the fallback-dialog ↔ error-phase interaction isn't obviously reconciled, so the "one-line flip" isn't truly one-line-safe.
+- **Priority:** low
+- **Pickup shape:** an early-return or a one-line comment reconciling the two surfaces, done as part of the WP6 flip (couples with the MAJOR above). Dismiss via the WIP's review section.
+
+## SURFACE-2026-07-17-QUALITY-WP4-FINISH-EMIT-ZEROES-DOWNLOADED
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/updater/commands.rs` (~L184-193, `on_download_finish` emit)
+- **Finding:** the finish emit sends `downloaded: 0, total: None, done: true`, zeroing the final cumulative byte count. Harmless (`progressPercent` short-circuits on `done` → 100), but reads as a lost value to a future maintainer.
+- **Why it matters:** trivial cosmetic; the `done`-pins-100 comment exists, but the `downloaded: 0` reset is mildly surprising.
+- **Priority:** low
+- **Pickup shape:** carry the final `downloaded` through on the finish emit (or a one-line comment). Rides any future `updater/commands.rs` touch. Dismiss via the WIP's review section.
+
 # m10-wp3-brew-detect-and-defer — 2026-07-17
 
 *(feature-review-quality on the WP3 working-tree diff [uncommitted, on HEAD `2592b2d`]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all documentary/cosmetic, auto-backlogged. Reviewer verdict: "well-built, appropriately-scoped… advances the codebase and accrues no meaningful debt." NOTE: this WP's P1.5 doc-drift fold RESOLVED the two `m10-wp2-updater-core` findings below [WP2-LIBRS-INVOKE-COMMENT-STALE + WP2-CARGO-DEP-COMMENT-STALE] — those close at finalize.)*
