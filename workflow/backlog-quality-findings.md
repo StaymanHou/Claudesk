@@ -642,3 +642,16 @@ Findings from the WP6c-1 (Metrics tab + build_metrics producer) review. Coherent
 - **Fix shape:** a one-line comment at the display seam clarifying the guarded anti-pattern is MINUTE-flooring (per-segment quantization), NOT sub-second display; sub-second flooring to "0s" is expected + correct.
 - **Priority:** low.
 - **Status:** pending.
+
+# m10-wp6-milestone-exit-verify — 2026-07-18
+
+Review of ship commit `4955463` (Phase 1 error-surface fold + Phase B1 revert to one self-update path), Mode 3. **0 CRITICAL / 0 MAJOR / 1 MINOR.** Reviewer verdict: "a well-executed subtraction … advances the codebase by collapsing a two-path flow into one uniform self-update path; the single MINOR is a type-narrowing polish, not debt."
+
+## SURFACE-2026-07-18-QUALITY-WP6-PICKER-CHECK-UPDATES-VESTIGIAL-RETURN-TYPE
+- **Severity:** MINOR
+- **Location:** `src/components/picker/ProjectPicker.tsx:83`
+- **Finding:** `onCheckForUpdates?: () => Promise<{ outcome: string } | null>` still types a `{ outcome }` return value that the handler (`handleCheckForUpdates`) no longer reads — the WP6 P1.4 de-dup made the picker KICKS-only (feedback moved to the App-level `useUpdater.statusNote`), and the comment at L79-82 even states "the return value is unused now." The advertised `{ outcome }` contract has no consumer.
+- **Why it matters:** a stray return-type contract left after a surface was de-duped invites a future reader to wire against a value the producer no longer meaningfully supplies.
+- **Suggested action:** narrow the type to `() => void` (or `() => Promise<unknown>`) on both the `ProjectPickerProps` declaration and the `App.tsx` prop pass-site. Trivial; no correctness impact.
+- **Priority:** low.
+- **Status:** pending.

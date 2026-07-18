@@ -178,7 +178,7 @@ WP6 (re-planned) = **Phase 1 (done, kept)** + **Phase B1 (revert to one self-upd
   **Relevance check (M10 close):** all four signals green — the M10 self-update capability was the milestone goal; it's verified GO on the real user path; no superior alternative surfaced. WP6 complete.
 
 ## Current Node
-- **Path:** WP6 COMPLETE 2026-07-18 — all phases done (Phase 1 error-surface fold; Phase B1 revert to one self-update path; Phase B2 brew self-update live milestone-exit pass = GO). The M10 self-update exit gate is MET. **Next: `/feature-ship` then `/feature-finalize`** (WP6 is the M10 milestone-exit WP → M10 ready for `/product-finalize` after ship/finalize).
+- **Path:** WP6 shipped + review-quality done (0C/0M/1m, MINOR auto-backlogged) → **`/feature-finalize`** next. WP6 is the M10 milestone-exit WP → M10 ready for `/product-finalize` after finalize.
 - **✅ M10 self-update verified GO** on the operator's REAL Homebrew prod install: brew-installed 0.2.7 → in-app Check-for-updates → Update → self-updated to the no-op 0.2.8 target with ZERO brew commands, relaunched clean past Gatekeeper. Verdict recorded to `docs/product/wbs.md` "Probe outcomes".
 - **Published this pass:** v0.2.7 (updater-capable, `4955463`+`2d99744`) + v0.2.8 (no-op target, `7d18eac`); tap bumped to 0.2.8 (`5eb7c02`); cask `auto_updates true` (`06e2d63`). HEAD == origin/main == `d9602c7`, tree clean.
 - **Cleanup DONE:** `~/claudesk-m10-probe/` (72M — spent WP1 probe keys/artifacts + the WP6 runbook) deleted at operator request; the release keys in `~/.claudesk-release-keys/` are untouched.
@@ -210,6 +210,17 @@ WP6 (re-planned) = **Phase 1 (done, kept)** + **Phase B1 (revert to one self-upd
      WP4 MINOR#3 (on_download_finish downloaded:0) rides any updater/commands.rs touch
      (not in Phase-1 scope unless a commands.rs edit lands); WP2/WP3 MINORs are
      documentary/accept-as-limitation — decide at finalize. -->
+
+### Reviewer output — m10-wp6 (ship commit 4955463, reviewed 2026-07-18, Mode 3)
+
+**Strengths:** the install-source revert is complete + symmetric across both layers (backend enum/fns/const/field + FE prop/branch/helper/CSS removed together, `use super::InstallSource;` dropped — no orphaned reference); the absence-guards are load-bearing (backend serde-guard pins exactly 3 keys, FE source guards assert zero brew artifacts); doc reconciliation exemplary (arch/roadmap/wbs/CLAUDE strike-through with audit trail + honestly record the buggy-detection finding); every removed-path comment updated in lockstep; the resulting one-self-update-path shape is a genuine simplification. tsc + eslint clean; runtime registry maintained.
+
+**Issues: 0 CRITICAL / 0 MAJOR / 1 MINOR.**
+- **MINOR** — [`src/components/picker/ProjectPicker.tsx:83`] `onCheckForUpdates?: () => Promise<{ outcome: string } | null>` still types a `{ outcome }` return the handler no longer reads (the comment even says "the return value is unused now"); could narrow to `() => void`. Trivial; no correctness impact. → **auto-backlogged (Mode 3), priority low.**
+
+**Assessment:** "a well-executed subtraction … avoids dead code, half-removed abstractions, and stale comments … advances the codebase by collapsing a two-path flow into one uniform self-update path … the single MINOR is a type-narrowing polish, not debt."
+
+**If you disagree:** dismiss the MINOR by marking it `[DISMISSED]` in this section before finalize archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
