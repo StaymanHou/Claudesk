@@ -1,7 +1,7 @@
 # Feature: M10 WP6 — Milestone-exit verify (in-app auto-updater)
 
 **Workflow:** feature
-**State:** plan (complete — RE-PLANNED via F23 back-loop 2026-07-18 around the reversed brew decision, option B) → build (Phase B1)
+**State:** ship (complete) — all phases done + verified (M10 self-update exit = GO); pushed to origin/main `324c2d7`; full suite green (backend 539+6, FE 105/1163). Next: review-quality → finalize.
 **Created:** 2026-07-17
 **drive_mode:** autopilot
 
