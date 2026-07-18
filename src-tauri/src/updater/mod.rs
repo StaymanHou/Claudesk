@@ -36,6 +36,16 @@
 //! - **[`commands`]** — the Tauri commands driving the production update flow
 //!   (`updater_check` + `updater_apply`).
 //!
+//! ## One self-update path — no install-source gate (M10 WP6 Phase B1, decision reversal)
+//! An earlier WP3 iteration classified the install source (`/Caskroom/` → Homebrew) and
+//! made brew installs DEFER to `brew upgrade` instead of self-updating. That decision was
+//! **reversed** (2026-07-17, `SURFACE-2026-07-17-M10-BREW-DECISION-REVERSED-TO-SELF-UPDATE`):
+//! brew installs now self-update in-app exactly like a direct download. The cask declares
+//! `auto_updates true` and each release bumps `CFBundleVersion`, so a later `brew upgrade`
+//! reconciles via `Info.plist` (Homebrew PR #21882) rather than downgrading. Consequently
+//! the `InstallSource` enum + `install_source*` fns + the brew short-circuit/refusal were
+//! removed here and in `commands` — there is ONE self-update path for every install.
+//!
 //! WP1 note: this module's pure core + tests are the durable output of the M10 WP1
 //! probe (verify-codify pinned them as the shipping self-clear logic); WP2 promoted
 //! them here from the throwaway `updater_probe` module and built the production flow
@@ -108,78 +118,6 @@ pub fn quarantine_clear_command(bundle: &Path) -> (String, Vec<String>) {
             bundle.to_string_lossy().into_owned(),
         ],
     )
-}
-
-/// Where the running Claudesk bundle was installed from — decides whether the in-app
-/// updater may self-install (WP3: brew detect-and-defer).
-///
-/// - [`InstallSource::Homebrew`] — a Homebrew-cask install, symlink-managed under a
-///   `…/Caskroom/…` path. The updater must NOT self-install into it (that desyncs
-///   brew's version bookkeeping); it defers the user to `brew upgrade`.
-/// - [`InstallSource::DirectDownload`] — a real `/Applications/Claudesk.app` (or any
-///   non-brew) install, and the **safe default** when the source can't be determined
-///   (dev binary not inside a `.app`, or a Gatekeeper-translocated bundle). A wrong
-///   `DirectDownload` verdict at worst attempts a self-update; a wrong `Homebrew`
-///   verdict would wrongly disable updates for a direct install — so we bias to
-///   DirectDownload and only flip to Homebrew on a positive `/Caskroom/` match.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InstallSource {
-    /// Homebrew-cask managed (path contains a `/Caskroom/` segment) → defer to `brew upgrade`.
-    Homebrew,
-    /// Direct-download / `/Applications` (or unknown) → in-app self-update allowed.
-    DirectDownload,
-}
-
-/// The path segment that marks a Homebrew-cask install. Matched as a *bounded* path
-/// segment (`/Caskroom/`), NOT a bare substring, so a project dir or file that merely
-/// contains the text "caskroom" cannot trip the gate.
-const CASKROOM_SEGMENT: &str = "Caskroom";
-
-/// Pure classification: given the (optionally-resolved) bundle path, decide the install
-/// source. `None` (exe not inside a `.app`) ⇒ `DirectDownload` safe default.
-///
-/// A Homebrew cask stores the app under `…/Caskroom/<token>/<version>/<App>.app`, so a
-/// brew-managed bundle path has a `Caskroom` **path component**. We check for the
-/// component (via [`Path::components`]) rather than a `.contains("Caskroom")` substring
-/// so a path like `/Users/me/Caskroom-notes/Claudesk.app` (a literal dir named
-/// "Caskroom-notes") does not false-positive.
-pub fn install_source_from_bundle(bundle: Option<&Path>) -> InstallSource {
-    match bundle {
-        Some(path) => {
-            let is_brew = path.components().any(|c| {
-                c.as_os_str()
-                    .to_str()
-                    .is_some_and(|s| s == CASKROOM_SEGMENT)
-            });
-            if is_brew {
-                InstallSource::Homebrew
-            } else {
-                InstallSource::DirectDownload
-            }
-        }
-        None => InstallSource::DirectDownload,
-    }
-}
-
-/// Resolve the running app's install source: `current_exe()` → enclosing `.app` bundle
-/// → `canonicalize()` (resolve the brew symlink chain to the real Caskroom path) →
-/// [`install_source_from_bundle`].
-///
-/// Homebrew installs the `.app` in the Caskroom and symlinks it into `/Applications`;
-/// whether `current_exe()` reports the symlink or the real path is macOS-version- and
-/// launch-path-dependent, so we `canonicalize()` to always see the underlying Caskroom
-/// path when it exists. Canonicalize failure (or an unresolved bundle) falls back to the
-/// pre-canonicalized path, then to the `None` safe default — never blocks the flow.
-pub fn install_source() -> InstallSource {
-    let exe = match std::env::current_exe() {
-        Ok(p) => p,
-        Err(_) => return InstallSource::DirectDownload,
-    };
-    let bundle = resolve_bundle_path(&exe);
-    // Canonicalize the bundle path so a /Applications symlink into the Caskroom resolves
-    // to the real …/Caskroom/… path. If canonicalize fails, use the raw bundle path.
-    let resolved = bundle.as_deref().map(|b| b.canonicalize().unwrap_or_else(|_| b.to_path_buf()));
-    install_source_from_bundle(resolved.as_deref())
 }
 
 /// Resolve the running app's own bundle and clear its quarantine xattr synchronously.
@@ -261,78 +199,5 @@ mod tests {
             quarantine_clear_command(Path::new("/Applications/Claudesk Dev.app"));
         // The bundle path is a single argv element (Command::args does not shell-split).
         assert_eq!(args[2], "/Applications/Claudesk Dev.app".to_string());
-    }
-
-    // --- WP3: install-source detection (brew detect-and-defer) ---
-
-    #[test]
-    fn caskroom_path_is_homebrew() {
-        // The canonical brew-cask layout: …/Caskroom/<token>/<version>/<App>.app
-        let bundle =
-            Path::new("/opt/homebrew/Caskroom/claudesk/0.2.5/Claudesk.app");
-        assert_eq!(
-            install_source_from_bundle(Some(bundle)),
-            InstallSource::Homebrew
-        );
-    }
-
-    #[test]
-    fn caskroom_path_intel_prefix_is_homebrew() {
-        // Intel Homebrew prefix (/usr/local) — still a Caskroom segment.
-        let bundle =
-            Path::new("/usr/local/Caskroom/claudesk/0.2.5/Claudesk.app");
-        assert_eq!(
-            install_source_from_bundle(Some(bundle)),
-            InstallSource::Homebrew
-        );
-    }
-
-    #[test]
-    fn applications_path_is_direct_download() {
-        let bundle = Path::new("/Applications/Claudesk.app");
-        assert_eq!(
-            install_source_from_bundle(Some(bundle)),
-            InstallSource::DirectDownload
-        );
-    }
-
-    #[test]
-    fn unresolved_bundle_is_direct_download_safe_default() {
-        // No .app (dev binary) → the safe default is DirectDownload, not a wrong
-        // Homebrew verdict that would disable updates.
-        assert_eq!(
-            install_source_from_bundle(None),
-            InstallSource::DirectDownload
-        );
-    }
-
-    #[test]
-    fn caskroom_substring_in_name_does_not_false_positive() {
-        // A dir literally named "Caskroom-notes" (or a file containing "caskroom")
-        // must NOT match — we match a bounded path COMPONENT, not a substring.
-        let bundle = Path::new("/Users/me/Caskroom-notes/Claudesk.app");
-        assert_eq!(
-            install_source_from_bundle(Some(bundle)),
-            InstallSource::DirectDownload,
-            "a dir named Caskroom-notes is not a Caskroom segment"
-        );
-        let bundle2 = Path::new("/Users/me/my-caskroom-backup/Claudesk.app");
-        assert_eq!(
-            install_source_from_bundle(Some(bundle2)),
-            InstallSource::DirectDownload
-        );
-    }
-
-    #[test]
-    fn translocated_path_is_direct_download() {
-        // A Gatekeeper-translocated bundle runs from a randomized AppTranslocation
-        // path — neither /Caskroom/ nor /Applications. The safe default applies.
-        let bundle = Path::new(
-            "/private/var/folders/ab/xxxx/T/AppTranslocation/UUID/d/Claudesk.app",
-        );
-        assert_eq!(
-            install_source_from_bundle(Some(bundle)),
-            InstallSource::DirectDownload
-        );
     }
 }

@@ -453,7 +453,6 @@ function App() {
       {updater.banner && (
         <UpdateNotifyBanner
           version={updater.banner.available_version ?? ""}
-          isBrew={updater.banner.install_source === "homebrew"}
           applyingPercent={
             updater.phase === "applying" ? updater.applyingPercent : undefined
           }
@@ -465,9 +464,9 @@ function App() {
       {/* M10 WP6 P1.1/P1.4 — the updater STATUS row: surfaces an apply FAILURE
           (phase==="error" + errorMessage — the WP4 MAJOR gap, previously unconsumed so a
           failed update silently reverted the banner) and the manual-check NOTE
-          (up-to-date / brew-defer / check-failed — the native-menu path had no App-side
-          surface). Same in-flow, misclick-safe app-shell row as the notify banner above;
-          renders null (zero height) when there's nothing to show. Error > note precedence. */}
+          (up-to-date / check-failed — the native-menu path had no App-side surface). Same
+          in-flow, misclick-safe app-shell row as the notify banner above; renders null
+          (zero height) when there's nothing to show. Error > note precedence. */}
       <UpdaterStatusRow
         isError={updater.phase === "error"}
         errorMessage={updater.errorMessage}

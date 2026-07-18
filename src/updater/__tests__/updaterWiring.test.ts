@@ -111,31 +111,30 @@ describe("useUpdater fallback-vs-error reconciliation (WP6 P1.3)", () => {
   });
 });
 
-// WP6 Phase 2 — the banner's Homebrew branch: same "available" text as direct-download,
-// but the in-app Update button is replaced by a one-click-to-copy `brew upgrade claudesk`
-// button (flashes "Copied!"), and there is NO in-app Update button for brew. Source-text
-// guards (no jsdom for components; live behavior is bridge-verified).
-describe("UpdateNotifyBanner Homebrew copy-to-clipboard branch (WP6 Phase 2)", () => {
-  it("renders a copy button wired to the clipboard helper (not a plain note)", () => {
-    expect(bannerSrc).toContain("copyToClipboard");
-    expect(bannerSrc).toContain("BREW_UPGRADE_CMD");
-    expect(bannerSrc).toContain('data-testid="update-banner-brew-copy"');
+// M10 WP6 Phase B1 (decision reversal) — one self-update path for every install. The
+// banner exposes exactly ONE action set — Update… / Skip this version / Dismiss — with NO
+// install-source branch and NO brew copy-to-clipboard affordance (removed with the gate).
+// Source-text guards (no jsdom for components; live behavior is bridge-verified).
+describe("UpdateNotifyBanner — single self-update action set, no brew branch (WP6 Phase B1)", () => {
+  it("exposes the Update…/Skip/Dismiss action set", () => {
+    expect(bannerSrc).toContain('data-testid="update-banner-update"');
+    expect(bannerSrc).toContain('data-testid="update-banner-skip"');
+    expect(bannerSrc).toContain('data-testid="update-banner-dismiss"');
   });
 
-  it("shows a Copied! affordance and toggles data-copied", () => {
-    expect(bannerSrc).toContain("Copied!");
-    expect(bannerSrc).toContain('data-copied');
+  it("carries NO brew copy-to-clipboard branch (install-source gate removed)", () => {
+    // The gate revert must leave zero brew artifacts in the banner: no isBrew prop, no
+    // copy button, no clipboard helper import, no BREW_UPGRADE_CMD.
+    expect(bannerSrc).not.toContain("isBrew");
+    expect(bannerSrc).not.toContain("copyToClipboard");
+    expect(bannerSrc).not.toContain("BREW_UPGRADE_CMD");
+    expect(bannerSrc).not.toContain("update-banner-brew-copy");
+    expect(bannerSrc).not.toContain("Copied!");
   });
 
-  it("does NOT offer an in-app Update button on the brew branch (brew never self-installs)", () => {
-    // The Update button (data-testid update-banner-update) must live ONLY in the
-    // direct-download branch. Assert the brew branch's copy button precedes it and that
-    // the brew branch itself carries no update-banner-update testid.
-    const brewIdx = bannerSrc.indexOf('data-testid="update-banner-brew-copy"');
-    const directUpdateIdx = bannerSrc.indexOf('data-testid="update-banner-update"');
-    expect(brewIdx).toBeGreaterThan(-1);
-    expect(directUpdateIdx).toBeGreaterThan(-1);
-    // brew branch (isBrew ? ...) is authored before the direct-download branch (: ...)
-    expect(brewIdx).toBeLessThan(directUpdateIdx);
+  it("the App.tsx banner call site passes no isBrew / install_source prop", () => {
+    // The gate is gone frontend-wide — App must not read install_source off the banner.
+    expect(appTsx).not.toContain("isBrew");
+    expect(appTsx).not.toContain("install_source");
   });
 });

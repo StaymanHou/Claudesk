@@ -81,11 +81,9 @@ describe("statusNoteForOutcome — manual-check outcome → App status note", ()
     expect(note).toEqual({ kind: "info", message: "Claudesk is up to date." });
   });
 
-  // Reshaped M10 WP6: the `brew-defer` outcome is retired (brew now classifies as
-  // update-available / up-to-date like direct-download; the brew-specific `brew upgrade`
-  // affordance moved into the banner's isBrew branch). statusNoteForOutcome only handles
-  // the two remaining outcomes — a brew "update available" shows the banner (null note),
-  // a brew "up to date" is just the shared up-to-date note.
+  // Install-source-agnostic since M10 WP6 Phase B1 (the install-source gate was removed —
+  // one self-update path for every install). statusNoteForOutcome handles just the two
+  // outcomes: update-available shows the banner (null note); up-to-date → the info note.
 
   it("statusNoteForCheckError returns an error-kind 'could not check' note", () => {
     const note = statusNoteForCheckError();

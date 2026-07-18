@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-17  # M10 WP4 P5: pnpm test 1.78s (106 files / 1154, +9 menu/picker tests)
+updated: 2026-07-18  # M10 WP6 Phase B1 verify-auto: vite build 1.15s, pnpm test 1.75s (105 files / 1163, revert)
 ---
 
 # Runtime Registry
@@ -17,9 +17,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm vite build
 
-- **Last:** 1.23s (2026-07-17, M10 WP6 P1: error-surface fold — UpdaterStatusRow + useUpdater statusNote/dismissError; built clean)
+- **Last:** 1.15s (2026-07-18, M10 WP6 Phase B1: one-self-update-path revert — removed brew branch; built clean)
 - **Use timeout:** 180000
 - **History:**
+  - 1.15s — 2026-07-18 (M10 WP6 Phase B1)
   - 1.23s — 2026-07-17 (M10 WP6 P1)
   - 1.19s — 2026-07-15 (WP6c-1 P2)
   - 1.96s — 2026-07-06 (mirror-fill-from-bottom)
@@ -73,9 +74,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.99s (2026-07-17, M10 WP6 P2 brew real-check-and-notify: +6 net [copyToClipboard ×4 + banner copy guards + reshaped brew tests] → 106 files / 1170 pass)
+- **Last:** 1.75s (2026-07-18, M10 WP6 Phase B1 verify-auto: one-self-update-path revert — deleted copyToClipboard.test.ts + removed brew tests, added absence guards → 105 files / 1163 pass, 0 fail)
 - **Use timeout:** 120000
 - **History:**
+  - 1.75s — 2026-07-18 (M10 WP6 Phase B1: revert — 105 files / 1163 pass)
+  - 1.99s — 2026-07-17 (M10 WP6 P2 brew real-check-and-notify: 106 files / 1170 pass)
   - 1.78s — 2026-07-17 (M10 WP4 P5 build: +9 menu/picker-updates tests → 106 files / 1154 pass)
   - 2.38s — 2026-07-17 (M10 WP4 P4 codify: +2 layout-invariant guards → 104 files / 1145 pass)
   - 2.72s — 2026-07-17 (M10 WP4 P4 build: +11 updateFlowState/updaterWiring tests → 104 files / 1143 pass)

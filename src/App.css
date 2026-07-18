@@ -1802,20 +1802,6 @@ body,
 .update-banner-btn-primary:hover {
   background-color: #35588c;
 }
-/* Homebrew copy-command button (WP6 Phase 2): a monospace command + a copy glyph; flips
-   to "Copied!" on click via data-copied. The inline <code> inherits readable-on-primary. */
-.update-banner-btn-copy code {
-  padding: 0;
-  background: transparent;
-  border: none;
-  color: inherit;
-  font-size: 0.76rem;
-}
-.update-banner-btn-copy[data-copied="true"] {
-  border-color: #4ec98a;
-  background-color: #245c3f;
-  color: #dfffef;
-}
 /* Progress bar (replaces the action buttons while a download is applying). */
 .update-banner-progress {
   flex: 0 0 40%;

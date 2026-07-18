@@ -3,29 +3,20 @@
 // scene and an open workspace). Full-width, dismissible, dark-token styled (App.css
 // `.update-banner`). NOT a blocking modal — the app stays usable behind it.
 //
-// A DIRECT-DOWNLOAD install shows: Update… (→ confirm dialog) / Skip this version /
-// Dismiss. A HOMEBREW install (reshaped M10 WP6) gets the SAME "an update is available"
-// experience — same version text, same Skip/Dismiss — but the in-app Update button is
-// replaced by a ONE-CLICK-TO-COPY `brew upgrade claudesk` button (clicking copies the
-// command + flashes "Copied!"), since brew installs must NOT self-install (only the ACTION
-// differs; brew now checks for real, so `isBrew` here means a genuine available update).
+// One self-update path for every install (M10 WP6 Phase B1, decision reversal): the
+// banner shows Update… (→ confirm dialog) / Skip this version / Dismiss regardless of how
+// the app was installed (brew and direct download self-update identically). The earlier
+// brew-specific copy-`brew upgrade` branch was removed with the install-source gate.
 //
-// This is the DUMB view — all state/flow lives in useUpdater; only the transient "Copied!"
-// affordance is local view state. Props are the available version + the callbacks + an
-// optional applying-progress percent (null = indeterminate) that turns the Update button
-// into a progress bar while a download runs (direct-download only).
-
-import { useState } from "react";
-import { BREW_UPGRADE_CMD, copyToClipboard } from "./copyToClipboard";
+// This is the DUMB view — all state/flow lives in useUpdater. Props are the available
+// version + the callbacks + an optional applying-progress percent (null = indeterminate)
+// that turns the Update button into a progress bar while a download runs.
 
 interface UpdateNotifyBannerProps {
-  /** The available version tag to offer (e.g. "0.2.6"). */
+  /** The available version tag to offer (e.g. "0.2.7"). */
   version: string;
-  /** True when this is a Homebrew-managed install → the Update button becomes a
-   *  copy-to-clipboard `brew upgrade claudesk` button (no in-app self-install). */
-  isBrew: boolean;
   /** While a download is in flight: 0–100, or null for an indeterminate bar. `undefined`
-   *  = not applying (show the action buttons). Direct-download only (brew never applies). */
+   *  = not applying (show the action buttons). */
   applyingPercent?: number | null;
   onUpdate: () => void;
   onSkip: () => void;
@@ -34,23 +25,12 @@ interface UpdateNotifyBannerProps {
 
 export function UpdateNotifyBanner({
   version,
-  isBrew,
   applyingPercent,
   onUpdate,
   onSkip,
   onDismiss,
 }: UpdateNotifyBannerProps) {
   const applying = applyingPercent !== undefined;
-  const [copied, setCopied] = useState(false);
-
-  async function handleCopyBrew() {
-    const ok = await copyToClipboard(BREW_UPGRADE_CMD);
-    if (ok) {
-      setCopied(true);
-      // Revert the "Copied!" affordance after a moment so the button re-invites a copy.
-      window.setTimeout(() => setCopied(false), 1600);
-    }
-  }
 
   return (
     <div className="update-banner" data-testid="update-notify-banner" role="status">
@@ -63,7 +43,6 @@ export function UpdateNotifyBanner({
         ) : (
           <>
             Claudesk <strong>{version}</strong> is available.
-            {isBrew ? " Update via Homebrew:" : ""}
           </>
         )}
       </span>
@@ -86,38 +65,6 @@ export function UpdateNotifyBanner({
               applyingPercent === null ? undefined : { width: `${applyingPercent}%` }
             }
           />
-        </div>
-      ) : isBrew ? (
-        // Homebrew: no in-app Update button (brew must not self-install). Instead a
-        // one-click-to-copy `brew upgrade claudesk` button (flashes "Copied!"), plus the
-        // same Skip / Dismiss as direct-download. Same notification, different action.
-        <div className="update-banner-actions">
-          <button
-            type="button"
-            className="update-banner-btn update-banner-btn-primary update-banner-btn-copy"
-            data-testid="update-banner-brew-copy"
-            data-copied={copied ? "true" : "false"}
-            onClick={() => void handleCopyBrew()}
-            title={`Copy “${BREW_UPGRADE_CMD}” to the clipboard`}
-          >
-            {copied ? "Copied!" : <><code>{BREW_UPGRADE_CMD}</code> ⧉</>}
-          </button>
-          <button
-            type="button"
-            className="update-banner-btn"
-            data-testid="update-banner-skip"
-            onClick={onSkip}
-          >
-            Skip this version
-          </button>
-          <button
-            type="button"
-            className="update-banner-btn"
-            data-testid="update-banner-dismiss"
-            onClick={onDismiss}
-          >
-            Dismiss
-          </button>
         </div>
       ) : (
         <div className="update-banner-actions">

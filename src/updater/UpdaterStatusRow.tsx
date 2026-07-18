@@ -2,8 +2,8 @@
 // (a) an apply FAILURE (`phase==="error"` + `errorMessage` — previously produced by
 // useUpdater but consumed nowhere, so a failed update silently reverted the banner:
 // SURFACE-2026-07-17-QUALITY-WP4-ERROR-STATE-UNCONSUMED), and (b) a transient manual-check
-// NOTE (up-to-date / brew-defer / check-failed) that the native-menu path had no surface
-// for (App.tsx has no toast like the picker: SURFACE-…-MENU-CHECK-DISCARDS-OUTCOME).
+// NOTE (up-to-date / check-failed) that the native-menu path had no surface for (App.tsx
+// has no toast like the picker: SURFACE-…-MENU-CHECK-DISCARDS-OUTCOME).
 //
 // Same in-flow, misclick-safe posture as the WP4 notify banner (an app-shell leading row,
 // NOT an absolute overlay — the WP4 F12 fix) so it never covers filmstrip click-targets.

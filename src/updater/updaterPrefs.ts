@@ -16,16 +16,15 @@
 import { invoke } from "@tauri-apps/api/core";
 
 /** Result of a `updater_check` pre-flight — what the running app is vs. what the manifest
- *  offers. `available_version` is `null` when up to date OR when the install is
- *  Homebrew-managed (self-update deferred to `brew upgrade`). `install_source` is the WP3
- *  seam the UX branches on. snake_case VERBATIM (IPC-DTO casing). Moved here from WP2's
- *  throwaway `UpdaterTrigger.tsx` so it survives that file's deletion in P4. */
+ *  offers. `available_version` is `null` when up to date. snake_case VERBATIM (IPC-DTO
+ *  casing). One self-update path for every install — the M10 WP6 install-source gate was
+ *  removed (decision reversed: brew installs self-update too), so there is no
+ *  `install_source` field. Moved here from WP2's throwaway `UpdaterTrigger.tsx` so it
+ *  survives that file's deletion in P4. */
 export interface UpdateCheckResult {
   current_version: string;
   available_version: string | null;
   status: string;
-  /** "homebrew" (defer to `brew upgrade`) | "direct-download" (in-app self-update). */
-  install_source: string;
 }
 
 /** Download-progress event payload (backend `DownloadProgress`, emitted per chunk from

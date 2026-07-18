@@ -58,10 +58,11 @@ mod time_store;
 mod tray;
 // M10 (in-app auto-updater): the production update flow. The pure core lives in
 // updater/mod.rs — self-clear (bundle-path resolution + `xattr -dr com.apple.quarantine`
-// on the own bundle) plus WP3's install-source detection (`/Caskroom/` segment →
-// Homebrew, else DirectDownload). The flow commands (updater_check + updater_apply —
-// the full check→download→install→self-clear→relaunch, gated so a Homebrew install
-// defers to `brew upgrade` instead of self-installing) live in updater/commands.rs.
+// on the own bundle). The flow commands (updater_check + updater_apply — the full
+// check→download→install→self-clear→relaunch) live in updater/commands.rs. There is ONE
+// self-update path for every install: the brew detect-and-defer gate was removed at M10
+// WP6 (decision reversed — brew installs self-update too; SURFACE-2026-07-17-M10-BREW-
+// DECISION-REVERSED-TO-SELF-UPDATE).
 mod updater;
 
 use std::sync::Mutex;
@@ -453,10 +454,10 @@ pub fn run() {
             time_store::commands::time_get_tracking_enabled,
             time_store::commands::time_set_tracking_enabled,
             // M10 (in-app auto-updater): the production update flow. `updater_check`
-            // reports current→available versions (short-circuiting to a `brew upgrade`
-            // defer on a Homebrew install — WP3); `updater_apply` executes the full
-            // check→download(minisign-verified)→install→self-`xattr`-clear→relaunch
-            // (refusing on a Homebrew install). See docs/product/wbs.md → M10 WP2/WP3.
+            // reports current→available versions; `updater_apply` executes the full
+            // check→download(minisign-verified)→install→self-`xattr`-clear→relaunch. One
+            // self-update path for every install — the brew detect-and-defer gate was
+            // removed at M10 WP6 (decision reversed). See docs/product/wbs.md → M10 WP2/WP6.
             updater::commands::updater_check,
             updater::commands::updater_apply,
             // M10 WP4 (user-control prefs): the notification toggle (default ON) + the

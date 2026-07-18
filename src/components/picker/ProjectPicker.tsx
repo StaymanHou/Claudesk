@@ -77,8 +77,8 @@ interface ProjectPickerProps {
   onOpenDashboard?: () => void;
   // M10 WP4 — manual "Check for updates" from the picker. App owns the `useUpdater` hook,
   // so the picker just KICKS the check; App's checkNow ignores skip/disable, shows the
-  // banner for an available update, and surfaces up-to-date / brew-defer / error via the
-  // single App-level updater status row (WP6 P1.4 — the picker no longer toasts these; the
+  // banner for an available update, and surfaces up-to-date / error via the single
+  // App-level updater status row (WP6 P1.4 — the picker no longer toasts these; the
   // return value is unused now). Optional (the dev-seam picker may not pass it).
   onCheckForUpdates?: () => Promise<{ outcome: string } | null>;
 }
@@ -281,8 +281,8 @@ export function ProjectPicker({
 
   function handleCheckForUpdates() {
     if (!onCheckForUpdates) return;
-    // WP6 P1.4: manual-check feedback (up-to-date / brew-defer / error) is now surfaced by
-    // the SINGLE App-level updater status row (useUpdater.statusNote), which renders over
+    // WP6 P1.4: manual-check feedback (up-to-date / error) is now surfaced by the SINGLE
+    // App-level updater status row (useUpdater.statusNote), which renders over
     // BOTH the picker and workspace scenes — so the picker no longer toasts these itself
     // (that was a duplicate surface, and the native-menu path had no equivalent). The
     // update-available case still shows App's banner. We only need to KICK the check here;

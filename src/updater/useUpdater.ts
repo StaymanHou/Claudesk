@@ -54,8 +54,8 @@ export interface UseUpdater {
    *  revert the banner. */
   errorMessage: string | null;
   /** A transient info/error note for the App-level status row (WP6 P1.4) — e.g. the
-   *  native-menu manual-check "up to date" / "Homebrew — brew upgrade" outcome that
-   *  previously had no App-side surface. `null` = no note. */
+   *  native-menu manual-check "up to date" / "could not check" outcome that previously had
+   *  no App-side surface. `null` = no note. */
   statusNote: UpdaterStatusNote | null;
   /** WP1-fallback: the bundle path to show in the quarantine dialog, or null when the
    *  fallback isn't active/triggered. (Default GO path leaves this null.) */
@@ -199,13 +199,12 @@ export function useUpdater(): UseUpdater {
     try {
       const result = await checkForUpdate();
       const outcome = manualCheckOutcome(result);
-      // Show the banner for an available update — direct-download OR brew (reshaped M10
-      // WP6: brew now checks for real; the banner's isBrew branch shows the copy-to-
-      // clipboard `brew upgrade` affordance instead of an Update button). Fires even for a
-      // skipped version — a manual check re-offers it. For up-to-date, set the SINGLE
-      // App-level status note (WP6 P1.4) so the native-menu path — which discards the
-      // returned report (App.tsx has no toast like the picker) — still gives feedback. The
-      // picker is KICKS-only, so this is the sole surface for both. update-available → null.
+      // Show the banner for an available update (one self-update path for every install —
+      // the banner offers the same Update… action regardless of install source). Fires
+      // even for a skipped version — a manual check re-offers it. For up-to-date, set the
+      // SINGLE App-level status note (WP6 P1.4) so the native-menu path — which discards
+      // the returned report (App.tsx has no toast like the picker) — still gives feedback.
+      // The picker is KICKS-only, so this is the sole surface for both. update-available → null.
       if (outcome === "update-available") setBanner(result);
       setStatusNote(statusNoteForOutcome(outcome));
       return { outcome, result };
