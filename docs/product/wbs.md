@@ -140,3 +140,21 @@ WP1 (PROBE: unsigned self-clear verdict) ── gates ──┐
 **Critical path:** WP1 → WP2 → (WP3 ∥ WP4 ∥ WP5) → WP6. WP1 is the gate; WP3/WP4/WP5 parallelize after WP2; WP6 is the exit.
 
 **One net-new arch element** (already recorded in `arch.md` → "Milestone 10 architecture"): the update-artifact/manifest/minisign publishing pipeline + install-source detection + self-quarantine-clear mechanism. No new runtime data store; prefs ride the existing `config_store` per-identity pattern.
+
+---
+
+## Probe outcomes
+
+### M10 self-update milestone-exit verdict — **GO** (2026-07-18, WP6)
+
+Verified LIVE on the operator's **real Homebrew prod install** (the exact path current users experience), after the brew-decision reversal to option B (brew installs self-update in-app):
+
+- **The verified path:** a user already on a brew install → **`brew upgrade` once** onto the updater-capable **0.2.7** (the last brew command they run for an update) → a no-op **0.2.8** release published as the target → in-app **Check for updates → Update → self-updated 0.2.7→0.2.8 with ZERO Homebrew commands**, relaunching **clean** past Gatekeeper.
+- **VERDICT: GO** — the unsigned bundle's self-`xattr`-clear works on a real brew install; no Gatekeeper "damaged" block; the FALLBACK instruct-user dialog was NOT needed. This is the WP1 unsigned-relaunch GO verdict, confirmed on the actual (brew) user base — not a demoted lower-stakes path.
+- **The reverted banner drove it:** a single in-app **Update…/Skip/Dismiss** action set (no brew-specific "Update via Homebrew" / copy-a-command affordance) — brew and direct-download self-update identically (the one self-update path from WP6 Phase B1).
+- **WP5 live-publish:** proven end-to-end — v0.2.7 + v0.2.8 published with all 4 assets each (`.dmg` + `.app.tar.gz` + `.sig` + signed `latest.json`); the updater endpoint (`releases/latest/download/latest.json`) resolves to the newest release; minisign signature verifies against the configured pubkey (`774E2E8429FDF78A`).
+- **Cask:** `auto_updates true` on the tap; `CFBundleVersion` = the semver `version` (Tauri sets both), so brew's version comparison is monotonic.
+
+**Out of scope (operator directive):** the `brew upgrade` downgrade/reconcile edge case — `brew upgrade` already works; the milestone-exit gate is the *in-app self-update*, which is confirmed GO.
+
+**M10 exit criteria: MET.** `SURFACE-2026-07-17-M10-DIRECT-DOWNLOAD-SELFUPDATE-VERIFY-STANDALONE-WP` is closed as **absorbed** — under option B, brew self-update IS the direct-download self-clear/relaunch path (one path, one verdict), so no separate direct-download WP is needed.
