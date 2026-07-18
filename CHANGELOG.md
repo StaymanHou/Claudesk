@@ -12,6 +12,11 @@
 - **Backlog resolved:** SURFACE-2026-07-17-M10-WP1-LIVE-VERIFY-DEFERRED — the WP1 unsigned-relaunch Gatekeeper GO/FALLBACK verdict was the load-bearing WP6 check: **GO** on a real installed build.
 - **Backlog resolved:** SURFACE-2026-07-17-M10-WP2-PROBE-HARNESS-STALE-SIG — the WP6 live pass used the real published `latest.json`/`.sig` (not the stale harness fixture), and the `~/claudesk-m10-probe/` harness was deleted at close.
 - **Milestone:** M10 WP6 — Milestone-exit verify (real Homebrew self-update path); this completes **all 6 M10 work packages** (WP1–WP6), so Milestone 10 (In-app auto-updater) is done and ready for `/product-finalize`.
+- **Product cycle complete:** Milestone 10 (In-app auto-updater) — Claudesk now checks for, downloads, verifies (minisign), and installs a newer version from inside the app, with the user always in control (skip a version / disable notifications / cancel-confirm; no silent updates), self-clearing the unsigned-relaunch Gatekeeper quarantine so both brew and direct-download installs self-update identically; verified GO on a real Homebrew prod install. Cycle docs archived to `docs/product/archive/milestone-10-in-app-auto-updater/`.
+- **Backlog resolved:** SURFACE-2026-07-06-M10-IN-APP-AUTO-UPDATER — the milestone request (in-app updater with skip/disable/cancel-confirm, before the next release) is fully delivered across WP1–WP6.
+- **Backlog resolved:** SURFACE-2026-07-17-QUALITY-WP4-ERROR-STATE-UNCONSUMED — the WP4 MAJOR error-surface gap was folded into WP6 Phase 1 (a new `UpdaterStatusRow` consumes `phase==="error"`/`errorMessage`, so a failed apply no longer silently reverts the banner).
+- **Backlog resolved:** SURFACE-2026-07-17-QUALITY-WP4-MENU-CHECK-DISCARDS-OUTCOME — WP6 Phase 1 wired manual-check feedback via a pure `statusNoteForOutcome`, so a native-menu check that finds you current now surfaces a note.
+- **Backlog resolved:** SURFACE-2026-07-17-QUALITY-WP4-FALLBACK-VS-ERROR-RACE — WP6 Phase 1 reconciled the fallback-dialog ↔ error-phase surfaces under a single-post-install-surface invariant (fallback dialog XOR error phase).
 
 ## 2026-07-17
 
