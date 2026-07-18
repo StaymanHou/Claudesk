@@ -33,7 +33,10 @@ import { PickerOverlay } from "./components/picker/PickerOverlay";
 import { ConfirmModal } from "./components/workspace/editor/ConfirmModal";
 import {
   closeWorkspaceSpec,
+  isActiveState,
+  quitWhileActiveSpec,
   type CloseWorkspaceChoice,
+  type QuitWhileActiveChoice,
 } from "./components/workspace/editor/confirmDialog";
 import { parseSeedParam } from "./state/seedWorkspace";
 import { listen } from "@tauri-apps/api/event";
@@ -252,14 +255,26 @@ function App() {
     [],
   );
 
-  // QoL-WP1 — the workspace pending a close-confirm (dirty guard). null = no dialog.
-  // Holds the id + display name + unsaved count so the ConfirmModal can show the blast
-  // radius; resolving it (close/cancel) clears it.
+  // QoL-WP1 + M10.5-WP2 — the workspace pending a close-confirm. null = no dialog.
+  // Holds the id + display name + the fired reason(s) (unsaved-doc count AND/OR
+  // CC-active) so the ConfirmModal shows the exact blast radius; resolving it
+  // (close/cancel) clears it. The `active` flag is captured at request time (a snapshot
+  // of the CC status when × was clicked), not re-read while the dialog is open.
   const [pendingClose, setPendingClose] = useState<{
     id: string;
     name: string;
-    count: number;
+    dirtyCount: number;
+    active: boolean;
   } | null>(null);
+
+  // M10.5-WP2 — app-quit-while-active confirm. When the backend `CloseRequested` handler
+  // holds the quit (`prevent_close`) and emits `quit-requested`, we compute the busy
+  // workspace names here (the FE owns `isActiveState(stateFor)` + display names). null =
+  // no dialog; a non-empty name list = the enumerated "quit anyway?" confirm is showing.
+  // (An empty busy set never sets this — it quits immediately via `quit_now`.)
+  const [pendingQuit, setPendingQuit] = useState<{ names: string[] } | null>(
+    null,
+  );
 
   // M10 WP4 — the in-app updater. One App-level hook drives the notify banner, the
   // confirm/progress/cancel flow, skip-this-version, and the WP1-fallback dialog. The
@@ -268,26 +283,31 @@ function App() {
   // notifications pref + skip-list).
   const updater = useUpdater();
 
-  // Close a workspace from the filmstrip × (QoL-WP1). If its editor has unsaved docs,
-  // open the discard-or-cancel confirm; otherwise close immediately. The actual teardown
-  // (CC + second-terminal kill on unmount, workspace_deregister, workspace_watch_stop)
-  // rides closeWorkspace removing the id from the list — see closeWorkspace + the
+  // Close a workspace from the filmstrip × (QoL-WP1 + M10.5-WP2). Confirm before
+  // destroying in-flight work: if its editor has unsaved docs (dirty) OR its CC is
+  // mid-work (running/awaiting_input — `isActiveState`), open the discard-or-cancel
+  // confirm; otherwise close immediately. The one dialog composes whichever reason(s)
+  // fired (M10.5-WP2 spec: never two stacked dialogs). The actual teardown (CC +
+  // second-terminal kill on unmount, workspace_deregister, workspace_watch_stop) rides
+  // closeWorkspace removing the id from the list — see closeWorkspace + the
   // useWorkspaceStatus diff loop + XtermPane's unmount-kill.
   const requestClose = useCallback(
     (workspaceId: string) => {
       const dirty = dirtyProbes.current.get(workspaceId)?.() ?? 0;
-      if (dirty > 0) {
+      const active = isActiveState(stateFor(workspaceId));
+      if (dirty > 0 || active) {
         const ws = workspaces.find((w) => w.id === workspaceId);
         setPendingClose({
           id: workspaceId,
           name: ws?.display_name ?? "This workspace",
-          count: dirty,
+          dirtyCount: dirty,
+          active,
         });
         return;
       }
       closeWorkspace(workspaceId);
     },
-    [workspaces, closeWorkspace],
+    [workspaces, closeWorkspace, stateFor],
   );
 
   // Resolve the close-confirm: "close" tears the workspace down; "cancel" keeps it.
@@ -315,6 +335,51 @@ function App() {
     const focused = workspaces.find((w) => w.id === focusedId);
     focusedPathRef.current = focused ? focused.project_path : null;
   }, [workspaces, focusedId]);
+
+  // M10.5-WP2 — latest-ref computing the busy workspace names, so the once-registered
+  // `quit-requested` listener reads the CURRENT set without re-subscribing (same
+  // latest-ref pattern as focusedPathRef). "Busy" = CC running/awaiting-input via the
+  // Phase-1 `isActiveState` predicate — ONE source of truth for "active" across the
+  // per-workspace close gate and this app-quit gate.
+  const busyNamesRef = useRef<string[]>([]);
+  useEffect(() => {
+    busyNamesRef.current = workspaces
+      .filter((w) => isActiveState(stateFor(w.id)))
+      .map((w) => w.display_name ?? "A workspace");
+  }, [workspaces, stateFor]);
+
+  // M10.5-WP2 — the app-quit round-trip. The backend holds the quit (`prevent_close`)
+  // and emits `quit-requested`; here we decide. No busy workspace → quit immediately
+  // (`quit_now` runs the shared teardown + app.exit). One or more busy → show the
+  // enumerated confirm; "Quit Anyway" then calls `quit_now`, "Cancel" dismisses (the
+  // close is already held, so the app just keeps running). Registers ONCE — the busy set
+  // is read from busyNamesRef at event time.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void listen("quit-requested", () => {
+      const names = busyNamesRef.current;
+      if (names.length === 0) {
+        void invoke("quit_now");
+      } else {
+        setPendingQuit({ names });
+      }
+    }).then((un) => {
+      if (cancelled) un();
+      else unlisten = un;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // Resolve the app-quit confirm: "quit" runs the real teardown + exit via the backend
+  // command; "cancel" dismisses (the app keeps running — prevent_close already held it).
+  const resolveQuit = useCallback((choice: QuitWhileActiveChoice) => {
+    setPendingQuit(null);
+    if (choice === "quit") void invoke("quit_now");
+  }, []);
 
   // M10 WP4 — latest-ref for the updater's manual-check so the once-registered `menu`
   // listener can trigger "Check for Updates…" without re-subscribing (same latest-ref
@@ -514,7 +579,10 @@ function App() {
               only while a close is pending the guard; reuses the shared ConfirmModal. */}
           {pendingClose && (
             <ConfirmModal
-              spec={closeWorkspaceSpec(pendingClose.name, pendingClose.count)}
+              spec={closeWorkspaceSpec(pendingClose.name, {
+                dirtyCount: pendingClose.dirtyCount,
+                active: pendingClose.active,
+              })}
               onChoose={resolveClose}
             />
           )}
@@ -560,6 +628,15 @@ function App() {
         <ConfirmModal
           spec={quarantineFallbackSpec(updater.fallbackBundlePath)}
           onChoose={() => updater.dismissFallback()}
+        />
+      )}
+      {/* M10.5-WP2 — app-quit-while-active confirm. App-shell level (NOT inside the
+          workspace-open branch) so a ⌘Q from either the picker or an open workspace can
+          surface it. Only mounted when the backend held a quit and ≥1 workspace is busy. */}
+      {pendingQuit && (
+        <ConfirmModal
+          spec={quitWhileActiveSpec(pendingQuit.names)}
+          onChoose={resolveQuit}
         />
       )}
     </div>

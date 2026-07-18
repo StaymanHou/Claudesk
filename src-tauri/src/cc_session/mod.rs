@@ -326,6 +326,16 @@ impl PtyCcSession {
     /// [`resolve_shell_argv`]) and reuses the same color-TTY env + generic
     /// [`Self::spawn_argv`] core as the CC spawn — the shared "drive a PTY process"
     /// path, so the `CcSession` seam is not bypassed (`CLAUDE.md`).
+    ///
+    /// **M10.5-WP2 — deliberately NO "running command" signal on this raw shell.** The
+    /// active-close / active-quit guard (design prior
+    /// `explicit-selectable-mode-over-inferred-mode`) keys "active" off the reliable M3
+    /// CC status ONLY. Detecting whether *this* raw PTY shell has a foreground command
+    /// running would need job-control introspection (`tcgetpgrp` vs the shell's pgid,
+    /// backgrounded-job edge cases) — a broad, fragile surface for a low-certainty
+    /// payoff. So a raw terminal's busyness is intentionally out of scope for v1: do NOT
+    /// add foreground-process detection here by reflex. (If ever wanted, it's a new
+    /// signal, not a bug fix.) See `workflow/archive/m10.5-wp2-*` Phase 3.
     fn spawn_shell(app: AppHandle, id: String, project_path: &str) -> Result<Self, CcError> {
         let argv = resolve_shell_argv(std::env::var("SHELL").ok());
         Self::spawn_argv(app, id, &argv, project_path, &color_tty_env(), "exit")

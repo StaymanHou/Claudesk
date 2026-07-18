@@ -158,8 +158,68 @@ pub fn pip_resize(app: AppHandle, width: f64, height: f64) -> Result<(), String>
         let w = width.max(1.0);
         let h = height.max(1.0);
         panel.set_content_size(w, h);
+
+        // M10.5 WP1 — top-right default position. The build (`pip_set_visible`) opens the panel
+        // at a placeholder size at NSPanel's default (~center) origin; the REAL content-driven
+        // size lands HERE, so this is the seam to anchor against — anchoring at build-time would
+        // use the 220×130 placeholder and land the panel in the wrong spot. Only anchor while the
+        // operator has NOT placed the panel (`positioned == false`, drag sets it true), so a
+        // re-summon after a drag stays put. Because we anchor on every unpositioned resize, a
+        // layout/size change before any drag re-flushes the panel to the corner against its
+        // NEW size (the frame math reads the current content frame post-`set_content_size`).
+        // This runs in a `#[tauri::command]` body → main thread, so the `setFrameOrigin:` (same
+        // AppKit msg_send idiom as `pip_move`) needs no marshaling.
+        let unpositioned = app
+            .try_state::<PipAutoStateLock>()
+            .and_then(|lock| lock.0.lock().ok().map(|st| !st.positioned))
+            .unwrap_or(false); // absent/poisoned lock → don't auto-anchor (safe: leave as-is)
+        if unpositioned {
+            anchor_top_right(panel.as_panel());
+        }
     }
     Ok(())
+}
+
+/// M10.5 WP1 — move the live PiP panel so its top-right corner sits `PIP_ANCHOR_MARGIN` points
+/// in from its screen's visible-frame top-right corner (operator-requested gap, not flush).
+/// Reads the panel's own `screen` (fallback `mainScreen`) so it anchors on whatever display the
+/// panel is on, and its **current** frame size (post-resize) so the right inset stays constant
+/// as the content-driven size changes. Pure AppKit frame mutation
+/// (`setFrameOrigin:`) — the same crash-safe path `pip_move` uses (NOT a style-mask transition).
+/// MUST be called on the main thread (all callers are `#[tauri::command]` bodies). Best-effort:
+/// if the screen can't be read, leaves the panel where it is. Takes `&NSPanel` (the caller's
+/// `panel.as_panel()`) so it doesn't have to name the generic `PanelHandle<R>` type.
+fn anchor_top_right(ns_panel: &tauri_nspanel::objc2_app_kit::NSPanel) {
+    use tauri_nspanel::objc2::msg_send;
+    use tauri_nspanel::objc2::runtime::AnyObject;
+    use tauri_nspanel::objc2_foundation::{NSPoint, NSRect};
+
+    unsafe {
+        // The panel's own screen, falling back to the main screen if it reports none (e.g. not
+        // yet on any display). `screen`/`mainScreen` return an NSScreen* (null-able); use raw
+        // messaging so we don't have to name the NSScreen type across crate versions.
+        let mut screen: *mut AnyObject = msg_send![ns_panel, screen];
+        if screen.is_null() {
+            let ns_screen_class = tauri_nspanel::objc2::class!(NSScreen);
+            screen = msg_send![ns_screen_class, mainScreen];
+        }
+        if screen.is_null() {
+            return; // no screen to anchor against — leave the panel as-is.
+        }
+        // `visibleFrame` excludes the menu bar + Dock, so the panel sits fully on-screen.
+        let visible: NSRect = msg_send![screen, visibleFrame];
+        let frame: NSRect = msg_send![ns_panel, frame];
+        let (x, y) = super::top_right_origin(
+            visible.origin.x,
+            visible.origin.y,
+            visible.size.width,
+            visible.size.height,
+            frame.size.width,
+            frame.size.height,
+            super::PIP_ANCHOR_MARGIN,
+        );
+        let _: () = msg_send![ns_panel, setFrameOrigin: NSPoint::new(x, y)];
+    }
 }
 
 /// Move the live PiP panel by a screen-space delta (WP4 Phase 5 drag fix). The PiP webview
@@ -187,6 +247,15 @@ pub fn pip_move(app: AppHandle, dx: f64, dy: f64) -> Result<(), String> {
             // webview y is down-positive; AppKit origin y is up-positive → subtract dy.
             let new_origin = NSPoint::new(frame.origin.x + dx, frame.origin.y - dy);
             let _: () = msg_send![ns_panel, setFrameOrigin: new_origin];
+        }
+        // M10.5 WP1 — the operator has now placed the panel, so stop the top-right auto-anchor
+        // for the rest of this session (`pip_resize` re-checks this flag). Best-effort: an absent
+        // or poisoned lock just leaves the flag unset (worst case, a later resize re-anchors —
+        // harmless, and lock poisoning is not expected on this single-writer main-thread path).
+        if let Some(lock) = app.try_state::<PipAutoStateLock>() {
+            if let Ok(mut st) = lock.0.lock() {
+                st.positioned = true;
+            }
         }
     }
     Ok(())

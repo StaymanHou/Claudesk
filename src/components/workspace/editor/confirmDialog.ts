@@ -12,6 +12,8 @@
 // Esc, which selects the designated cancel button) resolves to that button's `value`.
 // The component renders `buttons` left→right and reports the chosen `value`.
 
+import type { WireWorkspaceState } from "../../../state/workspaceStatus";
+
 /** One dialog button. `value` is what the caller receives when it is pressed. */
 export interface ConfirmButton<V extends string = string> {
   /** Stable id (React key + test handle). */
@@ -58,25 +60,73 @@ export function closeDirtySpec(name: string): ConfirmSpec<CloseChoice> {
   };
 }
 
-/** The two outcomes of the workspace-close dirty guard (QoL-WP1). */
+/** The two outcomes of the workspace-close guard (QoL-WP1 dirty + M10.5-WP2 active). */
 export type CloseWorkspaceChoice = "close" | "cancel";
 
 /**
- * The close-workspace-with-unsaved-edits dialog (QoL-WP1): Close Anyway (danger) /
- * Cancel (primary, the safe default). Esc → cancel (keeps the workspace). Unlike the
+ * Is a workspace's CC "active" for the close/quit guard? (M10.5-WP2, design prior
+ * `explicit-selectable-mode-over-inferred-mode`.) True iff CC is mid-work — a running
+ * turn (`running`) or a prompt the operator hasn't answered (`awaiting_input`). `idle`
+ * and `unknown` are NOT active (nothing in flight to protect). Scoped to the reliable M3
+ * `stateFor` signal; a raw right-panel terminal's "running command" is deliberately NOT
+ * a signal here (no cheap foreground-process detection on a raw PTY — see WP2 Phase 3).
+ * The single source of truth for "active" — reused by the App-level per-workspace close
+ * gate AND the app-quit aggregate.
+ */
+export function isActiveState(state: WireWorkspaceState): boolean {
+  return state === "running" || state === "awaiting_input";
+}
+
+/** Why a workspace close needs confirming — either/both may fire (M10.5-WP2). */
+export interface CloseWorkspaceReasons {
+  /** Count of unsaved editor docs (QoL-WP1). 0 → not dirty. */
+  dirtyCount: number;
+  /** CC is mid-work (`running`/`awaiting_input`) — M10.5-WP2. */
+  active: boolean;
+}
+
+/**
+ * The close-workspace confirm (QoL-WP1 dirty + M10.5-WP2 active): Close Anyway (danger)
+ * / Cancel (primary, the safe default). Esc → cancel (keeps the workspace). Unlike the
  * single-tab `closeDirtySpec` there is no "Save" — a workspace can hold many dirty docs
- * across panes/files, so v1 offers discard-or-cancel (save-all-then-close is out of
- * scope). `name` is the workspace display name; `count` is the unsaved-doc count, woven
- * into the message so the operator knows the blast radius before discarding.
+ * and a live CC turn, so v1 offers discard-or-cancel (save-all-then-close is out of
+ * scope).
+ *
+ * One factory, one dialog for either/both reasons (M10.5-WP2 spec decision b — never two
+ * stacked dialogs): the message composes whichever reason(s) fired so the operator sees
+ * the exact blast radius before closing —
+ *   - dirty-only  → "<name> has unsaved changes in N file(s). Close anyway and discard them?"
+ *   - active-only → "<name> is still working (Claude Code is running). Close anyway and stop it?"
+ *   - both        → "<name> is still working AND has unsaved changes in N file(s). Close anyway and discard them?"
+ *
+ * `name` is the workspace display name; `reasons` is the fired-reason set. The caller
+ * only opens this dialog when `dirtyCount > 0 || active` (App.requestClose) — but the
+ * factory is total (a no-reason call yields a plain "Close <name>?" so it never throws).
  */
 export function closeWorkspaceSpec(
   name: string,
-  count: number,
+  reasons: CloseWorkspaceReasons,
 ): ConfirmSpec<CloseWorkspaceChoice> {
-  const files = count === 1 ? "1 file" : `${count} files`;
+  const { dirtyCount, active } = reasons;
+  const files = dirtyCount === 1 ? "1 file" : `${dirtyCount} files`;
+  let title: string;
+  let message: string;
+  if (active && dirtyCount > 0) {
+    title = "Close active workspace";
+    message = `${name} is still working AND has unsaved changes in ${files}. Close anyway and discard them?`;
+  } else if (active) {
+    title = "Close active workspace";
+    message = `${name} is still working (Claude Code is running). Close anyway and stop it?`;
+  } else if (dirtyCount > 0) {
+    title = "Close workspace with unsaved changes";
+    message = `${name} has unsaved changes in ${files}. Close anyway and discard them?`;
+  } else {
+    title = "Close workspace";
+    message = `Close ${name}?`;
+  }
   return {
-    title: "Close workspace with unsaved changes",
-    message: `${name} has unsaved changes in ${files}. Close anyway and discard them?`,
+    title,
+    message,
     buttons: [
       { id: "cancel", label: "Cancel", value: "cancel", variant: "primary" },
       {
@@ -85,6 +135,45 @@ export function closeWorkspaceSpec(
         value: "close",
         variant: "danger",
       },
+    ],
+    escValue: "cancel",
+  };
+}
+
+/** The two outcomes of the app-quit-while-active confirm (M10.5-WP2). */
+export type QuitWhileActiveChoice = "quit" | "cancel";
+
+/**
+ * The app-quit-while-active confirm (M10.5-WP2): Quit Anyway (danger) / Cancel (primary,
+ * the safe default). Esc → cancel (keeps the app running — the native `prevent_close`
+ * already held the close, so cancelling just dismisses). Fired when the operator triggers
+ * a quit (⌘Q / red button) while one or more workspaces are `running`/`awaiting_input`.
+ *
+ * The message ENUMERATES the busy workspaces by name (M10.5-WP2 spec decision — the
+ * operator asked "which ones?"), so they see exactly what in-flight work quitting would
+ * destroy:
+ *   - 1 → "scratch-a is still working. Quit Claudesk anyway and stop it?"
+ *   - N → "scratch-a, scratch-b are still working. Quit Claudesk anyway and stop them?"
+ *
+ * `names` is the busy-workspace display-name list (non-empty — the caller only opens this
+ * dialog when the busy set is non-empty; an empty-set quit skips the confirm entirely and
+ * quits immediately). The factory is still total (empty → a generic "Quit Claudesk?").
+ */
+export function quitWhileActiveSpec(
+  names: string[],
+): ConfirmSpec<QuitWhileActiveChoice> {
+  const list = names.join(", ");
+  const them = names.length === 1 ? "it" : "them";
+  const message =
+    names.length > 0
+      ? `${list} ${names.length === 1 ? "is" : "are"} still working. Quit Claudesk anyway and stop ${them}?`
+      : "Quit Claudesk?";
+  return {
+    title: "Quit with active workspaces",
+    message,
+    buttons: [
+      { id: "cancel", label: "Cancel", value: "cancel", variant: "primary" },
+      { id: "quit", label: "Quit Anyway", value: "quit", variant: "danger" },
     ],
     escValue: "cancel",
   };

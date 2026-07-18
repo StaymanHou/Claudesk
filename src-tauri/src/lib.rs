@@ -71,6 +71,60 @@ use tauri::{Emitter, Listener, Manager, WindowEvent};
 
 use cc_session::SessionRegistry;
 
+/// The app-quit teardown, extracted so BOTH the quit paths share one body (M10.5-WP2).
+///
+/// Kills every CC child (writing the M9 WP6.5 per-session close marker), unlinks the
+/// hook socket, and tears down the PiP panel — the exact sequence the `CloseRequested`
+/// handler used to run inline. Best-effort throughout (a poisoned lock / gated-off
+/// time-store / absent state must never panic the quit path). Callers invoke this
+/// immediately before `app.exit(0)`.
+///
+/// Since M10.5-WP2 the native `CloseRequested` no longer tears down directly — it holds
+/// the close (`prevent_close`) and hands the quit decision to the frontend
+/// active-workspace confirm, which calls the `quit_now` command below on confirm. This
+/// fn is that command's body (and the ONLY teardown path — no double-teardown).
+fn perform_quit_teardown(app: &tauri::AppHandle) {
+    // Kill every CC child, capturing the ids killed OK so we can write the explicit
+    // session-end marker per session (M9 WP6.5 signal 1) — the authoritative end for
+    // the app-quit path. The registry lock is released before the (independent, gated)
+    // marker writes.
+    let mut killed_ids: Vec<String> = Vec::new();
+    if let Some(registry) = app.try_state::<Mutex<SessionRegistry>>() {
+        if let Ok(mut reg) = registry.lock() {
+            killed_ids = reg.kill_all();
+        }
+    }
+    // M9 WP6.5: explicit close marker per killed session (best-effort + gated; zero-IO
+    // when tracking is OFF). Must not panic the quit path.
+    for sid in &killed_ids {
+        time_store::commands::record_workspace_close(app, sid);
+    }
+    // M3 WP3: unlink the hook socket on close (mirror the kill_all reaping discipline).
+    // Belt to bind_listener's stale-file removal.
+    if let Some(state) = app.try_state::<hook_socket::commands::HookSocketState>() {
+        hook_socket::commands::cleanup_socket(&state.socket_path);
+    }
+    // M5: tear down the PiP panel if it's open — otherwise the all-Spaces/floating panel
+    // orphans on screen after the main window closes. MUST go through to_window()→close():
+    // the crate's to_window() un-swizzles the NSPanel + sets released_when_closed safely;
+    // closing the live panel object is a use-after-free abort (tauri-nspanel #22).
+    pip::commands::teardown(app);
+}
+
+/// M10.5-WP2 — the confirmed-quit command. The frontend calls this after the operator
+/// resolves the active-workspace quit confirm with "Quit Anyway" (or immediately, with
+/// no confirm, when no workspace is active). Runs the shared teardown, then exits.
+///
+/// `app.exit(0)` terminates the process AFTER teardown — it does NOT re-enter
+/// `CloseRequested` (that event fires on a window *close request*, which we've already
+/// consumed via `prevent_close`; `exit` is a direct process termination). So teardown
+/// runs exactly once.
+#[tauri::command]
+fn quit_now(app: tauri::AppHandle) {
+    perform_quit_teardown(&app);
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[allow(unused_mut)]
@@ -467,6 +521,10 @@ pub fn run() {
             updater::commands::updater_set_notifications_enabled,
             updater::commands::updater_get_skipped_version,
             updater::commands::updater_set_skipped_version,
+            // M10.5-WP2: the confirmed-quit command. The FE calls this after the
+            // active-workspace quit confirm resolves "Quit Anyway" (or immediately when
+            // nothing is active). Runs the shared teardown, then app.exit(0).
+            quit_now,
         ])
         .on_window_event(|window, event| {
             // M5 WP5 Phase 2 — auto-summon/dismiss state machine, driven by the MAIN
@@ -488,36 +546,28 @@ pub fn run() {
                     time_store::commands::record_focus_change(window.app_handle(), *focused);
                 }
             }
-            // WP7 shutdown: kill every CC child on window close so we never leak an
-            // orphaned `claude`. Backend-driven (robust against a frozen webview).
-            if let WindowEvent::CloseRequested { .. } = event {
-                // Kill every CC child, capturing the ids killed OK so we can write the
-                // explicit session-end marker per session (M9 WP6.5 signal 1) — the
-                // authoritative end for the app-quit path. The registry lock is released
-                // before the (independent, gated) marker writes.
-                let mut killed_ids: Vec<String> = Vec::new();
-                if let Some(registry) = window.try_state::<Mutex<SessionRegistry>>() {
-                    if let Ok(mut reg) = registry.lock() {
-                        killed_ids = reg.kill_all();
-                    }
+            // M10.5-WP2 — app-quit-while-active confirm. On any window-close request
+            // (⌘Q, the red button, both fire CloseRequested in single-window Tauri) we
+            // HOLD the close (`prevent_close`) and hand the decision to the frontend:
+            // the FE already owns `isActiveState(stateFor(id))` (Phase 1) + the workspace
+            // display names, so it computes the busy set and either quits immediately
+            // (nothing active → `invoke("quit_now")`) or shows the enumerated
+            // "N workspaces still working — quit anyway?" confirm. On "Quit Anyway" it
+            // calls `quit_now`, which runs `perform_quit_teardown` + `app.exit(0)`.
+            //
+            // This REPLACES the old inline teardown (WP7 kill_all + M9 WP6.5 markers +
+            // M3 socket unlink + M5 PiP teardown) — that body now lives in
+            // `perform_quit_teardown`, invoked exactly once via `quit_now`. Holding the
+            // close here means teardown no longer races the FE round-trip.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                if let Err(e) = window.app_handle().emit("quit-requested", ()) {
+                    // If we somehow can't reach the webview to ask, don't strand the user
+                    // in an unquittable app — fall back to the direct teardown + exit.
+                    eprintln!("[claudesk] quit-requested emit failed ({e}); quitting directly");
+                    perform_quit_teardown(window.app_handle());
+                    window.app_handle().exit(0);
                 }
-                // M9 WP6.5: explicit close marker per killed session (best-effort + gated;
-                // zero-IO when tracking is OFF). Must not panic the quit path.
-                for sid in &killed_ids {
-                    time_store::commands::record_workspace_close(window.app_handle(), sid);
-                }
-                // M3 WP3: unlink the hook socket on close (mirror the kill_all
-                // reaping discipline). Belt to bind_listener's stale-file removal.
-                if let Some(state) = window.try_state::<hook_socket::commands::HookSocketState>() {
-                    hook_socket::commands::cleanup_socket(&state.socket_path);
-                }
-                // M5: tear down the PiP panel if it's open — otherwise the
-                // all-Spaces/floating panel orphans on screen after the main window
-                // closes. MUST go through to_window()→close(): the crate's
-                // to_window() un-swizzles the NSPanel + sets released_when_closed
-                // safely; closing the live panel object is a use-after-free abort
-                // (tauri-nspanel #22).
-                pip::commands::teardown(window.app_handle());
             }
         })
         .run(tauri::generate_context!())

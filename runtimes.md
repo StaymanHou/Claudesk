@@ -76,7 +76,7 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.75s (2026-07-18, M10 WP6 Phase B1 verify-auto: one-self-update-path revert — deleted copyToClipboard.test.ts + removed brew tests, added absence guards → 105 files / 1163 pass, 0 fail)
+- **Last:** 1.73s (2026-07-18, M10.5 WP2 Phase 2 verify-codify: +5 quitWhileActiveSpec cases → 105 files / 1173 pass, 0 fail)
 - **Use timeout:** 120000
 - **History:**
   - 1.75s — 2026-07-18 (M10 WP6 Phase B1: revert — 105 files / 1163 pass)

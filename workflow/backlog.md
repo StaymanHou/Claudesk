@@ -1,5 +1,16 @@
 # Backlog
 
+## Code-quality findings — m10.5-wp2-active-close-confirmation (2026-07-18)
+- **Pointer:** 0 CRITICAL / 0 MAJOR / 3 MINOR from `feature-review-quality` on the uncommitted working-tree diff (HEAD `75ef6f8`; WP2 active-close + app-quit-while-active confirm — `isActiveState`/reasons-object `closeWorkspaceSpec`/`quitWhileActiveSpec` in `confirmDialog.ts`, the App.tsx active-close gate + `quit-requested` round-trip, lib.rs `prevent_close`/`quit_now`/`perform_quit_teardown`), Mode-3 autopilot auto-backlogged. All 3 MINOR are cosmetic polish, none blocking: (1) `quitWhileActiveSpec` computes `them` + `is`/`are` at two sites → hoist a shared `plural` const; (2) `busyNamesRef` vs `requestClose` use different missing-name fallback strings ("A workspace" vs "This workspace") → unify to one constant; (3) the P3 `spawn_shell` seam doc forward-references `workflow/archive/m10.5-wp2-*` (resolves once finalize archives the WIP — likely self-closing). Reviewer verdict: "well-built… advances the codebase rather than accruing debt… no refactor pass warranted"; `isActiveState` single-source-of-truth + frontend-decides architecture + the `perform_quit_teardown` verbatim-lift refactor all affirmed sound. No refactor auto-invoked (0 CRITICAL). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.5-wp2-active-close-confirmation — 2026-07-18`.
+- **Priority:** low (all 3 MINOR).
+- **Status:** pending.
+
+## Code-quality findings — m10.5-wp1-pip-top-right-default (2026-07-18)
+- **Pointer:** 0 CRITICAL / 0 MAJOR / 3 MINOR from `feature-review-quality` on the uncommitted working-tree diff (HEAD `75ef6f8`; new `pip/` top-right-anchor code — `top_right_origin` + `PIP_ANCHOR_MARGIN=150` + `positioned` flag + `anchor_top_right`/`pip_resize` gate + `pip_move` flag-set), Mode-3 autopilot auto-backlogged. All 3 MINOR are comment/doc polish, none blocking: (1) `pip_resize` guard comment says "single-writer" but `positioned` has 2 accessors → "single-thread" is accurate; (2) the anchor WHY is triplicated across the `pip_resize` call site + `anchor_top_right` doc + the `positioned` field doc (will drift) → consolidate to one spot + pointer; (3) the FE-mount-resize→BE-anchor cross-layer contract is documented only in the WIP, not at the Rust seam → add a one-line note. Reviewer verdict: well-built, fits `pip/` conventions closely; the in-session-`positioned`-flag / anchor-in-`pip_resize` design is correct + non-obvious (avoids the placeholder-size trap); coordinate math + thread-safety affirmed sound; the only critique is comment-volume, a polish concern not structural. No refactor auto-invoked (0 CRITICAL). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.5-wp1-pip-top-right-default — 2026-07-18`.
+- **Priority:** low (all 3 MINOR).
+- **Status:** pending.
+- **Pickup shape:** all 3 are a single small `pip/commands.rs` comment/doc pass (one-word tweak + WHY-consolidation + one-line FE-contract note) — rides any future `pip/` touch. Dismiss any via the WIP's `## Code-Quality Review` section.
+
 ## Code-quality findings — m10-wp6-milestone-exit-verify (2026-07-18)
 - **Pointer:** 1 MINOR (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `4955463` (Phase 1 error-surface fold + Phase B1 revert to one self-update path), Mode-3 autopilot auto-backlogged. **MINOR:** `ProjectPicker.tsx` `onCheckForUpdates?` still types a `{ outcome }` return the handler no longer reads (the WP6 de-dup made the picker KICKS-only) → narrow to `() => void`. Reviewer verdict: "a well-executed subtraction… advances the codebase by collapsing a two-path flow into one uniform self-update path; the single MINOR is a type-narrowing polish, not debt." See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10-wp6-milestone-exit-verify — 2026-07-18`.
 - **Priority:** low.
@@ -38,7 +49,7 @@
 - **Suggested action:** After M10 ships, decompose M10.5 via `/product-wbs` (4 WPs, one per item — or fold 1+2 as UX-polish, 3+4 as reproduce-first bug WPs). Items 3 and 4 each open with `/feature-reproduce`.
 - **⚠️ Encoding-item (item 4) hypothesis CORRECTED at WBS decomposition (2026-07-18):** the SURFACE's prime suspect — "FE decodes base64→string→`term.write(string)` corrupts a split multi-byte char" — is **already mitigated in current code**: `decodeBase64` (`src/cc/bridge.ts`) returns a `Uint8Array` and `XtermPane.tsx` already does `term.write(decodeBase64(...))` (a **bytes** write, xterm-safe across chunks). So the output string-decode path is NOT the bug. The real suspects shifted (in the WBS WP4): **(a)** the INPUT side — `encodeBase64`'s `charCodeAt(i) & 0xff` truncates code units > 0xFF → multi-byte *input* (emoji/accented paste) corrupts; **(b)** xterm cross-`write()` decoder buffering across separate 4096-byte chunks; **(c)** a `LANG`/`TERM`/locale mismatch. Reproduce-first is doubly load-bearing — a fix applied on the SURFACE's original (already-shipped) hypothesis would target the wrong layer.
 - **Priority:** medium (QoL, not blocking M10; operator-gated to land before the next release cut).
-- **Status:** DECOMPOSED 2026-07-18 via `/product-wbs` → `docs/product/wbs.md` (4 WPs: WP1 PiP top-right ∥ WP2 active-close [known-shape UX] → WP3 kill-clean-exit ∥ WP4 encoding-fix [reproduce-first]). Still an OPEN bucket — append WP5+ if more pre-release QoL surfaces. Sequence: M10 (done) → M10.5 → release.
+- **Status:** IN PROGRESS — DECOMPOSED 2026-07-18 via `/product-wbs` → `docs/product/wbs.md` (4 WPs). **WP1 (PiP top-right, as-built = 150px inset) ✅ SHIPPED** + **WP2 (active-close confirmation — per-workspace active-close gate + app-quit-while-active confirm + terminal-scope note) ✅ SHIPPED 2026-07-18** (both uncommitted, HEAD `75ef6f8`); **2 WPs remain: WP3 kill-clean-exit [reproduce-first] ∥ WP4 encoding-fix [reproduce-first]** — both open with `/feature-reproduce`. Still an OPEN bucket — append WP5+ if more pre-release QoL surfaces. Sequence: M10 (done) → M10.5 (WP1+WP2 done, 2 left) → release. *(Not deleted — the bucket resolves only when all WPs ship + the milestone closes at `/product-finalize`.)*
 
 ## SURFACE-2026-07-14-M9-EMPTY-PERIOD-NAV-TRAP
 - **Source:** feature:verify-human (M9 WP6b-3 Phase 2, operator at click-through — vh.2)
@@ -282,12 +293,12 @@
 - **Status:** pending (roadmap-anchored on M11)
 
 ## SURFACE-2026-07-07-WP2-FMT-DRIFT
-- **Source:** feature:build (M9 WP2.5 Phase 1)
+- **Source:** feature:build (M9 WP2.5 Phase 1; scope re-observed M10.5 WP1, 2026-07-18)
 - **Target level:** product:wbs
 - **Type:** tech-debt
-- **Summary:** `cargo fmt --check` exits 1 on pre-existing formatting drift in `src-tauri/src/hook_install/mod.rs:356` and `src-tauri/src/hook_socket/mod.rs:372` — both committed by M9 WP2 (`dc3b89e`), NOT touched by WP2.5.
-- **Context:** WP2.5 leaves these unformatted to avoid sweeping WP2's files into a WP2.5 commit. WP2.5's own files (`time_store/*`) are fmt-clean. The drift is a long-assert-macro rewrite + a long-string-literal wrap that `rustfmt` wants.
-- **Suggested action:** `cargo fmt` these two files in a `/feature-refactor` pass or the next WP2-adjacent touch (single command, cosmetic).
+- **Summary:** `cargo fmt --check` exits 1 on pre-existing formatting drift across the **M9 tree** — as of 2026-07-18 this spans ~70 diff sites in ~10 files (`time_store/commands.rs`, `time_store/query/tests.rs`, `reclassify/tests.rs`, `reclassify/mod.rs`, `cc_session/mod.rs`, `config_store/settings.rs`, `app_menu/mod.rs`, `updater/commands.rs`, `tests/hook_pl_output.rs`, and the original `hook_install`/`hook_socket`). All from the unpushed M9/M10 tree, NOT from M10.5.
+- **Context:** Later WPs (WP2.5, and now M10.5 WP1) deliberately leave these unformatted to avoid sweeping unrelated files into an unrelated commit — each WP fmt-cleans only its OWN changed files (M10.5 WP1's `pip/mod.rs` + `pip/commands.rs` are fmt-clean). The drift is mostly long-assert-macro rewrites + long-string-literal / long-signature wraps that `rustfmt` wants. It has grown steadily as the M9 tree accreted; a whole-tree `cargo fmt` is the single fix but would touch many files at once.
+- **Suggested action:** One `cargo fmt` sweep over `src-tauri/` in a dedicated `/feature-refactor` pass (or as the first commit of the next `/release` cut, since the release build already recompiles everything) — a single cosmetic command, but keep it in its OWN commit so it doesn't muddy a feature diff.
 - **Priority:** low
 - **Status:** pending
 

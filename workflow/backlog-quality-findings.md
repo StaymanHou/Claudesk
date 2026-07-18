@@ -4,6 +4,59 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m10.5-wp2-active-close-confirmation — 2026-07-18
+
+*(feature-review-quality on the uncommitted working-tree diff, HEAD `75ef6f8`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all cosmetic polish. Reviewer: "well-built… advances the codebase rather than accruing debt… no refactor pass warranted." None blocks; refactor-optional.)*
+
+## SURFACE-2026-07-18-QUALITY-WP2-PLURALIZATION-CO-LOCATION
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/editor/confirmDialog.ts:172-179` (`quitWhileActiveSpec`)
+- **Finding:** The `them` (`"it"`/`"them"`) and the `is`/`are` verb are computed at two different sites for the same `names` list. A future edit could pluralize one and forget the other. A single `const plural = names.length !== 1` reused for both would make the agreement structural. Tests currently pin both, so no live drift.
+- **Priority:** low
+- **Pickup shape:** one-line refactor — hoist a shared `plural` boolean; fold into any future `confirmDialog.ts` touch.
+
+## SURFACE-2026-07-18-QUALITY-WP2-FALLBACK-STRING-PARITY
+- **Severity:** MINOR
+- **Location:** `src/App.tsx:344-349` (`busyNamesRef` effect) vs `requestClose`
+- **Finding:** `busyNamesRef` uses `display_name ?? "A workspace"` while `requestClose` uses `display_name ?? "This workspace"` — two different missing-name fallback strings across the two gates. Harmless (a real workspace always has a name) but a reader comparing the gates may wonder if the divergence is intentional. Unify to one constant.
+- **Priority:** low
+- **Pickup shape:** one-line — extract a shared fallback constant; fold into any future `App.tsx` close/quit-gate touch.
+
+## SURFACE-2026-07-18-QUALITY-WP2-SEAM-DOC-FORWARD-REF
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/cc_session/mod.rs:339` (Phase-3 `spawn_shell` doc note)
+- **Finding:** The seam doc references `workflow/archive/m10.5-wp2-*` Phase 3 — a forward-reference that only becomes valid after `feature-finalize` archives the WIP (currently at `workflow/wip/`). Acceptable if finalize always archives (the convention), but the glob-with-wildcard pointer is softer than a concrete path; a reader grepping today won't find it. **NOTE: `feature-finalize` WILL archive the WIP to exactly `workflow/archive/m10.5-wp2-active-close-confirmation.md`, so this forward-ref resolves on finalize — likely self-closing; verify at finalize.**
+- **Priority:** low
+- **Pickup shape:** verify at finalize (the archive makes the glob valid); if a concrete path is wanted, one-line edit post-archive.
+
+# m10.5-wp1-pip-top-right-default — 2026-07-18
+
+*(feature-review-quality on the uncommitted working-tree diff, HEAD `75ef6f8`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all low-priority comment/doc polish on the new `pip/` anchor code; the coordinate math + thread-safety + design were all affirmed sound. None blocks; refactor-optional.)*
+
+## SURFACE-2026-07-18-QUALITY-WP1-SINGLE-WRITER-COMMENT
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/pip/commands.rs` (~L172-175, the `unpositioned` guard in `pip_resize`)
+- **Finding:** the guard comment says "single-writer main-thread path", but `positioned` has two accessors (`pip_move` writes `true`; `pip_resize` reads it). Not a real TOCTOU (both run on the main thread → can't interleave), but "single-thread" is the accurate phrasing.
+- **Why it matters:** trivial comment-accuracy; prevents a future reader from over-trusting a mis-stated invariant when adding a background-thread caller.
+- **Priority:** low
+- **Pickup shape:** one-word comment tweak ("single-writer" → "single-thread"). Rides any future `pip/commands.rs` touch. Dismiss via the WIP's review section.
+
+## SURFACE-2026-07-18-QUALITY-WP1-WHY-TRIPLICATED
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/pip/commands.rs` (~L162-171, the anchor-rationale comment in `pip_resize`) vs. `anchor_top_right` doc (~L183-191) + the `positioned` field doc (`pip/mod.rs` ~L45-52)
+- **Finding:** the 10-line placeholder-vs-real-size / drag-preservation / main-thread WHY is stated in three places and will drift independently over time.
+- **Why it matters:** minor WHY-duplication; consolidating to one authoritative spot (the field doc or the helper doc) + a short pointer at the call site lowers future-maintenance cost. Not a correctness issue.
+- **Priority:** low
+- **Pickup shape:** collapse to one canonical WHY + a one-line pointer at the `pip_resize` call site. Dismiss via the WIP's review section.
+
+## SURFACE-2026-07-18-QUALITY-WP1-FE-MOUNT-RESIZE-CONTRACT-UNDOCUMENTED
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/pip/commands.rs` (~L176-178, the anchor call site in `pip_resize`)
+- **Finding:** the anchor's correctness is coupled to the PiP webview's mount-time `pip_resize` `useEffect` always firing on first summon — that cross-layer contract (FE mount-resize → BE anchor) is documented only in the WIP, not at the Rust seam.
+- **Why it matters:** the implicit FE→BE contract is invisible from the Rust side; a future change to the webview's resize trigger could silently regress the anchor with no failing test (no CI seam covers it).
+- **Priority:** low
+- **Pickup shape:** one-line note at the anchor site ("relies on the webview's mount-time `pip_resize`; a summon with no resize leaves the panel at the build origin"). Dismiss via the WIP's review section.
+
 # m10-wp4-updater-user-control-ux — 2026-07-17
 
 *(feature-review-quality on ship commit `ee7bad7`; Mode 3 autopilot. Originally 0 CRITICAL / 1 MAJOR / 3 MINOR. **3 RESOLVED by M10 WP6 Phase 1** — the MAJOR `ERROR-STATE-UNCONSUMED` [now consumed by `UpdaterStatusRow`], MINOR `MENU-CHECK-DISCARDS-OUTCOME` [manual-check feedback via `statusNoteForOutcome`], MINOR `FALLBACK-VS-ERROR-RACE` [reconciled under the single-post-install-surface invariant] — closed 2026-07-18 at `/product-finalize`, see CHANGELOG. 1 MINOR survives below.)*

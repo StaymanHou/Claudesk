@@ -41,6 +41,15 @@ pub struct PipAutoState {
     /// fires if the token still matches when it elapses — so a `Focused(true)` that
     /// bumps it again (or any newer arm) cancels the stale pending summon.
     pub pending_summon_token: u64,
+
+    /// M10.5 WP1 — has the operator placed the PiP panel this session? `false` until the
+    /// operator drags it (`pip_move` sets this `true`). While `false`, `pip_resize`
+    /// re-anchors the panel top-right after each content-driven resize (so it opens in the
+    /// corner and follows layout/size changes); once `true`, the auto-anchor is suppressed so
+    /// a re-summon keeps the panel where it was dragged. Defaults `false` on each app launch —
+    /// drag position is deliberately NOT persisted (a fresh launch re-anchors top-right, the
+    /// operator's stated preference), so an in-session flag is the whole mechanism.
+    pub positioned: bool,
 }
 
 /// The managed wrapper Tauri stores (`.manage(PipAutoStateLock::default())`).
@@ -83,6 +92,41 @@ pub fn on_mode_should_show(mode: PipMode, open_count: usize) -> Option<bool> {
         PipMode::On => Some(open_count > 0),
         PipMode::Auto | PipMode::Off => None,
     }
+}
+
+/// The inset (in points) from the screen's visible-frame top + right edges when the PiP panel
+/// is auto-anchored on first summon (M10.5 WP1). The operator asked for a gap from the corner
+/// rather than a flush anchor (confirmed "Top + right", 2026-07-18) so the panel doesn't crowd
+/// the menu-bar / screen edge. Applied symmetrically to the top and right edges by
+/// [`top_right_origin`]'s `margin` parameter.
+pub const PIP_ANCHOR_MARGIN: f64 = 150.0;
+
+/// Pure math (M10.5 WP1): the bottom-left origin that lands a `panel_w × panel_h` panel in the
+/// **top-right** region of a screen whose visible frame is `(vis_x, vis_y, vis_w, vis_h)`,
+/// inset by `margin` points from the top and right edges.
+///
+/// NSWindow/NSScreen coordinates are **bottom-left origin, y-up**, so the screen's visible
+/// frame's top-right *corner* is at `(vis_x + vis_w, vis_y + vis_h)`. To put the panel's
+/// top-right corner `margin` points in from that corner, its bottom-left origin is:
+///   x = vis_x + vis_w − margin − panel_w   (right edge `margin` in from the visible right edge)
+///   y = vis_y + vis_h − margin − panel_h   (top edge `margin` down from the visible top edge)
+/// Using `visibleFrame` (not `frame`) keeps the panel clear of the menu bar + Dock; `margin`
+/// adds the operator-requested gap on top of that. `margin == 0.0` reduces to a flush anchor.
+/// Returned as a plain `(x, y)` pair so the caller feeds it to `setFrameOrigin:` — pure f64
+/// math, no live AppKit context, so it's unit-testable without a running screen.
+pub fn top_right_origin(
+    vis_x: f64,
+    vis_y: f64,
+    vis_w: f64,
+    vis_h: f64,
+    panel_w: f64,
+    panel_h: f64,
+    margin: f64,
+) -> (f64, f64) {
+    (
+        vis_x + vis_w - margin - panel_w,
+        vis_y + vis_h - margin - panel_h,
+    )
 }
 
 #[cfg(test)]
@@ -131,5 +175,49 @@ mod tests {
         assert_eq!(on_mode_should_show(PipMode::Auto, 2), None);
         assert_eq!(on_mode_should_show(PipMode::Off, 0), None);
         assert_eq!(on_mode_should_show(PipMode::Off, 2), None);
+    }
+
+    #[test]
+    fn top_right_origin_insets_by_margin_from_visible_frame_corner() {
+        // Screen visible frame at bottom-left origin (0,0), 1440×877 (menu-bar-trimmed),
+        // panel 220×130, margin 150 → the panel's top-right corner sits 150 in from the
+        // visible-frame corner: x = 1440−150−220, y = 877−150−130.
+        assert_eq!(
+            top_right_origin(0.0, 0.0, 1440.0, 877.0, 220.0, 130.0, PIP_ANCHOR_MARGIN),
+            (1070.0, 597.0)
+        );
+    }
+
+    #[test]
+    fn top_right_origin_zero_margin_reduces_to_flush() {
+        // margin == 0.0 is the flush anchor (right/top edges exactly on the visible-frame edges).
+        assert_eq!(
+            top_right_origin(0.0, 0.0, 1440.0, 877.0, 220.0, 130.0, 0.0),
+            (1220.0, 747.0)
+        );
+    }
+
+    #[test]
+    fn top_right_origin_honors_nonzero_visible_frame_offset() {
+        // A visible frame offset from the screen origin (Dock on the left → vis_x>0, or a
+        // secondary display with a nonzero global origin) must be added in, not ignored:
+        // origin = (vis_x+vis_w − margin − panel_w, vis_y+vis_h − margin − panel_h).
+        assert_eq!(
+            top_right_origin(100.0, 50.0, 1200.0, 800.0, 200.0, 120.0, 150.0),
+            (100.0 + 1200.0 - 150.0 - 200.0, 50.0 + 800.0 - 150.0 - 120.0)
+        );
+    }
+
+    #[test]
+    fn top_right_origin_recomputes_against_current_panel_size() {
+        // The anchor must recompute against the CURRENT (post-resize) panel size — a wider
+        // panel gets a smaller x so its right edge stays the same distance from the screen edge.
+        let (x_narrow, _) =
+            top_right_origin(0.0, 0.0, 1440.0, 877.0, 220.0, 130.0, PIP_ANCHOR_MARGIN);
+        let (x_wide, _) =
+            top_right_origin(0.0, 0.0, 1440.0, 877.0, 500.0, 130.0, PIP_ANCHOR_MARGIN);
+        assert!(x_wide < x_narrow); // wider panel → origin.x moves left to keep the right inset constant
+        assert_eq!(x_narrow, 1070.0); // 1440 − 150 − 220
+        assert_eq!(x_wide, 790.0); // 1440 − 150 − 500
     }
 }
