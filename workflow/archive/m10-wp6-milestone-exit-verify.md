@@ -1,7 +1,7 @@
 # Feature: M10 WP6 — Milestone-exit verify (in-app auto-updater)
 
 **Workflow:** feature
-**State:** ship (complete) — all phases done + verified (M10 self-update exit = GO); pushed to origin/main `324c2d7`; full suite green (backend 539+6, FE 105/1163). Next: review-quality → finalize.
+**State:** COMPLETED 2026-07-18 — shipped + review-quality (0C/0M/1m) + finalized. M10 self-update exit = GO (verified on the operator's real Homebrew prod install). This WP completes all 6 M10 WPs; M10 ready for `/product-finalize`. 8 backlog SURFACEs resolved (see CHANGELOG 2026-07-18). Archived.
 **Created:** 2026-07-17
 **drive_mode:** autopilot
 
@@ -221,6 +221,12 @@ WP6 (re-planned) = **Phase 1 (done, kept)** + **Phase B1 (revert to one self-upd
 **Assessment:** "a well-executed subtraction … avoids dead code, half-removed abstractions, and stale comments … advances the codebase by collapsing a two-path flow into one uniform self-update path … the single MINOR is a type-narrowing polish, not debt."
 
 **If you disagree:** dismiss the MINOR by marking it `[DISMISSED]` in this section before finalize archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:** the M10 exit gate is NOT "does the mechanism work in the abstract" but "does a *real Homebrew-installed* app self-update in-app with zero brew commands" — the exact path the actual (brew) users take. The brew-decision reversal (option B) made the WP1 unsigned-relaunch Gatekeeper verdict load-bearing for the real user base, not a demotable edge case.
+- **Assumptions that held:** the Phase B1 revert was a clean subtraction (0C/0M/1m review); the self-clear/relaunch core (kept from WP1/WP2) worked on a real brew install; CFBundleVersion=semver is sufficient for brew reconciliation; the reverted single-action banner drove the self-update correctly (bridge-verified, then live-confirmed).
+- **Assumptions that were wrong (the costly ones):** the agent misunderstood the verification target TWICE before operator correction — (1) fixated on a `brew upgrade` downgrade/reconcile edge case the operator explicitly didn't care about, and (2) proposed a contrived "install 0.2.6 from DMG → self-update → reconcile" path when the real path is "existing brew user `brew upgrade`s once onto the updater-capable version, then self-updates to a no-op release with no brew command." The agent also, at GATE 2 of the v0.2.7 cut, offered "push tap now" as an option that would have gutted the (then-misunderstood) test — a wrong framing driven by the wrong understanding.
+- **Approach delta:** WP6 was NOT the single "milestone-exit verify" WP planned — it absorbed a full F23 re-plan (the brew-decision reversal landed mid-WP), splitting into Phase 1 (error-surface fold, a WP4 finding) + Phase B1 (revert) + Phase B2 (live pass). Two `/release` cuts (v0.2.7 updater-capable floor + v0.2.8 no-op target) were needed to stage the real self-update path. **Lesson (worth a session-reflect capture):** when the operator states a priority ("verify the brew upgrade path first"), re-read it literally and confirm the exact path before building verification scaffolding — don't let a plausible-but-adjacent framing (downgrade-reconcile, DMG-install) substitute for the stated one. Verify "can't"/"must" claims and priority statements against the operator's actual words before they drive irreversible steps (a tap push, a release).
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
