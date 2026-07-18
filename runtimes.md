@@ -44,9 +44,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 102s (2026-07-17, /release v0.2.6 FLOOR: cargo clean + full cold build, 1m17s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed)
+- **Last:** 110s (2026-07-18, /release v0.2.7 update-target: cargo clean removed 7.8GiB + full cold build, 1m24s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed)
 - **Use timeout:** 600000
 - **History:**
+  - 110s — 2026-07-18 (/release v0.2.7: cargo clean 7.8GiB, 1m24s rust + bundle, signed)
   - 99s — 2026-07-17 (M10 WP1 probe "from" 0.2.5: fresh tauri-plugin-updater+process compile, 1m39s rust + bundle; "to" 0.2.6 warm-incremental 20.84s)
   - 88s — 2026-07-02 (/release v0.2.5 cold build: cargo clean removed 6.9GiB, full recompile ~63s incl. tauri-nspanel + bundle)
   - 91s — 2026-06-30 (/release v0.2.4 cold build: cargo clean removed 7.5GiB, full recompile ~67s incl. tauri-nspanel + bundle)
