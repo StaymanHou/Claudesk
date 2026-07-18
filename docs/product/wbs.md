@@ -30,21 +30,21 @@ No new design prior surfaced to capture (the WP boundaries are dependency/risk-d
 
 ## Work Packages
 
-### WP1: Probe — unsigned-relaunch self-quarantine-clear (the central risk; GATES the rest)
+### WP1: Probe — unsigned-relaunch self-quarantine-clear (the central risk; GATES the rest) ✅ VERDICT: GO (agent code+harness 2026-07-17; live GO verdict landed at WP6 2026-07-18)
 **Type:** probe
 **Milestone:** 10
 **Dependencies:** none (front-loaded)
 **Size:** M
 **Learning objective:** On a **real unsigned installed `.app`**, does the updater path `createUpdaterArtifacts` build → minisign-verify → `install()` extract/replace → **self-run `xattr -dr com.apple.quarantine <own bundle>`** → `relaunch()` open **clean** (no Gatekeeper "damaged" block)? If not, is the **instruct-the-user** dialog fallback the required UX? Settle the **App-Translocation** caveat (must run from a properly-installed `/Applications` bundle, not a translocated one).
 **Timebox:** 1–1.5 days (includes 2 real builds — a "from" version and a "to" version — and a minisign keypair).
-**Success criterion:** a documented **GO / FALLBACK verdict** in `wbs.md` "Probe outcomes": either (a) **GO** — self-clear-then-relaunch opens clean, seamless UX viable; or (b) **FALLBACK** — self-clear insufficient, M10 ships the instruct-the-user quarantine dialog. Plus: confirmed whether `install()` even permits a pre-relaunch hook (does it relaunch synchronously?), and the App-Translocation behavior for a `/Applications` install.
+**Success criterion:** a documented **GO / FALLBACK verdict** in `wbs.md` "Probe outcomes". **RESULT: GO** — the agent built the artifact/minisign pipeline + the self-clear code + harness (2026-07-17); the live installed-build GO/FALLBACK verdict was operator-deferred → folded into WP6's real end-to-end pass, where it landed **GO** (a real Homebrew-installed build self-updated in-app and relaunched clean past Gatekeeper — see WP6 + "Probe outcomes"). The `install()`-returns-then-self-clear-then-relaunch macOS seam was confirmed; App-Translocation is avoided by the pre-launch `xattr` clear.
 **Tasks:**
-- [ ] Generate a minisign keypair (`tauri signer generate`); set the pubkey in `tauri.conf.json` `plugins.updater.pubkey`; store the private key locally (NOT committed).
-- [ ] Enable `bundle.createUpdaterArtifacts: true`; build TWO unsigned versions (e.g. 0.2.5 "from" + a bumped "to"), each producing `.app.tar.gz` + `.sig`; sign + hand-author a `latest.json`.
-- [ ] Install the "from" build to `/Applications` as a real (non-brew, non-translocated) bundle; host `latest.json` + the "to" artifact somewhere the updater can reach (local static server or a scratch GH pre-release).
-- [ ] Drive the full path from the installed "from" app: `check()` → `download()` → `install()` → attempt self-`xattr`-clear on its own bundle → `relaunch()`. Observe: does it relaunch into the "to" version, or hit the Gatekeeper "damaged" block?
-- [ ] Determine WHERE the self-clear must run (before `install()` relaunches vs. a `RunEvent`/pre-relaunch hook) and whether it needs the app to spawn a detached helper. Record the exact working sequence (or the fallback verdict).
-- [ ] Write the GO/FALLBACK verdict + the working mechanism to "Probe outcomes"; note any reshaping of WP2/WP4.
+- [x] Generate a minisign keypair (`tauri signer generate`); set the pubkey in `tauri.conf.json` `plugins.updater.pubkey`; store the private key locally (NOT committed). (Fresh release key `774E2E8429FDF78A` at WP5.)
+- [x] Enable `bundle.createUpdaterArtifacts: true`; build TWO unsigned versions, each producing `.app.tar.gz` + `.sig`; sign + hand-author a `latest.json`.
+- [x] Install the "from" build to `/Applications` as a real bundle; host `latest.json` + the "to" artifact where the updater can reach. (Realized at WP6 as the real Homebrew install + the published v0.2.7→v0.2.8 releases.)
+- [x] Drive the full path from the installed "from" app: `check()` → `download()` → `install()` → self-`xattr`-clear → `relaunch()`. **Observed at WP6: relaunches clean into the "to" version (GO).**
+- [x] Determine WHERE the self-clear must run + the exact working sequence. (After `install()` returns, before `relaunch()` — the macOS seam; recorded in `arch.md` + `updater/mod.rs`.)
+- [x] Write the GO/FALLBACK verdict + working mechanism to "Probe outcomes". (Done at WP6 — GO.)
 
 ### WP2: Updater core — plugin wiring + check→download→install→relaunch flow ✅ SHIPPED 2026-07-17 (uncommitted — batched on the unpushed M9+M10 tree, HEAD `27743ff`)
 **Description:** Add the updater engine and the minimal working update path (no UX polish, no brew gate yet). `tauri-plugin-updater` v2 + `tauri-plugin-process` deps; `tauri.conf.json` `plugins.updater` block (pubkey from WP1 + the static `latest.json` GH-Releases endpoint); the Rust/JS flow using the **split `download()` then `install()`** (for the cancel boundary) + `relaunch()`; wire minisign verification; fold in WP1's self-clear (or fallback) mechanism at the correct point in the flow.
