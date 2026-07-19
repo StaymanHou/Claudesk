@@ -197,7 +197,9 @@ pub fn write_cc_permission_mode(
 /// `time_get_tracking_enabled` command AND the write-gate
 /// ([`crate::time_store::commands::tracking_enabled`]) call. (Mirror of `read_pip_mode`.)
 pub fn read_time_tracking_enabled(data_dir: &Path) -> Result<bool, ConfigError> {
-    Ok(read_settings(data_dir)?.time_tracking_enabled.unwrap_or(false))
+    Ok(read_settings(data_dir)?
+        .time_tracking_enabled
+        .unwrap_or(false))
 }
 
 /// Persist the tracking toggle, preserving other fields (read-modify-write). The single
@@ -239,10 +241,7 @@ pub fn read_skipped_version(data_dir: &Path) -> Result<Option<String>, ConfigErr
 /// Persist the skipped-version tag, preserving other fields (read-modify-write). A
 /// `None` clears the skip (used by "unskip"/a manual check that offers the version
 /// again). The single writer `updater_set_skipped_version` calls.
-pub fn write_skipped_version(
-    data_dir: &Path,
-    version: Option<String>,
-) -> Result<(), ConfigError> {
+pub fn write_skipped_version(data_dir: &Path, version: Option<String>) -> Result<(), ConfigError> {
     let mut settings = read_settings(data_dir)?;
     settings.skipped_version = version;
     write_settings(data_dir, &settings)

@@ -26,9 +26,43 @@ describe("base64 helpers", () => {
     );
   });
 
-  it("encodeBase64 masks to a single byte per char", () => {
-    // xterm onData never yields > 0xff, but the mask guards the contract.
+  it("encodeBase64 emits UTF-8 bytes (ASCII/control one-byte, multi-byte expands)", () => {
+    // Contract guard: a single-byte char round-trips to exactly its byte...
     expect(encodeBase64("\x0d")).toBe(btoa("\r"));
+    // ...and a multi-byte glyph expands to its real UTF-8 bytes (not truncated).
+    expect(encodeBase64("é")).toBe(btoa("\xc3\xa9")); // é = U+00E9 → [0xC3, 0xA9]
+  });
+
+  // WP4 (M10.5) reproduce-first — RED. The input side corrupts any multi-byte
+  // glyph: `encodeBase64`'s `charCodeAt(i) & 0xff` truncates code units > 0xFF
+  // (and code points that are surrogate pairs) instead of emitting the glyph's
+  // UTF-8 bytes. Pasting an emoji / accented char into the CC prompt therefore
+  // arrives at CC as `�`. The contract CC actually needs: encodeBase64 must send
+  // the string's real UTF-8 bytes, so decoding yields those bytes losslessly.
+  it("encodeBase64 sends a glyph's real UTF-8 bytes (multi-byte input round-trips)", () => {
+    const enc = new TextEncoder();
+    for (const glyph of ["é", "€", "café", "🎉", "→"]) {
+      const sent = Array.from(decodeBase64(encodeBase64(glyph)));
+      const utf8 = Array.from(enc.encode(glyph));
+      expect(sent).toEqual(utf8);
+    }
+  });
+
+  // WP4 codify — the user-observable property verify-human confirmed: the exact
+  // string the user types/pastes into the CC prompt is the string CC receives
+  // (FE encodes → CC decodes the bytes as UTF-8 → same string). Locks the
+  // round-trip as a whole, above the byte-layout anchor.
+  it("encodeBase64→decode→TextDecoder round-trips the original string", () => {
+    const dec = new TextDecoder();
+    for (const s of ["hi", "é", "café → 🎉 é", "日本語", "a\r\nb", ""]) {
+      const roundTripped = dec.decode(decodeBase64(encodeBase64(s)));
+      expect(roundTripped).toBe(s);
+    }
+  });
+
+  it("encodeBase64 handles the empty string (no glyphs to encode)", () => {
+    expect(encodeBase64("")).toBe("");
+    expect(Array.from(decodeBase64(encodeBase64("")))).toEqual([]);
   });
 });
 

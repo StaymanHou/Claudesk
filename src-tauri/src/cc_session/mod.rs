@@ -100,6 +100,84 @@ const READ_CHUNK: usize = 4096;
 /// default login shell since Catalina). Used by [`resolve_shell_argv`].
 const DEFAULT_SHELL: &str = "/bin/zsh";
 
+/// Timing + signal policy for [`PtyCcSession::kill`] (M10.5 WP3). Extracted as a value
+/// so the *sequence* — how long we wait for a clean exit, then which signals in what
+/// order — is asserted in a unit test without a real PTY or wall-clock (`Instant`).
+///
+/// **Why SIGHUP, not SIGTERM (the load-bearing choice):** an interactive login shell
+/// (`zsh -l -i`, the WP9 terminal) writes its command history to `HISTFILE` only on a
+/// *clean or hangup* exit — the operator's zsh has `SHARE_HISTORY`/`INC_APPEND_HISTORY`
+/// off (system-default `/etc/zshrc`), so history is NOT saved incrementally. Verified
+/// (M10.5 WP3) against a real `zsh -l -i` idle at the prompt: **SIGHUP saves history**
+/// (its default hangup handler runs the save, ~20ms); **SIGTERM / SIGINT / SIGKILL lose
+/// it**. So closing a workspace/app without typing `exit` must deliver **SIGHUP** (with a
+/// grace window for the save) — otherwise the user silently loses their shell history
+/// (the primary bug this WP fixes). SIGHUP is also the semantically-correct "your
+/// terminal closed" signal every login shell (zsh, bash) is built to handle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct KillTiming {
+    /// How long to poll `try_wait` after writing `exit_command\r`, giving an *idle*
+    /// interactive session a chance to exit cleanly on its own (the fastest, nicest path
+    /// — and the shell saves its own history). A *busy* session won't read the command;
+    /// we fall through to signals fast. Was 3000ms pre-WP3 (wasted on every busy close).
+    exit_poll: Duration,
+    /// How long to poll `try_wait` after `killpg(SIGHUP)` before escalating to SIGKILL.
+    /// Sized for the ~20ms history save + generous margin.
+    hup_grace: Duration,
+}
+
+/// The default kill timing. `exit_poll` 500ms (down from 3000ms — a busy session never
+/// reads the exit command, so the old full 3s grace was pure latency on every close);
+/// `hup_grace` 300ms (~15× the observed ~20ms zsh history-save). Worst-case forced path
+/// is ~800ms, well under the ≤~1s target.
+const DEFAULT_KILL_TIMING: KillTiming = KillTiming {
+    exit_poll: Duration::from_millis(500),
+    hup_grace: Duration::from_millis(300),
+};
+
+/// One step in the [`PtyCcSession::kill`] sequence — the *pure* description the executor
+/// walks, so the ordered sequence is unit-testable without spawning a process. See
+/// [`kill_steps`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KillStep {
+    /// Write `exit_command\r` and poll `try_wait` for `exit_poll` — return on reap.
+    CleanExitAttempt(Duration),
+    /// `killpg(pgid, SIGHUP)` to the whole process group, then poll `try_wait` for
+    /// `hup_grace` — return on reap. Saves shell history + reaps subagents.
+    HupGroupThenGrace(Duration),
+    /// `killpg(pgid, SIGKILL)` to the whole process group — anything that ignored SIGHUP.
+    KillGroup,
+    /// Final `try_wait`/`wait` to reap the leader zombie so the reader thread hits EOF and
+    /// `cc-exit-<id>` fires.
+    ReapLeader,
+}
+
+/// The ordered kill sequence for a given timing (pure — no I/O). The executor in
+/// [`PtyCcSession::kill`] walks exactly this, short-circuiting on an early reap. Kept
+/// separate from the executor so a test can assert the *policy* (order + durations)
+/// independent of any real PTY.
+fn kill_steps(timing: KillTiming) -> [KillStep; 4] {
+    [
+        KillStep::CleanExitAttempt(timing.exit_poll),
+        KillStep::HupGroupThenGrace(timing.hup_grace),
+        KillStep::KillGroup,
+        KillStep::ReapLeader,
+    ]
+}
+
+/// Send `sig` to the **process group** led by `pgid` (a `killpg`, i.e. `kill(-pgid, sig)`).
+/// `pgid` is the child's PID, which equals its PGID because portable-pty spawns the child
+/// as a `setsid` session/group leader — so this reaches CC/the shell AND every descendant
+/// in the group (subagents, backgrounded jobs) in one signal. Best-effort: a failure
+/// (e.g. the group already gone — ESRCH) is ignored, matching the kill path's best-effort
+/// contract; the subsequent `try_wait`/SIGKILL step resolves the outcome. macOS-only.
+fn signal_group(pgid: libc::pid_t, sig: libc::c_int) {
+    // Negative pid => the process group whose id is |pid| (POSIX `kill(2)` / `killpg(3)`).
+    unsafe {
+        libc::kill(-pgid, sig);
+    }
+}
+
 /// User-facing guidance shown when `claude` is not on `PATH`. The frontend overlay
 /// renders this verbatim, so it must read as actionable help, not an OS error code.
 const CC_NOT_FOUND_MSG: &str = "Claude Code (`claude`) was not found on your PATH. \
@@ -170,12 +248,28 @@ pub fn slash_command_bytes(command: &str) -> Vec<u8> {
     bytes
 }
 
-/// The explicit color-TTY env both the CC and shell spawns set. A Tauri app has no
-/// inherited `TERM`, so the spawned process must be told it's on a color-capable TTY
-/// (the WP2 finding — `wp2-cc-pty-probe.md:67,176`). Shared so the two spawn paths
-/// can't drift.
-fn color_tty_env() -> [(&'static str, &'static str); 2] {
-    [("TERM", "xterm-256color"), ("COLORTERM", "truecolor")]
+/// The explicit environment both the CC and shell spawns set. Shared so the two
+/// spawn paths can't drift.
+///
+/// Two concerns, both driven by the fact that a Tauri app inherits a bare env:
+/// - **Color TTY** (`TERM`/`COLORTERM`): a Tauri app has no inherited `TERM`, so the
+///   spawned process must be told it's on a color-capable TTY (the WP2 finding —
+///   `wp2-cc-pty-probe.md:67,176`).
+/// - **UTF-8 locale** (`LANG`/`LC_ALL`): a Finder/Dock-launched `.app` inherits the
+///   minimal **launchd** env, where `LANG` is **unset** → the spawned `claude`/shell
+///   (and any child TUI) defaults to `LC_CTYPE=C` (ASCII/POSIX), which mangles UTF-8
+///   output as `�` (M10.5 WP4, root cause C — confirmed via `launchctl getenv LANG`
+///   returning empty). This only bites the installed build — `pnpm tauri:dev` inherits
+///   the launching terminal's login-shell `LANG`, so it never reproduces in dev.
+///   `LC_ALL` forces the locale over any inherited `LC_*`; `en_US.UTF-8` is present on
+///   all macOS.
+fn color_tty_env() -> [(&'static str, &'static str); 4] {
+    [
+        ("TERM", "xterm-256color"),
+        ("COLORTERM", "truecolor"),
+        ("LANG", "en_US.UTF-8"),
+        ("LC_ALL", "en_US.UTF-8"),
+    ]
 }
 
 /// Resolve the argv for the WP9 second-terminal panel's login shell.
@@ -219,7 +313,11 @@ pub trait CcSession: Send {
     fn send_input(&self, bytes: &[u8]) -> Result<(), CcError>;
     /// Resize the PTY (propagates SIGWINCH; CC redraws). WP2-confirmed.
     fn resize(&self, cols: u16, rows: u16) -> Result<(), CcError>;
-    /// Terminate the session: `/exit\r` first, then SIGKILL after a grace window.
+    /// Terminate the session (M10.5 WP3): brief clean-exit attempt (`exit_command\r`),
+    /// then a SIGHUP-first **process-group** teardown — `killpg(SIGHUP)` (saves an
+    /// interactive shell's history + reaps subagents) → short grace → `killpg(SIGKILL)`
+    /// → reap. NOT an immediate SIGKILL (the pre-WP3 comment claimed that; the library's
+    /// `child.kill()` was really SIGHUP→SIGKILL to a single PID). See [`KillTiming`].
     fn kill(&self) -> Result<(), CcError>;
     /// Frontend has attached its output listener: flush any pre-subscription backlog and
     /// switch to live streaming (closes the WP9 shell-prompt race). Idempotent.
@@ -278,15 +376,16 @@ fn drain_backlog_emitting(backlog: &Mutex<Option<Vec<String>>>, mut emit: impl F
 
 /// A live PTY-backed process (CC, or a WP9 shell). Holds the master end (for resize),
 /// a single writer (for input), the child handle (for kill), and the clean-exit
-/// command to attempt before the SIGKILL fallback.
+/// command to attempt before the SIGHUP-first process-group teardown (M10.5 WP3).
 pub struct PtyCcSession {
     master: Box<dyn MasterPty + Send>,
     writer: Mutex<Box<dyn Write + Send>>,
     child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
     /// The command `kill()` writes (CR-terminated) to ask the process to exit cleanly
-    /// before the SIGKILL grace window. `/exit` for CC's TUI; `exit` for a shell
-    /// (a shell would print "command not found" for `/exit` and force the full
-    /// 3s SIGKILL wait on every window close — the WP9 P1.5 decision).
+    /// before escalating to signals. `/exit` for CC's TUI; `exit` for a shell (a shell
+    /// would print "command not found" for `/exit" — the WP9 P1.5 per-session-kind
+    /// decision). An *idle* session exits on this; a busy one falls through to the
+    /// SIGHUP-first group teardown fast (M10.5 WP3 shortened the poll from 3s → 500ms).
     exit_command: &'static str,
     /// Pre-subscription output backlog (see [`OutputBacklog`]). Shared with the reader
     /// thread; flushed + switched to live by [`Self::mark_ready`].
@@ -298,6 +397,29 @@ pub struct PtyCcSession {
 }
 
 impl PtyCcSession {
+    /// Poll `child.try_wait()` for up to `window`, returning `Ok(true)` the moment the
+    /// child is reaped, `Ok(false)` if the window elapses first. A `try_wait` error or a
+    /// poisoned lock propagates. Shared by the [`CcSession::kill`] steps so the poll
+    /// cadence (100ms) lives in one place. Inherent (not a trait method) — the kill
+    /// executor uses it internally.
+    fn poll_reaped(&self, window: Duration) -> Result<bool, CcError> {
+        let deadline = Instant::now() + window;
+        loop {
+            {
+                let mut child = self.child.lock().map_err(|_| CcError::Lock)?;
+                match child.try_wait() {
+                    Ok(Some(_)) => return Ok(true),
+                    Ok(None) => {}
+                    Err(e) => return Err(CcError::Io(e.to_string())),
+                }
+            }
+            if Instant::now() >= deadline {
+                return Ok(false);
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+
     /// Spawn `claude` under the given permission `mode` with `cwd = project_path`.
     ///
     /// Builds CC's argv via [`build_cc_argv`] (mapping the mode to `--permission-mode`)
@@ -486,32 +608,60 @@ impl CcSession for PtyCcSession {
     }
 
     fn kill(&self) -> Result<(), CcError> {
-        // Preferred path: ask the process to exit cleanly with one deterministic
-        // CR-terminated write (WP2: `/exit\r` exits CC in <5s, no two-keystroke race;
-        // a shell exits on `exit\r`). Then poll, and SIGKILL as a fallback so we never
-        // leak an orphaned child. `exit_command` is per-session-kind (`/exit` CC /
-        // `exit` shell) so a shell doesn't eat the full SIGKILL grace window.
-        let _ = self.send_input(&slash_command_bytes(self.exit_command));
+        // SIGHUP-first, process-GROUP teardown (M10.5 WP3). The ordered policy is the pure
+        // `kill_steps(DEFAULT_KILL_TIMING)` value (unit-tested independently); this executor
+        // WALKS that exact sequence, short-circuiting the moment the child is reaped. The
+        // old path claimed "SIGKILL fallback" but `child.kill()` was actually
+        // SIGHUP→250ms→SIGKILL to a SINGLE PID after a wasted 3s grace — which (a) took ~5s
+        // on every busy close, (b) couldn't reap a subagent in the group, and (c) too-often
+        // lost the shell's history (see the per-step notes in `KillStep` / `KillTiming`).
+        //
+        // The child is a `setsid` session/process-group leader (portable-pty), so its PID
+        // == PGID; we signal the whole group. `process_id()` is `Some` for a live child; if
+        // somehow `None`, the SIGKILL step falls back to the library's single-PID kill
+        // (best-effort — never worse than the pre-WP3 behavior).
+        let pgid = {
+            let child = self.child.lock().map_err(|_| CcError::Lock)?;
+            child.process_id().map(|p| p as libc::pid_t)
+        };
 
-        let deadline = Instant::now() + Duration::from_secs(3);
-        loop {
-            {
-                let mut child = self.child.lock().map_err(|_| CcError::Lock)?;
-                match child.try_wait() {
-                    Ok(Some(_)) => return Ok(()),
-                    Ok(None) => {}
-                    Err(e) => return Err(CcError::Io(e.to_string())),
+        for step in kill_steps(DEFAULT_KILL_TIMING) {
+            match step {
+                // 1) Ask to exit cleanly, poll briefly. An IDLE interactive session exits
+                //    here (fastest, and the shell saves its own history); a BUSY one won't
+                //    read it and we fall through.
+                KillStep::CleanExitAttempt(window) => {
+                    let _ = self.send_input(&slash_command_bytes(self.exit_command));
+                    if self.poll_reaped(window)? {
+                        return Ok(());
+                    }
+                }
+                // 2) SIGHUP the group (saves an interactive shell's history — SIGTERM/SIGKILL
+                //    don't — AND reaches subagents/children a single-PID kill can't), then
+                //    grace so the save lands.
+                KillStep::HupGroupThenGrace(grace) => {
+                    if let Some(pgid) = pgid {
+                        signal_group(pgid, libc::SIGHUP);
+                    }
+                    if self.poll_reaped(grace)? {
+                        return Ok(());
+                    }
+                }
+                // 3) SIGKILL the group (force) for anything that trapped/ignored SIGHUP.
+                KillStep::KillGroup => match pgid {
+                    Some(pgid) => signal_group(pgid, libc::SIGKILL),
+                    None => {
+                        let mut child = self.child.lock().map_err(|_| CcError::Lock)?;
+                        let _ = child.kill();
+                    }
+                },
+                // 4) Reap the leader so the reader thread hits EOF (→ `cc-exit-<id>`) and no
+                //    zombie lingers. Bounded; SIGKILL makes it quick.
+                KillStep::ReapLeader => {
+                    let _ = self.poll_reaped(DEFAULT_KILL_TIMING.hup_grace)?;
                 }
             }
-            if Instant::now() >= deadline {
-                break;
-            }
-            thread::sleep(Duration::from_millis(100));
         }
-
-        // Grace window elapsed — force kill.
-        let mut child = self.child.lock().map_err(|_| CcError::Lock)?;
-        child.kill().map_err(|e| CcError::Io(e.to_string()))?;
         Ok(())
     }
 
@@ -633,9 +783,7 @@ impl SessionRegistry {
 
         let handles: Vec<thread::JoinHandle<Option<String>>> = sessions
             .into_iter()
-            .map(|(id, session)| {
-                thread::spawn(move || session.kill().is_ok().then_some(id))
-            })
+            .map(|(id, session)| thread::spawn(move || session.kill().is_ok().then_some(id)))
             .collect();
 
         // Join all — the slowest grace window bounds the total, not the sum. A thread that
@@ -694,6 +842,36 @@ mod tests {
     fn slash_command_preserves_arguments() {
         assert_eq!(slash_command_bytes("/session-resume"), b"/session-resume\r");
         assert_eq!(slash_command_bytes("/model opus"), b"/model opus\r");
+    }
+
+    // --- color_tty_env: the shared spawn env (color TTY + UTF-8 locale) ---
+
+    #[test]
+    fn color_tty_env_carries_color_tty_and_utf8_locale() {
+        // Both spawn paths (CC + WP9 shell) share this; a maintainer must not silently
+        // drop the locale (M10.5 WP4 root cause C — a launchd `.app` has no `LANG`, so
+        // without this the spawned process gets `LC_CTYPE=C` and mangles UTF-8 → `�`).
+        let env = color_tty_env();
+        let get = |k: &str| {
+            env.iter()
+                .find(|(name, _)| *name == k)
+                .map(|(_, v)| *v)
+                .unwrap_or_else(|| panic!("color_tty_env missing {k}"))
+        };
+        // Color-TTY concern (WP2).
+        assert_eq!(get("TERM"), "xterm-256color");
+        assert_eq!(get("COLORTERM"), "truecolor");
+        // UTF-8 locale concern (WP4): both LANG and LC_ALL, both UTF-8.
+        assert!(
+            get("LANG").to_uppercase().contains("UTF-8"),
+            "LANG must be a UTF-8 locale, got {:?}",
+            get("LANG")
+        );
+        assert!(
+            get("LC_ALL").to_uppercase().contains("UTF-8"),
+            "LC_ALL must be a UTF-8 locale (forces the locale over inherited LC_*), got {:?}",
+            get("LC_ALL")
+        );
     }
 
     // --- build_cc_argv: permission-mode mapping (pure) ---
@@ -1050,7 +1228,10 @@ mod tests {
         use std::collections::BTreeSet;
         let got: BTreeSet<&str> = killed_ids.iter().map(String::as_str).collect();
         let want: BTreeSet<&str> = ids.iter().map(String::as_str).collect();
-        assert_eq!(got, want, "kill_all must return exactly the killed session ids");
+        assert_eq!(
+            got, want,
+            "kill_all must return exactly the killed session ids"
+        );
     }
 
     #[test]
@@ -1114,5 +1295,60 @@ mod tests {
         assert_eq!(reg.len(), 0);
         // ...and the 3 successes all ran (the failing one didn't short-circuit them).
         assert_eq!(killed.load(Ordering::SeqCst), 3);
+    }
+
+    // --- M10.5 WP3: the kill SEQUENCE (pure policy, no real PTY / wall-clock) ---
+
+    #[test]
+    fn kill_sequence_is_clean_exit_then_sighup_group_then_sigkill_group_then_reap() {
+        // The load-bearing assertion for WP3: the kill sequence tries a clean exit FIRST,
+        // then escalates SIGHUP-to-the-GROUP (which saves an interactive shell's history +
+        // reaps subagents — SIGTERM/SIGKILL would lose history), grants a grace, then
+        // SIGKILL-to-the-GROUP, then reaps the leader. Order + step kinds are the policy;
+        // the executor in `PtyCcSession::kill()` walks exactly this.
+        let steps = kill_steps(DEFAULT_KILL_TIMING);
+        assert_eq!(
+            steps,
+            [
+                KillStep::CleanExitAttempt(DEFAULT_KILL_TIMING.exit_poll),
+                KillStep::HupGroupThenGrace(DEFAULT_KILL_TIMING.hup_grace),
+                KillStep::KillGroup,
+                KillStep::ReapLeader,
+            ]
+        );
+    }
+
+    #[test]
+    fn kill_timing_shortened_exit_poll_and_bounded_forced_path() {
+        // Regression guard for the reproduced ~5s hang: the clean-exit poll must NOT be the
+        // old 3s (a busy session never reads `exit_command`, so that was pure latency on
+        // every close). 500ms + a 300ms SIGHUP grace bounds the forced path to ≤~800ms —
+        // under the ≤~1s acceptance target. If someone bumps these back up, this fails.
+        assert_eq!(DEFAULT_KILL_TIMING.exit_poll, Duration::from_millis(500));
+        assert_eq!(DEFAULT_KILL_TIMING.hup_grace, Duration::from_millis(300));
+        assert!(
+            DEFAULT_KILL_TIMING.exit_poll < Duration::from_secs(3),
+            "exit poll must be shorter than the pre-WP3 3s grace"
+        );
+        let forced_path = DEFAULT_KILL_TIMING.exit_poll + DEFAULT_KILL_TIMING.hup_grace;
+        assert!(
+            forced_path <= Duration::from_millis(1000),
+            "forced kill path must stay within ~1s (got {forced_path:?})"
+        );
+    }
+
+    #[test]
+    fn sighup_is_the_first_escalation_signal_not_sigterm() {
+        // Pin the SIGNAL choice: the first escalation after the clean-exit attempt is
+        // SIGHUP (which lets zsh/bash persist history on exit), NOT SIGTERM (which does
+        // not). This is the single decision that fixes the lost-shell-history defect; a
+        // regression to SIGTERM would compile fine but silently re-break history, so this
+        // asserts it directly at the policy level.
+        let steps = kill_steps(DEFAULT_KILL_TIMING);
+        assert!(
+            matches!(steps[1], KillStep::HupGroupThenGrace(_)),
+            "first escalation must be SIGHUP-to-group, got {:?}",
+            steps[1]
+        );
     }
 }

@@ -68,9 +68,21 @@ fn at_ms(d: chrono::NaiveDate, ms: i64) -> i64 {
 #[test]
 fn ms_to_minutes_round_is_round_half_up_and_zero_clamped() {
     assert_eq!(super::ms_to_minutes_round(0), 0);
-    assert_eq!(super::ms_to_minutes_round(-5_000), 0, "negative clamps to 0");
-    assert_eq!(super::ms_to_minutes_round(29_999), 0, "just under half a min → 0");
-    assert_eq!(super::ms_to_minutes_round(30_000), 1, "exactly half → rounds up");
+    assert_eq!(
+        super::ms_to_minutes_round(-5_000),
+        0,
+        "negative clamps to 0"
+    );
+    assert_eq!(
+        super::ms_to_minutes_round(29_999),
+        0,
+        "just under half a min → 0"
+    );
+    assert_eq!(
+        super::ms_to_minutes_round(30_000),
+        1,
+        "exactly half → rounds up"
+    );
     assert_eq!(super::ms_to_minutes_round(59_999), 1);
     assert_eq!(super::ms_to_minutes_round(60_000), 1);
     assert_eq!(super::ms_to_minutes_round(89_999), 1, "1m29.999s → 1");
@@ -78,7 +90,11 @@ fn ms_to_minutes_round_is_round_half_up_and_zero_clamped() {
     // The bug's shape: many sub-minute spans that individually floor to 0 but SUM to
     // real minutes — the helper is only ever fed the per-kind TOTAL, never per-segment.
     let total: i64 = 6 * 18_000; // 6 × 18s = 108s
-    assert_eq!(super::ms_to_minutes_round(total), 2, "108s total → 2m (not 0)");
+    assert_eq!(
+        super::ms_to_minutes_round(total),
+        2,
+        "108s total → 2m (not 0)"
+    );
 }
 
 // ---- build_day: empty day (oracle: test_empty_day, L59) -------------------
@@ -211,12 +227,22 @@ fn subminute_tool_calls_accrue_ai_doing_minutes_not_zero() {
         let post = pre + 18_000; // 18s of execution, back-to-back
         let tuid = format!("t{i}");
         events.push(with_tool(
-            ev(at_ms(monday, pre), "sess1234abcd", "/repo/proj-a", "PreToolUse"),
+            ev(
+                at_ms(monday, pre),
+                "sess1234abcd",
+                "/repo/proj-a",
+                "PreToolUse",
+            ),
             "Bash",
             &tuid,
         ));
         events.push(with_tool(
-            ev(at_ms(monday, post), "sess1234abcd", "/repo/proj-a", "PostToolUse"),
+            ev(
+                at_ms(monday, post),
+                "sess1234abcd",
+                "/repo/proj-a",
+                "PostToolUse",
+            ),
             "Bash",
             &tuid,
         ));
@@ -253,7 +279,7 @@ fn tool_calls_within_a_single_minute_still_accrue_ai_doing() {
     // rounds 48s → 1 min. RED today (==0), GREEN after the fix.
     let monday = day(2026, 5, 11);
     let base = 540 * 60_000; // 09:00:00
-    // 4 calls, each 12s of execution, all between 09:00:00 and 09:00:52 (one minute).
+                             // 4 calls, each 12s of execution, all between 09:00:00 and 09:00:52 (one minute).
     let mut events = vec![ev(
         at_ms(monday, base),
         "sess1234abcd",
@@ -265,12 +291,22 @@ fn tool_calls_within_a_single_minute_still_accrue_ai_doing() {
         let post = pre + 12_000;
         let tuid = format!("u{i}");
         events.push(with_tool(
-            ev(at_ms(monday, pre), "sess1234abcd", "/repo/proj-a", "PreToolUse"),
+            ev(
+                at_ms(monday, pre),
+                "sess1234abcd",
+                "/repo/proj-a",
+                "PreToolUse",
+            ),
             "Bash",
             &tuid,
         ));
         events.push(with_tool(
-            ev(at_ms(monday, post), "sess1234abcd", "/repo/proj-a", "PostToolUse"),
+            ev(
+                at_ms(monday, post),
+                "sess1234abcd",
+                "/repo/proj-a",
+                "PostToolUse",
+            ),
             "Bash",
             &tuid,
         ));
@@ -671,20 +707,45 @@ fn dead_session_with_stray_late_event_does_not_stretch_to_the_day_edge() {
     // A lone stray event at 13:42 (822') — 2h42m after real activity, far > the 30-min cap.
     let stray_min = 822;
     let events = [
-        ev(at_minute(d, 654), "deadsessabcd", "/repo/proj-x", "UserPromptSubmit"),
+        ev(
+            at_minute(d, 654),
+            "deadsessabcd",
+            "/repo/proj-x",
+            "UserPromptSubmit",
+        ),
         with_tool(
-            ev(at_minute(d, 655), "deadsessabcd", "/repo/proj-x", "PreToolUse"),
+            ev(
+                at_minute(d, 655),
+                "deadsessabcd",
+                "/repo/proj-x",
+                "PreToolUse",
+            ),
             "Edit",
             "t1",
         ),
         with_tool(
-            ev(at_minute(d, 656), "deadsessabcd", "/repo/proj-x", "PostToolUse"),
+            ev(
+                at_minute(d, 656),
+                "deadsessabcd",
+                "/repo/proj-x",
+                "PostToolUse",
+            ),
             "Edit",
             "t1",
         ),
-        ev(at_minute(d, real_end_min), "deadsessabcd", "/repo/proj-x", "Stop"),
+        ev(
+            at_minute(d, real_end_min),
+            "deadsessabcd",
+            "/repo/proj-x",
+            "Stop",
+        ),
         // The stray — a delayed idle Notification long after the session died.
-        ev(at_minute(d, stray_min), "deadsessabcd", "/repo/proj-x", "Notification"),
+        ev(
+            at_minute(d, stray_min),
+            "deadsessabcd",
+            "/repo/proj-x",
+            "Notification",
+        ),
     ];
     let payload = build_day(d, &events, &no_names());
     let sess = &payload.projects[0].sessions[0];
@@ -713,13 +774,33 @@ fn session_end_hook_bounds_the_session_at_its_true_end_dropping_a_later_stray() 
     // built session must end at the SessionEnd minute, NOT the Stop minute nor the stray.
     let d = day(2026, 5, 13);
     let events = [
-        ev(at_minute(d, 600), "endsessabcd", "/repo/proj-z", "SessionStart"),
-        ev(at_minute(d, 601), "endsessabcd", "/repo/proj-z", "UserPromptSubmit"),
+        ev(
+            at_minute(d, 600),
+            "endsessabcd",
+            "/repo/proj-z",
+            "SessionStart",
+        ),
+        ev(
+            at_minute(d, 601),
+            "endsessabcd",
+            "/repo/proj-z",
+            "UserPromptSubmit",
+        ),
         ev(at_minute(d, 604), "endsessabcd", "/repo/proj-z", "Stop"),
         // SessionEnd fires 2 min after Stop (clean /exit) — the authoritative end.
-        ev(at_minute(d, 606), "endsessabcd", "/repo/proj-z", "SessionEnd"),
+        ev(
+            at_minute(d, 606),
+            "endsessabcd",
+            "/repo/proj-z",
+            "SessionEnd",
+        ),
         // A stray idle Notification 50 min later — must be dropped, not extend the row.
-        ev(at_minute(d, 656), "endsessabcd", "/repo/proj-z", "Notification"),
+        ev(
+            at_minute(d, 656),
+            "endsessabcd",
+            "/repo/proj-z",
+            "Notification",
+        ),
     ];
     let payload = build_day(d, &events, &no_names());
     let sess = &payload.projects[0].sessions[0];
@@ -728,8 +809,15 @@ fn session_end_hook_bounds_the_session_at_its_true_end_dropping_a_later_stray() 
         sess.end, 606,
         "ends at the authoritative SessionEnd, not the Stop (604) or the stray (656)"
     );
-    assert!(sess.end < 656, "the later stray does not extend the session");
-    assert_eq!(sess.segs.last().unwrap().end, 606, "no phantom trailing seg past SessionEnd");
+    assert!(
+        sess.end < 656,
+        "the later stray does not extend the session"
+    );
+    assert_eq!(
+        sess.segs.last().unwrap().end,
+        606,
+        "no phantom trailing seg past SessionEnd"
+    );
 }
 
 #[test]
@@ -737,13 +825,28 @@ fn explicit_workspace_close_marker_bounds_the_session_over_a_later_session_end()
     // D3 precedence at the day level: an explicit WorkspaceClose (native) wins over a CC
     // SessionEnd. Marker@605 (native), SessionEnd@607 (cc-hook) → session ends at 605.
     let d = day(2026, 5, 13);
-    let mut close = ev(at_minute(d, 605), "wscloseabcd", "/repo/proj-z", "WorkspaceClose");
+    let mut close = ev(
+        at_minute(d, 605),
+        "wscloseabcd",
+        "/repo/proj-z",
+        "WorkspaceClose",
+    );
     close.source = "claudesk-native".to_string();
     let events = [
-        ev(at_minute(d, 600), "wscloseabcd", "/repo/proj-z", "UserPromptSubmit"),
+        ev(
+            at_minute(d, 600),
+            "wscloseabcd",
+            "/repo/proj-z",
+            "UserPromptSubmit",
+        ),
         ev(at_minute(d, 604), "wscloseabcd", "/repo/proj-z", "Stop"),
         close,
-        ev(at_minute(d, 607), "wscloseabcd", "/repo/proj-z", "SessionEnd"),
+        ev(
+            at_minute(d, 607),
+            "wscloseabcd",
+            "/repo/proj-z",
+            "SessionEnd",
+        ),
     ];
     let payload = build_day(d, &events, &no_names());
     let sess = &payload.projects[0].sessions[0];
@@ -759,10 +862,20 @@ fn live_idle_session_under_cap_is_not_truncated() {
     // between two real bursts stays ONE session spanning both — not cut at the gap.
     let d = day(2026, 5, 13);
     let events = [
-        ev(at_minute(d, 600), "livesessabcd", "/repo/proj-y", "UserPromptSubmit"),
+        ev(
+            at_minute(d, 600),
+            "livesessabcd",
+            "/repo/proj-y",
+            "UserPromptSubmit",
+        ),
         ev(at_minute(d, 605), "livesessabcd", "/repo/proj-y", "Stop"),
         // 25-min idle gap (605 -> 630), under the 30-min cap.
-        ev(at_minute(d, 630), "livesessabcd", "/repo/proj-y", "UserPromptSubmit"),
+        ev(
+            at_minute(d, 630),
+            "livesessabcd",
+            "/repo/proj-y",
+            "UserPromptSubmit",
+        ),
         ev(at_minute(d, 640), "livesessabcd", "/repo/proj-y", "Stop"),
     ];
     let payload = build_day(d, &events, &no_names());
@@ -822,13 +935,28 @@ fn end_to_end_all_four_termination_signals_compose_in_one_day() {
         }
     }
     // session ids are truncated to first 8 chars ("sess-A" etc. are <8, so unchanged).
-    assert_eq!(ends.get("sess-A"), Some(&606), "SessionEnd honored (not the 700 stray)");
-    assert_eq!(ends.get("sess-B"), Some(&607), "explicit WorkspaceClose honored");
-    assert_eq!(ends.get("sess-C"), Some(&606), "max-idle cap bounds the dead session");
+    assert_eq!(
+        ends.get("sess-A"),
+        Some(&606),
+        "SessionEnd honored (not the 700 stray)"
+    );
+    assert_eq!(
+        ends.get("sess-B"),
+        Some(&607),
+        "explicit WorkspaceClose honored"
+    );
+    assert_eq!(
+        ends.get("sess-C"),
+        Some(&606),
+        "max-idle cap bounds the dead session"
+    );
     assert_eq!(ends.get("sess-D"), Some(&610), "reconciled marker honored");
     // And none stretched to the 700 stray.
     for (id, end) in &ends {
-        assert!(*end <= 610, "session {id} must not stretch to the stray (end={end})");
+        assert!(
+            *end <= 610,
+            "session {id} must not stretch to the stray (end={end})"
+        );
     }
 }
 
@@ -867,11 +995,23 @@ fn build_metrics_tool_effort_sums_at_ms_precision_not_floored() {
     // anti-pattern). Three tool calls, each ~50ms, inside one burst.
     let d = day(2026, 5, 13);
     let ups = at_minute(d, 600); // 10:00
-    // Three sub-minute tool pairs (53ms, 49ms, 41ms) — real-data-shaped.
+                                 // Three sub-minute tool pairs (53ms, 49ms, 41ms) — real-data-shaped.
     let pairs = [
-        ("Edit", at_ms(d, 600 * 60_000 + 1_000), at_ms(d, 600 * 60_000 + 1_053)),
-        ("Bash", at_ms(d, 600 * 60_000 + 2_000), at_ms(d, 600 * 60_000 + 2_049)),
-        ("Bash", at_ms(d, 600 * 60_000 + 3_000), at_ms(d, 600 * 60_000 + 3_041)),
+        (
+            "Edit",
+            at_ms(d, 600 * 60_000 + 1_000),
+            at_ms(d, 600 * 60_000 + 1_053),
+        ),
+        (
+            "Bash",
+            at_ms(d, 600 * 60_000 + 2_000),
+            at_ms(d, 600 * 60_000 + 2_049),
+        ),
+        (
+            "Bash",
+            at_ms(d, 600 * 60_000 + 3_000),
+            at_ms(d, 600 * 60_000 + 3_041),
+        ),
     ];
     let stop = at_minute(d, 605);
     let events = burst_with_tools("sess-A", "/p", ups, stop, &pairs);
@@ -885,7 +1025,10 @@ fn build_metrics_tool_effort_sums_at_ms_precision_not_floored() {
         "sub-minute tool effort must sum at ms precision (got {}), not floor to 0",
         m.tool_call.effort_ms
     );
-    assert!(m.tool_call.wallclock_ms >= 143, "wallclock (merged) at least the summed span");
+    assert!(
+        m.tool_call.wallclock_ms >= 143,
+        "wallclock (merged) at least the summed span"
+    );
     // Top tools: Bash (49+41=90) ranks above Edit (53) by effort.
     assert_eq!(m.tool_call.top.len(), 2, "two distinct tool names");
     assert_eq!(m.tool_call.top[0].name, "Bash");
@@ -929,10 +1072,20 @@ fn build_metrics_human_is_typing_plus_reviewing_blocking_is_reviewing_only() {
         "/p",
         at_minute(d, 600),
         at_minute(d, 605),
-        &[("Edit", at_ms(d, 600 * 60_000 + 1_000), at_ms(d, 600 * 60_000 + 1_050))],
+        &[(
+            "Edit",
+            at_ms(d, 600 * 60_000 + 1_000),
+            at_ms(d, 600 * 60_000 + 1_050),
+        )],
     );
     // A second burst at 10:15 → 10:16; the 10:05→10:15 gap is human time between bursts.
-    events.extend(burst_with_tools("sess-A", "/p", at_minute(d, 615), at_minute(d, 616), &[]));
+    events.extend(burst_with_tools(
+        "sess-A",
+        "/p",
+        at_minute(d, 615),
+        at_minute(d, 616),
+        &[],
+    ));
 
     let m = build_metrics(d, d, &events);
 
@@ -942,8 +1095,14 @@ fn build_metrics_human_is_typing_plus_reviewing_blocking_is_reviewing_only() {
         m.human.typing_ms + m.human.reviewing_ms,
         "human.wallclock = typing + reviewing (away + ai-reasoning excluded)"
     );
-    assert_eq!(m.human.effort_ms, m.human.wallclock_ms, "one brain → effort == wallclock");
-    assert!((m.human.multiplier - 1.0).abs() < 1e-9, "human multiplier is 1.0");
+    assert_eq!(
+        m.human.effort_ms, m.human.wallclock_ms,
+        "one brain → effort == wallclock"
+    );
+    assert!(
+        (m.human.multiplier - 1.0).abs() < 1e-9,
+        "human multiplier is 1.0"
+    );
     // Blocking: human_blocking_agent is reviewing only (NOT + ai-reasoning/away).
     assert_eq!(
         m.blocking.human_blocking_agent_ms, m.human.reviewing_ms,
@@ -960,12 +1119,22 @@ fn build_metrics_subagent_is_a_subset_of_ai_agent() {
     let d = day(2026, 5, 13);
     let mut events = burst_with_tools("sess-A", "/p", at_minute(d, 600), at_minute(d, 610), &[]);
     // A subagent Start→Stop inside the burst.
-    events.push(with_agent(ev(at_minute(d, 602), "sess-A", "/p", "SubagentStart"), "explorer"));
-    events.push(with_agent(ev(at_minute(d, 604), "sess-A", "/p", "SubagentStop"), "explorer"));
+    events.push(with_agent(
+        ev(at_minute(d, 602), "sess-A", "/p", "SubagentStart"),
+        "explorer",
+    ));
+    events.push(with_agent(
+        ev(at_minute(d, 604), "sess-A", "/p", "SubagentStop"),
+        "explorer",
+    ));
 
     let m = build_metrics(d, d, &events);
     assert!(m.ai_agent.wallclock_ms > 0);
-    assert_eq!(m.ai_agent.subagent.wallclock_ms, 2 * 60_000, "2-min subagent span");
+    assert_eq!(
+        m.ai_agent.subagent.wallclock_ms,
+        2 * 60_000,
+        "2-min subagent span"
+    );
     assert!(
         m.ai_agent.subagent.wallclock_ms <= m.ai_agent.wallclock_ms,
         "subagent is a subset of ai_agent"
@@ -993,7 +1162,13 @@ fn build_metrics_concurrency_two_overlapping_sessions_lands_in_k2() {
     // Two sessions engaged over the SAME 10:00→10:10 span → that elapsed time is k=2.
     let d = day(2026, 5, 13);
     let mut events = burst_with_tools("sess-A", "/pa", at_minute(d, 600), at_minute(d, 610), &[]);
-    events.extend(burst_with_tools("sess-B", "/pb", at_minute(d, 600), at_minute(d, 610), &[]));
+    events.extend(burst_with_tools(
+        "sess-B",
+        "/pb",
+        at_minute(d, 600),
+        at_minute(d, 610),
+        &[],
+    ));
     let m = build_metrics(d, d, &events);
     let k2 = &m.concurrency[1];
     assert_eq!(k2.k, 2);
@@ -1006,8 +1181,16 @@ fn build_metrics_concurrency_two_overlapping_sessions_lands_in_k2() {
     // wallclock (merged/union) 10 min → multiplier 2.0. This is the core "running N
     // projects in parallel compresses effort into less elapsed time" metric — it breaks
     // silently if build_metrics merged effort or summed wallclock. (WP6c-1 codify pin.)
-    assert_eq!(m.engaged_session.effort_ms, 20 * 60_000, "effort = both sessions summed");
-    assert_eq!(m.engaged_session.wallclock_ms, 10 * 60_000, "wallclock = merged union");
+    assert_eq!(
+        m.engaged_session.effort_ms,
+        20 * 60_000,
+        "effort = both sessions summed"
+    );
+    assert_eq!(
+        m.engaged_session.wallclock_ms,
+        10 * 60_000,
+        "wallclock = merged union"
+    );
     assert!(
         (m.engaged_session.multiplier - 2.0).abs() < 1e-9,
         "parallelism multiplier is 2.0 (got {})",
@@ -1025,22 +1208,49 @@ fn metrics_dto_serde_shape_is_snake_case() {
         "/p",
         at_minute(d, 600),
         at_minute(d, 610),
-        &[("Edit", at_ms(d, 600 * 60_000 + 1_000), at_ms(d, 600 * 60_000 + 1_050))],
+        &[(
+            "Edit",
+            at_ms(d, 600 * 60_000 + 1_000),
+            at_ms(d, 600 * 60_000 + 1_050),
+        )],
     );
     let m = build_metrics(d, d, &events);
     let json = serde_json::to_string(&m).unwrap();
     for key in [
-        "\"window\"", "\"start\"", "\"end\"", "\"day_count\"",
-        "\"engaged_session\"", "\"wallclock_ms\"", "\"effort_ms\"", "\"multiplier\"",
-        "\"session_count\"", "\"ai_agent\"", "\"subagent\"", "\"tool_call\"", "\"top\"",
-        "\"name\"", "\"human\"", "\"typing_ms\"", "\"reviewing_ms\"", "\"away_ms\"",
-        "\"concurrency\"", "\"k\"", "\"blocking\"", "\"human_blocking_agent_ms\"",
+        "\"window\"",
+        "\"start\"",
+        "\"end\"",
+        "\"day_count\"",
+        "\"engaged_session\"",
+        "\"wallclock_ms\"",
+        "\"effort_ms\"",
+        "\"multiplier\"",
+        "\"session_count\"",
+        "\"ai_agent\"",
+        "\"subagent\"",
+        "\"tool_call\"",
+        "\"top\"",
+        "\"name\"",
+        "\"human\"",
+        "\"typing_ms\"",
+        "\"reviewing_ms\"",
+        "\"away_ms\"",
+        "\"concurrency\"",
+        "\"k\"",
+        "\"blocking\"",
+        "\"human_blocking_agent_ms\"",
         "\"agent_blocking_human_ms\"",
     ] {
-        assert!(json.contains(key), "metrics JSON must contain snake_case key {key}; got {json}");
+        assert!(
+            json.contains(key),
+            "metrics JSON must contain snake_case key {key}; got {json}"
+        );
     }
     // is_plus only appears on the k=4 stratum.
-    assert!(json.contains("\"is_plus\":true"), "k=4 stratum carries is_plus");
+    assert!(
+        json.contains("\"is_plus\":true"),
+        "k=4 stratum carries is_plus"
+    );
 }
 
 #[test]
@@ -1050,7 +1260,10 @@ fn time_analytics_result_metrics_tag_serializes() {
     let d = day(2026, 5, 13);
     let m = build_metrics(d, d, &[]);
     let json = serde_json::to_string(&TimeAnalyticsResult::Metrics(m)).unwrap();
-    assert!(json.contains("\"kind\":\"metrics\""), "result tagged metrics; got {json}");
+    assert!(
+        json.contains("\"kind\":\"metrics\""),
+        "result tagged metrics; got {json}"
+    );
 }
 
 // ===========================================================================
@@ -1084,7 +1297,11 @@ fn compare_month_over_month_bounds_span_full_calendar_months() {
     // (31d). Full-month spans regardless of the anchor day-of-month.
     let (a_start, a_end, b_start, b_end) = compare_month_over_month_bounds(day(2026, 3, 15));
     assert_eq!(a_start, day(2026, 2, 1));
-    assert_eq!(a_end, day(2026, 2, 28), "2026 is not a leap year → Feb has 28 days");
+    assert_eq!(
+        a_end,
+        day(2026, 2, 28),
+        "2026 is not a leap year → Feb has 28 days"
+    );
     assert_eq!(b_start, day(2026, 3, 1));
     assert_eq!(b_end, day(2026, 3, 31));
 }
@@ -1099,7 +1316,11 @@ fn compare_month_over_month_bounds_handle_january_rollover_and_leap() {
     assert_eq!(b_end, day(2026, 1, 31));
     // Leap-year Feb.
     let (_, feb_end, _, _) = compare_month_over_month_bounds(day(2024, 3, 10));
-    assert_eq!(feb_end, day(2024, 2, 29), "2024 is a leap year → Feb has 29 days");
+    assert_eq!(
+        feb_end,
+        day(2024, 2, 29),
+        "2024 is a leap year → Feb has 29 days"
+    );
 }
 
 #[test]
@@ -1133,14 +1354,22 @@ fn build_comparison_each_side_equals_build_metrics_over_its_days() {
         "/pa",
         at_minute(a_day, 600),
         at_minute(a_day, 620),
-        &[("Edit", at_ms(a_day, 600 * 60_000 + 1_000), at_ms(a_day, 600 * 60_000 + 1_500))],
+        &[(
+            "Edit",
+            at_ms(a_day, 600 * 60_000 + 1_000),
+            at_ms(a_day, 600 * 60_000 + 1_500),
+        )],
     );
     let b_events = burst_with_tools(
         "sess-B",
         "/pb",
         at_minute(b_day, 540),
         at_minute(b_day, 570),
-        &[("Bash", at_ms(b_day, 540 * 60_000 + 1_000), at_ms(b_day, 540 * 60_000 + 3_000))],
+        &[(
+            "Bash",
+            at_ms(b_day, 540 * 60_000 + 1_000),
+            at_ms(b_day, 540 * 60_000 + 3_000),
+        )],
     );
     let mut union: Vec<EventRow> = a_events.clone();
     union.extend(b_events.clone());
@@ -1171,15 +1400,27 @@ fn build_comparison_empty_side_is_fully_shaped_zeros() {
     // no NaN). B side has real activity. Mirrors build_metrics's empty-window guarantee.
     let a_day = day(2026, 5, 4);
     let b_day = day(2026, 5, 11);
-    let b_events = burst_with_tools("sess-B", "/pb", at_minute(b_day, 540), at_minute(b_day, 570), &[]);
+    let b_events = burst_with_tools(
+        "sess-B",
+        "/pb",
+        at_minute(b_day, 540),
+        at_minute(b_day, 570),
+        &[],
+    );
 
     let cmp = build_comparison_data(a_day, a_day, b_day, b_day, &b_events);
 
     assert_eq!(cmp.a.metrics.engaged_session.session_count, 0);
     assert_eq!(cmp.a.metrics.ai_agent.effort_ms, 0);
     assert_eq!(cmp.a.metrics.human.wallclock_ms, 0);
-    assert!(cmp.a.metrics.engaged_session.multiplier.is_finite(), "multiplier is 0.0, not NaN");
-    assert!(cmp.b.metrics.engaged_session.session_count >= 1, "B side has the real burst");
+    assert!(
+        cmp.a.metrics.engaged_session.multiplier.is_finite(),
+        "multiplier is 0.0, not NaN"
+    );
+    assert!(
+        cmp.b.metrics.engaged_session.session_count >= 1,
+        "B side has the real burst"
+    );
 }
 
 #[test]
@@ -1196,8 +1437,13 @@ fn build_comparison_overlapping_custom_windows_count_shared_days_on_both_sides()
     let b_end = day(2026, 5, 7);
     // One burst on the shared day 05-05 (a 30-min engaged session).
     let shared_day = day(2026, 5, 5);
-    let events =
-        burst_with_tools("sess-S", "/ps", at_minute(shared_day, 540), at_minute(shared_day, 570), &[]);
+    let events = burst_with_tools(
+        "sess-S",
+        "/ps",
+        at_minute(shared_day, 540),
+        at_minute(shared_day, 570),
+        &[],
+    );
 
     let cmp = build_comparison_data(a_start, a_end, b_start, b_end, &events);
 
@@ -1227,11 +1473,22 @@ fn comparison_dto_serde_shape_has_no_deltas() {
     let cmp = build_comparison_data(a_day, a_day, b_day, b_day, &[]);
     let json = serde_json::to_string(&cmp).unwrap();
     for key in [
-        "\"a\"", "\"b\"", "\"metrics\"", "\"range\"", "\"meta\"",
-        "\"a_start\"", "\"a_end\"", "\"b_start\"", "\"b_end\"",
-        "\"a_day_count\"", "\"b_day_count\"",
+        "\"a\"",
+        "\"b\"",
+        "\"metrics\"",
+        "\"range\"",
+        "\"meta\"",
+        "\"a_start\"",
+        "\"a_end\"",
+        "\"b_start\"",
+        "\"b_end\"",
+        "\"a_day_count\"",
+        "\"b_day_count\"",
     ] {
-        assert!(json.contains(key), "comparison JSON must contain key {key}; got {json}");
+        assert!(
+            json.contains(key),
+            "comparison JSON must contain key {key}; got {json}"
+        );
     }
     assert!(
         !json.contains("\"deltas\""),
@@ -1247,5 +1504,8 @@ fn time_analytics_result_compare_tag_serializes() {
     let b_day = day(2026, 5, 11);
     let cmp = build_comparison_data(a_day, a_day, b_day, b_day, &[]);
     let json = serde_json::to_string(&TimeAnalyticsResult::Compare(Box::new(cmp))).unwrap();
-    assert!(json.contains("\"kind\":\"compare\""), "result tagged compare; got {json}");
+    assert!(
+        json.contains("\"kind\":\"compare\""),
+        "result tagged compare; got {json}"
+    );
 }

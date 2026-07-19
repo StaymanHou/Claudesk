@@ -531,19 +531,26 @@ pub enum QueryWindow {
         #[serde(default)]
         monday: Option<String>,
     },
-    Custom { start_ms: i64, end_ms: i64 },
+    Custom {
+        start_ms: i64,
+        end_ms: i64,
+    },
     /// `{ "kind": "metrics", "window": { "kind": "day" | "week" | "custom", … } }`
     /// (M9 WP6c-1) — the AGGREGATE-metrics query. The nested `window` selects the span
     /// (reusing the same day/week/custom resolution); the result is a [`MetricsPayload`]
     /// (window-level analytics) rather than a per-session Range/Week payload. Boxed to
     /// keep the enum from being recursively unsized.
-    Metrics { window: Box<QueryWindow> },
+    Metrics {
+        window: Box<QueryWindow>,
+    },
     /// `{ "kind": "compare", "spec": … }` (M9 WP6c-2) — the A/B comparison query. `spec`
     /// selects a named preset (WoW / MoM / today-vs-trailing) or a custom A/B pair; the
     /// result is a [`ComparisonPayload`] (`{a, b, meta}`, each side a full metrics tree).
     /// Preset day-math is resolved backend-side on the LOCAL calendar (the FE sends only
     /// the preset string); custom sends two explicit epoch-ms spans.
-    Compare { spec: CompareSpec },
+    Compare {
+        spec: CompareSpec,
+    },
 }
 
 /// The A/B window selector for a `{ "kind": "compare" }` query. Internally-tagged so the FE
@@ -922,9 +929,15 @@ mod tests {
     fn reconcile_closes_dangling_sessions_at_their_last_seen_ts() {
         let store = mem_store();
         // Two sessions, each last-active at 10_000/20_000ms; `now` far past the cap.
-        store.write_gated(&ev_at("dead-1", 5_000, "UserPromptSubmit"), true).unwrap();
-        store.write_gated(&ev_at("dead-1", 10_000, "Stop"), true).unwrap();
-        store.write_gated(&ev_at("dead-2", 20_000, "Stop"), true).unwrap();
+        store
+            .write_gated(&ev_at("dead-1", 5_000, "UserPromptSubmit"), true)
+            .unwrap();
+        store
+            .write_gated(&ev_at("dead-1", 10_000, "Stop"), true)
+            .unwrap();
+        store
+            .write_gated(&ev_at("dead-2", 20_000, "Stop"), true)
+            .unwrap();
         let now = 20_000 + CAP + 60_000; // both silent past the cap
         let closed = store.reconcile_dangling(now, CAP).unwrap();
         assert_eq!(closed, 2, "both dangling sessions closed");
@@ -942,13 +955,18 @@ mod tests {
                 .collect();
             mapped
         };
-        assert_eq!(rows, vec![("dead-1".into(), 10_000), ("dead-2".into(), 20_000)]);
+        assert_eq!(
+            rows,
+            vec![("dead-1".into(), 10_000), ("dead-2".into(), 20_000)]
+        );
     }
 
     #[test]
     fn reconcile_is_idempotent_second_run_writes_nothing() {
         let store = mem_store();
-        store.write_gated(&ev_at("dead-1", 10_000, "Stop"), true).unwrap();
+        store
+            .write_gated(&ev_at("dead-1", 10_000, "Stop"), true)
+            .unwrap();
         let now = 10_000 + CAP + 60_000;
         assert_eq!(store.reconcile_dangling(now, CAP).unwrap(), 1);
         assert_eq!(ws_close_count(&store), 1);
@@ -960,7 +978,9 @@ mod tests {
     #[test]
     fn reconcile_leaves_a_recent_session_alone() {
         let store = mem_store();
-        store.write_gated(&ev_at("live-1", 10_000, "Stop"), true).unwrap();
+        store
+            .write_gated(&ev_at("live-1", 10_000, "Stop"), true)
+            .unwrap();
         let now = 10_000 + 5 * 60_000; // 5min silent < 30min cap → still live
         assert_eq!(store.reconcile_dangling(now, CAP).unwrap(), 0);
         assert_eq!(ws_close_count(&store), 0);
@@ -1411,7 +1431,10 @@ mod tests {
         let read = read_time_tracking_enabled(dir.path());
         assert!(read.is_err(), "malformed settings → reader returns Err");
         let gate_on = read.unwrap_or(false); // exactly what tracking_enabled does
-        assert!(!gate_on, "error degrades to gate OFF (drain must never die on a bad file)");
+        assert!(
+            !gate_on,
+            "error degrades to gate OFF (drain must never die on a bad file)"
+        );
         // ...and a store fed that OFF gate writes nothing.
         let store = mem_store();
         store.write_gated(&base_event("Stop"), gate_on).unwrap();
@@ -1435,7 +1458,9 @@ mod tests {
         // read it back the way `tracking_enabled` does, feed the write path → a row lands.
         // Flip it OFF → the write path is a zero-IO no-op. This is the settings→gate→write
         // seam WP5 introduced (the app→dir resolution is the only piece left to verify-self).
-        use crate::config_store::settings::{read_time_tracking_enabled, write_time_tracking_enabled};
+        use crate::config_store::settings::{
+            read_time_tracking_enabled, write_time_tracking_enabled,
+        };
         let dir = tempfile::TempDir::new().unwrap();
 
         write_time_tracking_enabled(dir.path(), true).unwrap();
@@ -1457,7 +1482,9 @@ mod tests {
         let store_off = mem_store();
         let gate_off = read_time_tracking_enabled(dir.path()).unwrap();
         assert!(!gate_off, "persisted OFF → gate OFF");
-        store_off.write_gated(&base_event("Stop"), gate_off).unwrap();
+        store_off
+            .write_gated(&base_event("Stop"), gate_off)
+            .unwrap();
         store_off
             .write_native_gated(
                 &NativeSignal::ActiveSurface,
@@ -1465,7 +1492,11 @@ mod tests {
                 gate_off,
             )
             .unwrap();
-        assert_eq!(count(&store_off), 0, "gate OFF → both write paths are zero-IO no-ops");
+        assert_eq!(
+            count(&store_off),
+            0,
+            "gate OFF → both write paths are zero-IO no-ops"
+        );
     }
 
     #[test]
@@ -1809,7 +1840,11 @@ mod tests {
                 assert_eq!((a_end - a_start).num_days() + 1, 7);
                 assert_eq!((b_end - b_start).num_days() + 1, 7);
                 assert!(a_end < b_start, "A week precedes B week");
-                assert_eq!(a_end + chrono::Duration::days(1), b_start, "contiguous weeks");
+                assert_eq!(
+                    a_end + chrono::Duration::days(1),
+                    b_start,
+                    "contiguous weeks"
+                );
             }
             _ => panic!("compare → Compare mode"),
         }
@@ -1821,7 +1856,8 @@ mod tests {
         // union read span spans min(start)..max(end)+1day.
         let a_start_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());
         let a_end_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 6).unwrap());
-        let b_start_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
+        let b_start_ms =
+            local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
         let b_end_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 13).unwrap());
         let (start, end, mode) = resolve_window(&QueryWindow::Compare {
             spec: CompareSpec::Custom {
@@ -1837,7 +1873,10 @@ mod tests {
         });
         // Union read starts at the earliest local midnight (A's start).
         assert_eq!(start, a_start_ms);
-        assert!(end > b_end_ms, "union end is the day AFTER B's last day (exclusive)");
+        assert!(
+            end > b_end_ms,
+            "union end is the day AFTER B's last day (exclusive)"
+        );
         match mode {
             WindowMode::Compare {
                 a_start,
@@ -1845,9 +1884,15 @@ mod tests {
                 b_start,
                 b_end,
             } => {
-                assert_eq!(a_start, chrono::NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());
+                assert_eq!(
+                    a_start,
+                    chrono::NaiveDate::from_ymd_opt(2026, 5, 4).unwrap()
+                );
                 assert_eq!(a_end, chrono::NaiveDate::from_ymd_opt(2026, 5, 6).unwrap());
-                assert_eq!(b_start, chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
+                assert_eq!(
+                    b_start,
+                    chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap()
+                );
                 assert_eq!(b_end, chrono::NaiveDate::from_ymd_opt(2026, 5, 13).unwrap());
             }
             _ => panic!("custom compare → Compare mode"),

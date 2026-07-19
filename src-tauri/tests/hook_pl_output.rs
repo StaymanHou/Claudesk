@@ -166,7 +166,8 @@ fn session_start_emits_source() {
     if !perl_available() {
         return;
     }
-    let payload = r#"{"hook_event_name":"SessionStart","session_id":"s","cwd":"/p","source":"startup"}"#;
+    let payload =
+        r#"{"hook_event_name":"SessionStart","session_id":"s","cwd":"/p","source":"startup"}"#;
     let v = as_json(&run_hook_capture_line(payload).expect("line"));
     assert_eq!(v["hook_event_name"].as_str(), Some("SessionStart"));
     assert_eq!(v["source"].as_str(), Some("startup"));

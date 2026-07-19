@@ -682,7 +682,10 @@ mod tests {
         assert_eq!(row.event, "WorkspaceClose");
         assert_eq!(row.event, crate::reclassify::EVENT_WORKSPACE_CLOSE);
         assert_eq!(row.source, SOURCE_CLAUDESK_NATIVE);
-        assert_eq!(row.session_id, "cc-7", "marker attributed to the closed session");
+        assert_eq!(
+            row.session_id, "cc-7",
+            "marker attributed to the closed session"
+        );
         assert!(row.ts > 1_577_836_800_000, "carries a real ts");
         assert_eq!(row.tool_name, None);
         assert_eq!(row.agent_type, None);

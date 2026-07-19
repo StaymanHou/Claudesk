@@ -240,7 +240,10 @@ mod tests {
     fn notifications_enabled_event_name_is_stable() {
         // The frontend `updaterPrefs.ts` hardcodes this string to listen for the toggle
         // broadcast — pin it so a rename can't silently desync the two sides.
-        assert_eq!(UPDATER_NOTIFICATIONS_ENABLED_EVENT, "updater-notifications-enabled");
+        assert_eq!(
+            UPDATER_NOTIFICATIONS_ENABLED_EVENT,
+            "updater-notifications-enabled"
+        );
     }
 
     #[test]

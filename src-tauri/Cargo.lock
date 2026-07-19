@@ -516,6 +516,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "git2",
+ "libc",
  "notify-debouncer-full",
  "portable-pty",
  "regex",

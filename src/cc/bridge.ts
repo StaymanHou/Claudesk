@@ -23,12 +23,18 @@ export function decodeBase64(b64: string): Uint8Array {
 
 /** Encode a UTF-8 string (an xterm `onData` chunk) to base64 for `cc_input`. */
 export function encodeBase64(data: string): string {
-  // xterm onData yields a string whose code units are bytes (it never produces
-  // code points > 0xff for terminal input), so charCode-per-char is the inverse
-  // of decodeBase64 and round-trips control bytes losslessly.
+  // Encode the string's real UTF-8 bytes so multi-byte input round-trips. A
+  // pasted glyph (emoji, accented char, arrow, box-drawing) arrives as a JS
+  // string whose code units are > 0xFF (or a surrogate pair); the old
+  // `charCodeAt(i) & 0xff` truncated each to a single byte, so CC received `�`
+  // (M10.5 WP4). `TextEncoder` yields the correct UTF-8 bytes, and the
+  // byte→binary-string→btoa path is the exact inverse of decodeBase64. ASCII
+  // and control bytes (CR/LF/ESC) are one-byte-per-char, so they round-trip
+  // unchanged.
+  const bytes = new TextEncoder().encode(data);
   let binary = "";
-  for (let i = 0; i < data.length; i += 1) {
-    binary += String.fromCharCode(data.charCodeAt(i) & 0xff);
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
 }

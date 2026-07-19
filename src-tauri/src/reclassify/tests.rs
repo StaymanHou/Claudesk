@@ -1239,8 +1239,15 @@ fn resolve_end_the_10_54_to_13_42_defect_repro() {
         (t_1342, "Notification"),
     ]);
     let end = resolve_session_end(&events, None);
-    assert_eq!(end, t_last_real * MIN, "cap at real activity, not the 13:42 stray");
-    assert!(end < t_1342 * MIN, "the dead session no longer reaches the stray");
+    assert_eq!(
+        end,
+        t_last_real * MIN,
+        "cap at real activity, not the 13:42 stray"
+    );
+    assert!(
+        end < t_1342 * MIN,
+        "the dead session no longer reaches the stray"
+    );
 }
 
 #[test]
@@ -1256,7 +1263,11 @@ fn resolve_end_authoritative_marker_wins_and_clamps_into_span() {
 #[test]
 fn resolve_end_authoritative_marker_beats_an_oversized_gap() {
     // BOTH an oversized idle gap AND an authoritative marker → the marker (level 1) wins.
-    let events = sess(&[(0, "UserPromptSubmit"), (3, "Stop"), (3 + 40, "Notification")]);
+    let events = sess(&[
+        (0, "UserPromptSubmit"),
+        (3, "Stop"),
+        (3 + 40, "Notification"),
+    ]);
     assert_eq!(resolve_session_end(&events, None), 3 * MIN); // cap fires without a marker
     assert_eq!(resolve_session_end(&events, Some(4 * MIN)), 4 * MIN); // marker overrides
 }
@@ -1370,7 +1381,11 @@ fn resolve_end_honors_session_end_even_with_a_later_stray_event() {
 fn resolve_end_explicit_marker_overrides_the_cap_and_last_event() {
     // Composed: an oversized idle gap (would cap at 5) AND an explicit WorkspaceClose@7 →
     // the marker (level 1) wins over the cap (level 2).
-    let mut events = sess(&[(0, "UserPromptSubmit"), (5, "Stop"), (5 + 40, "Notification")]);
+    let mut events = sess(&[
+        (0, "UserPromptSubmit"),
+        (5, "Stop"),
+        (5 + 40, "Notification"),
+    ]);
     events.push(native_ev(7 * MIN, "WorkspaceClose"));
     let ae = authoritative_end(&events);
     assert_eq!(resolve_session_end(&events, ae), 7 * MIN);
@@ -1396,7 +1411,11 @@ fn dangling_detects_a_session_silent_past_the_cap_with_no_marker() {
     // A session whose last event is > cap before `now`, no WorkspaceClose/SessionEnd →
     // dangling; reconciliation should close it at its last-seen ts.
     let now = 200 * MIN;
-    let events = sess_id("dead-1", "/repo/a", &[(0, "UserPromptSubmit"), (10, "Stop")]);
+    let events = sess_id(
+        "dead-1",
+        "/repo/a",
+        &[(0, "UserPromptSubmit"), (10, "Stop")],
+    );
     // last event at 10min; now at 200min → 190min silent >> 30min cap.
     let d = dangling_sessions(&events, now, CAP);
     assert_eq!(d.len(), 1);
@@ -1409,7 +1428,11 @@ fn dangling_detects_a_session_silent_past_the_cap_with_no_marker() {
 fn dangling_ignores_a_recent_session_within_the_cap() {
     // A session whose last event is WITHIN the cap of `now` is live/recent → NOT dangling.
     let now = 20 * MIN; // last event at 10min → 10min silent < 30min cap
-    let events = sess_id("live-1", "/repo/a", &[(0, "UserPromptSubmit"), (10, "Stop")]);
+    let events = sess_id(
+        "live-1",
+        "/repo/a",
+        &[(0, "UserPromptSubmit"), (10, "Stop")],
+    );
     assert!(dangling_sessions(&events, now, CAP).is_empty());
 }
 
@@ -1418,16 +1441,30 @@ fn dangling_ignores_a_session_that_already_has_a_marker() {
     // A session past the cap but WITH a WorkspaceClose (or SessionEnd) is already closed →
     // NOT dangling. This is what makes reconciliation idempotent.
     let now = 200 * MIN;
-    let mut ws_closed = sess_id("closed-1", "/repo/a", &[(0, "UserPromptSubmit"), (10, "Stop")]);
+    let mut ws_closed = sess_id(
+        "closed-1",
+        "/repo/a",
+        &[(0, "UserPromptSubmit"), (10, "Stop")],
+    );
     let mut mk = ev(10 * MIN, "closed-1", "WorkspaceClose");
     mk.source = "claudesk-native".to_string();
     mk.cwd = "/repo/a".to_string();
     ws_closed.push(mk);
-    assert!(dangling_sessions(&ws_closed, now, CAP).is_empty(), "WorkspaceClose → not dangling");
+    assert!(
+        dangling_sessions(&ws_closed, now, CAP).is_empty(),
+        "WorkspaceClose → not dangling"
+    );
 
-    let mut se_closed = sess_id("closed-2", "/repo/b", &[(0, "UserPromptSubmit"), (10, "Stop")]);
+    let mut se_closed = sess_id(
+        "closed-2",
+        "/repo/b",
+        &[(0, "UserPromptSubmit"), (10, "Stop")],
+    );
     se_closed.push(ev(11 * MIN, "closed-2", "SessionEnd"));
-    assert!(dangling_sessions(&se_closed, now, CAP).is_empty(), "SessionEnd → not dangling");
+    assert!(
+        dangling_sessions(&se_closed, now, CAP).is_empty(),
+        "SessionEnd → not dangling"
+    );
 }
 
 #[test]
@@ -1435,9 +1472,16 @@ fn dangling_reports_multiple_sessions_deterministically() {
     // Two dangling sessions → both reported, sorted by id (stable write order).
     let now = 300 * MIN;
     let mut events = sess_id("aaa", "/repo/a", &[(0, "UserPromptSubmit"), (5, "Stop")]);
-    events.extend(sess_id("bbb", "/repo/b", &[(0, "UserPromptSubmit"), (8, "Stop")]));
+    events.extend(sess_id(
+        "bbb",
+        "/repo/b",
+        &[(0, "UserPromptSubmit"), (8, "Stop")],
+    ));
     let d = dangling_sessions(&events, now, CAP);
-    assert_eq!(d.iter().map(|x| x.session_id.as_str()).collect::<Vec<_>>(), ["aaa", "bbb"]);
+    assert_eq!(
+        d.iter().map(|x| x.session_id.as_str()).collect::<Vec<_>>(),
+        ["aaa", "bbb"]
+    );
     assert_eq!(d[0].last_ts, 5 * MIN);
     assert_eq!(d[1].last_ts, 8 * MIN);
 }

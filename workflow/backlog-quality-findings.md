@@ -4,6 +4,49 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m10.5-wp4-cc-io-encoding-mojibake — 2026-07-19
+
+*(feature-review-quality on the uncommitted working-tree diff, HEAD `92cb0cc`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 2 MINOR — both cosmetic. Reviewer: "well-built, tightly-scoped fix… advances the codebase without accruing debt; the only findings are two cosmetic comment/symmetry nits." None blocks; refactor-optional. Files: `src/cc/bridge.ts`, `src/cc/__tests__/bridge.test.ts`.)*
+
+## SURFACE-2026-07-19-QUALITY-WP4-ENCODEBASE64-CONCAT-SYMMETRY
+- **Severity:** MINOR
+- **Location:** `src/cc/bridge.ts:35-38` (`encodeBase64` accumulation loop)
+- **Finding:** The `binary += String.fromCharCode(bytes[i])` char-by-char accumulation is O(n) string concatenation. Harmless for small terminal `onData`/paste chunks, but the sibling `decodeBase64` uses a preallocated `Uint8Array`; a `String.fromCharCode(...bytes)` (or chunked spread) would be faster and read as the mirror image of its inverse.
+- **Priority:** low
+- **Pickup shape:** one-line loop→spread rewrite in `encodeBase64`; purely cosmetic-symmetry, no correctness cost. Rides any future `bridge.ts` touch.
+
+## SURFACE-2026-07-19-QUALITY-WP4-STALE-RED-TEST-COMMENT
+- **Severity:** MINOR
+- **Location:** `src/cc/__tests__/bridge.test.ts:36-41` (multi-byte round-trip anchor test block comment)
+- **Finding:** The anchor test's block comment is still written in reproduce-first "RED / the old `& 0xff` truncates" framing, but the code under test is now GREEN (fixed). Slightly stale narration for a future maintainer who wasn't at the reproduce step.
+- **Priority:** low
+- **Pickup shape:** one-line comment trim to "guards the UTF-8-bytes contract". Rides any future bridge-test touch.
+
+# m10.5-wp3-cc-terminal-clean-kill — 2026-07-19
+
+*(feature-review-quality on the uncommitted working-tree diff, HEAD `92cb0cc`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all one-line doc/observability touch-ups. Reviewer: "well-built, unusually disciplined bug fix… No refactor is warranted." None blocks; refactor-optional. All 3 sit in `src-tauri/src/cc_session/mod.rs`.)*
+
+## SURFACE-2026-07-19-QUALITY-WP3-KILL-ALL-STALE-3S-DOC
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/cc_session/mod.rs:754-758` (`kill_all` doc-comment)
+- **Finding:** The `kill_all` doc still says each `kill()` blocks "up to a 3s SIGKILL grace window" and total close latency is "~one window (~3s)" — but WP3 shortened the per-`kill()` forced path to ~800ms (500ms exit-poll + 300ms SIGHUP grace). Ironically the same honest-code drift (this WP's AC-5) it set out to eliminate, one method down; understates the improvement ~4×.
+- **Priority:** low
+- **Pickup shape:** one-line doc edit — update the two "3s" figures to ~800ms; rides any future `cc_session` touch.
+
+## SURFACE-2026-07-19-QUALITY-WP3-REAPLEADER-SILENT-NONREAP
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/cc_session/mod.rs:641-644` (`KillStep::ReapLeader`)
+- **Finding:** `ReapLeader` discards `poll_reaped()`'s result (`let _ =`). If a process survives both `killpg(SIGKILL)` and the 300ms window (uninterruptible-sleep descendant, or a `None`-pgid path where a group child lingers holding the slave fd), `kill()` still returns `Ok` and `cc-exit-<id>` EOF may never fire — the AC-4 "wedged never-closed workspace" case — silently. The bounded wait is sound (can't hang); the concern is that a non-reap degrades invisibly. A debug-level log or distinct signal on `Ok(false)` would make the residual case observable.
+- **Priority:** low
+- **Pickup shape:** small — add a `log`/`eprintln` (or a distinct return) on the `ReapLeader` `Ok(false)` branch; rides any future kill-path touch.
+
+## SURFACE-2026-07-19-QUALITY-WP3-NONE-PGID-COMMENT-OVERPROMISE
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/cc_session/mod.rs:632-639` (`KillStep::KillGroup` `None`-pgid fallback)
+- **Finding:** On the (should-never-happen) `None`-pgid path, `HupGroupThenGrace` is guarded out (`if let Some(pgid)`), so the shell gets no SIGHUP-with-grace → history-save lost. The comment "never worse than the pre-WP3 behavior" is true for reaping but over-promises on the primary Defect-B history guarantee. Near-unreachable (`process_id()` is always `Some` post-spawn); pure comment-accuracy nit.
+- **Priority:** low
+- **Pickup shape:** one-line comment tweak (scope the "never worse" claim to reaping, not history); or make the `None` path also SIGHUP the single PID first. Rides any future kill-path touch.
+
 # m10.5-wp2-active-close-confirmation — 2026-07-18
 
 *(feature-review-quality on the uncommitted working-tree diff, HEAD `75ef6f8`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all cosmetic polish. Reviewer: "well-built… advances the codebase rather than accruing debt… no refactor pass warranted." None blocks; refactor-optional.)*

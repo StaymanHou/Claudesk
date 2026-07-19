@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-18  # M10 WP6 Phase B1 verify-auto: vite build 1.15s, pnpm test 1.75s (105 files / 1163, revert)
+updated: 2026-07-19  # M10.5 WP4 P1 verify-codify: pnpm test 1.71s (105 files / 1176)
 ---
 
 # Runtime Registry
@@ -76,9 +76,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.73s (2026-07-18, M10.5 WP2 Phase 2 verify-codify: +5 quitWhileActiveSpec cases → 105 files / 1173 pass, 0 fail)
+- **Last:** 1.71s (2026-07-19, M10.5 WP4 Phase 1 verify-codify: +2 UTF-8 round-trip/empty-string bridge tests → 105 files / 1176 pass, 0 fail)
 - **Use timeout:** 120000
 - **History:**
+  - 1.71s — 2026-07-19 (M10.5 WP4 P1 codify: +2 bridge UTF-8 round-trip tests → 105 files / 1176 pass)
   - 1.75s — 2026-07-18 (M10 WP6 Phase B1: revert — 105 files / 1163 pass)
   - 1.99s — 2026-07-17 (M10 WP6 P2 brew real-check-and-notify: 106 files / 1170 pass)
   - 1.78s — 2026-07-17 (M10 WP4 P5 build: +9 menu/picker-updates tests → 106 files / 1154 pass)
@@ -141,7 +142,7 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.67s (2026-07-17, M10 WP6 P2 codify: brew real-check reshape — 548 lib pass [+1 updater test net], warm)
+- **Last:** 0.68s (2026-07-19, M10.5 WP4 P2 codify: color_tty_env +LANG/LC_ALL locale — 547 lib pass [+1 locale test], warm)
 - **Use timeout:** 120000
 - **History:**
   - 0.92s — 2026-07-17 (M10 WP4 P2 build: +2 download-progress tests, 547 lib + 6 integ pass; warm)

@@ -733,7 +733,7 @@ pub struct DanglingSession {
 pub fn dangling_sessions(events: &[EventRow], now_ms: i64, cap_ms: i64) -> Vec<DanglingSession> {
     let mut out = Vec::new();
     let by_sid = group_by_session(events, |_| true); // all events, non-empty sid only
-    // Deterministic order (sort ids) so the write order + tests are stable.
+                                                     // Deterministic order (sort ids) so the write order + tests are stable.
     let mut sids: Vec<&String> = by_sid.keys().collect();
     sids.sort();
     for sid in sids {

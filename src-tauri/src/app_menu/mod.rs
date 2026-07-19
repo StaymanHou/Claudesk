@@ -155,9 +155,9 @@ pub mod ids {
 
     // Class 2b — call a React callback (no existing accelerator).
     pub const NEW_WORKSPACE: &str = "file.newWorkspace"; // opens the picker
-    // M10 WP4 — the "Check for Updates…" app-menu item (macOS-conventional, in the
-    // Claudesk app menu near About). A click triggers a MANUAL update check (ignores the
-    // skip-list + disable pref) via the frontend `useUpdater.checkNow`.
+                                                         // M10 WP4 — the "Check for Updates…" app-menu item (macOS-conventional, in the
+                                                         // Claudesk app menu near About). A click triggers a MANUAL update check (ignores the
+                                                         // skip-list + disable pref) via the frontend `useUpdater.checkNow`.
     pub const CHECK_FOR_UPDATES: &str = "app.checkForUpdates";
     pub const OPEN_SUBLIME_TEXT: &str = "workspace.openSublimeText";
     pub const OPEN_SUBLIME_MERGE: &str = "workspace.openSublimeMerge";

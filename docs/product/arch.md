@@ -192,6 +192,8 @@ Thresholds above are the proposed defaults. The probe's own implementation plan 
 6. Frontend receives the event, **adds a Workspace record to `WorkspaceList`** (Phase 1: list now has length 1), mounts xterm.js inside the center stage, subscribes to `cc-output-<sid>` events, wires xterm.js `onData` → Tauri command `cc-input(sid, bytes)`, and `xterm fit addon resize` → `cc-resize(sid, cols, rows)`.
 7. CC's TUI renders inside xterm.js. User interacts as in a normal terminal.
 
+> **As-built (M10.5 WP4 — I/O encoding, UTF-8-correct both directions):** two mojibake root causes fixed. **(Input)** `encodeBase64` (`src/cc/bridge.ts`) encodes the string's real **UTF-8 bytes** (`TextEncoder`) before base64 — the earlier `charCodeAt(i) & 0xff` truncated any code unit > 0xFF / surrogate pair, so pasted multi-byte glyphs (emoji, accented, arrows) reached CC as `�`. **(Output/locale)** the shared spawn env `color_tty_env()` (`cc_session/mod.rs`, consumed by BOTH the CC spawn and the WP9 shell spawn) now sets `LANG`+`LC_ALL=en_US.UTF-8` alongside `TERM`/`COLORTERM`. A **Finder/Dock-launched `.app` inherits the minimal launchd env where `LANG` is unset** → the spawned `claude`/shell defaults to `LC_CTYPE=C` (ASCII) and mangles UTF-8 output; the explicit UTF-8 locale forces correct decoding regardless of launch context. This output bug is **installed-`.app`-only** — `pnpm tauri:dev` inherits the login-shell's UTF-8 `LANG`, so it never reproduces in dev (the installed-build-smoke-test convention class).
+
 **Phase 1 happy path — Sublime hotkey/button (in-app):**
 
 1. With Claudesk focused, the user presses `⌘⇧E` (an in-app webview keybinding) OR clicks the "Open in Sublime" button in the focused workspace's right-panel toolbar.
@@ -203,7 +205,7 @@ Thresholds above are the proposed defaults. The probe's own implementation plan 
 **Phase 1 shutdown / window close:**
 
 1. Frontend signals `close_workspace` (or window close event).
-2. For each workspace in `WorkspaceList`, backend calls `CcSession::kill()` — sends SIGTERM to the CC process, then SIGKILL after timeout.
+2. For each workspace in `WorkspaceList`, backend calls `CcSession::kill()`. **As-built (M10.5 WP3):** a brief clean-exit attempt (`exit_command\r` — `/exit` CC / `exit` shell — polled 500ms) then a **SIGHUP-first, process-GROUP** teardown: `killpg(pgid, SIGHUP)` → ~300ms grace → `killpg(pgid, SIGKILL)` → reap. The child is a `setsid` group leader (portable-pty), so `pgid == child PID` and the group signal reaps CC/shell **and any subagent/child**. **SIGHUP (not SIGTERM)** is deliberate: it lets an interactive login shell run its on-exit history save (`~/.zsh_history`) — SIGTERM/SIGKILL lose it (verified M10.5 WP3) — so closing without typing `exit` no longer drops the terminal's command history. (Supersedes the earlier "sends SIGTERM… then SIGKILL" plan, which was neither as-built nor correct for history preservation.)
 3. Backend persists `projects.json` final state.
 4. App quits.
 

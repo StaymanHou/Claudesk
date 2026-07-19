@@ -1204,7 +1204,11 @@ pub fn build_metrics(
             }
         })
         .collect();
-    per_tool.sort_by(|a, b| b.effort_ms.cmp(&a.effort_ms).then_with(|| a.name.cmp(&b.name)));
+    per_tool.sort_by(|a, b| {
+        b.effort_ms
+            .cmp(&a.effort_ms)
+            .then_with(|| a.name.cmp(&b.name))
+    });
     per_tool.truncate(5);
     let tool_call = ToolCallMetric {
         wallclock_ms: tool_wallclock,
@@ -1450,10 +1454,30 @@ fn concurrency_strata(engaged_intervals: &[(i64, i64)]) -> Vec<ConcurrencyStratu
     let c3 = *by_k.get(&3).unwrap_or(&0);
     let c4plus: i64 = by_k.iter().filter(|(k, _)| **k >= 4).map(|(_, v)| *v).sum();
     vec![
-        ConcurrencyStratum { k: 1, wallclock_ms: c1, effort_ms: c1, is_plus: false },
-        ConcurrencyStratum { k: 2, wallclock_ms: c2, effort_ms: c2 * 2, is_plus: false },
-        ConcurrencyStratum { k: 3, wallclock_ms: c3, effort_ms: c3 * 3, is_plus: false },
-        ConcurrencyStratum { k: 4, wallclock_ms: c4plus, effort_ms: c4plus * 4, is_plus: true },
+        ConcurrencyStratum {
+            k: 1,
+            wallclock_ms: c1,
+            effort_ms: c1,
+            is_plus: false,
+        },
+        ConcurrencyStratum {
+            k: 2,
+            wallclock_ms: c2,
+            effort_ms: c2 * 2,
+            is_plus: false,
+        },
+        ConcurrencyStratum {
+            k: 3,
+            wallclock_ms: c3,
+            effort_ms: c3 * 3,
+            is_plus: false,
+        },
+        ConcurrencyStratum {
+            k: 4,
+            wallclock_ms: c4plus,
+            effort_ms: c4plus * 4,
+            is_plus: true,
+        },
     ]
 }
 
