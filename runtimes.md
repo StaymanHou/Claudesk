@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-20  # backlog-paydown WP6: cargo test 0.69s (547 lib + integ)
+updated: 2026-07-20  # /release v0.2.9: pnpm tauri build 103s (cold, signed)
 ---
 
 # Runtime Registry
@@ -44,9 +44,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 102s (2026-07-18, /release v0.2.8 no-op self-update target: cargo clean removed 1.6GiB + cold build, 1m18s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed)
+- **Last:** 103s (2026-07-20, /release v0.2.9: cargo clean removed 11.8GiB + cold build, 1m21s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed)
 - **Use timeout:** 600000
 - **History:**
+  - 103s — 2026-07-20 (/release v0.2.9: cargo clean 11.8GiB, 1m21s rust + bundle, signed)
   - 102s — 2026-07-18 (/release v0.2.8 no-op target: cargo clean 1.6GiB, 1m18s rust + bundle, signed)
   - 110s — 2026-07-18 (/release v0.2.7: cargo clean 7.8GiB, 1m24s rust + bundle, signed)
   - 99s — 2026-07-17 (M10 WP1 probe "from" 0.2.5: fresh tauri-plugin-updater+process compile, 1m39s rust + bundle; "to" 0.2.6 warm-incremental 20.84s)

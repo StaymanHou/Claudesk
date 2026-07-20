@@ -143,16 +143,6 @@
 - **Priority:** medium (real daily-use friction, but on M11 which is a few milestones out; no rush)
 - **Status:** pending (roadmap-anchored on M11)
 
-## SURFACE-2026-07-07-WP2-FMT-DRIFT
-- **Source:** feature:build (M9 WP2.5 Phase 1; scope re-observed M10.5 WP1, 2026-07-18)
-- **Target level:** product:wbs
-- **Type:** tech-debt
-- **Summary:** `cargo fmt --check` exits 1 on pre-existing formatting drift across the **M9 tree** — as of 2026-07-18 this spans ~70 diff sites in ~10 files (`time_store/commands.rs`, `time_store/query/tests.rs`, `reclassify/tests.rs`, `reclassify/mod.rs`, `cc_session/mod.rs`, `config_store/settings.rs`, `app_menu/mod.rs`, `updater/commands.rs`, `tests/hook_pl_output.rs`, and the original `hook_install`/`hook_socket`). All from the unpushed M9/M10 tree, NOT from M10.5.
-- **Context:** Later WPs (WP2.5, and now M10.5 WP1) deliberately leave these unformatted to avoid sweeping unrelated files into an unrelated commit — each WP fmt-cleans only its OWN changed files (M10.5 WP1's `pip/mod.rs` + `pip/commands.rs` are fmt-clean). The drift is mostly long-assert-macro rewrites + long-string-literal / long-signature wraps that `rustfmt` wants. It has grown steadily as the M9 tree accreted; a whole-tree `cargo fmt` is the single fix but would touch many files at once.
-- **Suggested action:** One `cargo fmt` sweep over `src-tauri/` in a dedicated `/feature-refactor` pass (or as the first commit of the next `/release` cut, since the release build already recompiles everything) — a single cosmetic command, but keep it in its OWN commit so it doesn't muddy a feature diff.
-- **Priority:** low
-- **Status:** pending
-
 ## Code-quality findings — qol-wp1-close-workspace (2026-06-25)
 - **Pointer:** 1 MINOR remaining (originally 3 MINOR / 0 CRITICAL / 0 MAJOR; the filmstrip-× over-narrating comment MINOR and the forward-referencing `docsRef` comment MINOR both RESOLVED) from `feature-review-quality` on ship commit `c01a3f9`. The remaining MINOR — **`WP1-APP-WIRING-UNTESTED`**: the App-level close wiring (`requestClose`/`resolveClose`/dirty-probe registry) + the × routing are untested by automation (accepted per the manual-host-UI convention + live 9/9 verification). Reviewer: well-built, idiomatic, closes a latent WP7 lifecycle gap. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp1-close-workspace — 2026-06-25`.
 - **Priority:** low (1 MINOR)
