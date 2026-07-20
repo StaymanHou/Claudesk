@@ -42,13 +42,11 @@ pub struct PipAutoState {
     /// bumps it again (or any newer arm) cancels the stale pending summon.
     pub pending_summon_token: u64,
 
-    /// M10.5 WP1 — has the operator placed the PiP panel this session? `false` until the
-    /// operator drags it (`pip_move` sets this `true`). While `false`, `pip_resize`
-    /// re-anchors the panel top-right after each content-driven resize (so it opens in the
-    /// corner and follows layout/size changes); once `true`, the auto-anchor is suppressed so
-    /// a re-summon keeps the panel where it was dragged. Defaults `false` on each app launch —
-    /// drag position is deliberately NOT persisted (a fresh launch re-anchors top-right, the
-    /// operator's stated preference), so an in-session flag is the whole mechanism.
+    /// M10.5 WP1 — has the operator placed the PiP panel this session? `false` until the operator
+    /// drags it (`pip_move` sets this `true`); `pip_resize` reads it to gate the top-right
+    /// auto-anchor (canonical WHY lives at the `pip_resize` anchor call site). Defaults `false` on
+    /// each app launch — drag position is deliberately NOT persisted (a fresh launch re-anchors
+    /// top-right, the operator's stated preference), so this in-session flag is the whole mechanism.
     pub positioned: bool,
 }
 

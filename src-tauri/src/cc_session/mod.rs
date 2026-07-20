@@ -67,10 +67,13 @@ pub enum CcPermissionMode {
     /// Auto-accept file edits; still prompts for other actions.
     #[serde(rename = "acceptEdits")]
     AcceptEdits,
-    /// CC's `auto` mode.
+    /// Auto mode — CC auto-selects permission decisions without prompting (broader than
+    /// `acceptEdits`, which only auto-accepts edits; still bounded by CC's own policy, unlike
+    /// `bypassPermissions`).
     #[serde(rename = "auto")]
     Auto,
-    /// CC's `dontAsk` mode.
+    /// Suppress permission prompts — CC proceeds without asking. Narrower than
+    /// `bypassPermissions` (which removes the checks entirely); this just stops the prompting.
     #[serde(rename = "dontAsk")]
     DontAsk,
     /// Bypass all permission checks — the old "yolo" behavior
@@ -618,8 +621,10 @@ impl CcSession for PtyCcSession {
         //
         // The child is a `setsid` session/process-group leader (portable-pty), so its PID
         // == PGID; we signal the whole group. `process_id()` is `Some` for a live child; if
-        // somehow `None`, the SIGKILL step falls back to the library's single-PID kill
-        // (best-effort — never worse than the pre-WP3 behavior).
+        // somehow `None` (near-unreachable post-spawn), the SIGKILL step falls back to the
+        // library's single-PID kill — best-effort, never worse than pre-WP3 for REAPING. Note
+        // the None path skips the SIGHUP-with-grace step, so an interactive shell's on-exit
+        // history save would be lost on that (near-unreachable) branch.
         let pgid = {
             let child = self.child.lock().map_err(|_| CcError::Lock)?;
             child.process_id().map(|p| p as libc::pid_t)
@@ -767,11 +772,12 @@ impl SessionRegistry {
     /// (M9 WP6.5: the `CloseRequested` handler writes an explicit session-end marker per
     /// killed id; callers wanting the count use `.len()`).
     ///
-    /// PARALLELIZED (M4 WP2): each `kill()` blocks up to a 3s SIGKILL grace window
-    /// ([`PtyCcSession::kill`]). At N>1 a sequential loop would serialize to N×3s of
-    /// window-close latency. Instead we drain every session out of the map, spawn one
-    /// thread per session to run its `kill()`, and join them — so the N grace windows
-    /// OVERLAP and total close latency is ~one window (~3s), not N×. The registry's own
+    /// PARALLELIZED (M4 WP2): each `kill()` blocks up to a ~800ms forced-kill window
+    /// ([`PtyCcSession::kill`] — 500ms exit-poll + 300ms SIGHUP grace, per `DEFAULT_KILL_TIMING`).
+    /// At N>1 a sequential loop would serialize to N×800ms of window-close latency. Instead we
+    /// drain every session out of the map, spawn one thread per session to run its `kill()`, and
+    /// join them — so the N grace windows OVERLAP and total close latency is ~one window
+    /// (~800ms), not N×. The registry's own
     /// `Mutex` (held by the `CloseRequested` caller) is released the moment this returns;
     /// the threads are joined inside this call so no kill is orphaned. Sessions are
     /// `Send` (the [`CcSession`] supertrait), so moving each `Box` into its thread is sound.

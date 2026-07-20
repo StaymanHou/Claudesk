@@ -115,7 +115,9 @@ fn deploy_hook_script(app: &AppHandle, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// `chmod +x` the deployed script (CC invokes it directly via the `command`).
+/// `chmod +x` the deployed script. NOTE: the registered `command` runs `/usr/bin/perl
+/// <script>` (see `hook_command`), so the +x bit isn't exercised for invocation today — it's
+/// defensive future-proofing in case the command form ever invokes the script path directly.
 #[cfg(unix)]
 fn set_executable(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;

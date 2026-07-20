@@ -27,6 +27,15 @@
 // content) are preserved. Never throws — if the expected structure isn't found (a future
 // xterm markup change, or empty input) the input is returned UNCHANGED, so the mirror
 // degrades to the pre-fix behavior rather than blanking.
+//
+// RECONSTRUCTION ASSUMPTION: rebuild is `prefix + rows.join("") + suffix` — an EMPTY join
+// separator, which assumes the serializer emits rows back-to-back with ZERO inter-row content
+// (no whitespace/newlines between consecutive `<div>…</div>`). This holds for the current
+// @xterm/addon-serialize output (verified above); a future serializer that pretty-prints
+// between rows would drop that inter-row text on trim. The final `end === rows.length` early-
+// return (nothing to trim) sidesteps it entirely on the common path, so only a genuine trim
+// is exposed — and even then the CONTRACT's "structure not found → unchanged" fallback bounds
+// the blast radius (mirror degrades, never corrupts).
 
 // One serialized row: `<div>…</div>`. Non-greedy body; `[\s\S]` so it spans the inner
 // `<span>`s (which never themselves contain a nested row `<div>` — spans hold text only).

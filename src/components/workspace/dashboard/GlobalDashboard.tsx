@@ -66,6 +66,7 @@ import {
   dayOffsetMin,
   framedRange,
   needsExtend,
+  nextExtendGuard,
   seedViewportToday,
   MAX_ZOOM_OUT_SPAN_MIN,
 } from "./viewport";
@@ -220,8 +221,11 @@ function DayViewHost({
  * `onExtend` so the parent widens the fetched span. Because the coordinate origin is
  * FIXED (PD1), the widened re-fetch keeps every existing lane's coordinate identical —
  * so `dataWindow` grows but the viewport is preserved (no jump under the operator). A ref
- * de-dupes rapid fires while an extend is in flight (the parent clears it on the new
- * payload by passing a wider `loadedWindow`, which flips `needsExtend` back to null).
+ * (`firingRef`) de-dupes rapid fires while an extend is in flight; the pure `nextExtendGuard`
+ * owns its transition. The guard self-clears on any no-extend tick (WP2 latch fix), so a fire
+ * that turns out to be a NO-OP at a coordinate edge — extend clamped at the origin floor / at
+ * today, so `loadedWindow` never changes and the wider-window clear never runs — cannot latch
+ * the guard permanently and block the opposite direction.
  */
 function AutoExtendWatcher({
   loadedWindow,
@@ -236,17 +240,23 @@ function AutoExtendWatcher({
   const firingRef = useRef(false);
   const [lo, hi] = loadedWindow;
   useEffect(() => {
-    // A new loadedWindow (post-extend) clears the in-flight guard — the fetch landed.
+    // A new loadedWindow (post-extend) clears the in-flight guard — the fetch landed
+    // (belt-and-braces: the debounced tick below also self-clears on a no-extend result).
     firingRef.current = false;
   }, [lo, hi]);
   useEffect(() => {
-    if (firingRef.current) return; // an extend is already in flight
+    // Always schedule the debounced tick — do NOT early-return when the guard is set. The
+    // pure `nextExtendGuard` owns the fire/hold/release decision so a guard latched by a
+    // NO-OP edge fire (extend clamped at the origin floor / today, loadedWindow unchanged)
+    // is RELEASED on the next no-extend tick instead of latching forever and blocking the
+    // opposite direction (SURFACE-2026-07-15-QUALITY-WP6B4-AUTOEXTEND-FIRINGREF-LATCH).
     const t = setTimeout(() => {
       const dir = needsExtend(viewport, [lo, hi], coordWindowEnd);
-      if (dir) {
-        firingRef.current = true;
-        onExtend(dir);
-      }
+      const { fire, nextGuard } = nextExtendGuard(dir, firingRef.current);
+      firingRef.current = nextGuard;
+      // `fire` is only ever true when `dir` is non-null (per `nextExtendGuard`'s branches), so
+      // `&& dir` is a TS null-narrow for `onExtend(dir)`, not a second logic guard.
+      if (fire && dir) onExtend(dir);
     }, 120); // debounce — don't fire mid-gesture-frame; ~2 RAF ticks of settle
     return () => clearTimeout(t);
   }, [viewport, lo, hi, coordWindowEnd, onExtend]);

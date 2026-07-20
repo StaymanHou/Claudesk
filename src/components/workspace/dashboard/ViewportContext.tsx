@@ -135,11 +135,7 @@ export function ViewportProvider({
       if (e.metaKey || e.ctrlKey || e.altKey) return; // leave ⌘/⌃/⌥-combos alone
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName;
-      if (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        (t && t.isContentEditable)
-      )
+      if (tag === "INPUT" || tag === "TEXTAREA" || (t && t.isContentEditable))
         return;
       reset();
     };
@@ -181,4 +177,43 @@ export function useViewportSetter(): {
     reset: ctx.reset,
     dataWindow: ctx.dataWindow,
   };
+}
+
+/**
+ * The single home for the "one viewport write per animation frame + no leak on unmount"
+ * invariant that every gesture surface needs. Owns the `rafRef`, cancels the pending RAF
+ * on unmount (the standalone-source consumers LEAKED this), and returns a `scheduleSet`
+ * bound to the clamped context setter. Both gesture consumers (`useTimelineGestures`, the
+ * `Minimap`) share it, so a future throttling-policy change lives in one place — was
+ * byte-duplicated across both (SURFACE-2026-07-13-M9-WP6B1-DUP-RAF-SCHEDULESET).
+ *
+ * `scheduleSet(next)` coalesces to the latest updater within a frame (cancel-and-
+ * reschedule). `next` is an UPDATER `(prev) => Viewport` computed against the COMMITTED
+ * viewport, so multiple gesture events within one frame each anchor off the correct prior
+ * state; the context setter clamps. Throws outside a `ViewportProvider` (via
+ * `useViewportSetter`).
+ */
+export function useRafViewportSetter(): (
+  next: (prev: Viewport) => Viewport,
+) => void {
+  const { setViewport } = useViewportSetter();
+  const rafRef = useRef<number | null>(null);
+
+  // Cancel any pending RAF on unmount.
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  return useCallback(
+    (next: (prev: Viewport) => Viewport) => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setViewport(next);
+      });
+    },
+    [setViewport],
+  );
 }

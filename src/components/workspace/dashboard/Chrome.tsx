@@ -3,11 +3,11 @@
 // Ported from dashboard.jsx (Toolbar L319, SummaryStrip L691, Legend L1734), stripped
 // to the WP6a day-view MVP then extended by WP6b-2:
 //   - Toolbar: the view-mode tabs. WP6a shipped ONLY Day functional (the rest inert);
-//     WP6b-2 makes the toolbar VIEW-DRIVEN — `view` + `onViewChange` props select the
-//     active tab and switch the body. Phase 1 enables Week; Month/Custom light up in
-//     Phases 2/3 (their `enabled` flags flip as each lands). Compare stays disabled
-//     (WP6c). The right-side slot is view-specific: Day shows the "Fit day" button;
-//     other views get their own controls in later phases. No wordmark.
+//     WP6b-2 made the toolbar VIEW-DRIVEN — `view` + `onViewChange` props select the
+//     active tab and switch the body. As of WP6c-2 all five views are enabled (Day/Week
+//     WP6b, Month WP6b-2 P2, Metrics WP6c-1, Compare WP6c-2 — see VIEW_MODES below). The
+//     right-side slot is view-specific: Day shows the "Fit day" button; other views get
+//     their own controls. No wordmark.
 //   - SummaryStrip: the 4 day stats. The filter-chip cluster is DROPPED.
 //   - Legend: a STATIC 6-kind key (swatch + label), display-only.
 //
@@ -170,10 +170,112 @@ export function Toolbar({
   );
 }
 
+// ── NavPill (shared prev/next period-nav primitive) ──────────────────────────
+/** The shared prev/next arrow-pill both `MonthNav` and `WeekNav` render — extracted so
+ *  the arrow styling, container chrome, and disabled-next handling live in ONE place
+ *  (SURFACE-2026-07-14-QUALITY-WP6B3-WEEKNAV-MONTHNAV-DUP: the two were ~60 duplicated
+ *  lines that differed only in data-attr names, titles, `minWidth`, and one extra span/
+ *  container attr). The consumers stay thin wrappers so their exact `data-*` surface — the
+ *  live-drive + dashboardWiring assertions read `data-month-nav`/`data-week-nav`,
+ *  `data-testid`, `data-month-iso`, `data-week-monday` — is preserved verbatim. */
+function NavPill({
+  testId,
+  navAttr,
+  unit,
+  label,
+  labelMinWidth,
+  onPrev,
+  onNext,
+  nextDisabled,
+  containerData,
+  labelData,
+}: {
+  /** Container `data-testid` (e.g. `"dashboard-month-nav"`). */
+  testId: string;
+  /** The prev/next button `data-*` attr name (e.g. `"data-month-nav"`). */
+  navAttr: string;
+  /** Period unit for the button titles ("month" / "week"). */
+  unit: string;
+  label: string;
+  labelMinWidth: number;
+  onPrev: () => void;
+  onNext: () => void;
+  nextDisabled: boolean;
+  /** Extra `data-*` attrs on the container (Week: `data-week-monday`). */
+  containerData?: Record<string, string>;
+  /** Extra `data-*` attrs on the label span (Month: `data-month-iso`). */
+  labelData?: Record<string, string>;
+}) {
+  const arrowStyle = (disabled: boolean) => ({
+    height: 28,
+    width: 28,
+    border: "none",
+    background: "transparent",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 5,
+    cursor: disabled ? ("not-allowed" as const) : ("pointer" as const),
+    color: CT_TOKENS.textSecondary,
+    opacity: disabled ? 0.4 : 1,
+    fontSize: 14,
+    fontFamily: CT_TOKENS.mono,
+  });
+  return (
+    <div
+      data-testid={testId}
+      {...containerData}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        background: CT_TOKENS.surfaceDim,
+        borderRadius: 8,
+        border: `1px solid ${CT_TOKENS.border}`,
+        padding: 2,
+      }}
+    >
+      <button
+        type="button"
+        {...{ [navAttr]: "prev" }}
+        onClick={onPrev}
+        title={`Previous ${unit}`}
+        style={arrowStyle(false)}
+      >
+        {"‹"}
+      </button>
+      <span
+        {...labelData}
+        style={{
+          fontFamily: CT_TOKENS.mono,
+          fontSize: 12,
+          color: CT_TOKENS.textPrimary,
+          padding: "0 8px",
+          minWidth: labelMinWidth,
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </span>
+      <button
+        type="button"
+        {...{ [navAttr]: "next" }}
+        onClick={nextDisabled ? undefined : onNext}
+        disabled={nextDisabled}
+        title={`Next ${unit}`}
+        style={arrowStyle(nextDisabled)}
+      >
+        {"›"}
+      </button>
+    </div>
+  );
+}
+
 // ── MonthNav ────────────────────────────────────────────────────────────────
 /** The Month view's prev/next-month nav control (Toolbar `rightSlot` for `view==="month"`).
  *  Ported from dashboard.jsx's month-nav arrows (L520-557). `label` is the month name
- *  ("July 2026"); `nextDisabled` blocks stepping past the current month. */
+ *  ("July 2026"); `nextDisabled` blocks stepping past the current month. Thin wrapper over
+ *  the shared {@link NavPill}. */
 export function MonthNav({
   label,
   monthIso,
@@ -187,67 +289,18 @@ export function MonthNav({
   onNext: () => void;
   nextDisabled: boolean;
 }) {
-  const arrowStyle = (disabled: boolean) => ({
-    height: 28,
-    width: 28,
-    border: "none",
-    background: "transparent",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 5,
-    cursor: disabled ? ("not-allowed" as const) : ("pointer" as const),
-    color: CT_TOKENS.textSecondary,
-    opacity: disabled ? 0.4 : 1,
-    fontSize: 14,
-    fontFamily: CT_TOKENS.mono,
-  });
   return (
-    <div
-      data-testid="dashboard-month-nav"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 4,
-        background: CT_TOKENS.surfaceDim,
-        borderRadius: 8,
-        border: `1px solid ${CT_TOKENS.border}`,
-        padding: 2,
-      }}
-    >
-      <button
-        type="button"
-        data-month-nav="prev"
-        onClick={onPrev}
-        title="Previous month"
-        style={arrowStyle(false)}
-      >
-        {"‹"}
-      </button>
-      <span
-        data-month-iso={monthIso}
-        style={{
-          fontFamily: CT_TOKENS.mono,
-          fontSize: 12,
-          color: CT_TOKENS.textPrimary,
-          padding: "0 8px",
-          minWidth: 100,
-          textAlign: "center",
-        }}
-      >
-        {label}
-      </span>
-      <button
-        type="button"
-        data-month-nav="next"
-        onClick={nextDisabled ? undefined : onNext}
-        disabled={nextDisabled}
-        title="Next month"
-        style={arrowStyle(nextDisabled)}
-      >
-        {"›"}
-      </button>
-    </div>
+    <NavPill
+      testId="dashboard-month-nav"
+      navAttr="data-month-nav"
+      unit="month"
+      label={label}
+      labelMinWidth={100}
+      onPrev={onPrev}
+      onNext={onNext}
+      nextDisabled={nextDisabled}
+      labelData={{ "data-month-iso": monthIso }}
+    />
   );
 }
 
@@ -256,7 +309,7 @@ export function MonthNav({
  *  A sibling of `MonthNav` (same arrow styling), ported from the reference's `data-week-nav`
  *  arrows (viz/dashboard.jsx L472-515). `label` is the week span ("Jul 7 – Jul 13");
  *  `nextDisabled` blocks stepping into a future week. `mondayIso` is exposed as a data attr
- *  for the live verify-self assertions. */
+ *  for the live verify-self assertions. Thin wrapper over the shared {@link NavPill}. */
 export function WeekNav({
   label,
   mondayIso,
@@ -270,67 +323,18 @@ export function WeekNav({
   onNext: () => void;
   nextDisabled: boolean;
 }) {
-  const arrowStyle = (disabled: boolean) => ({
-    height: 28,
-    width: 28,
-    border: "none",
-    background: "transparent",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 5,
-    cursor: disabled ? ("not-allowed" as const) : ("pointer" as const),
-    color: CT_TOKENS.textSecondary,
-    opacity: disabled ? 0.4 : 1,
-    fontSize: 14,
-    fontFamily: CT_TOKENS.mono,
-  });
   return (
-    <div
-      data-testid="dashboard-week-nav"
-      data-week-monday={mondayIso}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 4,
-        background: CT_TOKENS.surfaceDim,
-        borderRadius: 8,
-        border: `1px solid ${CT_TOKENS.border}`,
-        padding: 2,
-      }}
-    >
-      <button
-        type="button"
-        data-week-nav="prev"
-        onClick={onPrev}
-        title="Previous week"
-        style={arrowStyle(false)}
-      >
-        {"‹"}
-      </button>
-      <span
-        style={{
-          fontFamily: CT_TOKENS.mono,
-          fontSize: 12,
-          color: CT_TOKENS.textPrimary,
-          padding: "0 8px",
-          minWidth: 116,
-          textAlign: "center",
-        }}
-      >
-        {label}
-      </span>
-      <button
-        type="button"
-        data-week-nav="next"
-        onClick={nextDisabled ? undefined : onNext}
-        disabled={nextDisabled}
-        title="Next week"
-        style={arrowStyle(nextDisabled)}
-      >
-        {"›"}
-      </button>
-    </div>
+    <NavPill
+      testId="dashboard-week-nav"
+      navAttr="data-week-nav"
+      unit="week"
+      label={label}
+      labelMinWidth={116}
+      onPrev={onPrev}
+      onNext={onNext}
+      nextDisabled={nextDisabled}
+      containerData={{ "data-week-monday": mondayIso }}
+    />
   );
 }
 
@@ -404,7 +408,12 @@ export function Legend() {
     <div
       className="dashboard-legend"
       data-testid="dashboard-legend"
-      style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        flexWrap: "wrap",
+      }}
     >
       {ALL_KINDS.map((kind) => (
         <span

@@ -14,18 +14,24 @@
 //! - **Tauri command wrappers** ([`commands`]) are the only IPC surface; they map
 //!   [`EditorFsError`] to a `String`.
 //!
-//! ## Safety: the workspace-root guard
-//! Both operations confine the target to `root`. A path that escapes the
-//! workspace via `..` or an absolute path elsewhere is rejected with
-//! [`EditorFsError::OutsideWorkspace`]. Symlinks are handled at directory
-//! granularity: because [`resolve_within`] canonicalizes the target's *parent* and
-//! re-attaches the raw leaf name, a symlinked **directory** component escaping root
-//! IS rejected, but a **leaf** symlink (the final path component itself pointing
-//! outside) is NOT followed-and-validated — see [`resolve_within`]. `root` itself is
-//! supplied by the (trusted, single-user) frontend, not validated against the
-//! config store. The editor only ever edits files belonging to the open project;
-//! this guard makes that an invariant for the path-traversal class, not a
-//! convention, so a malformed `..`/absolute path can't read/write arbitrary disk.
+//! ## Safety: the workspace-root guard (WP7 — fully enforced)
+//! Two layers, both enforced in the backend:
+//! 1. **`root` is authenticated, not trusted.** `root` arrives from the frontend, but
+//!    the command layer ([`commands`]) validates it against the known project list via
+//!    [`validate_root`] before honoring it — a `root` that is neither a known project
+//!    nor a descendant of one is rejected. So the renderer can't widen the guard by
+//!    passing an arbitrary `root`.
+//! 2. **The file path is confined to `root`.** A path escaping the workspace via `..`
+//!    or an absolute path elsewhere is rejected with [`EditorFsError::OutsideWorkspace`].
+//!    Symlinks are fully handled: [`resolve_within`] canonicalizes the target's parent
+//!    (catching a symlinked **directory** component) AND, when the target exists,
+//!    canonicalizes the full resolved path (catching a **leaf** symlink whose target
+//!    points outside root). A not-yet-existing leaf (the write path for a new file) is
+//!    safe: it can't be a symlink and its parent is already confirmed inside root.
+//!
+//! Together these make "the editor only ever touches files inside a known open project"
+//! an enforced invariant for both the path-traversal and root-spoofing classes, not a
+//! convention. (`resolve_within_lexical` backs only the create paths — see its doc.)
 //!
 //! ## Durability
 //! Writes are atomic: `contents → <file>.tmp → fs::rename`, matching
@@ -76,15 +82,17 @@ pub enum EditorFsError {
 /// Resolve `requested` against `root` and confirm the result stays inside `root`.
 ///
 /// Returns the path to operate on (absolute). The containment check is the
-/// security boundary: we canonicalize `root` (it must exist) and the *parent* of
-/// the resolved target (for a not-yet-existing file on write, the file itself may
-/// not exist but its directory must), then assert the resolved target's directory
-/// is `root` or a descendant. Canonicalizing the parent resolves `..` and any
-/// symlinked **directory** component, so a non-leaf symlink escaping `root` is
-/// rejected. The raw leaf name is re-attached afterward (NOT canonicalized — it may
-/// not exist yet on write), so a **leaf** symlink that itself points outside `root`
-/// is NOT caught here. That gap is accepted for the trusted single-user editor;
-/// hardening it (canonicalize the full target when it exists) is a deferred pass.
+/// security boundary, enforced in two steps:
+/// 1. Canonicalize `root` (it must exist) and the *parent* of the resolved target
+///    (for a not-yet-existing file on write, the file itself may not exist but its
+///    directory must), then assert the parent is `root` or a descendant. Canonicalizing
+///    the parent resolves `..` and any symlinked **directory** component, so a non-leaf
+///    symlink escaping `root` is rejected.
+/// 2. Re-attach the raw leaf name. If the resolved target **exists**, canonicalize the
+///    full path — which follows a **leaf** symlink to its ultimate target — and re-assert
+///    `starts_with(root_canon)`, so a leaf symlink pointing outside `root` is rejected
+///    too (WP7). A not-yet-existing target (the new-file write path) is returned as-is:
+///    it can't be a symlink, and its parent is already confirmed inside `root`.
 fn resolve_within(root: &Path, requested: &Path) -> Result<PathBuf, EditorFsError> {
     let root_canon = root.canonicalize().map_err(|e| {
         EditorFsError::Io(std::io::Error::new(e.kind(), format!("root {root:?}: {e}")))
@@ -121,7 +129,76 @@ fn resolve_within(root: &Path, requested: &Path) -> Result<PathBuf, EditorFsErro
             root: root.display().to_string(),
         });
     }
-    Ok(parent_canon.join(file_name))
+    let resolved = parent_canon.join(file_name);
+
+    // Leaf-symlink guard: canonicalizing the parent resolves symlinked *directory*
+    // components, but the raw leaf is re-attached un-canonicalized, so a **leaf**
+    // symlink whose target points outside `root` would otherwise be followed. If the
+    // resolved target already exists, canonicalize the full path (which resolves a leaf
+    // symlink to its ultimate target) and re-assert containment. A not-yet-existing
+    // target (the write path for a new file) is left as-is: it cannot be a symlink, and
+    // its parent is already confirmed inside `root` above.
+    if resolved.exists() {
+        let target_canon = resolved.canonicalize().map_err(|e| {
+            EditorFsError::Io(std::io::Error::new(
+                e.kind(),
+                format!("target {resolved:?}: {e}"),
+            ))
+        })?;
+        if !target_canon.starts_with(&root_canon) {
+            return Err(EditorFsError::OutsideWorkspace {
+                requested: requested.display().to_string(),
+                root: root.display().to_string(),
+            });
+        }
+        return Ok(target_canon);
+    }
+    Ok(resolved)
+}
+
+/// Validate that a frontend-supplied workspace `root` is one of the known projects
+/// (or a descendant of one) before any file op honors it.
+///
+/// The [`resolve_within`] guard confines a *file path* to a given `root`, but `root`
+/// itself arrives from the renderer. This authenticates `root` against the known
+/// project list (the backend's server-side source of truth — [`crate::config_store`]),
+/// so a malformed or hostile `root` can't widen the guard to arbitrary disk. Returns
+/// the canonicalized `root` on success (so the caller confines against the resolved
+/// form), or [`EditorFsError::OutsideWorkspace`] if it matches no known project.
+///
+/// A descendant of a known project is accepted (the editor may open a file via a
+/// nested workspace dir under a recorded project). Both sides are canonicalized before
+/// comparison so a symlinked or `..`-laden `root` can't spoof a match. `known_roots`
+/// entries that no longer exist on disk are skipped (a stale project record can't
+/// authorize anything); if `requested_root` itself can't be canonicalized (does not
+/// exist), that surfaces as the `Io` error from canonicalize.
+pub fn validate_root(
+    known_roots: &[PathBuf],
+    requested_root: &Path,
+) -> Result<PathBuf, EditorFsError> {
+    let requested_canon = requested_root.canonicalize().map_err(|e| {
+        EditorFsError::Io(std::io::Error::new(
+            e.kind(),
+            format!("root {requested_root:?}: {e}"),
+        ))
+    })?;
+
+    let is_known = known_roots.iter().any(|known| {
+        // A stale record whose dir was deleted can't authorize anything → skip it.
+        match known.canonicalize() {
+            Ok(known_canon) => requested_canon.starts_with(&known_canon),
+            Err(_) => false,
+        }
+    });
+
+    if is_known {
+        Ok(requested_canon)
+    } else {
+        Err(EditorFsError::OutsideWorkspace {
+            requested: requested_root.display().to_string(),
+            root: "<no known project>".to_string(),
+        })
+    }
 }
 
 /// Resolve `requested` against `root` and confirm containment **lexically** — WITHOUT
@@ -352,6 +429,201 @@ mod tests {
         let canon = dir.path().canonicalize().unwrap();
         let out = read_file_core(dir.path(), &canon.join("in.txt")).unwrap();
         assert_eq!(out, "inside");
+    }
+
+    // WP7 (backlog-paydown 2026-07-19) — RED tests for the two accepted-gap hardening items.
+    // These assert the ENFORCED invariant the module doc will state once hardened; they FAIL
+    // against today's code (leaf symlink is followed; frontend root is unvalidated).
+
+    #[test]
+    fn read_leaf_symlink_escaping_root_is_rejected() {
+        // The workspace root, and a secret file that lives OUTSIDE it.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("ws");
+        std::fs::create_dir(&root).unwrap();
+        let secret = dir.path().join("outside-secret.txt");
+        std::fs::write(&secret, "TOP SECRET").unwrap();
+
+        // A LEAF symlink INSIDE the root whose target points at the outside secret.
+        // `resolve_within` canonicalizes only the parent (root, which is legal) and
+        // re-attaches the raw leaf name un-canonicalized, so today the read follows
+        // the symlink and leaks the secret. The guard must reject it.
+        let link = root.join("link.txt");
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+
+        let result = read_file_core(&root, Path::new("link.txt"));
+        assert!(
+            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            "a leaf symlink escaping root must be rejected, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn write_through_leaf_symlink_escaping_root_is_rejected() {
+        // Same shape, write side: a leaf symlink inside root pointing at an outside
+        // file must not let a write clobber the outside target.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("ws");
+        std::fs::create_dir(&root).unwrap();
+        let outside = dir.path().join("outside-target.txt");
+        std::fs::write(&outside, "original").unwrap();
+
+        let link = root.join("link.txt");
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+
+        let result = write_file_core(&root, Path::new("link.txt"), "clobbered");
+        assert!(
+            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            "a write through a leaf symlink escaping root must be rejected, got {result:?}"
+        );
+        // The outside target must be untouched.
+        assert_eq!(std::fs::read_to_string(&outside).unwrap(), "original");
+    }
+
+    #[test]
+    fn read_leaf_symlink_pointing_inside_root_is_still_allowed() {
+        // Guard against over-tightening: a leaf symlink whose target is ALSO inside
+        // root is legitimate and must keep working after the fix.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("ws");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join("real.txt"), "inside content").unwrap();
+        let link = root.join("alias.txt");
+        std::os::unix::fs::symlink(root.join("real.txt"), &link).unwrap();
+
+        let out = read_file_core(&root, Path::new("alias.txt")).unwrap();
+        assert_eq!(out, "inside content");
+    }
+
+    #[test]
+    fn destructive_ops_reject_a_leaf_symlink_escaping_root_and_target_survives() {
+        // The leaf-symlink guard lives in the shared `resolve_within`, so it must
+        // protect the *destructive* consumers too — `delete_file_core` (hard remove)
+        // and `trash_path_core` (Trash move) — not just read/write. Pins that a future
+        // refactor can't accidentally scope the guard to read/write only and leave a
+        // symlink-through-delete/trash escape open. The outside target must survive.
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("ws");
+        std::fs::create_dir(&root).unwrap();
+        let outside = dir.path().join("outside-victim.txt");
+        std::fs::write(&outside, "must survive").unwrap();
+        let link = root.join("link.txt");
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+
+        let del = delete_file_core(&root, Path::new("link.txt"));
+        assert!(
+            matches!(del, Err(EditorFsError::OutsideWorkspace { .. })),
+            "delete through a leaf symlink escaping root must be rejected, got {del:?}"
+        );
+        let trash = trash_path_core(&root, Path::new("link.txt"));
+        assert!(
+            matches!(trash, Err(EditorFsError::OutsideWorkspace { .. })),
+            "trash through a leaf symlink escaping root must be rejected, got {trash:?}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&outside).unwrap(),
+            "must survive",
+            "the outside target must be untouched by the rejected delete/trash"
+        );
+    }
+
+    // WP7 gap 2 — the backend honors a frontend-supplied `root` with NO validation
+    // against the known project list. Today there is no validation seam at all in
+    // editor_fs, so the RED for this gap is a *compile-gap*: it references the pure
+    // helper the fix will add — `validate_root(known_roots, requested_root)` — which
+    // must reject a `root` that is neither a known project nor a descendant of one.
+    // This intentionally fails to COMPILE until the fix lands (a legitimate red for a
+    // missing-capability bug); the gap-1 leaf-symlink reds above are runtime-red and
+    // were captured independently before this was added, so they are on the record.
+    // WP7 gap 2 — the backend now validates a frontend-supplied `root` against the
+    // known project list. (Phase-2 anchor: this was the compile-gap red from
+    // feature-reproduce; `validate_root` is now implemented.)
+    #[test]
+    fn validate_root_rejects_a_root_not_in_the_known_project_list() {
+        let known = TempDir::new().unwrap();
+        let known_root = known.path().to_path_buf();
+        // A hostile/unknown root the frontend could pass — not a known project.
+        let hostile = TempDir::new().unwrap();
+
+        // The known root itself is honored...
+        assert!(validate_root(std::slice::from_ref(&known_root), &known_root).is_ok());
+        // ...an unknown root is rejected.
+        let result = validate_root(std::slice::from_ref(&known_root), hostile.path());
+        assert!(
+            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            "a root not among the known projects must be rejected, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn validate_root_honors_a_descendant_of_a_known_project() {
+        // The editor may open a file via a nested workspace dir under a recorded
+        // project → a descendant of a known root must be accepted.
+        let known = TempDir::new().unwrap();
+        let nested = known.path().join("packages").join("app");
+        std::fs::create_dir_all(&nested).unwrap();
+        let result = validate_root(&[known.path().to_path_buf()], &nested);
+        assert!(
+            result.is_ok(),
+            "a descendant of a known project must be honored, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn validate_root_skips_a_stale_known_record_that_no_longer_exists() {
+        // A known-project record whose dir was deleted can't authorize anything.
+        let real = TempDir::new().unwrap();
+        let stale = real.path().join("was-deleted"); // never created
+        let hostile = TempDir::new().unwrap();
+        // The stale record must not authorize a hostile root...
+        let result = validate_root(&[stale], hostile.path());
+        assert!(
+            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            "a stale known record must not authorize anything, got {result:?}"
+        );
+        // ...while a live known record still works.
+        assert!(validate_root(&[real.path().to_path_buf()], real.path()).is_ok());
+    }
+
+    #[test]
+    fn validate_root_that_does_not_exist_is_an_io_error() {
+        // A requested root that can't be canonicalized (does not exist) surfaces as Io,
+        // not a silent pass.
+        let known = TempDir::new().unwrap();
+        let ghost = known.path().join("no-such-root");
+        let result = validate_root(&[known.path().to_path_buf()], &ghost);
+        assert!(
+            matches!(result, Err(EditorFsError::Io(_))),
+            "a non-existent requested root must be an Io error, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn validate_root_tolerates_a_non_canonical_form_of_a_known_root() {
+        // The false-positive-rejection guard (the risk flagged at verify-human): a known
+        // root recorded in canonical form must still validate when the *requested* root
+        // arrives in a NON-canonical form — a `..`-laden path OR a symlinked path — that
+        // resolves to the same dir. validate_root canonicalizes BOTH sides, so equivalent
+        // forms match; if it compared textually, a legit project would be wrongly rejected.
+        let known = TempDir::new().unwrap();
+        let known_root = known.path().to_path_buf();
+
+        // (a) `..`-laden form: <root>/sub/.. resolves back to <root>.
+        std::fs::create_dir(known.path().join("sub")).unwrap();
+        let dotdot_form = known.path().join("sub").join("..");
+        assert!(
+            validate_root(std::slice::from_ref(&known_root), &dotdot_form).is_ok(),
+            "a `..`-laden form of a known root must still validate"
+        );
+
+        // (b) symlinked form: a symlink elsewhere pointing at the known root.
+        let link_parent = TempDir::new().unwrap();
+        let link = link_parent.path().join("proj-link");
+        std::os::unix::fs::symlink(known.path(), &link).unwrap();
+        assert!(
+            validate_root(std::slice::from_ref(&known_root), &link).is_ok(),
+            "a symlinked form of a known root must still validate"
+        );
     }
 
     #[test]

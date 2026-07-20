@@ -121,8 +121,12 @@ fn user_prompt_submit_emits_length_not_text() {
             continue; // the one allowed carrier (status snippet)
         }
         if let Some(s) = val.as_str() {
+            // Compare against the ACTUAL prompt value, not a coincidental literal substring
+            // ("SECRET") — a real prompt need not contain that word, and keying on it would let
+            // a leak of a differently-worded prompt slip past (the privacy check must hold for
+            // ANY prompt text, not just this fixture's).
             assert!(
-                !s.contains("SECRET"),
+                !s.contains(secret),
                 "field {key} must not contain the prompt text (privacy leak)"
             );
         }

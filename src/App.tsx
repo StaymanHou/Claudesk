@@ -81,6 +81,13 @@ const GlobalDashboard = lazy(
 // WP8's Sublime launchers (Text + Merge) are icon buttons in each workspace's
 // right-panel tab row (RightPanelHost), not here. (The old ⌘⇧O Text hotkey was
 // removed in WP8.)
+
+// One shared fallback for a workspace missing a `display_name` — used by BOTH the
+// per-workspace close gate (`requestClose`) and the app-quit busy list (`busyNamesRef`),
+// so the two gates can never present divergent wording (a real workspace always has a
+// name, so this is belt-and-suspenders). SURFACE-2026-07-18-QUALITY-WP2-FALLBACK-STRING-PARITY.
+const UNNAMED_WORKSPACE = "This workspace";
+
 function App() {
   const {
     workspaces,
@@ -299,7 +306,7 @@ function App() {
         const ws = workspaces.find((w) => w.id === workspaceId);
         setPendingClose({
           id: workspaceId,
-          name: ws?.display_name ?? "This workspace",
+          name: ws?.display_name ?? UNNAMED_WORKSPACE,
           dirtyCount: dirty,
           active,
         });
@@ -345,7 +352,7 @@ function App() {
   useEffect(() => {
     busyNamesRef.current = workspaces
       .filter((w) => isActiveState(stateFor(w.id)))
-      .map((w) => w.display_name ?? "A workspace");
+      .map((w) => w.display_name ?? UNNAMED_WORKSPACE);
   }, [workspaces, stateFor]);
 
   // M10.5-WP2 — the app-quit round-trip. The backend holds the quit (`prevent_close`)

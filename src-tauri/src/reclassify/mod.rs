@@ -34,24 +34,29 @@
 //! `active` is NOT a segment kind in the redesign — `active_bursts`/`session_active_ms`
 //! survive only to feed the DERIVED "engaged time" summary metric.
 //!
-//! ## Consumers span multiple WPs (the `dead_code` allow, narrowed rationale)
-//! This module is an analytics-primitives library whose consumers land across M9's
-//! remaining WPs, NOT all at once:
-//! - **WP4 (`time_store::query`)** consumes the *tiling* subset — [`EventRow`],
-//!   [`Kind`], [`Segment`], [`ai_busy_intervals`], [`ai_segments_for_window`],
-//!   [`human_segments_for_window`] — to build the segment model.
-//! - **WP6c (dashboard metrics/compare panels)** will consume the *derived-metric*
-//!   subset — [`tool_durations_ms`], [`subagent_durations_ms`], [`session_active_ms`],
-//!   [`active_bursts`] — which WP4 does NOT call.
-//! - Several helpers ([`classify_gap`], [`awaiting_input_spans`], [`launch_marks`], …)
-//!   are `pub` for the test suite + called *internally*; they have no external caller.
+//! ## The `dead_code` allow is now NARROWED to per-item (backlog-paydown WP5, 2026-07-20)
+//! Now that M9 is complete, `time_store::query` consumes the tiling subset ([`EventRow`],
+//! [`Kind`], [`Segment`], [`ai_busy_intervals`], [`ai_segments_for_window`],
+//! [`human_segments_for_window`]) AND `build_metrics` consumes the interval/burst
+//! primitives ([`tool_intervals`], [`subagent_intervals`], [`active_bursts`],
+//! [`ai_component_spans`]). So the old module-wide `#![allow(dead_code)]` is REMOVED — the
+//! honest dead-code signal is back for the whole module. A small set of intentional
+//! analytics-library primitives that are exercised by the test suite but have no non-test
+//! consumer YET carry a **targeted** `#[allow(dead_code)]` each (with a one-line why),
+//! rather than one blanket allow hiding real rot:
+//! - the DERIVED per-name/per-session rollups [`tool_durations_ms`],
+//!   [`subagent_durations_ms`], [`session_active_ms`] — `build_metrics` computes its
+//!   aggregates from the *interval* primitives directly, so these rollup convenience
+//!   forms have no live caller yet (kept: locked, tested, likely future drill-downs);
+//! - the [`Family`] tag + [`Kind::family`] (the color-family split the WP6 palette will
+//!   read; the model is locked, the consumer hasn't landed);
+//! - [`GapContext::build`] (the no-window entry point; the query layer uses
+//!   `build_with_window`) and [`awaiting_input_spans`] (the bare entry point;
+//!   `awaiting_input_spans_bounded` is the live one) — both kept as documented API +
+//!   test entry points;
+//! - [`EventRow::meta_i64`] (the JSON-int extractor sibling of the live `meta_str`).
 //!
-//! So a module-wide `#![allow(dead_code)]` stays: WP4 P2.0's premise (that importing
-//! the module makes the whole surface used) was too strong — WP4 imports only a
-//! subset, and deleting the WP6c-bound helpers (tested + needed next WP) or fabricating
-//! callers would both be wrong. The allow is removed when M9's WPs collectively consume
-//! the surface (WP6c is the last). See `SURFACE-2026-07-08` in the WIP Discoveries.
-#![allow(dead_code)]
+//! (SURFACE-2026-07-08-QUALITY-WP4-P20-ALLOW-STAYS-MULTI-WP-CONSUMER — precondition met.)
 
 use std::collections::HashMap;
 
@@ -92,6 +97,8 @@ impl EventRow {
 
     /// Extract an integer field from the JSON `meta` blob. Accepts a JSON number
     /// (`prompt_length_chars`, `byte_count`). Returns `None` on absent/non-numeric.
+    // Test-only consumer today (the int sibling of the live `meta_str`); kept as API.
+    #[allow(dead_code)]
     pub fn meta_i64(&self, key: &str) -> Option<i64> {
         let raw = self.meta.as_ref()?;
         let v: serde_json::Value = serde_json::from_str(raw).ok()?;
@@ -131,6 +138,8 @@ pub enum Kind {
 /// The two color families the palette encodes (`SURFACE-2026-07-06-M9-COLOR-FAMILIES-
 /// AI-VS-HUMAN`): AI-execution vs human activity. WP6 assigns the exact hues; the
 /// reclassifier only tags which family each kind belongs to.
+// Locked model tag; the WP6 palette consumer of `Kind::family` hasn't landed — test-only.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
     /// AI-execution: [`Kind::AiDoing`], [`Kind::Subagent`], [`Kind::AiReasoning`].
@@ -141,6 +150,8 @@ pub enum Family {
 
 impl Kind {
     /// The color family this kind belongs to (drives the WP6 palette split).
+    // Test-only today; the WP6 palette split will read it (locked model, consumer pending).
+    #[allow(dead_code)]
     pub fn family(self) -> Family {
         match self {
             Kind::AiDoing | Kind::Subagent | Kind::AiReasoning => Family::Ai,
@@ -187,6 +198,9 @@ pub struct Segment {
 /// events (tool still running / session ended mid-tool) are skipped.
 ///
 /// Returns `{tool_name: total_ms}`. Mechanics unchanged from `claude-time`.
+// Derived per-name rollup; `build_metrics` sums the `tool_intervals` primitive directly, so
+// this convenience form has no live caller yet — kept (tested, likely per-tool drill-down).
+#[allow(dead_code)]
 pub fn tool_durations_ms(events: &[EventRow]) -> HashMap<String, i64> {
     let mut totals: HashMap<String, i64> = HashMap::new();
     let post_by_tuid = post_by_tool_use_id(events);
@@ -301,6 +315,9 @@ pub fn subagent_intervals(events: &[EventRow]) -> Vec<(i64, i64)> {
 /// not drop zero/negative durations (they add 0). Returns `{agent_type: total_ms}`.
 ///
 /// Mechanics unchanged from `claude-time`.
+// Derived per-agent-type rollup; `build_metrics` uses the `subagent_intervals` primitive
+// directly, so this convenience form has no live caller yet — kept (tested, future drill-down).
+#[allow(dead_code)]
 pub fn subagent_durations_ms(events: &[EventRow]) -> HashMap<String, i64> {
     let mut totals: HashMap<String, i64> = HashMap::new();
     for sid_events in group_by_session(events, is_subagent_event).values() {
@@ -391,6 +408,9 @@ pub fn active_bursts(events: &[EventRow]) -> HashMap<String, Vec<Burst>> {
 /// construction. Returns `{session_id: total_ms}`.
 ///
 /// Mechanics unchanged from `claude-time`.
+// Derived per-session rollup; `build_metrics` sums the `active_bursts` primitive directly,
+// so this convenience form has no live caller yet — kept (tested, future engaged-time drill).
+#[allow(dead_code)]
 pub fn session_active_ms(events: &[EventRow]) -> HashMap<String, i64> {
     active_bursts(events)
         .into_iter()
@@ -699,9 +719,17 @@ pub const EVENT_SESSION_END: &str = "SessionEnd";
 /// `SessionEnd`); the explicit marker wins as the synchronously-recorded truth, but either
 /// alone suffices. They disagree only by milliseconds — immaterial to the rendered minute.
 pub fn authoritative_end(session_events: &[EventRow]) -> Option<i64> {
-    let earliest = |name: &str| -> Option<i64> {
-        session_events
-            .iter()
+    earliest_end_marker(session_events.iter())
+}
+
+/// Iterator-based core of [`authoritative_end`] — takes any `&EventRow` stream so both the
+/// owned-slice callers (`&[EventRow]`) and the borrowed-slice caller in [`dangling_sessions`]
+/// (`&[&EventRow]`, via `.iter().copied()`) share one derivation with no clone. `Clone` on the
+/// iterator lets us scan it twice (WorkspaceClose pass, then SessionEnd pass).
+fn earliest_end_marker<'a>(events: impl Iterator<Item = &'a EventRow> + Clone) -> Option<i64> {
+    let earliest = |name: &str| {
+        events
+            .clone()
             .filter(|e| e.event == name)
             .map(|e| e.ts)
             .min()
@@ -740,10 +768,10 @@ pub fn dangling_sessions(events: &[EventRow], now_ms: i64, cap_ms: i64) -> Vec<D
         let evs = &by_sid[sid];
         // group_by_session sorts each session's events by ts, so last() is the latest.
         let Some(last) = evs.last() else { continue };
-        // Already has an authoritative end (WorkspaceClose/SessionEnd) → not dangling.
-        // (`authoritative_end` wants &[EventRow]; we hold &[&EventRow], so map to owned.)
-        let owned: Vec<EventRow> = evs.iter().map(|e| (*e).clone()).collect();
-        if authoritative_end(&owned).is_some() {
+        // Already has an authoritative end (WorkspaceClose/SessionEnd) → not dangling. `evs` is
+        // `&[&EventRow]`; feed the iterator core directly (`.copied()` → `&EventRow`) so we skip
+        // the per-session owned clone `authoritative_end`'s `&[EventRow]` API would force.
+        if earliest_end_marker(evs.iter().copied()).is_some() {
             continue;
         }
         // Still within the idle cap of now → treat as live/recent, not dangling.
@@ -803,6 +831,9 @@ pub fn resolve_session_end(session_events: &[EventRow], authoritative_end: Optio
         let (prev, next) = (w[0], w[1]);
         let idle = idle_ms_in_gap(prev, next, &busy);
         if idle > constants::SESSION_IDLE_CAP_MS {
+            // First oversized idle gap wins, even if activity resumes later in the stream
+            // (D3: a session ends once). A genuine later resume is handled by an
+            // authoritative `SessionEnd` marker or startup reconciliation, not by re-opening.
             return prev;
         }
     }
@@ -854,11 +885,15 @@ impl HumanState {
     }
 }
 
-/// The union of "AI is running" intervals, merged across all sessions. The AI is busy
-/// during any tool interval, subagent interval, OR engaged burst (`last-UPS → Stop`).
-/// The COMPLEMENT of this union (within a day/session window) is the set of human gaps
-/// the gap machine classifies. (P3.1.)
-pub fn ai_busy_intervals(events: &[EventRow]) -> Vec<(i64, i64)> {
+/// The UN-MERGED AI-activity component spans across all sessions: every tool interval,
+/// every subagent interval, and every positive engaged burst (`last-UPS → Stop`),
+/// concatenated (NOT merged). This is the single encoding of "what counts as AI-family
+/// work" — [`ai_busy_intervals`] merges it for wall-clock (elapsed) totals, while
+/// aggregate EFFORT totals sum it un-merged so parallel AI work across sessions adds up.
+/// Keeping both derivations off this one primitive means a future AI-family kind is added
+/// in exactly one place (was duplicated in `query::build_metrics` —
+/// `SURFACE-2026-07-15-QUALITY-WP6C1-AI-COMPONENT-SPAN-DUP`).
+pub(crate) fn ai_component_spans(events: &[EventRow]) -> Vec<(i64, i64)> {
     let mut spans: Vec<(i64, i64)> = Vec::new();
     for intervals in tool_intervals(events).values() {
         spans.extend(intervals.iter().copied());
@@ -871,7 +906,15 @@ pub fn ai_busy_intervals(events: &[EventRow]) -> Vec<(i64, i64)> {
             }
         }
     }
-    merge_spans(&mut spans)
+    spans
+}
+
+/// The union of "AI is running" intervals, merged across all sessions. The AI is busy
+/// during any tool interval, subagent interval, OR engaged burst (`last-UPS → Stop`).
+/// The COMPLEMENT of this union (within a day/session window) is the set of human gaps
+/// the gap machine classifies. Merges the shared [`ai_component_spans`] primitive. (P3.1.)
+pub fn ai_busy_intervals(events: &[EventRow]) -> Vec<(i64, i64)> {
+    merge_spans(&mut ai_component_spans(events))
 }
 
 /// The intervals during which CC was AwaitingInput — from a `Notification` row whose
@@ -884,6 +927,9 @@ pub fn ai_busy_intervals(events: &[EventRow]) -> Vec<(i64, i64)> {
 /// type is treated as input-needed, matching the live dot). For a historical row that is
 /// the same conservative choice — an unrecognized/absent notification is assumed to be a
 /// real prompt.
+// Bare (no-window-bound) entry point; the live query layer uses `awaiting_input_spans_bounded`
+// (the WP4 tail-of-stream fix). Kept as the documented unbounded API + test entry point.
+#[allow(dead_code)]
 pub fn awaiting_input_spans(events: &[EventRow]) -> Vec<(i64, i64)> {
     awaiting_input_spans_bounded(events, None)
 }
@@ -997,6 +1043,12 @@ pub struct GapContext {
     activity: Vec<i64>,
     /// Timestamps of native `KeystrokeActivity` rows (real PTY input moments).
     keystrokes: Vec<i64>,
+    /// Surface change-points as `(ts, is_editor)`, sorted by `(ts, surface)` — the same
+    /// deterministic ordering [`surface_is_editor_at`] uses, precomputed once so a per-gap
+    /// lookup is a binary search instead of a full event rescan (O(gaps·log n) vs O(gaps·n);
+    /// `SURFACE-2026-07-08-QUALITY-WP3-SURFACE-HELPER-NOT-IN-GAPCONTEXT`). Read via
+    /// [`GapContext::surface_editor_at`].
+    surfaces: Vec<(i64, bool)>,
 }
 
 impl GapContext {
@@ -1004,6 +1056,9 @@ impl GapContext {
     /// timestamps for a full event set. A still-open await at the data tail is DROPPED
     /// (no window bound). Prefer [`GapContext::build_with_window`] from the query layer,
     /// which bounds a trailing-open await at the window end (the WP4 tail-of-stream fix).
+    // No-window entry point; the query layer calls `build_with_window`. Kept as documented
+    // API + test entry point (the bare-`build` counterpart of `awaiting_input_spans`).
+    #[allow(dead_code)]
     pub fn build(events: &[EventRow]) -> Self {
         Self::build_with_window(events, None)
     }
@@ -1023,7 +1078,21 @@ impl GapContext {
             launches: launch_marks(events),
             activity: activity_marks(events),
             keystrokes,
+            surfaces: surface_change_points(events),
         }
+    }
+
+    /// Whether the active right-panel surface at `ts` is the editor — the precomputed,
+    /// per-gap-cheap form of the free [`surface_is_editor_at`]. Returns the `is_editor` of the
+    /// latest change-point at-or-before `ts` (deterministic last-wins on equal ts, since
+    /// [`surface_change_points`] sorts by `(ts, surface)`). No prior surface row → `false`.
+    fn surface_editor_at(&self, ts: i64) -> bool {
+        // `partition_point` gives the count of change-points with `pt.0 <= ts`; the one just
+        // before it is the latest at-or-before `ts`.
+        let idx = self.surfaces.partition_point(|&(pt_ts, _)| pt_ts <= ts);
+        idx.checked_sub(1)
+            .map(|i| self.surfaces[i].1)
+            .unwrap_or(false)
     }
 
     /// Whether any launch mark falls within `[gap_start - BLUR_LAUNCH_CORRELATION_MS,
@@ -1037,6 +1106,13 @@ impl GapContext {
     /// Whether CC is AwaitingInput at `ts` (point-membership in an await span).
     fn awaiting_at(&self, ts: i64) -> bool {
         self.awaiting.iter().any(|&(s, e)| ts >= s && ts < e)
+    }
+
+    /// Whether any AwaitingInput span STARTS within `[start, end)` — a prompt raised mid-gap
+    /// (vs [`awaiting_at`], which tests membership at a single instant). Extracted so
+    /// `classify_gap`'s working-credit predicate reads as a named check, not an inline rescan.
+    fn awaiting_in_gap(&self, start: i64, end: i64) -> bool {
+        self.awaiting.iter().any(|&(s, _)| s >= start && s < end)
     }
 
     /// The longest stretch of TOTAL SILENCE (no activity mark) inside `[start, end]`,
@@ -1093,10 +1169,7 @@ pub fn classify_gap(
     // Branch 2: launch/AwaitingInput → capped-working (reset-on-activity).
     let working_credit = ctx.launch_precedes(gap_start)
         || ctx.awaiting_at(gap_start)
-        || ctx
-            .awaiting
-            .iter()
-            .any(|&(s, _)| s >= gap_start && s < gap_end);
+        || ctx.awaiting_in_gap(gap_start, gap_end);
     if working_credit {
         // Working until SILENCE_CAP_MS of total silence elapses; then away.
         if ctx.longest_silence(gap_start, gap_end) > constants::SILENCE_CAP_MS {
@@ -1119,18 +1192,35 @@ pub fn classify_gap(
 /// A gap with editor-active surface + no keystrokes is the operator READING code — the
 /// dominant idle state — which the machine measures as Typing-family human work (per the
 /// locked definition: "editor-active + no PTY keystrokes" is the reading signal). (P3.5.)
+///
+/// The hot per-gap path now reads [`GapContext::surface_editor_at`] (precomputed) instead of
+/// this rescanning form; kept as the documented single-`ts` API + test entry point (the
+/// point-lookup counterpart of the precomputed field, same as bare-`build` vs `build_with_window`).
+#[allow(dead_code)]
 pub fn surface_is_editor_at(events: &[EventRow], ts: i64) -> bool {
-    // Collect every native surface-bearing row at-or-before `ts`, then pick the latest
-    // deterministically. `group_by_session`/the row source do NOT guarantee input order,
-    // so a same-`ts` surface flip must NOT resolve by iteration order (the confabulation-
-    // channel class). We sort by `(ts, surface)` and take the last — last-wins on ts, and
-    // a stable secondary key (`surface`) breaks a genuine same-ms tie deterministically.
+    // Take the latest surface change-point at-or-before `ts`. `surface_change_points` owns the
+    // deterministic `(ts, surface)` ordering (the row source does NOT guarantee input order, so
+    // a same-`ts` surface flip must not resolve by iteration order — the confabulation-channel
+    // class). This free fn is the documented/tested entry point; the hot per-gap path uses the
+    // precomputed [`GapContext::surface_editor_at`] instead of rescanning `events` each gap.
+    let points = surface_change_points(events);
+    points
+        .iter()
+        .rev()
+        .find(|&&(pt_ts, _)| pt_ts <= ts)
+        .map(|&(_, is_editor)| is_editor)
+        .unwrap_or(false)
+}
+
+/// Build the sorted `(ts, is_editor)` surface change-points from a native event set: every
+/// `ActiveSurface`/`WindowFocus`/`WindowBlur` native row that carries a `surface` meta, sorted by
+/// `(ts, surface)`. The `surface` secondary key breaks a genuine same-ms tie deterministically
+/// (last-wins). Single source of truth for surface ordering — consumed by both
+/// [`surface_is_editor_at`] (point lookup) and [`GapContext`] (precomputed field).
+fn surface_change_points(events: &[EventRow]) -> Vec<(i64, bool)> {
     let mut candidates: Vec<(i64, String)> = Vec::new();
     for e in events {
         if e.source != "claudesk-native" {
-            continue;
-        }
-        if e.ts > ts {
             continue;
         }
         if matches!(
@@ -1143,12 +1233,17 @@ pub fn surface_is_editor_at(events: &[EventRow], ts: i64) -> bool {
         }
     }
     candidates.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
-    matches!(candidates.last(), Some((_, s)) if s == "editor")
+    candidates
+        .into_iter()
+        .map(|(ts, surface)| (ts, surface == "editor"))
+        .collect()
 }
 
 /// Merge overlapping/adjacent spans into a sorted, non-overlapping cover. `spans` is
-/// sorted in place. Shared by [`ai_busy_intervals`] / [`awaiting_input_spans`].
-fn merge_spans(spans: &mut Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+/// sorted in place. Shared by [`ai_busy_intervals`] / [`awaiting_input_spans`] and, since
+/// the WP6c-1 dedup, by `query::build_metrics` for wall-clock union totals (replacing the
+/// near-verbatim `merge_intervals` copy — `SURFACE-2026-07-15-QUALITY-WP6C1-MERGE-INTERVALS-DUP`).
+pub(crate) fn merge_spans(spans: &mut Vec<(i64, i64)>) -> Vec<(i64, i64)> {
     spans.retain(|(s, e)| e > s);
     spans.sort();
     let mut merged: Vec<(i64, i64)> = Vec::new();
@@ -1183,7 +1278,7 @@ pub fn human_segments_for_window(
 
     gaps.into_iter()
         .map(|(gs, ge)| {
-            let surface_editor = surface_is_editor_at(events, gs);
+            let surface_editor = ctx.surface_editor_at(gs);
             let state = classify_gap(&ctx, gs, ge, surface_editor);
             Segment {
                 kind: state.to_kind(),

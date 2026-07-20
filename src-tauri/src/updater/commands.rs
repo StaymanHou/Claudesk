@@ -74,6 +74,9 @@ pub async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, String> 
     // classification — brew and direct-download both run the same real network check().
     let updater = app.updater().map_err(|e| format!("updater init: {e}"))?;
     match updater.check().await.map_err(|e| format!("check: {e}"))? {
+        // The Some arm reads `update.current_version` (the plugin's own read of the running
+        // bundle); the None arm below uses `current` (package_info). Both resolve to the same
+        // bundle version — dual provenance, one value.
         Some(update) => Ok(UpdateCheckResult {
             current_version: update.current_version.clone(),
             available_version: Some(update.version.clone()),

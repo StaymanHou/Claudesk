@@ -98,6 +98,10 @@ pub enum HookInstallError {
     Parse(#[from] serde_json::Error),
     #[error("settings.json root is not a JSON object")]
     NotAnObject,
+    #[error("settings.json `hooks` value is not a JSON object")]
+    HooksNotAnObject,
+    #[error("settings.json `hooks.{0}` value is not a JSON array")]
+    EventNotAnArray(String),
 }
 
 /// Extract the hook-script basename (`claudesk-hook.pl` / `claudesk-hook-dev.pl`)
@@ -183,14 +187,18 @@ pub fn merge_claudesk_hooks(settings: &mut Value, command: &str) -> Result<bool,
     let hooks = root
         .entry("hooks")
         .or_insert_with(|| Value::Object(Map::new()));
-    let hooks = hooks.as_object_mut().ok_or(HookInstallError::NotAnObject)?;
+    let hooks = hooks
+        .as_object_mut()
+        .ok_or(HookInstallError::HooksNotAnObject)?;
 
     let mut changed = false;
     for event in CLAUDESK_EVENTS {
         let arr = hooks
             .entry(event.to_string())
             .or_insert_with(|| Value::Array(Vec::new()));
-        let arr = arr.as_array_mut().ok_or(HookInstallError::NotAnObject)?;
+        let arr = arr
+            .as_array_mut()
+            .ok_or_else(|| HookInstallError::EventNotAnArray(event.to_string()))?;
 
         // Find an existing Claudesk group (by stable script-path marker).
         match arr.iter_mut().find(|g| group_is_claudesk(g, command)) {

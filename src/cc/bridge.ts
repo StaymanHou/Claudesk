@@ -32,9 +32,14 @@ export function encodeBase64(data: string): string {
   // and control bytes (CR/LF/ESC) are one-byte-per-char, so they round-trip
   // unchanged.
   const bytes = new TextEncoder().encode(data);
+  // Mirror of decodeBase64's byte↔binary-string mapping. Build the binary string via a
+  // CHUNKED `String.fromCharCode(...slice)` spread rather than a per-char `+=` concat: faster,
+  // and reads as the inverse of decodeBase64's indexed fill. Chunking (not one big spread over
+  // `bytes`) keeps the arg count bounded so a large paste can't overflow the call-arg limit.
   let binary = "";
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   }
   return btoa(binary);
 }

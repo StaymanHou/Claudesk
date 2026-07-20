@@ -13,18 +13,21 @@ import {
   framedRange,
   MAX_ZOOM_OUT_SPAN_MIN,
   needsExtend,
+  nextExtendGuard,
   nowMarkerAbsMin,
   pickTickInterval,
   seedViewportToday,
   ticksInViewport,
   viewportFromHourRange,
-  viewportFromRange,
   viewportPct,
   viewportSeedKey,
   type DataWindow,
   type Viewport,
+  MAX_FRAMED_DAYS,
 } from "../viewport";
 import type { RangePayload } from "../../../../state/timeAnalytics";
+import { MAX_RANGE_DAYS } from "../RangePicker";
+import { rangeDayCount, validateRange } from "../rangeMath";
 
 const vp = (a: number, b: number): Viewport => ({
   visible_start_min: a,
@@ -34,9 +37,7 @@ const vp = (a: number, b: number): Viewport => ({
 // ── viewportFromHourRange (seed) ──────────────────────────────────────────
 describe("viewportFromHourRange", () => {
   it("maps [h0,h1] hours → minute bounds", () => {
-    expect(viewportFromHourRange([8, 18])).toEqual(
-      vp(8 * 60, 18 * 60),
-    );
+    expect(viewportFromHourRange([8, 18])).toEqual(vp(8 * 60, 18 * 60));
   });
   it("falls back to [6,23] when undefined", () => {
     expect(viewportFromHourRange(undefined)).toEqual(vp(360, 1380));
@@ -154,13 +155,17 @@ describe("nowMarkerAbsMin — today's marker coordinate, or null if out of windo
   });
   it("multi-day, today is the LAST day of the range → nowMin + lastDayOffset", () => {
     // 3-day range starting 07-13; today = 07-15 = lane 2 (in [0,3)). offset = 2*1440.
-    expect(nowMarkerAbsMin(600, "2026-07-15", "2026-07-13", 3)).toBe(600 + 2 * 1440);
+    expect(nowMarkerAbsMin(600, "2026-07-15", "2026-07-13", 3)).toBe(
+      600 + 2 * 1440,
+    );
   });
   it("multi-day, today is the FIRST day → nowMin + 0", () => {
     expect(nowMarkerAbsMin(480, "2026-07-13", "2026-07-13", 3)).toBe(480);
   });
   it("multi-day, today is a MIDDLE day → shifted onto that lane", () => {
-    expect(nowMarkerAbsMin(720, "2026-07-14", "2026-07-13", 3)).toBe(720 + 1440);
+    expect(nowMarkerAbsMin(720, "2026-07-14", "2026-07-13", 3)).toBe(
+      720 + 1440,
+    );
   });
   it("today AFTER the range (lane >= dayCount) → null (hidden)", () => {
     // 2-day range 07-13..07-14; today 07-15 = lane 2, not < 2 → out of range.
@@ -169,46 +174,6 @@ describe("nowMarkerAbsMin — today's marker coordinate, or null if out of windo
   it("today BEFORE the range (lane < 0) → null (hidden)", () => {
     // range starts 07-14; today 07-13 = lane -1 → out of range.
     expect(nowMarkerAbsMin(600, "2026-07-13", "2026-07-14", 3)).toBeNull();
-  });
-});
-
-// ── viewportFromRange (WP6b-4 D6 — open legible, anchored on the last day) ──
-describe("viewportFromRange — legible ~one-day seed on the MOST RECENT day", () => {
-  const range = (
-    dayCount: number,
-    endIso: string,
-    lastHours?: [number, number],
-  ): RangePayload => ({
-    label: "x",
-    projects: [],
-    meta: { start: "2026-07-01", end: endIso, day_count: dayCount },
-    hour_range_by_day: lastHours ? { [endIso]: lastHours } : {},
-    day_window: [0, 1440],
-  });
-  it("seeds the last day's active hours, SHIFTED onto the last lane", () => {
-    // 3-day range ending 07-03, last day active 9:00–17:00. Offset = 2*1440 = 2880.
-    const v = viewportFromRange(range(3, "2026-07-03", [9, 17]));
-    expect(v).toEqual({
-      visible_start_min: 2880 + 9 * 60,
-      visible_end_min: 2880 + 17 * 60,
-    });
-  });
-  it("span is ≈ one day, NOT the whole range (the D6 legibility invariant)", () => {
-    const v = viewportFromRange(range(31, "2026-07-31", [8, 20]));
-    const span = v.visible_end_min - v.visible_start_min;
-    expect(span).toBe((20 - 8) * 60); // one day's active hours
-    expect(span).toBeLessThan(1.5 * 1440); // must not open sliver-zoomed
-  });
-  it("falls back to [6,23] when the last day has no hour_range entry", () => {
-    const v = viewportFromRange(range(2, "2026-07-02"));
-    expect(v).toEqual({
-      visible_start_min: 1440 + 6 * 60,
-      visible_end_min: 1440 + 23 * 60,
-    });
-  });
-  it("1-day range → offset 0 (correct for single-day too)", () => {
-    const v = viewportFromRange(range(1, "2026-07-01", [8, 18]));
-    expect(v).toEqual({ visible_start_min: 8 * 60, visible_end_min: 18 * 60 });
   });
 });
 
@@ -349,6 +314,70 @@ describe("framedRange — the day-granular ISO span the viewport frames (D8 read
   });
 });
 
+// ── framedRange × RangePicker off-by-one (SURFACE-2026-07-15-QUALITY-WP6B4- ───
+//    FRAMEDRANGE-PICKER-OFFBYONE, MAJOR) — reproduce-first (WP2 of the paydown sweep).
+//
+// The bug: a LEGAL max-zoom-out viewport (span capped at MAX_ZOOM_OUT_SPAN_MIN = 30*1440
+// by clampViewport) that is DAY-MISALIGNED (panned by a fractional day) maps to 31
+// INCLUSIVE lanes: `floor(start/1440)` … `ceil(end/1440)-1`. framedRange then emits a
+// 31-inclusive-day ISO span, which validateRange(…, MAX_RANGE_DAYS=30) — the picker's
+// live readout validator — flags as "Range too long", sticking the RangePicker in a
+// permanent red-border error on a value the operator never typed.
+//
+// These tests assert the FIXED invariant: framedRange's output span never exceeds
+// MAX_RANGE_DAYS inclusive days, so the reactive picker readout is always a value the
+// picker itself accepts. They fail against the pre-fix framedRange.
+describe("framedRange never emits a span the RangePicker rejects (off-by-one repro)", () => {
+  // A wide origin→today gap so a 30-lane span sits comfortably inside [origin, today].
+  const origin = "2026-05-01";
+  const today = "2026-07-15";
+  const MAX_SPAN = MAX_ZOOM_OUT_SPAN_MIN; // 30 * 1440 — the clampViewport zoom-out cap
+
+  it("a day-MISALIGNED max-span viewport frames ≤ MAX_RANGE_DAYS inclusive days", () => {
+    // A legal max-span viewport (exactly MAX_SPAN wide) shifted by half a day. Pre-fix:
+    // floor(5.5)=5 … ceil(5.5+30)-1 = ceil(35.5)-1 = 35 → lanes 5..35 = 31 inclusive days.
+    const start = 5.5 * 1440;
+    const r = framedRange(vp(start, start + MAX_SPAN), origin, today);
+    const days = rangeDayCount(r.startIso, r.endIso);
+    expect(days).toBeLessThanOrEqual(MAX_RANGE_DAYS);
+  });
+
+  it("that framed span is ACCEPTED by the picker's own validateRange (no red border)", () => {
+    const start = 5.5 * 1440;
+    const r = framedRange(vp(start, start + MAX_SPAN), origin, today);
+    // validateRange returns null when valid, an error string when it would show red.
+    expect(validateRange(r.startIso, r.endIso, MAX_RANGE_DAYS)).toBeNull();
+  });
+
+  it("holds across a sweep of fractional pan offsets at max span", () => {
+    // Any misalignment (0.0 .. 0.95 days) of a max-span camera must stay ≤ 30 inclusive days.
+    for (let frac = 0; frac < 1; frac += 0.05) {
+      const start = (10 + frac) * 1440; // lane 10-ish, fractionally shifted
+      const r = framedRange(vp(start, start + MAX_SPAN), origin, today);
+      expect(validateRange(r.startIso, r.endIso, MAX_RANGE_DAYS)).toBeNull();
+    }
+  });
+
+  it("a genuinely 30-inclusive-day-aligned viewport still frames 30 days (no over-correction)", () => {
+    // Regression guard for the fix: a viewport exactly covering 30 lanes (lanes 0..29,
+    // span = 30*1440 aligned to the lane grid) must still frame all 30 days, not 29.
+    const r = framedRange(vp(0, 30 * 1440), origin, today);
+    expect(rangeDayCount(r.startIso, r.endIso)).toBe(MAX_RANGE_DAYS); // 30 days, lanes 0..29
+  });
+
+  it("MAX_RANGE_DAYS is 30 AND is the same number as the zoom-out cap (the reconciliation)", () => {
+    // The fix ties the picker max to the timeline's zoom-out cap so they can never drift
+    // apart (the drift is exactly what produced the 31st lane). Pin both the value and the tie.
+    expect(MAX_RANGE_DAYS).toBe(30);
+    expect(MAX_RANGE_DAYS).toBe(MAX_ZOOM_OUT_SPAN_MIN / 1440);
+    // The pure layer's MAX_FRAMED_DAYS and the picker's MAX_RANGE_DAYS are two parallel
+    // derivations (kept separate to avoid a viewport↔RangePicker import cycle). This tie catches
+    // a future `+1`-style drift in either (SURFACE-2026-07-20-QUALITY-WP2-MAXFRAMED-MAXRANGE-
+    // PARALLEL-DERIVATION) — making the "they are one number" comments literally enforced.
+    expect(MAX_FRAMED_DAYS).toBe(MAX_RANGE_DAYS);
+  });
+});
+
 describe("needsExtend — auto-extend edge trigger (D7)", () => {
   const coordEnd = 30 * 1440; // fixed 30-day coordinate window end
   // Loaded = the last 14 days ending today, in coordinate minutes. Origin=today-29d,
@@ -390,6 +419,79 @@ describe("needsExtend — auto-extend edge trigger (D7)", () => {
     const wideVp = vp(16 * 1440 + 100, 30 * 1440 - 100);
     const bothOpen: DataWindow = [16 * 1440, 20 * 1440]; // lo>0 and hi<coordEnd
     expect(needsExtend(wideVp, bothOpen, coordEnd)).toBe("older");
+  });
+});
+
+// ── nextExtendGuard: firingRef latch (SURFACE-2026-07-15-QUALITY-WP6B4- ───────
+//    AUTOEXTEND-FIRINGREF-LATCH, MAJOR) — reproduce-first (WP2 of the paydown sweep).
+//
+// The AutoExtendWatcher's `firingRef` de-dupes fires WHILE an extend is in flight; a wider
+// loadedWindow (post-fetch) clears it. But an `onExtend` that is a NO-OP at a coordinate
+// edge (already at origin floor / today) never changes loadedWindow → the clearing effect
+// never runs → the guard stays latched. Because ONE guard gates both directions, a latched
+// `older` guard then blocks a later legitimate `newer` extend at the opposite edge.
+//
+// `nextExtendGuard(dir, currentGuard)` is the pure decision the debounced tick makes. These
+// tests assert the FIXED invariant: a `null` needsExtend result must CLEAR the guard so a
+// no-op-latched guard can never permanently block the other direction. They fail against the
+// pre-fix "null leaves the guard unchanged" behavior.
+describe("nextExtendGuard — the in-flight guard must not latch on a no-op extend", () => {
+  it("fires and arms the guard when a direction is needed and none is in flight", () => {
+    expect(nextExtendGuard("older", false)).toEqual({
+      fire: true,
+      nextGuard: true,
+    });
+    expect(nextExtendGuard("newer", false)).toEqual({
+      fire: true,
+      nextGuard: true,
+    });
+  });
+
+  it("holds (no double-fire) while an extend is already in flight", () => {
+    expect(nextExtendGuard("older", true)).toEqual({
+      fire: false,
+      nextGuard: true,
+    });
+    expect(nextExtendGuard("newer", true)).toEqual({
+      fire: false,
+      nextGuard: true,
+    });
+  });
+
+  it("CLEARS the guard when no extend is needed (the latch fix)", () => {
+    // The load-bearing assertion: a null result must reset the guard to false, so a guard
+    // that was latched by a no-op edge-fire is released the next time the camera is not at
+    // an extend threshold.
+    expect(nextExtendGuard(null, true)).toEqual({
+      fire: false,
+      nextGuard: false,
+    });
+    expect(nextExtendGuard(null, false)).toEqual({
+      fire: false,
+      nextGuard: false,
+    });
+  });
+
+  it("does NOT permanently block the opposite direction after a no-op edge latch (full trace)", () => {
+    // Trace the exact latent-bug sequence:
+    //   1. Camera nears the OLDER edge but we're already at the origin floor → onExtend is a
+    //      no-op; loadedWindow never changes, so the guard is NOT cleared by a new window.
+    let guard = false;
+    const step1 = nextExtendGuard("older", guard); // needs older, none in flight
+    guard = step1.nextGuard;
+    expect(step1.fire).toBe(true);
+    expect(guard).toBe(true); // guard armed by the (no-op) fire
+
+    //   2. Camera moves away from any edge (needsExtend → null). This tick MUST release the
+    //      guard — otherwise the no-op fire has latched it permanently.
+    const step2 = nextExtendGuard(null, guard);
+    guard = step2.nextGuard;
+    expect(guard).toBe(false); // <-- fails pre-fix (guard stays true)
+
+    //   3. Camera later nears the NEWER edge with real forward data available. With the guard
+    //      released it fires; with a latched guard it would be silently blocked.
+    const step3 = nextExtendGuard("newer", guard);
+    expect(step3.fire).toBe(true); // legitimate newer extend not blocked
   });
 });
 

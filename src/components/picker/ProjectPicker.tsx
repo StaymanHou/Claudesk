@@ -32,7 +32,9 @@ import {
 import {
   TIME_TRACKING_ENABLED_EVENT,
   getTimeTrackingEnabled,
-  setTimeTrackingEnabled,
+  // Aliased so the useState setter below can own the clean `setTimeTrackingEnabled` name
+  // (this is the IPC persister, not the React setter).
+  setTimeTrackingEnabled as persistTimeTracking,
 } from "../../state/timeAnalytics";
 import {
   UPDATER_NOTIFICATIONS_ENABLED_EVENT,
@@ -74,13 +76,19 @@ interface ProjectPickerProps {
   // must be reachable from the picker scene at launch, not only after a workspace opens
   // (SURFACE-2026-07-08-M9-WP6A-DASHBOARD-FROM-PICKER). When provided, the picker shows an
   // analytics entry point that toggles the same single <GlobalDashboard> App.tsx owns.
+  // OPTIONAL here (unlike Filmstrip's required `onOpenDashboard`) on purpose: the picker can
+  // render before App wires the handler, and it guards the absence (the entry point just hides);
+  // the filmstrip only ever mounts with a live handler, so it requires it.
   onOpenDashboard?: () => void;
   // M10 WP4 — manual "Check for updates" from the picker. App owns the `useUpdater` hook,
   // so the picker just KICKS the check; App's checkNow ignores skip/disable, shows the
   // banner for an available update, and surfaces up-to-date / error via the single
-  // App-level updater status row (WP6 P1.4 — the picker no longer toasts these; the
-  // return value is unused now). Optional (the dev-seam picker may not pass it).
-  onCheckForUpdates?: () => Promise<{ outcome: string } | null>;
+  // App-level updater status row (WP6 P1.4 — the picker no longer toasts these). The
+  // picker fires-and-forgets, so the type is KICKS-only (`() => void`) — the former
+  // `Promise<{outcome}>` return had no consumer (SURFACE-2026-07-18-QUALITY-WP6-PICKER-
+  // CHECK-UPDATES-VESTIGIAL-RETURN-TYPE); a Promise-returning `checkNow` still assigns to
+  // it. Optional (the dev-seam picker may not pass it).
+  onCheckForUpdates?: () => void;
 }
 
 export function ProjectPicker({
@@ -109,13 +117,14 @@ export function ProjectPicker({
   // `time-tracking-enabled` broadcast, and on change call time_set_tracking_enabled
   // (persists + re-broadcasts). OFF = zero SQLite IO; status dots are unaffected either
   // way. Starts OFF until the read lands (matches the backend default, so no flicker).
-  const [timeTrackingEnabled, setTimeTrackingEnabled_] = useState(false);
+  const [timeTrackingEnabled, setTimeTrackingEnabled] = useState(false);
   // M10 WP4 — the update-notification toggle (default ON per design-prior
   // operator-helpful-friend-misfiring-as-offswitchable-setting). Same backend-is-source-of-
   // truth discipline: seed from getUpdateNotificationsEnabled on mount, sync via the
   // `updater-notifications-enabled` broadcast, set via setUpdateNotificationsEnabled. Starts
   // true (matches the backend default, so no flicker toward the common case).
-  const [updateNotificationsEnabled, setUpdateNotificationsEnabled_] = useState(true);
+  const [updateNotificationsEnabled, setUpdateNotificationsEnabled_] =
+    useState(true);
 
   useEffect(() => {
     // Load recents on mount. First prune any project whose folder was deleted
@@ -202,13 +211,16 @@ export function ProjectPicker({
     let cancelled = false;
     void getTimeTrackingEnabled()
       .then((enabled) => {
-        if (!cancelled) setTimeTrackingEnabled_(enabled);
+        if (!cancelled) setTimeTrackingEnabled(enabled);
       })
       .catch((e) =>
-        console.error("[claudesk] time_get_tracking_enabled (picker) failed:", e),
+        console.error(
+          "[claudesk] time_get_tracking_enabled (picker) failed:",
+          e,
+        ),
       );
     void listen<boolean>(TIME_TRACKING_ENABLED_EVENT, (event) => {
-      setTimeTrackingEnabled_(event.payload);
+      setTimeTrackingEnabled(event.payload);
     }).then((fn) => {
       if (cancelled) {
         fn();
@@ -227,9 +239,9 @@ export function ProjectPicker({
     // re-confirms it. A rejection reverts + surfaces the error toast. (Mirror of
     // handleChangeMode.)
     const prev = timeTrackingEnabled;
-    setTimeTrackingEnabled_(next);
-    void setTimeTrackingEnabled(next).catch((e) => {
-      setTimeTrackingEnabled_(prev);
+    setTimeTrackingEnabled(next); // React state (optimistic)
+    void persistTimeTracking(next).catch((e) => {
+      setTimeTrackingEnabled(prev); // revert React state on IPC failure
       setToast({
         kind: "error",
         message: mapIpcError("update time tracking", e),
@@ -352,9 +364,30 @@ export function ProjectPicker({
           >
             {/* Bar-chart glyph — mirrors the Filmstrip analytics button. */}
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <rect x="1" y="9" width="3" height="6" rx="0.5" fill="currentColor" />
-              <rect x="6.5" y="5" width="3" height="10" rx="0.5" fill="currentColor" />
-              <rect x="12" y="2" width="3" height="13" rx="0.5" fill="currentColor" />
+              <rect
+                x="1"
+                y="9"
+                width="3"
+                height="6"
+                rx="0.5"
+                fill="currentColor"
+              />
+              <rect
+                x="6.5"
+                y="5"
+                width="3"
+                height="10"
+                rx="0.5"
+                fill="currentColor"
+              />
+              <rect
+                x="12"
+                y="2"
+                width="3"
+                height="13"
+                rx="0.5"
+                fill="currentColor"
+              />
             </svg>
             <span>Analytics</span>
           </button>
@@ -364,6 +397,7 @@ export function ProjectPicker({
         <span>Permission mode</span>
         <select
           data-testid="picker-permission-mode"
+          aria-label="Permission mode"
           value={ccPermissionMode}
           onChange={(e) =>
             handleChangeMode(coerceCcPermissionMode(e.target.value))

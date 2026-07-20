@@ -41,9 +41,9 @@ use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone};
 use serde::Serialize;
 
 use crate::reclassify::{
-    active_bursts, ai_busy_intervals, ai_segments_for_window, authoritative_end,
-    human_segments_for_window, resolve_session_end, subagent_intervals, tool_intervals, EventRow,
-    Kind, Segment,
+    active_bursts, ai_busy_intervals, ai_component_spans, ai_segments_for_window,
+    authoritative_end, human_segments_for_window, merge_spans, resolve_session_end,
+    subagent_intervals, tool_intervals, EventRow, Kind, Segment,
 };
 
 // ===========================================================================
@@ -344,13 +344,13 @@ pub struct MetricsPayload {
 // calendar (the frozen-contract coordinate system).
 // ===========================================================================
 
-/// One side of an A/B comparison: the side's aggregate metrics + its range label. `range`
-/// duplicates `metrics.window` for CompareView convenience (the header reads `meta`, but a
-/// side-local range keeps the DTO self-describing).
+/// One side of an A/B comparison: the side's aggregate metrics. The per-side window bounds
+/// live at `metrics.window` (and the top-level `meta` carries both sides' bounds for the
+/// header) — the former `range` field byte-duplicated `metrics.window` with no consumer, so
+/// it was dropped (SURFACE-2026-07-15-QUALITY-WP6C2-COMPARESIDE-RANGE-UNCONSUMED).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CompareSide {
     pub metrics: MetricsPayload,
-    pub range: MetricsWindowMeta,
 }
 
 /// A/B comparison window bounds + day counts (what CompareView's window-label header and
@@ -380,8 +380,10 @@ pub struct ComparisonPayload {
 // ===========================================================================
 
 /// Local-midnight epoch-ms for a given `NaiveDate`. Uses the system local tz. On a
-/// DST-ambiguous/nonexistent midnight (rare), takes the earliest valid instant.
-fn local_midnight_ms(day: NaiveDate) -> i64 {
+/// DST-ambiguous/nonexistent midnight (rare), takes the earliest valid instant. Shared
+/// with `commands.rs` window-resolution (`pub(crate)` since the WP4 tz-helper dedup —
+/// `SURFACE-2026-07-08-QUALITY-WP4-DUP-TZ-MATH-HELPERS`; one impl, no drift).
+pub(crate) fn local_midnight_ms(day: NaiveDate) -> i64 {
     let naive = day.and_hms_opt(0, 0, 0).expect("00:00:00 is always valid");
     Local
         .from_local_datetime(&naive)
@@ -413,8 +415,10 @@ fn ms_to_minutes_round(dur_ms: i64) -> i64 {
     (dur_ms + 30_000) / 60_000
 }
 
-/// The local calendar date an epoch-ms timestamp falls on.
-fn local_date_of(ts_ms: i64) -> NaiveDate {
+/// The local calendar date an epoch-ms timestamp falls on. Shared with `commands.rs`
+/// window-resolution (`pub(crate)` since the WP4 tz-helper dedup —
+/// `SURFACE-2026-07-08-QUALITY-WP4-DUP-TZ-MATH-HELPERS`; one impl, no drift).
+pub(crate) fn local_date_of(ts_ms: i64) -> NaiveDate {
     Local
         .timestamp_millis_opt(ts_ms)
         .single()
@@ -426,6 +430,29 @@ fn local_date_of(ts_ms: i64) -> NaiveDate {
 /// `%a · %b %d` upper-cased, e.g. `"WED · MAY 13"`.
 fn day_label(day: NaiveDate) -> String {
     day.format("%a · %b %d").to_string().to_uppercase()
+}
+
+/// The empty-`session_id` sentinel: window-level native rows (focus/blur without a PTY
+/// session) group under this key so they are still attributed to a viz-session bucket.
+const UNKNOWN_SID: &str = "<unknown>";
+
+/// Group events into owned per-session buckets keyed by `session_id`, folding empty ids
+/// under [`UNKNOWN_SID`]. The query layer's session-keying idiom, encoded once — every
+/// builder (`build_day`, `capped_events`, `human_kind_ms`) shares this exact grouping +
+/// sentinel rule (`SURFACE-2026-07-15-QUALITY-WP6C1-BY-SID-GROUPING-DUP`). Distinct from
+/// `reclassify::group_by_session`, which borrows (`Vec<&EventRow>`), skips empty ids, and
+/// pre-sorts by ts — this owns + keeps the `<unknown>` bucket the day/metrics builders need.
+fn group_events_by_sid(events: &[EventRow]) -> HashMap<String, Vec<EventRow>> {
+    let mut by_sid: HashMap<String, Vec<EventRow>> = HashMap::new();
+    for e in events {
+        let sid = if e.session_id.is_empty() {
+            UNKNOWN_SID.to_string()
+        } else {
+            e.session_id.clone()
+        };
+        by_sid.entry(sid).or_default().push(e.clone());
+    }
+    by_sid
 }
 
 // ===========================================================================
@@ -500,7 +527,9 @@ fn segments_for_window(events: &[EventRow], window_start: i64, window_end: i64) 
     }
 
     // Human half: the human tiler already takes the AI-busy complement inside the
-    // window (it computes ai_busy_intervals internally and tiles the gaps).
+    // window (it computes ai_busy_intervals internally and tiles the gaps) — so
+    // `ai_busy_intervals` is walked twice per window (once above for the AI half, once
+    // inside here); a known redundancy, negligible at current row volumes.
     segs.extend(human_segments_for_window(events, window_start, window_end));
 
     segs.sort_by_key(|s| (s.start_ms, s.end_ms));
@@ -552,7 +581,9 @@ fn build_viz_session(
             kind: s.kind,
             start: ts_to_minutes(s.start_ms, day_start_ms),
             end: ts_to_minutes(s.end_ms, day_start_ms),
-            // TRUE duration (pre-quantization) — the only correct source for summing.
+            // TRUE duration (pre-quantization) — the only correct source for summing. The
+            // `.max(0)` clamps a reversed seg; `ms_to_minutes_round` ALSO guards negatives, so
+            // `dur_ms` is double-defended and never negative downstream.
             dur_ms: (s.end_ms - s.start_ms).max(0),
             label: s.label,
         })
@@ -625,15 +656,7 @@ pub fn build_day(
 
     // Group events by session_id (a session may span cwds if the user `cd`s
     // mid-session, but it stays one logical engagement window).
-    let mut events_by_sid: HashMap<String, Vec<EventRow>> = HashMap::new();
-    for e in events {
-        let sid = if e.session_id.is_empty() {
-            "<unknown>".to_string()
-        } else {
-            e.session_id.clone()
-        };
-        events_by_sid.entry(sid).or_default().push(e.clone());
-    }
+    let events_by_sid = group_events_by_sid(events);
 
     // Partition sessions into projects by the session's MODAL cwd (the cwd most of
     // its events occurred in; ties broken alphabetically for determinism).
@@ -1032,23 +1055,13 @@ pub fn rows_in_window(
 // Metrics builder (M9 WP6c-1) — window-level AGGREGATE analytics.
 // ===========================================================================
 
-/// Merge overlapping/adjacent `(start, end)` intervals into a minimal non-overlapping
-/// set (sorted). Used for WALL-CLOCK totals (union — elapsed time). Local mirror of
-/// reclassify's private `merge_spans`.
+/// Merge `(start, end)` intervals into a minimal non-overlapping set for WALL-CLOCK
+/// (union / elapsed) totals. Thin adapter over `reclassify::merge_spans` (the single
+/// interval-merge impl since the WP6c-1 dedup dropped the near-verbatim local copy —
+/// `SURFACE-2026-07-15-QUALITY-WP6C1-MERGE-INTERVALS-DUP`); takes the `Vec` by value so
+/// call sites read as `sum_intervals(&merge_intervals(spans))`.
 fn merge_intervals(mut spans: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
-    spans.retain(|(s, e)| e > s);
-    spans.sort_unstable();
-    let mut out: Vec<(i64, i64)> = Vec::with_capacity(spans.len());
-    for (s, e) in spans {
-        if let Some(last) = out.last_mut() {
-            if s <= last.1 {
-                last.1 = last.1.max(e);
-                continue;
-            }
-        }
-        out.push((s, e));
-    }
-    out
+    merge_spans(&mut spans)
 }
 
 /// Sum the durations of a set of intervals WITHOUT merging (EFFORT total — parallel work
@@ -1074,15 +1087,7 @@ fn multiplier(wallclock_ms: i64, effort_ms: i64) -> f64 {
 /// with the timeline surfaces by construction. `SURFACE-2026-07-08-M9-SESSION-TERMINATION`
 /// + the WP6c research finding (an 885-min dangling burst on real data).
 fn capped_events(events: &[EventRow]) -> Vec<EventRow> {
-    let mut by_sid: HashMap<String, Vec<EventRow>> = HashMap::new();
-    for e in events {
-        let sid = if e.session_id.is_empty() {
-            "<unknown>".to_string()
-        } else {
-            e.session_id.clone()
-        };
-        by_sid.entry(sid).or_default().push(e.clone());
-    }
+    let by_sid = group_events_by_sid(events);
     let mut out: Vec<EventRow> = Vec::with_capacity(events.len());
     // Deterministic order (sort sids) so any downstream ordering is stable.
     let mut sids: Vec<&String> = by_sid.keys().collect();
@@ -1146,26 +1151,14 @@ pub fn build_metrics(
     };
 
     // ---- AI agent = AI-busy cover {ai-doing, subagent, ai-reasoning} ----
-    // `ai_busy_intervals` already unions tool + subagent + burst spans (merged), which IS
-    // the AI-family cover (ai-reasoning = the burst residual not covered by a tool/subagent
-    // interval, so the burst span carries it — folding ai-reasoning in, per the lock).
-    let busy = ai_busy_intervals(&ev); // already merged
+    // Wall-clock (elapsed) = the MERGED AI-busy union; effort (parallel work adds up) =
+    // the SAME component set un-merged. Both derive from `ai_component_spans` — the one
+    // encoding of AI-family membership (`ai_busy_intervals` merges it internally, re-
+    // deriving the tool/subagent/burst spans it merges) — so the effort/wallclock pair
+    // can't desync (`SURFACE-2026-07-15-QUALITY-WP6C1-AI-COMPONENT-SPAN-DUP`).
+    let busy = ai_busy_intervals(&ev); // merged union
     let agent_wallclock = sum_intervals(&busy);
-    // Effort = un-merged sum of the component spans (tools + subagents + bursts) so
-    // parallel AI work across sessions adds up.
-    let mut ai_component_spans: Vec<(i64, i64)> = Vec::new();
-    for ivs in tool_intervals(&ev).values() {
-        ai_component_spans.extend(ivs.iter().copied());
-    }
-    ai_component_spans.extend(subagent_intervals(&ev));
-    for bursts in bursts_by_sid.values() {
-        for b in bursts {
-            if b.end_ts > b.start_ts {
-                ai_component_spans.push((b.start_ts, b.end_ts));
-            }
-        }
-    }
-    let agent_effort = sum_intervals(&ai_component_spans);
+    let agent_effort = sum_intervals(&ai_component_spans(&ev));
 
     // Subagent subset.
     let sa_intervals = subagent_intervals(&ev);
@@ -1258,26 +1251,17 @@ pub fn build_metrics(
 // Comparison producer (M9 WP6c-2) — A/B side-by-side aggregate metrics.
 // ===========================================================================
 
-/// The local calendar date an epoch-ms timestamp falls on. Mirrors the command-side
-/// `local_date_of_ms`; kept query.rs-local so the producer partitions events without a
-/// cross-module dependency. Uses the system local tz (the frozen-contract coordinate).
-fn local_date_of_ms(ts_ms: i64) -> NaiveDate {
-    Local
-        .timestamp_millis_opt(ts_ms)
-        .single()
-        .map(|dt| dt.date_naive())
-        .unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).expect("epoch is valid"))
-}
-
 /// The subset of `events` whose local calendar day falls in `[start, end]` inclusive.
 /// Mirrors `viz_data._partition_events_by_day` (used so each comparison side's
 /// [`build_metrics`] runs over exactly its own window's rows — `build_metrics` reclassifies
-/// EVERY row it is handed, so the caller must pre-partition).
+/// EVERY row it is handed, so the caller must pre-partition). Uses the module's single
+/// [`local_date_of`] (the byte-duplicate `local_date_of_ms` was dropped in the WP6c
+/// consolidation — `SURFACE-2026-07-15-QUALITY-WP6C2-LOCAL-DATE-OF-MS-DUP`).
 fn events_in_days(events: &[EventRow], start: NaiveDate, end: NaiveDate) -> Vec<EventRow> {
     events
         .iter()
         .filter(|e| {
-            let d = local_date_of_ms(e.ts);
+            let d = local_date_of(e.ts);
             start <= d && d <= end
         })
         .cloned()
@@ -1303,17 +1287,9 @@ pub fn build_comparison_data(
     let b_metrics = build_metrics(b_start, b_end, &b_events);
     let a_days = (a_end - a_start).num_days() + 1;
     let b_days = (b_end - b_start).num_days() + 1;
-    let a_range = a_metrics.window.clone();
-    let b_range = b_metrics.window.clone();
     ComparisonPayload {
-        a: CompareSide {
-            metrics: a_metrics,
-            range: a_range,
-        },
-        b: CompareSide {
-            metrics: b_metrics,
-            range: b_range,
-        },
+        a: CompareSide { metrics: a_metrics },
+        b: CompareSide { metrics: b_metrics },
         meta: ComparisonMeta {
             a_start: a_start.format("%Y-%m-%d").to_string(),
             a_end: a_end.format("%Y-%m-%d").to_string(),
@@ -1389,15 +1365,7 @@ fn last_day_of_month(year: i32, month: u32) -> NaiveDate {
 /// over the session's own `[start, resolved_end]` span (the events are already capped;
 /// each session's window is its first→last capped event). All ms.
 fn human_kind_ms(events: &[EventRow]) -> (i64, i64, i64) {
-    let mut by_sid: HashMap<String, Vec<EventRow>> = HashMap::new();
-    for e in events {
-        let sid = if e.session_id.is_empty() {
-            "<unknown>".to_string()
-        } else {
-            e.session_id.clone()
-        };
-        by_sid.entry(sid).or_default().push(e.clone());
-    }
+    let by_sid = group_events_by_sid(events);
     let (mut typing, mut reviewing, mut away) = (0i64, 0i64, 0i64);
     for sid_events in by_sid.values() {
         let mut tss: Vec<i64> = sid_events.iter().map(|e| e.ts).collect();

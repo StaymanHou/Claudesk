@@ -21,7 +21,8 @@ const TIMES = "×"; // U+00D7 MULTIPLICATION SIGN
  *  to `"0m"` (a fidelity gain over the source's `fmtDur(ms/60000)`). A magnitude under 1s
  *  reads `"0m"`. */
 export function fmtSignedDurMs(absMs: number): string {
-  if (!Number.isFinite(absMs) || Math.round(Math.abs(absMs) / 1000) === 0) return "0m";
+  if (!Number.isFinite(absMs) || Math.round(Math.abs(absMs) / 1000) === 0)
+    return "0m";
   const sign = absMs > 0 ? "+" : MINUS;
   return `${sign}${fmtMsDur(Math.abs(absMs))}`;
 }
@@ -46,7 +47,8 @@ export function fmtSignedPp(absPp: number): string {
 /** Signed multiplier delta → `"+N.NN×"` / `"−N.NN×"` / `"0.00×"`. A sub-0.01 magnitude
  *  reads `0.00×`. */
 export function fmtSignedMult(absMult: number): string {
-  if (!Number.isFinite(absMult) || Math.abs(absMult) < 0.01) return `0.00${TIMES}`;
+  if (!Number.isFinite(absMult) || Math.abs(absMult) < 0.01)
+    return `0.00${TIMES}`;
   const sign = absMult > 0 ? "+" : MINUS;
   return `${sign}${Math.abs(absMult).toFixed(2)}${TIMES}`;
 }
@@ -124,17 +126,18 @@ export function topConcurrencyShift(
   return shifts[0];
 }
 
-/** The larger-magnitude blocking-split shift B−A (in pp) + which component moved, for the
- *  Δ column. `agent→human` vs `human→agent`; ties break toward `agent→human`. */
+/** The blocking-split shift B−A (in pp) for the Δ column, reported on the `agent→human`
+ *  axis. `blockingShares` normalizes the two components to sum to 100, so
+ *  `humanToAgent === 100 − agentToHuman` on both sides → the human→agent shift is exactly
+ *  `−(agent→human shift)`, equal in magnitude. A former `>=`-tie-break over the two
+ *  magnitudes therefore ALWAYS selected `agent→human` (they're always tied) — the
+ *  `human→agent` label was dead. Collapsed to report the `agent→human` shift directly
+ *  (SURFACE-2026-07-15-QUALITY-WP6C2-TOPBLOCKINGSHIFT-DEAD-BRANCH). */
 export function topBlockingShift(
   a: MetricsPayload,
   b: MetricsPayload,
 ): { label: string; delta: number } {
-  const as = blockingShares(a);
-  const bs = blockingShares(b);
-  const ahShift = bs.agentToHuman - as.agentToHuman;
-  const haShift = bs.humanToAgent - as.humanToAgent;
-  return Math.abs(ahShift) >= Math.abs(haShift)
-    ? { label: "agent→human", delta: ahShift }
-    : { label: "human→agent", delta: haShift };
+  const ahShift =
+    blockingShares(b).agentToHuman - blockingShares(a).agentToHuman;
+  return { label: "agent→human", delta: ahShift };
 }

@@ -16,6 +16,11 @@ import type { MetricsPayload } from "../../../state/timeAnalytics";
 export function fmtMsDur(ms: number): string {
   if (ms <= 0) return "0m";
   const totalSec = Math.round(ms / 1000);
+  // Sub-second totals rounding to "0s" here is EXPECTED and correct — this is display-time
+  // rounding of an already-ms-precise TOTAL. The anti-pattern this whole ms path guards
+  // against is MINUTE-flooring on the SUMMING side (quantizing each segment to the minute
+  // before adding, which zeroes sub-minute tool work — SURFACE-2026-07-13-M9-WP4-MINUTE-
+  // QUANTIZATION-…). Do NOT "fix" this into a misleading floor-up.
   if (totalSec < 60) return `${totalSec}s`;
   const totalMin = Math.round(ms / 60000);
   const h = Math.floor(totalMin / 60);
@@ -89,7 +94,10 @@ export const METRIC_SECTIONS: readonly MetricSection[] = [
   },
   {
     title: "AI agent",
-    rows: (d) => [triplet("AI agent", d.ai_agent), triplet("Subagent", d.ai_agent.subagent)],
+    rows: (d) => [
+      triplet("AI agent", d.ai_agent),
+      triplet("Subagent", d.ai_agent.subagent),
+    ],
   },
   {
     title: "Tool call",
@@ -102,7 +110,12 @@ export const METRIC_SECTIONS: readonly MetricSection[] = [
     title: "Human active",
     rows: (d) => [
       triplet("Human", d.human),
-      { label: "Typing", wallclock_ms: d.human.typing_ms, effort_ms: null, multiplier: null },
+      {
+        label: "Typing",
+        wallclock_ms: d.human.typing_ms,
+        effort_ms: null,
+        multiplier: null,
+      },
       {
         label: "Reviewing",
         wallclock_ms: d.human.reviewing_ms,

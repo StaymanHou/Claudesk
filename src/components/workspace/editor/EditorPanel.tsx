@@ -244,8 +244,12 @@ export function EditorPanel({
     view.focus();
   }, [highlightTarget, loadedPath, openPath]);
 
-  // No file open is derived from the prop. (Markup lives in EditorEmpty — the same
-  // no-CM6 placeholder PaneTabs renders for an empty pane so the CM6 chunk defers.)
+  // DEFENSIVE-ONLY, unreachable in the shipped wiring: PaneTabs renders <EditorEmpty/>
+  // itself for an empty pane and only mounts the lazy EditorPanel for a non-null
+  // `tab.path`, so `openPath` is never null here. Kept as a null-safety guard (returns the
+  // same no-CM6 placeholder so the CM6 chunk stays deferred); `lazyBundleWiring.test.ts`
+  // pins that PaneTabs owns the empty case. (SURFACE-2026-07-08-QUALITY-WP6A-EDITORPANEL-
+  // DEAD-EMPTY-BRANCH — documented rather than dropped: a cheap null guard on a lazy entry.)
   if (openPath == null) {
     return <EditorEmpty />;
   }

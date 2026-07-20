@@ -159,16 +159,24 @@ pub fn pip_resize(app: AppHandle, width: f64, height: f64) -> Result<(), String>
         let h = height.max(1.0);
         panel.set_content_size(w, h);
 
-        // M10.5 WP1 — top-right default position. The build (`pip_set_visible`) opens the panel
-        // at a placeholder size at NSPanel's default (~center) origin; the REAL content-driven
-        // size lands HERE, so this is the seam to anchor against — anchoring at build-time would
-        // use the 220×130 placeholder and land the panel in the wrong spot. Only anchor while the
-        // operator has NOT placed the panel (`positioned == false`, drag sets it true), so a
-        // re-summon after a drag stays put. Because we anchor on every unpositioned resize, a
-        // layout/size change before any drag re-flushes the panel to the corner against its
-        // NEW size (the frame math reads the current content frame post-`set_content_size`).
-        // This runs in a `#[tauri::command]` body → main thread, so the `setFrameOrigin:` (same
-        // AppKit msg_send idiom as `pip_move`) needs no marshaling.
+        // M10.5 WP1 — the top-right default position is anchored HERE (canonical WHY for the
+        // whole WP1 anchor mechanism; `anchor_top_right` and `PipAutoState::positioned` point back
+        // to this comment rather than restate it). Three facts pin the seam:
+        //   1. Placeholder timing — the build (`pip_set_visible`) opens the panel at a placeholder
+        //      size (220×130) at NSPanel's default (~center) origin; the REAL content-driven size
+        //      only exists after `set_content_size` above. Anchoring at build-time would use the
+        //      placeholder size and land the panel in the wrong spot — so `pip_resize` is the only
+        //      seam where the true size is known, and the anchor must live here, not at build.
+        //   2. Positioned gate — only anchor while the operator has NOT placed the panel
+        //      (`positioned == false`; `pip_move`/drag sets it true), so a re-summon after a drag
+        //      stays put. Anchoring on every *unpositioned* resize means a layout/size change
+        //      before any drag re-flushes the panel to the corner against its NEW size (the frame
+        //      math reads the current content frame post-`set_content_size`).
+        //   3. FE→BE contract (no CI seam) — this relies on the PiP webview's mount-time
+        //      `pip_resize` useEffect firing on first summon; a summon that never triggered a
+        //      resize would leave the panel at the placeholder origin (see fact 1).
+        // Runs in a `#[tauri::command]` body → main thread, so `setFrameOrigin:` (same AppKit
+        // msg_send idiom as `pip_move`) needs no marshaling.
         let unpositioned = app
             .try_state::<PipAutoStateLock>()
             .and_then(|lock| lock.0.lock().ok().map(|st| !st.positioned))
@@ -181,14 +189,15 @@ pub fn pip_resize(app: AppHandle, width: f64, height: f64) -> Result<(), String>
 }
 
 /// M10.5 WP1 — move the live PiP panel so its top-right corner sits `PIP_ANCHOR_MARGIN` points
-/// in from its screen's visible-frame top-right corner (operator-requested gap, not flush).
-/// Reads the panel's own `screen` (fallback `mainScreen`) so it anchors on whatever display the
-/// panel is on, and its **current** frame size (post-resize) so the right inset stays constant
-/// as the content-driven size changes. Pure AppKit frame mutation
-/// (`setFrameOrigin:`) — the same crash-safe path `pip_move` uses (NOT a style-mask transition).
-/// MUST be called on the main thread (all callers are `#[tauri::command]` bodies). Best-effort:
-/// if the screen can't be read, leaves the panel where it is. Takes `&NSPanel` (the caller's
-/// `panel.as_panel()`) so it doesn't have to name the generic `PanelHandle<R>` type.
+/// in from its screen's visible-frame top-right corner (operator-requested gap, not flush). See
+/// the anchor-mechanism WHY at the `pip_resize` call site for the placeholder-timing / positioned-
+/// gate rationale; this fn is just the geometry. Reads the panel's own `screen` (fallback
+/// `mainScreen`) so it anchors on whatever display the panel is on, and its **current** frame size
+/// (post-resize) so the right inset stays constant as the content-driven size changes. Pure AppKit
+/// frame mutation (`setFrameOrigin:`) — the same crash-safe path `pip_move` uses (NOT a style-mask
+/// transition). MUST be called on the main thread (all callers are `#[tauri::command]` bodies).
+/// Best-effort: if the screen can't be read, leaves the panel where it is. Takes `&NSPanel` (the
+/// caller's `panel.as_panel()`) so it doesn't have to name the generic `PanelHandle<R>` type.
 fn anchor_top_right(ns_panel: &tauri_nspanel::objc2_app_kit::NSPanel) {
     use tauri_nspanel::objc2::msg_send;
     use tauri_nspanel::objc2::runtime::AnyObject;
@@ -251,7 +260,8 @@ pub fn pip_move(app: AppHandle, dx: f64, dy: f64) -> Result<(), String> {
         // M10.5 WP1 — the operator has now placed the panel, so stop the top-right auto-anchor
         // for the rest of this session (`pip_resize` re-checks this flag). Best-effort: an absent
         // or poisoned lock just leaves the flag unset (worst case, a later resize re-anchors —
-        // harmless, and lock poisoning is not expected on this single-writer main-thread path).
+        // harmless, and lock poisoning is not expected — both accessors (`pip_move` writes,
+        // `pip_resize` reads) run on the main thread, so there's no cross-thread contention).
         if let Some(lock) = app.try_state::<PipAutoStateLock>() {
             if let Ok(mut st) = lock.0.lock() {
                 st.positioned = true;

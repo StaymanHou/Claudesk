@@ -21,13 +21,13 @@
 //
 // All coordinates are minutes-from-local-midnight (the shared-viewport unit).
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import type {
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { panViewport, zoomViewport, type Viewport } from "./viewport";
-import { useViewport, useViewportSetter } from "./ViewportContext";
+import { useViewport, useRafViewportSetter } from "./ViewportContext";
 
 /** The frozen state captured at pointerdown, so pan deltas are computed against a
  *  stable origin (idempotent under RAF frame-coalescing). */
@@ -55,32 +55,15 @@ export interface TimelineGestureHandlers {
  */
 export function useTimelineGestures(): TimelineGestureHandlers {
   const viewport = useViewport();
-  const { setViewport } = useViewportSetter();
 
   const dragRef = useRef<DragState | null>(null);
-  const rafRef = useRef<number | null>(null);
 
-  // Cancel any pending RAF on unmount (the source LEAKS this).
-  useEffect(() => {
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  // Coalesce viewport writes to one per animation frame (cancel-and-reschedule;
-  // the latest updater wins). `next` is an UPDATER `(prev) => Viewport` so it computes
-  // against the COMMITTED viewport — no stale ref, so even multiple wheel events within
-  // one frame each anchor off the correct prior state. The context setter clamps.
-  const scheduleSet = useCallback(
-    (next: (prev: Viewport) => Viewport) => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        setViewport(next);
-      });
-    },
-    [setViewport],
-  );
+  // Coalesce viewport writes to one per animation frame via the shared RAF setter
+  // (owns the rafRef + unmount-cancel; one write per frame, latest updater wins). Every
+  // `scheduleSet(next)` passes an UPDATER `(prev) => Viewport` computed against the
+  // COMMITTED viewport, so multiple wheel events within one frame each anchor off the
+  // correct prior state. The context setter clamps.
+  const scheduleSet = useRafViewportSetter();
 
   const onPointerDown = useCallback(
     (e: ReactPointerEvent) => {

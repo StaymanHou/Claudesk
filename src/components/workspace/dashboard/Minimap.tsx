@@ -16,7 +16,7 @@
 // Fixes over the source Minimap: a `dwWidth<=0` guard (via minimapMath) + the pending
 // RAF is cancelled on unmount (the source leaked it).
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { RangePayload, SegKind } from "../../../state/timeAnalytics";
 import { CT_TOKENS } from "./tokens";
@@ -32,7 +32,11 @@ import {
   minimapSegPct,
 } from "./minimapMath";
 import { dayOffsetMin, type Viewport } from "./viewport";
-import { useViewport, useViewportSetter } from "./ViewportContext";
+import {
+  useViewport,
+  useViewportSetter,
+  useRafViewportSetter,
+} from "./ViewportContext";
 import { useDayWindow } from "./DayWindowContext";
 
 const MINIMAP_HEIGHT = 80;
@@ -59,7 +63,7 @@ export interface MinimapProps {
 
 export function Minimap({ data }: MinimapProps) {
   const viewport = useViewport();
-  const { setViewport, dataWindow } = useViewportSetter();
+  const { dataWindow } = useViewportSetter();
   // WP6b-4 re-spec fix (P2.7): the density track must place each seg on its multi-day
   // LANE, not its raw minute-of-day. `windowStartIso` is the fixed coordinate origin
   // (today-29d) provided by DayViewHost — the SAME origin DayTimeline shifts by — so the
@@ -76,25 +80,11 @@ export function Minimap({ data }: MinimapProps) {
 
   const trackRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<MinimapDrag | null>(null);
-  const rafRef = useRef<number | null>(null);
 
-  // Cancel any pending RAF on unmount (the source Minimap LEAKS this).
-  useEffect(() => {
-    return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  const scheduleSet = useCallback(
-    (next: (prev: Viewport) => Viewport) => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null;
-        setViewport(next);
-      });
-    },
-    [setViewport],
-  );
+  // One viewport write per animation frame via the shared RAF setter (owns the rafRef +
+  // unmount-cancel; every Minimap gesture routes through it). Same invariant home as
+  // useTimelineGestures — see useRafViewportSetter.
+  const scheduleSet = useRafViewportSetter();
 
   // Flatten every project's every seg onto one aggregate density track, SHIFTED by each
   // session's fixed-origin dayOffset (P2.7) so multi-day activity lands on its own lane
@@ -143,7 +133,10 @@ export function Minimap({ data }: MinimapProps) {
         const centerMin = minimapFracToDataMin(frac, dataWindow);
         scheduleSet((prev) => minimapRecenter(prev, centerMin));
       }
-      // Prevent the timeline's gesture handler (or text selection) from also reacting.
+      // `preventDefault` suppresses the drag's native text-selection (the real effect here).
+      // `stopPropagation` is belt-and-suspenders: the Minimap is a SIBLING of the timeline (its
+      // own mousedown, not nested in the timeline's pointerdown), so nothing above would react
+      // anyway — but we stop the bubble defensively in case the tree is ever re-parented.
       e.stopPropagation();
       e.preventDefault();
     },

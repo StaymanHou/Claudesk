@@ -195,15 +195,16 @@ export interface MetricsPayload {
 }
 
 // ── M9 WP6c-2 — A/B comparison (mirror of `time_store::query`'s ComparisonPayload) ──────
-// `{a, b, meta}` — each side a full `MetricsPayload` (under `metrics`) + its range label.
-// NO `deltas` field: CompareView recomputes every delta FE-side from the two metrics trees
-// (WP6c-research; pinned backend-side by `comparison_dto_serde_shape_has_no_deltas`).
-// snake_case VERBATIM (the project IPC convention).
+// `{a, b, meta}` — each side a full `MetricsPayload` (under `metrics`). NO `deltas` field:
+// CompareView recomputes every delta FE-side from the two metrics trees (WP6c-research;
+// pinned backend-side by `comparison_dto_serde_shape_has_no_deltas`). snake_case VERBATIM
+// (the project IPC convention).
 
-/** One side of an A/B comparison: the side's aggregate metrics + its range label. */
+/** One side of an A/B comparison: the side's aggregate metrics. Per-side window bounds are
+ *  at `metrics.window` (and `meta` carries both sides' bounds); the former `range` field was
+ *  an unconsumed duplicate of `metrics.window` and was dropped. */
 export interface CompareSide {
   metrics: MetricsPayload;
-  range: MetricsWindowMeta;
 }
 
 /** A/B comparison window bounds + day counts (the CompareView header + length-mismatch

@@ -163,10 +163,12 @@ export function quitWhileActiveSpec(
   names: string[],
 ): ConfirmSpec<QuitWhileActiveChoice> {
   const list = names.join(", ");
-  const them = names.length === 1 ? "it" : "them";
+  const single = names.length === 1; // one predicate drives every plural/singular pick below
+  const them = single ? "it" : "them";
+  const verb = single ? "is" : "are";
   const message =
     names.length > 0
-      ? `${list} ${names.length === 1 ? "is" : "are"} still working. Quit Claudesk anyway and stop ${them}?`
+      ? `${list} ${verb} still working. Quit Claudesk anyway and stop ${them}?`
       : "Quit Claudesk?";
   return {
     title: "Quit with active workspaces",

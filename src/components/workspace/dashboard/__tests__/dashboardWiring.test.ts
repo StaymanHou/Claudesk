@@ -65,8 +65,10 @@ describe("M9 WP6a — the GLOBAL dashboard is reachable from the picker scene, n
     expect(appTsx).toContain("<ProjectPicker");
     // both the picker branch and the Filmstrip use this exact opener string.
     expect(
-      (appTsx.match(/onOpenDashboard=\{\(\) => setShowDashboard\(true\)\}/g) ?? [])
-        .length,
+      (
+        appTsx.match(/onOpenDashboard=\{\(\) => setShowDashboard\(true\)\}/g) ??
+        []
+      ).length,
     ).toBeGreaterThanOrEqual(2);
   });
 
@@ -97,7 +99,9 @@ describe("M9 WP6a — the GLOBAL dashboard is reachable from the picker scene, n
 
 describe("M9 WP6a — GlobalDashboard is the global view host (title + close + empty-state)", () => {
   it("exports a default component with the region testid and a close affordance", () => {
-    expect(globalDashboard).toContain("export default function GlobalDashboard");
+    expect(globalDashboard).toContain(
+      "export default function GlobalDashboard",
+    );
     expect(globalDashboard).toContain('data-testid="global-dashboard"');
     expect(globalDashboard).toContain('data-testid="global-dashboard-close"');
     expect(globalDashboard).toContain("onClose");
@@ -106,7 +110,9 @@ describe("M9 WP6a — GlobalDashboard is the global view host (title + close + e
   it("gates on the WP5 tracking toggle + renders the tracking-OFF empty-state", () => {
     expect(globalDashboard).toContain("getTimeTrackingEnabled");
     expect(globalDashboard).toContain("TIME_TRACKING_ENABLED_EVENT");
-    expect(globalDashboard).toContain('data-testid="dashboard-empty-tracking-off"');
+    expect(globalDashboard).toContain(
+      'data-testid="dashboard-empty-tracking-off"',
+    );
     expect(globalDashboard).toContain("dashboardMode");
   });
 });
@@ -148,7 +154,9 @@ describe("M9 WP6a Phase 2 / WP6b-2 P1 — GlobalDashboard fetches the active-vie
   it("renders the distinct tracking-ON-but-no-rows empty-state (not the OFF one)", () => {
     expect(globalDashboard).toContain('data-testid="dashboard-empty-nodata"');
     // still keeps the OFF empty-state + the tracking gate from Phase 1
-    expect(globalDashboard).toContain('data-testid="dashboard-empty-tracking-off"');
+    expect(globalDashboard).toContain(
+      'data-testid="dashboard-empty-tracking-off"',
+    );
   });
 
   it("WP6b-3: exposes the WeekNav prev/next control on the Week view", () => {
@@ -157,17 +165,26 @@ describe("M9 WP6a Phase 2 / WP6b-2 P1 — GlobalDashboard fetches the active-vie
     expect(globalDashboard).toContain("<WeekNav");
     expect(globalDashboard).toContain("changeWeek");
     expect(globalDashboard).toContain("nextWeekDisabled");
-    // Chrome.tsx exports WeekNav with the data-attr the live drive asserts on.
-    expect(chrome).toContain('data-week-nav="prev"');
-    expect(chrome).toContain('data-week-nav="next"');
+    // Chrome.tsx wires WeekNav's live-drive selector through the shared NavPill primitive:
+    // `WeekNav` passes `navAttr="data-week-nav"`, and NavPill spreads `{[navAttr]: "prev"}`
+    // / `"next"` onto its two buttons — so the rendered DOM still carries
+    // `data-week-nav="prev"`/`"next"`. Asserting the prop + the spread keeps this a
+    // regression guard on the selector contract after the WeekNav/MonthNav dedup.
+    expect(chrome).toContain('navAttr="data-week-nav"');
+    expect(chrome).toContain('{ [navAttr]: "prev" }');
+    expect(chrome).toContain('{ [navAttr]: "next" }');
   });
 
   it("WP6c-2: Chrome enables the Metrics AND Compare tabs (all 5 views enabled)", () => {
     // The tab must be ENABLED (`enabled: true`) or the tab strip greys it out. As of
     // WP6c-2 the Compare tab is enabled too (its producer + CompareView shipped). A
     // regression that flips either back to `false` should fail here.
-    expect(chrome).toMatch(/value:\s*"metrics",\s*label:\s*"Metrics",\s*enabled:\s*true/);
-    expect(chrome).toMatch(/value:\s*"compare",\s*label:\s*"Compare",\s*enabled:\s*true/);
+    expect(chrome).toMatch(
+      /value:\s*"metrics",\s*label:\s*"Metrics",\s*enabled:\s*true/,
+    );
+    expect(chrome).toMatch(
+      /value:\s*"compare",\s*label:\s*"Compare",\s*enabled:\s*true/,
+    );
     // The DashboardView union carries the metrics + compare members.
     expect(chrome).toContain('"metrics"');
     expect(chrome).toContain('"compare"');
@@ -220,7 +237,9 @@ describe("M9 WP6b-2 P2 — Month view: custom-range fetch, drill-down, nav (the 
     expect(globalDashboard).toContain("onNextMonth={() => changeMonth(");
     // Month day-click → changeRange(iso, iso) — a SINGLE-day range drill-down (WP6b-4:
     // changeDay was generalized to changeRange; a drill is start===end).
-    expect(globalDashboard).toContain("onDayClick={(iso) => changeRange(iso, iso)}");
+    expect(globalDashboard).toContain(
+      "onDayClick={(iso) => changeRange(iso, iso)}",
+    );
   });
 
   it("day-click drills into the Day view for that date via changeRange (a 1-day range)", () => {
@@ -292,8 +311,17 @@ describe("M9 WP6b-2 P3 — Custom→Day MERGE: Day gains a date picker, the Cust
     expect(rangePicker).toContain("localTodayIso");
   });
 
-  it("MAX_RANGE_DAYS is 30 (WP6b-4 re-spec D9 — matches the 30-day zoom-out cap)", () => {
-    expect(rangePicker).toContain("export const MAX_RANGE_DAYS = 30");
+  it("MAX_RANGE_DAYS is DERIVED from the 30-day zoom-out cap (WP6b-4 re-spec D9; WP2 off-by-one reconcile)", () => {
+    // WP2 (backlog-paydown 2026-07-19): the picker max is no longer a hard-coded 30 — it is
+    // derived from viewport's MAX_ZOOM_OUT_SPAN_MIN so the picker max and the timeline's
+    // zoom-out cap are provably ONE number (framedRange caps its readout to the same value →
+    // no 31-inclusive-day span the picker would red-border). The runtime value + the tie are
+    // asserted in viewport.test.ts; here (the ?raw wiring suite) we pin that the derivation is
+    // wired rather than re-hard-coded.
+    expect(rangePicker).toContain("MAX_ZOOM_OUT_SPAN_MIN");
+    expect(rangePicker).toContain(
+      "export const MAX_RANGE_DAYS = MAX_ZOOM_OUT_SPAN_MIN / 1440",
+    );
   });
 
   it("GlobalDashboard wires the fixed-origin flexible timeline (WP6b-4 re-spec: no mode/gate)", () => {
@@ -305,6 +333,13 @@ describe("M9 WP6b-2 P3 — Custom→Day MERGE: Day gains a date picker, the Cust
     expect(globalDashboard).toContain("loadedEndIso");
     expect(globalDashboard).toContain("AutoExtendWatcher");
     expect(globalDashboard).toContain("needsExtend");
+    // WP2 (backlog-paydown 2026-07-19) firingRef-latch fix: the debounced watcher tick routes
+    // its fire/hold/release decision through the pure `nextExtendGuard` (which releases the
+    // guard on a no-extend tick) — and must NOT early-return on `firingRef.current` before the
+    // tick (that skip was the latch's teeth: a guard latched by a no-op edge fire never got the
+    // tick that would clear it). Pin both so a future edit can't silently reintroduce the latch.
+    expect(globalDashboard).toContain("nextExtendGuard");
+    expect(globalDashboard).not.toContain("if (firingRef.current) return");
     expect(globalDashboard).toContain("seedViewportToday");
     expect(globalDashboard).toContain("reFrameKey");
     expect(globalDashboard).toContain("const extendLoaded");
@@ -368,13 +403,17 @@ describe("M9 WP6b-2 P4 — SidePanel + click-to-select seam (the live-verified w
     expect(globalDashboard).toContain("setSelectedSegId");
     // cleared in changeView + changeRange (both reset to null) and via onCloseSidePanel.
     expect(globalDashboard).toContain("setSelectedSegId(null)");
-    expect(globalDashboard).toContain("onCloseSidePanel={() => setSelectedSegId(null)}");
+    expect(globalDashboard).toContain(
+      "onCloseSidePanel={() => setSelectedSegId(null)}",
+    );
     expect(globalDashboard).toContain("onSelectSeg={setSelectedSegId}");
   });
 
   it("the Day view resolves the selection + renders <SidePanel> (Day-view-only)", () => {
     expect(globalDashboard).toContain("import { SidePanel }");
-    expect(globalDashboard).toContain("resolveSelectedSeg(selectedSegId, data)");
+    expect(globalDashboard).toContain(
+      "resolveSelectedSeg(selectedSegId, data)",
+    );
     expect(globalDashboard).toContain("<SidePanel");
     // rendered inside the Day body flex row alongside DayTimeline (not in Week/Month).
     expect(globalDashboard).toContain('className="dashboard-day-body"');

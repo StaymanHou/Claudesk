@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-19  # M10.5 WP4 P1 verify-codify: pnpm test 1.71s (105 files / 1176)
+updated: 2026-07-20  # backlog-paydown WP6: cargo test 0.69s (547 lib + integ)
 ---
 
 # Runtime Registry
@@ -76,9 +76,13 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.71s (2026-07-19, M10.5 WP4 Phase 1 verify-codify: +2 UTF-8 round-trip/empty-string bridge tests → 105 files / 1176 pass, 0 fail)
+- **Last:** 3.29s (2026-07-20, backlog-paydown WP6 verify-auto: FE nit fold-in [MAX_FRAMED↔MAX_RANGE tie test, encodeBase64 chunked spread, comment/naming nits] → 105 files / 1181 pass, 0 fail)
 - **Use timeout:** 120000
 - **History:**
+  - 3.29s — 2026-07-20 (backlog-paydown WP6 verify-auto: +1 tie assertion, comment/naming nits → 105 files / 1181 pass)
+  - 1.87s — 2026-07-20 (backlog-paydown WP5 verify-auto: dead-code cleanup, −4 viewportFromRange tests → 105 files / 1181 pass)
+  - 1.87s — 2026-07-20 (backlog-paydown WP4 verify-auto: dashboard dedup, 1 wiring-guard test updated → 105 files / 1185 pass)
+  - 1.87s — 2026-07-20 (backlog-paydown WP3 verify-auto: query/reclassify dedup, no new FE tests → 105 files / 1185 pass)
   - 1.71s — 2026-07-19 (M10.5 WP4 P1 codify: +2 bridge UTF-8 round-trip tests → 105 files / 1176 pass)
   - 1.75s — 2026-07-18 (M10 WP6 Phase B1: revert — 105 files / 1163 pass)
   - 1.99s — 2026-07-17 (M10 WP6 P2 brew real-check-and-notify: 106 files / 1170 pass)
@@ -142,9 +146,16 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.68s (2026-07-19, M10.5 WP4 P2 codify: color_tty_env +LANG/LC_ALL locale — 547 lib pass [+1 locale test], warm)
+- **Last:** 0.69s (2026-07-20, backlog-paydown WP7 P2 codify: +canonical-form-tolerance pin (`..`/symlinked known root still validates) — 556 lib + 6 integ + 1 shell-history pass; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.69s — 2026-07-20 (backlog-paydown WP7 P2 codify: +validate_root canonical-form-tolerance pin, 556 lib + 6 integ + 1 shell-history pass; warm)
+  - 0.71s — 2026-07-20 (backlog-paydown WP7 P2 build: validate_root + AppHandle-injected commands, 555 lib + 6 integ + 1 shell-history pass; warm)
+  - 0.86s — 2026-07-20 (backlog-paydown WP7 P1: leaf-symlink full-target canonicalize in resolve_within, 550 lib + 6 integ + 1 shell-history pass; warm)
+  - 0.69s — 2026-07-20 (backlog-paydown WP6: surface change-point precompute + ACTIVECTX single-lock + hook privacy-test self-consistency, 547 lib + integ pass; warm)
+  - 1.07s — 2026-07-20 (backlog-paydown WP5: dead-code cleanup + 8 targeted per-item allows, 547 lib pass; warm-ish)
+  - 0.69s — 2026-07-20 (backlog-paydown WP3: query/reclassify dedup, 547 lib pass unchanged; warm)
+  - 0.68s — 2026-07-19 (M10.5 WP4 P2 codify: color_tty_env +LANG/LC_ALL locale — 547 lib pass [+1 locale test], warm)
   - 0.92s — 2026-07-17 (M10 WP4 P2 build: +2 download-progress tests, 547 lib + 6 integ pass; warm)
   - 0.72s — 2026-07-17 (M10 WP4 P1 build: +6 updater-prefs tests, 545 lib + 6 integ pass; warm)
   - 0.82s — 2026-07-17 (M10 WP3 verify-codify: full lib 539 pass + 6 integ pass; warm)

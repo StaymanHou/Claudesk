@@ -74,8 +74,18 @@ export function viewportFromHourRange(
 // ── Multi-day day math (WP6b-4) ─────────────────────────────────────────────
 const MS_PER_DAY = 86_400_000;
 const MONTH_ABBR = [
-  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+  "JAN",
+  "FEB",
+  "MAR",
+  "APR",
+  "MAY",
+  "JUN",
+  "JUL",
+  "AUG",
+  "SEP",
+  "OCT",
+  "NOV",
+  "DEC",
 ] as const;
 
 /**
@@ -141,41 +151,6 @@ export function formatDayLabel(
   return `${MONTH_ABBR[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
-/**
- * The INITIAL (+ "Fit"-target-alternative) viewport for a MULTI-DAY range (WP6b-4,
- * D6 — "pan/zoom is the primary interaction, so the range must OPEN legible").
- *
- * A multi-day range must NOT open fully zoomed-out (a 31-day range would render every
- * day as an unreadable ~3%-width sliver, forcing a rescue zoom-in as the *first*
- * gesture). Instead it seeds to a **legible ≈one-day window anchored on the MOST
- * RECENT day** (the source seeded from the last day's `hour_range`) — so the timeline
- * opens showing the latest day at a readable zoom, and the first gesture is a
- * productive pan *backward* through days (or a "Fit" to see the whole range on demand).
- *
- * Mechanism: take the LAST day's active-hours (`hour_range_by_day[meta.end]`, fallback
- * the whole day `[0,24]`), then SHIFT that window by the last day's `dayOffset`
- * (`(day_count-1)*1440`) so it lands on the last lane in multi-day coordinates. The
- * `ViewportProvider` clamps this to `deriveDataWindow` (so it can never exceed the
- * pannable range). Pure — reads only `data.meta` + `data.hour_range_by_day`, never the
- * clock. For a 1-day payload prefer `viewportFromHourRange(data.hour_range)` (the
- * caller picks by day_count); this function is correct for 1 day too (offset 0).
- */
-export function viewportFromRange(data: RangePayload): Viewport {
-  const dayCount =
-    typeof data.meta?.day_count === "number" && data.meta.day_count >= 1
-      ? data.meta.day_count
-      : 1;
-  const lastIso = data.meta?.end;
-  const lastHours =
-    (lastIso && data.hour_range_by_day?.[lastIso]) || DEFAULT_HOUR_RANGE;
-  const [h0, h1] = lastHours;
-  const offset = (dayCount - 1) * 1440;
-  return {
-    visible_start_min: offset + h0 * 60,
-    visible_end_min: offset + h1 * 60,
-  };
-}
-
 // ── Flexible-timeline helpers (WP6b-4 re-spec — fixed-origin continuous timeline) ──
 //
 // The re-spec (2026-07-15) replaces the "type-a-range-to-unlock-multi-day mode" (D1)
@@ -210,6 +185,21 @@ export function seedViewportToday(
 }
 
 /**
+ * The largest INCLUSIVE-day span the framed-range readout may emit — derived from the same
+ * `MAX_ZOOM_OUT_SPAN_MIN` (30 lanes) the camera's zoom-out is capped at, so the two "30"s
+ * are one number. This is ALSO the `RangePicker`'s `MAX_RANGE_DAYS` bound; keeping the
+ * derivation here (the pure layer) lets `framedRange` cap its own output to a value the
+ * picker will always accept without importing the React component (which owns the picker copy
+ * of the constant). See `framedRange` for why the cap is needed (the misalignment off-by-one).
+ *
+ * Exported (not to be imported into `RangePicker` — that would cycle, since RangePicker imports
+ * `MAX_ZOOM_OUT_SPAN_MIN` from here) purely so a test can pin `MAX_FRAMED_DAYS === MAX_RANGE_DAYS`
+ * (SURFACE-2026-07-20-QUALITY-WP2-MAXFRAMED-MAXRANGE-PARALLEL-DERIVATION): the two derivations stay
+ * separate to avoid the cycle, but a tie assertion catches a future `+1`-style drift in either one.
+ */
+export const MAX_FRAMED_DAYS = MAX_ZOOM_OUT_SPAN_MIN / 1440; // 30
+
+/**
  * The day-granular ISO range the viewport currently FRAMES (D8 — the reactive RangePicker
  * readout). Maps the viewport's visible bounds → lane indices (relative to `originIso`) →
  * ISO dates, clamped to `[originIso, todayIso]`:
@@ -217,6 +207,17 @@ export function seedViewportToday(
  *   - `endIso`   = origin + `floor((visible_end - ε) / 1440)` days (the last framed lane;
  *     the `-ε` via `Math.ceil(visible_end/1440) - 1` so a viewport ending exactly on a
  *     lane boundary doesn't count the next, empty lane).
+ *
+ * SPAN CAP (SURFACE-2026-07-15-QUALITY-WP6B4-FRAMEDRANGE-PICKER-OFFBYONE): the camera's zoom-out
+ * is capped at 30 *lanes* on screen (`MAX_ZOOM_OUT_SPAN_MIN`), but a LANE COUNT and an INCLUSIVE
+ * DAY COUNT are off-by-one — a 30-lane-wide viewport that is day-MISALIGNED (panned a fractional
+ * day) touches 31 inclusive lanes (`floor(start)` … `ceil(start+30)-1`), which would present a
+ * 31-inclusive-day span to the `RangePicker` and stick its `validateRange(…, 30)` readout in a
+ * permanent red-border error on a value the operator never typed. So the LAST framed lane is
+ * additionally capped to `startLane + (MAX_FRAMED_DAYS - 1)` — the readout never exceeds 30
+ * inclusive days, exactly the picker's max. This does NOT touch `clampViewport`'s on-screen lane
+ * budget (that 30-lane cap is the gesture-smoothness contract); only the day-granular readout.
+ *
  * Clamped so a viewport panned/slivered past the coordinate edges still yields a valid,
  * in-range picker value. Pure; the only clock input is `todayIso` (a param). Reuses
  * `stepIso` (the established day-stepper — inverse of `dayOffsetMin` at day granularity).
@@ -239,6 +240,12 @@ export function framedRange(
   if (startIso < originIso) startIso = originIso;
   if (endIso > todayIso) endIso = todayIso;
   if (endIso < startIso) endIso = startIso;
+  // Cap the INCLUSIVE-day span AFTER the coordinate clamp so a day-misaligned max-zoom
+  // viewport never presents a 31st lane the picker would reject (the off-by-one fix above).
+  // Applied on the clamped ISO span — NOT on raw lane indices — so an over-panned viewport
+  // whose valid [origin,today] projection is already ≤30 days is left untouched.
+  const maxEndIso = stepIso(startIso, MAX_FRAMED_DAYS - 1);
+  if (endIso > maxEndIso) endIso = maxEndIso;
   return { startIso, endIso };
 }
 
@@ -273,6 +280,42 @@ export function needsExtend(
   return null;
 }
 
+/**
+ * The `AutoExtendWatcher`'s in-flight-guard next-state decision (pure so the guard's
+ * latch behavior is unit-pinned without a render toolchain — the watcher effect is thin
+ * glue around this). Given the `needsExtend` result inside the debounced tick and the
+ * guard's CURRENT value, returns:
+ *   - `fire` — whether to call `onExtend(dir)` this tick (only when a direction is needed
+ *     AND no extend is already in flight).
+ *   - `nextGuard` — what the in-flight guard (`firingRef`) should become.
+ *
+ * The guard exists to de-dupe rapid fires WHILE an extend is in flight; the parent clears
+ * it by landing a wider `loadedWindow` (which flips `needsExtend` back to null). But when a
+ * fired extend is a NO-OP at a coordinate edge (already at the origin floor / at today), the
+ * loaded window never changes, so the "new window clears the guard" effect never runs. If a
+ * null result left the guard UNCHANGED, a guard latched `true` by such a no-op fire would never
+ * clear — and because a SINGLE guard gates both directions, a stuck `older` guard would then
+ * block a later legitimate `newer` extend at the opposite edge
+ * (SURFACE-2026-07-15-QUALITY-WP6B4-AUTOEXTEND-FIRINGREF-LATCH).
+ *
+ * The FIX (WP2, backlog-paydown 2026-07-19): a `null` result CLEARS the guard — nothing is
+ * needed, so nothing is in flight; a no-op edge fire can no longer latch it permanently. The
+ * `currentGuard === true` hold still de-dupes a genuine in-flight extend (the wider-window
+ * effect clears it on landing); a directional result fires and arms the guard.
+ */
+export function nextExtendGuard(
+  dir: "older" | "newer" | null,
+  currentGuard: boolean,
+): { fire: boolean; nextGuard: boolean } {
+  // No extend needed → release the guard UNCONDITIONALLY. This is the latch fix: it must run
+  // BEFORE the in-flight hold, so a guard latched `true` by a no-op edge fire (which leaves
+  // needsExtend returning null once the camera moves off the edge) is cleared rather than held.
+  if (!dir) return { fire: false, nextGuard: false };
+  // A direction IS needed: hold if an extend is already in flight (de-dupe), else fire + arm.
+  if (currentGuard) return { fire: false, nextGuard: true };
+  return { fire: true, nextGuard: true };
+}
+
 // ── Data window (clamp bounds) ─────────────────────────────────────────────
 /**
  * Derive the pan/zoom bounds for a payload: the WHOLE window `[0, day_count * 1440]`
@@ -288,7 +331,7 @@ export function needsExtend(
  * active-hours seed is a *sub-window* with headroom: drag-pan works immediately, and
  * zoom-out reveals the rest of the range — the natural "timeline" model. The seed
  * itself is unchanged (still the active hours / a legible one-day window — see
- * `viewportFromHourRange` / `viewportFromRange`); only the pan/zoom BOUNDS widen with
+ * `viewportFromHourRange` / `seedViewportToday`); only the pan/zoom BOUNDS widen with
  * the day count.
  *
  * WP6b-4: the multi-day coordinate is `dayOffset*1440 + minute-of-day`, so a range of
@@ -396,7 +439,10 @@ export function fracToDataMin(frac: number, viewport: Viewport): number {
  * a jsdom render test (the project has no component-test toolchain by convention —
  * behavior is verified live via the MCP bridge).
  */
-export function viewportSeedKey(seed: Viewport, dataWindow: DataWindow): string {
+export function viewportSeedKey(
+  seed: Viewport,
+  dataWindow: DataWindow,
+): string {
   return `${seed.visible_start_min}|${seed.visible_end_min}|${dataWindow[0]}|${dataWindow[1]}`;
 }
 

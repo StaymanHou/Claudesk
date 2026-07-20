@@ -33,12 +33,9 @@ describe("base64 helpers", () => {
     expect(encodeBase64("é")).toBe(btoa("\xc3\xa9")); // é = U+00E9 → [0xC3, 0xA9]
   });
 
-  // WP4 (M10.5) reproduce-first — RED. The input side corrupts any multi-byte
-  // glyph: `encodeBase64`'s `charCodeAt(i) & 0xff` truncates code units > 0xFF
-  // (and code points that are surrogate pairs) instead of emitting the glyph's
-  // UTF-8 bytes. Pasting an emoji / accented char into the CC prompt therefore
-  // arrives at CC as `�`. The contract CC actually needs: encodeBase64 must send
-  // the string's real UTF-8 bytes, so decoding yields those bytes losslessly.
+  // WP4 (M10.5) — guards the UTF-8-bytes contract on the input side: `encodeBase64`
+  // must send a glyph's REAL UTF-8 bytes so decoding yields those bytes losslessly
+  // (an emoji / accented char pasted into the CC prompt reaches CC intact, not as `�`).
   it("encodeBase64 sends a glyph's real UTF-8 bytes (multi-byte input round-trips)", () => {
     const enc = new TextEncoder();
     for (const glyph of ["é", "€", "café", "🎉", "→"]) {

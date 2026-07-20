@@ -211,6 +211,11 @@ pub fn native_row(signal: &NativeSignal, ctx: &NativeContext) -> TimeRow {
 /// `WAL` + a busy-timeout are set on the *connection* in [`commands`], not here (they
 /// are connection pragmas, not schema). The two indexes mirror `claude-time`'s
 /// (session+ts for per-session scans, ts for day/range scans).
+///
+/// Column-vs-`meta` split: `tool_name`/`agent_type`/`source` earned first-class columns
+/// (the WP3 reclassifier + claude-time parity query them per-row); the lower-frequency
+/// extras (`prompt_length_chars`, `tool_use_id`, `notification_type`, `reason`, native
+/// `workspace_id`/`surface`/`byte_count`) stay in the `meta` JSON blob.
 const SCHEMA_SQL: &str = "\
 CREATE TABLE IF NOT EXISTS events (
   ts          INTEGER NOT NULL,
@@ -298,6 +303,10 @@ pub fn event_to_row(event: &HookEvent) -> Option<TimeRow> {
     };
 
     Some(TimeRow {
+        // Absent timestamp → epoch-0 sentinel. Unreachable today (the production Perl hook
+        // always stamps `timestamp`); a ts=0 row would sort to the epoch and could disorder
+        // WP3 reclassification — hardening (drop/log an unstamped row) is deferred to any
+        // future non-hook writer.
         ts: event.timestamp.map(|t| t as i64).unwrap_or(0),
         session_id: event.session_id.clone(),
         cwd: event.cwd.clone(),

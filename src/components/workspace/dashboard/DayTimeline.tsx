@@ -919,10 +919,14 @@ export interface DayTimelineProps {
  * The day-view timeline. WP6b-1: the viewport is now READ from the shared
  * `ViewportContext` (owned by GlobalDashboard's ViewportProvider) instead of
  * computed here — so it responds to Phase-2 gestures + the Phase-3 Minimap. The
- * overlap map + per-project totals are still computed here from the payload. The
- * viewport is passed DOWN to the leaf renderers as a plain `viewport` prop (they
- * receive it once from this component's `useViewport()` read — the ruler/grid read
- * the context directly since they also want the adaptive tick interval).
+ * overlap map + per-project totals are still computed here from the payload.
+ *
+ * Two sibling viewport-access patterns coexist on purpose: the leaf SEG renderers
+ * (`SegmentBar`, overlap/collapsed rows) take the viewport as a plain `viewport` PROP
+ * (this component reads it once via `useViewport()` and threads it down), while
+ * `HourRuler`/`HourGridBackground` read `useViewport()` DIRECTLY — because they also need
+ * the context's adaptive tick interval, not just the visible bounds, so a prop would under-
+ * supply them. Prop for the bounds-only leaves; context for the ruler/grid that want more.
  */
 export function DayTimeline({
   data,

@@ -1,14 +1,14 @@
-// M9 WP6b-4 Phase 3 — the Day view's date-RANGE control (start→end). Supersedes the
-// single-date DayDatePicker: this picks EITHER a single day (start===end, the common
-// case — today default, prev/next arrows step ±1 day, exactly the shipped DayDatePicker
-// ergonomic) OR an arbitrary multi-day span (start<end, ≤31 days — D3), which the Phase-2
-// multi-day timeline renders. Lives in the Day Toolbar `rightSlot` (D1: "range mode in the
-// Day view, no separate tab"; D5: "the picker is the only range signal" — no tab/label change).
+// M9 WP6b-4 — the Day view's date-RANGE control (start→end). Supersedes the single-date
+// DayDatePicker: this picks EITHER a single day (start===end, the common case — today default,
+// prev/next arrows step ±1 day, exactly the shipped DayDatePicker ergonomic) OR an arbitrary
+// multi-day span (start<end, ≤MAX_RANGE_DAYS=30 — the WP6b-4 re-spec D9 cap, matching the
+// flexible timeline's 30-lane zoom-out ceiling), which the flexible timeline renders. Lives in
+// the Day Toolbar `rightSlot` (D1: "range mode in the Day view, no separate tab"; D5: "the picker
+// is the only range signal" — no tab/label change).
 //
-// Validation: `validateRange(start, end, 31)` (rangeMath, shipped WP6b-2 P3). An invalid
-// range (end<start, future end, >31 days) shows a red border + `title` tooltip and does
-// NOT commit — the parent never fetches an invalid window. A valid change commits via
-// `onChange(startIso, endIso)`.
+// Validation: `validateRange(start, end, MAX_RANGE_DAYS)` (rangeMath). An invalid range
+// (end<start, future end, >30 days) shows a red border + `title` tooltip and does NOT commit —
+// the parent never fetches an invalid window. A valid change commits via `onChange(startIso, endIso)`.
 //
 // Prev/next arrows: only meaningful for a SINGLE day (step the day ±1, keeping start===end).
 // For a multi-day span they're hidden — a range is set by editing the two date fields
@@ -18,11 +18,15 @@
 import { useState, type CSSProperties } from "react";
 import { CT_TOKENS } from "./tokens";
 import { localTodayIso, stepIso, validateRange, isSingleDay } from "./rangeMath";
+import { MAX_ZOOM_OUT_SPAN_MIN } from "./viewport";
 
 /** The max span the range picker accepts (WP6b-4 re-spec D9: cap 31→30, matching the
- *  timeline's 30-day zoom-out ceiling `MAX_ZOOM_OUT_SPAN_MIN`). Exported so tests +
- *  callers share it. */
-export const MAX_RANGE_DAYS = 30;
+ *  timeline's 30-lane zoom-out ceiling `MAX_ZOOM_OUT_SPAN_MIN`). DERIVED from that ceiling
+ *  (÷1440 min/day) so the picker max and the timeline's zoom-out cap are provably ONE number —
+ *  `framedRange` caps its reactive readout to this same value, so the readout can never present
+ *  a span the picker would reject (SURFACE-2026-07-15-QUALITY-WP6B4-FRAMEDRANGE-PICKER-OFFBYONE).
+ *  Exported so tests + callers share it. */
+export const MAX_RANGE_DAYS = MAX_ZOOM_OUT_SPAN_MIN / 1440;
 
 export function RangePicker({
   startIso,

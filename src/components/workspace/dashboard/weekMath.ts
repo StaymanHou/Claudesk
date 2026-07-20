@@ -18,6 +18,14 @@
 //       normalizer + the per-cell / per-project "active work" number (AI family).
 
 import type { RollupCell, SegKind } from "../../../state/timeAnalytics";
+// Date helpers shared with the Month view — `dateToIso`/`mondayIdx` were byte-identical
+// re-implementations of these (SURFACE-2026-07-14-QUALITY-WP6B3-WEEKMATH-MONTHMATH-HELPER-
+// DUP). `GlobalDashboard`/`MonthView` already import from both modules, so this cross-import
+// adds no new edge. Aliased to the local names to keep this file's call sites unchanged.
+import {
+  todayDateIso as dateToIso,
+  mondayIndex as mondayIdx,
+} from "./monthMath";
 import { AI_KINDS, RENDER_ORDER } from "./kinds";
 
 /** Parsed pieces of a backend week-day header label. */
@@ -146,11 +154,6 @@ const MON_ABBR = [
   "Dec",
 ] as const;
 
-/** `"YYYY-MM-DD"` for a local Date (mirrors monthMath.todayDateIso). */
-function dateToIso(d: Date): string {
-  return `${String(d.getFullYear()).padStart(4, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 /** Parse a `"YYYY-MM-DD"` iso into a LOCAL Date at 00:00 (null on malformed input). */
 function isoToDate(iso: string): Date | null {
   if (typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
@@ -161,16 +164,14 @@ function isoToDate(iso: string): Date | null {
   const d = new Date(year, month - 1, day, 0, 0, 0, 0);
   // Reject overflow-normalized dates (e.g. "2026-02-31" → Mar 3): the round-trip must
   // preserve the requested day.
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
+  if (
+    d.getFullYear() !== year ||
+    d.getMonth() !== month - 1 ||
+    d.getDate() !== day
+  ) {
     return null;
   }
   return d;
-}
-
-/** Monday-first day-of-week index (0 = Mon … 6 = Sun) for a Date. Duplicated from
- *  monthMath.mondayIndex rather than imported to keep this module's import graph flat. */
-function mondayIdx(date: Date): number {
-  return (date.getDay() + 6) % 7;
 }
 
 /** The Monday (`"YYYY-MM-DD"`, local) of the ISO week containing `now`. `now` itself when
@@ -224,7 +225,8 @@ export function weekNavLabel(mondayIso: string): string {
  *  Compares iso strings directly (both are `"YYYY-MM-DD"` Mondays → lexicographic ==
  *  chronological). */
 export function isFutureMonday(mondayIso: string, now: Date): boolean {
-  const d = isoToDate(mondayIso);
-  if (!d) return true;
+  // Validity guard only — a malformed iso fails safe to "future" (disable next). The compare
+  // itself is lexicographic on the iso strings (see docstring), so we don't keep the parsed date.
+  if (!isoToDate(mondayIso)) return true;
   return mondayIso > mondayOfDate(now);
 }

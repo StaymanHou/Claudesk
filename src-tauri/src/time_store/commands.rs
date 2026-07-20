@@ -17,8 +17,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::query::{
     build_comparison_data, build_metrics, build_range, build_week, compare_day_vs_trailing_bounds,
-    compare_month_over_month_bounds, compare_week_over_week_bounds, ComparisonPayload,
-    MetricsPayload, RangePayload, WeekPayload,
+    compare_month_over_month_bounds, compare_week_over_week_bounds, local_date_of,
+    local_midnight_ms, ComparisonPayload, MetricsPayload, RangePayload, WeekPayload,
 };
 use super::{
     bootstrap, event_to_row, insert_row, native_row, NativeContext, NativeLaunchTool, NativeSignal,
@@ -289,38 +289,44 @@ pub fn time_set_active_context(
     surface: Option<String>,
     cwd: Option<String>,
 ) -> Result<(), String> {
-    // Detect a surface CHANGE (vs the previously-stored surface) so we can emit an
-    // ActiveSurface switch-marker row (Phase 4) — WP3 needs the switch timestamp.
-    let surface_changed = active.lock().map(|c| c.surface != surface).unwrap_or(false);
-    set_active_context(&active, workspace_id, surface, cwd)?;
+    // Write the context and learn (a) whether the surface CHANGED (so we can emit an
+    // ActiveSurface switch-marker row — WP3 needs the switch timestamp) and (b) the post-write
+    // snapshot to attribute that marker to — all under ONE lock acquisition (see
+    // `set_active_context`; `SURFACE-2026-07-08-QUALITY-ACTIVECTX-TRIPLE-LOCK`). A poisoned lock
+    // surfaces here as an Err (never-swallow IPC discipline) rather than silently skipping the
+    // marker as the old compare-then-write-then-reread form did.
+    let (surface_changed, ctx) = set_active_context(&active, workspace_id, surface, cwd)?;
     if surface_changed {
         // Emit the switch marker attributed to the NOW-current context (gated; no-op
-        // when tracking is OFF, the WP2 default). Read the freshly-set context back.
-        let ctx = active.lock().map(|c| c.clone()).unwrap_or_default();
+        // when tracking is OFF, the WP2 default).
         record_active_surface(&app, &ctx);
     }
     Ok(())
 }
 
-/// Pure core of [`time_set_active_context`] — set the active-context fields on the
-/// holder. Split out so it's unit-testable against a raw `SharedActiveContext` with
-/// no Tauri app (the `State` wrapper the command takes can't be built in a test).
-/// `session_id` is always cleared here — it's workspace-level context; the keystroke
-/// path (Phase 3) fills `session_id` from `cc_input` at write time.
+/// Pure core of [`time_set_active_context`] — set the active-context fields on the holder in a
+/// SINGLE lock scope, returning `(surface_changed, post_write_snapshot)` so the command needs no
+/// further lock acquisitions. `surface_changed` compares the NEW surface against the one stored
+/// before this write; the snapshot is a clone the caller can use lock-free. Split out so it's
+/// unit-testable against a raw `SharedActiveContext` with no Tauri app (the `State` wrapper the
+/// command takes can't be built in a test). `session_id` is always cleared here — it's
+/// workspace-level context; the keystroke path (Phase 3) fills `session_id` from `cc_input` at
+/// write time.
 pub fn set_active_context(
     active: &SharedActiveContext,
     workspace_id: Option<String>,
     surface: Option<String>,
     cwd: Option<String>,
-) -> Result<(), String> {
+) -> Result<(bool, NativeContext), String> {
     let mut ctx = active
         .lock()
         .map_err(|_| "active-context lock poisoned".to_string())?;
+    let surface_changed = ctx.surface != surface;
     ctx.workspace_id = workspace_id;
     ctx.surface = surface;
     ctx.cwd = cwd;
     ctx.session_id = None;
-    Ok(())
+    Ok((surface_changed, ctx.clone()))
 }
 
 /// Read the current active context (a clone, so the caller doesn't hold the lock).
@@ -699,8 +705,8 @@ fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
     let today = Local::now().date_naive();
     match window {
         QueryWindow::Day => {
-            let start = local_midnight_ms_of(today);
-            let end = local_midnight_ms_of(today + Duration::days(1));
+            let start = local_midnight_ms(today);
+            let end = local_midnight_ms(today + Duration::days(1));
             (
                 start,
                 end,
@@ -721,14 +727,14 @@ fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
                 .unwrap_or(today);
             let monday = monday_of(anchor);
             let sunday_end = monday + Duration::days(7);
-            let start = local_midnight_ms_of(monday);
-            let end = local_midnight_ms_of(sunday_end);
+            let start = local_midnight_ms(monday);
+            let end = local_midnight_ms(sunday_end);
             (start, end, WindowMode::Week { monday })
         }
         QueryWindow::Custom { start_ms, end_ms } => {
             // Map the explicit span to the local days it touches (inclusive).
-            let start_day = local_date_of_ms(*start_ms);
-            let end_day = local_date_of_ms(*end_ms);
+            let start_day = local_date_of(*start_ms);
+            let end_day = local_date_of(*end_ms);
             (*start_ms, *end_ms, WindowMode::Range { start_day, end_day })
         }
         QueryWindow::Metrics { window } => {
@@ -765,18 +771,18 @@ fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
                     ComparePreset::TodayVsTrailing => compare_day_vs_trailing_bounds(today, 7),
                 },
                 CompareSpec::Custom { a, b } => (
-                    local_date_of_ms(a.start_ms),
-                    local_date_of_ms(a.end_ms),
-                    local_date_of_ms(b.start_ms),
-                    local_date_of_ms(b.end_ms),
+                    local_date_of(a.start_ms),
+                    local_date_of(a.end_ms),
+                    local_date_of(b.start_ms),
+                    local_date_of(b.end_ms),
                 ),
             };
             let union_start_day = a_start.min(b_start);
             let union_end_day = a_end.max(b_end);
-            let start_ms = local_midnight_ms_of(union_start_day);
+            let start_ms = local_midnight_ms(union_start_day);
             // End = next local midnight after the last day (exclusive upper bound, matching
             // the day/week span convention).
-            let end_ms = local_midnight_ms_of(union_end_day + Duration::days(1));
+            let end_ms = local_midnight_ms(union_end_day + Duration::days(1));
             (
                 start_ms,
                 end_ms,
@@ -797,30 +803,6 @@ fn monday_of(day: chrono::NaiveDate) -> chrono::NaiveDate {
     use chrono::{Datelike, Duration};
     let days_from_monday = day.weekday().num_days_from_monday() as i64;
     day - Duration::days(days_from_monday)
-}
-
-/// Local-midnight epoch-ms for a `NaiveDate` (command-side; mirrors the query module's
-/// private helper — duplicated rather than exported to keep the query module's API
-/// surface minimal).
-fn local_midnight_ms_of(day: chrono::NaiveDate) -> i64 {
-    use chrono::{Local, TimeZone};
-    let naive = day.and_hms_opt(0, 0, 0).expect("00:00:00 valid");
-    Local
-        .from_local_datetime(&naive)
-        .earliest()
-        .or_else(|| Local.from_local_datetime(&naive).latest())
-        .map(|dt| dt.timestamp_millis())
-        .unwrap_or_else(|| naive.and_utc().timestamp_millis())
-}
-
-/// The local calendar date an epoch-ms timestamp falls on (command-side).
-fn local_date_of_ms(ts_ms: i64) -> chrono::NaiveDate {
-    use chrono::{Local, TimeZone};
-    Local
-        .timestamp_millis_opt(ts_ms)
-        .single()
-        .map(|dt| dt.date_naive())
-        .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
 }
 
 #[cfg(test)]
@@ -1308,20 +1290,41 @@ mod tests {
 
     #[test]
     fn set_active_context_surface_change_detection() {
-        // The command's surface-change gate: switching surface is detected as a change
-        // (→ ActiveSurface emit), but re-setting the same surface is not.
+        // The surface-change gate (→ ActiveSurface emit): a switch is detected as a change,
+        // re-setting the same surface is not. Since the ACTIVECTX-TRIPLE-LOCK single-lock
+        // refactor, `set_active_context` RETURNS `surface_changed` directly, so this asserts it
+        // at the source instead of the old proxy (reading back the stored surface).
         let holder = super::init_active_context();
-        super::set_active_context(
+        // First set from the default (surface None) → editor IS a change.
+        let (changed, ctx) = super::set_active_context(
             &holder,
             Some("ws-1".into()),
             Some("editor".into()),
             Some("/p".into()),
         )
         .unwrap();
+        assert!(changed, "None → editor is a surface change");
+        assert_eq!(ctx.surface.as_deref(), Some("editor")); // snapshot is post-write
+
         // Same surface again → NOT a change.
-        assert_eq!(holder.lock().unwrap().surface.as_deref(), Some("editor"));
-        // (The change-detection itself lives in the command; here we assert the stored
-        // surface is what a follow-up comparison would read against.)
+        let (changed, _) = super::set_active_context(
+            &holder,
+            Some("ws-1".into()),
+            Some("editor".into()),
+            Some("/p".into()),
+        )
+        .unwrap();
+        assert!(!changed, "editor → editor is not a surface change");
+
+        // Switch to a different surface → change again.
+        let (changed, _) = super::set_active_context(
+            &holder,
+            Some("ws-1".into()),
+            Some("terminal".into()),
+            Some("/p".into()),
+        )
+        .unwrap();
+        assert!(changed, "editor → terminal is a surface change");
     }
 
     #[test]
@@ -1854,11 +1857,10 @@ mod tests {
     fn resolve_window_compare_custom_maps_each_span_to_its_local_days() {
         // Custom A/B → each side's epoch-ms span maps to the local days it touches; the
         // union read span spans min(start)..max(end)+1day.
-        let a_start_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());
-        let a_end_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 6).unwrap());
-        let b_start_ms =
-            local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
-        let b_end_ms = local_midnight_ms_of(chrono::NaiveDate::from_ymd_opt(2026, 5, 13).unwrap());
+        let a_start_ms = local_midnight_ms(chrono::NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());
+        let a_end_ms = local_midnight_ms(chrono::NaiveDate::from_ymd_opt(2026, 5, 6).unwrap());
+        let b_start_ms = local_midnight_ms(chrono::NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
+        let b_end_ms = local_midnight_ms(chrono::NaiveDate::from_ymd_opt(2026, 5, 13).unwrap());
         let (start, end, mode) = resolve_window(&QueryWindow::Compare {
             spec: CompareSpec::Custom {
                 a: CustomSide {

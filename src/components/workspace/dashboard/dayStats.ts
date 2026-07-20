@@ -57,9 +57,9 @@ export function computeDayTotals(data: RangePayload): {
   for (const p of data.projects) {
     for (const s of p.sessions) {
       const segs: SegPayload[] = s.segs;
-      active += sumActive(segs);
+      const sessActive = sumActive(segs); // one walk; feeds both the running total and longest
+      active += sessActive;
       away += sumByKind(segs, "away");
-      const sessActive = sumActive(segs);
       if (sessActive > longest.active) {
         longest.active = sessActive;
         longest.project = p.alias;

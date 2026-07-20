@@ -1380,9 +1380,9 @@ fn build_comparison_each_side_equals_build_metrics_over_its_days() {
     // isolation — the A-side must not see the B-day burst and vice-versa).
     assert_eq!(cmp.a.metrics, build_metrics(a_day, a_day, &a_events));
     assert_eq!(cmp.b.metrics, build_metrics(b_day, b_day, &b_events));
-    // Range labels + meta reflect the bounds.
-    assert_eq!(cmp.a.range.start, "2026-05-04");
-    assert_eq!(cmp.b.range.start, "2026-05-11");
+    // Per-side window bounds (at metrics.window) + meta reflect the bounds.
+    assert_eq!(cmp.a.metrics.window.start, "2026-05-04");
+    assert_eq!(cmp.b.metrics.window.start, "2026-05-11");
     assert_eq!(cmp.meta.a_start, "2026-05-04");
     assert_eq!(cmp.meta.a_end, "2026-05-04");
     assert_eq!(cmp.meta.b_start, "2026-05-11");
@@ -1466,8 +1466,9 @@ fn build_comparison_overlapping_custom_windows_count_shared_days_on_both_sides()
 
 #[test]
 fn comparison_dto_serde_shape_has_no_deltas() {
-    // D3: the wire shape is {a:{metrics,range}, b:{metrics,range}, meta:{…}} — snake_case,
-    // and there is NO `deltas` key (CompareView recomputes deltas FE-side).
+    // D3: the wire shape is {a:{metrics}, b:{metrics}, meta:{…}} — snake_case, and there is
+    // NO `deltas` key (CompareView recomputes deltas FE-side). (The former per-side `range`
+    // field was dropped as an unconsumed duplicate of `metrics.window`.)
     let a_day = day(2026, 5, 4);
     let b_day = day(2026, 5, 11);
     let cmp = build_comparison_data(a_day, a_day, b_day, b_day, &[]);
@@ -1476,7 +1477,6 @@ fn comparison_dto_serde_shape_has_no_deltas() {
         "\"a\"",
         "\"b\"",
         "\"metrics\"",
-        "\"range\"",
         "\"meta\"",
         "\"a_start\"",
         "\"a_end\"",
