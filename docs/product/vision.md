@@ -61,7 +61,14 @@ Built with Tauri (Rust backend, web frontend) to stay genuinely lightweight. The
 
 ## Target Audience
 
-**Single user: the author (Stayman).** This is a personal tool, designed against one person's exact workflow — heavy Claude Code use, the custom workflow-system skill set installed at `~/.claude/skills/`, daily use of Sublime Text, macOS-only, 20+ rotating projects. Open-sourced so anyone running a similar setup can use or adapt it, but no design concession is made for users who don't share the workflow.
+**Single user: the author (Stayman).** This is a personal tool, designed against one person's exact workflow — heavy Claude Code use, the custom workflow-system skill set installed at `~/.claude/skills/`, daily use of Sublime Text, macOS-only, 20+ rotating projects. Open-sourced so anyone running a similar setup can use or adapt it.
+
+**Two tiers, one app (stance refined 2026-07-20).** The earlier framing was "no design concession is made for users who don't share the workflow." That's refined — *not reversed* — because the old wording implied a secondary (non-workflow) user would hit dead affordances (an empty Docs tab, controls pointing at absent files), which is bad for them and clutter for the primary user. The refined stance:
+
+- **The workflow-independent lite-IDE core** (project picker, tabbed workspaces, PTY terminals, editor/diff/second-terminal, and the hook-driven status surfaces — filmstrip / PiP / menu-bar, all built on Claude Code's *native* hook channel) is for **any** Claude Code user, out of the box, zero config. This is the bulk of the product and it is *optimal for both* audiences with no compromise.
+- **The workflow-orchestration layer** (Docs viewer, smart auto-resume, drive-mode selector, skill-buttons — everything that assumes the custom workflow system) is **opt-in and gated** behind a single `workflow_features_enabled` setting (default OFF; Milestone 10.9). With the gate OFF the app is **byte-identical** to one that never had those features — no dead affordances. A one-time evangelistic invite offers to enable + explains how to install the companion workflow system.
+
+**What "no concession" still means (unchanged):** no feature is *built for* the secondary user at the primary user's expense, and the roadmap is not distorted for them. The refinement only forbids *dead affordances* — it does not add features for, or compromise the tool toward, non-workflow users. The primary user (operator) enables the gate once and gets the full, undiluted workflow-aware tool. The companion workflow system itself (install/uninstall, doc layout, onboarding) is owned by the separate `my-claude-code-customization` repo. *(Full gate design: `roadmap.md` → Milestone 10.9 + Revision 2026-07-20. Design lean: `design-priors.md` → the workflow-feature-gating prior.)*
 
 ## Success Metrics
 
