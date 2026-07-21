@@ -127,3 +127,6 @@ M11 adds **one new frontend panel** to an existing per-workspace host and **two 
 
 ## Probe outcomes
 *(WP1's renderer verdict + WP5's exit verdict land here at their WP closes.)*
+
+## Session Pause — 2026-07-20 15:10
+Paused. See `workflow/.session.md` to resume.
