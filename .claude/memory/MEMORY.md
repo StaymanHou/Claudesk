@@ -95,3 +95,4 @@ desc='How to actually verify PTY/native behavior in Claudesk when Playwright can
 base=verify-self-stub-cannot-cross-subprocess-boundary.md
 desc=$'A stubbed verify-self (Tauri IPC faked in a plain browser) passes precisely where it can\'t reach �\M-\C-@\M-\C-T the real-subprocess bugs hide at the boundary the stub replaces.'
 - [wp4-macos-perf-measurement.md](wp4-macos-perf-measurement.md) — How to measure CPU/RAM/frame-time of the Tauri WKWebView on macOS for Claudesk perf probes
+- [session-only-vs-permanent-dismiss-precedent.md](session-only-vs-permanent-dismiss-precedent.md) — Claudesk already has a two-way "ask later vs never ask again" precedent in src/updater/useUpdater.ts (dismissBanner persists nothing → returns next launch; skipVersion writes to disk → permanent); copy it instead of inventing a field, and keep the lifecycle marker separate from the feature flag.

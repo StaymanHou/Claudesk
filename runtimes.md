@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-20  # /release v0.2.9: pnpm tauri build 103s (cold, signed)
+updated: 2026-07-28
 ---
 
 # Runtime Registry
@@ -77,9 +77,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 3.29s (2026-07-20, backlog-paydown WP6 verify-auto: FE nit fold-in [MAX_FRAMED↔MAX_RANGE tie test, encodeBase64 chunked spread, comment/naming nits] → 105 files / 1181 pass, 0 fail)
+- **Last:** 1.59s (2026-07-28, M10.9 WP1 Phase 2 verify-codify: full-suite regression gate at WP close — 105 files / 1181 pass, 0 fail; no source files touched this WP)
 - **Use timeout:** 120000
 - **History:**
+  - 1.59s — 2026-07-28
   - 3.29s — 2026-07-20 (backlog-paydown WP6 verify-auto: +1 tie assertion, comment/naming nits → 105 files / 1181 pass)
   - 1.87s — 2026-07-20 (backlog-paydown WP5 verify-auto: dead-code cleanup, −4 viewportFromRange tests → 105 files / 1181 pass)
   - 1.87s — 2026-07-20 (backlog-paydown WP4 verify-auto: dashboard dedup, 1 wiring-guard test updated → 105 files / 1185 pass)
@@ -140,16 +141,18 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm lint
 
-- **Last:** 1s (2026-06-16)
+- **Last:** <1s (2026-07-28, M10.9 WP1 close: 0 errors, 1 pre-existing warning [XtermPane.tsx:464 exhaustive-deps])
 - **Use timeout:** 120000
 - **History:**
+  - <1s — 2026-07-28
   - 1s — 2026-06-16
 
 ## cargo test
 
-- **Last:** 0.69s (2026-07-20, backlog-paydown WP7 P2 codify: +canonical-form-tolerance pin (`..`/symlinked known root still validates) — 556 lib + 6 integ + 1 shell-history pass; warm)
+- **Last:** 3.54s (2026-07-28, M10.9 WP1 Phase 2 verify-codify: 556 lib + 6 integ + 1 shell-history pass, 0 fail; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 3.54s — 2026-07-28
   - 0.69s — 2026-07-20 (backlog-paydown WP7 P2 codify: +validate_root canonical-form-tolerance pin, 556 lib + 6 integ + 1 shell-history pass; warm)
   - 0.71s — 2026-07-20 (backlog-paydown WP7 P2 build: validate_root + AppHandle-injected commands, 555 lib + 6 integ + 1 shell-history pass; warm)
   - 0.86s — 2026-07-20 (backlog-paydown WP7 P1: leaf-symlink full-target canonicalize in resolve_within, 550 lib + 6 integ + 1 shell-history pass; warm)
