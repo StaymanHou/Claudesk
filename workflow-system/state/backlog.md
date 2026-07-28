@@ -29,6 +29,20 @@
 - **Status:** pending.
 - **Pickup shape:** accept-as-documented-limitation unless a mockable updater seam appears. Dismiss via the WIP's `## Code-Quality Review` section.
 
+## SURFACE-2026-07-28-M11-DOCS-LIST-PATHS-STALE
+- **Source:** the `my-claude-code-customization` repo's WP8 / Milestone 12 return contract — see [`HANDOFF-from-mccc-2026-07-28.md`](../../HANDOFF-from-mccc-2026-07-28.md) at this repo's root.
+- **Target level:** product:wbs (this repo's own M11 spec — the correction is Claudesk's to make, not the companion repo's).
+- **Type:** bug (stale spec — would produce a non-functional feature if built as written).
+- **Summary:** M11 WP2 task 2.1 in `workflow-system/product/wbs.md:60` specifies `docs_list` discovery over the **pre-migration** doc paths — `docs/product/*.md`, `workflow/wip/*.md`, `workflow/backlog.md`, `workflow/.session.md`. **Those paths no longer exist in this repo.** This repo was migrated to the unified layout at HEAD `aacc687` ("chore: migrate doc layout to workflow-system/"); `workflow-system/product/` + `workflow-system/state/` are the live roots, and the old dirs are gone. Building WP2 as currently specified would produce a **`docs_list` that finds nothing.**
+- **Context:** This is the cross-repo coupling the 2026-07-20 Claudesk→companion handoff flagged under item #2 ("⚠️ Cross-repo coupling: Claudesk M11's Docs viewer auto-discovers this exact doc set — if you change the layout, tell Claudesk"). The companion repo settled the layout (its Milestone 7, "Option A") and is now telling us. This repo's own `workflow-system/product/roadmap.md:245` already anticipated it: *"if the companion repo unifies the `docs/product/` + `workflow/` folders (a companion-repo deliverable), M11's `docs_list` discovery follows that layout."*
+  **Good news — this is a SPEC correction, not a code change.** `docs_list`/`docs_read` are not implemented anywhere in `src/` or `src-tauri/` yet (task 2.1 is still `- [ ]`), so nothing built is broken and there is no migration to write. Cost is one WBS edit, provided it happens **before** WP2 is built.
+- **Suggested action:** Update `wbs.md:60` to the new roots — `workflow-system/product/*.md` (vision, roadmap, research, arch, context) + glob `*wbs*.md`, `workflow-system/state/wip/*.md`, `workflow-system/state/backlog.md`, `workflow-system/state/.session.md`. **The companion repo deliberately did NOT edit this file** — this repo's `/product-wbs` owns its own spec, and there is a real design question attached that belongs here:
+  - **Flat glob vs. enumerate.** The old spec enumerated five named product docs *plus* a `*wbs*.md` glob. Under the new layout, `workflow-system/product/*.md` would also pick up `transitions.md`, `design-priors.md`, and any cycle-scoped design docs. Decide whether the Docs panel wants **everything present** (simpler, self-maintaining, but the list grows unpredictably) or a **curated ordered set** (matches WP2's stated "workflow-ordered list" intent and task 2.4's ordering function, but needs updating when a new doc kind appears). The companion repo has no stake in this — it is a Claudesk UX call.
+  - **Two properties to preserve either way:** (1) `.session.md` is **gitignored but present on disk**, so discovery must not assume git-tracked ⇒ discoverable; (2) the `*wbs*.md` glob is **deliberate** — it catches the canonical `wbs.md` *and* `shape: temporary-wbs` scratch files — so keep it a glob, not a literal.
+  - Also worth folding in: cycle-scoped docs are now archived to `workflow-system/product/archive/<cycle-name>/` on cycle close. Decide whether archived cycles are discoverable (probably not, for an attention/re-orientation surface) and say so explicitly, so it is a decision rather than an omission.
+- **Priority:** medium — **not urgent, but it must land before M11 WP2 is built.** Zero cost now; a non-functional feature plus a debugging session if missed.
+- **Status:** pending.
+
 ## SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING
 - **Source:** operator (raised mid-turn during the 2026-07-19 backlog-paydown sweep, WP2).
 - **Target level:** product:wbs (small UX/copy feature — net-new, not debt).
