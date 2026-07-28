@@ -7,12 +7,12 @@ src-tauri/Cargo.lock
 
 # Hand-authored / skill-authored prose — preserve author's spacing (prettier's
 # markdown rewrites — blank-line-before-list, prose-wrap — fight the narrative
-# voice). Same rationale as docs/ + workflow/; the memory files, the CHANGELOG
+# voice). Same rationale as docs/ + workflow-system/; the memory files, the CHANGELOG
 # narrative, and the installed skill bodies are all hand/skill-authored prose.
 CLAUDE.md
 README.md
 docs/
-workflow/
+workflow-system/
 runtimes.md
 CHANGELOG.md
 .claude/memory/

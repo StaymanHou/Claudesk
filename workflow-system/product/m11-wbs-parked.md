@@ -1,21 +1,36 @@
 ---
 stage: wbs
-state: complete
+state: parked
 milestone: "Milestone 11: Workflow-docs markdown viewer"
-updated: 2026-07-20
+updated: 2026-07-28
 ---
 
-# WBS — Milestone 11: Workflow-docs markdown viewer
+# WBS — Milestone 11: Workflow-docs markdown viewer  ⏸ PARKED
 
-Decomposes **only** the immediate next milestone (M11). Future milestones (M12 auto-resume → M13 skill-orchestration → M14 polish) stay tracked in `roadmap.md` — not re-listed here; they decompose just-in-time when reached.
+> **⏸ PARKED 2026-07-28 — this is not the active cycle WBS.** M10.9 (workflow-features opt-in gate) was unblocked by the companion repo's return contract and took the active `wbs.md` slot. This file holds M11's decomposition verbatim; it returns to `wbs.md` when M10.9 closes at `/product-finalize`. Still matched by the deliberate `*wbs*.md` glob, so a Docs viewer built later lists it.
+>
+> **Two corrections applied while parked (operator-settled 2026-07-28, resolving `SURFACE-2026-07-28-M11-DOCS-LIST-PATHS-STALE`):** the doc-discovery paths were migrated to the unified `workflow-system/` layout, and the flat-glob-vs-curated + archive-discoverability questions were decided. See "Doc-discovery decisions" below and task 2.1.
+>
+> **One dependency added:** M11's Docs tab is **gated behind M10.9's `workflow_features_enabled`** (roadmap line 245). WP2 must register the panel conditionally — see task 2.3.
+
+Decomposes **only** M11. Future milestones (M12 auto-resume → M13 skill-orchestration → M14 polish) stay tracked in `roadmap.md` — not re-listed here; they decompose just-in-time when reached.
+
+## Doc-discovery decisions (settled 2026-07-28)
+
+The 2026-07-20 spec named pre-migration paths that no longer exist in this repo (migrated to `workflow-system/` at commit `aacc687`). Building task 2.1 as originally written would have produced a `docs_list` that finds nothing. Corrected, plus the two attached UX calls decided rather than left open:
+
+1. **Curated ordered set, NOT a flat glob.** `workflow-system/product/*.md` would now also sweep in `transitions.md` and `design-priors.md`, and would grow unpredictably as new doc kinds appear. M11 is an *attention/re-orientation* surface (see "Milestone intent") — an unbounded list dilutes exactly the glance it exists to serve, and the "workflow-ordered list" intent (decision 2 below) presumes a known set to order. So discovery enumerates named docs + the deliberate `*wbs*.md` glob. **Cost accepted:** a new doc kind needs a one-line spec edit to appear. `[PRIOR: new-surface-must-earn-its-place-against-existing-ones]` — the curated set is one of the three properties that earn the tab against the Editor (which already opens any `.md` by hand); a flat glob would erode it toward "a file tree that renders markdown."
+2. **`design-priors.md` and `transitions.md` ARE included**, at the tail of the order with arch·research·context. They're durable strategic docs an operator re-orienting genuinely reads; excluding them would be an omission, not a decision.
+3. **`archive/<cycle-name>/` is NOT discoverable.** Closed cycles are history, not re-orientation material, and one entry per past milestone would swamp the list. Reachable via the Editor/file-tree when actually wanted. *(Explicitly decided, not overlooked.)*
+4. **Two properties preserved** (flagged by the companion repo): `.session.md` is **gitignored but present on disk**, so discovery must not assume git-tracked ⇒ discoverable (M6 WP6 already re-based the walker on heavy-dir rather than gitignore, so `fs_index`/`fs_watch` see it); and `*wbs*.md` stays a **glob**, not a literal, so `shape: temporary-wbs` scratch files and this parked `m11-wbs-parked.md` surface alongside the canonical `wbs.md`.
 
 ## Milestone intent (read before scoping any WP)
 
 M11 is an **attention-routing / re-orientation feature wearing a "viewer" costume** — not a generic markdown preview (memory `[[m7-docs-viewer-intent]]`). When the operator context-switches *into* a cold project across 20+ rotating projects, the first question is **"where was I in the workflow, and what's next?"** — an answer that lives in `roadmap → wbs → wip → backlog → .session.md`. M11 makes that re-orientation a single glance in the right half, per-workspace, instead of popping Sublime or reading raw markdown in the Editor. Read-only is correct (editing stays in Editor/CC).
 
 **Operator decisions locked at this WBS (2026-07-20):**
-1. **Auto-select the most-relevant doc on open** — `.session.md` if present → else active `workflow/wip/*.md` → else `roadmap.md`. The file list is still there to switch. Resolves the intent memory's explicit open question.
-2. **Workflow-ordered doc list** — vision → roadmap → wbs (+ `*wbs*.md` scratch) → wip → backlog → `.session.md` → (arch · research · context), grouped, in that sequence; not alphabetical.
+1. **Auto-select the most-relevant doc on open** — `.session.md` if present → else active `workflow-system/state/wip/*.md` → else `roadmap.md`. The file list is still there to switch. Resolves the intent memory's explicit open question.
+2. **Workflow-ordered doc list** — vision → roadmap → wbs (+ `*wbs*.md` scratch/parked) → wip → backlog → `.session.md` → (arch · research · context · design-priors · transitions), grouped, in that sequence; not alphabetical. *(Tail expanded 2026-07-28 — see "Doc-discovery decisions" §2.)*
 
 ## Design-prior consult (fired at WP-boundary decisions)
 
@@ -42,7 +57,7 @@ No new design prior proposed — the two decisions above are applications of exi
 **Timebox:** half-day
 **Success criterion:** A short written verdict in this file's "Probe outcomes" (added at WP1 close): the chosen renderer + dep, how task-lists/tables/code/frontmatter render, the link-intercept mechanism (in-doc vs cross-doc vs external), and a one-line confirmation the render is re-render-in-place-safe under CSP. Enough that WP3 builds against a known shape, not an assumed one.
 **Tasks:**
-- [ ] 1.1 Spike both realistic renderer options against a real doc (this `wbs.md` + a live `workflow/wip/*.md` with a Work-Tree) — eyeball task-list/table/code/frontmatter fidelity.
+- [ ] 1.1 Spike both realistic renderer options against a real doc (this `wbs.md` + a live `workflow-system/state/wip/*.md` with a Work-Tree) — eyeball task-list/table/code/frontmatter fidelity.
 - [ ] 1.2 Determine the link-intercept mechanism for in-doc / cross-doc / external, and how the renderer exposes hrefs.
 - [ ] 1.3 Confirm CSP compatibility + re-render-in-place safety (no internal scroll reset).
 - [ ] 1.4 Write the verdict to "Probe outcomes" (renderer + dep + link model + frontmatter treatment).
@@ -57,10 +72,15 @@ No new design prior proposed — the two decisions above are applications of exi
 **Dependencies:** none (parallel-able with WP1; the render (WP3) needs both)
 **Size:** M
 **Tasks:**
-- [ ] 2.1 Backend: a `docs_list` command (new small `docs` module, or fold into an existing fs command surface) that, given a workspace project root, returns the present conventional docs — `docs/product/*.md` (vision, roadmap, research, arch, context) + **glob `*wbs*.md`** (canonical `wbs.md` **and** temporary/scratch WBS files), `workflow/wip/*.md`, `workflow/backlog.md`, `workflow/.session.md`. Absent files are silent no-ops. **CHANGELOG.md deliberately excluded.** Root authenticated via the WP7 `validate_root` seam (reuse — do not re-trust a frontend root).
+- [ ] 2.1 Backend: a `docs_list` command (new small `docs` module, or fold into an existing fs command surface) that, given a workspace project root, returns the present conventional docs. **Paths corrected 2026-07-28 for the unified `workflow-system/` layout — the pre-migration `docs/product/` + `workflow/` roots are GONE from this repo; the old spec would have found nothing.** Enumerate (curated, per "Doc-discovery decisions" — not a flat glob):
+  - `workflow-system/product/`: `vision.md`, `roadmap.md`, `research.md`, `arch.md`, `context.md`, `design-priors.md`, `transitions.md` + **glob `*wbs*.md`** (canonical `wbs.md`, `shape: temporary-wbs` scratch files, and any parked `*-wbs-parked.md`)
+  - `workflow-system/state/`: `wip/*.md`, `backlog.md`, `backlog-quality-findings.md`, `.session.md`
+  - **NOT** `workflow-system/product/archive/**` (decided: closed cycles aren't re-orientation material) and **NOT** `CHANGELOG.md` (unchanged from the original spec).
+
+  Absent files are silent no-ops. `.session.md` is gitignored-but-present — do not filter on git-tracked. Root authenticated via the WP7 `validate_root` seam (reuse — do not re-trust a frontend root). **Also: tolerate the legacy layout.** A project that hasn't migrated still has `docs/product/` + `workflow/`; probe both roots and use whichever is present (Claudesk opens 20+ rotating projects, not all of which will have migrated). Cheap here, ugly to retrofit.
 - [ ] 2.2 Backend: a `docs_read` command returning a single doc's raw text (read-only; reuse `editor_fs::read_file`'s `resolve_within` + `validate_root` posture — the doc set is a strict subset of the project tree, so no new trust surface).
-- [ ] 2.3 Frontend: register the Docs panel in `RightPanelHost` — tab button, the `⌘⇧`-chord (add to the chord map; confirm disjoint), and the panel container. All workspaces stay mounted; switching is display toggling, not remount.
-- [ ] 2.4 Frontend: render the **workflow-ordered** list — pure ordering function `vision → roadmap → wbs (+ *wbs* scratch) → wip/* → backlog → .session.md → arch · research · context`; unit-test the ordering derivation over a synthetic file set (present/absent mixes).
+- [ ] 2.3 Frontend: register the Docs panel in `RightPanelHost` — tab button, the `⌘⇧`-chord (add to the chord map; confirm disjoint), and the panel container. All workspaces stay mounted; switching is display toggling, not remount. **Gated behind M10.9:** the panel joins `AVAILABLE_PANELS` / the `RightPanel` union and its chord becomes live **only when `workflow_features_enabled` is on** — with the gate off there is no tab, no chord, and no `"docs"` member (M10.9's OFF=byte-identical invariant). Consume the gate via whatever seam M10.9 WP2 establishes; do not re-read settings ad hoc.
+- [ ] 2.4 Frontend: render the **workflow-ordered** list — pure ordering function `vision → roadmap → wbs (+ *wbs* scratch/parked) → wip/* → backlog (+ quality-findings) → .session.md → arch · research · context · design-priors · transitions`; unit-test the ordering derivation over a synthetic file set (present/absent mixes, both the `workflow-system/` and legacy layouts).
 - [ ] 2.5 Verify (self, via MCP bridge on a scratch workspace): the Docs tab appears, the chord + click select it, the list shows the right files in the right order for a real project.
 
 **WP2 → WP3 rationale:** Stand up the panel + doc discovery (a pure, testable data path) before the render, so WP3 plugs a renderer into a known list + a known `docs_read` shape rather than co-mingling discovery bugs with render bugs.
@@ -75,7 +95,7 @@ No new design prior proposed — the two decisions above are applications of exi
 **Tasks:**
 - [ ] 3.1 Add the chosen renderer dependency (WP1) and render `docs_read` content → formatted read-only DOM in the panel; style for the dark-only theme (no light tokens — project convention).
 - [ ] 3.2 Frontmatter renders as a legible styled header block (per WP1); task-list `- [ ]`/`- [x]` render as (non-interactive) checkboxes; tables + fenced code legible.
-- [ ] 3.3 **Auto-select-on-open** relevance rule — pure function `pickInitialDoc(docSet)`: `.session.md` if present → else the active `workflow/wip/*.md` (if one, else most-recently-modified wip) → else `roadmap.md` → else first in workflow order. Unit-test the ranking over synthetic doc sets. `[PRIOR: primary-surface-is-zero-ceremony-not-a-mode]` — zero-ceremony landing, operator-confirmed.
+- [ ] 3.3 **Auto-select-on-open** relevance rule — pure function `pickInitialDoc(docSet)`: `.session.md` if present → else the active `workflow-system/state/wip/*.md` (if one, else most-recently-modified wip) → else `roadmap.md` → else first in workflow order. Unit-test the ranking over synthetic doc sets. `[PRIOR: primary-surface-is-zero-ceremony-not-a-mode]` — zero-ceremony landing, operator-confirmed.
 - [ ] 3.4 **Link navigation:** in-doc anchors scroll within the panel; cross-doc links (`wbs.md`, another doc in the set) switch the selected doc; external `http(s)` links open in the default browser (existing `open`/shell seam) or are inert — never navigate the webview. (Mechanism per WP1.)
 - [ ] 3.5 Confirm read-only: no edit affordance, no write path (design-prior `new-surface-must-earn-its-place` — editing stays in Editor/CC).
 - [ ] 3.6 Verify (self, MCP bridge, scratch workspace): open Docs → lands on the re-orientation doc; task-lists/tables/frontmatter legible; click a cross-doc link → switches doc; external link doesn't hijack the webview.
@@ -85,7 +105,7 @@ No new design prior proposed — the two decisions above are applications of exi
 ---
 
 ### WP4: Scroll-preserving live reload (on `fs-change`)
-**Description:** When a rendered doc changes on disk, re-render its content **in place without resetting scroll to the top** — the common case being watching a `workflow/wip/*.md` update live while CC edits it (exactly this session's flow). Rides the existing QoL-WP0 `fs-change` watcher (`fs_watch` backend + `fsChange.ts` + `changeAppliesToWorkspace`) that `RightPanelHost` already consumes for editor reload — no new watcher.
+**Description:** When a rendered doc changes on disk, re-render its content **in place without resetting scroll to the top** — the common case being watching a `workflow-system/state/wip/*.md` update live while CC edits it (exactly this session's flow). Rides the existing QoL-WP0 `fs-change` watcher (`fs_watch` backend + `fsChange.ts` + `changeAppliesToWorkspace`) that `RightPanelHost` already consumes for editor reload — no new watcher.
 **Milestone:** M11
 **Dependencies:** WP3 (a rendered, scrollable doc to preserve)
 **Size:** S
@@ -127,6 +147,3 @@ M11 adds **one new frontend panel** to an existing per-workspace host and **two 
 
 ## Probe outcomes
 *(WP1's renderer verdict + WP5's exit verdict land here at their WP closes.)*
-
-## Session Pause — 2026-07-20 15:10
-Paused. See `workflow/.session.md` to resume.

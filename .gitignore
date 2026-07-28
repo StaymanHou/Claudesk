@@ -12,8 +12,11 @@ homebrew-claudesk/
 # Per-machine Claude Code state (NOT shared between developers)
 .claude/settings.local.json
 
-# Transient session pointer (deleted on resume)
-workflow/.session.md
+# Transient session pointer (deleted on restore).
+# Path updated 2026-07-28 for the workflow-system/ doc-layout migration (aacc687) —
+# the stale `workflow/.session.md` pattern no longer matched, so the migration's
+# `git mv` swept the pointer INTO the index. Untracked again at M10.9 cycle-open.
+workflow-system/state/.session.md
 
 # Test result artifacts (regenerable)
 tests/results/*.json
