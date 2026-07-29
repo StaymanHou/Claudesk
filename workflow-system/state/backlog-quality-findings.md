@@ -227,3 +227,70 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low.
 - **Status:** pending.
 
+
+# m10.9-wp2-workflow-features-gate — 2026-07-28
+
+*(feature-review-quality against ship commit `467593f`; Mode 3 autopilot. 0 CRITICAL / 4 MAJOR / 4 MINOR. **One MAJOR is NOT listed here — it was a live StrictMode double-write defect in `useSettingControl` and was fixed immediately rather than backlogged; see the WIP's `## Code-Quality Review`.** Reviewer: "well-built work that clears the bar the milestone set… the debt is concentrated in two places: the `?raw` idiom still doing load-bearing work despite this feature paying twice to learn it can't, and the (now-fixed) side-effect-in-updater.")*
+
+## SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST
+- **Severity:** MAJOR
+- **Location:** `src/state/__tests__/offInvariantGuard.test.ts` (chord arm, the `sourceFiles().filter` basename regex)
+- **Finding:** The chord arm selects candidate files by basename `/hord[A-Za-z]*\.tsx?$/i`, which does **not** match `src/components/workspace/panelHost.ts` — the module that owns `panelForChord`, the app's panel-select chord mapper.
+- **Why it matters:** If M11 adds a `"docs"` mnemonic to `panelForChord` (the most natural home for a Docs-tab chord), the chord arm silently skips the file. The invariant is not unprotected — the *panel* arm would still catch a `"docs"` entry in `AVAILABLE_PANELS` — but the arm most likely to fire at M11 time carries the same blind-spot shape as the camelCase matcher bug already caught once this feature.
+- **Suggested action:** select by CONTENT (files exporting a `*Chord` / `*ForChord` predicate) rather than by filename.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING
+- **Severity:** MAJOR
+- **Location:** `src/components/settings/__tests__/settingsPanelWiring.test.ts:38-84`
+- **Finding:** ~10 assertions are `?raw` source-text greps against `App.tsx` for formatted multi-line fragments (`"escDismissTarget({"` plus two property lines, `"showSettingsRef.current = showSettings"`). Prettier-fragile by construction.
+- **Why it matters:** This is exactly the shape that broke **twice** during this feature — once passing while the behavior was broken (the Esc-ordering bug), once silently un-matching after Prettier reflowed the file (`dashboardWiring.test.ts`). The behavior is already covered behaviorally by `escDismiss.test.ts`, so these structural pins are net cost, not net coverage. The test file's own comment says a source guard "must not be trusted to verify RUNTIME" — and then leans on ten of them.
+- **Suggested action:** delete the fragment-matching assertions, keep only the coarse ones that survive a reformat (single identifiers, not multi-line expressions). Consider a repo-wide convention note: `?raw` guards may assert single identifiers only, never formatted expressions.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-07-28-QUALITY-WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL
+- **Severity:** MAJOR
+- **Location:** `src/components/settings/SettingsPanel.tsx:184,233,249,259`
+- **Finding:** The three migrated controls kept their `picker-*` `data-testid`s (`picker-permission-mode`, `picker-time-tracking`, `picker-update-notifications`, `picker-check-updates`) inside a component whose entire purpose is that they are no longer in the picker.
+- **Why it matters:** Knowingly permitted by the WBS ("consider renaming… only if it doesn't inflate the diff"), and keeping them is what let the three migrated wiring tests keep asserting without churn. But it leaves a durable lie in the selector namespace, and `settingsPanelWiring.test.ts` now asserts these `picker-`-prefixed ids are ABSENT from the picker — which reads as contradictory at a glance.
+- **Suggested action:** mechanical rename to `settings-*` across ~8 sites (component + the 3 wiring tests + the parity guard). Do it as its own commit so the rename is reviewable in isolation.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-07-28-QUALITY-WP2-ESC-BRANCH-MISSING-RETURN
+- **Severity:** MINOR
+- **Location:** `src/App.tsx:268-287`
+- **Finding:** The `if (e.key === "Escape") { … }` block has no `return` before the subsequent `isSettingsChord(e)` check.
+- **Why it matters:** Harmless today (Escape is never `","`), but the sibling dashboard-chord branch above *does* `return`, so the asymmetry reads as an omission rather than a decision — in the very handler whose ordering bug this feature just fixed.
+- **Suggested action:** add the `return`, restoring the "one keypress, one branch" shape.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-28-QUALITY-WP2-MILESTONE-RATIONALE-RESTATED-SIX-TIMES
+- **Severity:** MINOR
+- **Location:** `workflow_gate/mod.rs`, `workflow_gate/commands.rs`, `config_store/settings.rs` (field doc), `lib.rs` (mod decl), `state/workflowGate.ts`, `state/useWorkflowFeaturesEnabled.ts`
+- **Finding:** The milestone rationale ("applicability, not audience size", the two invariants, the design-prior slug) is restated in near-identical form in ~6 places. Comment-to-code ratio in the smallest new modules runs 65–95% (`workflow_gate/mod.rs` is 36 comment lines over 2 lines of code).
+- **Why it matters:** Much of it is genuine WHY and worth keeping, but six copies must be updated together — a drift surface rather than a gift.
+- **Suggested action:** state it once at the owning module (`workflow_gate/mod.rs`) and point at it from the others.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-28-QUALITY-WP2-ALLOWLIST-TEST-HALF-TAUTOLOGICAL
+- **Severity:** MINOR
+- **Location:** `src/state/__tests__/offInvariantGuard.test.ts:150-176`
+- **Finding:** `the allowlist grants exact paths, never a directory prefix` builds a hand-copied `ALLOWED_SAMPLE` duplicating the real `ALLOWED` array, then asserts three invented paths aren't in the copy — testing the literal it just wrote.
+- **Why it matters:** The `expect(guardSrc).toContain("!ALLOWED.includes(rel)")` half does real work; the `ALLOWED_SAMPLE` half is tautological and will drift from the real list.
+- **Suggested action:** drop the `ALLOWED_SAMPLE` half, or export the real `ALLOWED` array and assert against that.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-28-QUALITY-WP2-SETTINGSPANEL-NEAR-DOING-TOO-MUCH
+- **Severity:** MINOR
+- **Location:** `src/components/settings/SettingsPanel.tsx`
+- **Finding:** Four `useSettingControl` calls, an error surface, a `SettingsGroup` sub-component, and the JSX in one file — close to but not over the doing-too-much line.
+- **Why it matters:** Readable today, but M14 extends this panel; adding controls without extracting a per-group module is the point where it tips.
+- **Suggested action:** extract per-group modules when M14 starts, while the extraction is still cheap.
+- **Priority:** low
+- **Status:** pending

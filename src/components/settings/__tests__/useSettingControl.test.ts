@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { mapIpcError } from "../../picker/ipcError";
 import {
   CC_PERMISSION_MODE_OPTIONS,
@@ -20,16 +22,23 @@ import {
 // The controls now share ONE implementation (`useSettingControl`), so the discipline can
 // be tested once, for real. This project has no jsdom/testing-library, so the hook's React
 // wiring is bridge-verified live; what IS unit-testable — and what actually carries the
-// risk — is the optimistic-set/revert state machine. It is modeled faithfully here:
-// `setValue` with an updater callback, a promise that may reject, and a revert that must
-// restore THE VALUE THAT WAS THERE BEFORE (not a stale closure capture).
+// risk — is the optimistic-set/revert state machine, modeled faithfully below.
+//
+// ## What this model CANNOT see (learned at code review)
+// It is a plain closure with no React semantics, so it cannot observe anything about WHERE
+// the side effect sits relative to a state updater. The first implementation called
+// `persist()` inside a `setValue(prev => …)` updater — which StrictMode double-invokes,
+// double-writing every toggle — and every test below still passed. That blind spot is
+// covered separately by the "side effect must live OUTSIDE the state updater" block.
+// Keep both: this one for the state machine, that one for the shape.
 
-/** Faithful model of the hook's `set`: optimistic update, persist, revert on reject. */
+/** Faithful model of the hook's `set`: optimistic update, persist, revert on reject.
+ *  `prev` is read BEFORE the change (from the hook's `valueRef`), not inside an updater. */
 function makeControl<T>(initial: T, persist: (next: T) => Promise<void>) {
   let value = initial;
   const errors: string[] = [];
   const set = (next: T) => {
-    const prev = value; // captured inside the updater, as the hook does
+    const prev = value; // read up-front, mirroring the hook's valueRef read
     value = next; // optimistic
     return persist(next).catch((err) => {
       value = prev; // revert to the value that was there before THIS change
@@ -69,8 +78,9 @@ describe("optimistic set + revert-on-reject", () => {
 
   it("reverts to the value before THAT change, not to the original", async () => {
     // Two successful changes then a failure: the revert must land on the second value,
-    // not the initial one. This is why `prev` is read inside the updater rather than
-    // closed over from render scope — a stale closure would rewind too far.
+    // not the initial one. This is why the hook reads `prev` from a ref that it updates
+    // on every set, rather than closing over the render-scope `value` — a stale closure
+    // would rewind too far.
     let fail = false;
     const c = makeControl("a", () =>
       fail ? Promise.reject("nope") : Promise.resolve(),
@@ -92,6 +102,53 @@ describe("optimistic set + revert-on-reject", () => {
     await c.set(2);
     await c.set(3);
     expect(c.get()).toBe(2);
+  });
+});
+
+describe("the persist side effect must live OUTSIDE the state updater", () => {
+  // Added at code review. The first implementation called `persist()` INSIDE a
+  // `setValue(prev => …)` updater to read the pre-change value. React StrictMode (active
+  // in this app) double-invokes updaters in dev to surface impure ones — so every toggle
+  // fired TWO IPC writes, and two error toasts on rejection.
+  //
+  // The tests above could not see it: they model `set` with a plain closure, which has no
+  // React semantics to double-invoke. That is the gap this describe block closes — it
+  // models the double-invoke explicitly, and pins the SHAPE (side effect outside) rather
+  // than the outcome, because the outcome is only observable under a real React render.
+
+  /** A `setValue` that double-invokes its updater, as StrictMode does in dev. */
+  function strictModeSetValue<T>(current: T, updater: (prev: T) => T): T {
+    updater(current); // first (discarded) invocation
+    return updater(current); // second — the one React keeps
+  }
+
+  it("a side effect inside an updater fires twice under StrictMode (the bug)", () => {
+    // Demonstrates WHY the shape matters, so a future reader doesn't "simplify" the ref
+    // back into the updater.
+    const writes: string[] = [];
+    strictModeSetValue("a", () => {
+      writes.push("persist"); // <- the old shape did this
+      return "b";
+    });
+    expect(writes).toHaveLength(2);
+  });
+
+  it("the real implementation calls persist outside any updater", () => {
+    // Structural, deliberately: the runtime property needs a React render this repo has no
+    // harness for, so pin the shape instead — `setValue(` must never be passed a function
+    // that contains `persist(`. Narrow, mechanical, and it fails on a regression to the
+    // old shape.
+    const src = readFileSync(
+      fileURLToPath(new URL("../useSettingControl.ts", import.meta.url)),
+      "utf8",
+    );
+    // The setter must use the plain-value form, not the updater form.
+    expect(src).toContain("setValue(next)");
+    expect(src).toContain("const prev = valueRef.current");
+    // And no `setValue(` call may open a callback that wraps the persist.
+    expect(src).not.toMatch(
+      /setValue\(\s*\(prev\)?\s*=>[\s\S]{0,400}?persist\(/,
+    );
   });
 });
 

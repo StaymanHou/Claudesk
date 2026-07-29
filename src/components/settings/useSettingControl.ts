@@ -23,7 +23,7 @@
 // The typed IPC getter/setter and the broadcast event name. Those differ per setting and
 // are the only genuinely per-setting parts; everything else is this hook.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTauriListen } from "../../useTauriListen";
 // Reuse the picker's pure error→message composer rather than writing a near-duplicate:
 // these two surfaces should read alike, and that helper is already unit-tested. (Its
@@ -70,6 +70,12 @@ export function useSettingControl<T>(
 ): SettingControl<T> {
   const { initial, get, persist, event, errorLabel, onError, coerce } = spec;
   const [value, setValue] = useState<T>(initial);
+  // Latest-value mirror, so `set` can read the pre-change value WITHOUT doing it inside a
+  // state updater. See `set` below for why that distinction is load-bearing.
+  const valueRef = useRef<T>(initial);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   // Seed from the backend once. `cancelled` guards the StrictMode double-mount and the
   // torn-down-before-resolve case (the same guard the picker's three effects carried).
@@ -99,15 +105,28 @@ export function useSettingControl<T>(
 
   const set = useCallback(
     (next: T) => {
-      setValue((prev) => {
-        // Optimistic: show `next` now; revert to THIS prev if the write rejects. Reading
-        // prev inside the updater (rather than closing over `value`) keeps the revert
-        // correct even if two changes land in the same tick.
-        void persist(next).catch((err) => {
-          setValue(prev);
-          onError(mapIpcError(errorLabel, err));
-        });
-        return next;
+      // Read the pre-change value from the ref — NOT from inside a `setValue` updater.
+      //
+      // This is the whole reason the ref exists, and it is not a style preference: React
+      // StrictMode (active in this app — see main.tsx) DOUBLE-INVOKES state updater
+      // callbacks in dev to surface impure ones. An earlier version of this function
+      // called `persist()` inside the updater, which meant every user toggle fired TWO
+      // IPC writes (and two error toasts on rejection) under `pnpm tauri:dev`. Updaters
+      // must be pure; side effects belong outside them.
+      //
+      // Caught at code review, not by the tests here — the unit tests model `set` with a
+      // plain closure, which has no React semantics to double-invoke. Same defect class as
+      // the Esc-ordering bug this feature already fixed (see escDismiss.ts): reaching for
+      // a state updater to do something other than compute the next state.
+      const prev = valueRef.current;
+      // Optimistic: show `next` immediately, and keep the ref in step so a second change
+      // landing in the same tick reverts to ITS predecessor rather than a stale value.
+      valueRef.current = next;
+      setValue(next);
+      void persist(next).catch((err) => {
+        valueRef.current = prev;
+        setValue(prev); // revert to the value that was there before THIS change
+        onError(mapIpcError(errorLabel, err));
       });
     },
     [persist, errorLabel, onError],
