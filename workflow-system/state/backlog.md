@@ -240,8 +240,9 @@
 - **Why A is also the safer FIRST version (independent of the update cadence):** option B's pull re-runs `install.sh`, which rewrites `~/.claude/skills/`. If provenance detection is wrong anywhere, that is an automated write into exactly the tree `SURFACE-2026-07-28-MCCC-INSTALL-FEATURE-NEEDS-SANDBOXED-DEV-AND-VERIFY` exists to protect. A first version that can only CREATE or REMOVE a clone has a far smaller blast radius than one that mutates an existing install. Any future B must clear the same sandbox + refuse-guard bar before it touches a real tree.
 - **Scope consequence:** the WP is now **install + uninstall + detect/describe** only. No fetch, no ahead/behind computation, no dirty-tree handling, no install-re-run path. That drops a substantial slice of the network/git surface from the first build.
 - **Suggested action:** own WP (not folded into WP3 — network fetch + subprocess execution + filesystem mutation + a provenance model is materially more than a `stat`). Write the provenance model into `arch.md` BEFORE any code. **All operator decisions are now settled** (location `~/.claudesk/vendor/`, updates = A); the one remaining sub-decision is internal: where the shared dev+prod provenance record lives, since `~/.claudesk/vendor/` is NOT bundle-identity-scoped.
+- **PROMOTED 2026-07-29 → M10.9 WP3.5** (`workflow-system/product/wbs.md` → "WP3.5: Install + uninstall wizards"). The operator asked for the wizards during the WP3 UI/UX conversation, which also **revised milestone property 2** (enable may now trigger an explicit install wizard; the gate itself stays pure app state). Two additions from that conversation, beyond what this entry recorded: the wizard lets the user **choose the download location** (default `~/.claudesk/vendor/`), and the **uninstall wizard offers three explicit intents** — `[Uninstall]` (remove + disable) · `[Keep mccc]` (leave + disable) · `[Cancel]` (leave + **revert to enabled**) — rather than inferring the user's intent from provenance. Provenance still governs *whether the wizard appears at all* (managed only). Stays open here until WP3.5 ships.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** pending — promoted into M10.9 WP3.5
 
 ## SURFACE-2026-07-28-MCCC-INSTALL-FEATURE-NEEDS-SANDBOXED-DEV-AND-VERIFY
 - **Source:** feature:build (M10.9 WP2, operator directive mid-session)
@@ -255,8 +256,9 @@
   3. **A refuse-guard in PRODUCTION code, not just tests.** The uninstall path asserts its target is inside Claudesk's recorded managed dir and hard-refuses otherwise. Belt-and-braces with the provenance model — a test-only guard cannot protect against a bug that ships.
 - **Also applies to agent-driven verify-self:** no MCP-bridge or shell verification may invoke a real install/uninstall against the live `~/.claude/`. Related standing hazard already logged in memory: teardown must be PID-scoped, never blanket `pkill`/port-kill (it killed the operator's live app on 2026-07-13).
 - **Suggested action:** make the sandbox fixture + the refuse-guard **explicit, separately-verified tasks in the install WP** (`SURFACE-2026-07-28-MCCC-INSTALL-UNINSTALL-INTERFACE-IN-CLAUDESK`), sequenced BEFORE the destructive paths are written. Record the posture in `arch.md`.
+- **PROMOTED 2026-07-29 → M10.9 WP3.5** (`workflow-system/product/wbs.md`). The suggested action was taken literally: the sandbox fixture is **task 3.5.1** and the refuse-guard is **3.5.2**, both sequenced ahead of the destructive paths (3.5.4/3.5.5), and the WP header carries the posture as a non-negotiable read-this-first block. Task 3.5.7 also pins the verify posture — the live install/uninstall pass against the operator's real `~/.claude/` is **operator-only** at verify-human / `/release`, never agent-driven. Stays open (**high**) until WP3.5 ships and the posture is recorded in `arch.md`.
 - **Priority:** high
-- **Status:** pending
+- **Status:** pending — promoted into M10.9 WP3.5
 
 ## SURFACE-2026-07-28-RUNTIMES-CARGO-TEST-ENTRY-HAS-DUPLICATE-BLOCKS
 - **Source:** feature:build (M10.9 WP2 Phase 1)
