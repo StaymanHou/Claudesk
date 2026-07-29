@@ -176,6 +176,58 @@ describe("OFF-invariant: the seam is the only door", () => {
     ).toEqual([]);
   });
 
+  it("no module imports the raw GETTER either — the wrapper is a bypass too", () => {
+    // BLIND SPOT CLOSED at WP3 review-quality (2026-07-29). The scan above matches the raw
+    // COMMAND STRINGS, so a bypass through the typed wrapper `getWorkflowFeaturesEnabled()`
+    // was completely invisible to it — and WP3's `App.tsx` did exactly that, shipping a
+    // one-shot read that never re-synced on the broadcast. The staleness happened to be
+    // masked by an unrelated flag, which is worse than a visible bug: the guard reported
+    // clean while the property it describes ("it would not re-render on the broadcast",
+    // three lines up) was already violated.
+    //
+    // The SETTER is deliberately not covered here: the invite's `[Enable]`-equivalent and
+    // the Settings control both legitimately persist the gate, and `setWorkflowFeaturesEnabled`
+    // has no staleness failure mode (a write needs no subscription). Only the READ path can
+    // silently diverge from the broadcast, so only the read path is guarded.
+    const ALLOWED_GETTER = [
+      "src/state/workflowGate.ts",
+      "src/state/useWorkflowFeaturesEnabled.ts",
+      "src/state/__tests__/workflowGateContract.test.ts",
+      "src/state/__tests__/offInvariantGuard.test.ts",
+      // The Settings panel's control genuinely owns a read+write pair through
+      // `useSettingControl`, which does its own seed+listen — so it is a mirror surface,
+      // not a bypass. It re-syncs on the broadcast like the hook does.
+      "src/components/settings/SettingsPanel.tsx",
+    ];
+    // Comments STRIPPED before matching. A file that documents *why* it avoids the raw
+    // getter must not be flagged for naming it — and the alternative (rewording the
+    // explanation to dodge a grep) would trade real reasoning for a passing test. This is
+    // the fourth instance in this feature of a source-scanning assertion matching prose;
+    // strip first, then match.
+    const stripComments = (src: string) =>
+      src
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+
+    const offenders = sourceFiles()
+      .filter((f) =>
+        stripComments(readFileSync(f, "utf8")).includes(
+          "getWorkflowFeaturesEnabled",
+        ),
+      )
+      .map(relFromSrcRoot)
+      .filter((rel) => !ALLOWED_GETTER.includes(rel));
+
+    expect(
+      offenders,
+      "these files read the gate through the raw getter — a one-shot read does NOT re-sync " +
+        "on WORKFLOW_FEATURES_ENABLED_EVENT. Consume useWorkflowFeaturesEnabled() instead, " +
+        "or (for a mirror surface with its own seed+listen) add the file to ALLOWED_GETTER " +
+        "with a comment saying why it re-syncs.",
+    ).toEqual([]);
+  });
+
   it("the allowlist grants exact paths, never a directory prefix", () => {
     // The bypass scan subtracts an allowlist. If that subtraction ever became a
     // prefix/startsWith/glob match, everything under src/state/ (or worse, src/) would be

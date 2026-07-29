@@ -4,6 +4,64 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m10.9-wp3-invite-settings-substrate — 2026-07-29
+
+*(feature-review-quality against ship baseline `6193615^..5bc88f3`; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 5 MINOR. **MAJOR #1 (gate-seam bypass in App.tsx) was FIXED IN PLACE, not backlogged** — it was a live staleness defect and the fix was a 3-line import swap; the OFF-invariant guard's blind spot that hid it was closed in the same pass. Only MAJOR #2 and the 5 MINOR are listed here. Reviewer: "high-quality, unusually disciplined work — the strongest parts are the persistence model and the consistent instinct to extract a pure function whenever a decision has a truth table.")*
+
+## SURFACE-2026-07-29-QUALITY-WP3-POSITIONAL-RAW-SLICING
+- **Severity:** MAJOR
+- **Location:** `src/components/settings/__tests__/workflowInviteCopy.test.ts:148-152,167-171`
+- **Finding:** Two wiring guards use positional `?raw` slicing — `appSrc.slice(at, appSrc.indexOf("\n", at))` for the `onLater=` handler, and `appSrc.slice(at, at + 90)` for the Esc branch. Both are the fragile shape the repo convention warns against ("assert single identifiers — never formatted multi-line expressions"). The line-bounded one silently depends on Prettier keeping the handler on one line; the fixed-width window is **the exact pattern that already produced a false positive in this same feature** (documented in the test at :143-147) — it was fixed in one place and left in the other.
+- **Why it matters:** these are the highest-value assertions in the file (`[Later]` writes nothing; Esc means `[Later]`, not `[Dismiss]`) and therefore the ones whose silent failure costs most. WP2 already paid twice for `?raw` guards that stopped matching after a reflow.
+- **Suggested action:** extract the Esc-branch decision as a pure function and assert it as a value — the same treatment `escDismissTarget` received, which is already the in-repo precedent. For the `onLater` guard, assert on a single identifier rather than a sliced window. Pay alongside the open `SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING` — same idiom, same root cause.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-07-29-QUALITY-WP3-DETACHED-SUBSTRATE-COMMENT
+- **Severity:** MINOR
+- **Location:** `src/components/settings/SettingsPanel.tsx:190-199`
+- **Finding:** The 10-line substrate-presence comment block is separated from the code it documents — the highlight state + effect were inserted between it and `const [substratePresent, …]`. A reader arriving at :190 reads nine lines about a filesystem probe, then meets an unrelated highlight comment.
+- **Why it matters:** the reasoning is load-bearing (why this is NOT a `useSettingControl`) but as placed it reads as documentation for the highlight.
+- **Suggested action:** move the block down to sit directly above `const [substratePresent, …]`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-29-QUALITY-WP3-HARDCODED-HIGHLIGHT-TINT
+- **Severity:** MINOR
+- **Location:** `src/components/settings/__tests__/settingsHighlight.test.ts:55,98`
+- **Finding:** Two assertions hardcode the literal `rgba(120, 165, 240`. A designer-level tint tweak with zero behavioral consequence fails two tests and reads as a regression. (The duration-coupling test in the same file is well-built by contrast — it parses both sides and compares numbers.)
+- **Why it matters:** the load-bearing property is "three distinct peaks with troughs between", which can be asserted by counting `background-color:` stops and their alternation without pinning a specific color.
+- **Suggested action:** count stops/alternation instead of matching the color literal.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-29-QUALITY-WP3-OPERATOR-SPECIFIC-CLONE-PATH
+- **Severity:** MINOR
+- **Location:** `src/components/settings/WorkflowSubstrateInfo.tsx:63-65`
+- **Finding:** `CLONE_PATH` is `~/Personal/projects/my-claude-code-customization` — the operator's own directory layout, shown to a secondary user as the canonical clone target. Traceable (it matches the companion README verbatim), but the invite's entire audience is other developers who have no `~/Personal/projects` tree.
+- **Why it matters:** a copy-paste of the displayed command creates a directory most users would not choose. Cheap to change while the text is display-only; **costlier once WP3.5's wizard reads it** as a default.
+- **Suggested action:** use a neutral default (`~/` + the repo name), and coordinate with WP3.5's location picker so the wizard's default and this text agree.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-29-QUALITY-WP3-KEBAB-CASE-CLAIM-UNTESTABLE
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/config_store/settings.rs:145,192`
+- **Finding:** The docs describe the enum as serializing kebab-case, but both variants are single words (`Acknowledged`→`"acknowledged"`), so `rename_all = "kebab-case"` is indistinguishable from `lowercase` here. The test named `workflow_invite_serializes_kebab_case_for_the_ts_union` asserts lowercasing, not kebab-casing.
+- **Why it matters:** the **same overstated-assertion class this feature logged three separate times**. A future multi-word variant would be the first real exercise of the attribute, and the existing test name would already have claimed to cover it.
+- **Suggested action:** rename the test to what it asserts, or note in it that kebab-casing is untested until a multi-word variant exists.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-29-QUALITY-WP3-STALE-SIBLING-TEST-NAME
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/config_store/settings.rs:917-924`
+- **Finding:** `workflow_features_independent_of_the_other_seven_fields` is misnamed (nine fields now); the correction lives six lines into an added comment rather than in the name.
+- **Why it matters:** cosmetic, and the avoid-scope-creep argument for not renaming is defensible — noted only because this feature's own Discoveries flag misleading test names as a confabulation channel (a misnamed sibling already cost a wrong test in Phase 1).
+- **Suggested action:** rename to what it asserts; pay with the related `SURFACE-2026-07-29-SETTINGS-PRESERVES-OTHER-FIELDS-TEST-NAME-OVERSTATES-ASSERTION`, which is the same file and the same class.
+- **Priority:** low
+- **Status:** pending
+
 # editor-fs-backend-hardening — 2026-07-20
 
 *(feature-review-quality on the uncommitted working-tree WP7 diff, HEAD `6f514d0`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 4 MINOR — all polish/observability notes, none blocking. Reviewer: "well-built, disciplined hardening pass… all flagged edge cases resolve correctly under the design; none rise to a finding." Backlog-paydown sweep WP7 — the last WP.)*

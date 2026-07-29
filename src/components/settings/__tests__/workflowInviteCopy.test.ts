@@ -197,8 +197,24 @@ describe("App wiring — the three intents map to the right persistence", () => 
       .replace(/^\s*\/\/.*$/gm, ""); // line comments
 
     expect(appSrc).toContain("{showInvite && (");
-    expect(code).toContain("shouldShowWorkflowInvite");
-    expect(code).not.toContain("useWorkflowFeaturesEnabled");
+    expect(code).toContain("shouldShowWorkflowInviteFor");
+
+    // REVISED at review-quality (2026-07-29). The original assertion here was
+    // `not.toContain("useWorkflowFeaturesEnabled")` — correct when the invite read the gate
+    // through a raw one-shot call, WRONG now. The reviewer caught that the raw read bypassed
+    // WP2's seam and never re-synced on the broadcast, so `App.tsx` now consumes the hook.
+    //
+    // The distinction the original assertion was groping for is real but subtler than
+    // "does the file mention the hook": the invite must not be **gated** by the gate — it
+    // must render when the gate is OFF. That is a property of the PREDICATE (the invite shows
+    // only when `!workflowFeaturesEnabled`), which `workflowInviteState.test.ts` asserts as a
+    // value. Reading the gate to decide "is there anything left to pitch?" is the opposite of
+    // being gated by it.
+    //
+    // So what is pinned here is the render condition: the invite renders on the
+    // show-predicate's verdict, never on the hook's boolean directly.
+    expect(code).not.toContain("{useWorkflowFeaturesEnabled() && (");
+    expect(code).not.toContain("workflowFeaturesEnabled && showInvite");
   });
 
   it("the dev reset seam is DEV-gated and deleted on cleanup", () => {

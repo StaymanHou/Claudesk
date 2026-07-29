@@ -28,7 +28,7 @@ import {
   getWorkflowInvite,
   setWorkflowInvite,
 } from "./state/workflowSubstrate";
-import { getWorkflowFeaturesEnabled } from "./state/workflowGate";
+import { useWorkflowFeaturesEnabled } from "./state/useWorkflowFeaturesEnabled";
 import {
   loadOrder,
   reorder,
@@ -271,9 +271,24 @@ function App() {
   //
   // NOT gated behind `useWorkflowFeaturesEnabled` — see the note at the render site. It is the
   // one workflow-NAMED surface that must exist precisely when the gate is OFF.
+  //
+  // The GATE half comes from the seam hook, not from a raw read (caught at review-quality,
+  // 2026-07-29). Two reasons, and the second is a live defect the first would have hidden:
+  //   1. `workflowGate.ts`'s header says a consumer imports the hook, never the helpers —
+  //      WP2's whole contribution was "the seam is the only door", and routing around it
+  //      here would have made this feature the first exception to a rule the milestone
+  //      exists to establish.
+  //   2. A one-shot `getWorkflowFeaturesEnabled()` NEVER RE-SYNCS. The hook subscribes to
+  //      `WORKFLOW_FEATURES_ENABLED_EVENT`; a bare read does not. So enabling the gate in
+  //      Settings mid-session left this value stale for the process lifetime. It happened to
+  //      be masked — the show-predicate's `dismissedThisSession` term suppressed the invite
+  //      on the only reachable path — but that is two independent flags coinciding, not a
+  //      guarantee, and the masking would evaporate the moment either changed.
+  // Worth noting the OFF-invariant guard could NOT see the violation: its bypass scan matches
+  // the raw command strings, so an import of the typed wrapper was invisible to it.
+  const workflowFeaturesEnabled = useWorkflowFeaturesEnabled();
   const [inviteSettings, setInviteSettings] = useState<{
     workflowInvite: WorkflowInviteOutcome | null;
-    workflowFeaturesEnabled: boolean;
   } | null>(null);
   const [inviteProjectCount, setInviteProjectCount] = useState(0);
   // `[Later]` lives here and ONLY here — React state, never disk. That is what makes "Later"
@@ -285,15 +300,9 @@ function App() {
     let cancelled = false;
     (async () => {
       try {
-        const [invite, gate] = await Promise.all([
-          getWorkflowInvite(),
-          getWorkflowFeaturesEnabled(),
-        ]);
+        const invite = await getWorkflowInvite();
         if (cancelled) return;
-        setInviteSettings({
-          workflowInvite: invite,
-          workflowFeaturesEnabled: gate,
-        });
+        setInviteSettings({ workflowInvite: invite });
         // Gate the project-count read on an UNRESOLVED invite (Verdict (b)'s requirement):
         // once the invite has resolved — permanently, for all but first-run users — this
         // second `list_projects` call site is skipped entirely.
@@ -316,7 +325,9 @@ function App() {
   // module so that property is assertable as a VALUE — it was inline, which made it invisible to
   // any test of the predicate (which never receives null).
   const showInvite = shouldShowWorkflowInviteFor(
-    inviteSettings,
+    inviteSettings === null
+      ? null
+      : { ...inviteSettings, workflowFeaturesEnabled },
     inviteProjectCount,
     inviteDismissedThisSession,
   );
