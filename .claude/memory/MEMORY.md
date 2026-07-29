@@ -21,7 +21,8 @@ desc=$'For CC hook-channel work, a live hook-stream capture beats the official d
 - [cc-hook-event-facts.md](cc-hook-event-facts.md) — Concrete Claude Code v2.1.x hook-event facts for Claudesk's status channel (live-captured)
 base=cc-hook-event-facts.md
 desc='Concrete Claude Code v2.1.x hook-event facts for Claudesk'\''s status channel (live-captured)'
-- [cc-tui-cr-not-lf.md](cc-tui-cr-not-lf.md) — Raw-mode CC PTY interaction — /cmd byte-injection must end in  (0x0d) to execute; 
+- [cc-tui-cr-not-lf.md](cc-tui-cr-not-lf.md) — Raw-mode CC PTY interaction — /cmd byte-injection must end in 
+ (0x0d) to execute; 
  only triggers autocomplete typeahead. Used by WP7 PtyCcSession trait.
 base=cc-tui-cr-not-lf.md
 desc=$'Raw-mode CC PTY interaction �\M-\C-@\M-\C-T /cmd byte-injection must end in \\r (0x0d) to execute; \\n only triggers autocomplete typeahead. Used by WP7 PtyCcSession trait.'
@@ -70,7 +71,8 @@ desc=$'A new PTY session kind must buffer early output until the frontend attach
 - [pty-probe-observable-default.md](pty-probe-observable-default.md) — Project-wide pattern for PTY probe harnesses in Claudesk (WP2, WP4, WP7, future workspace-process work). Reader thread must mirror PTY output to an observable surface by default; opt-out to silent byte-counting only when needed.
 base=pty-probe-observable-default.md
 desc='Project-wide pattern for PTY probe harnesses in Claudesk (WP2, WP4, WP7, future workspace-process work). Reader thread must mirror PTY output to an observable surface by default; opt-out to silent byte-counting only when needed.'
-- [raw-mode-cr-is-enter.md](raw-mode-cr-is-enter.md) — POSIX terminal line-discipline fact relevant to ALL PTY-driven subprocesses in Claudesk (not just CC). Raw mode disables CR→NL translation, so input lines must end in  to register as Enter.
+- [raw-mode-cr-is-enter.md](raw-mode-cr-is-enter.md) — POSIX terminal line-discipline fact relevant to ALL PTY-driven subprocesses in Claudesk (not just CC). Raw mode disables CR→NL translation, so input lines must end in 
+ to register as Enter.
 base=raw-mode-cr-is-enter.md
 desc=$'POSIX terminal line-discipline fact relevant to ALL PTY-driven subprocesses in Claudesk (not just CC). Raw mode disables CR�\M-\C-F\M-\C-RNL translation, so input lines must end in \\r to register as Enter.'
 - [synthetic-tab-seam-reusable-readonly-buffer.md](synthetic-tab-seam-reusable-readonly-buffer.md) — The WP12 synthetic-tab seam renders programmatic read-only content as an editor tab; consumers must supply font-size + decorations (it doesn't inherit the editor's live zoom).
@@ -97,3 +99,4 @@ desc=$'A stubbed verify-self (Tauri IPC faked in a plain browser) passes precise
 - [wp4-macos-perf-measurement.md](wp4-macos-perf-measurement.md) — How to measure CPU/RAM/frame-time of the Tauri WKWebView on macOS for Claudesk perf probes
 - [session-only-vs-permanent-dismiss-precedent.md](session-only-vs-permanent-dismiss-precedent.md) — Claudesk already has a two-way "ask later vs never ask again" precedent in src/updater/useUpdater.ts (dismissBanner persists nothing → returns next launch; skipVersion writes to disk → permanent); copy it instead of inventing a field, and keep the lifecycle marker separate from the feature flag.
 - [mcp-bridge-tools-not-exposed-to-subagents.md](mcp-bridge-tools-not-exposed-to-subagents.md) — The mcp__tauri__* bridge tools reach the ORCHESTRATOR but not spawned subagents (which silently fall back to bare Vite, no Tauri IPC) — drive the bridge yourself for live-app outcomes; plus ipc_emit_event's param is `eventName` and a plain-string payload dodges the double-encoding hazard.
+- [lsof-ti-tcp-misses-ipv6-vite.md](lsof-ti-tcp-misses-ipv6-vite.md) — `lsof -ti tcp:1420` misses Vite's IPv6-only listener (use `lsof -nP -iTCP:`) — BUT the real lesson: never kill a `target/debug/claudesk` you didn't launch yourself. "Port in use" at a verify-human gate usually means the OPERATOR has the app open; a prod-app-survived check does not protect their dev app.

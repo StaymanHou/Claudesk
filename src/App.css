@@ -2598,13 +2598,24 @@ body,
 .picker-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  /* 8px matches the filmstrip's action-button gap (`.filmstrip` gap: 8px), which is the
+     reference the operator pointed at — the "+" and analytics buttons there read as one
+     cluster. The title's own breathing room comes from its `margin-right: auto` below, so
+     this gap only ever separates the two action buttons from each other. */
+  gap: 8px;
   margin-bottom: 1.5rem;
 }
 
 .picker-header h1 {
   margin: 0;
+  /* The title absorbs ALL the row's slack, so the action buttons stay together at its
+     right rather than drifting apart (operator, 2026-07-29).
+     Was `justify-content: space-between` on the row: with THREE flex children that
+     distributes the free space BETWEEN each pair, so the wider the window, the further
+     Analytics and Settings separated — they read as two unrelated controls instead of one
+     action cluster. `space-between` is right for two children and wrong for three.
+     Pinned by pickerHeaderLayout.test.ts. */
+  margin-right: auto;
 }
 
 /* Kept for the overlay-panel variant (filmstrip "+" re-entry) where the picker has no
@@ -2970,6 +2981,99 @@ body,
 .settings-check-updates:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ── M10.9 WP3 — workflow-substrate status + install instructions ─────────
+   Lives inside the "Workflow features" settings group. Read-only content: a
+   status line, copy-able commands, and disclosures. Dark-only like the rest of
+   the app (no prefers-color-scheme block — see the project convention). */
+.substrate-info {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* REQUIRED, and not obvious — found at verify-self 2026-07-29 by measuring the live app.
+     The parent `.settings-group-body` is `display: flex` with `align-items: flex-start`, so
+     a child sizes to its CONTENT instead of the container: this block grew to 859px inside a
+     511px group, which pushed `.settings-panel-body` into horizontal overflow (scrollWidth
+     875 > clientWidth 543). Net effect: the ENTIRE Settings panel scrolled sideways — a
+     violation of the project rule that wide content must scroll inside its own container,
+     never the page/panel body — and `.substrate-cmd`'s own `overflow-x: auto` never engaged,
+     because the <pre> was never actually constrained.
+     `stretch` overrides the inherited flex-start for this child only; `min-width: 0` lets it
+     shrink below the <pre>'s intrinsic width so the <pre> is the thing that scrolls.
+     Verified live: info 859px→511px, panel overflow gone, <pre> scrolls internally with the
+     full `git clone` line reachable. Pinned by settingsPanelLayout.test.ts. */
+  align-self: stretch;
+  min-width: 0;
+}
+
+.substrate-status {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.substrate-status strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+}
+
+.substrate-ok {
+  color: #6cc47f;
+}
+
+.substrate-step-list {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.substrate-step-list li + li {
+  margin-top: 6px;
+}
+
+/* Commands are copy-able, so they must not be reflowed or truncated — a wrapped
+   `git clone` line is a command that silently fails when pasted. Scroll the
+   block horizontally instead (same posture the project uses for wide content). */
+.substrate-cmd {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  white-space: pre;
+  user-select: text;
+}
+
+.substrate-details {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.substrate-details > summary {
+  cursor: pointer;
+  padding: 2px 0;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.substrate-details > summary:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.substrate-note {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 /* A failed WRITE is a direct consequence of a user action, so it surfaces here

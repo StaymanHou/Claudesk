@@ -77,9 +77,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 2.14s (2026-07-29, M10.9 WP3 Phase 2: +12 tests / +1 file — the pure `shouldShowWorkflowInvite` truth table incl. an exhaustive 3x2x3x2 sweep; all 4 conditions proven independently load-bearing by removal → 112 files / 1253 pass, 0 fail)
+- **Last:** 2.3s (2026-07-29, M10.9 WP3 Phase 3 verify-codify: +12 tests / +2 files — the 3-state presence decision extracted as a pure fn + consuming-surface + anti-decoration guards, and the picker-header layout guards; all regressions proven to bite → 115 files / 1278 pass, 0 fail)
 - **Use timeout:** 120000
 - **History:**
+  - 2.3s — 2026-07-29 (WP3 P3 verify-codify: +12, 1278 pass)
+  - 2.2s — 2026-07-29 (WP3 P3 build: +6, 1262 pass)
   - 2.14s — 2026-07-29 (WP3 P2: +12, 1253 pass)
   - 1.79s — 2026-07-28 (M10.9 WP2 P4 verify-codify: +3 coerce-behavior tests → 111 files / 1239 pass)
   - 1.68s — 2026-07-28 (M10.9 WP2 P4 operator-requested picker Settings button: +5 discovery-parity tests → 111 files / 1236 pass)

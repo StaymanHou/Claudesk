@@ -42,8 +42,13 @@
 // preference (same reason "Zoom In" is not in Settings) — so the migration count is 3,
 // not 4. M14 EXTENDS this panel; it does not re-litigate it.
 
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSettingControl } from "./useSettingControl";
+import {
+  WorkflowSubstrateInfo,
+  type SubstratePresence,
+} from "./WorkflowSubstrateInfo";
+import { getWorkflowSubstrateInstalled } from "../../state/workflowSubstrate";
 import {
   CC_PERMISSION_MODE_EVENT,
   CC_PERMISSION_MODE_OPTIONS,
@@ -152,6 +157,32 @@ export default function SettingsPanel({
     onError,
   });
 
+  // M10.9 WP3 — substrate presence. Deliberately NOT a `useSettingControl`: that hook's
+  // contract is seed → listen to a broadcast → optimistic set → revert, and three of those
+  // four don't apply. This is a READ-ONLY probe of the filesystem with no setter, and there
+  // is no Claudesk-side event for "a directory appeared" — inventing one (or polling) would
+  // add a mechanism to watch something that changes about once in a user's lifetime.
+  //
+  // `null` until resolved, so the surface renders nothing rather than guessing (see the
+  // component header). A rejection also lands as `null`: the backend is contracted never to
+  // error, so a rejection here means something unexpected, and silently claiming
+  // "not installed" would be worse than showing nothing.
+  const [substratePresent, setSubstratePresent] =
+    useState<SubstratePresence>(null);
+  useEffect(() => {
+    let cancelled = false; // StrictMode double-mount guard, same as useSettingControl's
+    getWorkflowSubstrateInstalled()
+      .then((present) => {
+        if (!cancelled) setSubstratePresent(present);
+      })
+      .catch(() => {
+        if (!cancelled) setSubstratePresent(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div
       className="settings-panel"
@@ -214,12 +245,21 @@ export default function SettingsPanel({
           {/* The help line the flat strip had no room for. This setting is the one that
               genuinely needs it: it gates a whole feature class AND depends on software
               Claudesk does not ship. Enabling here is a pure UI flip — it never installs
-              or modifies anything under ~/.claude/. */}
+              or modifies anything under ~/.claude/.
+
+              WP3 trimmed the "Requires the workflow system installed in ~/.claude/" clause
+              that used to open this line: the substrate block immediately below now states
+              the install status as a FACT for this machine, which is strictly better than a
+              generic requirement the reader has to go check. Keeping both would have said
+              the same thing twice in adjacent paragraphs. The "doesn't install anything"
+              half stays — it is the part the status line does not cover, and it is the
+              milestone's load-bearing promise. (Revisit at WP3.5: once the wizards exist,
+              enabling CAN trigger an install, so this sentence will need to change.) */}
           <p className="settings-row-help">
-            Requires the workflow system installed in <code>~/.claude/</code>.
             Turning this on only shows the features — it doesn&rsquo;t install
             anything.
           </p>
+          <WorkflowSubstrateInfo present={substratePresent} />
         </SettingsGroup>
 
         <SettingsGroup

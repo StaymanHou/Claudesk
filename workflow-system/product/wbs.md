@@ -155,6 +155,16 @@ No new design prior proposed — M10.9's decisions are applications of the exist
 
   **This three-button wizard only appears for a MANAGED install** (per 3.5.3's provenance states). For a **developer install** — the operator's own row, permanently — disabling the gate must **not** offer uninstall at all; it just flips the gate, since Claudesk did not install that substrate and must never remove it. For **absent**, there is nothing to uninstall. So the wizard's trigger is `provenance == managed`, not merely "user disabled the gate."
 
+**Settled 2026-07-29 (operator, after seeing WP3's read-only surface in the real app) — what happens to WP3's copy-able commands.** The operator chose: **wizard for install; the hand-run commands survive ONLY in the `developer install` provenance row.** So WP3's instruction block is partly *scaffolding* — at WP3.5 it is replaced by the wizard for the `absent` state (where Claudesk can act), and retained only for `developer install` (where Claudesk must never act, because it did not create those symlinks and the provenance rule forbids touching them). Consequence for 3.5.3's three states:
+
+| Provenance | Install affordance | Uninstall affordance |
+|---|---|---|
+| **absent** | the **wizard** (location picker → clone → `install.sh`) | n/a |
+| **managed install** | n/a (already installed) | the **3-intent wizard** |
+| **developer install** (the operator's own row, permanently) | the **hand-run commands** — Claudesk describes, never acts | **none** — never offer to remove what Claudesk didn't install |
+
+This is why the commands are not simply deleted at WP3.5: the developer-install row has no wizard by design, so it needs the manual path. Rejected alternatives: wizard-replaces-everything (strands the developer-install row with no instructions) and wizard-plus-permanent-fallback (two affordances for the same act in the rows where the wizard works).
+
 **Tasks:**
 - [ ] 3.5.1 **Sandbox fixture FIRST** — a test harness with fully injectable roots (fake `$HOME`, fake clone dir, fake `~/.claude/`) that every subsequent task's tests run against. Nothing destructive gets written until this exists and is proven to contain writes.
 - [ ] 3.5.2 The refuse-guard, in production code: the uninstall path asserts its target is inside Claudesk's **recorded managed dir** and hard-refuses otherwise. Unit-test the refusal, not just the happy path. **A test-only guard cannot protect against a bug that ships** — this lives in production code, belt-and-braces with the provenance model.
