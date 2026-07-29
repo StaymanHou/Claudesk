@@ -157,9 +157,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.73s (2026-07-28, M10.9 WP2 Phase 4 verify-codify: +1 `~/.claude`-untouched invariant guard on the gate write path → 565 lib + 6 integ + 1 shell-history pass, 0 fail; warm)
+- **Last:** 0.71s (2026-07-29, M10.9 WP3 Phase 1 verify-codify: +2 codify tests [invite-vs-8-siblings independence = the consuming-surface test for the settings.rs boundary; on-disk key pin], both proven to bite by injection → 579 lib + 6 integ + 1 shell-history pass, 0 fail; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.71s — 2026-07-29 (WP3 P1 verify-codify: +2, 579 lib)
+  - 0.76s — 2026-07-29 (WP3 P1 build: +12, 577 lib)
   - 0.73s — 2026-07-28 (M10.9 WP2 P4 verify-codify: +1 milestone-invariant source guard [proven to bite by injecting a ~/.claude/skills path], 565 lib pass; warm)
   - 0.75s — 2026-07-28 (M10.9 WP2 P3 verify-codify: +1 settings_id membership pin [proven to bite where the 5 iterate-FUNCTIONAL_IDS tests do not], 564 lib pass; warm)
   - 0.74s — 2026-07-28 (M10.9 WP2 P1 verify-codify: +2 persistence-contract tests, 563 lib pass; warm)

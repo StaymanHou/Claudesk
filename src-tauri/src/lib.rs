@@ -70,6 +70,12 @@ mod updater;
 // is byte-identical to a build without the features, and enabling writes NOTHING into
 // `~/.claude/`. See workflow_gate/mod.rs.
 mod workflow_gate;
+// M10.9 WP3 — read-only detection of the companion workflow system's install
+// (`~/.claude/skills/`) plus the one-time invite's lifecycle marker. Separate from
+// `workflow_gate` by enforcement, not just taste: that module's standing guard fails if its
+// production code names `.claude`/`skills`/`HOME` at all, and this module must. Read-only —
+// the install/uninstall wizards are WP3.5's, in their own module with a sandbox fixture.
+mod workflow_substrate;
 
 use std::sync::Mutex;
 
@@ -531,6 +537,9 @@ pub fn run() {
             // settings.json ONLY — never `~/.claude/` (the milestone invariant).
             workflow_gate::commands::workflow_get_features_enabled,
             workflow_gate::commands::workflow_set_features_enabled,
+            workflow_substrate::commands::workflow_substrate_installed,
+            workflow_substrate::commands::workflow_get_invite,
+            workflow_substrate::commands::workflow_set_invite,
             updater::commands::updater_get_skipped_version,
             updater::commands::updater_set_skipped_version,
             // M10.5-WP2: the confirmed-quit command. The FE calls this after the

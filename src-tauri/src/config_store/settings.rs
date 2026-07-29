@@ -117,6 +117,56 @@ pub struct AppSettings {
     /// [`read_skipped_version`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skipped_version: Option<String>,
+    /// M10.9 WP3 — has the one-time workflow-features invite resolved, and how.
+    /// `None` = never shown yet, and is **the only state that permits showing it**.
+    ///
+    /// Deliberately SEPARATE from [`AppSettings::workflow_features_enabled`]: the gate is
+    /// *current state*, this is a *one-time lifecycle marker*. Conflating them breaks the
+    /// disable-after-enable case — a user who saw the invite, turned the features on,
+    /// tried them, then turned them off lands back at `workflow_features_enabled == false`,
+    /// the exact gate state as someone who never saw the invite. Recording the outcome
+    /// separately is what stops them being re-pitched something they already evaluated.
+    ///
+    /// It is **internal lifecycle state, not a user-facing setting** — no Settings-panel
+    /// control. Written only by the invite's own buttons, read only by the show-predicate.
+    /// Once `Some(_)`, suppression is permanent and one-directional: nothing in the
+    /// product resets it (the dev-only `window.__workflowInviteReset()` seam exists for
+    /// re-driving the first-run path in verification, and is absent from release builds).
+    ///
+    /// App-global, per bundle-identity. Read by [`read_workflow_invite`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_invite: Option<WorkflowInviteOutcome>,
+}
+
+/// How the one-time workflow-features invite was resolved (M10.9 WP3).
+///
+/// Two variants, and the ABSENCE of a variant is the third state — `None` means
+/// "unresolved, may still be shown". That is what makes the `[Later]` button work without
+/// a field of its own: `[Later]` deliberately **persists nothing**, so the setting stays
+/// `None` and the invite returns next launch, while a React-only session flag hides it for
+/// the current run. (Exactly the updater's `dismissBanner`-vs-`skipVersion` split:
+/// `useUpdater.ts:180-183` clears the banner and writes nothing; `:173` writes
+/// `skipped_version` for permanent suppression.)
+///
+/// Serializes kebab-case (`"acknowledged"` / `"dismissed"`) to match the TS union
+/// byte-for-byte, following the [`PipMode`](crate::pip::layout::PipMode) mold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkflowInviteOutcome {
+    /// The user took the invite's primary action: they were routed to the Settings panel
+    /// (with the workflow-features row highlighted) to decide there. Don't re-pitch.
+    ///
+    /// **Named for what it records, not for an outcome it cannot know.** The primary
+    /// button routes; it does **not** flip the gate (operator decision 2026-07-29,
+    /// reversing an earlier draft where it enabled inline). So Claudesk knows the user
+    /// engaged with the pitch, but not whether they went on to enable — and an
+    /// `Enabled` variant would assert the latter. Suppression is correct either way:
+    /// someone who saw the pitch, read the substrate context, and chose not to enable
+    /// should no more be re-pitched than someone who enabled.
+    Acknowledged,
+    /// The user explicitly dismissed the invite — the "done, stop asking" exit. Never
+    /// re-shown.
+    Dismissed,
 }
 
 /// Read the app settings. A missing file is normal (first run) and returns the
@@ -291,6 +341,36 @@ pub fn write_skipped_version(data_dir: &Path, version: Option<String>) -> Result
     write_settings(data_dir, &settings)
 }
 
+/// Read the one-time invite's outcome (M10.9 WP3). `None` = never resolved, which is the
+/// only state in which the invite may be shown.
+///
+/// No `unwrap_or` default here, unlike the boolean readers above: `None` is not a
+/// stand-in for a default, it is a **meaningful third state** the show-predicate branches
+/// on. Mirror of [`read_skipped_version`], whose `None` is likewise load-bearing.
+pub fn read_workflow_invite(data_dir: &Path) -> Result<Option<WorkflowInviteOutcome>, ConfigError> {
+    Ok(read_settings(data_dir)?.workflow_invite)
+}
+
+/// Persist the invite's outcome, preserving other fields (read-modify-write).
+///
+/// `Some(_)` is a one-way door in product terms — no user-facing affordance ever returns
+/// the value to `None`. The parameter still accepts `None` because the **dev-only** reset
+/// seam (`window.__workflowInviteReset()`) needs it to re-drive the first-run path during
+/// verification; that seam is compiled out of release frontends.
+///
+/// Note what does NOT call this: the `[Later]` button. It persists nothing at all, leaving
+/// the field `None` so the invite returns next launch (see
+/// [`WorkflowInviteOutcome`]'s header). A `[Later]` that wrote anything here would be the
+/// bug that makes "Later" mean "never".
+pub fn write_workflow_invite(
+    data_dir: &Path,
+    outcome: Option<WorkflowInviteOutcome>,
+) -> Result<(), ConfigError> {
+    let mut settings = read_settings(data_dir)?;
+    settings.workflow_invite = outcome;
+    write_settings(data_dir, &settings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,6 +442,7 @@ mod tests {
             update_notifications_enabled: Some(false),
             workflow_features_enabled: Some(true),
             skipped_version: Some("0.9.9".to_string()),
+            workflow_invite: Some(WorkflowInviteOutcome::Acknowledged),
         };
         write_settings(dir.path(), &written).unwrap();
         let read = read_settings(dir.path()).unwrap();
@@ -383,6 +464,109 @@ mod tests {
         assert!(!read_update_notifications_enabled(dir.path()).unwrap());
         write_update_notifications_enabled(dir.path(), true).unwrap();
         assert!(read_update_notifications_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn workflow_invite_defaults_to_none_and_round_trips_both_outcomes() {
+        let dir = TempDir::new().unwrap();
+        // Never shown yet — the only state that permits showing the invite. Both a fresh
+        // install and an EXISTING install (whose settings.json predates this field) read
+        // as None, which is correct for a brand-new feature.
+        assert_eq!(read_workflow_invite(dir.path()).unwrap(), None);
+
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Acknowledged)).unwrap();
+        assert_eq!(
+            read_workflow_invite(dir.path()).unwrap(),
+            Some(WorkflowInviteOutcome::Acknowledged)
+        );
+
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Dismissed)).unwrap();
+        assert_eq!(
+            read_workflow_invite(dir.path()).unwrap(),
+            Some(WorkflowInviteOutcome::Dismissed)
+        );
+
+        // Back to None — reachable only via the dev-only reset seam, never a user action.
+        write_workflow_invite(dir.path(), None).unwrap();
+        assert_eq!(read_workflow_invite(dir.path()).unwrap(), None);
+    }
+
+    #[test]
+    fn workflow_invite_serializes_kebab_case_for_the_ts_union() {
+        // Cross-language contract: the TS side declares this union verbatim. A drift in
+        // the wire strings desyncs the show-predicate silently — it would read an
+        // unrecognized value, fail to deserialize, and the invite would either never
+        // appear or reappear forever. Pin the literals.
+        let dir = TempDir::new().unwrap();
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Acknowledged)).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(
+            raw.contains("\"workflow_invite\": \"acknowledged\""),
+            "expected kebab-case \"acknowledged\" on the wire, got: {raw}"
+        );
+
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Dismissed)).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(
+            raw.contains("\"workflow_invite\": \"dismissed\""),
+            "expected kebab-case \"dismissed\" on the wire, got: {raw}"
+        );
+    }
+
+    #[test]
+    fn a_resolved_invite_survives_a_gate_toggle() {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // The disable-after-enable case, at the persistence layer.
+        //
+        // The two fields must stay INDEPENDENT. A user who saw the invite, enabled the
+        // features, tried them, then disabled them lands back at
+        // workflow_features_enabled == false — the same gate state as someone who never
+        // saw the invite. If a gate write clobbered the invite outcome (or the outcome
+        // were derived from the gate), they'd be re-pitched something they already
+        // evaluated and rejected. Read-modify-write is what prevents it; this asserts it.
+        // ═══════════════════════════════════════════════════════════════════════════
+        let dir = TempDir::new().unwrap();
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Acknowledged)).unwrap();
+
+        write_workflow_features_enabled(dir.path(), true).unwrap();
+        write_workflow_features_enabled(dir.path(), false).unwrap();
+
+        assert_eq!(
+            read_workflow_invite(dir.path()).unwrap(),
+            Some(WorkflowInviteOutcome::Acknowledged),
+            "a gate toggle must not disturb the invite's lifecycle marker"
+        );
+        assert!(!read_workflow_features_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn writing_the_invite_preserves_sibling_fields_and_tolerates_an_unknown_key() {
+        // read-modify-write: updating the invite must not disturb the OTHER settings, and
+        // an unknown key must not break the read.
+        //
+        // Note what is deliberately NOT asserted: that the unknown key survives on disk.
+        // It does not — `AppSettings` is a typed struct with no `#[serde(flatten)]`
+        // catch-all, so a read-modify-write round-trip drops keys it doesn't know. An
+        // earlier draft of this test asserted survival and failed, having copied the
+        // *claim* in `write_pip_layout_preserves_other_fields`'s name and comment ("must
+        // not be clobbered") rather than its actual assertion — that test's own inline
+        // note concedes the round-trip drops the key. Left explicit here so the next
+        // reader doesn't re-derive the same wrong expectation from the sibling's name.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(SETTINGS_FILE),
+            br#"{"time_tracking_enabled":true,"future_field":42}"#,
+        )
+        .unwrap();
+
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Dismissed)).unwrap();
+
+        // The unknown key did not break the read, and the sibling field round-tripped.
+        assert!(read_time_tracking_enabled(dir.path()).unwrap());
+        assert_eq!(
+            read_workflow_invite(dir.path()).unwrap(),
+            Some(WorkflowInviteOutcome::Dismissed)
+        );
     }
 
     #[test]
@@ -651,8 +835,15 @@ mod tests {
     #[test]
     fn workflow_features_independent_of_the_other_seven_fields() {
         // Read-modify-write across the full struct: flipping the gate must not clobber any
-        // sibling setting, and updating a sibling must not clobber the gate. Exercised
-        // against every OTHER field the struct carries (7 today; this one is the 8th).
+        // sibling setting, and updating a sibling must not clobber the gate.
+        //
+        // NOTE (M10.9 WP3): the name says "seven" and this exercises seven siblings, but the
+        // struct now carries NINE fields — `workflow_invite` was added and is deliberately
+        // NOT exercised here. Its own coverage is
+        // `workflow_invite_independent_of_the_other_eight_fields` above, which is the
+        // symmetric test written from the new field's side. Left as-is rather than renamed:
+        // each field's independence test asserting from its own side is the pattern, and
+        // widening this one would duplicate the other.
         let dir = TempDir::new().unwrap();
         write_pip_layout(dir.path(), PipLayout::VerticalMirror).unwrap();
         write_pip_mode(dir.path(), PipMode::Off).unwrap();
@@ -684,6 +875,95 @@ mod tests {
         // ...and updating a sibling leaves the gate intact.
         write_pip_mode(dir.path(), PipMode::On).unwrap();
         assert!(read_workflow_features_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn workflow_invite_independent_of_the_other_eight_fields() {
+        // THE CONSUMING-SURFACE TEST for Phase 1's integration boundary (M10.9 WP3).
+        //
+        // `settings.rs` is read by every existing settings IPC handler
+        // (workflow_get_features_enabled, time_get_tracking_enabled,
+        // updater_get_notifications_enabled, pip_set_mode, …). Adding a field to the shared
+        // struct means the new WRITER could clobber any of them via a botched
+        // read-modify-write — and that regression would surface as a user's PiP mode or
+        // permission mode silently resetting, which no test of the new field alone catches.
+        //
+        // This is the codified form of what verify-human approved against a copy of the
+        // operator's real settings.json. `a_resolved_invite_survives_a_gate_toggle` covers
+        // only the gate↔invite pair; this covers all eight siblings in both directions.
+        let dir = TempDir::new().unwrap();
+        write_pip_layout(dir.path(), PipLayout::Minimal).unwrap();
+        write_pip_mode(dir.path(), PipMode::Off).unwrap();
+        write_cc_permission_mode(dir.path(), CcPermissionMode::Plan).unwrap();
+        write_time_tracking_enabled(dir.path(), true).unwrap();
+        write_update_notifications_enabled(dir.path(), false).unwrap();
+        write_skipped_version(dir.path(), Some("1.2.3".to_string())).unwrap();
+        write_workflow_features_enabled(dir.path(), true).unwrap();
+
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Dismissed)).unwrap();
+
+        // Every sibling survived the invite write.
+        assert_eq!(read_pip_layout(dir.path()).unwrap(), PipLayout::Minimal);
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::Plan
+        );
+        assert!(read_time_tracking_enabled(dir.path()).unwrap());
+        assert!(!read_update_notifications_enabled(dir.path()).unwrap());
+        assert_eq!(
+            read_skipped_version(dir.path()).unwrap().as_deref(),
+            Some("1.2.3")
+        );
+        assert!(read_workflow_features_enabled(dir.path()).unwrap());
+        assert_eq!(
+            read_workflow_invite(dir.path()).unwrap(),
+            Some(WorkflowInviteOutcome::Dismissed)
+        );
+
+        // ...and updating each sibling leaves the invite marker intact. Iterating the
+        // writers matters: the invite is the field that must survive ANY other write, since
+        // a lost marker re-pitches a user who already resolved it.
+        write_pip_mode(dir.path(), PipMode::On).unwrap();
+        write_time_tracking_enabled(dir.path(), false).unwrap();
+        write_workflow_features_enabled(dir.path(), false).unwrap();
+        assert_eq!(
+            read_workflow_invite(dir.path()).unwrap(),
+            Some(WorkflowInviteOutcome::Dismissed),
+            "the invite marker must survive every sibling write — losing it re-pitches a \
+             user who already resolved the invite"
+        );
+    }
+
+    #[test]
+    fn workflow_invite_on_disk_key_is_the_pinned_persistence_contract() {
+        // Same tier and same reason as the gate's key pin below: the JSON key is a contract
+        // with every already-installed copy of the app. The serde attribute derives the key
+        // from the Rust field name, so a well-meaning field rename is exactly the edit that
+        // breaks it — and here the breakage is uniquely nasty. A renamed key makes the
+        // reader find nothing, which reads as `None` = "never shown", so **every user who
+        // already dismissed the invite gets re-pitched it**. That is the one outcome the
+        // one-time-invite design exists to prevent, and it would ship silently.
+        let dir = TempDir::new().unwrap();
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Dismissed)).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(
+            raw.contains("\"workflow_invite\": \"dismissed\""),
+            "the resolved invite must persist under exactly this key: {raw}"
+        );
+
+        // Unlike the gate (which writes an explicit `false`), clearing the invite DROPS the
+        // key entirely — `skip_serializing_if = "Option::is_none"`. That asymmetry is
+        // correct and load-bearing: absent IS the meaningful "unresolved" state, whereas the
+        // gate needs OFF distinguishable from never-set. Pin it so a future edit doesn't
+        // "helpfully" start writing `null`, which would deserialize as None but make the
+        // file misleading to read.
+        write_workflow_invite(dir.path(), None).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(
+            !raw.contains("workflow_invite"),
+            "a cleared invite must drop the key entirely, not write null: {raw}"
+        );
     }
 
     #[test]
