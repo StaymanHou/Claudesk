@@ -18,29 +18,9 @@
 
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
-import {
-  CC_PERMISSION_MODE_EVENT,
-  CC_PERMISSION_MODE_OPTIONS,
-  DEFAULT_CC_PERMISSION_MODE,
-  coerceCcPermissionMode,
-  type CcPermissionMode,
-} from "../../cc/permissionMode";
-import {
-  TIME_TRACKING_ENABLED_EVENT,
-  getTimeTrackingEnabled,
-  // Aliased so the useState setter below can own the clean `setTimeTrackingEnabled` name
-  // (this is the IPC persister, not the React setter).
-  setTimeTrackingEnabled as persistTimeTracking,
-} from "../../state/timeAnalytics";
-import {
-  UPDATER_NOTIFICATIONS_ENABLED_EVENT,
-  getUpdateNotificationsEnabled,
-  setUpdateNotificationsEnabled,
-} from "../../updater/updaterPrefs";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
 // an ERROR (an IPC rejection that must surface, not be swallowed — the WP6 MAJOR). The
@@ -80,51 +60,41 @@ interface ProjectPickerProps {
   // render before App wires the handler, and it guards the absence (the entry point just hides);
   // the filmstrip only ever mounts with a live handler, so it requires it.
   onOpenDashboard?: () => void;
-  // M10 WP4 — manual "Check for updates" from the picker. App owns the `useUpdater` hook,
-  // so the picker just KICKS the check; App's checkNow ignores skip/disable, shows the
-  // banner for an available update, and surfaces up-to-date / error via the single
-  // App-level updater status row (WP6 P1.4 — the picker no longer toasts these). The
-  // picker fires-and-forgets, so the type is KICKS-only (`() => void`) — the former
-  // `Promise<{outcome}>` return had no consumer (SURFACE-2026-07-18-QUALITY-WP6-PICKER-
-  // CHECK-UPDATES-VESTIGIAL-RETURN-TYPE); a Promise-returning `checkNow` still assigns to
-  // it. Optional (the dev-seam picker may not pass it).
-  onCheckForUpdates?: () => void;
+  // M10.9 WP2 Phase 4 — open the app-global Settings panel. Same shape as
+  // `onOpenDashboard`: the picker renders a header entry point that opens the single
+  // <SettingsPanel> App.tsx owns; optional, and the button hides when unwired.
+  //
+  // Added AFTER the strip migration, on operator review: WP1's verdict specified ⌘, and a
+  // Settings… menu item as the entry points, and nobody asked whether a chord plus a menu
+  // item is enough DISCOVERY for the surface that had just become the only home for four
+  // settings. The Analytics button sitting alone in this header made the asymmetry
+  // obvious — two app-global overlays, one with a visible affordance and one without.
+  //
+  // This is NOT re-adding the settings strip. The strip was four CONTROLS costing ~148px
+  // of vertical space above the project list; this is one icon in a header row that
+  // already exists (zero added vertical space), and it OPENS the panel rather than
+  // hosting settings — so the "settings in four places" trap stays closed.
+  //
+  // NOTE: `onCheckForUpdates` moved to SettingsPanel along with the update-notifications
+  // toggle it sat beside — the picker no longer hosts any settings CONTROLS.
+  onOpenSettings?: () => void;
 }
 
 export function ProjectPicker({
   onOpen,
   onOpenDashboard,
-  onCheckForUpdates,
+  onOpenSettings,
 }: ProjectPickerProps) {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [filter, setFilter] = useState("");
   // The picker toast: an info note (prune-on-mount) or a surfaced IPC error. `null` =
   // no toast (the common case). Both kinds are dismissible.
   const [toast, setToast] = useState<PickerToast | null>(null);
-  // The CC permission-mode dropdown (friend-requested, replacing the old yolo checkbox),
-  // surfaced on the picker (the app-global home screen) and synced with the native
-  // View-menu "Permission Mode" radio. The backend is the single source of truth: seed
-  // from cc_get_permission_mode on mount, stay in sync via the `cc-permission-mode`
-  // broadcast (so a native-menu pick updates this dropdown too), and on change call
-  // cc_set_permission_mode (which persists + re-broadcasts, re-checking the menu). Starts
-  // at the default until the read lands.
-  const [ccPermissionMode, setCcPermissionMode] = useState<CcPermissionMode>(
-    DEFAULT_CC_PERMISSION_MODE,
-  );
-  // M9 WP5 — the time-analytics tracking toggle (universal-vs-workflow-coupled feature
-  // flag, default OFF). Same backend-is-source-of-truth discipline as the permission
-  // dropdown: seed from time_get_tracking_enabled on mount, stay in sync via the
-  // `time-tracking-enabled` broadcast, and on change call time_set_tracking_enabled
-  // (persists + re-broadcasts). OFF = zero SQLite IO; status dots are unaffected either
-  // way. Starts OFF until the read lands (matches the backend default, so no flicker).
-  const [timeTrackingEnabled, setTimeTrackingEnabled] = useState(false);
-  // M10 WP4 — the update-notification toggle (default ON per design-prior
-  // operator-helpful-friend-misfiring-as-offswitchable-setting). Same backend-is-source-of-
-  // truth discipline: seed from getUpdateNotificationsEnabled on mount, sync via the
-  // `updater-notifications-enabled` broadcast, set via setUpdateNotificationsEnabled. Starts
-  // true (matches the backend default, so no flicker toward the common case).
-  const [updateNotificationsEnabled, setUpdateNotificationsEnabled_] =
-    useState(true);
+  // NOTE (M10.9 WP2 Phase 4): the three app-global settings states that used to live here
+  // (ccPermissionMode / timeTrackingEnabled / updateNotificationsEnabled), together with
+  // their seed+listen effects and optimistic-set handlers, MOVED to the Settings panel —
+  // they were not duplicated. The shared discipline they hand-copied three times now
+  // lives once in components/settings/useSettingControl.ts.
 
   useEffect(() => {
     // Load recents on mount. First prune any project whose folder was deleted
@@ -154,153 +124,6 @@ export function ProjectPicker({
       cancelled = true;
     };
   }, []);
-
-  // Seed the mode dropdown from the backend on mount, then track the `cc-permission-mode`
-  // broadcast so picking a mode on the native View-menu radio keeps this dropdown in sync
-  // (both surfaces share one source of truth — the persisted cc_permission_mode setting,
-  // mirrored on the menu by apply_cc_permission_mode_to_menu). Reads are coerced so a
-  // stale/corrupt persisted value falls back to the default rather than an impossible
-  // selection. `cancelled` guards the async listen under StrictMode.
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void invoke<CcPermissionMode>("cc_get_permission_mode")
-      .then((mode) => {
-        if (!cancelled) setCcPermissionMode(coerceCcPermissionMode(mode));
-      })
-      .catch((e) =>
-        console.error("[claudesk] cc_get_permission_mode (picker) failed:", e),
-      );
-    void listen<CcPermissionMode>(CC_PERMISSION_MODE_EVENT, (event) => {
-      setCcPermissionMode(coerceCcPermissionMode(event.payload));
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  function handleChangeMode(next: CcPermissionMode) {
-    // Optimistic set; the `cc-permission-mode` broadcast (fired by cc_set_permission_mode)
-    // re-confirms it and re-checks the menu radio. A rejection reverts to the prior mode +
-    // surfaces the error toast.
-    const prev = ccPermissionMode;
-    setCcPermissionMode(next);
-    void invoke("cc_set_permission_mode", { mode: next }).catch((e) => {
-      setCcPermissionMode(prev);
-      setToast({
-        kind: "error",
-        message: mapIpcError("update permission mode", e),
-      });
-    });
-  }
-
-  // Seed the tracking toggle from the backend on mount, then track the
-  // `time-tracking-enabled` broadcast (so any other surface flipping it — or a future
-  // WP6 empty-state — keeps this checkbox in sync). Backend is the single source of
-  // truth. `cancelled` guards the async listen under StrictMode. (Mirror of the
-  // cc-permission-mode seed+listen effect above.)
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void getTimeTrackingEnabled()
-      .then((enabled) => {
-        if (!cancelled) setTimeTrackingEnabled(enabled);
-      })
-      .catch((e) =>
-        console.error(
-          "[claudesk] time_get_tracking_enabled (picker) failed:",
-          e,
-        ),
-      );
-    void listen<boolean>(TIME_TRACKING_ENABLED_EVENT, (event) => {
-      setTimeTrackingEnabled(event.payload);
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  function handleToggleTracking(next: boolean) {
-    // Optimistic set; the `time-tracking-enabled` broadcast (fired by the set command)
-    // re-confirms it. A rejection reverts + surfaces the error toast. (Mirror of
-    // handleChangeMode.)
-    const prev = timeTrackingEnabled;
-    setTimeTrackingEnabled(next); // React state (optimistic)
-    void persistTimeTracking(next).catch((e) => {
-      setTimeTrackingEnabled(prev); // revert React state on IPC failure
-      setToast({
-        kind: "error",
-        message: mapIpcError("update time tracking", e),
-      });
-    });
-  }
-
-  // M10 WP4 — seed + sync the update-notification toggle (mirror of the tracking effect).
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void getUpdateNotificationsEnabled()
-      .then((enabled) => {
-        if (!cancelled) setUpdateNotificationsEnabled_(enabled);
-      })
-      .catch((e) =>
-        console.error(
-          "[claudesk] updater_get_notifications_enabled (picker) failed:",
-          e,
-        ),
-      );
-    void listen<boolean>(UPDATER_NOTIFICATIONS_ENABLED_EVENT, (event) => {
-      setUpdateNotificationsEnabled_(event.payload);
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
-  function handleToggleUpdateNotifications(next: boolean) {
-    // Optimistic set + revert-on-reject (mirror of handleToggleTracking).
-    const prev = updateNotificationsEnabled;
-    setUpdateNotificationsEnabled_(next);
-    void setUpdateNotificationsEnabled(next).catch((e) => {
-      setUpdateNotificationsEnabled_(prev);
-      setToast({
-        kind: "error",
-        message: mapIpcError("update notification setting", e),
-      });
-    });
-  }
-
-  function handleCheckForUpdates() {
-    if (!onCheckForUpdates) return;
-    // WP6 P1.4: manual-check feedback (up-to-date / error) is now surfaced by the SINGLE
-    // App-level updater status row (useUpdater.statusNote), which renders over
-    // BOTH the picker and workspace scenes — so the picker no longer toasts these itself
-    // (that was a duplicate surface, and the native-menu path had no equivalent). The
-    // update-available case still shows App's banner. We only need to KICK the check here;
-    // useUpdater owns all feedback. Kept as `void` — the returned report is unused now.
-    void onCheckForUpdates();
-  }
 
   async function handleOpenRecent(projectPath: string) {
     // Stamp recency before handing off so the next list_projects reflects it. A
@@ -392,57 +215,40 @@ export function ProjectPicker({
             <span>Analytics</span>
           </button>
         )}
-      </div>
-      <label className="picker-permission-mode">
-        <span>Permission mode</span>
-        <select
-          data-testid="picker-permission-mode"
-          aria-label="Permission mode"
-          value={ccPermissionMode}
-          onChange={(e) =>
-            handleChangeMode(coerceCcPermissionMode(e.target.value))
-          }
-        >
-          {CC_PERMISSION_MODE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="picker-time-tracking">
-        <input
-          type="checkbox"
-          data-testid="picker-time-tracking"
-          checked={timeTrackingEnabled}
-          onChange={(e) => handleToggleTracking(e.target.checked)}
-        />
-        <span>Time tracking</span>
-      </label>
-      {/* M10 WP4 — update-notification toggle (default ON) + a manual "Check for updates"
-          affordance. The toggle gates the auto-check-on-launch notify; the button runs a
-          MANUAL check (ignores skip/disable) via App's useUpdater.checkNow. */}
-      <div className="picker-updates">
-        <label className="picker-update-notifications-label">
-          <input
-            type="checkbox"
-            data-testid="picker-update-notifications"
-            checked={updateNotificationsEnabled}
-            onChange={(e) => handleToggleUpdateNotifications(e.target.checked)}
-          />
-          <span>Update notifications</span>
-        </label>
-        {onCheckForUpdates && (
+        {onOpenSettings && (
           <button
             type="button"
-            className="picker-check-updates"
-            data-testid="picker-check-updates"
-            onClick={handleCheckForUpdates}
+            className="picker-open-settings"
+            data-testid="picker-open-settings"
+            aria-label="Open settings"
+            title="Settings (⌘,)"
+            onClick={onOpenSettings}
           >
-            Check for updates
+            {/* Gear glyph — the conventional settings mark, sized to match the
+                Analytics bar-chart beside it. */}
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M8 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Zm0 4.1a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"
+                fill="currentColor"
+              />
+              <path
+                d="M13.3 8c0-.3 0-.6-.1-.9l1.3-1-1.3-2.2-1.5.6a5.2 5.2 0 0 0-1.5-.9L10 2H7.5l-.2 1.6c-.6.2-1 .5-1.5.9l-1.5-.6-1.3 2.2 1.3 1a5 5 0 0 0 0 1.8l-1.3 1 1.3 2.2 1.5-.6c.4.4.9.7 1.5.9l.2 1.6H10l.2-1.6c.6-.2 1-.5 1.5-.9l1.5.6 1.3-2.2-1.3-1c0-.3.1-.6.1-.9Zm-1.2 1.4.2.1 1 .8-.5.9-1.2-.5-.3.3c-.4.4-.9.7-1.4.8l-.4.1-.2 1.3h-1l-.2-1.3-.4-.1a4 4 0 0 1-1.4-.8l-.3-.3-1.2.5-.5-.9 1-.8.2-.1a4 4 0 0 1 0-1.6l-.1-.2-1-.8.5-.9 1.2.5.3-.3c.4-.4.9-.7 1.4-.8l.4-.1.2-1.3h1l.2 1.3.4.1c.5.1 1 .4 1.4.8l.3.3 1.2-.5.5.9-1 .8-.2.2a4 4 0 0 1 0 1.6Z"
+                fill="currentColor"
+              />
+            </svg>
+            <span>Settings</span>
           </button>
         )}
       </div>
+      {/* M10.9 WP2 Phase 4 — the app-global settings CONTROLS that used to live here
+          (permission mode / time tracking / update notifications) MOVED to the ⌘,
+          Settings panel. That was the point of the migration: the picker is the surface
+          hit on every project open, and the strip spent ~148px above the project list
+          doing a job that belongs to a preferences dialog. The project list now starts
+          directly below the filter.
+          The header gear ABOVE is not a walk-back of that — it opens the panel and costs
+          no vertical space (it shares the existing header row with Analytics). Do NOT
+          re-add settings CONTROLS here — see components/settings/SettingsPanel.tsx. */}
       {toast !== null && (
         <div
           className={`picker-toast${toast.kind === "error" ? " picker-toast-error" : ""}`}

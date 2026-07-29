@@ -93,6 +93,13 @@ describe("menuBridge — callback ids", () => {
       kind: "callback",
       callback: "checkForUpdates",
     });
+    // M10.9 WP2 — "Settings…" opens the app-global Settings panel. A CALLBACK, not a
+    // synthetic ⌘, keydown: the panel's open state is frontend-owned, so re-dispatching
+    // the chord would re-run the toggle the menu click already ran (open-then-close).
+    expect(menuActionFor(MENU_IDS.SETTINGS)).toEqual({
+      kind: "callback",
+      callback: "openSettings",
+    });
     expect(menuActionFor(MENU_IDS.NEW_WORKSPACE)).toEqual({
       kind: "callback",
       callback: "newWorkspace",

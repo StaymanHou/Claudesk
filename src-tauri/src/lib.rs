@@ -64,6 +64,12 @@ mod tray;
 // WP6 (decision reversed — brew installs self-update too; SURFACE-2026-07-17-M10-BREW-
 // DECISION-REVERSED-TO-SELF-UPDATE).
 mod updater;
+// M10.9 WP2 (workflow-features opt-in gate): one persisted boolean, default OFF for
+// everyone, gating the workflow-coupled feature class as a SET (M11 docs tab, M12
+// auto-resume + drive-mode selector, M13 skill buttons). Two invariants live here — OFF
+// is byte-identical to a build without the features, and enabling writes NOTHING into
+// `~/.claude/`. See workflow_gate/mod.rs.
+mod workflow_gate;
 
 use std::sync::Mutex;
 
@@ -519,6 +525,12 @@ pub fn run() {
             // skip/disable FILTERING is frontend-side; these just get/set the raw values.
             updater::commands::updater_get_notifications_enabled,
             updater::commands::updater_set_notifications_enabled,
+            // M10.9 WP2: the workflow-features gate (default OFF for everyone). get seeds
+            // the frontend consumption seam every gated surface reads; set persists +
+            // broadcasts `workflow-features-enabled`. The setter touches Claudesk's own
+            // settings.json ONLY — never `~/.claude/` (the milestone invariant).
+            workflow_gate::commands::workflow_get_features_enabled,
+            workflow_gate::commands::workflow_set_features_enabled,
             updater::commands::updater_get_skipped_version,
             updater::commands::updater_set_skipped_version,
             // M10.5-WP2: the confirmed-quit command. The FE calls this after the

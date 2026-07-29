@@ -36,6 +36,9 @@ export const MENU_IDS = {
   // M10 WP4 — "Check for Updates…" (manual check, ignores skip/disable). Value must
   // match `app_menu::ids::CHECK_FOR_UPDATES` byte-for-byte.
   CHECK_FOR_UPDATES: "app.checkForUpdates",
+  // M10.9 WP2 — "Settings…" opens the app-global Settings panel (same surface as ⌘,).
+  // Value must match `app_menu::ids::SETTINGS` byte-for-byte.
+  SETTINGS: "app.settings",
   NEW_WORKSPACE: "file.newWorkspace",
   OPEN_SUBLIME_TEXT: "workspace.openSublimeText",
   OPEN_SUBLIME_MERGE: "workspace.openSublimeMerge",
@@ -59,6 +62,7 @@ export const MENU_IDS = {
 /** A callback action's tag — App.tsx switches on this to call the right seam. */
 export type MenuCallback =
   | "checkForUpdates"
+  | "openSettings"
   | "newWorkspace"
   | "openSublimeText"
   | "openSublimeMerge"
@@ -79,7 +83,11 @@ export type MenuCallback =
 export type MenuAction =
   | { kind: "key"; init: KeyboardEventInit }
   | { kind: "callback"; callback: Exclude<MenuCallback, "setCcPermissionMode"> }
-  | { kind: "callback"; callback: "setCcPermissionMode"; mode: CcPermissionMode };
+  | {
+      kind: "callback";
+      callback: "setCcPermissionMode";
+      mode: CcPermissionMode;
+    };
 
 // The synthetic-key inits, each reproducing one existing chord. macOS reports the
 // digit/letter in `e.key`; the predicates match on `metaKey` + `shiftKey` + `key`
@@ -136,6 +144,10 @@ export function menuActionFor(id: string): MenuAction | null {
     // ignores the skip-list + disable pref and surfaces the outcome).
     case MENU_IDS.CHECK_FOR_UPDATES:
       return { kind: "callback", callback: "checkForUpdates" };
+    // A callback, NOT a synthetic ⌘, keydown: the panel's open state is frontend-owned,
+    // so re-dispatching the chord would run the same toggle the menu click already ran.
+    case MENU_IDS.SETTINGS:
+      return { kind: "callback", callback: "openSettings" };
     case MENU_IDS.NEW_WORKSPACE:
       return { kind: "callback", callback: "newWorkspace" };
     case MENU_IDS.OPEN_SUBLIME_TEXT:
@@ -157,9 +169,17 @@ export function menuActionFor(id: string): MenuAction | null {
     // that mode (no invert). The backend broadcasts `cc-permission-mode` so the menu radio
     // + picker dropdown re-render. Takes effect on the NEXT cc_spawn.
     case MENU_IDS.CC_MODE_DEFAULT:
-      return { kind: "callback", callback: "setCcPermissionMode", mode: "default" };
+      return {
+        kind: "callback",
+        callback: "setCcPermissionMode",
+        mode: "default",
+      };
     case MENU_IDS.CC_MODE_PLAN:
-      return { kind: "callback", callback: "setCcPermissionMode", mode: "plan" };
+      return {
+        kind: "callback",
+        callback: "setCcPermissionMode",
+        mode: "plan",
+      };
     case MENU_IDS.CC_MODE_ACCEPT_EDITS:
       return {
         kind: "callback",
@@ -167,9 +187,17 @@ export function menuActionFor(id: string): MenuAction | null {
         mode: "acceptEdits",
       };
     case MENU_IDS.CC_MODE_AUTO:
-      return { kind: "callback", callback: "setCcPermissionMode", mode: "auto" };
+      return {
+        kind: "callback",
+        callback: "setCcPermissionMode",
+        mode: "auto",
+      };
     case MENU_IDS.CC_MODE_DONT_ASK:
-      return { kind: "callback", callback: "setCcPermissionMode", mode: "dontAsk" };
+      return {
+        kind: "callback",
+        callback: "setCcPermissionMode",
+        mode: "dontAsk",
+      };
     case MENU_IDS.CC_MODE_BYPASS:
       return {
         kind: "callback",

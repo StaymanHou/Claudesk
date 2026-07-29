@@ -159,6 +159,11 @@ pub mod ids {
                                                          // Claudesk app menu near About). A click triggers a MANUAL update check (ignores the
                                                          // skip-list + disable pref) via the frontend `useUpdater.checkNow`.
     pub const CHECK_FOR_UPDATES: &str = "app.checkForUpdates";
+    // M10.9 WP2 — "Settings…" in the Claudesk app menu (macOS-conventional, right after
+    // About). Opens the app-global Settings panel; the ⌘, chord opens the same surface
+    // frontend-side. A CALLBACK, not a synthetic key: the frontend owns the panel's
+    // open state, and re-dispatching a keydown would duplicate the chord path.
+    pub const SETTINGS: &str = "app.settings";
     pub const OPEN_SUBLIME_TEXT: &str = "workspace.openSublimeText";
     pub const OPEN_SUBLIME_MERGE: &str = "workspace.openSublimeMerge";
     pub const REVEAL_IN_FINDER: &str = "workspace.revealInFinder";
@@ -185,6 +190,7 @@ pub mod ids {
 /// `MenuItemBuilder::with_id` call). Also lets the tests pin uniqueness + non-emptiness.
 pub const FUNCTIONAL_IDS: &[&str] = &[
     ids::CHECK_FOR_UPDATES,
+    ids::SETTINGS,
     ids::PANEL_EDITOR,
     ids::PANEL_DIFF,
     ids::PANEL_TERMINAL,
@@ -234,8 +240,16 @@ pub fn build_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     // accelerator (the native-menu pattern).
     let check_for_updates =
         MenuItemBuilder::with_id(ids::CHECK_FOR_UPDATES, "Check for Updates…").build(app)?;
+    // M10.9 WP2 — "Settings…" with the macOS-standard ⌘, shown in the item text. As with
+    // New Workspace's ⌘⇧N, the accelerator is DISPLAY-ONLY: the real binding is the
+    // frontend capture-phase chord (settingsChord.ts). Registering a native accelerator
+    // here would fire the menu action AND the document chord for one keypress, and the
+    // panel's open state is a frontend toggle — so it would open-then-close.
+    let settings = MenuItemBuilder::with_id(ids::SETTINGS, "Settings…\t⌘,").build(app)?;
     let app_menu = SubmenuBuilder::new(app, "Claudesk")
         .about(Some(about_metadata))
+        .separator()
+        .item(&settings)
         .separator()
         .item(&check_for_updates)
         .separator()
@@ -539,6 +553,38 @@ mod tests {
                  a click on this item would dead-end in the frontend's menuActionFor switch"
             );
         }
+    }
+
+    #[test]
+    fn settings_id_is_registered_functional_and_conventionally_placed() {
+        // M10.9 WP2 — membership pin for the "Settings…" item, by NAME.
+        //
+        // Every other id test here iterates FUNCTIONAL_IDS, which makes them blind to the
+        // regression that actually matters: DELETING an entry. A shorter array just means
+        // a shorter loop — `functional_ids_are_recognized` and
+        // `functional_ids_are_pinned_to_the_frontend_bridge` both still pass. The menu
+        // item would keep building and keep emitting on click, but `is_functional_id`
+        // would return false, the Rust handler would swallow the event, and the item
+        // would be silently dead. That path is exactly what the operator had to verify by
+        // hand (the bridge cannot click a native NSMenuItem), so it is worth pinning here
+        // rather than re-testing manually every phase.
+        assert!(
+            FUNCTIONAL_IDS.contains(&ids::SETTINGS),
+            "ids::SETTINGS must stay in FUNCTIONAL_IDS — without it the Settings… item \
+             builds and emits but is_functional_id rejects the click, silently dead"
+        );
+        assert!(is_functional_id(ids::SETTINGS));
+        // Value pin: the frontend's MENU_IDS.SETTINGS hardcodes this exact string, and
+        // menuActionFor switches on it. A rename here dead-ends the click in the TS
+        // switch's `null` arm.
+        assert_eq!(ids::SETTINGS, "app.settings");
+        // Namespace check: it belongs to the Claudesk app menu ("app.*"), like
+        // CHECK_FOR_UPDATES — not the view/file/workspace menus. Cheap guard against a
+        // copy-paste that files it under the wrong submenu prefix.
+        assert!(
+            ids::SETTINGS.starts_with("app."),
+            "Settings… lives in the Claudesk app menu, so its id should be app.*"
+        );
     }
 
     #[test]

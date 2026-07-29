@@ -86,14 +86,20 @@ describe("M9 WP6a — the GLOBAL dashboard is reachable from the picker scene, n
   });
 
   it("the GlobalDashboard overlay is rendered at the app-shell top level (outside the workspace-open branch)", () => {
-    // It overlays whichever scene is up. The overlay must come AFTER the view ternary's
-    // else-branch closes (`</>` + `)}`) — i.e. a sibling of the ternary, not nested inside
-    // the workspace-open fragment (which would re-gate it on a workspace being open).
+    // It overlays whichever scene is up. The overlay must come AFTER the scene container
+    // closes — i.e. a sibling of the view ternary, not nested inside the workspace-open
+    // fragment (which would re-gate it on a workspace being open).
+    //
+    // Anchored on `</div>` (the scene container's close) rather than an indentation-exact
+    // `"</>\n      )}"` excerpt: the original literal assumed a 6-space indent and silently
+    // stopped matching when Prettier re-indented this region during M10.9 WP2 Phase 3 —
+    // the test then failed on its own -1 guard rather than on the structural claim. A
+    // source guard that embeds newlines + indentation is one reformat away from rotting.
     const overlayIdx = appTsx.indexOf("{showDashboard && (");
-    const elseBranchCloseIdx = appTsx.indexOf("</>\n      )}");
+    const sceneCloseIdx = appTsx.indexOf("</div>");
     expect(overlayIdx).toBeGreaterThan(-1);
-    expect(elseBranchCloseIdx).toBeGreaterThan(-1);
-    expect(overlayIdx).toBeGreaterThan(elseBranchCloseIdx);
+    expect(sceneCloseIdx).toBeGreaterThan(-1);
+    expect(overlayIdx).toBeGreaterThan(sceneCloseIdx);
   });
 });
 

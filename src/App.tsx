@@ -19,6 +19,8 @@ import {
 import { workspaceSwitchIndex } from "./components/workspace/workspaceSwitchChord";
 import { newWorkspaceChord } from "./components/workspace/newWorkspaceChord";
 import { isDashboardChord } from "./components/workspace/dashboard/dashboardChord";
+import { isSettingsChord } from "./components/settings/settingsChord";
+import { escDismissTarget } from "./components/settings/escDismiss";
 import {
   loadOrder,
   reorder,
@@ -65,6 +67,12 @@ import {
 const GlobalDashboard = lazy(
   () => import("./components/workspace/dashboard/GlobalDashboard"),
 );
+
+// M10.9 WP2 — the app-global Settings panel (⌘, / Claudesk → Settings…). Same
+// mount-once + lazy shape as the dashboard: a top-level overlay reachable from BOTH the
+// picker and an open workspace, which is the reachability the retired picker settings
+// strip never had.
+const SettingsPanel = lazy(() => import("./components/settings/SettingsPanel"));
 
 // WP5 app shell. The view is a state machine over WorkspaceList:
 //   - "picker"         → Project Picker, full-screen (no workspace open yet)
@@ -226,6 +234,25 @@ function App() {
   // Esc closes it while open. Same APP-LEVEL capture-phase pattern. `showDashboard` mounts a
   // single <GlobalDashboard> (lazy), rendered at the app-shell top level below.
   const [showDashboard, setShowDashboard] = useState(false);
+  // M10.9 WP2 — the app-global Settings panel (⌘, / Claudesk → Settings…). Declared
+  // beside showDashboard because the two share one Esc handler below: they are both
+  // app-level overlays, and Esc must dismiss only whichever is in front.
+  const [showSettings, setShowSettings] = useState(false);
+  // Latest-refs mirroring the two overlay states, so the once-registered keydown listener
+  // below can read the CURRENT values synchronously (same idiom as focusedPathRef /
+  // busyNamesRef — the listener has empty deps, so it cannot close over the state).
+  //
+  // Load-bearing, and the reason is a bug this code already had: the first version read a
+  // flag assigned INSIDE a `setShowSettings` updater and checked it on the next line.
+  // React DEFERS updater callbacks, so the flag was still false when the guard ran and one
+  // Esc closed BOTH overlays. A state updater cannot answer a question the handler needs
+  // answered NOW — hence the refs.
+  const showSettingsRef = useRef(false);
+  const showDashboardRef = useRef(false);
+  useEffect(() => {
+    showSettingsRef.current = showSettings;
+    showDashboardRef.current = showDashboard;
+  }, [showSettings, showDashboard]);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isDashboardChord(e)) {
@@ -233,14 +260,31 @@ function App() {
         setShowDashboard((prev) => !prev); // toggle open/closed
         return;
       }
-      // Esc closes the dashboard when it's the front surface (does not steal Esc
-      // otherwise — only acts while showDashboard is true).
+      // Esc dismisses the FRONT overlay only. Both the dashboard and (M10.9 WP2) the
+      // Settings panel are app-level overlays with their own Esc branch, so one keypress
+      // must not close both. Settings sits at z-index 45 above the dashboard's 40, so it
+      // gets first refusal; the dashboard branch is skipped when Settings consumed the key.
       if (e.key === "Escape") {
-        setShowDashboard((prev) => {
-          if (!prev) return prev; // not open → leave Esc for whoever else wants it
-          e.preventDefault();
-          return false;
+        // Which overlay (if any) this Esc dismisses is decided by a pure function so the
+        // rule is testable without React batching in the way — see escDismiss.ts for why
+        // that matters (an inline version of this shipped a two-overlays-close-at-once
+        // bug that source-text tests could not see). `null` = no overlay open, so Esc
+        // passes through to the editor/finder/palette untouched.
+        const target = escDismissTarget({
+          dashboard: showDashboardRef.current,
+          settings: showSettingsRef.current,
         });
+        if (target !== null) e.preventDefault();
+        if (target === "settings") setShowSettings(false);
+        if (target === "dashboard") setShowDashboard(false);
+      }
+      // M10.9 WP2 — ⌘, toggles the Settings panel. Also NOT gated on `view`: Settings is
+      // app-global and must be reachable from the picker AND with a workspace focused —
+      // the reachability requirement that drove WP1's verdict to retire the picker-only
+      // settings strip.
+      if (isSettingsChord(e)) {
+        e.preventDefault();
+        setShowSettings((prev) => !prev);
       }
     };
     document.addEventListener("keydown", onKeyDown, true); // capture phase
@@ -435,6 +479,13 @@ function App() {
         setShowPicker(true);
         return;
       }
+      // M10.9 WP2 — Settings… is app-global (runs before the focused-path guard). OPENS
+      // rather than toggles: a menu click is an unambiguous "show me settings", whereas
+      // ⌘, is a toggle because a chord is cheap to press twice.
+      if (action.callback === "openSettings") {
+        setShowSettings(true);
+        return;
+      }
       // WP5 Phase 2 (rework) — PiP mode is app-global (not workspace-scoped), so these run
       // BEFORE the focused-path guard. Each View-menu radio item sets that mode via the
       // single pip_set_mode command (which persists + applies + broadcasts `pip-mode`).
@@ -458,12 +509,17 @@ function App() {
       // persists + broadcasts `cc-permission-mode`, which re-checks the menu radio + the
       // picker dropdown. Takes effect on the NEXT cc_spawn (argv is chosen once per process).
       if (action.callback === "setCcPermissionMode") {
-        void invoke("cc_set_permission_mode", { mode: action.mode }).catch((e) => {
-          // Menu-path write failures are deliberately silent (console-only) — App.tsx has
-          // no toast surface like the picker, and this mirrors the pip_set_mode menu path
-          // above. The picker's dropdown handler keeps its optimistic-set + revert + toast.
-          console.error("[claudesk] cc_set_permission_mode (menu) failed:", e);
-        });
+        void invoke("cc_set_permission_mode", { mode: action.mode }).catch(
+          (e) => {
+            // Menu-path write failures are deliberately silent (console-only) — App.tsx has
+            // no toast surface like the picker, and this mirrors the pip_set_mode menu path
+            // above. The picker's dropdown handler keeps its optimistic-set + revert + toast.
+            console.error(
+              "[claudesk] cc_set_permission_mode (menu) failed:",
+              e,
+            );
+          },
+        );
         return;
       }
       // The three launchers act on the focused workspace; no-op when none is open.
@@ -548,53 +604,56 @@ function App() {
       />
       <div className="app-shell-scene" data-testid="app-shell-scene">
         {view === "picker" ? (
-        <ProjectPicker
-          onOpen={openWorkspace}
-          onOpenDashboard={() => setShowDashboard(true)}
-          onCheckForUpdates={updater.checkNow}
-        />
-      ) : (
-        <>
-          <Filmstrip
-            tiles={tiles}
-            statusFor={stateFor}
-            snippetFor={snippetFor}
-            collapsed={collapsed}
-            onToggleCollapsed={toggleCollapsed}
-            onPromote={focusWorkspace}
-            onReorder={reorderTiles}
-            onReorderCommit={commitOrder}
-            onAddWorkspace={() => setShowPicker(true)}
+          <ProjectPicker
+            onOpen={openWorkspace}
             onOpenDashboard={() => setShowDashboard(true)}
-            onClose={requestClose}
+            // M10.9 WP2 Phase 4 — the picker's Settings entry point. Opens (not toggles)
+            // the same single <SettingsPanel>, matching the menu item's semantics; ⌘, is
+            // the toggle.
+            onOpenSettings={() => setShowSettings(true)}
           />
-          <CenterStage
-            workspaces={workspaces}
-            focusedId={focusedId}
-            onSessionId={setSessionId}
-            statusFor={stateFor}
-            snippetFor={snippetFor}
-            registerDirtyProbe={registerDirtyProbe}
-          />
-          {showPicker && (
-            <PickerOverlay
-              onOpen={openFromOverlay}
-              onDismiss={() => setShowPicker(false)}
+        ) : (
+          <>
+            <Filmstrip
+              tiles={tiles}
+              statusFor={stateFor}
+              snippetFor={snippetFor}
+              collapsed={collapsed}
+              onToggleCollapsed={toggleCollapsed}
+              onPromote={focusWorkspace}
+              onReorder={reorderTiles}
+              onReorderCommit={commitOrder}
+              onAddWorkspace={() => setShowPicker(true)}
+              onOpenDashboard={() => setShowDashboard(true)}
+              onClose={requestClose}
             />
-          )}
-          {/* QoL-WP1 — close-with-unsaved-changes confirm (discard or cancel). Mounted
+            <CenterStage
+              workspaces={workspaces}
+              focusedId={focusedId}
+              onSessionId={setSessionId}
+              statusFor={stateFor}
+              snippetFor={snippetFor}
+              registerDirtyProbe={registerDirtyProbe}
+            />
+            {showPicker && (
+              <PickerOverlay
+                onOpen={openFromOverlay}
+                onDismiss={() => setShowPicker(false)}
+              />
+            )}
+            {/* QoL-WP1 — close-with-unsaved-changes confirm (discard or cancel). Mounted
               only while a close is pending the guard; reuses the shared ConfirmModal. */}
-          {pendingClose && (
-            <ConfirmModal
-              spec={closeWorkspaceSpec(pendingClose.name, {
-                dirtyCount: pendingClose.dirtyCount,
-                active: pendingClose.active,
-              })}
-              onChoose={resolveClose}
-            />
-          )}
-        </>
-      )}
+            {pendingClose && (
+              <ConfirmModal
+                spec={closeWorkspaceSpec(pendingClose.name, {
+                  dirtyCount: pendingClose.dirtyCount,
+                  active: pendingClose.active,
+                })}
+                onChoose={resolveClose}
+              />
+            )}
+          </>
+        )}
       </div>
       {/* M9 WP6a — the GLOBAL time-analytics dashboard is app-level (NOT inside the
           workspace-open branch), so it overlays whichever scene is up — the picker at
@@ -615,6 +674,31 @@ function App() {
           }
         >
           <GlobalDashboard onClose={() => setShowDashboard(false)} />
+        </Suspense>
+      )}
+      {/* M10.9 WP2 — the app-global Settings panel. Also app-level (NOT inside the
+          workspace-open branch) so ⌘, and Claudesk → Settings… reach it from the picker
+          AND from an open workspace. Rendered AFTER the dashboard and at a higher
+          z-index, so it stacks on top when both happen to be open; its Esc branch runs
+          first for the same reason. */}
+      {showSettings && (
+        <Suspense
+          fallback={
+            <div
+              className="settings-panel-loading"
+              data-testid="settings-panel-loading"
+            >
+              Loading settings…
+            </div>
+          }
+        >
+          <SettingsPanel
+            onClose={() => setShowSettings(false)}
+            // M10.9 WP2 Phase 4 — the manual update check moved here with the
+            // update-notifications toggle it sits beside. App owns `useUpdater`; the
+            // panel just kicks the check.
+            onCheckForUpdates={updater.checkNow}
+          />
         </Suspense>
       )}
       {/* M10 WP4 — the confirm + WP1-fallback dialogs are modal OVERLAYS (they SHOULD

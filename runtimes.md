@@ -77,9 +77,17 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.59s (2026-07-28, M10.9 WP1 Phase 2 verify-codify: full-suite regression gate at WP close — 105 files / 1181 pass, 0 fail; no source files touched this WP)
+- **Last:** 1.79s (2026-07-28, M10.9 WP2 Phase 4 verify-codify: +3 coerce tests → 111 files / 1239 pass, 0 fail — WP2 COMPLETE)
 - **Use timeout:** 120000
 - **History:**
+  - 1.79s — 2026-07-28 (M10.9 WP2 P4 verify-codify: +3 coerce-behavior tests → 111 files / 1239 pass)
+  - 1.68s — 2026-07-28 (M10.9 WP2 P4 operator-requested picker Settings button: +5 discovery-parity tests → 111 files / 1236 pass)
+  - 1.70s — 2026-07-28 (M10.9 WP2 P4 build: migrate 3 controls + gate + retire picker strip → 111 files / 1231 pass)
+  - 1.71s — 2026-07-28 (M10.9 WP2 P3 verify-codify: no-backdrop + z-index pins → 110 files / 1225 pass)
+  - 1.78s — 2026-07-28 (M10.9 WP2 P3 P3.2 back-loop fix: escDismiss pure seam + 6 exhaustive tests, replaced the misleading source-order guard → 110 files / 1223 pass)
+  - 1.77s — 2026-07-28 (M10.9 WP2 P3 build: ⌘, Settings panel shell + menu item → 109 files / 1217 pass)
+  - 1.90s — 2026-07-28 (M10.9 WP2 P2 verify-codify: +4 meta-tests, caught+fixed a camelCase matcher defect → 107 files / 1199 pass)
+  - 1.78s — 2026-07-28 (M10.9 WP2 P2 build: consumption seam + OFF-invariant guard → 107 files / 1195 pass)
   - 1.59s — 2026-07-28
   - 3.29s — 2026-07-20 (backlog-paydown WP6 verify-auto: +1 tie assertion, comment/naming nits → 105 files / 1181 pass)
   - 1.87s — 2026-07-20 (backlog-paydown WP5 verify-auto: dead-code cleanup, −4 viewportFromRange tests → 105 files / 1181 pass)
@@ -149,9 +157,13 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 3.54s (2026-07-28, M10.9 WP1 Phase 2 verify-codify: 556 lib + 6 integ + 1 shell-history pass, 0 fail; warm)
+- **Last:** 0.73s (2026-07-28, M10.9 WP2 Phase 4 verify-codify: +1 `~/.claude`-untouched invariant guard on the gate write path → 565 lib + 6 integ + 1 shell-history pass, 0 fail; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.73s — 2026-07-28 (M10.9 WP2 P4 verify-codify: +1 milestone-invariant source guard [proven to bite by injecting a ~/.claude/skills path], 565 lib pass; warm)
+  - 0.75s — 2026-07-28 (M10.9 WP2 P3 verify-codify: +1 settings_id membership pin [proven to bite where the 5 iterate-FUNCTIONAL_IDS tests do not], 564 lib pass; warm)
+  - 0.74s — 2026-07-28 (M10.9 WP2 P1 verify-codify: +2 persistence-contract tests, 563 lib pass; warm)
+  - 0.75s — 2026-07-28 (M10.9 WP2 P1 build: workflow_features_enabled field + workflow_gate module, 561 lib pass; warm)
   - 3.54s — 2026-07-28
   - 0.69s — 2026-07-20 (backlog-paydown WP7 P2 codify: +validate_root canonical-form-tolerance pin, 556 lib + 6 integ + 1 shell-history pass; warm)
   - 0.71s — 2026-07-20 (backlog-paydown WP7 P2 build: validate_root + AppHandle-injected commands, 555 lib + 6 integ + 1 shell-history pass; warm)

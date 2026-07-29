@@ -86,6 +86,29 @@ pub struct AppSettings {
     /// `.dev`). Read by [`read_update_notifications_enabled`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_notifications_enabled: Option<bool>,
+    /// M10.9 WP2 — the workflow-features opt-in gate. `None` = never set → the reader
+    /// applies the default **`false`** (OFF for *everyone*, including the operator).
+    ///
+    /// Unlike the other off-by-default flags here, this default is set by
+    /// **applicability, not audience size**: the workflow-coupled feature class (M11 docs
+    /// tab, M12 auto-resume + drive-mode selector, M13 skill buttons) depends on a
+    /// substrate Claudesk does not ship — the companion workflow system installed at
+    /// `~/.claude/`. A user without it would meet dead affordances, so the whole class is
+    /// gated as a SET behind this one flag (design-prior
+    /// `gate-substrate-dependent-feature-class-behind-default-off-opt-in`).
+    ///
+    /// Two properties this field must preserve. **OFF is byte-identical** to a build that
+    /// never had the features — a gated surface must not exist when off (not
+    /// rendered-then-hidden, not present-but-disabled, not registered-with-a-no-op
+    /// handler); the frontend seam + its guard test enforce that. And **flipping this is a
+    /// pure Claudesk UI-state flip that writes NOTHING into `~/.claude/`** — the operator's
+    /// skills are live symlinks into the companion repo, so an install-on-enable step could
+    /// clobber the source. "Enable the UI" and "install the substrate" are separate acts.
+    ///
+    /// App-global, per bundle-identity. Read by [`read_workflow_features_enabled`].
+    /// Mirrors the `time_tracking_enabled` optional-with-default shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_features_enabled: Option<bool>,
     /// M10 WP4 — the exact version tag the user chose to SKIP (never re-notify about).
     /// `None` = nothing skipped (the common case). The updater's `check()` still returns
     /// this version; the frontend notify layer suppresses it (a manual "Check for
@@ -210,6 +233,27 @@ pub fn write_time_tracking_enabled(data_dir: &Path, enabled: bool) -> Result<(),
     write_settings(data_dir, &settings)
 }
 
+/// Read the workflow-features gate, defaulting **`false`** when unset / first run (M10.9
+/// WP2 — OFF for everyone, including the operator; the default is set by *applicability*,
+/// since the feature class depends on the companion workflow system being installed at
+/// `~/.claude/`). The single reader the `workflow_get_features_enabled` command calls.
+/// (Mirror of `read_time_tracking_enabled`.)
+pub fn read_workflow_features_enabled(data_dir: &Path) -> Result<bool, ConfigError> {
+    Ok(read_settings(data_dir)?
+        .workflow_features_enabled
+        .unwrap_or(false))
+}
+
+/// Persist the workflow-features gate, preserving other fields (read-modify-write). The
+/// single writer `workflow_set_features_enabled` calls. Writes ONLY to Claudesk's own
+/// `settings.json` — never to `~/.claude/` (the milestone invariant).
+/// (Mirror of `write_time_tracking_enabled`.)
+pub fn write_workflow_features_enabled(data_dir: &Path, enabled: bool) -> Result<(), ConfigError> {
+    let mut settings = read_settings(data_dir)?;
+    settings.workflow_features_enabled = Some(enabled);
+    write_settings(data_dir, &settings)
+}
+
 /// Read the update-notification toggle, defaulting **`true`** (ON) when unset / first run
 /// (M10 WP4 — the operator-benefit default). The single reader the
 /// `updater_get_notifications_enabled` command AND the auto-check-on-launch gate call.
@@ -316,6 +360,7 @@ mod tests {
             cc_yolo: None,
             time_tracking_enabled: Some(true),
             update_notifications_enabled: Some(false),
+            workflow_features_enabled: Some(true),
             skipped_version: Some("0.9.9".to_string()),
         };
         write_settings(dir.path(), &written).unwrap();
@@ -569,6 +614,139 @@ mod tests {
         assert!(read_time_tracking_enabled(dir.path()).unwrap());
         write_time_tracking_enabled(dir.path(), false).unwrap();
         assert!(!read_time_tracking_enabled(dir.path()).unwrap());
+    }
+
+    // ── M10.9 WP2 — the workflow-features gate ─────────────────────────────────
+    #[test]
+    fn workflow_features_default_to_false_when_unset() {
+        // The milestone's load-bearing default: OFF for everyone, operator included. A
+        // fresh install / missing field reads as false, so no workflow-coupled surface
+        // can exist out of the box.
+        let dir = TempDir::new().unwrap();
+        assert!(!read_workflow_features_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn workflow_features_absent_in_present_file_reads_as_false() {
+        // Forward-compat: every settings.json written before M10.9 predates this field,
+        // so EVERY existing install must read OFF — not just fresh ones.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(SETTINGS_FILE),
+            br#"{"pip_mode":"auto","cc_permission_mode":"plan","time_tracking_enabled":true}"#,
+        )
+        .unwrap();
+        assert!(!read_workflow_features_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn workflow_features_round_trip_both_values() {
+        let dir = TempDir::new().unwrap();
+        write_workflow_features_enabled(dir.path(), true).unwrap();
+        assert!(read_workflow_features_enabled(dir.path()).unwrap());
+        write_workflow_features_enabled(dir.path(), false).unwrap();
+        assert!(!read_workflow_features_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn workflow_features_independent_of_the_other_seven_fields() {
+        // Read-modify-write across the full struct: flipping the gate must not clobber any
+        // sibling setting, and updating a sibling must not clobber the gate. Exercised
+        // against every OTHER field the struct carries (7 today; this one is the 8th).
+        let dir = TempDir::new().unwrap();
+        write_pip_layout(dir.path(), PipLayout::VerticalMirror).unwrap();
+        write_pip_mode(dir.path(), PipMode::Off).unwrap();
+        write_cc_permission_mode(dir.path(), CcPermissionMode::Plan).unwrap();
+        write_time_tracking_enabled(dir.path(), true).unwrap();
+        write_update_notifications_enabled(dir.path(), false).unwrap();
+        write_skipped_version(dir.path(), Some("1.2.3".to_string())).unwrap();
+
+        write_workflow_features_enabled(dir.path(), true).unwrap();
+
+        // Every sibling survived the gate write.
+        assert_eq!(
+            read_pip_layout(dir.path()).unwrap(),
+            PipLayout::VerticalMirror
+        );
+        assert_eq!(read_pip_mode(dir.path()).unwrap(), PipMode::Off);
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::Plan
+        );
+        assert!(read_time_tracking_enabled(dir.path()).unwrap());
+        assert!(!read_update_notifications_enabled(dir.path()).unwrap());
+        assert_eq!(
+            read_skipped_version(dir.path()).unwrap().as_deref(),
+            Some("1.2.3")
+        );
+        assert!(read_workflow_features_enabled(dir.path()).unwrap());
+
+        // ...and updating a sibling leaves the gate intact.
+        write_pip_mode(dir.path(), PipMode::On).unwrap();
+        assert!(read_workflow_features_enabled(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn workflow_features_on_disk_key_is_the_pinned_persistence_contract() {
+        // The JSON key is a contract with every already-installed copy of the app: rename
+        // it and every user who enabled the gate silently reverts to OFF (the reader finds
+        // no field and defaults false) with no error and no migration path. The serde
+        // attribute means the key is derived from the Rust field name, so a well-meaning
+        // field rename is exactly the edit that breaks it. Assert the raw on-disk text —
+        // same tier as `write_cc_permission_mode_clears_legacy_cc_yolo`, because that is
+        // where the contract actually lives.
+        let dir = TempDir::new().unwrap();
+        write_workflow_features_enabled(dir.path(), true).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(
+            raw.contains("\"workflow_features_enabled\": true"),
+            "the enabled gate must persist under exactly this key: {raw}"
+        );
+
+        // ...and turning it back OFF writes an explicit `false` rather than dropping the
+        // key. Both states must be distinguishable on disk from "never set" — WP3's invite
+        // show-predicate reads the gate, and a disable that erased the key would be
+        // indistinguishable from a fresh install.
+        write_workflow_features_enabled(dir.path(), false).unwrap();
+        let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(
+            raw.contains("\"workflow_features_enabled\": false"),
+            "an explicitly-disabled gate must persist as false, not vanish: {raw}"
+        );
+    }
+
+    #[test]
+    fn workflow_features_write_preserves_the_legacy_cc_yolo_for_its_own_migrator() {
+        // Pins the CORRECT ownership boundary between writers, which is subtler than it
+        // looks. `cc_yolo` self-cleans ONLY because `write_cc_permission_mode` contains an
+        // explicit `settings.cc_yolo = None` (settings.rs:214) — it is NOT a struct-level
+        // property of `skip_serializing_if`, which skips a field only when it is already
+        // `None`. Since every writer is a read-modify-write over the whole struct, an
+        // unrelated writer that "helpfully" cleared the legacy field would DESTROY a
+        // pre-dropdown user's yolo setting before `read_cc_permission_mode` ever got to
+        // migrate it.
+        //
+        // So the gate's writer must leave `cc_yolo` exactly as it found it: not its field,
+        // not its migration. This test fails if someone later adds a well-meaning
+        // `settings.cc_yolo = None` here.
+        let dir = TempDir::new().unwrap();
+        std::fs::write(dir.path().join(SETTINGS_FILE), br#"{"cc_yolo":true}"#).unwrap();
+
+        write_workflow_features_enabled(dir.path(), true).unwrap();
+
+        let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(
+            raw.contains("cc_yolo"),
+            "an unrelated writer must not consume another field's migration: {raw}"
+        );
+        // The legacy value survives intact and still migrates correctly afterwards...
+        assert_eq!(
+            read_cc_permission_mode(dir.path()).unwrap(),
+            CcPermissionMode::BypassPermissions,
+            "cc_yolo:true must still migrate to bypassPermissions after a gate write"
+        );
+        // ...and the gate itself persisted, without inheriting the legacy boolean's value.
+        assert!(read_workflow_features_enabled(dir.path()).unwrap());
     }
 
     #[test]
