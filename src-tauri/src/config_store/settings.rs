@@ -514,6 +514,85 @@ mod tests {
     }
 
     #[test]
+    fn an_unresolved_invite_leaves_the_file_byte_identical() {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // THE `[Later]` PROPERTY, codified.
+        //
+        // `[Later]` must persist NOTHING — that is what makes "Later" mean later rather than
+        // silently meaning "never". It was verified live at verify-self by hashing
+        // settings.json before and after clicking the button (byte-identical), but that proof
+        // died with the app process. This is the standing guard.
+        //
+        // Asserted as RAW BYTES, not via the typed reader: a reader-level check
+        // (`read_workflow_invite() == None`) would still pass if a write reformatted the file,
+        // reordered keys, or added `"workflow_invite": null` — all of which are observable
+        // "Later wrote something" regressions. Bytes are the honest unit here, and they are
+        // exactly what the live shasum check compared.
+        //
+        // ## PROVEN LIMIT — read this before trusting it further than it goes
+        // This does NOT detect a write whose OUTPUT is byte-identical. Verified by injection:
+        // making `read_workflow_invite` call `write_settings` with the struct it just read
+        // leaves this test GREEN, because serializing the same typed value produces the same
+        // bytes. So the guard catches a write that CHANGES the file, not the mere act of
+        // writing.
+        //
+        // That limit is acceptable here because the regression this protects against is
+        // *observable divergence* — a `[Later]` that records an outcome, adds a null key, or
+        // reformats. A no-op rewrite is wasteful but behaviorally invisible, and catching it
+        // would need mtime/inode inspection, which is flaky under fast test clocks.
+        //
+        // Recorded rather than quietly left as an implied stronger claim: an unstated limit is
+        // how a guard comes to be trusted for something it never checked.
+        //
+        // Note also what this does NOT assert: that the frontend's [Later] handler avoids
+        // calling the writer. That is a frontend concern, pinned separately by a wiring guard
+        // in workflowInviteCopy.test.ts. Together they cover both halves — the button doesn't
+        // call it, and the store wouldn't diverge if something else did.
+        // ═══════════════════════════════════════════════════════════════════════════
+        let dir = TempDir::new().unwrap();
+        write_time_tracking_enabled(dir.path(), true).unwrap();
+        write_workflow_features_enabled(dir.path(), false).unwrap();
+
+        let file = dir.path().join(SETTINGS_FILE);
+        let before = std::fs::read(&file).unwrap();
+
+        // The whole point: reading the invite state (which the show-predicate does on every
+        // launch) must not mutate the file, and no write happens on the [Later] path at all.
+        assert_eq!(read_workflow_invite(dir.path()).unwrap(), None);
+        assert_eq!(read_workflow_invite(dir.path()).unwrap(), None); // twice — catch lazy init
+
+        let after = std::fs::read(&file).unwrap();
+        assert_eq!(
+            before, after,
+            "reading an unresolved invite must leave settings.json byte-identical — a \
+             [Later] that persists anything silently becomes a [Dismiss]"
+        );
+    }
+
+    #[test]
+    fn dismiss_and_acknowledge_are_distinguishable_on_disk() {
+        // Both resolve the invite permanently, but they are NOT interchangeable: `acknowledged`
+        // records "routed to Settings, don't re-pitch" while `dismissed` records "stop asking".
+        // If a future edit collapsed them to one value, the product behavior would look
+        // identical today — and would silently lose the ability to tell an engaged user from a
+        // rejecting one, which is the distinction the enum exists for.
+        let dir = TempDir::new().unwrap();
+
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Acknowledged)).unwrap();
+        let ack = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+
+        write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Dismissed)).unwrap();
+        let dis = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+
+        assert_ne!(
+            ack, dis,
+            "the two resolved outcomes must be distinguishable on disk"
+        );
+        assert!(ack.contains("acknowledged"));
+        assert!(dis.contains("dismissed"));
+    }
+
+    #[test]
     fn a_resolved_invite_survives_a_gate_toggle() {
         // ═══════════════════════════════════════════════════════════════════════════
         // The disable-after-enable case, at the persistence layer.

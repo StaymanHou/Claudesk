@@ -21,6 +21,14 @@ import { newWorkspaceChord } from "./components/workspace/newWorkspaceChord";
 import { isDashboardChord } from "./components/workspace/dashboard/dashboardChord";
 import { isSettingsChord } from "./components/settings/settingsChord";
 import { escDismissTarget } from "./components/settings/escDismiss";
+import { WorkflowInviteModal } from "./components/settings/WorkflowInviteModal";
+import { shouldShowWorkflowInviteFor } from "./state/workflowInviteState";
+import type { WorkflowInviteOutcome } from "./state/workflowInviteState";
+import {
+  getWorkflowInvite,
+  setWorkflowInvite,
+} from "./state/workflowSubstrate";
+import { getWorkflowFeaturesEnabled } from "./state/workflowGate";
 import {
   loadOrder,
   reorder,
@@ -249,10 +257,95 @@ function App() {
   // answered NOW — hence the refs.
   const showSettingsRef = useRef(false);
   const showDashboardRef = useRef(false);
+  // M10.9 WP3 — which settings group to flash when the panel opens. Set only when the
+  // invite routes the user here; `undefined` on every ordinary ⌘, / menu / gear open.
+  const [settingsHighlight, setSettingsHighlight] = useState<
+    string | undefined
+  >(undefined);
+
+  // ── M10.9 WP3 Phase 4: the one-time workflow-features invite ──────────────────────
+  //
+  // Mounted at the app shell so it overlays whichever scene is up (picker or workspace),
+  // matching the GlobalDashboard/updater precedent. NOT lazy: it is small and shows at most
+  // once per install, so a chunk boundary would buy nothing.
+  //
+  // NOT gated behind `useWorkflowFeaturesEnabled` — see the note at the render site. It is the
+  // one workflow-NAMED surface that must exist precisely when the gate is OFF.
+  const [inviteSettings, setInviteSettings] = useState<{
+    workflowInvite: WorkflowInviteOutcome | null;
+    workflowFeaturesEnabled: boolean;
+  } | null>(null);
+  const [inviteProjectCount, setInviteProjectCount] = useState(0);
+  // `[Later]` lives here and ONLY here — React state, never disk. That is what makes "Later"
+  // mean later: nothing is persisted, so the invite returns next launch.
+  const [inviteDismissedThisSession, setInviteDismissedThisSession] =
+    useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [invite, gate] = await Promise.all([
+          getWorkflowInvite(),
+          getWorkflowFeaturesEnabled(),
+        ]);
+        if (cancelled) return;
+        setInviteSettings({
+          workflowInvite: invite,
+          workflowFeaturesEnabled: gate,
+        });
+        // Gate the project-count read on an UNRESOLVED invite (Verdict (b)'s requirement):
+        // once the invite has resolved — permanently, for all but first-run users — this
+        // second `list_projects` call site is skipped entirely.
+        if (invite === null) {
+          const projects = await invoke<unknown[]>("list_projects");
+          if (!cancelled) setInviteProjectCount(projects.length);
+        }
+      } catch {
+        // Fail CLOSED: leaving `inviteSettings` null means the predicate never runs and the
+        // invite never shows. A broken read must not spend the milestone's one-shot pitch.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Includes the not-yet-loaded / rejected case (`inviteSettings === null` → false), which is
+  // the fail-closed property: a broken read must not spend the one-shot pitch. Kept in the pure
+  // module so that property is assertable as a VALUE — it was inline, which made it invisible to
+  // any test of the predicate (which never receives null).
+  const showInvite = shouldShowWorkflowInviteFor(
+    inviteSettings,
+    inviteProjectCount,
+    inviteDismissedThisSession,
+  );
+
+  /** Resolve the invite permanently, then run an optional follow-up (e.g. open Settings). */
+  const resolveInvite = useCallback(
+    (outcome: WorkflowInviteOutcome, then?: () => void) => {
+      // Optimistic local update so the modal closes immediately; the write follows. A failed
+      // write only means the invite may reappear next launch — strictly better than blocking
+      // the UI on IPC, and the operator can always Dismiss again.
+      setInviteSettings((prev) =>
+        prev === null ? prev : { ...prev, workflowInvite: outcome },
+      );
+      void setWorkflowInvite(outcome).catch((e) => {
+        console.error("[claudesk] workflow_set_invite failed:", e);
+      });
+      then?.();
+    },
+    [],
+  );
+
+  // Latest-ref for the invite too, for the same reason the other two exist: the keydown
+  // listener registers once with empty deps and must read the CURRENT value synchronously.
+  const showInviteRef = useRef(false);
   useEffect(() => {
     showSettingsRef.current = showSettings;
     showDashboardRef.current = showDashboard;
-  }, [showSettings, showDashboard]);
+    showInviteRef.current = showInvite;
+  }, [showSettings, showDashboard, showInvite]);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isDashboardChord(e)) {
@@ -273,8 +366,14 @@ function App() {
         const target = escDismissTarget({
           dashboard: showDashboardRef.current,
           settings: showSettingsRef.current,
+          invite: showInviteRef.current,
         });
         if (target !== null) e.preventDefault();
+        // Esc on the invite means `[Later]`, NOT `[Dismiss]` — it hides for this session and
+        // persists nothing, so the pitch returns next launch. Reading a keypress as permanent
+        // suppression of a one-time pitch would resurrect the mislabeled-control bug the
+        // three-button model exists to prevent: the user pressed Esc, not "never again".
+        if (target === "invite") setInviteDismissedThisSession(true);
         if (target === "settings") setShowSettings(false);
         if (target === "dashboard") setShowDashboard(false);
       }
@@ -569,6 +668,34 @@ function App() {
     };
   }, [openWorkspace]);
 
+  // M10.9 WP3 Phase 4 — DEV-ONLY invite reset seam. Same `import.meta.env.DEV` gate and
+  // same delete-on-cleanup shape as `__seedWorkspace` above, so it is absent from a
+  // `pnpm tauri build` bundle.
+  //
+  // Exists because the invite is a ONE-TIME surface: once resolved, nothing in the product
+  // ever un-resolves it (by design — there is no "show me that invite again" affordance).
+  // Verifying the first-run path therefore needs a way back to `null`, and the alternative is
+  // hand-editing `settings.json` between runs, which is both slow and easy to get wrong.
+  //
+  // Writes through the SAME setter the invite uses, so the reset exercises the real path
+  // rather than a test-only shortcut. Re-seeds local state too, so the invite can reappear
+  // without a reload.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__workflowInviteReset = async () => {
+      await setWorkflowInvite(null);
+      setInviteSettings((prev) =>
+        prev === null ? prev : { ...prev, workflowInvite: null },
+      );
+      setInviteDismissedThisSession(false);
+      const projects = await invoke<unknown[]>("list_projects");
+      setInviteProjectCount(projects.length);
+    };
+    return () => {
+      delete window.__workflowInviteReset;
+    };
+  }, []);
+
   return (
     <div className="app-shell" data-testid="app-shell">
       {/* M10 WP4 — the update-notify banner is an IN-FLOW leading row of the app-shell
@@ -698,8 +825,38 @@ function App() {
             // update-notifications toggle it sits beside. App owns `useUpdater`; the
             // panel just kicks the check.
             onCheckForUpdates={updater.checkNow}
+            // M10.9 WP3 — set only when the invite routed the user here, so they can see
+            // WHICH of four groups they were sent to.
+            highlightGroup={settingsHighlight}
           />
         </Suspense>
+      )}
+      {/* M10.9 WP3 Phase 4 — the one-time invite. Front-most (z-index 50): its primary
+          button opens the Settings panel BEHIND it, so it must outrank Settings' 45.
+
+          DELIBERATELY NOT gated behind `useWorkflowFeaturesEnabled` (P4.6). Every other
+          workflow-named surface in this milestone must not exist while the gate is OFF — this
+          one is the exact inverse: it exists PRECISELY when the gate is off, and disappears
+          once the user has engaged. It is the on-ramp to the gate, not a consumer of it, so
+          the seam contract does not apply.
+
+          It also does not trip the OFF-invariant guard, but that is a property of the guard's
+          current arms rather than a principle: the guard checks AVAILABLE_PANELS (this is not
+          a right-panel tab), MENU_IDS (no menu item), and *chord*.ts modules (no chord). The
+          invite is none of those. Recorded so a future reader doesn't "fix" this by gating it
+          — that would hide the only affordance that tells a user the features exist. */}
+      {showInvite && (
+        <WorkflowInviteModal
+          onShowSettings={() =>
+            resolveInvite("acknowledged", () => {
+              setSettingsHighlight("workflow-features");
+              setShowSettings(true);
+            })
+          }
+          // Persists NOTHING — that is what makes "Later" mean later.
+          onLater={() => setInviteDismissedThisSession(true)}
+          onDismiss={() => resolveInvite("dismissed")}
+        />
       )}
       {/* M10 WP4 — the confirm + WP1-fallback dialogs are modal OVERLAYS (they SHOULD
           cover the scene while active), unlike the notify banner (an in-flow row, hoisted

@@ -83,6 +83,18 @@ export interface SettingsPanelProps {
   /** M10 WP4 — kick a MANUAL update check. App owns `useUpdater`; this just fires.
    *  Optional: the button hides when App hasn't wired it (mirrors the picker's guard). */
   onCheckForUpdates?: () => void;
+  /**
+   * M10.9 WP3 Phase 4 — briefly highlight one settings group on open.
+   *
+   * The invite's primary button routes here, and a user who just clicked "Show me in
+   * Settings" needs to know WHICH of four groups they were sent to. Without this the routing
+   * is technically correct and practically useless — the panel opens and the user hunts.
+   *
+   * Pure presentation: the named group gets a self-clearing CSS class. No new state
+   * discipline, no change to `useSettingControl`, and it does NOT touch the setting's value.
+   * `undefined` (the normal ⌘, / menu / gear path) highlights nothing.
+   */
+  highlightGroup?: string;
 }
 
 /** One labelled settings group. The label + help line are the affordance a flat
@@ -92,15 +104,22 @@ function SettingsGroup({
   id,
   title,
   hint,
+  highlighted = false,
   children,
 }: {
   id: string;
   title: string;
   hint: string;
+  /** M10.9 WP3 — briefly flash this group (the invite routed the user here). */
+  highlighted?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className="settings-group" data-testid={`settings-group-${id}`}>
+    <section
+      className={`settings-group${highlighted ? " settings-group-highlight" : ""}`}
+      data-testid={`settings-group-${id}`}
+      data-highlighted={highlighted ? "true" : undefined}
+    >
       <h3 className="settings-group-title">{title}</h3>
       <p className="settings-group-hint">{hint}</p>
       <div className="settings-group-body">{children}</div>
@@ -108,9 +127,20 @@ function SettingsGroup({
   );
 }
 
+/**
+ * How long the routed-to group stays flashed — three discrete blinks (operator, 2026-07-29).
+ *
+ * MUST match the `settings-group-flash` keyframe duration in App.css. If this is longer, the
+ * class lingers after the animation finishes and the group sits inertly styled; if shorter,
+ * React yanks the class mid-blink and the cue truncates. The pairing is asserted by
+ * `settingsHighlight.test.ts` so the two cannot drift.
+ */
+const HIGHLIGHT_MS = 1200;
+
 export default function SettingsPanel({
   onClose,
   onCheckForUpdates,
+  highlightGroup,
 }: SettingsPanelProps) {
   // One error surface for the whole panel. A failed WRITE is a direct consequence of a
   // user action, so it must be visible (not console-only). Reads stay silent — see
@@ -167,6 +197,30 @@ export default function SettingsPanel({
   // component header). A rejection also lands as `null`: the backend is contracted never to
   // error, so a rejection here means something unexpected, and silently claiming
   // "not installed" would be worse than showing nothing.
+  // M10.9 WP3 — the routed-from-invite highlight, self-clearing after HIGHLIGHT_MS.
+  //
+  // Seeded from the prop rather than read directly at render time so it FADES: a bare
+  // `highlightGroup === id` check would leave the group flashed for as long as the panel
+  // stayed open, turning a wayfinding cue into a stuck visual state.
+  const [highlighted, setHighlighted] = useState<string | undefined>(
+    highlightGroup,
+  );
+  useEffect(() => {
+    if (highlightGroup === undefined) return;
+    // Schedules the CLEAR only — it does NOT set the value first. The `useState` initializer
+    // above already seeds it from the prop, so a synchronous `setHighlighted(highlightGroup)`
+    // here would write a value the state already holds and cost an extra render for nothing
+    // (flagged by `react-hooks/set-state-in-effect`, correctly).
+    //
+    // The panel mounts fresh each time it opens (App renders it conditionally), so the
+    // initializer runs on every open — there is no stale-highlight case for a re-open to fix.
+    const t = setTimeout(() => setHighlighted(undefined), HIGHLIGHT_MS);
+    // Clearing the timer on unmount matters: the panel is dismissible mid-highlight (Esc,
+    // close button, the ⌘, toggle), and a surviving timer would call setState on an
+    // unmounted component.
+    return () => clearTimeout(t);
+  }, [highlightGroup]);
+
   const [substratePresent, setSubstratePresent] =
     useState<SubstratePresence>(null);
   useEffect(() => {
@@ -232,6 +286,7 @@ export default function SettingsPanel({
           id="workflow-features"
           title="Workflow features"
           hint="Opt in to the workflow-orchestration layer — docs, auto-resume, and skill shortcuts."
+          highlighted={highlighted === "workflow-features"}
         >
           <label className="settings-row settings-row-check">
             <input

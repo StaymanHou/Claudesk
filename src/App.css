@@ -2983,6 +2983,129 @@ body,
   border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* ── M10.9 WP3 Phase 4 — the one-time workflow-features invite ────────────
+   App-level modal overlay, front-most (z-index 50, above Settings' 45 — its
+   primary button opens Settings BEHIND it). NO dimmed backdrop, matching the
+   Settings panel's test-pinned decision. Dark-only, like the rest of the app. */
+.workflow-invite {
+  position: fixed;
+  z-index: 50;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 48px));
+  box-sizing: border-box;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #1f1f1f;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+.workflow-invite-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.workflow-invite-body {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.workflow-invite-actions {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workflow-invite-btn {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.7rem;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.workflow-invite-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* The primary action reads as primary — it is the one that routes somewhere. */
+.workflow-invite-btn-primary {
+  margin-right: auto;
+  color: #fff;
+  background: rgba(90, 130, 200, 0.28);
+  border-color: rgba(120, 165, 240, 0.5);
+}
+
+.workflow-invite-btn-primary:hover {
+  background: rgba(90, 130, 200, 0.42);
+  border-color: rgba(140, 180, 250, 0.7);
+}
+
+/* ── M10.9 WP3 Phase 4 — the routed-to-group highlight ───────────────────
+   The invite's primary button opens Settings and flashes the group it sent the
+   user to. Without it the routing is technically correct and practically
+   useless: the panel opens on four groups and the user hunts. Self-clears after
+   HIGHLIGHT_MS (the class is removed in React, not by animation-fill). */
+/* THREE discrete blinks in 1.2s (operator, 2026-07-29), not one slow pulse.
+   The first version faded in once over 1.6s, which read as an ambient glow — a
+   state the group was in — rather than as "look here". Three pulses read as a
+   deliberate cue and finish faster. Kept as one animation with a 3-cycle
+   keyframe rather than `animation-iteration-count: 3`, so the final cycle can
+   end cleanly on transparent instead of snapping. */
+.settings-group-highlight {
+  animation: settings-group-flash 1.2s ease-in-out;
+  border-radius: 6px;
+}
+
+@keyframes settings-group-flash {
+  /* 3 × (on → off) across the 1.2s: peaks at ~13%/47%/80%, troughs between. */
+  0% {
+    background-color: transparent;
+  }
+  13% {
+    background-color: rgba(120, 165, 240, 0.2);
+  }
+  30% {
+    background-color: transparent;
+  }
+  47% {
+    background-color: rgba(120, 165, 240, 0.2);
+  }
+  63% {
+    background-color: transparent;
+  }
+  80% {
+    background-color: rgba(120, 165, 240, 0.2);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Respect the OS "reduce motion" setting: keep a STATIC tint for the same
+   duration rather than dropping the cue entirely. A user who disables motion
+   still needs to know which group they were routed to — silently removing the
+   affordance would be an accessibility regression dressed up as compliance. */
+@media (prefers-reduced-motion: reduce) {
+  .settings-group-highlight {
+    animation: none;
+    background-color: rgba(120, 165, 240, 0.16);
+  }
+}
+
 /* ── M10.9 WP3 — workflow-substrate status + install instructions ─────────
    Lives inside the "Workflow features" settings group. Read-only content: a
    status line, copy-able commands, and disclosures. Dark-only like the rest of

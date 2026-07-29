@@ -11,6 +11,12 @@ declare global {
     // `import.meta.env.DEV` (see EditorSplit) so verify-self / console harnesses can
     // drive a synthetic read-only tab (the WP7 Find-Results seam) without a real
     // consumer. Absent in production builds.
+    // M10.9 WP3 Phase 4 — dev-only invite reset seam. Registered ONLY under
+    // `import.meta.env.DEV` (see App.tsx) so verify-self can re-drive the first-run
+    // invite path without hand-editing settings.json. Resolves once the write lands
+    // and local state is re-seeded, so an awaiting caller can assert immediately.
+    // Absent in production builds; the optional type reflects that.
+    __workflowInviteReset?: () => Promise<void>;
     __editorSynthetic?: {
       add: (id: string, label: string) => void;
       setContent: (id: string, content: string) => void;

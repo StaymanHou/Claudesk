@@ -77,9 +77,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 2.3s (2026-07-29, M10.9 WP3 Phase 3 verify-codify: +12 tests / +2 files — the 3-state presence decision extracted as a pure fn + consuming-surface + anti-decoration guards, and the picker-header layout guards; all regressions proven to bite → 115 files / 1278 pass, 0 fail)
+- **Last:** 2.3s (2026-07-29, M10.9 WP3 Phase 4 — WP3 COMPLETE: the invite modal + highlight seam + Esc union + DEV reset seam; +29 tests total across the phase incl. the fail-closed show-decision extraction → 117 files / 1307 pass, 0 fail)
 - **Use timeout:** 120000
 - **History:**
+  - 2.3s — 2026-07-29 (WP3 P4 verify-codify: +2, 1307 pass — WP3 COMPLETE)
   - 2.3s — 2026-07-29 (WP3 P3 verify-codify: +12, 1278 pass)
   - 2.2s — 2026-07-29 (WP3 P3 build: +6, 1262 pass)
   - 2.14s — 2026-07-29 (WP3 P2: +12, 1253 pass)
@@ -160,9 +161,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.71s (2026-07-29, M10.9 WP3 Phase 1 verify-codify: +2 codify tests [invite-vs-8-siblings independence = the consuming-surface test for the settings.rs boundary; on-disk key pin], both proven to bite by injection → 579 lib + 6 integ + 1 shell-history pass, 0 fail; warm)
+- **Last:** 0.78s (2026-07-29, M10.9 WP3 Phase 4 verify-codify: +2 [unresolved-invite byte-identical — with its PROVEN LIMIT documented; acknowledged-vs-dismissed distinguishable on disk] → 581 lib + 6 integ + 1 shell-history pass, 0 fail; warm)
 - **Use timeout:** 120000
 - **History:**
+  - 0.78s — 2026-07-29 (WP3 P4 verify-codify: +2, 581 lib)
   - 0.71s — 2026-07-29 (WP3 P1 verify-codify: +2, 579 lib)
   - 0.76s — 2026-07-29 (WP3 P1 build: +12, 577 lib)
   - 0.73s — 2026-07-28 (M10.9 WP2 P4 verify-codify: +1 milestone-invariant source guard [proven to bite by injecting a ~/.claude/skills path], 565 lib pass; warm)

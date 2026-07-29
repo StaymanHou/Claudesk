@@ -26,6 +26,14 @@ export interface OverlayState {
   dashboard: boolean;
   /** The ⌘, Settings panel (z-index 45 — in front of the dashboard). */
   settings: boolean;
+  /**
+   * The M10.9 WP3 one-time workflow-features invite (z-index 50 — front-most).
+   *
+   * It outranks Settings because it can OPEN Settings behind itself: its primary button
+   * routes there and highlights the gate row. If Settings won the Esc contest, one keypress
+   * would close the panel the user was just sent to while leaving the invite up — backwards.
+   */
+  invite: boolean;
 }
 
 /**
@@ -38,10 +46,15 @@ export interface OverlayState {
  */
 export function escDismissTarget(
   state: OverlayState,
-): "settings" | "dashboard" | null {
-  // Front-most first. Settings (45) outranks the dashboard (40), so when both are open
-  // Esc closes Settings and leaves the dashboard up — the user is returned to the surface
-  // they opened Settings *from*, not dumped out of both.
+): "invite" | "settings" | "dashboard" | null {
+  // Front-most first. The invite (50) outranks Settings (45), which outranks the dashboard
+  // (40), so one keypress peels exactly one layer: the user is returned to the surface they
+  // came from, never dumped out of two at once.
+  //
+  // Esc on the invite means `[Later]`, not `[Dismiss]` — see App.tsx's handler. Treating a
+  // keypress as PERMANENT suppression of a one-time pitch would be the same mislabeled-control
+  // bug the three-button model was introduced to fix.
+  if (state.invite) return "invite";
   if (state.settings) return "settings";
   if (state.dashboard) return "dashboard";
   return null;

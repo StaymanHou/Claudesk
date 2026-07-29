@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   shouldShowWorkflowInvite,
+  shouldShowWorkflowInviteFor,
   type WorkflowInviteSettings,
   type WorkflowInviteOutcome,
 } from "../workflowInviteState";
@@ -138,6 +139,48 @@ describe("shouldShowWorkflowInvite — the show gate", () => {
       "invite=null gate=false n=1 session=false",
       "invite=null gate=false n=7 session=false",
     ]);
+  });
+
+  // ── The FULL decision, incl. not-yet-loaded (added at Phase 4 verify-codify) ───────
+
+  it("LOAD-BEARING — FAILS CLOSED when settings have not loaded or the read REJECTED", () => {
+    // The case `shouldShowWorkflowInvite` structurally cannot cover: it never receives `null`.
+    // This lived inline in App.tsx as `inviteSettings !== null &&`, which made the single most
+    // consequential property of the surface invisible to every test.
+    //
+    // Why it matters: the invite is a ONE-SHOT that never re-shows once resolved. If a rejected
+    // or in-flight IPC read let it render, the user would be pitched on unknown state — and any
+    // button they pressed would RECORD an outcome, permanently burning the pitch. Showing
+    // nothing and retrying next launch is strictly better.
+    expect(shouldShowWorkflowInviteFor(null, 5, false)).toBe(false);
+    // And it stays false regardless of the other inputs — nothing "rescues" a null read.
+    for (const count of [0, 1, 99]) {
+      for (const session of [false, true]) {
+        expect(shouldShowWorkflowInviteFor(null, count, session)).toBe(false);
+      }
+    }
+  });
+
+  it("delegates to the inner predicate once settings ARE loaded", () => {
+    // The wrapper must not become a second, divergent copy of the rules. Assert agreement
+    // across the whole input space rather than spot-checking one row.
+    const outcomes: (WorkflowInviteOutcome | null)[] = [
+      null,
+      "acknowledged",
+      "dismissed",
+    ];
+    for (const workflowInvite of outcomes) {
+      for (const workflowFeaturesEnabled of [false, true]) {
+        for (const count of [0, 1, 7]) {
+          for (const session of [false, true]) {
+            const s = { workflowInvite, workflowFeaturesEnabled };
+            expect(shouldShowWorkflowInviteFor(s, count, session)).toBe(
+              shouldShowWorkflowInvite(s, count, session),
+            );
+          }
+        }
+      }
+    }
   });
 
   it("is a pure function — same answer for same inputs, and does not mutate its argument", () => {

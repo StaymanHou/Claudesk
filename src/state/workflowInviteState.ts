@@ -82,3 +82,28 @@ export function shouldShowWorkflowInvite(
   if (dismissedThisSession) return false;
   return true;
 }
+
+/**
+ * The FULL show decision, including the not-yet-loaded case — this is what `App.tsx` renders on.
+ *
+ * `settings === null` means the async read of `workflow_invite` + the gate has not resolved, or
+ * **rejected**. Either way the answer is `false`, and that is a deliberate FAIL-CLOSED: the
+ * invite is a one-shot surface that never re-shows once resolved, so a broken or in-flight read
+ * must not spend it. Showing a pitch built on unknown state — and then recording an outcome for
+ * it — is strictly worse than showing nothing and trying again next launch.
+ *
+ * ## Why this is a function and not an inline `settings !== null &&`
+ * It was inline, and that made the fail-closed property unassertable: `shouldShowWorkflowInvite`
+ * never even receives `null`, so no test of the predicate could cover the case that matters most.
+ * The repo has already paid twice for verifying structure instead of behavior (WP2's `?raw`
+ * guards), and "a rejected IPC read must not show the invite" is exactly the kind of claim that
+ * should be a value assertion rather than a `?raw` grep for `!== null`.
+ */
+export function shouldShowWorkflowInviteFor(
+  settings: WorkflowInviteSettings | null,
+  projectCount: number,
+  dismissedThisSession: boolean,
+): boolean {
+  if (settings === null) return false;
+  return shouldShowWorkflowInvite(settings, projectCount, dismissedThisSession);
+}
