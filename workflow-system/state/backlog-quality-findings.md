@@ -35,15 +35,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-07-29-QUALITY-WP3-OPERATOR-SPECIFIC-CLONE-PATH
-- **Severity:** MINOR
-- **Location:** `src/components/settings/WorkflowSubstrateInfo.tsx:63-65`
-- **Finding:** `CLONE_PATH` is `~/Personal/projects/my-claude-code-customization` — the operator's own directory layout, shown to a secondary user as the canonical clone target. Traceable (it matches the companion README verbatim), but the invite's entire audience is other developers who have no `~/Personal/projects` tree.
-- **Why it matters:** a copy-paste of the displayed command creates a directory most users would not choose. Cheap to change while the text is display-only; **costlier once WP3.5's wizard reads it** as a default.
-- **Suggested action:** use a neutral default (`~/` + the repo name), and coordinate with WP3.5's location picker so the wizard's default and this text agree.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-07-29-QUALITY-WP3-KEBAB-CASE-CLAIM-UNTESTABLE
 - **Severity:** MINOR
 - **Location:** `src-tauri/src/config_store/settings.rs:145,192`
@@ -350,5 +341,48 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Finding:** Four `useSettingControl` calls, an error surface, a `SettingsGroup` sub-component, and the JSX in one file — close to but not over the doing-too-much line.
 - **Why it matters:** Readable today, but M14 extends this panel; adding controls without extracting a per-group module is the point where it tips.
 - **Suggested action:** extract per-group modules when M14 starts, while the extraction is still cheap.
+- **Priority:** low
+- **Status:** pending
+
+# m10.9-wp3.5a-sandbox-install-wizard — 2026-07-29
+
+Review against ship baseline `bc15ae6..a6fb194`. **2 CRITICAL + 3 MAJOR were FIXED in the refactor
+pass (`b95466f`)** and are recorded in the WIP's `## Code-Quality Review` → "Refactor resolution",
+not here. This section holds only what was deliberately NOT addressed.
+
+## SURFACE-2026-07-29-QUALITY-WP3.5A-SOURCE-GUARD-CONSOLIDATION
+- **Source:** feature:review-quality (m10.9-wp3.5a), MAJOR — deferred by decision
+- **Type:** tech-debt
+- **Summary:** Six source-text guard tests across four files (`roots_are_injected_never_ambient`, `nothing_in_this_module_deletes`, `the_source_guards_actually_see_the_whole_production_body`, `the_real_home_is_never_referenced_by_this_module`, `this_module_ships_no_deleting_path`, `only_this_layer_resolves_real_paths`, plus `the_provenance_write_is_the_last_step_in_the_source`), each **re-implementing the same `split("mod tests")` + comment-strip extractor by copy-paste**. Two carry documented known-bypasses in their own bodies (module-alias laundering; "text count, not call sites").
+- **Context:** The extractor duplication is the real cost: `SURFACE-2026-07-29-CFG-TEST-SPLIT-BLINDS-SOURCE-GUARDS` has **four places to recur** instead of one. The ambient-root guards earn their keep (they encode an otherwise-invisible architectural boundary, cheaply). The `remove_dir`/`remove_file`/`uninstall.sh` triplet guards a WP that by construction has no delete — and **expires the moment WP3.5b adds one**. `the_provenance_write_is_the_last_step_in_the_source` is a position tripwire whose own 30-line disclaimer is longer than its value and which demonstrably passes the regression it names (proven twice: by me at verify-auto, independently by the reviewer).
+- **Deferred deliberately (not an oversight):** three of the six must be **rewritten or deleted at WP3.5b anyway**, since a deleting path changes what "ships no delete" can mean. Consolidating now would churn code that WP3.5b rewrites days later.
+- **Suggested action:** **at WP3.5b, as part of building the refuse-guard.** (1) Factor the extractor into ONE `#[cfg(test)]` helper. (2) Keep one ambient-root guard per module. (3) Collapse the three delete guards into one crate-level guard over the module directory, re-scoped to "only the uninstall path may delete, and only via the refuse-guard." (4) Delete the position tripwire — the four behavioral `read_record().is_none()` tests are its real coverage.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-07-29-QUALITY-WP3.5A-CLONE-DIR-NAME-DUPLICATED
+- **Source:** feature:review-quality (m10.9-wp3.5a), MINOR
+- **Type:** tech-debt
+- **Summary:** `CLONE_DIR_NAME` exists twice — a Rust const in `workflow_install/mod.rs:92` and a TS const in `WorkflowInstallWizard.tsx:36` — with a comment acknowledging the coupling.
+- **Context:** Not a defect today; blast radius is a Browse-picked path disagreeing with the backend default. But the mitigation is one line: `workflow_install_default_location` already crosses the IPC boundary and returns the full path, so the wizard could take the directory name from that seeded value's basename and drop the constant entirely.
+- **Suggested action:** derive the basename from the seeded default instead of hardcoding; removes a documented drift channel rather than documenting it.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-29-QUALITY-WP3.5A-PROVENANCE-FETCH-DUPLICATED
+- **Source:** feature:review-quality (m10.9-wp3.5a), MINOR
+- **Type:** tech-debt
+- **Summary:** `SettingsPanel.tsx:255-270` — `refreshProvenance` and the mount effect duplicate the same `invoke("workflow_install_state").then().catch()` body verbatim; the effect adds only a `cancelled` guard.
+- **Context:** Two copies of one fetch means a change to error handling has to be made twice.
+- **Suggested action:** have the mount effect call the memoized callback, keeping only the `cancelled` guard around it.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-29-QUALITY-WP3.5A-DEFEAT-NARRATIVE-IN-TEST-COMMENT
+- **Source:** feature:review-quality (m10.9-wp3.5a), MINOR
+- **Type:** tech-debt
+- **Summary:** `terminal.rs:386-471` — a 45-line comment narrating three successive failed formulations of `the_table_covers_every_error_variant` is longer than the test and its fixture combined.
+- **Context:** The honesty is right and the lesson is already captured in the backlog in full; the **placement** is wrong. A future reader has to consume a defeat narrative to learn what the test currently checks.
+- **Suggested action:** cut to a two-line pointer at the SURFACE entry; keep the "must be values, not name strings" warning inline since that one is load-bearing for anyone editing the fixture.
 - **Priority:** low
 - **Status:** pending
