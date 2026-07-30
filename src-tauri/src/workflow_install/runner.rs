@@ -160,8 +160,16 @@ pub trait OutputSink {
 }
 
 /// A sink that discards everything — for tests that only care about the terminal state.
+///
+/// `#[cfg(test)]` because it has no production caller and never will: the real sink forwards to the
+/// webview. It sat in production code under a module-wide `#![allow(dead_code)]`, and removing that
+/// allow (its own comment said to, once Phase 4 landed) surfaced this as the single item it was
+/// masking. Gating it here is what let the allow go — so WP3.5b's *deleting* code arrives with
+/// dead-code detection switched on, which is where an orphaned function matters most.
+#[cfg(test)]
 pub struct NullSink;
 
+#[cfg(test)]
 impl OutputSink for NullSink {
     fn line(&self, _line: &str) {}
 }

@@ -41,20 +41,20 @@
 //! **Nothing in this module deletes anything.** The uninstall path — and the refuse-guard that
 //! must precede it — is WP3.5b's task one.
 
-// ## Why `dead_code` is allowed here, and when it comes off
-// Phase 1 of WP3.5a builds the sandbox fixture and the provenance store — deliberately BEFORE
-// anything that writes, because the high-priority sandbox SURFACE requires the fixture to
-// exist and be proven to contain writes first. The consequence is that the store has no
-// production caller until Phase 4 wires the commands layer, so `-D warnings` (which this repo
-// runs with, `--all-targets`) fails the build on dead code.
+// ## `#![allow(dead_code)]` was here, and is now REMOVED (2026-07-29)
+// Phase 1 built the sandbox fixture and provenance store before anything that writes — the
+// ordering the high-priority sandbox SURFACE mandates — which left those items without a
+// production caller and failed `-D warnings`. The allow carried that gap with an explicit
+// expiry: "remove when Phase 4 lands."
 //
-// The alternative — building the spawn path first so nothing is unused — is exactly the
-// ordering the SURFACE forbids. So the allow stays, scoped to this module and no wider.
+// Phase 4 landed, the trigger fired, and nothing tracked it until code review. Removing the
+// attribute surfaced exactly ONE masked item — `runner::NullSink`, a test-only helper sitting in
+// production code — now `#[cfg(test)]`-gated. Everything else was genuinely reachable.
 //
-// **Remove this attribute when Phase 4 lands.** By then `commands` consumes every item here,
-// and leaving it would hide a genuinely orphaned function in a module whose whole job is
-// deciding what may be deleted.
-#![allow(dead_code)]
+// **Do not re-add it.** WP3.5b adds the deleting path into this module, and dead-code detection on
+// destructive code is exactly where an orphaned function is most expensive to miss. If a future
+// phase again needs to land un-wired code, gate that ITEM narrowly rather than re-opening the
+// whole module.
 
 // The ONLY layer that resolves real paths (`$HOME`, `~/.claudesk/`). Every other module here
 // takes its roots as parameters so the sandbox can contain writes; this is the sanctioned

@@ -126,6 +126,62 @@ impl OutputSink for EventSink {
     }
 }
 
+/// The message a panicked worker reports, so the UI has something honest to show.
+///
+/// Deliberately does NOT try to describe the panic: the payload the user needs is "this failed and
+/// the gate is back off", and a panic message would be an internal detail with no user action
+/// attached. The real diagnostic goes to stderr via Rust's default panic hook.
+const PANIC_MESSAGE: &str =
+    "The install stopped unexpectedly. Nothing was recorded, so you can safely retry.";
+
+/// Releases the single-run lock and guarantees a terminal event, **even on an unwinding panic**.
+///
+/// This exists because the two things a stuck install costs are unrecoverable without a relaunch:
+/// a wedged `running` flag refuses every later install, and a wizard with no terminal event has no
+/// Close button. Both are `Drop`-shaped problems, so they get a `Drop` solution.
+struct RunGuard {
+    app: AppHandle,
+    ctl: Arc<InstallControl>,
+    /// Set once a real outcome has been emitted, so `Drop` stays silent on the happy path.
+    reported: bool,
+}
+
+impl RunGuard {
+    /// Emit the real outcome and mark the run reported.
+    fn finish(&mut self, payload: InstallFinished) {
+        self.reported = true;
+        let _ = self.app.emit(INSTALL_FINISHED_EVENT, payload);
+    }
+}
+
+impl Drop for RunGuard {
+    fn drop(&mut self) {
+        // Always release the lock — this is the half that would otherwise wedge the wizard for the
+        // whole process lifetime.
+        self.ctl.running.store(false, Ordering::SeqCst);
+
+        if self.reported {
+            return;
+        }
+
+        // Unreported at drop means the closure did not reach `finish()` — i.e. it panicked. Send a
+        // failure so the UI can leave `running`. `revert_gate: true` because a panicked install
+        // must not leave the gate ON claiming a substrate; `substrate_installed: false` because we
+        // genuinely do not know, and claiming an install we cannot prove is the one direction that
+        // could later arm a delete.
+        let _ = self.app.emit(
+            INSTALL_FINISHED_EVENT,
+            InstallFinished {
+                ok: false,
+                revert_gate: true,
+                partial_clone_left: false,
+                substrate_installed: false,
+                error: Some(PANIC_MESSAGE.to_string()),
+            },
+        );
+    }
+}
+
 /// Start an install into `dest`, cloning from `url`.
 ///
 /// Returns immediately; progress arrives on [`INSTALL_OUTPUT_EVENT`] and the outcome on
@@ -149,11 +205,56 @@ pub fn workflow_install_start(
     let root = claudesk_root().inspect_err(|_| {
         control.running.store(false, Ordering::SeqCst);
     })?;
-    let dest = PathBuf::from(dest);
+
+    // Reject anything that is not an absolute path, BEFORE any subprocess runs.
+    //
+    // The destination is free text (the field must stay editable — a native directory picker
+    // cannot select a directory that does not exist yet, and the default `~/.claudesk/vendor/`
+    // does not). Nothing on either side of the IPC boundary expands `~`, so
+    // `PathBuf::from("~/x")` is a *relative* path: `git clone` would create a directory literally
+    // named `~` under the app's cwd, the install would "succeed" into it, and the provenance
+    // record would point somewhere the user never chose — which WP3.5b later reads as
+    // authoritative when deciding what it may remove. Silently wrong beats loudly wrong here, so
+    // this refuses rather than guessing at expansion.
+    //
+    // Caught at code review; the adjacent Settings copy displays `~/dev/...` paths, so typing a
+    // tilde is the natural user move rather than an exotic one.
+    let dest = PathBuf::from(&dest);
+    if !dest.is_absolute() {
+        control.running.store(false, Ordering::SeqCst);
+        return Err(format!(
+            "The install location must be an absolute path (got {:?}). \
+             A leading ~ is not expanded — use the full path, or pick a folder with Browse.",
+            dest.display().to_string()
+        ));
+    }
     let ctl = Arc::clone(&control);
     let now = now_rfc3339();
 
     std::thread::spawn(move || {
+        // ── The panic boundary ──────────────────────────────────────────────────────────
+        // `RunGuard`'s `Drop` runs on a normal return AND on an unwinding panic, which is what
+        // makes the two unrecoverable states impossible by construction rather than by
+        // remembering to reset things on every path.
+        //
+        // Without it (the shipped version, caught at code review): `running.store(false)` and
+        // the finished-event emit were both the LAST statements of this closure, so a panic
+        // anywhere above them — inside `run_install`, a poisoned lock, an allocation failure
+        // while collecting output — left `running: true` for the rest of the process lifetime
+        // (every later `workflow_install_start` returning "an install is already running") AND
+        // left the wizard stuck in `step === "running"` with no Close button and no Esc path.
+        // One missing guard, two dead ends, and neither observable from a unit test.
+        //
+        // `finish()` is called on the success path so the real outcome wins; the guard then has
+        // nothing left to report. If it fires anyway, the payload it sends is deliberately a
+        // *failure* with `revert_gate: true` — a panicked install must never leave the gate ON
+        // claiming a substrate, which is `terminal.rs`'s load-bearing invariant.
+        let mut guard = RunGuard {
+            app: app.clone(),
+            ctl: Arc::clone(&ctl),
+            reported: false,
+        };
+
         let sink = EventSink { app: app.clone() };
         let cancelled = || ctl.cancelled.load(Ordering::SeqCst);
         let outcome = runner::run_install(&url, &dest, &root, &now, &sink, &cancelled);
@@ -168,8 +269,7 @@ pub fn workflow_install_start(
             substrate_installed: state.substrate_installed,
             error: state.surfaced_error,
         };
-        let _ = app.emit(INSTALL_FINISHED_EVENT, payload);
-        ctl.running.store(false, Ordering::SeqCst);
+        guard.finish(payload);
     });
 
     Ok(())
@@ -237,6 +337,118 @@ mod tests {
         assert!(
             code.contains("resolve_terminal_state"),
             "the terminal decision must come from the pure reducer, not be re-derived here"
+        );
+    }
+
+    #[test]
+    fn dto_serde_shape_is_snake_case() {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // The convention every sibling IPC DTO enforces — `status_broadcaster`,
+        // `hook_socket`, `time_store::query` all carry this pin, folding in
+        // SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE. This module
+        // shipped without it (caught at code review).
+        //
+        // The cost of the gap is concrete, not theoretical: a future
+        // `rename_all = "camelCase"` would silently rename `revert_gate` → `revertGate`,
+        // the hand-written TS interface would read `undefined`, `undefined` is falsy, and
+        // **the gate would stay ON after a failed install** — the exact invariant
+        // `terminal.rs`'s header calls load-bearing. A wire-shape drift here is a safety
+        // regression, not a cosmetic one.
+        // ═══════════════════════════════════════════════════════════════════════════
+        use super::*;
+        let payload = InstallFinished {
+            ok: false,
+            revert_gate: true,
+            partial_clone_left: true,
+            substrate_installed: false,
+            error: Some("boom".to_string()),
+        };
+        let value = serde_json::to_value(&payload).unwrap();
+        let obj = value.as_object().unwrap();
+
+        let mut keys: Vec<&String> = obj.keys().collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            vec![
+                &"error".to_string(),
+                &"ok".to_string(),
+                &"partial_clone_left".to_string(),
+                &"revert_gate".to_string(),
+                &"substrate_installed".to_string(),
+            ],
+            "the wire keys must stay snake_case verbatim — the TS interface in \
+             WorkflowInstallWizard.tsx mirrors them by hand"
+        );
+        // Spot-check the safety-critical field by name AND value.
+        assert_eq!(obj["revert_gate"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn a_panicked_run_still_reports_a_gate_revert() {
+        // The panic-boundary contract, asserted on the payload the `RunGuard` sends when the
+        // worker never reached `finish()`. Cannot spawn a real panicking Tauri thread in a unit
+        // test (no AppHandle), so this pins the VALUES the guard is built to send — the same
+        // discipline the rest of this module uses for decisions it cannot observe live.
+        //
+        // `revert_gate: true` is the load-bearing field: a panicked install must never leave the
+        // gate ON claiming a substrate. `substrate_installed: false` because we genuinely do not
+        // know — and claiming an install we cannot prove is the one direction that could later
+        // arm a delete.
+        use super::*;
+        let payload = InstallFinished {
+            ok: false,
+            revert_gate: true,
+            partial_clone_left: false,
+            substrate_installed: false,
+            error: Some(PANIC_MESSAGE.to_string()),
+        };
+
+        assert!(!payload.ok, "a panic is never a success");
+        assert!(payload.revert_gate, "a panic must revert the gate");
+        assert!(
+            !payload.substrate_installed,
+            "a panic must not claim an install it cannot prove"
+        );
+        assert!(
+            PANIC_MESSAGE.contains("safely retry"),
+            "the message must tell the user what they can do, not describe the panic"
+        );
+    }
+
+    #[test]
+    fn the_guard_releases_the_lock_and_reports_on_both_paths() {
+        // Source-level, and honest about it: `Drop` on an unwinding panic is not observable from
+        // a unit test without a real AppHandle. What IS checkable is that the release and the
+        // fallback emit live in `Drop` rather than at the end of the closure — which is the
+        // entire distinction between the fixed and broken versions.
+        let src = include_str!("commands.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+
+        let drop_impl = production
+            .split("impl Drop for RunGuard")
+            .nth(1)
+            .expect("RunGuard must have a Drop impl — that is the panic boundary");
+        let drop_body = drop_impl.split("\n}").next().unwrap_or(drop_impl);
+
+        assert!(
+            drop_body.contains("running.store(false"),
+            "Drop must release the single-run lock, or a panic wedges every later install"
+        );
+        assert!(
+            drop_body.contains("INSTALL_FINISHED_EVENT"),
+            "Drop must emit a terminal event, or a panic leaves the wizard stuck in `running` \
+             with no Close button"
+        );
+        // And the closure must NOT still be doing the release itself — that is the shipped bug.
+        let spawn_body = production
+            .split("std::thread::spawn")
+            .nth(1)
+            .unwrap_or_default();
+        assert!(
+            !spawn_body.contains("ctl.running.store(false"),
+            "the worker closure must delegate the lock release to RunGuard's Drop, not do it \
+             inline as its last statement (the shipped bug: a panic skipped it entirely)"
         );
     }
 

@@ -3128,7 +3128,13 @@ body,
      `stretch` overrides the inherited flex-start for this child only; `min-width: 0` lets it
      shrink below the <pre>'s intrinsic width so the <pre> is the thing that scrolls.
      Verified live: info 859px→511px, panel overflow gone, <pre> scrolls internally with the
-     full `git clone` line reachable. Pinned by settingsPanelLayout.test.ts. */
+     full `git clone` line reachable.
+     Pinned by `__tests__/settingsPanelLayout.test.ts` — which, until 2026-07-29, this comment
+     claimed while the file did NOT exist. Code review caught it, and the miss mattered: WP3.5a
+     re-introduced the same class of bug (two more unconstrained <pre> elements, eleven undefined
+     classes) in the belief this was guarded. The guard is source-level — it proves these two
+     declarations are PRESENT, not that the rendered layout is correct; the live check stays on the
+     verify-human list. */
   align-self: stretch;
   min-width: 0;
 }
@@ -3241,4 +3247,176 @@ body,
   justify-content: center;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── M10.9 WP3.5a — the install wizard ──────────────────────────────────────────
+   ⚠️ READ `.substrate-info` (above) BEFORE CHANGING THE BOX MODEL HERE.
+   This block lives in the same flex parent (`.settings-group-body`, which is
+   `display: flex` with `align-items: flex-start`), so a child sizes to its CONTENT
+   rather than the container unless it opts out. WP3 shipped an unconstrained <pre>
+   into that parent and put the ENTIRE Settings panel into horizontal overflow
+   (859px child inside a 511px group). This wizard adds TWO more <pre> elements
+   carrying `git clone` / `install.sh` output — lines that are long by nature — so
+   the same two properties are mandatory, for the same reason:
+     · `align-self: stretch` overrides the inherited flex-start for this child;
+     · `min-width: 0` lets it shrink below the <pre>'s intrinsic width, so the
+       <pre> becomes the thing that scrolls instead of the panel.
+   The project rule is that wide content scrolls inside its own container, never
+   the panel body. */
+.install-wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  align-self: stretch;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+}
+
+.install-wizard h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.install-wizard-intro {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.install-wizard-disclosures {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.install-wizard-location {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 0;
+}
+
+/* The field + Browse button share a row; `min-width: 0` on the row AND the input is
+   what keeps a long pre-filled path from widening the panel instead of scrolling. */
+.install-wizard-location-row {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.install-wizard-location-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 7px;
+  font-size: 0.76rem;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+.install-wizard-location-row input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* The streamed subprocess transcript, and the error dump. THE constrained-<pre>
+   case this whole comment block exists for — see `.substrate-cmd` for the same
+   treatment on a shorter block. */
+.install-wizard-log {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 220px;
+  overflow: auto;
+  align-self: stretch;
+  min-width: 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  white-space: pre;
+  user-select: text;
+}
+
+.install-wizard-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.install-wizard-actions button {
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.install-wizard-actions button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.install-wizard-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.install-wizard-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Warnings, not errors: the substrate-installed-but-unrecorded and
+   partial-clone-left cases are states the user must act on, not failures. */
+.install-wizard-warning {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: rgba(240, 190, 100, 0.92);
+}
+
+.install-wizard-error {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: rgba(240, 130, 130, 0.92);
+}
+
+.substrate-install-button {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  font-family: inherit;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.substrate-install-button:hover {
+  background: rgba(255, 255, 255, 0.14);
 }

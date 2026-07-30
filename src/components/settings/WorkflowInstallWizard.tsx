@@ -198,6 +198,18 @@ export function WorkflowInstallWizard({ onClose, onFinished }: Props) {
             {lines.join("\n")}
           </pre>
           <div className="install-wizard-actions">
+            {/* Always dismissable, even mid-run. Closing the panel does NOT cancel the
+                install — the backend keeps going and `install.sh` is idempotent — and the
+                copy below says so, because a Close button that silently abandoned a
+                half-finished `~/.claude/` mutation would be worse than no button.
+
+                This is the frontend half of the stuck-in-`running` fix. The backend's
+                RunGuard now emits a terminal event even on an unwinding panic, so this
+                should be unreachable; it exists because the cost of being wrong is a
+                wizard with no exit, and the cost of the button is one line. */}
+            <button onClick={onClose} data-testid="install-hide">
+              Close
+            </button>
             <button
               onClick={cancel}
               disabled={cancelPending}
@@ -208,6 +220,12 @@ export function WorkflowInstallWizard({ onClose, onFinished }: Props) {
           </div>
           {cancelPending && (
             <p className="install-wizard-hint">{CANCELLING_HINT}</p>
+          )}
+          {!cancelPending && (
+            <p className="install-wizard-hint">
+              Closing this leaves the install running &mdash; use Cancel to stop
+              it.
+            </p>
           )}
         </>
       )}
