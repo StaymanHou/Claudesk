@@ -130,14 +130,22 @@ export const TUTORIAL_COMMAND = "/tutorial-getting-started";
 
 interface WorkflowSubstrateInfoProps {
   /**
-   * The install affordance, rendered in the `absent` arm only — directly under the
-   * "not installed" status line and ABOVE the manual-steps disclosure.
+   * The install affordance for the `absent` arm — the **button, or the open wizard in its
+   * place** — rendered directly under the "not installed" status line and ABOVE the
+   * manual-steps disclosure.
    *
-   * A slot rather than a prop the component acts on: the wizard's open/closed state and the
-   * provenance gate live in `SettingsPanel`, and this component stays presentational. Position
-   * is the whole point (operator, verify-human 2026-07-30) — the button must sit *under the
-   * line that explains why you need it*, and *above* the manual fallback. Rendering it outside
-   * this block left it floating above the status line, explaining nothing.
+   * A slot rather than a prop this component acts on: the wizard's open/closed state and the
+   * provenance gate live in `SettingsPanel`, and this component stays presentational.
+   *
+   * **Position is the requirement, and it took two corrections to get right**
+   * (operator, verify-human 2026-07-30). Both halves have to be in the slot:
+   *   1. First mistake — the *button* rendered as a sibling before this whole block, which put
+   *      it above the very status line that explains why you'd want it.
+   *   2. Second mistake — the button moved in, but the *wizard* still rendered as a sibling
+   *      after the block, so opening it made the panel jump: the wizard appeared below the
+   *      manual steps, detached from the button that summoned it.
+   * The affordance and its expanded form must occupy the SAME position, or the surface moves
+   * under the user's cursor.
    */
   installAction?: ReactNode;
   /** Result of the read-only `workflow_substrate_installed` check. */

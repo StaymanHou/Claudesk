@@ -255,6 +255,37 @@ describe("install-affordance POSITION — under the status line, above the manua
     ).toBeLessThan(manual);
   });
 
+  it("renders the OPEN WIZARD in the same slot, not as a sibling", () => {
+    // The second correction. Slotting the button but leaving the wizard as a sibling meant
+    // opening it made the panel jump — the wizard appeared below the manual steps, detached
+    // from the button that summoned it. The affordance and its expanded form must occupy the
+    // same position.
+    //
+    // Asserted by position: the wizard element must appear INSIDE the installAction prop,
+    // which is bounded by the <WorkflowSubstrateInfo ... /> element.
+    // Count-based, NOT index-based. An index comparison scans forward and happily finds the
+    // real slotted wizard even when a stray sibling exists earlier — I proved that by mutation:
+    // inserting a sibling <WorkflowInstallWizard /> before the block left the index form
+    // PASSING. So assert there is exactly ONE render of the wizard and that it lives inside the
+    // slot's bounds.
+    const renders = PANEL_SRC.match(/<WorkflowInstallWizard\b/g) ?? [];
+    expect(
+      renders.length,
+      "the wizard must be rendered exactly ONCE — a second render site means one of them is " +
+        "a detached sibling",
+    ).toBe(1);
+
+    const infoAt = PANEL_SRC.indexOf("<WorkflowSubstrateInfo");
+    const slotAt = PANEL_SRC.indexOf("installAction={", infoAt);
+    const wizardAt = PANEL_SRC.indexOf("<WorkflowInstallWizard");
+    expect(slotAt, "the slot must exist").toBeGreaterThan(-1);
+    expect(
+      wizardAt,
+      "the wizard must render INSIDE installAction — as a sibling it detaches from the " +
+        "button position and the panel jumps when it opens",
+    ).toBeGreaterThan(slotAt);
+  });
+
   it("passes the button through the slot rather than rendering it as a sibling", () => {
     // The sibling form is the shipped mistake. If someone re-adds a standalone
     // <button className="substrate-install-button"> outside the slot, the position guarantee

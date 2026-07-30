@@ -382,7 +382,36 @@ export default function SettingsPanel({
           <WorkflowSubstrateInfo
             present={substratePresent}
             installAction={
-              offersInstallWizard(provenance) && !wizardOpen ? (
+              wizardOpen ? (
+                <WorkflowInstallWizard
+                  onClose={() => setWizardOpen(false)}
+                  onFinished={(result) => {
+                    // Re-resolve BOTH substrate state sources. They are independent and both
+                    // stale after an install: `provenance` drives the affordance,
+                    // `substratePresent` drives the "installed ✓ / not installed" line.
+                    //
+                    // Refreshing only provenance (the shipped bug, caught at verify-human)
+                    // made the button correctly disappear while the line still read "not
+                    // installed" after a successful install — violating the spec criterion
+                    // that the block re-resolves without a relaunch. Two sources, one event:
+                    // both must be refreshed or the surface contradicts itself.
+                    refreshProvenance();
+                    refreshSubstratePresent();
+                    // Honor the pure reducer's gate decision. Never re-derived here — the
+                    // decision came from Rust's terminal-state table.
+                    if (result.revert_gate && workflowFeatures.value) {
+                      workflowFeatures.set(false);
+                    }
+                  }}
+                  onEnableAndClose={() => {
+                    // Goes through the panel's existing `useSettingControl` seam, so the flip
+                    // keeps the optimistic-set + revert-on-IPC-failure discipline every other
+                    // control here uses. The wizard does not own settings state.
+                    workflowFeatures.set(true);
+                    setWizardOpen(false);
+                  }}
+                />
+              ) : offersInstallWizard(provenance) ? (
                 <button
                   type="button"
                   className="substrate-install-button"
@@ -394,36 +423,6 @@ export default function SettingsPanel({
               ) : undefined
             }
           />
-          {wizardOpen && (
-            <WorkflowInstallWizard
-              onClose={() => setWizardOpen(false)}
-              onFinished={(result) => {
-                // Re-resolve BOTH substrate state sources. They are independent and both
-                // stale after an install: `provenance` drives the [Install…] affordance,
-                // `substratePresent` drives the "installed ✓ / not installed" status line.
-                //
-                // Refreshing only provenance (the shipped bug, caught at verify-human) made
-                // the button correctly disappear while the line still read "not installed"
-                // after a successful install — violating the spec criterion that the block
-                // re-resolves to `managed` without a relaunch. Two state sources, one event:
-                // both must be refreshed or the surface contradicts itself.
-                refreshProvenance();
-                refreshSubstratePresent();
-                // Honor the pure reducer's gate decision. Never re-derived here — the
-                // decision came from Rust's terminal-state table.
-                if (result.revert_gate && workflowFeatures.value) {
-                  workflowFeatures.set(false);
-                }
-              }}
-              onEnableAndClose={() => {
-                // Goes through the panel's existing `useSettingControl` seam, so the flip keeps
-                // the optimistic-set + revert-on-IPC-failure discipline every other control
-                // here uses. The wizard deliberately does not own settings state.
-                workflowFeatures.set(true);
-                setWizardOpen(false);
-              }}
-            />
-          )}
         </SettingsGroup>
 
         <SettingsGroup
