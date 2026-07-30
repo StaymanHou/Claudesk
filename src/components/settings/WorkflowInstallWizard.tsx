@@ -145,13 +145,38 @@ export function WorkflowInstallWizard({
     }
   }, []);
 
+  /**
+   * On mount, scroll the Settings panel so the WHOLE wizard is visible.
+   *
+   * The wizard is tall (six disclosure bullets + a location row + actions) and it opens partway
+   * down a scrollable panel, so it was appearing with its bottom half — including the Install
+   * and Cancel buttons — clipped below the fold. The user then had to find the scrollbar to
+   * reach the primary action of the thing they just opened.
+   *
+   * `block: "nearest"` rather than `"start"`/`"center"`: it scrolls the MINIMUM needed to bring
+   * the element fully into view and no-ops when it already is. `"start"` would yank the wizard
+   * to the top of the viewport even when it was perfectly visible, losing the surrounding
+   * context (the status line above it) for no reason.
+   *
+   * A callback ref, not an effect: it fires once the node is in the DOM and laid out, which is
+   * what `scrollIntoView` needs to compute the right offset. `behavior: "smooth"` because the
+   * jump is otherwise disorienting — the panel moves without the user having asked it to.
+   */
+  const revealRef = useCallback((node: HTMLDivElement | null) => {
+    node?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, []);
+
   const cancel = useCallback(() => {
     setCancelPending(true);
     void invoke("workflow_install_cancel");
   }, []);
 
   return (
-    <div className="install-wizard" data-testid="workflow-install-wizard">
+    <div
+      className="install-wizard"
+      data-testid="workflow-install-wizard"
+      ref={revealRef}
+    >
       {step === "consent" && (
         <>
           <h3>Install the workflow system</h3>

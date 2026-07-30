@@ -296,3 +296,52 @@ describe("install-affordance POSITION — under the status line, above the manua
     expect(buttonAt).toBeGreaterThan(infoAt);
   });
 });
+
+describe("reveal-on-open — the wizard must not open half-clipped", () => {
+  // The wizard is tall and opens partway down a scrollable panel, so it appeared with its
+  // bottom half — including the Install and Cancel buttons — below the fold. The user then had
+  // to hunt for the scrollbar to reach the primary action of the thing they just opened.
+  const WIZ = readFileSync(
+    fileURLToPath(new URL("../WorkflowInstallWizard.tsx", import.meta.url)),
+    "utf8",
+  );
+
+  /**
+   * The wizard's source with comments stripped.
+   *
+   * ⚠️ Required, not tidiness. My first version of these guards asserted against the raw file,
+   * and a mutation that DELETED the `scrollIntoView` call still passed — the word survived in
+   * the doc comment right above it. That is the third time this session a guard matched prose
+   * instead of code. Strip comments first, always.
+   */
+  const WIZ_CODE = WIZ.split("\n")
+    .filter((l) => {
+      const t = l.trim();
+      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+    })
+    .join("\n");
+
+  it("scrolls itself into view on mount", () => {
+    expect(WIZ_CODE).toContain("scrollIntoView");
+  });
+
+  it('uses block: "nearest" — the minimum scroll, and a no-op when already visible', () => {
+    // NOT "start"/"center": those yank the wizard to the top of the viewport even when it is
+    // already fully visible, throwing away the surrounding context (the "not installed" status
+    // line the button sat under) for no reason. "nearest" scrolls only as far as needed.
+    expect(WIZ_CODE).toContain('block: "nearest"');
+    expect(WIZ_CODE).not.toContain('block: "start"');
+    expect(WIZ_CODE).not.toContain('block: "center"');
+  });
+
+  it("attaches the reveal to the wizard ROOT, not an inner element", () => {
+    // Revealing an inner node (the actions row, say) would scroll that into view while leaving
+    // the wizard's header clipped above — the mirror image of the bug.
+    const rootAt = WIZ.indexOf('className="install-wizard"');
+    const refAt = WIZ.indexOf("ref={revealRef}");
+    expect(rootAt).toBeGreaterThan(-1);
+    expect(refAt).toBeGreaterThan(-1);
+    // The ref must be on the same element as the root class (within its attribute list).
+    expect(Math.abs(refAt - rootAt)).toBeLessThan(160);
+  });
+});
