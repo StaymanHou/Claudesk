@@ -1,5 +1,15 @@
 # Backlog
 
+## SURFACE-2026-07-30-WP3.5B-UNINSTALL-MUST-CLEAR-THE-PROVENANCE-RECORD
+- **Source:** feature:verify-human (M10.9 WP3.5a) — found by hand-running the real `uninstall.sh` against the sandbox
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** `uninstall.sh` removes the symlinks and the `CLAUDE.md` marker block but **does not touch `~/.claudesk/install-record.json`**. So after a successful hand-uninstall, Claudesk still resolves `managed` and the substrate row still claims `installed ✓` — an install that is gone.
+- **Context:** Observed live: ran `uninstall.sh` (and its `--dry-run`) against the fake-`$HOME` sandbox. The dry-run output was accurate and correctly scoped; the script did exactly what it promises. The gap is on **Claudesk's** side — the record is Claudesk's artifact, so the script has no business deleting it, which means the *wizard* must. Corollary the record's own design already implies: `resolve_state` reads `(present, record)`, so with the substrate gone and a record surviving it lands on `Absent` — Claudesk would offer to install again while a stale record sits on disk. Not dangerous, but it makes the record a lie.
+- **Suggested action:** **WP3.5b task list — the uninstall path must delete the provenance record as its LAST step**, mirroring WP3.5a's write-last ordering (write last on install ⇒ delete last on uninstall, so a failed uninstall leaves the record describing what still exists). Also: `uninstall.sh` prints `permissions.allow` entries it does **not** remove, exactly as `install.sh` prints ones it does not add — the uninstall wizard's copy should disclose that symmetry the way the install consent copy already does.
+- **Priority:** medium
+- **Status:** pending
+
 ## SURFACE-2026-07-30-WP3.5A-PROVENANCE-STATE-NOT-LEGIBLE-IN-UI
 - **Source:** feature:verify-human (M10.9 WP3.5a, deferred batch)
 - **Target level:** product:wbs
