@@ -363,13 +363,19 @@ export default function SettingsPanel({
               distinction the milestone is built on. */}
           <p className="settings-row-help">
             Turning this on only shows the features — it doesn&rsquo;t install
-            anything. Installing is a separate, explicit step below.
+            anything. Installing is a separate, explicit step.
           </p>
-          <WorkflowSubstrateInfo present={substratePresent} />
-          {/* M10.9 WP3.5a — the install affordance. Gated on `offersInstallWizard`, which is
-              true ONLY for `"absent"`: a `"developer"` substrate is the operator's live repo (or
-              a hand-clone) that Claudesk did not record installing, and per the provenance rule
-              it must describe, never act. `null` (unresolved) shows nothing. */}
+          {/* M10.9 WP3.5a — the install affordance, deliberately ABOVE the substrate info
+              block (operator, verify-human 2026-07-30). The wizard is the PRIMARY path: it is
+              the thing most users should click, and the manual steps below it are the fallback
+              for the machine Claudesk cannot act on. Rendering the instructions first buried
+              the button under a wall of shell commands and read as though typing them were the
+              expected route.
+
+              Gated on `offersInstallWizard`, which is true ONLY for `"absent"`: a `"developer"`
+              substrate is the operator's live repo (or a hand-clone) that Claudesk did not
+              record installing, and per the provenance rule it must describe, never act.
+              `null` (unresolved) shows nothing. */}
           {offersInstallWizard(provenance) && !wizardOpen && (
             <button
               type="button"
@@ -380,6 +386,7 @@ export default function SettingsPanel({
               Install with the wizard&hellip;
             </button>
           )}
+          <WorkflowSubstrateInfo present={substratePresent} />
           {wizardOpen && (
             <WorkflowInstallWizard
               onClose={() => setWizardOpen(false)}
