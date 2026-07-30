@@ -195,3 +195,73 @@ describe("post-install refresh — the stale-status bug found at verify-human", 
     expect(WIZARD).toContain("{result.ok && (");
   });
 });
+
+describe("install-affordance POSITION — under the status line, above the manual steps", () => {
+  // The position is the requirement, not decoration (operator, verify-human 2026-07-30).
+  //
+  // First attempt rendered the button as a sibling BEFORE the substrate block, which put it
+  // above the very "Workflow system: not installed" line that explains why a user would want
+  // it — an action floating free of its own justification. The fix passes it INTO the block as
+  // a slot so the reading order is: what state am I in → the button that changes it → the
+  // manual fallback.
+  //
+  // Source-level (no DOM env for this component), but asserting ORDER via index comparison
+  // rather than presence — which is what the requirement actually is.
+  const INFO = readFileSync(
+    fileURLToPath(new URL("../WorkflowSubstrateInfo.tsx", import.meta.url)),
+    "utf8",
+  );
+  const PANEL_SRC = readFileSync(
+    fileURLToPath(new URL("../SettingsPanel.tsx", import.meta.url)),
+    "utf8",
+  );
+
+  /** Just the `absent` arm's JSX — the only arm that renders the install action. */
+  function absentArm(): string {
+    const at = INFO.indexOf('data-testid="substrate-info-absent"');
+    if (at === -1) return "";
+    const end = INFO.indexOf("if (arm ===", at + 10);
+    return INFO.slice(at, end === -1 ? INFO.length : end);
+  }
+
+  it("renders the install action AFTER the not-installed status line", () => {
+    const arm = absentArm();
+    expect(arm, "the absent arm must exist").not.toBe("");
+    const status = arm.indexOf("not installed");
+    const action = arm.indexOf("{installAction}");
+    expect(status, "status line must be present").toBeGreaterThan(-1);
+    expect(
+      action,
+      "the install slot must render in the absent arm",
+    ).toBeGreaterThan(-1);
+    expect(
+      action,
+      "the button must come AFTER the status line — above it, the action explains nothing",
+    ).toBeGreaterThan(status);
+  });
+
+  it("renders the install action BEFORE the manual-steps disclosure", () => {
+    const arm = absentArm();
+    const action = arm.indexOf("{installAction}");
+    const manual = arm.indexOf("substrate-install-disclosure");
+    expect(
+      manual,
+      "the manual-steps disclosure must be present",
+    ).toBeGreaterThan(-1);
+    expect(
+      action,
+      "the wizard is the PRIMARY path — it must precede the manual fallback, or the " +
+        "instructions read as the expected route",
+    ).toBeLessThan(manual);
+  });
+
+  it("passes the button through the slot rather than rendering it as a sibling", () => {
+    // The sibling form is the shipped mistake. If someone re-adds a standalone
+    // <button className="substrate-install-button"> outside the slot, the position guarantee
+    // silently breaks while both assertions above still pass.
+    expect(PANEL_SRC).toContain("installAction={");
+    const infoAt = PANEL_SRC.indexOf("<WorkflowSubstrateInfo");
+    const buttonAt = PANEL_SRC.indexOf('className="substrate-install-button"');
+    expect(buttonAt).toBeGreaterThan(infoAt);
+  });
+});

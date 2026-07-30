@@ -365,28 +365,35 @@ export default function SettingsPanel({
             Turning this on only shows the features — it doesn&rsquo;t install
             anything. Installing is a separate, explicit step.
           </p>
-          {/* M10.9 WP3.5a — the install affordance, deliberately ABOVE the substrate info
-              block (operator, verify-human 2026-07-30). The wizard is the PRIMARY path: it is
-              the thing most users should click, and the manual steps below it are the fallback
-              for the machine Claudesk cannot act on. Rendering the instructions first buried
-              the button under a wall of shell commands and read as though typing them were the
-              expected route.
+          {/* M10.9 WP3.5a — the install affordance is passed INTO the substrate block as a
+              slot, so it renders directly under "Workflow system: not installed" and above the
+              manual-steps disclosure (operator, verify-human 2026-07-30).
 
-              Gated on `offersInstallWizard`, which is true ONLY for `"absent"`: a `"developer"`
+              Position is the requirement, not decoration. Rendering the button as a sibling
+              *before* this block put it above the very status line that explains why a user
+              would want it — an action floating free of its own justification. Inside the
+              block, the reading order is: what state am I in → the button that changes it →
+              the manual fallback if Claudesk can't act.
+
+              Gated on `offersInstallWizard`, true ONLY for `"absent"`: a `"developer"`
               substrate is the operator's live repo (or a hand-clone) that Claudesk did not
               record installing, and per the provenance rule it must describe, never act.
               `null` (unresolved) shows nothing. */}
-          {offersInstallWizard(provenance) && !wizardOpen && (
-            <button
-              type="button"
-              className="substrate-install-button"
-              data-testid="substrate-install-button"
-              onClick={() => setWizardOpen(true)}
-            >
-              Install with the wizard&hellip;
-            </button>
-          )}
-          <WorkflowSubstrateInfo present={substratePresent} />
+          <WorkflowSubstrateInfo
+            present={substratePresent}
+            installAction={
+              offersInstallWizard(provenance) && !wizardOpen ? (
+                <button
+                  type="button"
+                  className="substrate-install-button"
+                  data-testid="substrate-install-button"
+                  onClick={() => setWizardOpen(true)}
+                >
+                  Install with the wizard&hellip;
+                </button>
+              ) : undefined
+            }
+          />
           {wizardOpen && (
             <WorkflowInstallWizard
               onClose={() => setWizardOpen(false)}

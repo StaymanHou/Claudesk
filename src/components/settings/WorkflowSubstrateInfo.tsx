@@ -24,6 +24,8 @@
 //   2. NEVER promise a "quick 5-minute" tour. It is an honest ~10–15 min narrated real run,
 //      and the upstream spec structurally forbids the shorter claim (§6).
 
+import type { ReactNode } from "react";
+
 /** Whether the companion workflow system appears to be installed. `null` = not yet resolved. */
 export type SubstratePresence = boolean | null;
 
@@ -127,6 +129,17 @@ export const TUTORIAL_POINTER_COPY =
 export const TUTORIAL_COMMAND = "/tutorial-getting-started";
 
 interface WorkflowSubstrateInfoProps {
+  /**
+   * The install affordance, rendered in the `absent` arm only — directly under the
+   * "not installed" status line and ABOVE the manual-steps disclosure.
+   *
+   * A slot rather than a prop the component acts on: the wizard's open/closed state and the
+   * provenance gate live in `SettingsPanel`, and this component stays presentational. Position
+   * is the whole point (operator, verify-human 2026-07-30) — the button must sit *under the
+   * line that explains why you need it*, and *above* the manual fallback. Rendering it outside
+   * this block left it floating above the status line, explaining nothing.
+   */
+  installAction?: ReactNode;
   /** Result of the read-only `workflow_substrate_installed` check. */
   present: SubstratePresence;
 }
@@ -203,7 +216,10 @@ function UninstallLine() {
  * "installed" would hide the instructions from the person who needs them. Same reasoning as
  * the gate seam's `false` pre-seed default — resolve first, then commit to a claim.
  */
-export function WorkflowSubstrateInfo({ present }: WorkflowSubstrateInfoProps) {
+export function WorkflowSubstrateInfo({
+  present,
+  installAction,
+}: WorkflowSubstrateInfoProps) {
   // Delegates the three-state decision to the pure `substrateArmFor` rather than re-deriving
   // it inline — that function is what the unit tests pin, so re-deriving here would let the
   // test and the render drift apart while both looked correct.
@@ -217,6 +233,9 @@ export function WorkflowSubstrateInfo({ present }: WorkflowSubstrateInfoProps) {
         <p className="substrate-status">
           Workflow system: <strong>not installed</strong>
         </p>
+        {/* The wizard, directly under the status line it answers and above the manual
+            fallback. This is the position the comment below predicted. */}
+        {installAction}
         {/* COLLAPSED by default (operator, 2026-07-29 — the expanded form ate the panel).
             The steps are ~14 lines of commands plus a JSON block; left open they pushed
             Analytics and Updates below the fold and made the most-used settings surface
@@ -227,8 +246,9 @@ export function WorkflowSubstrateInfo({ present }: WorkflowSubstrateInfoProps) {
             reader needs at a glance, and burying it would defeat the surface. Only the
             how-to is behind the click.
 
-            At WP3.5 the absent state gets an [Install…] wizard button here instead; these
-            commands survive only in the developer-install row (see wbs.md → WP3.5). */}
+            WP3.5a DISCHARGED the note that used to sit here: the absent state now gets the
+            wizard button via `installAction` (rendered just above), and these commands are the
+            fallback — kept because the developer-install row has no wizard by design. */}
         <details
           className="substrate-details"
           data-testid="substrate-install-disclosure"
