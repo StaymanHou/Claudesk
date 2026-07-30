@@ -100,11 +100,30 @@ describe("invite copy — upstream-pinned invariants", () => {
     expect(INVITE_BODY_2).toContain("uninstalls the whole thing");
   });
 
-  it("does NOT promise that Claudesk installs it (true in WP3; WP3.5 revisits)", () => {
-    // WP3 cannot install anything — the wizards are WP3.5. Copy that implied otherwise would
-    // be a promise the app cannot keep today. Flagged rather than merely asserted: when WP3.5
-    // lands the wizard, THIS test is the one to revisit deliberately.
-    expect(INVITE_BODY_2).toContain("outside Claudesk");
+  it("routes the install through Settings rather than promising the invite can do it", () => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // REVISITED 2026-07-29 (WP3.5a Phase 4) — as this test's previous version asked to be.
+    //
+    // It used to assert `INVITE_BODY_2` contains "outside Claudesk", because WP3 genuinely
+    // could not install anything and copy implying otherwise would have promised what the app
+    // could not keep. The wizard now exists, so that assertion was pinning a false statement —
+    // it failed, deliberately and usefully, the moment the copy was corrected.
+    //
+    // The invariant it becomes: the invite still must NOT claim it installs anything itself.
+    // The invite owns *discovery* only (the WP3 boundary the operator set: "Settings owns the
+    // substrate, the invite owns only discovery"), so it points at Settings — where the consent
+    // step and the location picker actually live — rather than implying a one-click install
+    // from a pitch the user has not yet had the context to evaluate.
+    // ═══════════════════════════════════════════════════════════════════════════
+    expect(INVITE_BODY_2).toContain("Settings");
+    // And it must not claim the pitch itself installs: no imperative that skips the consent step.
+    expect(INVITE_BODY_2).not.toMatch(/install it now|installs it for you automatically/i);
+  });
+
+  it("still frames setup as one-time, which is what makes the ask small", () => {
+    // Survives the revision unchanged: the reason a secondary user tolerates any setup at all is
+    // that it happens once, not per-project.
+    expect(INVITE_BODY_2).toContain("one-time");
   });
 });
 

@@ -40,8 +40,18 @@ export const INVITE_TITLE = "Workflow orchestration for Claude Code";
 export const INVITE_BODY_1 =
   "Claudesk has an optional layer for a companion workflow system — it gives real project work structure: product → feature → task cycles, durable state in plain files you can open, and verification gates where you stay in the loop.";
 
+/**
+ * **Revised 2026-07-29 (WP3.5a Phase 4).** Was: *"It needs a one-time install **outside
+ * Claudesk**…"* — true when WP3 shipped (Settings only *described* the install), false now that
+ * the wizard performs it. The claim moved from "you must leave the app" to "one-time setup",
+ * which is accurate either way the user chooses to do it: the hand-run commands still exist for
+ * a developer install, and the wizard exists for the absent case.
+ *
+ * The `~10–15 minute` framing is upstream-pinned (return contract §6) and must never become
+ * "quick" or "5-minute" — a test asserts that.
+ */
 export const INVITE_BODY_2 =
-  "It needs a one-time install outside Claudesk. There's a guided ~10–15 minute walkthrough on a sample project — a real run, so you watch it actually work — and a single command uninstalls the whole thing if it's not for you.";
+  "It needs a one-time setup, which Claudesk can do for you from Settings. There's a guided ~10–15 minute walkthrough on a sample project — a real run, so you watch it actually work — and a single command uninstalls the whole thing if it's not for you.";
 
 /** The three button labels, exported so the test pins the exact affordances. */
 export const INVITE_PRIMARY_LABEL = "Show me in Settings";

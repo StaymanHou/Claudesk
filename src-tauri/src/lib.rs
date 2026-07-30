@@ -76,6 +76,14 @@ mod workflow_gate;
 // production code names `.claude`/`skills`/`HOME` at all, and this module must. Read-only —
 // the install/uninstall wizards are WP3.5's, in their own module with a sandbox fixture.
 mod workflow_substrate;
+// M10.9 WP3.5a — installing the companion workflow system, plus the provenance record of
+// having done it. Separate from `workflow_substrate` by enforcement: that module's
+// `detection_reads_and_never_writes` guard fails if its production code names `Command`,
+// `git`, or `install.sh`, and this module must. Carries the inverse guard — no ambient
+// `HOME`/`home_dir()` anywhere, every root injected — because this is the first Claudesk code
+// to write outside its own app-data dir, into a tree that is live-edited source on the
+// operator's machine. Ships NO deleting path: uninstall is WP3.5b, refuse-guard first.
+mod workflow_install;
 
 use std::sync::Mutex;
 
@@ -193,6 +201,11 @@ pub fn run() {
         // M7: the menu-bar tray state (built tray handle + per-workspace alarm map). Managed
         // before `init_tray` runs in setup so the `workspace-status` listener can reach it.
         .manage(tray::commands::TrayState::default())
+        // M10.9 WP3.5a — the in-flight install's cancel flag + single-run lock. Shared between
+        // the IPC thread (which sets cancel) and the worker thread (which polls it).
+        .manage(std::sync::Arc::new(
+            workflow_install::commands::InstallControl::default(),
+        ))
         // M9 WP2.5: the active-context signal (which workspace/right-panel surface is
         // active) — set by the frontend's time_set_active_context, read by the focus
         // handler + keystroke path to attribute native-signal rows. Managed early so the
@@ -537,6 +550,10 @@ pub fn run() {
             // settings.json ONLY — never `~/.claude/` (the milestone invariant).
             workflow_gate::commands::workflow_get_features_enabled,
             workflow_gate::commands::workflow_set_features_enabled,
+            workflow_install::commands::workflow_install_default_location,
+            workflow_install::commands::workflow_install_state,
+            workflow_install::commands::workflow_install_start,
+            workflow_install::commands::workflow_install_cancel,
             workflow_substrate::commands::workflow_substrate_installed,
             workflow_substrate::commands::workflow_get_invite,
             workflow_substrate::commands::workflow_set_invite,

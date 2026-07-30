@@ -27,8 +27,35 @@
 /** Whether the companion workflow system appears to be installed. `null` = not yet resolved. */
 export type SubstratePresence = boolean | null;
 
-/** Which arm of the substrate surface a given presence value renders. */
+/**
+ * The substrate's **provenance** state, from `workflow_install_state` (M10.9 WP3.5a).
+ *
+ * `null` = not yet resolved. The three real values mirror Rust's `InstallState` exactly, and the
+ * names describe provenance, **not location** — a hand-clone sitting inside Claudesk's own vendor
+ * dir is `"developer"`, because Claudesk did not record installing it.
+ */
+export type InstallProvenance = "absent" | "managed" | "developer" | null;
+
+/** Which arm of the substrate surface a given state renders. */
 export type SubstrateArm = "installed" | "absent" | "nothing";
+
+/**
+ * Whether to offer the install wizard.
+ *
+ * **Only `"absent"` gets a button.** The other two arms are the safety boundary, not a UX nicety:
+ *   - `"managed"` — already installed by us; installing again is meaningless.
+ *   - `"developer"` — a substrate Claudesk did **not** record installing. This is the operator's
+ *     live repo (their `~/.claude/skills/` symlinks point into a companion repo they actively
+ *     edit) or a hand-clone. Offering to install over it risks `install.sh` repointing symlinks
+ *     into a *different* tree, and per the provenance rule Claudesk must describe, never act.
+ *   - `null` — unresolved. Same reasoning as `substrateArmFor`: resolve before claiming.
+ *
+ * Extracted as a pure function so the decision is asserted as a VALUE — the repo rule for any
+ * branch whose default is consequential.
+ */
+export function offersInstallWizard(state: InstallProvenance): boolean {
+  return state === "absent";
+}
 
 /**
  * Which arm to render for a presence value — extracted as a pure function so the
@@ -60,7 +87,21 @@ export function substrateArmFor(present: SubstratePresence): SubstrateArm {
  * Matches the companion repo's own README §Setup verbatim. NOT configurable here — WP3 only
  * *displays* the canonical command; WP3.5's wizard is what lets the user choose a location.
  */
-const CLONE_PATH = "~/Personal/projects/my-claude-code-customization";
+/**
+ * The clone target the hand-run instructions name.
+ *
+ * **Neutral by decision (operator, 2026-07-29), and deliberately NOT the wizard's default.**
+ * This was `~/Personal/projects/…` — the operator's own layout, shown to every secondary user
+ * (`SURFACE-2026-07-29-QUALITY-WP3-OPERATOR-SPECIFIC-CLONE-PATH`).
+ *
+ * It does **not** match the wizard's `~/.claudesk/vendor/` default, and that disagreement is the
+ * point: these two paths encode opposite intents. A hand-clone is somewhere you *edit*; the
+ * vendor dir is somewhere you *don't*. Pointing the manual instructions at the vendor dir would
+ * put an unrecorded clone inside Claudesk's managed directory, which reads as `"developer"`
+ * (correct — no provenance record) while *looking* managed. Keeping them apart means nothing in
+ * the UI ever directs a user into that confusing state.
+ */
+const CLONE_PATH = "~/dev/my-claude-code-customization";
 const CLONE_URL =
   "git@github.com:StaymanHou/stayman-claude-code-customization.git";
 

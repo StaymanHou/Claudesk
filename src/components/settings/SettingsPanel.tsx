@@ -44,10 +44,14 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSettingControl } from "./useSettingControl";
+import { invoke } from "@tauri-apps/api/core";
 import {
   WorkflowSubstrateInfo,
+  offersInstallWizard,
   type SubstratePresence,
+  type InstallProvenance,
 } from "./WorkflowSubstrateInfo";
+import { WorkflowInstallWizard } from "./WorkflowInstallWizard";
 import { getWorkflowSubstrateInstalled } from "../../state/workflowSubstrate";
 import {
   CC_PERMISSION_MODE_EVENT,
@@ -237,6 +241,36 @@ export default function SettingsPanel({
     };
   }, []);
 
+  // M10.9 WP3.5a — the substrate's PROVENANCE, which is a different question from WP3's
+  // presence check and cannot be derived from it. Presence answers "is something installed?";
+  // provenance answers "did *Claudesk* install it?" — and only the latter decides whether an
+  // install affordance may appear. A hand-clone and a Claudesk-managed install are both
+  // "present"; only one of them is ours to act on.
+  //
+  // `null` until resolved, same discipline as `substratePresent`: no affordance is offered
+  // until we know, because the default-wrong direction here offers to install over the
+  // operator's live repo.
+  const [provenance, setProvenance] = useState<InstallProvenance>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const refreshProvenance = useCallback(() => {
+    invoke<string>("workflow_install_state")
+      .then((s) => setProvenance(s as Exclude<InstallProvenance, null>))
+      .catch(() => setProvenance(null));
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    invoke<string>("workflow_install_state")
+      .then((s) => {
+        if (!cancelled) setProvenance(s as Exclude<InstallProvenance, null>);
+      })
+      .catch(() => {
+        if (!cancelled) setProvenance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div
       className="settings-panel"
@@ -309,12 +343,50 @@ export default function SettingsPanel({
               the same thing twice in adjacent paragraphs. The "doesn't install anything"
               half stays — it is the part the status line does not cover, and it is the
               milestone's load-bearing promise. (Revisit at WP3.5: once the wizards exist,
-              enabling CAN trigger an install, so this sentence will need to change.) */}
+              enabling CAN trigger an install, so this sentence will need to change.)
+
+              REVISITED 2026-07-29 (WP3.5a Phase 4), and the promise SURVIVES — sharpened, not
+              deleted. The wizard installs, but the TOGGLE still does not: milestone property 2's
+              revision says Claudesk may install "EXCEPT through an explicit, user-driven wizard",
+              and keeping those two acts separate is the whole point. So the copy now attributes
+              the non-action to the toggle specifically, and points at the deliberate second step
+              rather than claiming nothing in the app can ever install. Saying "this installs
+              nothing" would now be false; dropping the line entirely would lose the very
+              distinction the milestone is built on. */}
           <p className="settings-row-help">
             Turning this on only shows the features — it doesn&rsquo;t install
-            anything.
+            anything. Installing is a separate, explicit step below.
           </p>
           <WorkflowSubstrateInfo present={substratePresent} />
+          {/* M10.9 WP3.5a — the install affordance. Gated on `offersInstallWizard`, which is
+              true ONLY for `"absent"`: a `"developer"` substrate is the operator's live repo (or
+              a hand-clone) that Claudesk did not record installing, and per the provenance rule
+              it must describe, never act. `null` (unresolved) shows nothing. */}
+          {offersInstallWizard(provenance) && !wizardOpen && (
+            <button
+              type="button"
+              className="substrate-install-button"
+              data-testid="substrate-install-button"
+              onClick={() => setWizardOpen(true)}
+            >
+              Install&hellip;
+            </button>
+          )}
+          {wizardOpen && (
+            <WorkflowInstallWizard
+              onClose={() => setWizardOpen(false)}
+              onFinished={(result) => {
+                // Re-resolve provenance so a successful install flips the surface to
+                // "managed" without a relaunch (a spec acceptance criterion).
+                refreshProvenance();
+                // Honor the pure reducer's gate decision. Never re-derived here — the
+                // decision came from Rust's terminal-state table.
+                if (result.revert_gate && workflowFeatures.value) {
+                  workflowFeatures.set(false);
+                }
+              }}
+            />
+          )}
         </SettingsGroup>
 
         <SettingsGroup
