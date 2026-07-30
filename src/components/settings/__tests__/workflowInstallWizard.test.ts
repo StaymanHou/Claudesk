@@ -7,6 +7,8 @@
 // exported constants, and this file compares them to expected values.
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   offersInstallWizard,
   substrateArmFor,
@@ -125,5 +127,71 @@ describe("cancel copy — honest about coarse cancellation", () => {
 
   it("explains WHY the delay happens", () => {
     expect(CANCELLING_HINT).toMatch(/current step|corrupt/i);
+  });
+});
+
+describe("post-install refresh — the stale-status bug found at verify-human", () => {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // The defect: after a SUCCESSFUL install the row still read "not installed".
+  //
+  // Cause: two independent state sources. `provenance` drives the [Install…]
+  // affordance; `substratePresent` drives the "installed ✓ / not installed" line.
+  // `onFinished` refreshed only the first, so the button correctly disappeared
+  // while the status line stayed at its mount-time value — violating the spec
+  // criterion that the block re-resolves to `managed` without a relaunch.
+  //
+  // Guarded at source level because this repo has no DOM test environment for the
+  // panel (pure logic → vitest, live DOM → the MCP bridge). Asserts single
+  // identifiers inside one handler body, per the repo rule about `?raw` guards —
+  // never a formatted multi-line expression.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const PANEL = readFileSync(
+    fileURLToPath(new URL("../SettingsPanel.tsx", import.meta.url)),
+    "utf8",
+  );
+
+  /** The `onFinished` handler body — the one place both refreshes must appear. */
+  function onFinishedBody(): string {
+    const at = PANEL.indexOf("onFinished={(result)");
+    if (at === -1) return "";
+    // Bounded by the next prop on the same element.
+    const end = PANEL.indexOf("onEnableAndClose", at);
+    return PANEL.slice(at, end === -1 ? at + 1200 : end);
+  }
+
+  it("refreshes BOTH substrate state sources after an install", () => {
+    const body = onFinishedBody();
+    expect(body, "the onFinished handler must exist").not.toBe("");
+    expect(
+      body,
+      "provenance drives the [Install…] affordance — must be re-resolved",
+    ).toContain("refreshProvenance");
+    expect(
+      body,
+      'substratePresent drives the "installed ✓ / not installed" line — must be ' +
+        "re-resolved too, or the row contradicts the button (the shipped bug)",
+    ).toContain("refreshSubstratePresent");
+  });
+
+  it("exposes the presence read as a reusable callback, not a mount-only effect", () => {
+    // WP3 only needed this at mount (a directory does not appear on its own). The wizard makes
+    // it appear, so the read has to be callable again — if this collapses back into an
+    // effect-only read, the refresh above has nothing to call.
+    expect(PANEL).toContain("const refreshSubstratePresent = useCallback");
+  });
+
+  it("offers enable-and-close only as a distinct, explicit action", () => {
+    // Installing and enabling stay separate acts (milestone property 2), so the plain Close
+    // path must survive alongside it — a user who installed to try later must not have the
+    // gate flipped for them.
+    const WIZARD = readFileSync(
+      fileURLToPath(new URL("../WorkflowInstallWizard.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(WIZARD).toContain('data-testid="install-close"');
+    expect(WIZARD).toContain('data-testid="install-enable-close"');
+    // And the enable button is gated on success — offering it after a failure would enable a
+    // gate whose substrate is not there.
+    expect(WIZARD).toContain("{result.ok && (");
   });
 });

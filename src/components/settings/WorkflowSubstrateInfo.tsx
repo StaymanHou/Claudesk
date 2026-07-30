@@ -82,12 +82,6 @@ export function substrateArmFor(present: SubstratePresence): SubstrateArm {
 }
 
 /**
- * The clone target the install instructions name.
- *
- * Matches the companion repo's own README §Setup verbatim. NOT configurable here — WP3 only
- * *displays* the canonical command; WP3.5's wizard is what lets the user choose a location.
- */
-/**
  * The clone target the hand-run instructions name.
  *
  * **Neutral by decision (operator, 2026-07-29), and deliberately NOT the wizard's default.**
@@ -235,9 +229,14 @@ export function WorkflowSubstrateInfo({ present }: WorkflowSubstrateInfoProps) {
 
             At WP3.5 the absent state gets an [Install…] wizard button here instead; these
             commands survive only in the developer-install row (see wbs.md → WP3.5). */}
-        <details className="substrate-details" data-testid="substrate-install-disclosure">
-          <summary>How to install it</summary>
-          <p className="settings-row-help">A one-time install, outside Claudesk:</p>
+        <details
+          className="substrate-details"
+          data-testid="substrate-install-disclosure"
+        >
+          <summary>Install it yourself (manual steps)</summary>
+          <p className="settings-row-help">
+            A one-time install, outside Claudesk:
+          </p>
           <InstallSteps />
           {/* The back-out reassurance belongs INSIDE the disclosure in this state, not
               beside it: a standalone "Remove it anytime" line under "not installed" invites
@@ -283,7 +282,7 @@ export function WorkflowSubstrateInfo({ present }: WorkflowSubstrateInfoProps) {
         <code>/incident-report</code> for direct starts.
       </p>
       <details className="substrate-details">
-        <summary>Install steps (if you need them on another machine)</summary>
+        <summary>Manual install steps (for another machine)</summary>
         <InstallSteps />
       </details>
       <UninstallLine />

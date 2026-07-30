@@ -227,6 +227,14 @@ export default function SettingsPanel({
 
   const [substratePresent, setSubstratePresent] =
     useState<SubstratePresence>(null);
+  // Extracted so the install wizard can re-run it on success — see `onFinished` below. WP3
+  // only ever needed this at mount (a directory does not appear on its own); WP3.5a's wizard
+  // makes it appear, so the read has to be repeatable.
+  const refreshSubstratePresent = useCallback(() => {
+    getWorkflowSubstrateInstalled()
+      .then(setSubstratePresent)
+      .catch(() => setSubstratePresent(null));
+  }, []);
   useEffect(() => {
     let cancelled = false; // StrictMode double-mount guard, same as useSettingControl's
     getWorkflowSubstrateInstalled()
@@ -369,21 +377,36 @@ export default function SettingsPanel({
               data-testid="substrate-install-button"
               onClick={() => setWizardOpen(true)}
             >
-              Install&hellip;
+              Install with the wizard&hellip;
             </button>
           )}
           {wizardOpen && (
             <WorkflowInstallWizard
               onClose={() => setWizardOpen(false)}
               onFinished={(result) => {
-                // Re-resolve provenance so a successful install flips the surface to
-                // "managed" without a relaunch (a spec acceptance criterion).
+                // Re-resolve BOTH substrate state sources. They are independent and both
+                // stale after an install: `provenance` drives the [Install…] affordance,
+                // `substratePresent` drives the "installed ✓ / not installed" status line.
+                //
+                // Refreshing only provenance (the shipped bug, caught at verify-human) made
+                // the button correctly disappear while the line still read "not installed"
+                // after a successful install — violating the spec criterion that the block
+                // re-resolves to `managed` without a relaunch. Two state sources, one event:
+                // both must be refreshed or the surface contradicts itself.
                 refreshProvenance();
+                refreshSubstratePresent();
                 // Honor the pure reducer's gate decision. Never re-derived here — the
                 // decision came from Rust's terminal-state table.
                 if (result.revert_gate && workflowFeatures.value) {
                   workflowFeatures.set(false);
                 }
+              }}
+              onEnableAndClose={() => {
+                // Goes through the panel's existing `useSettingControl` seam, so the flip keeps
+                // the optimistic-set + revert-on-IPC-failure discipline every other control
+                // here uses. The wizard deliberately does not own settings state.
+                workflowFeatures.set(true);
+                setWizardOpen(false);
               }}
             />
           )}

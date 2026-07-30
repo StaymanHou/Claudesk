@@ -11,7 +11,7 @@
 // pure `terminal::resolve_terminal_state`. Re-deriving any of it here would create a second
 // implementation of the terminal-state table that could silently disagree with the tested one.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useTauriListen } from "../../useTauriListen";
@@ -51,16 +51,27 @@ interface Props {
   onClose: () => void;
   /** Called after a run ends so the caller can re-resolve provenance + honor a gate revert. */
   onFinished: (result: InstallFinished) => void;
+  /**
+   * Turn the workflow-features gate ON, then close.
+   *
+   * Offered only on a successful install. The gate flip stays the CALLER's job — this component
+   * does not own settings state, and routing it through the panel's existing `useSettingControl`
+   * keeps the optimistic-set/revert-on-reject discipline in one place.
+   */
+  onEnableAndClose: () => void;
 }
 
-export function WorkflowInstallWizard({ onClose, onFinished }: Props) {
+export function WorkflowInstallWizard({
+  onClose,
+  onFinished,
+  onEnableAndClose,
+}: Props) {
   const [step, setStep] = useState<Step>("consent");
   const [dest, setDest] = useState("");
   const [lines, setLines] = useState<string[]>([]);
   const [cancelPending, setCancelPending] = useState(false);
   const [result, setResult] = useState<InstallFinished | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
-  const logRef = useRef<HTMLPreElement>(null);
 
   // Seed the location field with the backend's default. The path is composed in Rust from the
   // resolved home dir — the frontend never builds a `~/...` string itself, because only the
@@ -95,9 +106,16 @@ export function WorkflowInstallWizard({ onClose, onFinished }: Props) {
   });
 
   // Follow the tail as output streams — the whole point of streaming is watching it move.
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [lines]);
+  //
+  // A CALLBACK ref, not `useRef` + an effect keyed on `lines`. Two reasons, both found at
+  // verify-human: (1) the `done` step renders a DIFFERENT <pre> than the `running` step, so a
+  // single ref attached to only one of them left the final transcript scrolled to the top —
+  // which is the box the operator saw; (2) a callback ref runs on every render *after* the DOM
+  // is updated, so it tails correctly on mount, on each new line, and across the step change,
+  // without needing a dependency array that has to enumerate all three.
+  const tailRef = useCallback((node: HTMLPreElement | null) => {
+    if (node) node.scrollTop = node.scrollHeight;
+  }, []);
 
   const start = useCallback(() => {
     setStartError(null);
@@ -192,7 +210,7 @@ export function WorkflowInstallWizard({ onClose, onFinished }: Props) {
           <h3>Installing&hellip;</h3>
           <pre
             className="install-wizard-log"
-            ref={logRef}
+            ref={tailRef}
             data-testid="install-log"
           >
             {lines.join("\n")}
@@ -249,17 +267,41 @@ export function WorkflowInstallWizard({ onClose, onFinished }: Props) {
             </p>
           )}
           {result.error && (
-            <pre className="install-wizard-log" data-testid="install-error">
+            <pre
+              className="install-wizard-log"
+              data-testid="install-error"
+              ref={tailRef}
+            >
               {result.error}
             </pre>
           )}
           {lines.length > 0 && !result.error && (
-            <pre className="install-wizard-log">{lines.join("\n")}</pre>
+            <pre className="install-wizard-log" ref={tailRef}>
+              {lines.join("\n")}
+            </pre>
           )}
           <div className="install-wizard-actions">
+            {/* On success, offer the obvious next step as its own button (operator request at
+                verify-human). Installing the substrate and ENABLING the feature layer are
+                deliberately separate acts — that separation is milestone property 2 — but
+                someone who just consented to an install almost certainly wants the features
+                on, and making them hunt for the checkbox afterwards is friction with no
+                safety value. So: two buttons, both explicit, neither implied.
+
+                Plain `Close` stays FIRST and remains the no-side-effect exit: a user who
+                installed to try it later, or who wants to read the transcript before
+                committing, must not have enabling forced on them. */}
             <button onClick={onClose} data-testid="install-close">
               Close
             </button>
+            {result.ok && (
+              <button
+                onClick={onEnableAndClose}
+                data-testid="install-enable-close"
+              >
+                Enable workflow features &amp; close
+              </button>
+            )}
           </div>
         </>
       )}
