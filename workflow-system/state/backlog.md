@@ -53,16 +53,6 @@
 - **Priority:** medium (the minimap is a navigation aid that is actively misleading while stale — worse than absent; but the editor is fully usable and the text is correct)
 - **Status:** **ANCHORED (2026-07-31) — 3rd deliverable of Milestone 11.5** (QoL polish bucket). See `roadmap.md` → "Milestone 11.5".
 
-## SURFACE-2026-07-31-PER-WORKSPACE-CC-MODEL-OVERRIDE
-- **Source:** operator request (mid-session, 2026-07-31, during M10.9 WP3.5b planning)
-- **Target level:** product:roadmap
-- **Type:** new-work
-- **Summary:** Per-workspace/per-project **default-model override** for the CC session Claudesk spawns. The global CC default means the operator forgets to switch models back after using a particular one on a project — the model choice should follow the project, not the machine.
-- **Context:** Claudesk already has the exact precedent shape: the CC **permission-mode** dropdown (per-workspace, persisted, applied at spawn) and `default_drive_mode` in `projects.json`. The natural build: a per-project `default_model` field in `projects.json`, surfaced as a workspace-header (or picker-row) selector, passed to the spawned CC as `--model <value>` in `cc_spawn` / `PtyCcSession`. Unset = inherit the CC global default (today's behavior). Note the `[[explicit-selectable-mode-over-inferred-mode]]` prior: the selected model should be *visible* on the workspace, not silent state.
-- **Suggested action:** small feature (likely `/feature-plan` scale) — settings plumbing + spawn-arg + selector UI. Model *names* drift with CC releases, so prefer a free-text/recently-used approach or derive the list rather than hardcoding model IDs.
-- **Priority:** medium
-- **Status:** **ANCHORED (2026-07-31) — scheduled as the lead deliverable of the new Milestone 11.5 QoL polish bucket**, executing after M10.9 closes and before M11's docs viewer. See `roadmap.md` → "Milestone 11.5" + "Revision 2026-07-31". **M14 was considered and rejected as the host** (last milestone; its "default CLI args for `claude`" line is already partly stale since PiP shipped at M5 and permission-mode at M6; and a per-*project* override is `projects.json` + header-selector work, i.e. M6's QoL-bucket pattern, not M14's app-global Settings work). Confirmed **not workflow-coupled** → sits outside M10.9's gate. Remains open until the bucket is decomposed via `/product-wbs`.
-
 ## Code-quality findings — m10.9-wp3.5a-sandbox-install-wizard (2026-07-29)
 - **Pointer:** **3 MINOR** remaining *(was 1 MAJOR + 3 MINOR — `WP3.5A-SOURCE-GUARD-CONSOLIDATION` was RESOLVED by WP3.5b on 2026-07-31 and deleted per delete-on-resolve; see CHANGELOG)*. Bodies in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.9-wp3.5a-sandbox-install-wizard — 2026-07-29`. The original review found **2 CRITICAL + 4 MAJOR + 4 MINOR**; both CRITICALs and 3 MAJORs were fixed in `b95466f` rather than backlogged.
 - **Priority:** low (all 3 remaining)

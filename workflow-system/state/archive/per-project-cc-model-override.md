@@ -1,7 +1,7 @@
 # Feature: Per-project CC default-model override
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** COMPLETED 2026-07-31
 **Created:** 2026-07-31
 **Milestone:** 11.5 (WP1 — lead deliverable)
 **Resolves:** `SURFACE-2026-07-31-PER-WORKSPACE-CC-MODEL-OVERRIDE`
@@ -442,3 +442,34 @@ Reviewer subagent against ship commit `e0c28ac`. **0 CRITICAL · 2 MAJOR · 7 MI
 
 ### If you disagree
 Mark any line above `[DISMISSED]` before `/feature-finalize` archives this file.
+
+## Retrospect
+
+- **What changed in our understanding:**
+  1. **The placement was the real design question, and the plan got it wrong.** Both the roadmap and the WBS specified a workspace-header control; it was built there and rejected at verify-human. The insight only arrived on seeing it: a value **read once at spawn** belongs on the surface where the spawn is *chosen*, not on the thing already running — where it looks live but can no longer act, and is visible for one project at a time. Since the problem being solved was *forgetting*, a scannable column is the shape that actually addresses it. Captured as design prior `set-a-spawn-time-choice-where-the-spawn-is-chosen`.
+  2. **A source-text guard can pass against the exact defect it was written for.** The nesting guard matched "the first `</button>` in the file" — a different button in the picker header — so a deliberately nested cell passed **5/5**. That is now the third logged instance of positional source-slicing failing, and the repair (make the structure *data the component maps over*, then assert the value **and** its consumption) is the reusable move.
+  3. **Green gates do not see rendering.** The picker shipped as three boxed tiles instead of the requested single row, with tsc, eslint, and 1426 tests all passing. Root cause was a `<button>` inheriting global chrome — invisible to every automated check, found by reading `getComputedStyle` on the real element.
+
+- **Assumptions that held:**
+  - Finding 1's audit was right: the "exact precedent to mirror" did not exist, and the per-project storage path had to be built. Sizing WP1 as **M** on that basis was correct.
+  - `SessionRegistry::spawn` already receiving `project_path` meant no signature change — the reason this was M and not L.
+  - The argv asymmetry (`--model` omitted when unset) was predicted at plan time and proven correct on live processes.
+  - Reproduce-/probe-first paid: the `claude --help` read settled the control shape *before* any UI existed, and its finding (CC reports unusable models itself, entitlements included) is what justified shipping **no** client-side validation.
+
+- **Assumptions that were wrong:**
+  - **The plan's own P2.6 was unsound.** It asked for a component test asserting "the setter is called once per commit, not twice" — but a component test cannot honestly pin that (a plain closure has no StrictMode double-invoke), which is *precisely* why the M10.9 WP2 defect escaped its tests. Replaced with a pure `decideCommit` asserted as a value.
+  - **An observable outcome was unsound too:** OC-4 specified `pnpm exec tsc --noEmit`, which resolves to the pnpm binary and exits 0 regardless of type errors. Anyone re-running that outcome as written gets a meaningless pass.
+  - **A narrow doc grep looked clean while four claims were stale.** Grepping the literal phrase `"workspace-header selector"` found only the frontmatter; sweeping *other phrasings of the same claim* found four live stale assertions in `wbs.md`. Grep the claim, not the sentence.
+  - I introduced an **N+1** (per-row IPC for a value `list_projects` already returns) and did not notice until code review.
+
+- **Approach delta:**
+  - **Placement reversed** at Phase 2 verify-human: header → picker row, permanent input → click-to-edit label. The orphaned hook and its 9 tests were **deleted** rather than left as dead code, and `Workspace.tsx` returned byte-identical to HEAD.
+  - **P2.1's backend half moved into Phase 1** — `clippy -D warnings` failed on `dead_code` once `set_default_model` had no caller. Chose the real ~20-line caller over an `#[allow]` someone must remember to remove.
+  - **`resolve_spawn_model` and `pickerRowOrder.ts` were not in the plan.** Both were extractions made so a property could be *asserted as a value* rather than left where only a running app (or a fragile grep) could see it.
+  - **Every new guard was mutation-proven** — implementation deliberately broken, test confirmed to fire, then restored. Nine mutation probes across the feature; two of them found guards that did **not** bite and were rewritten.
+
+## Communicate
+
+> **Feature complete:** the per-project CC default-model override has shipped. Each project's picker row now carries its own Claude Code model — dim `Default` when unset, brighter when set, so exceptions stand out down the column — and that model is applied when the project's session spawns, so the choice follows the project instead of the machine. To see it: `pnpm tauri:dev`, click a row's model cell, type `opus` or a full ID, then open the project and run `ps -eo args | grep -- --model`. An unset project spawns with no `--model` flag at all, exactly as before this feature.
+
+Requester = operator — closure notice for self-record.
