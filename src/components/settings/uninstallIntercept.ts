@@ -94,6 +94,20 @@ export function offersKeepIntent(trigger: UninstallTrigger): boolean {
   return trigger === "toggle";
 }
 
+/**
+ * Whether Cancel should speak to the gate.
+ *
+ * Only the toggle path has a *pending* change to reassure about — there the user proposed
+ * turning the features off, so "the features stay on" is the sentence that matters. From the
+ * button they proposed no such thing, and naming the gate would answer a question they never
+ * asked. A separate predicate rather than an inline `trigger === "toggle"` at the call site,
+ * for the same reason `offersKeepIntent` is one: trigger-dependent decisions live here, where
+ * they are asserted as values.
+ */
+export function cancelMentionsGate(trigger: UninstallTrigger): boolean {
+  return trigger === "toggle";
+}
+
 // NOTE: there is deliberately no `confirmDisablesGate(trigger)` helper. Confirming a removal
 // turns the gate off on BOTH paths — from the toggle because that is what the user asked for,
 // from the button because "& disable" is half its label — so a function taking `trigger` and

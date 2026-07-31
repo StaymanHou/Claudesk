@@ -344,14 +344,37 @@ pub fn workflow_install_cancel(control: State<'_, Arc<InstallControl>>) {
 /// Synchronous: the dry run spawns the script but touches nothing and finishes in well under
 /// a second (it iterates symlinks and prints). Refusals surface as the guard's own
 /// user-facing explanation.
+///
+/// ## Refuses while a real run is in flight — exclusion, not just latency
+/// This takes the same single-run lock as the two mutating commands, even though it only
+/// reads. Without it, a preview could spawn `uninstall.sh --dry-run` against a clone directory
+/// that `run_uninstall` is in the middle of `remove_dir_all`-ing, and the user would be shown
+/// a removal list scraped from a half-deleted tree. Code review flagged that this was the one
+/// substrate-touching command sitting outside the module's documented concurrency model, and
+/// that the comment defending its synchronous shape argued only about *latency*.
+///
+/// Held for the duration rather than released early: the lock's meaning is "one thing is
+/// touching the substrate", and a read racing a delete is exactly what it exists to prevent.
 #[tauri::command]
-pub fn workflow_uninstall_dry_run() -> Result<String, String> {
-    let home = dirs_home()?;
-    let root = claudesk_root()?;
-    let record = provenance::read_record(&root);
-    let target =
-        super::guard::refuse_guard(record.as_ref(), &home).map_err(|r| r.user_message())?;
-    runner::run_dry_run(&target, &Discard).map_err(|e| e.to_string())
+pub fn workflow_uninstall_dry_run(
+    control: State<'_, Arc<InstallControl>>,
+) -> Result<String, String> {
+    if control.running.swap(true, Ordering::SeqCst) {
+        return Err("an install or uninstall is already running".to_string());
+    }
+    // Every exit below must release the lock, including the early error returns — hence the
+    // closure-and-release shape rather than `?` straight through. (A `Drop` guard would also
+    // work; this command is short enough that the explicit release is easier to verify.)
+    let result = (|| {
+        let home = dirs_home()?;
+        let root = claudesk_root()?;
+        let record = provenance::read_record(&root);
+        let target =
+            super::guard::refuse_guard(record.as_ref(), &home).map_err(|r| r.user_message())?;
+        runner::run_dry_run(&target, &Discard).map_err(|e| e.to_string())
+    })();
+    control.running.store(false, Ordering::SeqCst);
+    result
 }
 
 /// Start the real uninstall of the recorded managed clone.
@@ -470,7 +493,7 @@ mod tests {
              other path must be derived from it or passed in"
         );
 
-        // (The delete-token half of this guard moved to the crate-level guard in
+        // (The delete-token half of this guard moved to the module-level guard in
         // `source_guard.rs` at WP3.5b Phase 1 — one allowlist, consciously extended.)
 
         // Positive anchors at the tail, so a truncated extraction fails loudly.
@@ -598,15 +621,52 @@ mod tests {
             "the uninstall worker must report on the uninstall event"
         );
         // And the closure must NOT still be doing the release itself — that is the shipped bug.
-        let spawn_body = production
-            .split("std::thread::spawn")
-            .nth(1)
-            .unwrap_or_default();
-        assert!(
-            !spawn_body.contains("ctl.running.store(false"),
-            "the worker closure must delegate the lock release to RunGuard's Drop, not do it \
-             inline as its last statement (the shipped bug: a panic skipped it entirely)"
+        // EVERY worker closure, not just the first. The previous version took `.nth(1)` — the
+        // install worker only — so reordering the two spawns would have silently stopped
+        // covering the uninstall worker while staying green (code review, 2026-07-31: "the one
+        // guard in this WP whose failure mode is 'quietly stops checking'").
+        let worker_bodies: Vec<&str> = production.split("std::thread::spawn").skip(1).collect();
+        assert_eq!(
+            worker_bodies.len(),
+            2,
+            "expected exactly two spawned workers (install + uninstall); if a third was added \
+             it must also delegate its lock release to RunGuard"
         );
+        for body in worker_bodies {
+            assert!(
+                !body.contains("ctl.running.store(false"),
+                "every worker closure must delegate the lock release to RunGuard's Drop, not do \
+                 it inline as its last statement (the shipped bug: a panic skipped it entirely)"
+            );
+        }
+    }
+
+    #[test]
+    fn every_substrate_touching_command_takes_the_single_run_lock() {
+        // Code review (2026-07-31) found `workflow_uninstall_dry_run` outside the module's
+        // concurrency model: it spawned the script against the clone dir with no lock, so a
+        // preview could read a tree that `run_uninstall` was mid-`remove_dir_all` on. The
+        // three commands that touch the substrate must all serialize; the two that only read
+        // Claudesk's own state (`default_location`, `install_state`) need not.
+        let code =
+            crate::workflow_install::source_guard::production_code(include_str!("commands.rs"));
+
+        for command in [
+            "pub fn workflow_install_start",
+            "pub fn workflow_uninstall_start",
+            "pub fn workflow_uninstall_dry_run",
+        ] {
+            let at = code.find(command).unwrap_or_else(|| {
+                panic!("{command} must exist — did it get renamed?");
+            });
+            // The lock acquisition sits in the first few lines of each body.
+            let body = &code[at..(at + 400).min(code.len())];
+            assert!(
+                body.contains("running.swap(true"),
+                "{command} must take the single-run lock — a substrate-touching command \
+                 outside the exclusion model can race a delete"
+            );
+        }
     }
 
     #[test]

@@ -247,10 +247,13 @@ interface WorkflowSubstrateInfoProps {
    * The uninstall affordance for the `managed` arm — in practice the open 3-intent dialog,
    * slotted where the reader is already looking.
    *
-   * Same slot discipline as `installAction`, and for the same reason: the dialog's open state
-   * lives in `SettingsPanel`, this component stays presentational. There is deliberately NO
-   * uninstall *button* — the dialog is triggered by turning the gate off, so a second entry
-   * point would need different gate semantics ([Cancel] re-enables what, exactly?).
+   * Same slot discipline as `installAction`, and for the same reason: the open/closed state
+   * lives in `SettingsPanel`, this component stays presentational. The slot carries the
+   * `[Uninstall & disable…]` BUTTON when the dialog is closed and the dialog itself when open —
+   * one position for the affordance and its expanded form, exactly as `installAction` does.
+   * (An earlier version shipped no button at all, on the theory that the gate toggle should be
+   * the sole trigger; the operator overturned that at verify-human — see design prior
+   * `paired-actions-need-paired-affordances`.)
    */
   uninstallAction?: ReactNode;
 }
@@ -415,8 +418,8 @@ export function WorkflowSubstrateInfo({
         </span>
       </p>
       {/* The provenance sentence — THE fix for the legibility gap: this is where a
-          `developer` user learns why no uninstall option exists, and a `managed` user learns
-          that the gate toggle is the route to one. */}
+          `developer` user learns WHY no uninstall option exists for them. A `managed` user
+          needs no route named here; their affordance is the button in the slot below. */}
       {provenanceLine && (
         <p className="settings-row-help" data-testid="substrate-provenance">
           {provenanceLine}

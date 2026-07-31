@@ -117,7 +117,9 @@ describe("invite copy — upstream-pinned invariants", () => {
     // ═══════════════════════════════════════════════════════════════════════════
     expect(INVITE_BODY_2).toContain("Settings");
     // And it must not claim the pitch itself installs: no imperative that skips the consent step.
-    expect(INVITE_BODY_2).not.toMatch(/install it now|installs it for you automatically/i);
+    expect(INVITE_BODY_2).not.toMatch(
+      /install it now|installs it for you automatically/i,
+    );
   });
 
   it("still frames setup as one-time, which is what makes the ask small", () => {

@@ -42,7 +42,7 @@
 //! deleting path existed. Phase 2 added the deleting path itself: `runner::run_uninstall`
 //! (script → clone-dir removal → record deletion LAST), reachable only through
 //! `run_uninstall_guarded`, whose `UninstallTarget` is constructible only by `refuse_guard`.
-//! The crate-level delete guard in `source_guard.rs` pins deletion APIs to a sanctioned
+//! The module-level delete guard in `source_guard.rs` pins deletion APIs to a sanctioned
 //! (file, token, count) allowlist — extending it is a conscious act any new delete must take.
 
 // ## `#![allow(dead_code)]` was here, and is now REMOVED (2026-07-29)
@@ -86,7 +86,7 @@ pub mod terminal;
 #[cfg(test)]
 pub mod sandbox;
 // Shared source-guard machinery: the ONE production-slice extractor every per-module guard
-// consumes, plus the crate-level delete guard. Test-only for the same reason sandbox is.
+// consumes, plus the module-level delete guard. Test-only for the same reason sandbox is.
 #[cfg(test)]
 pub mod source_guard;
 
@@ -356,7 +356,7 @@ mod tests {
     }
 
     // `nothing_in_this_module_deletes` (and its siblings in runner/commands) collapsed into
-    // ONE crate-level guard at WP3.5b Phase 1:
+    // ONE module-level guard at WP3.5b Phase 1:
     // `source_guard::tests::only_the_sanctioned_paths_may_call_deletion_apis`. The per-WP
     // "ships no delete" claim expired the moment a deleting WP started; the crate guard's
     // allowlist (all-zero in Phase 1) is the successor that survives it.

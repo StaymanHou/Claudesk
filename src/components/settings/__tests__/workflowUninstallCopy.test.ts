@@ -8,7 +8,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  CANCEL_HINT,
+  CANCEL_HINT_BUTTON,
+  CANCEL_HINT_TOGGLE,
   KEEP_HINT,
   UNINSTALL_EFFECTS,
   UNINSTALL_INTRO,
@@ -136,9 +137,13 @@ describe("uninstall copy — the disclosure obligation", () => {
   it("distinguishes keep from cancel in words, not just in behavior", () => {
     // The two buttons differ ONLY in the gate, which is invisible from the labels. If these
     // hints ever collapse into the same sentence, the three-button design loses its point.
-    expect(KEEP_HINT).not.toBe(CANCEL_HINT);
+    expect(KEEP_HINT).not.toBe(CANCEL_HINT_TOGGLE);
     expect(KEEP_HINT).toMatch(/off/i);
-    expect(CANCEL_HINT).toMatch(/nothing|stay on/i);
+    expect(CANCEL_HINT_TOGGLE).toMatch(/nothing|stay on/i);
+    // Per-trigger since code review: the button path never proposed disabling anything, so
+    // naming the gate there would answer a question the user did not ask.
+    expect(CANCEL_HINT_BUTTON).toMatch(/nothing/i);
+    expect(CANCEL_HINT_BUTTON).not.toMatch(/features/i);
   });
 
   it("attributes the preview to the script itself", () => {

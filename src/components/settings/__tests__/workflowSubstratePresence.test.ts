@@ -75,7 +75,9 @@ describe("the component delegates to the pure function rather than re-deriving t
     // `if (present === null)` (that IS the decision), and the doc comments discuss the branch
     // in prose. A whole-file negative match cannot tell the right location from the wrong one,
     // and "fixing" it by rewording a comment would have been the wrong move.
-    const renderStart = infoSrc.indexOf("export function WorkflowSubstrateInfo");
+    const renderStart = infoSrc.indexOf(
+      "export function WorkflowSubstrateInfo",
+    );
     expect(renderStart).toBeGreaterThan(-1);
     const renderBody = infoSrc.slice(renderStart);
 

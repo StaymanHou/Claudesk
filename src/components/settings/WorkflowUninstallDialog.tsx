@@ -1,11 +1,21 @@
 // M10.9 WP3.5b task P3.3 — the three-intent uninstall dialog.
 //
-// ## Why this opens from the TOGGLE and has no button of its own
-// The dialog is the interception point for turning `workflow_features_enabled` off while the
-// substrate is `managed`. `[Cancel]` means "I did not mean to turn the features off" — a
-// meaning that only exists relative to the toggle that summoned it. A standalone `[Uninstall…]`
-// button elsewhere in the panel would need different semantics for that button (cancel what?),
-// so there deliberately is none.
+// ## Two entry points, one dialog (operator decision, verify-human 2026-07-31)
+// This opens EITHER from the substrate row's `[Uninstall & disable…]` button — the visible pair
+// of `[Install…]` — OR from turning `workflow_features_enabled` off while the substrate is
+// `managed`. The caller passes `trigger` so the dialog knows which, because `[Cancel]` means
+// "undo what brought me here" and that differs: from the toggle it must leave the gate ON
+// (structurally — the setting is never written while this is open), from the button there was
+// nothing to undo. `[Keep it installed]` is offered on the toggle path only; arriving via a
+// button labelled "Uninstall & disable", disable-without-removing is an intent the user never
+// expressed.
+//
+// An earlier version of this header argued the opposite — that the toggle should be the sole
+// trigger and "a standalone button would need different semantics (cancel what?), so there
+// deliberately is none". That reasoning is retained here only because it names the real
+// question; the answer turned out to be "pass the trigger", not "ship one entry point". The
+// design error it produced (a button on the install side, a sentence on the uninstall side) is
+// what design prior `paired-actions-need-paired-affordances` now guards against.
 //
 // ## What this component does NOT decide
 // Whether the record was deleted, whether a retry is available, what the removal means — all
@@ -24,7 +34,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTauriListen } from "../../useTauriListen";
 import {
   CANCEL_BUTTON,
-  CANCEL_HINT,
+  CANCEL_HINT_BUTTON,
+  CANCEL_HINT_TOGGLE,
   KEEP_BUTTON,
   KEEP_HINT,
   UNINSTALL_BUTTON,
@@ -44,6 +55,7 @@ import {
   UNINSTALL_TITLE,
 } from "./workflowUninstallCopy";
 import {
+  cancelMentionsGate,
   offersKeepIntent,
   type UninstallIntent,
   type UninstallTrigger,
@@ -104,6 +116,12 @@ export function WorkflowUninstallDialog({
   const [cancelPending, setCancelPending] = useState(false);
   const [result, setResult] = useState<UninstallFinished | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+
+  // Cancel says "nothing changes" either way, but only the toggle path has a pending change to
+  // reassure about (the features staying on). See the copy module.
+  const cancelHint = cancelMentionsGate(trigger)
+    ? CANCEL_HINT_TOGGLE
+    : CANCEL_HINT_BUTTON;
 
   // Fetch the real `--dry-run` output on mount. A refusal surfaces here as a rejection
   // carrying the refuse-guard's own user-facing message — which is the honest thing to show:
@@ -277,7 +295,7 @@ export function WorkflowUninstallDialog({
                 onClose();
               }}
               data-testid="uninstall-cancel-intent"
-              title={CANCEL_HINT}
+              title={cancelHint}
             >
               {CANCEL_BUTTON}
             </button>
@@ -309,7 +327,7 @@ export function WorkflowUninstallDialog({
                 {KEEP_BUTTON}: {KEEP_HINT} ·{" "}
               </>
             )}
-            {CANCEL_BUTTON}: {CANCEL_HINT}
+            {CANCEL_BUTTON}: {cancelHint}
           </p>
         </>
       )}

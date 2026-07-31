@@ -37,15 +37,18 @@ pub mod commands;
 
 use std::path::Path;
 
-/// The substrate's install marker, relative to the user's home directory.
+/// Where `install.sh` puts its per-skill symlinks, relative to the user's home directory.
 ///
-/// `install.sh` creates per-skill symlinks under `~/.claude/skills/`, so the directory's
-/// existence is the cheapest honest signal that the system is installed. Deliberately NOT
-/// a check for specific skill names: the skill set evolves in the companion repo on its own
-/// schedule, and per the return contract's §4c anti-brittleness clause the only stable
-/// coupling Claudesk may depend on is the command name `/tutorial-getting-started` — a
-/// hardcoded roster of skill filenames would be exactly the brittle coupling that clause
-/// forbids.
+/// **The directory's existence is NOT the signal** — that was the original design, and it was
+/// wrong in both directions (see [`skills_dir_exists`], which supersedes it): an empty leftover
+/// read as installed after any uninstall, and a user's own skills read as installed on a
+/// machine that never had the substrate. This constant now names only *where to look*; what
+/// counts as an install is decided by the marker check below.
+///
+/// Still deliberately NOT a check for specific skill names: the skill set evolves in the
+/// companion repo on its own schedule, and per the return contract's §4c anti-brittleness
+/// clause a hardcoded roster of skill filenames would be exactly the brittle coupling that
+/// clause forbids.
 const SKILLS_SUBPATH: [&str; 2] = [".claude", "skills"];
 
 /// The installer script at a candidate repo's root.

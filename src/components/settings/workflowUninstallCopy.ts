@@ -91,7 +91,18 @@ export const CANCEL_BUTTON = "Cancel";
  */
 export const KEEP_HINT =
   "Turns the features off and leaves everything installed.";
-export const CANCEL_HINT = "Changes nothing — the features stay on.";
+
+/**
+ * Cancel's hint, per entry point.
+ *
+ * Both say "nothing changes", but only the toggle path has a *pending* change to speak to —
+ * there the user proposed turning the features off, so "the features stay on" is the reassurance
+ * that matters. Arriving from the `[Uninstall & disable…]` button they never proposed disabling
+ * anything, so naming the gate would answer a question they did not ask.
+ */
+export const CANCEL_HINT_TOGGLE = "Changes nothing — the features stay on.";
+export const CANCEL_HINT_BUTTON =
+  "Changes nothing — everything stays installed.";
 
 /** Shown while the real uninstall runs. Cancel is coarse; the copy must not oversell it. */
 export const UNINSTALL_RUNNING_LABEL = "Removing…";

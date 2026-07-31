@@ -14,7 +14,7 @@
 //!
 //! ## What lives here
 //! - [`production_code`]: the extractor every per-module guard consumes.
-//! - The **crate-level delete guard** (`only_the_sanctioned_paths_may_call_deletion_apis`):
+//! - The **module-level delete guard** (`only_the_sanctioned_paths_may_call_deletion_apis`):
 //!   WP3.5a's three per-module "ships no delete" guards, collapsed and re-scoped now that a
 //!   deleting WP is in flight. The rule is no longer "no deletes exist" (that expires the
 //!   moment WP3.5b Phase 2 lands) but **"deletion APIs appear only where the allowlist
@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn only_the_sanctioned_paths_may_call_deletion_apis() {
         // ═══════════════════════════════════════════════════════════════════════════
-        // THE crate-level delete guard — the consolidated successor of WP3.5a's three
+        // THE module-level delete guard — the consolidated successor of WP3.5a's three
         // per-module "ships no delete" guards, re-scoped for a WP that ships a delete.
         //
         // The allowlist is (file, token) → permitted count. Phase 2 sanctioned exactly

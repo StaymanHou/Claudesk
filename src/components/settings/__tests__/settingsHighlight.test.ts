@@ -52,7 +52,8 @@ describe("the highlight blinks three times", () => {
     // The operator asked for 3 blinks, not one fade. Count the tinted stops: each peak sets a
     // non-transparent background, and there must be exactly three.
     const block = keyframesBlock();
-    const peaks = block.match(/background-color:\s*rgba\(120,\s*165,\s*240/g) ?? [];
+    const peaks =
+      block.match(/background-color:\s*rgba\(120,\s*165,\s*240/g) ?? [];
     expect(peaks).toHaveLength(3);
   });
 

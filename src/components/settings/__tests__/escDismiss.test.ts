@@ -63,7 +63,9 @@ describe("escDismissTarget — Esc dismisses the FRONT overlay only", () => {
 
   it("the invite outranks all three when everything is open", () => {
     expect(
-      escDismissTarget(state({ dashboard: true, settings: true, invite: true })),
+      escDismissTarget(
+        state({ dashboard: true, settings: true, invite: true }),
+      ),
     ).toBe("invite");
   });
 

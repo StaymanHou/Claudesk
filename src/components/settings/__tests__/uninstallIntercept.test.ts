@@ -9,6 +9,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  cancelMentionsGate,
   gateToggleAction,
   offersKeepIntent,
   outcomeForIntent,
@@ -123,6 +124,15 @@ describe("the two entry points (operator, 2026-07-31: BOTH are supported)", () =
     // anything on its own. Offering "disable without uninstalling" would invent an intent they
     // did not express — and would make the two non-destructive buttons nearly synonymous.
     expect(offersKeepIntent("button")).toBe(false);
+  });
+
+  it("cancel mentions the gate only on the toggle path", () => {
+    // Cancel says "nothing changes" either way; only the toggle path has a PENDING change to
+    // reassure about. Routed through a predicate rather than an inline `trigger === "toggle"`
+    // at the call site — trigger-dependent decisions live in this module, where they are
+    // asserted as values (code review, 2026-07-31).
+    expect(cancelMentionsGate("toggle")).toBe(true);
+    expect(cancelMentionsGate("button")).toBe(false);
   });
 
   it("cancel writes nothing on EITHER path — the revert stays structural", () => {

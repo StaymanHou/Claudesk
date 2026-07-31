@@ -31,7 +31,7 @@
 //!    constructor is `refuse_guard` — so there is no compile-path to the delete that skips
 //!    the refusal checks. [`run_uninstall_guarded`] is the composition the command layer
 //!    calls.
-//! 2. **Sanctioned-count scan:** `source_guard`'s crate-level delete guard permits exactly
+//! 2. **Sanctioned-count scan:** `source_guard`'s module-level delete guard permits exactly
 //!    one `remove_dir` occurrence in this file (and one `remove_file` in `provenance`); any
 //!    new deletion call fails it until consciously sanctioned.
 //! 3. **Ordering:** script → clone-dir removal → record deletion **LAST** — the mirror of
@@ -1607,7 +1607,7 @@ mod tests {
     fn roots_are_injected_never_ambient() {
         // The same rule mod.rs and provenance.rs carry, on the module that spawns
         // subprocesses. The delete-token half of the old `this_module_ships_no_deleting_path`
-        // guard moved to the crate-level guard in `source_guard.rs` at WP3.5b Phase 1 —
+        // guard moved to the module-level guard in `source_guard.rs` at WP3.5b Phase 1 —
         // "no delete anywhere" expired as a per-module claim once a deleting WP started.
         let code =
             crate::workflow_install::source_guard::production_code(include_str!("runner.rs"));
