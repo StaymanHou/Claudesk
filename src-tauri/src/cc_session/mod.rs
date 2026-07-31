@@ -27,6 +27,7 @@ pub mod commands;
 
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -43,6 +44,11 @@ const CC_CMD: &str = "claude";
 /// per process via this flag (see [`build_cc_argv`]); the value is one of
 /// [`CcPermissionMode`]'s wire strings.
 const CC_ARG_PERMISSION_MODE: &str = "--permission-mode";
+/// CC's `--model` flag (M11.5 WP1). Passed ONLY when a project sets an override — see
+/// the asymmetry note on [`build_cc_argv`]. `claude --help`: *"Provide an alias for the
+/// latest model (e.g. 'fable', 'opus', or 'sonnet') or a model's full name (e.g.
+/// 'claude-fable-5')."*
+const CC_ARG_MODEL: &str = "--model";
 
 /// The Claude Code permission mode a spawned CC session runs under — the full
 /// `--permission-mode` choice set from `claude --help` (friend-requested, replacing the
@@ -293,19 +299,63 @@ pub fn resolve_shell_argv(env_shell: Option<String>) -> Vec<String> {
     vec![shell, "-l".to_string(), "-i".to_string()]
 }
 
-/// Build the argv for a CC spawn from the persisted permission mode.
+/// Build the argv for a CC spawn from the persisted permission mode + per-project model.
 ///
 /// Every mode maps to an explicit `--permission-mode <value>` pair (including
 /// `Default` — passing `--permission-mode default` is a harmless no-op that keeps the
 /// mapping uniform and makes the chosen mode visible in the process args). Pure
 /// (mode in → argv out) so the mapping is unit-testable without spawning a real
 /// `claude`; the setting read happens at the call site ([`SessionRegistry::spawn`]).
-fn build_cc_argv(mode: CcPermissionMode) -> Vec<String> {
-    vec![
+///
+/// **⚠️ `--model` is deliberately ASYMMETRIC with `--permission-mode`: it is omitted
+/// ENTIRELY when unset, never passed with a placeholder value.** This is not an
+/// oversight or an inconsistency to "fix". `--permission-mode` can be uniform because
+/// every one of its states — `default` included — has a spellable flag value. The model
+/// override's unset state means *"whatever CC itself is configured to use"*, and there
+/// is no flag value that expresses deference: `--model default` would name a model that
+/// does not exist, and `--model ""` is an invalid value. Omission is the only encoding
+/// of "don't override", so an unset project must produce argv with no `--model` token at
+/// all. Pinned by tests in this module.
+///
+/// A blank/whitespace value is treated as unset (defense in depth — `set_default_model`
+/// already normalizes on the way in, but a hand-edited or older-build `projects.json`
+/// could still carry one, and it must never become an argv token CC would reject).
+fn build_cc_argv(mode: CcPermissionMode, model: Option<&str>) -> Vec<String> {
+    let mut argv = vec![
         CC_CMD.to_string(),
         CC_ARG_PERMISSION_MODE.to_string(),
         mode.as_flag_value().to_string(),
-    ]
+    ];
+    if let Some(model) = model.map(str::trim).filter(|m| !m.is_empty()) {
+        argv.push(CC_ARG_MODEL.to_string());
+        argv.push(model.to_string());
+    }
+    argv
+}
+
+/// Decide the model a spawn should use, given the *outcome* of trying to read it.
+///
+/// Extracted from [`SessionRegistry::spawn`] specifically so this decision is testable:
+/// `spawn` needs a live `AppHandle` and a real PTY, so nothing in it can be unit-tested,
+/// and "degrades to inherit-the-default on ANY failure" is exactly the kind of fallback
+/// rule that must be asserted as a **value** rather than left where only a running app
+/// can observe it. (Same lesson as M10.9 WP2: extract the decision, assert the value.)
+///
+/// The input encodes all three reachable states at the call site:
+/// - `None` — the app-data dir could not be resolved, so no read was attempted;
+/// - `Some(Err(_))` — `projects.json` is missing-but-unreadable, malformed, or otherwise
+///   failed to parse;
+/// - `Some(Ok(None))` — read fine; this project has no override (or has no record);
+/// - `Some(Ok(Some(m)))` — read fine; this project overrides the model.
+///
+/// Only the last yields an override. **Every** degraded state collapses to `None` =
+/// inherit CC's own default, because a config problem must never block a spawn: opening
+/// with CC's default model is a mild surprise, whereas a workspace that refuses to open
+/// is a dead click.
+fn resolve_spawn_model(
+    read: Option<Result<Option<String>, crate::config_store::ConfigError>>,
+) -> Option<String> {
+    read.and_then(Result::ok).flatten()
 }
 
 /// Claudesk's seam for driving a Claude Code session. Never bypass this trait when
@@ -423,23 +473,26 @@ impl PtyCcSession {
         }
     }
 
-    /// Spawn `claude` under the given permission `mode` with `cwd = project_path`.
+    /// Spawn `claude` under the given permission `mode` with `cwd = project_path`,
+    /// optionally overriding the model (`model = None` inherits CC's own default).
     ///
-    /// Builds CC's argv via [`build_cc_argv`] (mapping the mode to `--permission-mode`)
-    /// plus the explicit color-TTY env, then delegates to the generic [`Self::spawn_argv`]
-    /// core. The `TERM`/`COLORTERM` overrides are required because WP2 ran under a
-    /// terminal that exported `TERM`, but a Tauri app has none, so CC would not detect a
-    /// color TTY without this (`wp2-cc-pty-probe.md:67,176`).
+    /// Builds CC's argv via [`build_cc_argv`] (mapping the mode to `--permission-mode`
+    /// and an override to `--model`) plus the explicit color-TTY env, then delegates to
+    /// the generic [`Self::spawn_argv`] core. The `TERM`/`COLORTERM` overrides are
+    /// required because WP2 ran under a terminal that exported `TERM`, but a Tauri app
+    /// has none, so CC would not detect a color TTY without this
+    /// (`wp2-cc-pty-probe.md:67,176`).
     fn spawn(
         app: AppHandle,
         id: String,
         project_path: &str,
         mode: CcPermissionMode,
+        model: Option<&str>,
     ) -> Result<Self, CcError> {
         Self::spawn_argv(
             app,
             id,
-            &build_cc_argv(mode),
+            &build_cc_argv(mode, model),
             project_path,
             &color_tty_env(),
             "/exit",
@@ -717,18 +770,34 @@ impl SessionRegistry {
         id
     }
 
-    /// Spawn a real CC session for `project_path` and register it. Reads the persisted
-    /// `cc_permission_mode` setting at spawn time (default [`CcPermissionMode::Default`])
-    /// to pick CC's `--permission-mode` — a change takes effect on the next spawn.
+    /// Spawn a real CC session for `project_path` and register it.
+    ///
+    /// Reads TWO persisted settings at spawn time, both of which take effect on the
+    /// *next* spawn rather than retroactively (argv is fixed once per process):
+    /// - the **app-global** `cc_permission_mode` (default [`CcPermissionMode::Default`])
+    ///   → CC's `--permission-mode`;
+    /// - the **per-project** `default_model` for `project_path` (M11.5 WP1) → CC's
+    ///   `--model`, omitted entirely when unset so CC applies its own default.
+    ///
+    /// **Both reads degrade to the inherit-the-default value on ANY failure** (no
+    /// app-data dir, unreadable or malformed `projects.json`, no record for this path).
+    /// A config problem must never block a spawn: a workspace that opens with CC's
+    /// default model is a mild surprise, whereas a workspace that refuses to open is a
+    /// dead click. This is why the store's reader returns `Result` and the degradation
+    /// decision lives *here*, at the call site, rather than being swallowed downstream.
     pub fn spawn(&mut self, app: AppHandle, project_path: &str) -> Result<String, CcError> {
-        let mode = app
-            .path()
-            .app_data_dir()
-            .ok()
-            .and_then(|dir| crate::config_store::settings::read_cc_permission_mode(&dir).ok())
+        let data_dir = app.path().app_data_dir().ok();
+        let mode = data_dir
+            .as_deref()
+            .and_then(|dir| crate::config_store::settings::read_cc_permission_mode(dir).ok())
             .unwrap_or_default();
+        let model = resolve_spawn_model(
+            data_dir
+                .as_deref()
+                .map(|dir| crate::config_store::read_default_model(dir, Path::new(project_path))),
+        );
         let id = self.mint_id();
-        let session = PtyCcSession::spawn(app, id.clone(), project_path, mode)?;
+        let session = PtyCcSession::spawn(app, id.clone(), project_path, mode, model.as_deref())?;
         self.sessions.insert(id.clone(), Box::new(session));
         Ok(id)
     }
@@ -894,7 +963,7 @@ mod tests {
             (CcPermissionMode::DontAsk, "dontAsk"),
             (CcPermissionMode::BypassPermissions, "bypassPermissions"),
         ] {
-            let argv = build_cc_argv(mode);
+            let argv = build_cc_argv(mode, None);
             assert_eq!(
                 argv,
                 vec![
@@ -905,6 +974,205 @@ mod tests {
                 "argv for {mode:?} should pass --permission-mode {expected}"
             );
         }
+    }
+
+    // --- build_cc_argv: per-project --model override (M11.5 WP1, pure) ---
+    //
+    // The property under test is an ASYMMETRY, deliberately unlike --permission-mode:
+    // unset must produce NO --model token at all, because "inherit CC's default" has no
+    // spellable flag value. See build_cc_argv's doc comment.
+
+    #[test]
+    fn cc_argv_omits_model_entirely_when_unset() {
+        let argv = build_cc_argv(CcPermissionMode::Default, None);
+        assert!(
+            !argv.iter().any(|a| a == CC_ARG_MODEL),
+            "unset must emit no --model token (not `--model default`, not an empty value), got {argv:?}"
+        );
+    }
+
+    #[test]
+    fn cc_argv_still_passes_permission_mode_when_model_is_unset() {
+        // Guards the asymmetry from being "tidied up" in either direction: the model's
+        // omit-when-unset rule must not be generalized onto --permission-mode, which is
+        // uniform on purpose.
+        let argv = build_cc_argv(CcPermissionMode::Default, None);
+        assert_eq!(
+            argv,
+            vec![
+                CC_CMD.to_string(),
+                CC_ARG_PERMISSION_MODE.to_string(),
+                "default".to_string(),
+            ],
+            "an unset model must leave the permission-mode argv exactly as it was pre-WP1"
+        );
+    }
+
+    #[test]
+    fn cc_argv_passes_exactly_one_model_pair_when_set() {
+        let argv = build_cc_argv(CcPermissionMode::Default, Some("opus"));
+        assert_eq!(
+            argv,
+            vec![
+                CC_CMD.to_string(),
+                CC_ARG_PERMISSION_MODE.to_string(),
+                "default".to_string(),
+                CC_ARG_MODEL.to_string(),
+                "opus".to_string(),
+            ]
+        );
+        assert_eq!(
+            argv.iter().filter(|a| *a == CC_ARG_MODEL).count(),
+            1,
+            "exactly one --model pair"
+        );
+    }
+
+    #[test]
+    fn cc_argv_accepts_an_alias_or_a_full_model_id_verbatim() {
+        // The probe established an open value set; Claudesk forwards, CC adjudicates.
+        for value in ["fable", "opus", "sonnet", "claude-fable-5"] {
+            let argv = build_cc_argv(CcPermissionMode::Auto, Some(value));
+            let idx = argv.iter().position(|a| a == CC_ARG_MODEL).unwrap();
+            assert_eq!(argv[idx + 1], value, "value must be forwarded unaltered");
+        }
+    }
+
+    #[test]
+    fn cc_argv_treats_blank_or_whitespace_model_as_unset() {
+        // Defense in depth: set_default_model normalizes on the way in, but a
+        // hand-edited or older-build projects.json could still carry whitespace, and it
+        // must never reach CC as an argv token.
+        for blank in ["", "   ", "\t", "\n"] {
+            let argv = build_cc_argv(CcPermissionMode::Default, Some(blank));
+            assert!(
+                !argv.iter().any(|a| a == CC_ARG_MODEL),
+                "{blank:?} must be treated as unset, got {argv:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn cc_argv_trims_a_padded_model_value() {
+        let argv = build_cc_argv(CcPermissionMode::Default, Some("  opus  "));
+        let idx = argv.iter().position(|a| a == CC_ARG_MODEL).unwrap();
+        assert_eq!(argv[idx + 1], "opus");
+    }
+
+    #[test]
+    fn cc_argv_model_composes_with_every_permission_mode() {
+        // The two flags are independent; neither read may clobber the other.
+        for mode in [
+            CcPermissionMode::Default,
+            CcPermissionMode::Plan,
+            CcPermissionMode::AcceptEdits,
+            CcPermissionMode::Auto,
+            CcPermissionMode::DontAsk,
+            CcPermissionMode::BypassPermissions,
+        ] {
+            let argv = build_cc_argv(mode, Some("opus"));
+            assert_eq!(argv[0], CC_CMD);
+            assert_eq!(argv[1], CC_ARG_PERMISSION_MODE);
+            assert_eq!(argv[2], mode.as_flag_value());
+            assert_eq!(argv[3], CC_ARG_MODEL);
+            assert_eq!(argv[4], "opus");
+        }
+    }
+
+    #[test]
+    fn cc_argv_model_flag_matches_the_documented_cli_token() {
+        assert_eq!(CC_ARG_MODEL, "--model");
+    }
+
+    /// Codifies the argv shapes that were accepted by the REAL `claude` CLI at
+    /// Phase 1 verify-human (2026-07-31, leaf `P1.verify-human.1`), so a regression in
+    /// composition is caught here rather than only on a live spawn.
+    ///
+    /// **Deliberately asserts the composed argv as a whole string vector, not just the
+    /// flag tokens.** Verify-human ran three arms and all three replied normally:
+    /// - `claude --permission-mode default --model opus`         → `OK`
+    /// - `claude --permission-mode default`  (no `--model`)      → `OK-NOMODEL`
+    /// - `claude --permission-mode default --model claude-fable-5` → `OK-FULLID`
+    ///
+    /// **This test does NOT invoke `claude`, on purpose.** A test that shelled out to the
+    /// real CLI would need network + auth + tokens and would fail on any machine or CI
+    /// runner without an authenticated `claude` — buying flakiness in exchange for
+    /// re-checking a fact about an external tool we do not control. What is *ours* to keep
+    /// correct is the argv we compose, which is what this pins. The live end-to-end proof
+    /// (`ps -o args=` on the spawned process, citing `cc_spawn`) is Phase 3's outcome.
+    #[test]
+    fn cc_argv_composes_the_exact_shapes_the_real_cli_accepted_at_verify_human() {
+        // Arm 1 — alias override.
+        assert_eq!(
+            build_cc_argv(CcPermissionMode::Default, Some("opus")),
+            vec!["claude", "--permission-mode", "default", "--model", "opus"]
+        );
+        // Arm 2 — the inherit path. The load-bearing arm: proves omit-when-unset yields a
+        // shape the CLI genuinely accepts, not merely one our tests agree on.
+        assert_eq!(
+            build_cc_argv(CcPermissionMode::Default, None),
+            vec!["claude", "--permission-mode", "default"]
+        );
+        // Arm 3 — full model ID.
+        assert_eq!(
+            build_cc_argv(CcPermissionMode::Default, Some("claude-fable-5")),
+            vec![
+                "claude",
+                "--permission-mode",
+                "default",
+                "--model",
+                "claude-fable-5"
+            ]
+        );
+    }
+
+    #[test]
+    fn cc_argv_permission_mode_flag_matches_the_documented_cli_token() {
+        // Sibling of the `--model` pin above; both flag spellings are external contracts
+        // with the `claude` CLI, so neither should be silently renameable.
+        assert_eq!(CC_ARG_PERMISSION_MODE, "--permission-mode");
+    }
+
+    // --- resolve_spawn_model: the never-block-a-spawn degradation rule (pure) ---
+    //
+    // `SessionRegistry::spawn` itself needs a live AppHandle + a real PTY, so it cannot
+    // be unit-tested at all (nothing in this codebase constructs an AppHandle in a test).
+    // The degradation DECISION is extracted precisely so it can be asserted as a value
+    // here rather than being observable only on a running app.
+
+    #[test]
+    fn spawn_model_uses_the_override_when_the_read_succeeds() {
+        let read = Some(Ok(Some("opus".to_string())));
+        assert_eq!(resolve_spawn_model(read), Some("opus".to_string()));
+    }
+
+    #[test]
+    fn spawn_model_is_none_when_the_project_has_no_override() {
+        let read = Some(Ok(None));
+        assert_eq!(resolve_spawn_model(read), None);
+    }
+
+    #[test]
+    fn spawn_model_degrades_to_none_when_the_app_data_dir_is_unresolvable() {
+        // No read was even attempted — must not block the spawn.
+        assert_eq!(resolve_spawn_model(None), None);
+    }
+
+    #[test]
+    fn spawn_model_degrades_to_none_on_a_malformed_projects_json() {
+        // A parse error must inherit CC's default, NOT propagate and fail the spawn:
+        // opening with the default model is a mild surprise; a workspace that refuses
+        // to open is a dead click.
+        let parse_err = serde_json::from_str::<serde_json::Value>("{ not json").unwrap_err();
+        let read = Some(Err(crate::config_store::ConfigError::Parse(parse_err)));
+        assert_eq!(resolve_spawn_model(read), None);
+    }
+
+    #[test]
+    fn spawn_model_degrades_to_none_on_an_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
+        let read = Some(Err(crate::config_store::ConfigError::Io(io_err)));
+        assert_eq!(resolve_spawn_model(read), None);
     }
 
     #[test]

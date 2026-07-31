@@ -1,5 +1,25 @@
 # Backlog
 
+## SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC
+- **Source:** operator question at M11.5 WP1 Phase 3 verify-human ("Then can this list be dynamic?")
+- **Target level:** product:wbs
+- **Type:** new-work
+- **Summary:** The per-project model control's `datalist` suggestions come from a hardcoded `MODEL_ALIAS_HINTS = ["fable", "opus", "sonnet"]` (`src/cc/modelOverride.ts`). Could it be derived instead of hand-maintained?
+- **Context:** **Not a correctness gap** — the hints affect *autocomplete only*. Any value stays typeable, nothing validates against the list, and its non-exhaustiveness is test-pinned at all three layers (TS normalizer, Rust store, Rust argv builder). If CC ships a new model it works immediately; only the suggestion is missing. **CC exposes no `list-models` command** (verified against `claude --help`: `--model` plus 11 subcommands, none enumerating models), so "dynamic" requires choosing a different source. The staleness cost is bounded, which is why this was not built during WP1.
+- **Suggested action:** **recently-used derivation** is the recommended option — zero dependencies, no network, no credentials, and it surfaces the models this operator actually uses (it is also what the roadmap's own constraint text suggested: "free-text / recently-used / derived"). Union it with the three static aliases so a fresh install still gets suggestions. **Two alternatives considered and not recommended:** scraping CC's own config/state (brittle coupling to an undocumented internal shape — the same anti-brittleness argument as M10.9 §4c), and querying the Anthropic API's models endpoint (authoritative and even entitlement-aware, but adds a network call, credentials Claudesk does not hold, and an offline-failure path to a feature that currently has none — a large surface for autocomplete convenience).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS
+- **Source:** feature:verify-codify (M11.5 WP1 Phase 2)
+- **Target level:** product:arch
+- **Type:** gap
+- **Summary:** This repo has **no React component-render test harness** — `@testing-library/react` is not a dependency and **not one of the 123 test files renders a component**. Every frontend test is either a pure-function test or a source-text guard.
+- **Context:** Surfaced when codifying the picker-row model control (M11.5 WP1 Phase 2). Two verify-human-verified behaviors were **honestly un-pinnable**: (1) click-to-edit yielding exactly one `<input>` + N-1 labels across a list, and (2) a commit reverting the visible value on IPC rejection. Both need a real render with state transitions. The gap has been *worked around* repeatedly rather than named: pure-function extraction (`decideCommit`, `escDismissTarget`, `PICKER_ROW_CELLS`) is the standing mitigation and is genuinely good practice — but it cannot reach render-output or interaction-sequence properties, so those currently rely on live MCP-bridge verification, which is operator/agent-driven and not a regression gate. Note this is *also* what made M10.9 WP2's StrictMode double-write invisible to tests (the tests there modelled `set` with a plain closure, which has no React semantics to double-invoke).
+- **Suggested action:** decide deliberately whether to adopt a render harness (`@testing-library/react` + `jsdom`; Vitest already present) or to **formally accept** the "pure-core + live-verify" posture and stop treating render-level coverage as a gap. Either is defensible — the cost of the current implicit position is that each feature re-discovers the limit and re-argues it. If adopted, the first targets are the two behaviors above plus the StrictMode-double-invoke class.
+- **Priority:** low
+- **Status:** pending
+
 ## SURFACE-2026-07-31-SUBSTRATE-DETECTION-CANNOT-TELL-MCCC-FROM-THE-USERS-OWN-SKILLS
 - **Source:** feature:verify-self (M10.9 WP3.5b Phase 3) — symptom found by driving a real uninstall in a sandboxed `$HOME`; the real scope identified by the operator immediately after
 - **Target level:** product:wbs

@@ -21,6 +21,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
+import { ProjectModelCell, ProjectModelHints } from "./ProjectModelCell";
+import { PICKER_ROW_CELLS } from "./pickerRowOrder";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
 // an ERROR (an IPC rejection that must surface, not be swallowed — the WP6 MAJOR). The
@@ -277,28 +279,59 @@ export function ProjectPicker({
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
       />
+      {/* One shared datalist for every row's model hints (not one per row). */}
+      <ProjectModelHints />
       <ul className="picker-recents" data-testid="picker-recents">
         {visible.map((r) => (
           <li key={r.project_path} className="picker-recent-row">
-            <button
-              type="button"
-              className="picker-recent"
-              data-testid="picker-recent"
-              onClick={() => void handleOpenRecent(r.project_path)}
-            >
-              <span className="picker-recent-name">{labelFor(r)}</span>
-              <span className="picker-recent-path">{r.project_path}</span>
-            </button>
-            <button
-              type="button"
-              className="picker-recent-remove"
-              data-testid="picker-recent-remove"
-              aria-label={`Remove ${labelFor(r)} from recents`}
-              title="Remove from recents"
-              onClick={() => void handleRemove(r.project_path)}
-            >
-              ×
-            </button>
+            {/* The row's cells are emitted by mapping PICKER_ROW_CELLS, so their ORDER
+                and — critically — their FLATNESS live in one asserted value rather than in
+                JSX indentation. The model cell (M11.5 WP1) must be a SIBLING of the
+                open-project button: nested inside it, every click meant for the model
+                would open the project instead. A source-text guard for that rule was
+                written first and provably failed to catch a deliberately nested cell, so
+                the structure is data now. See pickerRowOrder.ts. */}
+            {PICKER_ROW_CELLS.map((cell) => {
+              switch (cell) {
+                case "open":
+                  return (
+                    <button
+                      key={cell}
+                      type="button"
+                      className="picker-recent"
+                      data-testid="picker-recent"
+                      onClick={() => void handleOpenRecent(r.project_path)}
+                    >
+                      <span className="picker-recent-name">{labelFor(r)}</span>
+                      <span className="picker-recent-path">
+                        {r.project_path}
+                      </span>
+                    </button>
+                  );
+                case "model":
+                  return (
+                    <ProjectModelCell
+                      key={cell}
+                      projectPath={r.project_path}
+                      projectLabel={labelFor(r)}
+                    />
+                  );
+                case "remove":
+                  return (
+                    <button
+                      key={cell}
+                      type="button"
+                      className="picker-recent-remove"
+                      data-testid="picker-recent-remove"
+                      aria-label={`Remove ${labelFor(r)} from recents`}
+                      title="Remove from recents"
+                      onClick={() => void handleRemove(r.project_path)}
+                    >
+                      ×
+                    </button>
+                  );
+              }
+            })}
           </li>
         ))}
       </ul>

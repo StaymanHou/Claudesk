@@ -12,8 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
 use super::{
-    add_or_touch, prune_missing, read_projects, remove as remove_project_inner, Project,
-    PROJECTS_FILE,
+    add_or_touch, prune_missing, read_default_model, read_projects, remove as remove_project_inner,
+    set_default_model, Project, PROJECTS_FILE,
 };
 
 /// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists.
@@ -166,6 +166,31 @@ pub fn remove_project(app: AppHandle, path: String) -> Result<(), String> {
 pub fn prune_missing_projects(app: AppHandle) -> Result<Vec<Project>, String> {
     let dir = resolve_data_dir(&app)?;
     prune_missing(&dir).map_err(|e| e.to_string())
+}
+
+/// Read a project's per-project CC model override (M11.5 WP1). `None` = the project
+/// inherits CC's own default model — which is also the answer for an unknown path, so
+/// the workspace header can seed itself without special-casing a missing record.
+#[tauri::command]
+pub fn project_get_default_model(app: AppHandle, path: String) -> Result<Option<String>, String> {
+    let dir = resolve_data_dir(&app)?;
+    read_default_model(&dir, Path::new(&path)).map_err(|e| e.to_string())
+}
+
+/// Set (`Some`) or clear (`None`) a project's CC model override.
+///
+/// Takes effect on that project's **next** CC spawn — argv is fixed once per process,
+/// exactly like the app-global permission mode. A blank string is normalized to "clear",
+/// so the frontend may forward a trimmed-empty input without special-casing it.
+/// An unknown path is an error (there is no record to attach the value to).
+#[tauri::command]
+pub fn project_set_default_model(
+    app: AppHandle,
+    path: String,
+    model: Option<String>,
+) -> Result<(), String> {
+    let dir = resolve_data_dir(&app)?;
+    set_default_model(&dir, Path::new(&path), model).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

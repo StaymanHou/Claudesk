@@ -47,8 +47,26 @@ pub struct Project {
     /// Display label; defaults to the directory basename when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    /// Per-project override for the model the spawned CC session runs (M11.5 WP1).
+    /// `None` = **inherit CC's own global default** — the pre-M11.5 behavior — and the
+    /// key is omitted from disk entirely, so existing `projects.json` files and users
+    /// who never touch the control are byte-for-byte unaffected.
+    ///
+    /// **This is Claudesk's FIRST per-project setting with a live read/write path** —
+    /// do not mistake it for the placeholder [`Self::default_drive_mode`] below, which
+    /// looks similar and is never read. Written by `set_default_model`, read at spawn
+    /// time by `SessionRegistry::spawn` and mapped to CC's `--model` by `build_cc_argv`.
+    ///
+    /// Stored **verbatim, unvalidated**. `claude --help` documents an open value set
+    /// (an alias like `opus`, or a full ID like `claude-fable-5`), and an unusable value
+    /// makes CC print its own precise in-session error — which knows about entitlements,
+    /// not just existence. A Claudesk-side allowlist would be both less accurate and
+    /// guaranteed to reject models released after this build. See the WP1 probe findings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_model: Option<String>,
     /// Reserved for Phase 2 (WP15 drive-mode selector). Never read or written in
-    /// Phase 1 — present so the on-disk shape is forward-stable.
+    /// Phase 1 — present so the on-disk shape is forward-stable. **Contrast
+    /// [`Self::default_model`] above, which IS live.**
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_drive_mode: Option<DriveMode>,
 }
@@ -116,6 +134,7 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
             display_name: derive_display_name(&path),
             path,
             last_opened_at: now_ms,
+            default_model: None,
             default_drive_mode: None,
         };
         projects.push(project.clone());
@@ -123,6 +142,68 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
     };
     write_projects(data_dir, &projects)?;
     Ok(record)
+}
+
+/// Read one project's per-project CC model override (M11.5 WP1).
+///
+/// `Ok(None)` covers **both** "the project has no override" and "there is no record for
+/// this path at all" — the caller ([`crate::cc_session::SessionRegistry::spawn`]) treats
+/// them identically as *inherit CC's global default*, so distinguishing them would only
+/// invite a spawn-blocking error path where none is wanted. A malformed `projects.json`
+/// still surfaces as [`ConfigError::Parse`]; the spawn call site is what degrades that to
+/// `None`, keeping "never block a spawn" a decision of the caller rather than a silent
+/// swallow here.
+///
+/// Paths are compared verbatim, matching [`add_or_touch`] and [`remove`].
+pub fn read_default_model(
+    data_dir: &Path,
+    project_path: &Path,
+) -> Result<Option<String>, ConfigError> {
+    let projects = read_projects(data_dir)?;
+    Ok(projects
+        .into_iter()
+        .find(|p| p.path == project_path)
+        .and_then(|p| p.default_model))
+}
+
+/// Set (or clear, with `None`) one project's CC model override, persisting the list.
+///
+/// Unlike [`read_default_model`], an unknown path IS an error: there is no record to
+/// attach the value to, and silently doing nothing would present to the UI as a
+/// successful write that vanishes on the next read.
+///
+/// A `Some` value is trimmed, and a blank string is normalized to `None` (= clear), so
+/// whitespace can never become an argv token that CC would reject. Clearing removes the
+/// key from disk rather than writing `null` — see [`Project::default_model`].
+pub fn set_default_model(
+    data_dir: &Path,
+    project_path: &Path,
+    model: Option<String>,
+) -> Result<(), ConfigError> {
+    let mut projects = read_projects(data_dir)?;
+    let target = projects
+        .iter_mut()
+        .find(|p| p.path == project_path)
+        .ok_or_else(|| {
+            ConfigError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("no project record for {}", project_path.display()),
+            ))
+        })?;
+    target.default_model = normalize_model(model);
+    write_projects(data_dir, &projects)?;
+    Ok(())
+}
+
+/// Trim a model override, mapping blank to `None` (= inherit CC's default).
+///
+/// Pure so the blank-is-unset rule is unit-testable on its own and is guaranteed to be
+/// the *same* rule the argv builder applies (`build_cc_argv` re-checks for defense in
+/// depth against values written by an older build or hand-edited into the file).
+fn normalize_model(model: Option<String>) -> Option<String> {
+    model
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty())
 }
 
 /// Remove a project by path. No-op (and not an error) if the path is absent.
@@ -186,6 +267,7 @@ mod tests {
                     .to_string_lossy()
                     .into_owned(),
             ),
+            default_model: None,
             default_drive_mode: None,
         }
     }
@@ -304,6 +386,7 @@ mod tests {
             path: PathBuf::from("/m"),
             last_opened_at: 1,
             display_name: Some("m".into()),
+            default_model: None,
             default_drive_mode: Some(DriveMode::Autopilot),
         }];
         write_projects(dir.path(), &with_mode).unwrap();
@@ -405,5 +488,239 @@ mod tests {
             "path must serialize as project_path, got: {json}"
         );
         assert!(!json.contains("\"path\""));
+    }
+
+    // --- M11.5 WP1: per-project CC model override ---------------------------------
+    //
+    // The load-bearing property across this block is that UNSET is indistinguishable
+    // on disk from pre-WP1: no key, no `null`. Every existing projects.json must
+    // round-trip byte-identically for a user who never touches the control.
+
+    #[test]
+    fn unset_default_model_key_is_absent_from_serialized_json() {
+        let json = serde_json::to_string(&p("/x/repo", 1)).unwrap();
+        assert!(
+            !json.contains("default_model"),
+            "an unset override must not appear on disk at all (not even as null), got: {json}"
+        );
+    }
+
+    #[test]
+    fn legacy_file_without_default_model_key_parses_as_none() {
+        // Forward-compat: a projects.json written by any pre-M11.5 build has no such
+        // key. It must parse, not error, and read as "inherit CC's default".
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(PROJECTS_FILE),
+            r#"[{"project_path":"/a/one","last_opened_at":100,"display_name":"one"}]"#,
+        )
+        .unwrap();
+        let projects = read_projects(dir.path()).unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].default_model, None);
+    }
+
+    #[test]
+    fn set_default_model_then_read_returns_the_value() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+        set_default_model(dir.path(), Path::new("/a/one"), Some("opus".into())).unwrap();
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/a/one")).unwrap(),
+            Some("opus".to_string())
+        );
+    }
+
+    #[test]
+    fn set_default_model_accepts_a_model_that_does_not_exist_yet() {
+        // Forward-compatibility, asked about directly by the operator at Phase 3
+        // verify-human: *"what would happen if CC introduced a new model?"*
+        //
+        // The answer must be "it just works", and this is the layer where that is most
+        // likely to be broken by a well-meaning addition — the store is the natural place
+        // someone would slip in a "sanity check" against a known-models list. The sibling
+        // test below uses `claude-fable-5`, which exists TODAY, so it would keep passing
+        // against a validator seeded with today's models. This one cannot: the value is
+        // deliberately not a real model and not in `MODEL_ALIAS_HINTS`.
+        //
+        // Any validation added here — an allowlist, a regex on the ID shape, a prefix
+        // check — fails this test. That is the point.
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+        set_default_model(
+            dir.path(),
+            Path::new("/a/one"),
+            Some("claude-nonexistent-model-from-the-future-9".into()),
+        )
+        .unwrap();
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/a/one")).unwrap(),
+            Some("claude-nonexistent-model-from-the-future-9".to_string()),
+            "an unrecognized model must round-trip verbatim — CC adjudicates usability \
+             (including entitlements, which no local list can know), not Claudesk"
+        );
+    }
+
+    #[test]
+    fn set_default_model_accepts_a_full_model_id_verbatim() {
+        // The probe established an OPEN value set (alias OR full ID) and that CC — not
+        // Claudesk — adjudicates usability. Nothing here may normalize or reject shapes.
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+        set_default_model(
+            dir.path(),
+            Path::new("/a/one"),
+            Some("claude-fable-5".into()),
+        )
+        .unwrap();
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/a/one")).unwrap(),
+            Some("claude-fable-5".to_string())
+        );
+    }
+
+    #[test]
+    fn clearing_default_model_removes_the_key_rather_than_writing_null() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+        set_default_model(dir.path(), Path::new("/a/one"), Some("opus".into())).unwrap();
+        set_default_model(dir.path(), Path::new("/a/one"), None).unwrap();
+
+        let raw = std::fs::read_to_string(dir.path().join(PROJECTS_FILE)).unwrap();
+        assert!(
+            !raw.contains("default_model"),
+            "clearing must return the file to its unset shape, got: {raw}"
+        );
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/a/one")).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn set_default_model_normalizes_blank_and_whitespace_to_unset() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+
+        set_default_model(dir.path(), Path::new("/a/one"), Some("   ".into())).unwrap();
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/a/one")).unwrap(),
+            None,
+            "whitespace-only must mean unset, never an argv token CC would reject"
+        );
+
+        set_default_model(dir.path(), Path::new("/a/one"), Some("  opus  ".into())).unwrap();
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/a/one")).unwrap(),
+            Some("opus".to_string()),
+            "a padded value is trimmed, not stored with its padding"
+        );
+    }
+
+    #[test]
+    fn set_default_model_on_one_project_leaves_every_field_of_the_others_untouched() {
+        // Named for exactly what it asserts (per the overstated-assertion class this
+        // repo has hit three times): it compares the FULL sibling records, not one field.
+        let dir = TempDir::new().unwrap();
+        let mut other = p("/b/two", 200);
+        other.default_model = Some("sonnet".into());
+        other.default_drive_mode = Some(DriveMode::Autopilot);
+        let untouched = p("/c/three", 300);
+        write_projects(
+            dir.path(),
+            &[p("/a/one", 100), other.clone(), untouched.clone()],
+        )
+        .unwrap();
+
+        set_default_model(dir.path(), Path::new("/a/one"), Some("opus".into())).unwrap();
+
+        let after = read_projects(dir.path()).unwrap();
+        let find = |path: &str| {
+            after
+                .iter()
+                .find(|p| p.path == Path::new(path))
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(
+            find("/b/two"),
+            other,
+            "sibling record must be byte-identical"
+        );
+        assert_eq!(find("/c/three"), untouched);
+        assert_eq!(after.len(), 3, "no project may be added or dropped");
+        assert_eq!(find("/a/one").default_model, Some("opus".to_string()));
+        assert_eq!(
+            find("/a/one").display_name,
+            Some("one".to_string()),
+            "the target's own other fields must also survive"
+        );
+        assert_eq!(find("/a/one").last_opened_at, 100);
+    }
+
+    #[test]
+    fn read_default_model_for_an_unknown_path_is_none_not_an_error() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+        // "No record" and "record with no override" are deliberately the same answer:
+        // the spawn call site treats both as inherit-CC's-default.
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/nope")).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn read_default_model_on_a_missing_store_is_none_not_an_error() {
+        let dir = TempDir::new().unwrap();
+        // First run: no projects.json at all. Must not error a spawn.
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/a/one")).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn set_default_model_on_an_unknown_path_is_an_error() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+        // Unlike the reader, a write with nowhere to land must NOT report success —
+        // that would present as a value that vanishes on the next read.
+        let err = set_default_model(dir.path(), Path::new("/nope"), Some("opus".into()));
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn add_or_touch_preserves_an_existing_projects_default_model() {
+        // add_or_touch runs on every project open. It refreshes last_opened_at and
+        // clones the record — so a naive rebuild of the struct would silently drop
+        // the override on the very next open.
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100)]).unwrap();
+        set_default_model(dir.path(), Path::new("/a/one"), Some("opus".into())).unwrap();
+
+        let touched = add_or_touch(dir.path(), PathBuf::from("/a/one"), 999).unwrap();
+
+        assert_eq!(touched.last_opened_at, 999, "touch still updates recency");
+        assert_eq!(
+            touched.default_model,
+            Some("opus".to_string()),
+            "the returned record must carry the override"
+        );
+        assert_eq!(
+            read_default_model(dir.path(), Path::new("/a/one")).unwrap(),
+            Some("opus".to_string()),
+            "and it must still be on disk after the touch"
+        );
+    }
+
+    #[test]
+    fn add_or_touch_creates_a_new_project_with_no_override() {
+        let dir = TempDir::new().unwrap();
+        let created = add_or_touch(dir.path(), PathBuf::from("/fresh/repo"), 1).unwrap();
+        assert_eq!(
+            created.default_model, None,
+            "a newly added project inherits CC's default"
+        );
     }
 }

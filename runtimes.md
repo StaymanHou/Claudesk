@@ -162,9 +162,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** ~300s cold / 2.8s warm exec (2026-07-31, M10.9 WP3.5b Phase 1: first run after the 2026-07-30 `cargo clean` — cold rebuild dominated, ran backgrounded so wall-clock is an estimate; filtered `workflow_install` run → 70 pass, 0 fail)
+- **Last:** 4.04s warm exec (2026-07-31, M11.5 WP1 Phase 1: full `--all-targets` run, 698 pass / 0 fail across 6 targets — +20 for the per-project model override)
 - **Use timeout:** 510000 (covers a cold post-`cargo clean` rebuild; warm runs finish in seconds)
 - **History:**
+  - 4.04s warm — 2026-07-31 (M11.5 WP1 P1; full run, 698 pass)
   - ~300s cold (estimate, backgrounded) — 2026-07-31 (WP3.5b P1; first post-`cargo clean` run)
   - 0.78s — 2026-07-29 (WP3 P4 verify-codify: +2, 581 lib)
   - 0.71s — 2026-07-29 (WP3 P1 verify-codify: +2, 579 lib)

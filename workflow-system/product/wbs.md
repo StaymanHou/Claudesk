@@ -46,7 +46,7 @@ Three things the roadmap's deliverable text asserts were checked against the cod
 ## Work Packages
 
 ### WP1: Per-project CC default-model override
-**Description:** A `default_model: Option<String>` field on the `Project` record in `projects.json`, surfaced as a **visible control on the workspace** (per `[[explicit-selectable-mode-over-inferred-mode]]`), read at spawn time and passed to CC as `--model <value>`. **Unset = the field is omitted from argv entirely**, so CC applies its own global default and every existing project is untouched. Solves the operator's framing: *the global CC default means you forget to switch models back after using one on a project.*
+**Description:** A `default_model: Option<String>` field on the `Project` record in `projects.json`, surfaced as a **visible control on each project's picker row** (per `[[explicit-selectable-mode-over-inferred-mode]]` — the value reads without interaction; ⚠️ **as-built**: planned for the workspace header, relocated to the picker row at Phase 2 verify-human, 2026-07-31), read at spawn time and passed to CC as `--model <value>`. **Unset = the field is omitted from argv entirely**, so CC applies its own global default and every existing project is untouched. Solves the operator's framing: *the global CC default means you forget to switch models back after using one on a project.*
 **Milestone:** 11.5
 **Dependencies:** none (first WP — the operator's lead ask, so it goes first; see the ordering rationale)
 **Size:** M
@@ -56,7 +56,7 @@ Three things the roadmap's deliverable text asserts were checked against the cod
 - [ ] 1.3 Build the per-project read/write path (**new — no precedent to copy, per Finding 1**): a getter keyed by project path + a setter that persists to `projects.json` preserving all other fields. Mirror the *discipline* of `settings.rs`'s field-preserving writes, not its app-global storage.
 - [ ] 1.4 Extend the pure `build_cc_argv` (`cc_session/mod.rs:303`) to take the optional model and append `--model <value>` **only when `Some` and non-empty after trim**. Pin with tests: `None` → argv contains no `--model` (the deliberate asymmetry with `--permission-mode`, which is always passed); `Some("x")` → exactly one `--model x` pair; `Some("  ")` → treated as unset.
 - [ ] 1.5 Read the project's `default_model` in `SessionRegistry::spawn` (`cc_session/mod.rs:721`) alongside the existing permission-mode read — **no signature change needed**, `project_path` is already a parameter. A read failure or missing project record degrades to `None` (inherit CC's default), never to an error that blocks the spawn.
-- [ ] 1.6 Surface the control **on the workspace header** (visible, directly selectable — `[[explicit-selectable-mode-over-inferred-mode]]`), with an explicit "Default (CC's own)" choice for unset. **No hardcoded model-ID list** — per the roadmap constraint, prefer free-text entry with a recently-used/derived suggestion list so the control cannot rot on the next CC release. Show the active value without requiring a click. Communicate that a change applies to the **next** spawn (same semantics as the permission mode) rather than silently doing nothing to the running session.
+- [ ] 1.6 Surface the control **on each project's picker row**, right-aligned (⚠️ **AS-BUILT CORRECTION 2026-07-31** — this task said *workspace header*; it was built there, the operator **rejected the placement at Phase 2 verify-human**, and it now lives on the picker row as a compact **click-to-edit label**. The prior still holds: the *value* is visible without interaction on every row; only the *edit affordance* is behind a click. See design prior `set-a-spawn-time-choice-where-the-spawn-is-chosen`), with an explicit "Default (CC's own)" placeholder for unset. **No hardcoded model-ID list** — per the roadmap constraint, prefer free-text entry with a recently-used/derived suggestion list so the control cannot rot on the next CC release. Show the active value without requiring a click. Communicate that a change applies to the **next** spawn (same semantics as the permission mode) rather than silently doing nothing to the running session.
 - [ ] 1.7 Correct `roadmap.md`'s M11.5 deliverable text per **Finding 1** (the precedent is the permission-mode *mechanism*; the per-project *storage* is new), and correct M14's stale "default CLI args for `claude`" line as the roadmap itself instructs (it lists PiP + permission-mode as future work; both shipped at M5/M6, and this WP consumes the `--model` part).
 - [ ] 1.8 Verify: the choice persists across relaunch, an unset project spawns with no `--model` in its argv (checkable via `ps`), and a set project spawns with the chosen value.
 
@@ -125,7 +125,7 @@ Three things the roadmap's deliverable text asserts were checked against the cod
 
 | WP | Subsystem | Primary files |
 |---|---|---|
-| WP1 | CC spawn + project config | `config_store/mod.rs`, `cc_session/mod.rs`, workspace header |
+| WP1 | CC spawn + project config | `config_store/mod.rs`, `cc_session/mod.rs`, ~~workspace header~~ → **picker row** (`components/picker/`, relocated at verify-human 2026-07-31) |
 | WP2 | CodeMirror editor | `editor/editorExtensions.ts`, `App.css` |
 | WP3 | Settings copy | `settings/SettingsPanel.tsx` |
 | WP4 | Test infrastructure | `state/__tests__/offInvariantGuard.test.ts` |
@@ -191,7 +191,7 @@ Per `roadmap.md`, M11.5 is an **OPEN collection bucket** in the M6/M10.5 traditi
 | Exit criterion | WP | Verification |
 |---|---|---|
 | Opening a workspace spawns CC with that project's chosen model (unset → CC's own default) | WP1 | `ps` shows `--model <value>` for a set project and **no** `--model` for an unset one (1.8) |
-| The choice is visible on the workspace and persists across relaunch | WP1 | Visible header control (1.6); relaunch persistence (1.8) |
+| The choice is visible **on the picker row** and persists across relaunch | WP1 | ✅ MET — picker-row cell (1.6, relocated from the header at verify-human); relaunch persistence verified live (1.8) |
 | The model control does not depend on a hardcoded model-ID list | WP1 | Free-text + derived suggestions, no enumerated ID set (1.6) |
 | The editor minimap tracks the buffer through **both** an external disk reload and local typing | WP2 | Red-green: a test failing on today's behavior (2.1/2.2), green after the fix (2.5) |
 | The `time_tracking_enabled` setting states capture is offline and local-only | WP3 | Copy in the per-setting help line (3.1); privacy self-consistency test holds (3.4) |
@@ -218,5 +218,12 @@ Nothing here touches the `CcSession` trait boundary, the hook channel, the statu
 
 **One doc-resync item for close:** WP1's per-project read path is a genuine as-built architectural addition (the first per-project setting with a live read/write path). Record it in `arch.md` at `/product-finalize` — flagged now so the close does not have to rediscover it.
 
-## Session Handoff — 2026-07-31 14:46
-Handed off. See `workflow-system/state/.session.md` to restore.
+### ⚠️ WP1 as-built — the specific content `/product-finalize` must record in `arch.md` (written at WP1 Phase 3, 2026-07-31)
+
+Five things, because the WBS's own prediction was only partly right and the differences are the load-bearing part:
+
+1. **The per-project read/write path (as predicted).** `Project.default_model: Option<String>` in `config_store/mod.rs` with `skip_serializing_if` (unset ⇒ key absent from disk, so every pre-M11.5 `projects.json` round-trips byte-identically) + `read_default_model` / `set_default_model`, both keyed by verbatim project path. **Claudesk's first per-project setting with a live read/write path** — `default_drive_mode` remains the never-read placeholder it always was, and the two must not be confused.
+2. **The argv asymmetry is a deliberate, tested contract, not an inconsistency.** `build_cc_argv(mode, model)` passes `--permission-mode` **unconditionally** (every mode has a spellable flag value, `default` included) but **omits `--model` entirely when unset**, because "inherit CC's own default" has *no* representable flag value. **Proven on live processes at Phase 3**, not just in unit tests: set → `claude --permission-mode dontAsk --model sonnet`; unset → `claude --permission-mode dontAsk` with **no `--model` token at all**.
+3. **A new pure seam: `resolve_spawn_model`.** The never-block-a-spawn degradation rule was extracted out of `SessionRegistry::spawn` specifically so it is testable — nothing in this repo can construct an `AppHandle`, so anything left inside `spawn` is verifiable only on a running app. Every degraded read (no app-data dir / unreadable / malformed / no record) resolves to `None` = inherit CC's default; a config fault must never turn a workspace open into a dead click.
+4. **⚠️ The UI surface is the PICKER ROW, not the workspace header — and this reverses what the WBS and roadmap both specified.** Built on the header, **rejected by the operator at Phase 2 verify-human**, relocated to a right-aligned click-to-edit cell on each project's picker row. **One surface only, deliberately:** two homes for one per-project value would need a sync path, and there is intentionally **no broadcast event** for this setting (unlike the app-global permission mode, which has one because it has a second surface in the View menu). New design prior: `set-a-spawn-time-choice-where-the-spawn-is-chosen`.
+5. **No client-side validation, by design.** The value is stored and forwarded verbatim; CC adjudicates and reports an unusable model precisely, inside the very pane the user is watching. Record this as a *decision* — a future reader will otherwise read the missing validator as an oversight and "fix" it, reintroducing a list that rots on every CC release.

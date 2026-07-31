@@ -404,6 +404,9 @@ pub fn run() {
             config_store::commands::remove_project,
             // WP9: prune projects whose folder was deleted between sessions.
             config_store::commands::prune_missing_projects,
+            // M11.5 WP1: per-project CC model override (read at spawn → `--model`).
+            config_store::commands::project_get_default_model,
+            config_store::commands::project_set_default_model,
             cc_session::commands::cc_spawn,
             // WP9: second-terminal panel — spawns the user's login shell (not claude)
             // into the same SessionRegistry; reuses cc_input/cc_resize/cc_kill.

@@ -2795,6 +2795,80 @@ body,
   white-space: nowrap;
 }
 
+/* M11.5 WP1 — per-project CC model override, right-aligned on each picker row.
+   (Relocated here from the workspace header at the operator's verify-human call: the
+   model applies at spawn, so the picker row is the moment of use, and every project's
+   value is legible at once instead of one-at-a-time.)
+
+   A compact LABEL by default, becoming an input on click — an input box on every row
+   would be noise on the app's most-glanced surface with 20+ projects. Fixed width so the
+   labels form a clean right-hand column regardless of value length; it must not stretch,
+   or the project paths beside it would reflow row-to-row. */
+.picker-recent-model {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 7.5em;
+  padding: 0 0.6em;
+  overflow: hidden;
+  color: #6a6a6a;
+  font-family: inherit;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  /* Chrome-less by default so the cell reads as part of the project row rather than as a
+     third boxed tile beside it. It is a <button> (it must be clickable to edit), so it
+     inherits the app's global button chrome — #2a2a2a fill + 8px radius — which visually
+     split the row into three panels on first build. Override all of it; the affordance is
+     carried by the hover brightening + cursor, not by a box. */
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+/* A project with an explicit override reads brighter than an inheriting one, so the
+   exceptions stand out when scanning the list. */
+.picker-recent-model.is-set {
+  color: #b0b0b0;
+}
+
+.picker-recent-model:hover {
+  color: #e0e0e0;
+}
+
+.picker-recent-model.is-failed {
+  color: #ff8a7a;
+}
+
+.picker-recent-model.is-editing {
+  padding: 0;
+}
+
+.picker-recent-model-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.15em 0.4em;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid #6ea8ff;
+  border-radius: 3px;
+  color: #e0e0e0;
+  font-family: inherit;
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.picker-recent-model-input::placeholder {
+  color: #6a6a6a;
+  /* The unset placeholder is longer than the field; keep it from clipping mid-word. */
+  font-size: 0.72rem;
+}
+
+.picker-recent-model-input:focus {
+  outline: none;
+}
+
 /* Per-row delete — manual removal only; nothing falls off the list on its own. */
 .picker-recent-remove {
   flex: 0 0 auto;
