@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: "Milestone 10.9: Workflow-features opt-in gate"
-updated: 2026-07-31  # WP3.5b SHIPPED (da4a854 + 8626ba7) — the uninstall wizard: refuse-guard FIRST (compiler-enforced via a private-field UninstallTarget; a guard-skipping delete does not compile), script -> clone-dir removal -> provenance record deleted LAST, --dry-run driving the preview, and BOTH entry points ([Uninstall & disable...] button + gate toggle) after the operator overturned the toggle-only design at verify-human. Substrate detection REWRITTEN to marker-based (symlink -> repo whose install.sh carries `claude-workflow-system`), fixing two wrong answers still live in v0.2.9. review-quality: 0 CRITICAL / 4 MAJOR / 4 MINOR, all eight paid down. New design prior `paired-actions-need-paired-affordances` bounds the anti-redundancy prior. M10.9 remaining: WP4 (S), WP5 (XS).
+updated: 2026-07-31  # WP4 CLOSED as a documented NO-OP — verdict (i), operator decision; nothing shipped. The WP3 invite (discovery) + Settings (install path, provenance, the §4c-pinned /tutorial-getting-started pointer) already discharge the onboarding deliverable. The one genuine non-overlap — auto-STARTING the tour — was cut on three code findings the WBS didn't know: (1) it would be the app's FIRST programmatic PTY write (cc_input's only caller today is XtermPane's real keystrokes; arch.md's "byte-injection is legitimate because Claudesk IS the terminal" is about RELAYING the user, not the app composing input); (2) the invite fires at the PICKER per Verdict (b) — no workspace, no CC session to inject into; (3) driving a fresh CC prompt is timing-sensitive + needs \r, and a mistimed inject strands a FIRST-RUN user for the sake of one paste. (iii) M14 deferral declined deliberately — no evidence exists yet (Claudesk isn't public), so a speculative anchor would be uncloseable. Verified: 25 copy-fidelity + 10 OFF-invariant tests green, cc_input caller-count grep-checked. M10.9 remaining: WP5 (XS) only. | (prior) WP3.5b SHIPPED (da4a854 + 8626ba7) — the uninstall wizard: refuse-guard FIRST (compiler-enforced via a private-field UninstallTarget; a guard-skipping delete does not compile), script -> clone-dir removal -> provenance record deleted LAST, --dry-run driving the preview, and BOTH entry points ([Uninstall & disable...] button + gate toggle) after the operator overturned the toggle-only design at verify-human. Substrate detection REWRITTEN to marker-based (symlink -> repo whose install.sh carries `claude-workflow-system`), fixing two wrong answers still live in v0.2.9. review-quality: 0 CRITICAL / 4 MAJOR / 4 MINOR, all eight paid down. New design prior `paired-actions-need-paired-affordances` bounds the anti-redundancy prior. M10.9 remaining: WP4 (S), WP5 (XS).
 ---
 
 # WBS — Milestone 10.9: Workflow-features opt-in gate
@@ -252,16 +252,16 @@ This is why the commands are not simply deleted at WP3.5: the developer-install 
 
 ---
 
-### WP4: Onboarding surface — scope decision + minimal implementation
+### WP4: Onboarding surface — scope decision + minimal implementation ✅ CLOSED 2026-07-31 — **verdict (i): documented no-op, nothing shipped** (see "Probe outcomes" → Verdict (c))
 **Description:** The roadmap deliberately left this **"Scope TBD at WBS"** pending the companion repo's onboarding design. That design has now landed — and it landed *smaller* than expected for Claudesk: item #5 was brainstormed, designed, **and built** as a four-skill `tutorial-*` family, and per §4c the entire Claudesk-side coupling is **one command name**. So this WP is a **scope decision first, implementation second** — and the likely honest answer is that WP3's invite already discharges most of it.
 **Milestone:** M10.9
 **Dependencies:** WP3 (the invite is the candidate host; judge the gap against it in place)
 **Size:** S
 **Tasks:**
-- [ ] 4.1 Run the `new-surface-must-earn-its-place` decision rule on "an onboarding surface beyond the invite": list what such a surface would do, ask of each whether the invite (or CC itself, once the user runs `/tutorial-getting-started`) already covers it, and keep only genuine non-overlap. **Candidate non-overlap to weigh honestly:** the invite can only *name* the command — it cannot run it. A user who says `[Enable]` still has to type `/tutorial-getting-started` into a CC session themselves. Claudesk *can* inject into a workspace's CC PTY (the `cc_input` seam), so a "start the tour" affordance is technically available and would be a real capability the invite lacks. Weigh against: it presumes a workspace is open and a CC session is live (the invite may fire at the picker with zero projects), and byte-injection into a fresh CC session is a timing-sensitive path.
-- [ ] 4.2 Decide + record the verdict in "Probe outcomes": either **(i)** the invite suffices → this WP closes as a documented no-op (a legitimate outcome, and the prior's own rule says a subset surface should be cut), or **(ii)** ship the minimal surviving thing (most likely a single "Start the tour" action that opens/uses a workspace and sends `/tutorial-getting-started`, gated ON, nothing more), or **(iii)** defer a richer surface to M14 with a `SURFACE-` entry. **Do not build a tutorial UI** — the tour lives in the skills; Claudesk presents a pointer at most.
-- [ ] 4.3 Implement whatever (ii) selected, if anything. If injecting the command: reuse the `cc_session`/`cc_input` seam (never a new path), end the injected line with `\r` not `\n` (memory `[[cc-tui-cr-not-lf]]` / `[[raw-mode-cr-is-enter]]` — `\n` only triggers autocomplete typeahead), and handle "no workspace open" without an error path that strands the user.
-- [ ] 4.4 Verify per the chosen option (self, MCP bridge, scratch workspace). If (i), the verification is that no new surface exists and the invite's pointer is present + correct.
+- [x] 4.1 Run the `new-surface-must-earn-its-place` decision rule on "an onboarding surface beyond the invite": list what such a surface would do, ask of each whether the invite (or CC itself, once the user runs `/tutorial-getting-started`) already covers it, and keep only genuine non-overlap. **Candidate non-overlap to weigh honestly:** the invite can only *name* the command — it cannot run it. A user who says `[Enable]` still has to type `/tutorial-getting-started` into a CC session themselves. Claudesk *can* inject into a workspace's CC PTY (the `cc_input` seam), so a "start the tour" affordance is technically available and would be a real capability the invite lacks. Weigh against: it presumes a workspace is open and a CC session is live (the invite may fire at the picker with zero projects), and byte-injection into a fresh CC session is a timing-sensitive path.
+- [x] 4.2 Decide + record the verdict in "Probe outcomes": either **(i)** the invite suffices → this WP closes as a documented no-op (a legitimate outcome, and the prior's own rule says a subset surface should be cut), or **(ii)** ship the minimal surviving thing (most likely a single "Start the tour" action that opens/uses a workspace and sends `/tutorial-getting-started`, gated ON, nothing more), or **(iii)** defer a richer surface to M14 with a `SURFACE-` entry. **Do not build a tutorial UI** — the tour lives in the skills; Claudesk presents a pointer at most.
+- [x] 4.3 ~~Implement whatever (ii) selected, if anything.~~ **N/A — verdict (i) selected, nothing to implement.** The `cc_input`/`\r` guidance below stands as the recorded shape *if* this is ever reopened. Implement whatever (ii) selected, if anything. If injecting the command: reuse the `cc_session`/`cc_input` seam (never a new path), end the injected line with `\r` not `\n` (memory `[[cc-tui-cr-not-lf]]` / `[[raw-mode-cr-is-enter]]` — `\n` only triggers autocomplete typeahead), and handle "no workspace open" without an error path that strands the user.
+- [x] 4.4 Verify per the chosen option (self, MCP bridge, scratch workspace). If (i), the verification is that no new surface exists and the invite's pointer is present + correct. **Done — the (i) branch: 25 copy-fidelity tests + 10 OFF-invariant guard tests green, and `cc_input` grep-verified to have no caller outside `XtermPane.tsx`.** No live/bridge pass needed: nothing was built, and the pointer is pinned as an exported value rather than rendered-only text.
 
 ---
 
@@ -331,6 +331,36 @@ WP1 (probe: settings surface + invite trigger)
 
 ## Probe outcomes
 *(WP1's settings-surface + invite-trigger verdicts, WP2's guard-scope note, WP4's onboarding scope decision, and WP5's exit verdict land here at their WP closes.)*
+
+### Verdict (c) — Onboarding surface scope (WP4, decided 2026-07-31)
+
+**Chosen: (i) — WP4 closes as a documented no-op. Nothing ships.** The WP3 invite (discovery) + the Settings panel (install path, provenance, and the §4c-pinned tour pointer) already discharge the milestone's onboarding deliverable. Operator decision, taken after the decision-rule run below.
+
+**The `new-surface-must-earn-its-place` run (task 4.1) — what a further surface would do, and what already covers it:**
+
+| Candidate capability | Covered? | By what |
+|---|---|---|
+| Tell a user the workflow layer exists | **Yes** | The WP3 invite — its irreducible non-overlap *is* discovery |
+| Tell them how to install it | **Yes** | Settings' `absent` arm + the WP3.5a install wizard |
+| Name the tour command | **Yes** | `TUTORIAL_POINTER_COPY` / `TUTORIAL_COMMAND` in Settings' installed arm |
+| Explain what the tour is + its honest length | **Yes** | The same string — "~10–15 min walkthrough on a sample project" (§6-compliant: never "quick"/"5-minute") |
+| Teach the workflow itself | **Not ours** | The `tutorial-*` skills. Task 4.2's standing instruction: *do not build a tutorial UI* |
+| **Actually start the tour** | **NO** | ← the only genuine non-overlap, and the one the WBS predicted |
+
+**Three findings from the code (not known when the WBS was written) are what actually decided it** — the WBS had already *predicted* (i), and a decision rule that merely ratifies its author's guess is doing no work, so the verdict rests on these rather than on the prediction:
+
+1. **It would be the app's FIRST programmatic PTY write.** `cc_input` has exactly one caller today — `XtermPane.tsx:299`, real keystrokes from xterm's `onData`. Every byte Claudesk has ever written to a CC PTY came from a human pressing a key. `arch.md`'s reasoning that byte-injection is legitimate *because "Claudesk is the terminal"* is about **relaying the user**, not about the app composing input on its own initiative. Option (ii) introduces a new behavior class for one paste of a 25-character string.
+2. **The precondition does not hold when the invite fires.** Verdict (b) settled the trigger as **first launch with ≥1 project** — i.e. at the **picker**, with no workspace open and no CC session alive. A "Start the tour" button would have nothing to inject into at the exact moment discovery happens; it would have to open a workspace → spawn CC → await prompt-readiness → inject, a chain task 4.1 itself flagged as timing-sensitive.
+3. **That chain is a known-weak path, and its failure lands on the worst possible user.** Per `CLAUDE.md`'s bridge caveat (e) + memories `[[cc-tui-cr-not-lf]]`/`[[raw-mode-cr-is-enter]]`, driving a fresh CC prompt is timing-sensitive and the line must end in `\r` (`\n` only triggers autocomplete typeahead). A mistimed inject strands a **first-run user** — the person least equipped to recognize a half-typed slash command — in exchange for saving a paste.
+
+**Value/risk verdict:** the surviving non-overlap is thin (one paste) while its failure mode is disproportionate (a broken first impression, on the exact audience M10.9 exists to reach). The prior's own rule — a surface that is a subset of an existing one should be cut — applies. Same shape as **M7**, where the popover was cut as a strict PiP subset.
+
+**Verification (task 4.4), per the "if (i)" clause — the pointer is present + correct, and no new surface exists:**
+- `workflowSubstrateCopy.test.ts` + `workflowInviteCopy.test.ts` — **25 tests green**; the tour pointer is pinned as an exported *value* (not a `?raw` scrape), naming exactly `/tutorial-getting-started` and framing it as `~10–15 min`.
+- `offInvariantGuard.test.ts` — **10 tests green**; no workflow panel / menu id / chord, and no seam bypass.
+- **No `cc_input` caller outside `XtermPane.tsx`** (grep-verified) — the "nothing ships" claim is checked, not assumed.
+
+**(iii) was declined deliberately:** no `SURFACE-` deferral to M14 was filed. A richer onboarding surface has no evidence behind it yet — the honest trigger for revisiting is **real secondary-user feedback**, which does not exist (Claudesk is not yet public; that is M14's own job). Filing a speculative anchor now would create a backlog item nobody can close on evidence. If feedback later shows first-run users stalling at "type this command yourself," that is the moment to reopen — and this verdict is the record of what was considered.
 
 ### Verdict (a) — Settings surface
 
