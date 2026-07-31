@@ -217,3 +217,6 @@ Each WP extends a shipped, documented seam rather than introducing a new one:
 Nothing here touches the `CcSession` trait boundary, the hook channel, the status broadcaster, or the gate seam's contract.
 
 **One doc-resync item for close:** WP1's per-project read path is a genuine as-built architectural addition (the first per-project setting with a live read/write path). Record it in `arch.md` at `/product-finalize` — flagged now so the close does not have to rediscover it.
+
+## Session Handoff — 2026-07-31 14:46
+Handed off. See `workflow-system/state/.session.md` to restore.
