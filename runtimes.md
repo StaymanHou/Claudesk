@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-28
+updated: 2026-07-31
 ---
 
 # Runtime Registry
@@ -77,9 +77,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 2.3s (2026-07-29, M10.9 WP3 Phase 4 — WP3 COMPLETE: the invite modal + highlight seam + Esc union + DEV reset seam; +29 tests total across the phase incl. the fail-closed show-decision extraction → 117 files / 1307 pass, 0 fail)
+- **Last:** 2.5s (2026-07-31, M11.5 `/product-wbs` baseline — 121 files / 1400 pass, 0 fail; the M10.9-close baseline confirmed green before decomposing M11.5)
 - **Use timeout:** 120000
 - **History:**
+  - 2.5s — 2026-07-31 (M11.5 /product-wbs baseline: 121 files / 1400 pass)
   - 2.3s — 2026-07-29 (WP3 P4 verify-codify: +2, 1307 pass — WP3 COMPLETE)
   - 2.3s — 2026-07-29 (WP3 P3 verify-codify: +12, 1278 pass)
   - 2.2s — 2026-07-29 (WP3 P3 build: +6, 1262 pass)
