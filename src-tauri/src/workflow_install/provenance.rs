@@ -78,6 +78,26 @@ pub fn write_record(claudesk_root: &Path, record: &InstallRecord) -> io::Result<
     fs::write(record_path(claudesk_root), json)
 }
 
+/// Delete the record (M10.9 WP3.5b task P2.2) — **sequenced LAST in the uninstall run**, the
+/// mirror of the install's write-last: a failed uninstall leaves the record describing what
+/// still exists, and only a fully successful removal forgets it
+/// (`SURFACE-2026-07-30-WP3.5B-UNINSTALL-MUST-CLEAR-THE-PROVENANCE-RECORD`).
+///
+/// The ordering is pinned by behavioral failure-injection tests in `runner`, NOT by a source
+/// position guard — the position-tripwire approach was proven decorative twice in WP3.5a and
+/// deleted at this WP's Phase 1.
+///
+/// Idempotent on an already-missing record: the goal state is "no record", and a record that
+/// disappeared between the guard's read and this call (e.g. a concurrent hand-cleanup) means
+/// the goal is already met, not that the uninstall failed. Every other error is real and must
+/// surface — a record that CANNOT be deleted leaves Claudesk claiming an install that is gone.
+pub fn delete_record(claudesk_root: &Path) -> io::Result<()> {
+    match fs::remove_file(record_path(claudesk_root)) {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        other => other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,6 +178,55 @@ mod tests {
     }
 
     #[test]
+    fn delete_removes_an_existing_record() {
+        let root = TempDir::new().unwrap();
+        write_record(root.path(), &a_record(PathBuf::from("/somewhere"))).unwrap();
+
+        delete_record(root.path()).unwrap();
+
+        assert!(
+            read_record(root.path()).is_none(),
+            "a deleted record must read as None — the state a fresh machine has"
+        );
+        assert!(
+            !record_path(root.path()).exists(),
+            "the file itself must be gone, not emptied or renamed"
+        );
+    }
+
+    #[test]
+    fn delete_is_idempotent_when_no_record_exists() {
+        // The goal state is "no record". A second delete — or a delete racing a hand-cleanup —
+        // finds the goal already met and must not report failure.
+        let root = TempDir::new().unwrap();
+
+        assert!(delete_record(root.path()).is_ok());
+    }
+
+    #[test]
+    fn delete_surfaces_a_real_io_error_rather_than_swallowing_it() {
+        // A record that CANNOT be deleted leaves Claudesk claiming an install that is gone —
+        // the caller must know. Provoked with a read-only parent dir (the record's unlink
+        // fails), then restored so the TempDir can clean itself up.
+        use std::os::unix::fs::PermissionsExt;
+        let root = TempDir::new().unwrap();
+        write_record(root.path(), &a_record(PathBuf::from("/somewhere"))).unwrap();
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o555)).unwrap();
+
+        let result = delete_record(root.path());
+
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            result.is_err(),
+            "an undeletable record must surface as an error, never as success"
+        );
+        assert!(
+            read_record(root.path()).is_some(),
+            "the record must still be there after the failed delete"
+        );
+    }
+
+    #[test]
     fn every_write_stays_inside_the_injected_root() {
         // ═══════════════════════════════════════════════════════════════════════════
         // The containment proof the high-priority sandbox SURFACE demands: the fixture
@@ -209,22 +278,10 @@ mod tests {
     fn the_real_home_is_never_referenced_by_this_module() {
         // Companion to the parent module's `roots_are_injected_never_ambient`, applied to the
         // layer that actually writes files. The parent guards the decision logic; this guards
-        // the IO.
-        // Splits on `mod tests`, not on `#[cfg(test)]` — the sibling guard in `mod.rs` was
-        // silently blinded by the attribute form (that file carries the attribute twice, so
-        // the split truncated seven lines in). This file has it once today, so the attribute
-        // form would work here — but the failure is invisible when it happens, so both guards
-        // use the form that cannot be broken by adding a second gated declaration.
-        let src = include_str!("provenance.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
-        let code: String = production
-            .lines()
-            .filter(|l| {
-                let t = l.trim_start();
-                !t.starts_with("//") && !t.starts_with("*") && !t.starts_with("/*")
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+        // the IO. The extractor is the shared one in `source_guard.rs` — its split-on-`mod
+        // tests` discipline and the truncation meta-test live there now, once, for every file.
+        let code =
+            crate::workflow_install::source_guard::production_code(include_str!("provenance.rs"));
 
         for forbidden in ["home_dir", "env::var", "std::env", "dirs::home"] {
             assert!(

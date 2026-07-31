@@ -60,7 +60,9 @@ describe("Settings panel — the horizontal-overflow guard WP3 paid for", () => 
     // If this ever changes, the child-side fixes may become unnecessary — but silently keeping
     // them is harmless, whereas silently REMOVING them while flex-start persists is the bug. This
     // assertion documents the coupling rather than guessing at it.
-    expect(ruleBody(".settings-group-body")).toContain("align-items: flex-start");
+    expect(ruleBody(".settings-group-body")).toContain(
+      "align-items: flex-start",
+    );
   });
 
   it.each(WIDE_FLEX_CHILDREN)(
@@ -109,18 +111,76 @@ describe("Settings panel — the horizontal-overflow guard WP3 paid for", () => 
       ".install-wizard-warning",
       ".install-wizard-error",
       ".substrate-install-button",
+      // WP3.5b: the uninstall dialog's disclosure list. Added the same day an automated
+      // used-vs-defined sweep caught it undefined before it reached a browser — the exact
+      // CRITICAL WP3.5a shipped eleven times over.
+      ".install-wizard-list",
+      ".uninstall-preview-log",
     ]) {
-      expect(CSS, `${cls} is referenced by the wizard but not defined`).toContain(
-        `${cls} {`,
-      );
+      expect(
+        CSS,
+        `${cls} is referenced by the wizard but not defined`,
+      ).toContain(`${cls} {`);
     }
+  });
+
+  it("every className the substrate + uninstall components use is defined in App.css", () => {
+    // The GENERAL form of the check above, and the one that would have caught WP3.5a's
+    // CRITICAL without anyone maintaining a list: sweep the components' actual `className`
+    // attributes and diff them against the stylesheet. A hand-maintained list only guards the
+    // classes someone remembered to add to it — this guards the ones they didn't.
+    const defined = new Set(
+      CSS.match(/\.[a-zA-Z0-9_-]+/g)?.map((s) => s.slice(1)) ?? [],
+    );
+    const used = new Set<string>();
+    for (const file of [
+      "../WorkflowUninstallDialog.tsx",
+      "../WorkflowInstallWizard.tsx",
+      "../WorkflowSubstrateInfo.tsx",
+    ]) {
+      const src = readFileSync(
+        fileURLToPath(new URL(file, import.meta.url)),
+        "utf8",
+      );
+      for (const m of src.matchAll(/className="([^"]+)"/g)) {
+        for (const cls of m[1].split(/\s+/)) used.add(cls);
+      }
+    }
+    // `substrate-steps` is a pre-existing structural wrapper with no styling of its own —
+    // grandfathered explicitly rather than silently, so a NEW undefined class still fails.
+    const allowedUnstyled = new Set(["substrate-steps"]);
+    const missing = [...used].filter(
+      (c) => !defined.has(c) && !allowedUnstyled.has(c),
+    );
+    expect(
+      missing,
+      `classNames used but never defined in App.css: ${missing.join(", ")}`,
+    ).toEqual([]);
+    // Positive half — a sweep that found nothing to check would pass vacuously.
+    expect(used.size).toBeGreaterThan(8);
+  });
+
+  it("caps the uninstall preview well under the generic log height", () => {
+    // The dialog must fit the panel body (~600px). At the generic 220px log cap it ran ~700px
+    // and put its entire button row below the fold — the operator saw a click do nothing.
+    // Asserted as a NUMBER, not merely as "the declaration exists": a cap that drifted back up
+    // would reproduce the bug while a presence check stayed green.
+    const body = ruleBody(".uninstall-preview-log");
+    expect(body, ".uninstall-preview-log must exist in App.css").not.toBe("");
+    const cap = Number(/max-height:\s*(\d+)px/.exec(body)?.[1]);
+    expect(cap).toBeGreaterThan(0);
+    expect(cap).toBeLessThanOrEqual(140);
+    // And it must still scroll rather than clip — inherited from `.install-wizard-log`.
+    expect(ruleBody(".install-wizard-log")).toContain("overflow: auto");
   });
 
   it("would fail if a required declaration were removed", () => {
     // Meta-test. A guard that cannot fail is decoration — and this module has already shipped two
     // guards that passed broken code. Proves the extractor actually scopes to a rule body by
     // asserting a declaration that is NOT in it.
-    expect(ruleBody(".install-wizard")).not.toContain("align-items: flex-start");
+    expect(ruleBody(".install-wizard")).not.toContain(
+      "align-items: flex-start",
+    );
     expect(ruleBody("no-such-selector-here")).toBe("");
   });
 });

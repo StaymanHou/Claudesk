@@ -10,6 +10,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  armRendersInstallSlot,
+  armRendersUninstallSlot,
   offersInstallWizard,
   substrateArmFor,
   type InstallProvenance,
@@ -216,7 +218,9 @@ describe("install-affordance POSITION — under the status line, above the manua
     "utf8",
   );
 
-  /** Just the `absent` arm's JSX — the only arm that renders the install action. */
+  /** Just the `absent` arm's JSX. (Since the P2.verify-human.2 fix, the installed arm ALSO
+   *  renders the slot — as `{slot}`, computed once through `armRendersInstallSlot` — so the
+   *  literal these position checks anchor on is `{slot}`, not `{installAction}`.) */
   function absentArm(): string {
     const at = INFO.indexOf('data-testid="substrate-info-absent"');
     if (at === -1) return "";
@@ -228,7 +232,7 @@ describe("install-affordance POSITION — under the status line, above the manua
     const arm = absentArm();
     expect(arm, "the absent arm must exist").not.toBe("");
     const status = arm.indexOf("not installed");
-    const action = arm.indexOf("{installAction}");
+    const action = arm.indexOf("{slot}");
     expect(status, "status line must be present").toBeGreaterThan(-1);
     expect(
       action,
@@ -242,7 +246,7 @@ describe("install-affordance POSITION — under the status line, above the manua
 
   it("renders the install action BEFORE the manual-steps disclosure", () => {
     const arm = absentArm();
-    const action = arm.indexOf("{installAction}");
+    const action = arm.indexOf("{slot}");
     const manual = arm.indexOf("substrate-install-disclosure");
     expect(
       manual,
@@ -343,5 +347,87 @@ describe("reveal-on-open — the wizard must not open half-clipped", () => {
     expect(refAt).toBeGreaterThan(-1);
     // The ref must be on the same element as the root class (within its attribute list).
     expect(Math.abs(refAt - rootAt)).toBeLessThan(160);
+  });
+});
+
+describe("armRendersInstallSlot — the open wizard must survive the absent→installed flip", () => {
+  // The regression this pins (WP3.5b Phase 2 verify-human, operator-driven sandboxed run):
+  // on a successful install, the finished event puts the wizard on its done step AND fires
+  // the presence refresh, flipping the arm absent→installed. With the slot rendered only in
+  // the absent arm, that flip unmounted the wizard — the done step and its "Enable workflow
+  // features & close" button vanished before they could be read. WP3.5a's stale-status-row
+  // fix (refresh BOTH state sources) is what armed this; the two fixes were verified
+  // individually, never together.
+
+  it("renders the slot in the absent arm — the button and the running wizard", () => {
+    expect(armRendersInstallSlot("absent")).toBe(true);
+  });
+
+  it("renders the slot in the installed arm — the done step arrives WITH the flip", () => {
+    expect(armRendersInstallSlot("installed")).toBe(true);
+  });
+
+  it("renders nothing while presence is unresolved", () => {
+    expect(armRendersInstallSlot("nothing")).toBe(false);
+  });
+
+  // The value tests above pin the DECISION; this pins its CONSUMPTION — a render branch that
+  // drops `{slot}` would leave the decision true and the wizard still unmounting. Count-based
+  // (not anchored-forward: an anchor search cannot see a site removed before it), against
+  // comment-stripped source (a guard reading raw source matches its own prose).
+  const INFO_CODE = readFileSync(
+    fileURLToPath(new URL("../WorkflowSubstrateInfo.tsx", import.meta.url)),
+    "utf8",
+  )
+    .split("\n")
+    .filter((l) => {
+      const t = l.trim();
+      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+    })
+    .join("\n");
+
+  it("both allowed arms consume the slot — exactly two render sites", () => {
+    const sites = INFO_CODE.split("{slot}").length - 1;
+    expect(sites).toBe(2);
+  });
+
+  it("the slot is computed through the pure decision, not inlined per-branch", () => {
+    expect(INFO_CODE).toContain("armRendersInstallSlot(arm)");
+  });
+
+  // ── The same rule for the uninstall dialog ────────────────────────────────────────────
+  // Generalized after the SECOND instance of this defect class, one back-loop apart: a slot
+  // scoped to the arm that SUMMONS it rather than the arms it must SURVIVE. Install: the
+  // absent→installed flip on a successful install unmounted the done step. Uninstall: the
+  // installed→absent flip on a successful removal unmounted the "Removed" step and its Close
+  // button. Both found live; neither was reachable from a unit test of the component alone.
+
+  it("the uninstall dialog survives its own success (installed→absent flip)", () => {
+    expect(armRendersUninstallSlot("installed")).toBe(true);
+    expect(armRendersUninstallSlot("absent")).toBe(true);
+  });
+
+  it("renders no uninstall slot while presence is unresolved", () => {
+    expect(armRendersUninstallSlot("nothing")).toBe(false);
+  });
+
+  it("both allowed arms consume the uninstall slot — exactly two render sites", () => {
+    const sites = INFO_CODE.split("{uninstallSlot}").length - 1;
+    expect(sites).toBe(2);
+  });
+
+  it("the uninstall slot is computed through its pure decision too", () => {
+    expect(INFO_CODE).toContain("armRendersUninstallSlot(arm)");
+  });
+
+  it("every wizard/dialog slot survives BOTH resolved arms — the general rule", () => {
+    // The invariant behind both bugs, asserted once: any slot holding a long-lived surface
+    // must be rendered in every resolved arm, because the surface's own success is what
+    // changes the arm. A future third slot that forgets this fails here.
+    for (const decides of [armRendersInstallSlot, armRendersUninstallSlot]) {
+      expect(decides("absent")).toBe(true);
+      expect(decides("installed")).toBe(true);
+      expect(decides("nothing")).toBe(false);
+    }
   });
 });

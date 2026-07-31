@@ -52,6 +52,17 @@ import {
   type InstallProvenance,
 } from "./WorkflowSubstrateInfo";
 import { WorkflowInstallWizard } from "./WorkflowInstallWizard";
+import {
+  WorkflowUninstallDialog,
+  type UninstallFinished,
+} from "./WorkflowUninstallDialog";
+import {
+  gateToggleAction,
+  outcomeForIntent,
+  type UninstallIntent,
+  type UninstallTrigger,
+} from "./uninstallIntercept";
+import { UNINSTALL_BUTTON_LABEL } from "./workflowUninstallCopy";
 import { getWorkflowSubstrateInstalled } from "../../state/workflowSubstrate";
 import {
   CC_PERMISSION_MODE_EVENT,
@@ -279,6 +290,56 @@ export default function SettingsPanel({
     };
   }, []);
 
+  // M10.9 WP3.5b — the uninstall dialog's open state, plus HOW it was opened. Both entry
+  // points are supported (operator, 2026-07-31): the substrate row's button and the gate
+  // toggle. The trigger is carried explicitly rather than inferred, because `[Cancel]` means
+  // something different on each path — see `UninstallTrigger`.
+  const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [uninstallTrigger, setUninstallTrigger] =
+    useState<UninstallTrigger>("toggle");
+
+  /**
+   * The gate checkbox's onChange. Routes through the pure `gateToggleAction` decision rather
+   * than branching inline — this is the branch that decides whether a DESTRUCTIVE dialog
+   * opens, which is exactly the shape the repo rule says must be asserted as a value.
+   *
+   * The `"open-uninstall-dialog"` arm deliberately does NOT call `workflowFeatures.set(false)`
+   * first. Not persisting is what makes `[Cancel]` structural: there is no window in which the
+   * gate is off-but-not-uninstalled, so a crash or a quit mid-dialog cannot strand the user in
+   * `[Keep mccc]`'s state without having chosen it. See `uninstallIntercept.ts`.
+   */
+  const onGateToggle = useCallback(
+    (nextValue: boolean) => {
+      if (gateToggleAction(nextValue, provenance) === "open-uninstall-dialog") {
+        setUninstallTrigger("toggle");
+        setUninstallOpen(true);
+        return;
+      }
+      workflowFeatures.set(nextValue);
+    },
+    [provenance, workflowFeatures],
+  );
+
+  /**
+   * Apply an intent from the uninstall dialog.
+   *
+   * The intent→outcome mapping is the shared pure table, so the dialog's buttons and this
+   * handler cannot disagree about what "keep" versus "cancel" means. `persistGate: null` is
+   * the cancel case — nothing is written, which is the whole revert.
+   */
+  const onUninstallIntent = useCallback(
+    (intent: UninstallIntent) => {
+      const outcome = outcomeForIntent(intent);
+      if (outcome.persistGate !== null) {
+        workflowFeatures.set(outcome.persistGate);
+      }
+      // Deliberately does NOT close: `uninstall` fires this at run-START, and tearing the
+      // dialog down there would hide the run the user just authorized. The dialog owns its
+      // own dismissal via `onClose`.
+    },
+    [workflowFeatures],
+  );
+
   return (
     <div
       className="settings-panel"
@@ -335,7 +396,7 @@ export default function SettingsPanel({
               type="checkbox"
               data-testid="settings-workflow-features"
               checked={workflowFeatures.value}
-              onChange={(e) => workflowFeatures.set(e.target.checked)}
+              onChange={(e) => onGateToggle(e.target.checked)}
             />
             <span className="settings-row-label">Enable workflow features</span>
           </label>
@@ -381,6 +442,43 @@ export default function SettingsPanel({
               `null` (unresolved) shows nothing. */}
           <WorkflowSubstrateInfo
             present={substratePresent}
+            provenance={provenance}
+            uninstallAction={
+              uninstallOpen ? (
+                <WorkflowUninstallDialog
+                  trigger={uninstallTrigger}
+                  onIntent={onUninstallIntent}
+                  onClose={() => setUninstallOpen(false)}
+                  onFinished={(result: UninstallFinished) => {
+                    // Re-resolve BOTH sources, for the same reason the install path does:
+                    // they are independent and both stale after a removal. `provenance`
+                    // drives the affordances, `substratePresent` drives the status line —
+                    // refreshing only one was the shipped WP3.5a bug.
+                    refreshProvenance();
+                    refreshSubstratePresent();
+                    void result;
+                  }}
+                />
+              ) : provenance === "managed" ? (
+                /* The visible PAIR of [Install…] (operator, verify-human 2026-07-31). Only
+                   `managed` gets it — the provenance rule: Claudesk offers to remove only
+                   what it recorded installing, so `developer` (the operator's live repo, a
+                   hand-clone, or a damaged record) never sees this button, and `absent` has
+                   nothing to remove. Same slot as the dialog it opens, so the affordance and
+                   its expanded form occupy one position. */
+                <button
+                  type="button"
+                  className="substrate-install-button"
+                  data-testid="substrate-uninstall-button"
+                  onClick={() => {
+                    setUninstallTrigger("button");
+                    setUninstallOpen(true);
+                  }}
+                >
+                  {UNINSTALL_BUTTON_LABEL}
+                </button>
+              ) : undefined
+            }
             installAction={
               wizardOpen ? (
                 <WorkflowInstallWizard

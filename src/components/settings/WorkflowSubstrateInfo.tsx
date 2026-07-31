@@ -60,6 +60,44 @@ export function offersInstallWizard(state: InstallProvenance): boolean {
 }
 
 /**
+ * Whether a given arm renders the `installAction` slot.
+ *
+ * **`"installed"` is load-bearing, and it exists because of a live regression** (found at
+ * WP3.5b Phase 2 verify-human, operator-driven sandboxed run): on a successful install the
+ * finished event both puts the open wizard on its done step AND triggers the presence
+ * refresh — which flips the arm `absent → installed`. When only the absent arm rendered the
+ * slot, that flip unmounted the wizard milliseconds after success, so the done step and its
+ * "Enable workflow features & close" button were never readable. (WP3.5a's stale-status-row
+ * fix — refresh BOTH state sources — is what armed this; the two fixes were verified
+ * individually, never together.)
+ *
+ * Rendering the slot in the installed arm is safe in the steady state: `SettingsPanel`
+ * supplies the slot only while the wizard is open or provenance is `absent` (the button), so
+ * an installed machine with no wizard open gets `undefined` here and renders nothing.
+ */
+export function armRendersInstallSlot(arm: SubstrateArm): boolean {
+  return arm === "absent" || arm === "installed";
+}
+
+/**
+ * Whether a given arm renders the `uninstallAction` slot.
+ *
+ * **The exact mirror of `armRendersInstallSlot`, and it exists for the mirror reason.** The
+ * dialog is *triggered* from the installed arm, but a successful removal flips the arm
+ * `installed → absent` in the same instant the finished event puts the dialog on its "Removed"
+ * step — so an installed-only slot unmounts the dialog before the user can read the outcome or
+ * find its Close button. Found live at WP3.5b Phase 3 verify-self, one back-loop after the
+ * identical install-side bug; the two are the same defect class (a slot scoped to the state
+ * that *summons* it rather than the states it must *survive*).
+ *
+ * Safe in the steady state for the same reason: `SettingsPanel` supplies the slot only while
+ * the dialog is open, so an absent machine with no dialog gets `undefined` and renders nothing.
+ */
+export function armRendersUninstallSlot(arm: SubstrateArm): boolean {
+  return arm === "installed" || arm === "absent";
+}
+
+/**
  * Which arm to render for a presence value — extracted as a pure function so the
  * three-state decision is asserted as a VALUE, not as source text.
  *
@@ -128,6 +166,53 @@ export const TUTORIAL_POINTER_COPY =
  */
 export const TUTORIAL_COMMAND = "/tutorial-getting-started";
 
+/**
+ * The provenance sentence shown under the status line, per state (M10.9 WP3.5b task 3.5.3b —
+ * resolves `SURFACE-2026-07-30-WP3.5A-PROVENANCE-STATE-NOT-LEGIBLE-IN-UI`).
+ *
+ * ## Why this exists
+ * The status row said only `installed ✓` / `not installed`. That is *correct* but not
+ * *legible*: a user on the `developer` arm sees no install button and no uninstall option and
+ * is told nothing about why. The operator hit exactly this at WP3.5a verify-human — asking an
+ * agent why the wizard was missing, which is the surface failing to explain itself. Squarely
+ * the `[[explicit-selectable-mode-over-inferred-mode]]` axis: surface the state, don't leave
+ * it inferred.
+ *
+ * ## Why `developer` states a CONDITION, not a fixed cause
+ * `developer` covers three genuinely different situations — the operator's live repo, a
+ * hand-clone, and a record too damaged to trust (every degraded read fails toward it). The
+ * copy therefore says what Claudesk *knows* ("no record of installing it") and what it will
+ * *do* ("won't modify or remove it"), never guessing which of the three happened. This is the
+ * same discipline the consent copy uses for created directories: state the condition, because
+ * an enumeration goes stale invisibly.
+ *
+ * Values, not JSX, so the copy-fidelity test asserts what actually renders.
+ */
+export const PROVENANCE_COPY: Record<
+  "absent" | "managed" | "developer",
+  string
+> = {
+  absent: "Not found — Claudesk can install it for you below.",
+  // Was "To remove it, turn off Workflow features above." — a sentence pointing at a
+  // checkbox elsewhere, where the absent row had a button. The managed row now has its own
+  // [Uninstall & disable…] button, so the copy states provenance and lets the affordance
+  // speak for itself (operator, verify-human 2026-07-31).
+  managed: "Installed by Claudesk, so Claudesk can remove it.",
+  developer:
+    "Installed outside Claudesk — there's no record of Claudesk installing it, so Claudesk won't modify or remove it. Manage it yourself with the commands below.",
+};
+
+/**
+ * The provenance sentence for a state, or `null` while unresolved.
+ *
+ * `null` renders nothing for the same reason `substrateArmFor(null)` renders nothing: an
+ * unresolved read must not commit to a claim. Extracted as a pure function so the mapping is
+ * asserted as a value.
+ */
+export function provenanceCopyFor(state: InstallProvenance): string | null {
+  return state === null ? null : PROVENANCE_COPY[state];
+}
+
 interface WorkflowSubstrateInfoProps {
   /**
    * The install affordance for the `absent` arm — the **button, or the open wizard in its
@@ -150,6 +235,24 @@ interface WorkflowSubstrateInfoProps {
   installAction?: ReactNode;
   /** Result of the read-only `workflow_substrate_installed` check. */
   present: SubstratePresence;
+  /**
+   * The substrate's provenance, from `workflow_install_state`.
+   *
+   * Drives the explanatory sentence under the status line — the *why* behind an arm that
+   * offers no button. Separate from `present` because they answer different questions
+   * ("is it there?" vs "did WE put it there?") and are refreshed independently.
+   */
+  provenance?: InstallProvenance;
+  /**
+   * The uninstall affordance for the `managed` arm — in practice the open 3-intent dialog,
+   * slotted where the reader is already looking.
+   *
+   * Same slot discipline as `installAction`, and for the same reason: the dialog's open state
+   * lives in `SettingsPanel`, this component stays presentational. There is deliberately NO
+   * uninstall *button* — the dialog is triggered by turning the gate off, so a second entry
+   * point would need different gate semantics ([Cancel] re-enables what, exactly?).
+   */
+  uninstallAction?: ReactNode;
 }
 
 /**
@@ -227,11 +330,26 @@ function UninstallLine() {
 export function WorkflowSubstrateInfo({
   present,
   installAction,
+  provenance = null,
+  uninstallAction,
 }: WorkflowSubstrateInfoProps) {
   // Delegates the three-state decision to the pure `substrateArmFor` rather than re-deriving
   // it inline — that function is what the unit tests pin, so re-deriving here would let the
   // test and the render drift apart while both looked correct.
   const arm = substrateArmFor(present);
+
+  // Computed ONCE through the pure decision, rendered in every arm that decision allows —
+  // see `armRendersInstallSlot` for why the installed arm must keep an open wizard mounted.
+  const slot = armRendersInstallSlot(arm) ? installAction : undefined;
+
+  // Same discipline for the uninstall dialog — see `armRendersUninstallSlot` for why the
+  // ABSENT arm must render it (a successful removal flips the arm under the open dialog).
+  const uninstallSlot = armRendersUninstallSlot(arm)
+    ? uninstallAction
+    : undefined;
+
+  // The explanatory sentence — `null` while unresolved, which renders nothing.
+  const provenanceLine = provenanceCopyFor(provenance);
 
   if (arm === "nothing") return null;
 
@@ -241,9 +359,19 @@ export function WorkflowSubstrateInfo({
         <p className="substrate-status">
           Workflow system: <strong>not installed</strong>
         </p>
+        {/* The provenance sentence, between the status and the affordance — it is the
+         *why* that makes the affordance (or its absence) make sense. */}
+        {provenanceLine && (
+          <p className="settings-row-help" data-testid="substrate-provenance">
+            {provenanceLine}
+          </p>
+        )}
         {/* The wizard, directly under the status line it answers and above the manual
             fallback. This is the position the comment below predicted. */}
-        {installAction}
+        {slot}
+        {/* The uninstall dialog on its terminal step — a removal that just SUCCEEDED flips
+            this arm to absent, and the user still has to read the outcome and close it. */}
+        {uninstallSlot}
         {/* COLLAPSED by default (operator, 2026-07-29 — the expanded form ate the panel).
             The steps are ~14 lines of commands plus a JSON block; left open they pushed
             Analytics and Updates below the fold and made the most-used settings surface
@@ -286,6 +414,21 @@ export function WorkflowSubstrateInfo({
           ✓
         </span>
       </p>
+      {/* The provenance sentence — THE fix for the legibility gap: this is where a
+          `developer` user learns why no uninstall option exists, and a `managed` user learns
+          that the gate toggle is the route to one. */}
+      {provenanceLine && (
+        <p className="settings-row-help" data-testid="substrate-provenance">
+          {provenanceLine}
+        </p>
+      )}
+      {/* The open wizard survives the absent→installed arm flip here (its done step, with
+          the enable-and-close button, arrives in the same instant the presence refresh
+          flips the arm). Steady-state installed machines get undefined and render nothing. */}
+      {slot}
+      {/* The 3-intent uninstall dialog, slotted in the same place for the same reason the
+          install wizard is: the expanded form belongs where the state it acts on is read. */}
+      {uninstallSlot}
       {/* Rendered from the exported constant, NOT re-typed inline — the copy-fidelity test
           asserts that constant, and a hand-copied duplicate here would let the two drift
           while the test stayed green (pinning a string nobody reads). The <code> styling is

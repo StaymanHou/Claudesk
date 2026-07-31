@@ -554,6 +554,12 @@ pub fn run() {
             workflow_install::commands::workflow_install_state,
             workflow_install::commands::workflow_install_start,
             workflow_install::commands::workflow_install_cancel,
+            // WP3.5b: the uninstall path. dry_run drives the 3-intent dialog's preview
+            // (the script's own output — one source of truth); start runs the guarded
+            // removal (refuse-guard structurally in the call path, record deleted LAST).
+            workflow_install::commands::workflow_uninstall_dry_run,
+            workflow_install::commands::workflow_uninstall_start,
+            workflow_install::commands::workflow_uninstall_cancel,
             workflow_substrate::commands::workflow_substrate_installed,
             workflow_substrate::commands::workflow_get_invite,
             workflow_substrate::commands::workflow_set_invite,

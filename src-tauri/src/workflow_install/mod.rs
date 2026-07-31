@@ -36,10 +36,14 @@
 //!    reachable only by an affirmative, well-formed record. Failing the other way would mean a
 //!    corrupt file could make someone's substrate eligible for deletion.
 //!
-//! ## What lives here vs. in WP3.5b
-//! WP3.5a writes `Managed` and reads all three states (to decide whether to offer installing).
-//! **Nothing in this module deletes anything.** The uninstall path — and the refuse-guard that
-//! must precede it — is WP3.5b's task one.
+//! ## What lives here (updated at WP3.5b Phase 2)
+//! WP3.5a writes `Managed` and reads all three states. WP3.5b Phase 1 added the
+//! **refuse-guard** (`guard.rs`) — landed, per the SURFACE's mandated ordering, before any
+//! deleting path existed. Phase 2 added the deleting path itself: `runner::run_uninstall`
+//! (script → clone-dir removal → record deletion LAST), reachable only through
+//! `run_uninstall_guarded`, whose `UninstallTarget` is constructible only by `refuse_guard`.
+//! The crate-level delete guard in `source_guard.rs` pins deletion APIs to a sanctioned
+//! (file, token, count) allowlist — extending it is a conscious act any new delete must take.
 
 // ## `#![allow(dead_code)]` was here, and is now REMOVED (2026-07-29)
 // Phase 1 built the sandbox fixture and provenance store before anything that writes — the
@@ -60,9 +64,15 @@
 // takes its roots as parameters so the sandbox can contain writes; this is the sanctioned
 // exception, kept to one thin file so there is exactly one place to audit.
 pub mod commands;
+// The refuse-guard (WP3.5b task 3.5.2): the single authority on what the uninstall path may
+// touch. Production code, landed BEFORE the deleting path it guards — `UninstallTarget`'s
+// only constructor is `refuse_guard`, so the ordering is a compiler fact, not a convention.
+pub mod guard;
 pub mod provenance;
-// The two subprocess spawns (`git clone` → the repo's own `install.sh`) plus the ordering that
-// makes a failed install leave no provenance record. Additive only — no deleting path.
+// The subprocess spawns (`git clone` → `install.sh` on the install side; `uninstall.sh`
+// [--dry-run] on the uninstall side) plus both load-bearing orderings: record written LAST on
+// install, deleted LAST on uninstall. Carries the crate's ONE deleting call, behind the
+// guard-typed `UninstallTarget` and the source_guard allowlist.
 pub mod runner;
 // Phase 3 — what a finished run MEANS (gate revert, cleanup, what to surface), as a pure
 // reducer over `runner`'s outcome. Separate from `runner` because root `CLAUDE.md` requires
@@ -75,6 +85,10 @@ pub mod terminal;
 // contain writes.
 #[cfg(test)]
 pub mod sandbox;
+// Shared source-guard machinery: the ONE production-slice extractor every per-module guard
+// consumes, plus the crate-level delete guard. Test-only for the same reason sandbox is.
+#[cfg(test)]
+pub mod source_guard;
 
 use std::path::{Path, PathBuf};
 
@@ -161,55 +175,10 @@ mod tests {
     use super::*;
     use provenance::InstallRecord;
 
-    /// This module's production source, comments stripped, for the two source guards below.
-    ///
-    /// **Splits on `mod tests`, NOT on the first `#[cfg(test)]`.** That distinction is load
-    /// bearing and cost a real failure to find: this file carries `#[cfg(test)]` twice — once
-    /// near the top to gate the `sandbox` module declaration, and once on the test module
-    /// itself. Splitting on the attribute truncated the "production" slice at line 7,
-    /// silently discarding the entire rest of the file. The forbidden-token scans would then
-    /// have passed no matter what the module contained, which is the vacuous-guard failure
-    /// mode this repo has paid for repeatedly — here caught only because the positive half
-    /// (below) failed loudly. The positive assertions are the reason this bug surfaced at
-    /// all; a guard with only negative assertions would have shipped broken and silent.
-    fn production_source() -> String {
-        let src = include_str!("mod.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
-        production
-            .lines()
-            .filter(|l| {
-                let t = l.trim_start();
-                !t.starts_with("//") && !t.starts_with("*") && !t.starts_with("/*")
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    #[test]
-    fn the_source_guards_actually_see_the_whole_production_body() {
-        // Meta-test for `production_source`. The extractor is the shared dependency of both
-        // source guards, so a bug in it disables both at once — exactly what happened when it
-        // split on `#[cfg(test)]` and truncated at the `sandbox` declaration seven lines in.
-        //
-        // Asserts on the LAST production item, not the first: truncation always eats the tail,
-        // so pinning something near the end is what makes the check meaningful.
-        let code = production_source();
-
-        assert!(
-            code.contains("fn resolve_state"),
-            "the extractor is truncating before the end of production code — both source \
-             guards are blind to whatever it cut"
-        );
-        assert!(
-            code.contains("InstallState::Developer"),
-            "the extractor must reach the last production arm"
-        );
-        assert!(
-            !code.contains("fn production_source"),
-            "the extractor must not include the test module itself, or the guards would \
-             match their own forbidden-token literals"
-        );
-    }
+    // The local `production_source` extractor and its meta-test moved to `source_guard.rs`
+    // at WP3.5b Phase 1 (SURFACE-2026-07-29-QUALITY-WP3.5A-SOURCE-GUARD-CONSOLIDATION):
+    // one extractor, one place for the truncation-bug class, meta-tested over every file's
+    // tail at once.
 
     fn a_record() -> InstallRecord {
         InstallRecord {
@@ -361,7 +330,7 @@ mod tests {
         // sandbox" is impractical to assert from a unit test, while "this module never
         // resolves a real home" is exact and fails the moment someone adds one.
         // ═══════════════════════════════════════════════════════════════════════════
-        let code = production_source();
+        let code = source_guard::production_code(include_str!("mod.rs"));
 
         for forbidden in ["home_dir", "env::var", "std::env", "dirs::home"] {
             assert!(
@@ -386,20 +355,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn nothing_in_this_module_deletes() {
-        // WP3.5a is the ADDITIVE half. The deleting path — and the refuse-guard that must
-        // precede it — is WP3.5b's task one, and the SURFACE's mandated ordering only means
-        // something if this WP genuinely ships no delete. Guarding it here means the ordering
-        // is enforced rather than remembered.
-        let code = production_source();
-
-        for forbidden in ["remove_dir", "remove_file", "uninstall.sh"] {
-            assert!(
-                !code.contains(forbidden),
-                "WP3.5a must ship NO deleting path (`{forbidden}` found) — uninstall is \
-                 WP3.5b, where the refuse-guard is task one, before any delete exists."
-            );
-        }
-    }
+    // `nothing_in_this_module_deletes` (and its siblings in runner/commands) collapsed into
+    // ONE crate-level guard at WP3.5b Phase 1:
+    // `source_guard::tests::only_the_sanctioned_paths_may_call_deletion_apis`. The per-WP
+    // "ships no delete" claim expired the moment a deleting WP started; the crate guard's
+    // allowlist (all-zero in Phase 1) is the successor that survives it.
 }

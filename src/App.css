@@ -3388,6 +3388,36 @@ body,
   color: rgba(255, 255, 255, 0.5);
 }
 
+/* The uninstall dialog's removal preview (WP3.5b).
+   Shorter than the generic `.install-wizard-log` cap on purpose: the preview is ~55 lines of
+   real `--dry-run` output, and at 220px the dialog totalled ~700px inside a ~600px panel body,
+   which put its ENTIRE button row below the fold — the operator clicked the toggle and saw
+   nothing happen. Capping the scrollable region keeps the whole dialog, buttons included,
+   within the panel. The content is not truncated: it scrolls inside its own box, which is the
+   project rule for wide/tall content. */
+.uninstall-preview-log {
+  max-height: 96px;
+}
+
+/* The uninstall dialog's disclosure list (WP3.5b). `min-width: 0` + the inherited
+   `align-self: stretch` from `.install-wizard` are what keep long effect sentences from
+   forcing the whole Settings panel to scroll horizontally — the bug WP3 diagnosed live and
+   WP3.5a re-introduced with eleven undefined classes. Pinned by settingsPanelLayout.test.ts. */
+.install-wizard-list {
+  margin: 0;
+  padding-left: 18px;
+  min-width: 0;
+  align-self: stretch;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.install-wizard-list li {
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+
 /* Warnings, not errors: the substrate-installed-but-unrecorded and
    partial-clone-left cases are states the user must act on, not failures. */
 .install-wizard-warning {

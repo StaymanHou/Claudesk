@@ -29,7 +29,7 @@
 //! "a partial clone remains at <path>" rather than silently actioned. Honest, and it keeps the
 //! additive half additive.
 
-use super::runner::InstallError;
+use super::runner::{InstallError, UninstallError};
 
 /// What must happen to `workflow_features_enabled` after a run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,6 +172,133 @@ pub fn resolve_terminal_state(outcome: Result<(), &InstallError>) -> TerminalSta
                 "Install cancelled.".to_string()
             }),
             substrate_installed: false,
+        },
+    }
+}
+
+/// What happened to the provenance record after an uninstall run.
+///
+/// A first-class value rather than a bool because it is THE safety-relevant fact of the
+/// uninstall half: only a fully successful removal may forget the record
+/// (`SURFACE-2026-07-30-WP3.5B-UNINSTALL-MUST-CLEAR-THE-PROVENANCE-RECORD`), and every
+/// failure keeps it describing what still exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordFate {
+    /// The record survives — every non-success outcome.
+    Kept,
+    /// The record was deleted — the fully-successful outcome only.
+    Deleted,
+}
+
+/// The resolved meaning of a finished uninstall run.
+///
+/// Note what is NOT here: a gate action. Unlike the install half (where a failure must
+/// revert an optimistic enable), the uninstall's gate movement belongs to the 3-intent
+/// dialog — the user's button choice sets the gate, and the run's outcome does not
+/// second-guess it (spec assumption 2: the gate lands disabled even on a failed uninstall;
+/// the record staying `Kept` is what keeps a retry reachable).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UninstallTerminalState {
+    /// What happened to the provenance record.
+    pub record: RecordFate,
+    /// The message to show the user — the subprocess's own text where there is one, the
+    /// refuse-guard's explanation for a refusal. `None` on success.
+    pub surfaced_error: Option<String>,
+    /// True only when everything is gone: script ran, clone removed, record deleted.
+    pub removal_complete: bool,
+    /// Whether re-running the uninstall wizard is the recovery path. False on success
+    /// (nothing to retry), on a refusal (re-running re-refuses — the message says what to
+    /// do instead), and on a record-delete failure (the remaining fix is removing one file,
+    /// which the message states; a re-run would be refused as unresolvable).
+    pub retry_available: bool,
+}
+
+/// Reduce a finished uninstall run to its meaning. **Pure** — no IO, no clock.
+///
+/// Per-arm, no wildcard, no shared default: adding an [`UninstallError`] variant fails to
+/// compile until someone decides its row — the compiler's exhaustive `match` is the ONLY
+/// reliable coverage enforcement for a decision table
+/// (`SURFACE-2026-07-29-REMEMBER-TO-REGISTER-GUARDS-ARE-NOT-GUARDS`: three attempts at a
+/// counted/enumerated coverage guard were each defeated by the same act of forgetting).
+pub fn resolve_uninstall_terminal_state(
+    outcome: Result<(), &UninstallError>,
+) -> UninstallTerminalState {
+    let err = match outcome {
+        Ok(()) => {
+            return UninstallTerminalState {
+                record: RecordFate::Deleted,
+                surfaced_error: None,
+                removal_complete: true,
+                retry_available: false,
+            }
+        }
+        Err(e) => e,
+    };
+
+    match err {
+        // The refuse-guard said no. Nothing ran; the record (if any) is untouched. The
+        // guard's own message explains — it is the one place refusal language lives.
+        UninstallError::Refused(reason) => UninstallTerminalState {
+            record: RecordFate::Kept,
+            surfaced_error: Some(reason.user_message()),
+            removal_complete: false,
+            retry_available: false,
+        },
+
+        // The script could not be spawned. Nothing was changed; fix the cause and retry.
+        UninstallError::ScriptUnavailable(msg) => UninstallTerminalState {
+            record: RecordFate::Kept,
+            surfaced_error: Some(msg.clone()),
+            removal_complete: false,
+            retry_available: true,
+        },
+
+        // The script ran and failed. It is idempotent — a retry finishes what it started.
+        // The clone and record both remain, so the state stays managed and re-offerable.
+        UninstallError::ScriptFailed { .. } => UninstallTerminalState {
+            record: RecordFate::Kept,
+            surfaced_error: Some(err.to_string()),
+            removal_complete: false,
+            retry_available: true,
+        },
+
+        // The script succeeded but the clone dir would not delete. A partial tree may
+        // remain; the record remains and still describes it — delete-last is what makes
+        // this arm safe rather than lying.
+        UninstallError::CloneRemoveFailed { .. } => UninstallTerminalState {
+            record: RecordFate::Kept,
+            surfaced_error: Some(err.to_string()),
+            removal_complete: false,
+            retry_available: true,
+        },
+
+        // Everything is gone except the record. The one arm where "kept" is a PROBLEM to
+        // surface rather than a safety property: Claudesk will keep reading `managed` for a
+        // substrate that no longer exists until the record file is removed. Not retryable
+        // through the wizard (the recorded path no longer resolves, so the guard would
+        // refuse); the message carries what remains.
+        UninstallError::RecordDeleteFailed(_) => UninstallTerminalState {
+            record: RecordFate::Kept,
+            surfaced_error: Some(err.to_string()),
+            removal_complete: false,
+            retry_available: false,
+        },
+
+        // Cancelled between steps. `script_ran` decides the honest message: before the
+        // script nothing changed at all; after it, the symlinks are gone while the download
+        // and record remain (idempotent re-run finishes the job).
+        UninstallError::Cancelled { script_ran } => UninstallTerminalState {
+            record: RecordFate::Kept,
+            surfaced_error: Some(if *script_ran {
+                "Uninstall cancelled after the script ran — the workflow links are removed, \
+                 but the download and the install record remain. Run uninstall again to \
+                 finish."
+                    .to_string()
+            } else {
+                "Uninstall cancelled. Nothing was changed.".to_string()
+            }),
+            removal_complete: false,
+            retry_available: true,
         },
     }
 }
@@ -579,5 +706,169 @@ mod tests {
             msg.contains("[skip] skills/feature-build (exists but is not a symlink)"),
             "the script's own text must survive into the message, got {msg:?}"
         );
+    }
+
+    // ─── WP3.5b Phase 2: the uninstall half of the table ───────────────────────────────
+
+    /// One row of the uninstall terminal-state table.
+    ///
+    /// Completeness note (the honest one, per
+    /// SURFACE-2026-07-29-REMEMBER-TO-REGISTER-GUARDS-ARE-NOT-GUARDS): no in-module test can
+    /// force this list to cover every variant — forgetting the row and forgetting the
+    /// enumeration are the same act of forgetting. The load-bearing enforcement is the
+    /// resolver's own per-arm exhaustive `match`, which fails to COMPILE when a variant is
+    /// added without a decision. This table asserts the decided VALUES.
+    struct UninstallRow {
+        name: &'static str,
+        outcome: Result<(), UninstallError>,
+        record: RecordFate,
+        removal_complete: bool,
+        retry_available: bool,
+        message_contains: &'static str,
+    }
+
+    fn uninstall_table() -> Vec<UninstallRow> {
+        use crate::workflow_install::guard::RefusalReason;
+        vec![
+            UninstallRow {
+                name: "success",
+                outcome: Ok(()),
+                record: RecordFate::Deleted,
+                removal_complete: true,
+                retry_available: false,
+                message_contains: "",
+            },
+            UninstallRow {
+                name: "refused (no record)",
+                outcome: Err(UninstallError::Refused(RefusalReason::NoRecord)),
+                record: RecordFate::Kept,
+                removal_complete: false,
+                retry_available: false,
+                message_contains: "Nothing was changed",
+            },
+            UninstallRow {
+                name: "script not executable",
+                outcome: Err(UninstallError::ScriptUnavailable(
+                    "Permission denied (os error 13)".to_string(),
+                )),
+                record: RecordFate::Kept,
+                removal_complete: false,
+                retry_available: true,
+                message_contains: "os error 13",
+            },
+            UninstallRow {
+                name: "script exited non-zero",
+                outcome: Err(UninstallError::ScriptFailed {
+                    code: 2,
+                    output: "uninstall.sh: unknown argument".to_string(),
+                }),
+                record: RecordFate::Kept,
+                removal_complete: false,
+                retry_available: true,
+                message_contains: "unknown argument",
+            },
+            UninstallRow {
+                name: "clone removal failed",
+                outcome: Err(UninstallError::CloneRemoveFailed {
+                    path: "/tmp/vendor/mccc".to_string(),
+                    message: "Permission denied (os error 13)".to_string(),
+                }),
+                record: RecordFate::Kept,
+                removal_complete: false,
+                retry_available: true,
+                message_contains: "could not remove the download",
+            },
+            UninstallRow {
+                name: "record delete failed (everything else gone)",
+                outcome: Err(UninstallError::RecordDeleteFailed(
+                    "Read-only file system (os error 30)".to_string(),
+                )),
+                record: RecordFate::Kept,
+                removal_complete: false,
+                retry_available: false,
+                message_contains: "install record could not be deleted",
+            },
+            UninstallRow {
+                name: "cancelled before the script",
+                outcome: Err(UninstallError::Cancelled { script_ran: false }),
+                record: RecordFate::Kept,
+                removal_complete: false,
+                retry_available: true,
+                message_contains: "Nothing was changed",
+            },
+            UninstallRow {
+                name: "cancelled after the script",
+                outcome: Err(UninstallError::Cancelled { script_ran: true }),
+                record: RecordFate::Kept,
+                removal_complete: false,
+                retry_available: true,
+                message_contains: "Run uninstall again to finish",
+            },
+        ]
+    }
+
+    #[test]
+    fn the_uninstall_terminal_state_table_holds_for_every_outcome() {
+        for row in uninstall_table() {
+            let state = resolve_uninstall_terminal_state(row.outcome.as_ref().map(|_| ()));
+
+            assert_eq!(state.record, row.record, "record fate for '{}'", row.name);
+            assert_eq!(
+                state.removal_complete, row.removal_complete,
+                "removal_complete for '{}'",
+                row.name
+            );
+            assert_eq!(
+                state.retry_available, row.retry_available,
+                "retry_available for '{}'",
+                row.name
+            );
+            match &state.surfaced_error {
+                None => assert!(
+                    row.message_contains.is_empty(),
+                    "'{}' expected a message containing {:?}, got none",
+                    row.name,
+                    row.message_contains
+                ),
+                Some(msg) => assert!(
+                    msg.contains(row.message_contains),
+                    "'{}' message must contain {:?}, got {msg:?}",
+                    row.name,
+                    row.message_contains
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn only_full_success_deletes_the_record() {
+        // The uninstall half's single most important property, asserted across the whole
+        // table at once: RecordFate::Deleted appears on the Ok row and NOWHERE else.
+        for row in uninstall_table() {
+            let state = resolve_uninstall_terminal_state(row.outcome.as_ref().map(|_| ()));
+            assert_eq!(
+                state.record == RecordFate::Deleted,
+                row.outcome.is_ok(),
+                "'{}': the record may be Deleted on success and ONLY on success",
+                row.name
+            );
+        }
+    }
+
+    #[test]
+    fn a_refusal_surfaces_the_guards_own_explanation() {
+        use crate::workflow_install::guard::RefusalReason;
+        let state = resolve_uninstall_terminal_state(Err(&UninstallError::Refused(
+            RefusalReason::TargetIsHome {
+                resolved: std::path::PathBuf::from("/Users/someone"),
+            },
+        )));
+
+        let msg = state.surfaced_error.unwrap();
+        assert!(
+            msg.contains("home directory") && msg.contains("/Users/someone"),
+            "the refusal must reach the user as the guard's own explanation, got {msg:?}"
+        );
+        assert_eq!(state.record, RecordFate::Kept);
     }
 }

@@ -23,11 +23,24 @@
 //! then rolled back, because the record is never written speculatively. See
 //! [`InstallError`] for what each failure leaves behind.
 //!
-//! ## What this module deliberately does NOT do
-//! No deleting path. Not `remove_dir_all` on a failed clone, not an uninstall, nothing. A
-//! partial clone left by a failed `git` is reported, and the *caller* decides — Phase 3's
-//! terminal-state module owns cleanup decisions, and WP3.5b owns removal. Guarded by a source
-//! test, because "the additive half stays additive" is only meaningful if enforced.
+//! ## The deleting path lives here — and ONLY behind the refuse-guard (WP3.5b Phase 2)
+//! This module now carries the crate's single deleting call: [`run_uninstall`]'s removal of
+//! the managed clone dir. Three fences around it, none optional:
+//!
+//! 1. **Type-enforced guard:** it consumes a [`guard::UninstallTarget`], whose only
+//!    constructor is `refuse_guard` — so there is no compile-path to the delete that skips
+//!    the refusal checks. [`run_uninstall_guarded`] is the composition the command layer
+//!    calls.
+//! 2. **Sanctioned-count scan:** `source_guard`'s crate-level delete guard permits exactly
+//!    one `remove_dir` occurrence in this file (and one `remove_file` in `provenance`); any
+//!    new deletion call fails it until consciously sanctioned.
+//! 3. **Ordering:** script → clone-dir removal → record deletion **LAST** — the mirror of
+//!    the install's write-last, pinned by behavioral failure-injection tests. A failed
+//!    uninstall leaves the record describing what still exists.
+//!
+//! Install-side failures are still REPORTED, never cleaned up here (a failed clone's
+//! `Cleanup::RemovePartialClone` remains a decision the caller surfaces — acting on it would
+//! need a guard-approved target, which a failed install by definition lacks a record for).
 
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -35,6 +48,7 @@ use std::process::{Command, Stdio};
 
 use thiserror::Error;
 
+use super::guard::{self, UninstallTarget};
 use super::provenance::{self, InstallRecord};
 
 /// `git`, resolved from `PATH`.
@@ -318,6 +332,173 @@ pub fn run_install(
         .map_err(|e| InstallError::RecordWriteFailed(e.to_string()))?;
 
     Ok(InstallSuccess { record, cloned_to })
+}
+
+/// What went wrong during an uninstall, and — critically — what it left behind.
+///
+/// Same discipline as [`InstallError`]: each failing variant carries the subprocess's own
+/// output where there is one, and every variant answers "does the record survive?" — it does,
+/// for all of them. Only a fully successful run deletes the record (see [`run_uninstall`]).
+#[derive(Debug, Error)]
+pub enum UninstallError {
+    /// The refuse-guard said no. **Nothing ran and nothing was changed** — this variant
+    /// exists so the refusal reaches the user with its own explanation rather than as a
+    /// generic failure.
+    #[error("{}", .0.user_message())]
+    Refused(guard::RefusalReason),
+
+    /// `uninstall.sh` could not be spawned (not executable, for instance).
+    #[error("could not run {script}: {msg}", script = guard::UNINSTALL_SCRIPT, msg = .0)]
+    ScriptUnavailable(String),
+
+    /// `uninstall.sh` ran and failed. The script is idempotent, so a retry finishes what
+    /// this run started; the clone and the record both remain.
+    #[error("{script} failed (exit {code}): {output}", script = guard::UNINSTALL_SCRIPT)]
+    ScriptFailed { code: i32, output: String },
+
+    /// The script succeeded but the clone directory could not be removed. A partial tree may
+    /// remain; the record remains and still describes it.
+    #[error("could not remove the download at {path}: {message}")]
+    CloneRemoveFailed { path: String, message: String },
+
+    /// Everything was removed but the record could not be deleted. Claudesk will keep
+    /// claiming a managed install that is gone until the record file is removed — surfaced
+    /// so the user can act, never swallowed.
+    #[error("uninstalled, but the install record could not be deleted: {0}")]
+    RecordDeleteFailed(String),
+
+    /// The caller cancelled between steps. `script_ran` tells the truth about how far it
+    /// got: `false` means nothing was changed at all; `true` means the symlinks are already
+    /// removed while the download and the record remain (a re-run finishes the job).
+    #[error("cancelled by the user")]
+    Cancelled { script_ran: bool },
+}
+
+/// What a fully successful uninstall did.
+#[derive(Debug, PartialEq, Eq)]
+pub struct UninstallSuccess {
+    /// The clone directory that was removed — the guard-approved **canonicalized
+    /// observation**, reported back so containment assertions consume a production value
+    /// (never a test-constructed literal; the WP3.5a constant-true-assert lesson).
+    pub removed_clone_dir: std::path::PathBuf,
+}
+
+/// Build the `--dry-run` invocation of the clone's own `uninstall.sh`.
+///
+/// Pure, like [`clone_command`]. Takes the guard-approved target, not a bare path — even the
+/// read-only preview goes through the refuse-guard, so preview and action cannot disagree
+/// about what they are pointed at.
+pub fn dry_run_command(target: &UninstallTarget) -> (String, Vec<String>) {
+    (
+        target
+            .clone_dir()
+            .join(guard::UNINSTALL_SCRIPT)
+            .to_string_lossy()
+            .into_owned(),
+        vec!["--dry-run".to_string()],
+    )
+}
+
+/// Build the real invocation of the clone's own `uninstall.sh`.
+pub fn uninstall_command(target: &UninstallTarget) -> (String, Vec<String>) {
+    (
+        target
+            .clone_dir()
+            .join(guard::UNINSTALL_SCRIPT)
+            .to_string_lossy()
+            .into_owned(),
+        Vec::new(),
+    )
+}
+
+/// Run `uninstall.sh --dry-run` and return its real output — the wizard's removal preview.
+///
+/// **The script's output IS the preview** (operator decision, script finding 2): Claudesk
+/// never composes its own removal list, so preview and action share one source of truth.
+/// Callers should expect — and render honestly — the shapes real runs produce: `[remove]`,
+/// `[skip]`, `[ok]` lines, the *dangling into-repo link* case, and the unconditional legacy
+/// `claude-time` removals (upstream design rescuing pre-retirement installs).
+///
+/// Touches nothing: `--dry-run` is the script's own no-write mode, verified by hand against
+/// the sandbox at WP3.5a verify-human and pinned by a fixture test here.
+pub fn run_dry_run(
+    target: &UninstallTarget,
+    sink: &dyn OutputSink,
+) -> Result<String, UninstallError> {
+    let (program, args) = dry_run_command(target);
+    let (code, output) = run_streaming(&program, &args, Some(target.clone_dir()), sink)
+        .map_err(|e| UninstallError::ScriptUnavailable(e.to_string()))?;
+    if code != 0 {
+        return Err(UninstallError::ScriptFailed { code, output });
+    }
+    Ok(output)
+}
+
+/// Uninstall a guard-approved managed clone: run its `uninstall.sh`, remove the clone
+/// directory, and delete the provenance record — **in that order, record LAST**.
+///
+/// The ordering mirrors the install's write-last and exists for the same structural reason:
+/// there is no code path where the record is deleted and the removal then fails, so a failed
+/// uninstall always leaves the record describing what still exists
+/// (`SURFACE-2026-07-30-WP3.5B-UNINSTALL-MUST-CLEAR-THE-PROVENANCE-RECORD`).
+///
+/// `cancelled` is polled **between steps only** — before the script, and after the script
+/// but before the directory removal. Never mid-subprocess (killing the script halfway is how
+/// you get a half-unlinked substrate), and deliberately NOT between the directory removal
+/// and the record deletion: once the clone is gone, a record claiming it would be a lie, so
+/// those two steps are one unit as far as cancellation is concerned.
+pub fn run_uninstall(
+    target: &UninstallTarget,
+    claudesk_root: &Path,
+    sink: &dyn OutputSink,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<UninstallSuccess, UninstallError> {
+    if cancelled() {
+        return Err(UninstallError::Cancelled { script_ran: false });
+    }
+
+    // ── 1. The script — the substrate-editing half, with its own into-repo-only guards ──
+    let (program, args) = uninstall_command(target);
+    let (code, output) = run_streaming(&program, &args, Some(target.clone_dir()), sink)
+        .map_err(|e| UninstallError::ScriptUnavailable(e.to_string()))?;
+    if code != 0 {
+        return Err(UninstallError::ScriptFailed { code, output });
+    }
+
+    if cancelled() {
+        return Err(UninstallError::Cancelled { script_ran: true });
+    }
+
+    // ── 2. Remove the clone dir — THE crate's one deleting call, guard-typed target only ──
+    std::fs::remove_dir_all(target.clone_dir()).map_err(|e| UninstallError::CloneRemoveFailed {
+        path: target.clone_dir().display().to_string(),
+        message: e.to_string(),
+    })?;
+
+    // ── 3. Delete the record — LAST, and only after everything it described is gone ──────
+    provenance::delete_record(claudesk_root)
+        .map_err(|e| UninstallError::RecordDeleteFailed(e.to_string()))?;
+
+    Ok(UninstallSuccess {
+        removed_clone_dir: target.clone_dir().to_path_buf(),
+    })
+}
+
+/// The composition the command layer calls: refuse-guard, then uninstall.
+///
+/// Exists so the guard is **structurally in the call path** — a caller with a record and a
+/// home cannot reach [`run_uninstall`] except through [`guard::refuse_guard`], and the
+/// refusal arrives as a first-class [`UninstallError::Refused`] the terminal reducer can
+/// explain. Also what makes "a refused run deletes nothing" testable end-to-end.
+pub fn run_uninstall_guarded(
+    record: Option<&InstallRecord>,
+    home: &Path,
+    claudesk_root: &Path,
+    sink: &dyn OutputSink,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<UninstallSuccess, UninstallError> {
+    let target = guard::refuse_guard(record, home).map_err(UninstallError::Refused)?;
+    run_uninstall(&target, claudesk_root, sink, cancelled)
 }
 
 #[cfg(test)]
@@ -985,35 +1166,457 @@ mod tests {
         assert!(lines.iter().any(|l| l == "to-stderr"), "got {lines:?}");
     }
 
-    #[test]
-    fn this_module_ships_no_deleting_path() {
-        // WP3.5a is the additive half. A failed clone is REPORTED, never cleaned up here —
-        // cleanup decisions are Phase 3's and removal is WP3.5b's, where the refuse-guard
-        // lands first. The SURFACE's guard-before-destructive ordering only means something if
-        // this WP genuinely ships no delete.
-        let src = include_str!("runner.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
-        let code: String = production
-            .lines()
-            .filter(|l| {
-                let t = l.trim_start();
-                !t.starts_with("//") && !t.starts_with("*") && !t.starts_with("/*")
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+    // ─── WP3.5b Phase 2: the uninstall engine, against the sandbox ─────────────────────
 
-        for forbidden in [
-            "remove_dir",
-            "remove_file",
-            "uninstall.sh",
-            "home_dir",
-            "env::var",
-        ] {
+    /// Stage a managed install inside the sandbox: a clone dir carrying an executable
+    /// `uninstall.sh` with the given body, plus a provenance record describing it.
+    fn staged_managed_clone(sandbox: &Sandbox, script_body: &str) -> InstallRecord {
+        let clone = sandbox.vendor_dir().join("mccc");
+        std::fs::create_dir_all(&clone).unwrap();
+        let script = clone.join(guard::UNINSTALL_SCRIPT);
+        std::fs::write(&script, script_body).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let record = InstallRecord {
+            clone_path: clone,
+            installed_at: "2026-07-31T12:00:00Z".to_string(),
+            origin_url: "git@example.com:someone/repo.git".to_string(),
+        };
+        provenance::write_record(&sandbox.claudesk_root(), &record).unwrap();
+        record
+    }
+
+    /// Every path currently under the sandbox boundary — for proving a refused or cancelled
+    /// run changed NOTHING (a before/after set comparison, not a containment assert).
+    fn all_paths_under(root: &Path) -> Vec<std::path::PathBuf> {
+        let mut paths = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                let p = entry.path();
+                if p.is_dir() && !p.is_symlink() {
+                    stack.push(p.clone());
+                }
+                paths.push(p);
+            }
+        }
+        paths.sort();
+        paths
+    }
+
+    #[test]
+    fn a_successful_uninstall_runs_the_script_removes_the_clone_and_deletes_the_record_last() {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // THE composed end-to-end path, on production-reported observations: record
+        // read back from disk → refuse_guard → script → clone-dir removal → record
+        // deletion → resolve_state lands on Absent. (The WP3.5a codify gap said: never
+        // assert this chain on hand-built inputs.)
+        // ═══════════════════════════════════════════════════════════════════════════
+        let sandbox = Sandbox::new();
+        staged_managed_clone(
+            &sandbox,
+            "#!/bin/sh\necho '  [remove] skills/feature-build'\n",
+        );
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let sink = CollectingSink::new();
+
+        let ok = run_uninstall_guarded(
+            record.as_ref(),
+            &sandbox.home(),
+            &sandbox.claudesk_root(),
+            &sink,
+            &never_cancelled,
+        )
+        .expect("a staged managed clone must uninstall cleanly");
+
+        // The script really ran — its own output is the evidence.
+        assert!(
+            sink.lines()
+                .iter()
+                .any(|l| l.contains("[remove] skills/feature-build")),
+            "the script's real output must reach the sink, got {:?}",
+            sink.lines()
+        );
+        // The clone is gone, and the reported path is the guard's canonicalized observation.
+        assert!(!sandbox.vendor_dir().join("mccc").exists());
+        assert_eq!(
+            ok.removed_clone_dir,
+            sandbox
+                .vendor_dir()
+                .join("mccc")
+                .parent()
+                .unwrap()
+                .canonicalize()
+                .unwrap()
+                .join("mccc"),
+            "the removed path must be the canonicalized observation"
+        );
+        // The record is gone — deleted LAST, so its absence certifies everything before it.
+        assert!(provenance::read_record(&sandbox.claudesk_root()).is_none());
+        // And the composed state decision now reads Absent (no skills dir in the sandbox).
+        let present = crate::workflow_substrate::skills_dir_exists(&sandbox.home());
+        assert_eq!(
+            crate::workflow_install::resolve_state(
+                present,
+                provenance::read_record(&sandbox.claudesk_root()).as_ref()
+            ),
+            crate::workflow_install::InstallState::Absent
+        );
+    }
+
+    #[test]
+    fn after_uninstall_the_leftover_empty_skills_dir_reads_absent_not_developer() {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // The BLOCKING regression from Phase 3 verify-self, pinned at the composition
+        // that actually broke — presence + provenance together, seeded from the shape a
+        // REAL uninstall leaves on disk.
+        //
+        // `uninstall.sh` removes the per-skill symlinks and leaves `~/.claude/skills/`
+        // standing (it never created it). With presence as a bare `is_dir()`, that empty
+        // directory answered `true` while the record was gone, so
+        // `resolve_state(true, None)` → `Developer`: the panel claimed "installed ✓ …
+        // Claudesk won't modify or remove it" about a substrate it had just removed.
+        //
+        // Why no existing test caught it: the sandbox fixture never creates
+        // `.claude/skills`, so every post-removal assertion ran with presence=false and
+        // the composition was never exercised in the state a real machine reaches. This
+        // test creates the directory FIRST, then empties it the way the script does.
+        // ═══════════════════════════════════════════════════════════════════════════
+        let sandbox = Sandbox::new();
+        // Stage the clone FIRST — presence is now marker-based, so the skills entry must be a
+        // real symlink into a repo whose install.sh carries the workflow-system marker (a bare
+        // directory named `feature-build` is a USER's own skill, not this substrate).
+        staged_managed_clone(&sandbox, "#!/bin/sh\necho ok\n");
+        let clone = sandbox.vendor_dir().join("mccc");
+        std::fs::write(
+            clone.join("install.sh"),
+            "#!/usr/bin/env bash\nBEGIN_MARKER=\"<!-- BEGIN claude-workflow-system -->\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(clone.join("skills").join("feature-build")).unwrap();
+        let skills = sandbox.claude_dir().join("skills");
+        std::fs::create_dir_all(&skills).unwrap();
+        std::os::unix::fs::symlink(
+            clone.join("skills").join("feature-build"),
+            skills.join("feature-build"),
+        )
+        .unwrap();
+        assert_eq!(
+            crate::workflow_install::resolve_state(
+                crate::workflow_substrate::skills_dir_exists(&sandbox.home()),
+                provenance::read_record(&sandbox.claudesk_root()).as_ref()
+            ),
+            crate::workflow_install::InstallState::Managed,
+            "precondition: a populated skills dir plus a record is Managed"
+        );
+
+        // What the real script does: remove the SYMLINKS it created, leave the directory.
+        std::fs::remove_file(skills.join("feature-build")).unwrap();
+        assert!(skills.is_dir(), "the script leaves the skills dir standing");
+
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        std::fs::remove_file(provenance::record_path(&sandbox.claudesk_root())).unwrap();
+        assert!(
+            record.is_some(),
+            "precondition: a record existed before removal"
+        );
+
+        assert_eq!(
+            crate::workflow_install::resolve_state(
+                crate::workflow_substrate::skills_dir_exists(&sandbox.home()),
+                provenance::read_record(&sandbox.claudesk_root()).as_ref()
+            ),
+            crate::workflow_install::InstallState::Absent,
+            "a completed uninstall must read Absent — an empty leftover skills dir must \
+             NOT make it read Developer, which would claim an install that is gone AND \
+             say Claudesk will never touch it"
+        );
+    }
+
+    #[test]
+    fn a_failed_script_keeps_the_clone_and_the_record() {
+        let sandbox = Sandbox::new();
+        staged_managed_clone(&sandbox, "#!/bin/sh\necho 'about to fail'\nexit 3\n");
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let sink = CollectingSink::new();
+
+        let err = run_uninstall_guarded(
+            record.as_ref(),
+            &sandbox.home(),
+            &sandbox.claudesk_root(),
+            &sink,
+            &never_cancelled,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, UninstallError::ScriptFailed { code: 3, .. }),
+            "got {err:?}"
+        );
+        assert!(
+            sandbox.vendor_dir().join("mccc").exists(),
+            "a failed script must leave the clone for a retry"
+        );
+        assert!(
+            provenance::read_record(&sandbox.claudesk_root()).is_some(),
+            "the record must survive a failed script — it describes what still exists"
+        );
+    }
+
+    #[test]
+    fn a_failed_clone_removal_keeps_the_record() {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // The delete-record-LAST ordering, pinned BEHAVIORALLY by failure injection
+        // (never by source position — that tripwire was proven decorative and deleted).
+        // The removal step is made to fail by a read-only parent dir; the record must
+        // survive, still describing the remains.
+        // ═══════════════════════════════════════════════════════════════════════════
+        use std::os::unix::fs::PermissionsExt;
+        let sandbox = Sandbox::new();
+        staged_managed_clone(&sandbox, "#!/bin/sh\necho ok\n");
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let sink = CollectingSink::new();
+        std::fs::set_permissions(sandbox.vendor_dir(), std::fs::Permissions::from_mode(0o555))
+            .unwrap();
+
+        let err = run_uninstall_guarded(
+            record.as_ref(),
+            &sandbox.home(),
+            &sandbox.claudesk_root(),
+            &sink,
+            &never_cancelled,
+        )
+        .unwrap_err();
+
+        std::fs::set_permissions(sandbox.vendor_dir(), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        assert!(
+            matches!(err, UninstallError::CloneRemoveFailed { .. }),
+            "got {err:?}"
+        );
+        assert!(
+            provenance::read_record(&sandbox.claudesk_root()).is_some(),
+            "the record must NOT be deleted when the removal step fails — delete-last is \
+             the structural guarantee, and this is its behavioral pin"
+        );
+    }
+
+    #[test]
+    fn a_record_delete_failure_surfaces_after_removal() {
+        // The inverse injection: removal succeeds (vendor writable), the record unlink fails
+        // (claudesk_root read-only — permissions are not recursive). The failure must
+        // surface as its own variant, never be swallowed as success.
+        use std::os::unix::fs::PermissionsExt;
+        let sandbox = Sandbox::new();
+        staged_managed_clone(&sandbox, "#!/bin/sh\necho ok\n");
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let sink = CollectingSink::new();
+        std::fs::set_permissions(
+            sandbox.claudesk_root(),
+            std::fs::Permissions::from_mode(0o555),
+        )
+        .unwrap();
+
+        let err = run_uninstall_guarded(
+            record.as_ref(),
+            &sandbox.home(),
+            &sandbox.claudesk_root(),
+            &sink,
+            &never_cancelled,
+        )
+        .unwrap_err();
+
+        std::fs::set_permissions(
+            sandbox.claudesk_root(),
+            std::fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        assert!(
+            matches!(err, UninstallError::RecordDeleteFailed(_)),
+            "got {err:?}"
+        );
+        assert!(
+            !sandbox.vendor_dir().join("mccc").exists(),
+            "the clone removal itself succeeded"
+        );
+        assert!(
+            provenance::read_record(&sandbox.claudesk_root()).is_some(),
+            "the record file is still there — which is exactly what the error reports"
+        );
+    }
+
+    #[test]
+    fn a_refused_run_deletes_nothing_at_all() {
+        // ═══════════════════════════════════════════════════════════════════════════
+        // The refuse-guard bites IN the deleting path: a tempting, fully deletable
+        // clone with NO record. Proven by a before/after set comparison over every
+        // path in the sandbox — stronger than containment, which only bounds writes.
+        // ═══════════════════════════════════════════════════════════════════════════
+        let sandbox = Sandbox::new();
+        let clone = sandbox.vendor_dir().join("mccc");
+        std::fs::create_dir_all(&clone).unwrap();
+        std::fs::write(clone.join(guard::UNINSTALL_SCRIPT), "#!/bin/sh\n").unwrap();
+        let before = all_paths_under(sandbox.boundary());
+        let sink = CollectingSink::new();
+
+        let err = run_uninstall_guarded(
+            None,
+            &sandbox.home(),
+            &sandbox.claudesk_root(),
+            &sink,
+            &never_cancelled,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, UninstallError::Refused(guard::RefusalReason::NoRecord)),
+            "got {err:?}"
+        );
+        assert_eq!(
+            before,
+            all_paths_under(sandbox.boundary()),
+            "a refused run must leave the filesystem byte-for-byte alone"
+        );
+        assert!(sink.lines().is_empty(), "nothing ran, so nothing streamed");
+    }
+
+    #[test]
+    fn cancel_before_the_script_changes_nothing() {
+        let sandbox = Sandbox::new();
+        staged_managed_clone(&sandbox, "#!/bin/sh\necho ok\n");
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let before = all_paths_under(sandbox.boundary());
+        let sink = CollectingSink::new();
+
+        let err = run_uninstall_guarded(
+            record.as_ref(),
+            &sandbox.home(),
+            &sandbox.claudesk_root(),
+            &sink,
+            &|| true,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, UninstallError::Cancelled { script_ran: false }),
+            "got {err:?}"
+        );
+        assert_eq!(before, all_paths_under(sandbox.boundary()));
+    }
+
+    #[test]
+    fn cancel_after_the_script_keeps_the_clone_and_the_record() {
+        // Cancel polled BETWEEN steps: the script has run (its edits stand — it is
+        // idempotent, a re-run finishes the job), but the clone and record survive, so the
+        // state remains managed and retryable. There is deliberately NO cancel point after
+        // the clone removal — a record describing a removed clone would be a lie.
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let sandbox = Sandbox::new();
+        staged_managed_clone(&sandbox, "#!/bin/sh\necho 'script ran'\n");
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let sink = CollectingSink::new();
+        let polls = AtomicUsize::new(0);
+        let cancel_on_second_poll = || polls.fetch_add(1, Ordering::SeqCst) >= 1;
+
+        let err = run_uninstall_guarded(
+            record.as_ref(),
+            &sandbox.home(),
+            &sandbox.claudesk_root(),
+            &sink,
+            &cancel_on_second_poll,
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, UninstallError::Cancelled { script_ran: true }),
+            "got {err:?}"
+        );
+        assert!(
+            sink.lines().iter().any(|l| l == "script ran"),
+            "the script genuinely ran before the cancel was honored"
+        );
+        assert!(sandbox.vendor_dir().join("mccc").exists());
+        assert!(provenance::read_record(&sandbox.claudesk_root()).is_some());
+    }
+
+    #[test]
+    fn dry_run_returns_the_scripts_output_and_touches_nothing() {
+        // The preview contract: real script output (including the dangling-link shape), and
+        // the script proves it was invoked WITH the flag by mutating only when it is absent.
+        let sandbox = Sandbox::new();
+        staged_managed_clone(
+            &sandbox,
+            "#!/bin/sh\nif [ \"$1\" != \"--dry-run\" ]; then touch mutated; fi\n\
+             echo '  [remove] skills/foo (dry-run)'\n\
+             echo '  [remove] hooks/claude-time-hook.pl (dry-run, dangling into-repo link)'\n",
+        );
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let target = guard::refuse_guard(record.as_ref(), &sandbox.home()).unwrap();
+        let before = all_paths_under(sandbox.boundary());
+        let sink = CollectingSink::new();
+
+        let output = run_dry_run(&target, &sink).expect("dry-run must succeed");
+
+        assert!(output.contains("[remove] skills/foo"), "got: {output}");
+        assert!(
+            output.contains("dangling into-repo link"),
+            "the preview must carry the real shapes the script emits, got: {output}"
+        );
+        assert!(
+            !sandbox.vendor_dir().join("mccc").join("mutated").exists(),
+            "the --dry-run flag must actually reach the script"
+        );
+        assert_eq!(
+            before,
+            all_paths_under(sandbox.boundary()),
+            "a dry run must change nothing on disk"
+        );
+    }
+
+    #[test]
+    fn dry_run_command_passes_the_flag_as_one_argument() {
+        let sandbox = Sandbox::new();
+        staged_managed_clone(&sandbox, "#!/bin/sh\n");
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let target = guard::refuse_guard(record.as_ref(), &sandbox.home()).unwrap();
+
+        let (program, args) = dry_run_command(&target);
+
+        assert!(program.ends_with("/uninstall.sh"), "got {program}");
+        assert_eq!(args, vec!["--dry-run".to_string()]);
+    }
+
+    #[test]
+    fn uninstall_command_runs_the_script_by_absolute_path_with_no_flags() {
+        let sandbox = Sandbox::new();
+        staged_managed_clone(&sandbox, "#!/bin/sh\n");
+        let record = provenance::read_record(&sandbox.claudesk_root());
+        let target = guard::refuse_guard(record.as_ref(), &sandbox.home()).unwrap();
+
+        let (program, args) = uninstall_command(&target);
+
+        assert!(std::path::Path::new(&program).is_absolute());
+        assert!(program.ends_with("/uninstall.sh"));
+        assert!(args.is_empty(), "the real run passes no flags — {args:?}");
+    }
+
+    #[test]
+    fn roots_are_injected_never_ambient() {
+        // The same rule mod.rs and provenance.rs carry, on the module that spawns
+        // subprocesses. The delete-token half of the old `this_module_ships_no_deleting_path`
+        // guard moved to the crate-level guard in `source_guard.rs` at WP3.5b Phase 1 —
+        // "no delete anywhere" expired as a per-module claim once a deleting WP started.
+        let code =
+            crate::workflow_install::source_guard::production_code(include_str!("runner.rs"));
+
+        for forbidden in ["home_dir", "env::var", "std::env", "dirs::home"] {
             assert!(
                 !code.contains(forbidden),
-                "runner must not reference `{forbidden}` — WP3.5a is the ADDITIVE half (no \
-                 deletes; uninstall is WP3.5b, refuse-guard first) and takes every root as a \
-                 parameter (no ambient home)."
+                "runner must not resolve roots ambiently (`{forbidden}`) — every root \
+                 arrives as a parameter so the sandbox can contain every write."
             );
         }
 
@@ -1029,68 +1632,11 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_provenance_write_is_the_last_step_in_the_source() {
-        // Ordering is the structural guarantee that a failed install leaves no record. Asserted
-        // on POSITION because that is the property: if the write moves above either subprocess
-        // call, a failure could leave a record claiming an install that never finished.
-        //
-        // ⚠️ COUNT FIRST, THEN POSITION — and the count is not decoration.
-        // `find` returns the FIRST match, so a position check alone says only "the first write
-        // is after the spawns" while its name promises "the write is the last step." A SECOND
-        // write added to a failure path — the exact regression this guard exists to prevent —
-        // sits after the spawns too and slipped straight through: at verify-self a mutation
-        // inserting a record-write on the install-failure branch left this guard GREEN while
-        // the behavioral test failed. Reproduced directly before fixing, not taken on report.
-        //
-        // ⚠️ WHAT THIS GUARD DOES **NOT** PROVE — read before trusting it.
-        // It is a substring count over source text, so it is a TRIPWIRE, not a proof. Any
-        // indirection walks straight past it: a module alias (`use super::provenance as prov;`
-        // then `prov::write_record(...)`) keeps the literal count at exactly 1 while writing a
-        // record on a failure path. That bypass was demonstrated at verify-self — the guard
-        // stayed green and only the behavioral test caught it.
-        //
-        // So the invariant is secured by the FOUR BEHAVIORAL TESTS that assert
-        // `read_record(...).is_none()` against a real sandboxed filesystem after each failure
-        // path (non-zero install.sh, failed clone, clone-without-script, both cancels). Those
-        // caught every mutation attempted, including the one that beat this guard.
-        //
-        // This guard's value is narrower and still worth its ~12 lines: it is a fast,
-        // deterministic tripwire for the LIKELY regression — someone copy-pasting the write
-        // block onto an error branch — and it is executable documentation of the ordering rule.
-        // Do not read a green result here as proof that no failure path writes a record.
-        //
-        // (It is also mildly over-sensitive: a doc comment naming the function, or a second
-        // legitimate import, inflates the count and fails with a message that misdescribes the
-        // cause. It counts text occurrences, not call sites.)
-        let src = include_str!("runner.rs");
-        let production = src.split("mod tests").next().unwrap_or(src);
-
-        let write_count = production.matches("provenance::write_record").count();
-        assert_eq!(
-            write_count, 1,
-            "expected exactly ONE textual `provenance::write_record` occurrence in production \
-             code, found {write_count}. The likely cause is a write copy-pasted onto a failure \
-             path (the position check below cannot see it — `find` inspects only the first \
-             match). NOTE: this is a text count, so it can also trip on a doc comment naming \
-             the function or a second import; and it can be BYPASSED by a module alias. The \
-             real coverage is the four behavioral no-record tests."
-        );
-
-        let write_at = production
-            .find("provenance::write_record")
-            .expect("the provenance write must exist");
-        let install_spawn_at = production
-            .find("install_command(dest)")
-            .expect("the install spawn must exist");
-        let clone_spawn_at = production
-            .find("clone_command(url, dest)")
-            .expect("the clone spawn must exist");
-
-        assert!(
-            write_at > install_spawn_at && write_at > clone_spawn_at,
-            "the provenance write must come AFTER both subprocess calls — otherwise a failure \
-             can leave a record for an install that did not complete"
-        );
-    }
+    // `the_provenance_write_is_the_last_step_in_the_source` was DELETED at WP3.5b Phase 1,
+    // per SURFACE-2026-07-29-QUALITY-WP3.5A-SOURCE-GUARD-CONSOLIDATION action (4). It was a
+    // position tripwire twice proven to pass the regression it names (a write moved onto the
+    // failure branch; a module-alias bypass); its 30-line disclaimer outweighed its value.
+    // The REAL coverage was and remains the four behavioral tests asserting
+    // `read_record(...).is_none()` after every failure path — those caught every mutation,
+    // including the ones that beat the tripwire.
 }

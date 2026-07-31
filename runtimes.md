@@ -161,9 +161,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 0.78s (2026-07-29, M10.9 WP3 Phase 4 verify-codify: +2 [unresolved-invite byte-identical — with its PROVEN LIMIT documented; acknowledged-vs-dismissed distinguishable on disk] → 581 lib + 6 integ + 1 shell-history pass, 0 fail; warm)
-- **Use timeout:** 120000
+- **Last:** ~300s cold / 2.8s warm exec (2026-07-31, M10.9 WP3.5b Phase 1: first run after the 2026-07-30 `cargo clean` — cold rebuild dominated, ran backgrounded so wall-clock is an estimate; filtered `workflow_install` run → 70 pass, 0 fail)
+- **Use timeout:** 510000 (covers a cold post-`cargo clean` rebuild; warm runs finish in seconds)
 - **History:**
+  - ~300s cold (estimate, backgrounded) — 2026-07-31 (WP3.5b P1; first post-`cargo clean` run)
   - 0.78s — 2026-07-29 (WP3 P4 verify-codify: +2, 581 lib)
   - 0.71s — 2026-07-29 (WP3 P1 verify-codify: +2, 579 lib)
   - 0.76s — 2026-07-29 (WP3 P1 build: +12, 577 lib)

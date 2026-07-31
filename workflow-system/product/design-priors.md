@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-07-20
+updated: 2026-07-31
 ---
 
 # Design Priors — Claudesk
@@ -50,7 +50,31 @@ Terse, transferable statements of how the operator resolves recurring **product-
 
 **Origin:** M7 spec debate (2026-06-29) — the operator pushed back that the planned menu-bar status item looked redundant after PiP shipped, rebutting each claimed virtue (always-on, zero-pixel, system-wide reach) as already met by PiP's `On`/`minimal`/all-Spaces behavior, and noting "the roadmap can always be changed." Agreed; M7 was shrunk to center solely on the one surviving virtue — *"the menu bar is a surface you're already looking at, passively, all day"* — yielding an ambient 2-state alarm + actuator menu, with the PiP-duplicating popover/list/navigation cut. Related: [[explicit-selectable-mode-over-inferred-mode]] (its risk-surface-vs-value rule — prefer the lower-surface version when value is uncertain — points the same direction: cut the high-surface popover half).
 
+**⚠️ BOUNDARY (added 2026-07-31) — this prior does NOT license removing half of a symmetric pair.** See [[paired-actions-need-paired-affordances]]. Misapplied at M10.9 WP3.5b to justify shipping no uninstall button; the test that would have caught it is *"does the thing I am cutting OVERLAP an existing surface, or is it the INVERSE of one?"* Overlap → scope down. Inverse → it is a counterpart, and cutting it leaves a hole.
+
 **Recurrence (M9 WP6b-2 Phase 3, 2026-07-14) — the prior fired again, on tabs.** WP6b-2 shipped a **Custom** date-range tab; its 1-day case reused the Day view's exact render path (`ViewportProvider` + `DayTimeline`), making "Custom(1-day)" a strict subset of "Day" reached via a second tab. At verify-human the operator applied the decision-rule unprompted — "the custom range view can be merged into the Day view" — and chose to **fold the single-date case into Day (Day gains a date picker + prev/next), drop the Custom tab, and make genuine multi-day spans purely WP6b-4's concern** (multi-day is a real non-overlap → it earns its own surface, the multi-day timeline; the redundant 1-day tab does not). Tab bar collapsed Day·Week·Month·Custom → **Day·Week·Month**. This also retired the backlogged WP6b-3 (Day-nav = the new Day date picker). Same principle as the menu-bar cut: a surface that duplicates an existing one's output is redundancy; keep only the irreducible non-overlap (here, multi-day) and merge the rest. Confirms the prior generalizes beyond windows/panels to **tabs/views within one surface**.
+
+---
+
+## paired-actions-need-paired-affordances
+
+**Axis:** discoverability (the boundary condition on anti-redundancy)
+
+**Lean:** When a surface offers an action in one state, the **inverse** action in the sibling state gets an affordance of the **same kind** — a button pairs with a button. Replacing one half with prose that points at a control somewhere else ("to remove it, turn off X above") is not a lighter version of the affordance; it is an absent one. This holds even when the inverse action *also* has another trigger: a second entry point is cheaper than an undiscoverable one.
+
+**Decision rule:** before cutting an affordance under [[new-surface-must-earn-its-place-against-existing-ones]], ask **"does this OVERLAP an existing surface, or is it the INVERSE of one?"**
+- **Overlap** (it duplicates output another surface already shows) → scope it down or cut it. That is the anti-redundancy prior doing its job.
+- **Inverse** (install/uninstall, enable/disable, add/remove, open/close) → it is a *counterpart*, not a duplicate. Cutting it leaves a hole, and the hole is invisible to whoever cut it, because they know where the hidden trigger is.
+
+The tell that the anti-redundancy prior is being misapplied: the thing being cut has **no overlap** with any existing surface — what it has is a *trigger located elsewhere*. "The user can already do this via X" is a statement about reachability, not about redundancy.
+
+**Why:** Destructive and constructive actions are read by the same person on the same screen, and asymmetry between them reads as *absence*, not as restraint. In M10.9 WP3.5b the `absent` state showed a pressable `[Install…]`; the `managed` state showed a sentence pointing at a checkbox in a different group. Everything worked — the toggle really did open the dialog — and the operator still looked at the panel twice and asked "where's the uninstall wizard?" That is the affordance failing, not the reader. The cost of the missing half is paid by the user every time; the cost of the extra button is one render branch.
+
+There is a second, sharper reason for the destructive half specifically: a user who cannot *find* the uninstall concludes the thing cannot be uninstalled, which is precisely the fear that stops people trying software in the first place — the same fear the companion repo's standalone `uninstall.sh` and this milestone's "easy to uninstall" invite copy exist to answer. Hiding the exit undoes the reassurance.
+
+**Origin:** M10.9 WP3.5b Phase 3 verify-human (2026-07-31). The uninstall was built toggle-triggered only, and "no standalone uninstall button" was written into the spec's Out of Scope citing [[new-surface-must-earn-its-place-against-existing-ones]] — a decision taken unilaterally and never surfaced as a question. The operator, after reading the panel twice: *"There should be a 'uninstall & disable' button as a 'pair' of the install button."* Resolution: **both** entry points (operator's choice) — a `[Uninstall & disable…]` button in the managed row plus the existing toggle interception, with the trigger passed explicitly because `[Cancel]` means something different on each path. Related: [[explicit-selectable-mode-over-inferred-mode]] (a route the user must infer is the same failure as a mode they must infer); bounds [[new-surface-must-earn-its-place-against-existing-ones]].
+
+*(Operator: the inferred **why** above leans on **symmetry**; the alternative framing offered at capture was **discoverability of destructive actions** specifically. Both are written — symmetry as the rule, destructive-exit as the sharper sub-case. Sharpen or drop either when you next touch this file.)*
 
 ---
 
