@@ -350,16 +350,6 @@ Review against ship baseline `bc15ae6..a6fb194`. **2 CRITICAL + 3 MAJOR were FIX
 pass (`b95466f`)** and are recorded in the WIP's `## Code-Quality Review` → "Refactor resolution",
 not here. This section holds only what was deliberately NOT addressed.
 
-## SURFACE-2026-07-29-QUALITY-WP3.5A-SOURCE-GUARD-CONSOLIDATION
-- **Source:** feature:review-quality (m10.9-wp3.5a), MAJOR — deferred by decision
-- **Type:** tech-debt
-- **Summary:** Six source-text guard tests across four files (`roots_are_injected_never_ambient`, `nothing_in_this_module_deletes`, `the_source_guards_actually_see_the_whole_production_body`, `the_real_home_is_never_referenced_by_this_module`, `this_module_ships_no_deleting_path`, `only_this_layer_resolves_real_paths`, plus `the_provenance_write_is_the_last_step_in_the_source`), each **re-implementing the same `split("mod tests")` + comment-strip extractor by copy-paste**. Two carry documented known-bypasses in their own bodies (module-alias laundering; "text count, not call sites").
-- **Context:** The extractor duplication is the real cost: `SURFACE-2026-07-29-CFG-TEST-SPLIT-BLINDS-SOURCE-GUARDS` has **four places to recur** instead of one. The ambient-root guards earn their keep (they encode an otherwise-invisible architectural boundary, cheaply). The `remove_dir`/`remove_file`/`uninstall.sh` triplet guards a WP that by construction has no delete — and **expires the moment WP3.5b adds one**. `the_provenance_write_is_the_last_step_in_the_source` is a position tripwire whose own 30-line disclaimer is longer than its value and which demonstrably passes the regression it names (proven twice: by me at verify-auto, independently by the reviewer).
-- **Deferred deliberately (not an oversight):** three of the six must be **rewritten or deleted at WP3.5b anyway**, since a deleting path changes what "ships no delete" can mean. Consolidating now would churn code that WP3.5b rewrites days later.
-- **Suggested action:** **at WP3.5b, as part of building the refuse-guard.** (1) Factor the extractor into ONE `#[cfg(test)]` helper. (2) Keep one ambient-root guard per module. (3) Collapse the three delete guards into one crate-level guard over the module directory, re-scoped to "only the uninstall path may delete, and only via the refuse-guard." (4) Delete the position tripwire — the four behavioral `read_record().is_none()` tests are its real coverage.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-07-29-QUALITY-WP3.5A-CLONE-DIR-NAME-DUPLICATED
 - **Source:** feature:review-quality (m10.9-wp3.5a), MINOR
 - **Type:** tech-debt
