@@ -169,8 +169,8 @@ pub fn prune_missing_projects(app: AppHandle) -> Result<Vec<Project>, String> {
 }
 
 /// Read a project's per-project CC model override (M11.5 WP1). `None` = the project
-/// inherits CC's own default model — which is also the answer for an unknown path, so
-/// the workspace header can seed itself without special-casing a missing record.
+/// inherits CC's own default model — which is also the answer for an unknown path, so a
+/// caller can seed its control without special-casing a missing record.
 #[tauri::command]
 pub fn project_get_default_model(app: AppHandle, path: String) -> Result<Option<String>, String> {
     let dir = resolve_data_dir(&app)?;

@@ -35,8 +35,19 @@
  */
 export const MODEL_ALIAS_HINTS: readonly string[] = ["fable", "opus", "sonnet"];
 
-/** Placeholder shown when a project has no override — i.e. it inherits CC's own default. */
+/** Placeholder shown in the EDIT field when a project has no override. */
 export const MODEL_UNSET_PLACEHOLDER = "Default (CC's own)";
+
+/**
+ * Compact label shown on the picker ROW when a project has no override.
+ *
+ * Deliberately shorter than {@link MODEL_UNSET_PLACEHOLDER} — the row is a scannable
+ * column where brevity matters, while the edit field has space to be explicit about *whose*
+ * default it means. **Derived from the placeholder rather than written out again** so a copy
+ * change to one cannot silently leave the other stale (they were two independent hardcoded
+ * strings until code review caught it).
+ */
+export const MODEL_UNSET_LABEL = MODEL_UNSET_PLACEHOLDER.split(" (")[0];
 
 /**
  * Normalize a raw input value into what should be persisted.

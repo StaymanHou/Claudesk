@@ -341,9 +341,9 @@ fn build_cc_argv(mode: CcPermissionMode, model: Option<&str>) -> Vec<String> {
 /// rule that must be asserted as a **value** rather than left where only a running app
 /// can observe it. (Same lesson as M10.9 WP2: extract the decision, assert the value.)
 ///
-/// The input encodes all three reachable states at the call site:
+/// The input encodes every reachable state at the call site:
 /// - `None` — the app-data dir could not be resolved, so no read was attempted;
-/// - `Some(Err(_))` — `projects.json` is missing-but-unreadable, malformed, or otherwise
+/// - `Some(Err(_))` — `projects.json` is present but unreadable, malformed, or otherwise
 ///   failed to parse;
 /// - `Some(Ok(None))` — read fine; this project has no override (or has no record);
 /// - `Some(Ok(Some(m)))` — read fine; this project overrides the model.

@@ -7,12 +7,18 @@
 //
 // ## Note the shape difference from `permissionModeIpc.ts`
 // The permission mode is **app-global**: one value, and the backend re-broadcasts a
-// `cc-permission-mode` event on write so every surface reflecting it re-syncs. The model
+// `cc-permission-mode` event on write so every surface reflecting it re-syncs (its second
+// surface — a View-menu radio — is what makes that fan-out earn its keep). The model
 // override is **per-project**: each call is keyed by `projectPath`, and there is
-// deliberately NO broadcast event — a workspace header is the only surface showing a given
-// project's value, and it is the surface that just changed it. If a second surface ever
-// displays this (a picker-row badge, say), add the event then rather than pre-building a
-// fan-out with one subscriber.
+// deliberately NO broadcast event, because **the picker row is the only surface showing a
+// given project's value, and it is the surface that just changed it** — a fan-out would
+// have exactly one subscriber.
+//
+// If a genuinely second surface is ever added (a workspace-header readout, a filmstrip tile
+// badge), add the event *then*. Note that would be a real reversal, not an extension: the
+// operator rejected a workspace-header control at Phase 2 verify-human specifically so this
+// value would have ONE home — see design prior
+// `set-a-spawn-time-choice-where-the-spawn-is-chosen`.
 //
 // The commands are registered in `src-tauri/src/lib.rs`'s invoke handler and implemented in
 // `config_store/commands.rs`.

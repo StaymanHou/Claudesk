@@ -92,8 +92,8 @@ Ran ahead of planning because the answers decide the control shape and the failu
   - [x] verify-codify  <!-- status: done -->
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** **ALL THREE PHASES COMPLETE** — every impl task and all 12 verification gates `[x]`. Ready for `/feature-ship`.
+- **Path:** Feature > finalize
+- **Active scope:** **ALL THREE PHASES COMPLETE + shipped (`e0c28ac`) + code-quality review done** (0 CRITICAL · 2 MAJOR [1 fixed in place, 1 backlogged] · 7 MINOR [4 fixed, 3 accepted]). Ready for `/feature-finalize`.
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** 2 — `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` (low) and `SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC` (low, filed from the operator's Phase 3 question)
@@ -406,3 +406,39 @@ All three implementations were restored and re-confirmed green.
      Each entry is also logged to workflow-system/state/backlog.md -->
 
 [SHORTCUT-2026-07-31] P1.6 — The integration-boundary rule fired (`SessionRegistry::spawn` is consumed by the pre-existing `cc_spawn`, and no Phase 1 outcome cited it). Rather than back-loop F9b for an outcome that is structurally unverifiable at this tier (no test in this repo can construct an `AppHandle`), extracted the inline never-block-a-spawn degradation rule as the pure `resolve_spawn_model` and pinned it with 5 tests over all four reachable read states. Mutation-proven: propagating instead of degrading (`.expect(...)`) fails 2 of the 5. Re-verified via a fresh `cargo test --all-targets` run (703 pass / 0 fail) plus fmt + clippy. Gate 1 (trivial extension of the just-written leaf): holds — a function extraction within the same leaf's code. Gate 2 (fresh re-verification): holds — full suite re-run, not a re-read of prior state. Gate 3: this entry. The live `cc_spawn` → PTY argv proof remains Phase 3's `ps -o args=` outcome, which cites the consuming surface by name.
+
+## Code-Quality Review — per-project-cc-model-override
+
+Reviewer subagent against ship commit `e0c28ac`. **0 CRITICAL · 2 MAJOR · 7 MINOR.**
+
+### Strengths (reviewer's, condensed)
+- The argv asymmetry is documented at three layers *with the reason*, and pinned by a test that fails if it is "tidied up" in either direction — the shape that survives a future refactor.
+- `resolve_spawn_model` is a genuinely good extraction: the one part of `spawn` that mattered and the only part assertable as a value.
+- `set_default_model_on_one_project_leaves_every_field_of_the_others_untouched` compares full sibling records and is named for exactly what it asserts — a direct response to this repo's overstated-assertion class.
+- `set_default_model_accepts_a_model_that_does_not_exist_yet` is "the anti-validation guard done right": its comment explains why the sibling test using a *real* ID would keep passing against a validator.
+- `pickerRowOrder.ts` is a sound repair of a proven guard failure, and the test pins the *consumption* so the value cannot become decorative.
+- Both flagged judgment calls **hold up**: rejecting `useSettingControl` reuse (different shapes; the ~40 duplicated lines are simpler than the unifying abstraction) and skipping client-side validation.
+
+### Issues + disposition
+
+**CRITICAL** — none.
+
+**MAJOR (2)**
+1. **[FIXED IN PLACE]** `src/cc/modelOverrideIpc.ts` header was **actively wrong post-relocation** — it stated a workspace header was the only surface and offered "a picker-row badge, say" as the hypothetical *future* second surface justifying a broadcast. Both backwards. This is the stated rationale for the deliberate no-broadcast decision, so a future reader would have found its condition already satisfied and added a fan-out for one subscriber. Rewritten to name the picker row as the sole surface, to note the permission mode's View-menu radio as the second surface that earns *its* fan-out, and to flag that adding one here would be a **reversal** of an operator decision, not an extension.
+2. **[BACKLOGGED — medium]** `SURFACE-2026-07-31-QUALITY-WP1-PER-ROW-IPC-REFETCHES-DATA-ALREADY-ON-THE-WIRE`. Every row issues its own `getProjectDefaultModel`, but `list_projects` **already returns `default_model` on the wire** and the picker already holds it — `RecentProject` merely omits the field. N+1 against a `projects.json` read + parse + sort, on the most-glanced surface, re-firing on every filter clear. **Verified against the source before accepting.** Backlogged rather than fixed inline because the fix changes the picker's state shape (a design change, ~15 lines), unlike the comment fixes above.
+
+**MINOR (7) — 4 fixed, 3 left**
+- **[FIXED]** `displayModelValue` was exported + doc-commented + covered by two tests with **zero production callers** — the false-confidence pattern this feature otherwise avoids. Component now routes all five draft-seeding sites through it.
+- **[FIXED]** A second hardcoded `"Default"` on the row label, bypassing the exported constant. Now `MODEL_UNSET_LABEL`, **derived** from `MODEL_UNSET_PLACEHOLDER` so a copy change cannot leave one stale.
+- **[FIXED]** `projectModelCell.test.ts` asserted a **formatted multi-line CSS selector** (`/input,\s*\nbutton \{/`) — precisely the `SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING` class. Replaced with single-identifier assertions.
+- **[FIXED]** Two stale/contradictory doc clauses: `project_get_default_model`'s "so the workspace header can seed itself" (stale after relocation) and `resolve_spawn_model`'s "missing-but-unreadable" (self-contradictory — missing reads as `Ok(vec![])`). Plus the "all three reachable states" prose that then listed four.
+- **[NOT FIXED, accepted]** `failed` persists until a *genuinely different* value is committed (a no-op blur takes the early return), so the error styling can linger. Cosmetic, on an error path, and clearing it on edit-entry would slightly obscure that the last write failed. Below the bar for its own backlog entry.
+- **[NOT FIXED, accepted]** Two remaining prose nits.
+
+### Assessment (reviewer, verbatim excerpt)
+> "This is well-built work and the strongest part is the backend… the storage path was built rather than cargo-culted from the two half-precedents, with the argv asymmetry and the never-block-a-spawn rule each turned into a pure function asserted as a value rather than left where only a running app can see it. The test suite is the good kind — several tests are written specifically to fail against the *plausible wrong implementation*… The debt that did accrue is narrow but real."
+
+**Post-fix gates:** `tsc` 0 · frontend **1427 pass** · `cargo fmt --check` 0 · `clippy --all-targets -D warnings` 0 · backend **706 pass**.
+
+### If you disagree
+Mark any line above `[DISMISSED]` before `/feature-finalize` archives this file.

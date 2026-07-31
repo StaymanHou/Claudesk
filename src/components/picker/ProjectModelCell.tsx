@@ -28,7 +28,9 @@ import {
 } from "../../cc/modelOverrideIpc";
 import {
   MODEL_ALIAS_HINTS,
+  MODEL_UNSET_LABEL,
   MODEL_UNSET_PLACEHOLDER,
+  displayModelValue,
   normalizeModelValue,
   modelValueChanged,
 } from "../../cc/modelOverride";
@@ -63,7 +65,7 @@ export function ProjectModelCell({
         if (cancelled) return;
         valueRef.current = v;
         setValue(v);
-        setDraft(v ?? "");
+        setDraft(displayModelValue(v));
       })
       .catch((e) => {
         // A failed READ is logged, not surfaced: it is not a user action, and the honest
@@ -86,25 +88,25 @@ export function ProjectModelCell({
     if (!modelValueChanged(draft, prev)) {
       // Normalize the visible text even when not persisting, so a padded no-op edit
       // snaps back to canonical form rather than lingering.
-      setDraft(prev ?? "");
+      setDraft(displayModelValue(prev));
       return;
     }
     const next = normalizeModelValue(draft);
     valueRef.current = next;
     setValue(next);
-    setDraft(next ?? "");
+    setDraft(displayModelValue(next));
     setFailed(false);
     void setProjectDefaultModel(projectPath, next).catch((err: unknown) => {
       valueRef.current = prev;
       setValue(prev);
-      setDraft(prev ?? "");
+      setDraft(displayModelValue(prev));
       setFailed(true);
       console.error("[claudesk] model override write failed:", err);
     });
   }, [draft, projectPath]);
 
   const cancel = useCallback(() => {
-    setDraft(valueRef.current ?? "");
+    setDraft(displayModelValue(valueRef.current));
     setEditing(false);
   }, []);
 
@@ -161,7 +163,7 @@ export function ProjectModelCell({
         setEditing(true);
       }}
     >
-      {value ?? "Default"}
+      {value ?? MODEL_UNSET_LABEL}
     </button>
   );
 }

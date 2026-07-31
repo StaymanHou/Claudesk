@@ -112,9 +112,14 @@ describe("the workspace header no longer carries the model control", () => {
     expect(start).toBeGreaterThan(-1);
     const rule = css.slice(start, css.indexOf("}", start));
 
-    // The global button rule this must defeat (kept as an assertion so that if the global
-    // chrome is ever removed, this test's premise is re-examined rather than silently kept).
-    expect(css).toMatch(/input,\s*\nbutton \{/);
+    // The global chrome this must defeat, asserted as SINGLE IDENTIFIERS rather than as a
+    // formatted multi-line selector. A `/input,\s*\nbutton \{/` match was written first and
+    // is exactly the fragility class logged as
+    // SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING: reformat the global rule
+    // to `input, button {` and the premise-check silently stops asserting while the override
+    // test below keeps passing on a stale premise.
+    expect(css).toContain("background-color: #2a2a2a");
+    expect(css).toContain("border-radius: 8px");
 
     for (const override of ["background:", "border:", "border-radius:"]) {
       expect(rule).toContain(override);

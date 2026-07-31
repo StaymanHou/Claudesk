@@ -1,5 +1,12 @@
 # Backlog
 
+## Code-quality findings — per-project-cc-model-override (2026-07-31)
+- **Pointer:** **1 MAJOR** (0 CRITICAL) from `feature-review-quality` against ship commit `e0c28ac`. The picker issues **one IPC read per row** for a value `list_projects` already returned on the wire — an N+1 against a `projects.json` read on the most-glanced surface, caused only by `RecentProject` omitting one optional field. Body in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# per-project-cc-model-override — 2026-07-31`. **The review's other 1 MAJOR + 4 of 7 MINOR were FIXED at review time, not backlogged** (see below).
+- **Priority:** medium
+- **Status:** pending
+- **Pickup shape:** one self-contained ~15-line change — widen `RecentProject` with `default_model?: string | null` and pass the seed into `ProjectModelCell` as a prop instead of fetching it. Keep the IPC setter. Good candidate for any picker-adjacent refactor pass.
+- **Fixed in place at review time (NOT backlogged), for the record:** the **MAJOR** stale `modelOverrideIpc.ts` module header (it stated the workspace header was the surface and named "a picker-row badge" as the hypothetical *future* second surface — exactly backwards after the Phase 2 relocation, and it is the stated rationale for the deliberate no-broadcast decision, so leaving it would have invited a future reader to add a one-subscriber fan-out); the dead `displayModelValue` export whose two tests guarded nothing (component now routes through it); a second hardcoded `"Default"` string (now `MODEL_UNSET_LABEL`, *derived* from `MODEL_UNSET_PLACEHOLDER` so they cannot drift); a fragile multi-line CSS regex premise-check (now single-identifier assertions — it was the `SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING` class); and two stale/contradictory doc clauses. **3 MINOR remain unaddressed and un-backlogged by choice** — an `is-failed` styling flag that persists until a genuinely different value is committed, and two prose nits — all judged below the bar for their own entry.
+
 ## SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC
 - **Source:** operator question at M11.5 WP1 Phase 3 verify-human ("Then can this list be dynamic?")
 - **Target level:** product:wbs
