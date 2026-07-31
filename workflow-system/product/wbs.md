@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: "Milestone 10.9: Workflow-features opt-in gate"
-updated: 2026-07-31  # WP4 CLOSED as a documented NO-OP — verdict (i), operator decision; nothing shipped. The WP3 invite (discovery) + Settings (install path, provenance, the §4c-pinned /tutorial-getting-started pointer) already discharge the onboarding deliverable. The one genuine non-overlap — auto-STARTING the tour — was cut on three code findings the WBS didn't know: (1) it would be the app's FIRST programmatic PTY write (cc_input's only caller today is XtermPane's real keystrokes; arch.md's "byte-injection is legitimate because Claudesk IS the terminal" is about RELAYING the user, not the app composing input); (2) the invite fires at the PICKER per Verdict (b) — no workspace, no CC session to inject into; (3) driving a fresh CC prompt is timing-sensitive + needs \r, and a mistimed inject strands a FIRST-RUN user for the sake of one paste. (iii) M14 deferral declined deliberately — no evidence exists yet (Claudesk isn't public), so a speculative anchor would be uncloseable. Verified: 25 copy-fidelity + 10 OFF-invariant tests green, cc_input caller-count grep-checked. M10.9 remaining: WP5 (XS) only. | (prior) WP3.5b SHIPPED (da4a854 + 8626ba7) — the uninstall wizard: refuse-guard FIRST (compiler-enforced via a private-field UninstallTarget; a guard-skipping delete does not compile), script -> clone-dir removal -> provenance record deleted LAST, --dry-run driving the preview, and BOTH entry points ([Uninstall & disable...] button + gate toggle) after the operator overturned the toggle-only design at verify-human. Substrate detection REWRITTEN to marker-based (symlink -> repo whose install.sh carries `claude-workflow-system`), fixing two wrong answers still live in v0.2.9. review-quality: 0 CRITICAL / 4 MAJOR / 4 MINOR, all eight paid down. New design prior `paired-actions-need-paired-affordances` bounds the anti-redundancy prior. M10.9 remaining: WP4 (S), WP5 (XS).
+updated: 2026-07-31  # WP5 CLOSED — **M10.9 MILESTONE EXIT: GO. All 7 WPs closed; ready for /product-finalize.** 5.2 proved the OFF-invariant guard bites on all FIVE arms (panel / menu-id / raw-command bypass / wrapper bypass / chord), each probed SEPARATELY because a composite bypass tripping one arm would have reported "the guard bites" while hiding a gap — and that arm-by-arm method is what found probe 5b: an IDENTICAL ungated workflow chord predicate placed in `panelHost.ts` passes 10/10, because the chord arm selects by BASENAME (/hord/). That UPGRADES SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST from review inference to PROVEN defect — scheduled M11.5, before M11, since panelHost.ts owns panelForChord. 5.1 drove the full exit sequence live via the MCP bridge in a sandboxed $HOME staged with a USER-OWNED skill symlink: substrate detection correctly reads NOT-installed (the case that defeated bare is_dir() in v0.2.9 and then "non-empty"); invite fires at >=1 project with reachability MEASURED (geometry + elementFromPoint hit-test, per WP3.5b's unreachable-dialog lesson) not assumed; [Later] persists nothing and RETURNS next launch; [Dismiss] permanent; enable AND disable each leave ~/.claude/ byte-identical (md5 hashed around each TOGGLE — not around a relaunch, since hook_install legitimately rewrites settings.json on launch and would false-positive); post-disable DOM has zero workflow surfaces; real-home containment verified after (CLAUDE.md md5 unchanged, skills still symlinked into the live companion repo, no install record). Carry: installed-.app fresh-profile first-run rides the next /release gate per [[installed-build-verify-deferred-to-release]]. New bridge caveat: webview_interact{click} failed (`window.__MCP__.resolveRef` undefined) — drove clicks via el.click() inside webview_execute_js. | (prior) WP4 CLOSED as a documented NO-OP — verdict (i), operator decision; nothing shipped. The WP3 invite (discovery) + Settings (install path, provenance, the §4c-pinned /tutorial-getting-started pointer) already discharge the onboarding deliverable. The one genuine non-overlap — auto-STARTING the tour — was cut on three code findings the WBS didn't know: (1) it would be the app's FIRST programmatic PTY write (cc_input's only caller today is XtermPane's real keystrokes; arch.md's "byte-injection is legitimate because Claudesk IS the terminal" is about RELAYING the user, not the app composing input); (2) the invite fires at the PICKER per Verdict (b) — no workspace, no CC session to inject into; (3) driving a fresh CC prompt is timing-sensitive + needs \r, and a mistimed inject strands a FIRST-RUN user for the sake of one paste. (iii) M14 deferral declined deliberately — no evidence exists yet (Claudesk isn't public), so a speculative anchor would be uncloseable. Verified: 25 copy-fidelity + 10 OFF-invariant tests green, cc_input caller-count grep-checked. M10.9 remaining: WP5 (XS) only. | (prior) WP3.5b SHIPPED (da4a854 + 8626ba7) — the uninstall wizard: refuse-guard FIRST (compiler-enforced via a private-field UninstallTarget; a guard-skipping delete does not compile), script -> clone-dir removal -> provenance record deleted LAST, --dry-run driving the preview, and BOTH entry points ([Uninstall & disable...] button + gate toggle) after the operator overturned the toggle-only design at verify-human. Substrate detection REWRITTEN to marker-based (symlink -> repo whose install.sh carries `claude-workflow-system`), fixing two wrong answers still live in v0.2.9. review-quality: 0 CRITICAL / 4 MAJOR / 4 MINOR, all eight paid down. New design prior `paired-actions-need-paired-affordances` bounds the anti-redundancy prior. M10.9 remaining: WP4 (S), WP5 (XS).
 ---
 
 # WBS — Milestone 10.9: Workflow-features opt-in gate
@@ -265,7 +265,7 @@ This is why the commands are not simply deleted at WP3.5: the developer-install 
 
 ---
 
-### WP5: Milestone-exit verify
+### WP5: Milestone-exit verify ✅ CLOSED 2026-07-31 — **M10.9 exit verdict: GO** (see "Probe outcomes" → Verdicts (d) guard-bites, (e) live exit run, (f) the GO verdict)
 **Type:** probe (verification-only; produces the M10.9 exit verdict, no new software)
 **Milestone:** M10.9
 **Dependencies:** WP2, WP3, WP4
@@ -273,9 +273,9 @@ This is why the commands are not simply deleted at WP3.5: the developer-install 
 **Learning objective:** Does M10.9 meet its exit criterion end-to-end, including on the installed `.app` where the fresh-install path actually differs?
 **Success criterion:** A recorded PASS of the roadmap exit criterion: *With the gate OFF, Claudesk is byte-identical to a build without any workflow features (no dead affordances) and a non-workflow user sees a coherent lite-IDE. A one-time invite offers enable + shows how to install the workflow system. Enabling flips all workflow UI on without touching `~/.claude/`; disabling cleanly reverts. The operator enables once and gets the full tool.* Plus: the seam guard demonstrably fails when a surface bypasses it.
 **Tasks:**
-- [ ] 5.1 Drive the exit criterion on a scratch workspace via the MCP bridge: fresh state → invite appears → `[Later]` → relaunch → **invite returns** → `[Dismiss]` → relaunch → gone → clean app → enable via Settings → disable → clean again. Confirm no `~/.claude/` mutation across the toggles (hash/mtime around each toggle, not around a relaunch).
-- [ ] 5.2 **Prove the guard bites.** Temporarily add a throwaway gated surface that bypasses the WP2 seam, confirm 2.5's test **fails**, then revert. Without this, the guard is unproven and the invariant is decorative. Record the result.
-- [ ] 5.3 Record the M10.9 exit verdict (GO / issues) in "Probe outcomes". **Carry the fresh-install checks to the next `/release` gate** per `[[installed-build-verify-deferred-to-release]]` — the first-run invite path is exactly the class that differs between `pnpm tauri:dev` (inherits the terminal env, and a dev `settings.json` that already exists) and a Finder-launched installed `.app` on a genuinely fresh profile.
+- [x] 5.1 Drive the exit criterion on a scratch workspace via the MCP bridge: fresh state → invite appears → `[Later]` → relaunch → **invite returns** → `[Dismiss]` → relaunch → gone → clean app → enable via Settings → disable → clean again. Confirm no `~/.claude/` mutation across the toggles (hash/mtime around each toggle, not around a relaunch). **✅ DONE 2026-07-31 — full sequence PASS in a sandboxed `$HOME`, with real-home containment verified after. See "Probe outcomes" → Verdict (e).**
+- [x] 5.2 **Prove the guard bites.** Temporarily add a throwaway gated surface that bypasses the WP2 seam, confirm 2.5's test **fails**, then revert. Without this, the guard is unproven and the invariant is decorative. Record the result. **✅ DONE 2026-07-31 — 5 of 5 arms proven to bite, and the known blind spot proven REAL. Full results in "Probe outcomes" → Verdict (d).**
+- [x] 5.3 Record the M10.9 exit verdict (GO / issues) in "Probe outcomes". **✅ DONE — verdict: GO with one carry. See "Probe outcomes" → Verdict (f).** **Carry the fresh-install checks to the next `/release` gate** per `[[installed-build-verify-deferred-to-release]]` — the first-run invite path is exactly the class that differs between `pnpm tauri:dev` (inherits the terminal env, and a dev `settings.json` that already exists) and a Finder-launched installed `.app` on a genuinely fresh profile.
 
 ---
 
@@ -331,6 +331,73 @@ WP1 (probe: settings surface + invite trigger)
 
 ## Probe outcomes
 *(WP1's settings-surface + invite-trigger verdicts, WP2's guard-scope note, WP4's onboarding scope decision, and WP5's exit verdict land here at their WP closes.)*
+
+### Verdict (f) — M10.9 MILESTONE EXIT: **GO** (WP5.3, 2026-07-31)
+
+**Verdict: GO.** Every clause of the roadmap exit criterion is verified, the seam guard is proven to bite, and one item carries to `/release` by standing convention rather than as a gap.
+
+Clause-by-clause against the roadmap's exit criterion:
+
+1. *"With the gate OFF, Claudesk is byte-identical to a build without any workflow features (no dead affordances)"* — **MET, two ways.** Statically: the OFF-invariant guard's five arms, each **proven to fail** on a real bypass (Verdict (d)). Live: zero workflow-coupled surfaces in the post-disable DOM (Verdict (e)). **Stated limit:** this is a source/registry-level invariant, not a binary diff — and probe 5b shows the stated limitation is *reachable*, not theoretical (see the carry below).
+2. *"a non-workflow user sees a coherent lite-IDE"* — **MET.** The WBS's own baseline audit found zero workflow-coupled surfaces shipped, so OFF=byte-identical was already true before the milestone; WP2 added the *door* M11–M13 must come through rather than hiding existing UI.
+3. *"A one-time invite offers enable + shows how to install the workflow system"* — **MET, with the WP3 rescope.** The invite owns **discovery** and **routes** to Settings; Settings owns the substrate (status, provenance, install wizard, manual steps). The operator moved that boundary mid-WP3 and it is the shipped shape.
+4. *"Enabling flips all workflow UI on without touching `~/.claude/`"* — **MET and this is the milestone's load-bearing claim.** `md5` hashed immediately around each toggle: byte-identical, no new files, in both directions. Property 2's revised form holds — the *only* `~/.claude/` mutation path is the explicit, user-driven wizard (WP3.5a/b), never the toggle.
+5. *"disabling cleanly reverts"* — **MET.** Live DOM clean after disable; no residue.
+6. *"The operator enables once and gets the full tool"* — **MET by construction** (default OFF for everyone, one conscious enable, no environment auto-detection — the design-prior's (b) clause).
+7. *"the seam guard demonstrably fails when a surface bypasses it"* — **MET, five times over** (Verdict (d)).
+
+**One carry, one known gap — both dispositioned, neither blocking:**
+
+- **CARRY (convention, not a defect):** the **installed-`.app` fresh-profile first-run** check rides the next `/release` gate per `[[installed-build-verify-deferred-to-release]]`. Same posture as M5/M6/M7. `pnpm tauri:dev` cannot reproduce a genuinely-fresh Finder-launched profile.
+- **KNOWN GAP, already scheduled:** the chord arm's `panelHost.ts` blind spot (`SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST`), **proven** at probe 5b and scheduled in **M11.5, before M11** — which is precisely when it must be closed, since `panelHost.ts` owns `panelForChord` and is where an M11 Docs chord would naturally live. M10.9's exit does not depend on it (nothing gated exists yet); M11's correctness does.
+
+**Also still open from v0.2.9 (unchanged, previously dispositioned):** `SURFACE-2026-07-31-SUBSTRATE-DETECTION-CANNOT-TELL-MCCC-FROM-THE-USERS-OWN-SKILLS` is **fixed on `main` and confirmed fixed live in this run** (Verdict (e), row 2) but still live in released v0.2.9 — operator decision 2026-07-31: defer to the next release, worth a release-note line.
+
+**M10.9 is complete: 7 of 7 WPs closed** (WP1 · WP2 · WP3 · WP3.5a · WP3.5b · WP4 no-op · WP5). Ready for `/product-finalize`.
+
+### Verdict (e) — M10.9 exit criterion, driven live (WP5.1, 2026-07-31)
+
+**Result: PASS on every clause the agent can reach.** Driven through the MCP bridge against a **sandboxed `$HOME`** (`HOME=<scratch>/wp5-home` + the three mandatory `RUSTUP_HOME`/`CARGO_HOME`/`PATH` overrides). The fake home was staged with a **user-owned skill symlink** in `~/.claude/skills/` — WP3.5b's lesson that the detection bug is invisible without one.
+
+| Exit-criterion clause | Result | Evidence |
+|---|---|---|
+| Fresh state = genuine first run | ✅ | `workflow_get_invite` → `null`, gate → `false`, `list_projects` → 0 |
+| **Substrate detection is honest** | ✅ | `workflow_substrate_installed` → **`false`** with a user-owned skill symlink present — the exact case that defeated both earlier predicates (bare `is_dir()`, shipped in v0.2.9; then "non-empty") |
+| Invite appears with ≥1 project | ✅ | Added `tmp/scratch/scratch-a`, relaunched → `workflow-invite` present with all 3 buttons |
+| Invite copy honors upstream pins | ✅ | Renders "~10–15 minute walkthrough… a real run"; **no "5-minute" promise**, and **no slash command named** (correct — `/tutorial-getting-started` does not exist pre-install) |
+| **Buttons are actually reachable** | ✅ | Geometry measured, not assumed: dialog 293px in a 768px viewport; all 3 buttons `fullyInViewport` **and** passing `elementFromPoint` hit-testing |
+| `[Later]` persists nothing | ✅ | DOM gone, `workflow_get_invite` still `null` |
+| `[Later]` → **invite returns** next launch | ✅ | Reload → invite present again |
+| `[Dismiss]` is permanent | ✅ | Persists `"dismissed"`; reload → absent, clean picker |
+| Enable writes **nothing** to `~/.claude/` | ✅ | `md5` of every file under `~/.claude/`, **hashed immediately around the toggle** — byte-identical, no new files |
+| Disable writes nothing either | ✅ | Same method across the OFF toggle — byte-identical |
+| OFF = clean app, live | ✅ | Post-disable DOM: **zero** workflow-coupled `data-testid`s; panel tabs unchanged |
+| **Real-home containment** | ✅ | Real `~/.claude/CLAUDE.md` md5 unchanged (`2ba5ce50…`), skills still symlinked into the live companion repo, `~/.claudesk/install-record.json` still absent |
+
+**One observation worth recording (not a defect):** a `settings.json` exists in the sandbox `~/.claude/` — written by `hook_install`, which is **universal** and correctly keeps running with the gate OFF (it powers the status dots for any CC user). It was captured in the pre-toggle baseline, so the toggle-scoped diffs above are unaffected. This is exactly why the task specifies hashing **around each toggle, not around a relaunch**: a relaunch legitimately re-registers hooks, and hashing across one would have produced a false positive on a universal subsystem.
+
+**Bridge-mechanics notes for the next agent** (all previously-documented caveats reconfirmed, plus one new): `webview_execute_js` still times out on any script that awaits an `invoke` — the **fire-then-poll** pattern (store the result on a `window.__x` global in `.then`, read it back on a follow-up sync script) was needed for every IPC read here. **New:** `webview_interact{click}` failed with `undefined is not an object (evaluating 'window.__MCP__.resolveRef')` — the bridge's ref helper was not present on this page — so clicks were driven with a plain `el.click()` inside `webview_execute_js` instead. That worked for every control (invite buttons, Settings gear, the gate checkbox). Two command names I guessed were wrong: the real ones are **`workflow_substrate_installed`** / **`workflow_get_invite`** (not `workflow_substrate_status` / `get_workflow_invite`) — read `lib.rs`'s invoke handler rather than guessing.
+
+**Deferred to the next `/release` gate** per `[[installed-build-verify-deferred-to-release]]`: the **installed-`.app` fresh-profile first-run** path. `pnpm tauri:dev` inherits the terminal env and a dev `settings.json` that already exists, so the genuinely-fresh Finder-launched case is a different code path. This is a carry, not a gap — the same posture M5/M6/M7 used.
+
+### Verdict (d) — The OFF-invariant guard demonstrably bites (WP5.2, 2026-07-31)
+
+**Result: PASS, and stronger than the task asked for.** Task 5.2 called for *one* throwaway bypass. The guard has **five** independent arms across two `describe`s, and a bypass that trips only one proves only that one — so each arm was probed separately. **All five bite, each with an actionable failure message that names the offending file/panel/id and the fix.** Every probe was reverted and the tree verified clean (`git status` empty but for the pre-existing untracked handoff note); the guard is green at 10/10 on the clean tree.
+
+| # | Probe (the realistic M11 mistake it simulates) | Arm | Result |
+|---|---|---|---|
+| 1 | Add `"docs"` to `RightPanel` + `AVAILABLE_PANELS` ungated | panel | **FAILS** — `panel "docs" looks workflow-coupled but is unconditionally available` |
+| 2 | Add `PANEL_DOCS: "view.panel.docs"` to `MENU_IDS` | menu id | **FAILS** — `…a menu item present while the gate is OFF is a dead affordance` |
+| 3 | New module `invoke("workflow_get_features_enabled")` | raw-command bypass | **FAILS** — names the offending file |
+| 4 | New module importing `getWorkflowFeaturesEnabled()` | wrapper bypass | **FAILS** — the arm added at WP3 review after this exact shape shipped live |
+| 5a | Ungated workflow chord predicate in `docsChord.ts` | chord | **FAILS** |
+| 5b | **The same violation, in `panelHost.ts`** | chord | **⚠️ PASSES 10/10 — blind spot confirmed** |
+
+**⚠️ Probe 5b is the finding.** An **identical** ungated workflow chord predicate passes the entire guard when it lives in `panelHost.ts` instead of a `*Chord.ts` file, because the chord arm selects candidates by **basename** (`/hord[A-Za-z]*\.tsx?$/i`). `panelHost.ts` is the module that **already owns `panelForChord`** — i.e. the single most natural place for M11 to add a Docs chord. This **upgrades `SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST` from a code-review inference to an empirically proven defect**, and it is exactly why that item is scheduled in **M11.5, before M11** (roadmap, Revision 2026-07-31). The guard's own module header claims the seam is "the only door"; for chords, `panelHost.ts` is an unwatched door.
+
+**What this does and does not establish.** It establishes that the seam is enforced *through the registries the guard enumerates* — which is the property M11/M12/M13 will actually lean on. It does **not** establish byte-identity of a compiled build; the guard's header already says so, and probe 5b is a concrete instance of the stated limitation ("a surface rendered through a channel this test does not enumerate would slip past") turning out to be reachable rather than theoretical. The mitigation stands: adding a fourth registry must extend this guard as part of that work.
+
+**Method note worth keeping:** probing arm-by-arm rather than once is what surfaced 5b. A single composite bypass tripping *some* arm would have reported "the guard bites" and hidden the gap — the same vacuous-verification family this milestone has now paid for four times (`?raw` structure-not-behavior twice, the `remember-to-register` enumeration, the test-constructed containment assert).
 
 ### Verdict (c) — Onboarding surface scope (WP4, decided 2026-07-31)
 
