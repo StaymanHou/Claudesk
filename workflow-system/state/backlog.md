@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — time-tracking-offline-local-only-copy (2026-08-01)
+- **Pointer:** **2 MINOR** (0 CRITICAL, 0 MAJOR remaining) from `feature-review-quality` against ship baseline `0f5a8c7^..7a1a185`. **Both MAJORs and one MINOR were FIXED IN PLACE, not backlogged** — the two MAJORs were reflow-fragile `?raw` assertions in this WP's own new copy guards (prose inside JSX wraps at Prettier's default 80 cols; two assertions sat 3–6 chars from the boundary and passed only by luck about where the words fell), fixed by normalizing the haystack in both guard files and **validated in both directions**: a pure reflow with identical words now passes where it previously failed, while dropping a claim / dropping the scope disclosure / renaming the advertised label each still fail. The deviation from autopilot's auto-backlog default was deliberate — one line per file, the guards protect a **privacy disclosure**, and they had been written in the same session, so backlogging a guard already known to misfire would have shipped known-broken verification. The 2 remaining MINOR: the Analytics hint still ~2.5× its longest sibling hint (content correct, length an explicit call), and ~55 lines of test commentary triplicating prose that also lives in the WIP/WBS/commit. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# time-tracking-offline-local-only-copy — 2026-08-01`.
+- **Priority:** low (all).
+- **Status:** pending.
+- **Pickup shape:** Both are polish that should ride a future touch of these files, not a standalone pass. ⚠️ **Neither should be "fixed" by weakening a claim or a guard:** the hint's length is four *distinct* load-bearing facts (the machine-wide scope clause especially — removing it makes the copy misleading by omission), and the whitespace-normalization comment in the guards is what stops someone simplifying the haystack back to raw and silently re-breaking them. Dismiss via the WIP's `## Code-Quality Review` section.
+
 ## SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED
 - **Source:** feature:build (M11.5 WP3 Phase 1, 2026-08-01)
 - **Target level:** product:wbs (comment-only; fold into any future touch of either module)

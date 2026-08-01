@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { isSettingsChord } from "../settingsChord";
-import settingsPanel from "../SettingsPanel.tsx?raw";
-import globalDashboard from "../../workspace/dashboard/GlobalDashboard.tsx?raw";
+import settingsPanelRaw from "../SettingsPanel.tsx?raw";
+import globalDashboardRaw from "../../workspace/dashboard/GlobalDashboard.tsx?raw";
+
+// ⚠️ Whitespace-normalized, for the reason documented at length in the header of
+// settingsTimeTrackingCopy.test.ts: prose and JSX inside these files wrap at Prettier's
+// 80 cols, so any assertion spanning more than one token passes only by luck about where
+// the words fall. `>Time tracking<` below is exactly that shape — the element and its
+// text must sit on one line for a raw match to work, and it is the assertion carrying the
+// cross-module promise, so its blind spot is the one that lets the advertised route rot.
+const flat = (src: string) => src.replace(/\s+/g, " ");
+const settingsPanel = flat(settingsPanelRaw);
+const globalDashboard = flat(globalDashboardRaw);
 
 // M11.5 WP3 verify-codify — the CROSS-SURFACE PROMISE.
 //
@@ -104,7 +114,9 @@ describe("meta — this guard can fail", () => {
   });
 
   it("reads real source text from both surfaces", () => {
-    expect(settingsPanel.length).toBeGreaterThan(1000);
-    expect(globalDashboard.length).toBeGreaterThan(1000);
+    // RAW imports, not the normalized copies — `flat("")` is also "", so normalizing
+    // first would pass straight through an empty-loader failure.
+    expect(settingsPanelRaw.length).toBeGreaterThan(1000);
+    expect(globalDashboardRaw.length).toBeGreaterThan(1000);
   });
 });

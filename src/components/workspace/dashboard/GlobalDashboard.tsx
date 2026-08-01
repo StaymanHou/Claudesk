@@ -20,7 +20,9 @@
 //   - tracking OFF → "enable tracking" (dashboard-empty-tracking-off). M11.5 WP3 points
 //     this at Settings (⌘,) — NOT "the project picker", whose settings strip M10.9 WP2
 //     deleted — and states the offline/local-only guarantee, matching the Analytics group
-//     hint in SettingsPanel.tsx. Both are pinned by settingsTimeTrackingCopy.test.ts.
+//     hint in SettingsPanel.tsx. Pinned by TWO guards: settingsTimeTrackingCopy.test.ts
+//     (what each surface SAYS) and settingsTimeTrackingCopyPromise.test.ts (that the
+//     advertised route — the ⌘, chord + the "Time tracking" label — is still TRUE).
 //   - tracking ON, fetch in flight → loading
 //   - tracking ON, no rows → "no activity recorded" (dashboard-empty-nodata)
 //

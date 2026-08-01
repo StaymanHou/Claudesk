@@ -166,11 +166,100 @@ activity on this Mac**, while preserving the incumbent hint's ON-vs-OFF fact (Fi
        2. The two hook-stream drains filter differently, undocumented at both sites -->
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** none — shipped as `0f5a8c7`; review baseline is `0f5a8c7^..0f5a8c7`
+- **Path:** Feature > finalize
+- **Active scope:** none — review-quality complete (0 CRITICAL / 2 MAJOR both FIXED / 3 MINOR,
+  1 fixed + 2 backlogged)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
-- **Open discoveries:** 2 (both backlogged; neither blocks close)
+- **Unvisited:** finalize
+- **Open discoveries:** 2 SURFACEd + 2 MINOR quality findings, all backlogged; none blocks close
+
+## Code-Quality Review — time-tracking-offline-local-only-copy
+
+Reviewer subagent against `0f5a8c7^..7a1a185`. **0 CRITICAL / 2 MAJOR / 3 MINOR.**
+
+### Strengths
+- The load-bearing scope claim is verified against the code, not inherited from memory:
+  `time_store/commands.rs:494-513`'s `drain_loop` genuinely has no workspace filter, and no
+  network/http client exists in `src-tauri/src/time_store/` — so the shipped copy is true on both
+  claims it makes.
+- The WP's own plan was audited rather than followed; three of five tasks rested on facilities that
+  do not exist, and each non-existence was **filed** rather than silently skipped.
+- `settingsTimeTrackingCopyPromise.test.ts` codifies the *promise* rather than the wording —
+  executing the real `isSettingsChord` predicate is the only form that survives a rebind, paired
+  with a meta-test proving the predicate discriminates.
+- The dashboard half caught a live inaccuracy outside the filed item's scope (the deleted
+  project-picker pointer) and pinned it as an **absence** assertion, the direction that rots.
+- Genuinely zero `src-tauri/` files touched — the copy-only claim holds under inspection.
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR — both FIXED in place, not backlogged.**
+
+- **[`settingsTimeTrackingCopy.test.ts`] Two dashboard-copy assertions matched across a JSX line
+  break and would silently stop matching on reflow — the exact failure the file's own header
+  claimed to avoid.** `[FIXED]`
+- **[`settingsTimeTrackingCopyPromise.test.ts:60`] `toContain(">Time tracking<")` depended on the
+  element and its text staying on one line** — same class, and it carries the cross-module
+  promise. `[FIXED]`
+
+**Why these were fixed rather than auto-backlogged (a deliberate deviation from the
+`drive_mode: autopilot` default).** Three reasons: the fix is **one line per file**; the guards
+protect a **privacy disclosure**, so a silent un-guard is costlier than the usual `?raw` nuisance;
+and **I had just written them this session** — backlogging a guard I now know misfires, in the
+session that created it, would ship known-broken verification. The reviewer measured rather than
+argued (re-ran Prettier and counted matches), and I re-derived it independently: the two lines sit
+at **74 and 77 chars against Prettier's default 80** (`.prettierrc.json` sets only
+`trailingComma`), i.e. 3–6 characters of headroom.
+
+**The confirming experiment is the interesting part, and my first attempt at it was wrong.**
+Rewording to *"nothing is ever uploaded anywhere; your sessions are stored in a local database on
+this Mac"* made the guard fail — but that changed `"nothing is uploaded"` → `"nothing is ever
+uploaded"`, so a claim phrase genuinely disappeared. **Two variables at once; the test proved
+nothing.** Isolating to a **pure reflow** (identical words, wrap point moved between `"in a"` and
+`"local database"`) is what actually demonstrated it: pre-fix that reflow **failed** while every
+claim was still true. That is the dangerous direction — *a false alarm on correct copy trains the
+next reader to loosen the guard*, and the same mechanism yields silent false **negatives** whenever
+a phrase happens to reassemble on one line.
+
+**Fix:** normalize the haystack (`src.replace(/\s+/g, " ")`) before matching, in both files, making
+every claim assertion width-independent. **The meta-guards deliberately keep reading the RAW
+imports** — `flat("")` is also `""`, so normalizing there would pass straight through the
+empty-loader failure that arm exists to catch.
+
+**Validated in both directions (4 proofs):**
+
+| Test | Change | Expected | Result |
+|---|---|---|---|
+| 1b | **Pure reflow** — same words, wrap moved | PASS | ✅ passes (**failed** pre-fix) |
+| 2 | Local-storage claim deleted | FAIL | ✅ fails |
+| 3 | Scope disclosure deleted | FAIL | ✅ fails |
+| 4 | Advertised label renamed | FAIL | ✅ fails |
+
+**MINOR**
+
+- **[`GlobalDashboard.tsx:20-23`] Header comment named only one of the two pinning test files.**
+  `[FIXED]` — now names both, with what each pins.
+- **[`SettingsPanel.tsx:529`] The Analytics hint is 270 chars vs siblings at 107 / 84 / 42** —
+  ~2.5× the longest even after the verify-human compression. `[BACKLOGGED]` — content is correct
+  and the length was an explicit call; revisit only if a dedicated privacy line ever exists.
+- **[both new test files] ~55 lines of commentary across ~234, some re-telling WP history already
+  in the WIP, WBS, and commit body** — triplicated prose drifts, and the test-file copy will go
+  stale first once the WIP is archived. `[BACKLOGGED]` — the *why-this-assertion-exists* comments
+  earn their place; the episode narration is the trimmable part.
+
+### Assessment
+Well-built copy-only change that does more than its brief: the scope clause improves on the filed
+item's proposed wording, and it was reached by tracing `drain_loop` rather than trusting project
+memory — the right instinct for a user-facing privacy claim. The plan-audit discipline is the
+strongest thing here. The debt was narrow and specific (two reflow-fragile assertions in exactly
+the way the test file's own header forbids) and is now **paid**, mutation-proven in both
+directions. Remaining debt: two MINOR polish items, backlogged.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` in this section before `feature-finalize`
+archives this WIP.
 
 ## Ship log — 2026-08-01
 

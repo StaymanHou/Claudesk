@@ -4,6 +4,28 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# time-tracking-offline-local-only-copy — 2026-08-01
+
+*(feature-review-quality against ship baseline `0f5a8c7^..7a1a185`; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 3 MINOR. **BOTH MAJORs were FIXED IN PLACE, not backlogged**, and so was one MINOR — see the originating WIP's `## Code-Quality Review` for the full record. The two MAJORs were reflow-fragile `?raw` assertions in this WP's own new copy guards: prose inside JSX wraps at Prettier's default 80 cols, and two assertions sat 3–6 characters from the boundary, so they passed only by luck about where the words fell. Fixed by normalizing the haystack (`src.replace(/\s+/g, " ")`) in both guard files, validated in both directions — a **pure reflow** with identical words now passes where it previously failed, while dropping a claim, dropping the scope disclosure, or renaming the advertised label each still fail. Rationale for deviating from autopilot's auto-backlog default: one line per file, the guards protect a **privacy disclosure**, and they had been written in the same session — backlogging a guard already known to misfire would ship known-broken verification. Reviewer: "well-built copy-only change that does more than its brief… the plan-audit discipline is the strongest thing here.")*
+
+## SURFACE-2026-08-01-QUALITY-WP3-ANALYTICS-HINT-EXCEEDS-SIBLING-BAND
+- **Severity:** MINOR
+- **Location:** `src/components/settings/SettingsPanel.tsx:529`
+- **Finding:** The Analytics `SettingsGroup` hint is **270 chars** against sibling group hints of **107 / 84 / 42** (lines 367, 391, 545) — still ~2.5× the longest sibling after the verify-human compression from 322.
+- **Why it matters:** Cosmetic/proportion only; the content is correct, each of its four facts is distinct, and the length was an explicit operator-delegated call. Worth recording because the WP itself banked *"measure the incumbent's siblings first"* as the reusable lesson, and this surface still sits outside the band that lesson describes.
+- **Pickup shape:** Do **not** shorten by dropping a claim — all four are load-bearing (the machine-wide scope clause especially; removing it makes the copy misleading by omission, and its truthfulness is verified in `time_store::drain_loop`). The real fix, if ever wanted, is a **dedicated privacy line** as a distinct element so the group hint returns to one sentence. That is a small UI addition, not a copy edit, so it needs to clear `new-surface-must-earn-its-place` first. Revisit only if such an element appears for another reason.
+- **Priority:** low.
+- **Status:** pending.
+
+## SURFACE-2026-08-01-QUALITY-WP3-TEST-COMMENTARY-TRIPLICATES-WIP-PROSE
+- **Severity:** MINOR
+- **Location:** `src/components/settings/__tests__/settingsTimeTrackingCopy.test.ts` + `settingsTimeTrackingCopyPromise.test.ts`
+- **Finding:** ~55 lines of commentary across ~234 total, some of it re-telling WP history that also lives in the WIP, the WBS as-built section, and the commit body — e.g. the "first pass asserted three separate phrasings" episode appears in three places.
+- **Why it matters:** Triplicated prose drifts. Once the WIP is archived and the WBS resynced at cycle close, the test-file copy becomes the stale one — and a stale comment inside a *guard* is worse than elsewhere, because it describes what the guard supposedly protects.
+- **Pickup shape:** Keep every comment that states **why an assertion exists** or **why a form was chosen over an alternative** (the whitespace-normalization note is load-bearing — it prevents someone "simplifying" the haystack back to raw and silently re-breaking the guard). Trim only the **WHAT-happened narration** of the verify-human compression episode, which the WIP and CHANGELOG already own. Rides any future touch of these files.
+- **Priority:** low.
+- **Status:** pending.
+
 # m10.9-wp3-invite-settings-substrate — 2026-07-29
 
 *(feature-review-quality against ship baseline `6193615^..5bc88f3`; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 5 MINOR. **MAJOR #1 (gate-seam bypass in App.tsx) was FIXED IN PLACE, not backlogged** — it was a live staleness defect and the fix was a 3-line import swap; the OFF-invariant guard's blind spot that hid it was closed in the same pass. Only MAJOR #2 and the 5 MINOR are listed here. Reviewer: "high-quality, unusually disciplined work — the strongest parts are the persistence model and the consistent instinct to extract a pure function whenever a decision has a truth table.")*

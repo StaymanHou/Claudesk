@@ -14,8 +14,29 @@ import { describe, expect, it } from "vitest";
 // moment Prettier rewraps the line, and a `?raw` guard verifies STRUCTURE, never runtime
 // — the live read of this copy is a verify-human check, because whether copy *reassures*
 // is not a property source text can prove.
-import settingsPanel from "../SettingsPanel.tsx?raw";
-import globalDashboard from "../../workspace/dashboard/GlobalDashboard.tsx?raw";
+//
+// ⚠️ WHITESPACE-NORMALIZED HAYSTACK — the fix that makes the line above actually true.
+// Code-quality review caught that two assertions here were themselves multi-line-fragile:
+// prose inside JSX wraps at Prettier's 80 cols, so a phrase like "local database on this
+// Mac" was passing only because it happened to land whole on one line. PROVEN by reflow,
+// not argued: rewording the sentence to "nothing is ever uploaded anywhere; your sessions
+// are stored in a local database on this Mac" — still true, still making every claim —
+// made the guard FAIL. That is the dangerous direction: a false alarm on correct copy
+// trains the next reader to loosen the guard, and the same mechanism yields silent false
+// NEGATIVES whenever a phrase happens to reassemble on one line.
+//
+// Collapsing runs of whitespace to single spaces makes every claim assertion below
+// width-independent, so they fail on a dropped CLAIM and only on a dropped claim.
+// Assertions on single-token code (testids, identifiers) can read either haystack; they
+// use the normalized one too, for one rule instead of two.
+import settingsPanelRaw from "../SettingsPanel.tsx?raw";
+import globalDashboardRaw from "../../workspace/dashboard/GlobalDashboard.tsx?raw";
+
+/** Collapse all whitespace runs to single spaces — see the header note. */
+const flat = (src: string) => src.replace(/\s+/g, " ");
+
+const settingsPanel = flat(settingsPanelRaw);
+const globalDashboard = flat(globalDashboardRaw);
 
 // The three claims the copy must carry, per the WP's `## Copy decision`. Each is matched
 // by a short phrase chosen to survive rewording of the surrounding sentence: the test
@@ -106,10 +127,13 @@ describe("M11.5 WP3 — the tracking-OFF dashboard empty state points at Setting
 // above would still pass structurally while proving nothing about the real files.
 describe("meta — the copy guards are reading real source text", () => {
   it("both ?raw imports yield substantial source, not an empty or processed module", () => {
-    expect(typeof settingsPanel).toBe("string");
-    expect(typeof globalDashboard).toBe("string");
-    expect(settingsPanel.length).toBeGreaterThan(1000);
-    expect(globalDashboard.length).toBeGreaterThan(1000);
+    // Asserts on the RAW imports deliberately: this arm exists to catch the ?raw loader
+    // silently returning nothing, and `flat("")` is also "" — so checking the normalized
+    // copies would still pass through the very failure this is here to detect.
+    expect(typeof settingsPanelRaw).toBe("string");
+    expect(typeof globalDashboardRaw).toBe("string");
+    expect(settingsPanelRaw.length).toBeGreaterThan(1000);
+    expect(globalDashboardRaw.length).toBeGreaterThan(1000);
     // A marker unrelated to this WP's copy: present in the real file, absent from any
     // plausible stub. Pins that we are reading THESE modules, not arbitrary text.
     expect(settingsPanel).toContain("SettingsGroup");
