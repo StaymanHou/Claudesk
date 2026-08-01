@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-08-01  # M11.5 WP3 (time-tracking offline/local-only copy) SHIPPED + CLOSED — copy-only, 0 src-tauri changes, +18 mutation-proven tests. Three of five planned tasks landed DIFFERENTLY than written and are annotated in place rather than silently ticked: there is no per-SETTING help-line slot (SettingsGroup takes one hint per GROUP, already populated), task 3.4's named privacy test exists in four docs and nowhere in the code (the two real Rust tests assert on structured fields and cannot be tripped by copy, so the task's premise was false), and 3.5's wiring guard already existed in full. The copy discloses SCOPE as well as locality — verified in code (time_store::drain_loop has no workspace filter, unlike status_broadcaster) rather than trusted to memory. The verbose first draft FAILED its own verify-human at 322 chars vs sibling hints of 107/84/42; compressed to 270. Bucket now 2 shipped / 1 deferred / 1 remaining — WP4 (schedule-critical, must precede M11) is the only item left.
+updated: 2026-08-01  # M11.5 WP4 (OFF-invariant guard chord arm) SHIPPED + CLOSED — commit 0bac2c6. THE SCHEDULE-CRITICAL ITEM IS DONE: the proven panelHost.ts hole is closed and mutation-proven (the M10.9 WP5.2 probe that passed 10/10 now FAILS, naming the file), so M11's gate on this WP is DISCHARGED. Selector is exported-identifier-based, verified a STRICT SUPERSET (12 → 15, nothing dropped) — task 4.1's named "reads a chord-shaped keyboard event" predicate was DISPROVED at plan time (it drops closeTerminalChord.ts) and is annotated in place, not silently ticked. All five arms probed INDIVIDUALLY; comment-stripping shipped in the same unit because widening alone turns the guard red on paletteCommands.ts prose. +3 tests (1467 → 1470), each mutation-proven. ⚠️ Review found 3 MAJOR, all RESIDUAL reach, none reopening the shipped hole — most notably the arm guards chord PREDICATES, not chord REGISTRATION (App.tsx's 3 keydown listeners are unselected), which is the next panelHost.ts and worth weighing before M11. M11.5 now 3 shipped / 1 deferred / 0 remaining — the bucket is COMPLETE.
 milestone: "Milestone 11.5 — QoL polish bucket (per-project model override + pre-M11 guard debt)"
 ---
 
@@ -38,6 +38,7 @@ Three things the roadmap's deliverable text asserts were checked against the cod
 `editorExtensions.ts:217` does read `showMinimap.compute([], () => ({ … }))` — the empty deps array is real, exactly as the roadmap predicted from a static read. **This does not license skipping reproduction.** `compute([])` freezes the *facet value* (the config object, incl. the `create`d container); whether the minimap's **content** re-renders is governed by `@replit/codemirror-minimap`'s own update cycle reading the document from the view, which the frozen config does not obviously prevent. So the deps array explains a frozen *config*, and the reported symptom is stale *content* — those are only the same bug if the package derives content from the config snapshot. Reproduce first, both sources (external disk reload **and** local typing), then fix the mechanism the reproduction actually implicates. The roadmap's warning stands and is upheld here.
 
 ### ✅ Finding 3 — the chord-arm defect is exactly as filed, and the fix target is confirmed
+*(State at WBS time, 2026-07-31. **RESOLVED 2026-08-01 by WP4 (`0bac2c6`)** — the basename filter described below is gone; selection is now by exported identifier. Kept as the decomposition-time record.)*
 
 `offInvariantGuard.test.ts:134` filters candidates with `if (!/hord[A-Za-z]*\.tsx?$/i.test(base)) return false;` where `base` is the **basename**. `src/components/workspace/panelHost.ts` exports `panelForChord` (line 78) and does not match `/hord/`, so it is skipped — proven at M10.9 WP5.2 probe 5b (an identical ungated workflow chord predicate placed there passes 10/10). There are **12 non-test `*hord*.ts` modules** today (`settingsChord`, `newTerminalChord`, `closeTerminalChord`, `newWorkspaceChord`, `chordEvent`, `workspaceSwitchChord`, `newFileChord`, `searchChord`, `dashboardChord`, `finderChord`, `closeTabChord`, `tabSwitchChord`) plus `panelHost.ts` as the one known miss — so the candidate set is small enough that a content-based selector is cheap, and large enough that hardcoding a file list would rot.
 
@@ -128,17 +129,24 @@ bucket's stated value is that it stays tight. Full record:
 
 ---
 
-### WP4: OFF-invariant guard — chord arm selects by content, not basename
+### WP4: OFF-invariant guard — chord arm selects by content, not basename ✅ SHIPPED 2026-08-01 (commit `0bac2c6`)
 **Description:** The OFF-invariant guard's chord arm selects candidate files by **basename** (`/hord[A-Za-z]*\.tsx?$/i` at `offInvariantGuard.test.ts:134`), so it skips `panelHost.ts` — the module that owns `panelForChord` and the most natural home for an M11 Docs chord. Select by **content**. Resolves `SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST` (MAJOR, from M10.9 WP2's review; **upgraded from review-inference to proven defect** at M10.9 WP5.2 probe 5b).
 **Milestone:** 11.5
 **Dependencies:** none
 **Size:** S
 **Tasks:**
-- [ ] 4.1 Replace the basename filter with a **content-based** predicate that identifies a chord-predicate module by what it *does* (e.g. reads a chord-shaped keyboard event / exports a chord-mapping function), so a module is selected for owning chord logic rather than for being named `*Chord*`. Verify against the current tree: it must still select the **12 existing non-test `*hord*` modules** (`settingsChord`, `newTerminalChord`, `closeTerminalChord`, `newWorkspaceChord`, `chordEvent`, `workspaceSwitchChord`, `newFileChord`, `searchChord`, `dashboardChord`, `finderChord`, `closeTabChord`, `tabSwitchChord`) **and additionally** `panelHost.ts`.
-- [ ] 4.2 **Mutation-prove the arm bites at its new reach** — the WP's actual deliverable. Per M10.9 WP3.5a's lesson (*"for a safety-critical property, a guard must be mutation-proven, not merely present"* — three guards there looked like proof and were not), and per the exit criterion: temporarily place an ungated workflow-coupled chord predicate in **`panelHost.ts`** and confirm the guard **fails**; revert. Re-run the WP5.2 probe that passed 10/10 and confirm it now fails.
-- [ ] 4.3 **Probe arm-by-arm, never with one composite bypass** — the method note from M10.9 WP5.2, which is exactly how this hole was found: a composite bypass tripping *some* arm reports "the guard bites" while hiding a gap. Confirm the other four arms (panel · menu-id · raw-command bypass · wrapper bypass) still bite **individually** after the change.
-- [ ] 4.4 Guard against the opposite failure — **false positives**. The existing matcher is deliberately word-boundary-based because a substring match on `docs` fired on `docstring`; a broader *file selector* raises the same risk from the other side. Confirm the full frontend suite (~1400 tests) stays green and no legitimate module is newly flagged. A guard that cries wolf gets deleted by the next person who trips it — that reasoning is in the test's own comments.
-- [ ] 4.5 Update the arm's explanatory comment to state the selector is content-based and why (the basename version's proven miss), so the next reader does not "simplify" it back.
+- [x] 4.1 Replace the basename filter with a content-based predicate. — ⚠️ **LANDED DIFFERENTLY THAN WRITTEN.** The task's parenthetical named *"reads a chord-shaped keyboard event"*; a plan-time audit **disproved** that shape: it drops `closeTerminalChord.ts`, whose export takes three pre-computed booleans (`{isCloseChord, terminalFocused, canClose}`) and never reads a keyboard event — the only one of the 12 with no `metaKey`. That predicate would have widened reach on one module while silently **narrowing** it on another. Shipped the task's *other* named option instead — **exports a chord-mapping function** (`exportsChordIdentifier`) — verified a **strict superset**: all 12 modules **+ `panelHost.ts`**, 12 → 15, nothing dropped. **Also required, and not in the task list:** comment-stripping had to ship in the same unit, because widening the selector pulls in `paletteCommands.ts` whose comment carries a stale `workflow/archive/…` path — the selector alone turns the guard red on prose.
+- [x] 4.2 **Mutation-prove the arm bites at its new reach** — **DONE, the WP's deliverable.** Ungated `docsChord` in `panelHost.ts` → guard **exit 1**, chord arm failed naming the file verbatim. **The WP5.2 probe that passed 10/10 now FAILS.** Counterfactual also run: same file, the old basename regex still returns NO MATCH while the new predicate matches — and a control confirmed the old regex still matched three real chord modules, ruling out "the old regex was simply broken."
+- [x] 4.3 **Probe arm-by-arm, never with one composite bypass** — DONE, five separate inject → read-back → run → revert cycles; all five arms exit 1 on their own assertion. Every mutation was `sed`-read back (comment-stripped) before its verdict was believed, per `[[verify-the-mutation-landed]]`. ⚠️ **One method correction:** my first raw-command probe was under-isolated (injected into `newTerminalChord.ts`, itself a chord candidate, so two arms co-fired); the verify-self subagent caught it and re-probed in `RightPanelHost.tsx` for a clean single-arm result. **The non-chord pre-check belongs on every arm probed outside its own module.**
+- [x] 4.4 Guard against **false positives** — DONE. Full suite **127 files / 1470 tests** green; the word-boundary meta-tests (`docstring` et al.) still pass. Went beyond "suite is green": checked the 3 newly-selected modules individually — `panelHost.ts` and `terminalFontZoom.ts` are clean **raw AND stripped**, while `paletteCommands.ts` is `raw: true → stripped: false`, i.e. it passes **only** because of comment-stripping. Nothing passes by luck.
+- [x] 4.5 Update the arm's explanatory comment — DONE in two places (file header + `exportsChordIdentifier`'s doc), recording the proven basename miss **and** why the `metaKey` predicate was rejected, so neither failing form is "simplified" back in. Also fixed a comment the change made stale (*"Chord predicates live in `*hord*.ts` modules"*).
+
+**WP4 as-built.** One source file (`src/state/__tests__/offInvariantGuard.test.ts`), +3 tests (1467 → 1470), each mutation-proven to bite. The arm now selects via `exportsChordIdentifier()` + `chordModules()`, filters via the extracted `isUngatedWorkflowChord()` (pulled out of the inline `.filter()` so the predicate is asserted as a **value** — the arm asserts `offenders === []`, which passes identically whether the predicate works or is broken to always-false).
+
+**⚠️ Review-quality found 3 MAJOR — all about RESIDUAL reach, none reopening the shipped hole** (`0 CRITICAL`; all re-verified by orchestrator probe, all fail *safe* vs. the pre-fix state; backlogged 2026-08-01):
+1. The predicate misses **6 export forms** (`export default function`, `export async function`, `export class`, `export let`, `export enum`, `export {x}`) — the first two live in **14 non-test files**. This is the WP's own blind-spot class moved from filename to declaration keyword.
+2. It is a **name** predicate, not a content one — `export function openDocsPanel(e){…metaKey…}` is still missed. The reach gain is real; the "by content" framing oversells it.
+3. ⚠️ **The arm guards chord *predicates*, not chord *registration*.** `App.tsx` (3 `keydown` listeners), `Workspace.tsx`, `RightPanelHost.tsx` are **none** selected — an inline `useEffect` Docs chord is invisible. **This is the next `panelHost.ts` and is worth weighing BEFORE M11**, on exactly the reasoning that scheduled WP4 there.
 
 **⚠️ Schedule note — this WP is why the whole bucket precedes M11.** M11 landing its Docs tab is precisely the moment this arm must fire, and `panelHost.ts` owns `panelForChord`. A guard that cannot see the module it is guarding is decorative. **This WP must be complete before M11 begins.**
 
@@ -346,7 +354,17 @@ sizing prose for an existing surface, **measure the incumbent's siblings first**
   `docstring` — and self-defeating here, since WP3 deliberately *added* a comment naming the removed
   surface to prevent recurrence.
 
-**M11.5: 2 shipped / 1 deferred / 1 remaining.** WP1 (per-project model override) + **WP3
-(time-tracking offline/local-only copy)** SHIPPED; **WP2 (editor minimap) DEFERRED to backlog**
-2026-08-01 (`c12dcf0`). **Next: WP4 — the ⚠️ SCHEDULE-CRITICAL OFF-invariant guard chord-arm fix,
-which must complete before M11 begins.**
+**M11.5: 3 shipped / 1 deferred / 0 remaining — the bucket is COMPLETE.** WP1 (per-project model
+override) + **WP3** (time-tracking offline/local-only copy) + **WP4** (OFF-invariant guard chord arm,
+`0bac2c6`) SHIPPED; **WP2 (editor minimap) DEFERRED to backlog** 2026-08-01 (`c12dcf0`).
+
+**⚠️ The M11 gate is DISCHARGED.** WP4 was the one item with an external deadline — M11's Docs tab
+landing is exactly when the chord arm must fire, and `panelHost.ts` (which owns `panelForChord`) was
+provably invisible to it. That hole is closed and **mutation-proven**: the M10.9 WP5.2 probe that
+passed 10/10 now fails, naming the file. **M11 is no longer blocked by this bucket.**
+
+**One carry into M11's planning, not a blocker:** review-quality surfaced that the arm guards chord
+*predicates* but not chord *registration* — `App.tsx`'s 3 `keydown` listeners are unselected, so an
+inline `useEffect` Docs chord would be invisible. It is **the next `panelHost.ts`**, filed as
+`SURFACE-2026-08-01-QUALITY-WP4-ARM-GUARDS-PREDICATES-NOT-REGISTRATION` and worth weighing before
+M11 on the same reasoning that put WP4 there. It does **not** reopen the shipped hole.

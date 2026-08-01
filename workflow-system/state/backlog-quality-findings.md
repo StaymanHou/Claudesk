@@ -303,15 +303,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 *(feature-review-quality against ship commit `467593f`; Mode 3 autopilot. 0 CRITICAL / 4 MAJOR / 4 MINOR. **One MAJOR is NOT listed here — it was a live StrictMode double-write defect in `useSettingControl` and was fixed immediately rather than backlogged; see the WIP's `## Code-Quality Review`.** Reviewer: "well-built work that clears the bar the milestone set… the debt is concentrated in two places: the `?raw` idiom still doing load-bearing work despite this feature paying twice to learn it can't, and the (now-fixed) side-effect-in-updater.")*
 
-## SURFACE-2026-07-28-QUALITY-WP2-CHORD-ARM-MISSES-PANELHOST
-- **Severity:** MAJOR
-- **Location:** `src/state/__tests__/offInvariantGuard.test.ts` (chord arm, the `sourceFiles().filter` basename regex)
-- **Finding:** The chord arm selects candidate files by basename `/hord[A-Za-z]*\.tsx?$/i`, which does **not** match `src/components/workspace/panelHost.ts` — the module that owns `panelForChord`, the app's panel-select chord mapper.
-- **Why it matters:** If M11 adds a `"docs"` mnemonic to `panelForChord` (the most natural home for a Docs-tab chord), the chord arm silently skips the file. The invariant is not unprotected — the *panel* arm would still catch a `"docs"` entry in `AVAILABLE_PANELS` — but the arm most likely to fire at M11 time carries the same blind-spot shape as the camelCase matcher bug already caught once this feature.
-- **Suggested action:** select by CONTENT (files exporting a `*Chord` / `*ForChord` predicate) rather than by filename.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING
 - **Severity:** MAJOR
 - **Location:** `src/components/settings/__tests__/settingsPanelWiring.test.ts:38-84`
@@ -397,5 +388,47 @@ not here. This section holds only what was deliberately NOT addressed.
 - **Summary:** `terminal.rs:386-471` — a 45-line comment narrating three successive failed formulations of `the_table_covers_every_error_variant` is longer than the test and its fixture combined.
 - **Context:** The honesty is right and the lesson is already captured in the backlog in full; the **placement** is wrong. A future reader has to consume a defeat narrative to learn what the test currently checks.
 - **Suggested action:** cut to a two-line pointer at the SURFACE entry; keep the "must be values, not name strings" warning inline since that one is load-bearing for anyone editing the fixture.
+- **Priority:** low
+- **Status:** pending
+
+# m11.5-wp4-chord-arm-content-selector — 2026-08-01
+
+*(feature-review-quality against ship commit `0bac2c6`; Mode 3 autopilot. 0 CRITICAL / 3 MAJOR / 4 MINOR. **All 3 MAJOR were independently re-verified by the orchestrator before backlogging** — each reproduced by probe, not accepted on report. Reviewer verdict: "a careful, well-evidenced fix to a proven defect… Where it falls short is in how far it claims to have gone." The scheduled hole (`panelHost.ts`) IS genuinely closed; these findings are about residual reach, and all fail SAFE relative to the pre-fix state.)*
+
+## SURFACE-2026-08-01-QUALITY-WP4-CHORD-SELECTOR-MISSES-EXPORT-FORMS
+- **Severity:** MAJOR
+- **Location:** `src/state/__tests__/offInvariantGuard.test.ts:104-108` (`exportsChordIdentifier`)
+- **Finding:** The predicate matches only four export forms (`function`/`const`/`interface`/`type`). **Verified by probe:** `export default function docsChord`, `export async function docsChord`, `export class DocsChordHandler`, `export let docsChord`, `export enum ChordKind`, and `export { docsChord }` **all return false**.
+- **Why it matters:** ⚠️ **This is the same blind-spot class WP4 was chartered to close, relocated from filename shape to declaration keyword.** Not theoretical: `export default function` / `export async function` are live idioms in **14 non-test files** in this repo (e.g. `updaterPrefs.ts:52`, `workflowGate.ts:36`). A future `export default function docsChord` would sail past exactly as `panelHost.ts` did — and the arm is schedule-critical precisely because M11's Docs chord is the next thing to land.
+- **Suggested action:** widen to cover `default`, `async`, `class`, `let`, `enum`, and re-export braces — then **mutation-prove each added form individually** (per the method that found the original hole), not as one composite.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-01-QUALITY-WP4-SELECTOR-IS-NAME-NOT-CONTENT
+- **Severity:** MAJOR
+- **Location:** `src/state/__tests__/offInvariantGuard.test.ts:104`; framing at :46 + :83, and the WIP/commit message
+- **Finding:** The predicate is a **name** test applied to identifiers, not a content/behavior test. The header says "ARM SELECTION IS BY CONTENT, NOT FILENAME", but the mechanism is "does an exported symbol's *name* contain `Chord`". **Verified by probe:** `export function openDocsPanel(e) { return e.metaKey && e.key === "k" }` — a real ungated docs chord whose module never uses the word "Chord" — is **not selected**.
+- **Why it matters:** the root cause (reach depends on a naming convention nobody is obliged to follow) survives; what changed is *which* convention. The reach gain is real and the proven miss IS closed (12→15), but the docs oversell it as a category change, and a reader trusting "by content" will over-trust the arm at exactly the M11 moment it must fire.
+- **Suggested action:** cheapest honest fix is **re-word** the header/doc/WIP framing to "selected by exported-identifier name, not filename" (accurate, and preserves the real lesson). A true content predicate (detect a chord-shaped keyboard read) was **explicitly rejected during WP4's plan-time audit** because it drops `closeTerminalChord.ts` — so any behavior-based attempt must be a UNION with the name test, never a replacement.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-01-QUALITY-WP4-ARM-GUARDS-PREDICATES-NOT-REGISTRATION
+- **Severity:** MAJOR
+- **Location:** `src/state/__tests__/offInvariantGuard.test.ts:192-204` (the chord arm)
+- **Finding:** The arm guards chord **predicate** modules, not chord **registration** sites. **Verified by probe:** `App.tsx` (**3** `keydown` listeners), `Workspace.tsx` (1), and `RightPanelHost.tsx` (1) are each **NOT selected** by the arm under either the old or the new selector.
+- **Why it matters:** ⚠️ **Probably the most load-bearing of the three.** The seam contract explicitly forbids "registered-with-a-no-op-handler", and registration is where a keystroke actually gets swallowed — yet that half is unguarded. An M11 Docs chord written inline in a `useEffect` keydown handler (the shape already used in those files) is entirely invisible to this arm. **This is the next `panelHost.ts`**: a proven-shaped gap that will otherwise be found by the same probe-individually method *after* M11 lands rather than before.
+- **Suggested action:** add a sixth arm that scans **keydown-listener registration sites** for ungated workflow-coupled handlers. **Strongly consider paying this BEFORE M11**, on the same reasoning that put WP4 before M11 — a guard that misses the registration side at Docs-tab time is decorative in the same way the basename selector was.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-01-QUALITY-WP4-MINOR-CLUSTER
+- **Severity:** MINOR (4 findings)
+- **Location:** `src/state/__tests__/offInvariantGuard.test.ts`
+- **Findings:**
+  1. **`:105` — the `i` flag re-admits laxity the same file documents as a mistake.** Verified: `unchorded`, `CHORD_MAP`, `chordata` all match. `namesWorkflowTerm` (`:140`) deliberately avoids `i` because it re-admitted `docstring`. Harmless today and **fails safe** (false positives only widen the candidate set), but it contradicts a lesson recorded two functions away. Cheap to drop.
+  2. **`:389-395` — the `>= 13` floor tolerates a 2-module (13%) shrink** while the test is named "does not shrink". The four explicit `toContain` assertions above already cover specific shrinkage better, so the floor's marginal value is against a drop it permits.
+  3. **`:408-439` — the composition is untested end-to-end.** The `isUngatedWorkflowChord` fixtures never flow through `exportsChordIdentifier`/`chordModules`, so the select-then-filter seam relies on the reach test + the arm's own emptiness. Also `gatedDocsChord` passes only because its import line contains `useWorkflowFeaturesEnabled` — true of any file merely mentioning the hook.
+  4. **Comment repetition (~4:1 ratio in new material).** The probe-5b provenance is narrated **four times** with escalating detail across header, both helper docs, and the tests. Heavy commenting is defensible for a load-bearing guard; the *repetition* is not — duplicated rationale rots asymmetrically, and this WP already had to fix one stale comment for that exact reason.
 - **Priority:** low
 - **Status:** pending
