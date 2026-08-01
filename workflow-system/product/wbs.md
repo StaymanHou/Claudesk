@@ -64,7 +64,38 @@ Three things the roadmap's deliverable text asserts were checked against the cod
 
 ---
 
-### WP2: Editor minimap stale on file update (reproduce-first)
+### ~~WP2: Editor minimap stale on file update~~ — ❌ REMOVED FROM M11.5 2026-08-01 (deferred to backlog)
+
+**Operator decision after a live reproduce + fix attempt.** Not cancelled as invalid — the bug is
+**real, reproduced, and diagnosed**; it is simply **feature-sized, not papercut-sized**, and the
+bucket's stated value is that it stays tight. Full record:
+`workflow-system/state/archive/editor-minimap-stale-on-file-update.md`; open item retained as
+`SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE` in `backlog.md`.
+
+**What the WP produced before it was deferred (all banked, so reviving is cheap):**
+1. **The SURFACE's framing was WRONG and is corrected.** Not staleness — the minimap **stops painting
+   partway down and leaves a blank tail**. Round 1 chased freshness across 7 live recipes (both
+   change sources, with a calibrated canvas fingerprint) and correctly found **nothing**, because it
+   was given the wrong symptom. One operator screenshot re-scoped it in a single step.
+2. **Root cause proven, with a clean one-variable A/B.** `canvasStartAndEndIndex()` mixes units —
+   `scrollPercent` from the **wrap-aware** pixel scroll height, `totalHeight` from the **wrap-blind**
+   source-line count. At 85% scroll on `CLAUDE.md`: **wrap ON → 3/34 canvas bands blank; wrap OFF →
+   0/34.**
+3. **WBS Finding 2 is SETTLED — the prime suspect is exonerated.** `showMinimap.compute([], …)`
+   freezes the facet *value*, but the package's content path never consults it. **Reproduce-first is
+   what stopped this WP shipping a no-op "fix" and closing a live bug** — the single most valuable
+   thing the WP did.
+4. **Ecosystem is a dead end** (upstream issue #1 open since 2023; latest version already pinned; the
+   two alternative packages are CM5-only / a stale republish; 9 forks and 14 PRs contain no wrap
+   work).
+5. **A geometry-only patch was built, measured, and REVERTED.** It made things worse (blank at every
+   scroll position). Live instrumentation showed the geometry is *correct* and the gap is downstream:
+   `drawLine` paints ~4px rows while the cursor advances by true wrapped heights (up to 217px/line).
+   **A real fix must also rewrite `text.ts`'s line-drawing path** — the part upstream left undone.
+
+*(Original WP text retained below for provenance.)*
+
+### WP2 (original text): Editor minimap stale on file update (reproduce-first)
 **Description:** The editor minimap does not re-render when file content changes; the document text updates correctly, so the minimap stops corresponding to the buffer it summarizes — **actively misleading as a navigation aid, which is worse than absent**. Resolves `SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE`.
 **Milestone:** 11.5
 **Dependencies:** none (independent of WP1 — different subsystem, no shared files)
@@ -228,7 +259,24 @@ Five things, because the WBS's own prediction was only partly right and the diff
 4. **⚠️ The UI surface is the PICKER ROW, not the workspace header — and this reverses what the WBS and roadmap both specified.** Built on the header, **rejected by the operator at Phase 2 verify-human**, relocated to a right-aligned click-to-edit cell on each project's picker row. **One surface only, deliberately:** two homes for one per-project value would need a sync path, and there is intentionally **no broadcast event** for this setting (unlike the app-global permission mode, which has one because it has a second surface in the View menu). New design prior: `set-a-spawn-time-choice-where-the-spawn-is-chosen`.
 5. **No client-side validation, by design.** The value is stored and forwarded verbatim; CC adjudicates and reports an unusable model precisely, inside the very pane the user is watching. Record this as a *decision* — a future reader will otherwise read the missing validator as an oversight and "fix" it, reintroducing a list that rots on every CC release.
 
-## Session Handoff — 2026-08-01 07:32
-Handed off. See `workflow-system/state/.session.md` to restore.
+---
 
-**WP1 shipped (1 of 4); both carried repairs are now CLOSED** — (A) `format:check` green on `main` (`64e212f`, `34718a4`) and (B) the picker per-row IPC N+1, resolving + deleting `SURFACE-2026-07-31-QUALITY-WP1-PER-ROW-IPC-REFETCHES-DATA-ALREADY-ON-THE-WIRE` (`e77afe0`, `fcb5f07`, `12d906f`). The pre-WP2 queue is empty. **Next: WP2 (editor minimap stale — reproduce-first, root cause NOT confirmed) via `/feature-plan`.**
+## M11.5 status — 2026-08-01
+
+**1 of 4 shipped; 1 deferred out; 2 remain.**
+
+| WP | State |
+|---|---|
+| **WP1** per-project CC `default_model` override | ✅ **SHIPPED** 2026-07-31 (`e0c28ac` + review fixes `df8e002`) |
+| **WP2** editor minimap blank-tail under soft-wrap | ❌ **DEFERRED to backlog** 2026-08-01 — feature-sized, not papercut-sized (see the WP2 block above) |
+| **WP3** time-tracking offline/local-only copy | ◀ **NEXT** — XS, copy-only, zero-risk |
+| **WP4** OFF-invariant guard chord arm selects by content | ⚠️ **SCHEDULE-CRITICAL** — must complete **before M11 begins**; deliverable is the **mutation-proof**, not the selector edit |
+
+**Both carried repairs from the prior session are CLOSED** — `format:check` green on `main`
+(`64e212f`, `34718a4`) and the picker per-row IPC N+1 (`e77afe0`, `fcb5f07`, `12d906f`).
+
+**WP2's removal does not threaten the bucket.** It was ordered second precisely because it carried
+the only unknown root cause; that unknown resolved into "real bug, wrong size," which is the outcome
+the reproduce-first ordering existed to surface early. WP3 and WP4 are unaffected — all four WPs were
+mutually independent by design (no shared files, no shared subsystems), so nothing was blocked on it.
+**WP4 still ships before M11 regardless of anything else in this bucket.**
