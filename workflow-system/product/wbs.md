@@ -174,3 +174,6 @@ Arch gets an as-built resync at `/product-finalize` (the `RightPanelHost` row gr
 
 ## Probe outcomes
 *(WP1's renderer verdict + WP5's exit verdict land here at their WP closes.)*
+
+## Session Handoff — 2026-08-01 10:30
+Handed off. See `workflow-system/state/.session.md` to restore.
