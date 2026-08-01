@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-07-31
+updated: 2026-08-01  # M11.5 WP3 (time-tracking offline/local-only copy) SHIPPED + CLOSED — copy-only, 0 src-tauri changes, +18 mutation-proven tests. Three of five planned tasks landed DIFFERENTLY than written and are annotated in place rather than silently ticked: there is no per-SETTING help-line slot (SettingsGroup takes one hint per GROUP, already populated), task 3.4's named privacy test exists in four docs and nowhere in the code (the two real Rust tests assert on structured fields and cannot be tripped by copy, so the task's premise was false), and 3.5's wiring guard already existed in full. The copy discloses SCOPE as well as locality — verified in code (time_store::drain_loop has no workspace filter, unlike status_broadcaster) rather than trusted to memory. The verbose first draft FAILED its own verify-human at 322 chars vs sibling hints of 107/84/42; compressed to 270. Bucket now 2 shipped / 1 deferred / 1 remaining — WP4 (schedule-critical, must precede M11) is the only item left.
 milestone: "Milestone 11.5 — QoL polish bucket (per-project model override + pre-M11 guard debt)"
 ---
 
@@ -112,17 +112,17 @@ bucket's stated value is that it stays tight. Full record:
 
 ---
 
-### WP3: Time-tracking states it is offline + local-only
+### WP3: Time-tracking states it is offline + local-only ✅ SHIPPED 2026-08-01 (commits `0f5a8c7` + `7a1a185`, review fixes `17cf4a9`)
 **Description:** A short reassurance line on the `time_tracking_enabled` setting stating that capture is offline and stored locally. The feature has **always** been local-only (a local SQLite `time_store`, no network path) — nothing in the UI ever said so, which is a trust gap for a privacy-conscious user toggling it on. Resolves `SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING`.
 **Milestone:** 11.5
 **Dependencies:** none
 **Size:** XS
 **Tasks:**
-- [ ] 3.1 Write the copy into the **existing per-setting help-line slot** in the `⌘,` Settings panel (`components/settings/SettingsPanel.tsx`) — M10.9 WP2 already built that slot, which is why this is cheaper than when filed. Roadmap's candidate copy: *"Offline · stored locally on this Mac, visible only to you"* (exact wording at build time).
-- [ ] 3.2 **Copy-only — no data-flow change.** Do not touch `time_store`, the write gate, or the capture path. If the copy cannot be written truthfully without a code change, that is a finding to surface, not a scope expansion to absorb.
-- [ ] 3.3 Optionally extend to the dashboard empty-state (roadmap says "optionally") — include only if it costs nothing; skip rather than grow the WP.
-- [ ] 3.4 Re-verify the M9 `PRIVACY-TEST-COINCIDENTAL-SUBSTRING` self-consistency test still holds (it asserts on privacy-related strings; new copy is exactly what could trip it).
-- [ ] 3.5 Add a control-wiring check consistent with the panel's existing per-setting test discipline (`settingsPermissionModeWiring.test.ts` is the shape).
+- [x] 3.1 Write the copy into the **existing per-setting help-line slot** in the `⌘,` Settings panel (`components/settings/SettingsPanel.tsx`) — M10.9 WP2 already built that slot, which is why this is cheaper than when filed. Roadmap's candidate copy: *"Offline · stored locally on this Mac, visible only to you"* (exact wording at build time). — **LANDED DIFFERENTLY (Finding 1):** there is no per-*setting* slot; `SettingsGroup` takes one `hint` per **group** and the Analytics hint was **already populated**, so this edited existing copy and preserved its ON-vs-OFF fact. Final wording also widened past the candidate to disclose **scope**, and dropped *"visible only to you"* at verify-human as redundant.
+- [x] 3.2 **Copy-only — no data-flow change.** Do not touch `time_store`, the write gate, or the capture path. If the copy cannot be written truthfully without a code change, that is a finding to surface, not a scope expansion to absorb. — **HELD:** `git diff` reports **0 files** under `src-tauri/`, verified at ship.
+- [x] 3.3 Optionally extend to the dashboard empty-state (roadmap says "optionally") — include only if it costs nothing; skip rather than grow the WP. — **INCLUDED, and it stopped being optional (Finding 4):** the empty state told users to turn tracking on *"in the project picker"*, a surface **M10.9 WP2 deleted**. Retargeted to Settings (`⌘,`); the new instruction was verified end-to-end live.
+- [x] 3.4 Re-verify the M9 `PRIVACY-TEST-COINCIDENTAL-SUBSTRING` self-consistency test still holds (it asserts on privacy-related strings; new copy is exactly what could trip it). — **DISCHARGED AGAINST THE TESTS THAT EXIST (Finding 2):** the named identifier is **in four docs and nowhere in the code**. The real tests are `time_store::tests::row_never_carries_prompt_text` (`mod.rs:413`) + `native_row_never_carries_content` (`:703`); both ran by name (105 pass). They assert on **structured row fields**, so this task's premise — that UI copy could trip them — was **false**. Filed: `SURFACE-2026-08-01-PRIVACY-TEST-IDENTIFIER-IS-STALE-IN-FOUR-DOCS`.
+- [x] 3.5 Add a control-wiring check consistent with the panel's existing per-setting test discipline (`settingsPermissionModeWiring.test.ts` is the shape). — **ALREADY EXISTED (Finding 3):** `settingsTimeTrackingWiring.test.ts` pins all five wiring facts. A second one would be duplication, so the **unguarded** property got the coverage instead: two copy guards (+18 tests), both mutation-proven.
 
 **⚠️ Flagged for the operator, non-blocking:** this claim is **machine-scoped, and there is a known caveat worth not contradicting.** Per `[[time-tracking-capture-is-machine-global]]`, a tracking-ON Claudesk logs **all** CC sessions on the machine, including those of another Claudesk instance. "Offline · stored locally · visible only to you" is **true** (no network, local SQLite, single-user) and does not contradict that — but if you want the copy to also convey *scope* ("all CC activity on this Mac"), say so and I will widen it. Proceeding with the roadmap's copy intent as written; this is a copy-precision call, not a correctness one.
 

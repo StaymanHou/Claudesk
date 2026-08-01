@@ -1,6 +1,6 @@
 ---
 workflow: feature
-state: ship (complete)
+state: Completed 2026-08-01
 drive_mode: autopilot
 created: 2026-08-01
 milestone: 11.5
@@ -166,12 +166,59 @@ activity on this Mac**, while preserving the incumbent hint's ON-vs-OFF fact (Fi
        2. The two hook-stream drains filter differently, undocumented at both sites -->
 
 ## Current Node
-- **Path:** Feature > finalize
-- **Active scope:** none — review-quality complete (0 CRITICAL / 2 MAJOR both FIXED / 3 MINOR,
-  1 fixed + 2 backlogged)
+- **Path:** Feature > COMPLETE (archived 2026-08-01)
+- **Active scope:** none — all nodes `[x]`; shipped `0f5a8c7` + `7a1a185`, review fixes `17cf4a9`
 - **Blocked:** none
-- **Unvisited:** finalize
-- **Open discoveries:** 2 SURFACEd + 2 MINOR quality findings, all backlogged; none blocks close
+- **Unvisited:** none
+- **Open discoveries:** 2 SURFACEd + 2 MINOR quality findings, all backlogged; none blocked close
+
+## Retrospect
+
+- **What changed in our understanding:** Three of the WP's five planned tasks rested on facilities
+  that **do not exist** — there is no per-*setting* help-line slot (only a per-*group* hint, and it
+  was already populated), the privacy test task 3.4 named exists in four docs and nowhere in the
+  code, and task 3.5's wiring guard already existed in full. An "XS, fully-specified, zero-risk"
+  work package turned out to be specified against a codebase that had moved. Separately: the two
+  consumers of the hook-event fan-out **filter differently** (`time_store::drain_loop` writes
+  everything; `status_broadcaster` drops unmatched `cwd`) and neither documents it — the fact this
+  WP's central privacy claim depends on.
+- **Assumptions that held:** Copy-only was achievable and held exactly — **0 files under
+  `src-tauri/`**. The feature really is offline (no HTTP client in `time_store/`, verified by grep).
+  The `⌘,` Settings panel really was the right host. WP3's independence from the other three WPs
+  held; nothing was blocked either way.
+- **Assumptions that were wrong:**
+  1. **"Copy-only means low-risk" conflated two different risks.** The *data-flow* risk was nil, as
+     planned. But copy is a **user-facing claim**, and the risk that migrated into its place was
+     *saying something untrue or misleading* — which is why the scope clause needed a code trace,
+     not a memory lookup.
+  2. **"Fills an existing slot" — the slot was neither empty nor per-setting.** The plan inherited
+     that phrasing from the roadmap and the backlog entry, and both were wrong in the same way.
+  3. **I assumed my own guard was durable because it passed.** Review proved otherwise: two
+     assertions sat 3–6 chars from Prettier's wrap boundary and passed by luck about where the words
+     fell.
+  4. **The verbose first draft.** I judged 322 chars acceptable without measuring its siblings
+     (107/84/42). Every automated gate passed on it. Length-vs-context is not a property tests can
+     see.
+- **Approach delta:** Single phase as planned, and the two production edits are the two the plan
+  named. The deltas are all *additive discoveries*: the plan's task list was audited rather than
+  followed (4 findings, 2 filed as SURFACEs); the copy widened past the roadmap's candidate wording
+  to disclose scope; the "optional" dashboard extension became non-optional once its stale
+  picker-pointer surfaced; verify-codify added a second guard (cross-surface promise) that the plan
+  did not anticipate; and verify-human produced a real rejection-and-fix rather than a rubber stamp.
+  **Two mid-flight self-corrections worth naming:** one plan observable was too coarse
+  (`grep 'project picker'` matched a deliberate code comment) and was narrowed rather than waived;
+  and my first mutation experiments were **vacuous twice** — a `perl` pattern that changed nothing,
+  then one that hit a doc comment instead of the code line — which is the lesson most worth carrying
+  to WP4, whose whole deliverable is a mutation-proof.
+
+## Communicate
+
+> **Feature complete:** M11.5 WP3 — time tracking now states that it is offline, stored locally on
+> this Mac, and machine-wide in scope, in both places a user meets it: the `⌘,` Settings → Analytics
+> hint and the tracking-OFF dashboard empty state (`⌘⇧A` with tracking off). Copy-only — no change
+> to what is captured or where it is stored. To see it: `⌘,` → scroll to **Analytics**.
+
+**Requester = operator — closure notice for self-record.**
 
 ## Code-Quality Review — time-tracking-offline-local-only-copy
 
