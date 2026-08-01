@@ -16,12 +16,13 @@
 // mocked folder stub). The opened workspace is still the WP5 mock workspace until
 // WP7 swaps in a PTY-backed CC session.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
 import { ProjectModelCell, ProjectModelHints } from "./ProjectModelCell";
+import { applyCommittedModel } from "./applyCommittedModel";
 import { PICKER_ROW_CELLS } from "./pickerRowOrder";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
@@ -32,9 +33,17 @@ type PickerToast = { kind: "info" | "error"; message: string };
 // Mirrors the Rust `Project` serialization (`path` serializes as `project_path`).
 // Only the fields the picker reads are typed here; `last_opened_at` /
 // `default_drive_mode` exist on the wire but are unused by this component.
+//
+// `default_model` IS read: it seeds each row's model cell. Typing it here is what
+// removed an N+1 — the cell used to re-fetch this exact value per row via
+// `project_get_default_model`, and every such read re-read + re-parsed + re-sorted the
+// whole `projects.json` to keep one field. `list_projects` already returns it on the
+// wire; the field was simply absent from this interface. Optional because the Rust side
+// is `Option<String>` and may omit it entirely.
 export interface RecentProject {
   display_name?: string;
   project_path: string;
+  default_model?: string | null;
 }
 
 // Pure, testable filter predicate. Case-insensitive substring match on the
@@ -162,6 +171,18 @@ export function ProjectPicker({
       setToast({ kind: "error", message: mapIpcError("open folder", e) });
     }
   }
+
+  // Fold a persisted model override back into `recents`, so each row's cell re-seeds from
+  // a truthful value after an unmount (a filter round-trip unmounts filtered-out rows).
+  // `applyCommittedModel` is PURE — computing the next state is the only thing a state
+  // updater may do. StrictMode double-invokes updaters, so a side effect in here would
+  // fire twice (the M10.9 WP2 double-write defect); there is deliberately none.
+  const handleModelCommitted = useCallback(
+    (projectPath: string, model: string | null) => {
+      setRecents((rs) => applyCommittedModel(rs, projectPath, model));
+    },
+    [],
+  );
 
   async function handleRemove(projectPath: string) {
     try {
@@ -314,6 +335,8 @@ export function ProjectPicker({
                       key={cell}
                       projectPath={r.project_path}
                       projectLabel={labelFor(r)}
+                      seedModel={r.default_model ?? null}
+                      onCommitted={handleModelCommitted}
                     />
                   );
                 case "remove":
