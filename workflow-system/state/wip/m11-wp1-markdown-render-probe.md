@@ -1,7 +1,7 @@
 # Feature: M11 WP1 — Probe: markdown render approach (fidelity, links, live-region, CSP)
 
 **Workflow:** feature
-**State:** verify-codify (ALL PHASES COMPLETE — ready to ship)
+**State:** ship (complete) — committed `d467877`, not pushed (operator's call)
 **Created:** 2026-08-01
 **Drive mode:** autopilot
 **WBS:** `workflow-system/product/wbs.md` → WP1 (M11: Workflow-docs markdown viewer)
@@ -42,11 +42,6 @@ Audited the WBS's WP1 task list against the tree rather than trusting it — the
   - [x] P1.2 Write one render script per option against the two real docs (`workflow-system/product/wbs.md` + archived `m5-wp5-…md`, 78 checkbox items). Emit HTML to disk.  <!-- status: done — optA.mjs / optB.mjs, 4 HTML outputs -->
   - [x] P1.3 Measure the fidelity outcomes above (checkbox count, table, fenced code, frontmatter treatment) per option; record the numbers in `## Probe notes` in this WIP.  <!-- status: done — DEAD HEAT on every metric; checkbox 78/78 matches source truth exactly -->
   - [x] P1.4 Decide frontmatter treatment based on what each renderer actually emits for a leading `---` fence.  <!-- status: done — both MANGLE it identically (opening fence → <hr>, closing → setext <h2>); DECIDED: shared pre-strip regex, renderer-agnostic, validated on 6 edge cases -->
-  - [ ] SURFACED: pnpm install inside gitignored `tmp/` still writes the repo lockfile  <!-- status: SURFACED: gitignore does not isolate a pnpm workspace; spikes must live outside the repo tree -->
-  - [ ] SURFACED: A vs B undecidable on fidelity alone — Phase 2 is now the deciding phase  <!-- status: SURFACED: every fidelity metric tied; decision rests on sanitization + link model + testability -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: done 2026-08-01 — all 4 gates UNCHANGED vs the handoff baseline (127 files/1470 tests, tsc 0, eslint 0 errors + the 1 pre-existing XtermPane warning, format:check clean); dependency manifests provably untouched -->
   - [x] verify-self  <!-- status: done 2026-08-01 — 8/8 PASS, 0 BLOCKING, 0 COSMETIC; subagent RE-DERIVED every number from its own commands (fresh renders to new filenames), did not read claimed values back. See "Phase 1 verify-self" in Probe notes -->
   - [x] verify-human  <!-- status: AUTO-SKIPPED 2026-08-01 (F11) — drive_mode=autopilot; all 4 auto-skip gates clean (autopilot + verify-self 8/8 PASS + no integration boundary + no outcome cites a consuming surface). ⚠️ Flagged in chat as the skill's documented decision-artifact false-positive shape (a probe's deliverable IS measurements), with the full decision-input summary printed for operator read-time veto. No renderer chosen yet — that verdict is P3.3. -->
@@ -59,9 +54,7 @@ Audited the WBS's WP1 task list against the tree rather than trusting it — the
   - CLI: for a fixture containing an in-doc anchor `[a](#heading)`, a cross-doc link `[b](wbs.md)`, and an external `[c](https://example.com)`, the rendered HTML retains all three hrefs in a form a click handler can read — `grep -o 'href="[^"]*"' out-links-<option>.html` prints exactly `#heading`, `wbs.md`, `https://example.com` (order-insensitive). Confirms the sanitizer does not strip the relative/anchor hrefs the panel needs to intercept.
   - CLI: `grep -rn "plugin-opener" src-tauri/capabilities/default.json src-tauri/tauri.dev.json` exits 0 for both files — the external-open seam's grant is confirmed present in prod **and** dev capability sets (already true; this pins it as a recorded fact, since the dev overlay suppresses base perms if not re-listed).
   - [x] P2.1 Build the hostile fixture and run it through both options **with** their sanitizer; record the counts.  <!-- status: done — 8-vector hostile.md + a benign section; measured via LIVE-DOM predicate after the source-text regex proved to false-positive. A-sanitized=2 live vectors (NOT zero), B-default=0, B-raw-sanitized=0 -->
-  - [x] SURFACED: source-text danger predicate false-positived; switched to live-DOM  <!-- status: SURFACED: counted the fixture's own heading prose + &lt;-escaped inert text as live vectors -->
-  - [x] SURFACED: DOMPurify defaults leave a live `<style>` + an executable `data:image/svg` payload  <!-- status: SURFACED: closeable only via a hand-written afterSanitizeAttributes hook; config alone is insufficient -->
-  - [ ] P2.2 Run the same fixture through both options **without** the sanitizer; confirm non-zero counts (the negative control). If an option is safe-by-default with no sanitizer, that is a genuine finding — record it as such rather than forcing a control that cannot exist.  <!-- status: NOT-STARTED -->
+  - [x] P2.2 Run the same fixture through both options **without** the sanitizer; confirm non-zero counts (the negative control). If an option is safe-by-default with no sanitizer, that is a genuine finding — record it as such rather than forcing a control that cannot exist.  <!-- status: NOT-STARTED -->
     **⚠️ Phase 1 verify-self already established the expected asymmetry here.** CONFIRMED: B escapes raw HTML by default, so its honest control required opting into `rehype-raw` — `B-default` is **safe-by-default** and `rehype-sanitize` is defense-in-depth there. A's control fired loudly (8 live vectors).  <!-- status: done — A-unsanitized=8 live vectors incl. IMG@onerror + DIV@onclick (enumerated); B-raw-unsanitized=3. Neither sanitized pass is vacuous. -->
   - [x] P2.3 Build the three-link fixture; confirm each option's sanitizer preserves anchor + relative hrefs.  <!-- status: done — the realistic failure did NOT materialize: relDoc/anchor/external/checkbox/table/code all survive identically in ALL SIX variants -->
   - [x] P2.4 Determine the **interception mechanism** per option + confirm the `openUrl` signature.  <!-- status: done — delegated click handler (`closest("a[href]")` + preventDefault) works identically for BOTH options, so this axis does NOT discriminate. Classifier validated on 8 link shapes incl. the protocol-relative `//host` trap. openUrl(url: string|URL, openWith?) confirmed from index.d.ts -->
@@ -283,7 +276,7 @@ DOMPurify's default `ALLOWED_ATTR` includes `style` and it does not parse CSS co
 
 **P3.3 — VERDICT: Option B** (`react-markdown` + `remark-gfm` + `rehype-sanitize`). Written to `wbs.md` → "Probe outcomes". Deciding axis was **security posture under `csp: null`**, since fidelity, link-interception mechanism, and re-render safety all tied. One new finding at verdict time: **`react-dom/server` already ships with the installed `react-dom`** (verified resolvable), so **B's output is string-assertable in Vitest with no new dependency and no render harness** — which settles the plan's open testability question in B's favour and avoids re-opening `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS`.
 
-**The honest counter-argument is recorded in the verdict, not buried:** A is **20× lighter** (5 transitive packages / 4.4M vs 107 / 43M), and B's zero is *structural avoidance* rather than sanitization — contingent on never enabling `rehype-raw`. B won because a silent, three-part configuration obligation on the app's **only** line of defense is a worse recurring risk than bundle weight in a local desktop tool.
+**The honest counter-argument is recorded in the verdict, not buried:** ⚠️ **[RETRACTED — this paragraph originally read "A is 20× lighter (5 transitive packages / 4.4M vs 107 / 43M)". That number was WRONG](#phase-3-verify-self)** — it measured `node_modules` size where the WBS asked for **bundle cost**, and the 43M was contaminated by React (already in the app). **Corrected figure: A = 68.5 KB / B = 157.3 KB minified (22.7 vs 48.0 KB gzipped) — a 2.3× delta, ~25 KB gzipped**, plus ~100 net-new transitive packages, which is the genuine supply-chain concern. See "Phase 3 verify-self" below for how it was caught. B's zero is *structural avoidance* rather than sanitization — contingent on never enabling `rehype-raw`. B won because a silent, three-part configuration obligation on the app's **only** line of defense is a worse recurring risk than ~25 KB gzipped in a local desktop tool.
 
 **P3.4 no-footprint — all four confirmed:** dependency manifests byte-identical to HEAD, all 8 spike deps absent from `package.json`, `src/` untouched, verdict present in `wbs.md`. Gates unchanged (127 files / 1470 tests, `tsc` 0). The spike dir stays in the scratchpad until verify-self has re-derived from it.
 
@@ -334,6 +327,43 @@ DOMPurify's default `ALLOWED_ATTR` includes `style` and it does not parse CSS co
 The first spike attempt created `tmp/mdprobe/` **inside the repo**. `pnpm add` there resolved to the **repo workspace root** (visible as `../..` in its output) and **modified the tracked `pnpm-lock.yaml`** — `package.json` was untouched, so a `package.json`-only check would have missed it. Caught by `git status`, reverted with `git checkout pnpm-lock.yaml`, and the spike was relocated entirely outside the repo to the scratchpad.
 
 **Consequence for the plan:** Phase 3's "no production footprint" outcome is doing real work — it just fired in Phase 1. **Lesson worth carrying: `tmp/` being gitignored does NOT isolate a pnpm install** — pnpm walks up to the workspace root regardless of ignore rules. A dependency spike must live outside the repo tree entirely.
+
+## Code-Quality Review — m11-wp1-markdown-render-probe
+
+Reviewer: `code-quality-reviewer` subagent against ship baseline `d467877` (2026-08-01). **0 CRITICAL / 4 MAJOR / 5 MINOR.** The reviewer was explicitly told two overstated claims had already been found and corrected, and invited to assume a third — it found one (the `[[slug]]` gap) plus three defects in the evidence trail.
+
+**⚠️ Deviation from autopilot's auto-backlog default, recorded deliberately:** Mode 3 auto-backlogs MAJORs. **Five findings were FIXED IN PLACE instead** (3 MAJOR + 2 MINOR), because each is a one-line factual correction to a document shipped minutes earlier, and *leaving a known-wrong number in the evidence trail is exactly the failure this WP twice flagged as BLOCKING*. Backlogging a document defect I can fix in one line — in the document whose credibility with WP3 rests on its numbers being checkable — would have shipped known-wrong work. The remaining 1 MAJOR + 3 MINOR are genuinely deferrable and are backlogged.
+
+### Strengths
+- The security argument is genuinely mutation-proven, not asserted: both negative controls fire (A=20, B+raw=10), and each of A's three guard options is dropped individually and attributed to a specific probe.
+- The no-footprint property was treated as a real deliverable and verified adversarially (`pnpm-lock.yaml` checked, not just `package.json`) — which is how the pnpm workspace-root footgun was caught at all.
+- The two self-corrections preserve the *wrong* number plus an explicit "do not resurrect" warning — materially more useful than a silent fix.
+- The verdict discharges the downstream contract concretely: exact packages + versions, the pre-strip regex verbatim, the `openUrl` signature, the classifier ordering rule, the non-pinnable-constants warning for WP4.
+- Scope discipline held: three consecutive verify-codify passes each re-ran the check rather than inheriting the prior answer, and each declined to create a production module from a probe.
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR**
+- ✅ **[FIXED IN PLACE]** `[wip:47-49]` **Duplicate verification nodes** — three `NOT-STARTED` verify leaves sat above the three `[x]` ones under a `[x]` parent, violating the global Work Tree parent-completion rule. My own error: when correcting Phase 1 (I had wrongly marked verify nodes that belong to their own skills), I reinserted the reverted leaves *above* instead of replacing in place. Duplicates removed.
+  - **Auditing the whole tree for the same class then caught two more, which the reviewer had not flagged:** (a) **`P2.2` was never ticked** — the work was done and its result recorded in the leaf's own comment, but the checkbox stayed `[ ]`, so a mechanical reader would have seen the negative-control task as outstanding; (b) **four `SURFACED:` pseudo-leaves were sitting in the Work Tree**, which `[[feedback_surfaced_in_discoveries_not_worktree]]` explicitly forbids — SURFACED items are *notices*, not units of work, and putting them in the tree is what creates parent-completion violations. All four were already recorded in `## Discoveries`; removed from the tree. **The tree now has 0 unchecked leaves.**
+- ✅ **[FIXED IN PLACE]** `[wip:286]` **The retracted "20× lighter" claim was still stated as fact** in Phase 3's narrative, un-annotated — in the very evidence trail the verdict cites. The verdict was scrubbed; the trail was not. Same defect class this WP flagged as BLOCKING. Now carries an inline `[RETRACTED]` marker with the corrected figures.
+- ✅ **[FIXED IN PLACE]** `[wbs:206-207]` **Package counts inconsistent across three recordings** (5/107, 3/105, ~5/~104) — and the count is the one number the counter-argument actually leans on. Verdict now states the **clean isolated-install** figures (3 / 105) and explicitly supersedes the shared-`node_modules` numbers with a note on why they differed.
+- ✅ **[FIXED IN PLACE]** `[wbs:189-243]` **`[[slug]]` memory-style links were left undischarged** — named in WP1's own learning objective, absent from the verdict, and common in this repo's real docs (7 occurrences). **Measured rather than merely noted:** they render as *literal text* with **no `<a>` emitted**, so the delegated handler structurally cannot see them. Verdict now records the measurement + two options for WP3 at task 3.4.
+
+**MINOR**
+- ✅ **[FIXED IN PLACE]** `[wbs:189]` "11-section hostile fixture" read as designed-up-front; it was 8, expanded to 11 at verify-self. Clause added — the one place the document flattered its own process.
+- ✅ **[FIXED IN PLACE]** `[wbs:212]` The `never add rehype-raw` invariant lived **only** in the verdict, not in WP3's task 3.1 where the change would actually be made. Now stated in task 3.1 too.
+- ✅ **[FIXED IN PLACE]** `[backlog.md]` `SURFACE-…-DOMPURIFY-DEFAULTS-…` was `Status: pending` while the verdict declared it moot — forcing the next sweep to re-derive that it is dead. Now `deferred — MOOT under the WP1 verdict`, with why it is kept rather than deleted.
+- ⏳ **[BACKLOGGED]** `[wbs:214]` The `rehype-sanitize` strictness parenthetical (dropped a `<form>`, flattened `<svg><a>`) has no counterpart in the WIP's Probe notes — the one verdict claim that doesn't trace to a recorded measurement.
+- ⏳ **[BACKLOGGED]** `[runtimes.md:80-83]` History bullet says "P1 verify-auto" where the suite ran three times (once per phase). Not wrong — results were identical — but under-describes the observation.
+
+### Assessment
+Reviewer's verdict: *"a well-built knowledge artifact… the verdict is correct, its deciding argument is measured rather than reasoned, and it is actionable enough that WP3 can install three packages and start writing the render path without re-opening anything — which is the entire point of a probe WP."* Debt was small and **entirely in the evidence trail rather than the contract**; the `[[slug]]` omission was the one item flagged as costing real WP3 time, and it is now discharged with a measurement.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

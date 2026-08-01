@@ -4,6 +4,24 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m11-wp1-markdown-render-probe — 2026-08-01
+
+*(0 CRITICAL / 4 MAJOR / 5 MINOR from `code-quality-reviewer` against ship baseline `d467877`. **7 of 9 were FIXED IN PLACE**, not backlogged — all 4 MAJOR and 2 MINOR were one-line factual corrections to a document shipped minutes earlier, and leaving a known-wrong number in the evidence trail is the exact failure this WP twice flagged as BLOCKING. The 2 below are genuinely deferrable. See the WIP's `## Code-Quality Review` for the full review + what was fixed.)*
+
+## SURFACE-2026-08-01-QUALITY-WP1-SANITIZE-STRICTNESS-UNTRACED
+- **Finding (MINOR):** The WP1 verdict's parenthetical that `rehype-sanitize` is stricter than DOMPurify in places — *"it dropped a `<form>` wrapper and flattened `<svg><a>`"* (`wbs.md`, WP1 verdict) — has **no counterpart in the WIP's `## Probe notes`**. Every other claim in the verdict traces to a recorded measurement; this one doesn't.
+- **Why it matters:** it is the claim a WP3 reader will reach for precisely when benign content goes missing from a rendered doc — and at that moment they cannot find what was actually observed, only the assertion that something was. The observation is real (it came from a verify-self subagent's adversarial pass) but was never written into the trail.
+- **Suggested action:** either record the concrete observation in the verdict (which fixture, which elements, before/after), or soften the claim to "reported at verify-self, not independently re-measured." One or two lines. Fold into any WP3 touch of the render path.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-01-QUALITY-WP1-RUNTIMES-UNDERCOUNTS-OBSERVATIONS
+- **Finding (MINOR):** `runtimes.md`'s `pnpm test` History bullet records a single observation labelled "M11 WP1 P1 verify-auto", but the suite actually ran **three times** during WP1 (once per phase's verify-auto, plus verify-codify runs). Results were identical (127 files / 1470 tests, ~1.9–2.2s), so nothing is *wrong* — the entry just under-describes what was observed.
+- **Why it matters:** minor fidelity issue in the registry's audit trail. The registry's value is that the second session doesn't re-estimate what the first measured; an entry naming one phase when three ran is slightly misleading about sample size, though not about the timing.
+- **Suggested action:** decide the convention deliberately — either log one bullet per observation (verbose but honest) or one per feature with a note that N runs agreed. Currently implicit. Worth settling once rather than re-deciding each feature.
+- **Priority:** low
+- **Status:** pending
+
 # time-tracking-offline-local-only-copy — 2026-08-01
 
 *(feature-review-quality against ship baseline `0f5a8c7^..7a1a185`; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 3 MINOR. **BOTH MAJORs were FIXED IN PLACE, not backlogged**, and so was one MINOR — see the originating WIP's `## Code-Quality Review` for the full record. The two MAJORs were reflow-fragile `?raw` assertions in this WP's own new copy guards: prose inside JSX wraps at Prettier's default 80 cols, and two assertions sat 3–6 characters from the boundary, so they passed only by luck about where the words fell. Fixed by normalizing the haystack (`src.replace(/\s+/g, " ")`) in both guard files, validated in both directions — a **pure reflow** with identical words now passes where it previously failed, while dropping a claim, dropping the scope disclosure, or renaming the advertised label each still fail. Rationale for deviating from autopilot's auto-backlog default: one line per file, the guards protect a **privacy disclosure**, and they had been written in the same session — backlogging a guard already known to misfire would ship known-broken verification. Reviewer: "well-built copy-only change that does more than its brief… the plan-audit discipline is the strongest thing here.")*

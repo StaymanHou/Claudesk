@@ -116,7 +116,7 @@ No new design prior proposed — the two decisions above are applications of exi
 **Dependencies:** WP1 (renderer verdict), WP2 (panel + list + `docs_read`)
 **Size:** M
 **Tasks:**
-- [ ] 3.1 Add the chosen renderer dependency (WP1) and render `docs_read` content → formatted read-only DOM in the panel; style for the dark-only theme (no light tokens — project convention).
+- [ ] 3.1 Add the chosen renderer dependency (WP1 verdict: `react-markdown@10` + `remark-gfm@4` + `rehype-sanitize@6`) and render `docs_read` content → formatted read-only DOM in the panel; style for the dark-only theme (no light tokens — project convention). **⚠️ Do NOT add `rehype-raw`** — WP1's entire security verdict rests on that one invariant (it is what makes the renderer safe *by default* under the app's `csp: null`); nothing in code enforces it. Wanting inline HTML means **re-opening the WP1 verdict**, not adding a plugin. See "Probe outcomes" → WP1 verdict.
 - [ ] 3.2 Frontmatter renders as a legible styled header block (per WP1); task-list `- [ ]`/`- [x]` render as (non-interactive) checkboxes; tables + fenced code legible.
 - [ ] 3.3 **Auto-select-on-open** relevance rule — pure function `pickInitialDoc(docSet)`: `.session.md` if present → else the active `workflow-system/state/wip/*.md` (if one, else most-recently-modified wip) → else `roadmap.md` → else first in workflow order. Unit-test the ranking over synthetic doc sets. `[PRIOR: primary-surface-is-zero-ceremony-not-a-mode]` — zero-ceremony landing, operator-confirmed.
 - [ ] 3.4 **Link navigation:** in-doc anchors scroll within the panel; cross-doc links (`wbs.md`, another doc in the set) switch the selected doc; external `http(s)` links open in the default browser (existing `open`/shell seam) or are inert — never navigate the webview. (Mechanism per WP1.)
@@ -186,7 +186,7 @@ Add at WP3 task 3.1: `react-markdown@10`, `remark-gfm@4`, `rehype-sanitize@6`. *
 
 Fidelity was a **dead heat** and decided nothing: both options rendered the real `wbs.md` and a real 78-item Work-Tree WIP identically — GFM task-list checkboxes **78 = 78 = 78** against source truth (checked-state 58/58 too), tables, fenced code, headings all structurally identical. The WBS framed WP1 as primarily a fidelity comparison; it isn't one.
 
-**⚠️ The app ships with `"security": { "csp": null }`** (`tauri.conf.json:21-23`) — there is **no CSP**, so the sanitizer is the *only* line of defense, and anything that executes gets full `__TAURI_INTERNALS__` (whole IPC surface) access. Measured against an 11-section hostile fixture, scoring the **parsed live DOM** (not source text):
+**⚠️ The app ships with `"security": { "csp": null }`** (`tauri.conf.json:21-23`) — there is **no CSP**, so the sanitizer is the *only* line of defense, and anything that executes gets full `__TAURI_INTERNALS__` (whole IPC surface) access. Measured against an 11-section hostile fixture (8 sections initially; **expanded to 11 at verify-self** when the predicate was found to miss the style-attribute class), scoring the **parsed live DOM** (not source text):
 
 | config | live vectors | what it takes to get there |
 |---|---|---|
@@ -203,10 +203,12 @@ Both negative controls fire, so neither zero is vacuous. A's four survivors on d
 
 | | minified | gzipped | transitive packages |
 |---|---|---|---|
-| **A** (`marked` + `dompurify`) | **68.5 KB** | **22.7 KB** | ~5 |
-| **B** (`react-markdown` + `remark-gfm` + `rehype-sanitize`) | **157.3 KB** | **48.0 KB** | ~104 |
+| **A** (`marked` + `dompurify`) | **68.5 KB** | **22.7 KB** | **3** |
+| **B** (`react-markdown` + `remark-gfm` + `rehype-sanitize`) | **157.3 KB** | **48.0 KB** | **105** |
 
-So the real cost of B is **~89 KB minified / ~25 KB gzipped (a ~2.3× delta) and ~100 net-new transitive packages** — the package count being the genuine supply-chain concern, not the size.
+So the real cost of B is **~89 KB minified / ~25 KB gzipped (a 2.3× delta) and ~100 net-new transitive packages** — the package count being the genuine supply-chain concern, not the size.
+
+*Package counts are from **clean isolated installs**, one throwaway dir per option (independently reproduced at verify-self). Earlier notes in the WIP's evidence trail cite 5 / 107 — those came from the **shared** spike `node_modules`, which contained both options plus probe-only `jsdom`, and are superseded by the isolated figures here. Bundle sizes are esbuild, minified, ESM, with `react`/`react-dom` external (they already ship with the app).*
 
 ⚠️ **An earlier draft of this verdict said "20× lighter — 4.4M vs 43M." That was wrong and is corrected above.** It reported `node_modules` size, which is not bundle cost (DOMPurify is 1.7M on disk and 28.5 KB minified), and the 43M figure was contaminated — it included React, which the app already ships. **Do not resurrect that framing**; the WBS asked for *bundle cost* (this file, WP1 learning objective) and the numbers above are it.
 
@@ -226,6 +228,8 @@ So the real cost of B is **~89 KB minified / ~25 KB gzipped (a ~2.3× delta) and
 | **`//evil.example.com`** | **external (protocol-relative)** | `openUrl` |
 
 ⚠️ **The protocol-relative case is why the test must not be `startsWith("http")`** — it is *external* but carries no scheme, and a naive check misroutes it into the local-file path. **P2.3's realistic failure did not materialize:** no sanitizer in any variant stripped `href="wbs.md"`, `href="#heading"`, or the external href — cross-doc navigation is safe in every candidate config.
+
+⚠️ **`[[slug]]` memory-style links are NOT handled — measured, and out of scope for the delegated handler.** WP1's learning objective (this file, "Link behavior") named them alongside markdown links. Measured against the chosen renderer: **`[[slug]]` renders as literal text and emits NO `<a>` element at all** (`See [[verify-the-mutation-landed]]` → `<p>See [[verify-the-mutation-landed]] …</p>`). So the delegated click handler **structurally cannot see them** — this is not a classifier gap that a better predicate would fix. They are common in this repo's real docs (7 occurrences across `backlog.md` + `CLAUDE.md`), so WP3 will meet them immediately. **Options for WP3, deliberately not pre-decided:** accept them as inert plain text (cheapest; they still *read* fine), or add a small `remark` plugin that rewrites `[[slug]]` → a real link node before render (which then flows through the same delegated handler as any cross-doc link). **Do not discover this mid-build** — decide it at task 3.4.
 
 **External-open seam — available and granted, but uncalled.** `@tauri-apps/plugin-opener` is already in `package.json`, registered at `lib.rs:152`, with `opener:default` granted in **both** `capabilities/default.json:8` and the `tauri.dev.json` inline dev capability. **Zero call sites in `src/` today** — WP3 writes the first. Exact signature: `openUrl(url: string | URL, openWith?: 'inAppBrowser' | string): Promise<void>`.
 
