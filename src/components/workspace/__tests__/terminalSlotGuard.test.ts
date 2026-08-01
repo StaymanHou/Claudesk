@@ -171,8 +171,16 @@ describe("RightPanelHost mounts a GATED slot + tab for every gate-only panel", (
           `${marker} is rendered WITHOUT an enclosing \`${GATE}\` branch — a gated ` +
             `surface must not exist while the gate is off (not hidden, not disabled)`,
         ).toBeGreaterThan(-1);
-        // The gate opener must be closer than the previous sibling slot, i.e. it really
-        // encloses this element rather than being some earlier unrelated branch.
+        // Anti-false-positive: the nearest gate opener must come AFTER the previous
+        // sibling slot, i.e. it really encloses this element rather than being some
+        // earlier unrelated branch.
+        //
+        // ⚠️ SCOPE, measured at code review (2026-08-01) — this clause is load-bearing
+        // for the SLOT marker only. For `panel-tab-docs` the terminal slot does not
+        // appear earlier in the file (the tab row precedes every slot), so `prevSlot`
+        // is -1 and the assertion degenerates into a duplicate of the `> -1` check
+        // above. The tab's gating is still genuinely caught — by that first assertion,
+        // mutation-proved — but do not read this second one as covering both markers.
         const prevSlot = before.lastIndexOf(
           "right-panel-slot right-panel-slot--terminal",
         );

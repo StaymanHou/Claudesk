@@ -1,7 +1,7 @@
 # Feature: M11 WP2 — Docs panel plumbing (4th RightPanelHost panel + workflow-ordered doc list)
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** COMPLETED 2026-08-01 — shipped `6632f59`, review-quality done, finalized
 **Created:** 2026-08-01
 **Drive mode:** autopilot
 **Source:** `workflow-system/product/wbs.md` → WP2 (tasks 2.1–2.5) + the 2026-08-01 Activation audit
@@ -196,8 +196,8 @@ outcomes assert the reconciliation, not merely the absence of a tab).
   bug — fails two tests by name. Gates: 1513 frontend (+5) / 723 backend, tsc·lint·format·clippy·cargo-fmt all 0.
 
 ## Current Node
-- **Path:** Feature > COMPLETE (all 3 phases `[x]`, ready to ship)
-- **Active scope:** none — feature complete
+- **Path:** Feature > review-quality (complete) → feature-finalize
+- **Active scope:** none — shipped `6632f59`; review 0 CRITICAL / 3 MAJOR / 4 MINOR (1 MAJOR fixed in place, rest backlogged)
 - **Blocked:** none
 - **Unvisited:** none — all phases complete
 - **Open discoveries:** 1 — `SURFACE-2026-08-01-OFF-INVARIANT-CHORD-ARM-PREDICATE-IS-MODULE-LEVEL-NOT-PER-EXPORT` (low; no live gap, defense-in-depth only; relevant to Phase 3)
@@ -297,6 +297,116 @@ it green, since the base class still has a rule). Stated in the test so it is no
 
 **Gates:** 1507 frontend tests (was 1498, +9), `tsc` 0, `pnpm lint` **0 errors**, `format:check`
 clean. Backend untouched (723 green).
+
+## Retrospect
+
+- **What changed in our understanding:** The gating problem was not *"register the panel
+  conditionally"* — it was **"where may the `"docs"` identity live at all."** The activation audit had
+  measured that much; what the build added is *why* the guard's answer is the right one. Its offender
+  predicate is `namesWorkflowTerm(src) && !/useWorkflowFeaturesEnabled/i.test(src)`, so it is not
+  saying "`docs` may not live here" but **"whatever module names `docs` must consume the seam."**
+  That reframes gate-derivation from *a way around the error* into *the shape the guard is asking
+  for* — and it is why the fix is a real type-level dependency rather than a comment.
+
+- **Assumptions that held:** All five load-bearing activation-audit claims. The seam had zero
+  consumers as designed; `⌘⇧K` was genuinely free; `read_file_core`/`validate_root` were the right
+  public reuse surfaces (and the WBS's correction away from the private `resolve_within` was right);
+  the guard's own header had already sanctioned making `AVAILABLE_PANELS` dynamic. The WP's M/L
+  sizing was accurate.
+
+- **Assumptions that were wrong:**
+  1. **The plan specified `reconcilePanel` as a `useEffect`.** Lint rejected it (cascading renders),
+     and deriving at render turned out strictly better — no extra render pass, and a revoked panel is
+     never front even for one frame. The plan's mechanism was wrong; its *hazard analysis* (D3) was
+     exactly right, which is what mattered.
+  2. **A comment mentioning the seam does not satisfy the guard.** I assumed prose would; the arm
+     strips comments first. Measured, not reasoned.
+  3. **My first `?raw` guard and my first backend-contract test were both vacuous** — satisfied by
+     comments and by an arbitrary two-unknowns comparison respectively. Both found by mutation.
+
+- **Approach delta:** Three phases as planned, in order, no back-loops. Two operator-driven scope
+  changes landed cleanly at verify-human gates (legacy-layout support dropped at Phase 1; Phase 2
+  approved unchanged). The material delta is `reconcilePanel` moving from Phase 3 to Phase 2 (it is
+  pure logic, so it belonged with its siblings) and from an effect to a derivation.
+
+- **The method that paid, again:** *instruct verification subagents to attack the work, not confirm
+  it.* Every defect this WP found came from that framing — including the two BLOCKING coverage gaps
+  the live verification could never have caught, because **the app behaved correctly the whole time;
+  what was broken was that nothing pinned it.** Live checking proves behavior; only mutation proves
+  the tests would notice if it changed. Worth carrying: I fixed the same vacuity class three separate
+  times here, and twice the lesson failed to transfer to the next file I wrote until a mutation
+  forced it.
+
+## Code-Quality Review — m11-wp2-docs-panel-plumbing
+
+Reviewer: `code-quality-reviewer` against ship baseline `6632f59`. **0 CRITICAL / 3 MAJOR / 4 MINOR.**
+Drive mode autopilot → MAJOR + MINOR auto-backlogged (see
+`workflow-system/state/backlog-quality-findings.md`), **except MAJOR-1, which was VERIFIED and FIXED
+IN PLACE** — it was an over-claiming comment in a test shipped minutes earlier, and leaving a
+knowingly-wrong claim in a guard is the failure this feature twice paid to avoid.
+
+### Strengths
+- The gate-derived registry answers the OFF-invariant guard rather than dodging it, retaining
+  `AVAILABLE_PANELS` as the literal OFF-state baseline exactly as the guard's own header prescribed.
+- `reconcilePanel` closes a hazard the type system cannot see, and its two property tests assert the
+  *property* (fallback is itself ungated; every gated panel is evicted) rather than the literal
+  `"editor"` — they still hold for a future second gated panel.
+- `docs_read`/`docs_list` reuse `editor_fs::validate_root` + `read_file_core` instead of growing a
+  second path-confinement guard, with the reasoning stated rather than the safety asserted.
+- Several test comments state measured scope limits honestly rather than implying more coverage than
+  exists (`docsPanelStyles`, the wbs-glob directory test, `commands.rs`).
+- The chord is gated at the *predicate*, so `preventDefault` is never reached and the key passes
+  through — correctly avoiding the "registered-with-a-no-op-handler" shape the seam contract names.
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR**
+- **[FIXED IN PLACE 2026-08-01]** `terminalSlotGuard.test.ts:176-183` — the "gate branch is in the
+  wrong place" sub-assertion is **inert for the `panel-tab-docs` marker**: `prevSlot === -1` there
+  (the tab row precedes every slot), so it degenerates into a duplicate of the `> -1` check above,
+  while the comment claimed it covered both markers. **Independently verified before acting**
+  (measured `gateAt: 20036 / prevSlot: -1` for the tab vs `27213 / 24057` for the slot). Over-claim,
+  not a coverage hole — the tab's gating is still caught by the first assertion, mutation-proved.
+  Comment corrected to state the real scope.
+- `DocsPanel.tsx:36-55` — the fetch effect lists `docs` in its deps and uses `docs !== null` as the
+  once-only latch while the error path sets `setDocs([])`, so `docs` does double duty as data AND
+  has-fetched flag, coupling the effect's re-run to its own write. Works today only because both
+  arms write non-null. **WP4 is scheduled to add reload-on-`fs-change` to this exact component**; a
+  refetch that resets `docs` to `null` would re-arm the effect and can loop against a persistently
+  failing `docs_list`. Should become an explicit `fetched` ref before WP4 lands. → backlogged.
+- `DocsPanel.tsx` — no component/wiring test: nothing pins that it calls `docs_list` with
+  `root: projectPath` (stringly-typed across IPC — the `tauri-command-removal-needs-invoke-sweep`
+  failure class), that `selected` is per-instance, or that `visible` defers the first fetch. The
+  codify note closed the *decision function* gap (`docsView`), not the component's use of it. →
+  backlogged.
+
+**MINOR** (all → backlogged)
+- `panelHost.ts:26-43` — the type-only seam import is genuinely load-bearing (verified: replacing the
+  alias with `boolean` makes the module an offender), but the 18-line justification argues with the
+  guard before describing the code, burying the secondary type-safety benefit in a position that
+  reads as primary.
+- `docs/mod.rs:184-201` — 9 comment lines + a dedicated private-helper test for a dedup branch no
+  production input can reach; an assertion that the fixed lists and glob sets are disjoint would pin
+  the same invariant at its actual source, smaller.
+- `DocsPanel.tsx:29,95` — `selected` has no consumer until WP3; the header says so, the code doesn't.
+- `commands.rs:40-48` — `validate_frontend_root` is a verbatim copy of `editor_fs::commands`' private
+  fn of the same name. The cleanest fix (`pub(crate)` on the original) is one keyword and would make
+  the module's own "a second guard is one that drifts" principle true across both halves.
+
+### Assessment
+Well-built work clearing a genuinely hard bar: the first consumer of a seam that shipped deliberately
+unconsumed, which neither weakened nor dodged the guard protecting it. The render-time derivation is
+the right call over the planned state-sync effect. The backend is clean and its tests are unusually
+honest about what they do and do not pin. **Weakest area: the frontend integration boundary** —
+`DocsPanel`, the one net-new component, carries no test of its own IPC wiring, and its fetch latch is
+entangled with its data in a way WP4 will have to untangle. Comment-to-code ratio in `panelHost.ts`
+and `docs/mod.rs` is high enough that load-bearing sentences compete with provenance narration.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives this WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

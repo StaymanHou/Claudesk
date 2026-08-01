@@ -4,6 +4,73 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m11-wp2-docs-panel-plumbing — 2026-08-01
+
+*Reviewer: `code-quality-reviewer` against ship baseline `6632f59`. 0 CRITICAL / 3 MAJOR / 4 MINOR.
+**2 of 3 MAJOR backlogged** — MAJOR-1 was verified and fixed in place (an over-claiming comment in a
+guard shipped minutes earlier; leaving a knowingly-wrong claim in a test is the exact failure this
+feature twice paid to avoid). Both remaining MAJORs land on WP3/WP4's path, so they are genuine
+scheduling items rather than polish.*
+
+## SURFACE-2026-08-01-QUALITY-WP2-DOCSPANEL-FETCH-LATCH-ENTANGLED-WITH-DATA
+- **Source:** feature:review-quality (m11-wp2)
+- **Target level:** feature (M11 WP4)
+- **Type:** tech-debt (latent, becomes live at WP4)
+- **Summary:** `DocsPanel.tsx`'s fetch effect lists `docs` in its dependency array and uses
+  `docs !== null` as the once-only latch, while the error path sets `setDocs([])`. `docs` therefore
+  does double duty as both the data and the has-fetched flag, coupling the effect's re-run to its own
+  write.
+- **Context:** Correct today only because BOTH the success and failure arms write a non-null value.
+  **M11 WP4 is scheduled to add scroll-preserving live reload on `fs-change` to this exact
+  component** — a refetch that resets `docs` to `null` re-arms the effect, and against a persistently
+  failing `docs_list` that is a loop.
+- **Suggested action:** Replace the latch with an explicit `fetched` ref (or a discriminated
+  `status` union) **before WP4's reload lands**, so the fetch-once property is stated rather than
+  emergent. Cheap now; a live-reload bug later.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-01-QUALITY-WP2-DOCSPANEL-HAS-NO-WIRING-TEST
+- **Source:** feature:review-quality (m11-wp2)
+- **Target level:** feature (M11 WP3)
+- **Type:** gap (test coverage)
+- **Summary:** `DocsPanel` — the one net-new component in the WP — has no component or wiring test.
+  `docsOrder.test.ts` covers the pure functions and `docsPanelStyles.test.ts` covers CSS class
+  existence, but nothing pins that the component invokes `docs_list` with `root: projectPath`, that
+  `selected` is per-instance (the stated "preserved across panel switches" property), or that the
+  `visible` prop actually defers the first fetch.
+- **Context:** The argument-name coupling (`root:`) is **stringly-typed across the IPC boundary** —
+  the same failure class already recorded as `[[tauri-command-removal-needs-invoke-sweep]]`, invisible
+  to `tsc`. The WP's own codify note closed the *decision-function* gap (`docsView`), which pins the
+  branch choice but not the component's use of it. Verified live at verify-self, so there is no
+  present defect — the gap is regression protection.
+- **Suggested action:** Fold into WP3, which touches this component anyway to add the render. Note
+  `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` is the standing blocker for a true component
+  test; a narrower `?raw`-plus-pure-function split may be the cheaper answer than adopting RTL.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-01-QUALITY-WP2-MINOR-BATCH
+- **Source:** feature:review-quality (m11-wp2)
+- **Target level:** feature
+- **Type:** tech-debt (cosmetic)
+- **Summary:** Four MINOR findings, all comment/structure polish with no correctness impact:
+  (1) `panelHost.ts:26-43` — the type-only seam import is genuinely load-bearing (verified by
+  mutation), but its 18-line justification argues with the guard before describing the code, burying
+  the secondary type-safety benefit where it reads as primary. (2) `docs/mod.rs:184-201` — 9 comment
+  lines plus a dedicated private-helper test for a dedup branch no production input reaches; an
+  assertion that the fixed lists and glob sets are disjoint would pin the same invariant at its
+  source, smaller. (3) `DocsPanel.tsx:29,95` — `selected` has no consumer until WP3; the header says
+  so, the code doesn't. (4) `commands.rs:40-48` — `validate_frontend_root` is a verbatim copy of
+  `editor_fs::commands`' private fn of the same name; `pub(crate)` on the original is one keyword and
+  would make the module's own "a second guard is one that drifts" principle true across both halves.
+- **Context:** The reviewer's overall note is that comment-to-code ratio in `panelHost.ts` and
+  `docs/mod.rs` is high enough that load-bearing sentences compete with provenance narration.
+- **Suggested action:** Sweep in a refactor pass, or dismiss individually. (4) is the one with a
+  principled argument behind it and is nearly free.
+- **Priority:** low
+- **Status:** pending
+
 # m11-wp1-markdown-render-probe — 2026-08-01
 
 *(0 CRITICAL / 4 MAJOR / 5 MINOR from `code-quality-reviewer` against ship baseline `d467877`. **7 of 9 were FIXED IN PLACE**, not backlogged — all 4 MAJOR and 2 MINOR were one-line factual corrections to a document shipped minutes earlier, and leaving a known-wrong number in the evidence trail is the exact failure this WP twice flagged as BLOCKING. The 2 below are genuinely deferrable. See the WIP's `## Code-Quality Review` for the full review + what was fixed.)*
