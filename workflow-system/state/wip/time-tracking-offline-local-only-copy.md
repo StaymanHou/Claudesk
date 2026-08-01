@@ -1,6 +1,6 @@
 ---
 workflow: feature
-state: plan (complete)
+state: ship (complete)
 drive_mode: autopilot
 created: 2026-08-01
 milestone: 11.5
@@ -166,8 +166,41 @@ activity on this Mac**, while preserving the incumbent hint's ON-vs-OFF fact (Fi
        2. The two hook-stream drains filter differently, undocumented at both sites -->
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** none — Phase 1 complete (single-phase feature; all phases done)
+- **Path:** Feature > review-quality
+- **Active scope:** none — shipped as `0f5a8c7`; review baseline is `0f5a8c7^..0f5a8c7`
+- **Blocked:** none
+- **Unvisited:** review-quality → finalize
+- **Open discoveries:** 2 (both backlogged; neither blocks close)
+
+## Ship log — 2026-08-01
+
+**Committed `0f5a8c7`** on `main` (direct-to-main per the project's branch policy — no feature
+branch, none requested). Nine files: 2 copy edits, 2 new test files, CHANGELOG, wbs, backlog,
+runtimes, this WIP.
+
+**NOT pushed.** `main` is now **21 commits ahead** of `origin/main`, and that tail carries the
+entire M10.9 milestone (the workflow-features gate, both install/uninstall wizards, and the
+substrate-detection fix that is still broken in released v0.2.9). Publishing is a release-shaped
+operator decision, not a ship-step side effect — and nothing in this WP needs it.
+
+**Delete-on-resolve honored:** the `**Backlog resolved:**` line landed in `CHANGELOG.md` and the
+`SURFACE-2026-07-20-...` block was deleted from `backlog.md` in the **same commit**, CHANGELOG
+written first. Verified after: 0 occurrences of the resolved ID's `## ` heading, 1 in CHANGELOG,
+both neighbouring entries intact.
+**One follow-on catch:** deleting the entry left *my own new* backlog item citing it as a live
+"fourth citation" — a dangling cross-reference created by the delete itself. Corrected in the same
+commit (three surviving docs, with the deleted fourth noted as already gone). A second reference at
+`backlog.md:178` was left alone deliberately: it is a historical provenance comment about a past
+heading repair, accurate as history.
+
+**Cleanup verified:** all five mutation-test backups removed from `/tmp`; no `console.log` /
+`debugger` / `FIXME` / `@ts-ignore` in the changed files; no new TODOs; ports 1420/9223 clear and no
+residual `claudesk`/vite processes. `HANDOFF-REPLY-to-claudesk-2026-07-29.md` remains untracked by
+design — it predates these sessions and was **not** staged.
+
+**Final gates:** `tsc` 0 · `eslint` 0 errors (1 pre-existing warning in untouched `XtermPane.tsx`) ·
+`format:check` green · `pnpm test` **127 files / 1467 pass** · `vite build` exit 0 (exit code read
+directly, not inferred from the ✓) · **0 files under `src-tauri/`**.
 - **Blocked:** none
 - **Unvisited:** none — single-phase feature. Remaining sequence within Phase 1:
   verify-auto → verify-self → verify-human → verify-codify.
