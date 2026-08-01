@@ -280,3 +280,8 @@ the only unknown root cause; that unknown resolved into "real bug, wrong size," 
 the reproduce-first ordering existed to surface early. WP3 and WP4 are unaffected — all four WPs were
 mutually independent by design (no shared files, no shared subsystems), so nothing was blocked on it.
 **WP4 still ships before M11 regardless of anything else in this bucket.**
+
+## Session Handoff — 2026-08-01 08:37
+Handed off. See `workflow-system/state/.session.md` to restore.
+
+**M11.5: 1 shipped / 1 deferred / 2 remaining.** WP1 (per-project model override) SHIPPED; **WP2 (editor minimap) DEFERRED to backlog** 2026-08-01 — real bug, fully diagnosed, but feature-sized rather than papercut-sized (`c12dcf0`). **Next: WP3 (time-tracking offline/local-only copy — XS, copy-only) via `/feature-plan`.** WP4 remains schedule-critical before M11.
