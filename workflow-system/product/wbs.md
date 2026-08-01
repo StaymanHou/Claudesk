@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: "Milestone 11: Workflow-docs markdown viewer"
-updated: 2026-08-01  # UNPARKED into the active slot at M11.5's close. Re-audited against the tree before activation (the discipline that paid 3× in M11.5): all five load-bearing claims HOLD — the gate seam `useWorkflowFeaturesEnabled` exists with zero consumers as designed, `RightPanel`/`AVAILABLE_PANELS` are the shape WP2 assumes, ⌘⇧K and ⌘⇧G are both genuinely free, the `fs-change` seam exists, and `validate_root` is public. TWO corrections applied, both consequences of M11.5 WP4 landing AFTER this file was parked. (1) ⚠️ MEASURED, not predicted: adding `"docs"` to the `RightPanel` type union ALONE — one word, no panel registered, no chord wired — now FAILS the OFF-invariant guard, because WP4 put `panelHost.ts` in the chord arm's scope. The guard is behaving correctly (it is demanding the gate), but the friction arrives at the TYPE DECLARATION, not at panel registration where task 2.3 assumed. WP2 re-sized M → M/L and task 2.3 rewritten. (2) Task 2.2 named `resolve_within` for reuse, which is PRIVATE (`fn`, not `pub fn`); the real reuse surface is `read_file_core`, which wraps it — a better fit for `docs_read` anyway.
+updated: 2026-08-01  # WP1 ✅ SHIPPED (d467877 + review e971d22) — renderer VERDICT: Option B (react-markdown@10 + remark-gfm@4 + rehype-sanitize@6); deciding axis was security under `csp: null`, not fidelity (which tied). ⚠️ WP3 task 3.1 must NOT add `rehype-raw`. UNPARKED into the active slot at M11.5's close. Re-audited against the tree before activation (the discipline that paid 3× in M11.5): all five load-bearing claims HOLD — the gate seam `useWorkflowFeaturesEnabled` exists with zero consumers as designed, `RightPanel`/`AVAILABLE_PANELS` are the shape WP2 assumes, ⌘⇧K and ⌘⇧G are both genuinely free, the `fs-change` seam exists, and `validate_root` is public. TWO corrections applied, both consequences of M11.5 WP4 landing AFTER this file was parked. (1) ⚠️ MEASURED, not predicted: adding `"docs"` to the `RightPanel` type union ALONE — one word, no panel registered, no chord wired — now FAILS the OFF-invariant guard, because WP4 put `panelHost.ts` in the chord arm's scope. The guard is behaving correctly (it is demanding the gate), but the friction arrives at the TYPE DECLARATION, not at panel registration where task 2.3 assumed. WP2 re-sized M → M/L and task 2.3 rewritten. (2) Task 2.2 named `resolve_within` for reuse, which is PRIVATE (`fn`, not `pub fn`); the real reuse surface is `read_file_core`, which wraps it — a better fit for `docs_read` anyway.
 ---
 
 # WBS — Milestone 11: Workflow-docs markdown viewer
@@ -60,7 +60,7 @@ No new design prior proposed — the two decisions above are applications of exi
 
 ## Work Packages
 
-### WP1: Probe — markdown render approach (fidelity, links, live-region, CSP)
+### WP1: Probe — markdown render approach (fidelity, links, live-region, CSP) — ✅ SHIPPED 2026-08-01 (commit `d467877`, review pass `e971d22`)
 **Type:** probe
 **Milestone:** M11 (must precede WP3, the render build)
 **Dependencies:** none
@@ -74,10 +74,10 @@ No new design prior proposed — the two decisions above are applications of exi
 **Timebox:** half-day
 **Success criterion:** A short written verdict in this file's "Probe outcomes" (added at WP1 close): the chosen renderer + dep, how task-lists/tables/code/frontmatter render, the link-intercept mechanism (in-doc vs cross-doc vs external), and a one-line confirmation the render is re-render-in-place-safe under CSP. Enough that WP3 builds against a known shape, not an assumed one.
 **Tasks:**
-- [ ] 1.1 Spike both realistic renderer options against a real doc (this `wbs.md` + a live `workflow-system/state/wip/*.md` with a Work-Tree) — eyeball task-list/table/code/frontmatter fidelity.
-- [ ] 1.2 Determine the link-intercept mechanism for in-doc / cross-doc / external, and how the renderer exposes hrefs.
-- [ ] 1.3 Confirm CSP compatibility + re-render-in-place safety (no internal scroll reset).
-- [ ] 1.4 Write the verdict to "Probe outcomes" (renderer + dep + link model + frontmatter treatment).
+- [x] 1.1 Spike both realistic renderer options against a real doc (this `wbs.md` + a live `workflow-system/state/wip/*.md` with a Work-Tree) — eyeball task-list/table/code/frontmatter fidelity.
+- [x] 1.2 Determine the link-intercept mechanism for in-doc / cross-doc / external, and how the renderer exposes hrefs.
+- [x] 1.3 Confirm CSP compatibility + re-render-in-place safety (no internal scroll reset).
+- [x] 1.4 Write the verdict to "Probe outcomes" (renderer + dep + link model + frontmatter treatment).
 
 **WP1 → WP2 rationale:** Resolve the render-approach + dependency unknown *first*, cheaply, before building either the panel plumbing or the render — so WP3 isn't designed around an assumed renderer API or a dep that fails CSP/GFM. Standard 3rd-party-probe-before-build ordering (§4).
 

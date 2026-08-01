@@ -1,7 +1,7 @@
 # Feature: M11 WP1 — Probe: markdown render approach (fidelity, links, live-region, CSP)
 
 **Workflow:** feature
-**State:** ship (complete) — committed `d467877`, not pushed (operator's call)
+**State:** **COMPLETED 2026-08-01** — shipped `d467877`, review pass `e971d22`, finalized + archived. Not pushed (operator's call).
 **Created:** 2026-08-01
 **Drive mode:** autopilot
 **WBS:** `workflow-system/product/wbs.md` → WP1 (M11: Workflow-docs markdown viewer)
@@ -80,7 +80,7 @@ Audited the WBS's WP1 task list against the tree rather than trusting it — the
   - [x] verify-codify  <!-- status: done 2026-08-01 — DELIBERATELY CODIFIED NOTHING (0 tests; suite stays 127/1470). Structural reason now absolute: ZERO WP1 code exists in the repo (src/ untouched), no docs module, react-markdown not installed — nothing to test against. Scroll-ownership + link-classifier tests DEFERRED to WP3/WP4 where their module will exist. -->
 
 ## Current Node
-- **Path:** Feature > COMPLETE
+- **Path:** Feature > review-quality (complete) → finalize
 - **Active scope:** none — **all 3 phases complete**, every impl task and every verification node `[x]`. WP1's deliverable (the renderer verdict) is written to `wbs.md` → "Probe outcomes". Ready to ship.
 - **Blocked:** none
 - **Unvisited:** none
@@ -327,6 +327,26 @@ DOMPurify's default `ALLOWED_ATTR` includes `style` and it does not parse CSS co
 The first spike attempt created `tmp/mdprobe/` **inside the repo**. `pnpm add` there resolved to the **repo workspace root** (visible as `../..` in its output) and **modified the tracked `pnpm-lock.yaml`** — `package.json` was untouched, so a `package.json`-only check would have missed it. Caught by `git status`, reverted with `git checkout pnpm-lock.yaml`, and the spike was relocated entirely outside the repo to the scratchpad.
 
 **Consequence for the plan:** Phase 3's "no production footprint" outcome is doing real work — it just fired in Phase 1. **Lesson worth carrying: `tmp/` being gitignored does NOT isolate a pnpm install** — pnpm walks up to the workspace root regardless of ignore rules. A dependency spike must live outside the repo tree entirely.
+
+## Retrospect
+
+- **What changed in our understanding:** Three things the WBS did not know. (1) **The app ships with no CSP** (`"csp": null`) — the plan's task 1.3 asked to "confirm the renderer runs under Claudesk's CSP," a question with no answer; the real question inverted into *"with no backstop, what does each renderer do with hostile markdown on its own."* That inversion is what made this WP decidable. (2) **Fidelity does not discriminate** — the WBS framed WP1 as primarily a fidelity comparison, and both options rendered real docs identically on every metric. The WP's stated axis was the wrong axis. (3) **`react-dom/server` already ships with `react-dom`**, so Option B's output is string-assertable with no new dependency and no render harness — which quietly settled the testability worry that `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` had left open for this decision.
+
+- **Assumptions that held:** The plan's three-phase shape (fidelity → safety+links → re-render+verdict) survived intact, each phase failing independently as intended. The half-day timebox held. The "no dependency added to `package.json`" constraint held end-to-end and was worth its verification cost. The two candidate renderers were the right two — no third option surfaced.
+
+- **Assumptions that were wrong:**
+  - **The plan's own instruction was wrong:** it said spiking "may install into a throwaway dir under `tmp/`, which is gitignored." Following it dirtied the tracked `pnpm-lock.yaml` — pnpm walks to the workspace root regardless of gitignore, and `package.json` stays clean, so the usual check misses it. Fixed by moving the spike outside the repo entirely.
+  - **I assumed my measurement predicate was sound. Twice.** The first (source-text regexes) false-positived on the fixture's own heading prose and on `&lt;`-escaped inert text. The corrected one (live DOM) still missed the `style`-attribute vector — which made a "0 danger" result *under-determined*, passing only because the config happened to include `FORBID_ATTR:["style"]`. Both were caught by verify-self subagents, not by me.
+  - **I assumed reporting `node_modules` size answered "bundle cost."** It does not — DOMPurify is 1.7M on disk and 28.5 KB minified. The real delta is 2.3×, not 20×, and I dropped a React-contamination caveat that was in my own notes when writing the verdict.
+  - **I assumed a done phase's Work Tree was clean.** Review-quality found duplicate verify nodes under a `[x]` parent; auditing for that class then found a ticked-in-comment-but-unticked-in-box task (`P2.2`) and four `SURFACED:` pseudo-leaves that never belonged in the tree.
+
+- **Approach delta:** The plan was followed phase-for-phase, but the *weight* shifted: Phase 2 was written as confirmatory and became the deciding phase once fidelity tied. Three verify-self passes each produced a substantive finding rather than a rubber stamp, and two required in-place fixes under the shortcut clause — both re-verified by fresh subagents. **The single highest-leverage move was instructing each subagent to *attack* my work rather than confirm it** (re-derive every number independently; "argue the other side"); every one of the three real defects came from that framing, and the third was found only because I told the reviewer to assume a third existed. Three consecutive verify-codify passes wrote zero tests — deliberate, re-decided each time, and recorded with rationale rather than inherited.
+
+## Communicate
+
+> **Feature complete:** M11 WP1 (markdown render approach probe) has shipped. It settles which markdown renderer M11's Docs viewer will use — **Option B: `react-markdown@10` + `remark-gfm@4` + `rehype-sanitize@6`** — chosen on security posture under the app's `csp: null`, since render fidelity between the candidates was a measured tie. The verdict lives in `workflow-system/product/wbs.md` → "Probe outcomes" and names the exact packages, the frontmatter pre-strip regex, the link-classification model, and the one invariant the decision rests on (**never add `rehype-raw`**). WP3 can install three packages and start building without re-deriving anything.
+
+Requester = operator — closure notice for self-record.
 
 ## Code-Quality Review — m11-wp1-markdown-render-probe
 
