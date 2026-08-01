@@ -175,7 +175,10 @@ function HeadlineCard({ data }: { data: MetricsPayload }) {
  *  Monochrome — neutral tokens only. Rows are produced by `METRIC_SECTIONS` (pure). */
 function MetricsPanel({ data }: { data: MetricsPayload }) {
   return (
-    <div className="dashboard-metrics-panel" data-testid="dashboard-metrics-panel">
+    <div
+      className="dashboard-metrics-panel"
+      data-testid="dashboard-metrics-panel"
+    >
       {METRIC_SECTIONS.map((section) => (
         <Section key={section.title} title={section.title}>
           {section.rows(data).map((row, i) => (
@@ -234,7 +237,9 @@ function MetricRowView({ row }: { row: MetricRow }) {
         fontSize: 12.5,
       }}
     >
-      <span style={{ fontFamily: CT_TOKENS.sans, color: CT_TOKENS.textSecondary }}>
+      <span
+        style={{ fontFamily: CT_TOKENS.sans, color: CT_TOKENS.textSecondary }}
+      >
         {row.label}
       </span>
       <Cell
@@ -247,7 +252,10 @@ function MetricRowView({ row }: { row: MetricRow }) {
               : ""
         }
       />
-      <Cell label="effort" value={row.effort_ms != null ? fmtMsDur(row.effort_ms) : ""} />
+      <Cell
+        label="effort"
+        value={row.effort_ms != null ? fmtMsDur(row.effort_ms) : ""}
+      />
       <Cell
         label="mult"
         value={row.multiplier != null ? fmtMult(row.multiplier) : ""}

@@ -24,7 +24,10 @@
 // Palette/ink: `CT_TOKENS` + `segStyle`/`colorForKind` (kinds.ts) + `textOn` — same as
 // DayTimeline. Pure math (breakdown + seg-id resolution) lives in `./sidePanelMath`.
 
-import type { ProjectPayload, SessionPayload } from "../../../state/timeAnalytics";
+import type {
+  ProjectPayload,
+  SessionPayload,
+} from "../../../state/timeAnalytics";
 import { CT_TOKENS } from "./tokens";
 import { segStyle, colorForKind, sumActive } from "./kinds";
 import { fmtDur, fmtClock } from "./dayStats";
@@ -362,7 +365,14 @@ export function SidePanel({ session, project, onClose }: SidePanelProps) {
       </div>
 
       {/* Prompts + real session id */}
-      <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 16 }}>
+      <div
+        style={{
+          padding: "14px 16px",
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
         <div>
           <div style={{ ...CAPTION_STYLE, marginBottom: 3 }}>Prompts</div>
           <div

@@ -40,7 +40,8 @@ export interface DownloadProgress {
 /** Broadcast fired when the update-notification toggle changes (backend
  *  `UPDATER_NOTIFICATIONS_ENABLED_EVENT`). The picker checkbox listens so a change from
  *  any surface re-syncs it. */
-export const UPDATER_NOTIFICATIONS_ENABLED_EVENT = "updater-notifications-enabled";
+export const UPDATER_NOTIFICATIONS_ENABLED_EVENT =
+  "updater-notifications-enabled";
 
 /** Event carrying real download progress (backend `UPDATER_DOWNLOAD_PROGRESS_EVENT`),
  *  emitted from `updater_apply`'s download callback. The progress bar subscribes. */
@@ -55,7 +56,9 @@ export async function getUpdateNotificationsEnabled(): Promise<boolean> {
 /** Persist the update-notification toggle. The backend re-broadcasts
  *  `updater-notifications-enabled` so every surface re-renders. Thin typed wrapper over
  *  `updater_set_notifications_enabled`. */
-export async function setUpdateNotificationsEnabled(enabled: boolean): Promise<void> {
+export async function setUpdateNotificationsEnabled(
+  enabled: boolean,
+): Promise<void> {
   return invoke<void>("updater_set_notifications_enabled", { enabled });
 }
 

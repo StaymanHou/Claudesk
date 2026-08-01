@@ -20,8 +20,12 @@ describe("M9 WP6a P4 — CM6-bearing surfaces are lazy() (kept out of the initia
     expect(paneTabs).toMatch(/const SyntheticView = lazy\(/);
     expect(paneTabs).toMatch(/import\("\.\/SyntheticView"\)/);
     // Regression guard: no STATIC named import of the CM6 leaves (that would re-bundle CM6).
-    expect(paneTabs).not.toMatch(/import\s*\{[^}]*\bEditorPanel\b[^}]*\}\s*from\s*"\.\/EditorPanel"/);
-    expect(paneTabs).not.toMatch(/import\s*\{[^}]*\bSyntheticView\b[^}]*\}\s*from\s*"\.\/SyntheticView"/);
+    expect(paneTabs).not.toMatch(
+      /import\s*\{[^}]*\bEditorPanel\b[^}]*\}\s*from\s*"\.\/EditorPanel"/,
+    );
+    expect(paneTabs).not.toMatch(
+      /import\s*\{[^}]*\bSyntheticView\b[^}]*\}\s*from\s*"\.\/SyntheticView"/,
+    );
   });
 
   it("RightPanelHost lazy-loads DiffPanel + ProjectSearch (NOT static imports)", () => {
@@ -29,8 +33,12 @@ describe("M9 WP6a P4 — CM6-bearing surfaces are lazy() (kept out of the initia
     expect(rightPanelHost).toMatch(/import\("\.\/diff\/DiffPanel"\)/);
     expect(rightPanelHost).toMatch(/const ProjectSearch = lazy\(/);
     expect(rightPanelHost).toMatch(/import\("\.\/search\/ProjectSearch"\)/);
-    expect(rightPanelHost).not.toMatch(/import\s*\{[^}]*\bDiffPanel\b[^}]*\}\s*from\s*"\.\/diff\/DiffPanel"/);
-    expect(rightPanelHost).not.toMatch(/import\s*\{[^}]*\bProjectSearch\b[^}]*\}\s*from\s*"\.\/search\/ProjectSearch"/);
+    expect(rightPanelHost).not.toMatch(
+      /import\s*\{[^}]*\bDiffPanel\b[^}]*\}\s*from\s*"\.\/diff\/DiffPanel"/,
+    );
+    expect(rightPanelHost).not.toMatch(
+      /import\s*\{[^}]*\bProjectSearch\b[^}]*\}\s*from\s*"\.\/search\/ProjectSearch"/,
+    );
   });
 });
 

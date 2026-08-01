@@ -39,8 +39,12 @@ describe("progressPercent — download % from a DownloadProgress", () => {
   });
 
   it("done pins 100 regardless of the byte counts (the on_download_finish emit)", () => {
-    expect(progressPercent(p({ downloaded: 0, total: null, done: true }))).toBe(100);
-    expect(progressPercent(p({ downloaded: 5, total: 100, done: true }))).toBe(100);
+    expect(progressPercent(p({ downloaded: 0, total: null, done: true }))).toBe(
+      100,
+    );
+    expect(progressPercent(p({ downloaded: 5, total: 100, done: true }))).toBe(
+      100,
+    );
   });
 
   it("clamps to [0,100] when a server over/under-reports", () => {

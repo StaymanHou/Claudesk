@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { detectSessionOverlaps } from "../DayTimeline";
-import type { ProjectPayload, SessionPayload } from "../../../../state/timeAnalytics";
+import type {
+  ProjectPayload,
+  SessionPayload,
+} from "../../../../state/timeAnalytics";
 
 // A session is only its [start,end] window for overlap purposes; segs/tools are
 // irrelevant to detectSessionOverlaps, so the fixtures keep them minimal.
@@ -8,10 +11,7 @@ function session(id: string, start: number, end: number): SessionPayload {
   return { id, start, end, prompts: 0, tools: {}, segs: [] };
 }
 
-function project(
-  id: string,
-  sessions: SessionPayload[],
-): ProjectPayload {
+function project(id: string, sessions: SessionPayload[]): ProjectPayload {
   return { id, alias: id, path: `/repo/${id}`, sessions };
 }
 

@@ -143,7 +143,9 @@ export function WeekTimeline({ data }: { data: WeekPayload }) {
                     fontFamily: CT_TOKENS.mono,
                     fontSize: 15,
                     fontWeight: 500,
-                    color: isToday ? CT_TOKENS["ai-doing"] : CT_TOKENS.textPrimary,
+                    color: isToday
+                      ? CT_TOKENS["ai-doing"]
+                      : CT_TOKENS.textPrimary,
                     letterSpacing: "-0.01em",
                   }}
                 >
@@ -177,7 +179,9 @@ export function WeekTimeline({ data }: { data: WeekPayload }) {
                   i < headers.length - 1
                     ? `1px solid ${CT_TOKENS.gridDay}`
                     : "none",
-                background: isWeekendDow(h.dow) ? CT_TOKENS.rowAlt : "transparent",
+                background: isWeekendDow(h.dow)
+                  ? CT_TOKENS.rowAlt
+                  : "transparent",
               }}
             />
           ))}
@@ -207,10 +211,13 @@ export function WeekTimeline({ data }: { data: WeekPayload }) {
                   alignItems: "center",
                   gap: 8,
                   padding: "0 12px",
-                  background: pi % 2 === 1 ? CT_TOKENS.rowAlt : CT_TOKENS.surface,
+                  background:
+                    pi % 2 === 1 ? CT_TOKENS.rowAlt : CT_TOKENS.surface,
                 }}
               >
-                <span style={{ color: CT_TOKENS.textTertiary, display: "flex" }}>
+                <span
+                  style={{ color: CT_TOKENS.textTertiary, display: "flex" }}
+                >
                   <IconChevRight size={12} />
                 </span>
                 <span
@@ -235,7 +242,9 @@ export function WeekTimeline({ data }: { data: WeekPayload }) {
                     padding: "2px 7px",
                     borderRadius: 999,
                     background:
-                      weekActive > 0 ? CT_TOKENS["ai-doing"] : CT_TOKENS.surfaceDim,
+                      weekActive > 0
+                        ? CT_TOKENS["ai-doing"]
+                        : CT_TOKENS.surfaceDim,
                     color: weekActive > 0 ? "#fff" : CT_TOKENS.textTertiary,
                     fontWeight: 500,
                   }}

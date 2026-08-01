@@ -421,8 +421,22 @@ export function Filmstrip({
         >
           {/* Simple bar-chart glyph — three ascending bars. */}
           <rect x="2" y="9" width="3" height="5" rx="0.5" fill="currentColor" />
-          <rect x="6.5" y="6" width="3" height="8" rx="0.5" fill="currentColor" />
-          <rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor" />
+          <rect
+            x="6.5"
+            y="6"
+            width="3"
+            height="8"
+            rx="0.5"
+            fill="currentColor"
+          />
+          <rect
+            x="11"
+            y="3"
+            width="3"
+            height="11"
+            rx="0.5"
+            fill="currentColor"
+          />
         </svg>
       </button>
     </div>

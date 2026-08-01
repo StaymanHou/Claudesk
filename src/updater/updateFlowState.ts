@@ -28,12 +28,19 @@ export type UpdateConfirmChoice = "update" | "cancel";
  * until Update is pressed). Esc → cancel. `version` is woven in so the operator sees
  * exactly which version they're about to install + that the app will relaunch.
  */
-export function updateConfirmSpec(version: string): ConfirmSpec<UpdateConfirmChoice> {
+export function updateConfirmSpec(
+  version: string,
+): ConfirmSpec<UpdateConfirmChoice> {
   return {
     title: "Update Claudesk",
     message: `Update to ${version}? Claudesk will download the update and relaunch.`,
     buttons: [
-      { id: "update", label: "Update & Relaunch", value: "update", variant: "primary" },
+      {
+        id: "update",
+        label: "Update & Relaunch",
+        value: "update",
+        variant: "primary",
+      },
       { id: "cancel", label: "Cancel", value: "cancel", variant: "default" },
     ],
     escValue: "cancel",
@@ -60,7 +67,9 @@ export function progressPercent(p: DownloadProgress): number | null {
  */
 export type QuarantineAck = "ok";
 
-export function quarantineFallbackSpec(bundlePath: string): ConfirmSpec<QuarantineAck> {
+export function quarantineFallbackSpec(
+  bundlePath: string,
+): ConfirmSpec<QuarantineAck> {
   return {
     title: "One more step to finish updating",
     message:

@@ -132,7 +132,9 @@ export function intensityColor(intensity: number): string {
  * minute-quantization fix — subtracting the quantized `end - start` zeroes sub-minute AI
  * tool-execution). Sessions carry their date in `day_iso` on a multi-day range payload.
  */
-export function dayTotalsFromRange(payload: RangePayload | null): Map<string, number> {
+export function dayTotalsFromRange(
+  payload: RangePayload | null,
+): Map<string, number> {
   const out = new Map<string, number>();
   if (!payload || !payload.projects) return out;
   const aiSet = new Set<string>(AI_KINDS);

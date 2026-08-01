@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 // in verify-self, not re-asserted here.
 import panelSrc from "../SettingsPanel.tsx?raw";
 import updaterPrefsSrc from "../../../updater/updaterPrefs.ts?raw";
+import { UPDATER_NOTIFICATIONS_ENABLED_EVENT } from "../../../updater/updaterPrefs";
 
 // The picker "Update notifications" checkbox (M10 WP4) shares one source of truth with
 // any surface reflecting the flag: the backend update_notifications_enabled setting, read
@@ -65,9 +66,15 @@ describe("updaterPrefs notification-toggle IPC seam", () => {
     );
   });
 
+  // Asserted as a VALUE, not as source text. The original source-grep pinned the
+  // whole `CONST = "literal"` assignment on one line and silently stopped matching
+  // when prettier wrapped it (2026-08-01) — the `?raw`-guard fragility the repo
+  // convention warns about ("assert single identifiers — never formatted multi-line
+  // expressions"). Reading the export directly is reformat-proof AND strictly
+  // stronger: it also catches a rename that a source-grep for the literal would miss.
   it("pins the broadcast event name to the backend const value", () => {
-    expect(updaterPrefsSrc).toContain(
-      'UPDATER_NOTIFICATIONS_ENABLED_EVENT = "updater-notifications-enabled"',
+    expect(UPDATER_NOTIFICATIONS_ENABLED_EVENT).toBe(
+      "updater-notifications-enabled",
     );
   });
 });

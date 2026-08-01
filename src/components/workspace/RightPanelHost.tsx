@@ -1019,7 +1019,9 @@ export function RightPanelHost({
           style={{ display: panel === "diff" ? "flex" : "none" }}
         >
           <Suspense
-            fallback={<div className="diff-loading" data-testid="diff-loading" />}
+            fallback={
+              <div className="diff-loading" data-testid="diff-loading" />
+            }
           >
             <DiffPanel
               projectPath={projectPath}

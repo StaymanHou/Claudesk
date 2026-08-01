@@ -54,7 +54,9 @@ export type ManualCheckOutcome = "up-to-date" | "update-available";
  * (even if it's the skipped version — a manual check re-offers it). Install-source-
  * agnostic (one self-update path for every install).
  */
-export function manualCheckOutcome(result: UpdateCheckResult): ManualCheckOutcome {
+export function manualCheckOutcome(
+  result: UpdateCheckResult,
+): ManualCheckOutcome {
   if (result.available_version === null) return "up-to-date";
   return "update-available";
 }

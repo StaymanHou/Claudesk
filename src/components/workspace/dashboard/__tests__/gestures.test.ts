@@ -32,7 +32,9 @@ describe("panViewport — px drag → minute pan, width-preserving", () => {
   });
 
   it("computes against the FROZEN origin (idempotent for a given dx)", () => {
-    expect(panViewport(origin, 300, 600)).toEqual(panViewport(origin, 300, 600));
+    expect(panViewport(origin, 300, 600)).toEqual(
+      panViewport(origin, 300, 600),
+    );
   });
 
   it("degenerate body width → no-op (returns origin, no NaN)", () => {

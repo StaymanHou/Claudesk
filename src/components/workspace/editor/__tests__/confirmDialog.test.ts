@@ -99,7 +99,9 @@ describe("quitWhileActiveSpec (M10.5-WP2)", () => {
     expect(spec.buttons.find((b) => b.value === "cancel")?.variant).toBe(
       "primary",
     );
-    expect(spec.buttons.find((b) => b.value === "quit")?.variant).toBe("danger");
+    expect(spec.buttons.find((b) => b.value === "quit")?.variant).toBe(
+      "danger",
+    );
     expect(spec.escValue).toBe("cancel");
   });
 

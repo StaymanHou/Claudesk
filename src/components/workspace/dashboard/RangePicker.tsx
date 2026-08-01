@@ -17,7 +17,12 @@
 
 import { useState, type CSSProperties } from "react";
 import { CT_TOKENS } from "./tokens";
-import { localTodayIso, stepIso, validateRange, isSingleDay } from "./rangeMath";
+import {
+  localTodayIso,
+  stepIso,
+  validateRange,
+  isSingleDay,
+} from "./rangeMath";
 import { MAX_ZOOM_OUT_SPAN_MIN } from "./viewport";
 
 /** The max span the range picker accepts (WP6b-4 re-spec D9: cap 31→30, matching the
@@ -64,7 +69,10 @@ export function RangePicker({
 
   // Commit a proposed range only when valid + actually changed.
   const commit = (s: string, e: string) => {
-    if (validateRange(s, e, MAX_RANGE_DAYS) === null && (s !== startIso || e !== endIso)) {
+    if (
+      validateRange(s, e, MAX_RANGE_DAYS) === null &&
+      (s !== startIso || e !== endIso)
+    ) {
       onChange(s, e);
     }
   };
@@ -140,7 +148,13 @@ export function RangePicker({
         }}
         style={inputStyle(!!bufError)}
       />
-      <span style={{ color: CT_TOKENS.textMuted, fontFamily: CT_TOKENS.mono, fontSize: 12 }}>
+      <span
+        style={{
+          color: CT_TOKENS.textMuted,
+          fontFamily: CT_TOKENS.mono,
+          fontSize: 12,
+        }}
+      >
         →
       </span>
       <input

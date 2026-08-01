@@ -25,7 +25,10 @@ export type DashboardMode = "off" | "empty" | "data";
  * `result.kind === "range" && result.projects.length > 0`) so this stays a pure
  * two-boolean fold with no DTO coupling.
  */
-export function dashboardMode(enabled: boolean, hasData: boolean): DashboardMode {
+export function dashboardMode(
+  enabled: boolean,
+  hasData: boolean,
+): DashboardMode {
   if (!enabled) return "off";
   return hasData ? "data" : "empty";
 }

@@ -26,13 +26,21 @@ describe("shouldShowWorkflowInvite — the show gate", () => {
 
   it("does NOT show once dismissed", () => {
     expect(
-      shouldShowWorkflowInvite(settings({ workflowInvite: "dismissed" }), 1, false),
+      shouldShowWorkflowInvite(
+        settings({ workflowInvite: "dismissed" }),
+        1,
+        false,
+      ),
     ).toBe(false);
   });
 
   it("does NOT show once acknowledged", () => {
     expect(
-      shouldShowWorkflowInvite(settings({ workflowInvite: "acknowledged" }), 1, false),
+      shouldShowWorkflowInvite(
+        settings({ workflowInvite: "acknowledged" }),
+        1,
+        false,
+      ),
     ).toBe(false);
   });
 
@@ -40,7 +48,11 @@ describe("shouldShowWorkflowInvite — the show gate", () => {
 
   it("does NOT show when the features are already enabled (nothing left to pitch)", () => {
     expect(
-      shouldShowWorkflowInvite(settings({ workflowFeaturesEnabled: true }), 1, false),
+      shouldShowWorkflowInvite(
+        settings({ workflowFeaturesEnabled: true }),
+        1,
+        false,
+      ),
     ).toBe(false);
   });
 
@@ -81,7 +93,10 @@ describe("shouldShowWorkflowInvite — the show gate", () => {
     // they already evaluated and rejected.
     expect(
       shouldShowWorkflowInvite(
-        settings({ workflowInvite: "acknowledged", workflowFeaturesEnabled: false }),
+        settings({
+          workflowInvite: "acknowledged",
+          workflowFeaturesEnabled: false,
+        }),
         5,
         false,
       ),
@@ -228,7 +243,10 @@ describe("WorkflowInviteOutcome is a cross-language contract with the Rust enum"
   // twice in WP2).
   const rustSrc = readFileSync(
     fileURLToPath(
-      new URL("../../../src-tauri/src/config_store/settings.rs", import.meta.url),
+      new URL(
+        "../../../src-tauri/src/config_store/settings.rs",
+        import.meta.url,
+      ),
     ),
     "utf8",
   );

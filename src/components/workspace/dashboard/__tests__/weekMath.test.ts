@@ -87,7 +87,13 @@ describe("weekMath — cell field mapping", () => {
 
 describe("weekMath — cellSegments", () => {
   it("returns only non-zero kinds, EXCLUDING away, bottom-to-top in RENDER_ORDER", () => {
-    const c = cell({ ai_doing: 5, subagent: 3, reviewing: 2, away: 99, typing: 0 });
+    const c = cell({
+      ai_doing: 5,
+      subagent: 3,
+      reviewing: 2,
+      away: 99,
+      typing: 0,
+    });
     const segs = cellSegments(c);
     // RENDER_ORDER (minus away): reviewing, ai-reasoning, typing, ai-doing, subagent
     expect(segs.map((s) => s.kind)).toEqual([

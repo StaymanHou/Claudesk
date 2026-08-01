@@ -88,7 +88,9 @@ export function useUpdater(): UseUpdater {
   const [applyingPercent, setApplyingPercent] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<UpdaterStatusNote | null>(null);
-  const [fallbackBundlePath, setFallbackBundlePath] = useState<string | null>(null);
+  const [fallbackBundlePath, setFallbackBundlePath] = useState<string | null>(
+    null,
+  );
 
   // Check-on-launch: gated by the notifications pref + skip-list (frontend filter). Runs
   // once on mount. A failed check is swallowed (no update surface on a network error — a
@@ -103,7 +105,12 @@ export function useUpdater(): UseUpdater {
         const skipped = await getSkippedVersion();
         const result = await checkForUpdate();
         if (cancelled) return;
-        if (shouldAutoNotify(result, { notificationsEnabled: true, skippedVersion: skipped })) {
+        if (
+          shouldAutoNotify(result, {
+            notificationsEnabled: true,
+            skippedVersion: skipped,
+          })
+        ) {
           setBanner(result);
         }
       } catch {

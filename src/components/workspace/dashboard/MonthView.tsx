@@ -72,7 +72,9 @@ export function MonthView({
   // Today marker — only if today falls in the rendered month.
   const todayIso = todayDateIso(new Date());
   const todayDayNum =
-    todayIso.slice(0, 7) === monthIso ? parseInt(todayIso.slice(8, 10), 10) : null;
+    todayIso.slice(0, 7) === monthIso
+      ? parseInt(todayIso.slice(8, 10), 10)
+      : null;
 
   return (
     <div
@@ -151,7 +153,11 @@ export function MonthView({
               data-month-day-active={hasData ? "true" : "false"}
               data-month-day-intensity={hasData ? intensity.toFixed(2) : "0"}
               onClick={() => onDayClick(iso)}
-              title={hasData ? `${iso} — ${fmtDur(total)}` : `${iso} — no tracked time`}
+              title={
+                hasData
+                  ? `${iso} — ${fmtDur(total)}`
+                  : `${iso} — no tracked time`
+              }
               style={{
                 position: "relative",
                 aspectRatio: "2 / 1",

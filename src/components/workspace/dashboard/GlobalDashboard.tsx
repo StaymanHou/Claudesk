@@ -42,7 +42,10 @@ import { DayTimeline } from "./DayTimeline";
 import { WeekTimeline } from "./WeekTimeline";
 import { MonthView } from "./MonthView";
 import { MetricsView } from "./MetricsView";
-import { CompareViewContainer, type ComparePresetOrCustom } from "./CompareView";
+import {
+  CompareViewContainer,
+  type ComparePresetOrCustom,
+} from "./CompareView";
 import { RangePicker } from "./RangePicker";
 import { SidePanel } from "./SidePanel";
 import { resolveSelectedSeg } from "./sidePanelMath";
@@ -348,7 +351,9 @@ function DayView({
         // jump/pick to an active span; the Summary/Legend/Minimap/timeline are data-driven,
         // so show the inline empty body in their place.
         <InlinePeriodEmpty
-          period={framed.startIso !== framed.endIso ? "in this range" : "this day"}
+          period={
+            framed.startIso !== framed.endIso ? "in this range" : "this day"
+          }
         />
       ) : (
         <>
@@ -431,7 +436,11 @@ function WeekView({
       <div className="dashboard-legend-row">
         <Legend />
       </div>
-      {isEmpty ? <InlinePeriodEmpty period="this week" /> : <WeekTimeline data={data} />}
+      {isEmpty ? (
+        <InlinePeriodEmpty period="this week" />
+      ) : (
+        <WeekTimeline data={data} />
+      )}
     </>
   );
 }
@@ -477,7 +486,11 @@ function MonthViewContainer({
           />
         }
       />
-      <MonthView monthIso={monthIso} payload={payload} onDayClick={onDayClick} />
+      <MonthView
+        monthIso={monthIso}
+        payload={payload}
+        onDayClick={onDayClick}
+      />
     </>
   );
 }
@@ -500,13 +513,22 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
   // WP6c-2: the A/B comparison (Compare tab). `comparePreset` drives the fetch (default
   // WoW); `custom` uses the two RangePicker spans. Custom A/B default to the two prior
   // weeks (a sensible non-empty default until the operator picks).
-  const [compareData, setCompareData] = useState<ComparisonPayload | null>(null);
-  const [comparePreset, setComparePreset] = useState<ComparePresetOrCustom>("wow");
-  const [compareCustomA, setCompareCustomA] = useState<{ start: string; end: string }>(() => ({
+  const [compareData, setCompareData] = useState<ComparisonPayload | null>(
+    null,
+  );
+  const [comparePreset, setComparePreset] =
+    useState<ComparePresetOrCustom>("wow");
+  const [compareCustomA, setCompareCustomA] = useState<{
+    start: string;
+    end: string;
+  }>(() => ({
     start: stepIso(todayDateIso(new Date()), -13),
     end: stepIso(todayDateIso(new Date()), -7),
   }));
-  const [compareCustomB, setCompareCustomB] = useState<{ start: string; end: string }>(() => ({
+  const [compareCustomB, setCompareCustomB] = useState<{
+    start: string;
+    end: string;
+  }>(() => ({
     start: stepIso(todayDateIso(new Date()), -6),
     end: todayDateIso(new Date()),
   }));
@@ -533,14 +555,18 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
   // Computed once on mount (a session doesn't cross local midnight often enough to matter;
   // a stale origin at worst shifts the 30-day floor by a day).
   const todayIso = useState<string>(() => todayDateIso(new Date()))[0];
-  const originIso = useState<string>(() => stepIso(todayDateIso(new Date()), -29))[0];
+  const originIso = useState<string>(() =>
+    stepIso(todayDateIso(new Date()), -29),
+  )[0];
   // The LOADED window (the fetched sub-span = the pan clamp bound). Opens as the LAST 14
   // DAYS (D7 — pre-load recent history so panning back is instant), framed on today (D6′).
   // Grows via auto-extend (older → prepend 7d down to the origin; newer → toward today).
   const [loadedStartIso, setLoadedStartIso] = useState<string>(() =>
     stepIso(todayDateIso(new Date()), -13),
   );
-  const [loadedEndIso, setLoadedEndIso] = useState<string>(() => todayDateIso(new Date()));
+  const [loadedEndIso, setLoadedEndIso] = useState<string>(() =>
+    todayDateIso(new Date()),
+  );
   // The span to FRAME on the next intentional re-seed: `null` → open on today (D6′);
   // a jump-to (picker / Month drill-down) sets it so the camera lands on the picked span.
   const [frameTarget, setFrameTarget] = useState<{
@@ -642,8 +668,14 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
         const p = nav?.comparePreset ?? "wow";
         let spec: CompareSpec;
         if (p === "custom") {
-          const ca = nav?.compareCustomA ?? { start: todayDateIso(new Date()), end: todayDateIso(new Date()) };
-          const cb = nav?.compareCustomB ?? { start: todayDateIso(new Date()), end: todayDateIso(new Date()) };
+          const ca = nav?.compareCustomA ?? {
+            start: todayDateIso(new Date()),
+            end: todayDateIso(new Date()),
+          };
+          const cb = nav?.compareCustomB ?? {
+            start: todayDateIso(new Date()),
+            end: todayDateIso(new Date()),
+          };
           const aMs = rangeToMs(ca.start, ca.end);
           const bMs = rangeToMs(cb.start, cb.end);
           // Malformed custom span (should not happen — RangePicker gates) → fall back to WoW.
@@ -673,7 +705,11 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
         } else {
           const bounds = rangeToMs(s, e);
           window = bounds
-            ? { kind: "custom", start_ms: bounds.start_ms, end_ms: bounds.end_ms }
+            ? {
+                kind: "custom",
+                start_ms: bounds.start_ms,
+                end_ms: bounds.end_ms,
+              }
             : { kind: "day" };
         }
       }
@@ -710,7 +746,9 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
   // D10: single-open accordion. Expanding a project auto-collapses every other row →
   // `[id]`; clicking the already-open one collapses it → `[]`. At most one expanded.
   const toggleProject = useCallback((projectId: string) => {
-    setExpandedProjects((prev) => (prev.includes(projectId) ? [] : [projectId]));
+    setExpandedProjects((prev) =>
+      prev.includes(projectId) ? [] : [projectId],
+    );
   }, []);
 
   // Switch view via the tab strip + fetch its payload (if tracking is on). Refetch every
@@ -747,7 +785,14 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
                 : undefined;
       if (trackingEnabled) fetchView(v, nav);
     },
-    [trackingEnabled, fetchView, monthIso, comparePreset, compareCustomA, compareCustomB],
+    [
+      trackingEnabled,
+      fetchView,
+      monthIso,
+      comparePreset,
+      compareCustomA,
+      compareCustomB,
+    ],
   );
 
   // WP6c-2: Compare preset switch → set the preset + refetch. Custom keeps the current
@@ -756,7 +801,11 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
     (p: ComparePresetOrCustom) => {
       setComparePreset(p);
       if (trackingEnabled)
-        fetchView("compare", { comparePreset: p, compareCustomA, compareCustomB });
+        fetchView("compare", {
+          comparePreset: p,
+          compareCustomA,
+          compareCustomB,
+        });
     },
     [trackingEnabled, fetchView, compareCustomA, compareCustomB],
   );
@@ -804,7 +853,15 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
           loadedEndIso: clampedEnd,
         });
     },
-    [view, trackingEnabled, fetchView, loadedStartIso, loadedEndIso, originIso, todayIso],
+    [
+      view,
+      trackingEnabled,
+      fetchView,
+      loadedStartIso,
+      loadedEndIso,
+      originIso,
+      todayIso,
+    ],
   );
 
   // AUTO-EXTEND (D7): the edge-watcher fires this when the camera nears a loaded edge.
@@ -829,14 +886,22 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
           fetchView("day", { loadedStartIso, loadedEndIso: clamped });
       }
     },
-    [loadedStartIso, loadedEndIso, originIso, todayIso, trackingEnabled, fetchView],
+    [
+      loadedStartIso,
+      loadedEndIso,
+      originIso,
+      todayIso,
+      trackingEnabled,
+      fetchView,
+    ],
   );
 
   // Month prev/next nav: step the shown month, then refetch it. Never step past the
   // current month (matches the source's `nextDisabled`).
   const changeMonth = useCallback(
     (dir: "prev" | "next") => {
-      const next = dir === "prev" ? prevMonthIso(monthIso) : nextMonthIso(monthIso);
+      const next =
+        dir === "prev" ? prevMonthIso(monthIso) : nextMonthIso(monthIso);
       if (!next) return;
       if (dir === "next" && next > todayMonthIso(new Date())) return; // no future months
       setMonthIso(next);
@@ -1081,7 +1146,10 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
             onCloseSidePanel={() => setSelectedSegId(null)}
           />
         ) : loading ? (
-          <div className="dashboard-empty" data-testid="dashboard-empty-loading">
+          <div
+            className="dashboard-empty"
+            data-testid="dashboard-empty-loading"
+          >
             <p className="dashboard-empty-hint">Loading activity…</p>
           </div>
         ) : (

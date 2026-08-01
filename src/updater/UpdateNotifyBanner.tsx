@@ -33,7 +33,11 @@ export function UpdateNotifyBanner({
   const applying = applyingPercent !== undefined;
 
   return (
-    <div className="update-banner" data-testid="update-notify-banner" role="status">
+    <div
+      className="update-banner"
+      data-testid="update-notify-banner"
+      role="status"
+    >
       <span className="update-banner-icon" aria-hidden="true">
         ⬆︎
       </span>
@@ -62,7 +66,9 @@ export function UpdateNotifyBanner({
               applyingPercent === null ? " indeterminate" : ""
             }`}
             style={
-              applyingPercent === null ? undefined : { width: `${applyingPercent}%` }
+              applyingPercent === null
+                ? undefined
+                : { width: `${applyingPercent}%` }
             }
           />
         </div>

@@ -14,7 +14,9 @@ describe("M9 WP6b-2 P1 — Toolbar VIEW_MODES enablement (staged per phase)", ()
   it("Day, Week, and Month are enabled (P1 lit Week; P2 lit Month)", () => {
     expect(chrome).toContain('{ value: "day", label: "Day", enabled: true }');
     expect(chrome).toContain('{ value: "week", label: "Week", enabled: true }');
-    expect(chrome).toContain('{ value: "month", label: "Month", enabled: true }');
+    expect(chrome).toContain(
+      '{ value: "month", label: "Month", enabled: true }',
+    );
   });
 
   it("there is NO Custom tab (P3 merged Custom into Day's date picker — the tab was removed)", () => {

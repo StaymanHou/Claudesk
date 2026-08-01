@@ -61,7 +61,11 @@ function payload(over: Partial<MetricsPayload> = {}): MetricsPayload {
       wallclock_ms: 8 * 60_000,
       effort_ms: 8 * 60_000,
       multiplier: 1,
-      subagent: { wallclock_ms: 2 * 60_000, effort_ms: 2 * 60_000, multiplier: 1 },
+      subagent: {
+        wallclock_ms: 2 * 60_000,
+        effort_ms: 2 * 60_000,
+        multiplier: 1,
+      },
     },
     tool_call: {
       wallclock_ms: 143,
@@ -158,7 +162,9 @@ describe("METRIC_SECTIONS", () => {
     expect(rows[1].wallclock_ms).toBe(2 * 60_000);
     expect(rows[2].wallclock_ms).toBe(3 * 60_000);
     // away is not a row in this section (it's a headline tile, read from human.away_ms).
-    expect(rows.some((r) => r.label.toLowerCase().includes("away"))).toBe(false);
+    expect(rows.some((r) => r.label.toLowerCase().includes("away"))).toBe(
+      false,
+    );
   });
 
   it("Concurrency rows suppress the multiplier and label k=4+ with is_plus", () => {

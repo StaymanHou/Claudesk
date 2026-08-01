@@ -357,9 +357,16 @@ describe("M9 WP6b-2 P3 — Custom→Day MERGE: Day gains a date picker, the Cust
   it("the single-open project accordion collapses others on expand (WP6b-4 re-spec D10)", () => {
     // toggleProject → [id] (expand, others collapse) | [] (collapse the open one). At most
     // one expanded. Seeded to [] (all collapsed) on each fetch.
-    expect(globalDashboard).toContain(
-      "setExpandedProjects((prev) => (prev.includes(projectId) ? [] : [projectId]))",
-    );
+    //
+    // Asserted as WHITESPACE-NORMALIZED single tokens, not as one formatted expression.
+    // The original pinned the whole updater on one line and silently stopped matching
+    // when prettier wrapped it (2026-08-01) — the `?raw`-guard fragility the repo
+    // convention warns about ("assert single identifiers — never formatted multi-line
+    // expressions"). The ternary's SHAPE is what carries the single-open invariant, so
+    // it is still pinned; collapsing runs of whitespace is what makes it reflow-proof.
+    const flat = globalDashboard.replace(/\s+/g, " ");
+    expect(flat).toContain("setExpandedProjects((prev) =>");
+    expect(flat).toContain("prev.includes(projectId) ? [] : [projectId]");
     expect(globalDashboard).toContain("setExpandedProjects([])");
     // The old all-expanded seed is gone.
     expect(globalDashboard).not.toContain("result.projects.map((p) => p.id)");

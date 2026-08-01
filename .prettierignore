@@ -17,6 +17,16 @@ runtimes.md
 CHANGELOG.md
 .claude/memory/
 .claude/skills/
+# Cross-repo handoff notes at the root — same hand-authored prose class as the
+# above (prettier rewrites `*emphasis*` -> `_emphasis_` and reflows the status
+# tables in these). The list simply predated root-level HANDOFF-*.md files.
+HANDOFF-*.md
+
+# Generated files whose source of truth is a generator, NOT prettier. Formatting
+# these breaks the generator's own `--check` drift-guard, which regenerates in
+# memory and diffs against the committed file (exit 1 on drift).
+#   _dots.generated.css  <- tooling/demo/extract-dot-css.mjs (from src/App.css)
+tooling/demo/_dots.generated.css
 
 # Nested Homebrew tap — its own independent git repo
 homebrew-claudesk/

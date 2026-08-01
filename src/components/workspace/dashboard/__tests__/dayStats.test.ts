@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  computeDayTotals,
-  dayStats,
-  fmtDur,
-  fmtClock,
-} from "../dayStats";
+import { computeDayTotals, dayStats, fmtDur, fmtClock } from "../dayStats";
 import type { RangePayload, SegKind } from "../../../../state/timeAnalytics";
 
 // `dur_ms` defaults to the minute-span in ms (these fixtures are all minute-scale, so the

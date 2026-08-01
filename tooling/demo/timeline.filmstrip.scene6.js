@@ -171,7 +171,11 @@ window.TIMELINE = window.TIMELINE || {
             tokensPerSec: 700,
           },
         },
-        { name: "tax-cruncher", status: "running", body: "● Read federal_2024.rs" },
+        {
+          name: "tax-cruncher",
+          status: "running",
+          body: "● Read federal_2024.rs",
+        },
         {
           name: "hugo-blog",
           status: "running",

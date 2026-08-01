@@ -437,7 +437,11 @@ export const PaneTabs = forwardRef<PaneTabsHandle, PaneTabsProps>(
           // Non-empty → real CM6 views (lazy). One Suspense wraps all tab bodies: the
           // CM6 chunk loads once on the first file/synthetic tab render, then every pane
           // stays mounted (display:none-toggled) with its state — mount-once preserved.
-          <Suspense fallback={<div className="editor-loading" data-testid="editor-loading" />}>
+          <Suspense
+            fallback={
+              <div className="editor-loading" data-testid="editor-loading" />
+            }
+          >
             <div className="editor-tab-bodies">
               {tabs.map((tab) => {
                 const isActive = tab.id === activeTabId;

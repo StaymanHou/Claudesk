@@ -27,9 +27,9 @@ describe("shouldAutoNotify — the auto-check-on-launch gate", () => {
   });
 
   it("does NOT notify when notifications are OFF (even with an update available)", () => {
-    expect(shouldAutoNotify(result(), prefs({ notificationsEnabled: false }))).toBe(
-      false,
-    );
+    expect(
+      shouldAutoNotify(result(), prefs({ notificationsEnabled: false })),
+    ).toBe(false);
   });
 
   it("does NOT notify when the available version equals the skipped version", () => {
@@ -51,7 +51,9 @@ describe("shouldAutoNotify — the auto-check-on-launch gate", () => {
   });
 
   it("does NOT notify when up to date (available_version null)", () => {
-    expect(shouldAutoNotify(result({ available_version: null }), prefs())).toBe(false);
+    expect(shouldAutoNotify(result({ available_version: null }), prefs())).toBe(
+      false,
+    );
   });
 
   it("OFF pref beats an available update AND a fresh (unskipped) version", () => {
@@ -77,6 +79,8 @@ describe("manualCheckOutcome — a manual check ignores skip + disable, reports 
   });
 
   it("classifies up-to-date (available_version null)", () => {
-    expect(manualCheckOutcome(result({ available_version: null }))).toBe("up-to-date");
+    expect(manualCheckOutcome(result({ available_version: null }))).toBe(
+      "up-to-date",
+    );
   });
 });

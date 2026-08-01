@@ -129,17 +129,23 @@ function metrics(over: {
 
 describe("aiEffortPerHumanPct", () => {
   it("returns 0 when there is no human wall-clock (rendered as — by the consumer)", () => {
-    expect(aiEffortPerHumanPct(metrics({ aiEffort: 5000, humanWall: 0 }))).toBe(0);
+    expect(aiEffortPerHumanPct(metrics({ aiEffort: 5000, humanWall: 0 }))).toBe(
+      0,
+    );
   });
   it("computes ai_effort / human_wallclock * 100", () => {
     // 2× AI effort vs human wall = 200%.
-    expect(aiEffortPerHumanPct(metrics({ aiEffort: 200, humanWall: 100 }))).toBeCloseTo(200);
+    expect(
+      aiEffortPerHumanPct(metrics({ aiEffort: 200, humanWall: 100 })),
+    ).toBeCloseTo(200);
   });
 });
 
 describe("blockingShares", () => {
   it("is all-zero when there is no blocking time at all", () => {
-    expect(blockingShares(metrics({ agentBlockingHuman: 0, humanBlockingAgent: 0 }))).toEqual({
+    expect(
+      blockingShares(metrics({ agentBlockingHuman: 0, humanBlockingAgent: 0 })),
+    ).toEqual({
       agentToHuman: 0,
       humanToAgent: 0,
     });
@@ -216,8 +222,16 @@ describe("topConcurrencyShift", () => {
 
 describe("topBlockingShift", () => {
   it("reports the larger-magnitude blocking component shift with its label", () => {
-    const a = metrics({ engagedWall: 1000, agentBlockingHuman: 800, humanBlockingAgent: 200 });
-    const b = metrics({ engagedWall: 1000, agentBlockingHuman: 500, humanBlockingAgent: 500 });
+    const a = metrics({
+      engagedWall: 1000,
+      agentBlockingHuman: 800,
+      humanBlockingAgent: 200,
+    });
+    const b = metrics({
+      engagedWall: 1000,
+      agentBlockingHuman: 500,
+      humanBlockingAgent: 500,
+    });
     // agent→human: 80→50 (−30pp); human→agent: 20→50 (+30pp). Tie → agent→human wins.
     const shift = topBlockingShift(a, b);
     expect(shift.label).toBe("agent→human");

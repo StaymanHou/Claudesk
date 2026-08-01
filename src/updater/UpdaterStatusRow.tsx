@@ -76,7 +76,10 @@ export function UpdaterStatusRow({
         <span className="update-banner-icon" aria-hidden="true">
           {isNoteError ? "⚠︎" : "ℹ︎"}
         </span>
-        <span className="update-banner-text" data-testid="update-status-note-message">
+        <span
+          className="update-banner-text"
+          data-testid="update-status-note-message"
+        >
           {note.message}
         </span>
         <div className="update-banner-actions">

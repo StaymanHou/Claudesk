@@ -26,7 +26,13 @@ const wrap = (rows: string[]) => PREFIX + rows.join("") + SUFFIX;
 
 describe("trimTrailingBlankRows", () => {
   it("drops trailing blank rows, keeping only content rows (last emitted row is non-blank)", () => {
-    const html = wrap([row("$ claude"), row("Welcome"), blankRow(), blankRow(), blankRow()]);
+    const html = wrap([
+      row("$ claude"),
+      row("Welcome"),
+      blankRow(),
+      blankRow(),
+      blankRow(),
+    ]);
     const out = trimTrailingBlankRows(html);
     // The three trailing blanks are gone; the two content rows remain in order.
     expect(out).toBe(wrap([row("$ claude"), row("Welcome")]));
@@ -62,7 +68,13 @@ describe("trimTrailingBlankRows", () => {
   });
 
   it("preserves interior blank rows (a blank line BETWEEN content is real content)", () => {
-    const html = wrap([row("top"), blankRow(), row("bottom"), blankRow(), blankRow()]);
+    const html = wrap([
+      row("top"),
+      blankRow(),
+      row("bottom"),
+      blankRow(),
+      blankRow(),
+    ]);
     // Only the two TRAILING blanks are trimmed; the interior blank between top/bottom stays.
     expect(trimTrailingBlankRows(html)).toBe(
       wrap([row("top"), blankRow(), row("bottom")]),

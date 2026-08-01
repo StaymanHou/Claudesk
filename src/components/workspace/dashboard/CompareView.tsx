@@ -161,7 +161,9 @@ function PresetSelector({
                 fontWeight: active ? 550 : 450,
                 fontFamily: CT_TOKENS.sans,
                 cursor: "pointer",
-                boxShadow: active ? `inset 0 0 0 1px ${CT_TOKENS.border}` : "none",
+                boxShadow: active
+                  ? `inset 0 0 0 1px ${CT_TOKENS.border}`
+                  : "none",
               }}
             >
               {p.label}
@@ -170,7 +172,14 @@ function PresetSelector({
         })}
       </div>
       {preset === "custom" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
           <span
             style={{
               fontFamily: CT_TOKENS.sans,
@@ -186,7 +195,13 @@ function PresetSelector({
             endIso={customA.end}
             onChange={(s, e) => onCustomRangeChange("a", s, e)}
           />
-          <span style={{ fontFamily: CT_TOKENS.mono, fontSize: 12, color: CT_TOKENS.textTertiary }}>
+          <span
+            style={{
+              fontFamily: CT_TOKENS.mono,
+              fontSize: 12,
+              color: CT_TOKENS.textTertiary,
+            }}
+          >
             vs
           </span>
           <span
@@ -212,14 +227,38 @@ function PresetSelector({
 
 // ── CompareBody — window labels + 8 effectiveness rows ────────────────────────
 const ROWS: { rowKey: string; label: string; kind: RowKind }[] = [
-  { rowKey: "parallelism-multiplier", label: "Parallelism ×", kind: "multiplier" },
-  { rowKey: "ai-effort-per-human-wallclock", label: "AI effort / human wall", kind: "ratio-pct" },
+  {
+    rowKey: "parallelism-multiplier",
+    label: "Parallelism ×",
+    kind: "multiplier",
+  },
+  {
+    rowKey: "ai-effort-per-human-wallclock",
+    label: "AI effort / human wall",
+    kind: "ratio-pct",
+  },
   { rowKey: "blocking-split", label: "Blocking split", kind: "blocking-split" },
-  { rowKey: "concurrency-mix", label: "Concurrency mix", kind: "concurrency-mix" },
-  { rowKey: "ai-agent", label: "AI agent", kind: "absolute-wallclock-effort-mult" },
-  { rowKey: "tool-call", label: "Tool calls", kind: "absolute-wallclock-effort-mult" },
+  {
+    rowKey: "concurrency-mix",
+    label: "Concurrency mix",
+    kind: "concurrency-mix",
+  },
+  {
+    rowKey: "ai-agent",
+    label: "AI agent",
+    kind: "absolute-wallclock-effort-mult",
+  },
+  {
+    rowKey: "tool-call",
+    label: "Tool calls",
+    kind: "absolute-wallclock-effort-mult",
+  },
   { rowKey: "human", label: "Human (you)", kind: "absolute-wallclock-only" },
-  { rowKey: "engaged-session", label: "Engaged sessions", kind: "absolute-engaged" },
+  {
+    rowKey: "engaged-session",
+    label: "Engaged sessions",
+    kind: "absolute-engaged",
+  },
 ];
 
 function CompareBody({ comparison }: { comparison: ComparisonPayload | null }) {
@@ -232,8 +271,8 @@ function CompareBody({ comparison }: { comparison: ComparisonPayload | null }) {
       >
         <p className="dashboard-empty-title">No comparison data</p>
         <p className="dashboard-empty-hint">
-          Once you work in a tracked project, the A/B comparison for the selected
-          windows appears here.
+          Once you work in a tracked project, the A/B comparison for the
+          selected windows appears here.
         </p>
       </div>
     );
@@ -247,7 +286,9 @@ function CompareBody({ comparison }: { comparison: ComparisonPayload | null }) {
   const bEmpty = bWall === 0;
   const bothEmpty = aEmpty && bEmpty;
   const lengthMismatch =
-    meta.a_day_count > 0 && meta.b_day_count > 0 && meta.a_day_count !== meta.b_day_count;
+    meta.a_day_count > 0 &&
+    meta.b_day_count > 0 &&
+    meta.a_day_count !== meta.b_day_count;
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
@@ -306,7 +347,10 @@ function CompareBody({ comparison }: { comparison: ComparisonPayload | null }) {
           no tracked time in either window
         </div>
       ) : (
-        <div data-compare-section="effectiveness" style={{ display: "flex", flexDirection: "column" }}>
+        <div
+          data-compare-section="effectiveness"
+          style={{ display: "flex", flexDirection: "column" }}
+        >
           <div style={{ ...GRID, ...HEADER_STYLE }}>
             <div>Metric</div>
             <div>A</div>
@@ -314,7 +358,14 @@ function CompareBody({ comparison }: { comparison: ComparisonPayload | null }) {
             <div style={{ textAlign: "right" }}>Δ (B − A)</div>
           </div>
           {ROWS.map((r) => (
-            <EffectivenessRow key={r.rowKey} rowKey={r.rowKey} label={r.label} a={a} b={b} kind={r.kind} />
+            <EffectivenessRow
+              key={r.rowKey}
+              rowKey={r.rowKey}
+              label={r.label}
+              a={a}
+              b={b}
+              kind={r.kind}
+            />
           ))}
         </div>
       )}
@@ -349,7 +400,13 @@ function WindowLabel({
       >
         {side} {empty ? "(empty)" : ""}
       </div>
-      <div style={{ fontFamily: CT_TOKENS.mono, fontSize: 11, color: CT_TOKENS.textPrimary }}>
+      <div
+        style={{
+          fontFamily: CT_TOKENS.mono,
+          fontSize: 11,
+          color: CT_TOKENS.textPrimary,
+        }}
+      >
         {`${start || "—"} → ${end || "—"} (${days || 0}d)`}
       </div>
     </div>
@@ -470,10 +527,18 @@ function RowColumns({
     return (
       <>
         <BarCol>
-          {aWall === 0 ? "—" : <BlockingBar ah={as.agentToHuman} ha={as.humanToAgent} />}
+          {aWall === 0 ? (
+            "—"
+          ) : (
+            <BlockingBar ah={as.agentToHuman} ha={as.humanToAgent} />
+          )}
         </BarCol>
         <BarCol>
-          {bWall === 0 ? "—" : <BlockingBar ah={bs.agentToHuman} ha={bs.humanToAgent} />}
+          {bWall === 0 ? (
+            "—"
+          ) : (
+            <BlockingBar ah={bs.agentToHuman} ha={bs.humanToAgent} />
+          )}
         </BarCol>
         <Delta positive={shift.delta >= 0}>
           <Sub>{shift.label}</Sub>
@@ -507,14 +572,26 @@ function RowColumns({
     return (
       <>
         <Col>
-          <TripletCell wall={aSub.wallclock_ms} eff={aSub.effort_ms} mult={aSub.multiplier} />
+          <TripletCell
+            wall={aSub.wallclock_ms}
+            eff={aSub.effort_ms}
+            mult={aSub.multiplier}
+          />
         </Col>
         <Col strong>
-          <TripletCell wall={bSub.wallclock_ms} eff={bSub.effort_ms} mult={bSub.multiplier} />
+          <TripletCell
+            wall={bSub.wallclock_ms}
+            eff={bSub.effort_ms}
+            mult={bSub.multiplier}
+          />
         </Col>
         <Delta positive={wallDelta >= 0}>
           <div>{fmtSignedDurMs(wallDelta)}</div>
-          <Sub>{fmtRelPct(relPctOf(aSub.wallclock_ms || 0, bSub.wallclock_ms || 0))}</Sub>
+          <Sub>
+            {fmtRelPct(
+              relPctOf(aSub.wallclock_ms || 0, bSub.wallclock_ms || 0),
+            )}
+          </Sub>
         </Delta>
       </>
     );
@@ -548,14 +625,24 @@ function RowColumns({
       </Col>
       <Delta positive={wallDelta >= 0}>
         <div>{fmtSignedDurMs(wallDelta)}</div>
-        <Sub>{fmtRelPct(relPctOf(aS.wallclock_ms || 0, bS.wallclock_ms || 0))}</Sub>
+        <Sub>
+          {fmtRelPct(relPctOf(aS.wallclock_ms || 0, bS.wallclock_ms || 0))}
+        </Sub>
       </Delta>
     </>
   );
 }
 
 // ── column primitives ─────────────────────────────────────────────────────────
-function Col({ value, children, strong }: { value?: string; children?: ReactNode; strong?: boolean }) {
+function Col({
+  value,
+  children,
+  strong,
+}: {
+  value?: string;
+  children?: ReactNode;
+  strong?: boolean;
+}) {
   return (
     <div
       data-compare-col="ab"
@@ -587,7 +674,13 @@ function BarCol({ children }: { children: ReactNode }) {
   );
 }
 
-function Delta({ children, positive }: { children: ReactNode; positive: boolean }) {
+function Delta({
+  children,
+  positive,
+}: {
+  children: ReactNode;
+  positive: boolean;
+}) {
   return (
     <div
       data-compare-col="delta"
@@ -608,7 +701,11 @@ function Delta({ children, positive }: { children: ReactNode; positive: boolean 
 
 function Sub({ children }: { children: ReactNode }) {
   return (
-    <div style={{ fontSize: 10, color: CT_TOKENS.textTertiary, fontWeight: 400 }}>{children}</div>
+    <div
+      style={{ fontSize: 10, color: CT_TOKENS.textTertiary, fontWeight: 400 }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -634,7 +731,12 @@ function TripletCell({
 function EngagedCell({
   s,
 }: {
-  s: { wallclock_ms: number; effort_ms: number; multiplier: number; session_count: number };
+  s: {
+    wallclock_ms: number;
+    effort_ms: number;
+    multiplier: number;
+    session_count: number;
+  };
 }) {
   return (
     <div>
@@ -669,7 +771,11 @@ function BlockingBar({ ah, ha }: { ah: number; ha: number }) {
   );
 }
 
-function ConcurrencyBar({ shares }: { shares: { k1: number; k2: number; k3: number; k4: number } }) {
+function ConcurrencyBar({
+  shares,
+}: {
+  shares: { k1: number; k2: number; k3: number; k4: number };
+}) {
   return (
     <div
       data-compare-bar="concurrency-mix"

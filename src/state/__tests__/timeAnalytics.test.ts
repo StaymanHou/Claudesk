@@ -33,7 +33,9 @@ describe("M9 WP4 — time-analytics DTO contract (snake_case, verbatim)", () => 
               end: 570,
               prompts: 1,
               tools: { Edit: 1 },
-              segs: [{ kind: "ai-doing", start: 545, end: 546, dur_ms: 18_000 }],
+              segs: [
+                { kind: "ai-doing", start: 545, end: 546, dur_ms: 18_000 },
+              ],
               day_iso: "2026-05-13",
             },
           ],
@@ -61,7 +63,12 @@ describe("M9 WP4 — time-analytics DTO contract (snake_case, verbatim)", () => 
       dur_ms: 600_000,
       label: "Explore",
     };
-    const ai: SegPayload = { kind: "ai-reasoning", start: 0, end: 5, dur_ms: 300_000 };
+    const ai: SegPayload = {
+      kind: "ai-reasoning",
+      start: 0,
+      end: 5,
+      dur_ms: 300_000,
+    };
     expect(sub.label).toBe("Explore");
     expect(ai.label).toBeUndefined();
     // the six valid kebab tags

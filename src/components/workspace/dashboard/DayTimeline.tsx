@@ -30,7 +30,13 @@ import type {
   SegPayload,
 } from "../../../state/timeAnalytics";
 import { CT_TOKENS, textOn } from "./tokens";
-import { segStyle, colorForKind, RENDER_ORDER, sumActive, sumByKind } from "./kinds";
+import {
+  segStyle,
+  colorForKind,
+  RENDER_ORDER,
+  sumActive,
+  sumByKind,
+} from "./kinds";
 import { IconChevDown, IconChevRight } from "./Icon";
 import {
   dayOffsetMin,
@@ -162,9 +168,7 @@ function HourRuler() {
     >
       {ticks.map((t) => {
         const leftPct =
-          range > 0
-            ? ((t.min - viewport.visible_start_min) / range) * 100
-            : 0;
+          range > 0 ? ((t.min - viewport.visible_start_min) / range) * 100 : 0;
         const widthPct = range > 0 ? (interval / range) * 100 : 0;
         return (
           <div
@@ -215,8 +219,7 @@ function HourGridBackground() {
   // viewport is within [0,1440] so no interior midnight exists.
   const daySeparators: number[] = [];
   if (windowStartIso) {
-    const firstMidnight =
-      Math.ceil(viewport.visible_start_min / 1440) * 1440;
+    const firstMidnight = Math.ceil(viewport.visible_start_min / 1440) * 1440;
     for (let t = firstMidnight; t < viewport.visible_end_min; t += 1440) {
       if (t > viewport.visible_start_min) daySeparators.push(t);
     }
@@ -232,9 +235,7 @@ function HourGridBackground() {
     >
       {ticks.map((t) => {
         const leftPct =
-          range > 0
-            ? ((t.min - viewport.visible_start_min) / range) * 100
-            : 0;
+          range > 0 ? ((t.min - viewport.visible_start_min) / range) * 100 : 0;
         const widthPct = range > 0 ? (interval / range) * 100 : 0;
         return (
           <div
