@@ -67,6 +67,13 @@ Three things the roadmap's deliverable text asserts were checked against the cod
 
 ### ~~WP2: Editor minimap stale on file update~~ — ❌ REMOVED FROM M11.5 2026-08-01 (deferred to backlog)
 
+> **Cycle-close note (2026-08-01, `/product-finalize`):** this WP is **resolved-by-removal**, not
+> incomplete. `product-finalize`'s §1 gate asks for all WPs `[x]`; the operator explicitly ruled that
+> WP2's *deferral closes the cycle*, so the milestone was finalized with this WP scoped OUT rather
+> than ticked. **Its 6 task checkboxes below are deliberately left unticked** — the work genuinely did
+> not land, and faking a `[x]` would make the WBS lie about what shipped. The bug survives as
+> `SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE` in `backlog.md` with all diagnosis banked.
+
 **Operator decision after a live reproduce + fix attempt.** Not cancelled as invalid — the bug is
 **real, reproduced, and diagnosed**; it is simply **feature-sized, not papercut-sized**, and the
 bucket's stated value is that it stays tight. Full record:
