@@ -350,6 +350,3 @@ sizing prose for an existing surface, **measure the incumbent's siblings first**
 (time-tracking offline/local-only copy)** SHIPPED; **WP2 (editor minimap) DEFERRED to backlog**
 2026-08-01 (`c12dcf0`). **Next: WP4 — the ⚠️ SCHEDULE-CRITICAL OFF-invariant guard chord-arm fix,
 which must complete before M11 begins.**
-
-## Session Handoff — 2026-08-01 09:21
-Handed off. See `workflow-system/state/.session.md` to restore.

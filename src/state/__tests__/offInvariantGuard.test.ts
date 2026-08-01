@@ -42,6 +42,14 @@ import { MENU_IDS } from "../../menu/menuBridge";
 // computation rather than deleting the assertion.
 //
 // WP5.2 proves this guard bites by temporarily bypassing it and confirming a failure.
+//
+// ── ARM SELECTION IS BY CONTENT, NOT FILENAME (M11.5 WP4) ─────────────────────
+// The chord arm originally selected candidates by BASENAME and provably missed
+// `components/workspace/panelHost.ts` — the module owning `panelForChord`. It now selects
+// by exported identifier; see exportsChordIdentifier() for why that specific predicate and
+// not the tempting `metaKey` one. Probe arms INDIVIDUALLY when checking this guard: a
+// composite bypass that trips *some* arm reports "the guard bites" while hiding a gap,
+// which is exactly how the basename hole was found.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** Terms that identify a workflow-coupled surface. Deliberately broad on WHAT counts as
@@ -53,6 +61,66 @@ import { MENU_IDS } from "../../menu/menuBridge";
  *  that cries wolf gets deleted by the next person who trips it, so the matcher has to be
  *  precise even though the term list is broad. */
 const WORKFLOW_TERMS = ["workflow", "docs", "skill", "drivemode", "drive-mode"];
+
+/** Strip comments before matching source text.
+ *
+ *  Shared by the chord arm and the wrapper-bypass arm. A file that documents *why* it
+ *  avoids something must not be flagged for naming it — and the alternative (rewording an
+ *  explanation to dodge a grep) would trade real reasoning for a passing test.
+ *
+ *  This is load-bearing for the chord arm, not merely tidy: `paletteCommands.ts` carries a
+ *  stale `workflow/archive/…` doc path in a comment (pre-dating the 2026-07-28 layout
+ *  migration), and it is selected by the content predicate below. Without stripping, the
+ *  arm goes red on prose the moment it is widened — which the header calls out as the
+ *  failure that gets a guard deleted. */
+function stripComments(src: string): string {
+  return src
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}
+
+/** True iff `src` exports an identifier containing `Chord` — i.e. the module owns chord
+ *  logic, whatever its filename says.
+ *
+ *  ── Why CONTENT, not basename (a PROVEN miss, do not "simplify" this back) ──
+ *  This arm used to select candidates by basename (`/hord[A-Za-z]*\.tsx?$/i`). That skipped
+ *  `components/workspace/panelHost.ts` — the module owning `panelForChord`, the app's
+ *  panel-select chord mapper and the most natural home for an M11 Docs chord. M10.9 WP5.2
+ *  probe 5b proved the gap rather than inferring it: an ungated workflow chord predicate
+ *  placed there passed the full guard 10/10, while the identical violation in a
+ *  `*Chord.ts` file failed correctly. A guard that cannot see the module it guards is
+ *  decorative, and M11 landing its Docs tab is exactly when this arm must fire.
+ *
+ *  ── Why THIS predicate and not "reads a keyboard event" (M11.5 WP4 audit) ──
+ *  The tempting content test — "the module reads `metaKey`" — is WRONG: it drops
+ *  `closeTerminalChord.ts`, whose export takes three pre-computed booleans
+ *  (`{isCloseChord, terminalFocused, canClose}`) and never touches a keyboard event. It is
+ *  the only chord module with no `metaKey`, so that predicate would widen reach on one
+ *  module while silently narrowing it on another — a net loss disguised as a fix.
+ *  Matching the EXPORTED IDENTIFIER is a strict superset instead: it selects all 12
+ *  modules the basename filter found, plus `panelHost.ts` (via `panelForChord` and
+ *  `PanelChordEvent`). Nothing that was in scope dropped out. */
+function exportsChordIdentifier(src: string): boolean {
+  return /export\s+(?:function|const|interface|type)\s+[A-Za-z]*Chord/i.test(
+    src,
+  );
+}
+
+/** The chord arm's offender test: is this module source an UNGATED workflow chord?
+ *
+ *  Extracted from the arm's `.filter()` at M11.5 WP4 codify so it can be asserted as a
+ *  VALUE. The arm itself asserts `offenders === []`, which passes both when this predicate
+ *  works and when it is broken to always-false — the vacuity shape this file's meta-tests
+ *  exist to catch. M10.9 WP5.2 and M11.5 WP4 Phase 2 each proved it fires by throwaway
+ *  probe, but as the meta-test header says: "a probe is not coverage."
+ *
+ *  Comments are stripped first — a module that merely MENTIONS a workflow term in prose is
+ *  not a registered chord. A module that consumes the seam is legitimately gated. */
+function isUngatedWorkflowChord(rawSrc: string): boolean {
+  const src = stripComments(rawSrc);
+  return namesWorkflowTerm(src) && !/useWorkflowFeaturesEnabled/i.test(src);
+}
 
 /** True iff `haystack` contains any workflow term as a whole word.
  *
@@ -124,22 +192,10 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
   it("matches no workflow chord (no chord predicate module is workflow-coupled)", () => {
     // A live chord whose handler early-returns still SWALLOWS the keystroke — that is
     // "registered-with-a-no-op-handler", explicitly forbidden by the seam contract.
-    // Chord predicates live in *hord*.ts modules; none may be workflow-coupled unless
-    // its listener is mounted inside an `enabled &&` branch.
-    const offenders = sourceFiles()
-      .filter((f) => {
-        const base = f.split("/").pop() ?? "";
-        // Chord PREDICATE modules only — a test file that merely names a term is not a
-        // registered chord (and __tests__ prose is where the false positives live).
-        if (!/hord[A-Za-z]*\.tsx?$/i.test(base)) return false;
-        if (f.includes("__tests__")) return false;
-        const src = readFileSync(f, "utf8");
-        // Flag a chord module that names a workflow term AND is not itself gated (a
-        // legitimately gated chord module would consume the seam).
-        return (
-          namesWorkflowTerm(src) && !/useWorkflowFeaturesEnabled/i.test(src)
-        );
-      })
+    // Chord modules are selected by CONTENT (see chordModules() / exportsChordIdentifier);
+    // none may be workflow-coupled unless its listener is mounted in an `enabled &&` branch.
+    const offenders = chordModules()
+      .filter((f) => isUngatedWorkflowChord(readFileSync(f, "utf8")))
       .map(relFromSrcRoot);
     expect(
       offenders,
@@ -199,17 +255,10 @@ describe("OFF-invariant: the seam is the only door", () => {
       // not a bypass. It re-syncs on the broadcast like the hook does.
       "src/components/settings/SettingsPanel.tsx",
     ];
-    // Comments STRIPPED before matching. A file that documents *why* it avoids the raw
-    // getter must not be flagged for naming it — and the alternative (rewording the
-    // explanation to dodge a grep) would trade real reasoning for a passing test. This is
-    // the fourth instance in this feature of a source-scanning assertion matching prose;
-    // strip first, then match.
-    const stripComments = (src: string) =>
-      src
-        .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "");
-
+    // Comments STRIPPED before matching (shared helper, hoisted at M11.5 WP4 when the
+    // chord arm came to need it too). A file that documents *why* it avoids the raw getter
+    // must not be flagged for naming it — and the alternative (rewording the explanation to
+    // dodge a grep) would trade real reasoning for a passing test.
     const offenders = sourceFiles()
       .filter((f) =>
         stripComments(readFileSync(f, "utf8")).includes(
@@ -303,6 +352,134 @@ describe("the guard is not vacuous", () => {
     expect(files.map(relFromSrcRoot)).toContain("src/state/workflowGate.ts");
   });
 
+  it("the chord arm's content selector reaches panelHost.ts and does not shrink", () => {
+    // M11.5 WP4. The chord arm is only as good as its candidate set, and that set was
+    // silently WRONG for one release: the basename filter it used to carry missed
+    // `panelHost.ts`, proven by M10.9 WP5.2 probe 5b (an ungated workflow chord placed
+    // there passed the full guard 10/10). Phase 2 mutation-proves the arm bites there now,
+    // but a probe is not coverage — so the REACH itself is pinned here.
+    //
+    // Two directions, both of which have a real failure behind them:
+    const selected = chordModules().map(relFromSrcRoot);
+
+    // (1) The module the old selector missed. This is the whole point of the WP.
+    expect(
+      selected,
+      "the chord arm must reach panelHost.ts — it owns panelForChord, the most natural " +
+        "home for an M11 Docs chord, and the basename selector provably missed it",
+    ).toContain("src/components/workspace/panelHost.ts");
+
+    // (2) No SHRINKAGE. A tempting "content" predicate (match files that read `metaKey`)
+    // would drop closeTerminalChord.ts, whose export takes three pre-computed booleans and
+    // never reads a keyboard event — widening reach on one module while narrowing it on
+    // another. The exported-identifier predicate is a strict superset of the 12 modules the
+    // basename filter found; assert the ones a naive rewrite would lose.
+    for (const mustKeep of [
+      "src/components/workspace/closeTerminalChord.ts", // no metaKey at all
+      "src/components/workspace/chordEvent.ts", // shared type module, no predicate
+      "src/components/settings/settingsChord.ts",
+      "src/components/workspace/workspaceSwitchChord.ts",
+    ]) {
+      expect(
+        selected,
+        `${mustKeep} was in scope under the basename selector and must stay in scope`,
+      ).toContain(mustKeep);
+    }
+
+    // ...and the set is a plausible size (15 at the time of writing: 12 + panelHost +
+    // paletteCommands + terminalFontZoom). A loose floor — it catches "broken to empty" and
+    // "narrowed back to a handful", not ordinary churn.
+    expect(
+      selected.length,
+      "the chord-module set shrank unexpectedly — a narrowed selector silently disarms this arm",
+    ).toBeGreaterThanOrEqual(13);
+  });
+
+  it("the chord arm's offender predicate FIRES on an ungated workflow chord", () => {
+    // M11.5 WP4 codify. The arm asserts `offenders === []`, which passes just as happily
+    // when the predicate is broken to always-false. M10.9 WP5.2 and this WP's Phase 2 each
+    // proved it fires by injecting a real violation into panelHost.ts and confirming the
+    // guard failed — but both were throwaway probes, reverted. Per this file's own meta-test
+    // header ("a probe is not coverage"), the property is re-established as a standing test.
+    //
+    // The fixture is the EXACT shape of the M10.9 WP5.2 probe 5b that passed 10/10 against
+    // the old basename selector: an ungated workflow chord predicate in a module that owns
+    // chord logic but is not named *Chord.ts.
+    const ungatedDocsChord = `
+export function docsChord(e: { metaKey: boolean; key: string }): boolean {
+  return e.metaKey && e.key.toLowerCase() === "k";
+}
+`;
+    expect(
+      isUngatedWorkflowChord(ungatedDocsChord),
+      "an ungated workflow chord must be flagged — this is the violation the arm exists to catch",
+    ).toBe(true);
+
+    // ...and the two ways a module legitimately passes must NOT be flagged, so the
+    // predicate is not simply always-true (which would make the arm cry wolf):
+    const gatedDocsChord = `
+import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+export function docsChord(e: { metaKey: boolean; key: string }): boolean {
+  return e.metaKey && e.key.toLowerCase() === "k";
+}
+`;
+    expect(
+      isUngatedWorkflowChord(gatedDocsChord),
+      "a chord module that consumes the seam is legitimately gated and must NOT be flagged",
+    ).toBe(false);
+
+    const ordinaryChord = `
+export function isSearchChord(e: { metaKey: boolean; key: string }): boolean {
+  return e.metaKey && e.key.toLowerCase() === "f";
+}
+`;
+    expect(
+      isUngatedWorkflowChord(ordinaryChord),
+      "an ordinary non-workflow chord must NOT be flagged",
+    ).toBe(false);
+  });
+
+  it("the chord arm ignores workflow terms that appear only in COMMENTS", () => {
+    // M11.5 WP4, codified because it is load-bearing and currently unasserted. Widening the
+    // chord arm to select by content pulled in `paletteCommands.ts`, which carries a stale
+    // `workflow/archive/…` doc path in a comment (pre-dating the 2026-07-28 layout
+    // migration). The arm passes today ONLY because it strips comments first — measured:
+    // without stripping the arm reports exactly 1 offender, with stripping it reports 0.
+    //
+    // Why this matters more than it looks: if someone drops the strip, the arm goes red on
+    // PROSE, and the tempting fix is to narrow the selector back toward filenames — which
+    // would silently re-open the panelHost.ts hole this WP exists to close. So the property
+    // is pinned as behavior (a prose-only mention must not flag) rather than as a grep for
+    // the stripComments call, which would rot on the first refactor.
+    const proseOnly = [
+      "// see workflow/archive/m2-wp1-cm6-probe.md for the original probe",
+      "/* Handles the docs tab? No — see docs/lessons/ for why not. */",
+      "{/* a skill button would live here once M13 lands */}",
+    ];
+    for (const comment of proseOnly) {
+      const module = `${comment}\nexport function isThingChord(e: { key: string }) {\n  return e.key === "x";\n}\n`;
+      // The raw text names a workflow term...
+      expect(
+        namesWorkflowTerm(module),
+        `test fixture is wrong — ${comment} should name a workflow term before stripping`,
+      ).toBe(true);
+      // ...but after stripping, the arm sees nothing workflow-coupled.
+      expect(
+        namesWorkflowTerm(stripComments(module)),
+        `a workflow term appearing ONLY in a comment must not flag the module — ` +
+          `otherwise the arm goes red on prose and gets "fixed" by narrowing the selector`,
+      ).toBe(false);
+    }
+
+    // And the inverse must still hold: a term in REAL CODE is still caught. Without this,
+    // a stripComments() that ate everything would pass the assertions above.
+    const realOffender = `export function docsChord(e: { key: string }) {\n  return e.key === "d";\n}\n`;
+    expect(
+      namesWorkflowTerm(stripComments(realOffender)),
+      "stripping must not swallow executable code — a real workflow chord must still flag",
+    ).toBe(true);
+  });
+
   it("the matcher fires on real workflow terms", () => {
     // The positive direction. Without this, narrowing the regex too far (the natural
     // over-correction after a false positive) would silently disarm every arm.
@@ -361,6 +538,18 @@ function resolveFromSrcRoot(rel: string): string {
 
 function relFromSrcRoot(abs: string): string {
   return `src/${abs.slice(srcRoot().length)}`.replace(/\/+/g, "/");
+}
+
+/** Every non-test source module that owns chord logic, selected by CONTENT.
+ *
+ *  `__tests__` is excluded because a test file that merely names a term is not a
+ *  registered chord — and test prose is where the false positives live. */
+function chordModules(): string[] {
+  return sourceFiles().filter(
+    (f) =>
+      !f.includes("__tests__") &&
+      exportsChordIdentifier(readFileSync(f, "utf8")),
+  );
 }
 
 /** Every .ts/.tsx file under src/, recursively. */
