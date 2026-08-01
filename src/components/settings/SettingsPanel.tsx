@@ -526,7 +526,7 @@ export default function SettingsPanel({
         <SettingsGroup
           id="analytics"
           title="Analytics"
-          hint="Local time tracking for your Claude Code sessions. Off means zero storage and zero IO."
+          hint="Time tracking for your Claude Code sessions. Fully offline — nothing is uploaded; sessions are stored in a local database on this Mac. While on, it records Claude Code activity across the whole Mac, not just projects open in Claudesk. Off means zero storage and zero IO."
         >
           <label className="settings-row settings-row-check">
             <input

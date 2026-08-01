@@ -17,7 +17,10 @@
 // `TIME_TRACKING_ENABLED_EVENT` broadcast (mirror of ProjectPicker's seed+listen), and —
 // when tracking is ON — fetches the active view's payload and renders it. Empty/loading
 // states (per the pure `dashboardMode` predicate + a per-view `hasData`):
-//   - tracking OFF → "enable tracking" (dashboard-empty-tracking-off)
+//   - tracking OFF → "enable tracking" (dashboard-empty-tracking-off). M11.5 WP3 points
+//     this at Settings (⌘,) — NOT "the project picker", whose settings strip M10.9 WP2
+//     deleted — and states the offline/local-only guarantee, matching the Analytics group
+//     hint in SettingsPanel.tsx. Both are pinned by settingsTimeTrackingCopy.test.ts.
 //   - tracking ON, fetch in flight → loading
 //   - tracking ON, no rows → "no activity recorded" (dashboard-empty-nodata)
 //
@@ -1059,8 +1062,12 @@ export default function GlobalDashboard({ onClose }: GlobalDashboardProps) {
             <p className="dashboard-empty-title">Time tracking is off</p>
             <p className="dashboard-empty-hint">
               Enable tracking to see analytics. Turn on{" "}
-              <strong>Time tracking</strong> in the project picker, then your
+              <strong>Time tracking</strong> in Settings (⌘,), then your
               per-project activity will appear here.
+            </p>
+            <p className="dashboard-empty-hint">
+              Fully offline — nothing is uploaded; sessions are stored in a
+              local database on this Mac.
             </p>
           </div>
         ) : mode === "data" && view === "week" && weekData ? (

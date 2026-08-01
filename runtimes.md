@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-07-31
+updated: 2026-08-01
 ---
 
 # Runtime Registry
@@ -77,9 +77,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 2.5s (2026-07-31, M11.5 `/product-wbs` baseline — 121 files / 1400 pass, 0 fail; the M10.9-close baseline confirmed green before decomposing M11.5)
+- **Last:** 2.0s (2026-08-01, M11.5 WP3 Phase 1 verify-codify — 127 files / 1467 pass, 0 fail; +7 for the cross-surface copy-promise guard)
 - **Use timeout:** 120000
 - **History:**
+  - 2.0s — 2026-08-01 (M11.5 WP3 P1 verify-codify: +7, 1467 pass — cross-surface copy-promise guard)
+  - 1.9s — 2026-08-01 (M11.5 WP3 P1 build: +11, 1460 pass — time-tracking copy guard)
   - 2.5s — 2026-07-31 (M11.5 /product-wbs baseline: 121 files / 1400 pass)
   - 2.3s — 2026-07-29 (WP3 P4 verify-codify: +2, 1307 pass — WP3 COMPLETE)
   - 2.3s — 2026-07-29 (WP3 P3 verify-codify: +12, 1278 pass)

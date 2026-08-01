@@ -263,13 +263,13 @@ Five things, because the WBS's own prediction was only partly right and the diff
 
 ## M11.5 status — 2026-08-01
 
-**1 of 4 shipped; 1 deferred out; 2 remain.**
+**2 of 4 shipped; 1 deferred out; 1 remains.**
 
 | WP | State |
 |---|---|
 | **WP1** per-project CC `default_model` override | ✅ **SHIPPED** 2026-07-31 (`e0c28ac` + review fixes `df8e002`) |
 | **WP2** editor minimap blank-tail under soft-wrap | ❌ **DEFERRED to backlog** 2026-08-01 — feature-sized, not papercut-sized (see the WP2 block above) |
-| **WP3** time-tracking offline/local-only copy | ◀ **NEXT** — XS, copy-only, zero-risk |
+| **WP3** time-tracking offline/local-only copy | ✅ **SHIPPED** 2026-08-01 — copy-only, **0 `src-tauri/` changes**; +18 tests (both guards mutation-proven) |
 | **WP4** OFF-invariant guard chord arm selects by content | ⚠️ **SCHEDULE-CRITICAL** — must complete **before M11 begins**; deliverable is the **mutation-proof**, not the selector edit |
 
 **Both carried repairs from the prior session are CLOSED** — `format:check` green on `main`
@@ -281,7 +281,72 @@ the reproduce-first ordering existed to surface early. WP3 and WP4 are unaffecte
 mutually independent by design (no shared files, no shared subsystems), so nothing was blocked on it.
 **WP4 still ships before M11 regardless of anything else in this bucket.**
 
-## Session Handoff — 2026-08-01 08:37
-Handed off. See `workflow-system/state/.session.md` to restore.
+## WP3 as-built (2026-08-01)
 
-**M11.5: 1 shipped / 1 deferred / 2 remaining.** WP1 (per-project model override) SHIPPED; **WP2 (editor minimap) DEFERRED to backlog** 2026-08-01 — real bug, fully diagnosed, but feature-sized rather than papercut-sized (`c12dcf0`). **Next: WP3 (time-tracking offline/local-only copy — XS, copy-only) via `/feature-plan`.** WP4 remains schedule-critical before M11.
+Shipped as planned: **copy-only, zero `src-tauri/` changes**, two strings + two test files.
+Four scope-audit findings corrected the WBS's task list against the code as it actually stands —
+worth carrying, because three of the four assumed facilities that do not exist:
+
+1. **There is no per-*setting* help-line slot** — `SettingsGroup` takes one `hint` per **group**
+   (`SettingsPanel.tsx:118-143`), and the Analytics hint was **already populated** ("Local time
+   tracking… zero storage and zero IO"). So 3.1 was *editing existing copy*, not filling a blank.
+   The incumbent's ON-vs-OFF fact had to survive, and is now test-pinned.
+2. **Task 3.4's named test does not exist.** `PRIVACY-TEST-COINCIDENTAL-SUBSTRING` appears in four
+   docs and **nothing in the code**. The real tests are Rust —
+   `time_store::tests::row_never_carries_prompt_text` (`mod.rs:413`) and
+   `native_row_never_carries_content` (`:703`) — and both assert on **structured row fields**, so
+   UI copy *cannot* trip them. The WBS's stated worry was wrong on the merits. Both were run by
+   name (105 pass). Filed: `SURFACE-2026-08-01-PRIVACY-TEST-IDENTIFIER-IS-STALE-IN-FOUR-DOCS`.
+3. **Task 3.5's wiring discipline already existed in full** (`settingsTimeTrackingWiring.test.ts`,
+   all five facts). Adding a second wiring test would have been duplication; the unguarded property
+   was the **copy**, so that is what got a guard.
+4. **Task 3.3's optional dashboard extension had a live inaccuracy**, which upgraded it from
+   optional to worth doing: the tracking-OFF empty state told users to *"Turn on Time tracking in
+   the project picker"* — a surface **M10.9 WP2 deleted**. Retargeted to Settings (`⌘,`).
+
+**The copy conveys SCOPE as well as locality, and the scope claim is verified in code — not
+inherited from memory.** Final wording: *"Time tracking for your Claude Code sessions. Fully
+offline — nothing is uploaded; sessions are stored in a local database on this Mac. While on, it
+records Claude Code activity across the whole Mac, not just projects open in Claudesk. Off means
+zero storage and zero IO."* The breadth clause is load-bearing: `time_store::drain_loop`
+(`commands.rs:493-513`) writes **every** hook event with **no workspace filter**, whereas
+`status_broadcaster` **drops** events whose `cwd` matches no open workspace. Those two consumers of
+one fan-out behave differently and **neither documents it** — filed as
+`SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED`. Omitting breadth would have
+left the copy misleading by omission, which is the trust gap the WP exists to close.
+
+**⚠️ The verbose first draft failed its own verify-human, and the measurement is the reusable
+part.** The initial hint was **322 chars against sibling hints of 107 / 84 / 42** — 3× the longest —
+and asserted *"no network"* **three separate ways** ("Fully offline" + "nothing is uploaded" + "there
+is no network path"). That tripling *was* the legalese effect; over-insistence reads as
+defensiveness. Compressed to **270 chars / 3 wrapped lines**, four distinct facts, zero
+restatement. **Every automated gate passed on the verbose version** — "the strings are present" and
+"the copy reads well" are different properties, and only the human gate distinguishes them. When
+sizing prose for an existing surface, **measure the incumbent's siblings first**.
+
+**Two guards, both mutation-proven (+18 tests, 1467 total):**
+- `settingsTimeTrackingCopy.test.ts` (11) — *what* each surface says. Mutations: dropping the scope
+  sentence and reinstating the picker pointer fail exactly 3/11; re-stacking the third "no network"
+  phrasing fails 1/11 (an explicit anti-legalese-regression assertion).
+- `settingsTimeTrackingCopyPromise.test.ts` (7) — that the dashboard's instruction is still **TRUE**.
+  It executes the real `isSettingsChord` **predicate** rather than grepping for a `"⌘,"` literal,
+  because a source match would pass even after a rebind. Mutations: rebinding the chord fails 2/7,
+  renaming the advertised label fails 1/7. **This guard exists because the defect it prevents already
+  happened once** — the picker-pointer copy rotted precisely because nothing coupled the copy to the
+  surface it named.
+
+**Two method lessons worth reusing in WP4** (whose deliverable *is* a mutation-proof):
+- **Verify the mutation LANDED, not just that the test ran.** Two mutation attempts here reported
+  "guard did not bite" while having changed nothing executable — one whitespace mismatch, one that
+  hit a **doc comment quoting the predicate** instead of the code line. A mutation test that does
+  not confirm its own mutation is a *vacuous mutation test*: the same failure class this project
+  keeps meeting, one level up.
+- **Guard rendered phrasing, not keywords.** A first-pass `not.toContain("in the picker")` failed on
+  a legitimate code comment about M9 live-sync. Same over-broad-matcher error as `docs` firing on
+  `docstring` — and self-defeating here, since WP3 deliberately *added* a comment naming the removed
+  surface to prevent recurrence.
+
+**M11.5: 2 shipped / 1 deferred / 1 remaining.** WP1 (per-project model override) + **WP3
+(time-tracking offline/local-only copy)** SHIPPED; **WP2 (editor minimap) DEFERRED to backlog**
+2026-08-01 (`c12dcf0`). **Next: WP4 — the ⚠️ SCHEDULE-CRITICAL OFF-invariant guard chord-arm fix,
+which must complete before M11 begins.**

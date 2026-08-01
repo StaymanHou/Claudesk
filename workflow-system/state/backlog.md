@@ -1,5 +1,24 @@
 # Backlog
 
+## SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED
+- **Source:** feature:build (M11.5 WP3 Phase 1, 2026-08-01)
+- **Target level:** product:wbs (comment-only; fold into any future touch of either module)
+- **Type:** tech-debt (code comprehension)
+- **Summary:** The two consumers of the hook-event fan-out treat unmatched events **differently**, and neither says so. `status_broadcaster::resolve_cwd` (`mod.rs:240`) does ancestor/longest-prefix matching and **drops** an event whose `cwd` matches no open workspace (`mod.rs:34`); `time_store::commands::drain_loop` (`commands.rs:493-513`) reads the gate and calls `write_gated` on **every** event with **no workspace filter at all**.
+- **Context:** Found while writing M11.5 WP3's privacy copy, which asserts that time tracking records "Claude Code activity across this whole Mac, not just projects open in Claudesk". That claim rests entirely on this asymmetry. The asymmetry is **deliberate and correct** — analytics wants all CC activity on the machine, while a status dot only means something for a workspace that is actually open — but it is documented at neither drain. The natural inference from reading one drain is therefore **wrong** about the other, and the wrong direction is the dangerous one: a reader who checks `status_broadcaster` first would conclude the user-facing privacy copy overstates what is captured, and might "correct" true copy into false copy. Establishing the fact required a code trace; memory `[[time-tracking-capture-is-machine-global]]` asserted it but the code is the only authority for a privacy claim.
+- **Suggested action:** one cross-referencing comment at each `drain_loop` — status side: "unmatched cwd is DROPPED here; the time_store drain deliberately does NOT filter (see …)"; time_store side the mirror. Cheapest folded into the next edit of either module; not worth a standalone task. The behavior itself needs no change.
+- **Priority:** low (comment-only, no behavior at risk — but it guards a user-facing privacy claim, which is why it is filed rather than dropped).
+
+## SURFACE-2026-08-01-PRIVACY-TEST-IDENTIFIER-IS-STALE-IN-FOUR-DOCS
+- **Source:** feature:plan (M11.5 WP3 scope audit, 2026-08-01)
+- **Target level:** product:finalize (doc resync) — or a one-line fix any time
+- **Type:** docs / confabulation channel
+- **Summary:** `PRIVACY-TEST-COINCIDENTAL-SUBSTRING` is cited in **three** surviving docs (`CHANGELOG.md`, `roadmap.md`, `wbs.md` — including WP3's own task 3.4) as *the* privacy self-consistency test to re-verify when privacy-adjacent copy changes. *(A fourth citation lived in this file's `SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING` entry, which was deleted when WP3 resolved it — so that one is already gone.)* **It matches nothing in `src/` or `src-tauri/src/`.** The tests that actually exist are `time_store::tests::row_never_carries_prompt_text` (`src-tauri/src/time_store/mod.rs:413`) and `native_row_never_carries_content` (`mod.rs:703`).
+- **Context:** Found while discharging WP3 task 3.4. The WBS's stated worry — "new copy is exactly what could trip it" — is **also wrong on the merits**: both real tests assert on **structured row fields**, and `native_row_never_carries_content`'s own comment records that bare-substring checking was deliberately abandoned as "WP2 MINOR #1's weakness". So UI copy cannot trip them, and a future WP that changes privacy copy should not expect it to.
+- **Why it matters beyond tidiness:** a dangling identifier inside a **privacy** instruction is a confabulation channel with two failure modes — a reader believes a guard exists by that name, or "verifies" it by grepping, hitting the four doc mentions, and calling it discharged without ever running a test. That is precisely the vacuous-verification shape M10.9 WP3.5a's lesson warns about ("a guard must be mutation-proven, not merely present").
+- **Suggested action:** replace the identifier with the two real test paths at all four sites. Cheapest at `/product-finalize`'s doc resync, since `wbs.md` and `roadmap.md` are already being touched there.
+- **Priority:** low (docs-only; no behavior at risk, but it is a privacy instruction, which raises the cost of leaving it wrong).
+
 ## SURFACE-2026-08-01-EDITOR-DISK-RELOAD-WAITS-FOR-REAL-WINDOW-FOCUS
 - **Source:** feature:build (M11.5 WP2 Phase 1 reproduction run, 2026-08-01)
 - **Target level:** product:wbs
@@ -154,15 +173,6 @@
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** accept-as-documented-limitation unless a mockable updater seam appears. Dismiss via the WIP's `## Code-Quality Review` section.
 
-## SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING
-- **Source:** operator (raised mid-turn during the 2026-07-19 backlog-paydown sweep, WP2).
-- **Target level:** product:wbs (small UX/copy feature — net-new, not debt).
-- **Type:** new-work (UI messaging / reassurance copy).
-- **Summary:** The time-tracking feature needs UI copy that CLEARLY indicates it is **offline** and stores data **only locally, for the user's own visibility** — no upload, no telemetry, no external service. Surface this reassurance where a user meets the feature: the `time_tracking_enabled` toggle (WP5 setting, default OFF) and/or the dashboard tab header/empty-state.
-- **Context:** Time-analytics capture is machine-global and stored in a local SQLite `time_store` (see memory `time-tracking-capture-is-machine-global.md`); there is no network path. But nothing in the UI *tells* the user that — a privacy-conscious user toggling it on has no signal that the data never leaves their machine. This is a trust/clarity gap, not a behavior change (the feature is already local-only).
-- **Suggested action:** add a short "Offline · stored locally on this Mac, visible only to you" line (exact copy TBD) next to the `time_tracking_enabled` toggle, and consider an equivalent note in the dashboard tab. Copy-only + possibly one small helper-text element; no data-flow change. Verify the existing privacy self-consistency test (`PRIVACY-TEST-COINCIDENTAL-SUBSTRING`, m9) still holds.
-- **Priority:** medium (trust-facing; small effort).
-- **Status:** **ANCHORED (2026-07-31) — 2nd deliverable of Milestone 11.5** (QoL polish bucket). See `roadmap.md` → "Milestone 11.5". **Cheaper now than when filed:** M10.9 WP2 built the `⌘,` Settings panel *with a per-setting help line*, which is exactly the element this copy needs — so it is a copy addition to an existing slot, not new UI. Add the control's copy via the `useSettingControl` spec, never by hand-rolling the seed/listen/optimistic-set discipline (WP2 outcome).
 ## SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION
 <!-- Heading RESTORED at the M10.9 cycle-close sweep (2026-07-31). This item had lost its `## ` heading
      and was orphaned under SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING, making it
