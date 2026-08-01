@@ -1,10 +1,9 @@
 # Backlog
 
 ## Code-quality findings — per-project-cc-model-override (2026-07-31)
-- **Pointer:** **1 MAJOR** (0 CRITICAL) from `feature-review-quality` against ship commit `e0c28ac`. The picker issues **one IPC read per row** for a value `list_projects` already returned on the wire — an N+1 against a `projects.json` read on the most-glanced surface, caused only by `RecentProject` omitting one optional field. Body in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# per-project-cc-model-override — 2026-07-31`. **The review's other 1 MAJOR + 4 of 7 MINOR were FIXED at review time, not backlogged** (see below).
-- **Priority:** medium
-- **Status:** pending
-- **Pickup shape:** one self-contained ~15-line change — widen `RecentProject` with `default_model?: string | null` and pass the seed into `ProjectModelCell` as a prop instead of fetching it. Keep the IPC setter. Good candidate for any picker-adjacent refactor pass.
+- **Pointer:** ✅ **The 1 MAJOR (the per-row IPC N+1) was RESOLVED 2026-08-01** — see CHANGELOG → `**Backlog resolved:** SURFACE-2026-07-31-QUALITY-WP1-PER-ROW-IPC-REFETCHES-DATA-ALREADY-ON-THE-WIRE`. Its body has been deleted from `backlog-quality-findings.md` per delete-on-resolve. **This entry survives only as the record of the review's non-backlogged dispositions below** — nothing here is open work; it is kept because a future reader auditing that review needs to know which items were fixed in place and which 3 MINOR were consciously declined. Safe to prune at any cycle-close sweep.
+- **Priority:** n/a (no open work remains)
+- **Status:** resolved-record (retained for provenance, not pickup)
 - **Fixed in place at review time (NOT backlogged), for the record:** the **MAJOR** stale `modelOverrideIpc.ts` module header (it stated the workspace header was the surface and named "a picker-row badge" as the hypothetical *future* second surface — exactly backwards after the Phase 2 relocation, and it is the stated rationale for the deliberate no-broadcast decision, so leaving it would have invited a future reader to add a one-subscriber fan-out); the dead `displayModelValue` export whose two tests guarded nothing (component now routes through it); a second hardcoded `"Default"` string (now `MODEL_UNSET_LABEL`, *derived* from `MODEL_UNSET_PLACEHOLDER` so they cannot drift); a fragile multi-line CSS regex premise-check (now single-identifier assertions — it was the `SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING` class); and two stale/contradictory doc clauses. **3 MINOR remain unaddressed and un-backlogged by choice** — an `is-failed` styling flag that persists until a genuinely different value is committed, and two prose nits — all judged below the bar for their own entry.
 
 ## SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC
@@ -333,6 +332,16 @@
 - **Suggested action:** Merge into one `**Use timeout:**` + one chronological `**History:**` block. One-line cleanup, no behavior change — good candidate for a backlog-paydown sweep or any task already touching `runtimes.md`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
+
+## SURFACE-2026-08-01-PROJECT-GET-DEFAULT-MODEL-NOW-DEAD-CODE
+- **Source:** task:act (M11.5 repair (B), the picker N+1 removal)
+- **Target level:** product:wbs
+- **Type:** tech-debt
+- **Summary:** Removing the picker's per-row read left **`project_get_default_model` (Tauri command) and `getProjectDefaultModel` (TS wrapper) with zero callers.** Verified repo-wide: the only remaining references are the command's own registration (`lib.rs:408`), its definition (`config_store/commands.rs:175`), the wrapper's definition (`cc/modelOverrideIpc.ts:33`), and one test asserting the cell does *not* import it.
+- **Context:** ⚠️ **This corrects a premise the repair's own plan asserted.** The plan scoped removal out on the grounds that the command is "still the right read for `SessionRegistry::spawn`" — that is **false**. The spawn path calls the **Rust function** `config_store::read_default_model` directly (`cc_session/mod.rs:797`), never the IPC command. The command existed solely to serve the frontend cell that no longer reads. So nothing on either side of the IPC boundary needs it. Left in place deliberately rather than removed mid-task: deleting a registered Tauri command is a stringly-typed FE/BE binding change that wants its own sweep + smoke-launch (`[[tauri-command-removal-needs-invoke-sweep]]`), and bundling it into an N+1 fix would mix a perf repair with an API-surface removal.
+- **Suggested action:** Delete `project_get_default_model` from `lib.rs`'s invoke handler + `config_store/commands.rs`, and `getProjectDefaultModel` from `cc/modelOverrideIpc.ts`; keep the Rust `read_default_model` (the spawn path's real dependency). Then run the invoke-sweep + a runtime smoke-launch per the memory above. Cheap and self-contained; good candidate for any picker- or config-adjacent pass. **Or** consciously keep it as a supported read API and say so in a comment — the current state (registered, exported, uncalled) is the only outcome that is *accidental*.
+- **Priority:** low
+- **Status:** pending
 
 ## SURFACE-2026-08-01-NOTHING-ENFORCES-FORMAT-CHECK
 - **Source:** task:plan (M11.5 repair (A) — `format:check` red on `main`)

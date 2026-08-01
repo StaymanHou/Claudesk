@@ -4,18 +4,6 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
-# per-project-cc-model-override — 2026-07-31
-
-## SURFACE-2026-07-31-QUALITY-WP1-PER-ROW-IPC-REFETCHES-DATA-ALREADY-ON-THE-WIRE
-- **Severity:** MAJOR
-- **Location:** `src/components/picker/ProjectModelCell.tsx:59-76` (the seed effect) + `src/components/picker/ProjectPicker.tsx:35-38` (`RecentProject`)
-- **Finding:** Every picker row issues its own `getProjectDefaultModel` IPC read, but `list_projects` (`config_store/commands.rs:124`) **already returns the full `Project` record including `default_model`**, and the picker already holds that array as `recents`. `RecentProject` simply doesn't type the field. So with 20+ projects the picker performs N extra IPC round-trips, each doing a full `projects.json` disk read + `serde_json` parse + `sort_by_recency`, to fetch data it already received. Because cells unmount when filtered out, clearing the filter box re-fires all N.
-- **Why it matters:** N+1 against a **file read**, on the app's most-glanced surface. It also creates a second source of truth for one value that agrees only because both paths happen to read the same file.
-- **Suggested fix:** widen `RecentProject` by one optional field (`default_model?: string | null`) and pass the seed to `ProjectModelCell` as a prop; keep the IPC *setter*, and keep the getter for the post-write re-read only (or drop it and lift the value into the picker's `recents` state on commit). ~15 lines.
-- **Sizing note:** the fix touches the picker's state shape, so it is a small **design** change rather than a comment fix — which is why it was backlogged rather than done inline at review time, while the two documentation MAJOR/MINOR items in the same review were fixed in place.
-- **Priority:** medium
-- **Status:** pending
-
 # m10.9-wp3-invite-settings-substrate — 2026-07-29
 
 *(feature-review-quality against ship baseline `6193615^..5bc88f3`; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 5 MINOR. **MAJOR #1 (gate-seam bypass in App.tsx) was FIXED IN PLACE, not backlogged** — it was a live staleness defect and the fix was a 3-line import swap; the OFF-invariant guard's blind spot that hid it was closed in the same pass. Only MAJOR #2 and the 5 MINOR are listed here. Reviewer: "high-quality, unusually disciplined work — the strongest parts are the persistence model and the consistent instinct to extract a pure function whenever a decision has a truth table.")*
