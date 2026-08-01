@@ -77,9 +77,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 2.0s (2026-08-01, M11.5 WP3 Phase 1 verify-codify — 127 files / 1467 pass, 0 fail; +7 for the cross-surface copy-promise guard)
+- **Last:** 1.9s (2026-08-01, M11 WP1 Phase 1 verify-auto — 127 files / 1470 pass, 0 fail; UNCHANGED from baseline, as required by a knowledge-only phase)
 - **Use timeout:** 120000
 - **History:**
+  - 1.9s — 2026-08-01 (M11 WP1 P1 verify-auto: 1470 pass, +0 — knowledge-only phase, baseline confirm)
   - 2.0s — 2026-08-01 (M11.5 WP3 P1 verify-codify: +7, 1467 pass — cross-surface copy-promise guard)
   - 1.9s — 2026-08-01 (M11.5 WP3 P1 build: +11, 1460 pass — time-tracking copy guard)
   - 2.5s — 2026-07-31 (M11.5 /product-wbs baseline: 121 files / 1400 pass)

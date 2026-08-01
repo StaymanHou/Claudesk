@@ -173,7 +173,72 @@ M11 adds **one new frontend panel** to an existing per-workspace host and **two 
 Arch gets an as-built resync at `/product-finalize` (the `RightPanelHost` row grows Editor/Diff/Terminal → +Docs; the renderer dep, the two commands, and whichever gating shape WP2 chose recorded then).
 
 ## Probe outcomes
-*(WP1's renderer verdict + WP5's exit verdict land here at their WP closes.)*
 
-## Session Handoff — 2026-08-01 10:30
-Handed off. See `workflow-system/state/.session.md` to restore.
+*(WP5's exit verdict lands here at its WP close.)*
+
+### WP1 verdict (2026-08-01) — markdown render approach
+
+**CHOSEN: Option B — `react-markdown` + `remark-gfm` + `rehype-sanitize`.**
+
+Add at WP3 task 3.1: `react-markdown@10`, `remark-gfm@4`, `rehype-sanitize@6`. **Do NOT add `rehype-raw`** — see "the one rule" below. No other new dependency; `react-dom/server` (needed only by tests) already ships with the existing `react-dom`.
+
+**Why — the deciding axis was security posture under `csp: null`, not fidelity.**
+
+Fidelity was a **dead heat** and decided nothing: both options rendered the real `wbs.md` and a real 78-item Work-Tree WIP identically — GFM task-list checkboxes **78 = 78 = 78** against source truth (checked-state 58/58 too), tables, fenced code, headings all structurally identical. The WBS framed WP1 as primarily a fidelity comparison; it isn't one.
+
+**⚠️ The app ships with `"security": { "csp": null }`** (`tauri.conf.json:21-23`) — there is **no CSP**, so the sanitizer is the *only* line of defense, and anything that executes gets full `__TAURI_INTERNALS__` (whole IPC surface) access. Measured against an 11-section hostile fixture, scoring the **parsed live DOM** (not source text):
+
+| config | live vectors | what it takes to get there |
+|---|---|---|
+| A unsanitized *(control)* | **20** | — |
+| **A + DOMPurify defaults** | **4** | ⚠️ defaults are NOT safe here |
+| A + full recipe | **0** | 3 individually-necessary options **+ a hand-written hook** |
+| **B default** | **0** | **nothing** |
+| B + `rehype-raw`, unsanitized *(control)* | **10** | — |
+| B + `rehype-raw` + `rehype-sanitize` | **0** | — |
+
+Both negative controls fire, so neither zero is vacuous. A's four survivors on defaults are a live `<style>`, **two `style`-ATTRIBUTE vectors** (`background:url(javascript:…)`, `width:expression(…)` — DOMPurify's default `ALLOWED_ATTR` includes `style` and it does not parse CSS), and an `<img src="data:image/svg+xml;base64,…">` decoding to `<svg onload="alert(1)">`. **Neither `FORBID_TAGS` nor the strictest `ALLOWED_URI_REGEXP` removes that `data:` URI** (three configs probed); it needs an `afterSanitizeAttributes` hook. Each of A's three guard options is **mutation-proven load-bearing** — dropping the hook → 1, dropping `FORBID_ATTR` → 2, dropping `FORBID_TAGS` → 1, dropping all → 4. **The failure mode of forgetting any one is silent.** B needs none of it.
+
+**The honest counter-argument, recorded because it is real — with its cost stated correctly.** B's zero is *structural avoidance*, not sanitization: it escapes raw HTML wholesale, so the guarantee holds only while `rehype-raw` stays off (measured, not assumed — with `rehype-raw` on and no sanitizer, B leaks **10** live vectors). And A is genuinely lighter. **Measured as actual shipped bundle** (esbuild, minified, React external as in the app):
+
+| | minified | gzipped | transitive packages |
+|---|---|---|---|
+| **A** (`marked` + `dompurify`) | **68.5 KB** | **22.7 KB** | ~5 |
+| **B** (`react-markdown` + `remark-gfm` + `rehype-sanitize`) | **157.3 KB** | **48.0 KB** | ~104 |
+
+So the real cost of B is **~89 KB minified / ~25 KB gzipped (a ~2.3× delta) and ~100 net-new transitive packages** — the package count being the genuine supply-chain concern, not the size.
+
+⚠️ **An earlier draft of this verdict said "20× lighter — 4.4M vs 43M." That was wrong and is corrected above.** It reported `node_modules` size, which is not bundle cost (DOMPurify is 1.7M on disk and 28.5 KB minified), and the 43M figure was contaminated — it included React, which the app already ships. **Do not resurrect that framing**; the WBS asked for *bundle cost* (this file, WP1 learning objective) and the numbers above are it.
+
+**B was chosen anyway**, and the corrected numbers strengthen rather than weaken that: ~25 KB gzipped buys the removal of a standing, silent, three-part configuration obligation on the app's **only** line of defense under `csp: null`. For scale against this project's own precedent — Tauri-over-Electron was a ~93 **MB** shipped difference; this is ~89 **KB**, roughly a thousandth of it, so "lite over featureful" (a principle about product surface and runtime footprint) is not in tension here. `rehype-sanitize` is retained as defense-in-depth so the posture degrades safely if raw HTML is ever enabled.
+
+**⚠️ THE ONE RULE THIS VERDICT DEPENDS ON: never add `rehype-raw`.** It is what makes B's safety structural. If a future doc genuinely needs inline HTML, B collapses to A's situation and needs the same sanitizer discipline — treat that as a decision to re-open this verdict, not a config tweak. *(Note `rehype-sanitize` is stricter than DOMPurify in places: it dropped a `<form>` wrapper and flattened `<svg><a>`. Harmless for workflow docs; worth knowing if benign content ever disappears.)*
+
+**Frontmatter — DECIDED: shared pre-strip, renderer-agnostic.** Both options **mangle** a leading YAML block identically (opening `---` → `<hr>`, closing `---` turns the YAML into a setext `<h2>`). Split it off before the renderer with `/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/`, then render the frontmatter yourself as the styled header block. Chosen over `remark-frontmatter` (which correctly consumes the fence but **renders nothing**, leaving the panel without the YAML it needs to display). Validated on 6 real edge cases: no-frontmatter → no match; **a leading thematic break is correctly NOT treated as frontmatter**; a later `---` in the body is untouched; CRLF matches. Known boundary: an *empty* `---\n---` block falls through to the mangling path — **0 of 54** frontmatter-bearing docs have one.
+
+**Link model — the interception mechanism does not discriminate.** Use a **delegated click handler** on the panel container (`e.target.closest("a[href]")` → `preventDefault()`), which is renderer-agnostic and simpler than B's `components={{a}}` override. Classifier validated on 8 real shapes — **order matters**: test `#` first, then any `scheme:`, then `//`, then treat the rest as relative.
+
+| href shape | class | action |
+|---|---|---|
+| `#heading` | in-doc anchor | scroll within panel |
+| `wbs.md`, `workflow-system/product/roadmap.md`, `wbs.md#frag` | cross-doc relative | switch selected doc |
+| `https:`, `http:`, `mailto:` | external (absolute scheme) | `openUrl` |
+| **`//evil.example.com`** | **external (protocol-relative)** | `openUrl` |
+
+⚠️ **The protocol-relative case is why the test must not be `startsWith("http")`** — it is *external* but carries no scheme, and a naive check misroutes it into the local-file path. **P2.3's realistic failure did not materialize:** no sanitizer in any variant stripped `href="wbs.md"`, `href="#heading"`, or the external href — cross-doc navigation is safe in every candidate config.
+
+**External-open seam — available and granted, but uncalled.** `@tauri-apps/plugin-opener` is already in `package.json`, registered at `lib.rs:152`, with `opener:default` granted in **both** `capabilities/default.json:8` and the `tauri.dev.json` inline dev capability. **Zero call sites in `src/` today** — WP3 writes the first. Exact signature: `openUrl(url: string | URL, openWith?: 'inAppBrowser' | string): Promise<void>`.
+
+**Re-render-in-place: SAFE for WP4** (both options, so this did not discriminate either). Render A → render a *different* doc → render A again is **byte-identical**, and stable across **5 alternating cycles** (tested with a single reused DOMPurify instance — the realistic component shape, and the only place hook/config state could accumulate; verify-self additionally confirmed shared-instance output is byte-identical to fresh-instance, so nothing accumulates at all). Neither renderer emits **any** inline `style` attribute or a wrapper root; both produce a **flat sibling list**, so **the panel owns the scroll container** — exactly what WP4's `scrollTop` restore requires.
+
+⚠️ **The idempotence byte-counts and node-counts are NOT pinnable constants** — the fixture was this very file, which grew while the probe ran. WP3/WP4 should assert the *property* (two renders of the same input are identical) and never a literal byte count.
+
+**Testability under the no-render-harness posture** (`SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` — 127 test files, none renders a component): **B's output is string-assertable with no new dependency**, via `renderToStaticMarkup` from `react-dom/server`, which already ships with the installed `react-dom` (verified resolvable). So WP3 can pin render output as a value without adopting `@testing-library/react` and without re-opening that deferred decision.
+
+**⚠️ Two method notes for WP3, both learned the hard way here:**
+1. **Assert the parsed live DOM, never source text.** The first danger predicate used source-text regexes and produced false positives — it counted the fixture's own *heading prose* ("3. `javascript:` URL in a markdown link") and `&lt;`-escaped **inert** text as live vectors. Same class as the `?raw`-guard trap in `CLAUDE.md`.
+2. **A security guard must be mutation-proven, not merely present.** The *corrected* predicate still had a hole — no `style`-attribute probe — which made a "0 danger" result **under-determined**: it passed only because the config happened to include `FORBID_ATTR:["style"]`, which the predicate could not detect. Found by inviting a verify-self subagent to *attack* the predicate rather than confirm it. Any WP3 sanitization test must include a style-attribute probe and a mutation check.
+
+**Known latent gaps (COSMETIC, logged):** `img[srcset]` and `track[src]` referencing an external host survive even A's full recipe and are unmodeled — outbound network/beacon references, not script execution, and relevant only because `csp: null` means nothing else blocks the request.
+
+**Backlog items raised:** `SURFACE-2026-08-01-APP-SHIPS-WITH-CSP-NULL-NO-SECOND-LINE-OF-DEFENSE` (medium, arch — decide and record the CSP posture) and `SURFACE-2026-08-01-DOMPURIFY-DEFAULTS-LEAVE-DATA-SVG-AND-STYLE` (low — **moot under this verdict; close it**).
