@@ -4,6 +4,11 @@
 mod app_menu;
 mod cc_session;
 mod config_store;
+// M11 WP2: workflow-docs discovery — enumerates a project's conventional strategic
+// docs (vision/roadmap/wbs/wip/backlog/…) for the Docs panel. Curated set, not a
+// glob; scoped to the `workflow-system/` layout only (the legacy `docs/`+`workflow/`
+// roots are deliberately NOT supported — operator decision 2026-08-01).
+mod docs;
 mod editor_fs;
 // Process-wide PATH fix: a Finder/Dock-launched macOS app inherits the minimal
 // launchd PATH, not the user's shell PATH, so user-installed CLIs (claude, subl,
@@ -455,6 +460,13 @@ pub fn run() {
             // root (root-confined via a parent-tolerant lexical guard, idempotent). Backs
             // the "new folder" affordance + the nested-file create's mkdir -p of the parent.
             editor_fs::commands::create_dir,
+            // M11 WP2: workflow-docs discovery + read for the Docs panel. `docs_list`
+            // returns the conventional docs actually present under a workspace root;
+            // `docs_read` returns one doc's raw text (WP3 renders it). Both reuse the
+            // editor's root-authentication + path-confinement guard rather than adding
+            // a second one — the doc set is a strict subset of the project tree.
+            docs::commands::docs_list,
+            docs::commands::docs_read,
             // WP4: git diff viewer data (Sublime-Merge-style). The backend computes
             // the real git hunks + commit history; the frontend renders styled +/-
             // lines (no @codemirror/merge). (The superseded git_file_base command

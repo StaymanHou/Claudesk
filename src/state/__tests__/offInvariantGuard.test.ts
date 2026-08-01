@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { AVAILABLE_PANELS } from "../../components/workspace/panelHost";
+import { availablePanels } from "../../components/workspace/panelHost";
 import { MENU_IDS } from "../../menu/menuBridge";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -164,15 +164,48 @@ function namesWorkflowTerm(haystack: string): boolean {
 }
 
 describe("OFF-invariant: no workflow surface is registered while the gate is off", () => {
-  it("registers no workflow panel in AVAILABLE_PANELS", () => {
-    // M11's Docs tab is the first real test of this. AVAILABLE_PANELS is static today,
-    // so its contents ARE the OFF-state contents.
-    for (const panel of AVAILABLE_PANELS) {
+  it("registers no workflow panel in the OFF-state panel set", () => {
+    // M11 WP2 made the panel registry GATE-DERIVED, which this test's header anticipated
+    // ("If M11 makes AVAILABLE_PANELS dynamic, update this test to assert the OFF-state
+    // value of that computation rather than deleting the assertion"). So the subject is
+    // now `availablePanels(false)` — the computed OFF value — not the static array.
+    //
+    // Asserting the COMPUTATION rather than the constant is what keeps this honest: a
+    // future gated panel that forgets its gate lands in `availablePanels(false)` and is
+    // caught here, whereas checking only the `AVAILABLE_PANELS` literal would pass while
+    // the derivation leaked the panel through.
+    for (const panel of availablePanels(false)) {
       expect(
         namesWorkflowTerm(panel),
         `panel "${panel}" looks workflow-coupled but is unconditionally available — ` +
           `gate it behind useWorkflowFeaturesEnabled() instead of adding it to AVAILABLE_PANELS`,
       ).toBe(false);
+    }
+  });
+
+  it("the panel set is genuinely gate-DERIVED, not a constant that ignores the gate", () => {
+    // Anti-vacuity companion to the arm above. `availablePanels(false)` containing no
+    // workflow panel is satisfied just as well by a derivation that ignores its argument
+    // and always returns the ungated baseline — in which case the assertion above would
+    // pass forever while the Docs panel could never appear at all, and the arm would be
+    // guarding nothing. Pinning that ON differs from OFF is what makes the OFF assertion
+    // load-bearing rather than trivially true.
+    const off = availablePanels(false);
+    const on = availablePanels(true);
+
+    expect(
+      on.length,
+      "turning the gate ON must add at least one panel — otherwise the derivation is a " +
+        "constant and the OFF-state assertion above proves nothing",
+    ).toBeGreaterThan(off.length);
+    // And the panels it adds are exactly the workflow-coupled ones (the reverse direction:
+    // the gate must not be smuggling in unrelated panels).
+    for (const panel of on.filter((p) => !off.includes(p))) {
+      expect(
+        namesWorkflowTerm(panel),
+        `panel "${panel}" is added by the gate but does not look workflow-coupled — the ` +
+          `gate should only ever admit workflow surfaces`,
+      ).toBe(true);
     }
   });
 

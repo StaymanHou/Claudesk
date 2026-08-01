@@ -50,7 +50,14 @@ import {
   switchTerminal,
   MAX_TERMINALS,
 } from "./terminalList";
-import { panelForChord, selectPanel, type RightPanel } from "./panelHost";
+import {
+  panelForChord,
+  reconcilePanel,
+  selectPanel,
+  type RightPanel,
+} from "./panelHost";
+import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import { DocsPanel } from "./docs/DocsPanel";
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
 import { FileTree, type FileTreeHandle } from "./filetree/FileTree";
@@ -376,7 +383,41 @@ export function RightPanelHost({
 
   // Which right-half panel is front. Direct-select via tabs + ⌘⇧ chords. Both panels
   // stay mounted (display:none toggle) so each keeps its state across switches.
-  const [panel, setPanel] = useState<RightPanel>("editor");
+  const [storedPanel, setPanel] = useState<RightPanel>("editor");
+
+  // M11 WP2 — THE workflow-features gate. Read through the seam hook and nowhere else:
+  // a second call site would be a second source of truth that never re-syncs on the
+  // broadcast (the M10.9 contract, enforced by the OFF-invariant guard's bypass scan).
+  // Defaults `false` until the async seed resolves, so the Docs tab never flashes on.
+  const workflowFeaturesEnabled = useWorkflowFeaturesEnabled();
+
+  // Latest-ref so the capture-phase keydown listener — registered once on [visible] with
+  // an identity-stable dep array — reads the CURRENT gate rather than stale-closing over
+  // its value at registration time. Same pattern as `overlayOpenRef` / `terminalsRef`
+  // above. Without this, toggling the gate would not affect ⌘⇧K until the next re-register.
+  const workflowFeaturesEnabledRef = useRef(workflowFeaturesEnabled);
+  useEffect(() => {
+    workflowFeaturesEnabledRef.current = workflowFeaturesEnabled;
+  }, [workflowFeaturesEnabled]);
+
+  // M11 WP2 (decision D3) — reconcile a panel that is ALREADY front against the gate.
+  //
+  // `selectPanel` guards transitions INTO a panel; it never re-examines the current one.
+  // The gate is runtime-toggleable (⌘, Settings), so a user can sit on Docs and then turn
+  // the gate off — leaving the stored `panel` as "docs" with nothing to correct it. The
+  // type system cannot catch that (the value is already in `useState`, so no assignment
+  // type-checks), which is why it needs an explicit reconciliation and a behavioral test.
+  //
+  // DERIVED DURING RENDER, not synced in an effect. `reconcilePanel` is a pure function of
+  // (stored panel, gate), so the corrected value can simply be COMPUTED — no second state,
+  // no `setPanel` inside an effect. That matters beyond style: a state-sync effect here
+  // would fire an extra render pass on every gate change (the cascading-render the
+  // react-hooks lint rule flags), and would briefly render the dead "docs" panel before
+  // correcting it. Deriving closes that window entirely — the gated panel is never
+  // rendered front, not even for one frame.
+  //
+  // `storedPanel` remains the write target (`setPanel`); `panel` is what the UI reads.
+  const panel = reconcilePanel(storedPanel, workflowFeaturesEnabled);
 
   // M9 WP2.5 — report the ACTIVE CONTEXT (workspace + right-panel surface) to the
   // backend so native-signal rows (focus/blur, keystrokes) attribute correctly. This
@@ -746,14 +787,22 @@ export function RightPanelHost({
         editorSplitRef.current?.closeActiveTab();
         return;
       }
-      // ⌘⇧E/⌘⇧D/⌘⇧T panel-select. Deliberately NOT gated on `finderOpen`/`searchOpen`:
-      // switching the panel underneath an open Cmd+P/⌘⇧F overlay is an acceptable
-      // interleave (the overlay floats above; the panel behind it just changes), so no
-      // !overlayOpen guard here — cf. SURFACE-2026-06-20-QUALITY-WP6-PANEL-CHORD-UNDER-OVERLAY.
-      const target = panelForChord(e);
+      // ⌘⇧E/⌘⇧D/⌘⇧T (+ ⌘⇧K Docs, M11 — GATED) panel-select. Deliberately NOT gated on
+      // `finderOpen`/`searchOpen`: switching the panel underneath an open Cmd+P/⌘⇧F
+      // overlay is an acceptable interleave (the overlay floats above; the panel behind
+      // it just changes), so no !overlayOpen guard here — cf.
+      // SURFACE-2026-06-20-QUALITY-WP6-PANEL-CHORD-UNDER-OVERLAY.
+      //
+      // The gate is passed to the PREDICATE, not checked after it: with the gate off
+      // `panelForChord` returns null for ⌘⇧K, so we never reach `preventDefault` and the
+      // keystroke passes through untouched. Matching-then-no-opping would still SWALLOW
+      // the key, which the M10.9 seam contract forbids by name.
+      const target = panelForChord(e, workflowFeaturesEnabledRef.current);
       if (target === null) return;
       e.preventDefault();
-      setPanel((cur) => selectPanel(cur, target));
+      setPanel((cur) =>
+        selectPanel(cur, target, workflowFeaturesEnabledRef.current),
+      );
     };
     document.addEventListener("keydown", onKeyDown, true); // capture phase
     return () => document.removeEventListener("keydown", onKeyDown, true);
@@ -911,6 +960,29 @@ export function RightPanelHost({
           >
             Terminal
           </button>
+
+          {/* M11 WP2 — the DOCS tab. GATED: rendered only while the workflow-features
+                gate is on, so with the gate off it does not EXIST in the DOM (not hidden,
+                not disabled) — the M10.9 seam contract's requirement. */}
+          {workflowFeaturesEnabled && (
+            <button
+              type="button"
+              role="tab"
+              id={`paneltab-docs-${workspaceId}`}
+              aria-selected={panel === "docs"}
+              aria-controls={`panel-docs-${workspaceId}`}
+              className={`panel-tab${panel === "docs" ? " is-active" : ""}`}
+              data-testid="panel-tab-docs"
+              onClick={() =>
+                setPanel((cur) =>
+                  selectPanel(cur, "docs", workflowFeaturesEnabled),
+                )
+              }
+              title="Docs (⌘⇧K)"
+            >
+              Docs
+            </button>
+          )}
 
           {/* WP8 — external-app launchers, right-aligned past a divider so they
                 read as ACTIONS distinct from the selectable Editor/Diff tabs.
@@ -1141,6 +1213,25 @@ export function RightPanelHost({
             ))}
           </div>
         </div>
+
+        {/* M11 WP2 — the DOCS slot. GATED: the whole slot is absent while the gate is
+              off, so there is no empty tabpanel and no mounted component behind it.
+              Unlike its siblings this slot is NOT unconditionally mounted — the
+              SURFACE-2026-06-20 "never blank" guard is satisfied differently here:
+              `selectPanel` cannot return "docs" while the gate is off (and
+              `reconcilePanel` evicts it if the gate flips), so the panel can never be
+              front without this slot existing. */}
+        {workflowFeaturesEnabled && (
+          <div
+            className="right-panel-slot right-panel-slot--docs"
+            id={`panel-docs-${workspaceId}`}
+            role="tabpanel"
+            aria-labelledby={`paneltab-docs-${workspaceId}`}
+            style={{ display: panel === "docs" ? "flex" : "none" }}
+          >
+            <DocsPanel projectPath={projectPath} visible={visible} />
+          </div>
+        )}
       </div>
 
       {/* WP6 — Cmd+P fuzzy file finder overlay. Only the focused workspace mounts
