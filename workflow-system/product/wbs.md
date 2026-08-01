@@ -1,17 +1,34 @@
 ---
 stage: wbs
-state: parked
+state: complete
 milestone: "Milestone 11: Workflow-docs markdown viewer"
-updated: 2026-07-28
+updated: 2026-08-01  # UNPARKED into the active slot at M11.5's close. Re-audited against the tree before activation (the discipline that paid 3× in M11.5): all five load-bearing claims HOLD — the gate seam `useWorkflowFeaturesEnabled` exists with zero consumers as designed, `RightPanel`/`AVAILABLE_PANELS` are the shape WP2 assumes, ⌘⇧K and ⌘⇧G are both genuinely free, the `fs-change` seam exists, and `validate_root` is public. TWO corrections applied, both consequences of M11.5 WP4 landing AFTER this file was parked. (1) ⚠️ MEASURED, not predicted: adding `"docs"` to the `RightPanel` type union ALONE — one word, no panel registered, no chord wired — now FAILS the OFF-invariant guard, because WP4 put `panelHost.ts` in the chord arm's scope. The guard is behaving correctly (it is demanding the gate), but the friction arrives at the TYPE DECLARATION, not at panel registration where task 2.3 assumed. WP2 re-sized M → M/L and task 2.3 rewritten. (2) Task 2.2 named `resolve_within` for reuse, which is PRIVATE (`fn`, not `pub fn`); the real reuse surface is `read_file_core`, which wraps it — a better fit for `docs_read` anyway.
 ---
 
-# WBS — Milestone 11: Workflow-docs markdown viewer  ⏸ PARKED
+# WBS — Milestone 11: Workflow-docs markdown viewer
 
-> **⏸ PARKED 2026-07-28 — this is not the active cycle WBS.** M10.9 (workflow-features opt-in gate) was unblocked by the companion repo's return contract and took the active `wbs.md` slot. This file holds M11's decomposition verbatim; it returns to `wbs.md` when M10.9 closes at `/product-finalize`. Still matched by the deliberate `*wbs*.md` glob, so a Docs viewer built later lists it.
+> **▶ ACTIVE 2026-08-01** — unparked from `m11-wbs-parked.md` into the cycle slot when M11.5 closed (`bc46e7e`). M11.5's WP4 discharged this milestone's one hard dependency: the OFF-invariant guard's chord arm now sees `panelHost.ts`, which is exactly the module M11's Docs tab and chord live in.
 >
 > **Two corrections applied while parked (operator-settled 2026-07-28, resolving `SURFACE-2026-07-28-M11-DOCS-LIST-PATHS-STALE`):** the doc-discovery paths were migrated to the unified `workflow-system/` layout, and the flat-glob-vs-curated + archive-discoverability questions were decided. See "Doc-discovery decisions" below and task 2.1.
 >
-> **One dependency added:** M11's Docs tab is **gated behind M10.9's `workflow_features_enabled`** (roadmap line 245). WP2 must register the panel conditionally — see task 2.3.
+> **One dependency added:** M11's Docs tab is **gated behind M10.9's `workflow_features_enabled`**. WP2 must register the panel conditionally — see task 2.3.
+
+## ⚠️ Activation audit (2026-08-01) — read before starting WP2
+
+This file was written 2026-07-28; **M10.9 and M11.5 both closed after it was parked.** Re-audited against the tree at activation rather than trusted (the method that caught three mis-specified tasks in M11.5). **All five load-bearing claims HOLD** — `useWorkflowFeaturesEnabled` exists (zero consumers, as designed), `RightPanel`/`AVAILABLE_PANELS` are the assumed shape, `⌘⇧K` **and** `⌘⇧G` are both genuinely unclaimed, the `fs-change` seam (`FS_CHANGE_EVENT` + `appliesToWorkspace`) exists, and `validate_root` is `pub`.
+
+**Two corrections, both fallout from M11.5 WP4 landing after this file was written:**
+
+1. **⚠️ MEASURED, not predicted — the guard bites at the TYPE DECLARATION, not at panel registration.** Adding `"docs"` to the `RightPanel` union alone (one word; no `AVAILABLE_PANELS` entry, no chord, no tab) **already fails** the OFF-invariant guard's chord arm:
+   ```
+   × matches no workflow chord (no chord predicate module is workflow-coupled)
+     → src/components/workspace/panelHost.ts
+   ```
+   Cause: M11.5 WP4 changed the chord arm to select by **exported identifier**, so `panelHost.ts` (which exports `panelForChord` + `PanelChordEvent`) is now in scope, and the arm matches the workflow term anywhere in the module's non-comment source. **The guard is correct** — it is demanding exactly what M10.9's contract requires (*a gated surface must not exist when off*). But task 2.3 assumed the gating problem was "register the panel conditionally," and the real problem is **where the `"docs"` string may live at all**. `panelForChord`'s mnemonic map is in the same file.
+   **Consequence:** WP2 must decide its gating *shape* before writing code — a `"docs"` member in the static union/array is not merely un-gated, it is a build failure. Options to weigh at WP2 (do NOT pre-decide here): make `AVAILABLE_PANELS`/`RightPanel` gate-derived rather than static (the guard's own header anticipates this: *"If M11 makes AVAILABLE_PANELS dynamic, update this test to assert the OFF-state value of that computation"*), or hold the Docs panel's identity in a separate gated module that `panelHost.ts` never names. **WP2 re-sized M → M/L.**
+2. **Task 2.2's named reuse target does not exist as written.** `resolve_within` is **private** (`fn`, not `pub fn`, `editor_fs/mod.rs:96`). The public reuse surface is **`read_file_core`** (`:263`), which wraps `resolve_within` — a better fit for `docs_read` regardless, since it *is* a read. Task 2.2 updated.
+
+**Also note for WP5:** the guard now additionally pins its own reach and its offender predicate as a value (M11.5 WP4), so an M11 change that narrows the chord arm to dodge this will fail those meta-tests too. That is deliberate.
 
 Decomposes **only** M11. Future milestones (M12 auto-resume → M13 skill-orchestration → M14 polish) stay tracked in `roadmap.md` — not re-listed here; they decompose just-in-time when reached.
 
@@ -70,7 +87,7 @@ No new design prior proposed — the two decisions above are applications of exi
 **Description:** Add **Docs** as the fourth panel in the per-workspace `RightPanelHost`, alongside Editor / Diff / Terminal — a new clickable tab in the `right-panel-toggle` tab row **and** a direct-select `⌘⇧`-chord (next free chord, disjoint from `⌘⇧E` Editor / `⌘⇧D` Diff / `⌘⇧T` Terminal, the freed `⌘⇧O`, and the reserved `⌘⇧+digit` workspace switch — likely `⌘⇧K` or `⌘⇧G`; pick and pin in-build). The panel body is a **workflow-ordered file list** of the auto-discovered conventional doc set, scoped to the workspace's project. No render yet (WP3) — this WP is the tab, the chord, the discovery, and the list. Per-workspace panel state (which doc is selected, scroll) lives alongside the existing per-workspace Editor/Diff/Terminal state, mirroring "all workspaces stay mounted."
 **Milestone:** M11
 **Dependencies:** none (parallel-able with WP1; the render (WP3) needs both)
-**Size:** M
+**Size:** **M/L** *(re-sized from M at activation — task 2.3 now carries a gating-shape decision that the guard forces up-front; see the Activation audit.)*
 **Tasks:**
 - [ ] 2.1 Backend: a `docs_list` command (new small `docs` module, or fold into an existing fs command surface) that, given a workspace project root, returns the present conventional docs. **Paths corrected 2026-07-28 for the unified `workflow-system/` layout — the pre-migration `docs/product/` + `workflow/` roots are GONE from this repo; the old spec would have found nothing.** Enumerate (curated, per "Doc-discovery decisions" — not a flat glob):
   - `workflow-system/product/`: `vision.md`, `roadmap.md`, `research.md`, `arch.md`, `context.md`, `design-priors.md`, `transitions.md` + **glob `*wbs*.md`** (canonical `wbs.md`, `shape: temporary-wbs` scratch files, and any parked `*-wbs-parked.md`)
@@ -78,8 +95,14 @@ No new design prior proposed — the two decisions above are applications of exi
   - **NOT** `workflow-system/product/archive/**` (decided: closed cycles aren't re-orientation material) and **NOT** `CHANGELOG.md` (unchanged from the original spec).
 
   Absent files are silent no-ops. `.session.md` is gitignored-but-present — do not filter on git-tracked. Root authenticated via the WP7 `validate_root` seam (reuse — do not re-trust a frontend root). **Also: tolerate the legacy layout.** A project that hasn't migrated still has `docs/product/` + `workflow/`; probe both roots and use whichever is present (Claudesk opens 20+ rotating projects, not all of which will have migrated). Cheap here, ugly to retrofit.
-- [ ] 2.2 Backend: a `docs_read` command returning a single doc's raw text (read-only; reuse `editor_fs::read_file`'s `resolve_within` + `validate_root` posture — the doc set is a strict subset of the project tree, so no new trust surface).
-- [ ] 2.3 Frontend: register the Docs panel in `RightPanelHost` — tab button, the `⌘⇧`-chord (add to the chord map; confirm disjoint), and the panel container. All workspaces stay mounted; switching is display toggling, not remount. **Gated behind M10.9:** the panel joins `AVAILABLE_PANELS` / the `RightPanel` union and its chord becomes live **only when `workflow_features_enabled` is on** — with the gate off there is no tab, no chord, and no `"docs"` member (M10.9's OFF=byte-identical invariant). Consume the gate via whatever seam M10.9 WP2 establishes; do not re-read settings ad hoc.
+- [ ] 2.2 Backend: a `docs_read` command returning a single doc's raw text (read-only). **Corrected at activation:** reuse **`editor_fs::read_file_core`** (`mod.rs:263`) + `validate_root` (`:175`) — **not** `resolve_within`, which is **private** (`fn`, not `pub fn`, `:96`) and cannot be called from a sibling module. `read_file_core` wraps it and is the right fit anyway, since `docs_read` *is* a read. The doc set is a strict subset of the project tree, so no new trust surface.
+- [ ] 2.3 Frontend: register the Docs panel in `RightPanelHost` — tab button, the `⌘⇧`-chord (`⌘⇧K` and `⌘⇧G` both **verified free** at activation; pick one and pin it in-build), and the panel container. All workspaces stay mounted; switching is display toggling, not remount. **Gated behind M10.9:** with the gate off there must be no tab, no chord, and no `"docs"` member (OFF=byte-identical). Consume the gate **only** via `useWorkflowFeaturesEnabled()` (`src/state/useWorkflowFeaturesEnabled.ts` — M11's Docs tab is its first consumer, by design); never `invoke("workflow_get_features_enabled")` ad hoc and never import the raw `getWorkflowFeaturesEnabled()` wrapper — the guard scans for both bypass shapes.
+
+  **⚠️ REWRITTEN at activation — the gating problem is not where this task assumed.** Measured, not predicted: adding `"docs"` to the **`RightPanel` type union alone** — one word, no `AVAILABLE_PANELS` entry, no chord, no tab — **already fails the guard's chord arm**, because M11.5 WP4 put `panelHost.ts` in that arm's scope (it exports `panelForChord` + `PanelChordEvent`). So this is not "register conditionally"; it is **"decide where the `"docs"` identity may live at all,"** and `panelForChord`'s mnemonic map is in the same file. **Settle the gating shape before writing code.** Two candidate shapes, deliberately NOT pre-decided here:
+  - make `AVAILABLE_PANELS` / `RightPanel` **gate-derived** rather than static — the guard's own header anticipates exactly this (*"If M11 makes AVAILABLE_PANELS dynamic, update this test to assert the OFF-state value of that computation rather than deleting the assertion"*), so this path is sanctioned but requires a deliberate guard extension, **not** a weakening;
+  - or hold the Docs panel's identity in a **separate gated module** that `panelHost.ts` never names.
+
+  Whichever is chosen: **do not narrow the chord arm to make the error go away.** WP4 pinned the arm's reach and its offender predicate as standing tests precisely so that dodge fails loudly.
 - [ ] 2.4 Frontend: render the **workflow-ordered** list — pure ordering function `vision → roadmap → wbs (+ *wbs* scratch/parked) → wip/* → backlog (+ quality-findings) → .session.md → arch · research · context · design-priors · transitions`; unit-test the ordering derivation over a synthetic file set (present/absent mixes, both the `workflow-system/` and legacy layouts).
 - [ ] 2.5 Verify (self, via MCP bridge on a scratch workspace): the Docs tab appears, the chord + click select it, the list shows the right files in the right order for a real project.
 
@@ -143,7 +166,11 @@ WP2 (panel + list) ─┘
 
 ## Architecture check
 
-M11 adds **one new frontend panel** to an existing per-workspace host and **two small read-only backend commands** (`docs_list` / `docs_read`) reusing the `validate_root` + `resolve_within` trust seams and the existing `fs-change` watcher. The **one net-new dependency** is a markdown renderer (decided at WP1). No new webview, no new data store, no new native surface, no async/orchestration layer. **No architectural gap → no P8 back-loop to `/product-arch`.** Arch gets an as-built resync at `/product-finalize` (the `RightPanelHost` row grows Editor/Diff/Terminal → +Docs; the renderer dep + the two commands recorded then).
+M11 adds **one new frontend panel** to an existing per-workspace host and **two small read-only backend commands** (`docs_list` / `docs_read`) reusing the `validate_root` + `read_file_core` trust seams *(corrected at activation — `resolve_within` is private)* and the existing `fs-change` watcher. The **one net-new dependency** is a markdown renderer (decided at WP1). No new webview, no new data store, no new native surface, no async/orchestration layer. **No architectural gap → no P8 back-loop to `/product-arch`.**
+
+**One architectural question is in-scope but bounded, and belongs to WP2, not to `/product-arch`:** whether `AVAILABLE_PANELS` / the `RightPanel` union become **gate-derived** rather than static (see the Activation audit + task 2.3). This changes the *shape* of an existing registry rather than adding a component, the guard's own header explicitly sanctions and anticipates it, and the decision needs the panel in hand to make well — so it is a build-time call inside WP2 with the alternative recorded, not a milestone-blocking architecture gap. If WP2 finds the choice has consequences beyond `panelHost.ts` + the guard, *that* would justify a P8 back-loop; nothing seen at activation suggests it will.
+
+Arch gets an as-built resync at `/product-finalize` (the `RightPanelHost` row grows Editor/Diff/Terminal → +Docs; the renderer dep, the two commands, and whichever gating shape WP2 chose recorded then).
 
 ## Probe outcomes
 *(WP1's renderer verdict + WP5's exit verdict land here at their WP closes.)*
