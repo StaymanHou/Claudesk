@@ -334,6 +334,16 @@
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 
+## SURFACE-2026-08-01-NOTHING-ENFORCES-FORMAT-CHECK
+- **Source:** task:plan (M11.5 repair (A) — `format:check` red on `main`)
+- **Target level:** product:wbs
+- **Type:** tech-debt
+- **Summary:** Nothing enforces `pnpm format:check`. There is **no CI at all** (`.github/workflows/` absent), no verify-auto gate runs it, and it has no `runtimes.md` entry — which is why **38 files** drifted out of format unnoticed across many milestones before anyone looked.
+- **Context:** Found while planning the repair of that drift. The sweep itself is mechanical and safe (nothing depends on formatting state), but it fixes a *symptom*: with no enforcement the same drift resumes on the next un-formatted edit. Related, and the reason this is more than cosmetic: two backlogged code-quality findings (`backlog-quality-findings.md:26`, `:308`) are `?raw` source-text guards that **break when Prettier reflows a file** — so unenforced formatting is a live tripwire under those guards, not just an aesthetic gap. Measured while planning: the configured `printWidth` (Prettier's default 80) IS the real convention — 253 of 287 src TS/TSX files (88%) already conform, and raising it to 100 would make 217 fail — so enforcement would be pinning the existing style, not imposing a new one.
+- **Suggested action:** Pick an enforcement point and commit to it: (a) add `format:check` to the per-phase verify-auto gate alongside `tsc`/`eslint`/`clippy`; (b) a pre-commit hook; or (c) explicitly accept periodic manual sweeps and record that as the posture so it stops looking like an oversight. Note there is no CI to add (a) to today, which is itself part of the decision.
+- **Priority:** low
+- **Status:** pending
+
 ## Buried
 *Items moved out of active — low-impact + not worth carrying forward as active work. Not resolved (no CHANGELOG entry); revive only if the anchoring condition fires.*
 - **SURFACE-2026-06-24-QUALITY-APPMENU-LISTENER-NOT-EXTRACTED** (buried 2026-07-20, backlog-paydown sweep §Completion) — the `src/App.tsx` `menu` listener isn't extracted to a pure testable `dispatchMenuAction(action, effects)` seam. LOW-impact + med-effort + low-risk; explicitly "defer unless the listener grows"; consistent with the repo's "runtime-bound listeners aren't unit-tested" posture (the higher-value `menuBridge` mapping IS fully tested). **Revive only if** the App.tsx menu listener grows new branches. (Was: `# app-menu-bar` finding, now removed from `backlog-quality-findings.md`.)
