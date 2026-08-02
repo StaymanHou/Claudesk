@@ -44,6 +44,7 @@
 pub mod commands;
 
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
 
@@ -51,7 +52,10 @@ use serde::Serialize;
 ///
 /// snake_case end-to-end — Tauri does NOT camelCase command return values, so the TS
 /// mirror must read these fields verbatim (the WP7 IPC-DTO-field-case lesson).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+// `Eq` is deliberately NOT derived: `mtime_ms` is an `f64`, for which `Eq` is not
+// meaningful (NaN != NaN). `PartialEq` is what the tests actually use. Mirrors
+// `editor_fs::FileMarker`, which carries the same field and likewise cannot be `Eq`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DocEntry {
     /// Path relative to the project root, forward-slashed (e.g.
     /// `workflow-system/product/vision.md`). This is what `docs_read` takes back.
@@ -63,6 +67,24 @@ pub struct DocEntry {
     /// multi-file kinds (`wbs`, `wip`) with this, since `kind` alone can't distinguish
     /// `wbs.md` from `m11-wbs-parked.md`.
     pub file_name: String,
+    /// Modification time, milliseconds since the Unix epoch. `0.0` when unreadable.
+    ///
+    /// Exists for ONE consumer: the frontend's `pickInitialDoc` tiebreak when a project
+    /// has several `wip/*.md` files. The panel's job is to answer "where is this project
+    /// right now?", so the tie must go to the file being *actively worked in* — which is
+    /// modification time, not creation time. Measured on a real WIP mid-session: birth
+    /// 08:48, modified 09:28. Creation time would systematically favor the
+    /// newest-*started* item over the currently-active one, and this workflow `git mv`s
+    /// WIP files to `archive/` and creates new ones, so birthtime tracks phase starts
+    /// rather than where the work is.
+    ///
+    /// `f64` ms mirrors [`crate::editor_fs::FileMarker::mtime_ms`] deliberately — same
+    /// unit, same type, same serde shape, so the two DTOs cannot drift into disagreeing
+    /// about how this project represents a timestamp over IPC.
+    ///
+    /// A stat failure yields `0.0` rather than an error: an unreadable mtime must not
+    /// make a discoverable doc vanish from the list. It just sorts last among its kind.
+    pub mtime_ms: f64,
 }
 
 /// Where the strategic product docs live.
@@ -194,10 +216,22 @@ fn push_if_present(out: &mut Vec<DocEntry>, root: &Path, path: &Path, kind: &str
     if out.iter().any(|e| e.rel_path == rel_path) {
         return;
     }
+    // Reuses the stat `is_file()` above already warmed. A clock-before-epoch mtime (which
+    // shouldn't happen on a real filesystem) and any stat failure both fall to 0.0 — the
+    // same defensive shape `editor_fs::file_marker` uses for the identical field.
+    let mtime_ms = path
+        .metadata()
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as f64)
+        .unwrap_or(0.0);
+
     out.push(DocEntry {
         rel_path,
         kind: kind.to_string(),
         file_name,
+        mtime_ms,
     });
 }
 
@@ -413,6 +447,72 @@ mod tests {
     }
 
     #[test]
+    fn discover_populates_mtime_from_the_real_file() {
+        // The serde test pins the wire SHAPE; this pins that `discover` actually fills the
+        // field. Without it, `mtime_ms` could ship hardcoded 0.0 for every entry — the
+        // contract would look correct and the multi-WIP tiebreak it exists to serve would
+        // silently degrade to "everything ties".
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let wip = root.join("workflow-system/state/wip");
+        std::fs::create_dir_all(&wip).unwrap();
+        std::fs::write(wip.join("feature-a.md"), "# a").unwrap();
+
+        let entries = discover(root);
+        let entry = entries.iter().find(|e| e.kind == "wip").unwrap();
+
+        // A real mtime, not the 0.0 fallback and not a fabricated constant. Compared
+        // against the file's own metadata rather than a wall-clock window, so the test
+        // cannot flake on a slow machine or a clock skew.
+        let expected = std::fs::metadata(wip.join("feature-a.md"))
+            .and_then(|m| m.modified())
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as f64;
+        assert_eq!(entry.mtime_ms, expected);
+        assert!(entry.mtime_ms > 0.0, "mtime must not be the 0.0 fallback");
+    }
+
+    #[test]
+    fn discover_orders_wip_files_by_mtime_descending_when_sorted_by_the_frontend() {
+        // The frontend does the sorting, but the DATA has to make it possible: two WIP
+        // files written at different times must carry DIFFERENT mtimes. If the filesystem
+        // or our stat collapsed them to the same value, the tiebreak would be undecidable
+        // and `pickInitialDoc` would silently fall back to alphabetical.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let wip = root.join("workflow-system/state/wip");
+        std::fs::create_dir_all(&wip).unwrap();
+
+        std::fs::write(wip.join("z-older.md"), "# older").unwrap();
+        // Sleep past the filesystem's mtime granularity. HFS+/APFS resolve to <1s, but a
+        // 10ms write gap can land in the same tick on some volumes.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(wip.join("a-newer.md"), "# newer").unwrap();
+
+        let entries = discover(root);
+        let older = entries
+            .iter()
+            .find(|e| e.file_name == "z-older.md")
+            .unwrap();
+        let newer = entries
+            .iter()
+            .find(|e| e.file_name == "a-newer.md")
+            .unwrap();
+
+        // Note the names: the NEWER file sorts FIRST alphabetically, so a test that
+        // accidentally measured alphabetical order would pass. This asserts the mtimes
+        // are genuinely ordered, which is the only thing that distinguishes them.
+        assert!(
+            newer.mtime_ms > older.mtime_ms,
+            "newer {} should have a greater mtime than older {}",
+            newer.mtime_ms,
+            older.mtime_ms
+        );
+    }
+
+    #[test]
     fn doc_entry_serde_shape_is_snake_case() {
         // Pin the exact wire keys so Phase 2's TS type mirrors them verbatim. Tauri does
         // NOT camelCase command return values, so a `rename_all` or a field rename here
@@ -424,6 +524,7 @@ mod tests {
             rel_path: "workflow-system/product/vision.md".to_string(),
             kind: "vision".to_string(),
             file_name: "vision.md".to_string(),
+            mtime_ms: 1_754_130_493_000.0,
         };
         let value = serde_json::to_value(&entry).unwrap();
         let obj = value.as_object().unwrap();
@@ -435,12 +536,21 @@ mod tests {
             vec![
                 &"file_name".to_string(),
                 &"kind".to_string(),
+                &"mtime_ms".to_string(),
                 &"rel_path".to_string(),
             ]
         );
         assert_eq!(
             obj["rel_path"],
             serde_json::json!("workflow-system/product/vision.md")
+        );
+        // `mtime_ms` must cross as a JSON NUMBER, not a string: the TS mirror types it
+        // `number` and sorts on it. A serde attribute that stringified it would compile on
+        // both sides and silently make the multi-WIP tiebreak compare lexically.
+        assert!(
+            obj["mtime_ms"].is_number(),
+            "mtime_ms must serialize as a number, got {:?}",
+            obj["mtime_ms"]
         );
         assert_eq!(obj["kind"], serde_json::json!("vision"));
         assert_eq!(obj["file_name"], serde_json::json!("vision.md"));

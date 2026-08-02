@@ -64,11 +64,38 @@ export const AVAILABLE_PANELS: readonly RightPanel[] = [
   "terminal",
 ];
 
-/** The panels available while the workflow gate is ON — the baseline plus `"docs"`. */
+/**
+ * The panels available while the workflow gate is ON — the baseline plus `"docs"`, with
+ * **`"docs"` FIRST**.
+ *
+ * ⚠️ The order here is the TAB ORDER, and putting `"docs"` at the head is an operator
+ * decision (2026-08-02 verify-human), not a cosmetic default. The Docs panel is a
+ * **re-orientation surface**: for a user running the workflow system, "where is this
+ * project?" is the question they open the workspace with, and it is asked before any
+ * editing question. A workflow user who must first click past Editor to reach it pays that
+ * cost on every single workspace open — the ceremony
+ * `primary-surface-is-zero-ceremony-not-a-mode` exists to prevent.
+ *
+ * This ordering applies ONLY when the gate is on. With the gate off, `AVAILABLE_PANELS`
+ * is untouched and Editor remains first — a non-workflow user sees exactly the app they
+ * saw before, which is M10.9's byte-identical-when-off contract.
+ */
 const AVAILABLE_PANELS_WITH_WORKFLOW: readonly RightPanel[] = [
-  ...AVAILABLE_PANELS,
   "docs",
+  ...AVAILABLE_PANELS,
 ];
+
+/**
+ * The panel a workspace opens on, given the gate.
+ *
+ * `"docs"` when workflow features are on (see the ordering note above), `"editor"`
+ * otherwise. This is also the fallback [`reconcilePanel`] evicts to, so a gate flip that
+ * invalidates the front panel lands on the right default for the new gate state rather
+ * than always on Editor.
+ */
+export function defaultPanel(enabled: WorkflowGateValue): RightPanel {
+  return enabled ? "docs" : "editor";
+}
 
 /**
  * Which panels are mountable right now, derived from the workflow-features gate.
@@ -103,12 +130,16 @@ export function availablePanels(
  * SURFACE-2026-06-20-QUALITY-WP5-TERMINAL-SEAM-UNTESTED failure mode).
  */
 export function selectPanel(
-  current: RightPanel,
+  current: RightPanel | null,
   target: RightPanel,
   enabled: WorkflowGateValue = false,
 ): RightPanel {
   if (!availablePanels(enabled).includes(target)) {
-    return current;
+    // `current` may be `null` — the "user has not chosen a panel yet" state introduced in
+    // WP3 so the default can follow the async gate. A rejected target must not write
+    // `null` back into state (that would silently re-open the default to a later gate
+    // flip), so an unchosen panel resolves to the gate's default here.
+    return current ?? defaultPanel(enabled);
   }
   return target;
 }
@@ -131,7 +162,9 @@ export function reconcilePanel(
   current: RightPanel,
   enabled: WorkflowGateValue,
 ): RightPanel {
-  return availablePanels(enabled).includes(current) ? current : "editor";
+  return availablePanels(enabled).includes(current)
+    ? current
+    : defaultPanel(enabled);
 }
 
 // WP11 — `railVisibleForPanel` (a pure "rail visible for this panel?" predicate)

@@ -1246,15 +1246,24 @@ body,
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  /* The panel owns the scroll container — WP1 measured that the renderer emits a flat
-     sibling list with no wrapper, which is what WP4's scrollTop restore requires. */
-  overflow-y: auto;
+  /* ⚠️ The panel itself does NOT scroll (WP3). The list strip and the rendered content
+     each own their own scroll box, so the doc list stays visible while a long document
+     is scrolled — and so WP4 has ONE stable element (`.docs-content`) whose scrollTop it
+     can restore. Restoring `overflow-y: auto` here would scroll the list away with the
+     prose and silently break that restore target. */
+  overflow: hidden;
 }
 
 .docs-list {
   list-style: none;
   margin: 0;
   padding: 0.35rem 0;
+  /* A fixed-height strip: long doc sets scroll within the list rather than pushing the
+     rendered document off the bottom of the panel. */
+  max-height: 11rem;
+  overflow-y: auto;
+  flex: none;
+  border-bottom: 1px solid #2b2b2b;
 }
 
 .docs-list-row {
@@ -1288,6 +1297,169 @@ body,
 }
 .docs-panel-error {
   color: #e0a0a0;
+}
+
+/* M11 WP3 — the rendered document.
+   ⚠️ THE scroll container. WP4 captures and restores `scrollTop` on this element; it must
+   stay a single stable scrolling box (see the layout note in DocsPanel.tsx). */
+.docs-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 0.95rem 2rem;
+}
+
+/* M11 WP3 — a one-line note for link outcomes that are not panel errors: an external
+   open that failed, or a link pointing outside the curated doc set (CHANGELOG.md,
+   README.md). Visible rather than silent — a click that does nothing reads as a bug. */
+.docs-link-note {
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.75rem;
+  color: #c9b58a;
+  background-color: #221f18;
+  border-left: 2px solid #6b5a33;
+  border-radius: 2px;
+}
+
+/* The YAML frontmatter, shown verbatim rather than parsed — a reader wants `updated:` and
+   `drive_mode:` at a glance, and parsing to re-present would add a dependency plus a
+   silent-failure mode for a malformed block. */
+.doc-frontmatter {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #9b9b9b;
+  background-color: #1c1c1c;
+  border-left: 2px solid #3a3a3a;
+  border-radius: 2px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* The rendered doc's outer wrapper: frontmatter block + body, stacked. */
+.doc-markdown {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Dark-only by project convention — no light tokens, no prefers-color-scheme block. */
+.doc-markdown-body {
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: #c8c8c8;
+  overflow-wrap: break-word;
+}
+.doc-markdown-body h1,
+.doc-markdown-body h2,
+.doc-markdown-body h3,
+.doc-markdown-body h4,
+.doc-markdown-body h5,
+.doc-markdown-body h6 {
+  margin: 1.4em 0 0.5em;
+  line-height: 1.3;
+  color: #e4e4e4;
+  font-weight: 600;
+}
+.doc-markdown-body h1 {
+  font-size: 1.35em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid #2b2b2b;
+}
+.doc-markdown-body h2 {
+  font-size: 1.18em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid #262626;
+}
+.doc-markdown-body h3 {
+  font-size: 1.05em;
+}
+.doc-markdown-body > *:first-child {
+  margin-top: 0;
+}
+.doc-markdown-body p,
+.doc-markdown-body ul,
+.doc-markdown-body ol,
+.doc-markdown-body blockquote {
+  margin: 0 0 0.85em;
+}
+.doc-markdown-body ul,
+.doc-markdown-body ol {
+  padding-left: 1.4em;
+}
+.doc-markdown-body li {
+  margin: 0.2em 0;
+}
+/* GFM task lists: the Work-Tree format's `- [ ]` / `- [x]`, non-interactive by design
+   (the viewer never writes to disk). */
+.doc-markdown-body li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.15em;
+}
+.doc-markdown-body input[type="checkbox"] {
+  margin-right: 0.45em;
+  accent-color: #6ea8ff;
+  cursor: default;
+}
+.doc-markdown-body a {
+  color: #6ea8ff;
+  text-decoration: none;
+}
+.doc-markdown-body a:hover {
+  text-decoration: underline;
+}
+.doc-markdown-body code {
+  padding: 0.12em 0.35em;
+  font-size: 0.9em;
+  color: #d8d8d8;
+  background-color: #262626;
+  border-radius: 3px;
+}
+.doc-markdown-body pre {
+  margin: 0 0 0.9em;
+  padding: 0.65rem 0.75rem;
+  background-color: #1c1c1c;
+  border: 1px solid #2b2b2b;
+  border-radius: 3px;
+  overflow-x: auto;
+}
+.doc-markdown-body pre code {
+  padding: 0;
+  font-size: 0.95em;
+  background: none;
+}
+.doc-markdown-body blockquote {
+  padding-left: 0.8em;
+  color: #9b9b9b;
+  border-left: 2px solid #3a3a3a;
+}
+.doc-markdown-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 0 0.9em;
+  border-collapse: collapse;
+  overflow-x: auto;
+}
+.doc-markdown-body th,
+.doc-markdown-body td {
+  padding: 0.3em 0.6em;
+  border: 1px solid #2b2b2b;
+  text-align: left;
+}
+.doc-markdown-body th {
+  color: #e4e4e4;
+  background-color: #1f1f1f;
+  font-weight: 600;
+}
+.doc-markdown-body hr {
+  margin: 1.4em 0;
+  border: none;
+  border-top: 1px solid #2b2b2b;
+}
+.doc-markdown-body img {
+  max-width: 100%;
 }
 
 /* M9 WP6a — the GLOBAL time-analytics dashboard. NOT a right-panel slot: a top-level

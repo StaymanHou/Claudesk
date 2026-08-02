@@ -32,6 +32,15 @@ export interface DocEntry {
   kind: string;
   /** The file's own basename — distinguishes `wbs.md` from `m11-wbs-parked.md`. */
   file_name: string;
+  /** Modification time, ms since the Unix epoch; `0` when the backend couldn't stat it.
+   *
+   * Consumed only by `pickInitialDoc`'s multi-WIP tiebreak — "which of these is the one
+   * I'm actively working in?" Deliberately mtime rather than creation time: creation time
+   * favors the newest-*started* item over the currently-active one, and this workflow
+   * `git mv`s WIP files to `archive/` and creates new ones. See the Rust doc comment on
+   * `DocEntry::mtime_ms` for the measurement behind that call.
+   */
+  mtime_ms: number;
 }
 
 /** The presentation order, by `kind`. Index = rank; anything unlisted sorts last.
@@ -145,4 +154,31 @@ export function docsView(
   if (error !== null) return "error";
   if (docs === null) return "loading";
   return docs.length === 0 ? "empty" : "list";
+}
+
+/** What the Docs panel's CONTENT pane shows, given its selection + fetch state. */
+export type DocContentView = "none" | "loading" | "error" | "content";
+
+/**
+ * Which single view the content pane renders — the WP3 sibling of [`docsView`], and pure
+ * for the same reason: the exclusivity is the property worth pinning, and it is only
+ * assertable as a value.
+ *
+ * ⚠️ Same load-bearing ordering as `docsView`: `error` BEFORE `content`. A failed
+ * `docs_read` must never fall through to rendering stale text from the previously-selected
+ * doc — that would show one doc's content under another doc's highlighted row, which is a
+ * wrong answer presented confidently rather than an honest failure.
+ *
+ * `none` (nothing selected) is distinct from `loading` (selected, fetch in flight) so the
+ * pane can stay quiet before a first selection instead of showing a spinner for a fetch
+ * that was never started.
+ */
+export function docContentView(
+  selected: string | null,
+  content: string | null,
+  error: string | null,
+): DocContentView {
+  if (selected === null) return "none";
+  if (error !== null) return "error";
+  return content === null ? "loading" : "content";
 }

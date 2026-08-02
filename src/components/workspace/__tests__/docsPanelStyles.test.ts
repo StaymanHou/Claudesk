@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import docsPanelSource from "../docs/DocsPanel.tsx?raw";
+import docMarkdownSource from "../docs/DocMarkdown.tsx?raw";
 import hostSource from "../RightPanelHost.tsx?raw";
 
 // M11 WP2 — every CSS class the Docs panel references must actually be DEFINED.
@@ -41,10 +42,41 @@ function referencedClasses(src: string): string[] {
   const pattern = new RegExp('className=(?:"([^"]*)"|\\{`([^`$]*))', "g");
   for (const m of src.matchAll(pattern)) {
     for (const cls of (m[1] ?? m[2] ?? "").split(/\s+/)) {
-      if (cls.startsWith("docs-") || cls.endsWith("--docs")) found.add(cls);
+      // `doc-` (singular) covers WP3's render classes — `doc-markdown`,
+      // `doc-markdown-body`, `doc-frontmatter` — which the original `docs-` prefix would
+      // have skipped SILENTLY, leaving the render path unguarded by the very test written
+      // to catch unstyled markup. The prefixes are checked separately rather than loosened
+      // to a bare `doc` so unrelated classes don't drift into scope.
+      if (
+        cls.startsWith("docs-") ||
+        cls.startsWith("doc-") ||
+        cls.endsWith("--docs")
+      ) {
+        found.add(cls);
+      }
     }
   }
   return [...found];
+}
+
+/**
+ * Whether `css` defines a rule for `cls`, matching on a CLASS-NAME BOUNDARY.
+ *
+ * ⚠️ This replaced a plain `css.includes('.' + cls)`, which was **measured to not bite**:
+ * renaming `.doc-frontmatter` to `.doc-frontmatter-RENAMED` left the suite green, because
+ * the old selector is a prefix of the new one. The same hole covered `.doc-markdown`,
+ * whose name is a prefix of `.doc-markdown-body` — so deleting the shorter rule entirely
+ * would also have passed. WP2's own header calls this guard's scope out honestly; that
+ * note did not anticipate prefix-shadowing, which arrives as soon as two classes share a
+ * stem (exactly what WP3's render classes introduced).
+ *
+ * A class name may be followed only by a non-name character (`{`, `,`, `:`, `.`, ` `, a
+ * combinator, a newline) — never by `-`, a letter, or a digit, which would make it a
+ * different, longer class.
+ */
+function hasRule(css: string, cls: string): boolean {
+  const escaped = cls.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\.${escaped}(?![\\w-])`).test(css);
 }
 
 describe("Docs panel CSS classes are all defined", () => {
@@ -58,6 +90,7 @@ describe("Docs panel CSS classes are all defined", () => {
   it("finds a non-trivial set of docs-* classes to check (anti-vacuity)", () => {
     const referenced = [
       ...referencedClasses(docsPanelSource),
+      ...referencedClasses(docMarkdownSource),
       ...referencedClasses(hostSource),
     ];
     expect(
@@ -70,12 +103,11 @@ describe("Docs panel CSS classes are all defined", () => {
     const referenced = [
       ...new Set([
         ...referencedClasses(docsPanelSource),
+        ...referencedClasses(docMarkdownSource),
         ...referencedClasses(hostSource),
       ]),
     ];
-    const undefinedClasses = referenced.filter(
-      (cls) => !css.includes(`.${cls}`),
-    );
+    const undefinedClasses = referenced.filter((cls) => !hasRule(css, cls));
 
     expect(
       undefinedClasses,

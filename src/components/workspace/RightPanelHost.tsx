@@ -52,12 +52,23 @@ import {
 } from "./terminalList";
 import {
   panelForChord,
+  defaultPanel,
   reconcilePanel,
   selectPanel,
   type RightPanel,
 } from "./panelHost";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
-import { DocsPanel } from "./docs/DocsPanel";
+// M11 WP3 — LAZY, for the same reason as DiffPanel/ProjectSearch above
+// (SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD). WP2 imported this statically when the
+// panel was just a file list; WP3 gave it a markdown renderer (react-markdown + remark-gfm
+// + rehype-sanitize, ~157 KB minified / ~48 KB gzipped per WP1's measurement), which has no
+// business sitting in the eagerly-loaded `main` chunk. It matters more here than for its
+// siblings: the whole panel is behind a DEFAULT-OFF gate, so for a user who never enables
+// workflow features this is a renderer downloaded on every launch and never rendered.
+// No synchronous ref contract from here, so lazy is safe.
+const DocsPanel = lazy(() =>
+  import("./docs/DocsPanel").then((m) => ({ default: m.DocsPanel })),
+);
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
 import { FileTree, type FileTreeHandle } from "./filetree/FileTree";
@@ -383,7 +394,14 @@ export function RightPanelHost({
 
   // Which right-half panel is front. Direct-select via tabs + ⌘⇧ chords. Both panels
   // stay mounted (display:none toggle) so each keeps its state across switches.
-  const [storedPanel, setPanel] = useState<RightPanel>("editor");
+  //
+  // ⚠️ `null` means "the user has not chosen a panel yet" — it is NOT the same as
+  // defaulting to a value here. The workflow gate resolves ASYNCHRONOUSLY (the seam hook
+  // returns `false` until its seed lands), so a hardcoded initial panel would be computed
+  // against a gate value that is merely not-yet-known. With `null`, the default is derived
+  // below once the gate is actually known, and the first explicit `setPanel` — tab click or
+  // ⌘⇧ chord — pins it for the rest of the session.
+  const [storedPanel, setPanel] = useState<RightPanel | null>(null);
 
   // M11 WP2 — THE workflow-features gate. Read through the seam hook and nowhere else:
   // a second call site would be a second source of truth that never re-syncs on the
@@ -417,7 +435,16 @@ export function RightPanelHost({
   // rendered front, not even for one frame.
   //
   // `storedPanel` remains the write target (`setPanel`); `panel` is what the UI reads.
-  const panel = reconcilePanel(storedPanel, workflowFeaturesEnabled);
+  //
+  // M11 WP3 (operator decision, 2026-08-02) — an unchosen panel (`null`) resolves to
+  // `defaultPanel(gate)`: **Docs** when workflow features are on, Editor when off. Folding
+  // this into the SAME derivation is what makes it correct across an async gate: the
+  // default is recomputed when the gate seed lands, so a workspace opened before the seed
+  // resolves still lands on Docs rather than being stuck on a default chosen too early.
+  const panel = reconcilePanel(
+    storedPanel ?? defaultPanel(workflowFeaturesEnabled),
+    workflowFeaturesEnabled,
+  );
 
   // M9 WP2.5 — report the ACTIVE CONTEXT (workspace + right-panel surface) to the
   // backend so native-signal rows (focus/blur, keystrokes) attribute correctly. This
@@ -921,6 +948,35 @@ export function RightPanelHost({
           role="tablist"
           aria-label="right panel"
         >
+          {/* M11 WP2 — the DOCS tab. GATED: rendered only while the workflow-features
+                gate is on, so with the gate off it does not EXIST in the DOM (not hidden,
+                not disabled) — the M10.9 seam contract's requirement.
+
+                ⚠️ FIRST in the row (operator decision, 2026-08-02 verify-human), and the
+                default panel when the gate is on. For a workflow user, "where is this
+                project?" is the question they open a workspace with — it precedes any
+                editing question — so Docs leads and Editor follows. With the gate OFF this
+                block does not render at all and Editor is first exactly as before. */}
+          {workflowFeaturesEnabled && (
+            <button
+              type="button"
+              role="tab"
+              id={`paneltab-docs-${workspaceId}`}
+              aria-selected={panel === "docs"}
+              aria-controls={`panel-docs-${workspaceId}`}
+              className={`panel-tab${panel === "docs" ? " is-active" : ""}`}
+              data-testid="panel-tab-docs"
+              onClick={() =>
+                setPanel((cur) =>
+                  selectPanel(cur, "docs", workflowFeaturesEnabled),
+                )
+              }
+              title="Docs (⌘⇧K)"
+            >
+              Docs
+            </button>
+          )}
+
           <button
             type="button"
             role="tab"
@@ -960,29 +1016,6 @@ export function RightPanelHost({
           >
             Terminal
           </button>
-
-          {/* M11 WP2 — the DOCS tab. GATED: rendered only while the workflow-features
-                gate is on, so with the gate off it does not EXIST in the DOM (not hidden,
-                not disabled) — the M10.9 seam contract's requirement. */}
-          {workflowFeaturesEnabled && (
-            <button
-              type="button"
-              role="tab"
-              id={`paneltab-docs-${workspaceId}`}
-              aria-selected={panel === "docs"}
-              aria-controls={`panel-docs-${workspaceId}`}
-              className={`panel-tab${panel === "docs" ? " is-active" : ""}`}
-              data-testid="panel-tab-docs"
-              onClick={() =>
-                setPanel((cur) =>
-                  selectPanel(cur, "docs", workflowFeaturesEnabled),
-                )
-              }
-              title="Docs (⌘⇧K)"
-            >
-              Docs
-            </button>
-          )}
 
           {/* WP8 — external-app launchers, right-aligned past a divider so they
                 read as ACTIONS distinct from the selectable Editor/Diff tabs.
@@ -1229,7 +1262,9 @@ export function RightPanelHost({
             aria-labelledby={`paneltab-docs-${workspaceId}`}
             style={{ display: panel === "docs" ? "flex" : "none" }}
           >
-            <DocsPanel projectPath={projectPath} visible={visible} />
+            <Suspense fallback={null}>
+              <DocsPanel projectPath={projectPath} visible={visible} />
+            </Suspense>
           </div>
         )}
       </div>

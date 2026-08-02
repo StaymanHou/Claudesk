@@ -3,7 +3,14 @@ import { docsView, labelFor, orderDocs, type DocEntry } from "../docsOrder";
 
 /** Build a DocEntry with a plausible rel_path, so fixtures stay readable. */
 function doc(kind: string, file_name: string, dir = "product"): DocEntry {
-  return { rel_path: `workflow-system/${dir}/${file_name}`, kind, file_name };
+  return {
+    rel_path: `workflow-system/${dir}/${file_name}`,
+    kind,
+    file_name,
+    // mtime is irrelevant to ORDERING (that is `pickInitialDoc`'s tiebreak, tested
+    // separately) — a constant keeps these fixtures about the property under test.
+    mtime_ms: 0,
+  };
 }
 
 describe("orderDocs (workflow re-orientation order)", () => {
@@ -198,11 +205,17 @@ describe("the kind-string contract with the Rust backend", () => {
     // only way `kind` can come first is by having a real rank.
     const unranked = BACKEND_KINDS.filter((kind) => {
       const [first] = orderDocs([
-        { rel_path: `x/${kind}.md`, kind, file_name: `${kind}.md` },
+        {
+          rel_path: `x/${kind}.md`,
+          kind,
+          file_name: `${kind}.md`,
+          mtime_ms: 0,
+        },
         {
           rel_path: "x/aaa.md",
           kind: "definitely-unknown",
           file_name: "aaa.md",
+          mtime_ms: 0,
         },
       ]);
       return first.kind !== kind;
@@ -227,6 +240,7 @@ describe("the kind-string contract with the Rust backend", () => {
           rel_path: `x/${kind}.md`,
           kind,
           file_name: `${kind}.md`,
+          mtime_ms: 0,
         }) === `${kind}.md`,
     );
 

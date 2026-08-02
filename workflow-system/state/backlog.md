@@ -1,5 +1,25 @@
 # Backlog
 
+## SURFACE-2026-08-02-SET-A-CSP-AS-SECOND-LINE-OF-DEFENSE
+- **Source:** feature:verify-human (M11 WP3 Phase 3)
+- **Target level:** product:arch
+- **Type:** new-work (security hardening)
+- **Summary:** Set a real Content-Security-Policy on the webview. `tauri.conf.json` ships `"csp": null`; the operator agreed at WP3 verify-human that a CSP **should** exist as a second line of defense behind the renderer's raw-HTML escaping.
+- **Context:** WP3 recorded the *posture* decision in `arch.md` ("raw HTML is BLOCKED", pinned three ways) but deliberately did NOT set the CSP, on two grounds. (1) It needs **`style-src 'unsafe-inline'`** — 14 files use inline `style={{…}}` and CodeMirror/xterm inject stylesheets at runtime — so it does **not** close the CSS vector class and is a partial backstop, not a replacement for the escaping. (2) It is **app-wide**: terminal, editor, diff, PiP NSPanel, dashboard and updater all render under it. A too-strict CSP fails **silently** (blank panel, unpainted terminal), so it needs a full-surface live verification pass that a docs-viewer WP had no reason to run.
+- **Suggested action:** Proposed starting policy — `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost`. ⚠️ Verify **live** on every webview surface before shipping: xterm terminal (render + input), CodeMirror editor + diff, the **PiP NSPanel** (separate webview — easy to forget), the analytics dashboard, and the updater banner. Confirm the updater's `github.com` endpoint still resolves (it is a Rust-side fetch, so it should be unaffected — verify rather than assume). Note `img-src data:` is needed if any surface renders inline data-URI images.
+- **Priority:** medium (no live exposure — raw HTML is structurally blocked and mutation-proven; this is defense-in-depth for when that first line is removed by someone who did not know it was load-bearing)
+- **Status:** pending
+
+## SURFACE-2026-08-02-CSS-CLASS-GUARDS-MAY-USE-SUBSTRING-NOT-BOUNDARY-MATCH
+- **Source:** feature:build (M11 WP3 Phase 1)
+- **Target level:** product:arch (test-hygiene convention, cross-cutting)
+- **Type:** gap (guard weakness, class-wide)
+- **Summary:** `docsPanelStyles.test.ts` asserted a class had a rule via `css.includes('.' + cls)` — a **substring** test, so `.doc-frontmatter` was satisfied by `.doc-frontmatter-RENAMED` and `.doc-markdown` by `.doc-markdown-body`. **This was not theoretical: fixing it immediately surfaced a real defect in the same WP's CSS** (`.doc-markdown` referenced in JSX with no rule at all, hidden by its longer sibling sharing the stem). Fixed in that one file with a class-name-boundary matcher (`\.<cls>(?![\w-])`) and mutation-probed per class.
+- **Context:** **8 other test files read `App.css`** (`settingsPanelLayout`, `pickerHeaderLayout`, `projectModelCell`, `settingsHighlight`, `settingsPanelWiring`, `stickyHeaderStacking`, `pipPanelSize`, `updaterWiring`). Whether each uses the same weak comparison was NOT audited — out of scope for WP3, whose job was its own panel. The failure mode is silent and asymmetric: the guard keeps passing, so nobody learns it stopped protecting anything. Prefix-shadowing becomes reachable as soon as two classes share a stem (`x` / `x-body`), which is ordinary BEM-ish naming.
+- **Suggested action:** Audit the 8 files for substring-based class-existence checks; where found, switch to a boundary matcher and **mutation-probe each class individually** (a composite probe that trips one arm hides the others — the M10.9 WP5.2 method). Consider extracting the boundary matcher to one shared test helper so the next CSS guard inherits it rather than re-deriving it.
+- **Priority:** medium (no known live defect in the other 8, but the one file audited DID hide a real one, so the base rate is not zero)
+- **Status:** pending
+
 ## SURFACE-2026-08-01-OFF-INVARIANT-CHORD-ARM-PREDICATE-IS-MODULE-LEVEL-NOT-PER-EXPORT
 - **Source:** feature:verify-self (M11 WP2 Phase 2)
 - **Target level:** product:arch
@@ -30,7 +50,7 @@
 - **Context:** Surfaced while probing markdown renderers for M11 (the Docs viewer will render arbitrary `.md` from 20+ rotating projects, including repos Claudesk did not author). Measured, not theorized: an unsanitized `marked` render of a hostile fixture leaked **8 live vectors** (`<script>`, `<iframe>`, `IMG@onerror`, `DIV@onclick`, `javascript:` hrefs, a `data:image/svg` whose payload decodes to `<svg onload="alert(1)">`). M11 will handle its own case, but the *posture* is app-wide and outlives M11 — today's editor/diff/finder surfaces are not rendering untrusted HTML, so nothing has forced the question yet.
 - **Suggested action:** Decide deliberately and record it: either (a) set a CSP appropriate to a Tauri app that loads no remote content, or (b) record `csp: null` in `arch.md` as an accepted decision with its rationale + the compensating controls each HTML-rendering feature must implement. Either is defensible; the cost of the current implicit position is that every future feature re-derives the threat model from scratch. Not urgent — no shipped surface renders untrusted HTML today.
 - **Priority:** medium (no live exposure now; becomes load-bearing the moment M11's Docs viewer ships)
-- **Status:** pending
+- **Status:** **RESOLVED 2026-08-02** (M11 WP3 Phase 3) — its suggested action was *"decide deliberately and record it: either (a) set a CSP or (b) record `csp: null` with its rationale + compensating controls."* The operator decided at WP3 verify-human, and it is recorded in `arch.md` → "Webview HTML-rendering posture — raw HTML is BLOCKED": the posture is written down, the compensating control is stated as a rule (**no raw HTML, benign tags included**), and it is pinned three ways rather than asserted. The *unrecorded-posture* defect this item names is closed. Setting an actual CSP — which the operator also wants — is tracked separately as `SURFACE-2026-08-02-SET-A-CSP-AS-SECOND-LINE-OF-DEFENSE`, since it is app-wide work needing its own full-surface verification pass. ⚠️ Not deleted per delete-on-resolve: that rule requires a `**Backlog resolved:**` CHANGELOG line in the same commit, which `feature-finalize` writes at close.
 
 ## SURFACE-2026-08-01-DOMPURIFY-DEFAULTS-LEAVE-DATA-SVG-AND-STYLE
 - **Source:** feature:build (M11 WP1 Phase 2)

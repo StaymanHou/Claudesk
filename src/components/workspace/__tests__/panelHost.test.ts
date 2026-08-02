@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AVAILABLE_PANELS,
   availablePanels,
+  defaultPanel,
   panelForChord,
   reconcilePanel,
   selectPanel,
@@ -251,3 +252,57 @@ describe("panelForChord (⌘⇧+mnemonic → panel)", () => {
 // RightPanelHost), not via a per-panel visibility predicate. There is no pure
 // function left to unit-test; the editor-only placement is a DOM property confirmed
 // at verify-self/human (repo posture: live DOM → Playwright).
+
+// M11 WP3 (operator decision, 2026-08-02 verify-human) — Docs leads the tab row and is the
+// default panel WHEN the gate is on. The two halves are tested separately because they can
+// break independently: the ordering is what the tab row renders, the default is what a
+// fresh workspace opens on.
+describe("Docs-first ordering + default panel (gate ON only)", () => {
+  it("puts docs FIRST in the gate-on panel order", () => {
+    // Order here IS the tab order. Asserting the index, not just membership — membership
+    // was already true before this change and would not have caught the regression.
+    expect(availablePanels(true)[0]).toBe("docs");
+    expect([...availablePanels(true)]).toEqual([
+      "docs",
+      "editor",
+      "diff",
+      "terminal",
+    ]);
+  });
+
+  it("leaves the gate-OFF order completely untouched (M10.9 byte-identical contract)", () => {
+    // The whole point of gating: a non-workflow user must see exactly the previous app.
+    expect([...availablePanels(false)]).toEqual(["editor", "diff", "terminal"]);
+    expect(availablePanels(false)[0]).toBe("editor");
+    expect([...AVAILABLE_PANELS]).toEqual(["editor", "diff", "terminal"]);
+  });
+
+  it("defaults to docs when the gate is on, editor when off", () => {
+    expect(defaultPanel(true)).toBe("docs");
+    expect(defaultPanel(false)).toBe("editor");
+  });
+
+  it("resolves an UNCHOSEN panel (null) to the gate default, not a hardcoded editor", () => {
+    // `null` = "user has not picked yet". This is what lets the default follow the
+    // asynchronously-resolved gate instead of being fixed before the gate is known.
+    expect(reconcilePanel(defaultPanel(true), true)).toBe("docs");
+    expect(reconcilePanel(defaultPanel(false), false)).toBe("editor");
+  });
+
+  it("evicts docs to EDITOR when the gate flips off, not to a dead panel", () => {
+    // The standing OFF-invariant: a gated panel must never remain front once revoked.
+    expect(reconcilePanel("docs", false)).toBe("editor");
+  });
+
+  it("keeps an EXPLICIT user choice — the default never overrides a real selection", () => {
+    // Docs-first is a default, not a lock. A user who picks Editor stays on Editor.
+    expect(selectPanel(null, "editor", true)).toBe("editor");
+    expect(reconcilePanel("editor", true)).toBe("editor");
+  });
+
+  it("a rejected target on an unchosen panel yields the gate default, never null", () => {
+    // `selectPanel` returns `current` when the target is unavailable; with `current` now
+    // nullable, that path must not write null back into state.
+    expect(selectPanel(null, "docs", false)).toBe("editor");
+  });
+});
