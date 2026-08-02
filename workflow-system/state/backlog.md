@@ -1,5 +1,82 @@
 # Backlog
 
+## SURFACE-2026-08-02-BROWSER-SUPPLIES-THE-ANSWER-SO-SCROLL-RESTORE-CHECKS-ARE-VACUOUS
+- **Source:** feature:build (M11 WP5 Phase 2, carries (a) + (b)); **revised at that phase's
+  verify-self audit, which reversed two of this entry's original claims**
+- **Target level:** product:arch (verification method) + the Docs panel
+- **Type:** gap (non-decisive evidence — **NOT** a code defect)
+- **Summary:** **Neither** of the Docs panel's two scroll-position behaviors — the `pendingRestore`
+  **deferred restore** nor `planRestore`'s **doc-shrink clamp** — has ever been proven live, and
+  neither can be by the obvious experiment, because **the browser supplies the correct answer on its
+  own in both cases**:
+  1. **WebKit retains `scrollTop`** across a content swap on a `display:none`-but-never-unmounted node
+     (`RightPanelHost` hides the docs slot that way). Measured in a standalone `WKWebView` fixture with
+     **zero restore code**: hide → swap while hidden → reveal ⇒ returns to the exact prior offset.
+  2. **The browser clamps `scrollTop` writes itself.** Measured in the live Claudesk webview: writing
+     `999999` or `max + 500` both land at exactly `scrollHeight − clientHeight`; `-300` lands at `0`.
+  So in each case a correct implementation and a fully-broken one are **observationally identical**.
+- **Context:** ⚠️ **Two corrections to this entry's own first version** (both found by the Phase 2
+  verify-self audit, both now fixed here and in `wbs.md` → WP4 4.4):
+  - **The `"deferred"` arm was never even reached** in the experiment that "tested" it.
+    `DocsPanel.tsx:436` skips the reload while the panel is not front and sets a stale flag; the
+    catch-up effect at `:462` re-lists only **after** re-fronting, when the box is measurable — so the
+    **`"applied"`** arm runs, not `"deferred"`. The "mutate the file while hidden" recipe does **not**
+    exercise the deferred path. ⚠️ **`docsScrollRestore.ts`'s header and `DocsPanel.tsx:71` both still
+    describe that hidden-reload case as the motivating scenario — prose and code disagree** (relevant to
+    the standing comment-density finding, whose whole point is that real defects hide in that thicket).
+  - **Carry (b) was originally recorded as the "decisive counterexample" to (a)** — *"the clamp had to
+    move the offset, so the browser could not supply the right answer"*. **Measured false** (see
+    Summary 2). That was the more damaging error, because it taught a future reader that a
+    shrink-clamp check is a safe decisive pattern.
+  - The mutation itself *was* genuinely live (executable-line `sed`, `git diff`, 3 named unit-test
+    failures, and the **Vite-transformed module read over HTTP** with `Cache-Control: no-cache`, after a
+    full `location.reload()`), so none of this is a missed-setup artifact.
+  **⚠️ NOT a defect in `pendingRestore.ts` or `docsScrollRestore.ts`** — mutation-proven pure functions
+  (20 + 22 tests) that remain the only protection wherever the browser does *not* volunteer the answer
+  (a genuine unmount/remount, a different hiding strategy, a non-WebKit engine, or a caller comparing
+  the returned value back).
+- **Suggested action:** Do **not** retry either check as driven — both are non-decisive by
+  construction, not by insufficient effort. Three paths that would actually work, in ascending cost:
+  1. **The race path (drivable on the live app today, needs no new harness):** trigger the reload with
+     the panel **front**, then switch panels *during* the `docs_list`→`docs_read` round trip. That is
+     the one sequence that genuinely reaches `"deferred"`. *(Corrects this entry's original
+     "closed as unobtainable" — it is unobtainable by the sequence tried, not in principle.)*
+  2. Hide the slot by **unmounting** (or `content-visibility`) in a dev-only harness, so the browser
+     cannot volunteer the offset.
+  3. A component-render harness (blocked by `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS`).
+  **Also worth keeping: the standalone `swiftc` + `WKWebView` probe harness** the audit built
+  (scratchpad `webkit-probe/`: `wk.swift`, `probe.html`) — it answers "what does real WebKit do on its
+  own?" without needing the Claudesk app or the MCP bridge, which is exactly the question that settles
+  decisiveness.
+  **The durable generalization is worth more than any of the fixes: an observation is only decisive
+  when a broken implementation would give a DIFFERENT answer.** Ask what the browser/framework/OS
+  would do unaided *before* spending a live run. WP5 stated this rule and then violated it in the same
+  sentence — twice.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-02-RAF-DOES-NOT-TICK-IN-MCP-BRIDGE-EVAL-CONTEXT
+- **Source:** feature:verify-self (M11 WP5 Phase 1)
+- **Target level:** product:arch (verification tooling — candidate MCP-bridge caveat (h))
+- **Type:** gap (verification-method hazard)
+- **Summary:** A `requestAnimationFrame`-driven sampler installed via
+  `mcp__tauri__webview_execute_js` **never ticks** — measured `frameCount: 0` over a ~1.5s window
+  in which a real content swap occurred. A fast `setInterval` (4ms) in the same context works
+  (17 samples over ~2s, straddling the swap).
+- **Context:** The dangerous part is not that rAF fails — it is that a rAF sampler's
+  **absence-shaped results still look like passes**. The WP5 run read
+  `everHitZero: false, minTop: null, distinctTops: []` from **zero** captured frames; had the
+  sample count not been asserted, that would have been recorded as "the scroll offset never
+  jumped" on the strength of no data at all. Same class as
+  `[[guard-predicate-completeness-vs-mutation-landing]]` and `[[verify-the-mutation-landed]]`:
+  an instrument that recorded nothing is indistinguishable from a clean result.
+- **Suggested action:** Add as **caveat (h)** to the MCP-bridge list in the root `CLAUDE.md`
+  (alongside (a)–(g)): *prefer `setInterval` over `requestAnimationFrame` for live timing
+  observations through the bridge, and always assert the sample count before believing any
+  "never happened" result.* Generalizes to any future live timing/transient check.
+- **Priority:** medium
+- **Status:** pending
+
 ## SURFACE-2026-08-02-PROJECT-MEMORY-SYMLINK-NOT-IN-PLACE-TWO-COPIES-DRIFT
 - **Source:** session-capture / feature-finalize (M11 WP4 close)
 - **Target level:** product:arch (project setup / artifact tracking)

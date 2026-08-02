@@ -368,7 +368,34 @@ for provenance and superseded by this summary.**
 | 2. `.session.md` disappears → fallback | **PASS** | session row gone; fell back to the wip doc; **`rendersStaleSessionText: false`** |
 | 3. Doc appears → jump | **PASS** | jumped to the new `.session.md` **and** rendered it (`rendersNewDoc: true`) |
 | 4. Explicit pick not overridden | **PASS** | wip file changed on disk; `arch.md` selection held |
-| 5. Hidden-panel deferred restore | **PASS** | reload landed at `clientHeight: 0`; offset held; restored to exactly **1200** |
+| 5. Hidden-panel deferred restore | **⚠️ RETRACTED at WP5 P2 — see the note below this table** | reload landed at `clientHeight: 0`; offset held; restored to exactly **1200** |
+
+⚠️ **RETRACTION (added 2026-08-02 by M11 WP5 Phase 2 — outcome 5 above and "gap 2" further down are
+both reversed). Read this before citing either.** WP5 ran the decisive experiment this WP skipped and
+found outcome 5 **could not have proven what it claimed**, for two reasons:
+1. **WebKit retains `scrollTop`** across a content swap on a `display:none`-but-never-unmounted node —
+   measured in a standalone `WKWebView` fixture containing **zero restore code**, which still returns
+   to the exact prior offset. So a working restore and a fully-broken one are observationally
+   identical here. **This also refutes this file's own mitigating argument** (below, ~:419) that *"a
+   height-changing content replacement is exactly what clobbers a browser-retained offset"* — the
+   height changed ~91px in WP5's run and the offset survived anyway.
+2. **The `"deferred"` arm was never the code path under test.** `DocsPanel.tsx:436` skips the reload
+   entirely while the panel is not front (setting a stale flag), and the catch-up effect at `:462`
+   re-lists only after re-fronting, when the box is measurable — so the **`"applied"`** arm runs. The
+   "mutate the file while the panel is hidden" recipe does **not** exercise the deferred restore.
+   Reaching it requires a **race** (reload while front, then switch panels *during* the
+   `docs_list`→`docs_read` round trip), which no experiment has ever driven.
+
+**Also reversed: "gap 2 (doc-shrink clamp) — approved live, so `planRestore`'s clamp path is no longer
+unit-test-only" (below, ~:437) is FALSE.** The clamp **is** unit-test-only: the browser clamps
+`scrollTop` writes itself (writing `999999` or `max + 500` into the live webview both land at exactly
+`scrollHeight − clientHeight`), so that live check was vacuous too.
+
+**Neither is a code defect.** `pendingRestore.ts` (20 tests) and `docsScrollRestore.ts` (22 tests) are
+mutation-proven pure functions and remain the only protection wherever the browser does *not* supply
+the answer. The *behaviors* the operator approved are real; these two **live proofs** are withdrawn.
+Full account: `SURFACE-2026-08-02-BROWSER-SUPPLIES-THE-ANSWER-SO-SCROLL-RESTORE-CHECKS-ARE-VACUOUS`
+and the WP5 WIP → P2.1/P2.2/P2.3.
 
 Outcome 2 is the one the WBS singled out as routine-not-edge — the `/session-restore` step-7
 sequence — and it now falls back cleanly with **no stale text from the deleted file**, which is

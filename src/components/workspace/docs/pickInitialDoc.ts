@@ -101,8 +101,9 @@ export function pickInitialDoc(entries: readonly DocEntry[]): string | null {
  * 4.3, "disappear" row), which clears the sentinel rather than re-pointing it — see that
  * task for why re-pointing would forge a fake user choice.
  *
- * ## THREE tiers, not two (added at the WP4 code-review refactor)
- * `chosen` (user) > `jumpedTo` (machine) > `pickInitialDoc` (default).
+ * ## FOUR tiers (a fourth added at WP5 P3.2 — operator decision)
+ * `chosen` (user) > `jumpedTo` (machine jump) > `settled` (latched auto-resolution) >
+ * `pickInitialDoc` (live default).
  *
  * ⚠️ `jumpedTo` exists because collapsing it into `chosen` was a shipped CRITICAL: the jump
  * arm wrote its own answer into `chosen`, and since the caller's jump guard is
@@ -110,13 +111,27 @@ export function pickInitialDoc(entries: readonly DocEntry[]): string | null {
  * machine's landing spot in its own slot means a jump can be superseded by the next jump
  * while a USER pick still outranks both — which is the precedence this function exists to
  * state. Defaulted so existing two-argument callers keep their exact behavior.
+ *
+ * ⚠️ `settled` fixes a REPRODUCED defect (`SURFACE-2026-08-02-QUALITY-WP4-SIBLING-EDIT-MOVES-
+ * AUTOSELECTION`). Without it the bottom tier recomputes `pickInitialDoc(docs)` on every
+ * render, and because the caller refreshes `docs` (with new mtimes) on every `fs-change`,
+ * editing a file the reader is NOT looking at silently moved the selection: measured live at
+ * WP5 P3.1 — reading `older-feature.md` at `scrollTop` 600, a touch of the sibling
+ * `newer-feature.md` swapped the rendered doc and dropped the reader at `scrollTop` 0. No
+ * reload arm ran, so nothing captured or restored the position. Latching the first
+ * resolution means **only an appear/disappear may move an auto-selection** — the operator's
+ * chosen semantics ("pin once resolved"), which keeps mtime churn from stealing the panel.
  */
 export function selectedDoc(
   chosen: string | null,
   docs: readonly DocEntry[] | null,
   jumpedTo: string | null = null,
+  settled: string | null = null,
 ): string | null {
   if (chosen !== null) return chosen;
   if (jumpedTo !== null) return jumpedTo;
+  // The latched auto-resolution outranks a fresh compute, so later mtime churn cannot move
+  // it. Only cleared by the caller on appear/disappear (where re-ranking is the intent).
+  if (settled !== null) return settled;
   return docs !== null ? pickInitialDoc(docs) : null;
 }

@@ -7,8 +7,14 @@
 // ── ⚠️ The case that shapes this whole module: the panel can be display:none ─────
 // `RightPanelHost` renders the docs slot with `display: panel === "docs" ? "flex" : "none"`,
 // and panels stay MOUNTED when another panel is fronted (the panels-stay-mounted rule); the
-// whole `.workspace-right` is display-none'd when the workspace is backgrounded. So an
-// `fs-change` can land while the scroll box has no layout at all.
+// whole `.workspace-right` is display-none'd when the workspace is backgrounded. So a restore
+// can be attempted while the scroll box has no layout at all.
+//
+// ⚠️ SHARPENED at WP5: the reaching path is NOT "an `fs-change` lands while hidden" — `DocsPanel`
+// *skips* the reload while the panel is not front and replays it after re-fronting, when the box
+// is measurable. The unmeasurable case is reached by a RACE (a reload that starts while front,
+// then a panel switch during the `docs_list`→`docs_read` round trip) or by the workspace being
+// backgrounded mid-flight. The looser old wording sent a WP5 experiment down the wrong path.
 //
 // In a real browser a zero-height box reports `scrollTop === 0` and *silently ignores* a
 // write to it. A naive capture→refetch→restore therefore does the worst possible thing: it

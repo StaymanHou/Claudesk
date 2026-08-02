@@ -306,8 +306,15 @@ describe("auto-select is DERIVED, not written by an effect", () => {
     //   `jumpedTo` — a jump parked here. Overridable by the next jump; cleared on a user pick.
     // Collapsing the two was a shipped CRITICAL: the jump arm wrote into `chosen`, and since
     // the jump guard is `chosen === null`, the FIRST jump disabled every later one. Pinning
-    // the third argument is what stops a "simplifying" edit from re-merging them.
-    expect(panel).toContain("selectedDoc(chosen, docs, jumpedTo)");
+    // `jumpedTo`'s ORDINAL POSITION is what stops a "simplifying" edit from re-merging them.
+    //
+    // ⚠️ Pin the POSITION, never the full argument list. This arm asserted
+    // `selectedDoc(chosen, docs, jumpedTo)` literally and broke at WP5 P3.2 when a fourth tier
+    // (`settled`) was added — the same arity-brittleness the arm directly ABOVE was already
+    // triaged and fixed for, then reintroduced here. The property is "jumpedTo is the third
+    // tier", not "there are exactly three tiers"; a regex up to `jumpedTo` states that and
+    // survives a fifth tier.
+    expect(panel).toMatch(/selectedDoc\(\s*chosen,\s*docs,\s*jumpedTo\b/);
     expect(panel).toContain("const [jumpedTo, setJumpedTo]");
     // The jump arm must write jumpedTo, NOT chosen.
     expect(panel).toContain("setJumpedTo(decision.selected)");
@@ -429,5 +436,81 @@ describe("link navigation — wiring, now that the handler is its own module", (
     // review; a comment promising behavior the code does not perform is worse than an
     // unimplemented feature.
     expect(linkHandler).toContain("resolved.fragment");
+  });
+});
+
+describe("WP5 P3.2 — the `settled` latch is WIRED, not just implemented", () => {
+  // ⚠️ This exists because of this milestone's most expensive repeated lesson: extracting a
+  // pure state machine proves the MACHINE, not its CALLER. `pendingRestore` had 20 tests and
+  // a proven `"reset"` transition while NO caller dispatched it; `shouldJump` was proven while
+  // the jump arm poisoned its own input. Both were absences, and an absence is what a
+  // source-text guard is weakest at. So `pickInitialDoc.test.ts` proving the four-tier
+  // precedence is NOT sufficient — the latch also has to be set and released in the right
+  // places, and these are the four places.
+
+  it("passes `settled` INTO the precedence function (else the tier is dead code)", () => {
+    // The whole fix is inert if the caller keeps making the 3-argument call.
+    //
+    // ⚠️ Position, not full arity — the same lesson the `jumpedTo` arm above learned twice.
+    // "settled is the fourth tier" is the property; "there are exactly four" is not.
+    expect(panel).toMatch(
+      /selectedDoc\(\s*chosen,\s*docs,\s*jumpedTo,\s*settled\b/,
+    );
+  });
+
+  it("declares the latch as state, and sets it WHERE the list arrives", () => {
+    // ⚠️ WHERE is the whole difficulty, and two drafts were rejected by lint before this one:
+    //   1. `useEffect` + `setSettled`   → `set-state-in-effect` (cascading renders) — the same
+    //      reach-for-a-state-updater mistake WP2 and WP3 each paid for;
+    //   2. `useRef` read/written during render → `Cannot access refs during render` (5 errors);
+    //   3. ✅ state written in the `docs_list` response handler — a callback, so neither rule
+    //      fires, and it is the honest place: the latch is a fact about the answer when the
+    //      list arrived.
+    expect(panel).toContain("const [settled, setSettled] = useState<");
+    // Latched from the PURE ranking function on the entries just received — same answer the
+    // render would derive, fixed at the one moment it first exists.
+    expect(panel).toContain("setSettled(pickInitialDoc(entries))");
+  });
+
+  it("releases the latch ONLY where re-ranking is the intent — by site, not by count", () => {
+    // ⚠️ REWRITTEN at verify-self. This asserted `releases >= 3`, an unbounded count with no
+    // site attribution, and the audit found TWO bypasses that satisfied it while breaking the
+    // fix — both passing all four guards and all 69 tests:
+    //   BYPASS-2 (fatal): one extra `setSettled(null);` on the line right after the latch write
+    //     neutralizes the latch at birth. releases=4 satisfied `>=3`.
+    //   BYPASS-3: a release added in the `"content"` arm, which must NEVER release — an
+    //     in-place re-render must not move the selection.
+    // A count cannot tell "three right places" from "three right places plus a wrong one".
+    // So: pin the EXACT number, and pin that the two forbidden regions contain none.
+    const releases = panel.split("setSettled(null)").length - 1;
+    // Exactly TWO `null` releases now: the jump arm and `chooseDoc`. The refallback arm
+    // RE-LATCHES (`setSettled(decision.selected)`) rather than clearing — see the fifth-path
+    // regression test in `pickInitialDoc.test.ts`.
+    expect(releases).toBe(2);
+    expect(panel).toContain("setSettled(decision.selected)");
+
+    // BYPASS-2: no release may sit adjacent to the latch write, which would neutralize it.
+    const latchIdx = panel.indexOf("setSettled(pickInitialDoc(entries))");
+    expect(latchIdx).toBeGreaterThan(-1);
+    const afterLatch = panel.slice(latchIdx, latchIdx + 200);
+    expect(afterLatch).not.toContain("setSettled(null)");
+
+    // BYPASS-3: the `"content"` arm must not touch the latch at all — it re-renders in place.
+    const contentArm = panel.slice(
+      panel.indexOf('case "content"'),
+      panel.indexOf('case "jump"'),
+    );
+    expect(contentArm.length).toBeGreaterThan(20); // the slice is real, not empty
+    expect(contentArm).not.toContain("setSettled");
+  });
+
+  it("releases it inside the single user-pick writer, not at each call site", () => {
+    // `chooseDoc` is the one funnel for a user pick (row click AND in-doc link), which is
+    // what makes "forgetting the release" impossible by construction rather than by
+    // vigilance at each call site. Assert the release sits inside that function body.
+    const start = panel.indexOf("const chooseDoc = useCallback");
+    expect(start).toBeGreaterThan(-1);
+    const body = panel.slice(start, panel.indexOf("}, [])", start));
+    expect(body).toContain("setSettled(null)");
   });
 });

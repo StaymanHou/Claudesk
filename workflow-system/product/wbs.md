@@ -158,6 +158,55 @@ No new design prior proposed — the two decisions above are applications of exi
   **The load-bearing constraint: an EXPLICIT user selection is never overridden.** CC rewrites WIP files many times per turn, so a jump-on-any-update would yank the doc out from under a reader mid-sentence — which is why create-only is the trigger. Track "has the user chosen?" the same way WP3 tracks it for the panel default (a `null`-means-unchosen sentinel, not a boolean flag bolted on). ⚠️ Note WP3 already reuses `pickInitialDoc` for first-load; this makes it fire on a second trigger, so it must stay a **pure function of the doc set** with no first-load-only assumptions baked in.
 - [x] 4.4 Verify (self, MCP bridge, scratch workspace): render a wip doc, scroll mid-file, mutate the file on disk → content updates in place, scroll stays put (does not jump to top).
 
+⚠️ **CORRECTION applied at WP5 P2 (2026-08-02, revised at that phase's verify-self audit) — WP4's
+outcome 5 (hidden-panel deferred restore) was VACUOUS, and so was WP5's own attempt to settle it.
+BOTH of WP5's carry experiments turned out non-decisive; the honest verdict is that neither the
+deferred restore NOR the shrink clamp has ever been proven live.**
+
+**Carry (a) — the browser supplied the answer, AND the arm under test was never the one running.**
+*(These are causally chained, not two independent legs: the skip gate means nothing is captured while
+hidden, so the catch-up capture reads the **live** `scrollTop` — which is 1200 only because WebKit
+retained it. Retention is the supplier of the answer; the gate finding changes which arm ran.)* WP5 mutated
+`pendingNext`'s `"deferred"` arm to `NO_PENDING` (discarding the held offset) and the panel *still*
+returned to exactly 1200. The mutation was proven live four ways (executable-line `sed`, `git diff`,
+3 named unit-test failures, and the **Vite-transformed module read over HTTP** — confirmed
+`Cache-Control: no-cache`, i.e. the artifact the webview actually imports) after a full
+`location.reload()`. Why it proved nothing:
+1. **WebKit retains `scrollTop`** across a content swap on a `display:none`-but-never-unmounted node.
+   Measured in isolation at WP5's verify-self, in a standalone `WKWebView` fixture containing **zero
+   restore code**: hide → swap-while-hidden (scrollHeight 5700→5820) → reveal ⇒ returns to exactly
+   **1200**. *(This also dissolves the apparent tension with `scrollTop: 0` while hidden — a
+   zero-layout box reports zero offset while retaining scroll state internally.)*
+2. **⚠️ The `"deferred"` arm never ran at all.** `DocsPanel.tsx:436` skips the reload entirely while
+   the panel is not front (`if (!visibleRef.current) { staleRef.current = true; return; }`), and the
+   catch-up effect at `:462` re-lists only **after** re-fronting — by which time the box is
+   measurable, so `planRestore` returns `apply: true` and the **`"applied"`** arm runs. So the
+   "mutate the file while the panel is hidden" recipe does **not** exercise the deferred path.
+   **Do not retry that recipe believing it does.** The arm is still reachable, but only by a **race**:
+   a reload that passes the `:436` gate while front, then a panel switch *during* the
+   `docs_list`→`docs_read` round trip. **No experiment has ever exercised it.**
+
+**Carry (b) — the doc-shrink clamp is vacuous for the SAME reason (this reverses WP5's first
+write-up of it).** The earlier version of this block claimed (b) "PASSED genuinely … because the
+clamp had to move the offset, so the browser could not supply the right answer on its own."
+**Measured false.** The browser clamps `scrollTop` writes itself: in the live Claudesk webview,
+writing `999999` or `max + 500` both land at exactly `scrollHeight − clientHeight`, and `-300` lands
+at `0`. P2.2's recorded 533 is precisely `956 − 423` — the browser's own maximum. So a clamp-free
+implementation is observationally identical to `planRestore`'s clamp.
+
+**Neither finding is a defect in `pendingRestore.ts` or `docsScrollRestore.ts`** — both are
+mutation-proven pure functions (20 + 22 tests), and both remain the only protection wherever the
+browser does *not* volunteer the answer (a genuine unmount/remount, a different hiding strategy, a
+non-WebKit engine, or a caller that compares the returned value back). The *behaviors* the operator
+approved are real; only their **live proofs** were weaker than the records claimed.
+
+**⚠️ The durable rule this whole episode exists to teach — and which WP5's own first write-up
+violated while stating it: an observation is only decisive when a broken implementation would give a
+different answer.** Both carries failed that test, and the second one failed it *in the very sentence
+that asserted it*. Before spending a live run, ask what the browser (or any other layer) would do on
+its own. Filed as `SURFACE-2026-08-02-BROWSER-SUPPLIES-THE-ANSWER-SO-SCROLL-RESTORE-CHECKS-ARE-VACUOUS`. See the
+WP5 WIP → P2.1/P2.2/P2.3 and its Phase 2 verify-self audit.
+
 ---
 
 ### WP5: Milestone-exit verify
@@ -168,8 +217,8 @@ No new design prior proposed — the two decisions above are applications of exi
 **Learning objective:** Does M11 meet its exit criterion end-to-end on a real project (and, for the parts that need it, the installed `.app`)?
 **Success criterion:** A recorded PASS of the roadmap exit criterion: *From any workspace, the `Docs` tab renders that project's conventional product/workflow docs as formatted, scrollable, link-navigable markdown, read-only, with no external editor pop — and a live on-disk change re-renders in place without jumping scroll to the top.* Plus the auto-select-on-open + workflow-ordered-list operator decisions verified. Any installed-`.app`-only checks carried to the next `/release` gate per `[[installed-build-verify-deferred-to-release]]`.
 **Tasks:**
-- [ ] 5.1 Drive the full exit criterion on a scratch workspace via the MCP bridge (open → auto-select → render fidelity → link nav → live-reload scroll-preserve).
-- [ ] 5.2 Record the M11 exit verdict (GO / issues) in "Probe outcomes"; carry any installed-`.app`-only items to the release gate.
+- [x] 5.1 Drive the full exit criterion on a scratch workspace via the MCP bridge (open → auto-select → render fidelity → link nav → live-reload scroll-preserve).
+- [x] 5.2 Record the M11 exit verdict (GO / issues) in "Probe outcomes"; carry any installed-`.app`-only items to the release gate.
 
 ---
 
@@ -194,7 +243,77 @@ Arch gets an as-built resync at `/product-finalize` (the `RightPanelHost` row gr
 
 ## Probe outcomes
 
-*(WP5's exit verdict lands here at its WP close.)*
+### WP5 verdict (2026-08-02) — **M11 MILESTONE EXIT: GO**
+
+Driven live on the real WKWebView via the MCP bridge against a purpose-built 11-file scratch fixture,
+with the gate ON. Verdict per exit-criterion clause, quoting `roadmap.md`:
+
+> *"From any workspace, the `Docs` tab renders that project's conventional product/workflow docs as
+> formatted, scrollable, link-navigable markdown, read-only, with no external editor pop — and a live
+> on-disk change re-renders in place without jumping scroll to the top."*
+
+| Clause | Verdict | Evidence |
+|---|---|---|
+| `Docs` tab exists, is reachable | **PASS** | `panel-tab-docs` present; tab row `"DocsEditorDiffTerminal"` (Docs **first**, per the WP3 operator call); click **and** `⌘⇧K` both select it — the chord proven by a **positive control** (Editor → Docs on the same dispatch that is inert with the gate off) |
+| "that project's conventional docs" | **PASS** | 11/11 fixture docs discovered; absent `research.md`/`context.md` **structurally** omitted, not rendered as empty rows |
+| **workflow-ordered** | **PASS (mechanical)** | live order captured verbatim from `data-rel-path` **and** independently re-derived from `KIND_ORDER`, shuffle-invariant over 200 permutations |
+| **formatted** markdown | **PASS** | parsed-DOM counts vs. source truth: **11 task-list checkboxes / 2 checked / all `disabled`**; 1 table, 1 `pre code`, h1/h2×4/h3; frontmatter as **1 styled block with 0 `<hr>`** (not the WP1-measured mangling shape) |
+| **scrollable** | **PASS** | panel owns the scroll container — anchor scroll moved `.docs-content` 0 → 881 with `window.scrollY` unchanged at 0 |
+| **link-navigable** | **PASS** | all four `classifyHref` classes: in-doc anchor scrolls within the panel; cross-doc switches doc **two-sidedly** (new text present, old text gone); `https://` **and** protocol-relative `//host` leave `location.href` unchanged with no `beforeunload` — no hijack; `[[slug]]` inert with **no `<a>` emitted** |
+| **read-only** | **PASS** | 0 `textarea`, 0 `[contenteditable]`, 0 non-checkbox `input`; Rust registers exactly `docs_list` + `docs_read`, both reads. ⚠️ Scoped claim: this is a property of the **panel**, not of the webview (which under `csp: null` still reaches `editor_fs::write_file` et al.) — operator-accepted |
+| **no external editor pop** | **PASS** | `pgrep` for Sublime Text/Merge: none at baseline, none after the full sequence. *(A clause no prior WP had ever checked.)* |
+| **live change re-renders in place, no jump to top** | **PASS** | scrolled to 1200 (of `scrollHeight` 5662 / `clientHeight` 423), appended on disk → new text rendered, `scrollHeight` 5662 → 5754, and a **no-dedup 4ms sampler** shows **17 samples, `distinctTops: [1200]`**, straddling the swap frame-by-frame. Not a single post-hoc read. |
+| **Gate OFF ⇒ the surface does not exist** | **PASS** | zero `docs`-bearing testids anywhere, tab row back to `"EditorDiffTerminal"`, chord inert — then toggled back ON and the surface returned (15 testids), which is what makes the absence meaningful |
+| Auto-select-on-open (operator decision 1) | **PASS** | lands on `.session.md` with no click, positively identified by a distinctive marker; remove it → lands on the newest **wip**, not `vision.md` |
+| Workflow-ordered list (operator decision 2) | **PASS** | see the ordering row |
+
+**Static gate at exit:** `tsc` 0 · `pnpm lint` 0 errors (1 pre-existing `XtermPane` warning) ·
+`format:check` clean · **1733 tests / 140 files** · `vite build` clean with `DocsPanel` still its own
+**171 kB lazy chunk** (`main` 440 kB, not ~606 kB) · the **OFF-invariant guard 14/14** including the
+M11.5 WP4 meta-tests — so M11 landed its Docs surface **without narrowing the guard to fit**, which is
+the property M11.5 was paid to protect.
+
+**Three things this WP changed beyond verifying:**
+
+1. **A REPRODUCED defect was found and FIXED** (`…QUALITY-WP4-SIBLING-EDIT-MOVES-AUTOSELECTION`).
+   Editing a wip file the reader was **not** looking at moved the auto-selection — measured live as
+   reading `older-feature.md` at `scrollTop` 600 and landing at `scrollTop` 0 of `newer-feature.md`,
+   with no reload arm running. **Operator chose "pin once resolved"**: a fourth precedence tier
+   (`chosen` > `jumpedTo` > `settled` > live `pickInitialDoc`), latched where the list arrives.
+   ⚠️ This is a **deliberate scope extension** of a WP the WBS sized as verification-only — the
+   operator's call, made against a live reproduction, and it grew to 5 source files.
+
+   ⚠️ **The first version of this fix shipped a FIFTH selection-change path, caught at verify-self.**
+   The `"refallback"` arm cleared the latch and wrote nothing, dropping the panel permanently onto the
+   live-compute tier — so after `/session-restore` deletes `.session.md` (**every** restore), a sibling
+   edit reproduced the original defect. Fixed by having that arm **re-latch** onto `decision.selected`.
+   Two wiring-guard bypasses were found in the same audit (a count-based guard accepted a one-line edit
+   that made the whole fix inert); the guard now pins release **sites**, not a count. **7 mutants bite.**
+
+   ⚠️ **The post-fix behavior is NOT live-verified, by informed operator decision.** The live table
+   above was recorded *before* the fifth path was found, so it exercised the **broken** version; the fix
+   rests on 1734 tests + 7 mutants, which do not prove React re-renders with the latched value through a
+   real `fs-change` cycle. The operator was shown the 5-step re-drive sequence and chose to skip it
+   (failure mode is visible-but-harmless: the selection moves, nothing is lost). **Do not read the
+   sibling-edit row as covering the shipped fix.** The declined sequence is recorded in the WP5 WIP →
+   "Phase 3 verify-human".
+2. **Two WP4 evidence claims were RETRACTED** — see the ⚠️ CORRECTION under WP4 task 4.4. Neither the
+   deferred restore nor the doc-shrink clamp has ever been proven live, because **the browser supplies
+   the correct answer unaided in both cases**. No code defect; both pure modules remain mutation-proven.
+3. **Carry (d) (comment density, flagged a third consecutive WP) was PAID** — 50 comment lines cut from
+   the two named offenders with all four ⚠️ invariants preserved in tighter form, plus the
+   **prose-vs-code disagreement** that had cost a whole live experiment.
+
+**Carried to the next `/release` gate** per `[[installed-build-verify-deferred-to-release]]`: nothing
+Docs-specific requires the installed `.app` (no PATH/env/external-spawn surface), so the standing
+carry is only the general first-run check already queued from M10.9. **One clause is
+operator-accepted-as-asserted rather than observed:** *"from any workspace"* was driven on **one**
+scratch workspace (the per-workspace architecture is unchanged from M4).
+
+**Open, filed, not blocking:** `…BROWSER-SUPPLIES-THE-ANSWER…` (low — the race path is the one method
+that would genuinely reach the deferred arm; operator's binding decision was **not** to drive it during
+M11) · `…RAF-DOES-NOT-TICK-IN-MCP-BRIDGE-EVAL-CONTEXT` (medium, candidate bridge caveat (h)) ·
+`…JSDOM-CLIENTHEIGHT-IS-ZERO…` (medium) · `…SET-A-CSP-AS-SECOND-LINE-OF-DEFENSE` (medium, app-wide).
 
 ### WP1 verdict (2026-08-01) — markdown render approach
 
@@ -268,6 +387,3 @@ So the real cost of B is **~89 KB minified / ~25 KB gzipped (a 2.3× delta) and 
 **Known latent gaps (COSMETIC, logged):** `img[srcset]` and `track[src]` referencing an external host survive even A's full recipe and are unmodeled — outbound network/beacon references, not script execution, and relevant only because `csp: null` means nothing else blocks the request.
 
 **Backlog items raised:** `SURFACE-2026-08-01-APP-SHIPS-WITH-CSP-NULL-NO-SECOND-LINE-OF-DEFENSE` (medium, arch — decide and record the CSP posture) and `SURFACE-2026-08-01-DOMPURIFY-DEFAULTS-LEAVE-DATA-SVG-AND-STYLE` (low — **moot under this verdict; close it**).
-
-## Session Handoff — 2026-08-02 15:30
-Handed off. See `workflow-system/state/.session.md` to restore.

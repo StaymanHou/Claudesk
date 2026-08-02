@@ -550,7 +550,29 @@ not here. This section holds only what was deliberately NOT addressed.
   can move it (fewer surprises, but the panel stops tracking "the wip I'm actually in" — which is
   `pickInitialDoc`'s whole purpose). (a) is likely right but it is an operator-facing call.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** ✅ **RESOLVED 2026-08-02 at M11 WP5 P3.2 — delete this entry at `feature-finalize`,
+  after its `**Backlog resolved:**` line lands in `CHANGELOG.md`** (the delete-on-resolve invariant:
+  CHANGELOG record first, then the delete, both in one commit).
+  **Operator chose (b) "pin once resolved"** — presented against a LIVE reproduction (reading
+  `older-feature.md` at `scrollTop` 600, a sibling touch dropped the reader at `scrollTop` 0 of
+  `newer-feature.md`), not against a description. Note the finding's own guess ("(a) is likely
+  right") was **declined**: (a) would have kept the reproduced yank *by design*.
+  **Fix:** a fourth precedence tier `settled` in `pickInitialDoc.ts` — `chosen` > `jumpedTo` >
+  `settled` > live `pickInitialDoc` — latched in the `docs_list` response handler and released at
+  exactly three sites (jump arm, refallback arm, and `chooseDoc`, the single user-pick funnel).
+  **⚠️ The first version of the fix shipped a FIFTH path** — caught at verify-self by an adversarial
+  audit. The `"refallback"` arm cleared the latch and wrote nothing, dropping the panel permanently onto
+  the live-compute tier, so after `/session-restore` deletes `.session.md` (**every** restore) a sibling
+  edit reproduced this very defect. Fixed by re-latching onto `decision.selected`. Two wiring-guard
+  bypasses found in the same audit (a count-based guard accepted a one-line edit that rendered the fix
+  inert); the guard now pins release **sites**, not a count.
+  **Verified:** 7 new value tests incl. two non-vacuous named regression tests (the original defect and
+  the fifth path); **7 mutants probed individually**, each attributing to its own guard; gates green at
+  1734 tests. **⚠️ NOT live-verified after the fifth-path fix, by informed operator decision** — the
+  live run predates that fix and exercised the broken version, so the shipped behavior rests on tests +
+  mutants alone. Failure mode is visible-but-harmless (the selection moves; nothing is lost), and the
+  operator declined the 5-step re-drive after being shown it. Full account: the WP5 WIP →
+  P3.1/P3.2 + "Phase 3 verify-human".
 
 ## SURFACE-2026-08-02-QUALITY-WP4-MINOR-BATCH
 - **Source:** feature:review-quality (m11-wp4), 4 MINOR

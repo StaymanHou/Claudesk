@@ -33,7 +33,7 @@ import {
 } from "../../../state/fsChange";
 import { DocMarkdown } from "./DocMarkdown";
 import { latchNext, shouldFetch, type LatchState } from "./fetchLatch";
-import { selectedDoc } from "./pickInitialDoc";
+import { pickInitialDoc, selectedDoc } from "./pickInitialDoc";
 import { decideReload, shouldJump } from "./docsReloadDecision";
 import {
   captureScroll,
@@ -67,10 +67,18 @@ interface DocsPanelProps {
    * workspace being center-staged): both must hold for `.docs-content` to have layout, since
    * `RightPanelHost` display-none's the non-front slot.
    *
-   * ⚠️ WP4 uses this as the retry trigger for a DEFERRED scroll restore, not as a render
-   * gate. A reload that lands while the panel is hidden cannot write `scrollTop` (a
-   * zero-height box silently ignores it), so the offset is held and re-applied when this
-   * flips true. Without it, a reader who switched panels mid-document comes back to the top.
+   * ⚠️ WP4 uses this as the retry trigger for a DEFERRED scroll restore, not as a render gate:
+   * a zero-height box silently ignores a `scrollTop` write, so an offset that cannot be applied
+   * is HELD and re-applied when this flips true.
+   *
+   * ⚠️ CORRECTED at WP5: this used to say the motivating case is "a reload that lands while the
+   * panel is hidden." It is NOT — the reload is *skipped* while hidden (see the `!visibleRef`
+   * gate in the `fs-change` handler) and replayed by the catch-up effect after re-fronting, when
+   * the box is measurable, so that path takes the `"applied"` arm. The deferred arm is reached by
+   * a RACE: a reload that starts while front, then a panel switch during the
+   * `docs_list`→`docs_read` round trip. The old wording caused a WP5 experiment to be designed
+   * against the wrong path — see
+   * `SURFACE-2026-08-02-BROWSER-SUPPLIES-THE-ANSWER-SO-SCROLL-RESTORE-CHECKS-ARE-VACUOUS`.
    */
   panelFront: boolean;
 }
@@ -119,6 +127,31 @@ export function DocsPanel({
   // re-orienting — which is the one job it has.
   const [jumpedTo, setJumpedTo] = useState<string | null>(null);
 
+  // WP5 P3.2 — the LATCHED auto-resolution ("pin once resolved", operator decision).
+  //
+  // ⚠️ Without this, the bottom tier of `selectedDoc` recomputes `pickInitialDoc(docs)` every
+  // render, and since `docs` is refreshed with fresh mtimes on every `fs-change`, editing a
+  // file the reader is NOT looking at moved the selection. Measured live (WP5 P3.1): reading
+  // `older-feature.md` at scrollTop 600, a touch of the sibling `newer-feature.md` swapped the
+  // rendered doc and dropped the reader at scrollTop 0 — with NO reload arm running, so
+  // nothing captured or restored the position.
+  //
+  // The rule this enforces: **only an appear/disappear may move an auto-selection.** Released
+  // by the jump and refallback arms plus `chooseDoc`, which is exactly where re-ranking IS the
+  // intent.
+  //
+  // ⚠️ WHERE this is written matters, and two earlier drafts were both rejected by lint —
+  // worth recording, because the third shape is the only one that is actually correct:
+  //   1. a `useEffect` calling `setSettled` → `set-state-in-effect` ("Calling setState
+  //      synchronously within an effect can trigger cascading renders"), the same
+  //      reach-for-a-state-updater mistake WP2 and WP3 each paid for;
+  //   2. a `useRef` read+written during render → `Cannot access refs during render` (5 errors).
+  //   3. ✅ state, written where the auto-resolution first becomes POSSIBLE — the `docs_list`
+  //      response handler. That is a callback, not render and not an effect body, so there is
+  //      no cascading render and no render-phase ref access. It is also the honest place: the
+  //      latch is a fact about "the answer when the list arrived".
+  const [settled, setSettled] = useState<string | null>(null);
+
   // A one-line note for link outcomes the user should see but that are not errors in
   // the panel: an external open that failed, or a link pointing outside the curated doc
   // set. Cleared on the next successful navigation.
@@ -134,39 +167,21 @@ export function DocsPanel({
   // selection). The `cancelled` flag is the StrictMode double-mount guard used by every
   // async effect in this file's siblings.
   //
-  // ⚠️ The has-fetched latch is an EXPLICIT ref, not `docs !== null`
-  // (SURFACE-2026-08-01-QUALITY-WP2-DOCSPANEL-FETCH-LATCH-ENTANGLED-WITH-DATA, fixed in
-  // WP3 before the render state landed). Deriving the latch from the data made the
-  // effect's re-run depend on its own write, and worked only because BOTH arms happen to
-  // store a non-null value. M11 WP4 adds live reload to this component: a refetch that
-  // resets `docs` to null would re-arm the effect and, against a persistently failing
-  // `docs_list`, loop. Stating the latch separately makes fetch-once a property of the
-  // code rather than an emergent accident. `useRef` (not state) deliberately: flipping it
-  // must not itself schedule a render.
+  // ⚠️ The has-fetched latch is an EXPLICIT ref, never derived from `docs !== null` — deriving
+  // it makes the effect's re-run depend on its own write, and WP4's live reload would re-arm it
+  // and loop against a persistently failing `docs_list`
+  // (SURFACE-2026-08-01-QUALITY-WP2-DOCSPANEL-FETCH-LATCH-ENTANGLED-WITH-DATA). A ref, not
+  // state: flipping it must not schedule a render.
   //
-  // The ref is never reset on a `projectPath` change, and that is sound rather than an
-  // oversight: `CenterStage` keys each `Workspace` by `ws.id` and threads
-  // `workspace.project_path` down, so one mounted host is one project for its entire
-  // lifetime — a different project is a different key and therefore a fresh mount with a
-  // fresh ref. `projectPath` stays in the dep array as documentation of the real input;
-  // it simply cannot change in practice.
-  // ⚠️ The latch is RELEASED by the cleanup, and that is load-bearing — not tidiness.
-  // React StrictMode runs every effect mount → unmount → remount. A latch that is set
-  // before the await and never released deadlocks on exactly that sequence:
-  //   mount   → latch = true, fetch starts
-  //   unmount → cleanup sets cancelled = true
-  //   remount → latch is still true, so the guard returns early and never refetches
-  //   …then the first response lands, sees `cancelled`, and DISCARDS its data
-  // leaving `docs === null` forever, which `docsView` renders as "loading" — a
-  // permanently blank panel. This shipped and was caught at verify-human (2026-08-02).
+  // ⚠️ The latch MUST be released by the cleanup — load-bearing, not tidiness. Set-before-await
+  // and never-released deadlocks under StrictMode's mount → unmount → remount and renders a
+  // permanently blank panel while every automated gate stays green. The transition table and the
+  // full account live in `fetchLatch.ts`, which owns this machine as a pure function so the
+  // sequence is asserted as a VALUE (`fetchLatch.test.ts`) rather than trusted inside a hook.
   //
-  // Releasing the latch on the cancelled path lets the remount re-arm and fetch again,
-  // which is what makes fetch-once correct under StrictMode rather than merely stated.
-  // (The predecessor `docs !== null` latch survived this by accident: it read from state,
-  // which the discarded write never updated, so the remount refetched.)
-  // The latch itself is the pure state machine in `fetchLatch.ts`, driven from here. It
-  // lives in its own module so the mount/unmount/remount sequence is asserted as a VALUE
-  // (`fetchLatch.test.ts`) instead of trusted inside a hook — which is exactly what failed.
+  // The ref is deliberately never reset on a `projectPath` change: `CenterStage` keys each
+  // `Workspace` by `ws.id`, so one mounted host is one project for its whole lifetime. The dep
+  // stays as documentation of the real input.
   const latchRef = useRef<LatchState>("idle");
   useEffect(() => {
     if (!shouldFetch(latchRef.current, visible)) return;
@@ -177,6 +192,12 @@ export function DocsPanel({
         if (cancelled) return;
         latchRef.current = latchNext(latchRef.current, "settle");
         setDocs(entries);
+        // WP5 P3.2 — LATCH the auto-resolution here, where it first becomes possible.
+        // `pickInitialDoc` is pure, so this is the same answer the render would derive; fixing
+        // it now is what stops later mtime churn from moving it. Nothing higher can be set yet
+        // on this path (a user cannot have picked before the list existed), so no guard is
+        // needed — but `selectedDoc`'s precedence would ignore it anyway if one were.
+        setSettled(pickInitialDoc(entries));
         setError(null);
       })
       .catch((e: unknown) => {
@@ -221,23 +242,16 @@ export function DocsPanel({
   // before the content effect so that effect sees the auto-selection on the very first
   // render that has docs — which is what makes the panel open on a rendered document with
   // no click (P2.2, `[PRIOR: primary-surface-is-zero-ceremony-not-a-mode]`).
-  const selected = selectedDoc(chosen, docs, jumpedTo);
+  const selected = selectedDoc(chosen, docs, jumpedTo, settled);
 
   // WP4 — a "re-read the SAME path" signal. Bumped when `fs-change` reports the selected
   // doc's bytes changed.
   //
-  // ⚠️ This exists because the obvious alternative is BROKEN, and it shipped broken for one
-  // live probe before being caught (2026-08-02): clearing `loaded` (`setLoaded(null)`) to
-  // "re-trigger" the fetch does NOT re-trigger it — the effect below keys on `selected`,
-  // which by definition has NOT changed on a content edit. The result was a permanently
-  // EMPTY `.docs-content` (measured: scrollHeight 3034 → 433, no markdown node, no error),
-  // with the list and selection still perfectly correct. Every automated gate was green:
-  // tsc, lint, 1716 unit tests, a clean build, and seven mutation-proven wiring arms.
-  //
-  // It also violated WP3's stated invariant one screen above: `loaded` is stored WITH its
-  // path and currency is DERIVED precisely so the state is never reset in an effect. A nonce
-  // in the dep array is the honest expression of "read it again" — it re-runs the effect
-  // without ever putting the panel into a contentless state.
+  // ⚠️ FORBIDDEN SHAPE: do NOT clear `loaded` (`setLoaded(null)`) to "re-trigger" the fetch.
+  // It does not re-trigger — the effect below keys on `selected`, which by definition has NOT
+  // changed on a content edit — and it leaves the panel permanently contentless. A nonce in the
+  // dep array is the honest expression of "read it again". (Shipped broken once; every
+  // automated gate was green. See the archived WP4 WIP for the incident.)
   const [reloadNonce, setReloadNonce] = useState(0);
 
   useEffect(() => {
@@ -380,6 +394,11 @@ export function DocsPanel({
                 // first jump disabled every later one — a shipped CRITICAL. See the
                 // `jumpedTo` declaration for the full account.
                 setJumpedTo(decision.selected);
+                // WP5 P3.2 — release the latch: a jump is a deliberate re-rank, and a stale
+                // `settled` would outrank the next fall-back (same argument as `jumpedTo`
+                // below). `jumpedTo` outranks `settled` anyway, so this is belt-and-braces
+                // for the case where a later `refallback` clears `jumpedTo`.
+                setSettled(null);
                 setLinkNote(null);
               }
               break;
@@ -397,6 +416,25 @@ export function DocsPanel({
               // precedence) and the panel would keep pointing at a file that no longer
               // exists — the exact stale-render this arm exists to prevent.
               setJumpedTo(null);
+              // WP5 P3.2 — RE-LATCH onto the newly-resolved fall-back answer. Do NOT clear to
+              // null here.
+              //
+              // ⚠️ Clearing was the shipped bug (caught at this phase's verify-self): unlike
+              // `"jump"`, which releases the latch and immediately writes `jumpedTo`, this arm
+              // writes NOTHING — so a `null` latch drops the panel onto the live-compute tier
+              // and leaves it there PERMANENTLY. The next sibling-mtime edit then moves the
+              // selection again, reproducing the very defect this tier exists to fix. And the
+              // trigger is the most routine event in this workflow: `/session-restore` deletes
+              // `.session.md` on every restore (see `docsReloadDecision.ts` — "the routine
+              // case, not an edge case").
+              //
+              // `decision.selected` is `pickInitialDoc(next)` — the fall-back answer computed
+              // from the doc set WITHOUT the vanished file — so latching it cannot point at a
+              // deleted doc, which is what the old comment here was worried about. Note this is
+              // NOT the forbidden "forge a fake user choice": `chosen` stays null (cleared
+              // above), so a later jump-on-appear still fires. Only the auto-resolution is
+              // pinned, which is exactly "pin once resolved" applied to the new answer.
+              setSettled(decision.selected);
               setLinkNote(null);
               break;
           }
@@ -515,12 +553,15 @@ export function DocsPanel({
   // `planRestore` happened to clamp against a momentarily-empty container: correctness
   // resting on an incidental clamp rather than on the transition built for it.
   //
-  // Two things every user pick must do, which is why this is one function and not two call
-  // sites: drop any pending offset (it belongs to the doc being left), and clear `jumpedTo`
-  // (a user pick supersedes wherever the machine had parked us).
+  // THREE things every user pick must do, which is why this is one function and not two call
+  // sites: drop any pending offset (it belongs to the doc being left), clear `jumpedTo`
+  // (a user pick supersedes wherever the machine had parked us), and release the WP5 `settled`
+  // latch (`chosen` outranks it anyway, but leaving it set would resurrect a stale
+  // auto-selection the moment a `refallback` clears `chosen`).
   const chooseDoc = useCallback((relPath: string) => {
     pendingRef.current = pendingNext(pendingRef.current, { type: "reset" });
     setJumpedTo(null);
+    setSettled(null);
     setChosen(relPath);
     setLinkNote(null);
   }, []);

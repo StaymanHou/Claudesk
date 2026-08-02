@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { pickInitialDoc, selectedDoc } from "../docs/pickInitialDoc";
+import { decideReload } from "../docs/docsReloadDecision";
 import type { DocEntry } from "../docsOrder";
 
 // M11 WP3 P2.1 — the auto-select ranking, operator-confirmed 2026-08-02.
@@ -317,6 +318,136 @@ describe("selectedDoc — an explicit pick BEATS auto-selection", () => {
     // a pick made just as the list refreshes would blink away.
     expect(selectedDoc("workflow-system/product/wbs.md", null)).toBe(
       "workflow-system/product/wbs.md",
+    );
+  });
+});
+
+describe("selectedDoc — the `settled` latch pins an auto-selection (WP5 P3.2)", () => {
+  // Fixes a defect REPRODUCED LIVE at WP5 P3.1
+  // (SURFACE-2026-08-02-QUALITY-WP4-SIBLING-EDIT-MOVES-AUTOSELECTION): the bottom tier
+  // recomputes `pickInitialDoc(docs)`, and the caller refreshes `docs` with fresh mtimes on
+  // every `fs-change`, so editing a file the reader was NOT looking at moved the selection —
+  // measured as reading `older-feature.md` at scrollTop 600, then landing at scrollTop 0 of
+  // `newer-feature.md`. Operator decision: "pin once resolved" — only appear/disappear may
+  // move an auto-selection.
+
+  const OLDER = doc("workflow-system/state/wip/older-feature.md", "wip", 1000);
+  const NEWER = doc("workflow-system/state/wip/newer-feature.md", "wip", 2000);
+
+  it("⚠️ THE REGRESSION: a sibling's mtime overtaking the latched doc does NOT move the selection", () => {
+    // Baseline — unlatched, the live compute picks the newest wip.
+    expect(selectedDoc(null, [OLDER, NEWER])).toBe(NEWER.rel_path);
+
+    // The reader is parked on NEWER (latched). Now the SIBLING becomes newest, which is
+    // exactly the live sequence: `older-feature.md` gets touched.
+    const siblingNowNewest = [{ ...OLDER, mtime_ms: 9999 }, NEWER];
+
+    // Without the latch this returns OLDER (the defect). With it, the reader stays put.
+    expect(selectedDoc(null, siblingNowNewest, null, NEWER.rel_path)).toBe(
+      NEWER.rel_path,
+    );
+    // And the un-latched call still moves — proving the fixture actually reproduces the
+    // defect, so the assertion above is not passing vacuously.
+    expect(selectedDoc(null, siblingNowNewest)).toBe(OLDER.rel_path);
+  });
+
+  it("ranks BELOW an explicit pick and below a jump", () => {
+    // The latch is the weakest non-default tier: it must never outrank the user or a jump.
+    expect(
+      selectedDoc(WBS.rel_path, [OLDER, NEWER], null, NEWER.rel_path),
+    ).toBe(WBS.rel_path);
+    expect(
+      selectedDoc(null, [OLDER, NEWER], WBS.rel_path, NEWER.rel_path),
+    ).toBe(WBS.rel_path);
+  });
+
+  it("ranks ABOVE the live default — that is the whole point", () => {
+    // If this inverted, the latch would be inert and the defect would return.
+    expect(selectedDoc(null, [OLDER, NEWER], null, OLDER.rel_path)).toBe(
+      OLDER.rel_path,
+    );
+  });
+
+  it("a cleared latch falls back to the live compute (appear/disappear path)", () => {
+    // The jump and refallback arms clear it, which is where re-ranking IS the intent.
+    expect(selectedDoc(null, [OLDER, NEWER], null, null)).toBe(NEWER.rel_path);
+  });
+
+  it("is inert while the list is still loading", () => {
+    // A latch must not manufacture a path before docs exist… but once set it is a plain
+    // string, so it legitimately survives a refresh that momentarily nulls the list.
+    expect(selectedDoc(null, null, null, null)).toBeNull();
+    expect(selectedDoc(null, null, null, NEWER.rel_path)).toBe(NEWER.rel_path);
+  });
+
+  it("defaults to null, so three-argument callers are unaffected", () => {
+    // Back-compat guard: WP4's call sites pass three args and must keep exact behavior.
+    expect(selectedDoc(null, [OLDER, NEWER], null)).toBe(NEWER.rel_path);
+  });
+
+  it("⚠️ THE FIFTH PATH: the latch survives a refallback, so mtime churn AFTER a disappear still cannot move the selection", () => {
+    // Found at WP5 P3 verify-self, in SHIPPED code, by an adversarial audit. The first fix
+    // released the latch in the `refallback` arm (`setSettled(null)`) by analogy with
+    // `jumpedTo`. But the two arms are NOT symmetric: `"jump"` releases and immediately
+    // writes `jumpedTo`, so a tier above still pins the selection — whereas `"refallback"`
+    // writes NOTHING (chosen=null, jumpedTo=null), so a null latch drops the panel onto the
+    // live-compute tier and leaves it there PERMANENTLY. The next sibling edit then moved the
+    // selection again — the exact defect the tier exists to prevent.
+    //
+    // ⚠️ And the trigger is the most routine event in this workflow: `/session-restore`
+    // deletes `.session.md` on EVERY restore (`docsReloadDecision.ts` calls it "the routine
+    // case, not an edge case"), so this was not a corner.
+    //
+    // Modelled as the caller's sequence, because no single call to a pure function can
+    // express it — the bug lives in the STATE THE ARM LEAVES BEHIND, which is precisely the
+    // blind spot `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]` and the
+    // "extracting a machine proves the MACHINE, not its CALLER" rule both warn about.
+    const SESSION_DOC = doc(
+      "workflow-system/state/.session.md",
+      "session",
+      3000,
+    );
+    const withSession = [OLDER, NEWER, SESSION_DOC];
+
+    // 1. Panel opens: the session pointer is top-ranked and gets latched.
+    const latchedAtOpen = selectedDoc(null, withSession, null, null);
+    expect(latchedAtOpen).toBe(SESSION_DOC.rel_path);
+
+    // 2. `/session-restore` deletes it → the refallback arm resolves the new answer.
+    const afterDelete = [OLDER, NEWER];
+    const decision = decideReload({
+      prev: withSession,
+      next: afterDelete,
+      selected: latchedAtOpen,
+    });
+    // Narrow FIRST, then read the arm's fields — `chosen`/`selected` exist only on this
+    // variant, and reading them before narrowing does not type-check.
+    if (decision.kind !== "refallback") {
+      throw new Error(`expected refallback, got ${decision.kind}`);
+    }
+    expect(decision.chosen).toBeNull();
+    // The arm RE-LATCHES onto this rather than clearing to null. That is the fix.
+    const relatched = decision.selected;
+    expect(relatched).toBe(NEWER.rel_path);
+
+    // 3. CC touches the SIBLING, making it newest. `decideReload` says "none" — no arm runs —
+    //    but the caller still calls setDocs(next), refreshing every mtime.
+    const siblingNowNewest = [{ ...OLDER, mtime_ms: 9999 }, NEWER];
+    expect(
+      decideReload({
+        prev: afterDelete,
+        next: siblingNowNewest,
+        selected: relatched,
+      }).kind,
+    ).toBe("none");
+
+    // THE ASSERTION: the selection must HOLD.
+    expect(selectedDoc(null, siblingNowNewest, null, relatched)).toBe(
+      NEWER.rel_path,
+    );
+    // Non-vacuity: with the latch cleared (the shipped bug), the very same inputs MOVE it.
+    expect(selectedDoc(null, siblingNowNewest, null, null)).toBe(
+      OLDER.rel_path,
     );
   });
 });
