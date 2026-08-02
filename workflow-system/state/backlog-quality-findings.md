@@ -526,6 +526,36 @@ not here. This section holds only what was deliberately NOT addressed.
 - **Priority:** low
 - **Status:** pending
 
+# m11-wp5-milestone-exit-verify — 2026-08-02
+
+*Reviewer: `code-quality-reviewer` against ship baseline `0951d2d`. 0 CRITICAL / 2 MAJOR / 2 MINOR.
+**All four were FIXED IN PLACE** — MAJOR-1 was a demonstrated silent-pass hole in a guard written
+minutes earlier, MAJOR-2 re-inflated comment density, and both MINORs were stale/over-claiming
+comments. Only the reviewer's forward-looking observation is carried below.*
+
+## SURFACE-2026-08-02-QUALITY-WP5-COMMENT-DENSITY-NEEDS-A-BUDGET-NOT-A-TRIM
+- **Source:** feature:review-quality (m11-wp5)
+- **Target level:** feature (the next touch of `DocsPanel.tsx`)
+- **Type:** tech-debt (readability, process)
+- **Summary:** `DocsPanel.tsx` comment density has now been flagged **four consecutive reviews**
+  (WP2 → WP3 → WP4 → WP5). WP5 trimmed its two named offenders **and still shipped at 48%** because
+  the new `settled` documentation was itself larger than the blocks it replaced; a post-review prune
+  brought it to **46% / 650 lines** with all 25 ⚠️ markers intact. The reviewer's judgment is that
+  per-WP trimming is not converging: *"the carry needs a density **budget**, not another trim pass."*
+- **Context:** This is not aesthetics. WP4's reviewer judged it **functional** because both genuine WP4
+  defects sat inside the densest region — and WP5 then had its **P2.1 live experiment misdesigned by
+  stale prose in that same region** (a header described the deferred arm's motivating case as one the
+  skip-while-hidden gate makes impossible). Two milestones have now paid real time to this file's prose.
+- **Suggested action:** Adopt an explicit rule rather than another sweep. Candidates: (a) a density
+  ceiling for this file enforced by a test (it already has `docsPanelStyles`/wiring guards, so the
+  mechanism exists); (b) a hard convention that **process/provenance narration lives in the WIP and
+  only invariants + forbidden shapes live at the code** — WP5 applied this by hand and it worked, so
+  codifying it is cheap; (c) split `DocsPanel.tsx` (650 lines, 4 IPC call sites) so no single file
+  carries this much coordination. ⚠️ Do NOT strip ⚠️-marked invariants — those are the ones that
+  stopped real regressions.
+- **Priority:** low
+- **Status:** pending
+
 # m11-wp4-docs-live-reload — 2026-08-02
 
 ## SURFACE-2026-08-02-QUALITY-WP4-SIBLING-EDIT-MOVES-AUTOSELECTION

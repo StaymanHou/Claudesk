@@ -385,7 +385,14 @@ describe("selectedDoc — the `settled` latch pins an auto-selection (WP5 P3.2)"
     expect(selectedDoc(null, [OLDER, NEWER], null)).toBe(NEWER.rel_path);
   });
 
-  it("⚠️ THE FIFTH PATH: the latch survives a refallback, so mtime churn AFTER a disappear still cannot move the selection", () => {
+  it("⚠️ THE FIFTH PATH (documents the sequence; the WIRING guard is what pins it)", () => {
+    // ⚠️ READ THIS BEFORE TRUSTING THIS TEST AS THE PIN. It drives the real `decideReload` and
+    // asserts on `decision.selected`, i.e. it models the CORRECT caller — so it structurally
+    // cannot catch a caller that ignores that value. Measured: reverting the fix (refallback
+    // clearing instead of re-latching) leaves this file 35/35 GREEN; only
+    // `docsPanelWiring.test.ts`'s site guard fails. This test is executable documentation of
+    // the sequence; the wiring guard prevents the regression. Naming it otherwise would be the
+    // same category error this milestone spent two phases un-learning.
     // Found at WP5 P3 verify-self, in SHIPPED code, by an adversarial audit. The first fix
     // released the latch in the `refallback` arm (`setSettled(null)`) by analogy with
     // `jumpedTo`. But the two arms are NOT symmetric: `"jump"` releases and immediately

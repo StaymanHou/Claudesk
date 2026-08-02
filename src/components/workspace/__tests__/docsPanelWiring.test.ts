@@ -510,7 +510,17 @@ describe("WP5 P3.2 — the `settled` latch is WIRED, not just implemented", () =
     // vigilance at each call site. Assert the release sits inside that function body.
     const start = panel.indexOf("const chooseDoc = useCallback");
     expect(start).toBeGreaterThan(-1);
-    const body = panel.slice(start, panel.indexOf("}, [])", start));
+    // ⚠️ The end delimiter must be BOUNDED and CHECKED. `"}, [])"` is the *empty* dependency
+    // array: the moment `chooseDoc` gains a dep (`}, [dep]);`) `indexOf` returns -1, and
+    // `slice(start, -1)` silently widens to nearly the whole file — so the guard would keep
+    // passing while the release had moved out of the funnel, which is exactly the M-D bypass
+    // this test exists to catch. Found at code review; the failure mode is a SILENT PASS.
+    // Match any dep array, and assert the slice is real and plausibly one function long.
+    const rest = panel.slice(start);
+    const endRel = rest.search(/\}\s*,\s*\[[^\]]*\]\s*\)/);
+    expect(endRel).toBeGreaterThan(0);
+    const body = rest.slice(0, endRel);
+    expect(body.length).toBeLessThan(2000); // a function body, not half the file
     expect(body).toContain("setSettled(null)");
   });
 });

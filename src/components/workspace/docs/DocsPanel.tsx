@@ -140,16 +140,10 @@ export function DocsPanel({
   // by the jump and refallback arms plus `chooseDoc`, which is exactly where re-ranking IS the
   // intent.
   //
-  // ⚠️ WHERE this is written matters, and two earlier drafts were both rejected by lint —
-  // worth recording, because the third shape is the only one that is actually correct:
-  //   1. a `useEffect` calling `setSettled` → `set-state-in-effect` ("Calling setState
-  //      synchronously within an effect can trigger cascading renders"), the same
-  //      reach-for-a-state-updater mistake WP2 and WP3 each paid for;
-  //   2. a `useRef` read+written during render → `Cannot access refs during render` (5 errors).
-  //   3. ✅ state, written where the auto-resolution first becomes POSSIBLE — the `docs_list`
-  //      response handler. That is a callback, not render and not an effect body, so there is
-  //      no cascading render and no render-phase ref access. It is also the honest place: the
-  //      latch is a fact about "the answer when the list arrived".
+  // ⚠️ FORBIDDEN SHAPES for the write, both rejected by lint: a `useEffect` calling
+  // `setSettled` (`set-state-in-effect`) and a `useRef` read+written during render
+  // (`Cannot access refs during render`). It belongs in the `docs_list` response handler — a
+  // callback, so neither rule fires. (Draft history: the WP5 WIP.)
   const [settled, setSettled] = useState<string | null>(null);
 
   // A one-line note for link outcomes the user should see but that are not errors in
@@ -394,10 +388,10 @@ export function DocsPanel({
                 // first jump disabled every later one — a shipped CRITICAL. See the
                 // `jumpedTo` declaration for the full account.
                 setJumpedTo(decision.selected);
-                // WP5 P3.2 — release the latch: a jump is a deliberate re-rank, and a stale
-                // `settled` would outrank the next fall-back (same argument as `jumpedTo`
-                // below). `jumpedTo` outranks `settled` anyway, so this is belt-and-braces
-                // for the case where a later `refallback` clears `jumpedTo`.
+                // WP5 P3.2 — release the latch. This upholds the module's load-bearing
+                // invariant: **`settled !== null` implies `settled` IS the selection.** Both
+                // higher tiers clear it when they take over, which is what makes a stale
+                // `settled` pointing at a doc nobody is showing unreachable.
                 setSettled(null);
                 setLinkNote(null);
               }
@@ -416,24 +410,12 @@ export function DocsPanel({
               // precedence) and the panel would keep pointing at a file that no longer
               // exists — the exact stale-render this arm exists to prevent.
               setJumpedTo(null);
-              // WP5 P3.2 — RE-LATCH onto the newly-resolved fall-back answer. Do NOT clear to
-              // null here.
-              //
-              // ⚠️ Clearing was the shipped bug (caught at this phase's verify-self): unlike
-              // `"jump"`, which releases the latch and immediately writes `jumpedTo`, this arm
-              // writes NOTHING — so a `null` latch drops the panel onto the live-compute tier
-              // and leaves it there PERMANENTLY. The next sibling-mtime edit then moves the
-              // selection again, reproducing the very defect this tier exists to fix. And the
-              // trigger is the most routine event in this workflow: `/session-restore` deletes
-              // `.session.md` on every restore (see `docsReloadDecision.ts` — "the routine
-              // case, not an edge case").
-              //
-              // `decision.selected` is `pickInitialDoc(next)` — the fall-back answer computed
-              // from the doc set WITHOUT the vanished file — so latching it cannot point at a
-              // deleted doc, which is what the old comment here was worried about. Note this is
-              // NOT the forbidden "forge a fake user choice": `chosen` stays null (cleared
-              // above), so a later jump-on-appear still fires. Only the auto-resolution is
-              // pinned, which is exactly "pin once resolved" applied to the new answer.
+              // ⚠️ RE-LATCH — do NOT clear to null. Unlike `"jump"`, this arm writes nothing
+              // else, so a null latch would drop the panel onto the live-compute tier
+              // PERMANENTLY and the next sibling-mtime edit would move the selection again.
+              // `decision.selected` is `pickInitialDoc(next)` — computed WITHOUT the vanished
+              // file — so it cannot point at a deleted doc. Not a forged user choice either:
+              // `chosen` stays null above, so jump-on-appear still fires.
               setSettled(decision.selected);
               setLinkNote(null);
               break;

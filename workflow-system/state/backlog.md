@@ -1,5 +1,18 @@
 # Backlog
 
+## Code-quality findings — m11-wp5-milestone-exit-verify (2026-08-02)
+- **Pointer:** 1 open item of 4 findings (0 CRITICAL / 2 MAJOR / 2 MINOR — **all four fixed in place at
+  review**, incl. a demonstrated silent-pass hole in a wiring guard). The one carried item is the
+  reviewer's forward-looking judgment that `DocsPanel.tsx` comment density, flagged **four consecutive
+  reviews**, needs a **budget rather than another trim pass**. Full body:
+  [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
+  `# m11-wp5-milestone-exit-verify — 2026-08-02`.
+- **Priority:** low
+- **Status:** pending
+- **Pickup shape:** fold into the next WP that touches `DocsPanel.tsx` — pick one of the three
+  candidate rules (density ceiling as a test / provenance-in-WIP convention / split the file) rather
+  than sweeping again. Two milestones have already paid real time to this file's prose.
+
 ## SURFACE-2026-08-02-BROWSER-SUPPLIES-THE-ANSWER-SO-SCROLL-RESTORE-CHECKS-ARE-VACUOUS
 - **Source:** feature:build (M11 WP5 Phase 2, carries (a) + (b)); **revised at that phase's
   verify-self audit, which reversed two of this entry's original claims**

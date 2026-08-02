@@ -1,6 +1,6 @@
 ---
-stage: verify-codify
-state: complete (all phases)
+stage: ship
+state: complete
 drive_mode: autopilot
 wp: "M11 WP5 — Milestone-exit verify"
 milestone: "Milestone 11: Workflow-docs markdown viewer"
@@ -1059,7 +1059,7 @@ Check 5 earns its place because `selectedDoc`'s **public signature changed**: a 
 arity is worth one direct assertion rather than trusting `tsc`.
 
 ## Current Node
-- **Path:** Feature > ✅ ALL PHASES COMPLETE — ready to ship
+- **Path:** Feature > ✅ SHIPPED — commit `0951d2d` (NOT pushed; 42 commits now ahead of origin/main, operator's call)
 - **Active scope:** none — all **42** Work Tree checkboxes are `[x]` (Phases 1–3, each with impl + verify-auto + verify-self + verify-human + verify-codify). Next: `/feature-ship`.
 - **Blocked:** none
 - **⚠️ Standing gap, operator-accepted:** the fifth-path fix is **not live-verified** — the live run predates it. Rests on 1734 tests + 7 mutants. The operator declined the 5-step re-drive after being shown it; recorded in `wbs.md`'s verdict and the backlog entry so neither reads as verified.
@@ -1096,6 +1096,84 @@ Recorded here at plan time because each one has already cost this milestone real
 - **The integration-boundary rule** (which dissolved WP4's Phase 4 into Phase 3): a phase whose only
   content is another phase's verification has no independent deliverable. Phases 2 and 3 here each
   carry their own findings/decisions, not just re-checks of Phase 1.
+
+## Code-Quality Review — m11-wp5-milestone-exit-verify
+
+*Reviewer: `code-quality-reviewer` against ship baseline `0951d2d`. **0 CRITICAL / 2 MAJOR / 2 MINOR**.
+**Both MAJOR and both MINOR were FIXED IN PLACE** rather than backlogged — see the dispositions below;
+each was a small, self-contained correction to code written in this same WP, and MAJOR-1 was a
+demonstrated silent-pass hole in a guard written minutes earlier.*
+
+### Strengths (reviewer's, abridged)
+- The **retraction discipline** — two previously-approved live proofs withdrawn across four durable
+  records, with the mechanism explained and the code exonerated: *"a repo that reverses its own green
+  verdicts is unusually trustworthy."*
+- The fifth-path defect was found **inside the same phase that introduced it**, and the honest M-E
+  correction applies this milestone's "the machine, not its caller" lesson to the author's own fix.
+- `setSettled(decision.selected)` is correct on a non-obvious axis: `decision.selected` is
+  `pickInitialDoc(next)` computed *without* the vanished file, so re-latching **structurally cannot**
+  point at a deleted doc — the old comment's fear is dissolved rather than guarded.
+- The position-not-arity regexes were **verified to survive a Prettier reflow to five multi-line args**.
+
+### MAJOR-1 — ⚠️ FIXED. A silent-pass hole in the `chooseDoc` funnel guard.
+`panel.indexOf("}, [])")` matches the **empty** dependency array. The moment `chooseDoc` gains a dep
+(`}, [dep]);`), `indexOf` returns `-1` and `slice(start, -1)` **silently widens to nearly the whole
+file** — so the guard keeps passing while the release has moved out of the funnel, i.e. **the exact M-D
+bypass it exists to catch goes undetected.** The reviewer demonstrated it end-to-end. Verified here by
+reading the code, then fixed: match **any** dep array (`/\}\s*,\s*\[[^\]]*\]\s*\)/`), assert the slice
+index is `> 0`, and bound the body (`< 2000` chars — a function, not half a file). Re-probed after: the
+bypass now **fails**, and for the right reason rather than by luck. *(A guard whose failure mode is a
+silent pass is precisely what `[[verify-the-mutation-landed]]` exists to prevent — and I wrote it.)*
+
+### MAJOR-2 — ⚠️ FIXED. Carry (d) was RE-INFLATED by my own new code.
+Reviewer measured, and I confirmed: WP3 41% → WP4 45% → **WP5 ship 48%**, net **+35** comment lines.
+The two new `settled` blocks were individually **larger than the offenders carry (d) named** — 23
+comment lines above one `useState` (vs. the flagged 15-line block I had just cut to 5) and 18 above one
+`setSettled(...)`. So the trim was real on its two targets while the file moved the wrong way.
+**Fixed** by pruning exactly what the reviewer named as prunable-without-invariant-loss: the
+three-rejected-drafts **process narrative** (kept as a 4-line ⚠️ FORBIDDEN SHAPES rule; the draft
+history lives in this WIP) and the `refallback` block's re-telling of the fifth-path incident (kept the
+mechanism, dropped the story the regression test already tells). **Now 46%, 650 lines, and all 25 ⚠️
+markers intact** (verified by count, not eyeballed).
+⚠️ **The reviewer's deeper point stands and is NOT closed by this trim:** four consecutive flags on one
+file means the carry *"needs a density **budget**, not another trim pass."* Filed as a MINOR-batch item.
+
+### MINOR-1 — ⚠️ FIXED. The fifth-path test's title over-claimed.
+It drives the real `decideReload` and asserts on `decision.selected`, so it models the **correct**
+caller and cannot catch one that ignores it (measured: reverting the fix leaves that file 35/35 green).
+Renamed to *"documents the sequence; the WIRING guard is what pins it"* with the measurement in the
+comment. *(A test named after a defect it structurally cannot detect is the same category error this
+milestone spent two phases un-learning.)*
+
+### MINOR-2 — ⚠️ FIXED. A justification that went stale within its own commit.
+The jump arm's release was documented as "belt-and-braces for the case where a later `refallback`
+clears `jumpedTo`" — but `refallback` now **re-latches**, so that reason no longer holds. The line is
+still correct; the *reason* was one commit stale. Rewritten to state the actual invariant the reviewer
+surfaced and the diff never stated outright: **`settled !== null` implies `settled` IS the selection**,
+because both higher tiers clear it when they take over — which is what makes a stale pointer to a
+nonexistent doc unreachable.
+
+### Assessment (reviewer's, key judgments)
+- **Correctness: sound.** The reviewer independently traced all three writers of `settled`, derived the
+  invariant above, and checked the `docs_list` `.catch` recovery path and the initial-fetch/`runReload`
+  race — **no defect in either**.
+- **On the four-tier shape: not yet a smell.** Each tier is a distinct *authority* (user / jump /
+  latched-auto / live-auto), not a special case of another, and the precedence is pure and
+  mutation-proven. A `selectionSource` discriminated union would encode the invariant in the type
+  system and is worth doing **if a fifth tier ever appears** — "proposing it now would be refactoring
+  ahead of the evidence."
+- **On the missing live re-drive:** defensible **only because the wiring guard holds the line** — which
+  is why MAJOR-1 was the highest-value item in the diff, above the comment trim. That is exactly why it
+  was fixed rather than backlogged.
+- *"Future readers will find the logic clear and the file tiring; the WIP's own honesty is what keeps
+  this a well-built change rather than a well-narrated one."*
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives this WIP.
+
+**Gate after all four fixes:** `tsc` 0 · lint 0 errors · `format:check` clean · **1734 tests / 140
+files** · the M-D bypass re-probed and now caught.
 
 ## Test Triage — the four WP5 `settled`-latch wiring guards (`docsPanelWiring.test.ts`)
 Classification: **Obsolete test** — they pin an implementation shape that WP5 itself abandoned mid-task.
