@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   docContentView,
   docsView,
@@ -25,9 +26,26 @@ import {
   orderDocs,
   type DocEntry,
 } from "../docsOrder";
+import {
+  appliesToWorkspace,
+  FS_CHANGE_EVENT,
+  type FsChange,
+} from "../../../state/fsChange";
 import { DocMarkdown } from "./DocMarkdown";
 import { latchNext, shouldFetch, type LatchState } from "./fetchLatch";
 import { selectedDoc } from "./pickInitialDoc";
+import { decideReload, shouldJump } from "./docsReloadDecision";
+import {
+  captureScroll,
+  planRestore,
+  readGeometry,
+} from "./docsScrollRestore";
+import {
+  hasPending,
+  NO_PENDING,
+  pendingNext,
+  type PendingRestore,
+} from "./pendingRestore";
 import {
   makeDocLinkClickHandler,
   type DocLinkClickEvent,
@@ -38,9 +56,31 @@ interface DocsPanelProps {
   projectPath: string;
   /** Whether this host is the center-staged workspace (gates the initial fetch). */
   visible: boolean;
+  /**
+   * The owning workspace's id — WP4 needs it to filter the broadcast `fs-change` channel
+   * down to this workspace's own events (`appliesToWorkspace`). The watcher emits one event
+   * stream for all workspaces, so every consumer filters by its own id.
+   */
+  workspaceId: string;
+  /**
+   * Whether the Docs slot is the FRONTED panel. Distinct from `visible` (which is about the
+   * workspace being center-staged): both must hold for `.docs-content` to have layout, since
+   * `RightPanelHost` display-none's the non-front slot.
+   *
+   * ⚠️ WP4 uses this as the retry trigger for a DEFERRED scroll restore, not as a render
+   * gate. A reload that lands while the panel is hidden cannot write `scrollTop` (a
+   * zero-height box silently ignores it), so the offset is held and re-applied when this
+   * flips true. Without it, a reader who switched panels mid-document comes back to the top.
+   */
+  panelFront: boolean;
 }
 
-export function DocsPanel({ projectPath, visible }: DocsPanelProps) {
+export function DocsPanel({
+  projectPath,
+  visible,
+  workspaceId,
+  panelFront,
+}: DocsPanelProps) {
   const [docs, setDocs] = useState<DocEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,6 +205,23 @@ export function DocsPanel({ projectPath, visible }: DocsPanelProps) {
   // no click (P2.2, `[PRIOR: primary-surface-is-zero-ceremony-not-a-mode]`).
   const selected = selectedDoc(chosen, docs);
 
+  // WP4 — a "re-read the SAME path" signal. Bumped when `fs-change` reports the selected
+  // doc's bytes changed.
+  //
+  // ⚠️ This exists because the obvious alternative is BROKEN, and it shipped broken for one
+  // live probe before being caught (2026-08-02): clearing `loaded` (`setLoaded(null)`) to
+  // "re-trigger" the fetch does NOT re-trigger it — the effect below keys on `selected`,
+  // which by definition has NOT changed on a content edit. The result was a permanently
+  // EMPTY `.docs-content` (measured: scrollHeight 3034 → 433, no markdown node, no error),
+  // with the list and selection still perfectly correct. Every automated gate was green:
+  // tsc, lint, 1716 unit tests, a clean build, and seven mutation-proven wiring arms.
+  //
+  // It also violated WP3's stated invariant one screen above: `loaded` is stored WITH its
+  // path and currency is DERIVED precisely so the state is never reset in an effect. A nonce
+  // in the dep array is the honest expression of "read it again" — it re-runs the effect
+  // without ever putting the panel into a contentless state.
+  const [reloadNonce, setReloadNonce] = useState(0);
+
   useEffect(() => {
     if (selected === null) return;
     let cancelled = false;
@@ -182,10 +239,152 @@ export function DocsPanel({ projectPath, visible }: DocsPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [selected, projectPath]);
+    // `reloadNonce` is a deliberate re-run trigger, not a value the body reads.
+  }, [selected, projectPath, reloadNonce]);
 
   // Current-for-this-selection, or nothing. This is the derivation described above.
   const current = loaded !== null && loaded.path === selected ? loaded : null;
+
+  // ── WP4 — live reload on `fs-change` ──────────────────────────────────────────
+  //
+  // Three responses, decided by `decideReload` (a pure diff of the re-listed doc set):
+  //   content changed → re-read + re-render IN PLACE, scroll preserved, selection untouched
+  //   a doc appeared  → re-rank and jump (unless the user has an explicit pick)
+  //   a doc vanished  → fall back to the ranking, CLEARING the explicit pick
+  //
+  // ⚠️ The decision comes from diffing the LIST, never from `FsChange.kind` — that field is
+  // documented as "a hint only" and the backend folds a mixed 200ms batch to `Other`, so a
+  // delete+create of `.session.md` in one window is indistinguishable from the event itself.
+  //
+  // Latest-refs, not deps: this listener is registered ONCE per workspace and must read the
+  // CURRENT docs/selection at event time without re-subscribing on every keystroke CC makes.
+  // The same latest-ref discipline `RightPanelHost` uses for its own `fs-change` consumer.
+  //
+  // ⚠️ Synced in an EFFECT, not during render. `react-hooks/refs` rejects `ref.current = x`
+  // in the render body ("Cannot update ref during render") and the rule is right about the
+  // shape: a render-phase write is discarded work under a re-render that React throws away,
+  // and StrictMode's double render makes it happen for real. The effect runs after commit,
+  // which is also exactly when the values become the ones an event handler should see.
+  const docsRef = useRef<DocEntry[] | null>(null);
+  const selectedRef = useRef<string | null>(null);
+  const chosenRef = useRef<string | null>(null);
+  useEffect(() => {
+    docsRef.current = docs;
+    selectedRef.current = selected;
+    chosenRef.current = chosen;
+  }, [docs, selected, chosen]);
+
+  // The offset waiting to be (re-)applied, as a pure state machine (`pendingRestore.ts`)
+  // rather than an ad-hoc ref pair.
+  //
+  // ⚠️ A ref, not state: holding an offset must NOT schedule a render (the write is a DOM
+  // side effect, not rendered output), and the retry effect reads it synchronously after the
+  // content swap. Modelled as a machine because "held across a failed apply" is exactly the
+  // property a hook gets wrong silently — see the module header for the predecessor bug.
+  const pendingRef = useRef<PendingRestore>(NO_PENDING);
+
+  // Re-apply a held offset once the box is measurable again. Runs after every content commit,
+  // and — via `panelFront`/`visible` — when the panel is re-fronted or the workspace
+  // re-focused, which is what closes the hidden-reload case.
+  useEffect(() => {
+    if (!hasPending(pendingRef.current)) return;
+    const el = contentRef.current;
+    const plan = planRestore(readGeometry(el), pendingRef.current.offset);
+    if (plan.apply && el !== null) {
+      el.scrollTop = plan.scrollTop;
+      pendingRef.current = pendingNext(pendingRef.current, { type: "applied" });
+    } else {
+      // Still unmeasurable — the offset STAYS held for the next opportunity. Dropping it
+      // here is the "came back to the top" bug.
+      pendingRef.current = pendingNext(pendingRef.current, { type: "deferred" });
+    }
+  }, [current, panelFront, visible]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    // The `cancelled` guard is the StrictMode async-listen lesson: the cleanup can run before
+    // `listen()` resolves, and without it the first subscription's unlisten is never captured
+    // → a double listener.
+    void listen<FsChange>(FS_CHANGE_EVENT, (event) => {
+      if (!appliesToWorkspace(event.payload, workspaceId)) return;
+      const { paths } = event.payload;
+      // A git-meta-only event (no worktree paths) cannot have changed a doc.
+      if (paths.length === 0) return;
+
+      const prev = docsRef.current;
+      if (prev === null) return; // list hasn't loaded yet; the initial fetch will win.
+
+      void invoke<DocEntry[]>("docs_list", { root: projectPath })
+        .then((next) => {
+          if (cancelled) return;
+          const sel = selectedRef.current;
+          const decision = decideReload({ prev, next, selected: sel });
+
+          // The list is refreshed on EVERY event regardless of the decision — that is how
+          // mtimes advance, so the next diff compares against current data. Never set to
+          // `null`: that would re-arm the fetch latch (see the latch comment above).
+          setDocs(next);
+          setError(null);
+
+          switch (decision.kind) {
+            case "none":
+              break;
+            case "content": {
+              // Capture BEFORE the content swap, then let the retry effect above restore it
+              // once React has committed the new text.
+              const offset = captureScroll(
+                readGeometry(contentRef.current),
+                pendingRef.current.offset,
+              );
+              pendingRef.current = pendingNext(pendingRef.current, {
+                type: "hold",
+                offset,
+              });
+              // Re-read the same path via the nonce. ⚠️ NOT `setLoaded(null)` — see the
+              // nonce's declaration: clearing `loaded` cannot re-trigger an effect keyed on
+              // `selected` (unchanged on a content edit) and leaves the panel EMPTY.
+              setReloadNonce((n) => n + 1);
+              break;
+            }
+            case "jump":
+              // An explicit pick is never overridden by a jump.
+              if (shouldJump(chosenRef.current) && decision.selected !== null) {
+                pendingRef.current = pendingNext(pendingRef.current, {
+                  type: "reset",
+                });
+                setChosen(decision.selected);
+                setLinkNote(null);
+              }
+              break;
+            case "refallback":
+              // ⚠️ CLEAR the sentinel (back to "unchosen"), never re-point it at the
+              // fall-back answer — that would forge a fake user choice and suppress the next
+              // legitimate jump-on-appear.
+              pendingRef.current = pendingNext(pendingRef.current, {
+                type: "reset",
+              });
+              setChosen(decision.chosen);
+              setLinkNote(null);
+              break;
+          }
+        })
+        .catch(() => {
+          // A failed refresh leaves the current list in place rather than blanking the
+          // panel — the reader keeps what they had, and the next event retries.
+        });
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [workspaceId, projectPath]);
 
   const ordered = docs ? orderDocs(docs) : [];
   // ONE view at a time, decided by a pure function so the exclusivity is testable as a

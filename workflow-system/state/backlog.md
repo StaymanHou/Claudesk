@@ -1,5 +1,32 @@
 # Backlog
 
+## SURFACE-2026-08-02-JSDOM-CLIENTHEIGHT-IS-ZERO-FOR-VISIBLE-ELEMENTS-TOO
+- **Source:** feature:build (M11 WP4 Phase 2)
+- **Target level:** product:arch (testing posture)
+- **Type:** gap
+- **Summary:** In vitest+jsdom, `clientHeight` is **`0` for visible elements just as much as
+  for `display:none` ones** — jsdom has no layout engine — while `scrollTop` is a plain
+  writable property that persists whatever is assigned. Measured directly (2026-08-02), not
+  inferred from docs.
+- **Context:** Any test whose property depends on element geometry (visibility, size,
+  overflow, scroll offset, `getBoundingClientRect`) **cannot distinguish laid-out from hidden**
+  in jsdom, so a guard keyed on measured geometry passes **vacuously** — and passes equally
+  against code with the logic inverted. This is the same failure class as
+  `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`, reached from a
+  different direction: not a source-text proxy, but a *runtime environment* that cannot
+  represent the states under test. It bit WP4 Phase 2, whose load-bearing arm is "a reload
+  landing while the Docs panel is `display:none` must not clobber the remembered scroll
+  offset" — the originally-planned element-sniffing signature would have shipped a
+  permanently-green test for it.
+- **Suggested action:** Record the pattern that works in `arch.md`'s testing section: take
+  geometry as an **injected value**, keep the DOM read to one thin function, and verify the
+  read itself live via the MCP bridge. Worth stating repo-wide because there is no
+  component-render harness (`SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS`), so jsdom
+  is the default reach for anything DOM-shaped. Consider auditing existing jsdom tests that
+  assert on geometry — none known, but none audited either.
+- **Priority:** medium
+- **Status:** pending
+
 ## Code-quality findings — m11-wp3-docs-render-and-navigation (2026-08-02)
 - **Pointer:** **3 MINOR** (0 CRITICAL, 0 MAJOR remaining) from `code-quality-reviewer` against ship baseline `6f6df23`. **All 4 MAJOR were FIXED IN PLACE, not backlogged** — three were verified by reproducing the reviewer's mutations first, and one of them (folding an empty-href bail into the anchor guard) **passed the full 1645-test suite while re-opening the `[click]()` webview-hijack hole this WP had just fixed**. The root cause the reviewer named — *"the remedy is not more `?raw` arms but mutation-probing the component rather than the copy of it"* — was acted on: the click handler was extracted to `handleDocLinkClick.ts` so the behavioral test **imports the real code**, and the source-order guard was deleted rather than re-patched (that shape had failed twice). Also fixed: `resolveDocLink`'s `fragment` was computed, documented, and discarded by its only caller, so `wbs.md#section` links landed at the top of the doc while the comment said otherwise. The 3 remaining MINOR: comment density past useful (⚠️ flagged by the *previous* WP's review too, and it grew), `selected` recomputation feeding the content effect (becomes live at WP4), and `headingSlug` lacking GitHub's collision suffix. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m11-wp3-docs-render-and-navigation — 2026-08-02`.
 - **Priority:** low (all)

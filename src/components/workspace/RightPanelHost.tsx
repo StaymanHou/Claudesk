@@ -1263,7 +1263,12 @@ export function RightPanelHost({
             style={{ display: panel === "docs" ? "flex" : "none" }}
           >
             <Suspense fallback={null}>
-              <DocsPanel projectPath={projectPath} visible={visible} />
+              <DocsPanel
+                projectPath={projectPath}
+                visible={visible}
+                workspaceId={workspaceId}
+                panelFront={panel === "docs"}
+              />
             </Suspense>
           </div>
         )}

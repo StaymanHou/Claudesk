@@ -107,8 +107,30 @@ describe("IPC wiring — stringly-typed across the boundary, invisible to tsc", 
     expect(panel).toContain("{ root: projectPath, path: selected }");
   });
 
-  it("passes projectPath down from the host to the panel", () => {
-    expect(host).toContain("<DocsPanel projectPath={projectPath}");
+  it("passes all four props down from the host to the panel", () => {
+    // ⚠️ REWRITTEN at WP4 (2026-08-02). This previously asserted the single-line string
+    // `"<DocsPanel projectPath={projectPath}"`, which broke the moment WP4 added two props
+    // and Prettier reflowed the element to multi-line — while the prop was still passed
+    // correctly. That is the exact trap CLAUDE.md names: "another silently stopped matching
+    // after Prettier reflowed the file… never assert formatted multi-line expressions."
+    // (This file had already paid for it once at WP2.)
+    //
+    // Fix: flatten whitespace before matching, so the assertion is about the CODE rather
+    // than about where Prettier chose to wrap.
+    const flat = host.replace(/\s+/g, " ");
+    // Emptiness meta-guard: `flat` of an empty import would be "", and every `toContain`
+    // below would then... still fail, but for the wrong reason. Assert the haystack is real.
+    expect(flat.length).toBeGreaterThan(1000);
+
+    const mount = /<DocsPanel\b([^>]*)\/>/.exec(flat)?.[1] ?? "";
+    expect(mount).not.toBe("");
+    // All four props the panel requires. `workspaceId` and `panelFront` are WP4's:
+    // the first scopes the `fs-change` subscription to this workspace, the second is the
+    // retry trigger for a scroll restore deferred while the panel was display:none.
+    expect(mount).toContain("projectPath={projectPath}");
+    expect(mount).toContain("visible={visible}");
+    expect(mount).toContain("workspaceId={workspaceId}");
+    expect(mount).toContain('panelFront={panel === "docs"}');
   });
 });
 
@@ -124,6 +146,96 @@ describe("the LAZY mount (bundle-size win, operator-verified as flash-free)", ()
 
   it("wraps the lazy panel in Suspense — a lazy component without one throws", () => {
     expect(host).toMatch(/<Suspense[^>]*>\s*<DocsPanel/);
+  });
+});
+
+describe("WP4 — the live-reload wiring", () => {
+  // Reuses this file's existing `panel` (already comment-stripped by `stripComments`) rather
+  // than building a second stripper — the rule-1 rationale in the header applies verbatim,
+  // and two strippers would be two things to keep correct. It matters especially here: this
+  // panel's own header discusses every identifier asserted below in prose, so an un-stripped
+  // haystack would make these guards vacuous in the most literal way
+  // (`raw-guard-identifier-satisfied-by-own-comments`).
+  const stripped = panel;
+
+  it("the haystack is real after stripping (emptiness meta-guard)", () => {
+    // Without this, a stripping regex that ate the whole file would make every `not.toContain`
+    // below pass trivially.
+    expect(stripped.length).toBeGreaterThan(1000);
+    expect(stripped).toContain("export function DocsPanel");
+  });
+
+  it("subscribes to the fs-change event, filtered to THIS workspace", () => {
+    // One broadcast channel serves every workspace; a consumer that forgets the filter
+    // re-lists on unrelated projects' writes.
+    expect(stripped).toContain("listen<FsChange>(FS_CHANGE_EVENT");
+    expect(stripped).toContain(
+      "appliesToWorkspace(event.payload, workspaceId)",
+    );
+  });
+
+  it("decides what changed by DIFFING the re-listed set, not by reading FsChange.kind", () => {
+    // `kind` is documented as "a hint only" and the backend folds a mixed 200ms batch to
+    // `Other`, so it cannot classify appear-vs-change-vs-disappear. Diffing the list is
+    // correct regardless of what the debouncer coalesced.
+    expect(stripped).toContain("decideReload({");
+    expect(stripped).not.toMatch(/\bevent\.payload\.kind\b/);
+    expect(stripped).not.toMatch(/\bkind\s*===\s*["']created["']/);
+  });
+
+  it("consumes the scroll-restore seam by CALL, not by re-implementing it", () => {
+    expect(stripped).toContain("captureScroll(");
+    expect(stripped).toContain("planRestore(");
+    expect(stripped).toContain("readGeometry(");
+    // The pending machine drives the hold/retry — not an ad-hoc boolean pair.
+    expect(stripped).toContain("pendingNext(");
+    expect(stripped).toContain("hasPending(");
+  });
+
+  it("gates a jump on shouldJump so an explicit pick is never overridden", () => {
+    expect(stripped).toContain("shouldJump(");
+  });
+
+  it("⚠️ re-reads a changed doc via the nonce, NEVER by clearing `loaded`", () => {
+    // THE regression this WP shipped for one live probe (2026-08-02) and that every
+    // structural gate missed: the reload path called `setLoaded(null)` to "re-trigger" the
+    // content fetch. It cannot — that effect keys on `selected`, which is unchanged on a
+    // content edit — so `.docs-content` went permanently EMPTY (measured live: scrollHeight
+    // 3034 → 433, no markdown node, no error) while the list and selection stayed correct.
+    // tsc, lint, 1716 tests, a clean build and seven mutation-proven arms were all green.
+    //
+    // Two assertions, because only the pair is meaningful: the broken shape must be ABSENT
+    // and the working one PRESENT. Absence alone would pass if the reload were deleted.
+    expect(stripped).not.toContain("setLoaded(null)");
+    expect(stripped).toContain("setReloadNonce((n) => n + 1)");
+    // And the nonce must actually be in the content effect's deps, or it re-renders without
+    // re-reading — the same class of silent no-op in a new costume.
+    const contentEffect =
+      /invoke<string>\("docs_read"[^]*?\}, \[([^\]]*)\]\)/.exec(stripped);
+    expect(contentEffect).not.toBeNull();
+    expect(contentEffect?.[1] ?? "").toContain("reloadNonce");
+  });
+
+  it("⚠️ never resets `docs` to null on a refresh — that would re-arm the fetch latch", () => {
+    // The latch is `fetchLatch`'s state machine; `setDocs(null)` would re-arm the effect and,
+    // against a persistently failing `docs_list`, loop. The reload path must only ever write
+    // a real list.
+    expect(stripped).not.toContain("setDocs(null)");
+  });
+
+  it("re-applies a deferred restore when the panel becomes measurable again", () => {
+    // `panelFront`/`visible` in the retry effect's deps is what closes the hidden-reload
+    // case: a reload landing on a display:none panel holds its offset and applies it when
+    // the panel is re-fronted. Without these deps the offset is held forever and the reader
+    // still lands at the top.
+    const retryEffect =
+      /useEffect\(\(\) => \{[^]*?hasPending\(pendingRef\.current\)[^]*?\}, \[([^\]]*)\]\)/.exec(
+        stripped,
+      );
+    expect(retryEffect).not.toBeNull();
+    const deps = retryEffect?.[1] ?? "";
+    expect(deps).toContain("panelFront");
+    expect(deps).toContain("visible");
   });
 });
 

@@ -186,6 +186,41 @@ describe("purity — WP4 calls this a second time, on fs-change", () => {
     const entries = [VISION, ROADMAP, WBS, WIP, SESSION];
     expect(pickInitialDoc(entries)).toBe(pickInitialDoc(entries));
   });
+
+  // ⚠️ WP4 P1.3 — this pins SURFACE-2026-08-02-QUALITY-WP3-SELECTED-RECOMPUTED-FEEDS-EFFECT,
+  // which the WP3 reviewer filed as "latent, becomes live at WP4".
+  //
+  // The chain: `DocsPanel` computes `selected = selectedDoc(chosen, docs)` on every render
+  // and passes it as a dep of the content-fetch effect. WP4 refreshes the doc LIST on every
+  // `fs-change`, and `docs_list` re-stats `mtime_ms` — so every write CC makes to a WIP file
+  // produces a brand-new `DocEntry[]` with brand-new numbers. If the auto-selected value
+  // churned along with those numbers, the content effect would re-fire on every keystroke:
+  // a `docs_read` per debounce window, and a re-render that discards the reader's scroll.
+  //
+  // It does not churn, because `selected` is a STRING and an unchanged winner compares equal.
+  // That holds only as long as `pickInitialDoc` answers by identity rather than by anything
+  // derived from the timestamps, which is what this asserts.
+  it("returns the IDENTICAL path when mtimes all advance but the winner is unchanged", () => {
+    const before = [VISION, WBS, WIP, SESSION];
+    // Every mtime moves — the realistic shape of a list refresh mid-turn.
+    const after = before.map((e) => ({ ...e, mtime_ms: e.mtime_ms + 5_000 }));
+
+    expect(pickInitialDoc(after)).toBe(pickInitialDoc(before));
+    // Same string, so the `useEffect` dep comparison is equal and the fetch does not re-fire.
+    expect(pickInitialDoc(after)).toBe("workflow-system/state/.session.md");
+  });
+
+  it("still moves the winner when the mtime churn CHANGES which wip is newest", () => {
+    // The complement of the case above: stability must not be achieved by ignoring mtime,
+    // which would break the multi-WIP tiebreak this function exists to provide.
+    const wipA = doc("workflow-system/state/wip/feature-a.md", "wip", 1_000);
+    const wipB = doc("workflow-system/state/wip/feature-b.md", "wip", 2_000);
+    expect(pickInitialDoc([wipA, wipB])).toBe(wipB.rel_path);
+    // Now A is the one being edited.
+    expect(pickInitialDoc([{ ...wipA, mtime_ms: 9_000 }, wipB])).toBe(
+      wipA.rel_path,
+    );
+  });
 });
 
 describe("falling through when the top-ranked doc DISAPPEARS (WP4 depends on this)", () => {
