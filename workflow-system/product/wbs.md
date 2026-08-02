@@ -1,8 +1,8 @@
 ---
 stage: wbs
-state: complete
+state: complete — ALL 5 WPs SHIPPED; M11 exit verdict GO (WP5, 2026-08-02). Ready for `/product-finalize`.
 milestone: "Milestone 11: Workflow-docs markdown viewer"
-updated: 2026-08-02  # WP4 ✅ SHIPPED (`480052e`) + code-review refactor (`966dca5`) — the Docs panel now LIVE-RELOADS on `fs-change`: content changes re-render in place with scroll preserved, an appearing doc jumps, a vanishing doc falls back. Resolves SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL. Three pure modules (`docsReloadDecision` / `docsScrollRestore` / `pendingRestore`) so tests drive real code; 25 mutations proven. ⚠️ Classify by DIFFING the re-listed doc set, never `FsChange.kind` (backend folds a mixed 200ms batch to `Other`). ⚠️ jsdom reports `clientHeight === 0` for VISIBLE elements too, so scroll geometry is an injected VALUE, not read off an element. ⚠️ Phase 4 was DISSOLVED into Phase 3 at an integration-boundary back-loop (a phase whose only content is another phase's verification has no independent deliverable) — WP4 shipped as 3 phases. Review: 1 CRITICAL + 2 MAJOR fixed in place (the jump arm latched the machine's answer into `chosen`, self-disabling jump-on-appear after ONE firing), 1 MAJOR + 4 MINOR backlogged. Durable lesson → root CLAUDE.md: extracting a pure state machine proves the MACHINE, not its CALLER.
+updated: 2026-08-02  # ✅ WP5 SHIPPED (`0951d2d` + review `8cda041`) — **M11 EXIT VERDICT: GO**, all 5 WPs closed; see "Probe outcomes" → WP5 verdict for the 12-clause evidence table. WP5 was planned verification-only but also shipped the `settled` fourth precedence tier (operator decision at P3.2, against a live reproduction), fixing the sibling-edit auto-selection defect — incl. a fifth-path regression caught at verify-self. Two WP4 evidence claims RETRACTED (the browser supplies the answer unaided for both the deferred restore and the shrink clamp). PRIOR NOTE: WP4 ✅ SHIPPED (`480052e`) + code-review refactor (`966dca5`) — the Docs panel now LIVE-RELOADS on `fs-change`: content changes re-render in place with scroll preserved, an appearing doc jumps, a vanishing doc falls back. Resolves SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL. Three pure modules (`docsReloadDecision` / `docsScrollRestore` / `pendingRestore`) so tests drive real code; 25 mutations proven. ⚠️ Classify by DIFFING the re-listed doc set, never `FsChange.kind` (backend folds a mixed 200ms batch to `Other`). ⚠️ jsdom reports `clientHeight === 0` for VISIBLE elements too, so scroll geometry is an injected VALUE, not read off an element. ⚠️ Phase 4 was DISSOLVED into Phase 3 at an integration-boundary back-loop (a phase whose only content is another phase's verification has no independent deliverable) — WP4 shipped as 3 phases. Review: 1 CRITICAL + 2 MAJOR fixed in place (the jump arm latched the machine's answer into `chosen`, self-disabling jump-on-appear after ONE firing), 1 MAJOR + 4 MINOR backlogged. Durable lesson → root CLAUDE.md: extracting a pure state machine proves the MACHINE, not its CALLER.
 ---
 
 # WBS — Milestone 11: Workflow-docs markdown viewer
@@ -209,7 +209,7 @@ WP5 WIP → P2.1/P2.2/P2.3 and its Phase 2 verify-self audit.
 
 ---
 
-### WP5: Milestone-exit verify
+### WP5: Milestone-exit verify — ✅ SHIPPED 2026-08-02 (commit `0951d2d`, review pass `8cda041`)
 **Type:** probe (verification-only; produces the M11 exit verdict, no new software)
 **Milestone:** M11
 **Dependencies:** WP2, WP3, WP4

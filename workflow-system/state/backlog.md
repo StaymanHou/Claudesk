@@ -131,20 +131,21 @@
   clamp; fixed by funnelling both paths through a single `chooseDoc`. MAJOR-3: the reload ran
   regardless of `panelFront`, so a never-opened Docs tab still issued `docs_list` per debounce
   window per workspace; fixed with a skip-and-remember-stale flag plus a catch-up re-list on
-  re-front. All three mutation-proven (M23/M24/M25, one arm each). **Remaining: 1 MAJOR**
-  (`SIBLING-EDIT-MOVES-AUTOSELECTION` — a fourth unmodeled selection-change path; NOT fixed
-  because a correct fix is a design decision, not cleanup) **+ 4 MINOR** (comment density —
-  **third consecutive flag**, now judged functional rather than stylistic, with specific
-  offenders named; a second `fs-change` listener deviating from a stated in-repo pattern; a
-  vestigial null-check; an error-surfacing asymmetry). See
+  re-front. All three mutation-proven (M23/M24/M25, one arm each).
+  **⚠️ The 1 MAJOR (`SIBLING-EDIT-MOVES-AUTOSELECTION`) was RESOLVED at M11 WP5 (2026-08-02)** —
+  see CHANGELOG; its body is deleted from the findings file. **Remaining: 4 MINOR** (comment
+  density — which WP5 paid on its two named offenders and then re-inflated with its own new
+  documentation, so it is now carried forward as
+  `SURFACE-2026-08-02-QUALITY-WP5-COMMENT-DENSITY-NEEDS-A-BUDGET-NOT-A-TRIM`; a second
+  `fs-change` listener deviating from a stated in-repo pattern; a vestigial null-check; an
+  error-surfacing asymmetry). See
   [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
   `# m11-wp4-docs-live-reload — 2026-08-02`.
-- **Priority:** medium (the MAJOR), low (the MINOR batch)
+- **Priority:** low (all four remaining)
 - **Status:** pending
-- **Pickup shape:** The MAJOR needs an operator-facing behavior call first (does a
-  sibling-driven auto-selection move count as a jump?) — natural fit for M11 WP5 or the next
-  Docs-panel touch. The comment-density MINOR is the highest-value of the rest and is now
-  specific enough to act on directly.
+- **Pickup shape:** Fold into the next touch of `DocsPanel.tsx`. Read the WP5 comment-density
+  item alongside this one — they are the same finding at two points in time, and WP5's reviewer
+  concluded per-WP trimming is not converging (it wants a density *budget*, not another sweep).
 
 ## SURFACE-2026-08-02-JSDOM-CLIENTHEIGHT-IS-ZERO-FOR-VISIBLE-ELEMENTS-TOO
 - **Source:** feature:build (M11 WP4 Phase 2)

@@ -1,6 +1,8 @@
 ---
-stage: ship
-state: complete
+stage: finalize
+state: COMPLETED 2026-08-02
+completed: 2026-08-02
+ship_commits: "0951d2d (feat) + 8cda041 (code-review fixes)"
 drive_mode: autopilot
 wp: "M11 WP5 — Milestone-exit verify"
 milestone: "Milestone 11: Workflow-docs markdown viewer"
@@ -1096,6 +1098,46 @@ Recorded here at plan time because each one has already cost this milestone real
 - **The integration-boundary rule** (which dissolved WP4's Phase 4 into Phase 3): a phase whose only
   content is another phase's verification has no independent deliverable. Phases 2 and 3 here each
   carry their own findings/decisions, not just re-checks of Phase 1.
+
+## Retrospect
+
+- **What changed in our understanding:** **The platform can supply the answer you think you are
+  testing.** Three separate checks in this WP were vacuous for the same reason — WebKit retains
+  `scrollTop` on a `display:none` never-unmounted node; the browser clamps out-of-range `scrollTop`
+  writes itself; and (Phase 1) a rAF sampler through the MCP bridge recorded **zero** frames while
+  still reporting `everHitZero: false`. The durable rule: **an observation is only decisive when a
+  broken implementation would give a different answer** — ask what the browser/framework would do
+  *unaided* before spending a live run. We also learned that the WP4 `"deferred"` arm's documented
+  motivating case is **unreachable** (the skip-while-hidden gate routes it to `"applied"`), so prose
+  in that file had been describing a path the code forbids.
+- **Assumptions that held:** M11's shipped surface is genuinely sound — every exit-criterion clause
+  passed live, and the OFF-invariant guard still bites 14/14 including M11.5's meta-tests, so landing
+  the Docs tab did not require narrowing the guard. The three pure modules from WP4 were correct
+  throughout; nothing in the retraction touched behavior. `decision.selected` already carrying
+  `pickInitialDoc(next)` made the fifth-path fix a one-liner.
+- **Assumptions that were wrong:**
+  1. **That WP5 would ship no software.** It shipped a fourth precedence tier — an operator decision
+     made against a live reproduction, but a real scope extension across 5 files.
+  2. **That the two WP4 carries were open questions.** They were already operator-closed; and when
+     driven anyway, both turned out *unprovable by the method attempted* rather than pass-or-fail.
+  3. **That the `settled` fix was complete when I wrote its invariant.** It shipped a **fifth**
+     selection-change path — the `refallback` arm cleared the latch and wrote nothing — and I had
+     already written *"only an appear/disappear may move an auto-selection"* into three files. False
+     as shipped, on the most routine event in the workflow.
+  4. **That paying carry (d) reduced comment density.** Measured after: 45% → **48%**, because my own
+     new documentation was larger than the blocks I cut. Fixed to 46% at review.
+  5. **That my guards were sound because they were mutation-proven.** Four mutants bit; the reviewer
+     then demonstrated **two bypasses** and, later, a **silent-pass hole** in the funnel guard
+     (`indexOf("}, [])")` matching only the *empty* dep array). Mutation-proof covers the mutants you
+     thought of.
+- **Approach delta:** Planned as one verification phase; ran as three, with **two adversarial subagent
+  audits that each found a BLOCKING defect in work I had just declared done** (Phase 2's carry-(b)
+  claim, Phase 3's fifth path), plus a third audit at review-quality that found the guard hole. Both
+  of the first two were fixed in place rather than back-looped, because both were prose/one-line-class
+  edits with fresh-model re-verification. The recurring shape is worth naming: **every defect this WP
+  found in itself was in the *evidence*, not the behavior** — claims outrunning their proof, four
+  times. The corrective that actually worked was structural, not effort: probe each guard arm
+  individually, bound every source-text slice, and ask what the platform does unaided.
 
 ## Code-Quality Review — m11-wp5-milestone-exit-verify
 
