@@ -1,48 +1,51 @@
 // @vitest-environment jsdom
 //
-// M11 WP3 Phase 3 — the "webview must never navigate" invariant, proved BEHAVIORALLY.
+// M11 WP3 — the "webview must never navigate" invariant, proved against THE REAL HANDLER.
 //
-// ── Why this file exists ────────────────────────────────────────────────────────
-// A `?raw` source-order guard claimed to pin this invariant and PASSED while the invariant
-// was violated. It compared the source positions of `preventDefault()` and the `external`
-// branch — an ordering check against one named downstream branch, structurally blind to an
-// `if (kind === "empty") return;` that sat ABOVE the call. Markdown `[click]()` renders a
-// live `<a href="">` (measured: it survives the sanitizer), which took that early return
-// with the click still cancelable. In a WKWebView an empty href navigates to the current
-// URL — an app-shell reload, and Claudesk's window has no back button.
+// ── Why this file exists, and why it now imports rather than re-implements ──────
+// This invariant has had three guards. The first two were source-text proxies and BOTH
+// passed while the invariant was broken:
 //
-// A source guard can only compare the positions you thought to name; it cannot see a third
-// statement you did not. So the invariant is asserted here the only way that is honest:
-// dispatch a REAL click at a REAL anchor and read `defaultPrevented` off the event.
+//   1. Compared source positions of `preventDefault()` and the `external` branch — blind
+//      to an early return between them. `[click]()` (a live `<a href="">`) reloaded the
+//      app shell.
+//   2. Counted `return` tokens above `preventDefault()` — also a proxy. Folding the
+//      empty-href bail INTO the anchor guard keeps the count at 1 and passes, reopening
+//      the identical hole. Measured at code review with all 1645 tests green.
 //
-// ⚠️ This deliberately re-implements the handler's GUARD ORDER rather than importing the
-// component (no component-render harness in this repo — SURFACE-2026-07-31). That is a
-// known limitation: the copy could drift from `DocsPanel`. The companion structural arm in
-// `docsPanelWiring.test.ts` is what catches drift — it asserts no `return` precedes
-// `preventDefault` in the real handler. Neither test is sufficient alone; together they
-// cover order-in-source and behavior-on-click.
+// An earlier version of THIS file was itself part of the problem: it re-implemented the
+// handler's guard order, so mutating the real component left it green. The review named the
+// fix precisely — **probe the component, not the replica** — so the handler was extracted
+// to `handleDocLinkClick.ts` and is imported here. A mutation to production code now fails
+// these tests, which is the only thing that makes them worth running.
 
 import { describe, expect, it } from "vitest";
 import { classifyHref } from "../docs/classifyHref";
+import { makeDocLinkClickHandler } from "../docs/handleDocLinkClick";
+import type { DocEntry } from "../docsOrder";
 
-/**
- * The handler's guard order, mirroring `DocsPanel.onContentClick`'s opening.
- *
- * The property under test is that `preventDefault()` runs for EVERY anchor click,
- * regardless of how the href classifies — including classes that are then ignored.
- */
-function handleClick(e: Event): { classified: string | null } {
-  // Typed `Event`, not `MouseEvent`: the handler reads only `target` and `preventDefault`,
-  // which both live on `Event`. Narrowing to MouseEvent would need a cast at every
-  // addEventListener site and would overstate what the guard order depends on.
-  const anchor = (e.target as HTMLElement).closest?.("a[href]");
-  if (!(anchor instanceof HTMLAnchorElement)) return { classified: null };
+const DOCS: DocEntry[] = [
+  {
+    rel_path: "workflow-system/product/wbs.md",
+    kind: "wbs",
+    file_name: "wbs.md",
+    mtime_ms: 0,
+  },
+];
 
-  const href = anchor.getAttribute("href") ?? "";
-  e.preventDefault(); // FIRST — before classification, before any early return.
-  const kind = classifyHref(href);
-  if (kind === "empty") return { classified: kind };
-  return { classified: kind };
+/** The real handler, with inert deps — external opens are stubbed, never dispatched. */
+function realHandler(
+  over: Partial<Parameters<typeof makeDocLinkClickHandler>[0]> = {},
+) {
+  return makeDocLinkClickHandler({
+    selected: "workflow-system/product/vision.md",
+    docs: DOCS,
+    containerRef: { current: null },
+    setLinkNote: () => {},
+    setChosen: () => {},
+    openExternal: () => Promise.resolve(),
+    ...over,
+  });
 }
 
 /** Render an anchor into a container and click it, returning the dispatched event. */
@@ -53,7 +56,7 @@ function clickAnchor(hrefAttr: string | null): MouseEvent {
   a.textContent = "click";
   container.append(a);
   document.body.append(container);
-  container.addEventListener("click", handleClick);
+  container.addEventListener("click", realHandler() as EventListener);
 
   const ev = new MouseEvent("click", { bubbles: true, cancelable: true });
   a.dispatchEvent(ev);
@@ -124,7 +127,7 @@ describe("clicks that are NOT on a link are left alone", () => {
     p.textContent = "just prose";
     container.append(p);
     document.body.append(container);
-    container.addEventListener("click", handleClick);
+    container.addEventListener("click", realHandler() as EventListener);
 
     const ev = new MouseEvent("click", { bubbles: true, cancelable: true });
     p.dispatchEvent(ev);
@@ -137,5 +140,80 @@ describe("clicks that are NOT on a link are left alone", () => {
     // `closest("a[href]")` requires the attribute; a bare `<a>` is not a link.
     const ev = clickAnchor(null);
     expect(ev.defaultPrevented).toBe(false);
+  });
+});
+
+describe("cross-doc fragments are USED, not dropped (code-review finding)", () => {
+  // `resolveDocLink` always split `wbs.md#probe-outcomes` into path + fragment, and the
+  // caller always discarded the fragment — so such a link landed at the TOP of the target
+  // doc while the resolver's own doc comment said it would land on the section. A comment
+  // promising behavior the code does not perform is worse than an unimplemented feature,
+  // because it stops the next reader from noticing the gap.
+
+  function clickHrefWith(
+    href: string,
+    over: Parameters<typeof realHandler>[0] = {},
+  ) {
+    const container = document.createElement("div");
+    const a = document.createElement("a");
+    a.setAttribute("href", href);
+    container.append(a);
+    document.body.append(container);
+    container.addEventListener("click", realHandler(over) as EventListener);
+    a.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    container.remove();
+  }
+
+  it("switches the doc for a fragment-bearing cross-doc link", () => {
+    const chosen: string[] = [];
+    clickHrefWith("wbs.md#probe-outcomes", {
+      setChosen: (p: string) => chosen.push(p),
+    });
+    expect(chosen).toEqual(["workflow-system/product/wbs.md"]);
+  });
+
+  it("scrolls to the fragment's target once it renders", async () => {
+    // The target does not exist at click time — `setChosen` only schedules the switch and
+    // the content arrives after an async read — so the handler polls briefly. This models
+    // that: the heading appears AFTER the click, and the scroll must still happen.
+    const container = document.createElement("div");
+    document.body.append(container);
+    const scrolled: string[] = [];
+
+    const a = document.createElement("a");
+    a.setAttribute("href", "wbs.md#probe-outcomes");
+    container.append(a);
+    container.addEventListener(
+      "click",
+      realHandler({ containerRef: { current: container } }) as EventListener,
+    );
+    a.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+
+    // Now the "new doc" renders, heading included.
+    const h = document.createElement("h2");
+    h.id = "probe-outcomes";
+    h.scrollIntoView = () => scrolled.push("probe-outcomes");
+    container.append(h);
+
+    await new Promise((r) => setTimeout(r, 120));
+    container.remove();
+    expect(scrolled).toEqual(["probe-outcomes"]);
+  });
+
+  it("gives up quietly when the fragment never appears — no hang", () => {
+    // Bounded polling. A heading that does not exist must not spin forever; a missed
+    // scroll is a minor annoyance, a wedged handler is not.
+    const container = document.createElement("div");
+    document.body.append(container);
+    expect(() =>
+      clickHrefWith("wbs.md#no-such-heading", {
+        containerRef: { current: container },
+      }),
+    ).not.toThrow();
+    container.remove();
   });
 });

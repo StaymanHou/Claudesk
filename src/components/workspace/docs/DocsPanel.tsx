@@ -16,12 +16,7 @@
 // read the gate itself; a second read would be a second source of truth (the M10.9 seam
 // contract's "never invoke the command ad hoc" rule).
 
-import {
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   docContentView,
@@ -33,9 +28,10 @@ import {
 import { DocMarkdown } from "./DocMarkdown";
 import { latchNext, shouldFetch, type LatchState } from "./fetchLatch";
 import { selectedDoc } from "./pickInitialDoc";
-import { anchorSelector, classifyHref } from "./classifyHref";
-import { resolveDocLink } from "./resolveDocLink";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  makeDocLinkClickHandler,
+  type DocLinkClickEvent,
+} from "./handleDocLinkClick";
 
 interface DocsPanelProps {
   /** The workspace's project root — the discovery scope, authenticated backend-side. */
@@ -216,73 +212,26 @@ export function DocsPanel({ projectPath, visible }: DocsPanelProps) {
   // ⚠️ `[[slug]]` links are NOT handled here and structurally CANNOT be (P2.5): WP1
   // measured that the renderer emits them as literal text with no `<a>` element at all, so
   // this handler never sees them. Decision + rationale in the WIP.
-  const onContentClick = (e: ReactMouseEvent<HTMLDivElement>) => {
-    const anchor = (e.target as HTMLElement).closest?.("a[href]");
-    if (!(anchor instanceof HTMLAnchorElement)) return;
-
-    // Read the AUTHORED href, not `anchor.href` — the DOM property resolves relative URLs
-    // against the page origin, turning `wbs.md` into `http://localhost:1420/wbs.md`, which
-    // would make every cross-doc link classify as external.
-    const href = anchor.getAttribute("href") ?? "";
-
-    // ⚠️ preventDefault FIRST — before classification, before ANY early return. The anchor
-    // was matched by `closest("a[href]")`, so at this point the click is definitely on a
-    // link inside rendered doc content, and NO such click may ever perform its default
-    // action.
-    //
-    // This previously sat below `if (kind === "empty") return;`, which left one reachable
-    // hole: markdown `[click]()` renders a live `<a href="">` (measured — it survives the
-    // sanitizer), classifies as `empty`, and took the early return with the event still
-    // cancelable. In a WKWebView an empty href navigates to the CURRENT url, i.e. an
-    // app-shell reload — and Claudesk's window has no back button, which is exactly the
-    // unrecoverable state this ordering exists to prevent. Found at Phase 3 verify-self by
-    // a subagent asked to attack the claim; the guard test named for this invariant did
-    // NOT catch it, because it compared source-text positions and was structurally blind
-    // to an early return sitting above the call (see `docsPanelWiring.test.ts`).
-    e.preventDefault();
-
-    const kind = classifyHref(href);
-    // Nothing actionable, but the default action is already blocked above.
-    if (kind === "empty") return;
-
-    if (kind === "external") {
-      // Clear any stale note first: a successful navigation of ANY kind should not leave
-      // the previous link's message on screen (observed live at Phase 3 verify-self — a
-      // "not one of this project's docs" note persisted through a later successful
-      // external open, making the successful click look like it had failed).
-      setLinkNote(null);
-      // The app's FIRST `openUrl` call site. Failure is surfaced, not swallowed: a
-      // silently dead link is indistinguishable from a broken handler.
-      void openUrl(href).catch((err: unknown) => {
-        setLinkNote(`Could not open ${href}: ${String(err)}`);
-      });
-      return;
-    }
-
-    if (kind === "anchor") {
-      setLinkNote(null);
-      const target = contentRef.current?.querySelector(anchorSelector(href));
-      // `block: "start"` scrolls WITHIN `.docs-content` (the panel's own scroll box)
-      // rather than scrolling the whole app shell.
-      target?.scrollIntoView({ block: "start" });
-      return;
-    }
-
-    // cross-doc: resolve against the doc it was written in, then switch the selection.
-    if (selected === null || docs === null) return;
-    const resolved = resolveDocLink(href, selected, docs);
-    if (resolved.kind === "not-in-set") {
-      // Deliberately visible. `CHANGELOG.md` / `README.md` are real files that are NOT in
-      // the curated doc set, so this is reachable in normal use — and a click that does
-      // nothing at all reads as a broken panel.
-      setLinkNote(
-        `Not one of this project's workflow docs: ${resolved.attempted}`,
-      );
-      return;
-    }
-    setLinkNote(null);
-    setChosen(resolved.relPath);
-  };
+  // The handler lives in its own module so tests can drive THE REAL CODE with real DOM
+  // events rather than a re-implementation. Two prior guards for its central invariant
+  // ("no doc-content click ever performs its default action") were source-text proxies and
+  // both passed while the invariant was broken — see `handleDocLinkClick.ts`'s header.
+  //
+  // ⚠️ The ref is read INSIDE the callback, at click time — never passed to a function
+  // during render. `react-hooks/refs` rejects the latter (it cannot see that the handler
+  // defers the read), and the rule is right about the shape even though the getter was
+  // safe: keeping ref access inside the event handler is what the rule is protecting.
+  const onContentClick = useCallback(
+    (e: DocLinkClickEvent) =>
+      makeDocLinkClickHandler({
+        selected,
+        docs,
+        containerRef: contentRef,
+        setLinkNote,
+        setChosen,
+      })(e),
+    [selected, docs],
+  );
 
   return (
     <div className="docs-panel" data-testid="docs-panel">

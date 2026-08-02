@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import docsPanelSource from "../docs/DocsPanel.tsx?raw";
+import linkHandlerSource from "../docs/handleDocLinkClick.ts?raw";
 import hostSource from "../RightPanelHost.tsx?raw";
 
 // M11 WP3 verify-codify — the WIRING invariants behind the two behaviors the operator
@@ -56,6 +57,7 @@ function stripCssComments(src: string): string {
 }
 
 const panel = stripComments(docsPanelSource);
+const linkHandler = stripComments(linkHandlerSource);
 const host = stripComments(hostSource);
 
 const css = stripCssComments(
@@ -194,9 +196,14 @@ describe("auto-select is DERIVED, not written by an effect", () => {
     // rather than a behavioral claim this tier cannot observe. A prior version of this
     // file CLAIMED per-instance-ness in prose while asserting only that `chosen` exists,
     // which is not the same thing (flagged at verify-self).
+    // ⚠️ `export?` is load-bearing. The predicate was `/^(const|let|var)\s/`, which an
+    // `export const sharedCache = new Map()` at module scope walks straight past —
+    // measured at code review. That is not a hypothetical: a shared cache is the single
+    // most likely way someone would actually break per-instance isolation, so the guard
+    // was missing the realistic regression while catching the unrealistic one.
     const moduleLevelBindings = panel
       .split("\n")
-      .filter((l) => /^(const|let|var)\s/.test(l));
+      .filter((l) => /^(export\s+)?(const|let|var)\s/.test(l));
     expect(moduleLevelBindings).toEqual([]);
     // ...and the state it does hold is hook-based, so React scopes it per instance.
     expect(panel).toMatch(/useState<[^>]*>\(/);
@@ -213,65 +220,57 @@ describe("auto-select is DERIVED, not written by an effect", () => {
   });
 });
 
-describe("link navigation — the webview must never navigate", () => {
-  it("routes clicks through ONE delegated handler on the content container", () => {
+describe("link navigation — wiring, now that the handler is its own module", () => {
+  // ⚠️ These assertions moved from `DocsPanel.tsx` to `handleDocLinkClick.ts` at code
+  // review, when the handler was extracted so tests could drive THE REAL CODE. The
+  // `preventDefault`-ordering arm that used to live here is GONE, not relocated: it was a
+  // proxy (first source positions, then a `return` count) and BOTH versions passed while
+  // the invariant was broken. Its replacement is behavioral — `docsLinkHandling.test.ts`
+  // imports this handler and asserts `defaultPrevented` on a real event, so a mutation to
+  // production code fails it. Do not re-add a source-order arm here; that shape has now
+  // failed twice for the same structural reason.
+
+  it("the component delegates to the extracted handler, not an inline closure", () => {
+    expect(panel).toContain("makeDocLinkClickHandler({");
     expect(panel).toContain("onClick={onContentClick}");
-    expect(panel).toContain('closest?.("a[href]")');
+    // ...and the handler logic is not duplicated back into the component.
+    expect(panel).not.toContain("classifyHref(");
   });
 
-  it("calls preventDefault before ANY early return, not merely before a branch", () => {
-    // ⚠️ REWRITTEN at Phase 3 verify-self, after the previous version of this test PASSED
-    // while the invariant it names was violated. It compared source-text indices of
-    // `preventDefault` vs the `external` branch — an ordering check against ONE downstream
-    // branch, structurally blind to an `if (kind === "empty") return;` sitting ABOVE the
-    // call. That early return was real, and `[click]()` renders a live `<a href="">` that
-    // took it, leaving the click cancelable → WKWebView reload → unrecoverable (no back
-    // button).
-    //
-    // The lesson, and why this shape: a source-order guard can only compare the two
-    // positions you thought to name. It cannot see a THIRD statement you did not. The
-    // behavioral proof lives in `docsLinkHandling.test.ts` (a real click, a real
-    // `defaultPrevented`); this arm keeps only the structural claim a source read CAN
-    // honestly make — that no `return` precedes `preventDefault` inside the handler.
-    const handler = panel.slice(
-      panel.indexOf("const onContentClick"),
-      panel.indexOf("return (", panel.indexOf("const onContentClick")),
-    );
-    const pd = handler.indexOf("e.preventDefault()");
-    expect(pd).toBeGreaterThan(-1);
-    // The only `return` allowed above preventDefault is the not-an-anchor bail, which
-    // happens before we have committed to handling the click at all.
-    const beforePd = handler.slice(0, pd);
-    const returnsBefore = [...beforePd.matchAll(/\breturn\b/g)].length;
-    expect(
-      returnsBefore,
-      "a `return` above preventDefault means some link class escapes with its default " +
-        "action intact — the empty-href hole found at Phase 3 verify-self",
-    ).toBe(1);
+  it("matches links by delegation from the container", () => {
+    expect(linkHandler).toContain('closest?.("a[href]")');
   });
 
   it("reads the AUTHORED href attribute, not the resolved .href property", () => {
     // `anchor.href` resolves against the page origin, turning `wbs.md` into
     // `http://localhost:1420/wbs.md` — which would classify every cross-doc link as
     // external and hand it to the OS browser.
-    expect(panel).toContain('anchor.getAttribute("href")');
-    expect(panel).not.toMatch(/const href = anchor\.href/);
+    expect(linkHandler).toContain('anchor.getAttribute("href")');
+    expect(linkHandler).not.toMatch(/const href = anchor\.href/);
   });
 
-  it("hands external links to openUrl — the app's first call site", () => {
-    expect(panel).toContain('from "@tauri-apps/plugin-opener"');
-    expect(panel).toContain("openUrl(href)");
+  it("hands external links to an opener seam — the app's first call site", () => {
+    expect(linkHandler).toContain('from "@tauri-apps/plugin-opener"');
+    expect(linkHandler).toContain("openExternal(href)");
   });
 
   it("routes cross-doc links through the resolver, not a raw path match", () => {
-    // A raw `entries.find(e => e.rel_path === href)` would break every relative link.
-    expect(panel).toContain("resolveDocLink(href, selected, docs)");
+    expect(linkHandler).toContain(
+      "resolveDocLink(href, deps.selected, deps.docs)",
+    );
   });
 
   it("surfaces a link that resolves outside the curated doc set", () => {
-    // CHANGELOG.md / README.md are real files deliberately excluded from discovery, so
-    // this is reachable in normal use and must not be a silent no-op.
-    expect(panel).toContain('resolved.kind === "not-in-set"');
+    expect(linkHandler).toContain('resolved.kind === "not-in-set"');
     expect(panel).toContain('data-testid="docs-link-note"');
+  });
+
+  it("USES the fragment of a cross-doc link, rather than dropping it", () => {
+    // `resolveDocLink` always split `wbs.md#probe-outcomes` into path + fragment, and the
+    // caller always discarded the fragment — so such links landed at the TOP of the target
+    // while the resolver's own comment said they would land on the section. Caught at code
+    // review; a comment promising behavior the code does not perform is worse than an
+    // unimplemented feature.
+    expect(linkHandler).toContain("resolved.fragment");
   });
 });

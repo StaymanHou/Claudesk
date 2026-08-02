@@ -1,7 +1,7 @@
 # Feature: M11 WP3 — Docs read-only formatted render + auto-select-on-open + link navigation
 
 **Workflow:** feature
-**State:** ship (complete) — committed `cb9b18b`, NOT pushed (operator's call)
+**State:** COMPLETE — finalized 2026-08-02
 **Created:** 2026-08-02
 **Drive mode:** autopilot
 **WBS:** `workflow-system/product/wbs.md` → WP3 (M11)
@@ -183,7 +183,67 @@ invariant is what makes the safety structural rather than configured.
         to present the decision with the evidence, not to unilaterally change the app's
         security posture. Whichever is chosen, record it in `arch.md` and resolve or re-scope
         the backlog item.  <!-- status: DONE -->
-  - [x] P3.3 Close out the two folded-in WP2 MAJORs in this file's `## Code-Quality Review`
+  - [x] P3.3 Close out the two folded-in WP2 MAJORs in this file's `## Retrospect
+
+- **What changed in our understanding:** The gap between *"the gates are green"* and *"the code is
+  correct"* is much wider than this project had been treating it. Six defects surfaced in this WP;
+  **not one was caught by `tsc`, lint, the 1600-test suite, or a clean production build.** Every one
+  came from actively attacking the work — mutation testing, adversarial subagents, or driving the
+  real app. The blank panel is the clearest case: 1538 tests passed while the feature displayed
+  nothing at all.
+
+  The sharper lesson, which took three iterations to see: **a `?raw` source-text guard cannot
+  express a behavioral property, and writing a *better* predicate does not fix that.** I replaced a
+  source-order guard with a `return`-counting guard, and both passed while the same webview-hijack
+  hole was open. The code reviewer named the actual remedy — *probe the component, not a copy of
+  it* — which meant extracting the handler so a test could import the real code. That is a
+  structural answer to a structural problem, and it is the durable takeaway.
+
+- **Assumptions that held:** WP1's probe paid for itself. The renderer verdict, the security
+  posture, the link classifier's ordering, and `renderToStaticMarkup`-as-harness were all correct
+  and saved real time — WP3 built against a known shape rather than discovering one. The
+  pure-function-plus-thin-component architecture also held: every property that turned out to
+  matter (latch ordering, ranking, href classification, selection precedence) was testable as a
+  value precisely because it had been extracted.
+
+- **Assumptions that were wrong:**
+  - **That WP1's recorded frontmatter regex worked.** It failed the exact edge case its own verdict
+    listed as validated, and would have deleted a paragraph from any doc opening with a thematic
+    break. Corrected at source so the next reader doesn't copy it.
+  - **That a fix makes things safer.** The blank panel was caused by the P1.2 "improvement" to the
+    fetch latch — the old entangled version survived StrictMode *by accident*, and cleaning it up
+    removed the accident without replacing it.
+  - **That comment-recorded reasoning is durable.** Three files reasoned from "the app has no CSP"
+    with nothing asserting it; a `?raw` guard was satisfied by a module's own comments; and
+    `resolveDocLink`'s comment promised fragment-scrolling the caller never performed. **A comment
+    that states a fact the code does not enforce is a liability, not documentation.**
+  - **That verifying the slice I built is verifying the feature.** `anchorSelector`'s tests proved
+    the selector was well-formed; nothing checked a target existed. Every in-doc anchor was dead.
+
+- **Approach delta:** The plan's three phases held, but roughly a third of the work was unplanned
+  and reactive — the StrictMode latch machine, the heading-id fix, the handler extraction, and six
+  guard rewrites all came from findings rather than the plan. Two planned decisions were reversed
+  by the operator on better reasoning: the multi-WIP tiebreak (alphabetical → `mtime_ms`, once it
+  emerged that created-time and modified-time cost the same and only one answers *"where am I
+  working?"*), and the CSP framing (a cost/benefit tradeoff → a flat rule, *"I want raw HTML to be
+  blocked"*, which is stronger and needs no threat model). Docs-first tab ordering was a pure
+  operator addition. **The plan was a good scaffold and a poor predictor** — which is the expected
+  shape for a WP whose real content was verification quality.
+
+## Communicate
+
+> **Feature complete:** M11 WP3 — the Docs panel now renders. Selecting a workflow doc shows it as
+> formatted, read-only markdown (tables, fenced code, Work-Tree checkboxes, frontmatter), the panel
+> auto-opens on the most relevant doc with no click, and links navigate — in-doc anchors scroll
+> within the panel, cross-doc links switch documents, external links open in the real browser, and
+> the webview never navigates away. With workflow features enabled, Docs is now the first tab and
+> the default panel.
+>
+> **To see it:** `pnpm tauri:dev`, open a project with a `workflow-system/` directory, press `⌘⇧K`.
+>
+> *Requester = operator — closure notice for self-record.*
+
+## Code-Quality Review`
         section (latch → fixed at P1.2; wiring test → added at Phase 2), so the backlog
         entries can be deleted at finalize with the CHANGELOG record written first
         (delete-on-resolve invariant).  <!-- status: DONE -->
@@ -679,9 +739,90 @@ re-derives the threat model from scratch.** That is the actual defect the SURFAC
 **Either way this WP must leave `arch.md` with the posture written down.** Carried to verify-human
 as the decision point.
 
+## Code-Quality Review — m11-wp3-docs-render-and-navigation
+
+*Reviewer: `code-quality-reviewer` against ship baseline `6f6df23`. **0 CRITICAL / 4 MAJOR / 3
+MINOR.** ⚠️ **All 4 MAJOR were FIXED IN PLACE, not backlogged** — a deliberate deviation from
+autopilot's auto-backlog default, recorded rather than silent. Three of the four were **verified by
+reproducing the reviewer's mutations myself** before acting; each was a test asserting a PROXY for
+the property it named, and one of them (MAJOR-2a) **passed the full 1645-test suite while
+re-opening the `[click]()` webview-hijack hole this WP had just fixed**. Backlogging a guard known
+to be decorative on an invariant whose failure is unrecoverable would have shipped known-broken
+verification. The 3 MINOR are backlogged.*
+
+### Strengths (reviewer's)
+- Extraction discipline traceable to specific failures rather than style preference —
+  `fetchLatch.ts` exists *because* an in-effect latch deadlocked under StrictMode.
+- Pairing fetched content with its key makes "one doc's text under another doc's row"
+  structurally unrepresentable rather than merely brief.
+- The security fixture scores the **parsed DOM** with a negative control requiring every vector
+  class to fire — the correct shape, and it answers WP1's false-positive trap directly.
+- The `rehype-raw` prohibition pinned at three independent layers, with the header comment
+  correcting its own earlier wrong claim about which control is load-bearing.
+- The `csp: null` arm converts a premise that lived only in comments into something that trips.
+
+### MAJOR-1 — `resolveDocLink`'s `fragment` was computed, documented, and DISCARDED ✅ FIXED
+The module's own doc comment said the fragment is split off *"so the caller can scroll to it —
+`wbs.md#probe-outcomes` should land on the section, not just the file"*. The only caller never read
+it. **A comment promising behavior the code does not perform is worse than an unimplemented
+feature**, because it stops the next reader from noticing the gap. Implemented: the handler now
+polls briefly for the target (the doc has not rendered at click time — `setChosen` only schedules
+the switch and content arrives after an async read), bounded at 20 attempts so a missing heading
+gives up quietly rather than spinning. Three behavioral tests; mutation-proven.
+
+### MAJOR-2 — the `preventDefault` guard was STILL a proxy ✅ FIXED (the important one)
+The arm I had *just* rewritten to replace a proven-vacuous predecessor counted `return` tokens above
+`preventDefault()`. **Reproduced the reviewer's mutation: folding the empty-href bail into the
+anchor guard keeps the count at 1 and the ENTIRE 1645-test suite passes — while re-opening the
+exact `[click]()` app-shell-reload hole.** A second mutation (`const later = () => e.preventDefault()`,
+never invoked) also passed.
+
+⚠️ **The pattern, now three iterations deep: I kept writing better `?raw` predicates when the
+problem is that `?raw` cannot express a behavioral property at all.** A source-text predicate
+encodes only the shapes you thought of.
+
+### MAJOR-3 — the behavioral test tested a COPY, not the code ✅ FIXED (the root cause)
+`docsLinkHandling.test.ts` re-implemented the handler's guard order, so mutating the real component
+left it green — the two guards shared a blind spot rather than covering complementary halves. The
+reviewer named the fix exactly: **probe the component, not the replica.** The handler was extracted
+to `handleDocLinkClick.ts` as a factory over its dependencies and is now **imported** by the test.
+**Re-ran MUT-A against production code: it now FAILS.** The source-order arm was deleted outright
+rather than re-patched, with a comment saying not to re-add that shape.
+
+### MAJOR-4 — the per-instance guard missed `export const` ✅ FIXED
+Predicate `/^(const|let|var)\s/` walked straight past `export const sharedCache = new Map()` at
+module scope — **the single most likely way someone would actually break per-instance isolation**.
+One missing token. Widened and mutation-proven in isolation.
+
+### MINOR (backlogged)
+- **Comment density has tipped past useful** — 80% comment lines in `frontmatter.ts`, 69% in
+  `pickInitialDoc.ts`, 68% in `classifyHref.ts`. The *measurements* earn their place; the process
+  narration (which phase found what, what a prior draft claimed) does not. The reviewer's
+  discriminator is good: **does the sentence survive once the WIP is archived?**
+- `selected` is recomputed each render and feeds the content effect — harmless today (a string),
+  worth a note before WP4 re-runs discovery against it.
+- `headingSlug` does not de-duplicate colliding ids; GitHub appends `-1`, so "mirrors GitHub's
+  algorithm" overstates by one rule. Long WBS docs with repeated section names are the likeliest
+  corpus to hit it.
+
+### Assessment (reviewer's)
+> *"Well-built work whose engineering judgment is consistently better than its verification claims…
+> three of the four MAJORs are tests that assert a proxy for the property they name and pass under
+> mutations a reviewer can construct in minutes — which matters here more than usual, because this
+> WP's own history is six vacuous guards found and replaced, and the replacements inherit the same
+> shape. The remedy is not more `?raw` arms but mutation-probing the component rather than the copy
+> of it."*
+
+**That diagnosis is correct and is now acted on.** Gates after the fixes: **1649 frontend (137
+files) / 732 Rust**, tsc 0, lint 0 errors, format clean.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`/feature-finalize` archives this file.
+
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE
-- **Active scope:** none — SHIPPED as `cb9b18b`. Next: `/feature-review-quality`.
+- **Path:** Feature > review-quality (complete) > finalize
+- **Active scope:** none — review-quality complete (0 CRITICAL / 4 MAJOR fixed in place / 3 MINOR backlogged). Next: `/feature-finalize`.
 - **Push state:** 37 commits unpushed on `main` (was 36 at session start). Deliberate — no close skill auto-pushes and publishing is the operator's standing call.
 - **Blocked:** none
 - **Unvisited:** none

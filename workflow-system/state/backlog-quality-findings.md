@@ -4,6 +4,66 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m11-wp3-docs-render-and-navigation — 2026-08-02
+
+*Reviewer: `code-quality-reviewer` against ship baseline `6f6df23`. 0 CRITICAL / 4 MAJOR / 3 MINOR.
+**All 4 MAJOR were FIXED IN PLACE** (three verified by reproducing the reviewer's mutations first —
+one of them passed the full 1645-test suite while re-opening a webview-hijack hole). Only the 3
+MINOR are backlogged.*
+
+## SURFACE-2026-08-02-QUALITY-WP3-COMMENT-DENSITY-PAST-USEFUL
+- **Source:** feature:review-quality (m11-wp3)
+- **Target level:** feature
+- **Type:** tech-debt (readability)
+- **Summary:** Comment density on the small pure modules has tipped past useful — **80%** comment
+  lines in `frontmatter.ts`, **69%** in `pickInitialDoc.ts`, **68%** in `classifyHref.ts`.
+  `pickInitialDoc.ts` spends 19 lines before its first import; `DocsPanel.tsx:99-115` re-explains a
+  latch that `fetchLatch.ts` already explains in its own header.
+- **Context:** ⚠️ **The previous WP's review flagged this exact thing and it grew rather than
+  shrank.** The *measurements* genuinely earn their lines — the raw/sanitize 3-configuration table,
+  birth-08:48/modified-09:28, the 54-doc frontmatter survey — because a reader cannot re-derive
+  them. What accreted around them is **process narration**: which phase found a bug, that a first
+  draft failed, what a prior version of a comment claimed.
+- **Suggested action:** Apply the reviewer's discriminator — **does the sentence survive once the
+  WIP is archived?** Measurements and invariants do; provenance does not. Move the provenance to the
+  archived WIP (where it already lives) and keep the facts. ⚠️ Do NOT strip the ⚠️-marked invariant
+  comments; those are the ones that stopped real regressions.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-02-QUALITY-WP3-SELECTED-RECOMPUTED-FEEDS-EFFECT
+- **Source:** feature:review-quality (m11-wp3)
+- **Target level:** feature (M11 WP4)
+- **Type:** tech-debt (latent, becomes live at WP4)
+- **Summary:** `selected` is `selectedDoc(chosen, docs)` — recomputed each render from a
+  freshly-built array — and is a dependency of the content-fetch effect. Harmless today because it
+  resolves to a string, so referential churn does not re-fire the effect.
+- **Context:** It re-fires whenever `pickInitialDoc` returns a *different* path — which is exactly
+  what **WP4 introduces** when a new doc appears and the ranking is re-run. Worth a note before that
+  lands, since the auto-selected value must stay stable across a list refresh that does not change
+  the winner.
+- **Suggested action:** One comment at the effect noting the constraint; WP4 verifies it holds when
+  it wires `fs-change`.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-02-QUALITY-WP3-HEADING-SLUG-NO-COLLISION-SUFFIX
+- **Source:** feature:review-quality (m11-wp3)
+- **Target level:** feature
+- **Type:** gap (minor correctness)
+- **Summary:** `headingSlug` does not de-duplicate colliding ids. Two headings differing only in
+  punctuation (`## Probe outcomes` / `## Probe outcomes!`) emit the same `id`, so an anchor link
+  reaches only the first. GitHub appends `-1`, `-2`; the comment claiming it "mirrors GitHub's
+  algorithm" overstates by one rule.
+- **Context:** The corpus most likely to collide is exactly this panel's target — long WBS/WIP files
+  with repeated section names (`## Tasks`, `## Probe outcomes` per WP).
+- **Suggested action:** Either append a `-N` suffix on repeat (needs a per-render counter threaded
+  through the `components` override) or narrow the comment to say collisions are unhandled. **The
+  comment fix is not a cop-out** — an accurate limitation beats an overstated claim, which is this
+  WP's own recurring lesson.
+- **Priority:** low
+- **Status:** pending
+
 # m11-wp2-docs-panel-plumbing — 2026-08-01
 
 *Reviewer: `code-quality-reviewer` against ship baseline `6632f59`. 0 CRITICAL / 3 MAJOR / 4 MINOR.
@@ -11,44 +71,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 guard shipped minutes earlier; leaving a knowingly-wrong claim in a test is the exact failure this
 feature twice paid to avoid). Both remaining MAJORs land on WP3/WP4's path, so they are genuine
 scheduling items rather than polish.*
-
-## SURFACE-2026-08-01-QUALITY-WP2-DOCSPANEL-FETCH-LATCH-ENTANGLED-WITH-DATA
-- **Source:** feature:review-quality (m11-wp2)
-- **Target level:** feature (M11 WP4)
-- **Type:** tech-debt (latent, becomes live at WP4)
-- **Summary:** `DocsPanel.tsx`'s fetch effect lists `docs` in its dependency array and uses
-  `docs !== null` as the once-only latch, while the error path sets `setDocs([])`. `docs` therefore
-  does double duty as both the data and the has-fetched flag, coupling the effect's re-run to its own
-  write.
-- **Context:** Correct today only because BOTH the success and failure arms write a non-null value.
-  **M11 WP4 is scheduled to add scroll-preserving live reload on `fs-change` to this exact
-  component** — a refetch that resets `docs` to `null` re-arms the effect, and against a persistently
-  failing `docs_list` that is a loop.
-- **Suggested action:** Replace the latch with an explicit `fetched` ref (or a discriminated
-  `status` union) **before WP4's reload lands**, so the fetch-once property is stated rather than
-  emergent. Cheap now; a live-reload bug later.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-08-01-QUALITY-WP2-DOCSPANEL-HAS-NO-WIRING-TEST
-- **Source:** feature:review-quality (m11-wp2)
-- **Target level:** feature (M11 WP3)
-- **Type:** gap (test coverage)
-- **Summary:** `DocsPanel` — the one net-new component in the WP — has no component or wiring test.
-  `docsOrder.test.ts` covers the pure functions and `docsPanelStyles.test.ts` covers CSS class
-  existence, but nothing pins that the component invokes `docs_list` with `root: projectPath`, that
-  `selected` is per-instance (the stated "preserved across panel switches" property), or that the
-  `visible` prop actually defers the first fetch.
-- **Context:** The argument-name coupling (`root:`) is **stringly-typed across the IPC boundary** —
-  the same failure class already recorded as `[[tauri-command-removal-needs-invoke-sweep]]`, invisible
-  to `tsc`. The WP's own codify note closed the *decision-function* gap (`docsView`), which pins the
-  branch choice but not the component's use of it. Verified live at verify-self, so there is no
-  present defect — the gap is regression protection.
-- **Suggested action:** Fold into WP3, which touches this component anyway to add the render. Note
-  `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` is the standing blocker for a true component
-  test; a narrower `?raw`-plus-pure-function split may be the cheaper answer than adopting RTL.
-- **Priority:** medium
-- **Status:** pending
 
 ## SURFACE-2026-08-01-QUALITY-WP2-MINOR-BATCH
 - **Source:** feature:review-quality (m11-wp2)
