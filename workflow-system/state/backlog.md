@@ -1,5 +1,34 @@
 # Backlog
 
+## Code-quality findings — m11-wp4-docs-live-reload (2026-08-02)
+- **Pointer:** **1 MAJOR + 4 MINOR** remaining (was 1 CRITICAL + 4 MAJOR + 4 MINOR) from
+  `code-quality-reviewer` against ship baseline `480052e`. **The CRITICAL and 2 of the 4 MAJOR
+  were FIXED IN PLACE at `/feature-refactor`, not backlogged.** The CRITICAL: the `"jump"` arm
+  wrote the machine's answer into `chosen` — the state documented as "the USER's explicit pick" —
+  and since the jump guard is `chosen === null`, **the first jump permanently disabled every
+  later one**, self-disabling the feature's headline behavior after one firing. It was the exact
+  move `docsReloadDecision.ts` forbids for `"refallback"`, made one arm earlier. Fixed by giving
+  the machine its own `jumpedTo` slot (three precedence tiers: user > machine > default, stated
+  in `selectedDoc`). MAJOR-1: neither user-selection path dispatched `"reset"`, so a scroll offset
+  held for doc A could apply to doc B — correctness was resting on an incidental `planRestore`
+  clamp; fixed by funnelling both paths through a single `chooseDoc`. MAJOR-3: the reload ran
+  regardless of `panelFront`, so a never-opened Docs tab still issued `docs_list` per debounce
+  window per workspace; fixed with a skip-and-remember-stale flag plus a catch-up re-list on
+  re-front. All three mutation-proven (M23/M24/M25, one arm each). **Remaining: 1 MAJOR**
+  (`SIBLING-EDIT-MOVES-AUTOSELECTION` — a fourth unmodeled selection-change path; NOT fixed
+  because a correct fix is a design decision, not cleanup) **+ 4 MINOR** (comment density —
+  **third consecutive flag**, now judged functional rather than stylistic, with specific
+  offenders named; a second `fs-change` listener deviating from a stated in-repo pattern; a
+  vestigial null-check; an error-surfacing asymmetry). See
+  [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
+  `# m11-wp4-docs-live-reload — 2026-08-02`.
+- **Priority:** medium (the MAJOR), low (the MINOR batch)
+- **Status:** pending
+- **Pickup shape:** The MAJOR needs an operator-facing behavior call first (does a
+  sibling-driven auto-selection move count as a jump?) — natural fit for M11 WP5 or the next
+  Docs-panel touch. The comment-density MINOR is the highest-value of the rest and is now
+  specific enough to act on directly.
+
 ## SURFACE-2026-08-02-JSDOM-CLIENTHEIGHT-IS-ZERO-FOR-VISIBLE-ELEMENTS-TOO
 - **Source:** feature:build (M11 WP4 Phase 2)
 - **Target level:** product:arch (testing posture)

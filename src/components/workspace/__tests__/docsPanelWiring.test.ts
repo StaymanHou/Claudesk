@@ -294,7 +294,24 @@ describe("auto-select is DERIVED, not written by an effect", () => {
     // at verify-codify and is asserted as a VALUE in pickInitialDoc.test.ts. This arm now
     // pins only that the component routes through that seam — which is the part a source
     // guard can actually see.
-    expect(panel).toContain("selectedDoc(chosen, docs)");
+    // ⚠️ Prefix, not the full argument list. The original pinned `selectedDoc(chosen, docs)`
+    // exactly and broke when the code-review refactor added a third precedence tier — the arm
+    // was asserting arity when its stated property is seam-routing. Triaged as obsolete.
+    expect(panel).toContain("selectedDoc(chosen, docs");
+  });
+
+  it("passes jumpedTo as the THIRD precedence tier, below the user's pick", () => {
+    // Added at the code-review refactor. The tiers are user > machine > default:
+    //   `chosen`   — the user picked it. A jump may never override it.
+    //   `jumpedTo` — a jump parked here. Overridable by the next jump; cleared on a user pick.
+    // Collapsing the two was a shipped CRITICAL: the jump arm wrote into `chosen`, and since
+    // the jump guard is `chosen === null`, the FIRST jump disabled every later one. Pinning
+    // the third argument is what stops a "simplifying" edit from re-merging them.
+    expect(panel).toContain("selectedDoc(chosen, docs, jumpedTo)");
+    expect(panel).toContain("const [jumpedTo, setJumpedTo]");
+    // The jump arm must write jumpedTo, NOT chosen.
+    expect(panel).toContain("setJumpedTo(decision.selected)");
+    expect(panel).not.toContain("setChosen(decision.selected)");
   });
 
   it("holds ALL state inside the component — nothing module-level (per-instance)", () => {
@@ -325,10 +342,38 @@ describe("auto-select is DERIVED, not written by an effect", () => {
     // WP4 re-runs pickInitialDoc when a doc APPEARS and must never override an explicit
     // pick. Keeping intent in its own state makes that a fact to read, not one to infer.
     expect(panel).toContain("const [chosen, setChosen]");
-    // A row click records intent...
-    expect(panel).toContain("setChosen(entry.rel_path)");
+    // A row click records intent — via `chooseDoc`, not `setChosen` directly (see below).
+    expect(panel).toContain("chooseDoc(entry.rel_path)");
     // ...and there is no separate `selected` state to drift from it.
     expect(panel).not.toContain("const [selected, setSelected]");
+  });
+
+  it("⚠️ chooseDoc is the SINGLE writer of `chosen` for user-driven selection", () => {
+    // The invariant whose absence WAS a MAJOR at code review: the row click and the in-doc
+    // link handler both called `setChosen` directly and NEITHER dispatched `"reset"`, so a
+    // scroll offset held for doc A could be applied to freshly-opened doc B. It only looked
+    // harmless because `planRestore` clamped against a momentarily-empty container —
+    // correctness resting on an incidental clamp rather than the transition built for it.
+    //
+    // Funnelling both paths through one function makes forgetting the dispatch impossible by
+    // construction rather than by vigilance at each call site.
+    expect(panel).toContain("const chooseDoc = useCallback");
+    // It must do BOTH things a user pick requires.
+    const body =
+      /const chooseDoc = useCallback\([^]*?\}, \[\]\);/.exec(panel)?.[0] ?? "";
+    expect(body).not.toBe("");
+    expect(body).toContain('type: "reset"');
+    expect(body).toContain("setJumpedTo(null)");
+    expect(body).toContain("setChosen(relPath)");
+    // The link handler is wired to it too, not to raw setChosen.
+    expect(panel).toContain("setChosen: chooseDoc");
+
+    // And nothing else writes `chosen` for a USER action. The only other `setChosen(` call
+    // site is the `refallback` arm (`setChosen(decision.chosen)`, which clears the sentinel to
+    // null) — that is machine-driven, not a user pick, and is asserted separately below.
+    const userWrites = [...panel.matchAll(/setChosen\(/g)].length;
+    // 1 declaration + 1 inside chooseDoc + 1 refallback + 1 `setChosen: chooseDoc` wiring.
+    expect(userWrites).toBeLessThanOrEqual(4);
   });
 });
 

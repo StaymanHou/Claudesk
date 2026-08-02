@@ -101,6 +101,24 @@ export function DocsPanel({
   // has to infer by comparing paths.
   const [chosen, setChosen] = useState<string | null>(null);
 
+  // WP4 — where a JUMP parked the selection. Deliberately NOT `chosen`.
+  //
+  // ⚠️ This split exists because collapsing the two was a shipped CRITICAL (code review of
+  // `480052e`): the jump arm wrote its own answer into `chosen`, and since `shouldJump` is
+  // `chosen === null`, the FIRST jump permanently disabled every later one — the headline
+  // behavior self-disabled after one firing. It was the exact move `docsReloadDecision.ts`
+  // forbids for `"refallback"` ("would forge a fake user choice and suppress the next
+  // legitimate jump-on-appear"), made one arm earlier.
+  //
+  // The distinction is intent, and it is the whole reason `chosen` is documented as "the
+  // USER's explicit pick" above:
+  //   `chosen`   — the user picked this. Sacred; a jump may never override it.
+  //   `jumpedTo` — the machine picked this. Overridable by the next jump, and cleared the
+  //                moment the user picks anything.
+  // A jump landing on a doc must therefore leave `chosen` null, or the panel stops
+  // re-orienting — which is the one job it has.
+  const [jumpedTo, setJumpedTo] = useState<string | null>(null);
+
   // A one-line note for link outcomes the user should see but that are not errors in
   // the panel: an external open that failed, or a link pointing outside the curated doc
   // set. Cleared on the next successful navigation.
@@ -203,7 +221,7 @@ export function DocsPanel({
   // before the content effect so that effect sees the auto-selection on the very first
   // render that has docs — which is what makes the panel open on a rendered document with
   // no click (P2.2, `[PRIOR: primary-surface-is-zero-ceremony-not-a-mode]`).
-  const selected = selectedDoc(chosen, docs);
+  const selected = selectedDoc(chosen, docs, jumpedTo);
 
   // WP4 — a "re-read the SAME path" signal. Bumped when `fs-change` reports the selected
   // doc's bytes changed.
@@ -268,11 +286,18 @@ export function DocsPanel({
   const docsRef = useRef<DocEntry[] | null>(null);
   const selectedRef = useRef<string | null>(null);
   const chosenRef = useRef<string | null>(null);
+  // Whether the panel is currently WORTH doing work for: the workspace is center-staged AND
+  // the Docs slot is the fronted panel. Read inside the listener (see the skip below).
+  const visibleRef = useRef(false);
+  // Set when an `fs-change` arrived while invisible and was skipped. Consumed by the catch-up
+  // effect, which re-lists once the panel is worth working for again.
+  const staleRef = useRef(false);
   useEffect(() => {
     docsRef.current = docs;
     selectedRef.current = selected;
     chosenRef.current = chosen;
-  }, [docs, selected, chosen]);
+    visibleRef.current = visible && panelFront;
+  }, [docs, selected, chosen, visible, panelFront]);
 
   // The offset waiting to be (re-)applied, as a pure state machine (`pendingRestore.ts`)
   // rather than an ad-hoc ref pair.
@@ -300,24 +325,21 @@ export function DocsPanel({
     }
   }, [current, panelFront, visible]);
 
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    // The `cancelled` guard is the StrictMode async-listen lesson: the cleanup can run before
-    // `listen()` resolves, and without it the first subscription's unlisten is never captured
-    // → a double listener.
-    void listen<FsChange>(FS_CHANGE_EVENT, (event) => {
-      if (!appliesToWorkspace(event.payload, workspaceId)) return;
-      const { paths } = event.payload;
-      // A git-meta-only event (no worktree paths) cannot have changed a doc.
-      if (paths.length === 0) return;
-
+  // Re-list the docs and apply whatever `decideReload` says. Shared by the `fs-change`
+  // listener and the catch-up effect below, so a skipped-while-invisible reload and a live one
+  // take byte-identical paths — the alternative was duplicating ~50 lines of decision handling
+  // and letting the two drift.
+  //
+  // `isLive()` is passed by the caller rather than captured: the listener needs its own
+  // `cancelled` flag (StrictMode teardown), and the effect needs a different one.
+  const runReload = useCallback(
+    (isLive: () => boolean) => {
       const prev = docsRef.current;
       if (prev === null) return; // list hasn't loaded yet; the initial fetch will win.
 
       void invoke<DocEntry[]>("docs_list", { root: projectPath })
         .then((next) => {
-          if (cancelled) return;
+          if (!isLive()) return;
           const sel = selectedRef.current;
           const decision = decideReload({ prev, next, selected: sel });
 
@@ -353,7 +375,11 @@ export function DocsPanel({
                 pendingRef.current = pendingNext(pendingRef.current, {
                   type: "reset",
                 });
-                setChosen(decision.selected);
+                // ⚠️ `setJumpedTo`, NOT `setChosen`. Writing the machine's answer into
+                // `chosen` made the jump guard (`chosen === null`) false forever, so the
+                // first jump disabled every later one — a shipped CRITICAL. See the
+                // `jumpedTo` declaration for the full account.
+                setJumpedTo(decision.selected);
                 setLinkNote(null);
               }
               break;
@@ -365,6 +391,12 @@ export function DocsPanel({
                 type: "reset",
               });
               setChosen(decision.chosen);
+              // ⚠️ `jumpedTo` must be cleared too, for the same reason and by the same
+              // argument: if the vanished doc was where a JUMP had parked us, a surviving
+              // `jumpedTo` would outrank the fall-back answer (per `selectedDoc`'s
+              // precedence) and the panel would keep pointing at a file that no longer
+              // exists — the exact stale-render this arm exists to prevent.
+              setJumpedTo(null);
               setLinkNote(null);
               break;
           }
@@ -373,6 +405,40 @@ export function DocsPanel({
           // A failed refresh leaves the current list in place rather than blanking the
           // panel — the reader keeps what they had, and the next event retries.
         });
+    },
+    [projectPath],
+  );
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    // The `cancelled` guard is the StrictMode async-listen lesson: the cleanup can run before
+    // `listen()` resolves, and without it the first subscription's unlisten is never captured
+    // → a double listener.
+    void listen<FsChange>(FS_CHANGE_EVENT, (event) => {
+      if (!appliesToWorkspace(event.payload, workspaceId)) return;
+      const { paths } = event.payload;
+      // A git-meta-only event (no worktree paths) cannot have changed a doc.
+      if (paths.length === 0) return;
+
+      // ⚠️ Do NO work while the panel cannot be seen — record that it went stale instead.
+      //
+      // Added at the WP4 code-review refactor (MAJOR): the reload previously ran whenever the
+      // workflow gate was on, independent of whether the Docs tab was ever opened. Since the
+      // slot is mounted unconditionally under the gate, that meant a `docs_list` per 200ms
+      // debounce window plus a full `docs_read` per content change — per workspace — feeding a
+      // panel with `clientHeight: 0`. During the CC-churn scenario this feature targets, with
+      // several workspaces open, that is a steady stream of invisible IPC.
+      //
+      // Skipping is only safe because the staleness is REMEMBERED: the catch-up effect below
+      // re-lists once the panel is visible again, so re-fronting shows current content.
+      // Without that flag this would trade cost for a stale panel — the bug WP4 exists to fix.
+      if (!visibleRef.current) {
+        staleRef.current = true;
+        return;
+      }
+
+      runReload(() => !cancelled);
     }).then((fn) => {
       if (cancelled) {
         fn();
@@ -384,7 +450,25 @@ export function DocsPanel({
       cancelled = true;
       unlisten?.();
     };
-  }, [workspaceId, projectPath]);
+  }, [workspaceId, runReload]);
+
+  // Catch-up: the panel just became visible after skipping at least one `fs-change`. Re-list
+  // once and clear the flag, so what the reader sees on re-front is current.
+  //
+  // ⚠️ The flag is cleared BEFORE the async work, not after: leaving it set across the await
+  // would let a second visibility flip start a duplicate reload, and clearing it in the
+  // `.then` would strand it set forever if the effect were torn down mid-flight (the
+  // unreleased-latch shape that produced this component's blank-panel bug — see `fetchLatch`).
+  useEffect(() => {
+    if (!(visible && panelFront)) return;
+    if (!staleRef.current) return;
+    staleRef.current = false;
+    let cancelled = false;
+    runReload(() => !cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, panelFront, runReload]);
 
   const ordered = docs ? orderDocs(docs) : [];
   // ONE view at a time, decided by a pure function so the exclusivity is testable as a
@@ -420,6 +504,27 @@ export function DocsPanel({
   // during render. `react-hooks/refs` rejects the latter (it cannot see that the handler
   // defers the read), and the rule is right about the shape even though the getter was
   // safe: keeping ref access inside the event handler is what the rule is protecting.
+  // THE single entry point for a USER-driven selection change — the row click and the
+  // in-doc link handler both go through it, and nothing else may call `setChosen`.
+  //
+  // ⚠️ It exists because the two paths previously called `setChosen` directly and NEITHER
+  // dispatched `"reset"` (code review of `480052e`, MAJOR). `pendingRestore.ts` defines that
+  // event precisely for "the selection changed to a different document" and
+  // `pendingRestore.test.ts` asserts it — but no caller sent it, so a scroll offset held for
+  // doc A could be applied to freshly-opened doc B. It only looked harmless because
+  // `planRestore` happened to clamp against a momentarily-empty container: correctness
+  // resting on an incidental clamp rather than on the transition built for it.
+  //
+  // Two things every user pick must do, which is why this is one function and not two call
+  // sites: drop any pending offset (it belongs to the doc being left), and clear `jumpedTo`
+  // (a user pick supersedes wherever the machine had parked us).
+  const chooseDoc = useCallback((relPath: string) => {
+    pendingRef.current = pendingNext(pendingRef.current, { type: "reset" });
+    setJumpedTo(null);
+    setChosen(relPath);
+    setLinkNote(null);
+  }, []);
+
   const onContentClick = useCallback(
     (e: DocLinkClickEvent) =>
       makeDocLinkClickHandler({
@@ -427,9 +532,9 @@ export function DocsPanel({
         docs,
         containerRef: contentRef,
         setLinkNote,
-        setChosen,
+        setChosen: chooseDoc,
       })(e),
-    [selected, docs],
+    [selected, docs, chooseDoc],
   );
 
   return (
@@ -483,10 +588,7 @@ export function DocsPanel({
                 }`}
                 data-testid={`docs-row-${entry.kind}`}
                 data-rel-path={entry.rel_path}
-                onClick={() => {
-                  setChosen(entry.rel_path);
-                  setLinkNote(null);
-                }}
+                onClick={() => chooseDoc(entry.rel_path)}
                 // The full path is the disambiguator the label omits — several
                 // `*wbs*.md` label by filename, and the tooltip says where each lives.
                 title={entry.rel_path}

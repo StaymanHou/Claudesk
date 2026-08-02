@@ -100,11 +100,23 @@ export function pickInitialDoc(entries: readonly DocEntry[]): string | null {
  * NOT handle: the chosen doc being DELETED. That fall-back belongs to WP4 (`wbs.md` task
  * 4.3, "disappear" row), which clears the sentinel rather than re-pointing it — see that
  * task for why re-pointing would forge a fake user choice.
+ *
+ * ## THREE tiers, not two (added at the WP4 code-review refactor)
+ * `chosen` (user) > `jumpedTo` (machine) > `pickInitialDoc` (default).
+ *
+ * ⚠️ `jumpedTo` exists because collapsing it into `chosen` was a shipped CRITICAL: the jump
+ * arm wrote its own answer into `chosen`, and since the caller's jump guard is
+ * `chosen === null`, the FIRST jump permanently suppressed every later one. Keeping the
+ * machine's landing spot in its own slot means a jump can be superseded by the next jump
+ * while a USER pick still outranks both — which is the precedence this function exists to
+ * state. Defaulted so existing two-argument callers keep their exact behavior.
  */
 export function selectedDoc(
   chosen: string | null,
   docs: readonly DocEntry[] | null,
+  jumpedTo: string | null = null,
 ): string | null {
   if (chosen !== null) return chosen;
+  if (jumpedTo !== null) return jumpedTo;
   return docs !== null ? pickInitialDoc(docs) : null;
 }

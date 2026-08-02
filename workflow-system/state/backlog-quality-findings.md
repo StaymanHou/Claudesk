@@ -541,3 +541,57 @@ not here. This section holds only what was deliberately NOT addressed.
   4. **Comment repetition (~4:1 ratio in new material).** The probe-5b provenance is narrated **four times** with escalating detail across header, both helper docs, and the tests. Heavy commenting is defensible for a load-bearing guard; the *repetition* is not — duplicated rationale rots asymmetrically, and this WP already had to fix one stale comment for that exact reason.
 - **Priority:** low
 - **Status:** pending
+
+# m11-wp4-docs-live-reload — 2026-08-02
+
+## SURFACE-2026-08-02-QUALITY-WP4-SIBLING-EDIT-MOVES-AUTOSELECTION
+- **Source:** feature:review-quality (m11-wp4), MAJOR
+- **Target level:** feature (M11 WP5 or a later touch of the Docs panel)
+- **Type:** tech-debt / gap
+- **Summary:** A **fourth, unmodeled selection-change path** exists alongside the three WP4
+  designed. `setDocs(next)` refreshes mtimes on every `fs-change`, and `selected` derives from
+  `pickInitialDoc(docs)` when unchosen — so a *sibling* wip file being edited can move the
+  auto-selection even though `decideReload` returned `"none"`. No arm ran, no scroll was
+  captured, no `"reset"` was dispatched.
+- **Context:** Reachable in any project with two `wip/*.md` files and no `.session.md`.
+  `pickInitialDoc.test.ts` asserts BOTH halves of the underlying behavior (winner stable under
+  uniform mtime churn / winner moves when the newest changes), so the pure layer models it — the
+  panel layer does not. Of WP4's three responses this is the one with **no scroll preservation**.
+  NOT fixed at the review refactor: a correct fix means modeling a fifth response in the decision
+  matrix (does a sibling-driven auto-selection move count as a jump? should it preserve scroll?),
+  which is design work, not cleanup — and the refactor skill's scope guard forbids it.
+- **Suggested action:** Decide the intended behavior first, then implement. Two candidates:
+  (a) treat an auto-selection move as a `"jump"` (consistent with jump-on-appear, gets scroll
+  reset semantics for free); or (b) pin the auto-selection once resolved so only appear/disappear
+  can move it (fewer surprises, but the panel stops tracking "the wip I'm actually in" — which is
+  `pickInitialDoc`'s whole purpose). (a) is likely right but it is an operator-facing call.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-02-QUALITY-WP4-MINOR-BATCH
+- **Source:** feature:review-quality (m11-wp4), 4 MINOR
+- **Target level:** feature
+- **Type:** tech-debt
+- **Summary:** (1) **Comment density — THIRD consecutive flag** (WP2, WP3, now WP4; WP3 noted it
+  had grown). Reviewer's judgment: it has crossed from stylistic to functional, since the two
+  genuine gaps found at review sat inside the densest region of the file. Worst offenders named:
+  `DocsPanel.tsx:208-222` (15 comment lines for one `useState(0)`, restating the P3.5 incident
+  already recorded at length in the WIP) and `DocsPanel.tsx:113-151` (39 contiguous comment lines
+  above a 24-line effect, containing two separate accounts of the same latch bug, one duplicating
+  `fetchLatch.ts`'s own header). **Rule worth adopting: state the invariant and the forbidden
+  shape at the code; cite the WIP for the narrative.** (2) A **second** per-workspace `fs-change`
+  listener, where `RightPanelHost.tsx:315-317` documents the opposite pattern ("reuse the same
+  single listener instead of a second one in `EditorSplit`") — defensible for a lazy chunk, but
+  the deviation is unacknowledged, leaving the next consumer two conflicting precedents and no
+  rule. (3) `DocsPanel.tsx` `plan.apply && el !== null` — the second conjunct is unreachable as a
+  condition (exists only for `tsc` narrowing); undercuts the `isMeasurable`-as-type-predicate
+  rationale documented 200 lines earlier. (4) The reload path swallows a `docs_list` failure with
+  no `setError` while the initial fetch surfaces it — keeping the list is right, but the asymmetry
+  makes a permanently-unreadable doc dir read as "nothing is changing", against the file's own
+  "surfaced, never swallowed" convention.
+- **Context:** (1) is the highest-value item and is now specific enough to act on. It is also
+  self-reinforcing: the review found real defects hidden in the comment thicket.
+- **Suggested action:** (1) at the next touch of `DocsPanel.tsx` — cut the incident retellings,
+  keep the invariants. (2) record the rule either way in `arch.md`. (3)+(4) one-liners.
+- **Priority:** low (all four)
+- **Status:** pending

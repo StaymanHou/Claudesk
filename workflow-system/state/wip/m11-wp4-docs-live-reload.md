@@ -1,7 +1,7 @@
 # Feature: M11 WP4 — Scroll-preserving live reload of the Docs panel
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** refactor (complete)
 **Created:** 2026-08-02
 **Drive mode:** autopilot
 **WBS:** `workflow-system/product/wbs.md` → WP4 (M11), size S
@@ -184,8 +184,8 @@ the line — before believing a pass).
      WP4 is therefore a 3-phase feature. WBS task 4.4 is unchanged in substance. -->
 
 ## Current Node
-- **Path:** Feature > ship (complete)
-- **Active scope:** **SHIPPED** as `8d3e487` (not pushed — publication is the operator's call; the branch is now 39 ahead of origin/main). All 3 phases complete. Phase 4 was dissolved into Phase 3 at the integration-boundary back-loop, so WP4 is a 3-phase feature and the feature is ready to ship. P3.5 resolved via the `/debug-empirical-telemetry` sidebar: the `reloadNonce` fix was correct all along; the apparent second failure was an **HMR artifact** (4 hot updates to `DocsPanel.tsx` at 14:24:12–14:24:43, "re-verify" ran at 14:25:01 inside the hot-patched tree). 5/5 live outcomes PASS on a clean app.
+- **Path:** Feature > refactor (complete)
+- **Active scope:** **REFACTOR COMPLETE.** CRITICAL + MAJOR-1 + MAJOR-3 fixed in place and mutation-proven (M23/M24/M25); MAJOR-2 + 4 MINOR backlogged (MAJOR-2 needs a behavior decision, which the scope guard forbids here). Suite 1723/140. Was: The `"jump"` arm latches the machine's answer into `chosen`, so the first jump permanently disables every later one (`DocsPanel.tsx:356`); confirmed against source. Refactor scope: the CRITICAL + MAJOR-1 (`reset` never dispatched on user selection) + MAJOR-3 (`panelFront` work gate), which are the same wiring layer. SHIPPED as `8d3e487` (not pushed — publication is the operator's call; the branch is now 39 ahead of origin/main). All 3 phases complete. Phase 4 was dissolved into Phase 3 at the integration-boundary back-loop, so WP4 is a 3-phase feature and the feature is ready to ship. P3.5 resolved via the `/debug-empirical-telemetry` sidebar: the `reloadNonce` fix was correct all along; the apparent second failure was an **HMR artifact** (4 hot updates to `DocsPanel.tsx` at 14:24:12–14:24:43, "re-verify" ran at 14:25:01 inside the hot-patched tree). 5/5 live outcomes PASS on a clean app.
 - **Re-verify gate:** ✅ **PASSED** — the previously-failed outcome re-driven on the CLEANED source from a fresh launch (`htmlLen 16077`, marker present, `scrollTop` held at 900). §6 satisfied.
 - **Blocked:** none
 - **Unvisited:** none — all phases complete.
@@ -475,6 +475,113 @@ app. (Window-global counters inside the component worked fine.)
 <details>
 <summary>In-flight trail — the "NOT YET FIXED" state (superseded, kept for provenance)</summary>
 
+## Code-Quality Review — m11-wp4-docs-live-reload
+
+Reviewed against ship baseline `480052e` by `code-quality-reviewer` (fresh context, 37 tool
+uses). **1 CRITICAL · 4 MAJOR · 4 MINOR.** The CRITICAL and MAJOR-1 were independently
+CONFIRMED by the orchestrator against the source before acting (see verification note below).
+
+### Strengths
+- The three pure modules are the right response to this feature's own history: `decideReload`,
+  `planRestore`/`captureScroll`, and `pendingNext` are total functions over injected values, so
+  22 mutation-attributed probes assert behavior rather than source text.
+- Diffing the re-listed doc set instead of reading `FsChange.kind` is correct and correctly
+  argued: it makes the debounce-coalescing question moot rather than answered.
+- `docsScrollRestore.ts`'s geometry-as-value split is good engineering under a measured
+  constraint (jsdom's zero `clientHeight`), and the discovery was filed for repo-wide reuse.
+- `docsPanelWiring.test.ts:110` rewrote a brittle single-line JSX assertion into a
+  whitespace-flattened, four-prop, per-prop-mutation-proven guard.
+- The `reloadNonce` fix and its rationale are honest and correct.
+
+### Issues
+
+**CRITICAL**
+- [`DocsPanel.tsx:356`] **The `"jump"` arm latches the machine's answer into `chosen`** — the
+  state whose declaration (line 102 / comment at 87) says "the USER's explicit pick." This is
+  the exact move `docsReloadDecision.ts:60-64` forbids for `"refallback"` (*"would forge a fake
+  user choice and suppress the next legitimate jump-on-appear"*), performed one arm earlier for
+  the same reason it is forbidden. Since `shouldJump(chosen)` is `chosen === null`, **the first
+  jump permanently disables every subsequent jump** for the life of the mount. Routine, not
+  edge: `/session-handoff` creates `.session.md` → `/feature-plan` creates a `wip/*.md` →
+  `/product-research` creates `research.md` yields ONE jump then a pinned panel. ⚠️ **The
+  operator's verify-human approval of jump-on-appear was given against a mechanism that
+  narrows itself after one firing.**
+
+**MAJOR**
+- [`DocsPanel.tsx:486`, `handleDocLinkClick.ts:128`] **Neither user-driven selection path
+  dispatches `"reset"`** — only the two `fs-change` arms do. `pendingRestore.ts:62-69` defines
+  that event specifically for "the selection changed to a different document,"
+  `pendingRestore.test.ts:175` asserts it, and M22 mutation-proves it. A pending offset held
+  across a user click survives into the new document; it is consumed harmlessly today only
+  because `planRestore` clamps against a momentarily-empty container — correctness resting on an
+  incidental clamp. This is the "machine proven, caller not" gap this WP's method commitment
+  exists to prevent.
+- [`DocsPanel.tsx:327`] **A fourth, unmodeled selection-change path.** `setDocs(next)` refreshes
+  mtimes every event and `selected` derives from `pickInitialDoc(docs)` when unchosen, so a
+  *sibling* wip edit can move the auto-selection while `decideReload` returned `"none"` — no arm
+  ran, no scroll captured, no reset. `pickInitialDoc.test.ts` asserts both halves of this, so the
+  pure layer knows; the panel layer does not model it. Reachable in any project with two wip
+  files and no `.session.md`.
+- [`DocsPanel.tsx:303-387`] **The reload runs regardless of `panelFront`.** A workspace whose
+  user never opened the Docs tab still issues a `docs_list` per debounce window and a full
+  `docs_read` per `"content"` decision, feeding a panel with `clientHeight: 0` — N workspaces ×
+  ~5 IPC round trips/sec during exactly the CC-churn scenario the feature targets. `panelFront`
+  was threaded for the retry trigger and never considered as a work gate; the argument was
+  never made either way.
+- [`DocsPanel.tsx:284-301`, `docsPanelWiring.test.ts:151-241`] **The structural arms cannot catch
+  the findings above** (all three are missing-dispatch / missing-gate absences). The WIP's own
+  honesty about this is the right call, but the conclusion drawn ("regression-guarded
+  structurally + at unit level") overstates it: what is guarded is that *specific known-broken
+  shapes* are absent. Two of three findings here are the residual class the WIP predicted, so
+  the "WP5 drives this live again" mitigation is **load-bearing and a scheduled obligation, not
+  a footnote.**
+
+**MINOR**
+- [`DocsPanel.tsx:309`] A **second** per-workspace `fs-change` listener, where
+  `RightPanelHost.tsx:315-317` documents the opposite pattern ("reuse the same single
+  per-workspace listener instead of a second one in `EditorSplit`"). Defensible (lazy chunk,
+  self-contained) but the deviation is unacknowledged, leaving the next consumer two
+  conflicting precedents.
+- [comment density — **THIRD consecutive flag**, WP2 and WP3 both raised it and WP3 noted it had
+  grown] Now specific: worst offenders are `DocsPanel.tsx:208-222` (15 comment lines for one
+  `useState(0)`, restating the P3.5 incident already in this WIP) and `DocsPanel.tsx:113-151`
+  (39 contiguous comment lines above a 24-line effect, with two separate accounts of the same
+  latch bug, one duplicating `fetchLatch.ts`'s own header). Module headers earn their length;
+  the *incident retellings* do not. **Reviewer's judgment: this has crossed from stylistic to
+  functional — the two genuine gaps sit inside the densest region of the file.** Rule worth
+  adopting: state the invariant and the forbidden shape at the code, cite the WIP for narrative.
+- [`DocsPanel.tsx:293`] `plan.apply && el !== null` — the second conjunct is unreachable as a
+  condition (exists only for `tsc` narrowing); a note or a restructure would stop a reader
+  inferring that `apply: true` with a null element is a real state.
+- [`DocsPanel.tsx:372-375`] The reload path swallows a `docs_list` failure with no `setError`
+  while the initial fetch surfaces it. Keeping the list is right, but the asymmetry means a
+  permanently-unreadable doc dir reads as "nothing is changing," against the file's own
+  "surfaced, never swallowed" convention.
+
+### Assessment
+Strong, disciplined work with one real hole. The decomposition is not over-split — each module
+owns a distinct question and `pendingRestore.ts` earns its 27 executable lines because the
+property it encodes is one a hook gets wrong silently. Where the WP falls short is the seam it
+*identified* as highest-risk and then addressed one level too low: extracting the machine proved
+the machine, while the caller fails to dispatch `reset` on the two paths the machine documents,
+latches a machine-generated selection into state labelled "the user's explicit pick"
+(self-disabling the headline behavior), and lets a fourth path bypass the decision matrix. All
+three are absences, invisible to structural arms, and exactly the residual risk the WIP predicted
+— a point for candor, a point against the claim that the boundary was adequately mitigated. Net:
+the codebase is advanced by the pure modules and the testing posture, and accrues small debt in
+the wiring layer that a short follow-up would clear.
+
+### Orchestrator verification (2026-08-02)
+The CRITICAL and MAJOR-1 were **not taken on trust**. Confirmed against source before routing:
+`DocsPanel.tsx:356` is `setChosen(decision.selected)` inside the `"jump"` arm;
+`shouldJump` is `chosen === null`; `grep 'type: "reset"'` returns **only** lines 354 and 365
+(both `fs-change` arms) while `setChosen` call sites include the row click (487) and the link
+handler (`handleDocLinkClick.ts:128`), neither of which dispatches it. Both findings stand.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives the WIP.
+
 ## Phase 3 verify-codify (2026-08-02)
 
 **Coverage audit of the 4 operator-approved behaviors** — three were already covered and were
@@ -631,6 +738,39 @@ whitespace-flattened haystack (`[[raw-guard-jsx-prose-needs-flattened-haystack]]
 it to cover all FOUR props now threaded, since two of them (`workspaceId`, `panelFront`) are
 what WP4's live reload and deferred restore depend on. Mutation-proved after the rewrite: each
 of the four props, deleted individually from the mount site, fails the guard.
+
+## Test Triage
+
+⚠️ The entry above ("passes projectPath down…", from the Phase 3 build) belongs to this section
+— its `## Test Triage` heading was lost in a later full-file rewrite of this WIP. Recorded here
+so the artifact is greppable, per the hard rule that no test may be modified without one.
+
+### docsPanelWiring.test.ts › "derives the selection from the user's pick OR pickInitialDoc"
+Classification: **Obsolete test** — the refactor intentionally supersedes the exact call shape it
+pins. It asserts the literal `selectedDoc(chosen, docs)`; the CRITICAL fix adds a third precedence
+tier, so the call is now `selectedDoc(chosen, docs, jumpedTo)`. The *property* the arm exists for
+("the selection is COMPUTED, never written by an effect; the component routes through the
+`selectedDoc` seam") is unchanged and still true.
+Confidence: **high** — one plausible explanation, one sentence: the arm hard-codes an argument
+list the fix deliberately widened.
+Evidence: the arm's `toContain("selectedDoc(chosen, docs)")` vs. `DocsPanel.tsx:224`, now
+`selectedDoc(chosen, docs, jumpedTo)`.
+Action: widen to the call-shape prefix `selectedDoc(chosen, docs` (still proves seam routing, no
+longer pins arity) **and** add an arm asserting `jumpedTo` is passed, so the new third tier is
+itself guarded rather than silently unpinned. Mutation-proved after the edit.
+
+### docsPanelWiring.test.ts › "stores the user's explicit pick separately from the computed selection"
+Classification: **Obsolete test** — same cause, and the finding it was written to prevent is the
+one this refactor fixes. It asserts `setChosen(entry.rel_path)` at the row click; the MAJOR-1 fix
+routes **all** user selection through one `chooseDoc(relPath)` so the `"reset"` dispatch cannot be
+forgotten at a call site.
+Confidence: **high** — the string it matches was deliberately replaced; the arm's stated intent
+("a row click records intent") is satisfied *better* by the new shape.
+Evidence: the arm's `toContain("setChosen(entry.rel_path)")` vs. the row click, now
+`onClick={() => chooseDoc(entry.rel_path)}`.
+Action: rewrite around the new invariant — the row click goes through `chooseDoc(`, and
+`chooseDoc` is the SINGLE writer of `setChosen` for user-driven selection. Strictly stronger than
+the original: it pins the property whose absence *was* MAJOR-1. Mutation-proved after the edit.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
