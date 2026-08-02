@@ -47,7 +47,7 @@ desc='Five seconds of --help reading collapses redundant matrix rows and surface
 - [feedback_surfaced_in_discoveries_not_worktree.md](feedback_surfaced_in_discoveries_not_worktree.md) — Work Tree leaves are units of work; SURFACED items are notices — mixing them creates parent-completion-invariant violations
 base=feedback_surfaced_in_discoveries_not_worktree.md
 desc=$'Work Tree leaves are units of work; SURFACED items are notices �\M-\C-@\M-\C-T mixing them creates parent-completion-invariant violations'
-- [hmr-stale-across-file-rename.md](hmr-stale-across-file-rename.md) — A long-lived Vite/HMR dev window across a mid-build file RENAME can half-apply and fake a regression — relaunch before suspecting the diff.
+- [hmr-stale-across-file-rename.md](hmr-stale-across-file-rename.md) — A long-lived Vite/HMR dev window can half-apply and fake a regression — after a file RENAME *or* any in-place edit to a component holding useRef/useState (worse: hook state survives in a shape the new source cannot produce). Relaunch before believing a verify RESULT, not just before suspecting the diff.
 base=hmr-stale-across-file-rename.md
 desc=$'A long-lived Vite/HMR dev window across a mid-build file RENAME can half-apply and fake a regression �\M-\C-@\M-\C-T relaunch before suspecting the diff.'
 - [installed-build-verify-deferred-to-release.md](installed-build-verify-deferred-to-release.md) — "Operator defers installed-`.app` / native-window manual verification to the /release packaging gate, not per-feature verify-human"

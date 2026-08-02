@@ -1,5 +1,32 @@
 # Backlog
 
+## SURFACE-2026-08-02-PROJECT-MEMORY-SYMLINK-NOT-IN-PLACE-TWO-COPIES-DRIFT
+- **Source:** session-capture / feature-finalize (M11 WP4 close)
+- **Target level:** product:arch (project setup / artifact tracking)
+- **Type:** gap
+- **Summary:** `~/.claude/CLAUDE.md` → "Project-memory location — harness symlink (GLOBAL)" specifies
+  ONE physical store: `<proj-dir>/.claude/memory/` git-tracked, with the harness path
+  `~/.claude/projects/<slug>/memory` a **symlink** to it. **On this machine that is not the case
+  for claudesk** — `ls -ld .claude/memory` shows a real directory (not a symlink), so the repo dir
+  and the harness store are **two independent copies**.
+- **Context:** Found while closing M11 WP4. A memory update written to the repo path did not update
+  the harness copy (and vice versa) — I wrote the memory body to the repo dir and the index line to
+  the harness `MEMORY.md`, then had to stage the repo's `MEMORY.md` separately. **Both copies happen
+  to agree right now** (identical 2714-byte memory, both index lines widened), so nothing is broken
+  today; the risk is silent divergence on every future write, where a session reads a stale
+  auto-loaded memory while the tracked one is correct — or the reverse, which is worse because the
+  git history then looks authoritative and isn't.
+- **Suggested action:** Run the existing primitive rather than hand-fixing:
+  `tools/memory-link/ensure-memory-link.sh` in the workflow-system source repo (with
+  `migrate-memory.sh` if the two copies have already diverged — diff them first). ⚠️ The slug is
+  derived from the **realpath**, not `$PWD`. Then verify `ls -ld .claude/memory` reports a symlink.
+  Worth checking the other active projects for the same drift, since the convention says
+  `session-start`/`product-context` should have converged this automatically and evidently did not
+  here — that is the more interesting question than this one project's state.
+- **Priority:** medium (no data loss yet; silent-divergence risk on every memory write, and it may
+  affect other projects)
+- **Status:** pending
+
 ## Code-quality findings — m11-wp4-docs-live-reload (2026-08-02)
 - **Pointer:** **1 MAJOR + 4 MINOR** remaining (was 1 CRITICAL + 4 MAJOR + 4 MINOR) from
   `code-quality-reviewer` against ship baseline `480052e`. **The CRITICAL and 2 of the 4 MAJOR
@@ -57,7 +84,7 @@
 - **Status:** pending
 
 ## Code-quality findings — m11-wp3-docs-render-and-navigation (2026-08-02)
-- **Pointer:** **3 MINOR** (0 CRITICAL, 0 MAJOR remaining) from `code-quality-reviewer` against ship baseline `6f6df23`. **All 4 MAJOR were FIXED IN PLACE, not backlogged** — three were verified by reproducing the reviewer's mutations first, and one of them (folding an empty-href bail into the anchor guard) **passed the full 1645-test suite while re-opening the `[click]()` webview-hijack hole this WP had just fixed**. The root cause the reviewer named — *"the remedy is not more `?raw` arms but mutation-probing the component rather than the copy of it"* — was acted on: the click handler was extracted to `handleDocLinkClick.ts` so the behavioral test **imports the real code**, and the source-order guard was deleted rather than re-patched (that shape had failed twice). Also fixed: `resolveDocLink`'s `fragment` was computed, documented, and discarded by its only caller, so `wbs.md#section` links landed at the top of the doc while the comment said otherwise. The 3 remaining MINOR: comment density past useful (⚠️ flagged by the *previous* WP's review too, and it grew), `selected` recomputation feeding the content effect (becomes live at WP4), and `headingSlug` lacking GitHub's collision suffix. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m11-wp3-docs-render-and-navigation — 2026-08-02`.
+- **Pointer:** **2 MINOR** remaining (was 3; 0 CRITICAL, 0 MAJOR) from `code-quality-reviewer` against ship baseline `6f6df23`. ⚠️ **`SELECTED-RECOMPUTED-FEEDS-EFFECT` was RESOLVED by M11 WP4** (2026-08-02) — the WP it named as the point it "becomes live" — and deleted per delete-on-resolve; see CHANGELOG. **All 4 MAJOR were FIXED IN PLACE, not backlogged** — three were verified by reproducing the reviewer's mutations first, and one of them (folding an empty-href bail into the anchor guard) **passed the full 1645-test suite while re-opening the `[click]()` webview-hijack hole this WP had just fixed**. The root cause the reviewer named — *"the remedy is not more `?raw` arms but mutation-probing the component rather than the copy of it"* — was acted on: the click handler was extracted to `handleDocLinkClick.ts` so the behavioral test **imports the real code**, and the source-order guard was deleted rather than re-patched (that shape had failed twice). Also fixed: `resolveDocLink`'s `fragment` was computed, documented, and discarded by its only caller, so `wbs.md#section` links landed at the top of the doc while the comment said otherwise. The 2 remaining MINOR: comment density past useful (⚠️ flagged by the *previous* WP's review too, and it grew — **and flagged a THIRD time at WP4**, where the reviewer judged it to have crossed from stylistic to functional and named specific offenders; see the WP4 findings entry), and `headingSlug` lacking GitHub's collision suffix. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m11-wp3-docs-render-and-navigation — 2026-08-02`.
 - **Priority:** low (all)
 - **Status:** pending
 - **Pickup shape:** All three are polish that should ride a future touch of these files. The comment-density one is the pick — it has now been flagged twice, and the reviewer supplied a usable discriminator (*does the sentence survive once the WIP is archived?*). ⚠️ Do NOT strip the ⚠️-marked invariant comments while doing it; those are the ones that stopped real regressions. Dismiss via the WIP's `## Code-Quality Review` section.
@@ -403,16 +430,6 @@
 - **Priority:** low (1 MINOR)
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** a behavioral test (or doc-hardening) for the `--permission-mode default` no-op — rides any future spawn-path touch. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL
-- **Source:** operator request (2026-07-07, during M9 WP2.5)
-- **Target level:** product:roadmap (anchored on Milestone 11 — workflow-docs markdown viewer)
-- **Type:** new-work (improvement / UX refinement)
-- **Summary:** When a WIP/doc `.md` file rendered in the (future M11) Docs viewer changes on disk, the reload currently scrolls the view back to the top. The Docs viewer must reload the file content **in place, preserving scroll position** (offset or anchor), so watching a live-updating WIP file doesn't yank the reader to the top on every change.
-- **Context:** The operator watches `workflow/wip/*.md` update live in the editor/viewer as CC edits it (exactly this session's flow). The naive "re-read → replace content" reload resets scroll to top — disruptive precisely in the live-watch case the viewer is most useful for. This is M11's surface (the Docs panel rendering conventional docs + the `fs-change` watcher that already exists from QoL-WP0).
-- **Suggested action:** In the M11 Docs-viewer render path, on an `fs-change`-triggered reload, capture the scrollTop (or a stable anchor — e.g. nearest heading/line) before replacing content and restore it after. Applies to the read-only markdown render specifically; if the same scroll-jump affects the *editor* on external reload, fold that in too. Added as an M11 deliverable bullet in roadmap.md + its exit criterion.
-- **Priority:** medium (real daily-use friction, but on M11 which is a few milestones out; no rush)
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)* (roadmap-anchored on M11) — **deferred, carry to next cycle** *(M10.9 close, 2026-07-31)*
 
 ## Code-quality findings — qol-wp1-close-workspace (2026-06-25)
 - **Pointer:** 1 MINOR remaining (originally 3 MINOR / 0 CRITICAL / 0 MAJOR; the filmstrip-× over-narrating comment MINOR and the forward-referencing `docsRef` comment MINOR both RESOLVED) from `feature-review-quality` on ship commit `c01a3f9`. The remaining MINOR — **`WP1-APP-WIRING-UNTESTED`**: the App-level close wiring (`requestClose`/`resolveClose`/dirty-probe registry) + the × routing are untested by automation (accepted per the manual-host-UI convention + live 9/9 verification). Reviewer: well-built, idiomatic, closes a latent WP7 lifecycle gap. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp1-close-workspace — 2026-06-25`.

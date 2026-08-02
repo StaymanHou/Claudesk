@@ -31,22 +31,6 @@ MINOR are backlogged.*
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-08-02-QUALITY-WP3-SELECTED-RECOMPUTED-FEEDS-EFFECT
-- **Source:** feature:review-quality (m11-wp3)
-- **Target level:** feature (M11 WP4)
-- **Type:** tech-debt (latent, becomes live at WP4)
-- **Summary:** `selected` is `selectedDoc(chosen, docs)` — recomputed each render from a
-  freshly-built array — and is a dependency of the content-fetch effect. Harmless today because it
-  resolves to a string, so referential churn does not re-fire the effect.
-- **Context:** It re-fires whenever `pickInitialDoc` returns a *different* path — which is exactly
-  what **WP4 introduces** when a new doc appears and the ranking is re-run. Worth a note before that
-  lands, since the auto-selected value must stay stable across a list refresh that does not change
-  the winner.
-- **Suggested action:** One comment at the effect noting the constraint; WP4 verifies it holds when
-  it wires `fs-change`.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-08-02-QUALITY-WP3-HEADING-SLUG-NO-COLLISION-SUFFIX
 - **Source:** feature:review-quality (m11-wp3)
 - **Target level:** feature

@@ -1,7 +1,7 @@
 # Feature: M11 WP4 — Scroll-preserving live reload of the Docs panel
 
 **Workflow:** feature
-**State:** refactor (complete)
+**State:** COMPLETED 2026-08-02
 **Created:** 2026-08-02
 **Drive mode:** autopilot
 **WBS:** `workflow-system/product/wbs.md` → WP4 (M11), size S
@@ -184,7 +184,7 @@ the line — before believing a pass).
      WP4 is therefore a 3-phase feature. WBS task 4.4 is unchanged in substance. -->
 
 ## Current Node
-- **Path:** Feature > refactor (complete)
+- **Path:** Feature > finalize (complete) — **ARCHIVED**
 - **Active scope:** **REFACTOR COMPLETE.** CRITICAL + MAJOR-1 + MAJOR-3 fixed in place and mutation-proven (M23/M24/M25); MAJOR-2 + 4 MINOR backlogged (MAJOR-2 needs a behavior decision, which the scope guard forbids here). Suite 1723/140. Was: The `"jump"` arm latches the machine's answer into `chosen`, so the first jump permanently disables every later one (`DocsPanel.tsx:356`); confirmed against source. Refactor scope: the CRITICAL + MAJOR-1 (`reset` never dispatched on user selection) + MAJOR-3 (`panelFront` work gate), which are the same wiring layer. SHIPPED as `8d3e487` (not pushed — publication is the operator's call; the branch is now 39 ahead of origin/main). All 3 phases complete. Phase 4 was dissolved into Phase 3 at the integration-boundary back-loop, so WP4 is a 3-phase feature and the feature is ready to ship. P3.5 resolved via the `/debug-empirical-telemetry` sidebar: the `reloadNonce` fix was correct all along; the apparent second failure was an **HMR artifact** (4 hot updates to `DocsPanel.tsx` at 14:24:12–14:24:43, "re-verify" ran at 14:25:01 inside the hot-patched tree). 5/5 live outcomes PASS on a clean app.
 - **Re-verify gate:** ✅ **PASSED** — the previously-failed outcome re-driven on the CLEANED source from a fresh launch (`htmlLen 16077`, marker present, `scrollTop` held at 900). §6 satisfied.
 - **Blocked:** none
@@ -474,6 +474,61 @@ app. (Window-global counters inside the component worked fine.)
 
 <details>
 <summary>In-flight trail — the "NOT YET FIXED" state (superseded, kept for provenance)</summary>
+
+## Retrospect
+
+- **What changed in our understanding:**
+  1. **A pure-module extraction proves the module, not its caller.** This WP's headline method —
+     extract behavioral logic so tests import and drive real code — is right and worked for all
+     three modules. But it has a blind spot we hit *twice*: `pendingRestore.ts` was fully
+     mutation-proven while **no caller dispatched `"reset"`**, and `shouldJump` was proven while
+     the jump arm poisoned its own input. Both were *absences*, and a `?raw` guard can only
+     enumerate shapes you thought of. Now a root-`CLAUDE.md` convention.
+  2. **HMR can invalidate a verify RESULT, not just a diff.** An in-place edit to a component
+     holding `useRef`/`useState` leaves hook state alive in a shape no code path in the new
+     source can produce — strictly worse than the rename case, which at least fails loudly.
+     Cost: four wrong theories and a telemetry sidebar, *with the existing memory already read
+     and judged inapplicable*. The memory has been widened.
+  3. **jsdom has no layout engine** — `clientHeight` is `0` for visible elements exactly as for
+     `display:none` ones. Caught by probing *before* writing code, which changed the module's
+     signature from the planned element-sniffing shape to injected geometry.
+  4. **A phase whose only content is another phase's verification has no independent
+     deliverable.** The integration-boundary rule forced this out into the open: Phase 4 was
+     "go verify Phase 3", so it dissolved into Phase 3.
+
+- **Assumptions that held:**
+  - `pickInitialDoc` / `selectedDoc` needed no change — WP3 wrote both for this second caller,
+    and that held (`selectedDoc` gained one optional parameter at the review refactor, not a
+    rewrite).
+  - `fs-change`'s `kind` is unusable for classification; diffing the re-listed doc set is
+    correct **and** made the WBS's `notify`-coalescing question moot rather than answered.
+  - The watcher does see `.session.md` (M6 WP6's ignore re-base), so the routine
+    `/session-restore` disappear case was wireable.
+  - `.docs-content` as the stable scroll box survived a content swap, as WP1 measured.
+
+- **Assumptions that were wrong:**
+  - *"The nonce fix didn't work."* It had. I was verifying inside a hot-patched tree.
+  - *"Extracting the machine addresses the caller-honors-the-plan risk."* The verify-self
+    subagent named that seam as the highest risk; I answered one level too low, and code review
+    then found three defects in exactly that layer.
+  - *"`chosen` is safe to write from the jump arm."* It made the first jump disable every later
+    one — committed **one arm after** writing a comment forbidding the identical move for
+    `refallback`.
+  - *"jsdom can host the scroll tests as planned."*
+
+- **Approach delta:**
+  - **4 phases → 3.** Phase 4 dissolved into Phase 3 at an F9b integration-boundary back-loop.
+  - **P2.1's signature changed from the plan** (injected `ScrollGeometry` value, not an
+    `HTMLElement`), forced by the measured jsdom limitation.
+  - **One extra module beyond plan:** `pendingRestore.ts`, added because the Phase 2 verify-self
+    subagent named the hold-and-retry seam as the highest-risk part of the WP.
+  - **A `reloadNonce` was needed** that the plan did not anticipate — `setLoaded(null)` cannot
+    re-trigger an effect keyed on unchanged `selected`.
+  - **A code-review refactor pass** (`966dca5`) followed ship: 1 CRITICAL + 2 MAJOR fixed in
+    place. Not in the plan, and the CRITICAL means the feature shipped briefly self-disabling.
+  - **Verification cost far exceeded the estimate.** WP4 was sized **S**; it consumed a
+    telemetry sidebar, two adversarial subagent passes, five live MCP-bridge drives, and 25
+    mutations. The *code* was S-sized; proving it was not.
 
 ## Code-Quality Review — m11-wp4-docs-live-reload
 

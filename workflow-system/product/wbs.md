@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: "Milestone 11: Workflow-docs markdown viewer"
-updated: 2026-08-02  # WP3 ✅ SHIPPED (`6f6df23`) — the Docs panel RENDERS: read-only formatted markdown, auto-select-on-open (most-downstream-wins), link navigation (anchors scroll in-panel, cross-doc switches + lands on the fragment, external opens the real browser, webview never navigates). Docs is now the FIRST tab + default panel when the gate is ON (operator decision; gate-OFF ordering bit-for-bit unchanged). `DocsPanel` lazy-loaded: main chunk 606→440 KB. Backend `DocEntry.mtime_ms` added so the multi-WIP tiebreak is recency not alphabetical (mtime over creation time — measured, creation time favors newest-STARTED over currently-active). ⚠️ ARCH: raw HTML is BLOCKED as a stated rule (arch.md), pinned 3 ways incl. a test that fails on BENIGN tags; setting a real CSP filed separately. ⚠️ SIX defects found, NONE by the gates — incl. a StrictMode blank panel caused by the fix meant to make the latch safer, and an empty-href webview hijack whose guard passed the full 1645-test suite. Durable lesson: a `?raw` guard cannot express a behavioral property; the handler was extracted so tests import the REAL code. Review: 0 CRITICAL / 4 MAJOR (all fixed in place) / 3 MINOR (backlogged).
+updated: 2026-08-02  # WP4 ✅ SHIPPED (`480052e`) + code-review refactor (`966dca5`) — the Docs panel now LIVE-RELOADS on `fs-change`: content changes re-render in place with scroll preserved, an appearing doc jumps, a vanishing doc falls back. Resolves SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL. Three pure modules (`docsReloadDecision` / `docsScrollRestore` / `pendingRestore`) so tests drive real code; 25 mutations proven. ⚠️ Classify by DIFFING the re-listed doc set, never `FsChange.kind` (backend folds a mixed 200ms batch to `Other`). ⚠️ jsdom reports `clientHeight === 0` for VISIBLE elements too, so scroll geometry is an injected VALUE, not read off an element. ⚠️ Phase 4 was DISSOLVED into Phase 3 at an integration-boundary back-loop (a phase whose only content is another phase's verification has no independent deliverable) — WP4 shipped as 3 phases. Review: 1 CRITICAL + 2 MAJOR fixed in place (the jump arm latched the machine's answer into `chosen`, self-disabling jump-on-appear after ONE firing), 1 MAJOR + 4 MINOR backlogged. Durable lesson → root CLAUDE.md: extracting a pure state machine proves the MACHINE, not its CALLER.
 ---
 
 # WBS — Milestone 11: Workflow-docs markdown viewer
@@ -131,15 +131,15 @@ No new design prior proposed — the two decisions above are applications of exi
 
 ---
 
-### WP4: Scroll-preserving live reload (on `fs-change`)
+### WP4: Scroll-preserving live reload (on `fs-change`) — ✅ SHIPPED 2026-08-02 (commit `480052e`, code-review refactor `966dca5`)
 **Description:** When a rendered doc changes on disk, re-render its content **in place without resetting scroll to the top** — the common case being watching a `workflow-system/state/wip/*.md` update live while CC edits it (exactly this session's flow). Rides the existing QoL-WP0 `fs-change` watcher (`fs_watch` backend + `fsChange.ts` + `changeAppliesToWorkspace`) that `RightPanelHost` already consumes for editor reload — no new watcher.
 **Milestone:** M11
 **Dependencies:** WP3 (a rendered, scrollable doc to preserve)
 **Size:** S
 **Tasks:**
-- [ ] 4.1 Subscribe the Docs panel to `fs-change` (via the existing `RightPanelHost` fs-change handling): when the currently-rendered doc's path matches a change for this workspace, re-read (`docs_read`) + re-render.
-- [ ] 4.2 **Scroll-preserve:** capture `scrollTop` (or a stable anchor — nearest heading/line) before replacing content; restore it after the re-render. Resolves `SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL`.
-- [ ] 4.3 Also re-derive the doc **list** on `fs-change` (a new `*wbs*.md` scratch file or a new `wip/*.md` appearing/disappearing updates the list).
+- [x] 4.1 Subscribe the Docs panel to `fs-change` (via the existing `RightPanelHost` fs-change handling): when the currently-rendered doc's path matches a change for this workspace, re-read (`docs_read`) + re-render.
+- [x] 4.2 **Scroll-preserve:** capture `scrollTop` (or a stable anchor — nearest heading/line) before replacing content; restore it after the re-render. Resolves `SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL`.
+- [x] 4.3 Also re-derive the doc **list** on `fs-change` (a new `*wbs*.md` scratch file or a new `wip/*.md` appearing/disappearing updates the list).
 
   ⚠️ **AMENDED 2026-08-02 (operator decision at WP3 verify-human).** This task previously said the list re-derivation must happen *"without disturbing the current selection"*. That is now **half wrong**, and the distinction is the whole point:
 
@@ -156,7 +156,7 @@ No new design prior proposed — the two decisions above are applications of exi
   2. **A deleted-and-recreated file is an APPEAR, not a content change** — `.session.md` is written fresh by `/session-handoff` after being deleted by a restore. Whether the watcher coalesces delete+create into one event is a `notify` behavior WP4 must check empirically rather than assume.
 
   **The load-bearing constraint: an EXPLICIT user selection is never overridden.** CC rewrites WIP files many times per turn, so a jump-on-any-update would yank the doc out from under a reader mid-sentence — which is why create-only is the trigger. Track "has the user chosen?" the same way WP3 tracks it for the panel default (a `null`-means-unchosen sentinel, not a boolean flag bolted on). ⚠️ Note WP3 already reuses `pickInitialDoc` for first-load; this makes it fire on a second trigger, so it must stay a **pure function of the doc set** with no first-load-only assumptions baked in.
-- [ ] 4.4 Verify (self, MCP bridge, scratch workspace): render a wip doc, scroll mid-file, mutate the file on disk → content updates in place, scroll stays put (does not jump to top).
+- [x] 4.4 Verify (self, MCP bridge, scratch workspace): render a wip doc, scroll mid-file, mutate the file on disk → content updates in place, scroll stays put (does not jump to top).
 
 ---
 
@@ -268,3 +268,6 @@ So the real cost of B is **~89 KB minified / ~25 KB gzipped (a 2.3× delta) and 
 **Known latent gaps (COSMETIC, logged):** `img[srcset]` and `track[src]` referencing an external host survive even A's full recipe and are unmodeled — outbound network/beacon references, not script execution, and relevant only because `csp: null` means nothing else blocks the request.
 
 **Backlog items raised:** `SURFACE-2026-08-01-APP-SHIPS-WITH-CSP-NULL-NO-SECOND-LINE-OF-DEFENSE` (medium, arch — decide and record the CSP posture) and `SURFACE-2026-08-01-DOMPURIFY-DEFAULTS-LEAVE-DATA-SVG-AND-STYLE` (low — **moot under this verdict; close it**).
+
+## Session Handoff — 2026-08-02 15:30
+Handed off. See `workflow-system/state/.session.md` to restore.
