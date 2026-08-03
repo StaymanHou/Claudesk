@@ -658,6 +658,74 @@ mod tests {
         assert_eq!(find("/a/one").last_opened_at, 100);
     }
 
+    /// M12 WP1 Verdict (a) — the fact that disqualified storing the unclean-exit flag on
+    /// [`Project`]. Pinned as a test because the verdict *reasons from it*, and a future
+    /// refactor that made `projects.json` writes per-record would silently invalidate the
+    /// recorded rejection without anything failing.
+    ///
+    /// The property: [`write_projects`] serializes the WHOLE slice, so two writers that
+    /// each read-modify-write the list **lose each other's edits** — last `rename` wins
+    /// entirely. The existing
+    /// `set_default_model_on_one_project_leaves_every_field_of_the_others_untouched`
+    /// asserts the *sequential* case (read → write → read → write) and passes; it does NOT
+    /// cover interleaving, which is what the flag would have hit, because
+    /// `record_open`(→`add_or_touch`) and the flag write are co-triggered by ONE click
+    /// (`ProjectPicker.tsx:145-146`).
+    ///
+    /// ⚠️ This test asserts the hazard EXISTS. It is not aspirational — if a future change
+    /// serializes writers or adds per-record writes, this test SHOULD fail, and the correct
+    /// response is to update `SURFACE-2026-08-03-PROJECTS-JSON-WRITERS-ARE-WHOLE-FILE-RMW`
+    /// and Verdict (a)'s "Reopening condition", not to delete the test.
+    #[test]
+    fn interleaved_whole_file_writes_lose_the_earlier_writers_edit() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a/one", 100), p("/b/two", 200)]).unwrap();
+
+        // Writer A and writer B both snapshot the SAME pre-state — the interleaving a
+        // single user action produces today.
+        let mut snapshot_a = read_projects(dir.path()).unwrap();
+        let mut snapshot_b = read_projects(dir.path()).unwrap();
+
+        // Writer A stamps recency on /a/one (what `add_or_touch` does on open).
+        snapshot_a
+            .iter_mut()
+            .find(|proj| proj.path == Path::new("/a/one"))
+            .unwrap()
+            .last_opened_at = 999;
+        write_projects(dir.path(), &snapshot_a).unwrap();
+
+        // Writer B sets a per-project field on the SAME record from its stale snapshot
+        // (standing in for the unclean flag). `default_model` is used only because it is a
+        // real per-project field — the hazard is about the write path, not the field.
+        snapshot_b
+            .iter_mut()
+            .find(|proj| proj.path == Path::new("/a/one"))
+            .unwrap()
+            .default_model = Some("opus".into());
+        write_projects(dir.path(), &snapshot_b).unwrap();
+
+        let after = read_projects(dir.path()).unwrap();
+        let target = after
+            .iter()
+            .find(|proj| proj.path == Path::new("/a/one"))
+            .unwrap();
+
+        // B's write landed...
+        assert_eq!(
+            target.default_model,
+            Some("opus".to_string()),
+            "last writer's own edit survives"
+        );
+        // ...and it DISCARDED A's, because B wrote a whole list built from a stale read.
+        assert_eq!(
+            target.last_opened_at, 100,
+            "THE HAZARD: writer A's recency stamp was silently lost — this is why the \
+             M12 unclean flag does NOT live on `Project` (Verdict (a)). If this assertion \
+             starts failing, `projects.json` writes are no longer whole-file RMW and \
+             Verdict (a)'s reopening condition has been met."
+        );
+    }
+
     #[test]
     fn read_default_model_for_an_unknown_path_is_none_not_an_error() {
         let dir = TempDir::new().unwrap();

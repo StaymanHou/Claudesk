@@ -302,13 +302,164 @@ WP5 (exit verify + the guard's 4th arm)
 
 ## Probe outcomes
 
-*(WP1's two verdicts and WP5's exit verdict land here.)*
+*(WP5's exit verdict lands here.)*
+
+### Verdict (a) — the unclean flag's store and serialized shape (WP1 Phase 1, 2026-08-03)
+
+**DECISION: candidate 3 — the flag gets its OWN small store,
+`session-state.json` in the per-identity `app_data_dir()`, as a path→bool map.**
+
+```jsonc
+// ~/Library/Application Support/com.claudesk.app/session-state.json
+{ "unclean_exit": { "/Users/…/projects/foo": true } }
+```
+
+Shape notes: a **map keyed by absolute project path**, value `true`, and **absent means
+clean** (so clearing is a key *removal*, not a `false` write — the file self-compacts and an
+absent file is the correct cold-start state, exactly like `read_settings`' missing-file arm).
+One value per project is sufficient because **strictly one session per workspace**. Reads and
+writes take an injected `data_dir: &Path` so they are unit-testable against a `TempDir` with
+no Tauri runtime, and the write is atomic (`.tmp` → `rename`) — both mirroring the two
+existing stores rather than inventing a third discipline.
+
+**Why not candidate 1 (a field on `Project` in `projects.json`) — the disqualifying finding.**
+Not the byte cost. **Every `projects.json` writer is a read-modify-write of the WHOLE
+`Vec<Project>`** (`write_projects`, `mod.rs:115-122`), and the flag's set-on-open is
+**co-triggered by the same user action** as `add_or_touch`'s recency stamp: `ProjectPicker`
+`await invoke("record_open")` **then** `onOpen(path)` (`ProjectPicker.tsx:145-146`) — the
+first stamps `last_opened_at` by rewriting all N records, the second is what must set the
+flag. Two whole-file RMWs on one click, both snapshotting the same pre-state, so **whichever
+renames last silently discards the other's field.** Measured both directions
+(`scratchpad/wp1/measure_lost_update.py`): losing the flag **silently disables auto-resume
+for that project**; losing the stamp mis-sorts the picker. That is a lost-update defect in
+the exact write the feature depends on, and no amount of care at the call site fixes a
+whole-file RMW pair — only separating the files does.
+*(Secondary, confirmed but not decisive: setting one flag rewrites all 15 real records — 14
+unrelated — at 2423 bytes vs 87, a 27.9× amplification. `scratchpad/wp1/measure_amplification.py`.)*
+
+**Why not candidate 2 (a sibling map in `settings.json`).** No lost-update hazard (different
+file from `last_opened_at`), so it is *correct* — it loses on **category**, which is the
+operator's own framing: `settings.json` is **user preferences**, deliberately consolidated
+behind the `⌘,` Settings panel at M10.9 WP2. The unclean flag is **machine-local session
+state** the user never sets, reads, or reasons about; it is not a preference and must never
+appear in a settings surface. Putting it there also drags it through `read_settings`'
+read-modify-write on all 6 unrelated app-global settings for a value written on every
+workspace open. **Rejected on meaning, not mechanics** — and this is the whole reason the
+operator said *"not a sibling of `default_model`, but similar"*: `default_model` is the
+**shape** precedent (one value per project), never the **category** precedent.
+
+**Reopening condition (recorded so a future reader need not re-litigate).** Candidate 1
+becomes viable only if `projects.json` writes stop being whole-file RMW — e.g. a per-record
+write path or an in-process lock serializing all writers. Absent that, the co-trigger above
+is unconditional.
+
+**Precedent this follows.** `status_log` (`status_log/mod.rs:1-9`) already owns a small
+machine-local file in the same per-identity `app_data_dir()`, chosen for exactly this
+reason — automatic `com.claudesk.app/` vs `.dev/` isolation, alongside `settings.json` and
+`hook.sock`. So candidate 3 is **not** a new architectural pattern; it is the third instance
+of an established one. **Dev/prod isolation comes free**, which matters here: dogfooding
+Claudesk with Claudesk means both identities run concurrently and must not share a flag.
+
+**Durability posture (P1.4).** The flag is **default-set on workspace open** and a power loss
+runs no code, so *the set must be durable before the session starts doing work.* The write
+lands in the workspace-open path **immediately after** `SessionRegistry::spawn` succeeds —
+which already receives `project_path` and resolves `data_dir` (`cc_session/mod.rs:788-800`,
+the `read_default_model` call), so **no signature change** is needed (confirming the WBS's
+M-not-L sizing for WP2). Ordering is deliberate: setting *before* a failed spawn would mark
+a project unclean for a session that never existed. The atomic `.tmp`→`rename` means a crash
+mid-write leaves the previous state intact rather than a truncated file — and because
+**absent means clean**, the only way to *lose* a flag is to lose the whole file, which fails
+toward "no auto-fire," the safe direction.
+
+**⚠️ For WP2:** the four clean-exit routes clear by **removing the key**, and clearing must be
+as durable as setting. `/exit` · filmstrip × · app quit · M13 Recycle Session (task 2.5).
+
+### Verdict (b) — the batched announce query (WP1 Phase 2, 2026-08-03)
+
+**DECISION: ONE new sibling command, `picker_announce_actions` — NOT a widening of
+`list_projects`.** One call per picker open, returning the predicted action for every
+project. **Per-row IPC round-trips: zero.**
+
+```jsonc
+// picker_announce_actions() -> one map for ALL projects, gate-checked server-side
+{ "/Users/…/foo": "resume", "/Users/…/bar": "restore" }
+// absent key = no prediction (the "neither" arm); {} when the gate is OFF
+```
+
+**Why a sibling command and not the `default_model` precedent.** The plan expected to copy
+that precedent (widen the payload `list_projects` already returns) and it is the *right*
+precedent for a **per-project preference already in the store** — `default_model` cost
+nothing extra because the field was **already being read and parsed**; typing it on the wire
+was free. The announce is different in kind: it requires a **filesystem stat per project
+dir**, work `list_projects` does not do today. The disqualifying evidence is its **consumer
+set** — `list_projects` has three call sites, and **two of them
+(`App.tsx:310`, `App.tsx:702`) use only `projects.length`**, a count for the M10.9 invite
+predicate. Widening would make both pay N filesystem stats to learn a number, on a path
+`App.tsx:308-309` deliberately comments as *skipped once the invite resolves* — i.e. we
+would add per-project IO to the one call site engineered to be cheap and rare. **The N+1
+lesson generalizes to "don't make callers pay for data they didn't ask for," and widening
+here would violate that in the other direction.**
+
+**Gate placement is server-side.** The command reads
+`read_workflow_features_enabled(&dir)` (`settings.rs:291`, a cheap `settings.json` read)
+and returns `{}` when OFF **without statting anything**. So with the gate off the feature
+costs one settings read and zero project-dir IO — and the frontend seam
+(`useWorkflowFeaturesEnabled`) still governs rendering, per M10.9's contract. Two
+independent reasons the OFF path does no work.
+
+**Measured (`scratchpad/wp1/measure_announce.py`, warm best-of-7, incl. the flag-map read):**
+
+| N | total | per row |
+|---|---|---|
+| 15 (real) | 0.022 ms | 0.0015 ms |
+| 40 (padded) | 0.051 ms | 0.0013 ms |
+| 100 (padded) | 0.123 ms | 0.0012 ms |
+
+Linear and negligible — at 100 projects (well past the operator's 20+) the whole batch is a
+tenth of a millisecond. ⚠️ **Do not read this as "per-row would have been fine too."** The
+N+1 that shipped in M11.5 was expensive because each round-trip **re-read, re-parsed and
+re-sorted the whole `projects.json`**; the stat was never the cost. The batch shape is
+chosen for the round-trip count, and the measurement only confirms the batch adds nothing
+noticeable on top.
+
+**Flag half is free:** one read of `session-state.json` for **all** projects, independent of
+N (a map, per Verdict (a)) — so only the `.session.md` half scales with N at all.
+
+**Staleness window (P2.3) — read-at-picker-open is sufficient, and here is the exact
+sequence.** `.session.md` can vanish while the picker is open, because `/session-restore`
+deletes it at step 7:
+
+1. Picker opens → batch runs → row for project X announces `/session-restore`.
+2. Operator opens X in **another** Claudesk workspace (or another machine/terminal) and
+   `/session-restore` consumes-and-deletes `.session.md`.
+3. Picker still displays `/session-restore` for X — **now stale**.
+4. Operator clicks X → the fire path **re-derives** the decision at click time, sees no
+   `.session.md` and no flag, and fires **nothing** (the third arm).
+
+**The window is display-only and self-correcting**, because the decision that *acts* is
+computed at click time, not read from the announcement. That is the load-bearing rule for
+WP3: **the announcement is a prediction, never the input to the action.** M11 WP4's lesson
+(stale-content-that-looks-current is worse than absent) is satisfied by the worst case being
+a label that promised an action and no action occurring — never a *wrong* action.
+**A re-read on window focus is explicitly DEFERRED**, not overlooked: it narrows a window
+that already cannot cause a wrong action, and the operator settled read-at-open as
+sufficient. Revisit only if a stale label proves confusing in dogfooding.
+*(Observed live during this very phase: the count went 5/15 → 4/15 between Phase 1 and
+Phase 2 because `/session-restore` consumed this project's own pointer mid-session. The
+window is real and routine, which is precisely why the click path re-derives.)*
+
+**⚠️ The payload must keep the two signals distinguishable enough for WP3 task 3.1.** This
+verdict returns the **resolved action** per project (`"resume"` | `"restore"` | absent),
+which is what the row renders. The **precedence itself** (unclean flag **beats**
+`.session.md` — reversing the roadmap) lives in the **pure decision function**
+`predictAction(uncleanFlag, sessionMdPresent)`, which WP3 must mutation-prove *independently
+of this command*. **Do not let the batch command become the only place precedence is
+expressed** — a resolved-string payload cannot be mutation-tested for precedence, since both
+inputs are already collapsed. The command *calls* the pure function; the pure function is
+what the tests drive.
 
 ## Open questions carried into the WPs
 
 1. **Announce-label placement vs. long project names** (task 3.2) — next to the name reads best, but competes for the flexing left region.
 2. **Keyboard parity for the no-fire door** (task 3.6) — modifier, or deferred with a reason.
 3. **Flag store choice** (task 1.2) — three candidates; operator settled the *category* (machine-local, not a project preference), not the *location*.
-
-## Session Handoff — 2026-08-03 12:05
-Handed off. See `workflow-system/state/.session.md` to restore.

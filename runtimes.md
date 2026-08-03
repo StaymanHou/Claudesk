@@ -78,9 +78,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 1.9s (2026-08-01, M11 WP1 Phase 1 verify-auto — 127 files / 1470 pass, 0 fail; UNCHANGED from baseline, as required by a knowledge-only phase)
+- **Last:** 3s wall / 2.62s exec (2026-08-03, M12 WP1 Phase 2 verify-codify — 141 files / 1745 pass, 0 fail; +11 for the Verdict (b) consumer-set guard)
 - **Use timeout:** 120000
 - **History:**
+  - 5s wall / 2.62s exec — 2026-08-03
   - 1.9s — 2026-08-01 (M11 WP1 P1 verify-auto: 1470 pass, +0 — knowledge-only phase, baseline confirm)
   - 2.0s — 2026-08-01 (M11.5 WP3 P1 verify-codify: +7, 1467 pass — cross-surface copy-promise guard)
   - 1.9s — 2026-08-01 (M11.5 WP3 P1 build: +11, 1460 pass — time-tracking copy guard)
@@ -166,9 +167,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 4.04s warm exec (2026-07-31, M11.5 WP1 Phase 1: full `--all-targets` run, 698 pass / 0 fail across 6 targets — +20 for the per-project model override)
+- **Last:** 19s wall / 4.06s warm exec (2026-08-03, M12 WP1 Phase 1 verify-codify: full `--all-targets` run, 733 pass / 0 fail across 6 targets — +1 for the interleaved-write hazard guard)
 - **Use timeout:** 510000 (covers a cold post-`cargo clean` rebuild; warm runs finish in seconds)
 - **History:**
+  - 19s wall / 4.06s exec — 2026-08-03
   - 4.04s warm — 2026-07-31 (M11.5 WP1 P1; full run, 698 pass)
   - ~300s cold (estimate, backgrounded) — 2026-07-31 (WP3.5b P1; first post-`cargo clean` run)
   - 0.78s — 2026-07-29 (WP3 P4 verify-codify: +2, 581 lib)

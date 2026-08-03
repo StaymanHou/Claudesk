@@ -1,5 +1,15 @@
 # Backlog
 
+## SURFACE-2026-08-03-PROJECTS-JSON-WRITERS-ARE-WHOLE-FILE-RMW
+- **Source:** feature:build (M12 WP1 Phase 1 — Verdict (a))
+- **Target level:** product:arch
+- **Type:** tech-debt (latent correctness hazard)
+- **Summary:** Every writer of `projects.json` is a **read-modify-write of the whole `Vec<Project>`** (`config_store/mod.rs:115-122` `write_projects`; callers `add_or_touch`, `set_default_model`, `remove`, `prune_missing`). Two writers racing on the same list **silently discard each other's field** — whichever `rename`s last wins entirely. There is no per-record write path and no lock serializing writers.
+- **Context:** Found while choosing the M12 unclean-flag store. It is the **disqualifying reason** candidate 1 (a field on `Project`) was rejected: the flag's set-on-open would be **co-triggered by the same user action** as `add_or_touch`'s recency stamp — `ProjectPicker.tsx:145-146` does `await invoke("record_open")` then `onOpen(path)` — so one click issues two whole-file RMWs. Modeled both directions (`scratchpad/wp1/measure_lost_update.py`): losing the flag silently disables auto-resume; losing the stamp mis-sorts the picker. **M12 side-steps it entirely** (the flag went to its own store), so this is **not** a live M12 defect. What remains open is the general hazard: `set_default_model` and `add_or_touch` are *already* both reachable from a project-open flow, so a lost `default_model` write is possible today in principle — unmeasured, and likely rare because the model cell is edited outside the open path.
+- **Suggested action:** Decide whether to (a) accept it as tolerable given the low real-world collision rate and **document the constraint** at `write_projects` so nobody adds a co-triggered writer, (b) serialize writers behind a single in-process mutex, or (c) add a per-field write path. ⚠️ At minimum do (a) — the next person to add a per-project field will otherwise reach for `Project` exactly as M12 nearly did. Any *new* per-project field written during workspace open should be treated as unsafe on `projects.json` until this is settled.
+- **Priority:** medium (no confirmed live defect; the cost is that the next per-project field lands on a trap)
+- **Status:** pending
+
 ## SURFACE-2026-08-03-ARCH-MD-EXCEEDS-SIZE-GUARD-834-LINES
 - **Source:** feature-spec (M12 WP3 draft spec)
 - **Target level:** product:arch
