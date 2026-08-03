@@ -1,7 +1,7 @@
 # Feature: M12 WP1 — Probe: the unclean-flag store + the two announce signals
 
 **Workflow:** feature
-**State:** review-quality (complete)
+**State:** COMPLETED 2026-08-03 (finalized; archived)
 **Created:** 2026-08-03
 **Type:** probe (deliverable is a written verdict, not software)
 **Timebox:** half-day
@@ -150,6 +150,31 @@ standing "backend-lifecycle features are operator-only at the live tier" convent
 not apply, because nothing in this WP spawns a process or observes one. **verify-human is
 where the operator reviews the two verdicts themselves** — that is the real gate, and it is
 a judgment review, not a mechanical one.
+
+## Retrospect
+
+- **What changed in our understanding:**
+  - **The flag-store question was not the question the WBS thought it was.** It framed candidate 1's cost as write *amplification* (bytes). The real disqualifier is a **correctness** hazard: `projects.json` writes are whole-file RMW, and the flag's set-on-open is co-triggered by `add_or_touch`'s recency stamp **on the same click**, so the two writes clobber each other. Byte cost would have been an acceptable tradeoff; a silent lost update that disables auto-resume is not. **The category of the objection changed, not just its size.**
+  - **"Reuse the precedent" needed a second question.** `default_model` looked like the obvious model for the announce query, and the plan said so. It is the right precedent for *a field already read and parsed* and the wrong one for *work that adds a filesystem stat*. What settled it was reading the **consumer set**, not the precedent: two of three `list_projects` callers want only `.length`.
+  - **A guard's header is part of the guard.** Two MAJORs at review were both cases of the header claiming coverage the assertions did not deliver — and this repo has paid for that shape repeatedly. The lesson is sharper than "test your guards": **an overclaiming comment is worse than no comment**, because it retires the reader's suspicion.
+
+- **Assumptions that held:**
+  - `.session.md` presence is cheap to batch — measured 0.123 ms at N=100, so read-at-picker-open needed no cleverness.
+  - `SessionRegistry::spawn` already carries `project_path` + `data_dir`, so set-on-open needs no signature change (confirms WP2's M-not-L sizing).
+  - The operator's category call (machine-local, not a preference) was decisive and correct; it eliminated candidate 2 on meaning before any measurement.
+  - `wbs.md`'s "Scope-audit findings" were accurate where checked — every cited `file:line` resolved at ship SHA.
+
+- **Assumptions that were wrong:**
+  - **Plan-time hypothesis "candidate 1 loses on write amplification"** — right verdict, wrong reason. Measured 27.9×, then found the lost-update hazard that actually decides it.
+  - **Plan-time expectation "widen the payload, per `default_model`"** — reversed on the consumer-set evidence.
+  - **Phase 2's own observable encoded the wrong conclusion** ("cite the precedent it *is following*"), and I left it un-amended when the verdict inverted it. A mechanical grep now reports a miss on a phase marked `[x]` — logged as a MINOR.
+  - **Three of my own verification instruments were wrong before they were right:** a WIP-tree validator that reported 8 false failures, then one that passed *vacuously* (21 leaves collapsed to 2), then a parent-completion predicate that false-positived on a later phase's open node. Plus a mutant that "proved a guard hole" by modifying a deliberately-exempt phase header. **In every case the tooling was wrong and the artifact was fine** — and in one I nearly weakened a correct guard on that false signal.
+
+- **Approach delta:**
+  - Plan said 2 phases, 5 leaves each, half-day timebox — delivered exactly that. Both verdicts landed in `wbs.md` → "Probe outcomes" as specified.
+  - **Unplanned:** two codified guards (the plan anticipated "at most a probe harness"). Justified — each pins a *premise a verdict reasons from*, which is the only durable thing a probe can hand forward.
+  - **Unplanned:** a self-inflicted parse error while documenting the fix — a JSDoc containing `^\s*//` whose `*` + `/` terminated the block comment (5 tsc errors). Diagnosed with a 5-line fixture rather than guesswork.
+  - Verification ran fully agent-side as the plan predicted (no live app, no MCP bridge, no operator drive) — correct call for a docs/measurement phase.
 
 ## Code-Quality Review — m12-wp1-probe-flag-store-and-announce
 

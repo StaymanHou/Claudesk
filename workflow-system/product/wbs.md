@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: "Milestone 12: Smart auto-resume + drive mode"
-updated: 2026-08-03  # ▶ M12 DECOMPOSED — 5 WPs. Scoped from a LOG-MINED redesign of the milestone's decision tree (60 projects / 2087 transcripts), not from the roadmap text, which was written 2026-05-22 and is stale in six ways. THE CENTRAL REDESIGN: the unclean-boundary signal is now EXPLICIT (operator-supplied) instead of inferred, which deletes the milestone's one unresolvable unknown (there is NO CLI to query "does a resumable conversation exist"). The flag is DEFAULT-SET / cleared-on-clean-exit, so a power loss produces the correct state for free. Auto-fire is announced in the picker row BEFORE the click, with a second door that opens without firing — a per-open routing decision, NOT a per-project preference. /session-start is NEVER auto-fired (rare + high cost when wrong); it gets a manual button instead. ⚠️ REQUIRES a vision.md revision (5 places say the drive-mode selector lives in the workspace HEADER; operator moved it to the PICKER ROW) — see "Vision revision required". ⚠️ Also flags the FIRST live edge case for design prior set-a-spawn-time-choice-where-the-spawn-is-chosen, whose own text names it as untested. ⚠️ WP3/WP4 SWAPPED 2026-08-03 (operator: "Always derisk first"): auto-fire is now WP3 and the drive-mode cell WP4. The original order ran the safe clone first and justified it as "bank a shippable increment, then do the risky part with the flag proven" — build-dependency reasoning mis-stated as risk reasoning, inverting the learning-sequence rule. ALL of the milestone's genuine unknowns are in auto-fire (first feature-initiated PTY write, injection timing on a fresh prompt, the pickerRowOrder sibling-nesting trap, an auto-action on the most-glanced surface); the drive-mode cell clones an already-live path with a settled placement and holds near-zero unknown. Critical path is now WP1→WP2→WP3→WP5, with WP4 a genuine parallel track.
+updated: 2026-08-03  # ✅ WP1 SHIPPED (cc3dfa2 + cb2e192) — both verdicts recorded in "Probe outcomes" and operator-approved. THE FLAG GETS ITS OWN STORE (session-state.json, path->bool, absent=clean): candidate 1 (a field on Project) was disqualified NOT by the predicted byte cost but by a LOST-UPDATE hazard — every projects.json write is whole-file RMW and set-on-open is co-triggered by add_or_touch's recency stamp on the SAME click, so one write silently discards the other's field (losing the flag silently disables auto-resume). THE ANNOUNCE IS A NEW SIBLING COMMAND picker_announce_actions, NOT a list_projects widening — 2 of its 3 consumers use only projects.length, so widening would make them pay N stats for a count. ⚠️ WP3 task 3.1: precedence must live in the pure predictAction(), NOT in the command — a resolved-string payload cannot be mutation-tested for precedence. ▶ M12 DECOMPOSED — 5 WPs. Scoped from a LOG-MINED redesign of the milestone's decision tree (60 projects / 2087 transcripts), not from the roadmap text, which was written 2026-05-22 and is stale in six ways. THE CENTRAL REDESIGN: the unclean-boundary signal is now EXPLICIT (operator-supplied) instead of inferred, which deletes the milestone's one unresolvable unknown (there is NO CLI to query "does a resumable conversation exist"). The flag is DEFAULT-SET / cleared-on-clean-exit, so a power loss produces the correct state for free. Auto-fire is announced in the picker row BEFORE the click, with a second door that opens without firing — a per-open routing decision, NOT a per-project preference. /session-start is NEVER auto-fired (rare + high cost when wrong); it gets a manual button instead. ⚠️ REQUIRES a vision.md revision (5 places say the drive-mode selector lives in the workspace HEADER; operator moved it to the PICKER ROW) — see "Vision revision required". ⚠️ Also flags the FIRST live edge case for design prior set-a-spawn-time-choice-where-the-spawn-is-chosen, whose own text names it as untested. ⚠️ WP3/WP4 SWAPPED 2026-08-03 (operator: "Always derisk first"): auto-fire is now WP3 and the drive-mode cell WP4. The original order ran the safe clone first and justified it as "bank a shippable increment, then do the risky part with the flag proven" — build-dependency reasoning mis-stated as risk reasoning, inverting the learning-sequence rule. ALL of the milestone's genuine unknowns are in auto-fire (first feature-initiated PTY write, injection timing on a fresh prompt, the pickerRowOrder sibling-nesting trap, an auto-action on the most-glanced surface); the drive-mode cell clones an already-live path with a settled placement and holds near-zero unknown. Critical path is now WP1→WP2→WP3→WP5, with WP4 a genuine parallel track.
 ---
 
 # WBS — Milestone 12: Smart auto-resume + drive mode
@@ -171,7 +171,7 @@ workspace opens ─────────────────────�
 
 ## Work Packages
 
-### WP1: Probe — the unclean-flag store + the two announce signals
+### WP1: Probe — the unclean-flag store + the two announce signals  ✅ SHIPPED 2026-08-03 (commit `cc3dfa2`; review fixes `cb2e192`)
 **Type:** probe
 **Milestone:** M12 (first — every later WP depends on its two verdicts)
 **Dependencies:** none
@@ -182,11 +182,11 @@ workspace opens ─────────────────────�
 **Timebox:** half-day
 **Success criterion:** A written verdict naming (a) the flag's store + serialized shape + why that store over the other two, and (b) the single batched command that returns the predicted action per project, with a measured read cost at a realistic recents count. Both recorded in "Probe outcomes" below.
 **Tasks:**
-- [ ] 1.1 Read `config_store/` end-to-end (`mod.rs` `Project`, `settings.rs` `AppSettings`) and enumerate the three candidate stores with the cost of each. Note that `default_model` is the *shape* precedent, not the *category* precedent.
-- [ ] 1.2 Decide the flag's store + shape. Record the reasoning, including how it stays visually/semantically separate from user preferences on the same record (if `projects.json` wins).
-- [ ] 1.3 Design the batched announce command (one call → per-project predicted action). Measure the `.session.md` stat cost across a realistic recents count (operator runs 20+ projects). Confirm a single call, never per-row.
-- [ ] 1.4 Confirm read-at-picker-open is sufficient (operator-settled: **yes**) and write down what the staleness window actually is — `.session.md` can vanish while the picker is open (`/session-restore` deletes it at step 7). ⚠️ M11 WP4's lesson: stale-content-that-looks-current is worse than absent.
-- [ ] 1.5 Record both verdicts in "Probe outcomes".
+- [x] 1.1 Read `config_store/` end-to-end (`mod.rs` `Project`, `settings.rs` `AppSettings`) and enumerate the three candidate stores with the cost of each. Note that `default_model` is the *shape* precedent, not the *category* precedent.
+- [x] 1.2 Decide the flag's store + shape. Record the reasoning, including how it stays visually/semantically separate from user preferences on the same record (if `projects.json` wins).
+- [x] 1.3 Design the batched announce command (one call → per-project predicted action). Measure the `.session.md` stat cost across a realistic recents count (operator runs 20+ projects). Confirm a single call, never per-row.
+- [x] 1.4 Confirm read-at-picker-open is sufficient (operator-settled: **yes**) and write down what the staleness window actually is — `.session.md` can vanish while the picker is open (`/session-restore` deletes it at step 7). ⚠️ M11 WP4's lesson: stale-content-that-looks-current is worse than absent.
+- [x] 1.5 Record both verdicts in "Probe outcomes".
 
 **WP1 → WP2 rationale:** The flag's store and the announce query shape are the two facts every later WP builds on; both are cheap to settle and expensive to retrofit (the N+1 already happened once on this surface). Probe before build, per the standard sequence's 3rd-party/unknowns-first rule — here the "unknown" is our own storage boundary rather than an external API.
 
@@ -294,7 +294,7 @@ WP5 (exit verify + the guard's 4th arm)
 
 | WP | Size | Note |
 |---|---|---|
-| WP1 | S | Probe; two verdicts, half-day timebox |
+| WP1 | S | ✅ SHIPPED 2026-08-03 — both verdicts, within the half-day timebox |
 | WP2 | M | Four clean-exit routes + a hard-kill case are the bulk |
 | WP3 | L | **The milestone's risk.** First feature-initiated PTY write + injection timing on a fresh prompt + the sibling-nesting trap + an auto-action on the most-glanced surface |
 | WP4 | M | Clones a live precedent; the vision correction is real but small |
