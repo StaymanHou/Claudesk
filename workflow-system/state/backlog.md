@@ -1,5 +1,15 @@
 # Backlog
 
+## SURFACE-2026-08-03-ARCH-MD-EXCEEDS-SIZE-GUARD-834-LINES
+- **Source:** feature-spec (M12 WP3 draft spec)
+- **Target level:** product:arch
+- **Type:** gap (doc hygiene)
+- **Summary:** `workflow-system/product/arch.md` is **834 lines**, well past the ~300-line entry-skill size guard, so entry skills that are supposed to eager-read it now truncate to the first 100 lines + headings. M11 added ~105 lines and every milestone adds an as-built section, so it grows monotonically.
+- **Context:** Surfaced at the M12 WP3 spec, where the guard fired and the doc was **not** read end-to-end; the four seams the spec needed (`slash_command_bytes`, `cc_ready`, `pickerRowOrder`, the gate seam) were read from source instead, which was cheaper and more current anyway. That is the real signal: `arch.md` has become a **grep-addressed reference**, not a read-through document — but the skills still nominally eager-read it, so the truncation is silent and a reader may believe they got the whole picture.
+- **Suggested action:** Decide deliberately between (a) accepting grep-addressed status and relaxing the guard for this doc, (b) splitting per-milestone as-built sections into `arch/` files with `arch.md` as an index, or (c) a `/util-prune-claude-md`-style extraction pass. Do **not** just trim prose — the M11 section is load-bearing (it records two corrections a reader would otherwise be misled by).
+- **Priority:** low (no live defect; the failure mode is a reader over-trusting a truncated read)
+- **Status:** pending
+
 ## Code-quality findings — m11-wp5-milestone-exit-verify (2026-08-02)
 - **Pointer:** 1 open item of 4 findings (0 CRITICAL / 2 MAJOR / 2 MINOR — **all four fixed in place at
   review**, incl. a demonstrated silent-pass hole in a wiring guard). The one carried item is the
