@@ -330,12 +330,20 @@ Not the byte cost. **Every `projects.json` writer is a read-modify-write of the 
 first stamps `last_opened_at` by rewriting all N records, the second is what must set the
 flag. Two whole-file RMWs on one click, both snapshotting the same pre-state, so **whichever
 renames last silently discards the other's field.** Measured both directions
-(`scratchpad/wp1/measure_lost_update.py`): losing the flag **silently disables auto-resume
+(one-shot session spike, since superseded — the fact is now PINNED by the Rust test
+`interleaved_whole_file_writes_lose_the_earlier_writers_edit` in `config_store/mod.rs`, which
+drives the real `write_projects`/`read_projects` and is the reproducible record):
+losing the flag **silently disables auto-resume
 for that project**; losing the stamp mis-sorts the picker. That is a lost-update defect in
 the exact write the feature depends on, and no amount of care at the call site fixes a
 whole-file RMW pair — only separating the files does.
 *(Secondary, confirmed but not decisive: setting one flag rewrites all 15 real records — 14
-unrelated — at 2423 bytes vs 87, a 27.9× amplification. `scratchpad/wp1/measure_amplification.py`.)*
+unrelated — at 2423 bytes vs 87, a 27.9× amplification. ⚠️ **One-shot observation from a
+session-local spike; the script is NOT in the repo, so treat the exact figures as
+illustrative, not reproducible.** Method, so a reader can redo it in five minutes: serialize
+the real `projects.json` with one added boolean on one record, and compare its byte length
+against a single-key map holding that same flag. The load-bearing fact — that one flag write
+rewrites all N records — is the lost-update finding above, which IS pinned by a test.)*
 
 **Why not candidate 2 (a sibling map in `settings.json`).** No lost-update hazard (different
 file from `last_opened_at`), so it is *correct* — it loses on **category**, which is the
@@ -407,7 +415,13 @@ costs one settings read and zero project-dir IO — and the frontend seam
 (`useWorkflowFeaturesEnabled`) still governs rendering, per M10.9's contract. Two
 independent reasons the OFF path does no work.
 
-**Measured (`scratchpad/wp1/measure_announce.py`, warm best-of-7, incl. the flag-map read):**
+**Measured — ⚠️ one-shot observation, script NOT in the repo** (session-local spike; warm
+best-of-7, including the flag-map read). Treat the figures as order-of-magnitude, not as a
+reproducible benchmark. Method: one read of the flag map, then one `exists()` per project dir
+against `workflow-system/state/.session.md`, timed over the operator's real recents list and
+over that list padded to 40 and 100 entries. **The conclusion does not depend on the exact
+numbers** — it depends on the round-trip COUNT being 1 instead of N, which is a property of
+the design rather than of the timing:
 
 | N | total | per row |
 |---|---|---|

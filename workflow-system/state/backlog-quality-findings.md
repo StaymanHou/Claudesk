@@ -4,6 +4,53 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m12-wp1-probe-flag-store-and-announce — 2026-08-03
+
+## SURFACE-2026-08-03-QUALITY-WP1-MEASUREMENT-SCRIPTS-NOT-IN-REPO
+- **Source:** feature-review-quality (M12 WP1, MAJOR)
+- **Type:** tech-debt (evidence provenance)
+- **Summary:** All three measurements Verdicts (a)/(b) reason from were produced by scripts in the **session scratchpad**, which is not in the repo. The 27.9× write-amplification figure and the 0.022/0.051/0.123 ms announce table therefore have no reproducible provenance, while Phase 2's own observable required the measurement be *"reproducible by re-running the script the phase writes."*
+- **Context:** The lost-update fact — the load-bearing one — **is** now pinned by the Rust test `interleaved_whole_file_writes_lose_the_earlier_writers_edit`, which is the right answer and supersedes its script. The two *performance* figures are the gap. **Mitigated at review time:** both are now labelled in `wbs.md` as one-shot observations with their METHOD stated inline, so the doc no longer cites evidence a reader cannot reach and the measurement can be redone in ~5 minutes. What remains open is whether a perf spike of this kind should have a durable home.
+- **Suggested action:** Decide the general convention rather than just this instance: either (a) accept that probe-grade perf spikes are one-shot and method-documented (current state — arguably correct, since a benchmark nobody runs rots), or (b) give them a home under `tooling/` when the number is cited in a durable doc. ⚠️ Do NOT reflexively add a `tooling/` script for this WP alone — the conclusion depends on the round-trip COUNT (1 vs N), a design property, not on the timings.
+- **Priority:** low (was MAJOR pre-mitigation; the doc no longer overclaims and the decisive fact is test-pinned)
+- **Status:** pending
+
+## SURFACE-2026-08-03-QUALITY-WP1-RAW-GUARD-INTERFACE-SLICE-TRUNCATES
+- **Source:** feature-review-quality (M12 WP1, MINOR)
+- **Type:** tech-debt (guard completeness)
+- **Summary:** In `listProjectsConsumers.test.ts`, the `interface RecentProject\s*\{[\s\S]*?\}` non-greedy match truncates at the **first** `}`, so a nested-object field would defeat the "no announce field smuggled onto the wire type" assertion (verified: `meta?: { x: number }; unclean_exit?: boolean;` slices to `{ x: number }` and passes).
+- **Context:** Latent, not live — `RecentProject` is a flat wire type today and the Rust `Project` it mirrors is flat. Becomes reachable the moment anyone adds a nested field. Same family as the two MAJORs fixed at review time (incomplete `?raw` predicate ⇒ under-determined pass).
+- **Suggested action:** Brace-count instead of non-greedy matching, or assert on the *whole file* rather than a sliced interface. Cheap either way. Fold into the next touch of this file.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-03-QUALITY-WP1-PHASE2-OBSERVABLE-LEFT-UNAMENDED
+- **Source:** feature-review-quality (M12 WP1, MINOR)
+- **Type:** gap (process)
+- **Summary:** Phase 2's observable required the verdict cite `ProjectPicker.tsx:38-42` "as the precedent it **is following**." The verdict correctly *reversed* that conclusion (sibling command, not a widening) and cites the precedent as **declined**, by name rather than by line — so the literal string `ProjectPicker.tsx:38-42` appears nowhere, and a mechanical grep of the observable reports a miss on a phase marked `[x]`.
+- **Context:** The reversal is the *right* outcome; the defect is that the observable was not amended when the conclusion inverted. Generalizable process point: **when a phase's finding overturns the assumption its own observable encoded, the observable must be rewritten, not silently outgrown** — otherwise a later audit reads the mismatch as an unfinished phase.
+- **Suggested action:** No code change. Consider whether `feature-verify-codify` should prompt to reconcile observables that a verdict reversed. Low value alone; worth folding into a future workflow-system pass.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-03-QUALITY-WP1-TWO-LIVE-VERDICT-B-REFERENCES
+- **Source:** feature-review-quality (M12 WP1, MINOR)
+- **Type:** tech-debt (naming ambiguity)
+- **Summary:** `src/App.tsx:306-308` carries a pre-existing M10.9 comment reading *"Verdict (b)'s requirement"*. M12 WP1 introduced a **different** "Verdict (b)" whose reasoning cites that same call site, so two live "Verdict (b)"s now point at one line with different meanings.
+- **Context:** Not introduced by this diff, but this diff is what made it ambiguous. Probe verdicts are per-WP and letter-keyed, so collisions recur every milestone — the fix is a qualifier convention, not a one-off edit.
+- **Suggested action:** One-word qualifier at the call site (`M10.9 Verdict (b)`), and prefer milestone-qualified verdict references (`M12 WP1 Verdict (b)`) in future probe write-ups.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-03-QUALITY-WP1-HAZARD-TEST-DOC-COMMENT-LENGTH
+- **Source:** feature-review-quality (M12 WP1, MINOR)
+- **Type:** tech-debt (comment density)
+- **Summary:** The doc comment on `interleaved_whole_file_writes_lose_the_earlier_writers_edit` runs 16 lines for a 40-line test. The ⚠️ paragraph (what to do when it fails) is load-bearing *why*; the paragraph re-explaining what the pre-existing sequential test covers is ~one sentence of content in five lines.
+- **Context:** Reviewer's own read: *"mildly over-long, not the DocsPanel pattern"* — the inline body comments carry real *why* and should stay. Logged because comment density has been flagged four consecutive reviews in this repo and the operator wants a **budget**, not another ad-hoc trim.
+- **Suggested action:** Trim the redundant paragraph to one sentence on next touch. ⚠️ Do NOT trim the ⚠️ reopening-condition paragraph — it is the instruction that keeps a future reader from deleting the test when it correctly fails.
+- **Priority:** low
+- **Status:** pending
+
 # m11-wp3-docs-render-and-navigation — 2026-08-02
 
 *Reviewer: `code-quality-reviewer` against ship baseline `6f6df23`. 0 CRITICAL / 4 MAJOR / 3 MINOR.

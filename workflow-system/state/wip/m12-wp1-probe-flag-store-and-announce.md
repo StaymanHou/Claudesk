@@ -1,7 +1,7 @@
 # Feature: M12 WP1 — Probe: the unclean-flag store + the two announce signals
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** review-quality (complete)
 **Created:** 2026-08-03
 **Type:** probe (deliverable is a written verdict, not software)
 **Timebox:** half-day
@@ -129,8 +129,8 @@ pre-empt it, and each is a claim the phases must confirm or overturn rather than
   - [x] verify-codify  <!-- status: [x] — 11 new FE tests, 3 source-mutants proven to bite; 1745 vitest + 733 cargo pass -->
 
 ## Current Node
-- **Path:** Feature > (WP1 complete)
-- **Active scope:** none — BOTH phases complete; both verdicts recorded in `wbs.md` and operator-approved. Ready to ship.
+- **Path:** Feature > feature-finalize
+- **Active scope:** none — SHIPPED at `cc3dfa2`; code-quality review complete (0 CRITICAL / 3 MAJOR / 5 MINOR; 2 MAJORs + 1 MINOR fixed in place, 5 auto-backlogged). Ready for finalize.
 - **Phase 2 verify-self result:** 5/5 PASS. Independently confirmed the decisive claim: `list_projects` has exactly 3 real `invoke` sites (11 raw grep hits reduce to 3), `App.tsx:310`/`:702` both feed only `setInviteProjectCount(projects.length)`, and `ProjectPicker.tsx:127` is the one genuine field consumer. `picker_announce_actions` correctly absent repo-wide.
 - **Verify-self result:** 5/5 PASS. Independently confirmed the verdict's central claim: `write_projects` serializes the whole slice, and `ProjectPicker.tsx:145-146` really does `record_open` → `onOpen` adjacently, so the co-trigger is real. No integration boundary (docs-only; zero source files touched).
 - **Blocked:** none
@@ -150,6 +150,50 @@ standing "backend-lifecycle features are operator-only at the live tier" convent
 not apply, because nothing in this WP spawns a process or observes one. **verify-human is
 where the operator reviews the two verdicts themselves** — that is the real gate, and it is
 a judgment review, not a mechanical one.
+
+## Code-Quality Review — m12-wp1-probe-flag-store-and-announce
+
+*(feature-review-quality, 2026-08-03, against ship baseline `8c6b7c9..cc3dfa2`. 0 CRITICAL / 3 MAJOR / 5 MINOR.
+Each finding below was independently re-verified by the orchestrator before acceptance — all three MAJORs
+reproduce exactly as described.)*
+
+### Strengths
+- Both verdicts record an explicit **reopening condition** and a reject-reason per candidate, so a future reader inherits the decision *and* the conditions under which it is wrong.
+- The verdicts overturn their own plan-time hypotheses in two places (write-amplification → lost-update; "widen the payload" → sibling command) and *say so*, keeping the plan-time finding visible next to the correction.
+- Every cited line reference is accurate at ship SHA (`config_store/mod.rs:115-122`, `ProjectPicker.tsx:145-146`, `App.tsx:310`/`:702`, `settings.rs:291`, `cc_session/mod.rs:788-800`). No drift.
+- The Rust hazard test is genuinely non-duplicative: the pre-existing `set_default_model_on_one_project_leaves_every_field_of_the_others_untouched` covers only the sequential case and passes either way.
+- `listProjectsConsumers.test.ts` is not duplicative of `nPlusOneObservable.test.ts` — that sibling counts the model *cell's* mount-time reads; this pins the *call-site shape* in real source.
+- Verdict (b)'s explicit anti-lesson ("do NOT read this as 'per-row would have been fine'") pre-empts the exact misreading, and the staleness window is a numbered event sequence rather than a caveat sentence.
+
+### Issues
+
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`listProjectsConsumers.test.ts:73-79`] **Field-access negatives are variable-name- and syntax-form-bound.** `not.toMatch(/projects\[\d+\]\./)` + `not.toMatch(/projects\.map\(/)` miss realistic mutants: a `for (const p of projects) { use(p.default_model) }` consumer passes both, as does any consumer naming the variable `rows`/`list`. The header claimed "an App.tsx consumer switching to field access would be caught"; the calibration block only fed the matcher a literal string it constructed itself. Same shape as `[[guard-predicate-completeness-vs-mutation-landing]]`. **Mitigating:** the *decisive* assertions (call-site count == 3; exactly-2 `setInviteProjectCount(projects.length)`) DO bite on real mutants, so the verdict's protection is real — the advertised margin was thinner than stated. → **FIXED 2026-08-03** (see Resolution below).
+- [`listProjectsConsumers.test.ts:44-47`] **`stripComments` is one-directional.** `/^\s*\/\/.*$/gm` strips a `//` comment only when it is first non-whitespace on the line, so a *trailing* commented-out call (`foo(); // await invoke(...)`) counts as a real call site (verified: returns 1). Blast radius is a false *failure*, not a false pass — annoying, not dangerous — but it contradicted a stated property. → **FIXED 2026-08-03** (see Resolution below).
+- [`wbs.md` Verdict (a)/(b) measurement citations] **The three measurement scripts are session-scratchpad-local and absent from the repo.** The 27.9× amplification figure and the 0.022/0.051/0.123 ms table therefore have no surviving provenance, while Phase 2's own observable required the measurement be "reproducible by re-running the script the phase writes." The lost-update fact *is* now pinned by the Rust test (the right answer); the two performance numbers are not. → **BACKLOGGED** (see below) with the numbers relabelled in `wbs.md` as one-shot observations.
+
+**MINOR**
+- [`listProjectsConsumers.test.ts:96-101, :140-146`] `interface RecentProject\s*\{[\s\S]*?\}` truncates at the first `}`, so a nested-object field defeats the smuggling assertion (verified). Latent — the wire type is flat today.
+- [`wbs.md` / WIP Phase 2 observable] The observable required citing `ProjectPicker.tsx:38-42` "as the precedent it **is following**"; the verdict correctly *reversed* that and cites the precedent as declined, by name rather than by line. Observable left un-amended, so a mechanical grep would report a miss on a phase marked `[x]`.
+- [`src/App.tsx:306-308`] Pre-existing M10.9 comment says "Verdict (b)'s requirement"; this commit introduces a *different* "Verdict (b)" in the same milestone whose reasoning cites the same call site. Two live "Verdict (b)"s on one line. A one-word qualifier (`M10.9 Verdict (b)`) would settle it.
+- [`config_store/mod.rs` hazard-test doc comment] 16 lines of doc for a 40-line test. The ⚠️ paragraph is load-bearing; the paragraph re-explaining the pre-existing sequential test is one sentence in five lines. Mildly over-long, not the DocsPanel pattern.
+- [`runtimes.md`] `pnpm test` history bullet says `5s wall` while `**Last:**` says `3s wall` for the same run/date. → **FIXED 2026-08-03.**
+
+### Assessment
+A well-built probe that discharges its actual contract: the two verdicts are decisive, internally consistent, accurately cited, and carry their own falsification conditions. Pinning each verdict's *premise* rather than the decision is the right instinct, and the assert-the-hazard-exists inversion is sound rather than a trap. The debt accrued is confined to **guard calibration honesty** — the `?raw` header claimed broader coverage than its weaker assertions delivered, and comment-stripping was one-directional; both are lessons this repo has already paid for, and both are cited in that very header. The unreproducible measurement scripts are the one thing a future reader is actually blocked by.
+
+### Resolution (orchestrator, 2026-08-03)
+Two MAJORs were **fixed in place** rather than backlogged: both were inaccurate claims in a header written in this same commit, and shipping a guard whose header overstates its coverage is precisely the failure mode the file cites. Fixing text about a guard is not a refactor of the guard.
+- **MAJOR 1** — negatives rewritten to be variable-name-agnostic and form-agnostic (any `.field` access on the awaited result, any iteration form), with three previously-missed mutants added to the calibration block as real inputs. Header claim narrowed to what is actually asserted.
+- **MAJOR 2** — `stripComments` now strips trailing `//` comments too, with the previously-passing trailing-comment mutant added to calibration.
+- **MAJOR 3 (measurements)** — **BACKLOGGED**, not fixed: relocating throwaway spike scripts into `tooling/` is a scope decision, not cleanup. Mitigated now by relabelling the figures in `wbs.md` as one-shot observations with their method stated inline, so the doc no longer cites evidence a reader cannot reach.
+- **MINOR (runtimes.md wall-time)** fixed. The other four MINORs backlogged.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives this WIP.
 
 ## Discoveries
 

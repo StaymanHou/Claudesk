@@ -81,7 +81,7 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 - **Last:** 3s wall / 2.62s exec (2026-08-03, M12 WP1 Phase 2 verify-codify — 141 files / 1745 pass, 0 fail; +11 for the Verdict (b) consumer-set guard)
 - **Use timeout:** 120000
 - **History:**
-  - 5s wall / 2.62s exec — 2026-08-03
+  - 3s wall / 2.62s exec — 2026-08-03
   - 1.9s — 2026-08-01 (M11 WP1 P1 verify-auto: 1470 pass, +0 — knowledge-only phase, baseline confirm)
   - 2.0s — 2026-08-01 (M11.5 WP3 P1 verify-codify: +7, 1467 pass — cross-surface copy-promise guard)
   - 1.9s — 2026-08-01 (M11.5 WP3 P1 build: +11, 1460 pass — time-tracking copy guard)

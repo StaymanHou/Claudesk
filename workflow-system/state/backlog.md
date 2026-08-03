@@ -20,6 +20,31 @@
 - **Priority:** low (no live defect; the failure mode is a reader over-trusting a truncated read)
 - **Status:** **PARTIALLY RESOLVED 2026-08-03** (`af9cf81`) — **834 → 731 lines, and the real defect is fixed.** The framing in this item was wrong in a useful way: the guard truncates to the **first 100 lines**, not 300, and that window contained **zero of the file's 24 warnings**. Length was the symptom; *unfindable warnings* was the defect. Fixed by a `## Load-bearing constraints — read this first` index placed inside the truncation window (warnings 24 → 36 occurrences, zero lost — proven by diffing 30 distinctive tokens against a pre-edit snapshot). Also corrected the single most consequential mislabel: 102 lines titled *"Phase 2 forward-look (informational, not built)"* were actually SHIPPED M3/M4/M5/M7 architecture, so readers trusted the heading and skipped it. Archived the 2026-05/06 revision log, the M9 as-built detail (to a dir already holding two arch-grade companion docs), and the superseded 2026-08-01 M11 pre-build back-loop — each leaving a stub that keeps its rules. ⚠️ **Near-miss worth remembering:** the GUI-PATH fix (`env_path`) existed **exactly once in the file**, inside the block being archived — verifying each claim against the body before deleting (rather than assuming) is what caught it; it was relocated, not archived. **Remaining open work:** 731 still exceeds ~300, and the residual is ~40 sections of 10–77 lines with no dominant block, all as-built architecture. Going lower means archiving load-bearing content (the WP3.5a safety posture, which its own SURFACE requires live in `arch.md`; the M11 as-built; the security posture) — so the honest next step is **deciding whether `arch.md` is now legitimately a grep-addressed reference and relaxing the guard for it**, not another trim pass. Rewritten rather than deleted per the partial-resolution carve-out.
 
+## Code-quality findings — m12-wp1-probe-flag-store-and-announce (2026-08-03)
+- **Pointer:** 5 open items of 8 findings (0 CRITICAL / 3 MAJOR / 5 MINOR — **2 MAJORs and 1 MINOR
+  fixed in place at review**). The two fixed MAJORs were both *guard-calibration overclaims* in a
+  header written in the same commit: the field-access negatives were variable-name- and
+  syntax-form-bound (a `for (const p of projects)` consumer and any renamed binding passed them),
+  and `stripComments` ignored trailing `//`. Both are now name-agnostic/form-agnostic with the
+  previously-missed mutants added to the calibration block as real inputs, and the header narrowed
+  to what is actually asserted. The carried MAJOR (measurement scripts not in the repo) was
+  **mitigated** — figures relabelled as one-shot observations with method inline — leaving only a
+  convention question. Full body:
+  [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
+  `# m12-wp1-probe-flag-store-and-announce — 2026-08-03`.
+- **Priority:** low (all five)
+- **Status:** pending — auto-backlogged per `drive_mode=autopilot`.
+- **Pickup shape:** three are one-touch cleanups to fold into the next WP that edits the same file
+  (brace-count the interface slice in `listProjectsConsumers.test.ts`; qualify the ambiguous
+  `Verdict (b)` comment at `App.tsx:306-308`; trim one redundant paragraph on the Rust hazard test's
+  doc comment — ⚠️ **not** its ⚠️ reopening-condition paragraph, which is what stops a future reader
+  deleting the test when it correctly fails). The other two are conventions worth deciding once
+  rather than per-instance: whether probe-grade perf spikes get a durable home under `tooling/`, and
+  whether a phase observable must be amended when a verdict *reverses* the assumption it encoded.
+  ⚠️ The comment-density item here is mild ("not the DocsPanel pattern" per the reviewer) but it is
+  the **fifth consecutive review** to raise density in this repo — treat it as further evidence for
+  the standing *budget* ask on the M11 blocks below, not as another isolated trim.
+
 ## Code-quality findings — m11-wp5-milestone-exit-verify (2026-08-02)
 - **Pointer:** 1 open item of 4 findings (0 CRITICAL / 2 MAJOR / 2 MINOR — **all four fixed in place at
   review**, incl. a demonstrated silent-pass hole in a wiring guard). The one carried item is the
