@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: "Milestone 12: Smart auto-resume + drive mode"
-updated: 2026-08-03  # ▶ M12 DECOMPOSED — 5 WPs. Scoped from a LOG-MINED redesign of the milestone's decision tree (60 projects / 2087 transcripts), not from the roadmap text, which was written 2026-05-22 and is stale in six ways. THE CENTRAL REDESIGN: the unclean-boundary signal is now EXPLICIT (operator-supplied) instead of inferred, which deletes the milestone's one unresolvable unknown (there is NO CLI to query "does a resumable conversation exist"). The flag is DEFAULT-SET / cleared-on-clean-exit, so a power loss produces the correct state for free. Auto-fire is announced in the picker row BEFORE the click, with a second door that opens without firing — a per-open routing decision, NOT a per-project preference. /session-start is NEVER auto-fired (rare + high cost when wrong); it gets a manual button instead. ⚠️ REQUIRES a vision.md revision (5 places say the drive-mode selector lives in the workspace HEADER; operator moved it to the PICKER ROW) — see "Vision revision required". ⚠️ Also flags the FIRST live edge case for design prior set-a-spawn-time-choice-where-the-spawn-is-chosen, whose own text names it as untested.
+updated: 2026-08-03  # ▶ M12 DECOMPOSED — 5 WPs. Scoped from a LOG-MINED redesign of the milestone's decision tree (60 projects / 2087 transcripts), not from the roadmap text, which was written 2026-05-22 and is stale in six ways. THE CENTRAL REDESIGN: the unclean-boundary signal is now EXPLICIT (operator-supplied) instead of inferred, which deletes the milestone's one unresolvable unknown (there is NO CLI to query "does a resumable conversation exist"). The flag is DEFAULT-SET / cleared-on-clean-exit, so a power loss produces the correct state for free. Auto-fire is announced in the picker row BEFORE the click, with a second door that opens without firing — a per-open routing decision, NOT a per-project preference. /session-start is NEVER auto-fired (rare + high cost when wrong); it gets a manual button instead. ⚠️ REQUIRES a vision.md revision (5 places say the drive-mode selector lives in the workspace HEADER; operator moved it to the PICKER ROW) — see "Vision revision required". ⚠️ Also flags the FIRST live edge case for design prior set-a-spawn-time-choice-where-the-spawn-is-chosen, whose own text names it as untested. ⚠️ WP3/WP4 SWAPPED 2026-08-03 (operator: "Always derisk first"): auto-fire is now WP3 and the drive-mode cell WP4. The original order ran the safe clone first and justified it as "bank a shippable increment, then do the risky part with the flag proven" — build-dependency reasoning mis-stated as risk reasoning, inverting the learning-sequence rule. ALL of the milestone's genuine unknowns are in auto-fire (first feature-initiated PTY write, injection timing on a fresh prompt, the pickerRowOrder sibling-nesting trap, an auto-action on the most-glanced surface); the drive-mode cell clones an already-live path with a settled placement and holds near-zero unknown. Critical path is now WP1→WP2→WP3→WP5, with WP4 a genuine parallel track.
 ---
 
 # WBS — Milestone 12: Smart auto-resume + drive mode
@@ -53,7 +53,7 @@ The roadmap treats them as two branches of one lookup. They are not the same *ki
 
 Of the **18** cold `/session-start` openers, **7 had a live `.session.md`** when it was typed (`neo-stayman-assistant` 06-10, `stayman-cc-wrapper` 06-16 ×2, `replicator-1-0` 06-19, `Kenosis-edifi` 07-27 + 07-29, `mccc` 08-02). In **6** the skill's first act was telling the operator *"don't start fresh, there's a handoff here"*; in one the operator self-corrected to `/session-resume` one message later. **But in one (`stayman-cc-wrapper` 06-16) the operator had a live pointer and deliberately did new work anyway** ("shall we give this desktop app a name?").
 
-**So a pointer's presence does not imply intent to resume** — which is exactly the case an unconditional auto-fire gets wrong, and why WP4's opt-out door is part of the deliverable rather than a nicety. The other 11 split into: backlog-triage opens (6), ad-hoc task (2), true greenfield (2), throwaway (1).
+**So a pointer's presence does not imply intent to resume** — which is exactly the case an unconditional auto-fire gets wrong, and why WP3's opt-out door is part of the deliverable rather than a nicety. The other 11 split into: backlog-triage opens (6), ad-hoc task (2), true greenfield (2), throwaway (1).
 
 ### Finding 5 — command names, paths, and reuse targets
 
@@ -206,41 +206,41 @@ workspace opens ─────────────────────�
 - [ ] 2.6 Fix the stale test at `cc_session/mod.rs:918` — `"/session-resume"` → `"/session-restore"`. It currently reads as authoritative about a command that does not exist.
 - [ ] 2.7 Verify default-set behaves correctly under a **simulated hard kill** (no clean-exit code runs → flag survives). This is the case the design exists for and the one no button can catch.
 
-**WP2 → WP3 rationale:** WP3 (drive mode) is fully independent of the flag and touches different files — it is sequenced next only because it is the smaller, lower-risk half of the milestone and its placement decision is already settled, so it banks a shippable increment before WP4's riskier auto-fire.
+**WP2 → WP3 rationale:** With the flag provably correct, the very next thing built is the milestone's **highest-risk** work (auto-fire), per derisk-first — not the easy half. WP2 is the minimum WP3 needs: auto-fire cannot be verified against a flag whose lifecycle is still in question, and WP2's hard-kill case (2.7) is what proves the signal auto-fire reads is trustworthy.
 
 ---
 
-### WP3: Drive-mode selector on the picker row
-**Description:** Per-project drive mode as a compact readout + click-to-edit cell on the picker row, mirrored to the active WIP file's `drive_mode:` frontmatter. **NOT on the workspace header** — see the vision revision.
-**Milestone:** M12
-**Dependencies:** WP1 (store conventions only; independent of WP2)
-**Size:** M
-**Tasks:**
-- [ ] 3.1 Activate `default_drive_mode` (`config_store/mod.rs:68-71`) — the placeholder is already typed `Option<DriveMode>` with the correct kebab-case wire vocabulary. **Clone `default_model`'s live path** (`set_default_model` → read at spawn → event rebroadcast); do not invent a new one.
-- [ ] 3.2 Add the cell to `PICKER_ROW_CELLS` (`pickerRowOrder.ts`) as **data**, not JSX — the module exists precisely so the component cannot disagree with the declared order, and so the test asserts a *value* rather than a substring.
-- [ ] 3.3 **Compact readout, click to edit** — per `set-a-spawn-time-choice-where-the-spawn-is-chosen`'s corollary. The active value must be readable **without interaction**; only the *edit affordance* sits behind a click. ⚠️ An always-live `<select>` on every row was explicitly judged too noisy at 20+ projects.
-- [ ] 3.4 **Mirror to the active WIP file's `drive_mode:` frontmatter**, which is the source of truth for the workflow's pause-policy logic (`CLAUDE.md`: never let the UI hold a mode that disagrees; re-read on mount). Decide and document the write direction + conflict rule: the WIP file wins on disagreement.
-- [ ] 3.5 **Correct `vision.md` (5 places: lines 28, 51, 79, 87, success metric 5) and `roadmap.md`'s M12 exit criterion** from "workspace header" to "picker row", with the operator's reasoning and a pointer to the prior. ⚠️ Success metric 5's wording becomes unsatisfiable as written — this is not optional cleanup.
-- [ ] 3.6 Gate the cell behind `useWorkflowFeaturesEnabled` (drive mode is workflow-coupled). ⚠️ `"drivemode"`/`"drive-mode"` are already in `WORKFLOW_TERMS` — the seam reference must be in **executable source**, not a comment.
-
-**WP3 → WP4 rationale:** WP4 is the milestone's riskiest work (the first feature-initiated PTY write, plus an auto-action on the most-glanced surface). Sequencing it after WP2+WP3 means the flag is already provably correct and the picker-row cell pattern is already established, so WP4 adds only the *firing* and the *announcing* rather than debugging storage and layout at the same time.
-
----
-
-### WP4: Auto-fire + the picker-row announcement and its second door
+### WP3: Auto-fire + the picker-row announcement and its second door
 **Description:** The acting half. Announce the predicted command in each picker row, fire it on a normal row click, and offer a sibling `⏵` that opens without firing. Plus the manual `/session-start` button inside the workspace for the no-prediction case.
 **Milestone:** M12
-**Dependencies:** WP1, WP2, WP3
+**Dependencies:** WP1, WP2
 **Size:** L
 **Tasks:**
-- [ ] 4.1 **The decision function, pure and imported by tests.** `predictAction(uncleanFlag, sessionMdPresent) → "resume" | "restore" | null`, with the **unclean flag winning** over `.session.md`. Mutation-prove the precedence — inverting it must fail a test, since the roadmap specifies the opposite order and a future reader may "fix" it back.
-- [ ] 4.2 **Announce in the row**, next to the project name (operator's placement). Watch the flexing left region: a long command next to a long project name competes for space — measure at realistic name lengths rather than assuming.
-- [ ] 4.3 **The `⏵` second door.** ⚠️ **MUST be a sibling of the open-area `<button>`** (`pickerRowOrder.ts:4-7`; assert via the existing `isSiblingOfOpenButton`). Present **only** when an action is predicted — with no prediction both doors are identical and the button would provably do nothing.
-- [ ] 4.4 **Fire via `slash_command_bytes`** (`cc_session/mod.rs:251`), the reserved injection helper — not a new primitive. Address the timing hazard M10.9 WP4 named: driving a *fresh* CC prompt is timing-sensitive. Operator confirms **CC already handles Esc-interrupt**, so the mitigation is "interrupt a running command," not "cancel before send" — document that honestly rather than implying a pre-send window.
-- [ ] 4.5 **The manual `/session-start` button** inside the workspace (the third row's affordance; `paired-actions-need-paired-affordances` — it is the *inverse* of the two auto-actions, so cutting it leaves a hole). Deliberately **one hardcoded button, not a registry** — M13 builds the generic skill registry and either absorbs this or keeps it as a pinned special case. Rationale for shipping here anyway: M13 is "livable-without" and has slid five times, and without it M12 ships a three-branch design where one branch has no affordance at all.
-- [ ] 4.6 **Keyboard parity.** If Enter opens with fire, there is no keyboard route to the no-fire door. Decide: a modifier (⌥Enter/⌥click) covering both without new chrome, or explicitly defer with a recorded reason.
-- [ ] 4.7 **Show the pending action for an already-open workspace** (filmstrip or workspace header) so the unclean flag is not write-only — without it there is no way to confirm the exit-button click registered. Same deliverable as the announcement, not a separate feature.
-- [ ] 4.8 Gate everything in this WP behind `useWorkflowFeaturesEnabled`.
+- [ ] 3.1 **The decision function, pure and imported by tests.** `predictAction(uncleanFlag, sessionMdPresent) → "resume" | "restore" | null`, with the **unclean flag winning** over `.session.md`. Mutation-prove the precedence — inverting it must fail a test, since the roadmap specifies the opposite order and a future reader may "fix" it back.
+- [ ] 3.2 **Announce in the row**, next to the project name (operator's placement). Watch the flexing left region: a long command next to a long project name competes for space — measure at realistic name lengths rather than assuming.
+- [ ] 3.3 **The `⏵` second door.** ⚠️ **MUST be a sibling of the open-area `<button>`** (`pickerRowOrder.ts:4-7`; assert via the existing `isSiblingOfOpenButton`). Present **only** when an action is predicted — with no prediction both doors are identical and the button would provably do nothing.
+- [ ] 3.4 **Fire via `slash_command_bytes`** (`cc_session/mod.rs:251`), the reserved injection helper — not a new primitive. Address the timing hazard M10.9 WP4 named: driving a *fresh* CC prompt is timing-sensitive. Operator confirms **CC already handles Esc-interrupt**, so the mitigation is "interrupt a running command," not "cancel before send" — document that honestly rather than implying a pre-send window.
+- [ ] 3.5 **The manual `/session-start` button** inside the workspace (the third row's affordance; `paired-actions-need-paired-affordances` — it is the *inverse* of the two auto-actions, so cutting it leaves a hole). Deliberately **one hardcoded button, not a registry** — M13 builds the generic skill registry and either absorbs this or keeps it as a pinned special case. Rationale for shipping here anyway: M13 is "livable-without" and has slid five times, and without it M12 ships a three-branch design where one branch has no affordance at all.
+- [ ] 3.6 **Keyboard parity.** If Enter opens with fire, there is no keyboard route to the no-fire door. Decide: a modifier (⌥Enter/⌥click) covering both without new chrome, or explicitly defer with a recorded reason.
+- [ ] 3.7 **Show the pending action for an already-open workspace** (filmstrip or workspace header) so the unclean flag is not write-only — without it there is no way to confirm the exit-button click registered. Same deliverable as the announcement, not a separate feature.
+- [ ] 3.8 Gate everything in this WP behind `useWorkflowFeaturesEnabled`.
+
+**WP3 → WP4 rationale (⚠️ DERISK-FIRST, corrected 2026-08-03):** Auto-fire now runs BEFORE the drive-mode cell, because it carries every real unknown in the milestone — the first feature-initiated PTY write, injection timing against a fresh CC prompt, the sibling-nesting trap, and an auto-action on the most-glanced surface. WP4 (drive mode) clones an already-live precedent with a settled placement and holds near-zero unknown, so building it first would bank a safe increment while deferring the discovery that can still re-shape the milestone. **The original ordering was build-dependency reasoning mis-stated as risk reasoning** — operator-corrected: *"Always derisk first."* Nothing in auto-fire depends on the drive-mode cell existing; both only need WP1's store verdict + WP2's correct flag.
+
+---
+
+### WP4: Drive-mode selector on the picker row
+**Description:** Per-project drive mode as a compact readout + click-to-edit cell on the picker row, mirrored to the active WIP file's `drive_mode:` frontmatter. **NOT on the workspace header** — see the vision revision.
+**Milestone:** M12
+**Dependencies:** WP1 (store conventions only; independent of WP2 and WP3)
+**Size:** M
+**Tasks:**
+- [ ] 4.1 Activate `default_drive_mode` (`config_store/mod.rs:68-71`) — the placeholder is already typed `Option<DriveMode>` with the correct kebab-case wire vocabulary. **Clone `default_model`'s live path** (`set_default_model` → read at spawn → event rebroadcast); do not invent a new one.
+- [ ] 4.2 Add the cell to `PICKER_ROW_CELLS` (`pickerRowOrder.ts`) as **data**, not JSX — the module exists precisely so the component cannot disagree with the declared order, and so the test asserts a *value* rather than a substring.
+- [ ] 4.3 **Compact readout, click to edit** — per `set-a-spawn-time-choice-where-the-spawn-is-chosen`'s corollary. The active value must be readable **without interaction**; only the *edit affordance* sits behind a click. ⚠️ An always-live `<select>` on every row was explicitly judged too noisy at 20+ projects.
+- [ ] 4.4 **Mirror to the active WIP file's `drive_mode:` frontmatter**, which is the source of truth for the workflow's pause-policy logic (`CLAUDE.md`: never let the UI hold a mode that disagrees; re-read on mount). Decide and document the write direction + conflict rule: the WIP file wins on disagreement.
+- [ ] 4.5 **Correct `vision.md` (5 places: lines 28, 51, 79, 87, success metric 5) and `roadmap.md`'s M12 exit criterion** from "workspace header" to "picker row", with the operator's reasoning and a pointer to the prior. ⚠️ Success metric 5's wording becomes unsatisfiable as written — this is not optional cleanup.
+- [ ] 4.6 Gate the cell behind `useWorkflowFeaturesEnabled` (drive mode is workflow-coupled). ⚠️ `"drivemode"`/`"drive-mode"` are already in `WORKFLOW_TERMS` — the seam reference must be in **executable source**, not a comment.
 
 **WP4 → WP5 rationale:** Standard exit-verify placement — every deliverable must exist before the milestone's exit criteria and the OFF-invariant guard's new arm can be verified against the real app.
 
@@ -266,19 +266,27 @@ workspace opens ─────────────────────�
 ```
 WP1 (probe: flag store + announce query)          ← START, blocks everything
  │
- ├──► WP2 (flag lifecycle + exit button)  ──┐
- │                                          │
- └──► WP3 (drive mode on picker row)  ──────┤   WP2 ∥ WP3 are independent
-                                            │   (different files, different subsystems)
-                                            ▼
-                                     WP4 (auto-fire + announce + doors)
-                                            │
-                                            ▼
-                                     WP5 (exit verify + guard's 4th arm)
+ ▼
+WP2 (flag lifecycle + clean-exit clearing + exit button)
+ │
+ ▼
+WP3 (auto-fire + announce + two doors)   ◀── HIGHEST RISK, built EARLY (derisk-first)
+ │
+ ├──► WP4 (drive mode on picker row)   ← independent of WP2/WP3; may run in parallel
+ │                                        with WP3 or slot anywhere after WP1
+ ▼
+WP5 (exit verify + the guard's 4th arm)
 ```
 
-**Critical path:** WP1 → (WP2 ∥ WP3) → WP4 → WP5.
-**Parallel track:** WP2 and WP3 share no files and no subsystem — WP3 touches `config_store` + the picker row, WP2 touches the flag store + the close/spawn paths. Either may go first; WP2 is listed first only because WP4 depends on the flag being correct more deeply than on the drive-mode cell existing.
+**Critical path:** WP1 → WP2 → WP3 → WP5.
+
+**⚠️ Ordering is DERISK-FIRST, corrected 2026-08-03.** An earlier draft ran the drive-mode cell (WP4) before auto-fire and justified it as "bank a shippable increment first, then do the risky part with the flag already proven." That is **build-dependency reasoning mis-stated as risk reasoning**, and it inverts the standard learning-sequence rule: *resolve the riskiest unknowns first, when the cost of discovery and re-planning is lowest.* Operator-corrected — *"Always derisk first."*
+
+**All of the milestone's genuine unknowns live in WP3:** the first feature-initiated PTY write, injection timing against a freshly-spawned CC prompt, the `pickerRowOrder` sibling-nesting trap, and an auto-action on the app's most-glanced surface. **WP4 holds near-zero unknown** — it clones `default_model`'s already-live read/write path into a cell whose placement the operator has already settled. If WP3 discovers something that re-shapes the milestone, that must happen while there is still room to re-plan, not after the safe work is banked.
+
+**WP2 is the minimum WP3 needs** — auto-fire cannot be verified against a flag whose lifecycle is still in question, and WP2's hard-kill case (2.7) is what proves the signal WP3 reads is trustworthy. WP2 is deliberately NOT deferred behind WP3 for that reason.
+
+**Parallel track:** WP4 shares no files and no subsystem with WP2 or WP3 (it touches `config_store` + the picker-row cell list; they touch the flag store + the close/spawn paths + the announce/fire path). It may run alongside WP3 or slot anywhere after WP1 — it is a genuine parallel track, not a sequenced dependency.
 
 **No orchestration/async WP** — nothing here introduces a queue, worker, or event pipeline beyond the existing Tauri event channel. **No 3rd-party probe WP** — M12 calls no external API or SDK; WP1 is a probe of *our own* storage boundary, which is why it exists despite rule 4 not strictly requiring one.
 
@@ -288,8 +296,8 @@ WP1 (probe: flag store + announce query)          ← START, blocks everything
 |---|---|---|
 | WP1 | S | Probe; two verdicts, half-day timebox |
 | WP2 | M | Four clean-exit routes + a hard-kill case are the bulk |
-| WP3 | M | Clones a live precedent; the vision correction is real but small |
-| WP4 | L | First feature-initiated PTY write + an auto-action on the most-glanced surface + the sibling-nesting trap |
+| WP3 | L | **The milestone's risk.** First feature-initiated PTY write + injection timing on a fresh prompt + the sibling-nesting trap + an auto-action on the most-glanced surface |
+| WP4 | M | Clones a live precedent; the vision correction is real but small |
 | WP5 | M | Live drive + a new guard arm, each probed individually |
 
 ## Probe outcomes
@@ -298,6 +306,6 @@ WP1 (probe: flag store + announce query)          ← START, blocks everything
 
 ## Open questions carried into the WPs
 
-1. **Announce-label placement vs. long project names** (task 4.2) — next to the name reads best, but competes for the flexing left region.
-2. **Keyboard parity for the no-fire door** (task 4.6) — modifier, or deferred with a reason.
+1. **Announce-label placement vs. long project names** (task 3.2) — next to the name reads best, but competes for the flexing left region.
+2. **Keyboard parity for the no-fire door** (task 3.6) — modifier, or deferred with a reason.
 3. **Flag store choice** (task 1.2) — three candidates; operator settled the *category* (machine-local, not a project preference), not the *location*.
