@@ -309,3 +309,6 @@ WP5 (exit verify + the guard's 4th arm)
 1. **Announce-label placement vs. long project names** (task 3.2) — next to the name reads best, but competes for the flexing left region.
 2. **Keyboard parity for the no-fire door** (task 3.6) — modifier, or deferred with a reason.
 3. **Flag store choice** (task 1.2) — three candidates; operator settled the *category* (machine-local, not a project preference), not the *location*.
+
+## Session Handoff — 2026-08-03 12:05
+Handed off. See `workflow-system/state/.session.md` to restore.
