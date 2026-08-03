@@ -303,20 +303,6 @@
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*
 
-## SURFACE-2026-07-31-SUBSTRATE-DETECTION-CANNOT-TELL-MCCC-FROM-THE-USERS-OWN-SKILLS
-- **Source:** feature:verify-self (M10.9 WP3.5b Phase 3) — symptom found by driving a real uninstall in a sandboxed `$HOME`; the real scope identified by the operator immediately after
-- **Target level:** product:wbs
-- **Type:** bug
-- **Summary:** In **v0.2.9 (released)**, `workflow_substrate::skills_dir_exists` is a bare `is_dir()` on `~/.claude/skills/` — it answers *"does that directory exist?"* when the question it is asked is *"is the companion workflow system installed?"*. Those diverge for **any user who keeps their own skills**, and for **anyone who has uninstalled**.
-- **The two wrong answers it gives:**
-  1. **Never-installed user with their own skills → reads INSTALLED.** They never see the invite, and Settings claims a substrate they don't have.
-  2. **Post-uninstall (by hand or by wizard) → reads INSTALLED.** `uninstall.sh` removes only the symlinks it created, correctly leaving the directory (Claude Code owns it) and correctly leaving any skills the user had first. Post-WP3.5a this is worse than a stale label: with no provenance record, `resolve_state(true, None)` lands on **`developer`**, whose copy affirmatively says "installed outside Claudesk, so Claudesk won't modify or remove it" — about nothing.
-- **Context:** Pre-dates WP3.5b; the defect has existed since WP3 shipped the presence check. The wizard merely made it fast to reach. Note the near-miss: the first fix attempt narrowed the predicate to "non-empty", which fixes only the empty-dir case and **still mis-reads every user who owns skills** — caught by the operator, not by any gate. `workflow_substrate`'s own module header had warned since WP3 that an empty dir "looks installed to any later check", and the unit test asserted the buggy behavior.
-- **Resolution status:** **FIXED on main** by WP3.5b Phase 3. Detection is now marker-based: an entry counts only if it is a **symlink** whose target resolves into a repo whose root `install.sh` contains `claude-workflow-system` (the companion repo's own namespace marker, present in both its install and uninstall scripts and load-bearing to their `CLAUDE.md` block — so it cannot be dropped upstream silently). No skill name is hardcoded (§4c-safe); an upstream marker change degrades to "not installed", the safe direction. Verified against the operator's real machine: 48 marker-backed symlinks → installed, 11 dangling test leftovers correctly ignored. **Not yet released** — v0.2.9 users still hit both wrong answers.
-- **Suggested action:** no new work; ships with the next release. Worth a release-note line, since case 1 silently suppressed the invite for exactly the secondary users M10.9 exists to reach. Delete on resolve when that release goes out.
-- **Priority:** low (fixed on main; released-build exposure only)
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)* — awaiting release
-
 ## SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE
 - **Source:** operator report (2026-07-31, during the M11.5 bucket-scoping discussion)
 - **Target level:** product:wbs (bug, small)
