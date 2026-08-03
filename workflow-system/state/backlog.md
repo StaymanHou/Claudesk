@@ -115,7 +115,7 @@
   here — that is the more interesting question than this one project's state.
 - **Priority:** medium (no data loss yet; silent-divergence risk on every memory write, and it may
   affect other projects)
-- **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Environment/hygiene item, untouched by M11; the tooling primitive already exists in the companion repo (`tools/memory-link/`).
+- **Status:** **NOT A DEFECT — the premise was a misreading (verified 2026-08-03 at `/product-context` step 2c).** The item checked whether `<proj-dir>/.claude/memory/` is a symlink; the convention wants the **opposite** — the repo dir is the *real* git-tracked store and the **harness path** is the symlink to it. That is exactly the state on this machine: `~/.claude/projects/-Users-stayman-Personal-projects-claudesk/memory -> /Users/stayman/Personal/projects/claudesk/.claude/memory` (created 2026-07-03). Proven to be ONE physical store, not two: both paths `pwd -P` to the same directory, `MEMORY.md` is the **same inode** (65156983) through both, and both list 52 entries. So the "silent divergence on every future write" risk does not exist. The M11 WP4 symptom that prompted this (a memory body and its index line needing separate staging) has some other cause — most likely ordinary git staging of two files, not two stores. `ensure-memory-link.sh` would be a no-op. **Closing rather than deferring**; if the M11 WP4 staging oddity recurs, file it as its own item with the real symptom rather than reviving this premise.
 
 ## Code-quality findings — m11-wp4-docs-live-reload (2026-08-02)
 - **Pointer:** **1 MAJOR + 4 MINOR** remaining (was 1 CRITICAL + 4 MAJOR + 4 MINOR) from
