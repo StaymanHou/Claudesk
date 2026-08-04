@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: "Milestone 12: Smart auto-resume + drive mode"
-updated: 2026-08-03  # ✅ WP1 SHIPPED (cc3dfa2 + cb2e192) — both verdicts recorded in "Probe outcomes" and operator-approved. THE FLAG GETS ITS OWN STORE (session-state.json, path->bool, absent=clean): candidate 1 (a field on Project) was disqualified NOT by the predicted byte cost but by a LOST-UPDATE hazard — every projects.json write is whole-file RMW and set-on-open is co-triggered by add_or_touch's recency stamp on the SAME click, so one write silently discards the other's field (losing the flag silently disables auto-resume). THE ANNOUNCE IS A NEW SIBLING COMMAND picker_announce_actions, NOT a list_projects widening — 2 of its 3 consumers use only projects.length, so widening would make them pay N stats for a count. ⚠️ WP3 task 3.1: precedence must live in the pure predictAction(), NOT in the command — a resolved-string payload cannot be mutation-tested for precedence. ▶ M12 DECOMPOSED — 5 WPs. Scoped from a LOG-MINED redesign of the milestone's decision tree (60 projects / 2087 transcripts), not from the roadmap text, which was written 2026-05-22 and is stale in six ways. THE CENTRAL REDESIGN: the unclean-boundary signal is now EXPLICIT (operator-supplied) instead of inferred, which deletes the milestone's one unresolvable unknown (there is NO CLI to query "does a resumable conversation exist"). The flag is DEFAULT-SET / cleared-on-clean-exit, so a power loss produces the correct state for free. Auto-fire is announced in the picker row BEFORE the click, with a second door that opens without firing — a per-open routing decision, NOT a per-project preference. /session-start is NEVER auto-fired (rare + high cost when wrong); it gets a manual button instead. ⚠️ REQUIRES a vision.md revision (5 places say the drive-mode selector lives in the workspace HEADER; operator moved it to the PICKER ROW) — see "Vision revision required". ⚠️ Also flags the FIRST live edge case for design prior set-a-spawn-time-choice-where-the-spawn-is-chosen, whose own text names it as untested. ⚠️ WP3/WP4 SWAPPED 2026-08-03 (operator: "Always derisk first"): auto-fire is now WP3 and the drive-mode cell WP4. The original order ran the safe clone first and justified it as "bank a shippable increment, then do the risky part with the flag proven" — build-dependency reasoning mis-stated as risk reasoning, inverting the learning-sequence rule. ALL of the milestone's genuine unknowns are in auto-fire (first feature-initiated PTY write, injection timing on a fresh prompt, the pickerRowOrder sibling-nesting trap, an auto-action on the most-glanced surface); the drive-mode cell clones an already-live path with a settled placement and holds near-zero unknown. Critical path is now WP1→WP2→WP3→WP5, with WP4 a genuine parallel track.
+updated: 2026-08-03  # ✅ WP2 SHIPPED (`0b07e81` + `5e8256e`) — the unclean flag is live end-to-end: set-on-open (after the spawn `?`), opt-in-per-route clearing, the hover-revealed ⏸ (gated on M10.9), Recycle pinned clean for M13. ⚠️ WP2 shipped THREE clean-exit routes, not four — `/exit` was dropped as a dead variant pending a product decision (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). WP3 inherits: `consume()` is the fire-path primitive; the flag is keyed through `key_for()` (canonicalized) so any new reader must use the same helper; precedence must live in the pure `predictAction`, NOT the batch command.
 ---
 
 # WBS — Milestone 12: Smart auto-resume + drive mode
@@ -192,19 +192,19 @@ workspace opens ─────────────────────�
 
 ---
 
-### WP2: The unclean flag — lifecycle, clean-exit clearing, and the exit button
+### WP2: The unclean flag — lifecycle, clean-exit clearing, and the exit button ✅ SHIPPED 2026-08-03 (commits `0b07e81` + `5e8256e`)
 **Description:** The signal half of auto-resume, end to end: set-on-open, clear-on-clean-exit, consume-once-on-fire, plus the workspace-close button that closes without clearing. **No auto-fire yet** — this WP makes the flag *correct*, WP4 makes it *act*.
 **Milestone:** M12
 **Dependencies:** WP1
 **Size:** M
 **Tasks:**
-- [ ] 2.1 Implement the flag store per WP1's verdict, with a pure `#[cfg(test)]`-testable lifecycle module (set / clear / consume) so tests drive the real transitions rather than a replica — the standing `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]` method.
-- [ ] 2.2 **Set on workspace open.** Wire into the existing spawn path (`SessionRegistry::spawn` already receives the project path — no signature change, same reason M11.5 WP1 was M not L).
-- [ ] 2.3 **Clear on every clean exit — all four routes.** `/exit` in the CC pane · filmstrip × (close workspace) · proper app quit · **M13 Recycle Session** (see 2.5). ⚠️ Missing a route means a false unclean mark that fires a spurious `/resume`; missing the *inverse* (clearing on an unclean path) silently disables the whole feature. Enumerate the routes as data and test each.
-- [ ] 2.4 **The unclean-exit button.** Closes the workspace **without** clearing the flag, and reaps the PTY cleanly (that clean process-level shutdown is the button's entire remaining value over a force-quit). Reuse the existing close path + M10.5-WP2's active-close confirmation gate rather than adding a second close mechanism.
-- [ ] 2.5 **Pin Recycle Session as a CLEAN boundary** for M13. It writes `.session.md` first, so it is clean *by intent* — a comment + a test asserting the clearing contract, so M13 inherits it rather than rediscovering it. (Operator-confirmed at decomposition.)
-- [ ] 2.6 Fix the stale test at `cc_session/mod.rs:918` — `"/session-resume"` → `"/session-restore"`. It currently reads as authoritative about a command that does not exist.
-- [ ] 2.7 Verify default-set behaves correctly under a **simulated hard kill** (no clean-exit code runs → flag survives). This is the case the design exists for and the one no button can catch.
+- [x] 2.1 Implement the flag store per WP1's verdict, with a pure `#[cfg(test)]`-testable lifecycle module (set / clear / consume) so tests drive the real transitions rather than a replica — the standing `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]` method.
+- [x] 2.2 **Set on workspace open.** Wire into the existing spawn path (`SessionRegistry::spawn` already receives the project path — no signature change, same reason M11.5 WP1 was M not L).
+- [x] 2.3 **Clear on every clean exit — SHIPPED WITH THREE ROUTES, NOT FOUR (re-scoped at close, 2026-08-03).** Shipped: filmstrip × (close workspace) · proper app quit · **M13 Recycle Session** (pinned, see 2.5), enumerated as data (`CleanExitRoute`) and each tested. ⚠️ **`/exit` in the CC pane was DROPPED, deliberately** — it shipped as a dead enum variant (declared in three vocabularies, called by nothing) and was **removed** at code review rather than wired. Reason: `/exit` ends the CC process but leaves the workspace **OPEN** with a "Session ended" overlay + Relaunch, so there is no close for a clear to hang off, and whether that state is "clean" is an unresolved **product question** (Relaunch starts a NEW session that should itself be flagged unclean). Tracked as `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`; current behavior — the flag resolves on whatever close follows — is defensible. **The original "all four routes" wording is what made the gap invisible: the exhaustiveness test proved the SET, never that each member had a caller.**
+- [x] 2.4 **The unclean-exit button.** Closes the workspace **without** clearing the flag, and reaps the PTY cleanly (that clean process-level shutdown is the button's entire remaining value over a force-quit). Reuse the existing close path + M10.5-WP2's active-close confirmation gate rather than adding a second close mechanism.
+- [x] 2.5 **Pin Recycle Session as a CLEAN boundary** for M13. It writes `.session.md` first, so it is clean *by intent* — a comment + a test asserting the clearing contract, so M13 inherits it rather than rediscovering it. (Operator-confirmed at decomposition.)
+- [x] 2.6 Fix the stale test at `cc_session/mod.rs:918` — `"/session-resume"` → `"/session-restore"`. It currently reads as authoritative about a command that does not exist.
+- [x] 2.7 Verify default-set behaves correctly under a **simulated hard kill** (no clean-exit code runs → flag survives). This is the case the design exists for and the one no button can catch.
 
 **WP2 → WP3 rationale:** With the flag provably correct, the very next thing built is the milestone's **highest-risk** work (auto-fire), per derisk-first — not the easy half. WP2 is the minimum WP3 needs: auto-fire cannot be verified against a flag whose lifecycle is still in question, and WP2's hard-kill case (2.7) is what proves the signal auto-fire reads is trustworthy.
 
@@ -379,8 +379,11 @@ mid-write leaves the previous state intact rather than a truncated file — and 
 **absent means clean**, the only way to *lose* a flag is to lose the whole file, which fails
 toward "no auto-fire," the safe direction.
 
-**⚠️ For WP2:** the four clean-exit routes clear by **removing the key**, and clearing must be
-as durable as setting. `/exit` · filmstrip × · app quit · M13 Recycle Session (task 2.5).
+**⚠️ For WP2 (AS SHIPPED — corrected at close 2026-08-03):** the clean-exit routes clear by
+**removing the key**, and clearing is as durable as setting. **THREE routes shipped, not
+four:** filmstrip × · app quit · M13 Recycle Session (task 2.5). **`/exit` was dropped** — it
+leaves the workspace open, so there is no close to clear on; see task 2.3 and
+`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`.
 
 ### Verdict (b) — the batched announce query (WP1 Phase 2, 2026-08-03)
 

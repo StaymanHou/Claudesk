@@ -1,7 +1,7 @@
 ---
 feature: M12 WP2 — The unclean flag: lifecycle, clean-exit clearing, and the exit button
 workflow: feature
-state: ship (complete)
+state: finalize (complete) — ARCHIVED 2026-08-03
 created: 2026-08-03
 drive_mode: autopilot
 milestone: M12
@@ -11,7 +11,7 @@ wbs_wp: WP2
 # Feature: M12 WP2 — The unclean flag (lifecycle, clean-exit clearing, exit button)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete) — COMPLETED 2026-08-03
 **Created:** 2026-08-03
 
 ## Problem Statement
@@ -838,6 +838,54 @@ test-only helpers, or restate the horizon as WP3), and WP3 wires `read`, `is_unc
 `is_unclean_on_disk`, and `consume` within days. Churning the attributes now to re-churn them
 at WP3 is motion, not progress. **Auto-backlogged rather than silently dropped** — this is a
 recorded deferral, not a dismissal.
+
+
+## Retrospect
+
+- **What changed in our understanding:** Three things the plan did not know.
+  **(1) `cc-exit` is the wrong clearing signal precisely BECAUSE it covers everything.** The
+  plan treated "one event covers `/exit` and the ×" as a convenience; it is actually
+  disqualifying, since the same event fires for the ⏸ close, whose entire purpose is to NOT
+  clear. Two supporting facts sealed it: `PtyCcSession` never retains `project_path`, and
+  `cc_kill` fires from an unmount that also runs on StrictMode remounts.
+  **(2) An enum member with no caller is invisible to an exhaustiveness test.** Enumerating
+  the routes as data was right and made the *set* testable — but nothing tested that each
+  member had a **caller**, so `cc-exit-command` shipped declared-in-three-places and called
+  nowhere, with a green test suite reading as coverage.
+  **(3) A guard's own tripwire does not fire itself.** The per-item `#[allow(dead_code)]`
+  discipline is a genuine improvement on the blanket allow it replaced, and the module even
+  wrote down its own retirement rule — which then went unhonored at close. Better mechanism,
+  same outcome, until someone acts on it.
+
+- **Assumptions that held:** WP1's two verdicts survived contact intact — the separate store
+  was right (and the lost-update reasoning is now pinned by a test), and set-after-spawn
+  needed no signature change, confirming the M-not-L sizing. The `status_log` precedent fit
+  exactly. Derisk-first ordering paid: WP2's hard-kill arm is what makes WP3's signal
+  trustworthy, and doing it after auto-fire would have meant verifying against an unproven flag.
+
+- **Assumptions that were wrong:**
+  **(a)** That `/exit` was covered — I deferred *driving* it for a legitimate reason (bridge
+  typing fidelity), then filled the gap with an assumption and wrote it into the verify-self
+  log where WP3 would read it as settled. The disproving check was one `grep` for callers.
+  **(b)** That "the set lands after the `?`" was self-evidently safe. True, but true only by
+  *statement order*, which no test can go red on — verify-auto caught that the outcome demanded
+  mutation-provability and none existed.
+  **(c)** That the ⏸ needed no gate. It is workflow-coupled by definition; I built it ungated
+  and only the operator caught it.
+
+- **Approach delta:** Materially different from plan in three places, each an improvement
+  forced by reading code rather than following the plan. Clearing inverted from
+  side-effect-of-teardown to **opt-in per route**. `key_for()` canonicalization was added
+  unprompted, converting path-key agreement from a two-call-site coincidence into a store
+  property. P2.7 (a whole extra task) was added by a verify-auto back-loop to make the
+  spawn-ordering guarantee assertable — and required **rewiring the call site**, not just
+  adding a pure function beside it, or the function would have been proven and governing
+  nothing. Scope also *shrank* honestly at close: three clean-exit routes shipped, not four.
+
+- **Process note worth carrying:** every defect that escaped the automated gates was caught by
+  a **human or a fresh-context reviewer**, never by a green suite — the ungated ⏸ and the
+  slow-travel hover bug (operator, at verify-human), and the dead route (code review). Each
+  had a passing test suite at the moment it was wrong.
 
 
 ## Discoveries
