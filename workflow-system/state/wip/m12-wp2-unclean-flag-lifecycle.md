@@ -188,7 +188,7 @@ its flag too. ⚠️ This is the single most likely thing in WP2 to be built wro
   - [x] verify-codify  <!-- status: DONE — +8 hard-kill-guard tests, mutant 11 killed; 758 cargo + 1776 vitest (2026-08-03) -->
 
 ## Current Node
-- **Path:** Feature > ship (complete) > review-quality
+- **Path:** Feature > refactor (complete) > finalize
 - **Active scope:** none — all 3 phases `[x]`; shipped as `c149911`.
 - **⚠️ NOT PUSHED:** 2 commits ahead of origin/main (`b4e082f` WP1 close + `c149911` WP2).
   Held deliberately — pushing is the operator's call.
@@ -482,10 +482,27 @@ close end-to-end**. This is CLAUDE.md's "an observation is only decisive when a 
 implementation would give a DIFFERENT answer" — the failing hit-test was equally consistent
 with correct code, so it was not evidence.
 
-**Not covered here (correctly deferred):** the `/exit`-typed-in-CC route was not driven —
-raw xterm typing is low-fidelity over the bridge (caveat: synthetic Enter does not commit to
-the PTY). It shares the `workspace-close`/`cc-exit-command` clearing path proven above, and
-Phase 3's hard-kill arm is where the remaining live risk sits.
+**Not covered here:** the `/exit`-typed-in-CC route was not driven — raw xterm typing is
+low-fidelity over the bridge (caveat: synthetic Enter does not commit to the PTY).
+
+> ⚠️ **[CORRECTED 2026-08-03, post-review]** This paragraph originally continued: *"It shares
+> the `workspace-close`/`cc-exit-command` clearing path proven above."* **That was FALSE.**
+> Code review found `cc-exit-command` had **no caller at all** — the variant existed in the
+> Rust enum, the TS union, and round-tripped in two test suites, while nothing ever sent it.
+> The live ⏸/× contrast exercised `workspace-close` only.
+>
+> **The mistake was mine and it is worth naming precisely:** I deferred *driving* `/exit` for
+> a legitimate reason (bridge typing fidelity), then filled the resulting gap with an
+> **assumption** instead of a one-line caller check — and wrote that assumption into the
+> record, where WP3 would have read it as settled. Deferring an observation is fine; asserting
+> the unobserved thing is covered is not. The check that would have caught it took seconds:
+> `grep -rn "markSessionClean(" src/ --include=*.tsx | grep -v __tests__`.
+>
+> Resolution: the dead route was **removed** (not wired — wiring it is new functionality
+> gated on a product question), and the question is logged as
+> `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`. Current real behavior: `/exit`
+> leaves the workspace OPEN with a "Session ended" overlay, so the flag resolves on whatever
+> close follows.
 
 **Session hygiene:** bridge session stopped; ports 1420/9223 confirmed clean by **PID-scoped**
 check (never a blanket kill — the 2026-07-13 incident killed the operator's live app that way).
@@ -746,6 +763,82 @@ entries** — nothing failed except mutant 11, reverted immediately.
 
 **Final mutant tally: 11.** Phase 1: 4 · Phase 2: 6 (incl. mutant 7 from the P2.7 back-loop) ·
 Phase 3: 1. Every one confirmed to land in executable code before being believed.
+
+## Code-Quality Review — M12 WP2 (2026-08-03)
+
+Reviewer subagent against ship commit `0b07e81` (window `b4e082f..0b07e81`).
+
+### Strengths
+- Opt-in-per-route clearing documented as a **correction**; `CleanExitRoute` makes the ⏸ correct by construction ("clears nothing by not calling") — the M11 WP4 caller-side lesson applied.
+- `key_for()` converting path-key agreement from a two-call-site coincidence into a store property; pinned by a `/tmp`→`/private/tmp` TempDir probe.
+- P2.7 rewiring the `?` so `spawn_ok` is a real consumed term rather than adding a pure function beside an unchanged call site — the difference between a proven guard and decoration.
+- Every degraded read individually tested, all failing toward "clean", so a spurious `/resume` is structurally unreachable from a bad file.
+- `hardKillGuard.test.ts` asserting the naive marker DOES match both binaries — proving the discrimination is real, not an artifact of two unequal strings.
+
+### Issues
+
+**CRITICAL**
+- [`src/state/cleanExit.ts:31` + `src-tauri/src/session_state/mod.rs:282`] **The `cc-exit-command` route is DEAD.** No production code calls `markSessionClean` with it — the only caller is `App.tsx:473` with `"workspace-close"`. A user typing `/exit` in the CC pane dispatches `{type:"exited"}` (`XtermPane.tsx:407`), the bridge moves to `ended`, the workspace stays open, and **the flag is never cleared**.
+  **Why it matters:** `/exit` is named as covered in Phase 2's Observable outcome, in P2.2's task text, and in the module header's route list — and **the verify-self log (line 487) actively asserts it "shares the clearing path proven above." It does not.** The live ⏸/× contrast exercised `workspace-close` only. So a typed `/exit` leaves a stale `true` that fires an unasked-for `/resume` on next open — the feature's stated worst failure mode. **VERIFIED by the orchestrator before acting** (`grep` for callers: one, using `"workspace-close"`).
+  ⚠️ **Root cause worth carrying:** enumerating routes as data made the *set* exhaustive and testable, which was right — but nothing tests that each member has a **caller**, and the exhaustiveness test's green reads as coverage.
+
+**MAJOR**
+- [`session_state/mod.rs` ×10] **Ten `#[allow(dead_code)]` attributes survive at WP2 close**, against the module header's own rule (lines 61-63) and the commit message's claim that `consume` is "the single attribute expected to survive." Nine others are reachable only from `#[cfg(test)]` code and the two persist wrappers. The mechanism is a real improvement over the `workflow_install` blanket allow, **but the tripwire fired and was not acted on** — same outcome as the rot it was designed to avoid. Options: `#[cfg_attr(not(test), allow(dead_code))]`, mark test-only helpers as such, or restate the horizon as WP3.
+- [`TileActionButton.tsx:89`] `data-action={kind}` is emitted on every control and read by nothing — no test, no CSS, no source file. An unreferenced hook reads as a live contract.
+
+**MINOR**
+- [`Filmstrip.tsx:305-306`] Stale JSX comment still says the ⏸ "is `display:none` until hover" — the **pre-fix** mechanism, and `display` gating was precisely the operator-found defect. A reader following it would reintroduce the regression.
+- [`commands.rs:44`] `let _ = route;` plus three lines explaining the deliberate non-branch — an odd shape to leave in production.
+- Comment density (216/608, 51/84, 72/161). Reviewer's judgment on the brief's explicit question: **most is load-bearing and should NOT be cut.** Where it crosses into noise is **restatement across layers** — the opt-in-route rationale is told at near-full length **four** times, the hover-bridge story **three** times. The budget rule that would have bound this diff: **one canonical home per rationale, pointers elsewhere** (~40 lines saved, zero facts lost).
+
+### Assessment
+Engineering discipline above the repo's bar — the opt-in correction, `key_for` normalization, and P2.7 rewiring are each changes only made by reading the surrounding code rather than the plan, each pinned by a mutation-proven test. Against that, the diff ships one genuine hole: a clean-exit route existing in three vocabularies, round-tripping in two test suites, called by nothing — **and the WIP asserts it is covered**, which is the most expensive kind of finding because it will read as settled to WP3.
+
+### If you disagree
+Mark any finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+
+## Refactor log — post-review (2026-08-03)
+
+Entered F40 on the CRITICAL. **Cleanup only; no behavior changed** — 758 cargo + 1776 vitest
+both unchanged from the ship commit, which is the refactor contract.
+
+**CRITICAL — the dead `cc-exit-command` route: REMOVED, not wired.**
+⚠️ **The scope call matters more than the edit.** Wiring `/exit` to clear the flag would be
+**new functionality**, and §4's scope guard says log it rather than implement it. It is also
+gated on a genuine product question I should not answer unilaterally: `/exit` leaves the
+workspace OPEN with a "Session ended" overlay + Relaunch (verified in `XtermPane.tsx` /
+`bridge.ts`, not assumed), so there is no close for a clear to hang off — and Relaunch starts
+a NEW session that should itself be flagged unclean. Removing the dead member is pure cleanup;
+deciding `/exit`'s semantics is not. Logged as
+`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET` with the three viable answers and
+a note that today's behavior **(b) is defensible**.
+The Rust enum now carries a **do-not-re-add-it-blind** comment explaining why the member is
+absent, so the next reader doesn't "restore" it.
+
+**MAJOR — `data-action={kind}`: REMOVED.** Read by no test, no CSS, no source file.
+(The other MAJOR — ten surviving `#[allow(dead_code)]` — is **NOT** addressed here; see below.)
+
+**MINOR ×3, all fixed:**
+- `Filmstrip.tsx` stale comment claimed the ⏸ is `display:none` until hover — the **pre-fix**
+  mechanism, and `display` gating *was* the operator-found defect. A reader following it would
+  have reintroduced the exact regression two test files exist to prevent. Now a pointer.
+- `commands.rs`: `let _ = route;` gone (parse-to-validate via `.is_none()` instead); the doc
+  comment also wrongly said `Ok(true)`/`Ok(false)` for a bare-`bool` return — corrected.
+- Comment restatement collapsed per the reviewer's **"one canonical home per rationale,
+  pointers elsewhere"** rule: the opt-in-route story now lives once on `CleanExitRoute`
+  (pointers in `commands.rs`, `cleanExit.ts`); the hover-bridge story once in `App.css`
+  (pointers in `TileActionButton.tsx`, `Filmstrip.tsx`).
+
+**⚠️ NOT fixed, deliberately — the ten `#[allow(dead_code)]` attributes (MAJOR).** The
+reviewer is right that the tripwire fired and was ignored, and right that the outcome
+currently matches the rot the mechanism was meant to avoid. But the honest fix is a
+**judgment call about the retirement horizon** (narrow to `#[cfg_attr(not(test), ...)]`, mark
+test-only helpers, or restate the horizon as WP3), and WP3 wires `read`, `is_unclean`,
+`is_unclean_on_disk`, and `consume` within days. Churning the attributes now to re-churn them
+at WP3 is motion, not progress. **Auto-backlogged rather than silently dropped** — this is a
+recorded deferral, not a dismissal.
+
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

@@ -299,11 +299,9 @@ export function Filmstrip({
               {/* QoL-WP1 (P3.6 — operator request) — close (×) on the collapsed pill.
                   Routes through the SAME onClose → App.requestClose (dirty-guard +
                   focus-repick + reap unchanged).
-                  M12 WP2 — the × is now a CLUSTER: hovering it reveals a ⏸ directly
-                  beneath, which closes the workspace but leaves the session marked
-                  unfinished (next open offers `/resume`). Zero permanent pixels — the ⏸
-                  is display:none until hover/focus-within and is absolutely positioned,
-                  so the pill row costs exactly what it costs today. */}
+                  M12 WP2 — the × is now a CLUSTER (× + a hover-revealed ⏸). Mechanism
+                  and rationale live in `TileActionButton.tsx` and the
+                  `.tile-actions` block in `App.css` — not restated here. */}
               <TileActions
                 testIdPrefix="filmstrip"
                 workspaceId={tile.id}

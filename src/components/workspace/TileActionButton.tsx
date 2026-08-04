@@ -8,14 +8,10 @@
 //    pointer has to travel from one to the other. If the reveal were keyed on hovering the
 //    × alone, the ⏸ would vanish the instant the pointer left it — the classic hover-menu
 //    gap failure. Wrapping both in one element and keying the reveal on the WRAPPER's
-//    hover means moving down from × to ⏸ never leaves the trigger.
-//
-//    ⚠️ The CSS bridge that spans the gap must NOT itself be gated on `:hover` — that is
-//    circular and was a real bug, found by the operator at verify-human (2026-08-03): the
-//    ⏸ survived FAST pointer travel but vanished on SLOW travel, because leaving the ×
-//    made `:hover` false, which removed the very bridge meant to keep hover alive. The
-//    bridge is now always laid out and gated on `pointer-events` instead. See the
-//    `.tile-actions::after` block in `App.css`.
+//    hover means moving down from × to ⏸ never leaves the trigger. ⚠️ The CSS bridge that
+//    spans the gap must NOT be gated on `:hover` — that is circular and was a real
+//    operator-found bug. Full mechanism + the slow-vs-fast-travel symptom live in ONE
+//    place: the `.tile-actions::after` block in `App.css`.
 //
 // 2. **Nesting discipline in one place.** The pill and the expanded tile are themselves
 //    `<button>` elements, so these controls must be `<span role="button">` — a nested
@@ -86,7 +82,6 @@ function ActionControl({
       tabIndex={0}
       className={`tile-action tile-action--${kind}`}
       data-testid={testId}
-      data-action={kind}
       aria-label={label}
       title={label}
       onPointerDown={(e) => e.stopPropagation()}

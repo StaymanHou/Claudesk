@@ -85,7 +85,6 @@ describe("markSessionClean — M12 WP2 clean-exit clearing", () => {
     // clear on an unrecognized route (fail-safe), so the failure is a stale flag, which
     // is quiet rather than loud. Hence pinning every member.
     const routes: CleanExitRoute[] = [
-      "cc-exit-command",
       "workspace-close",
       "app-quit",
       "recycle-session",
@@ -136,7 +135,6 @@ describe("markSessionClean — M12 WP2 clean-exit clearing", () => {
     expect(Object.keys(mod)).toContain("markSessionClean");
 
     const routes: CleanExitRoute[] = [
-      "cc-exit-command",
       "workspace-close",
       "app-quit",
       "recycle-session",

@@ -250,10 +250,22 @@ pub fn is_unclean_on_disk(data_dir: &Path, project_path: &str) -> bool {
 /// opt out, because there is nothing to opt out of. Fail-safe by construction: a route
 /// someone forgets to wire leaves a stale flag (one spurious `/resume` offer), whereas the
 /// inverse default would silently disable the whole feature.
+/// ⚠️ **A typed `/exit` in the CC pane is deliberately NOT a member.** It was one until
+/// code review found the variant was **dead** — declared, wire-named, round-tripped in
+/// tests, and called by nothing. The reason it has no caller is behavioral, not an
+/// oversight: `/exit` ends the CC *process*, and the frontend responds by showing the
+/// "Session ended" overlay with a Relaunch button (`XtermPane.tsx`, bridge phase
+/// `ended`) — **the workspace stays open**. There is no close for a clean-exit clear to
+/// hang off, and whether that state should count as "clean" is a product question (the
+/// user may Relaunch, which starts a NEW session that should be flagged unclean again).
+///
+/// So the route was REMOVED rather than wired: an enum member with no caller reads as a
+/// covered case and is exactly what made this gap invisible — the exhaustiveness test
+/// proved the *set*, never that each member has a caller. Do not re-add it without
+/// deciding the product question first. Open as
+/// `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CleanExitRoute {
-    /// The user typed `/exit` in the CC pane and the session ended on its own.
-    CcExitCommand,
     /// The filmstrip × closed the workspace (the ordinary close).
     WorkspaceClose,
     /// The app quit gracefully (⌘Q / red button → `CloseRequested` → `quit_now`).
@@ -268,8 +280,7 @@ pub enum CleanExitRoute {
 impl CleanExitRoute {
     /// All clean-exit routes. A new variant must be added here — the exhaustiveness test
     /// fails until it is, and the `match` below fails to compile until it is handled.
-    pub const ALL: [CleanExitRoute; 4] = [
-        CleanExitRoute::CcExitCommand,
+    pub const ALL: [CleanExitRoute; 3] = [
         CleanExitRoute::WorkspaceClose,
         CleanExitRoute::AppQuit,
         CleanExitRoute::RecycleSession,
@@ -279,7 +290,6 @@ impl CleanExitRoute {
     /// wire vocabulary (`CcPermissionMode`, `DriveMode`).
     pub fn as_wire(self) -> &'static str {
         match self {
-            CleanExitRoute::CcExitCommand => "cc-exit-command",
             CleanExitRoute::WorkspaceClose => "workspace-close",
             CleanExitRoute::AppQuit => "app-quit",
             CleanExitRoute::RecycleSession => "recycle-session",

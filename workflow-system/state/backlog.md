@@ -1,5 +1,21 @@
 # Backlog
 
+## Code-quality findings — m12-wp2-unclean-flag-lifecycle (2026-08-03)
+- **Pointer:** 1 MAJOR deferred with reason — ten `#[allow(dead_code)]` attributes survive at WP2 close against the module's own stated retirement rule. Full finding in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp2-unclean-flag-lifecycle — 2026-08-03`. (The review's CRITICAL and all 3 MINORs were FIXED in refactor, not backlogged; the CRITICAL's residual product question is its own item, `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`.)
+- **Priority:** medium
+- **Status:** pending
+- **Pickup shape:** at WP3 close, re-run `cargo clippy --all-targets` with the attributes removed; whatever still warns has no consumer and should be `#[cfg(test)]`-gated or deleted.
+
+## SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET
+- **Source:** feature:refactor (M12 WP2, from the code-review CRITICAL)
+- **Target level:** product:wbs (M12 — WP3 or later)
+- **Type:** new-work (product decision, then possibly a small wiring change)
+- **Summary:** Typing `/exit` in the CC pane does **not** clear the unclean-exit flag. `/exit` ends the CC process; the frontend responds by showing the "Session ended" overlay with a Relaunch button (`XtermPane.tsx`, bridge phase `ended`) and **the workspace stays open**. There is no close for a clean-exit clear to hang off. Net effect: after a typed `/exit`, closing the workspace with × clears normally, but if the app is quit or the workspace is left open, the flag stays `true` and the next open offers `/resume`.
+- **Context:** Found at code review — the `CleanExitRoute::CcExitCommand` variant existed in the Rust enum, the TS union, and round-tripped in two test suites, but **no caller ever sent it**. The variant was **REMOVED** in refactor rather than wired, because wiring it is new functionality gated on a product question, and a dead enum member reads as a covered case (it is precisely what made the gap invisible — the exhaustiveness test proves the *set*, never that each member has a caller). ⚠️ The WP2 verify-self log wrongly asserted `/exit` "shares the clearing path proven above"; that sentence has been corrected in the WIP.
+- **Suggested action:** Decide the product question first: **is a typed `/exit` a clean exit?** It is genuinely ambiguous — the user deliberately ended the session (argues clean), but the workspace remains open and Relaunch starts a NEW session that should itself be flagged unclean (argues the flag is simply not yet decidable at that moment). Three viable answers: (a) treat `/exit` as clean and clear on the `ended` transition; (b) leave as-is — the flag resolves correctly on whatever close follows; (c) clear on `ended` but re-set on Relaunch. **(b) is the current behavior and is defensible**, which is why this is not a bug fix.
+- **Priority:** medium (no data loss; worst case is one unasked-for `/resume` offer, which WP3's announce makes visible before it fires)
+- **Status:** pending
+
 ## SURFACE-2026-08-03-M12-WP2-HARD-KILL-VERIFY-HUMAN-DEFERRED
 - **Source:** feature:verify-human (M12 WP2 Phase 3)
 - **Target level:** product:wbs (M12 — WP3 close or milestone-exit verify)

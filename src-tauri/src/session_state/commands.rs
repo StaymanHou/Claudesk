@@ -5,11 +5,8 @@
 //! it is co-located with the `?` that guarantees a failed spawn leaves no flag. Exposing a
 //! setter to the frontend would create a second way to set the flag with no such guarantee.
 //!
-//! ## Clearing is opt-in per route
-//! See [`crate::session_state::CleanExitRoute`] for the full rationale. In short: every
-//! teardown looks identical at the PTY layer (`cc-exit-<sid>` fires for the unclean-exit
-//! button too), so clearing cannot be a side effect of a session ending — it must be an
-//! explicit act on the routes that are genuinely clean.
+//! Clearing is **opt-in per route** — rationale lives on
+//! [`crate::session_state::CleanExitRoute`] (the canonical home), not restated here.
 
 use tauri::{AppHandle, Manager};
 
@@ -24,24 +21,21 @@ use super::CleanExitRoute;
 /// is legible at the call site and in tests, and so M13's Recycle path is a named,
 /// pinned member of the set rather than an ad-hoc fourth caller.
 ///
-/// Returns `Ok(true)` when the clear was applied (or was already clean), `Ok(false)` when
-/// the route was unrecognized or no app-data dir could be resolved. It never returns
-/// `Err`: a clearing failure must not surface as an error dialog on a close the user
+/// Returns `true` when the clear was applied (or the project was already clean), `false`
+/// when the route was unrecognized or no app-data dir could be resolved. Deliberately not
+/// a `Result`: a clearing failure must not surface as an error dialog on a close the user
 /// already committed to — the cost is one spurious `/resume` offer on next open.
 #[tauri::command]
 pub fn session_state_mark_clean(app: AppHandle, project_path: String, route: String) -> bool {
-    let Some(route) = CleanExitRoute::from_wire(&route) else {
-        // Unknown route: refuse to clear. Fail toward keeping the flag (a spurious
-        // /resume offer) rather than dropping it (silently disabling auto-resume).
+    // Parse-to-validate: every clean route clears identically, so the parsed value is not
+    // branched on — but an unrecognized route must refuse, failing toward keeping the flag
+    // (a spurious /resume offer) rather than dropping it (silently disabling auto-resume).
+    if CleanExitRoute::from_wire(&route).is_none() {
         return false;
-    };
+    }
     let Ok(dir) = app.path().app_data_dir() else {
         return false;
     };
-    // The route is deliberately not branched on — every clean route clears identically.
-    // It exists to make the *set* of clean routes explicit and testable, and to force a
-    // conscious decision when a new close path is added (see `CleanExitRoute::ALL`).
-    let _ = route;
     super::clear_and_persist(&dir, &project_path)
 }
 

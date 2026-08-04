@@ -26,12 +26,17 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-/** The clean-exit routes. Mirrors the Rust `CleanExitRoute` wire vocabulary. */
-export type CleanExitRoute =
-  | "cc-exit-command"
-  | "workspace-close"
-  | "app-quit"
-  | "recycle-session";
+/**
+ * The clean-exit routes. Mirrors the Rust `CleanExitRoute` wire vocabulary.
+ *
+ * ⚠️ A typed `/exit` in the CC pane is deliberately NOT a member — see the rationale on
+ * the Rust enum (`session_state/mod.rs`). Short version: `/exit` leaves the workspace
+ * OPEN with a "Session ended" overlay, so there is no close for a clear to hang off, and
+ * whether that counts as clean is an open product question
+ * (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). It was a member until
+ * review found it dead — declared everywhere, called nowhere.
+ */
+export type CleanExitRoute = "workspace-close" | "app-quit" | "recycle-session";
 
 /**
  * Which teardown a resolved close-confirm should run.

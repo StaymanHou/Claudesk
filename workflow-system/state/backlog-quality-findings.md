@@ -632,3 +632,15 @@ comments. Only the reviewer's forward-looking observation is carried below.*
   keep the invariants. (2) record the rule either way in `arch.md`. (3)+(4) one-liners.
 - **Priority:** low (all four)
 - **Status:** pending
+
+# m12-wp2-unclean-flag-lifecycle — 2026-08-03
+
+## SURFACE-2026-08-03-QUALITY-WP2-DEAD-CODE-ALLOWS-SURVIVE-CLOSE
+- **Severity:** MAJOR (deferred with reason, not dismissed)
+- **Location:** `src-tauri/src/session_state/mod.rs` (10 sites)
+- **Finding:** Ten `#[allow(dead_code)]` attributes survive at WP2 close, against the module header's own stated rule ("if any attribute still survives at WP2 close, that item has no caller and the honest question is whether it should exist at all") and against the ship commit's claim that `consume` is "the single attribute expected to survive." Nine others (`SESSION_STATE_FILE`, `SESSION_STATE_TMP_FILE`, `SessionStateMap`, `read`, `write`, `set`, `clear`, `is_unclean`, `is_unclean_on_disk`) are reachable only from `#[cfg(test)]` code and the two persist wrappers.
+- **Why it matters:** The per-item-allow discipline is a real improvement over the `workflow_install` blanket allow it was modelled against — but the discipline only works if retirement happens. The module wrote its own tripwire, the tripwire fired, and it was not acted on: better mechanism, currently identical outcome.
+- **Deferred because:** the honest fix is a judgment call on the retirement horizon (`#[cfg_attr(not(test), allow(dead_code))]` · mark test-only helpers · restate the horizon as WP3), and **WP3 wires `read`, `is_unclean`, `is_unclean_on_disk`, and `consume` within days**. Churning now to re-churn at WP3 is motion, not progress.
+- **Trigger:** WP3 close — at that point most consumers exist, so whatever attributes still remain are the genuinely questionable ones.
+- **Priority:** medium
+- **Status:** pending
