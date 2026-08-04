@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 import { useWorkspaceList } from "./state/useWorkspaceList";
+// M12 WP2 — clear the unclean-exit flag on a clean close (opt-in per route).
+import { markSessionClean, resolveCloseIntent } from "./state/cleanExit";
 import { useWorkspaceStatus } from "./state/useWorkspaceStatus";
 import { CenterStage } from "./components/workspace/CenterStage";
 import { Filmstrip } from "./components/workspace/Filmstrip";
@@ -426,6 +428,9 @@ function App() {
     name: string;
     dirtyCount: number;
     active: boolean;
+    /** M12 WP2 — true when the ⏸ (pause) control opened this confirm rather than the ×.
+     *  Carried through so the resolve runs the teardown the user actually asked for. */
+    unclean: boolean;
   } | null>(null);
 
   // M10.5-WP2 — app-quit-while-active confirm. When the backend `CloseRequested` handler
@@ -452,8 +457,46 @@ function App() {
   // second-terminal kill on unmount, workspace_deregister, workspace_watch_stop) rides
   // closeWorkspace removing the id from the list — see closeWorkspace + the
   // useWorkspaceStatus diff loop + XtermPane's unmount-kill.
-  const requestClose = useCallback(
+  // M12 WP2 (P2.2/P2.4) — THE SINGLE FUNNEL for a *clean* workspace close.
+  //
+  // Every ordinary close routes through here so the unclean-exit flag is cleared exactly
+  // once, at the one place that knows the close was user-intended and clean. `closeWorkspace`
+  // has two call sites (immediate + post-confirm) and will likely gain more; funnelling them
+  // means a future site inherits the clearing rather than having to remember it. That is the
+  // M11 WP4 lesson (CLAUDE.md): guard ONE writer, don't rely on vigilance at each call site.
+  //
+  // ⚠️ The unclean-exit close (P2.4) deliberately does NOT come through here — see
+  // `closeWorkspaceUnclean` below. Clearing is opt-in, so that path clears by not calling.
+  const closeWorkspaceCleanly = useCallback(
     (workspaceId: string) => {
+      const ws = workspaces.find((w) => w.id === workspaceId);
+      if (ws) markSessionClean(ws.project_path, "workspace-close");
+      closeWorkspace(workspaceId);
+    },
+    [workspaces, closeWorkspace],
+  );
+
+  // M12 WP2 (P2.4) — the UNCLEAN-exit close. Tears the workspace down through the exact
+  // same path (so the PTY is reaped cleanly — that clean process-level shutdown is this
+  // button's entire remaining value over a force-quit) while deliberately NOT clearing the
+  // flag, so the next open offers `/resume`.
+  //
+  // It is a sibling of `closeWorkspaceCleanly`, not a variant with a boolean: the two
+  // differ in one call, and naming them separately makes the difference legible at every
+  // call site rather than hidden behind an argument someone can pass wrongly.
+  const closeWorkspaceUnclean = useCallback(
+    (workspaceId: string) => {
+      closeWorkspace(workspaceId);
+    },
+    [closeWorkspace],
+  );
+
+  // The × and the ⏸ share ONE gate. `unclean` rides along in `pendingClose` so the
+  // post-confirm resolve knows which teardown the user originally asked for — otherwise a
+  // ⏸ on a busy workspace would silently resolve as a clean close, clearing the very flag
+  // the button exists to preserve.
+  const requestCloseWithIntent = useCallback(
+    (workspaceId: string, unclean: boolean) => {
       const dirty = dirtyProbes.current.get(workspaceId)?.() ?? 0;
       const active = isActiveState(stateFor(workspaceId));
       if (dirty > 0 || active) {
@@ -463,22 +506,41 @@ function App() {
           name: ws?.display_name ?? UNNAMED_WORKSPACE,
           dirtyCount: dirty,
           active,
+          unclean,
         });
         return;
       }
-      closeWorkspace(workspaceId);
+      if (unclean) closeWorkspaceUnclean(workspaceId);
+      else closeWorkspaceCleanly(workspaceId);
     },
-    [workspaces, closeWorkspace, stateFor],
+    [workspaces, closeWorkspaceCleanly, closeWorkspaceUnclean, stateFor],
+  );
+
+  const requestClose = useCallback(
+    (workspaceId: string) => requestCloseWithIntent(workspaceId, false),
+    [requestCloseWithIntent],
+  );
+
+  // M12 WP2 — the ⏸ (hover-revealed) close: same guard, same teardown, flag preserved.
+  const requestPauseClose = useCallback(
+    (workspaceId: string) => requestCloseWithIntent(workspaceId, true),
+    [requestCloseWithIntent],
   );
 
   // Resolve the close-confirm: "close" tears the workspace down; "cancel" keeps it.
+  // ⚠️ Honors the ORIGINAL intent (`target.unclean`) — see requestCloseWithIntent.
   const resolveClose = useCallback(
     (choice: CloseWorkspaceChoice) => {
       const target = pendingClose;
       setPendingClose(null);
-      if (choice === "close" && target) closeWorkspace(target.id);
+      // The intent decision lives in the pure `resolveCloseIntent` so it can be driven by
+      // tests directly — a dropped `unclean` here is silent (the ⏸ would clear the flag it
+      // exists to preserve) and would not show up in any rendered output.
+      const { action, id } = resolveCloseIntent(choice, target);
+      if (action === "close-unclean" && id) closeWorkspaceUnclean(id);
+      else if (action === "close-clean" && id) closeWorkspaceCleanly(id);
     },
-    [pendingClose, closeWorkspace],
+    [pendingClose, closeWorkspaceCleanly, closeWorkspaceUnclean],
   );
 
   // Native menu bridge: the macOS menu (src-tauri/src/app_menu) emits a clicked
@@ -764,6 +826,7 @@ function App() {
               onAddWorkspace={() => setShowPicker(true)}
               onOpenDashboard={() => setShowDashboard(true)}
               onClose={requestClose}
+              onPauseClose={requestPauseClose}
             />
             <CenterStage
               workspaces={workspaces}

@@ -358,6 +358,30 @@ fn resolve_spawn_model(
     read.and_then(Result::ok).flatten()
 }
 
+/// Whether a spawn attempt should DEFAULT-SET the M12 unclean-exit flag (P2.7).
+///
+/// Extracted for one reason: **the ordering guarantee has to be provable, not just true.**
+/// `SessionRegistry::spawn` needs a real `AppHandle`, so "a failed spawn leaves no flag"
+/// cannot be asserted where it happens — and a property that no test can go red on is one
+/// a future tidy-up silently breaks. Grouping the flag write with the config reads a few
+/// lines above looks like harmless cleanup and would invert this. Same shape, and the same
+/// motivation, as [`resolve_spawn_model`] directly above.
+///
+/// The inputs encode every reachable state at the call site:
+/// - `spawn_ok == false` — the PTY spawn returned `Err`, so **no flag**, whatever else is
+///   true. Marking a project unclean for a session that never existed would fire a
+///   `/resume` on the next open for work nobody started.
+/// - `data_dir.is_none()` — no app-data dir resolved, so there is nowhere to write.
+///
+/// ⚠️ The `spawn_ok` term is load-bearing and must be checked FIRST-class rather than
+/// relied upon implicitly via an early `?` return: the `?` is correct today, but it makes
+/// the guarantee a property of *statement order* — invisible to tests, and exactly what
+/// [`spawn_failure_must_not_set_the_flag`](tests::spawn_failure_must_not_set_the_flag)
+/// mutation-proves.
+fn should_set_unclean_flag(spawn_ok: bool, data_dir: Option<&Path>) -> bool {
+    spawn_ok && data_dir.is_some()
+}
+
 /// Claudesk's seam for driving a Claude Code session. Never bypass this trait when
 /// talking to CC (`CLAUDE.md`). Phase 2 extends it with `state_events()` (hook-channel
 /// status fan-out) and `recycle()` (Recycle Session) — reserved here, not implemented.
@@ -797,7 +821,31 @@ impl SessionRegistry {
                 .map(|dir| crate::config_store::read_default_model(dir, Path::new(project_path))),
         );
         let id = self.mint_id();
-        let session = PtyCcSession::spawn(app, id.clone(), project_path, mode, model.as_deref())?;
+        let spawned = PtyCcSession::spawn(app, id.clone(), project_path, mode, model.as_deref());
+
+        // M12 WP2 — DEFAULT-SET the unclean-exit flag, so a crash (which runs no code at
+        // all) leaves it set for free and the next open can offer `/resume`. Only a clean
+        // exit clears it.
+        //
+        // ⚠️ ORDERING IS LOAD-BEARING: a flag set for a spawn that then FAILED would fire a
+        // `/resume` on the next open for a session that never existed. The spawn result is
+        // therefore passed to `should_set_unclean_flag` as an explicit term and the `?` is
+        // deferred to *after* this block — so the guarantee is a property of the predicate
+        // (which a test can drive) rather than of statement order (which it cannot). See
+        // P2.7 / the verify-auto F9 back-loop: the earlier version was correct but nothing
+        // would have gone red if someone moved it above the `?`.
+        //
+        // Best-effort, matching the `read_cc_permission_mode` / `read_default_model`
+        // degradation posture documented above: a workspace that opens without its flag
+        // recorded costs one missed auto-resume, whereas a workspace that refuses to open
+        // is a dead click. The failure direction is deliberately "no auto-fire".
+        if should_set_unclean_flag(spawned.is_ok(), data_dir.as_deref()) {
+            if let Some(dir) = data_dir.as_deref() {
+                crate::session_state::set_and_persist(dir, project_path);
+            }
+        }
+
+        let session = spawned?;
         self.sessions.insert(id.clone(), Box::new(session));
         Ok(id)
     }
@@ -915,7 +963,16 @@ mod tests {
 
     #[test]
     fn slash_command_preserves_arguments() {
-        assert_eq!(slash_command_bytes("/session-resume"), b"/session-resume\r");
+        // ⚠️ `/session-restore`, NOT `/session-resume` (fixed M12 WP2). The skill was
+        // renamed at WP5/M9 *specifically* to avoid colliding with the built-in `/resume`
+        // that M12's other decision arm fires. The old name read as authoritative about a
+        // command that does not exist — exactly the kind of stale reference a future
+        // reader would copy. `ls ~/.claude/skills/` → session-capture, session-handoff,
+        // session-reflect, session-restore, session-start.
+        assert_eq!(
+            slash_command_bytes("/session-restore"),
+            b"/session-restore\r"
+        );
         assert_eq!(slash_command_bytes("/model opus"), b"/model opus\r");
     }
 
@@ -1173,6 +1230,46 @@ mod tests {
         let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied");
         let read = Some(Err(crate::config_store::ConfigError::Io(io_err)));
         assert_eq!(resolve_spawn_model(read), None);
+    }
+
+    // --- should_set_unclean_flag: the M12 WP2 spawn-ordering guarantee (pure, P2.7) ---
+    //
+    // These exist because the guarantee was previously true only by STATEMENT ORDER (the
+    // flag write sat after a `?`), which no test can go red on. verify-auto caught that the
+    // Observable outcome demanded a mutation-provable guard and none existed.
+
+    #[test]
+    fn spawn_failure_must_not_set_the_flag() {
+        // THE load-bearing case. A flag set for a spawn that failed would fire `/resume` on
+        // the next open for a session that never existed — acting on the user's workflow
+        // off the back of a dead click.
+        let dir = std::path::PathBuf::from("/tmp/some-data-dir");
+        assert!(
+            !should_set_unclean_flag(false, Some(&dir)),
+            "a FAILED spawn must never set the unclean flag, even with a resolvable data dir"
+        );
+    }
+
+    #[test]
+    fn spawn_success_sets_the_flag() {
+        let dir = std::path::PathBuf::from("/tmp/some-data-dir");
+        assert!(
+            should_set_unclean_flag(true, Some(&dir)),
+            "a successful spawn is DEFAULT-UNCLEAN — that is the whole design: a crash runs \
+             no code, so the flag must already be set before any work begins"
+        );
+    }
+
+    #[test]
+    fn no_data_dir_means_no_flag_even_on_a_successful_spawn() {
+        // Nowhere to write. Degrades to "no flag" (→ no auto-fire), the safe direction,
+        // rather than blocking the spawn — same posture as the two config reads above.
+        assert!(!should_set_unclean_flag(true, None));
+    }
+
+    #[test]
+    fn a_failed_spawn_with_no_data_dir_sets_nothing() {
+        assert!(!should_set_unclean_flag(false, None));
     }
 
     #[test]

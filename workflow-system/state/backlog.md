@@ -1,5 +1,25 @@
 # Backlog
 
+## SURFACE-2026-08-03-M12-WP2-HARD-KILL-VERIFY-HUMAN-DEFERRED
+- **Source:** feature:verify-human (M12 WP2 Phase 3)
+- **Target level:** product:wbs (M12 — WP3 close or milestone-exit verify)
+- **Type:** gap (deferred verification, not a defect)
+- **Summary:** M12 WP2 Phase 3's verify-human was **DEFERRED by the operator**, not approved. Two checks remain open: (1) review the `SIGKILL` guard in `tooling/unclean-flag/hard-kill-check.sh` — the only script in the repo that sends `SIGKILL`, exercised while the operator's production app was running; (2) confirm the both-arms flag contrast live (hard kill → flag SURVIVES; clean quit → key GONE).
+- **Context:** The agent ran both arms live and recorded the results (Phase 3 build log in the WIP), and verify-self passed 5/5 read-only. So this is **confirmation of a recorded result**, not an unrun check. The operator's stated reason: the property is more meaningful checked once the feature is fully delivered — WP3's auto-fire is what consumes this flag, so it will be observable as a real `/resume` offer rather than as a JSON file inspected in isolation. ⚠️ The hard-kill property is the ONE thing in WP2 that no test can establish (every test runs in a process that survives to assert), so it must not silently lapse.
+- **Suggested action:** Fold into WP3's verify-human, or the M12 milestone-exit verify — whichever the operator reaches first. Concretely: `pnpm tauri:dev` → open a scratch workspace → `hard-kill-check.sh --state` (expect the path → `true`) → `hard-kill-check.sh --kill` → `--state` again (flag must SURVIVE) → relaunch, open, quit gracefully → `--state` (key must be GONE).
+- **Priority:** medium (evidence already recorded and reproducible; the risk is the carry being forgotten at WP2 close, not a suspected defect)
+- **Status:** pending
+
+## SURFACE-2026-08-03-OFF-INVARIANT-GUARD-MISSES-NON-REGISTRY-SURFACES
+- **Source:** feature:verify-human (M12 WP2 Phase 2)
+- **Target level:** product:wbs (M12 WP5 already owns the fix; this records the CONFIRMATION)
+- **Type:** gap
+- **Summary:** The OFF-invariant guard (`src/state/__tests__/offInvariantGuard.test.ts`) enumerates **three** registries — right-panel panels, keyboard chords, and menu ids — plus a source-text bypass scan. A gated surface that is **none of those three** is invisible to it. Confirmed empirically, not inferred: M12 WP2's ⏸ (pause-close) filmstrip control shipped **completely ungated** through build, verify-auto, and a 5/5 live verify-self, and was caught only by the **operator** at verify-human.
+- **Context:** The WBS already predicted this ("M12's surfaces fall outside all three enumerated registries... the guard's own header requires extending it as part of such work") and assigned the fourth arm to **WP5**. This entry upgrades that from a prediction to a **measured** defect, and supplies the concrete missed case. A local guard now exists for this one surface (`src/components/workspace/__tests__/tileActionsGate.test.ts`, mutation-proven), but it is per-surface — the next gated control in a fourth category will be equally invisible.
+- **Suggested action:** WP5's fourth arm should key on something structural rather than another hand-maintained registry list — e.g. scan for components that accept a `workflowEnabled`-shaped prop, or invert it: enumerate every consumer of `useWorkflowFeaturesEnabled` and assert each renders its gated child only inside a conditional. ⚠️ Also note: the guard is source-text-based and **fails a test file that merely spells out the bypass identifiers inside a negative assertion** (hit while writing the local guard) — a fourth arm should not deepen that trap.
+- **Priority:** medium (WP5 already owns it; the risk is a gated surface shipping ungated in the interim, which has now happened once)
+- **Status:** pending
+
 ## SURFACE-2026-08-03-PROJECTS-JSON-WRITERS-ARE-WHOLE-FILE-RMW
 - **Source:** feature:build (M12 WP1 Phase 1 — Verdict (a))
 - **Target level:** product:arch

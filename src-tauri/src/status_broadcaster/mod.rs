@@ -260,6 +260,21 @@ impl WorkspaceRegistry {
     pub fn len(&self) -> usize {
         self.by_path.len()
     }
+
+    /// The canonicalized project paths of every currently-open workspace.
+    ///
+    /// M12 WP2 (P2.3): the app-quit teardown must clear the unclean flag for every open
+    /// workspace, but it only has *session ids* — `PtyCcSession` does not retain its
+    /// project path (it is consumed as the PTY's cwd at spawn). This registry is the one
+    /// place that already holds the open-workspace path set, so app-quit reads it here
+    /// rather than a second path map being introduced to duplicate it.
+    ///
+    /// Returns canonicalized keys — the same form `register` stored and therefore the
+    /// same form the flag was keyed under at spawn (both derive from the frontend's
+    /// canonicalized project path).
+    pub fn open_project_paths(&self) -> Vec<String> {
+        self.by_path.keys().cloned().collect()
+    }
 }
 
 /// Whether `ancestor` is the same path as `descendant` OR a path-ancestor of it, matched
@@ -821,6 +836,74 @@ mod tests {
         let reg = WorkspaceRegistry::new(); // empty — nothing registered
         let event = ev("Stop", "/some/unregistered/path");
         assert!(to_update(&event, &reg).is_none());
+    }
+
+    // --- open_project_paths: the M12 WP2 app-quit clearing source (P2.3) ---
+    //
+    // `perform_quit_teardown` clears the unclean-exit flag for every OPEN workspace, but it
+    // holds only session ids — `PtyCcSession` does not retain its project path (consumed as
+    // the PTY's cwd at spawn). This registry is the one place that already knows the open
+    // path set, so app-quit reads it from here. These tests cover the seam; the teardown
+    // itself needs an `AppHandle` and was verified live instead (verify-self outcome 4).
+
+    #[test]
+    fn open_project_paths_lists_every_registered_workspace() {
+        let a = tempfile::TempDir::new().unwrap();
+        let b = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(a.path(), "ws-1".to_string());
+        reg.register(b.path(), "ws-2".to_string());
+
+        let mut paths = reg.open_project_paths();
+        paths.sort();
+        let mut want = vec![canonical_key(a.path()), canonical_key(b.path())];
+        want.sort();
+        assert_eq!(
+            paths, want,
+            "app-quit must see EVERY open workspace — a missing path means that project's \
+             flag is never cleared, and the next open fires a spurious /resume"
+        );
+    }
+
+    #[test]
+    fn open_project_paths_is_empty_with_no_workspaces_open() {
+        let reg = WorkspaceRegistry::new();
+        assert!(
+            reg.open_project_paths().is_empty(),
+            "quitting with nothing open must clear nothing"
+        );
+    }
+
+    #[test]
+    fn open_project_paths_drops_a_deregistered_workspace() {
+        // A workspace closed BEFORE the quit already cleared its own flag via the close
+        // route; app-quit must not revisit it (harmless but wasteful), and more importantly
+        // the list must track the live set rather than everything ever opened.
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "ws-1".to_string());
+        reg.deregister(dir.path());
+        assert!(reg.open_project_paths().is_empty());
+    }
+
+    #[test]
+    fn open_project_paths_returns_canonicalized_keys() {
+        // ⚠️ Load-bearing for M12 WP2. The flag is keyed through `session_state::key_for`,
+        // which canonicalizes; app-quit's clear must therefore be handed the SAME form or
+        // it silently clears nothing (no error — just a stale flag firing a later /resume).
+        // A `/tmp/...` TempDir is the natural probe on macOS, where `/tmp` is a symlink to
+        // `/private/tmp`, so an uncanonicalized path would differ visibly here.
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "ws-1".to_string());
+
+        let paths = reg.open_project_paths();
+        assert_eq!(paths.len(), 1);
+        assert_eq!(
+            paths[0],
+            canonical_key(dir.path()),
+            "the returned key must be the canonicalized form the flag store also uses"
+        );
     }
 
     #[test]

@@ -42,6 +42,14 @@ mod project_search;
 // EventRow). Phase 2 = AI kinds (ai-doing/subagent/ai-reasoning) + reused interval
 // mechanics; Phase 3 = the human-state gap machine (focus-fusion + capped-working).
 mod reclassify;
+// M12 WP2: the unclean-exit flag store (`session-state.json`) — one boolean per project
+// path, DEFAULT-SET on workspace open and cleared only by a clean exit, so a power loss
+// (which runs no code) leaves it set for free. ABSENT MEANS CLEAN: clearing removes the
+// key and every degraded read yields clean, so the failure direction is "no auto-fire".
+// Machine-local session state, NOT a user preference — it must never reach a settings
+// surface. Its own file (not a field on `Project`) because `projects.json` writes are
+// whole-file RMW and set-on-open is co-triggered by `add_or_touch` on the same click.
+mod session_state;
 // M3 WP4: status broadcaster — normalizes each HookEvent to a workspace state,
 // maps cwd→open-workspace, and emits WorkspaceStatusUpdate on `workspace-status`.
 // Phase 1 = the pure transform core + DTO + registry; Phase 2 drains WP3's receiver
@@ -123,6 +131,31 @@ fn perform_quit_teardown(app: &tauri::AppHandle) {
     // when tracking is OFF). Must not panic the quit path.
     for sid in &killed_ids {
         time_store::commands::record_workspace_close(app, sid);
+    }
+    // M12 WP2 (P2.3) — a graceful app quit is a CLEAN exit for every open workspace, so
+    // clear each one's unclean flag. This runs on the same path as the markers above:
+    // `CloseRequested` → the frontend quit round-trip → `quit_now` → here.
+    //
+    // The paths come from `WorkspaceRegistry` because the kill loop above has only
+    // *session ids* — `PtyCcSession` does not retain its project path (it is consumed as
+    // the PTY's cwd at spawn). Reading the registry avoids introducing a second path map
+    // that would then have to be kept in sync with this one.
+    //
+    // ⚠️ A FORCE-quit (SIGKILL) never reaches this code, which is exactly right: no code
+    // runs, the flags stay set, and the next open offers `/resume`. That is the design
+    // working, not a gap — the same property `SURFACE-2026-07-08-M9-WP6.5-CLOSE-MARKER-
+    // MISSES-FORCE-QUIT` documents for the time-analytics markers. Best-effort
+    // throughout; a clearing failure must never panic the quit.
+    if let Ok(dir) = app.path().app_data_dir() {
+        if let Some(registry) = app.try_state::<status_broadcaster::SharedRegistry>() {
+            let paths = registry
+                .lock()
+                .map(|reg| reg.open_project_paths())
+                .unwrap_or_default();
+            for path in paths {
+                session_state::clear_and_persist(&dir, &path);
+            }
+        }
     }
     // M3 WP3: unlink the hook socket on close (mirror the kill_all reaping discipline).
     // Belt to bind_listener's stale-file removal.
@@ -412,6 +445,10 @@ pub fn run() {
             // M11.5 WP1: per-project CC model override (read at spawn → `--model`).
             config_store::commands::project_get_default_model,
             config_store::commands::project_set_default_model,
+            // M12 WP2: clear the unclean-exit flag on a CLEAN close. There is deliberately
+            // no `mark_unclean` counterpart — setting is owned by the spawn path, where it
+            // is co-located with the `?` guaranteeing a failed spawn leaves no flag.
+            session_state::commands::session_state_mark_clean,
             cc_session::commands::cc_spawn,
             // WP9: second-terminal panel — spawns the user's login shell (not claude)
             // into the same SessionRegistry; reuses cc_input/cc_resize/cc_kill.

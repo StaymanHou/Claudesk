@@ -22,6 +22,8 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
+import { TileActions } from "./TileActionButton";
+import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import type { FilmstripTile } from "./filmstripTiles";
 import { readMirrorFrame, subscribeMirrorFrame } from "./mirrorFrame";
 import { shouldRunMirror } from "./mirrorTicker";
@@ -54,6 +56,11 @@ interface FilmstripProps {
   onOpenDashboard: () => void;
   /** Close a workspace (QoL-WP1 — the per-tile × button). App runs the dirty guard. */
   onClose: (workspaceId: string) => void;
+  /** M12 WP2 — close a workspace but leave its session marked UNFINISHED (the hover-
+   *  revealed ⏸). Same teardown as `onClose` — the PTY is still reaped cleanly — but the
+   *  unclean-exit flag is NOT cleared, so the next open offers `/resume`. App runs the
+   *  same dirty guard. */
+  onPauseClose: (workspaceId: string) => void;
 }
 
 /** Px the pointer must travel before a press becomes a drag (vs a click-to-promote). */
@@ -71,7 +78,13 @@ export function Filmstrip({
   onAddWorkspace,
   onOpenDashboard,
   onClose,
+  onPauseClose,
 }: FilmstripProps) {
+  // M10.9 gate, read ONCE here rather than per-tile: the ⏸ (pause-close) is
+  // workflow-coupled — it exists to preserve the unclean flag M12's auto-resume reads —
+  // so with the workflow layer off it must be ABSENT, not hidden (the seam contract in
+  // `useWorkflowFeaturesEnabled.ts`). The × is universal and always renders.
+  const workflowEnabled = useWorkflowFeaturesEnabled();
   // M4 WP3 P4 — POINTER-based live (WYSIWYG) reorder. A press that stays under
   // DRAG_THRESHOLD_PX is a click (promote, P2); past it, it's a drag — and on each move
   // we hit-test the pointer x against the tile rects and call onReorder LIVE so tiles
@@ -283,33 +296,23 @@ export function Filmstrip({
                 state={statusFor(tile.id)}
                 snippet={snippetFor?.(tile.id)}
               />
-              {/* QoL-WP1 (P3.6 — operator request) — close (×) on the collapsed pill too.
-                  stopPropagation so the pill's own onClick (promote) doesn't fire; the
-                  click routes through the SAME onClose → App.requestClose (dirty-guard +
-                  focus-repick + reap unchanged). span role=button avoids nesting a
-                  <button> inside the pill <button>. */}
-              <span
-                role="button"
-                tabIndex={0}
-                className="filmstrip-pill-close"
-                data-testid={`filmstrip-close-${tile.id}`}
-                aria-label={`Close ${tile.display_name}`}
-                title={`Close ${tile.display_name}`}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose(tile.id);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onClose(tile.id);
-                  }
-                }}
-              >
-                ×
-              </span>
+              {/* QoL-WP1 (P3.6 — operator request) — close (×) on the collapsed pill.
+                  Routes through the SAME onClose → App.requestClose (dirty-guard +
+                  focus-repick + reap unchanged).
+                  M12 WP2 — the × is now a CLUSTER: hovering it reveals a ⏸ directly
+                  beneath, which closes the workspace but leaves the session marked
+                  unfinished (next open offers `/resume`). Zero permanent pixels — the ⏸
+                  is display:none until hover/focus-within and is absolutely positioned,
+                  so the pill row costs exactly what it costs today. */}
+              <TileActions
+                testIdPrefix="filmstrip"
+                workspaceId={tile.id}
+                displayName={tile.display_name}
+                className="filmstrip-pill-actions"
+                onClose={() => onClose(tile.id)}
+                onPauseClose={() => onPauseClose(tile.id)}
+                workflowEnabled={workflowEnabled}
+              />
             </button>
           ))
         : // EXPANDED — the full WP3 thumbnail tiles.
@@ -364,31 +367,21 @@ export function Filmstrip({
                 />
                 {/* QoL-WP1 — close (×). stopPropagation on pointerdown so the strip's
                     drag/promote handler (onStripPointerDown) never treats this as a tile
-                    press; the click closes via onClose (App runs the dirty guard). Rendered
-                    as a <span role=button> to avoid nesting a <button> inside the tile
-                    <button> (invalid HTML). */}
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="filmstrip-tile-close"
-                  data-testid={`filmstrip-close-${tile.id}`}
-                  aria-label={`Close ${tile.display_name}`}
-                  title={`Close ${tile.display_name}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClose(tile.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onClose(tile.id);
-                    }
-                  }}
-                >
-                  ×
-                </span>
+                    press; the click closes via onClose (App runs the dirty guard).
+                    M12 WP2 — now a CLUSTER: hover reveals a ⏸ beneath the ×, closing the
+                    workspace while leaving the session marked unfinished. Both controls are
+                    <span role=button> — a nested <button> inside the tile <button> is
+                    invalid HTML and fails SILENTLY (inner clicks surface on the outer
+                    handler). That discipline now lives in TileActions, not copy-pasted. */}
+                <TileActions
+                  testIdPrefix="filmstrip"
+                  workspaceId={tile.id}
+                  displayName={tile.display_name}
+                  className="filmstrip-tile-actions"
+                  onClose={() => onClose(tile.id)}
+                  onPauseClose={() => onPauseClose(tile.id)}
+                  workflowEnabled={workflowEnabled}
+                />
               </div>
             </button>
           ))}

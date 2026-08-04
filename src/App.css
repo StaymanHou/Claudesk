@@ -277,35 +277,12 @@ body,
    the glance view. The header is pointer-events:none (so the tile is one click target),
    so the × must re-enable pointer-events to be clickable. Dark-only tokens (project rule:
    no light variant). */
-.filmstrip-tile-close {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 3px;
-  font-size: 0.8rem;
-  line-height: 1;
-  color: #d4d4d4;
-  opacity: 0;
-  cursor: pointer;
-  pointer-events: auto; /* override the header's pointer-events:none */
-  transition:
-    opacity 0.12s ease,
-    background-color 0.12s ease;
-}
-
-.filmstrip-tile:hover .filmstrip-tile-close,
-.filmstrip-tile-close:focus-visible {
-  opacity: 0.7;
-}
-
-.filmstrip-tile-close:hover {
-  opacity: 1;
-  background-color: rgba(255, 90, 90, 0.25);
-  color: #ff8a8a;
-}
+/* M12 WP2 — `.filmstrip-tile-close` was REMOVED here: the × moved into the shared
+   `.tile-actions` cluster (with the hover-revealed ⏸), so these rules had no element
+   left to match. Deleted rather than left in place — orphaned CSS reads as live styling
+   to the next person and is the rot this file has to stay clear of. The cluster's own
+   rules, including the tile-header `pointer-events: auto` override this block used to
+   carry, live under "M12 WP2 — the × / ⏸ tile-action cluster" below. */
 
 /* ───────────────────────── M4 WP4 — collapse toggle ─────────────────────────
    The filmstrip toggles between EXPANDED (full thumbnail tiles, above) and
@@ -393,7 +370,70 @@ body,
 /* QoL-WP1 (P3.6) — close (×) on the collapsed pill. Hover-revealed, same language as the
    expanded tile's × (opacity 0 → 0.7 on pill hover / × focus → 1 + red on its own hover).
    Slightly smaller to fit the 22px pill. Dark-only tokens (project rule). */
-.filmstrip-pill-close {
+/* M12 WP2 — `.filmstrip-pill-close` was REMOVED here for the same reason as
+   `.filmstrip-tile-close` above: the pill's × is now part of the `.tile-actions`
+   cluster. See that block below for the live rules. */
+
+/* ───────────────── M12 WP2 — the × / ⏸ tile-action cluster ─────────────────
+   The × behaves exactly as before (always in flow, revealed on tile hover). The ⏸ —
+   "close, but leave the session unfinished so the next open offers /resume" — is
+   ABSOLUTELY POSITIONED directly beneath it and hidden until the cluster is hovered.
+
+   Two properties this must hold, both deliberate:
+
+   1. ZERO PERMANENT REAL ESTATE. The cluster's own box is the size of the × alone
+      (the ⏸ is out of flow), so the collapsed pill row — the tightest surface in the
+      app — costs exactly what it costs today. This is why the ⏸ is positioned rather
+      than a second flex child.
+
+   2. NO HOVER GAP. The reveal is keyed on the CLUSTER's :hover, not the ×'s, and the
+      cluster's ::after bridges the vertical gap with a transparent hit area. Moving
+      the pointer straight down from × to ⏸ therefore never leaves the trigger — the
+      classic hover-menu failure (menu vanishes mid-travel) cannot happen here, and no
+      dismiss timer is needed. :focus-within gives the same reveal to keyboard users. */
+
+.tile-actions {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  /* The cluster is only as wide/tall as the × — the ⏸ is out of flow (see below). */
+  line-height: 0;
+}
+
+/* The transparent bridge: extends the hover zone down over the gap the ⏸ occupies, so
+   the pointer never crosses un-hovered space. Only active while revealed, so it can't
+   swallow clicks on neighbouring tiles the rest of the time. */
+/* ⚠️ The bridge must NOT be gated on `.tile-actions:hover` — that is circular and was a
+   real bug (found at verify-human 2026-08-03: the ⏸ survived FAST pointer travel but
+   vanished on SLOW travel). Why: `:hover` on the cluster is only true while the pointer is
+   inside the cluster's own 15px box (the ×). Leaving the × heading downward made `:hover`
+   false → removed the bridge → which was the very thing meant to keep hover alive. Fast
+   travel crossed the resulting dead band between two pointer samples and landed on the ⏸;
+   slow travel landed IN it and lost the reveal.
+
+   The bridge is therefore always present in the layout and made non-interactive instead —
+   `pointer-events` is what gates it, not `display`. It covers the ⏸'s own footprint plus
+   the 3px gap, so the pointer never crosses un-hovered space on the way down. */
+.tile-actions::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: -4px;
+  right: -4px;
+  /* Gap (3px) + the ⏸'s height (15px) + a little slack, so the whole descent is covered. */
+  height: 24px;
+  /* Inert until the cluster is engaged, so it cannot swallow clicks on the tile behind it
+     during the ~99% of the time the ⏸ is hidden. */
+  pointer-events: none;
+}
+
+.tile-actions:hover::after,
+.tile-actions:focus-within::after {
+  pointer-events: auto;
+}
+
+.tile-action {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -406,20 +446,79 @@ body,
   color: #d4d4d4;
   opacity: 0;
   cursor: pointer;
+  pointer-events: auto; /* override the tile header's pointer-events:none */
   transition:
     opacity 0.12s ease,
     background-color 0.12s ease;
 }
 
-.filmstrip-pill:hover .filmstrip-pill-close,
-.filmstrip-pill-close:focus-visible {
+/* The expanded tile's × was 15px/0.8rem before the cluster refactor (the pill's was
+   14px/0.75rem). Preserved rather than unified — the tile is a larger surface and the
+   slightly bigger control is deliberate, so silently shrinking it would be an unasked-for
+   visual change riding along with a behavioral one. */
+.filmstrip-tile-actions .tile-action {
+  width: 15px;
+  height: 15px;
+  font-size: 0.8rem;
+}
+
+/* The × reveals with its tile, exactly as it always has. */
+.filmstrip-pill:hover .tile-action--close,
+.filmstrip-tile:hover .tile-action--close,
+.tile-action--close:focus-visible {
   opacity: 0.7;
 }
 
-.filmstrip-pill-close:hover {
+.tile-action--close:hover {
   opacity: 1;
   background-color: rgba(255, 90, 90, 0.25);
   color: #ff8a8a;
+}
+
+/* The ⏸ — out of flow, directly below the ×, hidden until the cluster is hovered. */
+.tile-action--pause {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  /* Hidden from hit-testing too, not just sight: an invisible-but-clickable control
+     sitting under the cursor would steal clicks meant for the tile behind it. */
+  visibility: hidden;
+  background-color: rgba(28, 28, 30, 0.92);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  z-index: 3;
+}
+
+.tile-actions:hover .tile-action--pause,
+.tile-actions:focus-within .tile-action--pause,
+.tile-action--pause:focus-visible {
+  visibility: visible;
+  opacity: 0.75;
+}
+
+.tile-action--pause:hover {
+  opacity: 1;
+  /* Amber, deliberately NOT the ×'s red: this control is not destructive-with-finality —
+     it is "set down and come back". The colour carries that distinction pre-click. */
+  background-color: rgba(255, 190, 80, 0.28);
+  color: #ffcf8a;
+}
+
+/* The ⏸ glyph: two bars, drawn rather than using the "⏸" codepoint (which renders
+   inconsistently across fonts and can pick up a colour-emoji fallback). Inherits
+   currentColor so it tracks the hover/focus states above. */
+.tile-action-pause-glyph {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+}
+
+.tile-action-pause-glyph > span {
+  display: block;
+  width: 2px;
+  height: 8px;
+  border-radius: 1px;
+  background-color: currentColor;
 }
 
 .center-stage {
