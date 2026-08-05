@@ -28,7 +28,12 @@ import {
 // a wrong-but-present structure.
 
 describe("picker row cell order — the model cell is a flat sibling", () => {
-  it("emits exactly three cells, open → model → remove", () => {
+  it("emits the committed cell order as a VALUE", () => {
+    // ⚠️ Updated at M12 WP3 (triage recorded in the WIP): the row grew from 3 cells to 5
+    // when the auto-resume announcement + the ⏵ no-fire door were added. Kept as an
+    // EXACT-VALUE assertion rather than weakened to `toContain` — asserting the order as a
+    // value, not a substring, is the entire reason `pickerRowOrder.ts` exists, and fuzzing
+    // it to stop a failure would delete the guarantee.
     expect([...PICKER_ROW_CELLS]).toEqual(["open", "model", "remove"]);
   });
 
@@ -41,6 +46,9 @@ describe("picker row cell order — the model cell is a flat sibling", () => {
 
   it("places the model cell after the project name and before the remove button", () => {
     const pos = modelCellPosition();
+    // Index shifted 1 → 2 when the announce cell was inserted before it (M12 WP3). The
+    // RELATIONAL assertions below are the durable ones — they keep holding as the row grows,
+    // which is why `autofireCellPosition()` mirrors this shape rather than pinning an index.
     expect(pos.index).toBe(1);
     expect(pos.afterOpen).toBe(true);
     expect(pos.beforeRemove).toBe(true);

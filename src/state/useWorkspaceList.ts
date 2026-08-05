@@ -15,6 +15,7 @@ import {
   type WorkspaceListState,
 } from "./workspace";
 import { viewFor, type AppView } from "./appView";
+import type { AutoResumeAction, OpenIntent } from "./predictAction";
 
 export interface WorkspaceListApi {
   workspaces: Workspace[];
@@ -22,7 +23,14 @@ export interface WorkspaceListApi {
   focused: Workspace | null;
   /** Derived app-shell view: "picker" when nothing is open, else "workspace-open". */
   view: AppView;
-  openWorkspace: (projectPath: string) => void;
+  /** Open (or focus) a project. `pendingAction` (M12 WP3) rides onto the NEW workspace's
+   *  record for its spawn to consume; it is dropped when the path is already open, since a
+   *  focus has no spawn to apply it to. */
+  openWorkspace: (
+    projectPath: string,
+    pendingAction?: AutoResumeAction,
+    openIntent?: OpenIntent,
+  ) => void;
   /** Promote an already-open workspace to center stage by id (M4 WP3 — filmstrip
    *  tile click + ⌘⇧+digit both route through this). No-op if id is unknown. */
   focusWorkspace: (id: string) => void;
@@ -39,9 +47,16 @@ export function useWorkspaceList(
 ): WorkspaceListApi {
   const [state, setState] = useState<WorkspaceListState>(initial);
 
-  const openWorkspace = useCallback((projectPath: string) => {
-    setState((s) => openReducer(s, projectPath));
-  }, []);
+  const openWorkspace = useCallback(
+    (
+      projectPath: string,
+      pendingAction: AutoResumeAction = null,
+      openIntent: OpenIntent = "fire",
+    ) => {
+      setState((s) => openReducer(s, projectPath, pendingAction, openIntent));
+    },
+    [],
+  );
 
   const focusWorkspace = useCallback((id: string) => {
     setState((s) => focusReducer(s, id));

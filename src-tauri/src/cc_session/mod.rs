@@ -49,6 +49,21 @@ const CC_ARG_PERMISSION_MODE: &str = "--permission-mode";
 /// latest model (e.g. 'fable', 'opus', or 'sonnet') or a model's full name (e.g.
 /// 'claude-fable-5')."*
 const CC_ARG_MODEL: &str = "--model";
+/// CC's `-c`/`--continue` flag — **M12 WP3 Phase 4, the auto-resume argv arm.**
+///
+/// ⚠️ **This is deliberately a SPAWN FLAG and not an injected slash command.** Phase 1's
+/// probe established that a bare `/resume` typed into the TUI opens an **interactive modal
+/// session picker** ("Resume session", "1 of 17", a search box, "Esc to cancel") rather than
+/// resuming anything, which would strand the user in a keyboard modal on every unclean
+/// re-open — strictly worse than firing nothing. There is no `/continue` slash command
+/// either; CC's autocomplete lists one entry, `/resume (continue)`, for the same picker.
+///
+/// `--continue` was verified live to restore the prior conversation **non-interactively** and
+/// land at a ready prompt. Because it is present at `execvp` time, this arm needs **no
+/// injection and no settle delay** — which is why it is the *safe* arm and why the
+/// milestone's riskiest mechanism (composing input on the app's own initiative) covers only
+/// the `/session-restore` arm.
+const CC_ARG_CONTINUE: &str = "--continue";
 
 /// The Claude Code permission mode a spawned CC session runs under — the full
 /// `--permission-mode` choice set from `claude --help` (friend-requested, replacing the
@@ -320,7 +335,7 @@ pub fn resolve_shell_argv(env_shell: Option<String>) -> Vec<String> {
 /// A blank/whitespace value is treated as unset (defense in depth — `set_default_model`
 /// already normalizes on the way in, but a hand-edited or older-build `projects.json`
 /// could still carry one, and it must never become an argv token CC would reject).
-fn build_cc_argv(mode: CcPermissionMode, model: Option<&str>) -> Vec<String> {
+fn build_cc_argv(mode: CcPermissionMode, model: Option<&str>, resume: ResumeArm) -> Vec<String> {
     let mut argv = vec![
         CC_CMD.to_string(),
         CC_ARG_PERMISSION_MODE.to_string(),
@@ -330,7 +345,82 @@ fn build_cc_argv(mode: CcPermissionMode, model: Option<&str>) -> Vec<String> {
         argv.push(CC_ARG_MODEL.to_string());
         argv.push(model.to_string());
     }
+    // M12 WP3 Phase 4 — the auto-resume argv arm. Appended LAST so the flags that shape the
+    // session (permission mode, model) are unaffected by whether this open resumes.
+    if resume == ResumeArm::Continue {
+        argv.push(CC_ARG_CONTINUE.to_string());
+    }
     argv
+}
+
+/// Whether this spawn should continue the project's previous conversation.
+///
+/// ⚠️ **A named type rather than a `bool` parameter, deliberately.** `build_cc_argv(mode,
+/// model, true)` at a call site says nothing about what is true, and this codebase has
+/// already paid for a silently-wrong argument once in this milestone (M12 WP3 Phase 3's
+/// `onOpen` arity: a dropped action that **type-checked cleanly**, because TS parameter counts
+/// are contravariant). A two-variant enum cannot be passed the wrong way round without
+/// naming the variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResumeArm {
+    /// Pass `--continue`: resume the project's previous conversation.
+    Continue,
+    /// Ordinary spawn — no resume flag.
+    Fresh,
+}
+
+/// Which picker door opened this workspace — i.e. whether the spawn is **authorized** to fire
+/// the auto-resume argv arm.
+///
+/// ⚠️ **This exists because the frontend's no-fire decision did not reach the backend, and the
+/// `⏵` door fired `--continue` anyway** (found live at M12 WP3 Phase 4 verify-self, reproduced
+/// 3×). The frontend was entirely correct — `actionForIntent(action, "no-fire")` returns `null`
+/// and is mutation-proven — but `cc_spawn` took only `project_path`, so [`SessionRegistry::spawn`]
+/// re-derived the arm from the flag alone and had no way to know which door was used. A user who
+/// deliberately chose *"open without resuming"* got a resumed conversation.
+///
+/// ⚠️ **The decision is passed IN, never re-decided here.** It would be tempting to let the
+/// frontend resolve the whole argv arm and send a flag — that is wrong: firing must **consume**
+/// the flag (read-and-clear), and a frontend-resolved arm would make the consume a separate call
+/// that could diverge from what actually spawned. So the backend still owns *resolution*; the
+/// frontend owns only *authorization*.
+///
+/// A named type rather than a `bool`, for the reason [`ResumeArm`] documents at length.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OpenIntent {
+    /// The row (title box) was clicked — fire the announced auto-resume command.
+    Fire,
+    /// The `⏵` second door was clicked — open the workspace and fire **nothing**.
+    NoFire,
+}
+
+impl Default for OpenIntent {
+    /// Absent intent means **fire**, preserving every pre-M12 caller's behavior.
+    ///
+    /// ⚠️ Defaulting to `NoFire` would be the safer-looking choice and is wrong: it would
+    /// silently disable auto-resume for any caller that forgot the parameter, which is the
+    /// failure mode this milestone's own WP1 verdict calls out as *"losing the flag silently
+    /// disables auto-resume"* — a defect with no error and no symptom except a feature that
+    /// stopped working.
+    fn default() -> Self {
+        Self::Fire
+    }
+}
+
+/// Whether this spawn should consume the unclean flag and pass `--continue`.
+///
+/// Extracted as a pure function for the reason this phase learned the hard way: the property
+/// *"the no-fire door does not fire the argv arm"* was **proven in TypeScript and unenforced at
+/// the boundary**, so the suite was green exactly where the feature was broken. A source-order
+/// or frontend-side assertion cannot express this; a value can.
+///
+/// ⚠️ **`NoFire` must short-circuit BEFORE the consume, not after.** Deciding the arm and then
+/// discarding it would still spend the flag, so the announcement would vanish and the *next*
+/// open — the one the user actually wanted to resume — would find nothing. The no-fire door must
+/// leave the signal exactly as it found it.
+fn should_consume_for_resume(intent: OpenIntent) -> bool {
+    intent == OpenIntent::Fire
 }
 
 /// Decide the model a spawn should use, given the *outcome* of trying to read it.
@@ -512,11 +602,12 @@ impl PtyCcSession {
         project_path: &str,
         mode: CcPermissionMode,
         model: Option<&str>,
+        resume: ResumeArm,
     ) -> Result<Self, CcError> {
         Self::spawn_argv(
             app,
             id,
-            &build_cc_argv(mode, model),
+            &build_cc_argv(mode, model, resume),
             project_path,
             &color_tty_env(),
             "/exit",
@@ -809,7 +900,16 @@ impl SessionRegistry {
     /// default model is a mild surprise, whereas a workspace that refuses to open is a
     /// dead click. This is why the store's reader returns `Result` and the degradation
     /// decision lives *here*, at the call site, rather than being swallowed downstream.
-    pub fn spawn(&mut self, app: AppHandle, project_path: &str) -> Result<String, CcError> {
+    ///
+    /// `intent` is which picker door opened the workspace (M12 WP3 P4.6). The auto-resume argv
+    /// arm fires only for [`OpenIntent::Fire`]; the `⏵` door neither resumes **nor consumes the
+    /// flag**, so the announcement survives for the next open.
+    pub fn spawn(
+        &mut self,
+        app: AppHandle,
+        project_path: &str,
+        intent: OpenIntent,
+    ) -> Result<String, CcError> {
         let data_dir = app.path().app_data_dir().ok();
         let mode = data_dir
             .as_deref()
@@ -820,8 +920,50 @@ impl SessionRegistry {
                 .as_deref()
                 .map(|dir| crate::config_store::read_default_model(dir, Path::new(project_path))),
         );
+        // M12 WP3 Phase 4 — THE AUTO-RESUME ARGV ARM. Resolved HERE, in the backend, and
+        // resolved by CONSUMING the flag rather than merely reading it.
+        //
+        // ⚠️ Why the backend decides and not the frontend, which already computed a
+        // `pending_action`: the fire must **consume** the flag (read-and-clear, so a
+        // `--continue` fires at most once per unclean exit). If the frontend decided, the
+        // consume would be a separate call that could diverge from what actually spawned —
+        // the flag cleared for a spawn that failed, or a spawn resuming on a flag that was
+        // never cleared. One function reads, decides, clears, and spawns.
+        //
+        // ⚠️ ORDERING vs the DEFAULT-SET below is subtle and load-bearing: this consume runs
+        // BEFORE `should_set_unclean_flag` re-sets the flag for the session being started.
+        // That sequence is correct and intentional — consume clears the PREVIOUS session's
+        // flag (the signal we are acting on), then the set marks THIS session as in-flight.
+        // Reversing them would consume the flag this very spawn just set, so nothing would
+        // ever resume. `consume_before_set_or_nothing_ever_resumes` pins it.
+        //
+        // ⚠️ `consume_and_persist` canonicalizes via `key_for` internally. A reader that
+        // skips that silently matches nothing — no error, just a flag that never fires.
+        // ⚠️ P4.6 — GATED ON THE OPEN INTENT. The `⏵` no-fire door reaches this same function,
+        // and before the gate existed it resumed anyway: the frontend's `pending_action` governs
+        // only the *inject* arm, so an unauthorized argv arm was invisible to it. The gate is
+        // checked BEFORE `consume_and_persist` (via the `&&` short-circuit) so a no-fire open
+        // leaves the flag intact — spending it here would delete the very announcement the user
+        // declined to act on, and the NEXT open would find nothing to resume.
+        let resume = match data_dir.as_deref() {
+            Some(dir)
+                if should_consume_for_resume(intent)
+                    && crate::session_state::consume_and_persist(dir, project_path) =>
+            {
+                ResumeArm::Continue
+            }
+            _ => ResumeArm::Fresh,
+        };
+
         let id = self.mint_id();
-        let spawned = PtyCcSession::spawn(app, id.clone(), project_path, mode, model.as_deref());
+        let spawned = PtyCcSession::spawn(
+            app,
+            id.clone(),
+            project_path,
+            mode,
+            model.as_deref(),
+            resume,
+        );
 
         // M12 WP2 — DEFAULT-SET the unclean-exit flag, so a crash (which runs no code at
         // all) leaves it set for free and the next open can offer `/resume`. Only a clean
@@ -1020,7 +1162,7 @@ mod tests {
             (CcPermissionMode::DontAsk, "dontAsk"),
             (CcPermissionMode::BypassPermissions, "bypassPermissions"),
         ] {
-            let argv = build_cc_argv(mode, None);
+            let argv = build_cc_argv(mode, None, ResumeArm::Fresh);
             assert_eq!(
                 argv,
                 vec![
@@ -1041,7 +1183,7 @@ mod tests {
 
     #[test]
     fn cc_argv_omits_model_entirely_when_unset() {
-        let argv = build_cc_argv(CcPermissionMode::Default, None);
+        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Fresh);
         assert!(
             !argv.iter().any(|a| a == CC_ARG_MODEL),
             "unset must emit no --model token (not `--model default`, not an empty value), got {argv:?}"
@@ -1053,7 +1195,7 @@ mod tests {
         // Guards the asymmetry from being "tidied up" in either direction: the model's
         // omit-when-unset rule must not be generalized onto --permission-mode, which is
         // uniform on purpose.
-        let argv = build_cc_argv(CcPermissionMode::Default, None);
+        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Fresh);
         assert_eq!(
             argv,
             vec![
@@ -1066,8 +1208,195 @@ mod tests {
     }
 
     #[test]
+    fn consume_before_set_or_nothing_ever_resumes() {
+        // ⚠️ THE ORDERING PROPERTY, and it is genuinely subtle. `Registry::spawn` does two
+        // opposite things to the same flag in one function: it CONSUMES the previous
+        // session's flag (the signal we act on) and then DEFAULT-SETS the flag for the
+        // session it is starting. Reversed, the consume would eat the flag this very spawn
+        // just set — so `resume` would be `Continue` on every open AND nothing would ever be
+        // a genuine resume signal. Both orders "work" in the sense of not crashing, which is
+        // exactly why this needs a test rather than a comment.
+        //
+        // Source-position guard (CLAUDE.md: structure, never runtime) used narrowly, because
+        // the alternative is spawning a real `claude` process. Comments are stripped so the
+        // prose above cannot satisfy the assertion on the code's behalf — a hole this repo
+        // has hit three times.
+        // ⚠️ The anchor is the bare `pub fn spawn(` — NOT the full signature. P4.6 added an
+        // `intent` parameter and reflowed the signature across lines, which broke the previous
+        // full-signature literal. That failed LOUDLY (the `expect` below panics), which is the
+        // good failure mode for a source guard — but the lesson is to anchor on the smallest
+        // stable token, since a signature is exactly the thing a future change reflows.
+        let src = include_str!("mod.rs");
+        let body = src
+            .split("pub fn spawn(")
+            .nth(1)
+            .expect("Registry::spawn must exist");
+        let body = &body[..body.find("\n    }\n").expect("spawn must terminate")];
+        let code: String = body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let consume_at = code
+            .find("consume_and_persist(")
+            .expect("the fire path must consume the flag");
+        let set_at = code
+            .find("should_set_unclean_flag(")
+            .expect("the default-set must still be here");
+        assert!(
+            consume_at < set_at,
+            "consume must precede the default-set, or the spawn eats the flag it just set \
+             and no open is ever a genuine resume"
+        );
+    }
+
+    // --- M12 WP3 Phase 4: the auto-resume ARGV arm ---
+
+    #[test]
+    fn the_continue_flag_is_absent_on_a_fresh_spawn() {
+        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Fresh);
+        assert!(
+            !argv.iter().any(|a| a == "--continue"),
+            "a fresh spawn must not resume: {argv:?}"
+        );
+    }
+
+    #[test]
+    fn the_continue_flag_is_present_on_a_resuming_spawn() {
+        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Continue);
+        assert!(
+            argv.iter().any(|a| a == "--continue"),
+            "the resume arm must pass --continue: {argv:?}"
+        );
+    }
+
+    #[test]
+    fn the_continue_flag_never_becomes_a_slash_command() {
+        // ⚠️ Phase 1 Verdict 2: a bare `/resume` typed into the TUI opens an INTERACTIVE
+        // session picker rather than resuming, and there is no `/continue` slash command at
+        // all. This arm must stay a CLI flag. If someone "unifies" the two arms into one
+        // injected string, this fails.
+        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Continue);
+        for arg in &argv {
+            assert!(
+                !arg.starts_with('/'),
+                "argv must contain no slash commands, found {arg:?} in {argv:?}"
+            );
+        }
+        assert!(argv.contains(&"--continue".to_string()));
+    }
+
+    #[test]
+    fn the_resume_arm_does_not_disturb_the_other_flags() {
+        // The resume flag is appended LAST so permission mode + model are byte-identical
+        // whether or not this open resumes. Without this, a regression that inserted the
+        // flag mid-argv could shift `--model`'s value into the wrong position.
+        let fresh = build_cc_argv(CcPermissionMode::Auto, Some("opus"), ResumeArm::Fresh);
+        let resuming = build_cc_argv(CcPermissionMode::Auto, Some("opus"), ResumeArm::Continue);
+        assert_eq!(
+            resuming[..fresh.len()],
+            fresh[..],
+            "the resuming argv must be the fresh argv plus a suffix"
+        );
+        assert_eq!(resuming.len(), fresh.len() + 1);
+        assert_eq!(resuming.last().unwrap(), "--continue");
+    }
+
+    // --- M12 WP3 P4.6: the open INTENT gates the argv arm ---
+    //
+    // ⚠️ These exist because the property they assert was **proven in TypeScript and unenforced
+    // here**, and the feature shipped broken with a fully green suite.
+    // `actionForIntent(argv, "no-fire") === null` is mutation-proven in `announceRow.test.ts`, and
+    // it was never the missing piece: `cc_spawn` took no intent, so `Registry::spawn` resolved the
+    // arm from the flag alone and the `⏵` door resumed anyway. Reproduced live 3×.
+    //
+    // The lesson these tests encode: when a decision is made on one side of an IPC boundary and
+    // acted on the other, **assert the boundary**. Re-asserting the pure function would have
+    // passed before the fix.
+
+    #[test]
+    fn the_no_fire_door_does_not_consume_the_flag() {
+        // The gate must short-circuit BEFORE `consume_and_persist`, not discard its result after.
+        // Consuming on a no-fire open would spend the signal the user just declined to act on,
+        // so the announcement would vanish and the NEXT open — the one they actually wanted to
+        // resume — would find nothing.
+        assert!(
+            !should_consume_for_resume(OpenIntent::NoFire),
+            "the no-fire door must neither resume nor consume the flag"
+        );
+        assert!(
+            should_consume_for_resume(OpenIntent::Fire),
+            "the row door must consume and resume"
+        );
+    }
+
+    #[test]
+    fn the_intent_gate_is_evaluated_before_the_consume() {
+        // Source-position guard, used narrowly for the same reason as
+        // `consume_before_set_or_nothing_ever_resumes`: the alternative is spawning a real
+        // `claude`. What it pins is the `&&` SHORT-CIRCUIT — that the gate is the left operand,
+        // so a no-fire open never reaches the consume at all. Written as an ordering assertion
+        // rather than a substring match on one spelling, because `a && b` vs `b && a` both
+        // compile and both "work" for the resume decision while differing on whether the flag
+        // survives. Comments are stripped so the prose above cannot satisfy it.
+        let src = include_str!("mod.rs");
+        let body = src
+            .split("pub fn spawn(")
+            .nth(1)
+            .expect("Registry::spawn must exist");
+        let body = &body[..body.find("\n    }\n").expect("spawn must terminate")];
+        let code: String = body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let gate_at = code
+            .find("should_consume_for_resume(")
+            .expect("the argv arm must be gated on the open intent");
+        let consume_at = code
+            .find("consume_and_persist(")
+            .expect("the fire path must consume the flag");
+        assert!(
+            gate_at < consume_at,
+            "the intent gate must precede (and short-circuit) the consume, or a no-fire open \
+             spends the flag it declined to act on"
+        );
+    }
+
+    #[test]
+    fn an_absent_wire_intent_defaults_to_fire() {
+        // `cc_spawn`'s parameter is `Option<OpenIntent>` so existing callers need no change.
+        // ⚠️ The default direction is load-bearing: `NoFire` would look safer and is wrong —
+        // it would silently disable auto-resume for any caller that omitted the field, a defect
+        // with no error and no symptom except a feature that stopped working.
+        assert_eq!(OpenIntent::default(), OpenIntent::Fire);
+        assert!(should_consume_for_resume(OpenIntent::default()));
+    }
+
+    #[test]
+    fn the_wire_form_of_open_intent_is_kebab_case() {
+        // Pins the serde contract against the TS union `"fire" | "no-fire"`. The two sides are
+        // separately declared, so nothing but a test couples them — and a silent mismatch would
+        // make every `⏵` click deserialize-fail or fall back to firing.
+        assert_eq!(
+            serde_json::from_str::<OpenIntent>("\"no-fire\"").unwrap(),
+            OpenIntent::NoFire
+        );
+        assert_eq!(
+            serde_json::from_str::<OpenIntent>("\"fire\"").unwrap(),
+            OpenIntent::Fire
+        );
+        // camelCase / snake_case spellings must NOT deserialize — if they did, a frontend typo
+        // would silently pick a variant instead of erroring.
+        assert!(serde_json::from_str::<OpenIntent>("\"noFire\"").is_err());
+        assert!(serde_json::from_str::<OpenIntent>("\"no_fire\"").is_err());
+    }
+
+    #[test]
     fn cc_argv_passes_exactly_one_model_pair_when_set() {
-        let argv = build_cc_argv(CcPermissionMode::Default, Some("opus"));
+        let argv = build_cc_argv(CcPermissionMode::Default, Some("opus"), ResumeArm::Fresh);
         assert_eq!(
             argv,
             vec![
@@ -1089,7 +1418,7 @@ mod tests {
     fn cc_argv_accepts_an_alias_or_a_full_model_id_verbatim() {
         // The probe established an open value set; Claudesk forwards, CC adjudicates.
         for value in ["fable", "opus", "sonnet", "claude-fable-5"] {
-            let argv = build_cc_argv(CcPermissionMode::Auto, Some(value));
+            let argv = build_cc_argv(CcPermissionMode::Auto, Some(value), ResumeArm::Fresh);
             let idx = argv.iter().position(|a| a == CC_ARG_MODEL).unwrap();
             assert_eq!(argv[idx + 1], value, "value must be forwarded unaltered");
         }
@@ -1101,7 +1430,7 @@ mod tests {
         // hand-edited or older-build projects.json could still carry whitespace, and it
         // must never reach CC as an argv token.
         for blank in ["", "   ", "\t", "\n"] {
-            let argv = build_cc_argv(CcPermissionMode::Default, Some(blank));
+            let argv = build_cc_argv(CcPermissionMode::Default, Some(blank), ResumeArm::Fresh);
             assert!(
                 !argv.iter().any(|a| a == CC_ARG_MODEL),
                 "{blank:?} must be treated as unset, got {argv:?}"
@@ -1111,7 +1440,11 @@ mod tests {
 
     #[test]
     fn cc_argv_trims_a_padded_model_value() {
-        let argv = build_cc_argv(CcPermissionMode::Default, Some("  opus  "));
+        let argv = build_cc_argv(
+            CcPermissionMode::Default,
+            Some("  opus  "),
+            ResumeArm::Fresh,
+        );
         let idx = argv.iter().position(|a| a == CC_ARG_MODEL).unwrap();
         assert_eq!(argv[idx + 1], "opus");
     }
@@ -1127,7 +1460,7 @@ mod tests {
             CcPermissionMode::DontAsk,
             CcPermissionMode::BypassPermissions,
         ] {
-            let argv = build_cc_argv(mode, Some("opus"));
+            let argv = build_cc_argv(mode, Some("opus"), ResumeArm::Fresh);
             assert_eq!(argv[0], CC_CMD);
             assert_eq!(argv[1], CC_ARG_PERMISSION_MODE);
             assert_eq!(argv[2], mode.as_flag_value());
@@ -1161,18 +1494,22 @@ mod tests {
     fn cc_argv_composes_the_exact_shapes_the_real_cli_accepted_at_verify_human() {
         // Arm 1 — alias override.
         assert_eq!(
-            build_cc_argv(CcPermissionMode::Default, Some("opus")),
+            build_cc_argv(CcPermissionMode::Default, Some("opus"), ResumeArm::Fresh),
             vec!["claude", "--permission-mode", "default", "--model", "opus"]
         );
         // Arm 2 — the inherit path. The load-bearing arm: proves omit-when-unset yields a
         // shape the CLI genuinely accepts, not merely one our tests agree on.
         assert_eq!(
-            build_cc_argv(CcPermissionMode::Default, None),
+            build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Fresh),
             vec!["claude", "--permission-mode", "default"]
         );
         // Arm 3 — full model ID.
         assert_eq!(
-            build_cc_argv(CcPermissionMode::Default, Some("claude-fable-5")),
+            build_cc_argv(
+                CcPermissionMode::Default,
+                Some("claude-fable-5"),
+                ResumeArm::Fresh
+            ),
             vec![
                 "claude",
                 "--permission-mode",

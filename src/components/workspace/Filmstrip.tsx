@@ -23,7 +23,6 @@ import {
 } from "react";
 import { WorkspaceStatusIndicator } from "./WorkspaceStatusIndicator";
 import { TileActions } from "./TileActionButton";
-import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import type { FilmstripTile } from "./filmstripTiles";
 import { readMirrorFrame, subscribeMirrorFrame } from "./mirrorFrame";
 import { shouldRunMirror } from "./mirrorTicker";
@@ -58,8 +57,11 @@ interface FilmstripProps {
   onClose: (workspaceId: string) => void;
   /** M12 WP2 — close a workspace but leave its session marked UNFINISHED (the hover-
    *  revealed ⏸). Same teardown as `onClose` — the PTY is still reaped cleanly — but the
-   *  unclean-exit flag is NOT cleared, so the next open offers `/resume`. App runs the
-   *  same dirty guard. */
+   *  unclean-exit flag is NOT cleared, so the next open resumes the conversation
+   *  (⚠️ via spawn argv `--continue`, NOT `/resume`: a bare `/resume` opens an interactive
+   *  session picker — Phase 1, Verdict 2). App runs the same dirty guard.
+   *  ⚠️ UNIVERSAL since Phase 3.5 — no longer gated. See `TileActionButton`'s
+   *  `onPauseClose` doc for why. */
   onPauseClose: (workspaceId: string) => void;
 }
 
@@ -80,11 +82,16 @@ export function Filmstrip({
   onClose,
   onPauseClose,
 }: FilmstripProps) {
-  // M10.9 gate, read ONCE here rather than per-tile: the ⏸ (pause-close) is
-  // workflow-coupled — it exists to preserve the unclean flag M12's auto-resume reads —
-  // so with the workflow layer off it must be ABSENT, not hidden (the seam contract in
-  // `useWorkflowFeaturesEnabled.ts`). The × is universal and always renders.
-  const workflowEnabled = useWorkflowFeaturesEnabled();
+  // ⚠️ NO GATE READ HERE ANY MORE. The ⏸ (pause-close) was gated behind
+  // `workflow_features_enabled` until M12 WP3 Phase 3.5 (operator decision 2026-08-05);
+  // both the read and the `workflowEnabled` prop are RETIRED. The ⏸ is now universal, like
+  // the ×. Full reasoning at `TileActionButton`'s `onPauseClose` doc — in short: Phase 3.5
+  // ungated the unclean-flag arm, so the premise "nothing to resume into" no longer holds,
+  // and leaving the ⏸ gated made the flag write-only for a non-workflow user (set on every
+  // open, cleared by the ×, with no route declining to clear).
+  //
+  // If a future gated filmstrip control is added, read the hook then — do NOT restore this
+  // line speculatively.
   // M4 WP3 P4 — POINTER-based live (WYSIWYG) reorder. A press that stays under
   // DRAG_THRESHOLD_PX is a click (promote, P2); past it, it's a drag — and on each move
   // we hit-test the pointer x against the tile rects and call onReorder LIVE so tiles
@@ -309,7 +316,6 @@ export function Filmstrip({
                 className="filmstrip-pill-actions"
                 onClose={() => onClose(tile.id)}
                 onPauseClose={() => onPauseClose(tile.id)}
-                workflowEnabled={workflowEnabled}
               />
             </button>
           ))
@@ -378,7 +384,6 @@ export function Filmstrip({
                   className="filmstrip-tile-actions"
                   onClose={() => onClose(tile.id)}
                   onPauseClose={() => onPauseClose(tile.id)}
-                  workflowEnabled={workflowEnabled}
                 />
               </div>
             </button>

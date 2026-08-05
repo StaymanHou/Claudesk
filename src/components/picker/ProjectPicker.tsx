@@ -24,6 +24,13 @@ import { mapIpcError } from "./ipcError";
 import { ProjectModelCell, ProjectModelHints } from "./ProjectModelCell";
 import { applyCommittedModel } from "./applyCommittedModel";
 import { PICKER_ROW_CELLS } from "./pickerRowOrder";
+import {
+  actionForIntent,
+  rowAffordances,
+  type OpenIntent,
+} from "./announceRow";
+import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import type { AnnounceMap, AutoResumeAction } from "../../state/predictAction";
 
 // A picker toast is either an INFO note (e.g. "removed N stale projects" on mount) or
 // an ERROR (an IPC rejection that must surface, not be swallowed — the WP6 MAJOR). The
@@ -62,7 +69,25 @@ function labelFor(project: RecentProject): string {
 }
 
 interface ProjectPickerProps {
-  onOpen: (projectPath: string) => void;
+  /**
+   * Open a project. `action` is the auto-resume action to fire on spawn (M12 WP3), or
+   * `null` to open plainly.
+   *
+   * ⚠️ The action is RE-DERIVED at click time from the current announce map, never read
+   * from the rendered label — WP1 Verdict (b)'s load-bearing rule. That is what makes a
+   * stale announcement harmless (worst case: a label promised something and nothing fires,
+   * never a WRONG action).
+   *
+   * `intent` (P4.6) is which door was used. It is carried SEPARATELY from `action` because it
+   * cannot be recovered from it: `action === null` means both "the no-fire door" and "the row
+   * door with no signal", and the backend must suppress the argv arm for the first but not the
+   * second. Passing only `action` is what let the `⏵` door resume anyway.
+   */
+  onOpen: (
+    projectPath: string,
+    action: AutoResumeAction,
+    intent: OpenIntent,
+  ) => void;
   // M9 WP6a — the time-analytics dashboard is a GLOBAL (all-projects) surface, so it
   // must be reachable from the picker scene at launch, not only after a workspace opens
   // (SURFACE-2026-07-08-M9-WP6A-DASHBOARD-FROM-PICKER). When provided, the picker shows an
@@ -101,6 +126,18 @@ export function ProjectPicker({
   // The picker toast: an info note (prune-on-mount) or a surfaced IPC error. `null` =
   // no toast (the common case). Both kinds are dismissible.
   const [toast, setToast] = useState<PickerToast | null>(null);
+  // M12 WP3 — the batched auto-resume announcement. ONE call per picker open (never a
+  // per-row probe: M11.5 WP1's review found the model cell issuing an IPC read per row for
+  // a value already on the wire, and this is the same surface). `{}` until it resolves and
+  // `{}` forever when the gate is off, so a row simply announces nothing in both cases.
+  const [announceMap, setAnnounceMap] = useState<AnnounceMap>({});
+  // The M10.9 gate seam. Read the HOOK — never the underlying Tauri command ad hoc and
+  // never the raw getter wrapper (a one-shot read never re-syncs on the broadcast). Both
+  // bypass shapes are scanned by the OFF-invariant guard, whose scan is a plain substring
+  // match over source: it cannot tell a real call from prose, so this comment deliberately
+  // does NOT spell either forbidden identifier. Naming them here would flag this file as an
+  // offender. See `useWorkflowFeaturesEnabled.ts` for the full contract.
+  const workflowEnabled = useWorkflowFeaturesEnabled();
   // NOTE (M10.9 WP2 Phase 4): the three app-global settings states that used to live here
   // (ccPermissionMode / timeTrackingEnabled / updateNotificationsEnabled), together with
   // their seed+listen effects and optimistic-set handlers, MOVED to the Settings panel —
@@ -126,6 +163,26 @@ export function ProjectPicker({
         if (pruneMsg !== null) setToast({ kind: "info", message: pruneMsg });
         const projects = await invoke<RecentProject[]>("list_projects");
         if (!cancelled) setRecents(projects);
+        // M12 WP3 — ONE announce call per picker open, alongside the existing two. Read
+        // AFTER the list so a slow stat never delays the rows appearing; a row simply gains
+        // its announcement a moment later. Gate-checked server-side, so this returns `{}`
+        // without statting anything when the workflow layer is off.
+        //
+        // Its own try/catch: an announce failure must NOT take down the project list, which
+        // is the picker's actual job. A missing announcement degrades to "no prediction"
+        // (the safe direction — a missed auto-fire costs a click), so it is logged rather
+        // than toasted.
+        try {
+          const announced = await invoke<AnnounceMap>(
+            "picker_announce_actions",
+          );
+          if (!cancelled) setAnnounceMap(announced);
+        } catch (e) {
+          console.warn(
+            "picker_announce_actions failed; no rows will announce",
+            e,
+          );
+        }
       } catch (e) {
         if (!cancelled)
           setToast({ kind: "error", message: mapIpcError("load projects", e) });
@@ -136,14 +193,43 @@ export function ProjectPicker({
     };
   }, []);
 
-  async function handleOpenRecent(projectPath: string) {
+  /**
+   * Open a project via one of the two doors.
+   *
+   * ⚠️ **BOTH doors funnel through here** — the row click (`"fire"`) and the ⏵
+   * (`"no-fire"`). That is deliberate: a second open path would be a second place for the
+   * recency stamp, the error handling, and the re-derivation to drift, and only one of them
+   * would get fixed when a bug appeared. `intent` is the ONLY difference between them.
+   *
+   * ⚠️ The action is **re-derived here, at click time**, from the current announce map —
+   * never read back from the rendered label. WP1 Verdict (b): *the announcement is a
+   * prediction, never the input to the action.* `.session.md` can vanish while the picker
+   * is open, so the label can be stale; re-deriving makes that harmless (a label that
+   * promised something and nothing fires) instead of wrong (firing a restore whose pointer
+   * is gone).
+   */
+  async function handleOpenRecent(
+    projectPath: string,
+    intent: OpenIntent = "fire",
+  ) {
+    // Re-derive, do not read the label. `rowAffordances` is the same function the row
+    // rendered with, called fresh — so a signal that changed since render is reflected.
+    const { action } = rowAffordances(
+      projectPath,
+      announceMap,
+      workflowEnabled,
+    );
     // Stamp recency before handing off so the next list_projects reflects it. A
     // rejection surfaces as an error toast (P4.2) — never dropped as an unhandled
     // promise rejection. We do NOT proceed to onOpen if recording failed, since the
-    // store is in an unknown state.
+    // store is in an unknown state. BOTH doors record the open; only the firing differs.
     try {
       await invoke("record_open", { path: projectPath });
-      onOpen(projectPath);
+      // ⚠️ P4.6 — `intent` is passed ALONGSIDE the action, not folded into it.
+      // `actionForIntent` correctly nulls the action on the no-fire door, but `null` is
+      // ambiguous downstream (it also means "row door, no signal"), and the backend needs the
+      // unambiguous door to gate the argv arm. Folding them was the shipped defect.
+      onOpen(projectPath, actionForIntent(action, intent), intent);
     } catch (e) {
       setToast({ kind: "error", message: mapIpcError("open project", e) });
     }
@@ -166,7 +252,24 @@ export function ProjectPicker({
         added,
         ...rs.filter((r) => r.project_path !== added.project_path),
       ]);
-      onOpen(picked);
+      // M12 WP3 — "Open Folder…" NEVER auto-fires. Explicit `null` rather than relying on
+      // the newly-added path being absent from `announceMap`: it happens to be absent
+      // (the map was fetched at mount, before this folder existed), but that is a
+      // coincidence of fetch timing, not a decision — and a future focus-refresh of the map
+      // would silently turn this into an auto-fire.
+      //
+      // The decision itself: a folder you just picked from a dialog is a deliberate,
+      // explicit act on a project that may be brand new to Claudesk. Firing a resumption
+      // command into it would act on state the user has not seen. It goes through the
+      // recents row on the NEXT open, where the announcement is visible first.
+      //
+      // ⚠️ P4.6 — `"no-fire"` is passed EXPLICITLY, and it is load-bearing here in a way the
+      // `null` action above is not. This path could reach a project whose unclean flag is set
+      // (re-picking a folder already in recents), and the ARGV arm is resolved from that flag in
+      // the backend — so `null` alone would have let "Open Folder…" resume, exactly as it let the
+      // `⏵` door resume. The comment above reasons carefully about not relying on coincidence;
+      // before P4.6 the argv arm was a second coincidence it did not know about.
+      onOpen(picked, null, "no-fire");
     } catch (e) {
       setToast({ kind: "error", message: mapIpcError("open folder", e) });
     }
@@ -314,7 +417,21 @@ export function ProjectPicker({
                 the structure is data now. See pickerRowOrder.ts. */}
             {PICKER_ROW_CELLS.map((cell) => {
               switch (cell) {
-                case "open":
+                case "open": {
+                  // M12 WP3 (operator spec, 2026-08-04): the title box AUTO-FIRES by
+                  // default, and the no-fire escape hatch lives INSIDE it.
+                  //
+                  // ⚠️ Both M12 elements are nested in this <button>, which is NOT a
+                  // violation of pickerRowOrder.ts's rule — that rule forbids a nested
+                  // <button> (a button-in-button cannot disambiguate the click). The
+                  // announcement is an inert <span>; the no-fire control is a
+                  // <span role="button"> with stopPropagation, the same discipline
+                  // TileActionButton.tsx uses for this exact problem in the filmstrip.
+                  const { announcement, showNoFireDoor } = rowAffordances(
+                    r.project_path,
+                    announceMap,
+                    workflowEnabled,
+                  );
                   return (
                     <button
                       key={cell}
@@ -323,12 +440,106 @@ export function ProjectPicker({
                       data-testid="picker-recent"
                       onClick={() => void handleOpenRecent(r.project_path)}
                     >
-                      <span className="picker-recent-name">{labelFor(r)}</span>
-                      <span className="picker-recent-path">
-                        {r.project_path}
+                      <span className="picker-recent-text">
+                        {/* The announcement sits on the NAME's line (operator decision,
+                            2026-08-04), settled by measuring rather than by taste: on the
+                            path's line the badge took 140px and halved the path
+                            (369→184px), while names have real slack (~80-180px).
+                            ⚠️ The original comment here also claimed the path then "keeps
+                            its FULL width — identical on every row." That was MEASURED
+                            FALSE at verify-human (2026-08-05) and is why the gutter below
+                            is now reserved unconditionally: see `.picker-recent-gutter`. */}
+                        <span className="picker-recent-headline">
+                          <span className="picker-recent-name">
+                            {labelFor(r)}
+                          </span>
+                          {announcement !== null && (
+                            <span
+                              className="picker-recent-announce"
+                              data-testid="picker-recent-announce"
+                              title={`Opening this project will run ${announcement}`}
+                            >
+                              ↻ {announcement}
+                            </span>
+                          )}
+                        </span>
+                        <span className="picker-recent-path">
+                          {r.project_path}
+                        </span>
+                      </span>
+                      {/* ⚠️ THE GUTTER IS ALWAYS RENDERED — this is the P3.9 fix
+                          (operator decision, 2026-08-05), and it is load-bearing.
+                          Previously `{showNoFireDoor && <span .../>}` put the control
+                          directly here as a sibling of `.picker-recent-text`, which has
+                          `flex: 1 1 auto` — so on a row with NO prediction the text stack
+                          ABSORBED the control's width. Measured: 369px without a badge vs
+                          331px with one, meaning a 37-char name truncated mid-word while a
+                          LONGER 35-char name on the adjacent row showed in full. Rows
+                          disagreed about how much name you get, for a reason invisible to
+                          the reader.
+                          Reserving the box unconditionally makes every row share one
+                          geometry, so names truncate at the same length everywhere. The
+                          cost is deliberate and accepted: non-announcing rows also give up
+                          the 38px.
+                          Note the conditional moved INWARD rather than being deleted —
+                          `showNoFireDoor` still governs whether the *control* exists (the
+                          contract `announceRow.ts` pins: no prediction ⇒ no control, since
+                          both doors would be identical). An empty gutter is spacing, not a
+                          control: no role, no tabIndex, no handler, aria-hidden. */}
+                      <span
+                        className="picker-recent-gutter"
+                        aria-hidden={!showNoFireDoor}
+                      >
+                        {showNoFireDoor && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            className="picker-recent-nofire"
+                            data-testid="picker-recent-nofire"
+                            aria-label={`Open ${labelFor(r)} without running ${announcement}`}
+                            title={`Open without running ${announcement}`}
+                            // stopPropagation on BOTH pointerdown and click: the outer
+                            // <button> would otherwise fire its open-and-run handler, which
+                            // is the silent "the control does the wrong thing" failure.
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleOpenRecent(r.project_path, "no-fire");
+                            }}
+                            // Keyboard mirror — a span has no implicit Enter/Space activation,
+                            // so without this the control is mouse-only.
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                void handleOpenRecent(
+                                  r.project_path,
+                                  "no-fire",
+                                );
+                              }
+                            }}
+                          >
+                            {/* ⚠️ `⊘` (U+2298), NOT a play triangle. The glyph was `⏵` until the
+                                operator rejected it 2026-08-05, and the objection is a real
+                                semantic inversion rather than taste: a play icon promises "run
+                                this", and this control's entire purpose is to open WITHOUT
+                                running the announced command. It advertised the thing it
+                                withholds.
+
+                                `⊘` reads as suppression — and the row's announcement one span
+                                over is `↻ <command>`, so the pair reads "would re-run X" /
+                                "don't". Deliberately not `⤓`/`↴` (motion metaphors that can be
+                                misread as "just go, faster") and not `↷` (too close to `↻` to
+                                distinguish at 0.72rem). The ACCESSIBLE name is carried by
+                                `aria-label`/`title` below, so the glyph never has to be
+                                self-explanatory to a screen reader. */}
+                            ⊘
+                          </span>
+                        )}
                       </span>
                     </button>
                   );
+                }
                 case "model":
                   return (
                     <ProjectModelCell

@@ -26,6 +26,13 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  FIRE_DELAY_MS,
+  injectCommand,
+  injectionCommand,
+  shouldInject,
+} from "./autoResumeFire";
+import type { AutoResumeAction, OpenIntent } from "../../state/predictAction";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import "@xterm/xterm/css/xterm.css";
 import {
@@ -104,6 +111,32 @@ interface XtermPaneProps {
    * redraws (SIGWINCH → the shell repaints its prompt).
    */
   active?: boolean;
+  /**
+   * M12 WP3 Phase 4 — the auto-resume action this workspace open resolved to, or `null`.
+   *
+   * ⚠️ **Only the INJECT arm is honored here.** The `--continue` arm is spawn ARGV, resolved
+   * entirely in Rust (`Registry::spawn` consumes the unclean flag and passes `--continue` to
+   * `build_cc_argv`), so it never reaches the frontend's fire path — it needs no injection
+   * and no delay. Passing an argv action here is harmless and injects nothing; `shouldInject`
+   * branches on the action's `kind`.
+   *
+   * Defaults to `null` so the WP9 terminal panel and every other `XtermPane` consumer is
+   * unaffected — a pane with no action behaves exactly as before.
+   */
+  pendingAction?: AutoResumeAction;
+  /**
+   * M12 WP3 P4.6 — which picker door opened this workspace, forwarded to `cc_spawn` so the
+   * backend can gate the auto-resume **argv** arm (`--continue`).
+   *
+   * ⚠️ **This is a SEPARATE prop from `pendingAction` and must stay so.** `pendingAction`
+   * governs only the *inject* arm, and `null` is ambiguous — it means both "the no-fire door was
+   * used" and "the row door was used but there was no signal". The argv arm needs those
+   * distinguished (suppress vs. nothing-to-suppress), and conflating them shipped a defect where
+   * the `⏵` door resumed a conversation the user had explicitly declined.
+   *
+   * Only forwarded for `cc_spawn`; `term_spawn` (the WP9 shell) has no resume arm.
+   */
+  openIntent?: OpenIntent;
 }
 
 export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
@@ -117,6 +150,8 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       testId = "xterm-pane",
       dataSessionId,
       active = true,
+      pendingAction = null,
+      openIntent = "fire",
     },
     ref,
   ) {
@@ -380,10 +415,26 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       let unlistenOutput: UnlistenFn | undefined;
       let unlistenExit: UnlistenFn | undefined;
       let cancelled = false;
+      // M12 WP3 Phase 4 — the auto-resume fire timer, per-run like `cancelled` (NOT a ref:
+      // this file documents at length why a shared ref is wrong across StrictMode runs).
+      let fireTimer: ReturnType<typeof setTimeout> | undefined;
 
       async function spawn() {
         try {
-          const sessionId = await invoke<string>(spawnCommand, { projectPath });
+          // ⚠️ P4.6 — `intent` CROSSES THE IPC BOUNDARY HERE, and its absence was the defect.
+          // Before this, the call was `{ projectPath }` alone, so the backend re-derived the
+          // auto-resume argv arm from the unclean flag with no knowledge of which door was used
+          // — and the `⏵` no-fire door resumed anyway. The frontend's `pendingAction` governs
+          // only the inject arm, which is why the gap was invisible to it and to every test.
+          //
+          // Sent for `cc_spawn` only: `term_spawn` (the WP9 shell) has no resume arm and its
+          // Rust command takes no such parameter, so passing it would be a wire error.
+          const sessionId = await invoke<string>(
+            spawnCommand,
+            spawnCommand === "cc_spawn"
+              ? { projectPath, intent: openIntent }
+              : { projectPath },
+          );
           if (cancelled) {
             // This effect run was torn down (unmount, or a nonce/path/command re-run) before
             // the spawn resolved — kill the orphan we just created and attach nothing. This
@@ -437,6 +488,38 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
             fitAndResize();
             termRef.current?.focus();
           });
+
+          // ── M12 WP3 Phase 4 — THE AUTO-RESUME FIRE (the inject arm) ──────────────
+          //
+          // ⚠️ NOT fired on `cc_ready` above, despite that being the obvious-looking hook.
+          // Phase 1 measured injection at that moment NOT-EXECUTED 5/5: `cc_ready` is
+          // Claudesk's own frontend-listener handshake, not a signal that CC's TUI has
+          // started reading keystrokes. See `autoResumeFire.ts` for the full delay table —
+          // 1500 ms is a ~4× margin over a measured 350 ms flake point, not a round number.
+          //
+          // ⚠️ The decision is RE-CHECKED inside the timer, not captured at schedule time.
+          // 1500 ms is long enough for the user to close the workspace, switch away, or
+          // relaunch; `cancelled` is this run's own closure flag (the same one the spawn
+          // uses to self-kill orphans), so a torn-down run injects nothing. Writing into a
+          // replaced session would type a slash command into a live conversation.
+          //
+          // ⚠️ The timer is cleared in the effect cleanup — without that, StrictMode's
+          // mount→unmount→remount would leave a live timer from the discarded first run.
+          if (injectionCommand(pendingAction) !== null) {
+            fireTimer = setTimeout(() => {
+              if (!shouldInject({ action: pendingAction, cancelled })) return;
+              const command = injectionCommand(pendingAction);
+              if (command === null) return;
+              // ⚠️ NO error dispatch on failure. An injection miss must NOT be surfaced as
+              // `spawn-failed`: that would replace a perfectly working terminal with an
+              // error overlay over a command the user can simply type themselves. The
+              // operator-settled surfacing is `console.warn` always (inside
+              // `injectCommand`), and the terminal itself is the evidence — the user is at
+              // a live prompt. A toast belongs only on a genuine backend fault, and this
+              // pane has no toast setter, so it passes no handler.
+              void injectCommand(sessionId, command);
+            }, FIRE_DELAY_MS);
+          }
         } catch (err) {
           if (cancelled) return;
           dispatch({ type: "spawn-failed", errorMsg: String(err) });
@@ -446,6 +529,12 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
 
       return () => {
         cancelled = true;
+        // ⚠️ M12 WP3 Phase 4 — clear the auto-resume fire timer. Without this, StrictMode's
+        // mount→unmount→remount leaves the DISCARDED first run's timer live: it would wake
+        // 1500 ms later and inject into a session this run already self-killed. `cancelled`
+        // alone would stop the write, but leaving a timer pending is the kind of loose end
+        // that becomes a real leak the moment someone adds state to the callback.
+        if (fireTimer !== undefined) clearTimeout(fireTimer);
         unlistenOutput?.();
         unlistenExit?.();
       };

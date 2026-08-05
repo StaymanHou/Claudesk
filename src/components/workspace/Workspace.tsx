@@ -22,6 +22,7 @@
 // panel liveness + the capture-phase hotkey (only the focused workspace's host reacts).
 
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
 import { XtermPane, type XtermPaneHandle } from "./XtermPane";
 import { RightPanelHost } from "./RightPanelHost";
@@ -44,6 +45,16 @@ import {
   terminalZoomForChord,
   DEFAULT_TERMINAL_FONT_PX,
 } from "./terminalFontZoom";
+// M12 WP3 Phase 5 — the third arm. Both surfaces are GATED (a workflow skill + a statement
+// about `workflow-system/` state), unlike Phase 3.5's ungated `--continue` announcement.
+import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import { predictAction } from "../../state/predictAction";
+import { slashCommandPayload } from "./autoResumeFire";
+import {
+  nextOpenIndicator,
+  SESSION_START_COMMAND,
+  showSessionStartButton,
+} from "./sessionStartButton";
 
 interface WorkspaceProps {
   workspace: WorkspaceModel;
@@ -81,6 +92,85 @@ export function Workspace({
   // "none" on hide prevents a stale accent if a workspace is demoted while focused.
   const rootRef = useRef<HTMLDivElement>(null);
   const [focusHalf, setFocusHalf] = useState<FocusHalf>("none");
+
+  // ── M12 WP3 Phase 5 — the third arm ──────────────────────────────────────────────
+  //
+  // The gate seam. Read the HOOK, never the raw command or the one-shot wrapper: a one-shot
+  // read never re-syncs on the broadcast, which is a defect that actually shipped in M10.9 WP3.
+  const workflowEnabled = useWorkflowFeaturesEnabled();
+  // What this workspace WOULD fire if reopened now. Re-read on every `visible` edge rather than
+  // once on mount, because the whole point is to reflect a flag the ⏸ may have set *since* —
+  // and workspaces stay mounted forever (the standing invariant), so a mount-only read would go
+  // stale for the entire life of the app.
+  const [announcedNextOpen, setAnnouncedNextOpen] = useState<string | null>(
+    null,
+  );
+  // ⚠️ The gate-off / hidden case is DERIVED AT RENDER, not stored via a `setState` in the
+  // effect. Two reasons, and the first is a hard error rather than a preference:
+  //   1. Calling the setter synchronously inside the effect is a cascading render, which
+  //      eslint's `react-hooks` rule rejects outright as an ERROR (it caught this — the first
+  //      draft cleared the label in the effect's gate-off branch).
+  //   2. M11's lesson: reconciling a surface that just became unavailable must be a
+  //      render-time derivation, so it is never rendered for even one frame. A state write
+  //      would let a stale label survive until the next commit.
+  const nextOpen = workflowEnabled && visible ? announcedNextOpen : null;
+  useEffect(() => {
+    // No `setState` on this path — the derivation above already hides the surface. The effect
+    // only FETCHES, and simply declines to when there is nothing to show.
+    if (!workflowEnabled || !visible) return;
+    let cancelled = false;
+    // Reuses the picker's batched command — one call returning every project's resolved action,
+    // so this adds no per-workspace IPC shape. ⚠️ `.catch` is mandatory: an unhandled Tauri
+    // rejection vanishes silently (the WP6 picker MAJOR), and this surface failing quietly is
+    // exactly the write-only problem it exists to fix.
+    invoke<Record<string, "continue" | "restore">>("picker_announce_actions")
+      .then((map) => {
+        if (cancelled) return;
+        const announced = map[workspace.project_path];
+        // ⚠️ Derived from the SIGNALS via the real predictor, not from the announced string —
+        // the same rule the click path follows. A label is a prediction, never an input.
+        setAnnouncedNextOpen(
+          nextOpenIndicator({
+            workflowEnabled: true,
+            action: predictAction({
+              uncleanFlag: announced === "continue",
+              sessionMdPresent: announced === "restore",
+            }),
+          }),
+        );
+      })
+      .catch((e) => {
+        console.warn("next-open indicator: announce read failed", e);
+        if (!cancelled) setAnnouncedNextOpen(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workflowEnabled, visible, workspace.project_path]);
+
+  /**
+   * Fire `/session-start` into this workspace's live CC session, on an explicit click only.
+   *
+   * ⚠️ No delay. Phase 1's 1500 ms settle is about a COLD spawn whose TUI has not started
+   * reading keystrokes; this fires into a session the operator is already looking at, through
+   * the same `cc_input` path every real keypress uses.
+   */
+  const fireSessionStart = () => {
+    const sessionId = workspace.cc_session_id;
+    if (sessionId === null) return; // unreachable — the button does not render without one.
+    invoke("cc_input", {
+      sessionId,
+      data: slashCommandPayload(SESSION_START_COMMAND),
+    }).catch((e) => {
+      // Same surfacing decision as the auto-fire (operator-settled): the terminal IS the
+      // evidence, so a `console.warn` for diagnosis and NO error overlay — replacing a working
+      // terminal with an error over a command the user can simply type would be worse.
+      console.warn(
+        `session-start: injecting ${SESSION_START_COMMAND} into ${sessionId} failed`,
+        e,
+      );
+    });
+  };
 
   // QoL-WP3 — auto-focus the LEFT CC terminal on the false→true `visible` edge (and on
   // mount when already visible), since the always-active XtermPane's own focus never
@@ -298,6 +388,37 @@ export function Workspace({
     >
       <div className="workspace-header" data-testid="workspace-header">
         <span className="workspace-header-name">{workspace.display_name}</span>
+        {/* M12 WP3 Phase 5 — the already-open indicator. Reads back what this workspace
+            WOULD fire on its next open, so the unclean flag stops being write-only: WP2's ⏸
+            set it with no way to confirm the click landed short of reading
+            `session-state.json` by hand, which is why the operator deferred WP2's hard-kill
+            verification. A PREDICTION, never an instruction — nothing consumes this string.
+            Both this and the button below are GATED (the label states workflow state; the
+            button sends a workflow skill), unlike Phase 3.5's ungated `--continue` announce. */}
+        {nextOpen !== null && (
+          <span
+            className="workspace-header-nextopen"
+            data-testid="workspace-header-nextopen"
+            title={`On next open, this workspace ${nextOpen}`}
+          >
+            ↻ {nextOpen}
+          </span>
+        )}
+        {showSessionStartButton({
+          workflowEnabled,
+          ccSessionId: workspace.cc_session_id,
+        }) && (
+          <button
+            type="button"
+            className="workspace-session-start"
+            data-testid="workspace-session-start"
+            aria-label={`Run ${SESSION_START_COMMAND} in ${workspace.display_name}`}
+            title={`Run ${SESSION_START_COMMAND} — never auto-fired; this is the one-click route`}
+            onClick={fireSessionStart}
+          >
+            {SESSION_START_COMMAND}
+          </button>
+        )}
         {/* M6 WP3 — the split-ratio control. Two collapse toggles (◀ CC / ED ▶)
             flank a cycle button whose label is the current ratio (3:1 / 2:2 / 1:3).
             Collapse + cycle are orthogonal: the cycle steps the three ratios; the
@@ -368,6 +489,21 @@ export function Workspace({
           workspaceId={workspace.id}
           projectPath={workspace.project_path}
           onSessionId={(sid) => onSessionId?.(workspace.id, sid)}
+          // M12 WP3 Phase 4 — the auto-resume action, read off the workspace model this
+          // component already receives. NO new `Workspace` prop was needed: `pending_action`
+          // rides on the record (set on the mint branch of `openReducer`, deliberately
+          // dropped on the focus branch), so threading it is one line rather than a prop
+          // chain through App → Workspace → XtermPane.
+          //
+          // ⚠️ Only the RIGHT-panel terminal is excluded: `TerminalPane` spawns a login
+          // SHELL, not CC, so injecting a CC slash command there would type it at a bash
+          // prompt. That pane simply never receives this prop (it defaults to `null`).
+          pendingAction={workspace.pending_action}
+          // P4.6 — the door that opened this workspace, for the backend's argv-arm gate. Rides
+          // the same workspace record as `pending_action` for the same reason, but stays a
+          // DISTINCT field: `pending_action === null` cannot distinguish the no-fire door from
+          // "no signal", and the argv arm needs that distinction.
+          openIntent={workspace.open_intent}
         />
       </div>
       <RightPanelHost

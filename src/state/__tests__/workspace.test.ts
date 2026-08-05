@@ -187,3 +187,97 @@ describe("closeWorkspace — QoL-WP1", () => {
     expect(next).toBe(s);
   });
 });
+
+describe("pending_action — M12 WP3's auto-resume intent", () => {
+  it("rides onto a NEWLY minted workspace", () => {
+    const s = openWorkspace(emptyWorkspaceList, "/p/a", {
+      kind: "inject",
+      command: "/session-restore",
+    });
+    expect(s.workspaces[0].pending_action).toEqual({
+      kind: "inject",
+      command: "/session-restore",
+    });
+  });
+
+  it("defaults to null when no action is supplied", () => {
+    // Every pre-M12 caller (the dev seam, the mock, other tests) keeps its behavior.
+    expect(
+      openWorkspace(emptyWorkspaceList, "/p/a").workspaces[0].pending_action,
+    ).toBeNull();
+  });
+
+  it("reopening a LIVE workspace does not carry a pending action", () => {
+    // ⚠️ This asserts a DELIBERATE omission, so a future reader does not "fix" it.
+    //
+    // `openWorkspace` focuses an already-open path rather than minting a second workspace,
+    // and a focus has NO SPAWN to apply an action to. Injecting a resumption command into a
+    // session that is already running would type a slash command mid-conversation — strictly
+    // worse than doing nothing. So the action is dropped on this branch by design.
+    const first = openWorkspace(emptyWorkspaceList, "/p/a");
+    const again = openWorkspace(first, "/p/a", {
+      kind: "inject",
+      command: "/session-restore",
+    });
+    expect(again.workspaces).toHaveLength(1);
+    expect(again.workspaces[0].pending_action).toBeNull();
+    expect(again.focusedId).toBe(first.workspaces[0].id);
+  });
+
+  it("the argv arm rides through unchanged", () => {
+    const s = openWorkspace(emptyWorkspaceList, "/p/b", {
+      kind: "argv",
+      flag: "--continue",
+    });
+    expect(s.workspaces[0].pending_action).toEqual({
+      kind: "argv",
+      flag: "--continue",
+    });
+  });
+});
+
+describe("open_intent — P4.6's argv-arm authorization", () => {
+  // ⚠️ WHY THIS IS A SEPARATE FIELD FROM `pending_action`, asserted rather than commented:
+  // `pending_action === null` conflates the no-fire door with "row door, no signal", and the
+  // ARGV arm needs those distinguished — it is resolved in the backend from the unclean flag, so
+  // it does not consult `pending_action` at all. Deriving the door from the action is what
+  // shipped a defect where `⏵` resumed a conversation the user had declined.
+
+  it("rides onto a newly minted workspace as a VALUE", () => {
+    const s = openWorkspace(emptyWorkspaceList, "/p/a", null, "no-fire");
+    expect(s.workspaces[0].open_intent).toBe("no-fire");
+  });
+
+  it("defaults to 'fire', NOT 'no-fire'", () => {
+    // ⚠️ The default direction is load-bearing and counter-intuitive. `no-fire` looks like the
+    // safe default and is wrong: it would silently suppress auto-resume for every caller that
+    // omitted the argument (the dev seam, the mock, older tests) — a feature that stops working
+    // with no error. Contrast `pending_action`, which correctly defaults to null: that withholds
+    // an action nobody supplied, whereas this would withhold an authorization.
+    expect(
+      openWorkspace(emptyWorkspaceList, "/p/a").workspaces[0].open_intent,
+    ).toBe("fire");
+  });
+
+  it("is INDEPENDENT of pending_action — the no-fire door with a null action", () => {
+    // The exact live combination that was broken: the `⏵` door nulls the action (correctly),
+    // and the intent is the only thing left that can tell the backend to suppress the argv arm.
+    // If a future refactor derives the intent from the action, this fails.
+    const s = openWorkspace(emptyWorkspaceList, "/p/a", null, "no-fire");
+    expect(s.workspaces[0].pending_action).toBeNull();
+    expect(s.workspaces[0].open_intent).toBe("no-fire");
+  });
+
+  it("distinguishes the two states a null action cannot", () => {
+    // Same `pending_action` (null), opposite argv authorization — proving the field carries
+    // information the action provably does not. This is the assertion that makes "why two
+    // fields?" answerable from the test suite rather than from a comment.
+    const noFire = openWorkspace(emptyWorkspaceList, "/p/a", null, "no-fire");
+    const rowNoSignal = openWorkspace(emptyWorkspaceList, "/p/b", null, "fire");
+    expect(noFire.workspaces[0].pending_action).toBeNull();
+    expect(rowNoSignal.workspaces[0].pending_action).toBeNull();
+    expect(noFire.workspaces[0].open_intent).not.toBe(
+      rowNoSignal.workspaces[0].open_intent,
+    );
+  });
+});

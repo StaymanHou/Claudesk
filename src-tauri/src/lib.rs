@@ -49,6 +49,7 @@ mod reclassify;
 // Machine-local session state, NOT a user preference — it must never reach a settings
 // surface. Its own file (not a field on `Project`) because `projects.json` writes are
 // whole-file RMW and set-on-open is co-triggered by `add_or_touch` on the same click.
+mod announce;
 mod session_state;
 // M3 WP4: status broadcaster — normalizes each HookEvent to a workspace state,
 // maps cwd→open-workspace, and emits WorkspaceStatusUpdate on `workspace-status`.
@@ -449,6 +450,13 @@ pub fn run() {
             // no `mark_unclean` counterpart — setting is owned by the spawn path, where it
             // is co-located with the `?` guaranteeing a failed spawn leaves no flag.
             session_state::commands::session_state_mark_clean,
+            // M12 WP3: the batched auto-resume announcement. ONE call per picker open
+            // returning every project's predicted action; gate-checked server-side, so an
+            // OFF gate returns {} without statting any project dir. Deliberately a sibling
+            // of `list_projects` rather than a widening of it — two of that command's three
+            // consumers use only `projects.length`, and widening would make them pay N
+            // filesystem stats to learn a number (WP1 Verdict (b)).
+            announce::commands::picker_announce_actions,
             cc_session::commands::cc_spawn,
             // WP9: second-terminal panel — spawns the user's login shell (not claude)
             // into the same SessionRegistry; reuses cc_input/cc_resize/cc_kill.

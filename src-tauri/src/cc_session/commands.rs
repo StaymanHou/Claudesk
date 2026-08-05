@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use base64::Engine as _;
 use tauri::{AppHandle, Emitter, State};
 
-use super::{CcPermissionMode, SessionRegistry};
+use super::{CcPermissionMode, OpenIntent, SessionRegistry};
 
 type Registry = Mutex<SessionRegistry>;
 
@@ -48,17 +48,41 @@ pub fn cc_set_permission_mode(app: AppHandle, mode: CcPermissionMode) -> Result<
     Ok(())
 }
 
+/// Resolve the optional wire `intent` into the enum [`SessionRegistry::spawn`] requires.
+///
+/// ⚠️ **Extracted as a named function so the translation is testable as a VALUE.** The inline
+/// `intent.unwrap_or_default()` it replaces could only be asserted by unwrapping a literal in the
+/// test — which clippy correctly flags as `unnecessary_literal_unwrap`, because such a test
+/// exercises the literal rather than the code. That is the same vacuity this phase already had to
+/// fix once in TypeScript (`expect(null).toBeNull()`), and clippy caught this instance.
+///
+/// An absent value means **Fire**, preserving every pre-M12 caller's behavior; see
+/// [`OpenIntent::default`] for why the opposite default would be a silent feature-killer.
+fn resolve_open_intent(intent: Option<OpenIntent>) -> OpenIntent {
+    intent.unwrap_or_default()
+}
+
 /// Spawn a CC session for `project_path`; returns the new session id.
+///
+/// `intent` (M12 WP3 P4.6) is which picker door opened the workspace. It is **optional on the
+/// wire and defaults to `Fire`**, so every pre-existing caller keeps its behavior; the `⏵`
+/// no-fire door passes `"no-fire"` and gets neither `--continue` nor a consumed flag.
+///
+/// ⚠️ **This parameter is the whole fix for a shipped defect.** Without it the frontend's no-fire
+/// decision stopped at the IPC boundary and the `⏵` door resumed anyway — the frontend was
+/// correct and mutation-proven, and the argv arm simply never saw it.
 #[tauri::command]
 pub fn cc_spawn(
     app: AppHandle,
     registry: State<'_, Registry>,
     project_path: String,
+    intent: Option<OpenIntent>,
 ) -> Result<String, String> {
     let mut reg = registry
         .lock()
         .map_err(|_| "session registry lock poisoned".to_string())?;
-    reg.spawn(app, &project_path).map_err(|e| e.to_string())
+    reg.spawn(app, &project_path, resolve_open_intent(intent))
+        .map_err(|e| e.to_string())
 }
 
 /// Spawn the WP9 second-terminal panel's interactive login shell for `project_path`;
@@ -157,4 +181,88 @@ pub fn cc_kill(
       // the kill, which already succeeded above.
     crate::time_store::commands::record_workspace_close(&app, &session_id);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // M12 WP3 Phase 4 verify-codify — THE IPC BOUNDARY.
+    //
+    // ⚠️ WHY THESE ARE AT THE COMMAND LAYER AND NOT (ONLY) IN `mod.rs`.
+    // P4.6 fixed a shipped defect whose whole character was that a decision computed on the
+    // FRONTEND side of this boundary never reached the backend: the `⏵` no-fire door resumed a
+    // conversation the user had explicitly declined, while `actionForIntent(argv,"no-fire")`
+    // was mutation-proven and green in TypeScript the entire time. `Registry::spawn`'s own
+    // tests are also green either way, because they take `intent` as a parameter and so assume
+    // the very thing that was broken — that it arrives.
+    //
+    // This module is the seam that translates an ABSENT-or-PRESENT wire value into the enum
+    // `spawn` receives. Nothing tested that translation until now; `commands.rs` had zero
+    // tests. The standing lesson from P4.6: **test the boundary, not the pure function.**
+
+    // ⚠️ These drive the REAL `resolve_open_intent`, not an inline unwrap of a literal.
+    // The first draft asserted `Some(NoFire).unwrap_or_default()` directly, which clippy rejected
+    // as `unnecessary_literal_unwrap` — and clippy was right for the reason that matters here:
+    // unwrapping a literal tests the literal, so those assertions would have passed even if
+    // `cc_spawn` stopped calling the translation entirely. Extracting the function is what makes
+    // them real. (Same vacuity this phase fixed once already in TypeScript.)
+
+    #[test]
+    fn an_absent_wire_intent_becomes_fire_at_the_command_layer() {
+        // `None` is what Tauri hands us when the frontend omits `intent` — every pre-M12 caller
+        // — and it must mean "behave as before", i.e. resume when the flag is set.
+        assert_eq!(resolve_open_intent(None), OpenIntent::Fire);
+    }
+
+    #[test]
+    fn an_explicit_no_fire_survives_the_command_layer() {
+        // ⚠️ THE REGRESSION THIS PINS. A `Some(NoFire)` that arrives as `Fire` IS the shipped
+        // defect, reproduced — the `⏵` door resuming a conversation the user declined.
+        assert_eq!(
+            resolve_open_intent(Some(OpenIntent::NoFire)),
+            OpenIntent::NoFire
+        );
+    }
+
+    #[test]
+    fn an_explicit_fire_survives_the_command_layer() {
+        assert_eq!(
+            resolve_open_intent(Some(OpenIntent::Fire)),
+            OpenIntent::Fire
+        );
+    }
+
+    #[test]
+    fn cc_spawn_forwards_the_intent_rather_than_discarding_it() {
+        // Source-position guard, narrow and deliberate: `cc_spawn` needs a live `AppHandle` and
+        // spawns a real `claude`, so it cannot be called from a unit test. What CAN be asserted
+        // is that the parameter reaches `reg.spawn(...)` — the defect's shape was a parameter
+        // that existed and went nowhere, which every value-level test above would still pass.
+        //
+        // Comments are stripped first so this prose cannot satisfy the assertion on the code's
+        // behalf (`[[raw-guard-identifier-satisfied-by-own-comments]]`, hit 3× in this repo).
+        let src = include_str!("commands.rs");
+        let body = src
+            .split("pub fn cc_spawn(")
+            .nth(1)
+            .expect("cc_spawn must exist");
+        let body = &body[..body.find("\n}\n").expect("cc_spawn must terminate")];
+        let code: String = body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            code.contains("resolve_open_intent(intent)"),
+            "cc_spawn must forward the wire intent to the registry; found:\n{code}"
+        );
+        // And it must NOT hardcode a door — the mutation that passed a fully green suite one
+        // layer up in the frontend was exactly this shape.
+        assert!(
+            !code.contains("OpenIntent::Fire") && !code.contains("OpenIntent::NoFire"),
+            "cc_spawn must not hardcode an intent variant; found:\n{code}"
+        );
+    }
 }

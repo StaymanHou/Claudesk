@@ -1,3 +1,4 @@
+import type { AutoResumeAction, OpenIntent } from "./predictAction";
 // WP5 — Workspace data model + WorkspaceList state.
 //
 // The WorkspaceList holds an ARRAY of workspaces and tracks a focused id.
@@ -19,6 +20,41 @@ export interface Workspace {
   cc_session_id: string | null;
   status: WorkspaceStatus;
   display_name: string;
+  /**
+   * M12 WP3 — the auto-resume action to apply when this workspace's CC session spawns,
+   * or `null` to spawn plainly.
+   *
+   * ⚠️ **Lives on the workspace, not threaded through the open reducer's focus path**, and
+   * the reason is structural: `openWorkspace` FOCUSES an already-open workspace rather than
+   * minting a new one (the reopen-dedup), and a focus has no spawn to attach an action to.
+   * Carrying the intent as an argument to that reducer would silently do nothing on the
+   * focus branch — a wrong-looking-right shape. Stored per-workspace, it is consumed once
+   * by the spawn that the workspace's creation triggers.
+   *
+   * One-shot by intent: the spawn path is expected to consume it. It is NOT persisted —
+   * both doors are a per-open routing decision, never a per-project preference (nothing in
+   * `projects.json` records which door was used).
+   */
+  pending_action: AutoResumeAction;
+  /**
+   * M12 WP3 P4.6 — which picker door opened this workspace, forwarded to `cc_spawn` so the
+   * backend can gate the auto-resume **argv** arm.
+   *
+   * ⚠️ **This cannot be inferred from `pending_action`, and trying to was the shipped defect.**
+   * `pending_action === null` conflates two states that need opposite argv behavior:
+   *   • the `⏵` no-fire door — the argv arm must be SUPPRESSED;
+   *   • the row door on a project with no signal — nothing to suppress, and a suppression here
+   *     would be indistinguishable from the first case.
+   * The ambiguity is harmless for the inject arm (both mean "inject nothing"), which is exactly
+   * why the defect hid: `pending_action` was a sufficient carrier for the arm it governed and a
+   * silent non-carrier for the arm it did not.
+   *
+   * The backend gates on this AND the flag, and a `"no-fire"` open deliberately does **not**
+   * consume the flag — so declining to resume leaves the announcement intact for the next open.
+   *
+   * Defaults to `"fire"` so every pre-M12 caller (the dev seam, tests, the mock) is unchanged.
+   */
+  open_intent: OpenIntent;
 }
 
 /** Derive a human-friendly name from a project path (last path segment). */
@@ -67,6 +103,15 @@ export function makeWorkspace(
     cc_session_id: null,
     status: "idle",
     display_name: deriveDisplayName(projectPath),
+    // Default: fire nothing. Every existing caller (the dev seam, tests, the mock) keeps
+    // its current behavior without change, and only the picker's fire door opts in.
+    pending_action: null,
+    // P4.6 — default "fire", NOT "no-fire". These two defaults look inconsistent and are
+    // deliberately not: `pending_action: null` withholds an *action nobody supplied*, whereas
+    // `open_intent` withholds an *authorization*, and defaulting that to "no-fire" would
+    // silently suppress auto-resume for every caller that omitted it — a feature that stops
+    // working with no error, which is the failure direction WP1's verdict warns about.
+    open_intent: "fire",
     ...overrides,
   };
 }
@@ -96,6 +141,8 @@ export const emptyWorkspaceList: WorkspaceListState = {
 export function openWorkspace(
   state: WorkspaceListState,
   projectPath: string,
+  pendingAction: AutoResumeAction = null,
+  openIntent: OpenIntent = "fire",
 ): WorkspaceListState {
   const key = canonicalizeProjectPath(projectPath);
   const existing = state.workspaces.find(
@@ -103,9 +150,20 @@ export function openWorkspace(
   );
   if (existing) {
     // Already open → focus it, mint no new workspace / CC session.
+    //
+    // ⚠️ `pendingAction` is DELIBERATELY DROPPED on this branch, and that is the correct
+    // behavior rather than an oversight: there is no new spawn here, so there is nothing to
+    // apply it to. Firing a resumption command into a session that is already running would
+    // inject a slash command mid-conversation — strictly worse than doing nothing.
+    //
+    // Asserted by `reopening_a_live_workspace_does_not_carry_a_pending_action` so a future
+    // reader does not "fix" the apparent omission.
     return { ...state, focusedId: existing.id };
   }
-  const ws = makeWorkspace(projectPath);
+  const ws = makeWorkspace(projectPath, {
+    pending_action: pendingAction,
+    open_intent: openIntent,
+  });
   return { workspaces: [...state.workspaces, ws], focusedId: ws.id };
 }
 

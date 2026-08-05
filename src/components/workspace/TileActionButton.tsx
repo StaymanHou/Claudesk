@@ -40,28 +40,33 @@ interface TileActionsProps {
   displayName: string;
   /** Ordinary close — clears the unclean flag (a clean exit). */
   onClose: () => void;
-  /** Pause-close — closes and reaps the PTY but LEAVES the session marked unfinished,
-   *  so the next open offers `/resume`. */
+  /**
+   * Pause-close — closes and reaps the PTY but LEAVES the unclean flag in place, so the
+   * next open resumes the conversation.
+   *
+   * ⚠️ **UNIVERSAL as of M12 WP3 Phase 3.5 (operator decision 2026-08-05) — it used to be
+   * gated behind `workflow_features_enabled` and the `workflowEnabled` prop is RETIRED.**
+   * The old rationale, quoted so nobody reinstates it from memory: *"the ⏸ is
+   * workflow-coupled because its whole purpose is to preserve the unclean flag that M12's
+   * auto-resume reads to fire `/resume`; with the workflow layer off there is nothing to
+   * resume into, so the control would be a dead affordance."*
+   *
+   * **That was true when WP2 wrote it and is now false, in two places:**
+   *
+   * 1. The unclean flag's arm is **no longer gated** — M12 WP3 Phase 3.5 decoupled it, so
+   *    with the workflow layer off there IS something to resume into. Leaving the ⏸ gated
+   *    made the flag effectively write-only for a non-workflow user: the flag is set on
+   *    every open (`should_set_unclean_flag`, ungated), the × clears it, and without the ⏸
+   *    no route deliberately declines to clear. Caught by the operator at verify-human —
+   *    they could not find the ⏸ with the gate off.
+   * 2. It fires **`--continue` as spawn argv**, not `/resume`. A bare `/resume` opens an
+   *    interactive session picker (Phase 1, Verdict 2), which is why nothing sends it.
+   *
+   * The × and the ⏸ are now a coherent universal pair: × clears the flag, ⏸ declines to.
+   */
   onPauseClose: () => void;
   /** Site-specific class for the cluster (`filmstrip-pill-actions` / `-tile-actions`). */
   className: string;
-  /**
-   * M10.9 gate — whether the workflow-features layer is ON.
-   *
-   * ⚠️ When `false` the ⏸ is **NOT RENDERED AT ALL**, per the seam contract in
-   * `useWorkflowFeaturesEnabled.ts`: *a gated surface must not exist when the gate is
-   * off* — not hidden, not disabled, not a no-op handler. The ⏸ is workflow-coupled
-   * because its whole purpose is to preserve the unclean flag that M12's auto-resume
-   * reads to fire `/resume`; with the workflow layer off there is nothing to resume
-   * into, so the control would be a dead affordance.
-   *
-   * The × is universal and always renders — closing a workspace is not workflow-coupled.
-   *
-   * Passed IN as a prop rather than read from the hook here: this component renders once
-   * per tile, and one subscription per tile would be N listeners for one app-global
-   * value. The caller reads the hook once. (It also keeps this component pure/testable.)
-   */
-  workflowEnabled: boolean;
 }
 
 /** One action control. Not exported — always rendered via [`TileActions`]. */
@@ -126,7 +131,6 @@ export function TileActions({
   onClose,
   onPauseClose,
   className,
-  workflowEnabled,
 }: TileActionsProps) {
   return (
     // The hover TRIGGER. `onPointerDown` stops here too so a press anywhere in the
@@ -142,15 +146,16 @@ export function TileActions({
         label={`Close ${displayName}`}
         onActivate={onClose}
       />
-      {/* Gated: ABSENT when the workflow layer is off — see `workflowEnabled` above. */}
-      {workflowEnabled && (
-        <ActionControl
-          kind="pause"
-          testId={`${testIdPrefix}-pause-${workspaceId}`}
-          label={`Close ${displayName}, resume later`}
-          onActivate={onPauseClose}
-        />
-      )}
+      {/* UNIVERSAL as of Phase 3.5 — unconditional, no gate. See `onPauseClose` above for
+          why the previous `workflowEnabled &&` wrapper was removed rather than passed
+          `true`: a prop every caller sets to one constant is a dead parameter, which is
+          the WP2 dead-variant lesson repeating. */}
+      <ActionControl
+        kind="pause"
+        testId={`${testIdPrefix}-pause-${workspaceId}`}
+        label={`Close ${displayName}, resume later`}
+        onActivate={onPauseClose}
+      />
     </span>
   );
 }

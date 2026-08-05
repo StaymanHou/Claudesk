@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-03
+updated: 2026-08-05
 ---
 
 # Runtime Registry
@@ -31,6 +31,8 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 - **Last:** 3s (2026-06-16)
 - **Use timeout:** 120000
 - **History:**
+  - 3.5s — 2026-08-04 (147 files / 1806 pass)
+  - 3.6s — 2026-08-04 (145 files / 1776 pass)
   - 3s — 2026-06-16
 
 ## pnpm tauri dev
@@ -78,9 +80,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 3s wall / 2.62s exec (2026-08-03, M12 WP1 Phase 2 verify-codify — 141 files / 1745 pass, 0 fail; +11 for the Verdict (b) consumer-set guard)
+- **Last:** 3.5s wall / 2.66s exec (2026-08-05, M12 WP3 Phase 3 verify-codify — 150 files / 1854 pass, 0 fail; +12 for the ⏵ gutter's parsed-DOM structure suite, +5 earlier for the P3.9 CSS/JSX guards)
 - **Use timeout:** 120000
 - **History:**
+  - 3.5s wall / 2.66s exec — 2026-08-05
+  - 3.5s wall / 2.5s exec — 2026-08-04
   - 3s wall / 2.62s exec — 2026-08-03
   - 1.9s — 2026-08-01 (M11 WP1 P1 verify-auto: 1470 pass, +0 — knowledge-only phase, baseline confirm)
   - 2.0s — 2026-08-01 (M11.5 WP3 P1 verify-codify: +7, 1467 pass — cross-surface copy-promise guard)
@@ -165,11 +169,21 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
   - <1s — 2026-07-28
   - 1s — 2026-06-16
 
+## python3 tooling/autofire-timing/test_probe.py
+
+- **Last:** <1s (2026-08-04, M12 WP3 Phase 1 — 21 tests, pure predicate/verdict logic, no subprocess)
+- **Use timeout:** 60000
+- **History:**
+  - <1s — 2026-08-04
+
 ## cargo test
 
-- **Last:** 19s wall / 4.06s warm exec (2026-08-03, M12 WP1 Phase 1 verify-codify: full `--all-targets` run, 733 pass / 0 fail across 6 targets — +1 for the interleaved-write hazard guard)
-- **Use timeout:** 510000 (covers a cold post-`cargo clean` rebuild; warm runs finish in seconds)
+- **Last:** 8s wall / 4.0s warm exec (2026-08-05, M12 WP3 Phase 3.5 verify-codify: full `--all-targets` run, **781 lib pass** / 0 fail across 6 targets — +4 for the producer→consumer round-trip tests; note `--all-targets` totals 788 across all targets, the lib figure is 781)
+- **Use timeout:** 510000
 - **History:**
+  - 8s wall / 4.0s exec — 2026-08-05 (781 lib pass, +4 round-trip)
+  - 8s — 2026-08-04 (776 pass, warm)
+  - 8s — 2026-08-04 (765 pass, warm)
   - 19s wall / 4.06s exec — 2026-08-03
   - 4.04s warm — 2026-07-31 (M11.5 WP1 P1; full run, 698 pass)
   - ~300s cold (estimate, backgrounded) — 2026-07-31 (WP3.5b P1; first post-`cargo clean` run)

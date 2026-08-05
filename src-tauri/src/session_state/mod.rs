@@ -44,10 +44,31 @@
 //! returns a bare `bool` precisely so no caller can accidentally treat a read failure as
 //! "unclean".
 //!
-//! ## Why every item below carries its own `#[allow(dead_code)]` (WP2 Phase 1 only)
-//! Phase 1 builds the store; Phase 2 wires the callers (spawn, the clean-exit routes) and
-//! WP3 wires [`consume`]. Until then nothing in production calls into this module, and
-//! `-D warnings` fails the build.
+//! ## ✅ The `#[allow(dead_code)]` ledger — CLOSED at M12 WP3 Phase 4 (2026-08-05)
+//! WP2 Phase 1 built the store with every item attributed; the attributes retired as
+//! consumers landed. **Every one is now gone, and `cargo clippy --all-targets -- -D warnings`
+//! passes with none of them** — which is the proof that each item has a real caller rather
+//! than an attribute hiding its absence. The full tally, kept because the *shape* of how this
+//! closed is the transferable part:
+//!
+//! - **Retired at WP2 Phase 2** — `set`/`clear`/the persist wrappers (spawn + the
+//!   clean-exit routes).
+//! - **Retired at WP3 Phase 2** — [`SessionStateMap`], [`read`], [`is_unclean`],
+//!   [`SESSION_STATE_FILE`]: the `announce` module's batch reads the map once in production
+//!   and queries it per project, so these now have real callers.
+//! - **Retired at WP3 Phase 4** — [`consume`], now called by [`consume_and_persist`], which
+//!   the spawn path calls to resolve the auto-resume argv arm. WP2 named this as the one
+//!   attribute expected to outlive that WP; it is gone as predicted.
+//! - **⚠️ DELETED at WP3 Phase 4** — `is_unclean_on_disk`. WP2 attributed it on the stated
+//!   expectation that WP3's fire path would consume it, and **that prediction was wrong**: the
+//!   fire path must read-and-CLEAR, so it uses [`consume_and_persist`] instead. With its
+//!   attribute removed `cargo build` immediately reported it unused, and it was **deleted
+//!   rather than re-attributed** (the WP2 precedent for a dead declaration). See the comment
+//!   at its former site for the full reasoning.
+//! - **Still attributed** — none. Every `#[allow(dead_code)]` this module opened with has now
+//!   either retired to a real caller or had its item deleted, which is exactly what the
+//!   per-item discipline below was for: the one wrong prediction became **visible** instead of
+//!   being absorbed by a blanket allow.
 //!
 //! These are **targeted per-item allows, each naming the consumer that retires it** — NOT
 //! a module-wide `#![allow(dead_code)]`. That distinction is a lesson this codebase already
@@ -69,10 +90,8 @@ use std::path::Path;
 
 /// Basename of the session-state file within the per-identity app-data directory.
 /// Consumer: Phase 2 (the live-file assertions in verify-self) + [`read`]/[`write`].
-#[allow(dead_code)]
 pub const SESSION_STATE_FILE: &str = "session-state.json";
 /// Sidecar temp file used for the atomic write-then-rename. Consumer: [`write`].
-#[allow(dead_code)]
 const SESSION_STATE_TMP_FILE: &str = "session-state.json.tmp";
 
 /// The on-disk map: project path → unclean. A `BTreeMap` (not `HashMap`) so the
@@ -81,7 +100,6 @@ const SESSION_STATE_TMP_FILE: &str = "session-state.json.tmp";
 ///
 /// **Only `true` is ever stored.** [`clear`] removes the key; see the module header.
 /// Consumer: Phase 2 (every wiring site) — retire this attribute then.
-#[allow(dead_code)]
 pub type SessionStateMap = BTreeMap<String, bool>;
 
 /// Read the map. **Every failure mode degrades to an empty map**, never an error:
@@ -94,7 +112,6 @@ pub type SessionStateMap = BTreeMap<String, bool>;
 /// degradation the *only* behavior removes that call-site decision entirely.
 /// Consumer: Phase 2 via [`set_and_persist`]/[`clear_and_persist`]; WP3 reads it directly
 /// for the announce batch. Retire the attribute at Phase 2.
-#[allow(dead_code)]
 pub fn read(data_dir: &Path) -> SessionStateMap {
     let bytes = match std::fs::read(data_dir.join(SESSION_STATE_FILE)) {
         Ok(b) => b,
@@ -111,7 +128,6 @@ pub fn read(data_dir: &Path) -> SessionStateMap {
 /// than a truncated file. Combined with absent-means-clean, the only way to lose a flag
 /// is to lose the whole file — which fails toward "no auto-fire".
 /// Consumer: the persist wrappers below (Phase 2).
-#[allow(dead_code)]
 pub fn write(data_dir: &Path, map: &SessionStateMap) -> Result<(), std::io::Error> {
     let tmp = data_dir.join(SESSION_STATE_TMP_FILE);
     let json = serde_json::to_vec_pretty(map)
@@ -132,7 +148,6 @@ pub fn write(data_dir: &Path, map: &SessionStateMap) -> Result<(), std::io::Erro
 /// effect (the value is the same), which matters because a re-open before any clean exit
 /// must not be able to *un*-set it.
 /// Consumer: Phase 2 task P2.1 (set-on-open, after `SessionRegistry::spawn` succeeds).
-#[allow(dead_code)]
 pub fn set(map: &mut SessionStateMap, project_path: &str) {
     map.insert(project_path.to_string(), true);
 }
@@ -145,7 +160,6 @@ pub fn set(map: &mut SessionStateMap, project_path: &str) {
 /// write — silently wrong. Returns whether a flag was actually removed, so a caller can
 /// skip the write when nothing changed.
 /// Consumer: Phase 2 tasks P2.2/P2.3 (the clean-exit routes).
-#[allow(dead_code)]
 pub fn clear(map: &mut SessionStateMap, project_path: &str) -> bool {
     map.remove(project_path).is_some()
 }
@@ -155,19 +169,40 @@ pub fn clear(map: &mut SessionStateMap, project_path: &str) -> bool {
 /// WP3's auto-fire path uses this — firing consumes the flag, so a `/resume` fires at
 /// most once per unclean exit. A second open with no intervening crash gets the "neither"
 /// arm, which is correct: the mid-flight work was already resumed.
-/// Consumer: **WP3** (the auto-fire path) — this one legitimately outlives Phase 2, so it
-/// is the single attribute expected to survive WP2 close. Named here so that is a recorded
-/// decision rather than an oversight.
-#[allow(dead_code)]
+/// **Consumer as of M12 WP3 Phase 4: [`consume_and_persist`]**, which is what the spawn path
+/// calls. WP2 left this with an `#[allow(dead_code)]` as the single attribute expected to
+/// outlive Phase 2; that attribute is **retired here** now the caller exists — which is the
+/// whole point of having named it rather than letting it sit unexplained.
 pub fn consume(map: &mut SessionStateMap, project_path: &str) -> bool {
     map.remove(project_path).unwrap_or(false)
 }
 
-/// Whether `project_path` is currently marked unclean. A missing key is clean.
-/// Consumer: WP3's `predictAction` input + Phase 2 assertions.
-#[allow(dead_code)]
+/// Whether `project_path` is currently marked unclean, where `project_path` is **already
+/// in canonical key form**. A missing key is clean.
+///
+/// ⚠️ Prefer [`is_unclean_keyed`] from outside this module. This variant takes a raw map key
+/// and does NOT canonicalize, so passing a caller-supplied path here silently matches
+/// nothing — no error, just a flag that never fires. It exists for the in-module transition
+/// helpers (which key through [`key_for`] themselves) and for tests that construct maps
+/// directly.
 pub fn is_unclean(map: &SessionStateMap, project_path: &str) -> bool {
     map.get(project_path).copied().unwrap_or(false)
+}
+
+/// Whether `project_path` is marked unclean, canonicalizing the path first.
+///
+/// **This is the reader for anyone holding a real project path** — e.g. M12 WP3's announce
+/// batch, which reads the map ONCE and then queries it per project (so it must not use
+/// [`is_unclean_on_disk`], which re-reads the file on every call).
+///
+/// Exists because the alternative shape is a documented footgun: [`is_unclean`] takes a bare
+/// map key, and the whole reason [`key_for`] exists is that the spawn path receives the
+/// frontend's raw `projectPath` while the app-quit path reads canonicalized
+/// `WorkspaceRegistry` keys. A reader that forgets to canonicalize matches nothing and
+/// silently disables auto-resume. Making the canonicalizing variant the obvious one to reach
+/// for is cheaper than remembering.
+pub fn is_unclean_keyed(map: &SessionStateMap, project_path: &str) -> bool {
+    is_unclean(map, &key_for(project_path))
 }
 
 // ---------------------------------------------------------------------------
@@ -215,12 +250,51 @@ pub fn clear_and_persist(data_dir: &Path, project_path: &str) -> bool {
     write(data_dir, &map).is_ok()
 }
 
-/// Whether `project_path` is marked unclean, read straight from disk. Keyed through
-/// [`key_for`] so it agrees with what [`set_and_persist`] wrote.
-/// Consumer: WP3's announce batch + `predictAction` input. Retire the attribute then.
-#[allow(dead_code)]
-pub fn is_unclean_on_disk(data_dir: &Path, project_path: &str) -> bool {
-    is_unclean(&read(data_dir), &key_for(project_path))
+// ⚠️ `is_unclean_on_disk` WAS HERE AND WAS DELETED at M12 WP3 Phase 4 (2026-08-05).
+//
+// WP2 kept it behind `#[allow(dead_code)]` on the stated expectation that *"WP3's fire path"*
+// would be its consumer. When Phase 4 actually built that path, the correct primitive turned
+// out to be [`consume_and_persist`] — the fire must not merely *ask* whether a project is
+// unclean, it must **read and clear**, or the same flag fires on every subsequent open. So
+// the predicted consumer never materialized and `cargo build` reported it unused the moment
+// its attribute came off.
+//
+// **Deleted rather than re-attributed**, following the WP2 precedent (`CleanExitRoute::
+// CcExitCommand` was removed at code review, not wired). Re-adding `#[allow(dead_code)]`
+// would have re-created exactly the condition
+// `SURFACE-2026-08-05-FIRE-PATH-PRIMITIVES-HAVE-NO-CALLER-UNTIL-PHASE-4` tracks: a function
+// kept alive by an attribute and a promise about a future phase.
+//
+// If a genuine "just ask, don't consume" caller ever appears, `is_unclean(&read(dir),
+// &key_for(path))` is one line at the call site.
+
+/// **The fire path's primitive (M12 WP3 Phase 4):** read-and-clear, persisted.
+///
+/// Returns whether `project_path` *was* unclean and clears it on disk in one step. This is
+/// what makes auto-resume **consume-once**: a `--continue` fires at most once per unclean
+/// exit, and a second open with no intervening crash correctly gets the "neither" arm,
+/// because the mid-flight work was already resumed.
+///
+/// ⚠️ **Read-and-clear must be ATOMIC with respect to the caller**, which is why this exists
+/// rather than `is_unclean_on_disk` followed by `clear_and_persist`. That two-call shape has
+/// two failure modes this one does not: the flag can be observed as set and then fail to
+/// clear (so it fires again next open), and a reader can interleave between the two calls.
+/// One function, one read-modify-write.
+///
+/// ⚠️ **Failure direction is deliberately "fire, then stay set" rather than "clear, then
+/// don't fire".** If the write fails we still return the value we read, so the resume the
+/// user is expecting happens; the cost is that it may fire once more. The inverse (swallow
+/// the flag on a write failure) would silently lose the resume, which is the outcome this
+/// whole feature exists to prevent. Matches the best-effort posture of its siblings.
+pub fn consume_and_persist(data_dir: &Path, project_path: &str) -> bool {
+    let mut map = read(data_dir);
+    let was_unclean = consume(&mut map, &key_for(project_path));
+    if was_unclean {
+        // Best-effort: see the failure-direction note above. `write` failing means the flag
+        // survives, so the next open fires again — not that this fire is cancelled.
+        let _ = write(data_dir, &map);
+    }
+    was_unclean
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +379,94 @@ impl CleanExitRoute {
 
 #[cfg(test)]
 mod tests {
+    // --- M12 WP3 Phase 4: consume_and_persist, the fire path's primitive ---
+
+    #[test]
+    fn consume_and_persist_returns_the_prior_value_and_clears_it() {
+        let dir = TempDir::new().unwrap();
+        set_and_persist(dir.path(), "/p");
+        assert!(is_unclean(&read(dir.path()), &key_for("/p")), "setup");
+
+        assert!(
+            consume_and_persist(dir.path(), "/p"),
+            "must report the project WAS unclean"
+        );
+        assert!(
+            !is_unclean(&read(dir.path()), &key_for("/p")),
+            "and must have cleared it ON DISK"
+        );
+    }
+
+    #[test]
+    fn consume_and_persist_is_consume_once() {
+        // ⚠️ THE PROPERTY THE WHOLE FIRE PATH RESTS ON. Without it, one unclean exit would
+        // resume on every subsequent open forever — the flag would never be spent.
+        let dir = TempDir::new().unwrap();
+        set_and_persist(dir.path(), "/p");
+
+        assert!(consume_and_persist(dir.path(), "/p"), "first open fires");
+        assert!(
+            !consume_and_persist(dir.path(), "/p"),
+            "second open must fire NOTHING — the mid-flight work was already resumed"
+        );
+        assert!(
+            !consume_and_persist(dir.path(), "/p"),
+            "and stays spent on every open after that"
+        );
+    }
+
+    #[test]
+    fn consume_and_persist_on_a_clean_project_is_false_and_writes_nothing() {
+        let dir = TempDir::new().unwrap();
+        // No file at all — the cold-start state.
+        assert!(!consume_and_persist(dir.path(), "/p"));
+        assert!(
+            !dir.path().join(SESSION_STATE_FILE).exists(),
+            "a no-op consume must not create the file"
+        );
+    }
+
+    #[test]
+    fn consume_and_persist_canonicalizes_like_its_siblings() {
+        // ⚠️ A reader that skips `key_for` silently matches NOTHING — no error, just a flag
+        // that never fires. The spawn path receives the frontend's raw `projectPath` while
+        // the app-quit path reads canonicalized registry keys.
+        //
+        // ⚠️ Uses a REAL directory, deliberately. A first version used "/p" vs "/p/" and
+        // FAILED — correctly: `key_for` delegates to `canonical_key`, which falls back to the
+        // lossy string form when `canonicalize` fails, so two spellings of a NONEXISTENT path
+        // stay distinct by design (a since-deleted dir still keys stably rather than
+        // panicking). The canonicalization this test is about only engages for a path that
+        // exists, which is the case production actually has.
+        let data = TempDir::new().unwrap();
+        let proj = TempDir::new().unwrap();
+        let plain = proj.path().to_string_lossy().to_string();
+        let trailing = format!("{plain}/");
+
+        set_and_persist(data.path(), &trailing);
+        assert!(
+            consume_and_persist(data.path(), &plain),
+            "a trailing-slash variant of a REAL path must resolve to the same key"
+        );
+        assert!(
+            !consume_and_persist(data.path(), &plain),
+            "and it must have been consumed, not merely matched"
+        );
+    }
+
+    #[test]
+    fn consume_and_persist_only_touches_the_named_project() {
+        let dir = TempDir::new().unwrap();
+        set_and_persist(dir.path(), "/a");
+        set_and_persist(dir.path(), "/b");
+
+        assert!(consume_and_persist(dir.path(), "/a"));
+        assert!(
+            is_unclean(&read(dir.path()), &key_for("/b")),
+            "consuming /a must leave /b's flag intact"
+        );
+    }
+
     use super::*;
     use tempfile::TempDir;
 

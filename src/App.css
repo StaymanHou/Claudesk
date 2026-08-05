@@ -565,6 +565,51 @@ body,
   white-space: nowrap;
 }
 
+/* M12 WP3 Phase 5 — the already-open indicator: what this workspace WOULD fire on its
+   next open. A readout, not a control (no pointer affordance, no click target).
+
+   ⚠️ `flex-shrink: 0` is deliberate and `.workspace-header-name` above is the reason.
+   The name ellipsizes but declares no shrink limit, so a shrinkable sibling would let
+   the browser squeeze THIS instead of the name — or, worse, resolve the contest
+   differently at different header widths. P3.9 was exactly this defect one surface
+   over: a conditionally-rendered picker cell let the text stack absorb its width, so a
+   37-char project name truncated while a LONGER 35-char name on the adjacent row did
+   not. Keeping this rigid means the name is the only thing that ever gives. */
+.workspace-header-nextopen {
+  flex-shrink: 0;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  background-color: rgba(110, 168, 255, 0.12);
+  color: #6ea8ff;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* M12 WP3 Phase 5 — the manual /session-start button. Deliberately ONE hardcoded
+   button, not a registry: M13 builds the generic skill palette and either absorbs
+   this or keeps it as a pinned special case.
+
+   Styled as a quiet secondary action rather than a primary one — it is the 2.7% path
+   (the log-mined share of cold opens that start a fresh workflow session), so it must
+   be reachable without competing with the project name for attention. */
+.workspace-session-start {
+  flex-shrink: 0;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 3px;
+  background-color: transparent;
+  color: inherit;
+  opacity: 0.7;
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.workspace-session-start:hover {
+  opacity: 1;
+  border-color: rgba(110, 168, 255, 0.6);
+}
+
 /* M6 WP3 — the split-ratio control in the header. Sits between the project name
    and the status dot; `margin-left:auto` pushes it (and the dot) to the trailing
    edge so the name keeps the left. The row holds the cycle button flanked by the
@@ -3101,22 +3146,95 @@ body,
 }
 
 .picker-recent {
+  /* M12 WP3 — was `column` (name over path). Now a ROW holding exactly TWO children:
+     the name/path stack (`.picker-recent-text`, which carries the announcement on the
+     name's line) and the ALWAYS-PRESENT ⏵ gutter (`.picker-recent-gutter`).
+     ⚠️ "Always present" is the correctness property, not a stylistic choice. The
+     original version rendered the ⏵ conditionally and claimed rows "line up whether
+     or not they announce" — measured FALSE at verify-human 2026-08-05, because
+     `.picker-recent-text` is `flex: 1 1 auto` and absorbed the missing gutter's
+     width. Two children, one of them fixed-width and unconditional, is what actually
+     makes every row resolve to the same geometry. */
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6em;
   flex: 1 1 auto;
   min-width: 0;
   text-align: left;
   padding: 0.75em 1em;
 }
 
+.picker-recent-headline {
+  /* The name + the announcement badge, on one line. The NAME shrinks if it must
+     (long project names ellipsise); the badge does not, so it never gets clipped
+     into meaninglessness. The path below is untouched by either. */
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.55em;
+  width: 100%;
+  min-width: 0;
+}
+
+.picker-recent-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  /* Takes all leftover width. ⚠️ That is exactly why the ⏵ gutter must be RESERVED
+     rather than conditionally rendered — `flex: 1 1 auto` means this stack absorbs
+     the gutter's width whenever the gutter is absent, which is the P3.9 defect
+     (369px on a non-announcing row vs 331px on an announcing one). Reserving the
+     gutter is what makes this `1 1 auto` resolve to the same width on every row.
+     See `.picker-recent-gutter`. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.picker-recent-gutter {
+  /* ⚠️ THE P3.9 FIX (2026-08-05) — reserved on EVERY row, announcing or not.
+     Fixed basis, never flexible: `flex: 0 0 <w>` is the whole point. If this
+     becomes `auto` or gains `flex-grow`, the collapse-when-empty behavior returns
+     and rows silently disagree about name width again.
+     Width matches `.picker-recent-nofire` exactly (1.9em ≈ 28px measured) so the
+     reserved space is neither too small (control overflows) nor too large (dead
+     margin on every row). Kept in sync by `pickerGutterReserved.test.ts`. */
+  flex: 0 0 1.9em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* An EMPTY gutter must not be a click target: without this, the reserved box on a
+     non-announcing row would swallow clicks that belong to the open button — trading
+     the layout defect for a worse interaction one. The ⏵ inside re-enables itself. */
+  pointer-events: none;
+}
+
+.picker-recent-gutter > * {
+  pointer-events: auto;
+}
+
 .picker-recent-name {
   font-weight: 600;
+  /* Shrinks beside the badge rather than pushing it out of the box. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .picker-recent-path {
   font-size: 0.8rem;
   opacity: 0.6;
+  /* Equal width on EVERY row, announcing or not. Two things buy that, and BOTH are
+     required: the badge lives on the name's line (so it never competes with the
+     path), AND the ⏵ gutter is reserved unconditionally (so the parent text stack
+     resolves to one width everywhere).
+     ⚠️ This comment previously claimed "full width on EVERY row" from the placement
+     alone. That was MEASURED FALSE at verify-human 2026-08-05 — the path was 331px
+     on announcing rows vs 369px elsewhere, because the then-conditional gutter let
+     the stack absorb its width. Placement fixed the HALVING; only the reserved
+     gutter fixes the SHRINKING. */
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3211,6 +3329,74 @@ body,
   opacity: 1;
   border-color: #b3402f;
   color: #ff8a7a;
+}
+
+/* ── M12 WP3 — the auto-resume announcement + the ⏵ no-fire door ────────────
+   BOTH LIVE INSIDE the open <button> (operator spec, 2026-08-04: "clicking the
+   title box would just auto-fire by default; have another small button inside the
+   box to open without auto-fire").
+
+   ⚠️ This is NOT a violation of pickerRowOrder.ts's nesting rule. That rule forbids
+   a nested <button> — a button-in-button cannot disambiguate the click. The
+   announcement is an inert <span>; the no-fire control is a <span role="button">
+   with stopPropagation, the same discipline .tile-actions uses in the filmstrip.
+
+   The first attempt put both in their own SIBLING cells and it looked wrong in a
+   way no DOM assertion caught: the extra cells shrank the open button, so paths
+   truncated on announcing rows and rows no longer lined up. Keeping them in-box
+   with `.picker-recent-text { flex: 1 1 auto }` is what preserves alignment. */
+
+.picker-recent-announce {
+  /* A READOUT, not a control: no border, no hover, not focusable. */
+  flex: 0 0 auto;
+  padding: 0.15em 0.5em;
+  border-radius: 3px;
+  background: #2a3a2f;
+  color: #8fd3a3;
+  font-size: 0.72rem;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  line-height: 1.5;
+  white-space: nowrap;
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.picker-recent-nofire {
+  /* Reads as a real control: bordered, hover-lit, keyboard-focusable. The first
+     version rendered as a bare glyph in dead space and read as decoration. */
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9em;
+  height: 1.9em;
+  border: 1px solid #3a3a3a;
+  border-radius: 3px;
+  background: #262626;
+  color: #cfcfcf;
+  /* ⚠️ Sized + weighted for `⊘` specifically, not inherited from the old `⏵`. A filled
+     triangle carries its own optical weight; `⊘` is a thin circle-and-slash and at the
+     previous 0.85rem/0.75 opacity it read fainter than the `×` two cells over — leaving the
+     more consequential control as the quieter one. Measured live at 13.6px before the bump.
+     If the glyph changes again, re-check this pair rather than carrying these numbers over. */
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.picker-recent-nofire:hover {
+  opacity: 1;
+  border-color: #4a7d5c;
+  background: #2a3a2f;
+  color: #8fd3a3;
+}
+
+.picker-recent-nofire:focus-visible {
+  outline: 2px solid #4a7d5c;
+  outline-offset: 1px;
+  opacity: 1;
 }
 
 /* ── M10.9 WP2 — Settings panel (⌘, / Claudesk → Settings…) ─────────────────

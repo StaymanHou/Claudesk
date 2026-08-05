@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useWorkspaceList } from "./state/useWorkspaceList";
+import type { AutoResumeAction, OpenIntent } from "./state/predictAction";
 // M12 WP2 — clear the unclean-exit flag on a clean close (opt-in per route).
 import { markSessionClean, resolveCloseIntent } from "./state/cleanExit";
 import { useWorkspaceStatus } from "./state/useWorkspaceStatus";
@@ -715,9 +716,22 @@ function App() {
   }, []);
 
   // Open from the overlay = append a workspace, then dismiss the overlay.
+  // ⚠️ The second AND THIRD parameters are LOAD-BEARING and TypeScript cannot enforce either.
+  // A handler declared `(projectPath: string) => void` still satisfies the picker's
+  // `(projectPath, action, intent) => void` prop — parameter counts are contravariant, so a
+  // too-narrow handler type-checks and **silently discards the trailing arguments**. That is the
+  // exact shape of bug this milestone has now paid for FOUR times (a dead enum route; a
+  // spawn-order term that was never consumed; this handler dropping the action in Phase 3; and
+  // P4.6's no-fire intent never reaching `cc_spawn` — which shipped and resumed a conversation
+  // the user had explicitly declined). Guarded by `pickerOnOpenArity.test.ts`, not by
+  // remembering.
   const openFromOverlay = useCallback(
-    (projectPath: string) => {
-      openWorkspace(projectPath);
+    (
+      projectPath: string,
+      pendingAction: AutoResumeAction = null,
+      openIntent: OpenIntent = "fire",
+    ) => {
+      openWorkspace(projectPath, pendingAction, openIntent);
       setShowPicker(false);
     },
     [openWorkspace],
