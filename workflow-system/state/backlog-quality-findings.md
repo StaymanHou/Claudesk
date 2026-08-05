@@ -6,15 +6,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m12-wp3-autofire-and-announce — 2026-08-05
 
-## SURFACE-2026-08-05-QUALITY-WP3-INJECT-ARM-REFIRES-ON-RELAUNCH
-- **Source:** feature-review-quality (M12 WP3, MAJOR) — mechanism independently re-verified by the orchestrator in source
-- **Type:** bug (unenforced documented invariant)
-- **Summary:** The **inject arm re-fires on Re-launch.** `handleRelaunch` (`XtermPane.tsx:223-230`) clears `hasSpawnedRef` and the trigger effect bumps `spawnNonce`, so the spawn effect re-runs with `pendingAction` **still closure-captured** — a second `/session-restore` fires 1500 ms later. `workspace.ts:36` documents the field as *"One-shot by intent: the spawn path is expected to consume it"*; **nothing ever clears it**, and it is immutable after mint.
-- **Context:** ⚠️ Worse than a duplicate command: the FIRST `/session-restore` **deletes `.session.md` at its own step 7**, so the second runs against a pointer that no longer exists. The **argv arm is protected** (`consume_and_persist` genuinely read-and-clears), so this is the one place the two arms' consume-once guarantees **diverge** — and the divergence is undocumented. `cancelled` protects the *in-flight* timer, not a *new* run; `autoResumeFire.ts:62` mentions relaunch only as a reason `cancelled` exists, which reads as coverage it does not provide. Not caught by any gate: verify-self exercised the fire path but never clicked Re-launch afterwards.
-- **Suggested action:** Give the inject arm a consume-once of its own. Options: clear `pending_action` on the workspace record once the fire dispatches (making the documented one-shot real), or gate the fire on the same `spawnNonce` value that scheduled it. ⚠️ Prefer whichever makes the two arms' guarantees **symmetric** — the current asymmetry is the actual defect, not the extra command.
-- **Priority:** medium (a real behavioral defect, but reachable only via Re-launch on a workspace whose `.session.md` was already consumed; the failure is a no-op command rather than data loss)
-- **Status:** pending
-
 ## SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS
 - **Source:** feature-review-quality (M12 WP3, MAJOR)
 - **Type:** tech-debt (stale docs at the highest-traffic entry points)

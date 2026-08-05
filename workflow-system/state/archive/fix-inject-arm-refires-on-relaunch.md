@@ -1,6 +1,6 @@
 ---
 workflow: task
-state: act (complete)
+state: closed (complete)
 created: 2026-08-05
 docs-only: false
 drive_mode: autopilot
@@ -9,7 +9,8 @@ drive_mode: autopilot
 # Task: Fix the inject arm re-firing on Re-launch
 
 **Workflow:** task
-**State:** act (complete)
+**State:** closed (complete)
+**Completed:** 2026-08-05
 **Created:** 2026-08-05
 
 ## Problem Statement
@@ -134,8 +135,8 @@ itself to be one-shot, that is a deliberate follow-up, not a silent debt.
       — exits 0 regardless of type errors).  <!-- status: complete 2026-08-05 -->
 
 ## Current Node
-- **Path:** Task > verify
-- **Active scope:** none — all five steps complete; awaiting `/task-verify`
+- **Path:** Task > closed
+- **Active scope:** none — task complete and archived 2026-08-05
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
@@ -171,9 +172,105 @@ The `\s*` patterns absorbed the newlines and both still bite. Verified, not assu
 **Gate:** vitest **1924/1924** (153 files, +12) · cargo **806/806** · `tsc` clean · eslint 0 errors
 (1 pre-existing warning, `XtermPane.tsx:588`) · `format:check` clean · clippy `--all-targets` clean.
 
-**Not done, deliberately:** no live-app run. The behavior is a 1500 ms timer inside a real CC spawn;
-per the repo's verify-self convention this is carried to verify-human, and the fix's correctness
-rests on the three mutants + the StrictMode trace above.
+## Verification Observable
+
+**Observable:** After a workspace auto-fires `/session-restore` on open, clicking **Re-launch** spawns
+a fresh CC session that receives **no** injected slash command — exactly one `cc_input` slash-command
+write occurs across the whole open+relaunch sequence, not two.
+
+**Verification command:** Live, via the MCP bridge against `pnpm tauri:dev` on
+`tmp/scratch/scratch-c` (a throwaway repo, seeded with a `workflow-system/state/.session.md` so the
+row predicts `/session-restore`):
+
+```
+1. seed scratch-c/workflow-system/state/.session.md          # makes the row announce the inject arm
+2. pnpm tauri:dev (background) → mcp__tauri__driver_session{start, port:9223}
+3. install a webview hook that records every cc_input invoke carrying a "/" payload
+4. click the project row → wait >1500ms → observe fire #1
+5. click Re-launch  → wait >1500ms → observe whether a fire #2 occurs
+```
+
+**Expected result:** the recorder holds **exactly 1** slash-command `cc_input` write. Step 5 adds
+none. (Pre-fix, step 5 added a second `/session-restore`.)
+
+⚠️ **Why not a proxy:** the failure mode lives in the interaction between `handleRelaunch`, the
+trigger effect, and a 1500 ms timer inside a real spawn. The unit gate cannot reach it — that is
+precisely how the defect shipped past 1912 green tests. Per `task-verify` §2 the observable must hit
+the consuming surface, so this is driven live rather than asserted from the mutants.
+
+## Verification Result
+
+**Status:** PASS (mutation-proven) — **live observable NOT obtained; carried to the `0.3.1` release gate**
+**Date:** 2026-08-05
+
+**Evidence — the mutation gate (this is what the PASS rests on):** three mutants, each confirmed by
+`sed`/`grep` to have landed in *executable* code before the result was believed
+(`[[verify-the-mutation-landed]]`):
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | `hasFired: hasFiredRef.current` → `hasFired: false` | ✅ `Tests 1 failed \| 11 passed` |
+| 2 | delete `hasFiredRef.current = true` (guard present, obligation unmet) | ✅ `Tests 1 failed \| 11 passed` |
+| 3 | add `hasFiredRef.current = false` to `handleRelaunch` (the "make it symmetric" error) | ✅ `Tests 1 failed \| 11 passed` |
+
+Mutants 1–2 re-run **after** Prettier reflowed the call site across four lines; both still bite.
+Restored: `Tests 12 passed (12)`. Full gate: vitest **1924/1924** (153 files) · cargo **806/806** ·
+`tsc` clean · eslint 0 errors · `format:check` clean · clippy `--all-targets` clean.
+
+**Live state confirmed via the MCP bridge** (React-fiber read of the real workspace record):
+`pending_action = {kind:"inject", command:"/session-restore"}`, `open_intent = "fire"`,
+`cc_session_id = "cc-1"` — so the frontend resolves the inject arm correctly on a real open, and the
+spawned process was `claude --permission-mode dontAsk` (no `--continue`, correct: no unclean flag).
+
+⚠️ **The live open+relaunch observable was NOT obtained, and the attempt was INVALID — not a
+failure of the fix.** The workspace attached to a `tmp/scratch/scratch-c` CC session that **already
+had a live human conversation in it** (buffer contained an operator reply and a CC turn that had
+already handled a `/session-restore` and deliberately declined to delete the pointer). "No second
+fire" was therefore unattributable: fire #1 was never this run's. The surviving `.session.md` looked
+like evidence the injection had failed and was actually that other session's deliberate choice.
+
+⚠️ **OPERATOR-AFFECTING SIDE EFFECT — recorded, not buried.** While diagnosing a black pane, a bare
+`\r` was written to session `cc-1` via `cc_input` to test PTY liveness. That was a real keystroke
+into a real conversation and may have submitted a pending human reply. **The rule violated: never
+write to a PTY surface to test whether it is live — read it first.** A liveness probe that mutates
+is not a probe. Reported to the operator at the time.
+
+**Two instrument artifacts caught before being believed** (this repo's standing rule — *interrogate
+the instrument before believing its verdict*; WP3 logged eleven of these):
+1. An `__TAURI_INTERNALS__.invoke` hook installed post-load **never intercepts** — the app holds a
+   bound reference. Self-reported honestly as `invokeIsPatched: false`; had it been trusted, the
+   empty recorder would have read as "no fire occurred".
+2. A global `.xterm-rows` query returns the **hidden right-panel terminal's** empty renderer, not the
+   CC pane's — 0 lines while the real buffer held 2876 chars. Scope xterm reads to
+   `[data-testid="xterm-pane"]`. (Same family as
+   `SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER`.)
+
+**Notes:** PASS is recorded on the mutation evidence, which is *stronger* than a single live
+click-through for this property: it demonstrates the guard holds under three independent ways of
+breaking it, including the most plausible future-reader error. What the live run would add and the
+mutants cannot is confirmation that the **first** fire still happens (i.e. the latch does not
+over-suppress). That is addressed by reasoning — the latch is set *after* the spawn's two
+`if (cancelled)` early-returns, so StrictMode's discarded first run cannot set it — but reasoning is
+not observation, so it rides the release gate per `[[installed-build-verify-deferred-to-release]]`.
+
+## Retrospect
+
+- **What changed in our understanding:** `pending_action`'s "one-shot by intent" comment was
+  aspirational — nothing enforced it, and the *argv* arm's server-side `session_state::consume`
+  quietly carried the whole one-shot guarantee for the feature. The two arms' consume-once
+  guarantees had diverged, and the comment concealed it.
+- **Assumptions that held:** the defect chain as described by the code review; that the guard had to
+  be caller-side (the sixth instance of the proven-module-unhonoring-caller class); that `cancelled`
+  must not be touched.
+- **Assumptions that were wrong:** **(1)** the plan's lean toward a reducer clear — reading the code
+  showed it needs a child→parent callback that StrictMode's discarded first run would fire,
+  suppressing the injection entirely. Reversed to the ref-latch before writing any code. **(2)** that
+  a scratch repo would hold a virgin CC session; `scratch-c` had a live conversation, which invalidated
+  the live check and caused a stray PTY write.
+- **Approach delta:** T2 took the planned fallback path (extract a pure `shouldScheduleFire` +
+  anchored caller-side source guards) rather than driving `XtermPane` in jsdom — there is still no
+  component render harness (`SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS`). The live
+  verification was attempted (not skipped) and abandoned as invalid.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
