@@ -1,7 +1,7 @@
 # Feature: M12 WP3 — Auto-fire + the picker-row announcement and its second door
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** ✅ **COMPLETED 2026-08-05** — shipped `80b82a1`, reviewed `ba875df`, acceptance pass `119373b`, closed by `/feature-finalize`
 **Created:** 2026-08-03
 **Reconciled:** 2026-08-04 (against WP1's two verdicts + WP2 as-shipped)
 **Planned:** 2026-08-04
@@ -3741,3 +3741,60 @@ empirically-confirmed OFF-invariant guard gap requiring a per-surface guard in t
   readers (the draft's author and this reconciliation's first pass) took it the wrong way. Worth either
   a rename (`cc_output_listener_attached`) or a one-line doc-comment correction at the command, since
   M13's skill-buttons will face the same injection-timing question.
+
+## Retrospect
+
+- **What changed in our understanding:**
+  1. **The milestone's arm-1 command was wrong twice, in two different ways, and only measurement caught
+     either.** Decomposition already knew the roadmap's *"does CC have a resumable conversation?"* signal
+     was unqueryable and permanently true, and replaced it with the explicit unclean flag. But the
+     *replacement* then specified a typed `/resume`, and Phase 1 measured that a bare `/resume` opens an
+     **interactive modal picker** — stranding the operator, strictly worse than firing nothing. The fix
+     (`--continue` at spawn) turned out **better than the original spec**: only one arm needs PTY
+     injection, halving exposure to the milestone's riskiest mechanism.
+  2. **A green suite can be green precisely because it tests the half that works.** The no-fire door
+     fired `--continue` anyway while `actionForIntent(argv,"no-fire") === null` was asserted and passing,
+     `pending_action` was null, and the `⊘` hit-tested to itself. Every frontend claim was true; the
+     intent simply never crossed the IPC boundary. **Fifth instance in M12 of "proven module, unhonoring
+     caller," and the first where the caller did something actively WRONG rather than nothing.**
+  3. **Three planned properties were better inverted than obeyed** — the nested-and-defended `⊘`, the
+     per-arm gate, and keyboard parity via a focusable span rather than a modifier. Each is annotated on
+     its WBS task, because a reader who "restores" the plan reintroduces a defect the build paid for.
+  4. **`cc_ready` does not mean CC is ready** — it is Claudesk's own frontend-listener handshake. Two
+     independent readers took it the wrong way, which is why the timing question became a probe.
+
+- **Assumptions that held:**
+  - WP1's store verdict (`session-state.json`, absent-means-clean, `key_for()` canonicalization) and
+    WP2's `consume()` primitive were both correct and needed no revision — the derisk-first ordering paid
+    off exactly as intended.
+  - `slash_command_bytes` was the right injection seam; **no new primitive was added.**
+  - The `pickerRowOrder` nesting trap was real and worth the attention it got — though it was resolved by
+    *defending* the nesting rather than avoiding it.
+  - WP1's staleness verdict held exactly: display-only, self-correcting, worst case a label that promised
+    something and nothing firing. Observed live at the acceptance pass.
+
+- **Assumptions that were wrong:**
+  - *"Fire on `cc_ready`; a terminal buffers stdin by design"* — false on both clauses (see above). CC is
+    a raw-mode TUI, not a line-buffered shell.
+  - *"`isSiblingOfOpenButton` asserts the nesting rule"* — it is `cell !== "open"`, **tautological**.
+  - *"The write side is gated"* (my own P3.5.7 framing) — false; the flag is set by the *ungated* spawn
+    path. The real gap was that no ungated route DECLINED TO CLEAR. A fix built on my first framing would
+    have hunted for a setter that already existed.
+  - *"Gate the whole feature"* — wrong granularity; the gate belongs per arm.
+
+- **Approach delta:**
+  - **Six phases instead of five** (3.5 inserted for the per-arm gate split), with **three back-loops
+    from a verify gate** (P3.9 layout, P3.5.7 gate scope, P4.6 the IPC boundary). Every one came from
+    verify-human or verify-self, not from the automated gate.
+  - **ELEVEN instrument artifacts across the WP** — 8 during the phases, 3 more at the acceptance pass,
+    each of which initially looked like a finding and was not. Two nearly caused damage: filing
+    deliberately-designed code as a CRITICAL, and reporting a successful gate flip as broken.
+    ⚠️ **The standing rule earned its keep repeatedly: interrogate the instrument before believing its
+    verdict.** In this repo that is not a nicety; it is the difference between a real finding and a
+    weakened guard.
+  - **One process failure worth naming:** the post-review pass was run as verify-**self** and labelled
+    verify-human — the agent produced the verdict rather than the operator. The operator caught it. The
+    5-check operator checklist was never driven, which is why one check (does `--continue` land on the
+    *intended* conversation) remains open as
+    `SURFACE-2026-08-05-CONTINUE-LANDS-ON-INTENDED-CONVERSATION-UNVERIFIED`. **The tell: if the agent is
+    producing the verdict table, it is not verify-human.**

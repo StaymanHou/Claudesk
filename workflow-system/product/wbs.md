@@ -2,7 +2,8 @@
 stage: wbs
 state: complete
 milestone: "Milestone 12: Smart auto-resume + drive mode"
-updated: 2026-08-03  # ✅ WP2 SHIPPED (`0b07e81` + `5e8256e`) — the unclean flag is live end-to-end: set-on-open (after the spawn `?`), opt-in-per-route clearing, the hover-revealed ⏸ (gated on M10.9), Recycle pinned clean for M13. ⚠️ WP2 shipped THREE clean-exit routes, not four — `/exit` was dropped as a dead variant pending a product decision (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). WP3 inherits: `consume()` is the fire-path primitive; the flag is keyed through `key_for()` (canonicalized) so any new reader must use the same helper; precedence must live in the pure `predictAction`, NOT the batch command.
+updated: 2026-08-05  # ✅ WP3 SHIPPED (`80b82a1`; review `ba875df`; acceptance pass `119373b`) — auto-fire is live end-to-end: the picker announces the predicted command before you click, the row fires it on open, a `⊘` second door opens without firing, `/session-start` is never auto-fired but is one click away in the workspace header, and the already-open indicator gives WP2's ⏸ its read-back. ⚠️ **Arm 1 is the `--continue` CLI FLAG, not `/resume`** — a bare `/resume` opens an interactive picker (Phase 1 probe); every `/resume` reference in this doc was corrected 2026-08-05. ⚠️ The `⊘` shipped NESTED-and-defended, not sibling — see the STRUCTURAL note. ⚠️ The gate applies PER ARM: `--continue` ungated (serves every CC user), `/session-restore` gated. Remaining: WP4 (drive-mode cell, parallel track) → WP5 (exit verify + the guard's 4th arm).
+# Prior: 2026-08-03  # ✅ WP2 SHIPPED (`0b07e81` + `5e8256e`) — the unclean flag is live end-to-end: set-on-open (after the spawn `?`), opt-in-per-route clearing, the hover-revealed ⏸ (gated on M10.9), Recycle pinned clean for M13. ⚠️ WP2 shipped THREE clean-exit routes, not four — `/exit` was dropped as a dead variant pending a product decision (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). WP3 inherits: `consume()` is the fire-path primitive; the flag is keyed through `key_for()` (canonicalized) so any new reader must use the same helper; precedence must live in the pure `predictAction`, NOT the batch command.
 ---
 
 # WBS — Milestone 12: Smart auto-resume + drive mode
@@ -111,9 +112,18 @@ This is a **product-intent** change, not an architectural gap, so it does not tr
 
 | # | Condition | Action | Trigger |
 |---|---|---|---|
-| 1 | **Unclean flag set** for this project | `/resume` | **AUTO** on open |
-| 2 | `workflow-system/state/.session.md` present | `/session-restore` | **AUTO** on open |
+| 1 | **Unclean flag set** for this project | **`--continue` CLI flag** (⚠️ NOT `/resume`) | **AUTO** on open |
+| 2 | `workflow-system/state/.session.md` present | `/session-restore` (PTY inject) | **AUTO** on open |
 | 3 | Neither | *(nothing fires)* | **MANUAL** — a `/session-start` skill button inside the workspace |
+
+> ⚠️ **CORRECTED 2026-08-05 (WP3 Phase 1 probe, then shipped that way).** Arm 1 is the **`--continue`
+> argv flag**, not a typed `/resume`. A bare `/resume` typed into CC **opens an interactive session
+> picker** rather than resuming — it needs a value to act non-interactively, so injecting it would
+> strand the operator in a chooser. The two arms therefore differ in **kind**: arm 1 is
+> **argv at spawn** (`claude … --continue`), arm 2 is **PTY injection** after the prompt settles. This
+> distinction is load-bearing for M13 — `AutoResumeAction` is a tagged union (`{kind:"argv"}` vs
+> `{kind:"inject"}`) precisely because `null` alone could not express it.
+> (`SURFACE-2026-08-04-BARE-RESUME-OPENS-AN-INTERACTIVE-PICKER-NOT-A-RESUME`.)
 
 ⚠️ **Precedence: the unclean flag WINS over `.session.md`** — this **reverses** the roadmap's *"both present → prefer `/session-resume`, workflow context is richer."* Operator's reason: **the unclean flag is an explicit user signal; `.session.md` is semi-automated.** An explicit statement of intent outranks a file written by a skill.
 
@@ -134,15 +144,15 @@ workspace opens ─────────────────────�
         │                                                                    │
         ▼                                                                    ▼
    flag CLEARED                                                     flag SURVIVES
-   next open: check .session.md                                next open: fire /resume
+   next open: check .session.md                            next open: spawn with --continue
                                                                then CLEAR (consume-once)
 ```
 
 **Why default-set is the load-bearing choice** (operator's inversion, 2026-08-03): a power loss cannot run any code, so a default-clear design would *miss the exact case the feature exists for*. Default-set means **a crash and a button-click produce identical state** — there is no button-vs-crash divergence to reconcile, and the feature fails toward "resume the mid-flight workflow," which is the safe direction.
 
-**Consequence worth naming:** the button is now *nearly* redundant with force-quitting. Its remaining value is real but narrow — it closes the workspace **cleanly at the process level** (reaps the PTY, no orphaned `claude`) while still marking the session unfinished. Tidy shutdown *and* a `/resume` next time.
+**Consequence worth naming:** the button is now *nearly* redundant with force-quitting. Its remaining value is real but narrow — it closes the workspace **cleanly at the process level** (reaps the PTY, no orphaned `claude`) while still marking the session unfinished. Tidy shutdown *and* a `--continue` next time.
 
-**Consume-once:** firing `/resume` clears the flag immediately (operator-confirmed), same lifecycle as `.session.md`, which `/session-restore` deletes at its step 7.
+**Consume-once:** firing the `--continue` arm clears the flag immediately (operator-confirmed), same lifecycle as `.session.md`, which `/session-restore` deletes at its step 7. ⚠️ **As-built (WP3):** the argv arm consumes via `consume_and_persist` on the Rust side; the inject arm's `pending_action` is documented one-shot but **nothing clears it**, so the two arms' consume-once guarantees diverge — a Re-launch re-fires the inject arm. Recorded as the headline code-quality finding, deferred to a refactor pass.
 
 ### The picker-row UX — announce, then two doors
 
@@ -157,15 +167,45 @@ workspace opens ─────────────────────�
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Predicted | Row announces | Click row | Click `⏵` |
+| Predicted | Row announces | Click row | Click `⊘` |
 |---|---|---|---|
-| unclean flag set | `↻ /resume` | opens + fires `/resume` | opens, no fire |
-| `.session.md` present | `↻ /session-restore` | opens + fires restore | opens, no fire |
-| neither | *(nothing)* | opens plain | **`⏵` ABSENT** |
+| unclean flag set | `↻ continue` | opens + spawns with `--continue` | opens, no fire |
+| `.session.md` present | `↻ /session-restore` | opens + injects restore | opens, no fire |
+| neither | *(nothing)* | opens plain | **`⊘` ABSENT** |
 
-**Why `⏵` is absent on the third row (one rule, not two):** with no auto-fire predicted, **both doors are identical** — a second button would be a control that provably does nothing. The label and the button share one conditional: both appear exactly when there is an action to announce.
+> ⚠️ **AS-BUILT corrections (WP3, 2026-08-05).** Two things in this table changed during the build:
+> the no-fire glyph shipped as **`⊘`**, not `⏵` (this doc used `⏵` throughout planning); and arm 1's
+> label reads **`↻ continue`**, not `↻ /resume` — a row announcing the raw argv flag `--continue` would
+> be meaningless to a reader, and `/resume` is simply wrong (see the correction under the decision
+> table). `announcementFor` is deliberately a **separate function** from `predictAction` for this
+> reason: the label is what the user reads, the action is what runs, and they are allowed to differ.
 
-⚠️ **STRUCTURAL: `⏵` must be a SIBLING of the open-area `<button>`, never nested.** `pickerRowOrder.ts:4-7` documents this as the row's load-bearing rule — nested, *every click meant for it opens the project instead*, a silent 100%-reproducible defect presenting as "the control does nothing." `isSiblingOfOpenButton` already exists to assert it. This affordance is the single most likely thing in M12 to hit that bug, since it lives inside the row whose whole surface is the open button.
+**Why `⊘` is absent on the third row (one rule, not two):** with no auto-fire predicted, **both doors are identical** — a second button would be a control that provably does nothing. The label and the button share one conditional: both appear exactly when there is an action to announce. ✅ **Verified live** at the acceptance pass: the no-prediction row renders neither the label nor the door.
+
+⚠️ **STRUCTURAL — the planned rule and the AS-BUILT solution DIFFER; read this before "fixing" it.**
+The plan said: *`⏵` must be a SIBLING of the open-area `<button>`, never nested* (`pickerRowOrder.ts:4-7`
+documents nesting as a silent 100%-reproducible defect where every click meant for it opens the project
+instead).
+
+**As built, the `⊘` IS nested inside the open `<button>`** — as a
+`<span role="button" tabindex="0" class="picker-recent-nofire">` within the open area's gutter — and it
+is **correct**, because the nesting is explicitly defended:
+
+- `stopPropagation()` on **both** `onPointerDown` **and** `onClick` (the comment at the call site names
+  the exact failure it prevents);
+- an **Enter/Space `onKeyDown` mirror**, since a `span` has no implicit activation;
+- `aria-label` + `title` + `role="button"` + `tabIndex={0}`.
+
+✅ **Verified live** at the acceptance pass: the glyph **hit-tests to itself** (`elementFromPoint` at its
+center returns the span, not the open button), and clicking it opened the workspace while firing
+**nothing** on either channel — no `--continue` on argv, no `/session-restore` in the PTY, and the
+`.session.md` pointer byte-identical (md5) before and after.
+
+⚠️ **Two consequences for a future reader.** (1) `isSiblingOfOpenButton` does **NOT** protect this — it
+is literally `cell !== "open"`, a tautology, and the `⊘` is not a declared row *cell* at all. The real
+protection is the propagation guard. (2) An automated check that searches for a `<button>` containing
+`⊘` will **not find one** and may report a contradictory verdict; the acceptance pass hit exactly that
+and nearly filed designed code as a CRITICAL. Interrogate the instrument before believing it.
 
 ---
 
@@ -210,20 +250,26 @@ workspace opens ─────────────────────�
 
 ---
 
-### WP3: Auto-fire + the picker-row announcement and its second door
-**Description:** The acting half. Announce the predicted command in each picker row, fire it on a normal row click, and offer a sibling `⏵` that opens without firing. Plus the manual `/session-start` button inside the workspace for the no-prediction case.
+### WP3: Auto-fire + the picker-row announcement and its second door ✅ SHIPPED 2026-08-05 (commit `80b82a1`; review `ba875df`; acceptance pass `119373b`)
+**Description:** The acting half. Announce the predicted command in each picker row, fire it on a normal row click, and offer a `⊘` second door that opens without firing. Plus the manual `/session-start` button inside the workspace for the no-prediction case.
 **Milestone:** M12
 **Dependencies:** WP1, WP2
 **Size:** L
 **Tasks:**
-- [ ] 3.1 **The decision function, pure and imported by tests.** `predictAction(uncleanFlag, sessionMdPresent) → "resume" | "restore" | null`, with the **unclean flag winning** over `.session.md`. Mutation-prove the precedence — inverting it must fail a test, since the roadmap specifies the opposite order and a future reader may "fix" it back.
-- [ ] 3.2 **Announce in the row**, next to the project name (operator's placement). Watch the flexing left region: a long command next to a long project name competes for space — measure at realistic name lengths rather than assuming.
-- [ ] 3.3 **The `⏵` second door.** ⚠️ **MUST be a sibling of the open-area `<button>`** (`pickerRowOrder.ts:4-7`; assert via the existing `isSiblingOfOpenButton`). Present **only** when an action is predicted — with no prediction both doors are identical and the button would provably do nothing.
-- [ ] 3.4 **Fire via `slash_command_bytes`** (`cc_session/mod.rs:251`), the reserved injection helper — not a new primitive. Address the timing hazard M10.9 WP4 named: driving a *fresh* CC prompt is timing-sensitive. Operator confirms **CC already handles Esc-interrupt**, so the mitigation is "interrupt a running command," not "cancel before send" — document that honestly rather than implying a pre-send window.
-- [ ] 3.5 **The manual `/session-start` button** inside the workspace (the third row's affordance; `paired-actions-need-paired-affordances` — it is the *inverse* of the two auto-actions, so cutting it leaves a hole). Deliberately **one hardcoded button, not a registry** — M13 builds the generic skill registry and either absorbs this or keeps it as a pinned special case. Rationale for shipping here anyway: M13 is "livable-without" and has slid five times, and without it M12 ships a three-branch design where one branch has no affordance at all.
-- [ ] 3.6 **Keyboard parity.** If Enter opens with fire, there is no keyboard route to the no-fire door. Decide: a modifier (⌥Enter/⌥click) covering both without new chrome, or explicitly defer with a recorded reason.
-- [ ] 3.7 **Show the pending action for an already-open workspace** (filmstrip or workspace header) so the unclean flag is not write-only — without it there is no way to confirm the exit-button click registered. Same deliverable as the announcement, not a separate feature.
-- [ ] 3.8 Gate everything in this WP behind `useWorkflowFeaturesEnabled`.
+- [x] 3.1 **The decision function, pure and imported by tests.** `predictAction(uncleanFlag, sessionMdPresent)`, with the **unclean flag winning** over `.session.md`. Mutation-prove the precedence — inverting it must fail a test, since the roadmap specifies the opposite order and a future reader may "fix" it back.  <!-- status: complete 2026-08-05 — shipped as `src/state/predictAction.ts`, the SINGLE home for precedence. ⚠️ Return type is a tagged union `{kind:"argv",flag:"--continue"} | {kind:"inject",command:"/session-restore"} | null`, NOT the planned `"resume"|"restore"|null` — the two arms differ in KIND (argv at spawn vs PTY inject), which a string could not express. Precedence mutation-proven twice: at build, and again at the acceptance pass (inverting the branches fails 2 tests incl. the named `precedence_the_unclean_flag_wins_when_both_signals_are_present`; mutation confirmed to land in executable code per `[[verify-the-mutation-landed]]`). -->
+- [x] 3.2 **Announce in the row**, next to the project name (operator's placement). Watch the flexing left region: a long command next to a long project name competes for space — measure at realistic name lengths rather than assuming.  <!-- status: complete 2026-08-05 — the space competition was REAL and caught at verify-human (P3.9 back-loop): a conditionally-rendered door let the text stack absorb its width. Fixed as a layout defect inside the announcement. Label reads `↻ continue` / `↻ /session-restore` via `announcementFor`, deliberately a SEPARATE function from `predictAction` (the label is what the user reads, the action is what runs). -->
+- [x] 3.3 **The `⊘` second door.** Present **only** when an action is predicted — with no prediction both doors are identical and the button would provably do nothing.  <!-- status: complete 2026-08-05 — ⚠️ SHIPPED NESTED, not sibling: a `<span role="button" tabindex="0">` inside the open `<button>`'s gutter, defended by `stopPropagation` on BOTH pointerdown and click + an Enter/Space keyboard mirror. See the STRUCTURAL note above — the planned rule and the as-built solution DIFFER, deliberately. `isSiblingOfOpenButton` does NOT protect this (it is `cell !== "open"`, tautological). Reachability verified live at the acceptance pass: hit-tests to itself, fires nothing on either channel, pointer md5 unchanged. -->
+- [x] 3.4 **Fire via `slash_command_bytes`** (`cc_session/mod.rs:251`), the reserved injection helper — not a new primitive. Address the timing hazard M10.9 WP4 named: driving a *fresh* CC prompt is timing-sensitive.  <!-- status: complete 2026-08-05 — no new primitive added. ⚠️ Timing was a PROBE, not an assumption (the draft's "fire on cc_ready" premise was false — `cc_ready` is Claudesk's own frontend-listener handshake and says nothing about CC's readiness). Phase 1 measured a COLD-spawn settle floor; the inject arm waits 1500ms. Arm 1 needs no delay at all because it is argv, not injection. The in-workspace `/session-start` button also fires with NO delay — it targets a session the operator is already looking at. -->
+- [x] 3.5 **The manual `/session-start` button** inside the workspace (the third row's affordance; `paired-actions-need-paired-affordances`). Deliberately **one hardcoded button, not a registry** — M13 builds the generic skill registry and either absorbs this or keeps it as a pinned special case.  <!-- status: complete 2026-08-05 — `sessionStartButton.ts` + wiring in `Workspace.tsx`'s header. ⚠️ Deliberately NOT conditioned on the workspace's signals: the decision table describes what AUTO-FIRES ON OPEN, not what the operator may choose afterwards, and hiding the button exactly when there is a decision to make is backwards. -->
+- [x] 3.6 **Keyboard parity.** If Enter opens with fire, there is no keyboard route to the no-fire door. Decide: a modifier (⌥Enter/⌥click) covering both without new chrome, or explicitly defer with a recorded reason.  <!-- status: complete 2026-08-05 — resolved WITHOUT a modifier: the `⊘` is itself keyboard-reachable (`tabIndex={0}` + an Enter/Space `onKeyDown` mirror), so tabbing to it and pressing Enter is the no-fire keyboard route. No new chord claimed, no deferral needed. -->
+- [x] 3.7 **Show the pending action for an already-open workspace** (filmstrip or workspace header) so the unclean flag is not write-only — without it there is no way to confirm the exit-button click registered.  <!-- status: complete 2026-08-05 — the workspace header's already-open indicator (`nextOpenIndicator`), reading the SAME batched `picker_announce_actions` (no new IPC shape) and re-deriving the label from the SIGNALS via the real `predictAction`, not from the announced string. ⚠️ Re-read per `visible` EDGE, not once on mount: workspaces stay mounted forever, so a mount-only read would go stale for the app's whole life — and this surface exists precisely to reflect a flag the ⏸ may have set since. -->
+- [x] 3.8 Gate everything in this WP behind `useWorkflowFeaturesEnabled`.  <!-- status: complete 2026-08-05 — ⚠️ WITH ONE DELIBERATE EXCEPTION, decided at Phase 3.5: the gate applies PER ARM, not per row. The `--continue` arm reads Claudesk's own store and fires a stock CC CLI flag, so it serves EVERY CC user and is UNGATED; the `/session-restore` arm promises something about `workflow-system/` files and stays GATED. Verified live in BOTH directions at the acceptance pass (gate OFF → gated surfaces absent from the DOM and `picker_announce_actions` returns `{}`; gate ON → returns immediately, no reload). The in-workspace button + indicator are both gated. -->
+
+**⚠️ As-built divergences from this WP's plan, all deliberate** (each is annotated on its task above): the
+return type is a tagged union rather than a string; the `⊘` ships **nested-and-defended** rather than
+sibling; keyboard parity is solved by making the door focusable rather than by a modifier; and the gate
+applies **per arm** rather than to the whole WP. A reader who "corrects" any of these back to the plan
+will reintroduce a defect the build already paid for.
 
 **WP3 → WP4 rationale (⚠️ DERISK-FIRST, corrected 2026-08-03):** Auto-fire now runs BEFORE the drive-mode cell, because it carries every real unknown in the milestone — the first feature-initiated PTY write, injection timing against a fresh CC prompt, the sibling-nesting trap, and an auto-action on the most-glanced surface. WP4 (drive mode) clones an already-live precedent with a settled placement and holds near-zero unknown, so building it first would bank a safe increment while deferring the discovery that can still re-shape the milestone. **The original ordering was build-dependency reasoning mis-stated as risk reasoning** — operator-corrected: *"Always derisk first."* Nothing in auto-fire depends on the drive-mode cell existing; both only need WP1's store verdict + WP2's correct flag.
 
