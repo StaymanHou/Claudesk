@@ -172,3 +172,6 @@ there.
 [SURFACED-2026-08-05] report — `arch.md` exceeds the 300-line size guard (731 lines); read the
 load-bearing-constraints index + headings only. Already tracked as
 `SURFACE-2026-08-03-ARCH-MD-EXCEEDS-SIZE-GUARD-834-LINES`; no new entry filed.
+
+## Session Handoff — 2026-08-05 18:30
+Handed off. See `workflow-system/state/.session.md` to restore.
