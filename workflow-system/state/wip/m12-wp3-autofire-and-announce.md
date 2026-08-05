@@ -3470,17 +3470,124 @@ clean · `cargo fmt --check` clean · `tsc` 0 · `eslint` 0 errors (1 pre-existi
   - [x] verify-codify  <!-- status: complete 2026-08-05 — found exactly 2 verified-live behaviors with NO test, both wiring INSIDE the component (the button's click handler; the indicator's fetch). Added guards scoped to a sliced-out handler body, asserted as CALL shapes, with an extractor that THROWS rather than returning "" (2 meta-tests). 4/4 mutants bite: hardcoded session id, dropped `.catch`, reading the announced string instead of re-deriving, and swapping the batched command for a per-workspace N+1. Deliberately NOT codified: the live execution (proven at verify-self), the ⏸ read-back (operator-verified), and the `visible`-edge runtime (jsdom has no layout engine, so an assertion would pass on broken code — the M11 lesson). vitest 1912 / cargo 799. See "verify-codify log (Phase 5)". -->
 
 ## Current Node
-- **Path:** Feature > review-quality (COMPLETE — 0 CRITICAL / 3 MAJOR / 3 MINOR, all auto-backlogged) → **finalize next**
+- **Path:** Feature > whole-feature acceptance pass (COMPLETE — operator "reviewed. All good.") → **finalize next**
 - **Active scope:** **WP3 is feature-complete and ready to ship.** All 6 phases closed (1, 2, 3, 3.5, 4, 5) with every impl task and all 4 verify gates each; parent-completion invariant verified clean across the whole tree.
   **What WP3 delivered:** the picker announces the predicted resumption command before you click (`↻ continue` / `↻ /session-restore`), the row fires it on open, a `⊘` second door opens without firing, `/session-start` is never auto-fired but is one click away in the workspace header, and the already-open indicator gives WP2's ⏸ the read-back that made the flag write-only before.
   ✅ **SHIPPED 2026-08-05 — commit `80b82a1`** (37 files, +9646/-252) on `main`, tree clean, gate re-verified green AFTER the commit (vitest 1912 · cargo 799). ⚠️ **NOT PUSHED** — origin/main is still at `e82e334`; pushing is the operator's call per the standing policy (commit/push only when asked).
   ⚠️ **Two doc-sync items ride to close:** `wbs.md` + `roadmap.md` still say `/resume` where the code correctly uses `--continue` (`SURFACE-2026-08-04-BARE-RESUME-OPENS-AN-INTERACTIVE-PICKER-NOT-A-RESUME`, **high**), and `SURFACE-2026-08-03-M12-WP2-HARD-KILL-VERIFY-HUMAN-DEFERRED` is now **discharged** (satisfied at Phase 4 verify-human) so it should be resolved per the CHANGELOG-then-delete rule.
 - **Blocked:** none
-- **Unvisited:** none — ship → review-quality → finalize
-- **Open discoveries:** 6 (4 prior + the no-fire/argv boundary gap **now fixed** + the xterm-DOM-rows verification trap)
+- **Unvisited:** none — ship → review-quality → acceptance pass → finalize
+- ✅ **Post-review acceptance pass done 2026-08-05** (operator: "reviewed. All good."). It added a live
+  **per-arm gate-split proof in both directions**, a **live two-session argv proof** of P4.6's boundary
+  fix, and a **precedence mutation proof** — see "Whole-feature acceptance pass" above.
+  ⚠️ **Read that section's scope note before citing the ACK:** the agent mislabelled a verify-self pass as
+  verify-human, and the 5-check operator checklist it produced was **never driven on a running app** (the
+  operator had already closed it). The ACK is feature-level, not per-leaf, and **one check is still
+  unverified by anyone** — that `--continue` lands on the *intended* conversation
+  (`SURFACE-2026-08-05-CONTINUE-LANDS-ON-INTENDED-CONVERSATION-UNVERIFIED`).
+- **Open discoveries:** 7 (4 prior + the no-fire/argv boundary gap **now fixed** + the xterm-DOM-rows verification trap + the `--continue` intended-conversation gap)
 - **Discharged at Phase 4:** the paired two-door check (carried from Phase 3, operator-approved) and WP2's hard-kill confirmation — `SURFACE-2026-08-03-M12-WP2-HARD-KILL-VERIFY-HUMAN-DEFERRED` is now **satisfied** and should be resolved at WP3 close per the CHANGELOG-then-delete rule.
 - ⚠️ **EIGHT instrument artifacts on this WP** (4 in verify-self session 2, two of which nearly caused damage: sampling the wrong DOM element entirely, and almost filing deliberately-designed code as a CRITICAL nesting defect). In this repo, interrogate the check before believing its verdict — and read a cited rule's own text, not a summary of it.
 - ⚠️ **P4.6's own lesson, which the next phase should assume applies to it too:** when a decision is computed on one side of an IPC boundary and acted on the other, the test must drive **the boundary**. Re-asserting the pure function passes before the fix.
+
+## Whole-feature acceptance pass (post-review, pre-finalize) — 2026-08-05
+
+Operator asked for "one more verify-human pass before finalize." Recorded because it produced a
+**live gate-split proof** and a **precedence mutation proof** that no phase gate had done end to end,
+and because of two process facts a future reader should not have to re-derive.
+
+**Operator verdict: "reviewed. All good."** — an approval of the shipped feature at the operator's own
+discretion.
+
+### ⚠️ Scope of that approval, stated precisely (do NOT read it as more than it is)
+
+The agent presented a 5-check operator checklist, **and that checklist was never driven on a running
+app.** The operator closed the dev app during the agent's preceding turn — before the checklist was
+delivered — and then approved. So:
+
+- The ACK is a **feature-level approval**, not per-leaf confirmation of the five checks.
+- ⚠️ **Check 3 remains genuinely unverified by anyone:** whether `--continue` resumes the *intended*
+  conversation. The agent proved the flag reaches argv and that CC resumes *a* prior conversation, but
+  an agent-launched Claudesk inherits `CLAUDE_CODE_CHILD_SESSION`, so its spawned sessions cannot write
+  transcripts — `env -u` at the seeding call does **not** defeat this, because the marker arrives through
+  the app's own launch chain. Confirming *which* conversation requires an operator-launched build.
+  Carried as `SURFACE-2026-08-05-CONTINUE-LANDS-ON-INTENDED-CONVERSATION-UNVERIFIED`.
+
+### ⚠️ Agent process error, recorded rather than smoothed over
+
+**The agent ran a verify-SELF pass and labelled it verify-human.** It gathered the evidence itself and
+handed the operator a finished verdict — inverting the gate's purpose, which is that the operator drives
+and the operator judges. The operator caught it ("I said verify-human … Where's my turn?"). The agent had
+also torn the app down by then, leaving nothing to click. **The tell to watch for: if the agent is
+producing the verdict table, it is not verify-human.**
+
+Second, smaller one: when the dev app exited, the agent's first instinct was again to explain it as its
+own harness dropping the process — the exact Phase 4 error. This time it read the log first (clean exit,
+no panic, focus-probe transitions immediately prior → someone closed the window) and **asked** instead of
+relaunching. Operator confirmed: *"yes, I closed it."* Asking was the correct move; the instinct was not.
+
+### What the pass established that no phase gate had (agent-driven, live, via the MCP bridge)
+
+1. **All 3 decision-table rows, simultaneously, on one screen** — `↻ continue` (scratch-b, flag) /
+   `↻ /session-restore` (scratch-c, pointer) / bare (scratch-a, neither), with `⊘` present on exactly
+   the two announcing rows. The no-prediction row suppresses **both** label and door — one conditional,
+   confirmed live.
+2. **⚠️ The intent DOES cross the IPC boundary — proven by two live sessions side by side.** Same app,
+   same click path: PID `…998` (fired) → `claude --permission-mode dontAsk --continue`; PID `…300`
+   (opened via `⊘`) → `claude --permission-mode dontAsk`, **no flag**. P4.6's fix, observed rather than
+   inferred. Neither terminal contained `/session-restore`, so the no-fire door fires nothing on
+   **either** channel (argv or PTY), and the pointer's md5 was byte-identical before and after.
+3. **Precedence is mutation-proven at the live-build level.** Inverting the two branches in
+   `predictAction` (mutation confirmed to land in *executable* code per
+   `[[verify-the-mutation-landed]]`) fails **2 tests**, including the named
+   `precedence_the_unclean_flag_wins_when_both_signals_are_present`. Restored; tree clean.
+4. **⚠️ The per-arm gate split verified in BOTH directions on one fixture** — the strongest new evidence
+   here. Gate OFF: `/session-start` button, `↻ will continue` indicator and the Docs tab all **absent**
+   from the DOM (panel row reverts to `Editor / Diff / Terminal`), and `picker_announce_actions` returns
+   **`{}`** server-side with a pointer-only project present. Gate ON: the same call immediately returns
+   `{"…/scratch-c":"restore"}`. Both flips took effect **live on the broadcast, with no reload**.
+   ⚠️ The ungated `--continue` arm correctly **still announces with the gate OFF** — that is Phase 3.5's
+   deliberate design (arm 1 reads Claudesk's own store and fires a stock CC flag), NOT a leak.
+5. **Staleness is display-only and self-correcting, observed rather than argued.** A row held
+   `↻ continue` after its flag was cleared on disk; re-opening the picker re-fetched and it became
+   `↻ /session-restore`, with the other two rows correcting simultaneously. Worst case is a label that
+   promises an action which then does not fire — never a wrong action. WP1's Verdict (c), live.
+
+### ⚠️ THREE instrument artifacts in this pass alone — the count is now ELEVEN on this WP
+
+Each initially looked like a finding; none was:
+
+1. **A contradictory nesting verdict from a wrong selector.** `doorNestedInsideOpen: true` alongside
+   `doorParentIsRow: true` cannot both hold. Cause: `⊘` is **not a `<button>`** but a
+   `SPAN.picker-recent-nofire[role=button][tabindex=0]` *inside* the open `<button>`, so a
+   `button`-only search fell back to matching the open button itself. **A DOM walk gave the truth where
+   two flag-based checks had lied.** The nesting is deliberate and correctly defended —
+   `stopPropagation` on **both** `pointerdown` and `click`, plus an Enter/Space keyboard mirror — and it
+   hit-tests to itself. Reporting artifact #1 would have filed designed code as a CRITICAL, which
+   line 3482 records this WP nearly doing once already.
+2. **A "blank terminal" that was a hidden panel.** `ws-1-term-0` measured 0×0 with an 11×6 xterm and an
+   empty buffer — because its ancestor `right-panel-slot--terminal` is `display:none` (the Docs tab was
+   selected). That is the all-workspaces-stay-mounted contract working. The **CC** terminal is the
+   *left* half (`.workspace-left`, 640×648) and was rendering fine. ⚠️ Corollary to
+   `[[…-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER]]`: **first confirm you are on the right pane**, then worry
+   about how you read it.
+3. **Two bridge "timeouts" whose calls had SUCCEEDED.** `webview_execute_js` reported
+   *"Script execution timeout"* for a `__TAURI_INTERNALS__.invoke`, twice — yet a follow-up sync read
+   showed `ok:null` and the gate had in fact flipped. Caveat (d) exactly as documented: the eval's
+   response channel times out, the invoke lands. **Reporting these as failures would have been wrong in
+   the most misleading possible direction — a gate flip reported as broken when it worked.**
+
+**The standing lesson earned its place a third time in one session: interrogate the instrument before
+believing its verdict.**
+
+### Environment
+
+Dev app launched by the agent, later closed by the operator; teardown **PID-scoped** (no pattern kill —
+per `[[verify-self-dev-vs-prod-process-name-collision]]`). Operator's production app (PID 1317) verified
+alive at 5h12m with **all four** of its CC sessions retaining original uptimes, before and after. Ports
+1420/9223 free. Dev gate left at the operator's `true` (verified on disk); prod `settings.json`
+untouched. Fixtures removed; dev flag map back to `{}`. Gate after the pass: vitest **1912/1912**, tree
+clean at `ba875df`.
 
 ## Code-Quality Review — m12-wp3-autofire-and-announce
 

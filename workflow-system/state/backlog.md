@@ -12,6 +12,16 @@
 - **Status:** pending
 - **Pickup shape:** at WP3 close, re-run `cargo clippy --all-targets` with the attributes removed; whatever still warns has no consumer and should be `#[cfg(test)]`-gated or deleted.
 
+## SURFACE-2026-08-05-CONTINUE-LANDS-ON-INTENDED-CONVERSATION-UNVERIFIED
+- **Source:** feature:acceptance-pass (M12 WP3, post-review whole-feature pass 2026-08-05)
+- **Target level:** feature (M12 WP3, arm 1) — verification gap, not a known defect
+- **Type:** verification gap
+- **Summary:** Arm 1's **wiring** is proven (the spawned process carries `claude --permission-mode dontAsk --continue`, observed live side-by-side against a no-fire spawn that lacks it) and CC demonstrably resumes *a* prior conversation. **What is NOT verified is that `--continue` resumes the *intended* conversation** — i.e. the operator's actual last session in that project, rather than an older transcript.
+- **Context:** ⚠️ **The blocker is the agent's harness, not the feature.** An agent-launched Claudesk inherits `CLAUDE_CODE_CHILD_SESSION`, so every CC session it spawns runs with *"Transcript saving is off"* — the app-spawned session writes no transcript, so a later `--continue` cannot land on it. **`env -u CLAUDE_CODE_CHILD_SESSION` at the seeding call does NOT defeat this**: the seed (run outside the app) is written correctly, but the marker still reaches the app through the launch chain, so `--continue` inside the app resolved to an older `/exit` residue rather than the fresh seed. This is why Phase 4 seeded via a direct `claude -p` **outside** the app; the acceptance pass reproduced the same limitation from the other direction. The operator-facing checklist item covering this was **never driven** (the operator had closed the dev app before the checklist was delivered, then approved at feature level).
+- **Suggested action:** One-minute check from an **operator-launched** build (`pnpm tauri:dev` typed by the operator, or the installed `.app`): open a project whose last CC conversation is known and recent, and confirm the resumed history is that conversation. ⚠️ Any *agent-driven* attempt must first prove transcript saving is ON in the app-spawned session — otherwise the check is vacuous in the `[[…-BROWSER-SUPPLIES-THE-ANSWER…]]` sense: a broken implementation and a correct one give the same answer. Natural pickup: the next `/release` gate, alongside the standing installed-`.app` carry per `[[installed-build-verify-deferred-to-release]]`.
+- **Priority:** low (arm 1's wiring is proven and the failure mode is benign — resuming *some* conversation rather than the newest; no evidence of a defect, and the mechanism reads the newest transcript by CC's own contract)
+- **Status:** pending
+
 ## SURFACE-2026-08-05-NO-FIRE-INTENT-DOES-NOT-CROSS-THE-IPC-BOUNDARY
 - **Source:** feature:verify-self (M12 WP3 Phase 4, session 2 — found live via the MCP bridge, reproduced 3×)
 - **Target level:** feature (M12 WP3 Phase 4) — **the live defect itself is scoped as build task P4.6**; this item tracks the transferable *method* lesson
