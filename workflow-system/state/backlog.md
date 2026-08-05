@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m12-wp3-autofire-and-announce (2026-08-05)
+- **Pointer:** 3 MAJOR + 3 MINOR (grouped as 4 entries), auto-backlogged per `drive_mode: autopilot`. Headline: **the inject arm re-fires on Re-launch** — `pending_action` is documented "one-shot by intent" and nothing clears it, so a second `/session-restore` fires against a pointer the first one already deleted (the argv arm IS protected, so the two arms' guarantees diverge). Plus 3 stale doc comments still asserting the pre-Phase-3.5 whole-feature gate at the module's most-read entry points, and one consumer bypassing the `actionFromAnnounced` wire seam. Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp3-autofire-and-announce — 2026-08-05`.
+- **Priority:** medium (3 MAJOR) + low (3 MINOR)
+- **Status:** pending
+- **Pickup shape:** the relaunch re-fire is the natural first item — it is the only finding where prose asserts an invariant nothing enforces, and the fix should make the two arms **symmetric** rather than just suppress the extra command. The other five are mechanical single-line edits.
+
 ## Code-quality findings — m12-wp2-unclean-flag-lifecycle (2026-08-03)
 - **Pointer:** 1 MAJOR deferred with reason — ten `#[allow(dead_code)]` attributes survive at WP2 close against the module's own stated retirement rule. Full finding in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp2-unclean-flag-lifecycle — 2026-08-03`. (The review's CRITICAL and all 3 MINORs were FIXED in refactor, not backlogged; the CRITICAL's residual product question is its own item, `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`.)
 - **Priority:** medium

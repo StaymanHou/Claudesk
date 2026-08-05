@@ -3470,10 +3470,10 @@ clean · `cargo fmt --check` clean · `tsc` 0 · `eslint` 0 errors (1 pre-existi
   - [x] verify-codify  <!-- status: complete 2026-08-05 — found exactly 2 verified-live behaviors with NO test, both wiring INSIDE the component (the button's click handler; the indicator's fetch). Added guards scoped to a sliced-out handler body, asserted as CALL shapes, with an extractor that THROWS rather than returning "" (2 meta-tests). 4/4 mutants bite: hardcoded session id, dropped `.catch`, reading the announced string instead of re-deriving, and swapping the batched command for a per-workspace N+1. Deliberately NOT codified: the live execution (proven at verify-self), the ⏸ read-back (operator-verified), and the `visible`-edge runtime (jsdom has no layout engine, so an assertion would pass on broken code — the M11 lesson). vitest 1912 / cargo 799. See "verify-codify log (Phase 5)". -->
 
 ## Current Node
-- **Path:** Feature > ship (ALL 6 PHASES COMPLETE — every impl task + every verify gate)
+- **Path:** Feature > review-quality (COMPLETE — 0 CRITICAL / 3 MAJOR / 3 MINOR, all auto-backlogged) → **finalize next**
 - **Active scope:** **WP3 is feature-complete and ready to ship.** All 6 phases closed (1, 2, 3, 3.5, 4, 5) with every impl task and all 4 verify gates each; parent-completion invariant verified clean across the whole tree.
   **What WP3 delivered:** the picker announces the predicted resumption command before you click (`↻ continue` / `↻ /session-restore`), the row fires it on open, a `⊘` second door opens without firing, `/session-start` is never auto-fired but is one click away in the workspace header, and the already-open indicator gives WP2's ⏸ the read-back that made the flag write-only before.
-  ⚠️ **Ship must know: NOTHING IS COMMITTED.** The entire WP sits uncommitted on top of `e82e334` — 6 phases' worth. Gate at handoff: **vitest 1912/1912** · **cargo 799/799** · clippy · fmt · tsc · eslint (1 pre-existing warning) · format:check · vite build, all clean.
+  ✅ **SHIPPED 2026-08-05 — commit `80b82a1`** (37 files, +9646/-252) on `main`, tree clean, gate re-verified green AFTER the commit (vitest 1912 · cargo 799). ⚠️ **NOT PUSHED** — origin/main is still at `e82e334`; pushing is the operator's call per the standing policy (commit/push only when asked).
   ⚠️ **Two doc-sync items ride to close:** `wbs.md` + `roadmap.md` still say `/resume` where the code correctly uses `--continue` (`SURFACE-2026-08-04-BARE-RESUME-OPENS-AN-INTERACTIVE-PICKER-NOT-A-RESUME`, **high**), and `SURFACE-2026-08-03-M12-WP2-HARD-KILL-VERIFY-HUMAN-DEFERRED` is now **discharged** (satisfied at Phase 4 verify-human) so it should be resolved per the CHANGELOG-then-delete rule.
 - **Blocked:** none
 - **Unvisited:** none — ship → review-quality → finalize
@@ -3481,6 +3481,89 @@ clean · `cargo fmt --check` clean · `tsc` 0 · `eslint` 0 errors (1 pre-existi
 - **Discharged at Phase 4:** the paired two-door check (carried from Phase 3, operator-approved) and WP2's hard-kill confirmation — `SURFACE-2026-08-03-M12-WP2-HARD-KILL-VERIFY-HUMAN-DEFERRED` is now **satisfied** and should be resolved at WP3 close per the CHANGELOG-then-delete rule.
 - ⚠️ **EIGHT instrument artifacts on this WP** (4 in verify-self session 2, two of which nearly caused damage: sampling the wrong DOM element entirely, and almost filing deliberately-designed code as a CRITICAL nesting defect). In this repo, interrogate the check before believing its verdict — and read a cited rule's own text, not a summary of it.
 - ⚠️ **P4.6's own lesson, which the next phase should assume applies to it too:** when a decision is computed on one side of an IPC boundary and acted on the other, the test must drive **the boundary**. Re-asserting the pure function passes before the fix.
+
+## Code-Quality Review — m12-wp3-autofire-and-announce
+
+**Reviewed:** 2026-08-05, fresh-context subagent against `e82e334..80b82a1` (34 files, product code only).
+⚠️ **Diff-window note:** the WIP's own `git log --reverse` points at a spec commit predating WP1/WP2, so a
+`BASE^..SHIP` window would have re-reviewed two already-closed WPs. Scoped to WP3's own commit deliberately.
+
+**Verdict: 0 CRITICAL · 3 MAJOR · 3 MINOR.** All three MAJORs were independently re-verified by the
+orchestrator before recording (mechanism traced in source, not taken on the reviewer's word).
+
+### Strengths (reviewer's, condensed)
+- Precedence has ONE mutation-provable home (`predictAction.ts`), with the Rust side documented as a
+  *mirror* that does not own it.
+- P4.6's fix is structural rather than defensive: `OpenIntent` travels as its own value because
+  `AutoResumeAction === null` is genuinely ambiguous; both it and `ResumeArm` are named enums, not bools.
+- The `#[allow(dead_code)]` ledger was **closed** — every attribute retired to a real caller, and the one
+  wrong prediction (`is_unclean_on_disk`) deleted rather than re-attributed.
+- Guards are **mutation-derived**: several carry the exact mutant that defeated their predecessor.
+- The redundant-controls masking pattern was fixed by *removing* a control (`arm_available`), not by
+  adding an assertion.
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR**
+
+1. **[`XtermPane.tsx:505-522`] The inject arm RE-FIRES on Re-launch.** `handleRelaunch` clears
+   `hasSpawnedRef` → the trigger effect bumps `spawnNonce` → the spawn effect re-runs with
+   `pendingAction` still closure-captured → a second `/session-restore` 1500 ms later.
+   ⚠️ **Verified by the orchestrator**, and worse than the summary suggests: the FIRST `/session-restore`
+   deletes `.session.md` at its own step 7, so the second fires against a pointer that no longer exists.
+   `workspace.ts:36` documents `pending_action` as *"One-shot by intent: the spawn path is expected to
+   consume it"* — **nothing ever clears it.** The argv arm IS protected (`consume_and_persist` genuinely
+   consumes), so this is the one place the two arms' consume-once guarantees diverge, undocumented.
+   `cancelled` protects the in-flight timer, not a *new* run.
+2. **[`announce/mod.rs:183`, `announce/commands.rs:16`, `lib.rs:454-455`] Three doc comments still assert
+   the pre-Phase-3.5 WHOLE-FEATURE gate** (*"returns an empty map when the gate is off, before any
+   project-dir IO"*). ⚠️ **This is my own Phase 3.5 miss, and the sting is that the module header 140
+   lines above explicitly warns that this exact stale claim will make a reader "restore an early return
+   that suppresses a working feature."** Phase 3.5 renamed two Rust *tests* for precisely this reason and
+   left the three most-read entry points — the `pub fn` docstring, the command docstring, and the
+   invoke-handler registration — saying the opposite of what the code does.
+3. **[`Workspace.tsx:126-141`] The indicator reconstructs SYNTHETIC signals** —
+   `predictAction({ uncleanFlag: announced === "continue", sessionMdPresent: announced === "restore" })` —
+   instead of calling `actionFromAnnounced`, the purpose-built seam whose own docs say both sides should
+   *"agree by construction rather than by two call sites independently remembering what `continue` means."*
+   `announceRow.ts:125` uses the seam correctly; this is the one consumer that skipped it, and it
+   fabricates a signal state that never existed on disk.
+
+**MINOR**
+
+4. **[`session_state/mod.rs:188`]** `is_unclean` is `pub` with no callers outside its module, and its own
+   docstring calls it a footgun — `pub` in a lib crate suppresses `dead_code`, so the ledger discipline
+   that caught `is_unclean_on_disk` cannot see it. Narrow to `pub(crate)`.
+5. **[`XtermPane.tsx:542-551`]** The `exhaustive-deps` suppression comment enumerates every intentional
+   exclusion by name but omits the two new captured props (`pendingAction`, `openIntent`). Safe today
+   (immutable after mint); the list is the mechanism protecting that effect.
+6. **[`pickerRowOrder.ts:52,76`]** Docs still say "the `⏵` cell" after the glyph became `⊘`, and
+   `pickerRowGutterStructure.test.ts:63` still emits `⏵` as its fixture's text node.
+
+### Assessment (reviewer's)
+
+> "High-quality work that advances the codebase rather than accruing debt. […] The test discipline is the
+> strongest I have seen in this repo's recent history — nearly every guard carries the mutant that
+> defeated its predecessor, and two Rust tests were *renamed* because their names overstated their scope.
+> The P4.6 postmortem is exemplary: the fix moved the decision across the boundary that broke rather than
+> adding assertions on the side that was already correct. […] The relaunch re-fire is the one place where
+> a documented invariant is asserted in prose and enforced nowhere."
+
+### Disposition (drive_mode: autopilot → Mode 3)
+
+Per the severity matrix, MAJOR findings **auto-backlog** in Mode 3 (autopilot's only pause is
+verify-human). All 6 findings are recorded in `workflow-system/state/backlog-quality-findings.md` with a
+pointer in `backlog.md`.
+
+⚠️ **Finding 1 is a real behavioral defect, not a style note** — it is the natural first item for any
+refactor pass, and it is the only finding where prose asserts an invariant nothing enforces.
+
+### If you disagree
+
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`/feature-finalize` archives this WIP.
 
 ## Reconciliation log (2026-08-04)
 

@@ -4,6 +4,43 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m12-wp3-autofire-and-announce — 2026-08-05
+
+## SURFACE-2026-08-05-QUALITY-WP3-INJECT-ARM-REFIRES-ON-RELAUNCH
+- **Source:** feature-review-quality (M12 WP3, MAJOR) — mechanism independently re-verified by the orchestrator in source
+- **Type:** bug (unenforced documented invariant)
+- **Summary:** The **inject arm re-fires on Re-launch.** `handleRelaunch` (`XtermPane.tsx:223-230`) clears `hasSpawnedRef` and the trigger effect bumps `spawnNonce`, so the spawn effect re-runs with `pendingAction` **still closure-captured** — a second `/session-restore` fires 1500 ms later. `workspace.ts:36` documents the field as *"One-shot by intent: the spawn path is expected to consume it"*; **nothing ever clears it**, and it is immutable after mint.
+- **Context:** ⚠️ Worse than a duplicate command: the FIRST `/session-restore` **deletes `.session.md` at its own step 7**, so the second runs against a pointer that no longer exists. The **argv arm is protected** (`consume_and_persist` genuinely read-and-clears), so this is the one place the two arms' consume-once guarantees **diverge** — and the divergence is undocumented. `cancelled` protects the *in-flight* timer, not a *new* run; `autoResumeFire.ts:62` mentions relaunch only as a reason `cancelled` exists, which reads as coverage it does not provide. Not caught by any gate: verify-self exercised the fire path but never clicked Re-launch afterwards.
+- **Suggested action:** Give the inject arm a consume-once of its own. Options: clear `pending_action` on the workspace record once the fire dispatches (making the documented one-shot real), or gate the fire on the same `spawnNonce` value that scheduled it. ⚠️ Prefer whichever makes the two arms' guarantees **symmetric** — the current asymmetry is the actual defect, not the extra command.
+- **Priority:** medium (a real behavioral defect, but reachable only via Re-launch on a workspace whose `.session.md` was already consumed; the failure is a no-op command rather than data loss)
+- **Status:** pending
+
+## SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS
+- **Source:** feature-review-quality (M12 WP3, MAJOR)
+- **Type:** tech-debt (stale docs at the highest-traffic entry points)
+- **Summary:** Three doc comments still assert the **pre-Phase-3.5 whole-feature gate** — *"Returns an empty map when the gate is off, before any project-dir IO"* (`announce/mod.rs:183`), *"Returns `{}` when the workflow-features gate is off, without statting any project dir"* (`announce/commands.rs:16`), and the same claim at the invoke-handler registration (`lib.rs:454-455`). Since Phase 3.5 the `--continue` arm is **ungated**, so an OFF gate returns a **non-empty** map.
+- **Context:** ⚠️ The module header 140 lines above the first instance **explicitly warns about this exact claim**: *"The previous text … is no longer true, and a reader who trusts it will 'restore' an early return that suppresses a working feature."* Phase 3.5 renamed two Rust *tests* whose names overstated their scope for the same reason, and missed the three prose copies — which sit at the **most-read** entry points (the `pub fn`'s own docstring, the command's docstring, the registration comment). A reader reaches those before the header.
+- **Suggested action:** Rewrite all three to state the surviving property: *"the OFF gate suppresses only the `.session.md` arm and its stats; the unclean-flag arm is ungated and still returns entries."* Cheap and mechanical.
+- **Priority:** medium (no runtime defect; the code names this as the single most likely thing to be "fixed" back, and these three are the invitation)
+- **Status:** pending
+
+## SURFACE-2026-08-05-QUALITY-WP3-INDICATOR-BYPASSES-THE-WIRE-SEAM
+- **Source:** feature-review-quality (M12 WP3, MAJOR)
+- **Type:** tech-debt (duplicated wire-vocabulary knowledge)
+- **Summary:** The next-open indicator reconstructs **synthetic signals** from the resolved wire value — `predictAction({ uncleanFlag: announced === "continue", sessionMdPresent: announced === "restore" })` (`Workspace.tsx:126-141`) — instead of calling `actionFromAnnounced`, the purpose-built seam at `predictAction.ts:203`.
+- **Context:** That seam's own docs state its reason: both sides should *"agree by construction rather than by two call sites independently remembering what `continue` means."* `announceRow.ts:125` uses it correctly; this is the **one consumer that skipped it**, and it fabricates a signal combination that never existed on disk (it infers "the flag was set" from a resolved string). Functionally equivalent **today** only because precedence is total — a third arm or a precedence change breaks the equivalence silently.
+- **Suggested action:** Replace the reconstruction with `actionFromAnnounced(announced)`. One-line change; the seam already exists and is already tested.
+- **Priority:** medium (no live defect; it is a second home for knowledge the codebase deliberately centralized)
+- **Status:** pending
+
+## SURFACE-2026-08-05-QUALITY-WP3-THREE-MINOR-POLISH-ITEMS
+- **Source:** feature-review-quality (M12 WP3, 3× MINOR)
+- **Type:** tech-debt (polish)
+- **Summary:** (a) `session_state::is_unclean` is `pub` with **no callers outside its own module** while its docstring calls it a footgun — `pub` in a lib crate suppresses `dead_code`, so the ledger discipline that caught `is_unclean_on_disk` **cannot see it**; narrow to `pub(crate)`. (b) `XtermPane.tsx:542-551`'s `exhaustive-deps` suppression comment enumerates every intentional exclusion by name but **omits the two new captured props** (`pendingAction`, `openIntent`) — safe today since both are immutable after mint, but that list is the mechanism protecting the effect. (c) `pickerRowOrder.ts:52,76` still say "the `⏵` cell" after the glyph became `⊘`, and `pickerRowGutterStructure.test.ts:63` still emits `⏵` as its fixture's text node.
+- **Context:** Grouped as one entry because all three are single-line mechanical edits in the same WP. Item (a) is the most interesting: the module's own closing argument is that no item survives without a real caller, and this one does — invisibly, because visibility suppresses the lint that would say so.
+- **Priority:** low (all three)
+- **Status:** pending
+
 # m12-wp1-probe-flag-store-and-announce — 2026-08-03
 
 ## SURFACE-2026-08-03-QUALITY-WP1-MEASUREMENT-SCRIPTS-NOT-IN-REPO
