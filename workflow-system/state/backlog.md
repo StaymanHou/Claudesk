@@ -1,5 +1,16 @@
 # Backlog
 
+## SURFACE-2026-08-05-AGENT-LAUNCHED-DEV-BUILD-SPAWNS-A-BLANK-CC-PANE
+- **Source:** task:verify (the M12 inject-once live check, twice, on two different scratch repos)
+- **Target level:** verification method (a bridge caveat), NOT a product defect
+- **Type:** tooling / verify-self instrument limitation
+- **Summary:** A CC pane spawned by an **agent-launched** `pnpm tauri:dev` can render **completely blank** — screenshot-confirmed, not a selector artifact: `claude` is alive on a live tty (`SNs+`), `cc_input` invokes succeed, the app logs no error, and the status dot stays `Unknown`, while zero bytes paint. Reproduced on `tmp/scratch/scratch-c` and a virgin `tmp/scratch/verify-041`.
+- **Cause (identified, not speculated):** `CLAUDE_CODE_CHILD_SESSION` is set in an agent's own environment and **Claudesk does not strip it** (no reference anywhere in `src-tauri/src/`), so every `claude` the dev build spawns inherits the child-session marker. CC reports it directly in-buffer: *"⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker"*. Extends `[[agent-launched-app-cannot-verify-continue]]` from "cannot verify which conversation `--continue` resumes" to "**the spawned session may not paint at all**".
+- **NOT a product defect — established by dogfooding evidence, not by a single control open:** the operator's Finder-launched prod build has been in continuous daily use across weeks with no such symptom (*"prod 0.3.0 has always been doing just fine; otherwise I'd have reported an incident"*). A Finder/Dock launch carries no marker.
+- **Suggested action:** ⚠️ **Do NOT "fix" this in product code by stripping the var at spawn** without a separate decision — a real user never has it set, so the strip would be dead code justified by an agent's convenience, and it would silently change what a legitimately-nested CC session does. The actionable item is a **verification-method** one: an agent driving live verify-self must (a) expect a possibly-blank pane, (b) never read a blank pane as a product regression, and (c) treat any check that depends on CC's TUI actually rendering as **operator-only**, carried to verify-human / the release gate.
+- **Priority:** medium (blocks no shipping code; it silently invalidates a whole class of agent-driven live verification, and it cost a paused release + two invalid verification runs before being attributed)
+- **Status:** pending — wants folding into `CLAUDE.md`'s MCP-bridge caveat list as caveat (h)
+
 ## Code-quality findings — m12-wp3-autofire-and-announce (2026-08-05)
 - **Pointer:** ~~3 MAJOR~~ **2 MAJOR** + 3 MINOR remaining (grouped as 3 entries), auto-backlogged per `drive_mode: autopilot`. **The headline MAJOR — the inject arm re-firing on Re-launch — was RESOLVED 2026-08-05** (task `fix-inject-arm-refires-on-relaunch`, commit `051d707`; see `CHANGELOG.md`). Remaining: 3 stale doc comments still asserting the pre-Phase-3.5 whole-feature gate at the module's most-read entry points, one consumer bypassing the `actionFromAnnounced` wire seam, and 3 MINOR polish items. Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp3-autofire-and-announce — 2026-08-05`.
 - **Priority:** medium (2 MAJOR) + low (3 MINOR)
