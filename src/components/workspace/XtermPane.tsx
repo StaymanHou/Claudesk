@@ -31,6 +31,7 @@ import {
   injectCommand,
   injectionCommand,
   shouldInject,
+  shouldScheduleFire,
 } from "./autoResumeFire";
 import type { AutoResumeAction, OpenIntent } from "../../state/predictAction";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -166,6 +167,32 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // FIRST activation only — a re-activation (panel/center-stage switch-back) is inert.
     // Reset to false on a real teardown/relaunch so a fresh spawn is allowed again.
     const hasSpawnedRef = useRef(false);
+    // M12 WP3 follow-up — the auto-resume CONSUME-ONCE latch. True once the fire has been
+    // scheduled for this pane; the fire arm refuses to schedule a second one.
+    //
+    // ⚠️ THIS PANE NOW HAS THREE LIFECYCLE FLAGS AND THEY ARE NOT INTERCHANGEABLE. Merging any
+    // two of them re-introduces a shipped defect — read this before "simplifying":
+    //
+    //   • `cancelled` (per-run CLOSURE var in the spawn effect) — orphan de-dup. MUST stay a
+    //     closure: each run needs its OWN flag so a spawn resolving after its run was torn down
+    //     self-kills. A ref version leaked 2 live sessions per pane (see the spawn effect's
+    //     LIFECYCLE block). It is `false` on a relaunch run, so it cannot express consume-once.
+    //   • `hasSpawnedRef` (per-PANE ref) — spawn-once across `active` false→true edges.
+    //     DELIBERATELY CLEARED by `handleRelaunch`, because a relaunch *should* spawn again.
+    //   • `hasFiredRef` (per-PANE ref, this one) — inject-once for the pane's whole lifetime.
+    //     NOT cleared by `handleRelaunch`: a relaunch should spawn again but must NOT re-type
+    //     the slash command. That difference is the entire defect this latch fixes — the
+    //     relaunch chain (clear `hasSpawnedRef` → nonce bump → spawn effect re-runs with
+    //     `pendingAction` still set) fired `/session-restore` a second time, 1500 ms later,
+    //     against a `.session.md` the first fire had already deleted.
+    //
+    // Why a ref and not a `pending_action` clear in the reducer: the reducer cannot know a spawn
+    // happened, so clearing it needs a child→parent callback — and under StrictMode the
+    // DISCARDED first run would fire that clear, leaving the surviving run with a null action
+    // and no injection at all. Consume-once is a property of this pane's lifetime, so it lives
+    // here. `pending_action` therefore stays non-null after the fire; see its doc comment in
+    // `state/workspace.ts` for where the one-shot is actually enforced.
+    const hasFiredRef = useRef(false);
     const [bridge, dispatch] = useReducer(bridgeReducer, initialBridgeState);
 
     // QoL-WP3 — imperative focus handle for the parent Workspace's visible-edge effect.
@@ -505,7 +532,20 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           //
           // ⚠️ The timer is cleared in the effect cleanup — without that, StrictMode's
           // mount→unmount→remount would leave a live timer from the discarded first run.
-          if (injectionCommand(pendingAction) !== null) {
+          //
+          // ⚠️ CONSUME-ONCE lives here, in `shouldScheduleFire`, NOT in the timer's
+          // `shouldInject` check. A relaunch clears `hasSpawnedRef` → the trigger effect bumps
+          // the nonce → THIS effect re-runs with `pendingAction` unchanged (it is a prop; the
+          // reducer never clears it). The timer-time `cancelled` flag is a fresh per-run closure
+          // var and is `false` on that run, so it cannot stop a second fire. The latch is set
+          // BEFORE the timer is created, so two effect runs racing to schedule cannot both win.
+          if (
+            shouldScheduleFire({
+              action: pendingAction,
+              hasFired: hasFiredRef.current,
+            })
+          ) {
+            hasFiredRef.current = true;
             fireTimer = setTimeout(() => {
               if (!shouldInject({ action: pendingAction, cancelled })) return;
               const command = injectionCommand(pendingAction);

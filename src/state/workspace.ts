@@ -31,9 +31,24 @@ export interface Workspace {
    * focus branch — a wrong-looking-right shape. Stored per-workspace, it is consumed once
    * by the spawn that the workspace's creation triggers.
    *
-   * One-shot by intent: the spawn path is expected to consume it. It is NOT persisted —
-   * both doors are a per-open routing decision, never a per-project preference (nothing in
-   * `projects.json` records which door was used).
+   * ⚠️ **One-shot, but enforced by the CONSUMER — not by this field.** This value is never
+   * cleared: it stays set for the workspace's whole life. The earlier wording here said "the
+   * spawn path is expected to consume it", which read as a guarantee and was not one — a
+   * `Re-launch` re-runs the spawn effect with this prop unchanged, and the inject arm fired
+   * `/session-restore` a second time against a `.session.md` the first fire had already deleted.
+   * The one-shot now lives in `XtermPane`'s `hasFiredRef` latch (see `shouldScheduleFire` in
+   * `components/workspace/autoResumeFire.ts`), because consume-once is a property of one pane's
+   * lifetime and a reducer clear would need a child→parent callback that StrictMode's discarded
+   * first run would fire — suppressing the injection entirely.
+   *
+   * ⚠️ **This DIVERGES from the argv arm deliberately.** The `--continue` arm's one-shot is
+   * server-side and stateful (`session_state::consume` returns the prior value *and* clears the
+   * flag), so that arm cannot fire twice even across process restarts. This arm's is client-side
+   * and per-pane. If a future consumer (M13's skill-buttons) needs the *state* to be one-shot
+   * rather than the consumer, that is a deliberate redesign, not a bug to quietly patch here.
+   *
+   * It is NOT persisted — both doors are a per-open routing decision, never a per-project
+   * preference (nothing in `projects.json` records which door was used).
    */
   pending_action: AutoResumeAction;
   /**

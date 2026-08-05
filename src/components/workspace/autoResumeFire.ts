@@ -83,6 +83,39 @@ export function injectionCommand(action: AutoResumeAction): string | null {
   return action?.kind === "inject" ? action.command : null;
 }
 
+/** Whether the spawn effect should SCHEDULE a fire timer at all. */
+export interface ScheduleInputs {
+  /** The action this workspace open resolved to (`null` = nothing to fire). */
+  action: AutoResumeAction;
+  /** Whether this pane has ALREADY scheduled a fire (the consume-once latch). */
+  hasFired: boolean;
+}
+
+/**
+ * Whether to schedule the delayed injection — the **consume-once** gate.
+ *
+ * ⚠️ This is a DIFFERENT question from `shouldInject`, and the split is the whole point:
+ *   • `shouldScheduleFire` — asked ONCE per spawn-effect run, *before* the timer is created:
+ *     "is there an injection to do, and has this pane already done it?"
+ *   • `shouldInject` — asked when the timer FIRES, 1500 ms later: "is this run still alive?"
+ *
+ * Collapsing them re-opens the defect. `shouldInject`'s `cancelled` term is a per-run closure
+ * flag that is `false` on a relaunch run, so it cannot express "this pane already fired" — a
+ * relaunch legitimately re-spawns (`handleRelaunch` clears the spawn latch) and the re-run then
+ * read a still-set `pendingAction` and typed `/session-restore` a second time, against a
+ * `.session.md` the first fire had already deleted.
+ *
+ * Pure so the property is testable without a live PTY or a React render harness. The caller
+ * (`XtermPane`'s spawn effect) must pass `hasFiredRef.current` and set that ref when it
+ * schedules — a caller-side obligation, because the sixth instance of M12's
+ * "proven-module-unhonoring-caller" class is exactly what this function's own correctness
+ * cannot prevent.
+ */
+export function shouldScheduleFire(inputs: ScheduleInputs): boolean {
+  if (inputs.hasFired) return false;
+  return injectionCommand(inputs.action) !== null;
+}
+
 /** How long to wait before injecting. Re-exported so a call site needs one import. */
 export const FIRE_DELAY_MS = INJECT_SETTLE_MS;
 
