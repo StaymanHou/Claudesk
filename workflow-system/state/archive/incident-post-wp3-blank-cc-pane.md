@@ -1,19 +1,48 @@
 ---
 workflow: incident
-state: triage
+state: resolved
 created: 2026-08-05
+resolved: 2026-08-06
 severity: P1
+resolution: no-defect (measurement artifact)
 drive_mode: autopilot
 ---
 
 # Incident: Post-WP3 dev build spawns a blank CC pane
 
 **Workflow:** incident
-**State:** triage
+**State:** resolved
 **Created:** 2026-08-05 18:20
-**Triaged:** 2026-08-06
-**Severity:** P1
-**Status:** Triaged
+**Triaged:** 2026-08-06 (P1)
+**Resolved:** 2026-08-06
+**Severity:** P1 (as triaged — see Resolution for why the assessment was correct on the evidence available)
+**Status:** **Resolved — NO DEFECT (measurement artifact)**
+
+## Resolution
+
+**There was never a product defect.** Both the suspect build (`94e5032`) and the discriminating build
+(`3d8e18c`) spawn CC correctly and paint the pane, pixel-confirmed, recovering **unaided** with no
+resize, click, or focus event.
+
+**Root cause of the false alarm:** every "blank pane" observation in this incident — including the
+three I added while investigating it — was a **single sample taken inside the normal spawn window**,
+before CC had emitted its first bytes. On `94e5032` that window is ~10.5 s wide. Sampling inside it
+yields exactly the reported signature: `0 chars`, 48 empty row divs, a live `claude` on a real tty,
+successful `cc_input`, and no log errors — because nothing is wrong.
+
+**Disposition:**
+- **`0.3.1` release pause: LIFTED.** The blocking defect does not exist.
+- **WP3 (`80b82a1`) exonerated.** The bisect was measuring spawn latency, not a regression.
+- **The inject-once latch (`051d707`) exonerated** — the commit the handoff explicitly refused to
+  excuse a priori. Refusing to excuse it was right; it simply turned out clean.
+- **No mitigation, no codify.** There is no defect to fix and no regression to pin. Writing a test
+  here would codify a non-behavior.
+- **No follow-up SURFACE filed** (neither I11 nor I12) — no root cause requires a fix. The one durable
+  output is a *method* lesson, routed to `/session-reflect` rather than the backlog.
+
+**Severity retrospect:** P1 was the correct call **on the evidence then available** — a blank primary
+surface on an unreleased build, with a bisect that appeared to implicate a specific commit. The error
+was never in the triage; it was in the measurement that fed it.
 
 ## Summary
 
@@ -245,11 +274,14 @@ click, focus, or scroll.
    latency, not a regression.
 3. **Blast radius: NIL, as originally assessed** — but for a different reason than recorded. Not
    "unreleased only": *nothing was ever broken.*
-4. ⚠️ **A genuine open question survives, and it is NOT release-blocking:** why is first content ~10.5 s
-   after click on `94e5032` vs ~4 s on `3d8e18c`? That may be normal CC startup variance (different
-   projects, warm vs cold caches, `--continue` doing more work on a flagged row) or a real latency
-   regression worth a separate look. **It is a performance question, not a correctness one** — file it,
-   don't block on it.
+4. **The latency question is CLOSED, not filed** (operator input at resolve, 2026-08-06). The ~10.5 s
+   vs ~4 s first-paint gap was measured on **cold-compiled debug builds on their first-ever launch**,
+   one of them opening a flagged row where `--continue` does extra work. The operator reports **no
+   perceptible latency in daily dogfooding of the real installed app** — a far larger sample, under
+   the conditions that actually matter. A debug-build timing is not evidence about release
+   performance, and no `SURFACE-` was filed: a speculative anchor against a number that cannot be
+   reproduced in real conditions would be uncloseable (the same reasoning that declined an M10.9 WP4
+   deferral anchor).
 
 ### ⛔ CORRECTION #2 (SUPERSEDED by #3 above — the premise was a sampling error)
 
