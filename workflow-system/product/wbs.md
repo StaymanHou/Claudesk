@@ -459,6 +459,14 @@ was proven the same way. **The channel decision is MADE — this probe does not 
   **wrong at turn 60**, when the operator may legitimately want to change mode; a per-turn prohibition
   would fight that. ⚠️ The probe's own wording did include a prohibition clause and still worked — so
   this is a **durability** judgement, not a measured requirement; record it as such.
+- [ ] 4a.2b **⚠️ Decide HOW the gate reaches the hook — it is a separate process.** This arm is
+  **gated** (4b.6), but `workflow_features_enabled` lives in Claudesk's `settings.json` while the hook
+  runs as its own process at CC's discretion. So "gated" here cannot be a UI conditional. **Preferred
+  shape: when the gate is OFF, simply do not set `CLAUDESK_DRIVE_MODE`** — the surface then stays inert
+  by the *same* mechanism that protects plain-CLI users, needing no second gate check and no way for the
+  two checks to disagree. The alternative (the hook reads the gate itself) adds a file read per turn and
+  a second source of truth. ⚠️ Whichever is chosen, the OFF state must be **absence**, not an emitted
+  line saying "disabled" — the gate contract is *a gated surface must not exist when off*.
 - [ ] 4a.3 **Confirm the env var is the only Claudesk marker.** `cwd`-based hook correlation **cannot**
   distinguish a Claudesk-spawned `claude` from a terminal-spawned one in the same tree
   (`status_broadcaster::resolve_cwd` is longest-ancestor matching). So the env var is not merely the
