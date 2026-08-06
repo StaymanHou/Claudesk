@@ -428,7 +428,7 @@ will reintroduce a defect the build already paid for.
 
 ---
 
-### WP4a: Probe — the signal channel's shape + the cell's UI/UX (mockups)  ✅ VERDICTS RECORDED 2026-08-06 (all 6 tasks `[x]`; Verdicts (c)–(f) in "Probe outcomes"; ⚠️ not yet committed — `feature-ship` writes the commit marker the WP1–WP3 headers carry)
+### WP4a: Probe — the signal channel's shape + the cell's UI/UX (mockups) ✅ SHIPPED 2026-08-06 (commit `5f68720`; review fixes `c1d8af6`) — all 6 tasks `[x]`; Verdicts (c)–(f) in "Probe outcomes"
 **Type:** probe
 **Milestone:** M12
 **Dependencies:** WP1–WP3 (shipped)

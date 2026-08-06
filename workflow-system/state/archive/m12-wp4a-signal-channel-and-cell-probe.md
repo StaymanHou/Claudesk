@@ -1,7 +1,7 @@
 # Feature: M12 WP4a — Probe: the drive-mode signal channel's shape + the picker cell's UI/UX
 
 **Workflow:** feature
-**State:** ship (complete) — committed `5f68720` on `main`
+**State:** COMPLETED 2026-08-06 — shipped `5f68720`, review fixes `c1d8af6`, finalized
 **Created:** 2026-08-06
 **WBS:** `workflow-system/product/wbs.md` → "WP4a" (size S, half-day timebox)
 **Type:** probe — the deliverable is **two recorded verdicts + an operator-chosen mockup**, not shipped
@@ -954,6 +954,51 @@ identities).
 script + `grep`/`git status`). Phase 3's mockup is a rendered artifact the **operator** judges — the
 choice is definitionally theirs, so verify-human is the real gate there, not a shortfall in agent
 verification.
+
+## Retrospect
+
+- **What changed in our understanding:** The WP's stated job was to answer two questions. Its *actual*
+  value turned out to be **finding four things that were already wrong** — a hook-plumbing premise
+  (`DriveMode`'s vocabulary), a safety net that existed only in prose (the known-mode guard), a
+  never-block-CC comment that inverted the truth, and a mockup framing that asked the wrong question
+  ("which option preserves the path?" when the path was *already* ellipsised). None of those were on the
+  task list.
+
+- **Assumptions that held:** The channel decision (proven pre-WP) needed no revisiting. Derisk-first
+  ordering was right — every downstream WP's shape changed based on what these four phases found. The
+  operator's "decide the cell with mockups, not prose" instruction was vindicated hard: the drawing
+  **reversed** the framing, and Option 3 read well in prose while being measurably the worst.
+
+- **Assumptions that were wrong:**
+  1. ⚠️ **"There is nothing to codify" — believed TWICE, wrong both times.** Phase 3 and Phase 4 each
+     entered verify-codify expecting a no-op; each found a real unguarded property in *shipping* code
+     (`MODEL_UNSET_LABEL`'s derivation; `color_tty_env`'s exclusion). **"The phase only produced prose" is
+     true and irrelevant — prose that makes factual claims about shipping code is testable.**
+  2. ⚠️ **"The verdicts are recorded, therefore the record is usable."** Four verify-self passes found
+     **7 BLOCKING** sufficiency failures, all one shape: *a correction written where it was discovered but
+     not where it would be read.* A builder enters at `### WP4b`, not at "Probe outcomes".
+  3. ⚠️ **"The fixture behaves like the real script."** They agreed on telemetry — which is what I
+     compared, across 6 event shapes — and disagreed on the one property I then recorded as proven.
+
+- **Approach delta:** The plan was 4 phases of probe-and-record; that is what shipped. What the plan did
+  **not** anticipate was the verification cost: **10 instrument failures** across the WP (a broken AF_UNIX
+  listener ×2 independent agents, a missing `+x` bit giving 8 false passes, `env $VAR` collapsing two
+  assignments, `PIPESTATUS` after a pipe, two greps false-positiving, a `sed`-mangled rustfmt diff), and
+  **four** verify-self passes on a phase whose deliverable was prose. The WP's real lesson is that a
+  probe's *record* needs the same adversarial verification as its code — arguably more, since nothing
+  compiles it.
+
+## Communicate
+
+> **Feature complete:** M12 WP4a (probe — the drive-mode signal channel + picker cell) has shipped. It
+> settles seven operator-approved verdicts that WP4b and WP4c build from: the emission goes in the shared
+> `claudesk-hook.pl` above its line-44 early exit, the gate reaches the hook by *absence*, the injected
+> sentence states a fact rather than a prohibition, an unset mode emits nothing, and the cell stacks model
+> + drive mode in the existing 7.5em column with labels shown only when unset. It also caught a **WP4b
+> blocker** (`DriveMode` serializes 2 of 4 variants to values no skill recognizes) and landed 4
+> mutation-proven tests. To see it: `workflow-system/product/wbs.md` → "Probe outcomes" → Verdicts (c)–(f).
+
+*Requester = operator — closure notice for self-record.*
 
 ## Code-Quality Review — m12-wp4a-signal-channel-and-cell-probe
 
