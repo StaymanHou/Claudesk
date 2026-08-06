@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-05
+updated: 2026-08-06
 ---
 
 # Runtime Registry
@@ -46,9 +46,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm tauri build
 
-- **Last:** 107s (2026-08-03, /release v0.3.0: cargo clean removed 0 files [tree already clean] + cold build, 1m21s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed)
+- **Last:** 110s (2026-08-06, /release v0.3.2: cargo clean removed 81435 files / 25.9 GiB + cold build, 1m18s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed)
 - **Use timeout:** 600000
 - **History:**
+  - 110s — 2026-08-06 (/release v0.3.2: cargo clean 81435 files/25.9GiB, 1m18s rust + bundle, signed)
   - 107s — 2026-08-03 (/release v0.3.0: cargo clean 0 files, 1m21s rust + bundle, signed)
   - 103s — 2026-07-20 (/release v0.2.9: cargo clean 11.8GiB, 1m21s rust + bundle, signed)
   - 102s — 2026-07-18 (/release v0.2.8 no-op target: cargo clean 1.6GiB, 1m18s rust + bundle, signed)
