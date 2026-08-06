@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   MODEL_ALIAS_HINTS,
+  MODEL_UNSET_LABEL,
   MODEL_UNSET_PLACEHOLDER,
   normalizeModelValue,
   displayModelValue,
@@ -89,6 +90,43 @@ describe("displayModelValue — unset shows the placeholder, not literal text", 
 
   it("has a placeholder that names the inherit behavior", () => {
     expect(MODEL_UNSET_PLACEHOLDER).toMatch(/default/i);
+  });
+
+  // ── The row label must stay DERIVED from the placeholder ──────────────────
+  //
+  // `MODEL_UNSET_LABEL` exists only to be a shorter form of `MODEL_UNSET_PLACEHOLDER`,
+  // and its whole value is the DERIVATION: the two were independent hardcoded strings
+  // until code review caught them drifting (see the constant's doc comment). Nothing
+  // tested that — measured at M12 WP4a Phase 3 verify-codify: the constant had **zero**
+  // test references, and replacing it with a hardcoded `"Inherit"` passed all 1924 tests.
+  //
+  // ⚠️ That exact drift is not hypothetical. WP4a's own decision mockup drew this cell as
+  // `inherit` — a word that appears NOWHERE in the UI — and the wrong label survived into
+  // a published artifact used to make a product decision. The real label is `"Default"`.
+  //
+  // Load-bearing for M12 WP4c, which adds a SECOND label to this cell (drive mode) under
+  // Verdict (h) "label only when unset". That doubles the drift surface, so the derivation
+  // rule needs a guard before the second label lands — not after.
+  it("derives the row label from the placeholder rather than hardcoding it", () => {
+    // The relationship, asserted as a relationship — not as two literals that could
+    // both be edited to agree on something wrong.
+    expect(MODEL_UNSET_PLACEHOLDER.startsWith(MODEL_UNSET_LABEL)).toBe(true);
+    expect(MODEL_UNSET_LABEL.length).toBeLessThan(
+      MODEL_UNSET_PLACEHOLDER.length,
+    );
+    // The label is the placeholder's leading phrase, with the parenthetical dropped.
+    expect(MODEL_UNSET_LABEL).toBe(MODEL_UNSET_PLACEHOLDER.split(" (")[0]);
+    // It must remain a bare phrase — no parenthetical survived the split.
+    expect(MODEL_UNSET_LABEL).not.toContain("(");
+  });
+
+  it("renders the unset row label as the product's actual word", () => {
+    // Pinned as a literal ON PURPOSE, in addition to the derivation test above. The
+    // derivation alone cannot catch a rename of BOTH constants together, and this string
+    // is what the operator reads in the picker — a silent change to it is a UI change.
+    expect(MODEL_UNSET_LABEL).toBe("Default");
+    // And the value-vs-unset branch actually uses it: a set value renders as itself.
+    expect(displayModelValue("opus")).toBe("opus");
   });
 });
 

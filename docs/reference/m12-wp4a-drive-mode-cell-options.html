@@ -1,0 +1,440 @@
+<meta charset="utf-8">
+<title>M12 WP4a — picker-row drive-mode cell: 4 options</title>
+<!-- ⚠️ The charset declaration above is LOAD-BEARING, not boilerplate. This file is
+     valid UTF-8 on disk and carries 12 distinct non-ASCII glyphs (⊘ ↻ × → ▾ − — ≈ · ─ Δ ⚠).
+     Opened as a local file — or served with a bare `Content-type: text/html` — a browser
+     with no declaration falls back to windows-1252 and EVERY one of them mojibakes: ⊘
+     becomes âŠ˜ and × becomes Ã—. Those two are the ⊘ no-fire control and the × remove
+     button, i.e. two of the five cells this mockup exists to compare. Measured at
+     verify-self 2026-08-06: 58 mojibake sequences page-wide, `characterSet` =
+     "windows-1252". The publish pipeline supplies its own <head>, which is why this was
+     invisible in the published copy and broken in the saved one. -->
+<style>
+  /* ── Annotation layer (NOT product palette) ─────────────────────────── */
+  :root{
+    --anno:#ff3d9a;            /* magenta — absent from Claudesk's tokens */
+    --page:#141414;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;padding:32px 24px 64px;
+    background:var(--page);
+    color:#e8e8e8;
+    font-family:Inter,Avenir,Helvetica,Arial,sans-serif;
+    font-size:16px;line-height:24px;
+  }
+  h1{font-size:1.05rem;font-weight:600;margin:0 0 4px;letter-spacing:.01em}
+  .sub{font-family:var(--mono);font-size:.75rem;color:var(--anno);margin:0 0 28px}
+  .sub b{color:#ff8ec4;font-weight:400}
+
+  .grid{display:flex;flex-direction:column;gap:34px;max-width:700px}
+
+  .opt{display:flex;flex-direction:column;gap:0}
+  .opt-hd{
+    font-family:var(--mono);font-size:.74rem;color:var(--anno);
+    display:flex;gap:10px;align-items:baseline;margin-bottom:7px;
+  }
+  .opt-hd .n{font-weight:700}
+  .opt-hd .verdict{color:#8a8a8a}
+  .trap .opt-hd{color:#ff6b6b}
+
+  /* ── PRODUCT FRAME — real Claudesk tokens + geometry ────────────────── */
+  .frame{
+    /* ⚠️ The frame must be SHRINKABLE for its own `overflow-x:auto` to engage.
+       It was `width:592px` with `max-width:none`, which meant scrollWidth always
+       equalled clientWidth — so 0 of 8 frames ever self-scrolled and the overflow
+       escaped to the body: measured at verify-self 2026-08-06 as documentElement
+       scrollWidth 616 > clientWidth 600, a real 16px pan (window.scrollX === 16),
+       breaking below a 616px viewport. `max-width:100%` is what makes the auto real;
+       the TRUE 592px row width now lives on `.row` inside, so the geometry the mockup
+       is measuring is unchanged — only the container yields. */
+    max-width:100%;
+    background:#1e1e1e;       /* :root background-color */
+    padding:10px;
+    border:1px dashed rgba(255,61,154,.28);   /* annotation: frame edge, not product */
+    overflow-x:auto;
+  }
+  /* real row width: 640px container − 1.5rem×2 padding. Pinned HERE (not on .frame) so
+     the measured geometry survives a narrow viewport while the frame scrolls. */
+  .row{display:flex;align-items:stretch;gap:0.4rem;width:592px}   /* .picker-recent-row */
+  .open{
+    display:flex;flex-direction:row;align-items:center;gap:0.6em;
+    flex:1 1 auto;min-width:0;text-align:left;padding:0.75em 1em;
+    background:#2a2a2a;border-radius:8px;                    /* global button chrome */
+  }
+  .text{display:flex;flex-direction:column;align-items:flex-start;flex:1 1 auto;min-width:0}
+  .headline{display:flex;flex-direction:row;align-items:baseline;gap:0.55em;width:100%;min-width:0}
+  .name{
+    font-weight:600;flex:0 1 auto;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f6f6f6;
+  }
+  .announce{
+    flex:0 0 auto;padding:0.15em 0.5em;border-radius:3px;
+    background:#2a3a2f;color:#8fd3a3;font-size:0.72rem;font-family:var(--mono);
+    line-height:1.5;white-space:nowrap;max-width:12em;overflow:hidden;text-overflow:ellipsis;
+  }
+  .path{
+    font-size:0.8rem;opacity:.6;max-width:100%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .gutter{flex:0 0 1.9em;display:inline-flex;align-items:center;justify-content:center}
+  .nofire{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:1.9em;height:1.9em;border:1px solid #3a3a3a;border-radius:3px;
+    background:#262626;color:#cfcfcf;font-size:0.95rem;line-height:1;opacity:.85;
+  }
+  .model{
+    flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;
+    width:7.5em;padding:0 0.6em;overflow:hidden;
+    color:#6a6a6a;font-size:0.78rem;line-height:1.3;white-space:nowrap;
+    background:none;border:none;
+  }
+  .model.is-set{color:#b0b0b0}
+  .rm{
+    flex:0 0 auto;width:2.6em;padding:0;font-size:1.2rem;line-height:1;opacity:.55;
+    display:flex;align-items:center;justify-content:center;
+    background:#2a2a2a;border-radius:8px;color:#f6f6f6;
+  }
+
+  /* option-specific cells */
+  .mode{
+    flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;
+    padding:0 0.6em;overflow:hidden;
+    color:#6a6a6a;font-size:0.78rem;line-height:1.3;white-space:nowrap;
+  }
+  .mode.is-set{color:#b0b0b0}
+  .mode.w6{width:6em}
+  .mode.w45{width:4.5em}
+  .stack{
+    flex:0 0 auto;width:7.5em;padding:0 0.6em;overflow:hidden;
+    display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
+    font-size:0.78rem;line-height:1.25;white-space:nowrap;
+  }
+  .stack .m1{color:#b0b0b0}
+  .stack .m2{color:#6a6a6a;font-size:0.72rem}
+  .modebadge{
+    flex:0 0 auto;padding:0.15em 0.5em;border-radius:3px;
+    background:#33304a;color:#a9a2e0;font-size:0.72rem;font-family:var(--mono);
+    line-height:1.5;white-space:nowrap;
+  }
+  select.live{
+    width:7.5em;flex:0 0 auto;font-size:0.78rem;font-family:inherit;
+    background:#2a2a2a;color:#c9c9c9;border:1px solid #3a3a3a;border-radius:6px;
+    padding:.2em .3em;
+  }
+  .editing{
+    width:7.5em;flex:0 0 auto;padding:0.15em 0.4em;
+    background:rgba(255,255,255,.08);border:1px solid #6ea8ff;border-radius:4px;
+    color:#f6f6f6;font-size:0.78rem;
+  }
+
+  .state{font-family:var(--mono);font-size:.66rem;color:#7a7a7a;margin:6px 0 3px 2px}
+
+  /* ── measured axis ─────────────────────────────────────────────────── */
+  .axis{
+    font-family:var(--mono);font-size:.7rem;color:var(--anno);
+    margin-top:8px;display:flex;gap:18px;flex-wrap:wrap;
+  }
+  .axis .bad{color:#ff6b6b}
+  .axis .ok{color:#7fd6a0}
+  .note{
+    font-family:var(--mono);font-size:.7rem;color:#9a9a9a;
+    margin-top:6px;max-width:592px;
+  }
+  /* ⚠️ The comparison table needs its OWN overflow container, exactly like `.frame`.
+     Measured at verify-self 2026-08-06: with the frames fixed, this unwrapped table
+     became the binding constraint and still panned the body at 380px (scrollWidth 391 >
+     380, real 11px pan) — its min-content floor is ~366.5px and the body adds 24px of
+     side padding. Hiding the table alone restored 380px to clean, which is what
+     attributed it. The lesson worth keeping: removing the LARGEST overflow source
+     unmasks the next one, so "no horizontal scroll" has to be re-measured after each
+     fix rather than inferred from the one you just made. */
+  .table-scroll{overflow-x:auto;max-width:100%}
+  table{border-collapse:collapse;font-family:var(--mono);font-size:.72rem;margin-top:8px}
+  th,td{border:1px solid #333;padding:5px 9px;text-align:left;font-variant-numeric:tabular-nums}
+  th{color:var(--anno);font-weight:400}
+  caption{caption-side:top;text-align:left;color:var(--anno);font-size:.7rem;padding-bottom:6px}
+  .refline{
+    /* ⚠️ Anchored to `.row-wrap` (the 592px box), NOT to `.frame`. When `.frame` became
+       shrinkable to fix the body-scroll defect, a frame-anchored line would drift off the
+       × column at any viewport below 616px — while the row it is marking stays 592px.
+       The shared reference line is the requirement that makes these frames a comparison
+       rather than three separate pictures, so it must track the ROW, not the container. */
+    position:absolute;top:0;bottom:0;width:1px;background:rgba(255,61,154,.5);
+    right:calc(2.6em + 0.4rem);   /* left edge of the × column = shared reference */
+  }
+  .row-wrap{position:relative;width:592px}
+  .reflabel{
+    font-family:var(--mono);font-size:.62rem;color:var(--anno);
+    margin:4px 0 0 2px;
+  }
+</style>
+
+<h1>M12 WP4a · P3.1 — where does the drive-mode cell go?</h1>
+<p class="sub">
+  Real tokens, real geometry: <b>592px</b> row (640px container − 1.5rem×2), model <b>7.5em</b>,
+  × <b>2.6em</b>, reserved gutter <b>1.9em</b>. Real content: longest name <b>37ch</b>, longest path <b>70ch</b>.
+  Magenta = annotation, never product UI. Vertical magenta line = shared reference (left edge of the × column).
+</p>
+
+<div class="grid">
+
+  <!-- ───────────────────────── OPTION 1 ───────────────────────── -->
+  <div class="opt">
+    <div class="opt-hd"><span class="n">OPTION 1</span><span>mode as a 4th sibling cell</span>
+      <span class="verdict">— costs path width</span></div>
+
+    <div class="state">resting readout</div>
+    <div class="frame">
+      <div class="row-wrap">
+      <div class="refline"></div>
+      <div class="row">
+        <div class="open">
+          <div class="text">
+            <div class="headline">
+              <span class="name">claude-code-wrapper-agent-boilerplate</span>
+              <span class="announce">↻ /session-restore</span>
+            </div>
+            <span class="path">/Users/stayman/Personal/projects/claude-code-wrapper-agent-boilerplate</span>
+          </div>
+          <div class="gutter"><span class="nofire">⊘</span></div>
+        </div>
+        <div class="model is-set">opus</div>
+        <div class="mode w6 is-set">autopilot</div>
+        <div class="rm">×</div>
+      </div>
+    </div>
+
+    <div class="state">click the readout → editable in place</div>
+    </div>
+    <div class="frame">
+      <div class="row-wrap">
+      <div class="refline"></div>
+      <div class="row">
+        <div class="open">
+          <div class="text">
+            <div class="headline">
+              <span class="name">my-claude-code-customization</span>
+              <span class="announce">↻ --continue</span>
+            </div>
+            <span class="path">/Users/stayman/Personal/projects/my-claude-code-customization</span>
+          </div>
+          <div class="gutter"><span class="nofire">⊘</span></div>
+        </div>
+        <div class="model is-set">opus</div>
+        <div class="editing" style="width:6em">autopilot ▾</div>
+        <div class="rm">×</div>
+      </div>
+    </div>
+
+    <div class="axis">
+      <span>usable name/path: <span class="bad">~243px</span> (est. from mockup)</span>
+      <span>row height: <span class="ok">unchanged ~67px</span></span>
+      <span>vs current: <span class="bad">−102px</span></span>
+    </div>
+    <p class="note">A 4th fixed column takes 102px straight out of the text stack. The path is
+      <em>already</em> ellipsised today (70ch ≈ 462px into 346px); this makes it markedly worse and
+      starts biting the 37ch name too.</p>
+  </div>
+
+  <!-- ───────────────────────── OPTION 2 ───────────────────────── -->
+  <div class="opt">
+    <div class="opt-hd"><span class="n">OPTION 2</span><span>model + mode stacked in ONE 7.5em column</span>
+      <span class="verdict">— costs nothing horizontally</span></div>
+
+    <div class="state">resting readout</div>
+    </div>
+    <div class="frame">
+      <div class="row-wrap">
+      <div class="refline"></div>
+      <div class="row">
+        <div class="open">
+          <div class="text">
+            <div class="headline">
+              <span class="name">claude-code-wrapper-agent-boilerplate</span>
+              <span class="announce">↻ /session-restore</span>
+            </div>
+            <span class="path">/Users/stayman/Personal/projects/claude-code-wrapper-agent-boilerplate</span>
+          </div>
+          <div class="gutter"><span class="nofire">⊘</span></div>
+        </div>
+        <div class="stack"><span class="m1">opus</span><span class="m2">autopilot</span></div>
+        <div class="rm">×</div>
+      </div>
+    </div>
+
+    <div class="state">click either line → that line becomes editable</div>
+    </div>
+    <div class="frame">
+      <div class="row-wrap">
+      <div class="refline"></div>
+      <div class="row">
+        <div class="open">
+          <div class="text">
+            <div class="headline">
+              <span class="name">google-newsroom-intelligence-engine</span>
+              <span class="announce">↻ /session-restore</span>
+            </div>
+            <span class="path">/Users/stayman/Personal/projects/google-newsroom-intelligence-engine</span>
+          </div>
+          <div class="gutter"><span class="nofire">⊘</span></div>
+        </div>
+        <div class="stack">
+          <span class="m1">opus</span>
+          <span class="editing" style="width:100%;padding:0 .3em">autopilot ▾</span>
+        </div>
+        <div class="rm">×</div>
+      </div>
+    </div>
+
+    <div class="axis">
+      <span>usable name/path: <span class="ok">~346px</span> (est. — unchanged)</span>
+      <span>row height: <span class="ok">unchanged ~67px</span></span>
+      <span>vs current: <span class="ok">0px</span></span>
+    </div>
+    <p class="note">The cell already has two lines of vertical room (the text stack is taller than the
+      one-line model readout), so the second line is <em>free</em>: no width lost, no row growth.
+      Cost is semantic, not spatial — two unrelated settings share one column and one hit-target region.</p>
+  </div>
+
+  <!-- ───────────────────────── OPTION 3 ───────────────────────── -->
+  <div class="opt">
+    <div class="opt-hd"><span class="n">OPTION 3</span><span>second badge on the name's line</span>
+      <span class="verdict">— costs the name</span></div>
+
+    <div class="state">resting readout</div>
+    </div>
+    <div class="frame">
+      <div class="row-wrap">
+      <div class="refline"></div>
+      <div class="row">
+        <div class="open">
+          <div class="text">
+            <div class="headline">
+              <span class="name">claude-code-wrapper-agent-boilerplate</span>
+              <span class="announce">↻ /session-restore</span>
+              <span class="modebadge">autopilot</span>
+            </div>
+            <span class="path">/Users/stayman/Personal/projects/claude-code-wrapper-agent-boilerplate</span>
+          </div>
+          <div class="gutter"><span class="nofire">⊘</span></div>
+        </div>
+        <div class="model is-set">opus</div>
+        <div class="rm">×</div>
+      </div>
+    </div>
+
+    <div class="state">click the badge → ??? (a readout inside a button; the edit target is ambiguous)</div>
+    </div>
+    <div class="frame">
+      <div class="row-wrap">
+      <div class="refline"></div>
+      <div class="row">
+        <div class="open">
+          <div class="text">
+            <div class="headline">
+              <span class="name">turn-based-ai-test-proto-1</span>
+              <span class="announce">↻ --continue</span>
+              <span class="modebadge" style="border:1px solid #6ea8ff">autopilot ▾</span>
+            </div>
+            <span class="path">/Users/stayman/Personal/projects/turn-based-ai-test-proto-1</span>
+          </div>
+          <div class="gutter"><span class="nofire">⊘</span></div>
+        </div>
+        <div class="model is-set">opus</div>
+        <div class="rm">×</div>
+      </div>
+    </div>
+
+    <div class="axis">
+      <span>usable name/path: <span class="ok">~346px</span> (est. — unchanged)</span>
+      <span>row height: <span class="ok">unchanged</span></span>
+      <span>headline demand: <span class="bad">~554px into ~346px</span></span>
+    </div>
+    <p class="note">Width is untouched, but the <em>headline</em> is already over budget
+      (37ch name ≈ 274px + badge cap 192px ≈ 466px into 346px). A third item pushes the name to a stub.
+      Worse: it would put an interactive control inside the open-button's headline, next to a
+      deliberately inert readout — the exact confusion <code>.picker-recent-announce</code> is
+      commented to avoid.</p>
+  </div>
+
+  <!-- ───────────────────────── OPTION 4 (TRAP) ───────────────────────── -->
+  <div class="opt trap">
+    <div class="opt-hd"><span class="n">OPTION 4</span><span>live &lt;select&gt; on every row</span>
+      <span class="verdict">— drawn to show the cost; forbidden by the constraint</span></div>
+
+    <div class="state">there is no resting state — the control is always chrome</div>
+    </div>
+    <div class="frame">
+      <div class="row-wrap">
+      <div class="refline"></div>
+      <div class="row">
+        <div class="open">
+          <div class="text">
+            <div class="headline">
+              <span class="name">claude-code-wrapper-agent-boilerplate</span>
+              <span class="announce">↻ /session-restore</span>
+            </div>
+            <span class="path">/Users/stayman/Personal/projects/claude-code-wrapper-agent-boilerplate</span>
+          </div>
+          <div class="gutter"><span class="nofire">⊘</span></div>
+        </div>
+        <div class="model is-set">opus</div>
+        <select class="live"><option>autopilot</option><option>stepping</option>
+          <option>orchestrated</option><option>fsd</option></select>
+        <div class="rm">×</div>
+      </div>
+    </div>
+    </div>
+    <div class="frame" style="margin-top:6px">
+      <div class="row-wrap">
+      <div class="refline"></div>
+      <div class="row">
+        <div class="open">
+          <div class="text">
+            <div class="headline">
+              <span class="name">cloudflare-investigation</span>
+            </div>
+            <span class="path">/Users/stayman/Personal/projects/cloudflare-investigation</span>
+          </div>
+          <div class="gutter"></div>
+        </div>
+        <div class="model">inherit</div>
+        <select class="live"><option>orchestrated</option><option>stepping</option>
+          <option>autopilot</option><option>fsd</option></select>
+        <div class="rm">×</div>
+      </div>
+    </div>
+
+    <div class="axis">
+      <span>usable name/path: <span class="bad">~243px</span> (est.)</span>
+      <span>×16 rows: <span class="bad">16 always-on comboboxes</span></span>
+    </div>
+    <p class="note">Two rows shown so the multiplication is visible: every row shouts a control of equal
+      weight to the project name, and the chrome-less treatment the model cell was
+      <em>specifically rewritten</em> to adopt ("it visually split the row into three panels") is undone
+      16 times over.</p>
+  </div>
+
+</div>
+    </div>
+
+<div class="table-scroll">
+<table>
+  <caption>Measured axis — all figures est. from this mockup's geometry, NOT instrumented on the running app</caption>
+  <tr><th>option</th><th>usable name/path</th><th>Δ vs current</th><th>row height</th><th>headline over budget?</th></tr>
+  <tr><td>current (3 cells)</td><td>~346px</td><td>—</td><td>~67px</td><td>yes, already (~466/346)</td></tr>
+  <tr><td>1 · 4th cell</td><td>~243px</td><td>−102px</td><td>~67px</td><td>yes, worse</td></tr>
+  <tr><td>2 · stacked</td><td>~346px</td><td>0px</td><td>~67px</td><td>unchanged</td></tr>
+  <tr><td>3 · 2nd badge</td><td>~346px</td><td>0px</td><td>~67px</td><td>yes, ~554/346</td></tr>
+  <tr><td>4 · live select</td><td>~243px</td><td>−102px</td><td>~67px</td><td>yes, worse</td></tr>
+</table>
+</div>
+
+<p class="note" style="margin-top:18px">
+  ⚠️ The framing this drawing changed: the question is not "which option preserves the path" — <b>the path
+  is already ellipsised today</b> (70ch needs ~462px, has ~346px) and the headline is already over budget.
+  Every option is a choice about <em>which already-strained thing strains further</em>. That is invisible
+  in prose and was the reason to draw it.
+</p>

@@ -1148,6 +1148,39 @@ mod tests {
         );
     }
 
+    /// `color_tty_env()` is SHARED BY BOTH SPAWN PATHS — the CC session (`spawn`, :612) and
+    /// the WP9 raw login shell (`spawn_shell`, :634). Anything added here reaches **both**.
+    ///
+    /// ⚠️ **This test exists because M12 WP4a predicted the exact wrong fix a WP4b builder
+    /// will reach for, and measured that nothing catches it.** WP4b must set
+    /// `CLAUDESK_DRIVE_MODE` on the CC spawn. The obvious move — append it to
+    /// `color_tty_env()` — compiles, reads naturally, and **leaks the var into the raw
+    /// login shell**, which is not a CC session and must never receive it. Measured
+    /// 2026-08-06: injecting `CLAUDESK_DRIVE_MODE` into this array passed **all 809 tests**.
+    ///
+    /// The correct shape is to **compose a `Vec` at the CC call site**, leaving this
+    /// function and the shell spawn untouched.
+    ///
+    /// The guard is an **exact-set** assertion rather than a "does not contain
+    /// CLAUDESK_DRIVE_MODE" check on purpose: a denylist only catches the one name someone
+    /// thought of, and the property is *"this env is exactly the color+locale concern"* —
+    /// not *"this env lacks one particular var."* Adding a genuinely shared var here is
+    /// legitimate; it just has to be a deliberate edit to this list, with the shell spawn
+    /// considered.
+    #[test]
+    fn color_tty_env_carries_nothing_beyond_color_and_locale() {
+        let mut names: Vec<&str> = color_tty_env().iter().map(|(k, _)| *k).collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            vec!["COLORTERM", "LANG", "LC_ALL", "TERM"],
+            "color_tty_env() reaches BOTH the CC spawn and the raw login shell. If you are \
+             adding a CC-only var (e.g. M12's CLAUDESK_DRIVE_MODE), compose a Vec at the CC \
+             call site instead — appending here leaks it into the shell. If the var really \
+             is shared by both, add it to this expected list deliberately."
+        );
+    }
+
     // --- build_cc_argv: permission-mode mapping (pure) ---
 
     #[test]

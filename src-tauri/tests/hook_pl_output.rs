@@ -89,6 +89,122 @@ fn as_json(line: &str) -> serde_json::Value {
     serde_json::from_str(line).expect("hook must emit valid JSON")
 }
 
+/// Run the hook with `payload` on stdin and **no listening socket**, capturing its
+/// exit code and stdout. Returns `(exit_ok, stdout_bytes)`.
+///
+/// ## Why this helper exists alongside [`run_hook_capture_line`] (M12 WP4a)
+/// `run_hook_capture_line` asserts the never-block-CC exit-0 contract at line 80 —
+/// but it can only be called with a payload that **successfully connects to a
+/// socket**, because its reader thread blocks on `accept()`. So the exit-0 assertion
+/// was reachable on the **happy path only**: the abuse arms that actually threaten
+/// the contract (no socket, malformed JSON, empty stdin) could never reach it, since
+/// that helper would hang waiting for a connection the hook never makes.
+///
+/// This helper closes that gap by never binding a socket and never accepting, so the
+/// degraded paths are drivable. It also captures **stdout**, which nothing previously
+/// asserted — relevant now because M12 WP4b will make this script emit a
+/// `UserPromptSubmit` `additionalContext` line on stdout, and a malformed emission
+/// must never reach CC as partial JSON.
+fn run_hook_degraded(payload: &str, sock_env: Option<&str>) -> (bool, Vec<u8>) {
+    let mut cmd = Command::new("perl");
+    cmd.arg(hook_path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    match sock_env {
+        Some(p) => {
+            cmd.env("CLAUDESK_HOOK_SOCK", p);
+        }
+        // Deliberately REMOVE the var rather than setting it empty — the script's
+        // line-44 early exit distinguishes these, and the test inherits the ambient
+        // environment otherwise (a developer with the var exported would silently
+        // change what this test exercises).
+        None => {
+            cmd.env_remove("CLAUDESK_HOOK_SOCK");
+        }
+    }
+    let mut child = cmd.spawn().expect("spawn perl hook");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(payload.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().expect("hook exits");
+    (out.status.success(), out.stdout)
+}
+
+/// The never-block-CC contract on the DEGRADED paths — the ones that actually
+/// threaten it. Each arm must exit 0 and emit no partial JSON on stdout.
+///
+/// ⚠️ M12 WP4a proved this property rests on **one** construct: the `eval {}` that
+/// wraps the payload decode. Removing the inner `eval` around `decode_json` alone
+/// changes nothing (an outer guard catches it — they are redundant, not layered), but
+/// removing **both** makes malformed stdin exit **2** with a Perl error on stderr,
+/// i.e. a wedged CC turn. Do not "simplify" those guards away.
+#[test]
+fn never_blocks_cc_on_degraded_inputs() {
+    if !perl_available() {
+        return;
+    }
+    let valid =
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi"}"#;
+    let cases: [(&str, &str, Option<&str>); 6] = [
+        ("socket var absent", valid, None),
+        (
+            "socket path does not exist",
+            valid,
+            Some("/nonexistent/nope.sock"),
+        ),
+        ("empty stdin", "", None),
+        (
+            "truncated JSON",
+            r#"{"hook_event_name":"UserPrompt"#,
+            Some("/nonexistent/nope.sock"),
+        ),
+        (
+            "non-JSON garbage",
+            "}}not json{{",
+            Some("/nonexistent/nope.sock"),
+        ),
+        // A JSON array parses fine but is not the HASH the script requires — the
+        // `ref($payload) eq 'HASH'` guard is what handles it.
+        (
+            "JSON array not object",
+            "[1,2,3]",
+            Some("/nonexistent/nope.sock"),
+        ),
+    ];
+    for (label, payload, sock) in cases {
+        let (ok, stdout) = run_hook_degraded(payload, sock);
+        assert!(ok, "hook must exit 0 on degraded input: {label}");
+        // stdout must be either empty or ONE complete valid JSON object — never a
+        // partial fragment. Today the script writes nothing to stdout at all; WP4b
+        // adds the drive-mode emission, and this assertion is what keeps a malformed
+        // emission from reaching CC.
+        if !stdout.is_empty() {
+            serde_json::from_slice::<serde_json::Value>(&stdout).unwrap_or_else(|e| {
+                panic!("stdout must be valid JSON if non-empty ({label}): {e}")
+            });
+        }
+    }
+}
+
+/// `Notification` forwards `notification_type` — the field the broadcaster gates
+/// AwaitingInput on (QoL-WP2). Previously uncovered: a regression here would silently
+/// turn an informational `idle_prompt` nudge into a blue awaiting-input dot, or drop a
+/// genuine `permission_prompt`, with no failing test.
+#[test]
+fn notification_forwards_notification_type() {
+    if !perl_available() {
+        return;
+    }
+    let payload = r#"{"hook_event_name":"Notification","session_id":"s","cwd":"/p","message":"m","notification_type":"permission_prompt"}"#;
+    let v = as_json(&run_hook_capture_line(payload).expect("line"));
+    assert_eq!(v["notification_type"].as_str(), Some("permission_prompt"));
+    assert_eq!(v["message"].as_str(), Some("m"));
+}
+
 #[test]
 fn user_prompt_submit_emits_length_not_text() {
     if !perl_available() {

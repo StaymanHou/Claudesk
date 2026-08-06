@@ -394,6 +394,76 @@ mod tests {
         assert_eq!(read[0].default_drive_mode, Some(DriveMode::Autopilot));
     }
 
+    /// ⚠️ **This test pins values that are KNOWN WRONG on 2 of 4 variants.** It is a
+    /// tripwire for M12 WP4b, not an endorsement.
+    ///
+    /// M12 WP4a measured that `DriveMode`'s `kebab-case` serialization disagrees with the
+    /// vocabulary every workflow skill actually reads:
+    ///
+    /// | variant | serializes to | what skills read | |
+    /// |---|---|---|---|
+    /// | `StepByStep`    | `step-by-step`    | **`stepping`** | ❌ |
+    /// | `Orchestrated`  | `orchestrated`    | `orchestrated` | ✓ |
+    /// | `Autopilot`     | `autopilot`       | `autopilot`    | ✓ |
+    /// | `FullAutopilot` | `full-autopilot`  | **`fsd`**      | ❌ |
+    ///
+    /// Authority: `transitions.md:165` (*"drive_mode: stepping | orchestrated | autopilot
+    /// | fsd"*), `session-handoff/SKILL.md:75`'s writer template, and 29 real archive WIP
+    /// files (28 `autopilot`, 1 `orchestrated`).
+    ///
+    /// **Why pin the wrong values instead of the right ones:** the fix is production work
+    /// the operator assigned to **WP4b task 4b.1** (WP4a is a probe; shipping the rename
+    /// here would breach its scope guard). A test asserting the *correct* strings would be
+    /// red on `main`, which is worse than no test. So this asserts today's reality and
+    /// **fails the moment WP4b renames the variants** — at which point WP4b updates the
+    /// expectations to `stepping`/`fsd` and deletes this note. That failure is the point:
+    /// it makes the rename impossible to forget.
+    ///
+    /// **Why this test exists at all** — `drive_mode_round_trips` above writes
+    /// `DriveMode::Autopilot` and reads back `DriveMode::Autopilot`, never inspecting the
+    /// JSON. It passes identically whether the on-disk value is `autopilot`,
+    /// `full-autopilot`, or `banana`. **A round-trip through your own serializer proves
+    /// symmetry, not correctness** — the same blind spot that hid this bug from WP4a's own
+    /// fixture (which shared a third, differently-wrong vocabulary) and from an evidence
+    /// script's substring match. Only asserting the literal string catches it.
+    #[test]
+    fn drive_mode_serializes_to_these_literal_strings() {
+        // The external consumer reads STRINGS out of YAML frontmatter; assert strings.
+        let observed: Vec<String> = [
+            DriveMode::StepByStep,
+            DriveMode::Orchestrated,
+            DriveMode::Autopilot,
+            DriveMode::FullAutopilot,
+        ]
+        .iter()
+        .map(|m| {
+            serde_json::to_string(m)
+                .unwrap()
+                .trim_matches('"')
+                .to_string()
+        })
+        .collect();
+
+        // TODO(M12 WP4b 4b.1): change to ["stepping", "orchestrated", "autopilot", "fsd"]
+        // in the same commit as the `#[serde(rename = ...)]` fix.
+        assert_eq!(
+            observed,
+            vec![
+                "step-by-step",
+                "orchestrated",
+                "autopilot",
+                "full-autopilot"
+            ],
+            "DriveMode's serialized vocabulary changed. If WP4b just fixed it, the \
+             expectation should now be [stepping, orchestrated, autopilot, fsd] — update \
+             it here and drop this test's WRONG-VALUES note."
+        );
+
+        // The two that are already correct must STAY correct through the WP4b rename.
+        assert_eq!(observed[1], "orchestrated");
+        assert_eq!(observed[2], "autopilot");
+    }
+
     #[test]
     fn empty_list_round_trips() {
         // Removing the last project leaves an explicitly-empty list on disk —
