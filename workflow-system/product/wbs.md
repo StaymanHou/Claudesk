@@ -2,7 +2,8 @@
 stage: wbs
 state: complete
 milestone: "Milestone 12: Smart auto-resume + drive mode"
-updated: 2026-08-05  # ✅ WP3 SHIPPED (`80b82a1`; review `ba875df`; acceptance pass `119373b`) — auto-fire is live end-to-end: the picker announces the predicted command before you click, the row fires it on open, a `⊘` second door opens without firing, `/session-start` is never auto-fired but is one click away in the workspace header, and the already-open indicator gives WP2's ⏸ its read-back. ⚠️ **Arm 1 is the `--continue` CLI FLAG, not `/resume`** — a bare `/resume` opens an interactive picker (Phase 1 probe); every `/resume` reference in this doc was corrected 2026-08-05. ⚠️ The `⊘` shipped NESTED-and-defended, not sibling — see the STRUCTURAL note. ⚠️ The gate applies PER ARM: `--continue` ungated (serves every CC user), `/session-restore` gated. Remaining: WP4 (drive-mode cell, parallel track) → WP5 (exit verify + the guard's 4th arm).
+updated: 2026-08-06  # ⚠️ WP4 RE-DECOMPOSED into WP4a–WP4d (`/product-wbs` back-loop) — the original WP4 was invalidated on all four of its claims. It is NOT "clone `default_model`'s path" (that path ends in argv; drive mode has no argv destination and no CLI flag), NOT near-zero-unknown (the whole delivery mechanism was missing), NOT an independent parallel track (it consumes WP3's spawn path), and its task 4.4 targeted `.session.md` + WIP frontmatter — files that are DELETED at `/session-restore` step 7 and ARCHIVED at finalize, i.e. absent at the exact moment a new WP starts. ⚠️ THE DELIVERABLE IS A SIGNAL, NOT A STORE: a persisted `drive_mode` already exists in 93% of manual restores and is already ignored 74% of the time, so storing it somewhere new does nothing. Mechanism PROVEN LIVE 2026-08-06 — an env-var-gated `UserPromptSubmit` hook returning `additionalContext` makes the REAL `/session-restore` skip the mode menu (absent var → menu + `S15`; present → no menu, pointer consumed). Zero companion-repo change; `/session-restore`'s re-prompt is CORRECT for a CLI user and must NOT be changed (operator). ⚠️ Long-context durability is ASSUMED, not proven — validated by dogfooding, deliberately not by a synthetic probe. Measured pain: 524 manual opens, 82% got the menu, ~7.2×/day, 99% of replies bundle the mode word with the work instruction. The manual `/session-start` arm is DEFERRED to the backlog.
+# Prior: 2026-08-05  # ✅ WP3 SHIPPED (`80b82a1`; review `ba875df`; acceptance pass `119373b`) — auto-fire is live end-to-end: the picker announces the predicted command before you click, the row fires it on open, a `⊘` second door opens without firing, `/session-start` is never auto-fired but is one click away in the workspace header, and the already-open indicator gives WP2's ⏸ its read-back. ⚠️ **Arm 1 is the `--continue` CLI FLAG, not `/resume`** — a bare `/resume` opens an interactive picker (Phase 1 probe); every `/resume` reference in this doc was corrected 2026-08-05. ⚠️ The `⊘` shipped NESTED-and-defended, not sibling — see the STRUCTURAL note. ⚠️ The gate applies PER ARM: `--continue` ungated (serves every CC user), `/session-restore` gated. Remaining: WP4 (drive-mode cell, parallel track) → WP5 (exit verify + the guard's 4th arm).
 # Prior: 2026-08-03  # ✅ WP2 SHIPPED (`0b07e81` + `5e8256e`) — the unclean flag is live end-to-end: set-on-open (after the spawn `?`), opt-in-per-route clearing, the hover-revealed ⏸ (gated on M10.9), Recycle pinned clean for M13. ⚠️ WP2 shipped THREE clean-exit routes, not four — `/exit` was dropped as a dead variant pending a product decision (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). WP3 inherits: `consume()` is the fire-path primitive; the flag is keyed through `key_for()` (canonicalized) so any new reader must use the same helper; precedence must live in the pure `predictAction`, NOT the batch command.
 ---
 
@@ -84,7 +85,7 @@ This is a **product-intent** change, not an architectural gap, so it does not tr
 | `explicit-selectable-mode-over-inferred-mode` | **3 → resolved by the redesign** | Fires hard against a silent inferred auto-fire. **The operator's picker-row announcement resolves the tension without a confirmation keypress:** the action is *stated before the click* and a second door opens without firing, so state is legible and escapable while remaining automatic. The prior's `risk-surface-vs-value` rule additionally kills the `~/.claude/projects/` probe (high bug surface, unproven value). |
 | `set-a-spawn-time-choice-where-the-spawn-is-chosen` | **⚠️ FIRST LIVE EDGE CASE** | The prior's own text names the untested edge: *"a setting read at creation that is ALSO live-reconfigurable later, which may want both."* **Drive mode is exactly that** — read at spawn AND changeable mid-session. Its decision rule splits: "read at creation, immutable" → creation surface; "read continuously, live-reconfigurable" → the instance. Operator chose **picker row only, not both** (2026-08-03), consistent with the prior's own M11.5 clarification that two homes for one per-project value would need a sync path that deliberately does not exist. **Its corollary governs the cell's shape: compact READOUT, click to edit** — not a live `<select>` on every row. See WP3, and the capture proposal below. |
 | `primary-surface-is-zero-ceremony-not-a-mode` | 2 (agrees) | Supports auto-firing at all: no setup step between "I'm here" and productive. |
-| `gate-substrate-dependent-feature-class-behind-default-off-opt-in` | 2 (agrees) | Both deliverables behind `workflow_features_enabled`. |
+| `gate-substrate-dependent-feature-class-behind-default-off-opt-in` | 2 (agrees) | ⚠️ **Refined by WP3's as-built: the gate applies PER ARM, not per deliverable.** `--continue` reads Claudesk's own store and fires a stock CC CLI flag → serves every CC user → **ungated**. `/session-restore` promises something about `workflow-system/` files → **gated**. **The drive-mode signal (WP4b) is on the GATED side** — it names a companion-workflow concept and injects it into CC's context. The original row read "both deliverables behind the gate", which is now too coarse to be actionable. |
 | `paired-actions-need-paired-affordances` | 2 (agrees) | Auto-restore/auto-resume are actions Claudesk takes *for* you; the manual `/session-start` button is their **inverse**, not an overlap — cutting it leaves a hole. Same prior that bounded the anti-redundancy prior at M10.9. |
 | `new-surface-must-earn-its-place-against-existing-ones` | 2 (agrees) | M12 adds **no new surface** — it extends the picker row (existing) and the close path (existing). |
 
@@ -103,6 +104,124 @@ This is a **product-intent** change, not an architectural gap, so it does not tr
 *Related: [[explicit-selectable-mode-over-inferred-mode]] (that prior surfaces a mode the system already knows; this one is about a fact it cannot know), [[primary-surface-is-zero-ceremony-not-a-mode]] (the default-set half is what keeps the ceremony at zero).*
 
 **Origin:** M12 decomposition, 2026-08-03 — operator redesigned the auto-resume decision tree after log mining showed the specced condition was both unqueryable and permanently true. Operator's framing: *"I simply need a button or something within the Claudesk workspace to signal Claudesk that I'm exiting this session at an unclean boundary, so that Claudesk explicitly knows it."*
+
+---
+
+## ⚠️ Scope-audit findings II — the WP4 re-decomposition (2026-08-06)
+
+*Read before starting WP4a. This section is the evidence WP4a–WP4d build on; do not re-derive it.*
+
+### Finding A — the operator's actual pain, measured
+
+Prompted by the operator asking *"how is the drive-mode selector actually wired to control the CC
+agent?"* — a question the WBS had no answer to. Full parse of **697 transcripts / 62 project slugs /
+2026-05-29→2026-08-06**, counting *logical* entry points (so `/clear` boundaries split correctly).
+
+**524 of 622 entry points (84%) are MANUAL** (human-typed slash command, distinguished from agent-chained
+by a `<command-name>` breadcrumb vs. a `Skill` tool_use in the preceding records — the classifier was
+**exactly decidable**: zero ambiguous cases, zero flips under a wider lookback).
+
+| entry | manual | chained |
+|---|---|---|
+| `session-resume` | 390 | 4 |
+| `session-restore` | 110 | 1 |
+| `session-start` | **24** | 88 |
+
+- **Menu shown on 430 of 524 manual opens (82%).**
+- **60 active days / 70 calendar days; mean 8.7 manual opens per active day → the handshake is paid ~7.2×/day.**
+- Of 417 captured replies, **345 (83%) lead with a mode token**; 319 of those are `autopilot`. **343 of
+  345 (99%) BUNDLE the mode with the work instruction** — `autopilot\nstart wp2` ×19, `autopilot\nstart
+  wp1` ×19, `autopilot\nstart wp3` ×17. Once: `atuopilot\nstart wp7i`, a typo left uncorrected.
+- **The numbered 1–4 affordance was used 3 times in 417 replies. "Press Enter to keep" was never used.**
+- Cost is **not** an extra round trip (1.36 turns with the menu vs 1.09 without) — the operator *pre-empts*
+  the question. The cost is typing a word 295 times to choose what was already chosen.
+
+### Finding B — ⚠️ a persisted mode ALREADY EXISTS AND IS ALREADY IGNORED
+
+**102 of 110 manual `session-restore` opens (93%) read a `.session.md` that already carried
+`drive_mode:` — and the menu was still shown 75 times (74%).** Where no mode was stored: 75%.
+**Statistically indistinguishable.** Same for resume (87% had one; menu shown 88% of the time — *higher*
+than when nothing was stored).
+
+**Consequence, and the reason the original WP4 could not have worked: persisting the mode somewhere new
+accomplishes nothing on its own.** The reader is not consuming what already exists. The deliverable had
+to become a **signal**, not a **store**.
+
+### Finding C — ⚠️ `/session-restore`'s re-prompt is CORRECT and MUST NOT be changed
+
+An earlier framing in this session called it "the 90% offender." **That was wrong**, and the operator
+corrected it: *"`/session-restore` should behave the way as is if used without Claudesk!!! It's not an
+'offender'!"*
+
+A CLI user typing `/session-restore` has expressed one intent — *restore this session* — and said nothing
+about drive mode. Reading a mode off disk, **showing** it, and offering keep-or-switch is the skill being
+honest. Silently honoring a mode a previous handoff wrote would be the skill deciding something the user
+did not. **So: no companion-repo behavior change is acceptable.** The distinguishing fact is not the
+skill, it is **the caller** — Claudesk *has* an explicit per-open mode; the CLI does not.
+
+### Finding D — the channel, PROVEN LIVE (not from docs)
+
+Probed empirically because this project has a banked lesson that hook docs can be confidently wrong
+(`[[cc-hook-capture-beats-docs]]`). Against the **real** `/session-restore` on an identical fixture:
+
+| arm | menu | transition | pointer |
+|---|---|---|---|
+| `CLAUDESK_DRIVE_MODE=autopilot` + hook | **no** | standard restore | consumed |
+| env var **absent**, same hook file | **yes** | **`S15`** | held, blocked |
+
+Proven on **both** `SessionStart` and **`UserPromptSubmit`** (the latter re-probed at the operator's
+direct question — *"have you probed this hook?"* — because only *visibility* had been shown on it, not
+*obedience*; visibility and obedience are different claims). On the `UserPromptSubmit` arm the model
+reconciled the two sources itself: *"Restoring in Autopilot mode (from the pointer's `drive_mode`,
+matching what Claudesk reports for this workspace — so no mode menu)."*
+
+**Inertness is therefore proven, not asserted** — one env var apart, same settings file.
+
+Also verified in `claude --help`: **`--append-system-prompt`** and **`--settings`** exist (a viable
+alternative channel needing no hook-contract change). **Env var alone is disqualified** — the model
+cannot read the environment; it works only as a *gate* on a hook that can.
+
+**Operator's channel choice (2026-08-06): `UserPromptSubmit`, per-turn.** Rationale: a `SessionStart`
+injection lands once at position 0 and recedes as the session grows — the operator's reported failure mode
+is *"the agent fails to follow when under context pressure when the session goes long."* A per-turn
+injection's position stays fixed.
+
+### Finding E — ⚠️ ASSUMED, NOT PROVEN (label it as such wherever it is repeated)
+
+**That per-turn re-injection actually holds up under long-context pressure where a one-shot would decay.**
+Both proofs above were on **short, cold** contexts. A synthetic long-context probe was **considered and
+deliberately declined** (operator, 2026-08-06): filler tokens are not the same pressure as a real long
+session full of competing instructions, so the probe would be expensive *and* weak evidence — failing this
+project's own rule that *an observation is only decisive when a broken implementation would give a
+different answer.* **The operator will validate by dogfooding.** A future reader must not upgrade this to
+"proven" on the strength of the short-context runs.
+
+### Finding F — infrastructure facts WP4b needs
+
+- **Claudesk already registers both `SessionStart` and `UserPromptSubmit`** — 10 events, both prod and dev
+  identities, live in `~/.claude/settings.json` (`hook_install/mod.rs:74-87`).
+- **The deployed Perl script is strictly write-only telemetry** — never writes stdout, `exit 0`
+  unconditionally, header: *"a down Claudesk (no listener) must NEVER block CC."* Zero hits for
+  `additionalContext`/`hookSpecificOutput` anywhere in `src-tauri/`. **Emitting stdout from it changes
+  that contract across all 10 events** — WP4a's decision.
+- **Claudesk sets no identifying env var today** — only `TERM`/`COLORTERM`/`LANG`/`LC_ALL`
+  (`color_tty_env`, `cc_session/mod.rs:290-297`). And `cwd` correlation **cannot** distinguish a
+  Claudesk-spawned `claude` from a terminal one in the same tree, so the env var is the *only* possible
+  marker. `spawn_argv` already takes a generic `env:&[(&str,&str)]`, so adding one is free.
+- **`additionalContext` must be nested under `hookSpecificOutput` with `hookEventName`** — top-level is
+  rejected at runtime.
+- **`session-start` and `session-restore` disagree on their defaults** (autopilot vs orchestrated), so
+  there is no single upstream default to copy — see 4c.0.
+
+### Finding G — scope decisions made 2026-08-06
+
+- **The manual `/session-start` arm goes to the BACKLOG** (operator: *"much lower priority than
+  session-restore, but not nothing"*). Only 24 manual opens, but it costs **2.18 turns** vs ~0.5 — the
+  menu arrives *before* the operator has stated their problem (only 4 of 17 replies led with a mode; the
+  rest were substantive problem statements ignoring the menu).
+- **Enforcement is built in M12; M13 reuse is NOT pre-committed** (operator: *"I'll need to open the spec
+  and re-evaluate if it's reusable when we get there"*). Record, don't abstract.
+- **The picker cell stays in scope, with its UI/UX decided by mockups** → WP4a.4.
 
 ---
 
@@ -275,76 +394,283 @@ will reintroduce a defect the build already paid for.
 
 ---
 
-### WP4: Drive-mode selector on the picker row
-**Description:** Per-project drive mode as a compact readout + click-to-edit cell on the picker row, mirrored to the active WIP file's `drive_mode:` frontmatter. **NOT on the workspace header** — see the vision revision.
+> ## ⚠️ WP4 WAS RE-DECOMPOSED 2026-08-06 — READ "Scope-audit findings II" BEFORE STARTING
+>
+> The original WP4 (a single M-sized "drive-mode selector on the picker row", reproduced at the bottom
+> of this block for provenance) was **invalidated on all four of its claims** by research run
+> 2026-08-06. It has been replaced by **WP4a (probe/mockup) → WP4b (the signal) → WP4c (the cell) →
+> WP4d (doc corrections)**. The single most important correction: **storing a drive mode somewhere new
+> does not, by itself, do anything** — a persisted mode *already exists* on disk in 93% of manual
+> restores and is *already ignored* 74% of the time. The deliverable is the **signal**, not the store.
+>
+> <details><summary>Superseded WP4 text (2026-08-03) — kept for provenance</summary>
+>
+> *4.1 Activate `default_drive_mode`, "clone `default_model`'s live path". 4.2 Add the cell to
+> `PICKER_ROW_CELLS`. 4.3 Compact readout, click to edit. 4.4 Mirror to the active WIP file's
+> `drive_mode:` frontmatter, "the WIP file wins on disagreement". 4.5 Correct `vision.md` + `roadmap.md`.
+> 4.6 Gate behind `useWorkflowFeaturesEnabled`. Sized **M**, "near-zero unknown", "independent parallel
+> track".*
+>
+> **Why each claim failed** — (1) *"clone `default_model`'s path"*: that path terminates in **argv**
+> (`--model`); drive mode has **no argv destination and no CLI flag**, so the analogy breaks at the only
+> place it mattered. (2) *"near-zero unknown"*: the whole delivery mechanism was unknown and had to be
+> discovered empirically. (3) *"independent parallel track"*: it now depends on WP3's shipped
+> injection/spawn path and on the hook channel. (4) **Task 4.4 was aimed at a file that does not
+> exist when it matters** — `/session-restore` **deletes** `.session.md` at its step 7, and in the
+> finalize→next-plan gap the WIP file has been archived, so at the exact moment a new WP starts there is
+> nothing to mirror into. Five WIP templates (`feature-plan`, `feature-spec`, `task-plan`,
+> `incident-report`, `product-vision`) do not declare `drive_mode:` at all.
+>
+> </details>
+
+---
+
+### WP4a: Probe — the signal channel's shape + the cell's UI/UX (mockups)
+**Type:** probe
 **Milestone:** M12
-**Dependencies:** WP1 (store conventions only; independent of WP2 and WP3)
+**Dependencies:** WP1–WP3 (shipped)
+**Size:** S
+**Timebox:** half-day
+**Learning objective:** Two questions whose answers change what WP4b/WP4c build: **(a)** does the
+`UserPromptSubmit` signal go in the *shared* Claudesk telemetry hook script or a *separate* hook entry,
+and what exactly does the injected sentence say; **(b)** what does the picker-row drive-mode cell look
+like — decided from **mockups**, not from prose (operator instruction 2026-08-06).
+**Success criterion:** A recorded verdict for the hook-plumbing question with the blast-radius argument
+addressed, the exact injected copy written down, and an operator-chosen cell design from a side-by-side
+mockup.
+
+**⚠️ What is ALREADY PROVEN — do not re-probe** (measured live 2026-08-06; see "Scope-audit findings II"):
+`UserPromptSubmit` + `additionalContext` **works and is obeyed**. Against the *real* `/session-restore`
+on an identical fixture, one env var apart: with `CLAUDESK_DRIVE_MODE=autopilot` the menu is **skipped**
+and the pointer consumed (the model said so explicitly — *"matching what Claudesk reports for this
+workspace — so no mode menu"*); with the var **absent**, the menu appears and the skill blocks at
+transition **`S15`**. Inertness for plain-CLI users is therefore proven, not asserted. `SessionStart`
+was proven the same way. **The channel decision is MADE — this probe does not revisit it.**
+
+**Tasks:**
+- [ ] 4a.1 **Decide: shared telemetry script vs. a separate hook entry.** The deployed Perl script
+  (`hook_install/`) is registered on **all 10 events for both identities** and is strictly write-only —
+  it never writes stdout and `exit 0`s unconditionally, with a header stating *"a down Claudesk (no
+  listener) must NEVER block CC."* Emitting stdout from it changes that contract with a blast radius
+  across every event. Weigh against a second, `UserPromptSubmit`-only entry. ⚠️ Whichever wins, the
+  **"never block CC"** invariant must survive — a malformed emission must not be able to wedge a turn.
+- [ ] 4a.2 **Write the injected sentence, and state the FACT not a PROHIBITION.** *"Drive mode is
+  autopilot"* — **not** *"never present the drive-mode menu."* A prohibition is correct at turn 1 and
+  **wrong at turn 60**, when the operator may legitimately want to change mode; a per-turn prohibition
+  would fight that. ⚠️ The probe's own wording did include a prohibition clause and still worked — so
+  this is a **durability** judgement, not a measured requirement; record it as such.
+- [ ] 4a.3 **Confirm the env var is the only Claudesk marker.** `cwd`-based hook correlation **cannot**
+  distinguish a Claudesk-spawned `claude` from a terminal-spawned one in the same tree
+  (`status_broadcaster::resolve_cwd` is longest-ancestor matching). So the env var is not merely the
+  gate — it is the *only* thing that can mark a session as Claudesk's. `spawn_argv` already takes a
+  generic `env: &[(&str,&str)]` (`cc_session/mod.rs:645-674`), so adding one costs nothing.
+- [ ] 4a.4 **Mockup the picker-row cell** (operator instruction: *"a WP to decide the UI/UX with
+  mockups"*). Use `/util-option-mockup` — this is *the same surface rearranged*, which that skill's
+  own discriminant names as a decision tool rather than a prototype WP. The row already carries name,
+  announce label, `⊘`, and the M11.5 model cell; **space competition on this row is a KNOWN, already-paid
+  defect** (WP3's P3.9 back-loop). Mock at realistic project-name lengths.
+- [ ] 4a.5 **Record both verdicts in "Probe outcomes"** with the reasoning, so WP4b/WP4c build rather
+  than re-decide.
+
+**WP4a → WP4b rationale:** Derisk-first, the rule this milestone was already corrected by once
+(*"Always derisk first"*, 2026-08-03). Both remaining unknowns are cheap to settle and both change what
+gets built — the hook-plumbing choice determines whether WP4b touches shared infrastructure, and the
+mockup determines the cell before any pixels are written.
+
+---
+
+### WP4b: The drive-mode signal — per-project value + per-turn injection
+**Description:** The **acting** half, and the actual deliverable. Store a per-project drive mode, set the
+gating env var on spawn, and emit the `UserPromptSubmit` `additionalContext` line so a Claudesk-opened
+session does not re-ask a question the operator already answered. **Zero companion-repo change** — the
+skills are untouched and a plain-terminal `claude` behaves byte-identically.
+**Milestone:** M12
+**Dependencies:** WP4a
 **Size:** M
 **Tasks:**
-- [ ] 4.1 Activate `default_drive_mode` (`config_store/mod.rs:68-71`) — the placeholder is already typed `Option<DriveMode>` with the correct kebab-case wire vocabulary. **Clone `default_model`'s live path** (`set_default_model` → read at spawn → event rebroadcast); do not invent a new one.
-- [ ] 4.2 Add the cell to `PICKER_ROW_CELLS` (`pickerRowOrder.ts`) as **data**, not JSX — the module exists precisely so the component cannot disagree with the declared order, and so the test asserts a *value* rather than a substring.
-- [ ] 4.3 **Compact readout, click to edit** — per `set-a-spawn-time-choice-where-the-spawn-is-chosen`'s corollary. The active value must be readable **without interaction**; only the *edit affordance* sits behind a click. ⚠️ An always-live `<select>` on every row was explicitly judged too noisy at 20+ projects.
-- [ ] 4.4 **Mirror to the active WIP file's `drive_mode:` frontmatter**, which is the source of truth for the workflow's pause-policy logic (`CLAUDE.md`: never let the UI hold a mode that disagrees; re-read on mount). Decide and document the write direction + conflict rule: the WIP file wins on disagreement.
-- [ ] 4.5 **Correct `vision.md` (5 places: lines 28, 51, 79, 87, success metric 5) and `roadmap.md`'s M12 exit criterion** from "workspace header" to "picker row", with the operator's reasoning and a pointer to the prior. ⚠️ Success metric 5's wording becomes unsatisfiable as written — this is not optional cleanup.
-- [ ] 4.6 Gate the cell behind `useWorkflowFeaturesEnabled` (drive mode is workflow-coupled). ⚠️ `"drivemode"`/`"drive-mode"` are already in `WORKFLOW_TERMS` — the seam reference must be in **executable source**, not a comment.
+- [ ] 4b.1 **Activate `default_drive_mode`** (`config_store/mod.rs:68-71`) — already typed
+  `Option<DriveMode>` with the right kebab-case wire vocabulary (`step-by-step`/`orchestrated`/
+  `autopilot`/`full-autopilot`). Follow `default_model`'s **storage** precedent (`set_default_model` →
+  read at spawn), ⚠️ **but not its consumption precedent** — `default_model` terminates in argv and this
+  does not. ⚠️ Its doc comment currently says *"Never read or written"*; correct it in the same commit
+  or it becomes a lie a future reader trusts.
+- [ ] 4b.2 **Set `CLAUDESK_DRIVE_MODE` on the spawned process** when the project has a mode. Absent
+  value → **do not set the var** (an unset var is what makes the hook inert). `spawn` already reads
+  per-project config at `cc_session/mod.rs:907-921` beside `read_default_model`, so this is a read
+  alongside an existing read, not new plumbing.
+- [ ] 4b.3 **Emit the `additionalContext` line** per WP4a's plumbing verdict, gated on the env var being
+  present and non-empty. ⚠️ `additionalContext` **must** be nested under `hookSpecificOutput` with
+  `hookEventName` — the binary rejects it at top level.
+- [ ] 4b.4 **Mutation-prove the inertness arm, not just the firing arm.** The load-bearing property is
+  that an **absent** env var emits **nothing** — that is what protects every plain-CLI user. A test that
+  only proves the firing case leaves the more important half unguarded. ⚠️ Per
+  `[[verify-the-mutation-landed]]`, confirm each mutation changed *executable* code.
+- [ ] 4b.5 **Prove the CALLER, not only the primitive.** This milestone has now hit *"a proven module
+  behind a caller that does not honor it"* **five times** (WP2's dead `/exit` route · WP2's unconsumed
+  spawn term · WP3 Phase 3's dropped `onOpen` arg · the fire-path primitives · the no-fire intent that
+  never crossed the IPC boundary). Assert the spawn path actually sets the var and the hook actually
+  reads it — an end-to-end assertion, not two unit tests that pass independently.
+- [ ] 4b.6 **Gate on `useWorkflowFeaturesEnabled`.** ⚠️ Drive mode is workflow-coupled in a way
+  `--continue` was not: WP3 set the precedent that the gate applies **per arm**, and this arm names a
+  companion-workflow concept, so it is **gated** (the `/session-restore` side of that split, not the
+  `--continue` side). ⚠️ `"drivemode"`/`"drive-mode"` are already in `WORKFLOW_TERMS`, so the seam
+  reference must be in **executable source** — a comment-only mention was *measured* not to satisfy the
+  guard at M11.
+- [ ] 4b.7 **Do NOT write `drive_mode:` into any workflow file.** The superseded 4.4 aimed at
+  `.session.md` (deleted by `/session-restore` step 7) and the WIP frontmatter (archived at finalize,
+  absent in the gap). Claudesk has never written into `workflow-system/` and M11 shipped the docs viewer
+  deliberately read-only; **this WP does not change that posture.** Recorded as a decision so it is not
+  re-litigated as an oversight.
 
-**WP4 → WP5 rationale:** Standard exit-verify placement — every deliverable must exist before the milestone's exit criteria and the OFF-invariant guard's new arm can be verified against the real app.
+**WP4b → WP4c rationale:** The signal is the deliverable and carries the remaining risk (shared-hook
+plumbing, an end-to-end path across the IPC boundary); the cell is a display surface that *feeds* it.
+Building the signal first means the cell has a real consumer the moment it lands — avoiding the
+uncalled-primitive shape this milestone has already paid for five times. ⚠️ **But see 4c.0:** until the
+cell exists there is no way to *set* a mode, so 4b must ship with a defined default.
+
+---
+
+### WP4c: The picker-row drive-mode cell
+**Description:** The **visible** half — metric 5's actual requirement (*"the active drive mode is always
+visible"*). A compact readout that becomes editable on demand, built to WP4a's chosen mockup.
+**Milestone:** M12
+**Dependencies:** WP4a (design), WP4b (the value it displays and feeds)
+**Size:** S/M — sized after WP4a's mockup verdict
+**Tasks:**
+- [ ] 4c.0 **State the default explicitly.** With no cell, WP4b needs a defined value; with the cell,
+  "unset" must still mean something. Decide whether unset means *no env var at all* (fully inert, the
+  safe reading) or a default mode — and note that `session-start` defaults to **autopilot** on Enter
+  while `session-restore` defaults to **orchestrated**, so there is no single upstream default to copy.
+- [ ] 4c.1 **Compact readout, click to edit** — `set-a-spawn-time-choice-where-the-spawn-is-chosen`'s
+  corollary. The active value is readable **without interaction**; only the *edit affordance* is behind
+  a click. An always-live `<select>` on every row was explicitly judged too noisy at 20+ projects.
+  ⚠️ **This is the prior's own named untested edge** — *"a setting read at creation that is ALSO
+  live-reconfigurable later, which may want both."* Drive mode is exactly that: read at spawn **and**
+  changeable mid-session by typing. Resolved **picker row only** (matching M11.5 WP1's resolution);
+  record the edge as now-tested when this ships.
+- [ ] 4c.2 **Add the cell to `PICKER_ROW_CELLS`** (`pickerRowOrder.ts`) as **data**, not JSX — the module
+  exists so the component cannot disagree with the declared order and the test asserts a *value*.
+  ⚠️ `isSiblingOfOpenButton` is `cell !== "open"` and is **tautological** for anything nested (WP3's
+  as-built note) — do not read it as protection.
+- [ ] 4c.3 **Gate the cell** behind `useWorkflowFeaturesEnabled` (executable-source seam reference).
+- [ ] 4c.4 **Verify the row still fits** at realistic name lengths — space competition on this row is a
+  known, already-paid defect (WP3 P3.9).
+
+---
+
+### WP4d: Doc corrections — vision.md, roadmap.md, and the M13 hand-off note
+**Description:** The corrections the superseded 4.5 owned, plus what this re-decomposition adds.
+**Milestone:** M12
+**Dependencies:** WP4b, WP4c (correct docs to what actually shipped, not to what was planned)
+**Size:** S
+**Tasks:**
+- [ ] 4d.1 **Correct `vision.md` in 5 places** — lines 28, 51, 79, 87 and **success metric 5** — from
+  "workspace header" to "picker row", with the reasoning and a pointer to
+  `set-a-spawn-time-choice-where-the-spawn-is-chosen`. ⚠️ **Metric 5 is unsatisfiable as written**; this
+  is not optional cleanup. ⚠️ Line 79 *also* names `/session-pause` and `/session-resume`, **neither of
+  which has existed since M9 WP5** — fix in the same pass.
+- [ ] 4d.2 **Correct `roadmap.md`'s M12 deliverable + exit criterion.** The deliverable still says
+  *"mirrored to the active WIP file's `drive_mode:` frontmatter so Claudesk's UI and the workflow's
+  pause-policy logic share a single source of truth"* — that is the mechanism this re-decomposition
+  **rejected**. Replace with the signal mechanism and say why.
+- [ ] 4d.3 **Record the mechanism in `arch.md`** — the hook-as-write-channel is a new architectural
+  capability (Claudesk's hooks were read-only telemetry until now) and the next person to touch the hook
+  script must find this rather than rediscover it.
+- [ ] 4d.4 **Write the M13 hand-off note.** M13's Recycle Session ends in `/session-restore` and is the
+  natural second caller. ⚠️ **Operator decision 2026-08-06: reuse is NOT pre-committed** — *"I'll need to
+  open the spec and re-evaluate if it's reusable when we get there."* So record what exists and let M13
+  decide; do **not** build a generalized abstraction for a second caller that has not been specced.
+
+**WP4d → WP5 rationale:** Standard exit-verify placement — every deliverable must exist, and the docs
+must describe what shipped, before the exit criteria can be verified against the real app.
 
 ---
 
 ### WP5: Milestone-exit verify (+ the guard's fourth arm)
 **Description:** Drive M12's exit criteria live, and extend the OFF-invariant guard to cover M12's new registry.
 **Milestone:** M12
-**Dependencies:** WP1–WP4
+**Dependencies:** WP1–WP3, WP4a–WP4d
 **Size:** M
 **Tasks:**
 - [ ] 5.1 **Extend the OFF-invariant guard with a fourth arm** covering M12's surfaces (a picker cell + a spawn-time action are neither panel, menu id, nor chord). The guard's own header (`:33-36`) requires this as part of the work. Assert the **computed OFF-state value**, mirroring how M11 extended the panel arm to `availablePanels(false)` rather than a static array.
 - [ ] 5.2 **Probe each guard arm INDIVIDUALLY** — never with one composite bypass. M10.9's proven method: a composite tripping *some* arm reports "the guard bites" while hiding a gap, which is exactly how the `panelHost.ts` hole was found. ⚠️ And per `[[verify-the-mutation-landed]]`, confirm each mutation changed *executable code* before believing a pass — two attempts in one session reported "the guard does not bite" having modified nothing.
 - [ ] 5.3 Drive the exit criteria live via the MCP bridge on `tmp/scratch/scratch-*` (mandatory once a check spawns a CC session): each of the three prediction states, both doors, the flag surviving a hard kill, and consume-once.
 - [ ] 5.4 Verify **enable AND disable each leave `~/.claude/` byte-identical**. ⚠️ **Hash around each TOGGLE, never around a relaunch** — `hook_install` legitimately rewrites `~/.claude/settings.json` at launch and is universal; a relaunch-spanning hash false-positives on it and looks like the milestone's invariant failing.
-- [ ] 5.5 Confirm the vision/roadmap corrections from 3.5 landed, and that success metric 5 now reads consistently with the shipped placement.
+- [ ] 5.5 Confirm the vision/roadmap corrections from **WP4d** landed, and that success metric 5 now reads consistently with the shipped placement.
 - [ ] 5.6 Record the exit verdict + an evidence table in "Probe outcomes".
+- [ ] 5.7 **Verify the drive-mode signal end-to-end on the real app, BOTH arms.** Open a Claudesk
+  workspace with a mode set → the menu does not appear; run `claude` in the **same directory from a
+  plain terminal** → the menu **does** appear. ⚠️ The negative arm is the load-bearing one: it is the
+  operator's stated constraint (*"`/session-restore` should behave as-is if used without Claudesk"*),
+  and a check that only drives the Claudesk arm cannot distinguish "correctly inert" from "broken for
+  everyone". Run both in the same session, as WP2's hard-kill case did.
+- [ ] 5.8 **Confirm the `~/.claude/` byte-identity check still holds with the new hook emission.** 5.4
+  hashes around each *toggle*; the signal adds a per-turn stdout write, which must not alter
+  `settings.json` at all. If WP4a chose the **shared** script, re-run 5.4 with particular care — the
+  contract change touches all 10 events.
 
 ---
 
 ## Dependency map
 
 ```
-WP1 (probe: flag store + announce query)          ← START, blocks everything
+WP1 ✅ (probe: flag store + announce query)       ← START, blocks everything
  │
  ▼
-WP2 (flag lifecycle + clean-exit clearing + exit button)
+WP2 ✅ (flag lifecycle + clean-exit clearing + exit button)
  │
  ▼
-WP3 (auto-fire + announce + two doors)   ◀── HIGHEST RISK, built EARLY (derisk-first)
+WP3 ✅ (auto-fire + announce + two doors)   ◀── HIGHEST RISK, built EARLY (derisk-first)
  │
- ├──► WP4 (drive mode on picker row)   ← independent of WP2/WP3; may run in parallel
- │                                        with WP3 or slot anywhere after WP1
+ ▼
+WP4a (probe: hook plumbing verdict + cell mockups)   ◀── re-decomposed 2026-08-06
+ │
+ ▼
+WP4b (the signal: per-project value + env var + per-turn injection)   ◀── THE DELIVERABLE
+ │
+ ▼
+WP4c (the picker-row cell — metric 5's "always visible")
+ │
+ ▼
+WP4d (doc corrections + the M13 hand-off note)
+ │
  ▼
 WP5 (exit verify + the guard's 4th arm)
 ```
 
-**Critical path:** WP1 → WP2 → WP3 → WP5.
+**Critical path:** WP1 → WP2 → WP3 → **WP4a → WP4b → WP4c → WP4d** → WP5. ⚠️ **There is no longer a
+parallel track** — the 2026-08-03 decomposition called WP4 "independent of WP2/WP3"; the re-decomposition
+makes it strictly sequential, because the signal consumes WP3's spawn path and the cell feeds the signal.
 
-**⚠️ Ordering is DERISK-FIRST, corrected 2026-08-03.** An earlier draft ran the drive-mode cell (WP4) before auto-fire and justified it as "bank a shippable increment first, then do the risky part with the flag already proven." That is **build-dependency reasoning mis-stated as risk reasoning**, and it inverts the standard learning-sequence rule: *resolve the riskiest unknowns first, when the cost of discovery and re-planning is lowest.* Operator-corrected — *"Always derisk first."*
+**⚠️ Ordering is DERISK-FIRST, corrected 2026-08-03.** An earlier draft ran the drive-mode cell (WP4) before auto-fire and justified it as "bank a shippable increment first, then do the risky part with the flag already proven." That is **build-dependency reasoning mis-stated as risk reasoning**, and it inverts the standard learning-sequence rule: *resolve the riskiest unknowns first, when the cost of discovery and re-planning is lowest.* Operator-corrected — *"Always derisk first."* **The same rule is why WP4a precedes WP4b/WP4c** rather than the cell being built first.
 
-**All of the milestone's genuine unknowns live in WP3:** the first feature-initiated PTY write, injection timing against a freshly-spawned CC prompt, the `pickerRowOrder` sibling-nesting trap, and an auto-action on the app's most-glanced surface. **WP4 holds near-zero unknown** — it clones `default_model`'s already-live read/write path into a cell whose placement the operator has already settled. If WP3 discovers something that re-shapes the milestone, that must happen while there is still room to re-plan, not after the safe work is banked.
+**⚠️ The claim "all of the milestone's genuine unknowns live in WP3" was FALSE, and this is the
+re-decomposition's central correction.** WP4 was sized **M / "near-zero unknown" / "clones an
+already-live precedent"** — and every part of that was wrong. Drive mode has **no argv destination**, so
+the `default_model` analogy breaks at the only point that mattered; the delivery mechanism did not exist
+and had to be found empirically; and the planned frontmatter mirror targeted a file that is **deleted by
+`/session-restore` step 7** and **absent in the finalize→next-plan gap**. The lesson generalizes past
+this instance: *"clones an existing path"* is a claim about **storage**, and it says nothing about
+**consumption** — the two ends of a feature can have entirely different risk profiles, and a WP sized on
+the familiar end will be mis-sized.
 
 **WP2 is the minimum WP3 needs** — auto-fire cannot be verified against a flag whose lifecycle is still in question, and WP2's hard-kill case (2.7) is what proves the signal WP3 reads is trustworthy. WP2 is deliberately NOT deferred behind WP3 for that reason.
 
-**Parallel track:** WP4 shares no files and no subsystem with WP2 or WP3 (it touches `config_store` + the picker-row cell list; they touch the flag store + the close/spawn paths + the announce/fire path). It may run alongside WP3 or slot anywhere after WP1 — it is a genuine parallel track, not a sequenced dependency.
-
-**No orchestration/async WP** — nothing here introduces a queue, worker, or event pipeline beyond the existing Tauri event channel. **No 3rd-party probe WP** — M12 calls no external API or SDK; WP1 is a probe of *our own* storage boundary, which is why it exists despite rule 4 not strictly requiring one.
+**No orchestration/async WP** — nothing here introduces a queue, worker, or event pipeline beyond the existing Tauri event channel. **No 3rd-party probe WP** — M12 calls no external API or SDK; WP1 and WP4a are probes of *our own* boundaries (a storage boundary, then a hook/IPC boundary), which is why they exist despite rule 4 not strictly requiring one.
 
 ## Sizing summary
 
 | WP | Size | Note |
 |---|---|---|
 | WP1 | S | ✅ SHIPPED 2026-08-03 — both verdicts, within the half-day timebox |
-| WP2 | M | Four clean-exit routes + a hard-kill case are the bulk |
-| WP3 | L | **The milestone's risk.** First feature-initiated PTY write + injection timing on a fresh prompt + the sibling-nesting trap + an auto-action on the most-glanced surface |
-| WP4 | M | Clones a live precedent; the vision correction is real but small |
-| WP5 | M | Live drive + a new guard arm, each probed individually |
+| WP2 | M | ✅ SHIPPED 2026-08-03 — three clean-exit routes (not four) + a hard-kill case |
+| WP3 | L | ✅ SHIPPED 2026-08-05. **The milestone's risk** as scoped at the time: first feature-initiated PTY write + injection timing on a fresh prompt + the sibling-nesting trap + an auto-action on the most-glanced surface |
+| ~~WP4~~ | ~~M~~ | ⚠️ **SUPERSEDED 2026-08-06** — re-decomposed into WP4a–WP4d. The "M / near-zero unknown / clones a live precedent" sizing was wrong on all counts |
+| WP4a | S | Probe: hook-plumbing verdict + cell mockups. Half-day timebox; the channel is already decided |
+| WP4b | M | **The actual deliverable.** Per-project value + env var + per-turn injection, with the inertness arm mutation-proven |
+| WP4c | S/M | Size after WP4a's mockup verdict |
+| WP4d | S | Doc corrections (5 vision places incl. the unsatisfiable metric 5) + arch.md + the M13 note |
+| WP5 | M | Live drive + a new guard arm each probed individually + the two-arm signal check (5.7) |
 
 ## Probe outcomes
 
@@ -523,6 +849,35 @@ what the tests drive.
 
 ## Open questions carried into the WPs
 
-1. **Announce-label placement vs. long project names** (task 3.2) — next to the name reads best, but competes for the flexing left region.
-2. **Keyboard parity for the no-fire door** (task 3.6) — modifier, or deferred with a reason.
-3. **Flag store choice** (task 1.2) — three candidates; operator settled the *category* (machine-local, not a project preference), not the *location*.
+*Updated 2026-08-06. The three original questions are all CLOSED by shipped WPs and are kept below for
+provenance; the live ones are WP4a's.*
+
+**Live — WP4a settles these:**
+
+1. **Shared telemetry hook script vs. a separate `UserPromptSubmit` entry** (task 4a.1). The shared
+   script is registered on all 10 events for both identities and has never written stdout; its stated
+   contract is *"a down Claudesk must NEVER block CC."* Changing that has a 10-event blast radius.
+2. **The injected sentence's exact wording** (task 4a.2) — and specifically **fact vs. prohibition**. The
+   proven probe wording *did* include a prohibition clause, so this is a durability judgement (correct at
+   turn 1, wrong at turn 60 when the operator may want to change mode), not a measured requirement.
+3. **The picker-row cell's design** (task 4a.4) — decided from mockups per the operator, not prose.
+4. **What "unset" means** (task 4c.0) — no env var at all (fully inert) vs. a default mode. ⚠️ There is no
+   single upstream default to copy: `session-start` defaults to autopilot, `session-restore` to
+   orchestrated.
+
+**Deliberately NOT open** — do not reopen these as if they were gaps: the **channel** (`UserPromptSubmit`,
+operator-chosen, obedience proven live on both arms); **whether to change the companion repo** (no —
+`/session-restore`'s re-prompt is correct for a CLI user); **whether M13 reuses the primitive** (recorded,
+not pre-committed — the operator evaluates it at M13's spec); and **long-context durability** (assumed,
+validated by dogfooding, deliberately not probed synthetically).
+
+<details><summary>Closed (2026-08-03 decomposition)</summary>
+
+1. ~~**Announce-label placement vs. long project names** (task 3.2)~~ — CLOSED by WP3: the space
+   competition was real, caught at verify-human (P3.9 back-loop), and fixed as a layout defect.
+2. ~~**Keyboard parity for the no-fire door** (task 3.6)~~ — CLOSED by WP3 **without** a modifier: the
+   `⊘` is itself focusable with an Enter/Space mirror.
+3. ~~**Flag store choice** (task 1.2)~~ — CLOSED by WP1: its own `session-state.json` in the per-identity
+   `app_data_dir()`, chosen on a lost-update hazard rather than the predicted byte cost.
+
+</details>
