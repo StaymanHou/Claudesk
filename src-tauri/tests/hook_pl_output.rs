@@ -17,7 +17,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
 
 /// Absolute path to the deployed hook script in the repo.
@@ -90,7 +90,7 @@ fn as_json(line: &str) -> serde_json::Value {
 }
 
 /// Run the hook with `payload` on stdin and **no listening socket**, capturing its
-/// exit code and stdout. Returns `(exit_ok, stdout_bytes)`.
+/// exit status and stdout. Returns `(ExitStatus, stdout_bytes)`.
 ///
 /// ## Why this helper exists alongside [`run_hook_capture_line`] (M12 WP4a)
 /// `run_hook_capture_line` asserts the never-block-CC exit-0 contract at line 80 —
@@ -105,7 +105,7 @@ fn as_json(line: &str) -> serde_json::Value {
 /// asserted — relevant now because M12 WP4b will make this script emit a
 /// `UserPromptSubmit` `additionalContext` line on stdout, and a malformed emission
 /// must never reach CC as partial JSON.
-fn run_hook_degraded(payload: &str, sock_env: Option<&str>) -> (bool, Vec<u8>) {
+fn run_hook_degraded(payload: &str, sock_env: Option<&str>) -> (ExitStatus, Vec<u8>) {
     let mut cmd = Command::new("perl");
     cmd.arg(hook_path())
         .stdin(Stdio::piped())
@@ -131,17 +131,26 @@ fn run_hook_degraded(payload: &str, sock_env: Option<&str>) -> (bool, Vec<u8>) {
         .write_all(payload.as_bytes())
         .unwrap();
     let out = child.wait_with_output().expect("hook exits");
-    (out.status.success(), out.stdout)
+    // ⚠️ Returns the full `ExitStatus`, not a bare `bool` — changed at code review. The
+    // failure this helper exists to catch is "exits **2** with a Perl error", and a bool
+    // discards exactly the number that makes the assertion message actionable.
+    (out.status, out.stdout)
 }
 
 /// The never-block-CC contract on the DEGRADED paths — the ones that actually
 /// threaten it. Each arm must exit 0 and emit no partial JSON on stdout.
 ///
-/// ⚠️ M12 WP4a proved this property rests on **one** construct: the `eval {}` that
-/// wraps the payload decode. Removing the inner `eval` around `decode_json` alone
-/// changes nothing (an outer guard catches it — they are redundant, not layered), but
-/// removing **both** makes malformed stdin exit **2** with a Perl error on stderr,
-/// i.e. a wedged CC turn. Do not "simplify" those guards away.
+/// ⚠️ **M12 WP4a measured that this property rests on ONE construct: the `eval {}` at
+/// `claudesk-hook.pl:58` that wraps `decode_json`.** Remove it and malformed stdin exits
+/// **2** with a Perl error on stderr — a wedged CC turn. **There is no second guard
+/// behind it**: the script's only other `eval`s are `:120` (socket open) and `:138` (the
+/// write-failure log), neither of which wraps the decode. Do not "simplify" `:58` away.
+///
+/// ⚠️ **This comment previously claimed the opposite** — that an "outer guard" made `:58`
+/// redundant. That was the finding from WP4a's *scratchpad fixture*, which really did wrap
+/// its whole signal block in an outer `eval`; it was pasted onto the real script, where it
+/// is false and inverted. Corrected at code review. The mutation this test was built from
+/// says it plainly: removing `:58` alone makes **this test fail**.
 #[test]
 fn never_blocks_cc_on_degraded_inputs() {
     if !perl_available() {
@@ -176,8 +185,14 @@ fn never_blocks_cc_on_degraded_inputs() {
         ),
     ];
     for (label, payload, sock) in cases {
-        let (ok, stdout) = run_hook_degraded(payload, sock);
-        assert!(ok, "hook must exit 0 on degraded input: {label}");
+        let (status, stdout) = run_hook_degraded(payload, sock);
+        assert!(
+            status.success(),
+            "hook must exit 0 on degraded input ({label}) — got {:?}. A non-zero exit here \
+             wedges the user's CC turn; see this test's doc comment for the one guard that \
+             prevents it.",
+            status.code()
+        );
         // stdout must be either empty or ONE complete valid JSON object — never a
         // partial fragment. Today the script writes nothing to stdout at all; WP4b
         // adds the drive-mode emission, and this assertion is what keeps a malformed

@@ -1005,10 +1005,17 @@ demo pipeline). What survives is this record plus the two permanent tests the pr
 - **`claudesk-hook.pl:44` does `exit 0 if $sock_path eq ''` BEFORE reading stdin.** The emission must go
   **above** it, which means **the stdin drain moves up and is shared** by both concerns. Appending after
   line 44 silently kills the signal whenever `CLAUDESK_HOOK_SOCK` is absent.
-- **Never-block-CC rests on ONE construct: the outer `eval {}`.** Removing the *inner* `eval` around
-  `decode_json` changes nothing (the outer one catches it — they are **redundant, not layered**); removing
-  **both** makes malformed stdin exit **2** with a Perl error, i.e. a wedged CC turn. Do not "simplify"
-  the outer guard as redundant.
+- **Never-block-CC rests on ONE construct: `claudesk-hook.pl:58`, the `eval {}` wrapping `decode_json`.**
+  Remove it and malformed stdin exits **2** with a Perl error — a wedged CC turn, and
+  `never_blocks_cc_on_degraded_inputs` fails. ⚠️ **There is NO second guard behind it**: the script's only
+  other `eval`s are `:120` (socket open) and `:138` (the write-failure log), neither of which wraps the
+  decode. **Do not "simplify" `:58` away when you move the stdin drain up.**
+  ⚠️ **This bullet previously described an "outer `eval {}`" that made `:58` redundant — that was FALSE
+  and is corrected here (code-review CRITICAL, 2026-08-06).** The claim was measured on WP4a's *scratchpad
+  fixture*, which did wrap its whole signal block, and was carried onto the real script, which does not.
+  It inverted the instruction on the one construct this WP tells you not to touch. **A finding measured on
+  a fixture is a finding about the fixture** — the two agreed on telemetry and disagreed on exactly the
+  thing that mattered.
 
 **The gate reaches the hook by ABSENCE** (task 4a.2b): gate OFF → **do not set `CLAUDESK_DRIVE_MODE`**.
 Inertness then comes from the same mechanism that protects every plain-CLI user (proven: unset *and*

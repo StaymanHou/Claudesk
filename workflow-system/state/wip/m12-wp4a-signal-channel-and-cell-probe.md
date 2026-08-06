@@ -1,7 +1,7 @@
 # Feature: M12 WP4a — Probe: the drive-mode signal channel's shape + the picker cell's UI/UX
 
 **Workflow:** feature
-**State:** verify-codify (ALL PHASES COMPLETE) — ready for `/feature-ship`
+**State:** ship (complete) — committed `5f68720` on `main`
 **Created:** 2026-08-06
 **WBS:** `workflow-system/product/wbs.md` → "WP4a" (size S, half-day timebox)
 **Type:** probe — the deliverable is **two recorded verdicts + an operator-chosen mockup**, not shipped
@@ -151,10 +151,20 @@ appended — it must go **above** that early exit, which means **the stdin drain
 by both concerns. Placing the emission after line 44 would silently kill the signal for any session
 where `CLAUDESK_HOOK_SOCK` is absent. Property C+ above is the regression test for exactly this.
 
-⚠️ **The never-block-CC property rests on ONE construct: the outer `eval {}` wrapping the signal block.**
-Mutation-proven — removing the *inner* `eval` around `decode_json` changes nothing (the outer one catches
-it; they are redundant, not layered), but removing **both** makes malformed stdin exit **2** with a Perl
-error on stderr, i.e. a wedged CC turn. WP4b must not "clean up" the outer `eval` as redundant.
+⚠️ **The never-block-CC property rests on ONE construct — and it is `claudesk-hook.pl:58`, the `eval {}`
+that wraps `decode_json`.** Mutation-proven against the **real script**: remove `:58` and malformed stdin
+exits **2** with a Perl error on stderr — a wedged CC turn, and `never_blocks_cc_on_degraded_inputs`
+fails. **There is no second guard behind it.** The script's only other `eval`s are `:120` (socket open)
+and `:138` (the write-failure log); neither wraps the decode. **WP4b must not "simplify" `:58` away.**
+
+⚠️ **THIS PASSAGE PREVIOUSLY SAID THE OPPOSITE — corrected at code review (CRITICAL), and the way it went
+wrong is the lesson.** It claimed an *"outer `eval {}` wrapping the signal block"* made `:58` redundant.
+That was true of **WP4a's scratchpad FIXTURE** (which did wrap its whole signal block), and it was carried
+across to the real script, which has no such wrapper — inverting the instruction on the one construct WP4b
+must not touch. ⚠️ **My own Phase 1 mutation had already disproven it** (mutant A removed `:58`; the test
+FAILED) and I wrote the contradicting sentence anyway. **The generalizable rule: a finding measured on a
+FIXTURE is a finding about the fixture.** Re-measure against the real artifact before recording it as a
+property of that artifact — the two agreed on telemetry and disagreed on exactly the thing that mattered.
 
 ### ✅ VERDICT (b) — the gate reaches the hook by ABSENCE (P1.3)
 
@@ -889,8 +899,26 @@ WP4b at §E as the prototype for a **tracked** guard, which is where that code b
    (`CLAUDESK_DRIVE_MODE` became `autopilot CLAUDESK_HOOK_SOCK=…`), producing a false **FAIL** on the
    dead-socket arm. Use explicit inline assignments.
 
+## Ship record (2026-08-06)
+
+**Committed `5f68720` on `main`** — 8 files, +2120/−60. ⚠️ **NOT pushed**: `main` was already **4 commits
+ahead of origin** before this WP, so a push would have carried unrelated work; the operator did not ask.
+No branch created (project policy: commit directly to `main`).
+
+**Final gates:** 810 cargo (0 fail) · 1926 vitest (0 fail) · `clippy --all-targets -- -D warnings` 0 errors ·
+`tsc --noEmit` clean · `cargo fmt --check` clean · `format:check` clean. One **pre-existing** lint warning
+in `XtermPane.tsx` (spread in a `useEffect` dep array), untouched by this WP, 0 errors.
+
+⚠️ **The one `TODO` added is deliberate, not debt:** `TODO(M12 WP4b 4b.1)` inside
+`drive_mode_serializes_to_these_literal_strings`. It is paired with an assertion that **fails the moment
+WP4b renames the enum**, so it cannot rot silently — the test tells the next builder what to change.
+
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → `/feature-ship`
+- **Path:** Feature > review-quality (complete) → **`/feature-refactor`** (F40 — CRITICAL found)
+- **Active scope:** 2 CRITICAL (one finding, two sites: `hook_pl_output.rs:139-143` + the WIP's own
+  self-contradiction) · 3 MAJOR · 4 MINOR. ⚠️ **The CRITICAL is a comment that states the OPPOSITE of what
+  `claudesk-hook.pl` does**, on the one construct WP4b must not remove — independently verified: three
+  `eval`s, none wrapping the `decode_json` one.
 - **Active scope:** **Phases 1–3 COMPLETE `[x]`; Phase 4 impl + verify-auto + verify-self + verify-human
   all complete** (4 verification passes; 7 BLOCKING sufficiency failures found and fixed; pass 4 clean;
   operator APPROVED the record as sufficient). **WP4b re-sized M → L** at the operator's prompting.
@@ -926,6 +954,120 @@ identities).
 script + `grep`/`git status`). Phase 3's mockup is a rendered artifact the **operator** judges — the
 choice is definitionally theirs, so verify-human is the real gate there, not a shortfall in agent
 verification.
+
+## Code-Quality Review — m12-wp4a-signal-channel-and-cell-probe
+
+*Reviewed against ship baseline `5f68720` (2026-08-06). Mode 2 → CRITICAL auto-invokes refactor.*
+
+### Strengths
+- Each of the four tests closes a **measured** gap, not a suspected one — written only after proving the
+  specific wrong belief (the exit-0 assert unreachable on degraded arms; the wrong `color_tty_env` fix
+  passing all 809 tests).
+- `run_hook_degraded()` adds a second helper with a doc comment stating why two exist, rather than
+  refactoring the working one. The `env_remove`-not-empty-string choice is explained.
+- *"A round-trip through your own serializer proves symmetry, not correctness"* is stated in three places
+  without diverging.
+- The backlog item correctly stays `pending` with deletion deferred to `feature-finalize`'s
+  CHANGELOG-then-delete commit — the delete-on-resolve invariant honored under pressure to tidy.
+- That same item **self-corrects** ("this item's original claim was WRONG… the check took one `grep`")
+  and downgrades its own priority rather than defending the filing.
+
+### Issues
+
+**CRITICAL**
+- [`src-tauri/tests/hook_pl_output.rs:139-143`] The doc comment on `never_blocks_cc_on_degraded_inputs`
+  **states the opposite of the truth** about the script it guards: *"Removing the inner `eval` around
+  `decode_json` alone changes nothing (an outer guard catches it — they are redundant, not layered)."*
+  ⚠️ **VERIFIED: `claudesk-hook.pl` has NO outer guard.** `eval` appears exactly three times — `:58`
+  (around `decode_json`), `:120` (socket open), `:138` (the write) — and **none wraps the decode**. The
+  comment is the *scratchpad-fixture* finding (that fixture DID have an outer `eval`) pasted onto the real
+  script. — *Why it matters: this is the single load-bearing construct for never-block-CC, and the comment
+  sits directly above its guard telling the WP4b builder the eval is redundant — on the exact file WP4b
+  edits. Worse than no comment.* ⚠️ **My own Phase 1 measurement contradicted this**: mutant A removed
+  that eval and the test FAILED.
+- [WIP `:154-157` vs `:223-228`] The same contradiction is **inside this file**: one passage says the
+  property "rests on ONE construct: the **outer** `eval {}`" and "WP4b must not clean up the outer `eval`
+  as redundant"; another says "the real script has no such outer guard." — *Why it matters: the WIP is
+  the handoff document; a self-contradictory statement about the invariant the whole channel decision
+  rests on is the highest-consequence drift in the diff.*
+
+**MAJOR**
+- [`backlog.md:17`, `wbs.md` `4c.1b`] **Verdict-label drift — VERIFIED: `grep '^### Verdict (g|h)' wbs.md`
+  returns 0.** The content exists (folded into Verdict (f)), so this is a naming break, not a missing
+  decision — but a builder told to "see Verdict (h)" greps and finds nothing.
+- [`docs/reference/…-cell-options.html`] The mockup **still renders `inherit`** (2 occurrences) for the
+  unset model cell; the real value is `Default`. Both the backlog and the new test comment record the
+  defect, but the artifact shipped uncorrected and — unlike its two BLOCKING defects — carries **no
+  in-file comment**. — *Why it matters: the WIP's own standard for this artifact is "causes written into
+  the file's own comments." A known-wrong string in a committed reference artifact, with the correction
+  living only in a backlog entry that gets deleted on resolve, is the exact drift channel this WP spent a
+  test preventing.*
+- [`modelOverride.test.ts:118`] `expect(MODEL_UNSET_LABEL).toBe(MODEL_UNSET_PLACEHOLDER.split(" (")[0])`
+  **re-implements the production derivation verbatim** — tautological against current source, and the
+  `.not.toContain("(")` line already covers the delimiter case more robustly. Contradicts the repo's own
+  `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]` lesson: a test that re-implements
+  the code shares its blind spot.
+
+**MINOR**
+- [`config_store/mod.rs:456-457`] The tripwire's trailing `observed[1]`/`observed[2]` assertions pin
+  **positional indices** into a vec built 30 lines earlier — a WP4b editor who reorders the array silently
+  changes what they pin. Assert by name instead.
+- [`hook_pl_output.rs:120`] `run_hook_degraded` returns a bare `bool` for exit status, discarding the
+  code — so the "exits **2** on a wedged turn" failure the doc comment describes can't be *reported* by
+  the helper guarding it. `ExitStatus` would let the message say what it exited with.
+- **On the deliberately-wrong tripwire (my question 1): reviewer says it is the RIGHT call** — the
+  alternative is red on `main`, the assertion message names the replacements, and the two correct variants
+  are pinned separately. Not a trap.
+- **On exact-set vs denylist (my question 2): reviewer says exact-set is CORRECT** and the churn concern
+  is not real — one line edited on a deliberate change to a 4-element array, at exactly the moment a human
+  should consider the shell spawn.
+- **On the stated limitation: reviewer says the honesty is ADEQUATE** and closing it with a `?raw` guard
+  would have been worse, given three recorded measurements of such guards passing while broken.
+
+### Assessment
+A strong probe WP judged on probe terms — every test exists because a specific wrong belief was measured
+and killed, each aimed at a defect the *next* WP is demonstrably about to walk into. Both scrutinized
+design choices hold up. **The debt is entirely in the prose layer, and it is real:** the never-block-CC
+comment asserts the opposite of what the script does, the WIP contradicts itself on the same point 70
+lines apart, verdict labels (g)/(h) are cited in two files and defined in none, and a known-wrong string
+ships in the reference artifact. ⚠️ **For a WP whose deliverable IS prose, that is not a cosmetic
+category** — WP4b will read the prose and inherit the tests without re-deriving either. The inverse of the
+usual failure, and here the more dangerous one.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize`
+archives this WIP.
+
+### ✅ Refactor — all 7 findings ADDRESSED (2026-08-06)
+
+**Nothing dismissed, nothing backlogged.** Cleanup only; no behavior changed. Suites re-run green after
+every edit: **810 cargo · 1926 vitest · clippy `-D warnings` 0 errors · `cargo fmt --check` · `tsc` ·
+`format:check` all clean.**
+
+| # | Finding | Fix |
+|---|---|---|
+| **CRITICAL** | The "outer guard" claim | Corrected at **THREE** sites — the reviewer found two, and the third was the worst |
+| MAJOR | Verdict-label drift | `backlog.md`'s (g)/(h) citations repointed to the WBS's **Verdict (f)**, with the WIP-local lettering named inline so both readings resolve |
+| MAJOR | `inherit` in the artifact | Changed to **`Default`** *and* annotated in place, per the WIP's own standard for this file |
+| MAJOR | Tautological assertion | Deleted `modelOverride.test.ts:118`; **re-ran both mutants to prove the remaining assertions still catch them** |
+| MINOR | Positional indices | `observed[1]`/`observed[2]` → assert by **variant** via a `wire()` helper |
+| MINOR | Bare `bool` | `run_hook_degraded` → `ExitStatus`; the assertion message now prints the actual code |
+| MINOR ×3 | The three answered questions | No action — reviewer confirmed the tripwire, the exact-set assertion, and the stated limitation were all right |
+
+⚠️ **THE CRITICAL HAD A THIRD SITE THE REVIEW DID NOT FIND — `wbs.md`'s Verdict (c), which is the one that
+actually matters.** The reviewer flagged `hook_pl_output.rs` and this WIP. But Verdict (c) is the
+**durable record WP4b builds from**, and it carried the same inverted claim. Fixing only the two reported
+sites would have left the wrong instruction in the single place most likely to be read. **When a
+copy-paste error is found in two places, the question is not "are both fixed" — it is "where else did
+this text go."**
+
+**The root cause, recorded because it will recur:** the claim was measured on WP4a's **scratchpad
+fixture**, which really did wrap its whole signal block in an outer `eval`. The real script does not. The
+two agreed on telemetry (which is what I compared them on, 6 event shapes) and **disagreed on exactly the
+property I then wrote down as proven**. ⚠️ My own Phase 1 mutant A had already disproven it — removing
+`:58` made the test FAIL — and I wrote the contradicting sentence anyway. **A finding measured on a
+fixture is a finding about the fixture; re-measure against the real artifact before recording it as a
+property of that artifact.**
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

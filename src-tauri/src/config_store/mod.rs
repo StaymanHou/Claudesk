@@ -460,8 +460,18 @@ mod tests {
         );
 
         // The two that are already correct must STAY correct through the WP4b rename.
-        assert_eq!(observed[1], "orchestrated");
-        assert_eq!(observed[2], "autopilot");
+        // ⚠️ Asserted BY VARIANT, not by index into `observed`. These were `observed[1]` /
+        // `observed[2]` until code review: positional indices into an array built 30 lines
+        // above mean a WP4b editor who reorders that array silently changes what these
+        // lines pin — while the test keeps passing.
+        let wire = |m: DriveMode| {
+            serde_json::to_string(&m)
+                .unwrap()
+                .trim_matches('"')
+                .to_string()
+        };
+        assert_eq!(wire(DriveMode::Orchestrated), "orchestrated");
+        assert_eq!(wire(DriveMode::Autopilot), "autopilot");
     }
 
     #[test]

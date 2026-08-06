@@ -108,16 +108,25 @@ describe("displayModelValue — unset shows the placeholder, not literal text", 
   // Verdict (h) "label only when unset". That doubles the drift surface, so the derivation
   // rule needs a guard before the second label lands — not after.
   it("derives the row label from the placeholder rather than hardcoding it", () => {
-    // The relationship, asserted as a relationship — not as two literals that could
-    // both be edited to agree on something wrong.
+    // Each assertion states the RELATIONSHIP, never two literals that could both be
+    // edited to agree on something wrong.
     expect(MODEL_UNSET_PLACEHOLDER.startsWith(MODEL_UNSET_LABEL)).toBe(true);
     expect(MODEL_UNSET_LABEL.length).toBeLessThan(
       MODEL_UNSET_PLACEHOLDER.length,
     );
-    // The label is the placeholder's leading phrase, with the parenthetical dropped.
-    expect(MODEL_UNSET_LABEL).toBe(MODEL_UNSET_PLACEHOLDER.split(" (")[0]);
-    // It must remain a bare phrase — no parenthetical survived the split.
+    // A bare phrase — the parenthetical did not survive into the label.
     expect(MODEL_UNSET_LABEL).not.toContain("(");
+    //
+    // ⚠️ REMOVED at code review: `expect(MODEL_UNSET_LABEL).toBe(
+    //   MODEL_UNSET_PLACEHOLDER.split(" (")[0])`. It re-implemented the production
+    // expression (modelOverride.ts:50) VERBATIM, so it was tautological against the
+    // current source and could only fail if someone changed the delimiter — which the
+    // `not.toContain("(")` line above already covers, and covers more robustly. Per
+    // [[extract-for-import-when-a-raw-guard-cant-express-the-property]], a test that
+    // re-implements the code shares its blind spot; keeping it would have added the
+    // APPEARANCE of proof to the one line most likely to be read as "the derivation is
+    // proven." The three assertions above carry this test on their own — verified by
+    // re-running the two mutants that matter (`= "Inherit"` and a wrong delimiter).
   });
 
   it("renders the unset row label as the product's actual word", () => {

@@ -400,7 +400,15 @@
           </div>
           <div class="gutter"></div>
         </div>
-        <div class="model">inherit</div>
+        <!-- ⚠️ CORRECTED at code review 2026-08-06: this cell read `inherit`, a word that appears
+             NOWHERE in the product. The real unset label is `Default` (MODEL_UNSET_LABEL, derived from
+             MODEL_UNSET_PLACEHOLDER = "Default (CC's own)" in src/cc/modelOverride.ts). `inherit` exists
+             only in that file's code COMMENTS describing the behavior — it was lifted from prose into a
+             mockup used to make a product decision. The fake-content pitfall, in the one place it does
+             the most damage. ⚠️ Note the decision this artifact supported is UNAFFECTED: Option 2 was
+             chosen on layout cost, not on this string. The binding record is the written verdict in
+             wbs.md, not this drawing. -->
+        <div class="model">Default</div>
         <select class="live"><option>orchestrated</option><option>stepping</option>
           <option>autopilot</option><option>fsd</option></select>
         <div class="rm">×</div>
