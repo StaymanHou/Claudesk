@@ -109,6 +109,17 @@ there → WP3; paints there → the latch fix. The worktree is already prepared.
   present in *both* builds, so it cannot be the sole cause; it could still be a necessary co-factor
   (e.g. WP3 code that behaves differently when CC starts in a degraded/transcript-off mode).
   (unverified)
+- **H5 — the blank is a VERIFICATION-HARNESS artifact, not a product defect** (promoted to first-class
+  2026-08-06 at operator direction; previously buried inside H4). The agent-driven MCP-bridge harness
+  is itself a suspect: the launch chain, the `CLAUDE_CODE_CHILD_SESSION` marker, bridge-injected
+  timing, or an observation method that under-reports a *working* pane. ⚠️ **Do not treat the bisect
+  as having eliminated this.** `e82e334` painting under the same harness lowers H5's prior but leaves a
+  **harness×code interaction** fully open — a build could be harness-fragile in a way its predecessor
+  was not, which would present exactly as "WP3 broke it." **Discriminator:** the same recipe run from
+  an **operator-launched** build (outside the agent harness). Paints there but blanks under the
+  harness → H5. Blanks in both → a genuine code defect. ⚠️ Related precedent worth respecting:
+  `SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER` records two *prior false verdicts* on this
+  exact surface where a working terminal was misread as blank. (unverified)
 
 ## Blast radius / exposure
 
@@ -143,6 +154,69 @@ there → WP3; paints there → the latch fix. The worktree is already prepared.
 **Next step: I13 → `/incident-reproduce`.** Reproducibility is already established (twice, two repos, one virgin, screenshot-confirmed, environment held fixed) — so this is a deterministic local recipe, not a prod-data or telemetry-only signal. The anchor is worth capturing before investigating: this session's own history is the argument, having produced one retracted misattribution and two self-caught DOM-selector artifacts on this exact surface. An anchored, re-runnable recipe is what makes the next observation decisive and gives mitigation a regression gate.
 
 ⚠️ **Binding constraint on every pane observation from here** (per `SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER`): read `term.buffer.active` via the React fiber, scoped to `[data-testid="xterm-pane"]`. A DOM `.xterm-rows` read has already produced two false verdicts on this surface, and `data-session-id` belongs to the *right-panel* terminal, not the CC pane.
+
+## Reproduction plan (operator-directed 2026-08-06)
+
+Three operator constraints, in order:
+
+1. **Establish CONSISTENCY before anything else.** A single blank pane is not a reproduction. Run the
+   same recipe N times and record a **hit rate** (`X blank / N runs`), not a binary. Determinism is
+   itself a diagnostic: **every-run** points at code; **flaky** points at a race or at the harness.
+2. **Then discriminate: WP3 code change vs. verification-harness artifact.** ⚠️ The harness hypothesis
+   is a **first-class candidate**, not a footnote — the report frames it only narrowly as H4. It is
+   promoted to **H5** below. Note the bisect constrains but does not eliminate it: `e82e334` painting
+   under the same harness lowers its prior, yet a harness×code *interaction* remains open.
+3. ⚠️ **PAUSE ON FIRST LIVE CATCH — do not tear down.** When the blank pane is caught live, stop with
+   the app **running** and hand the MCP-driven dev build to the operator to eyeball directly. Teardown
+   only after the operator has looked. This overrides the usual drive-through-to-verdict posture.
+
+## Reproduction Attempt
+
+**Surface chosen:** manual recipe (a failing test cannot reach this — 1924 vitest + 806 cargo + `tsc`
++ lint are all green while the pane is blank, and `spawnTrigger.test.ts`, which pins the frontend half
+of the invariant, is green on `main`).
+**Outcome:** **reproduced — and the symptom is NOT what the report assumed.**
+**Determinism:** first run on this build; hit rate still being established (operator-directed step 1).
+**Build under test:** `3d8e18c` — **WP3 complete, latch fix (`051d707`) absent** (the discriminating build).
+**Target:** `tmp/scratch/scratch-a` — the only scratch repo with **no** unclean flag, so the row carries
+no prediction and no `--continue` arm (one fewer variable).
+
+### ⚠️ THE HEADLINE: the buffer is FULL while the screen is BLACK
+
+Read at the same instant, on the same pane:
+
+| Layer | Reading |
+|---|---|
+| `term.buffer.active` (via React fiber — the authority) | **878 chars**, 17 non-empty lines, full **CC v2.1.223** welcome banner |
+| DOM `.xterm-rows` (scoped to `[data-testid="xterm-pane"]`) | **878 chars**, 48 row divs, **17 with text**, real markup (674/1019/796 bytes for first 3 rows) |
+| Computed styles (`rows`/`screen`/`viewport`) | all `display:block`, `visibility:visible`, `opacity:1`, colour `rgb(212,212,212)` on transparent |
+| **Screenshot (what the user sees)** | **completely black left pane** |
+
+Evidence: `scratchpad/blank-pane-3d8e18c.png`.
+
+**This falsifies the report's entire hypothesis frame.** H1 (listener lifetime) and H2 (backend
+buffer-and-flush) both predict *no data reaches the frontend*. Data reaches the frontend **and the
+DOM**. The PTY delivers, `mark_ready`/flush works, the `cc-output-<sid>` listener is attached, xterm
+ingests the bytes and **renders them into DOM nodes with visible styles** — and the pixels still never
+appear. **The failure is below the DOM: a WKWebView compositing/paint failure**, downstream of every
+mechanism under suspicion.
+
+⚠️ **This also INVERTS the standing trap.** `SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER`
+warns that a DOM read *under-reports a working terminal*. Here **both** text layers over-report a
+**visibly broken** one. The lesson generalises: on this surface, *no* text-layer read — buffer or DOM —
+is decisive about what the user sees. **Only a screenshot is.** Had this run trusted the fiber-buffer
+read alone (the method that backlog item mandates), it would have recorded a confident **false
+"PAINTS"** and mis-bisected the incident onto the latch fix.
+
+**Consequence for the bisect:** the earlier `e82e334` "PAINTS — 1389 chars" and `94e5032` "BLANK — 0
+chars" readings are **not comparable to this one** and may not mean what they were taken to mean —
+`e82e334`'s was a *char count*, and this build produces a healthy char count while black. Whether the
+prior blank-side readings were screenshot-confirmed at the pixel level (the report says they were) vs.
+char-count-confirmed needs re-checking before the WP3-vs-latch verdict stands.
+
+**Probe validity:** the reader was validated on a known-good case *before* being trusted — it returned
+a full banner with correct structure, so a subsequent zero would have been a real zero rather than a
+broken probe.
 
 ## Timeline
 
