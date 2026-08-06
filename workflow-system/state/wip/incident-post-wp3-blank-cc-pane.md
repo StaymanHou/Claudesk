@@ -181,7 +181,142 @@ of the invariant, is green on `main`).
 **Target:** `tmp/scratch/scratch-a` — the only scratch repo with **no** unclean flag, so the row carries
 no prediction and no `--continue` arm (one fewer variable).
 
-### ⚠️ THE HEADLINE: the buffer is FULL while the screen is BLACK
+### ✅ CORRECTION #3 — MEASURED. No paint bug exists. The pane was photographed BEFORE DATA ARRIVED.
+
+**A T+0 time series on a cold spawn settles it** (500 ms sampling, virgin second workspace, window
+never touched — no resize, click, focus, or scroll):
+
+| T (from sampler start) | Event |
+|---|---|
+| 6.374 s | workspace open clicked |
+| 7.2 s / 9.2 s | new pane mounted, **0 chars** — CC still starting |
+| **10.2 s** | **912 chars arrive** — first content |
+| ~10.2 s → end | stable 912/929 chars, painted |
+
+**Screenshot at ~T+8s → BLACK. Screenshot at ~T+28s → PAINTED. Nothing touched the window in
+between.**
+
+⚠️ **The ~T+8s black screenshot fell inside the ~4-second window when the pane held ZERO characters.**
+It was not an unpainted-but-full terminal, and not an instrument artifact: **it was a faithful photo of
+a genuinely empty terminal that had not yet received bytes.** Correction #2's "buffer full while screen
+black" framing is therefore **also wrong** — it compared a buffer read taken at one moment against a
+screenshot taken at a *different* moment on a *different* spawn, and read the mismatch as simultaneity.
+
+**Conclusions:**
+1. **There is no compositing bug, no paint stall, and no instrument lie.** Buffer, DOM, and pixels agree
+   whenever sampled at the same instant.
+2. **The pane recovers unaided** — Story A. No external event is needed to force a repaint, so the
+   "stalls until resize/focus" defect (the severity-driving worry) **does not occur on this build**.
+3. **Build `3d8e18c` is healthy.** CC paints ~4 s after the pane mounts, ~10 s after the click.
+4. ⚠️ **The real lesson is measurement discipline, not product behavior:** three successive conclusions
+   (compositing failure → instrument artifact → paint stall) were each drawn from **single samples taken
+   at unaligned moments**. Only the T+0 time series — cheap, and available from the start — was ever
+   capable of discriminating. **This is the THIRD instance in this incident of a verdict carried by an
+   observation that could not discriminate**, after the `CLAUDE_CODE_CHILD_SESSION` misattribution and
+   the "1389 chars = PAINTS" bisect reading.
+
+### ✅ DECISIVE: `94e5032` — the build the release is paused on — ALSO PAINTS
+
+The same T+0 series, run against **`94e5032`** (the exact build both original blank reports came from),
+`tmp/scratch/scratch-a`, window never touched:
+
+| T | Event |
+|---|---|
+| 9.299 s | workspace open clicked |
+| 9.3 → 19.8 s | pane mounted, **0 chars** — the blank window (**~10.5 s**) |
+| **19.822 s** | **893 chars arrive** — first content |
+| 19.8 → 36.3 s | stable at 893 chars |
+
+**Screenshot at ~T+11s → BLACK (inside the 0-char window). Screenshot at ~T+36s → PAINTS**, pixel-
+confirmed: full CC v2.1.223 banner, prompt, model line. **Nothing touched the window** — no resize,
+click, focus, or scroll.
+
+**Verdict: there is no product defect. The incident is a measurement artifact end to end.**
+- Both builds paint. `3d8e18c`: content at ~4 s after mount. `94e5032`: content at **10.5 s after the
+  click** — slower, and that longer window is precisely what made the original observations land black.
+- The pane recovers **unaided** on both builds. No external event is needed.
+- ⚠️ **The "0 chars / 48 empty row divs" reading in the original report is exactly what this window
+  produces.** The original sessions sampled inside it and never re-looked — the same single-early-sample
+  error repeated three more times in *this* session before a time series was taken.
+
+**Consequences:**
+1. **The `0.3.1` release pause can be lifted** — the blocking defect does not exist.
+2. **WP3 is exonerated**, and so is the inject-once latch (`051d707`). The bisect was reading spawn
+   latency, not a regression.
+3. **Blast radius: NIL, as originally assessed** — but for a different reason than recorded. Not
+   "unreleased only": *nothing was ever broken.*
+4. ⚠️ **A genuine open question survives, and it is NOT release-blocking:** why is first content ~10.5 s
+   after click on `94e5032` vs ~4 s on `3d8e18c`? That may be normal CC startup variance (different
+   projects, warm vs cold caches, `--continue` doing more work on a flagged row) or a real latency
+   regression worth a separate look. **It is a performance question, not a correctness one** — file it,
+   don't block on it.
+
+### ⛔ CORRECTION #2 (SUPERSEDED by #3 above — the premise was a sampling error)
+
+**A second bridge screenshot of the same pane ~15 min later PAINTS correctly.** So the bridge
+screenshot is **not categorically broken for xterm**, and correction #1 below (written minutes earlier)
+**over-corrected**. The precise reading:
+
+| Sample | `term.buffer.active` | Bridge screenshot |
+|---|---|---|
+| **T+12s** after workspace open | **878 chars** (full banner) | **BLACK** |
+| **T+~15min**, same pane, untouched | 878 chars | **PAINTS** (matches operator's window) |
+
+The buffer was **already full at T+12s** — so xterm had ingested the bytes but **had not yet painted
+them to pixels**. The bridge captured a **genuine intermediate state**, not a lie.
+
+**⚠️ This is very likely the incident itself, and it reframes it:** the symptom is not a *permanently
+dead* pane but a **delayed / stalled first paint**. That fits every recorded observation better than
+H1–H5 do:
+- `claude` alive on a real tty, `cc_input` succeeding, zero log errors — all expected of a healthy
+  session that simply has not painted yet.
+- Buffer and DOM populated while the screen is black — exactly this state.
+- **Why every prior session recorded "blank" and never saw it recover: they each took a SINGLE EARLY
+  SAMPLE and moved on.** Nobody waited and re-looked. My own T+12s read repeated that mistake.
+
+**The question that now determines severity:** does it *always* paint eventually, or does it sometimes
+stall until an external event (resize, focus change, keystroke, scroll) forces a repaint?
+- Always-eventually → a startup-latency annoyance; likely **not** release-blocking.
+- Stalls until an event → a real user-facing defect (a user opening a workspace sees a dead terminal
+  and has no reason to know a resize would fix it).
+**This is the single most important thing left to measure** — and it is measurable: sample the same
+pane at intervals from T+0 without touching the window.
+
+### ⛔ CORRECTION #1 (superseded in part by #2 above) — the "black screen" is not what it looked like
+
+**The operator eyeballed the live window and it PAINTS normally** — CC v2.1.223 banner, prompt, model
+line, all visible, matching the buffer exactly. **The compositing-failure conclusion below is FALSE
+and is retained only as a record of the error.**
+
+**What was actually wrong:** the MCP bridge's `webview_screenshot` returned a black left pane while
+the real window painted correctly. The bridge screenshot is **not a faithful record of what the user
+sees** — it appears to miss the composited xterm content (or captures a stale backing frame). ⚠️ **New
+bridge caveat: `webview_screenshot` can report a FALSE BLANK for xterm panes. It cannot be used as the
+decisive "does the user see it?" instrument — only the operator's own eyes, or a native window capture
+(`screencapture`), can settle that.**
+
+**The reasoning error, which is the transferable part:** two independent text layers (fiber buffer +
+scoped DOM) **agreed** that content was present; one image disagreed. I concluded the two agreeing
+measurements were over-reporting and the single image was truth — and wrote it into the report and a
+commit message before testing it. The likelier reading was the opposite. ⚠️ **This is the SECOND
+instance in this incident of the same root error** — the retracted `CLAUDE_CODE_CHILD_SESSION`
+misattribution was also a verdict carried by an observation that could not discriminate. The rule this
+incident keeps re-learning: **an observation is only decisive when a broken implementation and a
+working one would give DIFFERENT answers** — and when instruments disagree, the first question is
+*which instrument is lying*, not *which layer of the product is broken*.
+
+### ✅ WHAT SURVIVES: build `3d8e18c` PAINTS (operator-confirmed at the pixel level)
+
+This is the discriminating build the bisect was waiting on — **WP3 complete, latch fix (`051d707`)
+absent** — and it **paints**. Per the report's own logic (blank → WP3; paints → the latch), **WP3 is
+not implicated and the remaining suspect is the latch fix.**
+
+⚠️ **But do NOT close on that yet.** The prior blank-side readings are now themselves suspect: if they
+were judged via the same bridge `webview_screenshot` path, they may be the same artifact. The report
+records them as "screenshot-confirmed" **without naming which screenshot path**. Resolving that is the
+next step — see "Open question" in the Timeline.
+
+### ⛔ FALSE — original headline, retained for provenance: "the buffer is FULL while the screen is BLACK"
 
 Read at the same instant, on the same pane:
 
@@ -190,29 +325,25 @@ Read at the same instant, on the same pane:
 | `term.buffer.active` (via React fiber — the authority) | **878 chars**, 17 non-empty lines, full **CC v2.1.223** welcome banner |
 | DOM `.xterm-rows` (scoped to `[data-testid="xterm-pane"]`) | **878 chars**, 48 row divs, **17 with text**, real markup (674/1019/796 bytes for first 3 rows) |
 | Computed styles (`rows`/`screen`/`viewport`) | all `display:block`, `visibility:visible`, `opacity:1`, colour `rgb(212,212,212)` on transparent |
-| **Screenshot (what the user sees)** | **completely black left pane** |
+| **MCP bridge `webview_screenshot`** | ⛔ black left pane — **ARTIFACT, see retraction above** |
+| **Operator's own eyes (the real window)** | ✅ **PAINTS** — banner, prompt, model line, matching the buffer |
 
-Evidence: `scratchpad/blank-pane-3d8e18c.png`.
+Artifact image (the false one): `scratchpad/blank-pane-3d8e18c.png`. Operator's true capture: the
+window screenshot supplied 2026-08-06.
 
-**This falsifies the report's entire hypothesis frame.** H1 (listener lifetime) and H2 (backend
-buffer-and-flush) both predict *no data reaches the frontend*. Data reaches the frontend **and the
-DOM**. The PTY delivers, `mark_ready`/flush works, the `cc-output-<sid>` listener is attached, xterm
-ingests the bytes and **renders them into DOM nodes with visible styles** — and the pixels still never
-appear. **The failure is below the DOM: a WKWebView compositing/paint failure**, downstream of every
-mechanism under suspicion.
+**Every conclusion originally drawn from the "black" row is void.** There is no compositing failure;
+buffer, DOM, and screen all agree. H1/H2 are **not** falsified by this run — they are simply
+**untested** by it, because this build never exhibited the symptom.
 
-⚠️ **This also INVERTS the standing trap.** `SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER`
-warns that a DOM read *under-reports a working terminal*. Here **both** text layers over-report a
-**visibly broken** one. The lesson generalises: on this surface, *no* text-layer read — buffer or DOM —
-is decisive about what the user sees. **Only a screenshot is.** Had this run trusted the fiber-buffer
-read alone (the method that backlog item mandates), it would have recorded a confident **false
-"PAINTS"** and mis-bisected the incident onto the latch fix.
+**What the three agreeing layers DO establish, on this build:** the PTY delivers, `mark_ready`/flush
+works, the `cc-output-<sid>` listener is attached and survives, and xterm renders to visible pixels.
+The `arch.md:374` two-half invariant is **intact at `3d8e18c`**.
 
-**Consequence for the bisect:** the earlier `e82e334` "PAINTS — 1389 chars" and `94e5032` "BLANK — 0
-chars" readings are **not comparable to this one** and may not mean what they were taken to mean —
-`e82e334`'s was a *char count*, and this build produces a healthy char count while black. Whether the
-prior blank-side readings were screenshot-confirmed at the pixel level (the report says they were) vs.
-char-count-confirmed needs re-checking before the WP3-vs-latch verdict stands.
+⚠️ **Standing-trap status, corrected.** `SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER` is
+**not** inverted by this run — the buffer read was *correct* here and agreed with reality. What this
+run adds is a **new, separate** trap on the other instrument: the **bridge screenshot** can report a
+false blank. Both traps now point the same way — **on this surface, cross-check at least two
+independent instruments and treat disagreement as an instrument question first.**
 
 **Probe validity:** the reader was validated on a known-good case *before* being trusted — it returned
 a full banner with correct structure, so a subsequent zero would have been a real zero rather than a
