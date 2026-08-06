@@ -1,18 +1,19 @@
 ---
 workflow: incident
-state: report
+state: triage
 created: 2026-08-05
-severity: TBD
+severity: P1
 drive_mode: autopilot
 ---
 
 # Incident: Post-WP3 dev build spawns a blank CC pane
 
 **Workflow:** incident
-**State:** report
+**State:** triage
 **Created:** 2026-08-05 18:20
-**Severity:** TBD (set during triage)
-**Status:** New
+**Triaged:** 2026-08-06
+**Severity:** P1
+**Status:** Triaged
 
 ## Summary
 
@@ -119,6 +120,30 @@ there → WP3; paints there → the latch fix. The worktree is already prepared.
 - **Verification capability: already degraded.** Any agent-driven live check that needs CC's TUI to
   render is currently unavailable on `main`.
 
+## Triage assessment (2026-08-06)
+
+**Severity: P1** — major feature broken, investigate immediately. Operator-confirmed.
+
+| Question | Answer |
+|---|---|
+| **User-facing impact** | Every CC pane renders blank — the app's **primary surface** is dead. A workspace opens to a terminal that never paints. |
+| **How many affected** | **Shipped: zero.** Prod `0.3.0` predates all of WP3 and has been dogfooded daily for weeks, clean. **Unreleased `main`: total** — every workspace, every project. |
+| **Workaround** | None — and none needed, because no shipped user is affected. The containment is the release pause, not a user-side mitigation. |
+| **Duplicate?** | **No.** But `arch.md:374` records a prior *closed* incident with the **identical symptom** (`incident-terminal-blank-cursor`, 2026-06-22) whose two-half invariant is the leading hypothesis here. Same signature, not an open duplicate. |
+
+⚠️ **Why P1 and not P2** (the handoff note leaned "high-urgency / low-severity"): the zero shipped exposure makes this **containable**, not **minor**. Severity measures the defect, and the defect kills the app's main surface; the urgency is undiminished because it blocks the `0.3.1` release *and* all agent-driven live verification on `main`. The nil exposure buys room to investigate properly rather than hotfix blind — that is its only effect on the response.
+
+**Why not P0:** nothing is down for any user, no data loss, no security dimension. The operator's prod install is unaffected and in daily use.
+
+**Blocked by this incident:**
+- The `0.3.1` release (paused mid-`/release`).
+- The M12 WP3 inject-once fix's live open→relaunch observable (needs a rendered CC pane to observe).
+- Any agent-driven live verification on `main` that depends on CC's TUI rendering.
+
+**Next step: I13 → `/incident-reproduce`.** Reproducibility is already established (twice, two repos, one virgin, screenshot-confirmed, environment held fixed) — so this is a deterministic local recipe, not a prod-data or telemetry-only signal. The anchor is worth capturing before investigating: this session's own history is the argument, having produced one retracted misattribution and two self-caught DOM-selector artifacts on this exact surface. An anchored, re-runnable recipe is what makes the next observation decisive and gives mitigation a regression gate.
+
+⚠️ **Binding constraint on every pane observation from here** (per `SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER`): read `term.buffer.active` via the React fiber, scoped to `[data-testid="xterm-pane"]`. A DOM `.xterm-rows` read has already produced two false verdicts on this surface, and `data-session-id` belongs to the *right-panel* terminal, not the CC pane.
+
 ## Timeline
 
 - **~17:15** — Live verification of the WP3 inject-once fix attempted on `tmp/scratch/scratch-c`;
@@ -137,6 +162,9 @@ there → WP3; paints there → the latch fix. The worktree is already prepared.
   marker → **the environment hypothesis is falsified**.
 - **~18:18** — Backlog entry retracted (it asserted a now-disproven conclusion). `0.3.1` release
   stays paused. Incident filed.
+- **2026-08-06** — **Triaged P1** (operator-confirmed). Route: **I13 → reproduce** — the failure is a
+  deterministic local recipe, not a prod-only signal, and an anchored reproduction is what makes the
+  next observation decisive after this session's retracted misattribution.
 
 ## Discoveries
 
@@ -172,6 +200,3 @@ there.
 [SURFACED-2026-08-05] report — `arch.md` exceeds the 300-line size guard (731 lines); read the
 load-bearing-constraints index + headings only. Already tracked as
 `SURFACE-2026-08-03-ARCH-MD-EXCEEDS-SIZE-GUARD-834-LINES`; no new entry filed.
-
-## Session Handoff — 2026-08-05 18:30
-Handed off. See `workflow-system/state/.session.md` to restore.
