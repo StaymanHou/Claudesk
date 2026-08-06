@@ -889,3 +889,8 @@ validated by dogfooding, deliberately not probed synthetically).
    `app_data_dir()`, chosen on a lost-update hazard rather than the predicted byte cost.
 
 </details>
+
+---
+
+## Session Handoff — 2026-08-06 12:20
+Handed off. See `workflow-system/state/.session.md` to restore. **Resume at WP4a** via `/feature-plan`.
