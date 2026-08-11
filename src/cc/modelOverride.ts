@@ -46,6 +46,20 @@ export const MODEL_UNSET_PLACEHOLDER = "Default (CC's own)";
  * default it means. **Derived from the placeholder rather than written out again** so a copy
  * change to one cannot silently leave the other stale (they were two independent hardcoded
  * strings until code review caught it).
+ *
+ * ⚠️ **The brevity rationale above assumed ONE value per row, which stopped being true at
+ * M12 WP4c.** The cell now stacks two lines (model over drive mode), and two bare values
+ * read as `Default` over `None` with nothing saying which line is which. So when the value
+ * is unset **and** the workflow gate is on, the row prefixes this label — rendering
+ * `Model: Default` — via `MODEL_LINE_PREFIX` in `cc/driveMode.ts`. The constant itself is
+ * unchanged; what changed is that the *row* may now decorate it.
+ *
+ * Brevity still governs the case this comment was written for: with the gate **off** the
+ * cell is a single line and renders this label bare, byte-identically to the pre-M12 build.
+ * ⚠️ Do NOT "simplify" the prefixing away as redundant — it is the only thing distinguishing
+ * the two stacked lines, and `Drive Mode: None` fits the column with just 2.4px of headroom
+ * (the column was widened to `9.8em` specifically to afford both prefixes). See WBS
+ * Verdict (f) and `SURFACE-2026-08-06-STACKED-CELL-LABELS-REVISE-THE-MODEL-UNSET-BREVITY-RATIONALE`.
  */
 export const MODEL_UNSET_LABEL = MODEL_UNSET_PLACEHOLDER.split(" (")[0];
 

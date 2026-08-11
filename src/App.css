@@ -3249,13 +3249,56 @@ body,
    A compact LABEL by default, becoming an input on click — an input box on every row
    would be noise on the app's most-glanced surface with 20+ projects. Fixed width so the
    labels form a clean right-hand column regardless of value length; it must not stretch,
-   or the project paths beside it would reflow row-to-row. */
+   or the project paths beside it would reflow row-to-row.
+
+   ⚠️ THE `em` HERE RESOLVES AGAINST THIS ELEMENT'S OWN `font-size` (0.78rem = 12.48px),
+   NOT the root 16px — per CSS spec, `em` on any property except `font-size` uses the
+   element's own computed size. So `9.61em` is 120px, not 154px. This trap cost M12 WP4c a
+   re-plan: three docs recorded the column as "~101px usable" by multiplying against the
+   root, when the real figure at the old 7.5em was 78.62px — ~22px optimistic. If you resize
+   this column, MEASURE it (`getBoundingClientRect`), and note that the container's
+   `scrollWidth` is blind to a clipped text child here because this box is `display:flex`;
+   use a `Range` over the text node instead.
+   (`SURFACE-2026-08-10-PICKER-MODEL-COLUMN-WIDTH-MEASURED-AGAINST-THE-WRONG-EM`)
+
+   ⚠️ WIDTH IS 9.8em, NOT 7.5em, AND THE EXTRA ~29px IS PAID FOR — M12 WP4c, operator
+   decision 2026-08-10. The cell now carries TWO stacked lines (model + drive mode), whose
+   unset labels are `Model: Default` (84.6px ink) and `Drive Mode: None` (105px ink). Both
+   CLIPPED at 7.5em/78.62px — rendering as `Model: Def…` / `Drive Mod…`, the second losing the
+   word that carries its meaning — and no font shrink rescues them (`Drive Mode: None` is
+   still 87.5px at 0.65rem). Widening was chosen over shortening the labels; the cost is ~29px
+   off the project path (328.3 → ~299px). Do NOT shrink this back to reclaim path width
+   without re-measuring both labels first — the width and the label strings are coupled.
+
+   ⚠️ 9.8em, NOT the 9.61em the arithmetic says. At 9.61em the widest label ellipsised — a
+   sub-pixel overage WebKit resolves by clipping — so the label rendered `Drive Mode: No…` at
+   the width computed to fit it exactly. A width derived to fit with zero tolerance will lose
+   to sub-pixel rounding; 9.8em is the smallest value that renders in full, verified visually
+   across a 9.61/9.8/10/10.2em ladder in one frame.
+
+   ⚠️ THIS BOX IS `content-box` (the app sets no global `border-box`), so `width: 9.8em` IS the
+   CONTENT area — 122.3px — and the `0 0.6em` padding sits OUTSIDE it (border box 137.27px,
+   confirmed live). Do NOT subtract the padding from 9.8em when computing what fits: an earlier
+   pass did exactly that, computed a 107.3px content box, and recorded the widest label's
+   headroom as 2.4px when it is really ~17.3px. That error was harmless (conservative), but it
+   is the third box-math slip in this one column's history — after root-vs-own `em` and the
+   zero-tolerance fit. For CSS box math here, MEASURE (`getBoundingClientRect` +
+   `getComputedStyle`); compute nothing you can read.
+   ⚠️ DO NOT verify this class of fit with `scrollWidth > clientWidth` — both round to
+   integers (105 vs 105), so that check reported "not ellipsised" at EVERY width in the ladder,
+   including ones that visibly clipped. A screenshot was the only instrument that stayed
+   correct; a `Range` over the text node gives the true sub-pixel ink width. */
 .picker-recent-model {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: 7.5em;
+  /* M12 WP4c — a COLUMN, so the model line stacks OVER the drive-mode line (Verdict (f)
+     Option 2). ⚠️ The default is `row`; leaving it would sit the two lines side-by-side and
+     blow the 107px budget instantly. With the gate OFF there is only one line, and a column
+     of one is identical to the pre-M12 row — which is what keeps that state byte-identical. */
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  width: 9.8em;
   padding: 0 0.6em;
   overflow: hidden;
   color: #6a6a6a;
@@ -3290,6 +3333,61 @@ body,
 
 .picker-recent-model.is-editing {
   padding: 0;
+}
+
+/* M12 WP4c — the two stacked lines (model over drive mode) inside the cell.
+   The cell is a flex COLUMN now; each line is its own hit region because two independent
+   edit targets share one column (see ProjectModelCell.tsx's header). */
+.picker-recent-cell-line {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Right-aligned to match the column, and chrome-less like the cell itself: the affordance
+     is the hover brightening + cursor, not a box. It is a <span role="button">, so it does
+     NOT inherit the global `input, button` chrome — but keep it explicit anyway, since that
+     chrome reappearing is what visually split the row into tiles on the M11.5 first build. */
+  text-align: right;
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.picker-recent-cell-line.is-set {
+  color: #b0b0b0;
+}
+
+.picker-recent-cell-line:hover {
+  color: #e0e0e0;
+}
+
+/* Keyboard reachability must be VISIBLE — these lines are `tabIndex={0}` spans, so without
+   an explicit ring a keyboard user cannot tell which line they are about to activate. */
+.picker-recent-cell-line:focus-visible {
+  outline: 1px solid #6ea8ff;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.picker-recent-mode-select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.1em 0.2em;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid #6ea8ff;
+  border-radius: 3px;
+  color: #e0e0e0;
+  font-family: inherit;
+  font-size: 0.78rem;
+  /* The native disclosure arrow costs a MEASURED 31px (104px native vs 73px with
+     appearance:none, Phase 1). At the widened 9.8em column the native control fits the
+     107.3px content box either way, so the arrow is affordable and kept — it is the standard
+     "this is a closed set, click to choose" signal, which is exactly what this control is.
+     If the column is ever narrowed, `appearance: none` + a CSS caret reclaims those 31px. */
 }
 
 .picker-recent-model-input {

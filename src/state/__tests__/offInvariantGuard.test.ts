@@ -43,6 +43,28 @@ import { MENU_IDS } from "../../menu/menuBridge";
 //
 // WP5.2 proves this guard bites by temporarily bypassing it and confirming a failure.
 //
+// ── WHEN M12 LANDS (measured at WP4b, 2026-08-07) ─────────────────────────────
+// M12 splits across two work packages with DIFFERENT relationships to this guard,
+// and conflating them is the easy mistake:
+//
+//   WP4b (the drive-mode SIGNAL) is deliberately OUT OF SCOPE, and that is correct.
+//   Its surfaces are a Rust spawn-time env var (`CLAUDESK_DRIVE_MODE`, composed in
+//   `cc_session::cc_spawn_env`) and a Perl hook — this guard scans neither `.rs` nor
+//   `.pl`, and WP4b adds ZERO frontend surface. Gate-OFF for that WP is enforced
+//   Rust-side instead, by a fail-closed `resolve_gate_enabled` plus byte-empty-when-OFF
+//   assertions. Do NOT "fix" this guard to reach into src-tauri/: it is a frontend
+//   registry invariant, and widening it to a second language would make it a different,
+//   weaker thing. MEASURED, not assumed: the allowlist is all `src/**`.
+//
+//   WP4c (the picker-row drive-mode CELL) IS in scope — it is a real frontend surface,
+//   and WP5 owns adding the fourth arm for it. Note `WORKFLOW_TERMS` already contains
+//   "drivemode"/"drive-mode", so a `driveMode` identifier in any *Chord*-exporting
+//   module trips the chord arm TODAY, before that arm exists.
+//
+// The lesson generalizing both: this guard's scope is the FRONTEND registries. A
+// backend-only feature being absent from it is not a hole — but that has to be written
+// down, or the next reader re-derives it and reasonably concludes the guard is broken.
+//
 // ── ARM SELECTION IS BY CONTENT, NOT FILENAME (M11.5 WP4) ─────────────────────
 // The chord arm originally selected candidates by BASENAME and provably missed
 // `components/workspace/panelHost.ts` — the module owning `panelForChord`. It now selects

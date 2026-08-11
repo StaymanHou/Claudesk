@@ -22,7 +22,11 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
 import { ProjectModelCell, ProjectModelHints } from "./ProjectModelCell";
-import { applyCommittedModel } from "./applyCommittedModel";
+import {
+  applyCommittedDriveMode,
+  applyCommittedModel,
+} from "./applyCommittedModel";
+import type { DriveMode } from "../../cc/driveMode";
 import { PICKER_ROW_CELLS } from "./pickerRowOrder";
 import {
   actionForIntent,
@@ -38,8 +42,8 @@ import type { AnnounceMap, AutoResumeAction } from "../../state/predictAction";
 type PickerToast = { kind: "info" | "error"; message: string };
 
 // Mirrors the Rust `Project` serialization (`path` serializes as `project_path`).
-// Only the fields the picker reads are typed here; `last_opened_at` /
-// `default_drive_mode` exist on the wire but are unused by this component.
+// Only the fields the picker reads are typed here; `last_opened_at` exists on the wire but
+// is unused by this component.
 //
 // `default_model` IS read: it seeds each row's model cell. Typing it here is what
 // removed an N+1 — the cell used to re-fetch this exact value per row via
@@ -47,10 +51,19 @@ type PickerToast = { kind: "info" | "error"; message: string };
 // whole `projects.json` to keep one field. `list_projects` already returns it on the
 // wire; the field was simply absent from this interface. Optional because the Rust side
 // is `Option<String>` and may omit it entirely.
+//
+// `default_drive_mode` is read for the SAME reason as of M12 WP4c — it seeds the second line
+// of that same cell. ⚠️ This comment previously said the field was "unused by this
+// component", which is no longer true; and note there is deliberately no
+// `project_get_default_drive_mode` command to fall back on (`driveModeIpc.ts` ships no
+// getter, precisely so the N+1 above cannot be reintroduced for the new field). The Rust
+// side is pinned to keep this on the wire by
+// `tests::the_drive_mode_is_serialized_onto_the_list_projects_wire`.
 export interface RecentProject {
   display_name?: string;
   project_path: string;
   default_model?: string | null;
+  default_drive_mode?: DriveMode | null;
 }
 
 // Pure, testable filter predicate. Case-insensitive substring match on the
@@ -283,6 +296,14 @@ export function ProjectPicker({
   const handleModelCommitted = useCallback(
     (projectPath: string, model: string | null) => {
       setRecents((rs) => applyCommittedModel(rs, projectPath, model));
+    },
+    [],
+  );
+
+  // Same contract, same purity requirement, for the drive mode (M12 WP4c).
+  const handleDriveModeCommitted = useCallback(
+    (projectPath: string, mode: DriveMode | null) => {
+      setRecents((rs) => applyCommittedDriveMode(rs, projectPath, mode));
     },
     [],
   );
@@ -547,7 +568,9 @@ export function ProjectPicker({
                       projectPath={r.project_path}
                       projectLabel={labelFor(r)}
                       seedModel={r.default_model ?? null}
+                      seedDriveMode={r.default_drive_mode ?? null}
                       onCommitted={handleModelCommitted}
+                      onDriveModeCommitted={handleDriveModeCommitted}
                     />
                   );
                 case "remove":

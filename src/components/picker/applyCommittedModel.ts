@@ -28,6 +28,7 @@
 // discipline `pickerRowOrder.ts` applies to the row's cell order.
 
 import type { RecentProject } from "./ProjectPicker";
+import type { DriveMode } from "../../cc/driveMode";
 
 /**
  * Fold a just-committed model override back into the `recents` array.
@@ -53,5 +54,32 @@ export function applyCommittedModel(
 ): RecentProject[] {
   return recents.map((r) =>
     r.project_path === projectPath ? { ...r, default_model: model } : r,
+  );
+}
+
+/**
+ * Fold a just-committed drive mode back into the `recents` array (M12 WP4c).
+ *
+ * The drive-mode twin of {@link applyCommittedModel}, and **every word of this module's
+ * header applies to it identically** — same seeded-from-`recents` design, same `void`-returning
+ * setter, same deliberate absence of a broadcast event, so the same stale-after-filter-
+ * round-trip window and the same fix.
+ *
+ * ⚠️ Kept as a separate function rather than generalizing both into
+ * `applyCommittedField(recents, path, key, value)`. A generic version would need the field
+ * name as a runtime string, which trades a **compile-time** guarantee (each function can only
+ * write its own correctly-typed field) for a stringly-typed one — and the field being written
+ * here is `default_drive_mode`, where a bad value does not degrade gracefully: it fails serde
+ * on the next read and takes the whole project list down. Two four-line functions with real
+ * types beat one clever one. If a THIRD per-project field ever arrives, revisit — but weigh it
+ * against that specific loss, not against the duplication alone.
+ */
+export function applyCommittedDriveMode(
+  recents: readonly RecentProject[],
+  projectPath: string,
+  mode: DriveMode | null,
+): RecentProject[] {
+  return recents.map((r) =>
+    r.project_path === projectPath ? { ...r, default_drive_mode: mode } : r,
   );
 }

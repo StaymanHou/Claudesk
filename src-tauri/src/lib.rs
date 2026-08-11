@@ -446,6 +446,7 @@ pub fn run() {
             // M11.5 WP1: per-project CC model override (read at spawn → `--model`).
             config_store::commands::project_get_default_model,
             config_store::commands::project_set_default_model,
+            config_store::commands::project_set_default_drive_mode,
             // M12 WP2: clear the unclean-exit flag on a CLEAN close. There is deliberately
             // no `mark_unclean` counterpart — setting is owned by the spawn path, where it
             // is co-located with the `?` guaranteeing a failed spawn leaves no flag.

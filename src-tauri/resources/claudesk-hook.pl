@@ -20,6 +20,15 @@
 # them). PRIVACY: prompt_length_chars is a LENGTH; the prompt TEXT never lands in a
 # time-analytics field.
 #
+# M12 WP4b — THIS SCRIPT IS NO LONGER WRITE-ONLY. It now has TWO independent concerns:
+#   (1) telemetry OUT to the socket (all 10 events) — unchanged, and
+#   (2) the drive-mode SIGNAL on stdout (UserPromptSubmit only), which CC reads back as
+#       `hookSpecificOutput.additionalContext`.
+# So the hook channel is BIDIRECTIONAL as of M12 (arch.md's "one-directional CC→Claudesk"
+# describes the pre-M12 shape). The two concerns are INDEPENDENT: the signal must still
+# emit with no socket, and telemetry is unaffected by the signal. Gate OFF reaches this
+# script as an ABSENT CLAUDESK_DRIVE_MODE — there is no settings read here.
+#
 # Discipline (proven in the WP1 probe, see docs/product/wp1-hook-socket-probe-outcome.md):
 #   - reads the event payload as JSON on stdin,
 #   - exits 0 UNCONDITIONALLY — a down Claudesk (no listener) must NEVER block CC,
@@ -41,13 +50,20 @@ use strict;
 use warnings;
 
 my $sock_path = $ENV{CLAUDESK_HOOK_SOCK} // '';
-exit 0 if $sock_path eq '';
 
 require JSON::PP;       JSON::PP->import('decode_json', 'encode_json');
 require Time::HiRes;
 require IO::Socket::UNIX;
 
 # Drain stdin (the event payload). Some invocations (manual test) have no payload.
+#
+# ⚠️ M12 WP4b — THIS DRAIN IS SHARED BY TWO CONCERNS AND MUST STAY ABOVE THE
+# $sock_path EARLY EXIT. Before WP4b the script did `exit 0 if $sock_path eq ''`
+# HERE, above the drain, because telemetry was the only concern and a missing socket
+# made everything below pointless. The drive-mode signal (below) is independent of the
+# socket: it must still emit when CLAUDESK_HOOK_SOCK is absent. Restoring an early exit
+# above this point silently kills the signal for exactly that case — mutation-proven,
+# and it is the failure `emits_when_the_socket_var_is_absent` catches.
 my $raw = '';
 if (!-t STDIN) {
     local $/;
@@ -55,11 +71,65 @@ if (!-t STDIN) {
 }
 exit 0 if $raw eq '';
 
+# ⚠️ THIS `eval` IS THE SOLE NEVER-BLOCK-CC GUARD. Do not "simplify" it away.
+# Without it, malformed stdin exits 255 with a Perl error, which WEDGES the user's CC
+# turn. There is NO second guard behind it — the script's only other evals are the
+# socket open and the write-failure log, neither of which wraps this decode.
+# Pinned by `never_blocks_cc_on_degraded_inputs` (src-tauri/tests/hook_pl_output.rs).
 my $payload = eval { decode_json($raw) };
 exit 0 unless ref($payload) eq 'HASH';
 
 my $event = $payload->{hook_event_name} // '';
 exit 0 if $event eq '';
+
+# --- M12 WP4b: the drive-mode signal (stdout), independent of the socket ---------
+#
+# Claudesk sets CLAUDESK_DRIVE_MODE on the CC spawn ONLY when the workflow-features
+# gate is ON and the project has a mode. THE GATE REACHES THIS SCRIPT BY ABSENCE:
+# there is no settings read here — an unset var is the same inert path that keeps a
+# plain-terminal `claude` byte-identical. Deliberately NOT a gate read per turn on
+# CC's critical path (it would also be a second source of truth able to disagree with
+# the spawn side).
+#
+# Scope: `UserPromptSubmit` only — a measured 1-of-10 blast radius across the events
+# this script is registered for. The other nine stay byte-silent on stdout.
+#
+# ⚠️ An unrecognized / empty / absent mode emits NOTHING — never a line naming a
+# default. There is no coherent upstream default to copy: `session-restore` contradicts
+# ITSELF (SKILL.md:42 says orchestrated, :59 labels autopilot "(default)"), so any
+# default here would be Claudesk inventing workflow policy. Emitting nothing leaves the
+# skill's own resolution chain intact — that is what "zero companion-repo change" means.
+if ($event eq 'UserPromptSubmit') {
+    my $mode = $ENV{CLAUDESK_DRIVE_MODE} // '';
+    # Exact-match allowlist, NOT "present and non-empty" — the latter admits any
+    # garbage (including shell metacharacters) straight into the model's context.
+    # These four literals are the `transitions.md:165` vocabulary; they must stay in
+    # sync with Rust's DriveMode serde renames (config_store::DriveMode).
+    my %KNOWN = map { $_ => 1 } qw(stepping orchestrated autopilot fsd);
+    if ($KNOWN{$mode}) {
+        # ⚠️ `additionalContext` MUST nest under `hookSpecificOutput` alongside
+        # `hookEventName` — a top-level `additionalContext` is REJECTED at runtime
+        # (proven live 2026-08-06, WP4a).
+        #
+        # The sentence ATTRIBUTES THE SOURCE ("Claudesk reports...") rather than
+        # asserting bare fact: it reads as standing environmental context rather than a
+        # fresh instruction at turn 60, and gives the model something to reconcile
+        # `.session.md`'s own `drive_mode:` against. It states a FACT, never a
+        # prohibition — a prohibition is correct at turn 1 and wrong at turn 60, when
+        # the operator may legitimately want to change mode.
+        print encode_json({
+            hookSpecificOutput => {
+                hookEventName     => 'UserPromptSubmit',
+                additionalContext =>
+                    "Claudesk reports the drive mode for this workspace as $mode.",
+            },
+        }) . "\n";
+    }
+}
+
+# Telemetry below is socket-bound; the signal above is not. A missing socket must not
+# suppress the signal, which is why this exit lives HERE and not above the drain.
+exit 0 if $sock_path eq '';
 
 # Re-emit exactly the fields the Rust HookEvent models. `timestamp` is the hook-side
 # send time in epoch ms (telemetry; not load-bearing for the state machine).

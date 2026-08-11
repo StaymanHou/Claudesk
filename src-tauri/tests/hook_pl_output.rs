@@ -41,6 +41,17 @@ fn perl_available() -> bool {
 /// if it wrote nothing — e.g. the no-op paths). The listener accepts one connection
 /// on a background thread and reads the first line.
 fn run_hook_capture_line(payload: &str) -> Option<String> {
+    run_hook_capture_line_with_mode(payload, None)
+}
+
+/// [`run_hook_capture_line`] with control of `CLAUDESK_DRIVE_MODE` (M12 WP4b), so the
+/// telemetry line can be asserted **with the signal active** — proving the two concerns
+/// are independent in the socket direction too, not just the stdout one.
+///
+/// ⚠️ `None` REMOVES the var. Claudesk sets it on its own CC spawns, so a test run from
+/// inside a Claudesk workspace would otherwise inherit it and assert against a different
+/// arm than the one it names.
+fn run_hook_capture_line_with_mode(payload: &str, drive_mode: Option<&str>) -> Option<String> {
     let dir = tempfile::TempDir::new().unwrap();
     let sock_path = dir.path().join("hook.sock");
     let listener = UnixListener::bind(&sock_path).unwrap();
@@ -61,14 +72,21 @@ fn run_hook_capture_line(payload: &str) -> Option<String> {
         None
     });
 
-    let mut child = Command::new("perl")
-        .arg(hook_path())
+    let mut cmd = Command::new("perl");
+    cmd.arg(hook_path())
         .env("CLAUDESK_HOOK_SOCK", &sock_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("spawn perl hook");
+        .stderr(Stdio::null());
+    match drive_mode {
+        Some(m) => {
+            cmd.env("CLAUDESK_DRIVE_MODE", m);
+        }
+        None => {
+            cmd.env_remove("CLAUDESK_DRIVE_MODE");
+        }
+    }
+    let mut child = cmd.spawn().expect("spawn perl hook");
     child
         .stdin
         .take()
@@ -106,6 +124,24 @@ fn as_json(line: &str) -> serde_json::Value {
 /// `UserPromptSubmit` `additionalContext` line on stdout, and a malformed emission
 /// must never reach CC as partial JSON.
 fn run_hook_degraded(payload: &str, sock_env: Option<&str>) -> (ExitStatus, Vec<u8>) {
+    run_hook_env(payload, sock_env, None)
+}
+
+/// [`run_hook_degraded`] plus control of `CLAUDESK_DRIVE_MODE` (M12 WP4b).
+///
+/// ⚠️ **Both vars are REMOVED, not set-empty, when `None`.** The script distinguishes
+/// absent from empty for the socket var, and the drive-mode allowlist treats them alike
+/// only by construction — a test that set `CLAUDESK_DRIVE_MODE=""` would exercise a
+/// different arm than a plain-CLI user's genuinely-absent var. Removing also stops an
+/// ambient export in the developer's own shell from silently changing what these assert
+/// — and since Claudesk itself sets this var on CC spawns, an agent running these tests
+/// from inside a Claudesk workspace **has it exported**. Inheriting it would make the
+/// inert-arm tests pass for the wrong reason.
+fn run_hook_env(
+    payload: &str,
+    sock_env: Option<&str>,
+    drive_mode: Option<&str>,
+) -> (ExitStatus, Vec<u8>) {
     let mut cmd = Command::new("perl");
     cmd.arg(hook_path())
         .stdin(Stdio::piped())
@@ -116,11 +152,19 @@ fn run_hook_degraded(payload: &str, sock_env: Option<&str>) -> (ExitStatus, Vec<
             cmd.env("CLAUDESK_HOOK_SOCK", p);
         }
         // Deliberately REMOVE the var rather than setting it empty — the script's
-        // line-44 early exit distinguishes these, and the test inherits the ambient
+        // early exit distinguishes these, and the test inherits the ambient
         // environment otherwise (a developer with the var exported would silently
         // change what this test exercises).
         None => {
             cmd.env_remove("CLAUDESK_HOOK_SOCK");
+        }
+    }
+    match drive_mode {
+        Some(m) => {
+            cmd.env("CLAUDESK_DRIVE_MODE", m);
+        }
+        None => {
+            cmd.env_remove("CLAUDESK_DRIVE_MODE");
         }
     }
     let mut child = cmd.spawn().expect("spawn perl hook");
@@ -132,7 +176,7 @@ fn run_hook_degraded(payload: &str, sock_env: Option<&str>) -> (ExitStatus, Vec<
         .unwrap();
     let out = child.wait_with_output().expect("hook exits");
     // ⚠️ Returns the full `ExitStatus`, not a bare `bool` — changed at code review. The
-    // failure this helper exists to catch is "exits **2** with a Perl error", and a bool
+    // failure this helper exists to catch is "exits **255** with a Perl error", and a bool
     // discards exactly the number that makes the assertion message actionable.
     (out.status, out.stdout)
 }
@@ -348,6 +392,369 @@ fn status_event_shape_is_unchanged() {
         assert!(
             v.get(absent).is_none(),
             "Stop must not carry {absent} (event-specific field)"
+        );
+    }
+}
+
+// ===========================================================================
+// M12 WP4b Phase 3 — the drive-mode signal on stdout.
+//
+// The script gained a SECOND, independent concern: telemetry still goes OUT to the
+// socket, and a `UserPromptSubmit` `additionalContext` line now comes back on stdout
+// so the real `/session-restore` can skip its mode menu. The hook channel is
+// BIDIRECTIONAL as of M12 — `arch.md`'s "one-directional CC→Claudesk" describes the
+// pre-M12 shape (corrected in WP4d.3).
+// ===========================================================================
+
+/// The exact sentence from WP4a Verdict (d), operator-approved. Transcribed here as a
+/// literal rather than built from a format string shared with the script, so a drift in
+/// either one shows up as a test failure instead of two mirrors agreeing with each other.
+fn expected_context(mode: &str) -> String {
+    format!("Claudesk reports the drive mode for this workspace as {mode}.")
+}
+
+/// Parse the hook's stdout as the `hookSpecificOutput` envelope, asserting the nesting.
+fn signal_context(stdout: &[u8]) -> Option<String> {
+    let text = String::from_utf8(stdout.to_vec()).expect("stdout is utf-8");
+    if text.trim().is_empty() {
+        return None;
+    }
+    let v: serde_json::Value = serde_json::from_str(text.trim()).unwrap_or_else(|e| {
+        panic!("stdout must be valid JSON or byte-empty — got {text:?} ({e})");
+    });
+    // ⚠️ `additionalContext` MUST nest under `hookSpecificOutput` WITH `hookEventName`.
+    // A top-level `additionalContext` is REJECTED by CC at runtime (proven live, WP4a),
+    // so a regression that flattened this would be silently inert in production while
+    // still "emitting something" — which is why the nesting is asserted, not just the text.
+    assert_eq!(
+        v["hookSpecificOutput"]["hookEventName"].as_str(),
+        Some("UserPromptSubmit"),
+        "additionalContext must nest under hookSpecificOutput alongside hookEventName"
+    );
+    assert!(
+        v.get("additionalContext").is_none(),
+        "additionalContext must NOT also appear at top level (rejected at runtime)"
+    );
+    Some(
+        v["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .expect("additionalContext is a string")
+            .to_string(),
+    )
+}
+
+const UPS_PAYLOAD: &str =
+    r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi"}"#;
+
+#[test]
+fn emits_the_drive_mode_signal_for_every_known_mode() {
+    if !perl_available() {
+        return;
+    }
+    // All four `transitions.md:165` wire values. ⚠️ Two of these (`stepping`, `fsd`) are
+    // NOT what `DriveMode` serialized to before WP4b Phase 1 — building on the old values
+    // would have shipped a silent no-op for modes 1 and 4.
+    for mode in ["stepping", "orchestrated", "autopilot", "fsd"] {
+        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some(mode));
+        assert!(status.success(), "hook must exit 0 for mode {mode}");
+        assert_eq!(
+            signal_context(&stdout),
+            Some(expected_context(mode)),
+            "mode {mode} must emit its own wire value in the sentence"
+        );
+    }
+}
+
+#[test]
+fn emits_when_the_socket_var_is_absent() {
+    if !perl_available() {
+        return;
+    }
+    // ⚠️ THE CONSTRAINT-3 REGRESSION TEST. The signal and the telemetry are INDEPENDENT:
+    // before WP4b the script did `exit 0 if $sock_path eq ''` ABOVE the stdin drain, so an
+    // emission appended below it would be dead whenever Claudesk is not listening. Moving
+    // that early exit back up is an easy "tidy-up" that this test is the only thing
+    // standing against — and it would present as "the signal silently stopped working",
+    // never as a crash.
+    let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some("autopilot"));
+    assert!(status.success());
+    assert_eq!(
+        signal_context(&stdout),
+        Some(expected_context("autopilot")),
+        "the signal must NOT depend on CLAUDESK_HOOK_SOCK being set"
+    );
+
+    // Same with the socket var set but pointing at nothing that listens (Claudesk down).
+    let (status, stdout) = run_hook_env(UPS_PAYLOAD, Some("/nonexistent/nope.sock"), Some("fsd"));
+    assert!(status.success());
+    assert_eq!(signal_context(&stdout), Some(expected_context("fsd")));
+}
+
+#[test]
+fn an_unknown_or_absent_mode_emits_nothing_never_a_default() {
+    if !perl_available() {
+        return;
+    }
+    // ⚠️ "Present and non-empty" would admit every one of these. The allowlist is an
+    // EXACT match on four literals, so anything else is byte-empty — never a line naming
+    // a default. There is no coherent upstream default to copy: `session-restore`
+    // contradicts ITSELF (SKILL.md:42 orchestrated vs :59 labelling autopilot "(default)"),
+    // so any default here would be Claudesk inventing workflow policy.
+    let cases: [(&str, Option<&str>); 9] = [
+        ("var absent entirely", None),
+        ("empty string", Some("")),
+        // The pre-WP4b WRONG serde values — the exact strings a partial revert produces.
+        ("old wire value full-autopilot", Some("full-autopilot")),
+        ("old wire value step-by-step", Some("step-by-step")),
+        ("unknown word", Some("banana")),
+        ("wrong case", Some("AUTOPILOT")),
+        ("trailing space", Some("autopilot ")),
+        ("shell metacharacters", Some("; rm -rf /")),
+        // A prefix/substring of a known mode must not match loosely.
+        ("prefix of a known mode", Some("auto")),
+    ];
+    for (label, mode) in cases {
+        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, mode);
+        assert!(status.success(), "[{label}] must exit 0");
+        assert!(
+            stdout.is_empty(),
+            "[{label}] must emit BYTE-EMPTY stdout, never a default — got {:?}",
+            String::from_utf8_lossy(&stdout)
+        );
+    }
+}
+
+#[test]
+fn only_user_prompt_submit_emits_the_signal() {
+    if !perl_available() {
+        return;
+    }
+    // The measured 1-of-10 blast radius. This script is registered for all 10 CLAUDESK_
+    // EVENTS on both identities, so an emission that forgot to filter by event would put
+    // the sentence into the model's context on every tool call — many times per turn.
+    for event in [
+        "Stop",
+        "Notification",
+        "PostToolUse",
+        "PreToolUse",
+        "PostToolUseFailure",
+        "SubagentStart",
+        "SubagentStop",
+        "SessionStart",
+        "SessionEnd",
+    ] {
+        let payload = format!(r#"{{"hook_event_name":"{event}","session_id":"s","cwd":"/p"}}"#);
+        let (status, stdout) = run_hook_env(&payload, None, Some("autopilot"));
+        assert!(status.success(), "[{event}] must exit 0");
+        assert!(
+            stdout.is_empty(),
+            "[{event}] must be byte-silent on stdout — only UserPromptSubmit signals. Got {:?}",
+            String::from_utf8_lossy(&stdout)
+        );
+    }
+}
+
+#[test]
+fn the_signal_never_blocks_cc_on_degraded_input() {
+    if !perl_available() {
+        return;
+    }
+    // The never-block-CC contract, re-asserted with the drive-mode var SET — the arm the
+    // pre-WP4b suite could not cover, since the var did not exist. A malformed emission
+    // must never reach CC as partial JSON, and a decode failure must still exit 0.
+    for (label, payload) in [
+        ("empty stdin", ""),
+        ("truncated JSON", r#"{"hook_event_name":"UserPrompt"#),
+        ("non-JSON garbage", "not json at all"),
+        ("JSON array, not object", "[]"),
+        ("JSON null", "null"),
+        (
+            "event name missing",
+            r#"{"session_id":"s","cwd":"/p","prompt":"hi"}"#,
+        ),
+    ] {
+        let (status, stdout) = run_hook_env(payload, None, Some("autopilot"));
+        assert!(
+            status.success(),
+            "[{label}] must exit 0 even with the drive-mode var set — got {status:?}"
+        );
+        assert!(
+            stdout.is_empty(),
+            "[{label}] must emit no partial JSON — got {:?}",
+            String::from_utf8_lossy(&stdout)
+        );
+    }
+}
+
+#[test]
+fn telemetry_is_unchanged_by_the_signal() {
+    if !perl_available() {
+        return;
+    }
+    // ⚠️ The two concerns must be INDEPENDENT in both directions. The tests above prove a
+    // dead socket does not suppress the signal; this proves the signal does not disturb
+    // the telemetry line — including the M9 privacy invariant (prompt LENGTH only).
+    // Asserted with the var SET, which no pre-WP4b test could do.
+    let line = run_hook_capture_line_with_mode(
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"s7","cwd":"/proj","prompt":"hello"}"#,
+        Some("autopilot"),
+    )
+    .expect("telemetry line still written");
+    let v = as_json(&line);
+    assert_eq!(v["hook_event_name"].as_str(), Some("UserPromptSubmit"));
+    assert_eq!(v["session_id"].as_str(), Some("s7"));
+    assert_eq!(v["cwd"].as_str(), Some("/proj"));
+    assert_eq!(v["prompt_length_chars"].as_i64(), Some(5));
+    // PRIVACY: the telemetry line must not gain the drive mode, and must not start
+    // carrying prompt text just because a second concern now reads the same payload.
+    assert!(
+        v.get("drive_mode").is_none() && v.get("CLAUDESK_DRIVE_MODE").is_none(),
+        "the drive mode is a SIGNAL to CC, not telemetry to Claudesk: {v}"
+    );
+}
+
+/// P3.5 — the CONSUMING SURFACE's accepted shape, corroborated against the official docs.
+///
+/// ⚠️ **Why this is separate from the emission tests above.** Those prove the script emits
+/// *well-formed JSON*. This proves it emits the **one shape Claude Code actually accepts** —
+/// and the two are genuinely separable: WP4a measured live that a top-level
+/// `additionalContext` emits perfectly well and is **rejected at runtime**. A synthetic
+/// `perl` run cannot tell those apart, which is why the phase's other outcomes could all
+/// pass on an inert implementation.
+///
+/// ⚠️ **AND MALFORMED STDOUT IS NOT MERELY IGNORED — IT CAN HARD-CRASH THE SESSION.**
+/// Per Claude Code's hooks reference plus anthropics/claude-code#57483, a
+/// `hookSpecificOutput` that is not an Object raises an unhandled `TypeError`
+/// (`"additionalContext" in q.hookSpecificOutput`) that terminates the session and loses
+/// in-flight work. So the never-block-CC invariant this repo already guards on **exit
+/// codes** has a second, previously-unguarded axis: **stdout shape**. This test pins it.
+///
+/// The safety property, stated exactly: **stdout is ALWAYS either byte-empty, or exactly one
+/// JSON object whose `hookSpecificOutput` is an object carrying the right `hookEventName`.**
+/// There is no third outcome — which is what makes the allowlist load-bearing for crash
+/// safety, not just for context hygiene: a value that would interpolate badly never reaches
+/// `encode_json` at all.
+#[test]
+fn stdout_is_always_empty_or_exactly_one_cc_accepted_object() {
+    if !perl_available() {
+        return;
+    }
+    // Values chosen to attack the SHAPE, not just the allowlist: JSON-injection attempts,
+    // embedded newlines (which would split one line into two), quotes, and a lone brace.
+    let hostile = [
+        "autopilot",
+        "stepping",
+        "orchestrated",
+        "fsd",
+        "",
+        "banana",
+        r#"{"injected":1}"#,
+        r#""; DROP--"#,
+        "a\nb",
+        "tab\there",
+        "{",
+        r#"autopilot","additionalContext":"pwned"#,
+    ];
+    for mode in hostile {
+        let (status, stdout) = run_hook_env(UPS_PAYLOAD, None, Some(mode));
+        assert!(status.success(), "[{mode:?}] must exit 0");
+        if stdout.is_empty() {
+            continue; // byte-empty is always safe
+        }
+        let text = String::from_utf8(stdout).expect("stdout is utf-8");
+        // Exactly ONE line — an embedded newline that split the emission would make CC
+        // parse a fragment.
+        assert_eq!(
+            text.lines().count(),
+            1,
+            "[{mode:?}] stdout must be exactly one line, got {text:?}"
+        );
+        let v: serde_json::Value = serde_json::from_str(text.trim())
+            .unwrap_or_else(|e| panic!("[{mode:?}] emitted MALFORMED JSON ({e}): {text:?}"));
+        // ⚠️ `.is_object()` is the specific assertion issue #57483 is about — a
+        // non-Object here is the hard-crash shape, not a cosmetic deviation.
+        assert!(
+            v["hookSpecificOutput"].is_object(),
+            "[{mode:?}] hookSpecificOutput MUST be an object — a non-object raises an \
+             unhandled TypeError in CC and terminates the session (claude-code#57483)"
+        );
+        assert_eq!(
+            v["hookSpecificOutput"]["hookEventName"].as_str(),
+            Some("UserPromptSubmit"),
+            "[{mode:?}] hookEventName is required and must match the event exactly"
+        );
+        assert!(
+            v["hookSpecificOutput"]["additionalContext"].is_string(),
+            "[{mode:?}] additionalContext must be a string"
+        );
+        // Only the four allowlisted modes may reach here at all.
+        assert!(
+            ["autopilot", "stepping", "orchestrated", "fsd"].contains(&mode),
+            "[{mode:?}] emitted output but is NOT an allowlisted mode — the allowlist is \
+             what keeps hostile values away from encode_json"
+        );
+    }
+}
+
+/// The hook must be **silent on stderr** too — not just correct on stdout (M12 WP4b P4.1).
+///
+/// ⚠️ **Found by a mutant that produced NO test failure.** Deleting the `// ''` fallback on
+/// `$ENV{CLAUDESK_DRIVE_MODE}` leaves stdout byte-empty and every other test green, because
+/// inertness for an absent var actually comes from the `%KNOWN` allowlist (an undef key is
+/// falsy), not from the fallback. What the fallback really prevents is a `use warnings`
+/// diagnostic — *"Use of uninitialized value $mode in hash element"* — printed to **stderr**
+/// on every single turn of every CC session with the gate off. That is the overwhelmingly
+/// common case: one line of noise per prompt for every user who does not run the workflow
+/// layer.
+///
+/// It was invisible because **every other helper in this file sets `.stderr(Stdio::null())`**,
+/// so the suite structurally cannot see stderr. A defensive construct with no test defending
+/// it is one "tidy-up" away from deletion — this is that test.
+///
+/// Not a never-block-CC violation (exit stays 0, stdout stays clean), so it is asserted
+/// separately from `never_blocks_cc_on_degraded_inputs` rather than folded into it.
+#[test]
+fn the_hook_never_writes_to_stderr() {
+    if !perl_available() {
+        return;
+    }
+    let cases: [(&str, Option<&str>); 5] = [
+        ("var absent — the gate-OFF path, i.e. most sessions", None),
+        ("empty string", Some("")),
+        ("unrecognized value", Some("banana")),
+        ("allowlisted value", Some("autopilot")),
+        ("old pre-WP4b wire value", Some("full-autopilot")),
+    ];
+    for (label, mode) in cases {
+        let mut cmd = Command::new("perl");
+        cmd.arg(hook_path())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()) // ⚠️ piped, NOT null — the whole point of this test
+            .env_remove("CLAUDESK_HOOK_SOCK");
+        match mode {
+            Some(m) => {
+                cmd.env("CLAUDESK_DRIVE_MODE", m);
+            }
+            None => {
+                cmd.env_remove("CLAUDESK_DRIVE_MODE");
+            }
+        }
+        let mut child = cmd.spawn().expect("spawn perl hook");
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(UPS_PAYLOAD.as_bytes())
+            .unwrap();
+        let out = child.wait_with_output().expect("hook exits");
+        assert!(out.status.success(), "[{label}] must exit 0");
+        assert!(
+            out.stderr.is_empty(),
+            "[{label}] the hook wrote to stderr: {:?}. Every CC turn invokes this script, so a \
+             `use warnings` diagnostic here is one line of noise per prompt — most often for \
+             users with the gate OFF, who get no benefit from this feature at all.",
+            String::from_utf8_lossy(&out.stderr)
         );
     }
 }

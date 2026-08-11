@@ -13,7 +13,7 @@ use tauri::{AppHandle, Manager};
 
 use super::{
     add_or_touch, prune_missing, read_default_model, read_projects, remove as remove_project_inner,
-    set_default_model, Project, PROJECTS_FILE,
+    set_default_drive_mode, set_default_model, DriveMode, Project, PROJECTS_FILE,
 };
 
 /// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists.
@@ -191,6 +191,38 @@ pub fn project_set_default_model(
 ) -> Result<(), String> {
     let dir = resolve_data_dir(&app)?;
     set_default_model(&dir, Path::new(&path), model).map_err(|e| e.to_string())
+}
+
+/// Set (`Some`) or clear (`None`) a project's workflow drive mode (M12 WP4c).
+///
+/// Takes effect on that project's **next** CC spawn: the mode is read at spawn time and
+/// becomes the `CLAUDESK_DRIVE_MODE` env var gating the `UserPromptSubmit` hook. An
+/// unknown path is an error — there is no record to attach the value to, and reporting
+/// success for a write that vanishes on the next read is worse than failing.
+///
+/// ⚠️ **`mode` is TYPED (`Option<DriveMode>`), deliberately unlike
+/// [`project_set_default_model`]'s free `Option<String>`** — and the asymmetry is a
+/// correctness requirement, not a style choice. An unrecognized *model* string is
+/// adjudicated by CC itself, loudly and precisely, in the pane the operator is already
+/// looking at. An unrecognized *drive-mode* string instead fails `serde` on the way back
+/// **in and takes the whole project list with it** (`read_projects` returns `Err`, so the
+/// picker cannot render at all — see `tests::an_unknown_drive_mode_string_fails_the_whole_project_list`).
+/// So this boundary must reject at the type level; do NOT "harmonize" it to a `String` for
+/// symmetry with the model command, and do NOT copy `cc/modelOverride.ts`'s emphatic
+/// "this module does NOT validate" rule across — that rule is about the open-valued
+/// sibling.
+///
+/// Clearing removes the key from disk (via `skip_serializing_if`) rather than writing
+/// `null`, which is what makes "absent → do not set the env var" one code path instead of
+/// two.
+#[tauri::command]
+pub fn project_set_default_drive_mode(
+    app: AppHandle,
+    path: String,
+    mode: Option<DriveMode>,
+) -> Result<(), String> {
+    let dir = resolve_data_dir(&app)?;
+    set_default_drive_mode(&dir, Path::new(&path), mode).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

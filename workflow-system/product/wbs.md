@@ -2,7 +2,7 @@
 stage: wbs
 state: complete
 milestone: "Milestone 12: Smart auto-resume + drive mode"
-updated: 2026-08-06  # ⚠️ WP4 RE-DECOMPOSED into WP4a–WP4d (`/product-wbs` back-loop) — the original WP4 was invalidated on all four of its claims. It is NOT "clone `default_model`'s path" (that path ends in argv; drive mode has no argv destination and no CLI flag), NOT near-zero-unknown (the whole delivery mechanism was missing), NOT an independent parallel track (it consumes WP3's spawn path), and its task 4.4 targeted `.session.md` + WIP frontmatter — files that are DELETED at `/session-restore` step 7 and ARCHIVED at finalize, i.e. absent at the exact moment a new WP starts. ⚠️ THE DELIVERABLE IS A SIGNAL, NOT A STORE: a persisted `drive_mode` already exists in 93% of manual restores and is already ignored 74% of the time, so storing it somewhere new does nothing. Mechanism PROVEN LIVE 2026-08-06 — an env-var-gated `UserPromptSubmit` hook returning `additionalContext` makes the REAL `/session-restore` skip the mode menu (absent var → menu + `S15`; present → no menu, pointer consumed). Zero companion-repo change; `/session-restore`'s re-prompt is CORRECT for a CLI user and must NOT be changed (operator). ⚠️ Long-context durability is ASSUMED, not proven — validated by dogfooding, deliberately not by a synthetic probe. Measured pain: 524 manual opens, 82% got the menu, ~7.2×/day, 99% of replies bundle the mode word with the work instruction. The manual `/session-start` arm is DEFERRED to the backlog.
+updated: 2026-08-07  # ▶ WP4b (the drive-mode signal) SHIPPED — the mechanism is LIVE and PROVEN END TO END: a real CC turn in a Claudesk-spawned workspace answered `fsd`, the exact stamped mode (a value absent from that project and no documented default, so only the signal explains it). 4 phases: DriveMode vocabulary fixed (`stepping`/`fsd`) + per-project store activated → `CLAUDESK_DRIVE_MODE` on the CC spawn, fail-closed gated, isolated from the login shell → the hook emission + exact-match allowlist (the hook channel is BIDIRECTIONAL for the first time) → 5 mutants proven individually + a cross-language caller assertion. ⚠️ NOT COMMITTED at finalize — operator has not requested a commit. ⚠️ Code review found 3 MAJOR, all backlogged: the env var inherits to ALL DESCENDANTS (confirmed empirically — a nested `claude` fires the hook with the parent workspace's mode; undecided, not a defect), `shell_spawn_env`'s test asserts the primitive not the caller, and incident-narrative comments are triple-recorded. ⚠️ Long-context durability remains ASSUMED, not proven — validated by dogfooding per the operator's WP4a call. Next: WP4c (picker cell) → WP4d (doc corrections) → WP5 (exit verify + the guard's 4th arm, which owns WP4c's surface — WP4b is deliberately outside the guard, measured).  # ⚠️ WP4 RE-DECOMPOSED into WP4a–WP4d (`/product-wbs` back-loop) — the original WP4 was invalidated on all four of its claims. It is NOT "clone `default_model`'s path" (that path ends in argv; drive mode has no argv destination and no CLI flag), NOT near-zero-unknown (the whole delivery mechanism was missing), NOT an independent parallel track (it consumes WP3's spawn path), and its task 4.4 targeted `.session.md` + WIP frontmatter — files that are DELETED at `/session-restore` step 7 and ARCHIVED at finalize, i.e. absent at the exact moment a new WP starts. ⚠️ THE DELIVERABLE IS A SIGNAL, NOT A STORE: a persisted `drive_mode` already exists in 93% of manual restores and is already ignored 74% of the time, so storing it somewhere new does nothing. Mechanism PROVEN LIVE 2026-08-06 — an env-var-gated `UserPromptSubmit` hook returning `additionalContext` makes the REAL `/session-restore` skip the mode menu (absent var → menu + `S15`; present → no menu, pointer consumed). Zero companion-repo change; `/session-restore`'s re-prompt is CORRECT for a CLI user and must NOT be changed (operator). ⚠️ Long-context durability is ASSUMED, not proven — validated by dogfooding, deliberately not by a synthetic probe. Measured pain: 524 manual opens, 82% got the menu, ~7.2×/day, 99% of replies bundle the mode word with the work instruction. The manual `/session-start` arm is DEFERRED to the backlog.
 # Prior: 2026-08-05  # ✅ WP3 SHIPPED (`80b82a1`; review `ba875df`; acceptance pass `119373b`) — auto-fire is live end-to-end: the picker announces the predicted command before you click, the row fires it on open, a `⊘` second door opens without firing, `/session-start` is never auto-fired but is one click away in the workspace header, and the already-open indicator gives WP2's ⏸ its read-back. ⚠️ **Arm 1 is the `--continue` CLI FLAG, not `/resume`** — a bare `/resume` opens an interactive picker (Phase 1 probe); every `/resume` reference in this doc was corrected 2026-08-05. ⚠️ The `⊘` shipped NESTED-and-defended, not sibling — see the STRUCTURAL note. ⚠️ The gate applies PER ARM: `--continue` ungated (serves every CC user), `/session-restore` gated. Remaining: WP4 (drive-mode cell, parallel track) → WP5 (exit verify + the guard's 4th arm).
 # Prior: 2026-08-03  # ✅ WP2 SHIPPED (`0b07e81` + `5e8256e`) — the unclean flag is live end-to-end: set-on-open (after the spawn `?`), opt-in-per-route clearing, the hover-revealed ⏸ (gated on M10.9), Recycle pinned clean for M13. ⚠️ WP2 shipped THREE clean-exit routes, not four — `/exit` was dropped as a dead variant pending a product decision (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). WP3 inherits: `consume()` is the fire-path primitive; the flag is keyed through `key_for()` (canonicalized) so any new reader must use the same helper; precedence must live in the pure `predictAction`, NOT the batch command.
 ---
@@ -491,7 +491,7 @@ mockup determines the cell before any pixels are written.
 
 ---
 
-### WP4b: The drive-mode signal — per-project value + per-turn injection
+### WP4b: The drive-mode signal — per-project value + per-turn injection  ✅ SHIPPED 2026-08-07 (uncommitted at finalize — operator has not requested a commit)
 **Description:** The **acting** half, and the actual deliverable. Store a per-project drive mode, set the
 gating env var on spawn, and emit the `UserPromptSubmit` `additionalContext` line so a Claudesk-opened
 session does not re-ask a question the operator already answered. **Zero companion-repo change** — the
@@ -506,7 +506,7 @@ skill recognizes — Verdict (e)); (2) the **known-mode allowlist**, which does 
 (unrecognized-value, alongside absent and empty). ⚠️ **This is an ESTIMATE CORRECTION, not a scope change** —
 nothing was added that Verdicts (c)/(e) had not already assigned to this WP.
 **Tasks:**
-- [ ] 4b.1 **Activate `default_drive_mode`** (`config_store/mod.rs:68-71`) — typed `Option<DriveMode>`.
+- [x] 4b.1 **Activate `default_drive_mode`** (`config_store/mod.rs:68-71`) — typed `Option<DriveMode>`.
   ⚠️⚠️ **THIS TASK'S ORIGINAL PREMISE WAS FALSE — see Verdict (e) in "Probe outcomes" BEFORE starting.**
   It used to read *"already typed … with the right kebab-case wire vocabulary
   (`step-by-step`/`orchestrated`/`autopilot`/`full-autopilot`)"*. **Two of those four are WRONG:**
@@ -525,7 +525,7 @@ nothing was added that Verdicts (c)/(e) had not already assigned to this WP.
   carries **two** stale claims — *"Never read or written"* **and** a *"Phase 2 (WP15 drive-mode
   selector)"* reference to a numbering that no longer exists; kill both in the same commit or the file
   keeps three lies (value, readership, provenance).
-- [ ] 4b.2 **Set `CLAUDESK_DRIVE_MODE` on the spawned process** when the project has a mode. Absent
+- [x] 4b.2 **Set `CLAUDESK_DRIVE_MODE` on the spawned process** when the project has a mode. Absent
   value → **do not set the var** (an unset var is what makes the hook inert). The *config read* is easy:
   `spawn` already reads per-project config at `cc_session/mod.rs:907-921` beside `read_default_model`.
   ⚠️ **But the ENV plumbing is NOT free, and an earlier note in this file says it is — that note is
@@ -537,7 +537,7 @@ nothing was added that Verdicts (c)/(e) had not already assigned to this WP.
   which **leaks `CLAUDESK_DRIVE_MODE` into the raw login shell** at `:634`. A shell is not a CC session
   and must never receive it. **Compose a `Vec` at the CC call site instead**, leaving `color_tty_env()`
   and the shell spawn untouched. See "Incidental code facts WP4b/WP4c inherit".
-- [ ] 4b.3 **Emit the `additionalContext` line** per WP4a's plumbing verdict (Verdict (c)), using the
+- [x] 4b.3 **Emit the `additionalContext` line** per WP4a's plumbing verdict (Verdict (c)), using the
   exact sentence from **Verdict (d)**. ⚠️ `additionalContext` **must** be nested under
   `hookSpecificOutput` with `hookEventName` — the binary rejects it at top level.
   ⚠️ **"Present and non-empty" is NOT a sufficient gate — you must also build the KNOWN-MODE ALLOWLIST.**
@@ -549,19 +549,19 @@ nothing was added that Verdicts (c)/(e) had not already assigned to this WP.
   nonsense mode into **every turn**. Allowlist exactly: `stepping` · `orchestrated` · `autopilot` · `fsd`
   (⚠️ **not** what `DriveMode` serializes today — see 4b.1). An unrecognized value emits **nothing**, per
   Verdict (e) — never a default.
-- [ ] 4b.4 **Mutation-prove ALL THREE inertness arms, not just the firing arm.** The load-bearing property
+- [x] 4b.4 **Mutation-prove ALL THREE inertness arms, not just the firing arm.** The load-bearing property
   is that the hook stays silent unless it should speak — that is what protects every plain-CLI user.
   ⚠️ This task previously named only the **absent**-var arm; Verdict (e) measured **three** inert arms and
   each needs a mutant: (1) var **absent**, (2) var present but **empty string**, (3) var present with an
   **unrecognized value** (the arm owned by 4b.3's new allowlist — and the one with no test if you skip it).
   A test proving only the firing case leaves the more important half unguarded. ⚠️ Per
   `[[verify-the-mutation-landed]]`, confirm each mutation changed *executable* code.
-- [ ] 4b.5 **Prove the CALLER, not only the primitive.** This milestone has now hit *"a proven module
+- [x] 4b.5 **Prove the CALLER, not only the primitive.** This milestone has now hit *"a proven module
   behind a caller that does not honor it"* **five times** (WP2's dead `/exit` route · WP2's unconsumed
   spawn term · WP3 Phase 3's dropped `onOpen` arg · the fire-path primitives · the no-fire intent that
   never crossed the IPC boundary). Assert the spawn path actually sets the var and the hook actually
   reads it — an end-to-end assertion, not two unit tests that pass independently.
-- [ ] 4b.6 **Gate on `useWorkflowFeaturesEnabled`.** ⚠️ Drive mode is workflow-coupled in a way
+- [x] 4b.6 **Gate on `useWorkflowFeaturesEnabled`.** ⚠️ Drive mode is workflow-coupled in a way
   `--continue` was not: WP3 set the precedent that the gate applies **per arm**, and this arm names a
   companion-workflow concept, so it is **gated** (the `/session-restore` side of that split, not the
   `--continue` side). ⚠️ `"drivemode"`/`"drive-mode"` are already in `WORKFLOW_TERMS`, so the seam
@@ -571,7 +571,7 @@ nothing was added that Verdicts (c)/(e) had not already assigned to this WP.
   plain-CLI users. Copy `announce/commands.rs:33`'s **fail-closed** read —
   `read_workflow_features_enabled(&dir).unwrap_or(false)` — so an unreadable settings file gates OFF
   rather than on.
-- [ ] 4b.7 **Do NOT write `drive_mode:` into any workflow file.** The superseded 4.4 aimed at
+- [x] 4b.7 **Do NOT write `drive_mode:` into any workflow file.** The superseded 4.4 aimed at
   `.session.md` (deleted by `/session-restore` step 7) and the WIP frontmatter (archived at finalize,
   absent in the gap). Claudesk has never written into `workflow-system/` and M11 shipped the docs viewer
   deliberately read-only; **this WP does not change that posture.** Recorded as a decision so it is not
@@ -1006,7 +1006,10 @@ demo pipeline). What survives is this record plus the two permanent tests the pr
   **above** it, which means **the stdin drain moves up and is shared** by both concerns. Appending after
   line 44 silently kills the signal whenever `CLAUDESK_HOOK_SOCK` is absent.
 - **Never-block-CC rests on ONE construct: `claudesk-hook.pl:58`, the `eval {}` wrapping `decode_json`.**
-  Remove it and malformed stdin exits **2** with a Perl error — a wedged CC turn, and
+  Remove it and malformed stdin exits **255** with a Perl error — a wedged CC turn, and
+  *(⚠️ corrected 2026-08-07 at WP4b Phase 3 verify-self: this said **2**, measured wrong. Perl's `die`
+  exits **255**. The number was carried verbatim into two other files before anyone re-measured it —
+  a reminder that a recorded measurement is still worth re-running when it is cheap.)*
   `never_blocks_cc_on_degraded_inputs` fails. ⚠️ **There is NO second guard behind it**: the script's only
   other `eval`s are `:120` (socket open) and `:138` (the write-failure log), neither of which wraps the
   decode. **Do not "simplify" `:58` away when you move the stdin drain up.**

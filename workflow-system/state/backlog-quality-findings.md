@@ -4,6 +4,43 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m12-wp4b-drive-mode-signal — 2026-08-07
+
+## SURFACE-2026-08-07-QUALITY-WP4B-ENV-VAR-INHERITS-TO-ALL-DESCENDANTS
+- **Source:** feature-review-quality (M12 WP4b, MAJOR) — **CONFIRMED EMPIRICALLY at review, not accepted on assertion**
+- **Type:** gap (stated containment story is narrower than actual reach)
+- **Summary:** `CommandBuilder::env` is **additive over the inherited environment** (there is no `env_clear()` anywhere in `cc_session`), so `CLAUDESK_DRIVE_MODE` propagates down the **entire descendant chain** of a Claudesk-spawned CC — not just to CC itself. A `claude` launched from inside that CC's Bash tool inherits the var and its `UserPromptSubmit` hook fires carrying **the parent workspace's mode**, even though that nested session never opened a Claudesk workspace. Verified directly: `CLAUDESK_DRIVE_MODE=fsd bash -c 'bash -c echo $CLAUDESK_DRIVE_MODE'` → `fsd` at both levels, and feeding that value to the real hook emits the sentence.
+- **Context:** ⚠️ **The WP's own containment story is CC-yes / login-shell-no** (constraint 5, `shell_spawn_env`, `the_raw_login_shell_never_receives_the_drive_mode_var`) — all of which guard the **sibling** shell and none of which address **descendants**. The announced blast radius is "1 of 10 events, CC-only"; the real radius includes nested CC invocations. ⚠️ **The test suite ALREADY OBSERVED this and neutralized it locally**: both new helpers call `.env_remove("CLAUDESK_DRIVE_MODE")` with a comment saying the ambient environment carries it because the tests run inside a Claudesk workspace. That was the strongest available signal about production behavior and it was consumed as test hygiene. ⚠️ Precedent in this repo for the same shape: `[[agent-launched-app-cannot-verify-continue]]` (CLAUDE_CODE_CHILD_SESSION leaking down a launch chain). **Not necessarily a defect** — a nested CC arguably *should* inherit the workspace's mode — but it is undecided and unstated.
+- **Suggested action:** Decide the intent, then make it explicit. Either (a) accept propagation and say so at `cc_spawn_env` ("descendants inherit this; any of them emitting UserPromptSubmit will fire the hook with this mode"), or (b) scope it to the direct child. ⚠️ Do NOT reach for `env_clear()` — it would strip PATH/LANG/TERM and break the M10.5 mojibake fix and the GUI-PATH spawn fix. If (b) is wanted the mechanism is a marker the hook can compare against, not env removal.
+- **Priority:** medium (no user-visible defect today; it is a stated-scope gap on a feature whose whole safety story is "inert unless Claudesk set it")
+- **Status:** pending
+
+## SURFACE-2026-08-07-QUALITY-WP4B-SHELL-SEAM-ASSERTS-THE-PRIMITIVE-NOT-THE-CALLER
+- **Source:** feature-review-quality (M12 WP4b, MAJOR)
+- **Type:** tech-debt (the extract-for-testability method applied one level past its yield)
+- **Summary:** `shell_spawn_env()` returns `color_tty_env()` verbatim, and `the_raw_login_shell_never_receives_the_drive_mode_var` asserts that its output lacks the var — which `color_tty_env_carries_nothing_beyond_color_and_locale` already pins. The only new information would be *"`spawn_shell` calls this one"*, and **the test cannot observe that**: it calls `shell_spawn_env()` directly, never `spawn_shell`. A mutant routing `spawn_shell` to `cc_spawn_env(...)` would still pass.
+- **Context:** ⚠️ **This is the SAME caller-vs-primitive gap the WP correctly diagnoses and closes at `cc_spawn`** (constraint 9, P2.7, P4.3) — recurring unresolved on the shell side, in a seam added specifically to close it. `borrow_env` has a milder version of the same shape. The irony is instructive: the method (extract so a test can drive the real thing) is right, but extracting is not the same as *asserting the caller*, and only the latter discharges constraint 9.
+- **Suggested action:** Either assert what `spawn_shell` actually passes (the `spawn_argv` call site is the seam that would need to be observable), or delete `shell_spawn_env` and accept `color_tty_env`'s existing guard as sufficient — the current middle position pays the indirection cost without buying the property. Prefer deleting unless the caller assertion is genuinely wanted.
+- **Priority:** medium (no defect; a test that reads as a caller proof and is not one is worse than no test, because it discourages writing the real one)
+- **Status:** pending
+
+## SURFACE-2026-08-07-QUALITY-WP4B-INCIDENT-NARRATIVE-TRIPLE-RECORDED-IN-CODE-COMMENTS
+- **Source:** feature-review-quality (M12 WP4b, MAJOR)
+- **Type:** tech-debt (comment density tipped from WHY into chronology)
+- **Summary:** The new `cc_session` region runs ~48% comments/blanks across ~560 added lines, with several doc comments spending 14-20 lines re-narrating build history (the three vacuous guards; the doc-comment-citing-a-nonexistent-test incident). `resolve_cc_spawn_env`'s doc alone spends 14 lines on retired guards' failure modes. That history is **already recorded in three places** — the WIP, the backlog SURFACEs, and these comments — and the code copy decays fastest.
+- **Context:** This repo's convention IS heavy explanatory comments encoding WHY, and most of these do that well — the finding is scoped to the *incident-narrative subset*, not the contract documentation. A reader modifying `resolve_cc_spawn_env` needs its contract and the one-line reason the shape is load-bearing; they do not need the chronology of guards that no longer exist.
+- **Suggested action:** Compress the retired-guard chronology to one line plus a pointer (the SURFACE ID or the lesson slug), keeping the *contract* statements at full length. Do NOT strip the ⚠️ contract warnings — those are the ones that have demonstrably prevented regressions.
+- **Priority:** low-medium (pure readability; no correctness risk, and over-correcting here would cost more than it saves)
+- **Status:** pending
+
+## SURFACE-2026-08-07-QUALITY-WP4B-FOUR-MINOR-FINDINGS
+- **Source:** feature-review-quality (M12 WP4b, MINOR ×4)
+- **Type:** tech-debt (polish)
+- **Summary:** (1) `claudesk-hook.pl:108` rebuilds the 4-element `%KNOWN` hash on every `UserPromptSubmit` — negligible against Perl's ~15 ms cold start, but the surrounding comments advertise per-call cost as a design constraint and do not answer the question they invite. (2) `cc_session/mod.rs:499-506` reaches the wire value via `serde_json::to_string(&mode).trim_matches('"')`, and the `if let Ok(wire)` arm silently drops the var on a serialization failure that cannot occur for a fieldless enum. (3) `hook_pl_output.rs`'s `expected_context()` duplicates the sentence literal from the script and defends it — three lines from the vocabulary test whose stated principle is the opposite (read it out, never restate); the two adjacent tests apply opposite duplication rules with no note reconciling them. (4) `set_default_drive_mode_leaves_the_model_override_untouched_and_vice_versa` does not assert the "vice versa" half.
+- **Suggested action:** Address opportunistically. (3) is the most valuable — a one-line note reconciling why the *vocabulary* is read out of the script while the *sentence* is duplicated would stop a future editor unifying them the wrong way. (4) is a two-line test addition.
+- **Priority:** low
+- **Status:** pending
+
 # m12-wp3-autofire-and-announce — 2026-08-05
 
 ## SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS

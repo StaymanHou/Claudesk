@@ -179,9 +179,13 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 8s wall / 4.0s warm exec (2026-08-05, M12 WP3 Phase 3.5 verify-codify: full `--all-targets` run, **781 lib pass** / 0 fail across 6 targets — +4 for the producer→consumer round-trip tests; note `--all-targets` totals 788 across all targets, the lib figure is 781)
+- **Last:** 7s wall / 3.84s warm exec (2026-08-10, M12 WP4c Phase 1 verify-auto baseline: full `cargo test -p claudesk`, **821 lib** + 16 hook_pl_output + 1 integration = **838 pass** / 0 fail — count UNCHANGED from 2026-08-07, which is the point: WP4c Phase 1 touched only `src/App.css`, so this run establishes that the uncommitted WP4b Rust code is green and a later Rust failure must NOT be attributed to WP4c)
 - **Use timeout:** 510000
 - **History:**
+  - 7s wall / 3.84s exec — 2026-08-10 (838 total, unchanged; WP4c Phase 1 baseline — CSS-only change, run purely to fix attribution)
+  - 7s wall / 3.93s exec — 2026-08-07 (838 total: 821 lib + 16 hook + 1; WP4b complete)
+  - 7s wall / 4.18s exec — 2026-08-07 (817 lib pass, +7 WP4b Phase 2 spawn-env)
+  - 9s wall / 5.5s exec — 2026-08-06 (810 lib pass, +11 WP4b drive-mode)
   - 8s wall / 4.0s exec — 2026-08-05 (781 lib pass, +4 round-trip)
   - 8s — 2026-08-04 (776 pass, warm)
   - 8s — 2026-08-04 (765 pass, warm)
