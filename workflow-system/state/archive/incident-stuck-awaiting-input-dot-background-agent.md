@@ -1,17 +1,20 @@
 ---
 workflow: incident
-state: reported
+state: resolved
 created: 2026-08-06
-severity: TBD
+resolved: 2026-08-11
+severity: low
+resolution: fast-close (no mitigation) — defect real and understood, not worth an investigation
 ---
 
 # Incident: AwaitingInput dot stays lit after a background agent finishes
 
 **Workflow:** incident
-**State:** reported
+**State:** resolved (fast-close)
 **Created:** 2026-08-06 15:2x
-**Severity:** TBD (not yet triaged)
-**Status:** Reported — awaiting `/incident-triage`
+**Resolved:** 2026-08-11
+**Severity:** low
+**Status:** Closed without mitigation — see "Resolution" below
 
 ## Summary
 
@@ -134,6 +137,51 @@ Not yet reduced to deterministic steps. Observed shape:
 Evidence for the observed instance is in `status-channel.log` at the epochs quoted above (the file
 rotates — copy the lines out before they age out if they are still needed at triage).
 
+## Resolution — 2026-08-11 (fast-close, no mitigation)
+
+**Severity: low. Closed without a fix.** Operator decision: not experienced a second time since the
+2026-08-06 reproduction, across ~5 days of ordinary use including the background-agent workflow that
+produced it.
+
+⚠️ **This is a fast-close on SEVERITY, not a "could not reproduce" and not a no-defect finding.** The
+defect is real, reproduced once, and its mechanism is fully understood in source: `event_to_state`
+(`status_broadcaster/mod.rs:121`) maps four events and `SubagentStop` falls through to `_ => None`, so
+this shape has **no clearing edge at all**. Nothing was changed, so it remains live. What the low
+severity records is that it is not worth an investigation *now* — status-surface staleness only, no
+crash, no data loss, no process-lifecycle effect, and observed frequency far below what the
+"frequency scales with background-agent use" prediction implied.
+
+**The mechanism is preserved, not discarded.** `SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT`
+**stays open in `backlog.md`** and now carries the full analysis this file holds. That item is the
+live anchor; this incident file is archived only because the *incident* process is closed.
+
+**What a future fix must still know** (all of it in the backlog item):
+
+- The one-line `SubagentStop → Idle` fix **contradicts a passing test that is correct for what it
+  protects** (`m9_time_analytics_events_are_status_neutral`, `mod.rs:449`) — and is wrong anyway with
+  multiple agents outstanding, since one finishing ≠ none awaiting.
+- The real question is a **product** one, unanswered: what should the dot mean with N background
+  agents? Lean was **(b)** track background-agent state separately — the only shape that can express
+  "2 of 5 awaiting" — but it was never decided.
+- **Before designing (b), confirm a per-agent identifier exists on the hook payload.** `SubagentStop`
+  carries the *parent session's* cwd, so every background agent of one workspace resolves to the same
+  `ws-N` and cannot currently be counted. Settle with a **live hook capture, not docs**
+  (`[[cc-hook-capture-beats-docs]]`).
+
+**Revive the incident if** the stuck dot recurs with any regularity, or if background-agent use
+increases enough that the held menu-bar alarm glyph becomes a routine false alarm.
+
+**The freeze recorded in this file is a separate, still-unexplained one-off** and is NOT closed by
+this resolution — see the section above. It has not recurred in ~5 days. If it does:
+`sample <pid> 5 -f ~/Desktop/claudesk-freeze.txt` **while still frozen**, before force quitting.
+
 ## Next state
 
-`/incident-triage` — assess severity and decide investigate vs. fast-close.
+Closed. No mitigation, no regression test (there is no behavior change to codify).
+
+⚠️ This incident is **still at `state: reported` / `severity: TBD`** — reported 2026-08-06 and
+deliberately not triaged across two sessions that ran M12 WP4b and WP4c to completion alongside it.
+It is now the **only** item in `wip/`. Read this file's "Next state" section plus
+`SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT` in `backlog.md` before
+touching the event mapping — the obvious one-line fix contradicts a passing test that is correct for
+what it protects.
