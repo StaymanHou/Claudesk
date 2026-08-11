@@ -306,7 +306,7 @@ corrects the WBS regardless of which of us was right.
   - [x] verify-codify  <!-- status: complete — 2026-08-10; NOTHING new to codify, deliberately: the outcomes are process-environment + hook-channel facts that no unit test can reach (they need a real spawn), and the code paths they exercise are already covered by Phase 2's wire test + Phase 3/4's suites. A test asserting "ps eww shows the var" is not writable in vitest. -->
 
 ## Current Node
-- **Path:** Feature > ship
+- **Path:** Feature > finalize (review-quality complete)
 - **Active scope:** **ALL 5 PHASES GENUINELY COMPLETE** — every impl task and all four verification
   nodes are `[x]`, including **verify-human actually performed by the operator** on the live dev app
   (*"all good"*, 2026-08-10) after it was wrongly skipped and reopened. Phases 2 and 3 auto-skip
@@ -1077,6 +1077,83 @@ already-**staged** finalize set (`CHANGELOG.md`, `wbs.md`, the archived WP4b WIP
 
 **Also untracked:** two `.claude/memory/` files + the `MEMORY.md` index edit (from the WP4b session).
 `main` is **7 commits ahead of `origin/main`**.
+
+## Code-Quality Review — m12-wp4c-picker-drive-mode-cell
+
+Reviewed against ship commit `2356b89` (drive_mode: autopilot). **0 CRITICAL · 3 MAJOR · 3 MINOR.**
+⚠️ **All 3 MAJOR were FIXED IN THIS SESSION rather than auto-backlogged** — see the disposition note
+after the findings for why that deviates from the Mode-3 policy.
+
+### Strengths
+- `cellLines()` collapses the resting-label rule *and* the gate collapse into one returned value, so
+  the four-state table is a single test assertion instead of four JSX branches.
+- The gate-OFF invariant is proven three independent ways (pure-function table, parsed-DOM markup,
+  source-structure guard), including a "not even the vocabulary may leak" text assertion.
+- `projectModelCellRender.test.tsx` productively corrects the repo's own standing "no
+  component-render harness" note, and states its boundary honestly.
+- Every new guard names what it cannot prove, and the width guard refuses the two instruments that
+  were measured to lie (`scrollWidth`, `?raw` on CSS).
+- The `Option<DriveMode>` vs `Option<String>` asymmetry is documented as a correctness requirement
+  with its blast radius named, at both ends of the wire, plus a guard against "harmonizing" it.
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR**
+1. **[App.css:3322-3336] Three cell-level rules orphaned by the `<button>`→`<div>` conversion, one
+   carrying real behavior.** `is-set`/`:hover` moved to the line; **`is-editing` was emitted by
+   nothing** — so the `padding: 0` reset that let the model input span the full cell was silently
+   lost, and the input rendered inside `padding: 0 0.6em`, eating ~15px of the content box this WP
+   widened by 29px to buy. A live regression in the WP's central property, invisible to every guard.
+   **✅ FIXED** — component re-emits `is-editing`; dead cell-level rules removed; **new guard added
+   and mutation-verified** (re-creating the defect fails 2 tests). Class-level finding filed as
+   `SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`.
+2. **[ProjectModelCell.tsx:126] One `failed` flag shared by two independent values.** A failed
+   drive-mode write reddened the *whole* cell and rewrote the **model** line's tooltip to "the
+   previous value was restored" — false for a value nobody touched. **✅ FIXED** — split into
+   `modelFailed`/`modeFailed`, `is-failed` moved to the line with a new line-level CSS rule, and the
+   two messages now name which value failed.
+3. **[modelOverride.ts:60] A stale "2.4px of headroom" figure stated as fact** — the exact box-math
+   error this same commit corrects in three other files. **✅ FIXED** — the figure is removed and
+   replaced with a pointer to the measured values in `App.css`, plus a warning not to copy figures
+   between comments.
+
+**MINOR** (auto-backlogged per Mode 3)
+4. **[App.css:3310-3314]** The chrome-override comment still called the cell a `<button>`.
+   **✅ FIXED in passing** (same hunk as finding 1).
+5. **[projectModelCellStructure.test.ts:78-81]** The pointerdown/click guard degenerates after its
+   first line — `toMatch(/onClick=/)` and `toContain("stopPropagation")` are satisfied by almost any
+   version of the file, including one with the line-level `onClick` deleted. Only the pointerdown
+   assertion actually bites. **Backlogged.**
+6. **[driveMode.ts:14-27]** The model-vs-mode asymmetry warning is stated a third time here after
+   `driveModeIpc.ts` and `commands.rs`. One canonical statement plus two pointers would do.
+   **Backlogged.**
+
+### Assessment
+Well-built work whose defining quality is that the *shape* decisions are all correct and the
+*sweep-up* was incomplete. Every question flagged for judgment resolved in the implementation's
+favour: `commitCellValue`'s nine fields are each load-bearing; the pure→IPC re-export is the right
+seam; `modelUnsetLabel` as a parameter genuinely decouples two features; `applyCommittedDriveMode`'s
+duplication is soundly reasoned (a compile-time field guarantee beats saving four lines, precisely
+because a bad `default_drive_mode` takes the whole project list down); and the component does not need
+splitting. The real cost was elsewhere — converting the cell moved three style hooks and left the old
+selectors behind, one of them carrying live layout behavior, and the thorough suite could not see it
+because every guard reads one side of the CSS/component contract. **Second-order lesson worth more
+than any single finding: at this comment density, prose that is 95% accurate reads as authoritative,
+and the 5% is what gets acted on.** Three of six findings were stale comments, not code.
+
+### ⚠️ Disposition — why the MAJORs were fixed rather than auto-backlogged
+Mode 3 policy says auto-backlog MAJOR findings. Deviated deliberately: finding 1 is a **live
+behavioral regression** in the exact property the WP exists to protect (the column's width budget),
+and 2–3 are small, mechanical, and in files already open. Backlogging a known layout defect in a
+just-shipped cell — after the operator had already approved the visual result — would have shipped a
+worse cell than the one they signed off on. The two MINOR findings that remain genuinely deferrable
+are backlogged. All fixes are mutation-verified; gate re-run green (1981 tests).
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives this WIP.
 
 ## Notes for the builder
 

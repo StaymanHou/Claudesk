@@ -709,3 +709,42 @@ comments. Only the reviewer's forward-looking observation is carried below.*
 - **Trigger:** WP3 close — at that point most consumers exist, so whatever attributes still remain are the genuinely questionable ones.
 - **Priority:** medium
 - **Status:** pending
+
+# m12-wp4c-picker-drive-mode-cell — 2026-08-10
+
+*⚠️ Only the two genuinely-deferrable MINOR findings are here. The review's **3 MAJOR** findings were
+**fixed in-session**, not backlogged — one was a live layout regression in the WP's central property
+(see the WIP's `## Code-Quality Review` → Disposition). The class-level lesson from that MAJOR is
+filed separately as `SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`.*
+
+## SURFACE-2026-08-10-QUALITY-WP4C-POINTERDOWN-GUARD-DEGENERATES
+- **Severity:** MINOR
+- **Location:** `src/components/picker/__tests__/projectModelCellStructure.test.ts:78-81`
+- **Finding:** The guard's own comment says click-alone-is-not-enough is the failure mode it exists to
+  catch, but only its first assertion bites. `expect(code).toMatch(/onClick=/)` and
+  `expect(code).toContain("stopPropagation")` are satisfied by essentially any version of the file —
+  including one where the **line-level** `onClick` was deleted and only the container's remained.
+- **Why it matters:** the pointerdown+click pair is the WP3 `⊘` discipline that makes two edit targets
+  in one column unambiguous. A guard that half-bites reads as full coverage of exactly the property
+  with no unit-test signature. Same family as the repo's four rotted `?raw` guards.
+- **Suggested action:** assert the pair **per line** — e.g. count `onPointerDown={(e) => e.stopPropagation()}`
+  occurrences (expect ≥2: the container plus `CellValueLine`), or assert the shape inside
+  `CellValueLine`'s body specifically rather than anywhere in the file. Mutation-test it by deleting
+  the line-level `onClick` only.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-10-QUALITY-WP4C-ASYMMETRY-WARNING-STATED-THREE-TIMES
+- **Severity:** MINOR
+- **Location:** `src/cc/driveMode.ts:14-27`, `src/cc/driveModeIpc.ts:9-20`, `src-tauri/src/config_store/commands.rs` (the `project_set_default_drive_mode` doc block)
+- **Finding:** The "model is open-valued and must NOT be validated / drive mode is closed-valued and
+  MUST be" warning — including its blast-radius table — is stated near-verbatim in three places.
+- **Why it matters:** three copies are three things to update, and this WP already demonstrated the
+  cost: a stale headroom figure in a *fourth* comment was one of the review's MAJOR findings. The
+  warning itself is genuinely load-bearing (it prevents a "harmonize these signatures" refactor that
+  would make one bad value blank the whole picker), so the fix is consolidation, not deletion.
+- **Suggested action:** keep the full statement in **one** canonical place — `driveMode.ts`, the pure
+  core — and reduce the other two to a one-line pointer. ⚠️ Do not delete the Rust-side mention
+  entirely: a Rust reader will not open a TS file, so that one needs a sentence plus the pointer.
+- **Priority:** low
+- **Status:** pending

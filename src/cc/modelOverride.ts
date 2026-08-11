@@ -57,9 +57,13 @@ export const MODEL_UNSET_PLACEHOLDER = "Default (CC's own)";
  * Brevity still governs the case this comment was written for: with the gate **off** the
  * cell is a single line and renders this label bare, byte-identically to the pre-M12 build.
  * ⚠️ Do NOT "simplify" the prefixing away as redundant — it is the only thing distinguishing
- * the two stacked lines, and `Drive Mode: None` fits the column with just 2.4px of headroom
- * (the column was widened to `9.8em` specifically to afford both prefixes). See WBS
- * Verdict (f) and `SURFACE-2026-08-06-STACKED-CELL-LABELS-REVISE-THE-MODEL-UNSET-BREVITY-RATIONALE`.
+ * the two stacked lines, and the column was widened to `9.8em` specifically to afford both
+ * prefixes at full size. ⚠️ Do NOT restate a headroom figure here — an earlier draft of this
+ * comment said "2.4px", which was the box-math error (padding subtracted from a `content-box`
+ * width that never included it) that this same commit corrects in three other places. The
+ * measured figures live at `.picker-recent-model` in `App.css`; cite that, do not copy it. See
+ * WBS Verdict (f) and
+ * `SURFACE-2026-08-06-STACKED-CELL-LABELS-REVISE-THE-MODEL-UNSET-BREVITY-RATIONALE`.
  */
 export const MODEL_UNSET_LABEL = MODEL_UNSET_PLACEHOLDER.split(" (")[0];
 

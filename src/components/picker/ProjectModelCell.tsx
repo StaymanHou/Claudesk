@@ -123,7 +123,13 @@ export function ProjectModelCell({
   const [editingModel, setEditingModel] = useState(false);
   const [mode, setMode] = useState<DriveMode | null>(seedDriveMode);
   const [editingMode, setEditingMode] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // ⚠️ ONE FLAG PER VALUE, deliberately. A single shared `failed` was the first shape and it
+  // was wrong in a way that lies to the user: a failed drive-mode write turned the whole cell
+  // red AND rewrote the MODEL line's tooltip to "the previous value was restored" — false for
+  // a value nobody touched. `commitCellValue`'s `setFailed` is already per-call-site, so
+  // keeping them separate costs one `useState`. (Code review, 2026-08-10.)
+  const [modelFailed, setModelFailed] = useState(false);
+  const [modeFailed, setModeFailed] = useState(false);
 
   // Latest persisted values, readable OUTSIDE a state updater. React StrictMode
   // double-invokes updater callbacks, so a `persist()` called inside one fires TWO IPC
@@ -159,7 +165,7 @@ export function ProjectModelCell({
       setRef: (value) => {
         modelRef.current = value;
       },
-      setFailed,
+      setFailed: setModelFailed,
       notifyCommitted: (value) => onCommitted?.(projectPath, value),
       what: "model override",
     });
@@ -177,7 +183,7 @@ export function ProjectModelCell({
         setRef: (value) => {
           modeRef.current = value;
         },
-        setFailed,
+        setFailed: setModeFailed,
         notifyCommitted: (value) => onDriveModeCommitted?.(projectPath, value),
         what: "drive mode",
       });
@@ -190,11 +196,12 @@ export function ProjectModelCell({
     setEditingModel(false);
   }, []);
 
-  const modelTitle = failed
-    ? "Could not save — the previous value was restored."
+  // Each line reports only ITS OWN write failure — see the two flags above.
+  const modelTitle = modelFailed
+    ? "Could not save the model — the previous value was restored."
     : `Claude Code model for ${projectLabel}. Blank = inherit CC's own default. Applied when this project's session starts.`;
-  const modeTitle = failed
-    ? "Could not save — the previous value was restored."
+  const modeTitle = modeFailed
+    ? "Could not save the drive mode — the previous value was restored."
     : `Workflow drive mode for ${projectLabel}. None = the workflow skills ask, as usual. Applied when this project's session starts.`;
 
   // The RENDERED TEXT comes from the pure module, never re-derived here (the whole reason
@@ -206,7 +213,7 @@ export function ProjectModelCell({
 
   return (
     <div
-      className={`picker-recent-model${failed ? " is-failed" : ""}`}
+      className={`picker-recent-model${editingModel ? " is-editing" : ""}`}
       data-testid="picker-recent-model"
       // A click anywhere in the cell must never reach the row's open-project button.
       onPointerDown={(e) => e.stopPropagation()}
@@ -243,7 +250,7 @@ export function ProjectModelCell({
         modelLine && (
           <CellValueLine
             testId="picker-recent-model-line"
-            className={`picker-recent-cell-line${model ? " is-set" : ""}`}
+            className={`picker-recent-cell-line${model ? " is-set" : ""}${modelFailed ? " is-failed" : ""}`}
             label={`Claude Code model for ${projectLabel}: ${model ?? "default"}. Click to change.`}
             title={modelTitle}
             text={modelLine.text}
@@ -290,7 +297,7 @@ export function ProjectModelCell({
         ) : (
           <CellValueLine
             testId="picker-recent-mode-line"
-            className={`picker-recent-cell-line${mode ? " is-set" : ""}`}
+            className={`picker-recent-cell-line${mode ? " is-set" : ""}${modeFailed ? " is-failed" : ""}`}
             label={`Workflow drive mode for ${projectLabel}: ${mode ?? "none"}. Click to change.`}
             title={modeTitle}
             text={modeLine.text}

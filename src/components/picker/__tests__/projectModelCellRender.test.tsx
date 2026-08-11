@@ -3,6 +3,8 @@
 // ⚠️ Needed because the component reads browser globals through its hooks. Scoped per-file
 // rather than flipping the project default — same reasoning as `docsRender.test.tsx`.
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
 import { ProjectModelCell } from "../ProjectModelCell";
@@ -129,5 +131,92 @@ describe("the cell's resting DOM with the workflow gate OFF", () => {
     const cell = doc.querySelector('[data-testid="picker-recent-model"]');
     expect(cell?.tagName).toBe("DIV");
     expect(doc.querySelectorAll("button")).toHaveLength(0);
+  });
+});
+
+describe("every CSS class this cell's stylesheet styles is actually emitted", () => {
+  // ⚠️ This guard exists because its absence let a LIVE LAYOUT REGRESSION ship for one commit.
+  //
+  // Converting the cell from a `<button>` to a `<div>` of per-line spans moved three style
+  // hooks (`is-set`, `:hover`, `is-failed`) onto the line and **silently orphaned
+  // `.picker-recent-model.is-editing`** — the rule that zeroes the cell's padding while the
+  // model input is open. The component simply stopped emitting the class, so the input began
+  // rendering inside `padding: 0 0.6em`, eating ~15px of the very content box this WP had just
+  // widened by 29px to buy.
+  //
+  // **Nothing caught it**, and the reason is structural rather than an oversight: every guard
+  // in this repo reads ONE side of the CSS/component contract. `pickerModelColumnWidth.test.ts`
+  // reads the `.picker-recent-model` rule body and never asks which classes the component
+  // emits; the structure guards read the component and never ask which classes the stylesheet
+  // styles. A class can therefore be styled-but-never-emitted (dead CSS carrying real
+  // behavior) or emitted-but-never-styled (the eleven-undefined-classes CRITICAL of M10.9
+  // WP3.5a) with both sides individually green.
+  //
+  // This closes the styled-but-never-emitted direction for this cell. The inverse direction is
+  // covered by verify-auto's className→CSS sweep.
+  // (`SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`)
+
+  /** Modifier classes the stylesheet defines on the cell or its lines. */
+  function styledModifiers(): string[] {
+    const css = readFileSync(join(process.cwd(), "src", "App.css"), "utf8");
+    const out = new Set<string>();
+    for (const m of css.matchAll(
+      /\.(picker-recent-model|picker-recent-cell-line)\.([a-z-]+)/g,
+    )) {
+      out.add(m[2]);
+    }
+    return [...out];
+  }
+
+  it("emits every modifier class the stylesheet defines, across all cell states", () => {
+    // Render every state the OFF-gate shape can reach and collect the classes actually used.
+    // ⚠️ `is-editing` is reachable only mid-edit, which server rendering cannot drive — so it
+    // is asserted against the SOURCE below rather than skipped, which is what a green here
+    // would otherwise quietly mean.
+    const emitted = new Set<string>();
+    for (const seedModel of [null, "opus"]) {
+      const doc = renderCell({ seedModel });
+      for (const el of doc.querySelectorAll("[class]")) {
+        for (const c of el.className.split(/\s+/))
+          if (c.startsWith("is-")) emitted.add(c);
+      }
+    }
+    const src = readFileSync(
+      join(
+        process.cwd(),
+        "src",
+        "components",
+        "picker",
+        "ProjectModelCell.tsx",
+      ),
+      "utf8",
+    );
+
+    for (const mod of styledModifiers()) {
+      const isEmitted = emitted.has(mod) || src.includes(`" ${mod}"`);
+      expect(
+        isEmitted,
+        `App.css styles ".${mod}" on the picker cell, but ProjectModelCell.tsx never emits it. ` +
+          `Either the component stopped applying it (a dead rule that may be carrying real ` +
+          `behavior — this is exactly how the is-editing padding reset was lost) or the rule ` +
+          `is stale and should be deleted. Do not "fix" this by deleting the assertion.`,
+      ).toBe(true);
+    }
+  });
+
+  it("emits is-editing, the class whose loss was the regression", () => {
+    // Named separately from the sweep above so the failure message points straight at the
+    // specific defect rather than at a generic modifier mismatch.
+    const src = readFileSync(
+      join(
+        process.cwd(),
+        "src",
+        "components",
+        "picker",
+        "ProjectModelCell.tsx",
+      ),
+      "utf8",
+    );
+    expect(src).toMatch(/editingModel \? " is-editing" : ""/);
   });
 });

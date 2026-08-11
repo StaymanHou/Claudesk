@@ -3308,29 +3308,31 @@ body,
   white-space: nowrap;
   text-overflow: ellipsis;
   /* Chrome-less by default so the cell reads as part of the project row rather than as a
-     third boxed tile beside it. It is a <button> (it must be clickable to edit), so it
-     inherits the app's global button chrome — #2a2a2a fill + 8px radius — which visually
-     split the row into three panels on first build. Override all of it; the affordance is
-     carried by the hover brightening + cursor, not by a box. */
+     third boxed tile beside it. ⚠️ The cell was a <button> until M12 WP4c and is now a <div>
+     of per-line spans (pinned by projectModelCellRender.test.tsx), so it no longer inherits
+     the app's global `input, button` chrome — #2a2a2a fill + 8px radius — which visually split
+     the row into three panels on the M11.5 first build. These three overrides are KEPT anyway:
+     they cost nothing, and they are what makes the rule safe if this ever becomes a focusable
+     element again. The affordance is carried by the per-line hover brightening + cursor. */
   background: none;
   border: none;
   border-radius: 0;
 }
 
-/* A project with an explicit override reads brighter than an inheriting one, so the
-   exceptions stand out when scanning the list. */
-.picker-recent-model.is-set {
-  color: #b0b0b0;
-}
+/* ⚠️ `is-set` / `:hover` / `is-failed` live on `.picker-recent-cell-line` below, NOT here —
+   they moved at M12 WP4c when the single-value cell became two independently-editable lines
+   (a shared `is-failed` on the container turned the WHOLE cell red for one line's failed
+   write, and shared hover lit both lines at once). Cell-level copies of those three rules
+   were left behind as dead selectors and removed at code review, 2026-08-10. */
 
-.picker-recent-model:hover {
-  color: #e0e0e0;
-}
-
-.picker-recent-model.is-failed {
-  color: #ff8a7a;
-}
-
+/* Zero the cell's padding while the model input is open, so the input spans the full content
+   box. ⚠️ Load-bearing, and it was ORPHANED for one commit: the pre-WP4c component applied
+   `is-editing` and the rewrite dropped it, so the input rendered inside `padding: 0 0.6em` and
+   silently ate ~15px of the very content box WP4c widened by 29px to buy. Caught at code
+   review; the component now emits this class again (`editingModel ? " is-editing" : ""`).
+   ⚠️ No guard in this repo couples a CSS class to the component that emits it, which is why a
+   thorough test suite missed it — `pickerModelColumnWidth.test.ts` reads only this rule's body.
+   (`SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`) */
 .picker-recent-model.is-editing {
   padding: 0;
 }
@@ -3363,6 +3365,13 @@ body,
 
 .picker-recent-cell-line:hover {
   color: #e0e0e0;
+}
+
+/* PER LINE, not per cell — only the value whose write actually failed reddens. A shared
+   container-level `is-failed` reddened the whole cell (and mislabelled the untouched line's
+   tooltip) when one of the two writes failed; split at code review, 2026-08-10. */
+.picker-recent-cell-line.is-failed {
+  color: #ff8a7a;
 }
 
 /* Keyboard reachability must be VISIBLE — these lines are `tabIndex={0}` spans, so without
