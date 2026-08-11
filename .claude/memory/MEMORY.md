@@ -1,117 +1,81 @@
 # Memory Index
 
-base=MEMORY.md
-- [bash-cargo-env.md](bash-cargo-env.md) — Bash subshells in Claude Code sessions do not inherit ~/.cargo/env from the user's login shell; cargo/rustc invocations require an explicit PATH prefix.
-- [verify-self-dev-vs-prod-process-name-collision.md](verify-self-dev-vs-prod-process-name-collision.md) — osascript "process whose name is claudesk" hits the PROD app during dev verify-self (same process name); target the dev app by window title / bundle id, or avoid OS-focus driving entirely. Teardown must be PID-scoped — never blanket pkill/port-kill (killed operator's live app 2026-07-13).
-- [time-tracking-capture-is-machine-global.md](time-tracking-capture-is-machine-global.md) — time-analytics capture is machine-global + gated by a live tracking-ON instance; any tracking-on Claudesk logs ALL CC sessions on the machine (incl. the other app's). Expected behavior — flag proactively when reading the dashboard.
-- [day-view-flexible-timeline-model.md](day-view-flexible-timeline-model.md) — M9 Day view = continuous video-editor flexible timeline (SHIPPED 2026-07-15, fixed-origin @ today-29d); coordinate frame has ONE source of truth (ViewportContext dataWindow + DayWindowContext windowStartIso) — every consumer READS it, never recomputes (the P2.7 Minimap regression).
-- [reclassifier-primitives-need-session-end-cap.md](reclassifier-primitives-need-session-end-cap.md) — Aggregate-duration consumers of the reclassify primitives (active_bursts/session_active_ms/tool_intervals/subagent_intervals) must clip events at resolve_session_end FIRST — the WP6.5 cap lives in the CALLER (build_viz_session/build_metrics::capped_events), not the primitives (RAW bursts); skipping it inflates durations (the 885-min dangling-burst trap).
-- [vitest-raw-import-css-returns-processed-not-text.md](vitest-raw-import-css-returns-processed-not-text.md) — Vitest ?raw import of a .css file does NOT yield raw file text (Vite CSS plugin intercepts) — read CSS source-guards via node:fs readFileSync, not ?raw (the .tsx/.ts ?raw convention doesn't extend to .css).
-- [mcp-bridge-manage-window-reads-native-geometry.md](mcp-bridge-manage-window-reads-native-geometry.md) — MCP bridge manage_window {info, windowId} returns a native window's on-screen frame geometry (x/y/w/h, top-left-origin y-down) → native window-POSITION features are agent-verifiable via geometry math (convert to AppKit bottom-left y-up when checking). Caveat (f) on the bridge-verify-self list.
-- [mcp-bridge-seed-held-workspace-status-via-fiber.md](mcp-bridge-seed-held-workspace-status-via-fiber.md) — Hold a workspace CC status for a bridge verify-self check by dispatching setStatusMap via the React fiber; ipc_emit_event double-encodes the payload to a JSON string (applyStatusUpdate no-ops) and a real CC turn races faster than inter-tool latency. Next in the bridge-caveat chain.
-- [zsh-histfile-overridden-by-etc-zshrc.md](zsh-histfile-overridden-by-etc-zshrc.md) — A HISTFILE env var passed to a spawned interactive login zsh is OVERRIDDEN by /etc/zshrc (HISTFILE=$HOME/.zsh_history); isolate shell-history tests via HOME (read $HOME/.zsh_history), not HISTFILE. Also: SIGHUP saves history, SIGTERM/SIGKILL don't (the WP3 kill-signal reason).
-base=bash-cargo-env.md
-desc='Bash subshells in Claude Code sessions do not inherit ~/.cargo/env from the user'\''s login shell; cargo/rustc invocations require an explicit PATH prefix.'
-- [brew-cask-manual-delete-desync.md](brew-cask-manual-delete-desync.md) — "Why \"brew won't reinstall claudesk after I deleted the app\" happens, and the fix"
-base=brew-cask-manual-delete-desync.md
-desc='"Why \"brew won'\''t reinstall claudesk after I deleted the app\" happens, and the fix"'
-- [cc-hook-capture-beats-docs.md](cc-hook-capture-beats-docs.md) — For CC hook-channel work, a live hook-stream capture beats the official docs — docs can be confidently wrong about event existence
-base=cc-hook-capture-beats-docs.md
-desc=$'For CC hook-channel work, a live hook-stream capture beats the official docs �\M-\C-@\M-\C-T docs can be confidently wrong about event existence'
-- [cc-hook-event-facts.md](cc-hook-event-facts.md) — Concrete Claude Code v2.1.x hook-event facts for Claudesk's status channel (live-captured)
-base=cc-hook-event-facts.md
-desc='Concrete Claude Code v2.1.x hook-event facts for Claudesk'\''s status channel (live-captured)'
-- [cc-tui-cr-not-lf.md](cc-tui-cr-not-lf.md) — Raw-mode CC PTY interaction — /cmd byte-injection must end in 
- (0x0d) to execute; 
- only triggers autocomplete typeahead. Used by WP7 PtyCcSession trait.
-base=cc-tui-cr-not-lf.md
-desc=$'Raw-mode CC PTY interaction �\M-\C-@\M-\C-T /cmd byte-injection must end in \\r (0x0d) to execute; \\n only triggers autocomplete typeahead. Used by WP7 PtyCcSession trait.'
-- [claudesk-philosophy.md](claudesk-philosophy.md) — "The deliberate design philosophy behind Claudesk — opinionated, Claude-specific, parallel-across-projects, attention as the scarce resource"
-base=claudesk-philosophy.md
-desc=$'"The deliberate design philosophy behind Claudesk �\M-\C-@\M-\C-T opinionated, Claude-specific, parallel-across-projects, attention as the scarce resource"'
-- [cm6-dont-copy-compartment-by-analogy.md](cm6-dont-copy-compartment-by-analogy.md) — Don't add a CM6 Compartment by analogy to fontSizeCompartment without checking the new case needs live reconfigure — an array-rebuild may already swap the value, making the compartment vestigial.
-base=cm6-dont-copy-compartment-by-analogy.md
-desc=$'Don\'t add a CM6 Compartment by analogy to fontSizeCompartment without checking the new case needs live reconfigure �\M-\C-@\M-\C-T an array-rebuild may already swap the value, making the compartment vestigial.'
-- [cmd-shift-digit-reserved-for-filmstrip.md](cmd-shift-digit-reserved-for-filmstrip.md) — ⌘⇧+digit is reserved for future workspace/filmstrip switching in Claudesk; do not claim it for editor features
-base=cmd-shift-digit-reserved-for-filmstrip.md
-desc=$'�\M-\C-L\M-\C-X�\M-\C-G�+digit is reserved for future workspace/filmstrip switching in Claudesk; do not claim it for editor features'
-- [feedback_no_sublime_activate.md](feedback_no_sublime_activate.md) — Dev-time rule only — macOS Spaces yanks live ST windows to current Desktop; the Claudesk app's runtime ST activation is NOT constrained
-base=feedback_no_sublime_activate.md
-desc=$'Dev-time rule only �\M-\C-@\M-\C-T macOS Spaces yanks live ST windows to current Desktop; the Claudesk app\'s runtime ST activation is NOT constrained'
-- [feedback_osascript_activate_side_effects.md](feedback_osascript_activate_side_effects.md) — Activating any app via osascript/open -a/subl/etc. gathers that app's windows onto the current Desktop — treat as a write during dev-time probes
-base=feedback_osascript_activate_side_effects.md
-desc=$'Activating any app via osascript/open -a/subl/etc. gathers that app\'s windows onto the current Desktop �\M-\C-@\M-\C-T treat as a write during dev-time probes'
-- [feedback_read_help_before_cli_matrix.md](feedback_read_help_before_cli_matrix.md) — Five seconds of --help reading collapses redundant matrix rows and surfaces native flags upstream research may have missed
-base=feedback_read_help_before_cli_matrix.md
-desc='Five seconds of --help reading collapses redundant matrix rows and surfaces native flags upstream research may have missed'
-- [feedback_surfaced_in_discoveries_not_worktree.md](feedback_surfaced_in_discoveries_not_worktree.md) — Work Tree leaves are units of work; SURFACED items are notices — mixing them creates parent-completion-invariant violations
-base=feedback_surfaced_in_discoveries_not_worktree.md
-desc=$'Work Tree leaves are units of work; SURFACED items are notices �\M-\C-@\M-\C-T mixing them creates parent-completion-invariant violations'
-- [hmr-stale-across-file-rename.md](hmr-stale-across-file-rename.md) — A long-lived Vite/HMR dev window can half-apply and fake a regression — after a file RENAME *or* any in-place edit to a component holding useRef/useState (worse: hook state survives in a shape the new source cannot produce). Relaunch before believing a verify RESULT, not just before suspecting the diff.
-base=hmr-stale-across-file-rename.md
-desc=$'A long-lived Vite/HMR dev window across a mid-build file RENAME can half-apply and fake a regression �\M-\C-@\M-\C-T relaunch before suspecting the diff.'
-- [installed-build-verify-deferred-to-release.md](installed-build-verify-deferred-to-release.md) — "Operator defers installed-`.app` / native-window manual verification to the /release packaging gate, not per-feature verify-human"
-base=installed-build-verify-deferred-to-release.md
-desc='"Operator defers installed-`.app` / native-window manual verification to the /release packaging gate, not per-feature verify-human"'
-- [m7-docs-viewer-intent.md](m7-docs-viewer-intent.md) — "Why Claudesk's M7 workflow-docs markdown viewer exists — it's an attention/re-orientation feature, not a documentation reader"
-base=m7-docs-viewer-intent.md
-desc=$'"Why Claudesk\'s M7 workflow-docs markdown viewer exists �\M-\C-@\M-\C-T it\'s an attention/re-orientation feature, not a documentation reader"'
-- [macos-case-collision-module-naming.md](macos-case-collision-module-naming.md) — On macOS case-insensitive FS, foo.ts and Foo.tsx collide (tsc TS1149/TS1261) — name pure modules case-distinct from their PascalCase component siblings.
-base=macos-case-collision-module-naming.md
-desc=$'On macOS case-insensitive FS, foo.ts and Foo.tsx collide (tsc TS1149/TS1261) �\M-\C-@\M-\C-T name pure modules case-distinct from their PascalCase component siblings.'
-- [macos-tcc-permissions-granted.md](macos-tcc-permissions-granted.md) — Terminal.app has Accessibility + Screen Recording granted; agent can screenshot native windows and run osascript GUI queries
-base=macos-tcc-permissions-granted.md
-desc='Terminal.app has Accessibility + Screen Recording granted; agent can screenshot native windows and run osascript GUI queries'
-- [observable-outcomes-execution-evidence.md](observable-outcomes-execution-evidence.md) — feature-plan discipline in Claudesk. Outcomes that test command execution must require BOTH the typing-side evidence AND the execution-side evidence (output body, exit code, state change). "Marker appears in output" is too weak for execution checks.
-base=observable-outcomes-execution-evidence.md
-desc='feature-plan discipline in Claudesk. Outcomes that test command execution must require BOTH the typing-side evidence AND the execution-side evidence (output body, exit code, state change). "Marker appears in output" is too weak for execution checks.'
-- [pty-output-buffer-until-frontend-ready.md](pty-output-buffer-until-frontend-ready.md) — A new PTY session kind must buffer early output until the frontend attaches its listener + calls cc_ready — a quiescent shell loses its one-shot prompt otherwise.
-base=pty-output-buffer-until-frontend-ready.md
-desc=$'A new PTY session kind must buffer early output until the frontend attaches its listener + calls cc_ready �\M-\C-@\M-\C-T a quiescent shell loses its one-shot prompt otherwise.'
-- [pty-probe-observable-default.md](pty-probe-observable-default.md) — Project-wide pattern for PTY probe harnesses in Claudesk (WP2, WP4, WP7, future workspace-process work). Reader thread must mirror PTY output to an observable surface by default; opt-out to silent byte-counting only when needed.
-base=pty-probe-observable-default.md
-desc='Project-wide pattern for PTY probe harnesses in Claudesk (WP2, WP4, WP7, future workspace-process work). Reader thread must mirror PTY output to an observable surface by default; opt-out to silent byte-counting only when needed.'
-- [raw-mode-cr-is-enter.md](raw-mode-cr-is-enter.md) — POSIX terminal line-discipline fact relevant to ALL PTY-driven subprocesses in Claudesk (not just CC). Raw mode disables CR→NL translation, so input lines must end in 
- to register as Enter.
-base=raw-mode-cr-is-enter.md
-desc=$'POSIX terminal line-discipline fact relevant to ALL PTY-driven subprocesses in Claudesk (not just CC). Raw mode disables CR�\M-\C-F\M-\C-RNL translation, so input lines must end in \\r to register as Enter.'
-- [synthetic-tab-seam-reusable-readonly-buffer.md](synthetic-tab-seam-reusable-readonly-buffer.md) — The WP12 synthetic-tab seam renders programmatic read-only content as an editor tab; consumers must supply font-size + decorations (it doesn't inherit the editor's live zoom).
-base=synthetic-tab-seam-reusable-readonly-buffer.md
-desc='The WP12 synthetic-tab seam renders programmatic read-only content as an editor tab; consumers must supply font-size + decorations (it doesn'\''t inherit the editor'\''s live zoom).'
-- [tauri-command-removal-needs-invoke-sweep.md](tauri-command-removal-needs-invoke-sweep.md) — Removing/renaming a #[tauri::command] needs a frontend invoke() caller sweep + runtime smoke-launch — the FE/BE binding is stringly-typed and invisible to the unit gate
-base=tauri-command-removal-needs-invoke-sweep.md
-desc=$'Removing/renaming a #[tauri::command] needs a frontend invoke() caller sweep + runtime smoke-launch �\M-\C-@\M-\C-T the FE/BE binding is stringly-typed and invisible to the unit gate'
-- [tauri-nspanel-pip-gotchas.md](tauri-nspanel-pip-gotchas.md) — tauri-nspanel v2.1 PiP usage rules for M5 WP3 — four AppKit gotchas each found via a live crash at verify-human
-base=tauri-nspanel-pip-gotchas.md
-desc=$'tauri-nspanel v2.1 PiP usage rules for M5 WP3 �\M-\C-@\M-\C-T four AppKit gotchas each found via a live crash at verify-human'
-- [tauri-scaffold-recipe.md](tauri-scaffold-recipe.md) — The exact non-interactive command and merge pattern used to scaffold WP1 (Tauri 2 + React + TS + Vite) without destroying strategic docs.
-base=tauri-scaffold-recipe.md
-desc='The exact non-interactive command and merge pattern used to scaffold WP1 (Tauri 2 + React + TS + Vite) without destroying strategic docs.'
-- [tauri-xterm-pty-gotchas.md](tauri-xterm-pty-gotchas.md) — Embedding xterm.js + a PTY in a Tauri WKWebView needs explicit TERM, term.focus(), and rAF-deferred fit() — none are automatic.
-base=tauri-xterm-pty-gotchas.md
-desc=$'Embedding xterm.js + a PTY in a Tauri WKWebView needs explicit TERM, term.focus(), and rAF-deferred fit() �\M-\C-@\M-\C-T none are automatic.'
-- [verify-native-pty-via-ps-screencapture-stderr.md](verify-native-pty-via-ps-screencapture-stderr.md) — How to actually verify PTY/native behavior in Claudesk when Playwright can't see the WKWebView and the Vite browser has no backend.
-base=verify-native-pty-via-ps-screencapture-stderr.md
-desc='How to actually verify PTY/native behavior in Claudesk when Playwright can'\''t see the WKWebView and the Vite browser has no backend.'
-- [verify-self-stub-cannot-cross-subprocess-boundary.md](verify-self-stub-cannot-cross-subprocess-boundary.md) — A stubbed verify-self (Tauri IPC faked in a plain browser) passes precisely where it can't reach — the real-subprocess bugs hide at the boundary the stub replaces.
-base=verify-self-stub-cannot-cross-subprocess-boundary.md
-desc=$'A stubbed verify-self (Tauri IPC faked in a plain browser) passes precisely where it can\'t reach �\M-\C-@\M-\C-T the real-subprocess bugs hide at the boundary the stub replaces.'
-- [wp4-macos-perf-measurement.md](wp4-macos-perf-measurement.md) — How to measure CPU/RAM/frame-time of the Tauri WKWebView on macOS for Claudesk perf probes
-- [session-only-vs-permanent-dismiss-precedent.md](session-only-vs-permanent-dismiss-precedent.md) — Claudesk already has a two-way "ask later vs never ask again" precedent in src/updater/useUpdater.ts (dismissBanner persists nothing → returns next launch; skipVersion writes to disk → permanent); copy it instead of inventing a field, and keep the lifecycle marker separate from the feature flag.
-- [mcp-bridge-tools-not-exposed-to-subagents.md](mcp-bridge-tools-not-exposed-to-subagents.md) — The mcp__tauri__* bridge tools reach the ORCHESTRATOR but not spawned subagents (which silently fall back to bare Vite, no Tauri IPC) — drive the bridge yourself for live-app outcomes; plus ipc_emit_event's param is `eventName` and a plain-string payload dodges the double-encoding hazard.
-- [lsof-ti-tcp-misses-ipv6-vite.md](lsof-ti-tcp-misses-ipv6-vite.md) — `lsof -ti tcp:1420` misses Vite's IPv6-only listener (use `lsof -nP -iTCP:`) — BUT the real lesson: never kill a `target/debug/claudesk` you didn't launch yourself. "Port in use" at a verify-human gate usually means the OPERATOR has the app open; a prod-app-survived check does not protect their dev app.
-- [mcp-bridge-interact-click-needs-el-click-fallback.md](mcp-bridge-interact-click-needs-el-click-fallback.md) — webview_interact{click} can fail with "window.__MCP__.resolveRef is undefined" (the bridge's ref helper isn't on the page — not a selector bug); fall back to el.click() inside webview_execute_js, which drives every control type. ⚠️ el.click() bypasses hit-testing, so pair it with explicit geometry + elementFromPoint when the check is about reachability. Also: read real command names from lib.rs's invoke_handler, don't guess.
-- [pnpm-exec-shadows-local-binaries.md](pnpm-exec-shadows-local-binaries.md) — `pnpm exec tsc --noEmit` runs the PNPM binary and exits 0 regardless of type errors (a silent FALSE GREEN); use ./node_modules/.bin/tsc. Applies to any `pnpm exec <bin>` that collides with a pnpm subcommand — but NOT to `pnpm run <script>`: `format:check`/`lint`/`test` are proven-trustworthy exit-code gates, so prefer them in an observable (they're what the operator types).
-- [prove-mechanical-transform-by-rerunning-it.md](prove-mechanical-transform-by-rerunning-it.md) — To prove a formatter sweep / codemod changed nothing semantic, re-run the transform on the pre-change input and diff (`git show HEAD:$f | prettier --stdin-filepath $f | diff - $f`); do NOT hand-write a normalizer for the output — `git diff -w`, whitespace-stripping, and paren-stripping each false-alarmed first.
-- [raw-guard-jsx-prose-needs-flattened-haystack.md](raw-guard-jsx-prose-needs-flattened-haystack.md) — A `?raw` guard over user-visible PROSE in JSX must flatten whitespace first (`src.replace(/\s+/g," ")`) — copy is inherently multi-word so CLAUDE.md's "assert single identifiers" rule has no answer for it, and phrases pass only by luck about where Prettier wraps (74/77 chars vs an 80 default). ⚠️ The emptiness meta-guard must keep reading the RAW import: `flat("")===""` passes straight through an empty-loader failure. Prove with a PURE reflow (same words, wrap moved → must pass) plus a claim-drop (must fail).
-- [verify-the-mutation-landed.md](verify-the-mutation-landed.md) — A mutation test must confirm the mutation changed *executable code*, not just that the test ran: two attempts in one session reported "the guard does not bite" having modified nothing (a whitespace-mismatched pattern, then a doc comment quoting the predicate). `sed -n '<line>p'` the mutated line before believing a pass — a silent no-op is indistinguishable from a real guard hole, and leads to weakening a guard that was fine. Load-bearing for M11.5 WP4.
-- [widened-selector-must-be-strict-superset.md](widened-selector-must-be-strict-superset.md) — When widening a guard/lint/codemod's file-selection predicate, compute the OLD and NEW candidate sets and diff them — "does it catch the new target?" passes while the change silently DROPS a module previously in scope (M11.5 WP4: a `metaKey`-based predicate would have added panelHost.ts while dropping closeTerminalChord.ts, whose export takes pre-computed booleans and reads no keyboard event).
-- [app-ships-with-no-csp.md](app-ships-with-no-csp.md) — Claudesk ships `"csp": null` (NO Content-Security-Policy), so anything executing in the webview gets the full `__TAURI_INTERNALS__` IPC surface and a sanitizer is the ONLY line of defense; a plan asking "does it run under our CSP?" is asking a question with no answer — invert it.
-- [guard-predicate-completeness-vs-mutation-landing.md](guard-predicate-completeness-vs-mutation-landing.md) — A guard's PREDICATE can be incomplete so a passing "0 findings" is under-determined (distinct from a mutation that never lands): interrogate the parsed DOM not source text, mutation-test each guard option individually, and attribute each mutant to its own probe.
-- [raw-guard-identifier-satisfied-by-own-comments.md](raw-guard-identifier-satisfied-by-own-comments.md) — A `?raw` guard asserting a bare identifier is satisfied by the module's OWN COMMENTS, so it passes exactly when the code it names has been deleted — strip comments first, assert the CALL shape (`fn(`). Corrects CLAUDE.md's "assert single identifiers" rule, which points straight at this hole; the lesson failed to transfer 2× in one session, so mutation-test every new `?raw` guard.
-- [extract-for-import-when-a-raw-guard-cant-express-the-property.md](extract-for-import-when-a-raw-guard-cant-express-the-property.md) — When a `?raw` guard for a BEHAVIORAL property is vacuous, EXTRACT the code so a test imports and drives the real thing — a better predicate does not help, because a source-text predicate can only encode the shapes you thought of (two successive rewrites both passed while the same webview-hijack hole stayed open, the second passing all 1645 tests). ⚠️ A behavioral test that RE-IMPLEMENTS the code shares the blind spot: probe the component, not the replica.
-- [strictmode-remount-deadlocks-an-unreleased-fetch-latch.md](strictmode-remount-deadlocks-an-unreleased-fetch-latch.md) — A fetch-once latch SET before the await and never released on the cancelled path deadlocks under StrictMode's mount→unmount→remount: the response is discarded, state stays null, the UI renders BLANK while tsc/lint/1538 tests/a clean build are all green. ⚠️ The predecessor survived by accident, and the "cleanup" deleted the accident — release the latch in cleanup and model it as a pure state machine (in-flight+cancel → idle, but settled+cancel → settled).
-- [block-comment-terminated-by-regex-star-slash.md](block-comment-terminated-by-regex-star-slash.md) — A block comment documenting a regex containing `*` then `/` (e.g. `^\s*//`) TERMINATES EARLY; tsc/esbuild then report TS1005/TS1161 on prose lines, so the error points at your wording, not the cause. Prove it with a 5-line fixture; prefer `//` headers, which are immune.
-- [agent-launched-app-cannot-verify-continue.md](agent-launched-app-cannot-verify-continue.md) — An agent-launched Claudesk CANNOT verify which conversation `--continue` resumes: its spawned CC sessions inherit CLAUDE_CODE_CHILD_SESSION and write no transcript, and `env -u` at the SEEDING call does not fix it (the marker reaches the app via its own launch chain). The agent can still prove the flag reaches argv + that the arm is selected correctly (a `⊘` no-fire open lacks it); only an operator-launched build proves the INTENDED conversation. Assert transcript-saving is ON before spending a live run, or the check is vacuous.
-- [xterm-dom-reads-fake-a-blank-pane.md](xterm-dom-reads-fake-a-blank-pane.md) — `.xterm-rows` children read empty and `[data-session-id]`.innerText returns xterm's injected STYLESHEET, so a "blank pane" verdict can be pure instrument error. ⚠️ Extends caveat (h): instrument AGREEMENT is not correctness when both share a defect (7 stable samples + a screenshot were wrong together). Run a positive control before believing a negative read; status-channel.log is the out-of-band instrument that works.
-- [rustdoc-link-to-a-nonexistent-test-fails-no-gate.md](rustdoc-link-to-a-nonexistent-test-fails-no-gate.md) — A doc comment can cite a test that DOESN'T EXIST and pass cargo test + clippy -D warnings + fmt (broken intra-doc links aren't errors by default). Verify with `grep -rc "fn <name>"` — a total of 1 means only the citation exists. Extends [[verify-the-mutation-landed]] from "did the mutation land" to "does the cited test exist".
+## Verification method & instrument traps
+
+- [verify-the-mutation-landed.md](verify-the-mutation-landed.md) — A mutation test must confirm it changed *executable code*, not just that the test ran; `sed -n '<line>p'` the mutated line before believing a pass. A silent no-op looks exactly like a real guard hole and leads to weakening a guard that was fine.
+- [guard-predicate-completeness-vs-mutation-landing.md](guard-predicate-completeness-vs-mutation-landing.md) — A guard's PREDICATE can be incomplete, so "0 findings" is under-determined (distinct from a mutation that never lands): interrogate the parsed DOM, mutation-test each option individually, attribute each mutant to its own probe.
+- [raw-guard-identifier-satisfied-by-own-comments.md](raw-guard-identifier-satisfied-by-own-comments.md) — A `?raw` guard asserting a bare identifier is satisfied by the module's OWN COMMENTS, so it passes exactly when the named code was deleted — strip comments, assert the CALL shape `fn(`.
+- [extract-for-import-when-a-raw-guard-cant-express-the-property.md](extract-for-import-when-a-raw-guard-cant-express-the-property.md) — For a BEHAVIORAL property, extract the code so a test drives the real thing; a better source-text predicate can only encode shapes you thought of. A test that RE-IMPLEMENTS the code shares its blind spot.
+- [raw-guard-jsx-prose-needs-flattened-haystack.md](raw-guard-jsx-prose-needs-flattened-haystack.md) — A `?raw` guard over user-visible PROSE must flatten whitespace first; phrases otherwise pass only by luck about where Prettier wraps. The emptiness meta-guard must keep reading the RAW import.
+- [widened-selector-must-be-strict-superset.md](widened-selector-must-be-strict-superset.md) — When widening a guard/lint/codemod's file-selection predicate, diff the OLD and NEW candidate sets — "does it catch the new target?" passes while silently DROPPING a module previously in scope.
+- [rustdoc-link-to-a-nonexistent-test-fails-no-gate.md](rustdoc-link-to-a-nonexistent-test-fails-no-gate.md) — A doc comment can cite a test that DOESN'T EXIST and pass cargo test + clippy + fmt. `grep -rc "fn <name>"` returning 1 means only the citation exists.
+- [doc-correction-scope-list-is-a-floor.md](doc-correction-scope-list-is-a-floor.md) — A doc-correction task's enumerated site list is a FLOOR: grep the retracted CLAIM repo-wide first (WP4d — 5 named, 10 wrong; the unnamed ones held a disproven design still standing as live spec). Separate string-matches from claim-assertions.
+- [prove-mechanical-transform-by-rerunning-it.md](prove-mechanical-transform-by-rerunning-it.md) — To prove a formatter sweep changed nothing semantic, re-run the transform on the pre-change input and diff; do NOT hand-write a normalizer (`git diff -w` and whitespace/paren-stripping each false-alarmed).
+- [observable-outcomes-execution-evidence.md](observable-outcomes-execution-evidence.md) — Outcomes testing command execution need BOTH typing-side AND execution-side evidence (output body, exit code, state change). "Marker appears in output" is too weak.
+- [pnpm-exec-shadows-local-binaries.md](pnpm-exec-shadows-local-binaries.md) — `pnpm exec tsc` runs the PNPM binary and exits 0 regardless of type errors (silent FALSE GREEN); use `./node_modules/.bin/tsc`. `pnpm run <script>` is trustworthy.
+- [vitest-raw-import-css-returns-processed-not-text.md](vitest-raw-import-css-returns-processed-not-text.md) — A Vitest `?raw` import of a `.css` file does NOT yield raw text (Vite's CSS plugin intercepts); read CSS source-guards via `node:fs`.
+
+## verify-self: what the agent can and cannot observe
+
+- [verify-self-stub-cannot-cross-subprocess-boundary.md](verify-self-stub-cannot-cross-subprocess-boundary.md) — A stubbed verify-self (faked Tauri IPC in a plain browser) passes precisely where it can't reach; the real bugs hide at the boundary the stub replaces.
+- [verify-native-pty-via-ps-screencapture-stderr.md](verify-native-pty-via-ps-screencapture-stderr.md) — How to verify PTY/native behavior when Playwright can't see the WKWebView and the Vite browser has no backend.
+- [xterm-dom-reads-fake-a-blank-pane.md](xterm-dom-reads-fake-a-blank-pane.md) — `.xterm-rows` reads empty and `innerText` returns xterm's injected STYLESHEET, so a "blank pane" verdict can be pure instrument error. Instrument AGREEMENT is not correctness when both share a defect; run a positive control.
+- [agent-launched-app-cannot-verify-continue.md](agent-launched-app-cannot-verify-continue.md) — An agent-launched Claudesk cannot verify which conversation `--continue` resumes (spawned sessions inherit `CLAUDE_CODE_CHILD_SESSION`, write no transcript). It CAN prove the flag reaches argv + the arm was selected.
+- [verify-self-dev-vs-prod-process-name-collision.md](verify-self-dev-vs-prod-process-name-collision.md) — osascript "process whose name is claudesk" hits the PROD app during dev verify-self; target by window title/bundle id. Teardown must be PID-scoped — never blanket pkill (killed the operator's live app 2026-07-13).
+- [lsof-ti-tcp-misses-ipv6-vite.md](lsof-ti-tcp-misses-ipv6-vite.md) — `lsof -ti tcp:1420` misses Vite's IPv6-only listener (use `lsof -nP -iTCP:`). Real lesson: never kill a `target/debug/claudesk` you didn't launch — "port in use" usually means the OPERATOR has it open.
+- [installed-build-verify-deferred-to-release.md](installed-build-verify-deferred-to-release.md) — The operator defers installed-`.app` / native-window manual verification to the `/release` gate, not per-feature verify-human.
+- [macos-tcc-permissions-granted.md](macos-tcc-permissions-granted.md) — Terminal.app has Accessibility + Screen Recording; the agent can screenshot native windows and run osascript GUI queries.
+- [wp4-macos-perf-measurement.md](wp4-macos-perf-measurement.md) — How to measure CPU/RAM/frame-time of the Tauri WKWebView on macOS.
+
+## MCP tauri bridge (caveat chain)
+
+- [mcp-bridge-tools-not-exposed-to-subagents.md](mcp-bridge-tools-not-exposed-to-subagents.md) — `mcp__tauri__*` reaches the ORCHESTRATOR but not spawned subagents (which silently fall back to bare Vite); drive the bridge yourself. `ipc_emit_event`'s param is `eventName`.
+- [mcp-bridge-interact-click-needs-el-click-fallback.md](mcp-bridge-interact-click-needs-el-click-fallback.md) — `webview_interact{click}` can fail on a missing ref helper; fall back to `el.click()` in `webview_execute_js`. That bypasses hit-testing, so pair with geometry + `elementFromPoint` when reachability is the point.
+- [mcp-bridge-manage-window-reads-native-geometry.md](mcp-bridge-manage-window-reads-native-geometry.md) — `manage_window{info}` returns a native window's on-screen frame → window-POSITION features are agent-verifiable via geometry math (convert to AppKit y-up).
+- [mcp-bridge-seed-held-workspace-status-via-fiber.md](mcp-bridge-seed-held-workspace-status-via-fiber.md) — Hold a workspace CC status by dispatching `setStatusMap` via the React fiber; `ipc_emit_event` double-encodes the payload and a real CC turn races faster than inter-tool latency.
+
+## CC hooks, PTY & terminal
+
+- [cc-hook-capture-beats-docs.md](cc-hook-capture-beats-docs.md) — For hook-channel work a live capture beats the official docs, which can be confidently wrong about event existence.
+- [cc-hook-event-facts.md](cc-hook-event-facts.md) — Concrete CC v2.1.x hook-event facts for Claudesk's status channel (live-captured).
+- [raw-mode-cr-is-enter.md](raw-mode-cr-is-enter.md) — Raw mode disables CR→NL translation, so input lines must end in `\r`. Applies to ALL PTY-driven subprocesses, not just CC.
+- [cc-tui-cr-not-lf.md](cc-tui-cr-not-lf.md) — `/cmd` byte-injection must end in `\r` (0x0d) to execute; `\n` only triggers autocomplete typeahead.
+- [pty-output-buffer-until-frontend-ready.md](pty-output-buffer-until-frontend-ready.md) — A new PTY session kind must buffer early output until the frontend attaches its listener and calls `cc_ready`, or a quiescent shell loses its one-shot prompt.
+- [pty-probe-observable-default.md](pty-probe-observable-default.md) — A PTY probe's reader thread must mirror output to an observable surface by default; opt out to silent byte-counting only when needed.
+- [tauri-xterm-pty-gotchas.md](tauri-xterm-pty-gotchas.md) — xterm.js + PTY in a Tauri WKWebView needs explicit TERM, `term.focus()`, and rAF-deferred `fit()` — none automatic.
+- [zsh-histfile-overridden-by-etc-zshrc.md](zsh-histfile-overridden-by-etc-zshrc.md) — A HISTFILE env var to a spawned login zsh is overridden by `/etc/zshrc`; isolate via HOME. SIGHUP saves history, SIGTERM/SIGKILL don't.
+- [time-tracking-capture-is-machine-global.md](time-tracking-capture-is-machine-global.md) — Time-analytics capture is machine-global: any tracking-on Claudesk logs ALL CC sessions on the machine. Expected — flag proactively when reading the dashboard.
+
+## Architecture, seams & precedents
+
+- [claudesk-philosophy.md](claudesk-philosophy.md) — The deliberate design philosophy: opinionated, Claude-specific, parallel-across-projects, attention as the scarce resource.
+- [app-ships-with-no-csp.md](app-ships-with-no-csp.md) — Claudesk ships `"csp": null`, so anything executing in the webview gets the full `__TAURI_INTERNALS__` surface and a sanitizer is the ONLY defense. A plan asking "does it run under our CSP?" has no answer — invert it.
+- [m7-docs-viewer-intent.md](m7-docs-viewer-intent.md) — The workflow-docs viewer is an attention/re-orientation feature, not a documentation reader.
+- [day-view-flexible-timeline-model.md](day-view-flexible-timeline-model.md) — M9 Day view is a continuous flexible timeline; the coordinate frame has ONE source of truth that every consumer READS, never recomputes (the P2.7 Minimap regression).
+- [reclassifier-primitives-need-session-end-cap.md](reclassifier-primitives-need-session-end-cap.md) — Aggregate-duration consumers must clip events at `resolve_session_end` FIRST; the cap lives in the CALLER, not the primitives (the 885-min dangling-burst trap).
+- [session-only-vs-permanent-dismiss-precedent.md](session-only-vs-permanent-dismiss-precedent.md) — A two-way "ask later vs never again" precedent already exists in `useUpdater.ts`; copy it instead of inventing a field, and keep the lifecycle marker separate from the feature flag.
+- [synthetic-tab-seam-reusable-readonly-buffer.md](synthetic-tab-seam-reusable-readonly-buffer.md) — The synthetic-tab seam renders programmatic read-only content as an editor tab; consumers must supply font-size + decorations.
+- [tauri-command-removal-needs-invoke-sweep.md](tauri-command-removal-needs-invoke-sweep.md) — Removing/renaming a `#[tauri::command]` needs a frontend `invoke()` sweep + smoke-launch; the binding is stringly-typed and invisible to the unit gate.
+- [tauri-nspanel-pip-gotchas.md](tauri-nspanel-pip-gotchas.md) — Four AppKit gotchas for PiP, each found via a live crash at verify-human.
+- [cmd-shift-digit-reserved-for-filmstrip.md](cmd-shift-digit-reserved-for-filmstrip.md) — `⌘⇧`+digit is reserved for workspace/filmstrip switching; don't claim it for editor features.
+- [cm6-dont-copy-compartment-by-analogy.md](cm6-dont-copy-compartment-by-analogy.md) — Don't add a CM6 Compartment by analogy without checking the case needs live reconfigure; an array-rebuild may already swap the value.
+
+## Toolchain & environment traps
+
+- [bash-cargo-env.md](bash-cargo-env.md) — Bash subshells don't inherit `~/.cargo/env`; cargo/rustc need an explicit PATH prefix.
+- [hmr-stale-across-file-rename.md](hmr-stale-across-file-rename.md) — A long-lived Vite/HMR window can half-apply and fake a regression after a RENAME *or* any edit to a component holding `useRef`/`useState`. Relaunch before believing a verify RESULT.
+- [strictmode-remount-deadlocks-an-unreleased-fetch-latch.md](strictmode-remount-deadlocks-an-unreleased-fetch-latch.md) — A fetch-once latch set before the await and never released on cancel deadlocks under StrictMode and renders BLANK while every gate is green. Release in cleanup; model as a pure state machine.
+- [block-comment-terminated-by-regex-star-slash.md](block-comment-terminated-by-regex-star-slash.md) — A block comment documenting a regex with `*` then `/` terminates EARLY; tsc then blames your prose lines. Prefer `//` headers.
+- [macos-case-collision-module-naming.md](macos-case-collision-module-naming.md) — On macOS's case-insensitive FS `foo.ts` and `Foo.tsx` collide (TS1149/TS1261); name pure modules case-distinct from PascalCase siblings.
+- [brew-cask-manual-delete-desync.md](brew-cask-manual-delete-desync.md) — Why "brew won't reinstall claudesk after I deleted the app" happens, and the fix.
+- [tauri-scaffold-recipe.md](tauri-scaffold-recipe.md) — The non-interactive scaffold command + merge pattern that doesn't destroy strategic docs.
+- [feedback_read_help_before_cli_matrix.md](feedback_read_help_before_cli_matrix.md) — Five seconds of `--help` collapses redundant matrix rows and surfaces native flags upstream research missed.
+
+## Dev-time side effects (macOS focus)
+
+- [feedback_osascript_activate_side_effects.md](feedback_osascript_activate_side_effects.md) — Activating any app via osascript/`open -a`/`subl` gathers its windows onto the current Desktop — treat as a WRITE during probes.
+- [feedback_no_sublime_activate.md](feedback_no_sublime_activate.md) — Dev-time rule only: macOS Spaces yanks live Sublime windows to the current Desktop. The app's runtime activation is NOT constrained.
+
+## Workflow-system discipline
+
+- [feedback_surfaced_in_discoveries_not_worktree.md](feedback_surfaced_in_discoveries_not_worktree.md) — Work Tree leaves are units of work; SURFACED items are notices. Mixing them violates the parent-completion invariant.
