@@ -2,7 +2,8 @@
 stage: wbs
 state: complete
 milestone: "Milestone 12: Smart auto-resume + drive mode"
-updated: 2026-08-07  # ▶ WP4b (the drive-mode signal) SHIPPED — the mechanism is LIVE and PROVEN END TO END: a real CC turn in a Claudesk-spawned workspace answered `fsd`, the exact stamped mode (a value absent from that project and no documented default, so only the signal explains it). 4 phases: DriveMode vocabulary fixed (`stepping`/`fsd`) + per-project store activated → `CLAUDESK_DRIVE_MODE` on the CC spawn, fail-closed gated, isolated from the login shell → the hook emission + exact-match allowlist (the hook channel is BIDIRECTIONAL for the first time) → 5 mutants proven individually + a cross-language caller assertion. ⚠️ NOT COMMITTED at finalize — operator has not requested a commit. ⚠️ Code review found 3 MAJOR, all backlogged: the env var inherits to ALL DESCENDANTS (confirmed empirically — a nested `claude` fires the hook with the parent workspace's mode; undecided, not a defect), `shell_spawn_env`'s test asserts the primitive not the caller, and incident-narrative comments are triple-recorded. ⚠️ Long-context durability remains ASSUMED, not proven — validated by dogfooding per the operator's WP4a call. Next: WP4c (picker cell) → WP4d (doc corrections) → WP5 (exit verify + the guard's 4th arm, which owns WP4c's surface — WP4b is deliberately outside the guard, measured).  # ⚠️ WP4 RE-DECOMPOSED into WP4a–WP4d (`/product-wbs` back-loop) — the original WP4 was invalidated on all four of its claims. It is NOT "clone `default_model`'s path" (that path ends in argv; drive mode has no argv destination and no CLI flag), NOT near-zero-unknown (the whole delivery mechanism was missing), NOT an independent parallel track (it consumes WP3's spawn path), and its task 4.4 targeted `.session.md` + WIP frontmatter — files that are DELETED at `/session-restore` step 7 and ARCHIVED at finalize, i.e. absent at the exact moment a new WP starts. ⚠️ THE DELIVERABLE IS A SIGNAL, NOT A STORE: a persisted `drive_mode` already exists in 93% of manual restores and is already ignored 74% of the time, so storing it somewhere new does nothing. Mechanism PROVEN LIVE 2026-08-06 — an env-var-gated `UserPromptSubmit` hook returning `additionalContext` makes the REAL `/session-restore` skip the mode menu (absent var → menu + `S15`; present → no menu, pointer consumed). Zero companion-repo change; `/session-restore`'s re-prompt is CORRECT for a CLI user and must NOT be changed (operator). ⚠️ Long-context durability is ASSUMED, not proven — validated by dogfooding, deliberately not by a synthetic probe. Measured pain: 524 manual opens, 82% got the menu, ~7.2×/day, 99% of replies bundle the mode word with the work instruction. The manual `/session-start` arm is DEFERRED to the backlog.
+updated: 2026-08-10  # ▶ WP4c (the picker-row drive-mode cell) SHIPPED — a mode can now be SET, which is what made WP4b's signal reachable at all. Two lines inside the EXISTING model column (Verdict (f) Option 2, `PICKER_ROW_CELLS` untouched), native `<select>` for the closed 4-value set, per-line hit regions on the WP3 `⊘` discipline, one writer for both values, gate-OFF ⇒ the mode line does not exist. Proven end to end live: cell → `projects.json` → `CLAUDESK_DRIVE_MODE` in the spawned CC's real process env (`ps eww`) → the `UserPromptSubmit` hook; negative arm (cleared ⇒ var absent) asserted just as hard. ⚠️ The column is `9.8em`, NOT the `9.61em` arithmetic gives, and Verdict (f)'s "~101px usable" was a unit error — box math for this column was wrong THREE separate ways, each caught only by measuring the live DOM. ⚠️ Code review found a LIVE layout regression no gate could see: the `<button>`→`<div>` conversion orphaned a CSS rule carrying real behavior, because every CSS guard here reads one side of the CSS↔component contract. Fixed + guarded. ⚠️ verify-human was wrongly skipped as an inferred "waiver" and then actually performed at the operator's catch — a pacing instruction is not a gate waiver (filed HIGH). Next: WP4d (doc corrections) → WP5 (exit verify + the guard's 4th arm, which now has a new hole to close).
+# Prior: 2026-08-07  # ▶ WP4b (the drive-mode signal) SHIPPED — the mechanism is LIVE and PROVEN END TO END: a real CC turn in a Claudesk-spawned workspace answered `fsd`, the exact stamped mode (a value absent from that project and no documented default, so only the signal explains it). 4 phases: DriveMode vocabulary fixed (`stepping`/`fsd`) + per-project store activated → `CLAUDESK_DRIVE_MODE` on the CC spawn, fail-closed gated, isolated from the login shell → the hook emission + exact-match allowlist (the hook channel is BIDIRECTIONAL for the first time) → 5 mutants proven individually + a cross-language caller assertion. ⚠️ NOT COMMITTED at finalize — operator has not requested a commit. ⚠️ Code review found 3 MAJOR, all backlogged: the env var inherits to ALL DESCENDANTS (confirmed empirically — a nested `claude` fires the hook with the parent workspace's mode; undecided, not a defect), `shell_spawn_env`'s test asserts the primitive not the caller, and incident-narrative comments are triple-recorded. ⚠️ Long-context durability remains ASSUMED, not proven — validated by dogfooding per the operator's WP4a call. Next: WP4c (picker cell) → WP4d (doc corrections) → WP5 (exit verify + the guard's 4th arm, which owns WP4c's surface — WP4b is deliberately outside the guard, measured).  # ⚠️ WP4 RE-DECOMPOSED into WP4a–WP4d (`/product-wbs` back-loop) — the original WP4 was invalidated on all four of its claims. It is NOT "clone `default_model`'s path" (that path ends in argv; drive mode has no argv destination and no CLI flag), NOT near-zero-unknown (the whole delivery mechanism was missing), NOT an independent parallel track (it consumes WP3's spawn path), and its task 4.4 targeted `.session.md` + WIP frontmatter — files that are DELETED at `/session-restore` step 7 and ARCHIVED at finalize, i.e. absent at the exact moment a new WP starts. ⚠️ THE DELIVERABLE IS A SIGNAL, NOT A STORE: a persisted `drive_mode` already exists in 93% of manual restores and is already ignored 74% of the time, so storing it somewhere new does nothing. Mechanism PROVEN LIVE 2026-08-06 — an env-var-gated `UserPromptSubmit` hook returning `additionalContext` makes the REAL `/session-restore` skip the mode menu (absent var → menu + `S15`; present → no menu, pointer consumed). Zero companion-repo change; `/session-restore`'s re-prompt is CORRECT for a CLI user and must NOT be changed (operator). ⚠️ Long-context durability is ASSUMED, not proven — validated by dogfooding, deliberately not by a synthetic probe. Measured pain: 524 manual opens, 82% got the menu, ~7.2×/day, 99% of replies bundle the mode word with the work instruction. The manual `/session-start` arm is DEFERRED to the backlog.
 # Prior: 2026-08-05  # ✅ WP3 SHIPPED (`80b82a1`; review `ba875df`; acceptance pass `119373b`) — auto-fire is live end-to-end: the picker announces the predicted command before you click, the row fires it on open, a `⊘` second door opens without firing, `/session-start` is never auto-fired but is one click away in the workspace header, and the already-open indicator gives WP2's ⏸ its read-back. ⚠️ **Arm 1 is the `--continue` CLI FLAG, not `/resume`** — a bare `/resume` opens an interactive picker (Phase 1 probe); every `/resume` reference in this doc was corrected 2026-08-05. ⚠️ The `⊘` shipped NESTED-and-defended, not sibling — see the STRUCTURAL note. ⚠️ The gate applies PER ARM: `--continue` ungated (serves every CC user), `/session-restore` gated. Remaining: WP4 (drive-mode cell, parallel track) → WP5 (exit verify + the guard's 4th arm).
 # Prior: 2026-08-03  # ✅ WP2 SHIPPED (`0b07e81` + `5e8256e`) — the unclean flag is live end-to-end: set-on-open (after the spawn `?`), opt-in-per-route clearing, the hover-revealed ⏸ (gated on M10.9), Recycle pinned clean for M13. ⚠️ WP2 shipped THREE clean-exit routes, not four — `/exit` was dropped as a dead variant pending a product decision (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). WP3 inherits: `consume()` is the fire-path primitive; the flag is keyed through `key_for()` (canonicalized) so any new reader must use the same helper; precedence must live in the pure `predictAction`, NOT the batch command.
 ---
@@ -585,7 +586,7 @@ cell exists there is no way to *set* a mode, so 4b must ship with a defined defa
 
 ---
 
-### WP4c: The picker-row drive-mode cell
+### WP4c: The picker-row drive-mode cell — ✅ SHIPPED 2026-08-10 (commits `2356b89` + `8ba257d`)
 **Description:** The **visible** half — metric 5's actual requirement (*"the active drive mode is always
 visible"*). A compact readout that becomes editable on demand, built to WP4a's chosen mockup.
 **Milestone:** M12
@@ -601,14 +602,14 @@ visible"*). A compact readout that becomes editable on demand, built to WP4a's c
   Autopilot "(default)"). So there is no coherent upstream default to copy even from a single skill, and
   any default Claudesk emitted would be Claudesk inventing workflow policy. Kept as a checked item rather
   than deleted so the WP4b→WP4c rationale's *"but see 4c.0"* pointer still resolves.
-- [ ] 4c.1 **Compact readout, click to edit** — `set-a-spawn-time-choice-where-the-spawn-is-chosen`'s
+- [x] 4c.1 **Compact readout, click to edit** — `set-a-spawn-time-choice-where-the-spawn-is-chosen`'s
   corollary. The active value is readable **without interaction**; only the *edit affordance* is behind
   a click. An always-live `<select>` on every row was explicitly judged too noisy at 20+ projects.
   ⚠️ **This is the prior's own named untested edge** — *"a setting read at creation that is ALSO
   live-reconfigurable later, which may want both."* Drive mode is exactly that: read at spawn **and**
   changeable mid-session by typing. Resolved **picker row only** (matching M11.5 WP1's resolution);
   record the edge as now-tested when this ships.
-- [ ] 4c.1b **The resting labels — LABEL ONLY WHEN UNSET** (Verdict (f); operator refinement, added here
+- [x] 4c.1b **The resting labels — LABEL ONLY WHEN UNSET** (Verdict (f); operator refinement, added here
   2026-08-06 because the task list had no owner for it and a builder would otherwise ship the measured-
   not-to-fit form). Two bare stacked values read as `Default` over `None` with **nothing saying which line
   is which** — a problem the single-value cell never had.
@@ -633,7 +634,7 @@ visible"*). A compact readout that becomes editable on demand, built to WP4a's c
   was **one** value per row; stacking two makes brevity ambiguous. Leave it stale and a future reader
   reverts these labels as redundant. Tracked:
   `SURFACE-2026-08-06-STACKED-CELL-LABELS-REVISE-THE-MODEL-UNSET-BREVITY-RATIONALE`.
-- [ ] 4c.2 **⚠️ DO NOT add a member to `PICKER_ROW_CELLS` — this task was written for a design that was
+- [x] 4c.2 **⚠️ DO NOT add a member to `PICKER_ROW_CELLS` — this task was written for a design that was
   REJECTED. See Verdict (f) before starting.** The operator chose **Option 2**: model and drive mode
   **stacked as two lines inside the EXISTING `"model"` cell**, not a 4th sibling cell (that was Option 1,
   rejected for costing ~85px of an already-ellipsised path). So `PICKER_ROW_CELLS` stays
@@ -649,9 +650,48 @@ visible"*). A compact readout that becomes editable on demand, built to WP4a's c
   ⚠️ `isSiblingOfOpenButton` is `cell !== "open"` and is **tautological** — it says nothing about
   intra-cell targets, so do not read it as protection here.
   Tracked: `SURFACE-2026-08-06-STACKED-MODEL-MODE-CELL-NEEDS-TWO-HIT-TARGETS-IN-ONE-COLUMN`.
-- [ ] 4c.3 **Gate the cell** behind `useWorkflowFeaturesEnabled` (executable-source seam reference).
-- [ ] 4c.4 **Verify the row still fits** at realistic name lengths — space competition on this row is a
+- [x] 4c.3 **Gate the cell** behind `useWorkflowFeaturesEnabled` (executable-source seam reference).
+- [x] 4c.4 **Verify the row still fits** at realistic name lengths — space competition on this row is a
   known, already-paid defect (WP3 P3.9).
+
+**As-built (2026-08-10) — what WP4d and WP5 must NOT re-decide:**
+
+- ⚠️ **The column is `9.8em`, NOT the `9.61em` the arithmetic gives.** Verdict (f)'s recorded
+  *"~101px usable"* was a **unit error** — `width: 7.5em` resolves against the element's **own**
+  `0.78rem` (12.48px), not the root 16px, so the real column was 93.6px/78.6px. At that width **both**
+  chosen unset labels clipped, and no font shrink rescues `Drive Mode: None` (87.5px even at
+  0.65rem). Operator chose **widening over shortening the labels**, paying **−28.3px (~8.6%)** off
+  every project path. `9.61em` then ellipsised anyway on a **sub-pixel** overage; `9.8em` is the
+  smallest width that renders in full. ⚠️ **Box math for this column has now been wrong three separate
+  ways** (root-vs-own `em`, zero-tolerance exact fit, border-box-vs-`content-box`) — the cell is
+  `content-box`, so the declared width **is** the content area. **Measure; compute nothing you can
+  read.** (`SURFACE-2026-08-10-CSS-BOX-MATH-WAS-WRONG-THREE-TIMES-IN-ONE-COLUMN`)
+- ⚠️ **Never verify text clipping with `scrollWidth > clientWidth`** — integer-rounded, therefore
+  blind to the sub-pixel overflow that triggers an ellipsis. It reported "not ellipsised" at **every**
+  rung of a 9.61/9.8/10/10.2em ladder including one that visibly clipped. Use a `Range` over the text
+  node for the number and a **screenshot** for the verdict.
+  (`SURFACE-2026-08-10-SCROLLWIDTH-IS-BLIND-TO-SUBPIXEL-TEXT-CLIPPING`)
+- **The mode editor is a native `<select>`** (operator decision) — a **closed** 4-value set, the
+  opposite of the model override's open one. ⚠️ The asymmetry is a **correctness requirement**: a bad
+  model string is adjudicated by CC in the pane, whereas a bad drive-mode string fails serde on read
+  and **takes the whole project list down**. So `modelOverride.ts`'s emphatic *"do NOT validate"* rule
+  must **not** be generalized, and the Rust command stays `Option<DriveMode>`, never `Option<String>`.
+- **Gate OFF ⇒ the mode line does not exist** and the model label renders **unprefixed** — byte-identical
+  to the pre-M12 cell. The gate decision lives **only** in `cellLines()`; the component follows the
+  data (`modeLine &&`) and never re-branches on the gate.
+- **`PICKER_ROW_CELLS` is untouched** (`["open","model","remove"]`), as Verdict (f) required — no drift
+  to the rejected Option 1. Both pinning tests are byte-unchanged.
+- ⚠️ **WP5's OFF-invariant fourth arm has a NEW hole to close, found here:** the guard runs 14/14
+  against this cell because it exports no chord — but the `<button>`→`<div>` conversion **silently
+  orphaned a CSS rule that was carrying real layout behavior** (`is-editing`, which zeroes the cell's
+  padding while the model input is open), and **1979 tests, tsc, eslint, prettier and a clean build all
+  missed it**. Every CSS guard here reads **one** side of the CSS↔component contract. Fixed + guarded
+  for this cell; the repo-wide check is open as
+  `SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`.
+- **Bonus for WP4d:** the repo's standing *"no component-render harness"* note is **half true** —
+  `renderToStaticMarkup` + jsdom works, **including on a hooks-and-IPC component**, which is how the
+  gate-OFF shape is now a parsed-DOM assertion rather than a source-text grep.
+  (`SURFACE-2026-08-10-THE-NO-RENDER-HARNESS-NOTE-IS-HALF-TRUE-AND-COSTS-COVERAGE`)
 
 ---
 

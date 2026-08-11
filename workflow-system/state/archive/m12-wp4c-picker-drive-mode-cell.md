@@ -1,9 +1,11 @@
 ---
 workflow: feature
-state: ship (complete)
+state: Completed
 created: 2026-08-10
+completed: 2026-08-10
 wbs_ref: M12 WP4c
 drive_mode: autopilot
+ship_commits: 2356b89 (feature) + 8ba257d (code-review fixes)
 ---
 
 # Feature: M12 WP4c — the picker-row drive-mode cell
@@ -1154,6 +1156,63 @@ are backlogged. All fixes are mutation-verified; gate re-run green (1981 tests).
 ### If you disagree
 Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
 `feature-finalize` archives this WIP.
+
+## Retrospect
+
+- **What changed in our understanding:**
+  1. **Box math for this column was wrong three separate ways**, and every one survived review because
+     each was internally consistent: `em` resolved against the root instead of the element's own
+     font-size (Verdict (f)'s "~101px" vs a real 78.6px); a width *derived to fit exactly* lost to
+     sub-pixel rounding; and headroom computed by subtracting padding from a `content-box` width that
+     never included it. The transferable rule: **for CSS box math, measure — compute nothing you can
+     read.**
+  2. **`scrollWidth > clientWidth` cannot detect sub-pixel text clipping.** Integer-rounded, so it
+     reported "not ellipsised" at *every* rung of a width ladder including one that visibly clipped.
+     Third instrument-lies instance in this family, and the failing instrument was **different each
+     time** — so the mitigation can't be a list of bad selectors, only the habit of a positive control.
+  3. **This repo DOES have a usable render harness.** The standing "no component-render harness" note
+     is half true: `renderToStaticMarkup` + jsdom works, *including on a hooks-and-IPC component*.
+     Believing the discouraging half was costing real coverage.
+  4. **Every CSS guard here reads only ONE side of the CSS↔component contract**, so a class can be
+     styled-but-never-emitted (dead CSS carrying live behavior) or the inverse, with both sides green.
+     This is what let a real layout regression ship past 1979 tests.
+  5. **The `#[allow(dead_code)]` ledger has a structural blind spot**: a *stale* allowance suppresses
+     the very warning that would flag it, so clippy passes either way and the note just misinforms.
+
+- **Assumptions that held:**
+  - Verdict (f)'s Option 2 (two lines in the existing column) — geometrically sound at **0px** width
+    cost, confirmed live; `PICKER_ROW_CELLS` never needed touching, exactly as predicted.
+  - The plan's identification of Phase 4 as the WP's real risk was right: two edit targets in one
+    column is where the only unit-test-invisible defect class lived, and the `⊘` discipline transferred
+    cleanly.
+  - Extracting `cellLines()` so the label table is a value, not JSX branches — paid off immediately
+    (four states, one assertion) and the reviewer confirmed the shape.
+  - Deriving the unset labels rather than hardcoding them, per `MODEL_UNSET_LABEL`'s precedent.
+
+- **Assumptions that were wrong:**
+  - **Phase 2 predicted work that did not exist.** `default_drive_mode` was *already* on the
+    `list_projects` wire (a `pub` field on a `Vec<Project>` return), so the plan's "carry it onto the
+    wire" task was a no-op. The plan was right that *something* was missing — nothing **asserted** it.
+  - **I put the vocabulary in the wrong module** in Phase 2 (the IPC module, inverting the pure/IPC
+    split), and no gate could see it — tsc, lint and every test stayed green because no cycle formed.
+    Only reading the sibling pair revealed it.
+  - **"9.61em fits" was wrong**, and I recorded it as fact before measuring the rendered result.
+  - **A `<select>` needed `appearance: none` to fit** — true at 7.5em, false at 9.8em. The widening
+    made it optional, so the constraint I planned around dissolved.
+
+- **Approach delta:**
+  - **Phase 1 grew two tasks mid-phase** (P1.4 the label-scheme decision, P1.5 the live re-verify)
+    because measuring invalidated a recorded product decision. That was the plan working, not failing:
+    a measurement phase placed first is exactly what surfaced it before the cell was built.
+  - **Phase 2 added a cross-language test** (TS reading Rust source) with no precedent in this repo —
+    justified by the asymmetry that a bad mode string blanks the *entire* picker.
+  - **Phase 3 corrected Phase 2** rather than building on it (the module inversion).
+  - **Phase 4 added `commitCellValue`** — not in the plan as a separate module; the plan said "one
+     writer", and a shared function was the honest way to make that structural rather than habitual.
+  - ⚠️ **Two process deviations, both recorded rather than smoothed over:** verify-human was skipped on
+    five phases as an *inferred* waiver and then actually performed at the operator's catch (filed
+    HIGH); and the three MAJOR review findings were **fixed in-session** instead of auto-backlogged,
+    because one was a live regression in the property the WP exists to protect.
 
 ## Notes for the builder
 
