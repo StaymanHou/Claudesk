@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-06
+updated: 2026-08-11
 ---
 
 # Runtime Registry
@@ -81,9 +81,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## pnpm test
 
-- **Last:** 3.5s wall / 2.66s exec (2026-08-05, M12 WP3 Phase 3 verify-codify — 150 files / 1854 pass, 0 fail; +12 for the ⏵ gutter's parsed-DOM structure suite, +5 earlier for the P3.9 CSS/JSX guards)
+- **Last:** 3.05s wall / 1.87s exec (2026-08-11, M12 WP4d verify-auto — 159 files / **1981** pass, 0 fail. WP4d is documentation-only, so this run's purpose is to establish that the doc edits changed nothing: the count is **unchanged** from WP4c's close, and a later failure must not be attributed here)
 - **Use timeout:** 120000
 - **History:**
+  - 3.05s wall / 1.87s exec — 2026-08-11
   - 3.5s wall / 2.66s exec — 2026-08-05
   - 3.5s wall / 2.5s exec — 2026-08-04
   - 3s wall / 2.62s exec — 2026-08-03
@@ -179,9 +180,10 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 7s wall / 3.84s warm exec (2026-08-10, M12 WP4c Phase 1 verify-auto baseline: full `cargo test -p claudesk`, **821 lib** + 16 hook_pl_output + 1 integration = **838 pass** / 0 fail — count UNCHANGED from 2026-08-07, which is the point: WP4c Phase 1 touched only `src/App.css`, so this run establishes that the uncommitted WP4b Rust code is green and a later Rust failure must NOT be attributed to WP4c)
+- **Last:** 8s wall / 4.30s warm exec (2026-08-11, M12 WP4d verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP4d touched no Rust at all, so this run's only job is attribution — the count matches WP4c's post-review close, confirming the doc edits are inert)
 - **Use timeout:** 510000
 - **History:**
+  - 8s wall / 4.30s exec — 2026-08-11 (840 total; WP4d doc-only — run purely to prove inertness)
   - 7s wall / 3.84s exec — 2026-08-10 (838 total, unchanged; WP4c Phase 1 baseline — CSS-only change, run purely to fix attribution)
   - 7s wall / 3.93s exec — 2026-08-07 (838 total: 821 lib + 16 hook + 1; WP4b complete)
   - 7s wall / 4.18s exec — 2026-08-07 (817 lib pass, +7 WP4b Phase 2 spawn-env)

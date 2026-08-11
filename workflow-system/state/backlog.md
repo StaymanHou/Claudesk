@@ -60,14 +60,6 @@
 - **Priority:** medium (no live defect — the shipped width is correct and verified; the cost is that the reflexive clipping check is unsound in this codebase's most layout-sensitive surface, and it already produced one wrong width that a numeric gate would have passed)
 - **Status:** pending
 
-## SURFACE-2026-08-10-PICKER-COLUMN-WIDTH-FIGURES-ARE-WRONG-IN-THREE-DOCS
-- **Source:** feature:plan (M12 WP4c) — **rewritten at WP4c finalize to the remaining open work only**
-- **Target level:** product:wbs (M12 — **WP4d owns this**, it is task 4d's doc-correction pass)
-- **Type:** tech-debt (three docs teach a measurement that is now known wrong)
-- **Summary:** ⚠️ **The measurement half of this item is DONE and is not what remains.** Live-measured at WP4c Phase 1: the column is **93.59px total / 78.62px usable** at the old `7.5em`, not the "~101px usable" three documents state — because `width: 7.5em` resolves against the element's **own** `0.78rem` (12.48px), not the root 16px. The cell now ships at `9.8em`, and the correct figures are recorded at `.picker-recent-model` in `App.css`. **What remains is purely editorial:** three recorded sites still teach the wrong number and will mislead the next person sizing this column — (1) WBS Verdict (f)'s "~101px", (2) `SURFACE-2026-08-06-STACKED-CELL-LABELS-REVISE-THE-MODEL-UNSET-BREVITY-RATIONALE`'s "~101px usable", and (3) WP4c task 4c.1b's copy of it.
-- **Context:** ⚠️ **Correct each site by POINTING at `App.css`, not by restating a figure** — copied numbers are exactly how this went wrong. A stale "2.4px headroom" line in `modelOverride.ts` was a MAJOR code-review finding on the very commit that corrected the same error in three other files, and the fix there was to delete the number and cite the source. ⚠️ Also state *which font-size the `em` resolves against*, since the unit — not the ruler — is what was wrong, and a reader re-deriving it will make the same mistake. ⚠️ Note the row's own `gap: 0.4rem` (6.4px) was omitted from the WBS budget entirely, so any future width arithmetic starts from an incomplete model. The broader method rule (measure, do not compute) is filed separately as `SURFACE-2026-08-10-CSS-BOX-MATH-WAS-WRONG-THREE-TIMES-IN-ONE-COLUMN`.
-- **Priority:** low (was medium — downgraded at WP4c finalize: the load-bearing consequence is shipped and correct, so what is left cannot cause a defect, only mislead)
-- **Status:** pending — editorial only; the measurement and the shipped width are settled
 ## SURFACE-2026-08-07-XTERM-ROWS-INNERTEXT-READS-EMPTY-AND-FAKES-A-BLANK-PANE
 - **Source:** feature:verify-human (M12 WP4b Phase 3 — agent misread a rendering pane as blank; operator screenshot disproved it)
 - **Target level:** product:arch (the bridge-caveat chain in `CLAUDE.md`, caveat (h))
