@@ -103,6 +103,26 @@ import type { AnnounceMap } from "../predictAction";
 // not the tempting `metaKey` one. Probe arms INDIVIDUALLY when checking this guard: a
 // composite bypass that trips *some* arm reports "the guard bites" while hiding a gap,
 // which is exactly how the basename hole was found.
+//
+// ── ⚠️ THE CHORD ARM IS PER-EXPORT, NOT PER-MODULE (paydown WP2, 2026-08-12) ───
+// Selecting the right MODULE was only half the problem. Two successive whole-module
+// exemption predicates were built here and BOTH passed the full suite 19/19 while blind to
+// a real violation — the second one measured, not inferred:
+//
+//   1. `!/useWorkflowFeaturesEnabled/` exempted any module MENTIONING the seam. It excused
+//      exactly one module — `panelHost.ts` — and for a reason unrelated to gating: that
+//      module is pure, so it imports the symbol as a TYPE only, while its real gate is
+//      `panelForChord`'s `enabled ? "docs" : null`. The arm was reading a type import as
+//      proof of gating. (`SURFACE-2026-08-12-CHORD-ARM-GATE-EXEMPTION-IS-WHOLE-MODULE`.)
+//   2. Requiring genuine gate-value evidence, but still module-wide, was ALSO holed:
+//      appending an ungated `skillPaletteChord` to `panelHost.ts` left the suite green,
+//      because one correctly-gated sibling export exempted the entire file.
+//
+// So the arm now scans EXPORT BY EXPORT (`ungatedWorkflowExports`), and the scoping to
+// chord-shaped exports is load-bearing in the other direction: an unscoped per-export scan
+// flagged four non-chord exports on the untouched tree (`RightPanel`, `AVAILABLE_PANELS`,
+// `selectPanel`, `reconcilePanel`) — false positives, which is how a guard gets deleted.
+// Both directions are standing meta-tests below, not throwaway probes.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** Terms that identify a workflow-coupled surface. Deliberately broad on WHAT counts as
@@ -137,13 +157,8 @@ function stripComments(src: string): string {
  *  logic, whatever its filename says.
  *
  *  ── Why CONTENT, not basename (a PROVEN miss, do not "simplify" this back) ──
- *  This arm used to select candidates by basename (`/hord[A-Za-z]*\.tsx?$/i`). That skipped
- *  `components/workspace/panelHost.ts` — the module owning `panelForChord`, the app's
- *  panel-select chord mapper and the most natural home for an M11 Docs chord. M10.9 WP5.2
- *  probe 5b proved the gap rather than inferring it: an ungated workflow chord predicate
- *  placed there passed the full guard 10/10, while the identical violation in a
- *  `*Chord.ts` file failed correctly. A guard that cannot see the module it guards is
- *  decorative, and M11 landing its Docs tab is exactly when this arm must fire.
+ *  Selecting by basename skipped `panelHost.ts`. Provenance is in the file header; the RULE
+ *  is: a guard that cannot see the module it guards is decorative.
  *
  *  ── Why THIS predicate and not "reads a keyboard event" (M11.5 WP4 audit) ──
  *  The tempting content test — "the module reads `metaKey`" — is WRONG: it drops
@@ -153,9 +168,38 @@ function stripComments(src: string): string {
  *  module while silently narrowing it on another — a net loss disguised as a fix.
  *  Matching the EXPORTED IDENTIFIER is a strict superset instead: it selects all 12
  *  modules the basename filter found, plus `panelHost.ts` (via `panelForChord` and
- *  `PanelChordEvent`). Nothing that was in scope dropped out. */
+ *  `PanelChordEvent`). Nothing that was in scope dropped out.
+ *
+ *  ⚠️ It is a NAME test on identifiers, not a behavioral one — say so plainly, because the
+ *  header once oversold it as a category change. The root cause (reach depends on a naming
+ *  convention nobody is obliged to follow) survives; what changed is WHICH convention, from
+ *  filename to exported-identifier name. The reach gain and the proven miss it closes are
+ *  both real, and a true content predicate was rejected above for a measured reason — but
+ *  the honest framing is "selected by exported-identifier name, not by filename."
+ *  (`SURFACE-2026-08-01-QUALITY-WP4-SELECTOR-IS-NAME-NOT-CONTENT`.)
+ *
+ *  ── Declaration forms (paydown WP2, 2026-08-12) ──
+ *  The form list was `function|const|interface|type`, which missed `export default function`,
+ *  `export async function`, `export class`, `export let`, and `export enum` — the SAME
+ *  blind-spot class this arm exists to close, relocated from filename shape to declaration
+ *  keyword. Measured on the real tree: `export default function` appears in 8 non-test files
+ *  and `export async function` in 9, so these are live idioms rather than hypotheticals.
+ *  Each added form is mutation-proven INDIVIDUALLY in the meta-tests below — as one composite
+ *  probe would report "the selector widened" while any single form stayed blind.
+ *  (`SURFACE-2026-08-01-QUALITY-WP4-CHORD-SELECTOR-MISSES-EXPORT-FORMS`.) */
 function exportsChordIdentifier(src: string): boolean {
-  return /export\s+(?:function|const|interface|type)\s+[A-Za-z]*Chord/i.test(
+  // ⚠️ Case-SENSITIVE on the identifier (`Chord` or `chord`), not the `i` flag
+  // (`SURFACE-2026-08-01-QUALITY-WP4-MINOR-CLUSTER` #1) — the same laxity `namesWorkflowTerm`
+  // below deliberately avoids after `i` re-admitted `docstring`. Measured: 15 modules before
+  // and after, nothing dropped, and `CHORD_MAP` is now correctly excluded.
+  //
+  // Stated honestly: this does NOT eliminate every false positive. `unchorded` and `chordata`
+  // still match, because `[A-Za-z]*chord` must accept a lowercase-prefixed identifier for
+  // `isSearchChord` and friends to be selected. Tightening further would risk dropping a real
+  // chord export, which is the one direction that actually disarms the arm. All of these fail
+  // SAFE — a false positive only widens the candidate set, and the per-export offender filter
+  // is what decides. So this is consistency with the file's documented rule, not a bug fix.
+  return /export\s+(?:default\s+)?(?:async\s+)?(?:function|const|let|var|class|enum|interface|type)\s+[A-Za-z]*(?:Chord|chord)/.test(
     src,
   );
 }
@@ -169,10 +213,74 @@ function exportsChordIdentifier(src: string): boolean {
  *  probe, but as the meta-test header says: "a probe is not coverage."
  *
  *  Comments are stripped first — a module that merely MENTIONS a workflow term in prose is
- *  not a registered chord. A module that consumes the seam is legitimately gated. */
+ *  not a registered chord. A module that consumes the seam is legitimately gated.
+ *
+ *  ⚠️ The RULE: a bare mention of the seam is not gating, and one gated export does not
+ *  excuse its siblings — hence the per-export scan below. Why both were learned the hard way
+ *  is in the file header ("THE CHORD ARM IS PER-EXPORT"); both directions are mutation-proven
+ *  in the meta-tests. */
 function isUngatedWorkflowChord(rawSrc: string): boolean {
+  return ungatedWorkflowExports(rawSrc).length > 0;
+}
+
+/** True iff this ONE export body consumes the gate value (rather than merely naming the seam).
+ *
+ *  Evidence accepted — each is the gate reaching a DECISION:
+ *    - `useWorkflowFeaturesEnabled(` — the hook is actually CALLED (note the paren; a bare
+ *      mention or a `import type` is not)
+ *    - `enabled ? … : …` / `enabled && …` / `if (enabled)` — the value reaches a branch
+ *
+ *  ⚠️ Deliberately NOT accepted: `WorkflowGateValue`, or `enabled` merely appearing in a
+ *  parameter list. Those are type signatures, and `panelHost.ts` is the proof of why they
+ *  cannot count — it is a pure module whose gate arrives as a parameter, so a signature-level
+ *  match would exempt it (and every future export beside it) without any gate being honored. */
+function consumesGateValue(exportBody: string): boolean {
+  return (
+    /useWorkflowFeaturesEnabled\s*\(/.test(exportBody) ||
+    /\benabled\b\s*(\?|&&)/.test(exportBody) ||
+    /\bif\s*\(\s*!?\s*enabled\b/.test(exportBody)
+  );
+}
+
+/** The chord arm's PER-EXPORT offender scan: which exports of this module are ungated
+ *  workflow surfaces?
+ *
+ *  ⚠️ Per-export, NOT per-module — two whole-module predicates were each proven holed here
+ *  (file header, "THE CHORD ARM IS PER-EXPORT"). Do not "simplify" this back to a
+ *  whole-module test; both mutation directions are pinned in the meta-tests.
+ *
+ *  Splitting on `export ` is coarse but honest for this codebase: chord modules are flat
+ *  top-level functions, and a nested `export` inside a function body does not occur here. */
+function ungatedWorkflowExports(rawSrc: string): string[] {
   const src = stripComments(rawSrc);
-  return namesWorkflowTerm(src) && !/useWorkflowFeaturesEnabled/i.test(src);
+  // Everything before the first `export` is imports/types — not a surface, but its text must
+  // not leak into the first export's body either, so it is dropped rather than prepended.
+  const segments = src.split(/^export\s/m).slice(1);
+  return (
+    segments
+      .map((body) => ({
+        body,
+        name: /^(?:async\s+)?(?:function|const|class|interface|type)\s+([A-Za-z_$][\w$]*)/.exec(
+          body,
+        )?.[1],
+      }))
+      // ⚠️ Only CHORD-shaped exports are in scope, and the scoping is what keeps the per-export
+      // split honest. `panelHost.ts` also exports a `RightPanel` type union containing "docs",
+      // an `AVAILABLE_PANELS` constant, and `selectPanel` / `reconcilePanel` — all of which name
+      // a workflow term and none of which consume the gate, because none of them REGISTERS a
+      // surface (the first two are data; the latter two receive an already-gated panel set).
+      // Scanning every export flagged all four on the untouched tree — four false positives that
+      // would have made this arm cry wolf, which the file's header names as how a guard gets
+      // deleted. The arm's subject is chords: an export whose NAME says chord, or whose body
+      // reads a keyboard event.
+      .filter(
+        ({ body, name }) =>
+          /chord/i.test(name ?? "") ||
+          /\b(metaKey|shiftKey|altKey|ctrlKey)\b/.test(body),
+      )
+      .filter(({ body }) => namesWorkflowTerm(body) && !consumesGateValue(body))
+      .map(({ body, name }) => name ?? body.split("\n")[0].trim().slice(0, 40))
+  );
 }
 
 /** True iff `haystack` contains any workflow term as a whole word.
@@ -587,12 +695,19 @@ describe("the guard is not vacuous", () => {
     }
 
     // ...and the set is a plausible size (15 at the time of writing: 12 + panelHost +
-    // paletteCommands + terminalFontZoom). A loose floor — it catches "broken to empty" and
-    // "narrowed back to a handful", not ordinary churn.
+    // paletteCommands + terminalFontZoom).
+    //
+    // ⚠️ The floor was `>= 13` while the test was named "does not shrink" — it tolerated
+    // losing 2 of 15 modules (13%), i.e. precisely the shrinkage it claimed to forbid
+    // (`SURFACE-2026-08-01-QUALITY-WP4-MINOR-CLUSTER` #2). The four `toContain` assertions
+    // above already cover specific shrinkage better, so a loose floor added nothing except a
+    // false sense of a bound. It is now exact: a selector change that moves this number must
+    // be a deliberate edit here, with the new count justified.
     expect(
       selected.length,
-      "the chord-module set shrank unexpectedly — a narrowed selector silently disarms this arm",
-    ).toBeGreaterThanOrEqual(13);
+      "the chord-module set changed size — if a selector widening added a module this is " +
+        "expected, but update the count deliberately; a SHRINK silently disarms this arm",
+    ).toBe(15);
   });
 
   it("the chord arm's offender predicate FIRES on an ungated workflow chord", () => {
@@ -615,17 +730,49 @@ export function docsChord(e: { metaKey: boolean; key: string }): boolean {
       "an ungated workflow chord must be flagged — this is the violation the arm exists to catch",
     ).toBe(true);
 
-    // ...and the two ways a module legitimately passes must NOT be flagged, so the
-    // predicate is not simply always-true (which would make the arm cry wolf):
-    const gatedDocsChord = `
+    // ⚠️ A bare seam IMPORT is NOT gating, and must still be flagged. This fixture used to
+    // assert the opposite — it imported the hook, never consumed it, and expected `false`,
+    // which is exactly the whole-module escape hatch of
+    // `SURFACE-2026-08-12-CHORD-ARM-GATE-EXEMPTION-IS-WHOLE-MODULE`. Under that contract the
+    // only real module it exempted (`panelHost.ts`) was excused by a *type-only* import while
+    // its actual gate lived elsewhere, so the arm was reading the wrong evidence.
+    const importsButNeverConsumes = `
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 export function docsChord(e: { metaKey: boolean; key: string }): boolean {
   return e.metaKey && e.key.toLowerCase() === "k";
 }
 `;
     expect(
+      isUngatedWorkflowChord(importsButNeverConsumes),
+      "importing the seam without consuming the gate value is NOT gating — still an offender",
+    ).toBe(true);
+
+    // ...and the ways a module legitimately passes must NOT be flagged, so the predicate is
+    // not simply always-true (which would make the arm cry wolf). This is `panelHost.ts`'s
+    // real shape: a pure module that takes the gate value as a parameter and BRANCHES on it.
+    const gatedDocsChord = `
+export function panelForChord(e: { metaKey: boolean; key: string }, enabled = false) {
+  if (!e.metaKey) return null;
+  return e.key.toLowerCase() === "k" ? (enabled ? "docs" : null) : null;
+}
+`;
+    expect(
       isUngatedWorkflowChord(gatedDocsChord),
-      "a chord module that consumes the seam is legitimately gated and must NOT be flagged",
+      "a chord that branches on the gate value is legitimately gated and must NOT be flagged",
+    ).toBe(false);
+
+    // The hook-calling shape (a React module) is equally legitimate.
+    const hookCallingChord = `
+import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+export function useDocsChord() {
+  const enabled = useWorkflowFeaturesEnabled();
+  return (e: { metaKey: boolean; key: string }) =>
+    enabled && e.metaKey && e.key.toLowerCase() === "k";
+}
+`;
+    expect(
+      isUngatedWorkflowChord(hookCallingChord),
+      "a module that CALLS the hook and branches on it is gated and must NOT be flagged",
     ).toBe(false);
 
     const ordinaryChord = `
@@ -637,6 +784,212 @@ export function isSearchChord(e: { metaKey: boolean; key: string }): boolean {
       isUngatedWorkflowChord(ordinaryChord),
       "an ordinary non-workflow chord must NOT be flagged",
     ).toBe(false);
+  });
+
+  it("the chord selector reaches every declaration form, each proven individually", () => {
+    // Paydown WP2 (2026-08-12), closing
+    // `SURFACE-2026-08-01-QUALITY-WP4-CHORD-SELECTOR-MISSES-EXPORT-FORMS`.
+    //
+    // ⚠️ Asserted form-by-form, NOT as one composite string containing all of them. A single
+    // fixture exercising every form at once passes as soon as ONE matches, so a form that
+    // stayed blind would be reported as covered — the same composite-probe error the arm's own
+    // header warns about for arms. `it.each` gives each form its own named failure.
+    //
+    // These are live idioms, not hypotheticals: measured on the tree at the time of writing,
+    // `export default function` appears in 8 non-test files and `export async function` in 9.
+    const forms: Array<[string, string]> = [
+      [
+        "export default function",
+        "export default function docsChord(e) { return e.metaKey; }",
+      ],
+      [
+        "export async function",
+        "export async function docsChord(e) { return e.metaKey; }",
+      ],
+      ["export class", "export class DocsChordHandler {}"],
+      ["export let", "export let docsChord = (e) => e.metaKey;"],
+      ["export var", "export var docsChord = (e) => e.metaKey;"],
+      ["export enum", "export enum DocsChordKind { Open }"],
+      ["export function", "export function docsChord(e) { return e.metaKey; }"],
+      ["export const", "export const docsChord = (e) => e.metaKey;"],
+      [
+        "export interface",
+        "export interface DocsChordEvent { metaKey: boolean }",
+      ],
+      ["export type", "export type DocsChordKey = string;"],
+    ];
+    for (const [form, fixture] of forms) {
+      expect(
+        exportsChordIdentifier(fixture),
+        `the selector must reach \`${form}\` — a declaration form it cannot see is a blind spot of the same class the arm exists to close`,
+      ).toBe(true);
+    }
+
+    // ...and it must not select a module with no chord export at all, so the widening did not
+    // simply make the predicate always-true.
+    expect(
+      exportsChordIdentifier(
+        "export function isSearchThing(e) { return e.metaKey; }",
+      ),
+    ).toBe(false);
+  });
+
+  it("the select-then-filter SEAM composes — a fixture flows through both halves", () => {
+    // `SURFACE-2026-08-01-QUALITY-WP4-MINOR-CLUSTER` #3: the two halves of the arm were each
+    // tested alone, but never composed. `exportsChordIdentifier` decides WHICH modules are
+    // scanned and `ungatedWorkflowExports` decides WHICH of their exports offend — so a
+    // fixture that the selector rejects can never reach the offender filter, and a hole in
+    // the seam between them is invisible to either test on its own.
+    //
+    // This drives the same fixture through the real composition, in both directions.
+    const ungatedInSelectedModule = `
+export function panelForChord(e: { metaKey: boolean; key: string }, enabled = false) {
+  return e.metaKey && e.key.toLowerCase() === "k" ? (enabled ? "docs" : null) : null;
+}
+export function skillPaletteChord(e: { metaKey: boolean; shiftKey: boolean; key: string }) {
+  return e.metaKey && e.shiftKey && e.key.toLowerCase() === "j";
+}
+`;
+    // Half 1 must SELECT it...
+    expect(
+      exportsChordIdentifier(ungatedInSelectedModule),
+      "the selector must reach this module, or the offender filter never runs on it",
+    ).toBe(true);
+    // ...and half 2 must FLAG it. Both are required; either alone passes vacuously.
+    expect(ungatedWorkflowExports(ungatedInSelectedModule)).toEqual([
+      "skillPaletteChord",
+    ]);
+
+    // The inverse seam failure: a module the selector does NOT reach is never scanned, so an
+    // ungated workflow chord inside it would go unseen. Pinned so a future narrowing of the
+    // selector — which cannot fail the offender tests — fails HERE.
+    const notAChordModule = `
+export function openDocsThing(e: { metaKey: boolean; key: string }) {
+  return e.metaKey && e.key.toLowerCase() === "k";
+}
+`;
+    expect(
+      exportsChordIdentifier(notAChordModule),
+      "this fixture is deliberately outside the selector — if it starts matching, the seam " +
+        "test below no longer proves what it claims",
+    ).toBe(false);
+    // It WOULD be flagged if it were ever selected — which is exactly why selector reach is
+    // the load-bearing half, and why the reach test above enumerates declaration forms.
+    expect(ungatedWorkflowExports(notAChordModule)).toEqual(["openDocsThing"]);
+  });
+
+  it("no keydown registration site does inline chord matching (the convention guard)", () => {
+    // Paydown WP2 (2026-08-12), closing
+    // `SURFACE-2026-08-01-QUALITY-WP4-ARM-GUARDS-PREDICATES-NOT-REGISTRATION`.
+    //
+    // ⚠️ This is deliberately NOT a sixth arm scanning handler bodies for gated-ness — that
+    // was the item's ORIGINAL suggestion and it was explicitly superseded (M11 arch back-loop,
+    // 2026-08-01, severity corrected MAJOR→low on measured evidence). The chord arm guards
+    // predicate MODULES, not registration SITES, and that is sufficient *precisely because*
+    // every registration site delegates to a predicate module. This test protects that
+    // premise, which is a far smaller change than re-implementing the arm at every listener.
+    //
+    // The distinction that makes it work: a CHORD is a modifier + key match. Bare
+    // `e.key === "Escape"` / `"Enter"` / `" "` dismissals and confirmations are NOT chords and
+    // are legitimately inline — there are many, and flagging them would make this cry wolf.
+    // So the offender shape is a modifier (`metaKey`/`ctrlKey`/`altKey`) tested in the same
+    // module as a `key ===` comparison, at a site that registers a listener.
+    // ⚠️ Test files are excluded, and the omission is load-bearing rather than tidy: without
+    // it THIS FILE is the only offender the scan reports. Its fixtures above contain both a
+    // modifier read and a `key ===` comparison, so the guard matches its own test data — the
+    // Rust-side twin of `[[raw-guard-identifier-satisfied-by-own-comments]]`. A test file
+    // registers no listeners, so it cannot be a registration site by construction.
+    const registrationSites = sourceFiles().filter((f) => {
+      if (/__tests__|\.test\.tsx?$/.test(f)) return false;
+      const src = stripComments(readFileSync(f, "utf8"));
+      return /addEventListener\(\s*["']keydown["']|onKeyDown/.test(src);
+    });
+
+    // Vacuity check: if this resolved to [] the assertion below would pass having scanned
+    // nothing — the exact failure mode this file's meta-tests exist to catch.
+    expect(
+      registrationSites.length,
+      "found no keydown registration sites at all — the scan is broken, not the code clean",
+    ).toBeGreaterThan(5);
+
+    const inlineChordSites = registrationSites
+      .filter((f) => {
+        const src = stripComments(readFileSync(f, "utf8"));
+        const hasModifier = /\be\.(metaKey|ctrlKey|altKey)\b/.test(src);
+        const hasKeyCompare = /\.key\s*===|\.key\.toLowerCase\(\)\s*===/.test(
+          src,
+        );
+        return hasModifier && hasKeyCompare;
+      })
+      .map(relFromSrcRoot);
+
+    expect(
+      inlineChordSites,
+      "these registration sites match a chord inline instead of delegating to a predicate " +
+        "module — that is what makes the chord arm's module-level scan sufficient, so an " +
+        "inline match is a hole the arm cannot see",
+    ).toEqual([]);
+  });
+
+  it("the chord arm is PER-EXPORT — a gated export does not excuse an ungated sibling", () => {
+    // Paydown WP2 (2026-08-12), codified because it is the property two previous predicates
+    // silently lacked, and the second failure was invisible without exactly this test.
+    //
+    // ⚠️ Both predecessors passed the whole suite 19/19 while blind to this violation:
+    //   1. `!/useWorkflowFeaturesEnabled/` exempted any module MENTIONING the seam.
+    //   2. Requiring real gate-value evidence, but module-wide, still exempted the whole file
+    //      as soon as ONE export gated correctly.
+    // `panelHost.ts` is the module that matters: `panelForChord` legitimately gates
+    // (`enabled ? "docs" : null`), and under (2) that single correct branch excused every
+    // other export beside it — including a newly added ungated one.
+    //
+    // The fixture is that exact shape: one properly-gated chord and one ungated workflow
+    // chord in the SAME module. A module-level predicate cannot fail this; a per-export one
+    // must, and must name the offending export rather than just the file.
+    const mixedModule = `
+export function panelForChord(e: { metaKey: boolean; key: string }, enabled = false) {
+  return e.metaKey && e.key.toLowerCase() === "k" ? (enabled ? "docs" : null) : null;
+}
+export function skillPaletteChord(e: { metaKey: boolean; shiftKey: boolean; key: string }) {
+  return e.metaKey && e.shiftKey && e.key.toLowerCase() === "j";
+}
+`;
+    expect(
+      ungatedWorkflowExports(mixedModule),
+      "an ungated workflow chord must be caught even when a SIBLING export gates correctly",
+    ).toEqual(["skillPaletteChord"]);
+
+    // The inverse: a module where every workflow-naming chord export gates is clean, so the
+    // per-export split does not manufacture false positives.
+    const allGated = `
+export function panelForChord(e: { metaKey: boolean; key: string }, enabled = false) {
+  return e.metaKey && e.key.toLowerCase() === "k" ? (enabled ? "docs" : null) : null;
+}
+export function isSearchChord(e: { metaKey: boolean; key: string }) {
+  return e.metaKey && e.key.toLowerCase() === "f";
+}
+`;
+    expect(ungatedWorkflowExports(allGated)).toEqual([]);
+  });
+
+  it("the chord arm does not flag non-chord exports that merely name a workflow term", () => {
+    // The other half of the per-export split, and the reason it is SCOPED to chords. When
+    // first written it scanned every export and flagged four on the untouched tree —
+    // `RightPanel` (a type union containing "docs"), `AVAILABLE_PANELS` (a constant),
+    // `selectPanel` and `reconcilePanel` (which receive an already-gated panel set). None
+    // registers a surface; all four were false positives, the failure mode this file's header
+    // names as how a guard gets deleted.
+    const dataExports = `
+export type RightPanel = "editor" | "diff" | "terminal" | "docs";
+export const AVAILABLE_PANELS: readonly RightPanel[] = ["editor", "diff", "terminal", "docs"];
+export function selectPanel(panel: RightPanel, available: readonly RightPanel[]) {
+  return available.includes(panel) ? panel : available[0];
+}
+`;
+    expect(
+      ungatedWorkflowExports(dataExports),
+      "data and panel-plumbing exports are not chords — flagging them makes the arm cry wolf",
+    ).toEqual([]);
   });
 
   it("the chord arm ignores workflow terms that appear only in COMMENTS", () => {
