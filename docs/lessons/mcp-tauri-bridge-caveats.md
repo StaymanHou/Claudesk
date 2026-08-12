@@ -118,6 +118,54 @@ conclusions in a single session: a WKWebView compositing failure, then a lying i
 paint stall. All three were single samples taken at unaligned moments; a T+0 time series was cheap
 and available from the start.
 
+### (i) ⚠️ The xterm DOM is NOT the terminal buffer — a working pane reads as 1–3 characters
+
+Reading a CC pane's contents from the DOM **under-reports a fully working terminal**. Both
+`innerText` and `textContent` on `.xterm-rows > div` are unreliable: xterm's DOM renderer
+materializes only the visible viewport, and rows can read empty for a pane that is rendering
+perfectly. Two concrete traps, both measured:
+
+- `.xterm-rows` children read **empty** under the DOM renderer, so "zero non-empty rows" is not
+  evidence of a blank pane.
+- `[data-session-id]`'s own `innerText` returns **xterm's injected stylesheet**, not terminal text
+  — a long, plausible-looking string that is entirely instrument artifact.
+
+**Read the buffer, not the DOM.** Via `webview_execute_js`, walk the xterm instance's
+`buffer.active` and join `getLine(i).translateToString(true)`.
+
+⚠️ **Instrument AGREEMENT is not correctness when both instruments share a defect.** Two DOM reads
+agreeing that a pane is empty means only that both went through the same broken path. Run a
+**positive control** — a read that must succeed if the instrument works — before trusting either.
+See `[[xterm-dom-reads-fake-a-blank-pane]]`.
+
+### (j) ⚠️ `scrollWidth > clientWidth` cannot see sub-pixel clipping
+
+The standard "is this text ellipsised?" check is **integer-rounded on both sides**, so a 104.96px
+string in a 104.95px box *is* ellipsised by WebKit while the check reports `false`. Anything a
+fractional pixel over the boundary is invisible to it.
+
+**For the number**, measure a `Range` over the text node (`getBoundingClientRect().width` on the
+range, not the element). **For the verdict**, take a screenshot — the rendered ellipsis is the only
+unambiguous evidence.
+
+### (k) ⚠️ For CSS box math: measure, compute nothing you can read
+
+Sizing **one** column produced **three** independent arithmetic errors in a single work package,
+each caught only by reading the live DOM:
+
+1. `width: 7.5em` computed against the root 16px instead of the element's own 12.48px font size.
+2. A padding contribution counted once when the box had it on both sides.
+3. A `box-sizing` assumption that inverted which way the border-box math ran.
+
+Before committing any width/fit decision, read `getBoundingClientRect()` on the real element and
+`getComputedStyle()` for the values that feed it. Every one of those three errors survived
+review and arithmetic; none survived one DOM read.
+
+⚠️ **`requestAnimationFrame` does not tick in the bridge's eval context.** A rAF-driven sampler
+installed through `webview_execute_js` never fires, so a measurement loop built on it returns its
+initial value forever — which reads as "the value never changed". Use `setInterval` for sampling
+(caveat (e)'s technique), and take one-shot geometry reads synchronously.
+
 ## Related
 
 - [`verify-self-tiers.md`](verify-self-tiers.md) — what the agent can and cannot observe, and when

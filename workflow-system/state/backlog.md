@@ -20,36 +20,6 @@
 - **Priority:** medium (no defect — this is unclaimed capability; the cost is that the discouraging half of the note keeps steering work toward the guard style that has already failed four times here)
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: used and proven in WP4c; the note itself and its citing files are not yet updated
 
-## SURFACE-2026-08-10-CSS-BOX-MATH-WAS-WRONG-THREE-TIMES-IN-ONE-COLUMN
-- **Source:** feature:verify-self (M12 WP4c Phase 4 — found while measuring the row fit)
-- **Target level:** product:arch (`CLAUDE.md` bridge-caveat chain / verification method)
-- **Type:** tech-debt (a class of arithmetic error that only live measurement catches)
-- **Summary:** Sizing **one** CSS column produced **three** independent arithmetic errors across this WP, each caught only by reading the live DOM: **(1)** `width: 7.5em` was computed against the root 16px instead of the element's own 12.48px (recorded in three docs as "~101px usable" vs a real 78.6px); **(2)** the replacement width was derived to fit the widest label *exactly*, and lost to sub-pixel rounding — `9.61em` ellipsised on a 0.01px overage; **(3)** the headroom was then computed by subtracting padding from a **`content-box`** width that never included it, recording 2.4px where the true figure is ~17.3px.
-- **Context:** ⚠️ **Every one of the three was internally consistent and survived review** — the numbers were self-coherent, just wrong about which base they applied to. Errors (1) and (2) were consequential: (1) invalidated a shipped product decision about label text, (2) shipped a visibly clipped label. Error (3) was **conservative** (more room than recorded, so nothing broke), which is precisely why it would have survived indefinitely — a wrong-but-safe number in a comment is the kind a future reader trusts and then reasons *from*. ⚠️ Note the pattern is not "CSS is hard": each error was a **base-of-measurement** mistake (which font-size, how much tolerance, which box edge), and each is invisible to `tsc`, lint, Prettier, 1973 unit tests, and a clean production build. jsdom cannot catch them either — it has no layout engine.
-- **Suggested action:** Add to `CLAUDE.md`'s caveat chain a short rule with the three instances as evidence: **for CSS box math, measure — compute nothing you can read.** Concretely, before committing a width/fit decision: `getBoundingClientRect()` for the box, `getComputedStyle` for `boxSizing` **and** `fontSize` (never assume the root), a `Range` over the text node for true sub-pixel ink (never `scrollWidth` — see `SURFACE-2026-08-10-SCROLLWIDTH-IS-BLIND-TO-SUBPIXEL-TEXT-CLIPPING`), and a **screenshot** as the verdict. Add tolerance rather than deriving an exact fit. All three corrections are now recorded at `.picker-recent-model`'s CSS comment, which is the right home — but the *method* belongs in the caveat chain, since the next such column will be elsewhere.
-- **Priority:** medium (no live defect — the shipped width is correct and live-verified; the cost is a repeated, cheap-to-avoid error class in this repo's most layout-sensitive surface, plus wrong figures that were already propagating into new comments)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: the three figures are corrected in source; the general method rule is not yet in `CLAUDE.md`
-
-## SURFACE-2026-08-10-SCROLLWIDTH-IS-BLIND-TO-SUBPIXEL-TEXT-CLIPPING
-- **Source:** feature:build (M12 WP4c Phase 1/P1.5 — two different `scrollWidth` failures in one phase)
-- **Target level:** product:arch (the bridge-caveat chain in `CLAUDE.md` — the `[[xterm-dom-reads-fake-a-blank-pane]]` family)
-- **Type:** tech-debt (verification-method defect — a wrong instrument that reads as a confident positive)
-- **Summary:** `el.scrollWidth > el.clientWidth` — the standard "is this text ellipsised?" check — **cannot detect sub-pixel clipping**, because both properties are **integer-rounded**. A 104.96px string in a 104.95px box *is* ellipsised by WebKit, but both values round to `105`, so the check reports **"not ellipsised."** Measured across a deliberate width ladder (9.61 / 9.8 / 10 / 10.2em), the check returned "not ellipsised" at **every rung**, including the one a screenshot showed rendering `Drive Mode: No…`. A **second, distinct** `scrollWidth` failure appeared in the same phase: on a `display:flex` container it describes the container's own box and is blind to a clipped *child*, so it reported no overflow for a visibly-clipped label.
-- **Context:** ⚠️ **Both failures are false NEGATIVES on a clipping check, i.e. they say "your text fits" when it does not** — the direction that ships a broken label. This is the third instrument-lies instance in this family, and the point worth carrying is that **the failing instrument was different each time**: `.xterm-rows` children reading empty (the original), flex-container `scrollWidth` blind to a child, and integer-rounded `scrollWidth` blind to sub-pixels. So the mitigation cannot be a list of known-bad selectors; it has to be the habit. ⚠️ **A `Range` over the text node (`range.selectNodeContents(el)` → `getBoundingClientRect().width`) gives true sub-pixel ink width** and was correct both times — but note it is only *diagnostic*: comparing ink 104.96 to content 104.95 reads as "fits with 0.01px spare" unless you recognize a 0.01px **overage** is a clip. The screenshot is the only instrument that was unambiguously right throughout.
-- **Suggested action:** Add to `CLAUDE.md`'s caveat chain: (1) never verify text clipping with `scrollWidth > clientWidth` — use a `Range` over the text node for the number and a **screenshot** for the verdict; (2) when a width is *derived* to fit a known string, add tolerance and verify visually, because a zero-tolerance fit loses to sub-pixel rounding; (3) the general form, extending the existing agreement-is-not-correctness rule — **when a numeric check and a rendering disagree, the rendering wins**, and a margin under ~1px is not a margin. A cheap standing technique worth naming: stage the same string at several widths on adjacent rows and take **one** screenshot, which makes the threshold self-evident rather than inferred.
-- **Priority:** medium (no live defect — the shipped width is correct and verified; the cost is that the reflexive clipping check is unsound in this codebase's most layout-sensitive surface, and it already produced one wrong width that a numeric gate would have passed)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
-
-## SURFACE-2026-08-07-XTERM-ROWS-INNERTEXT-READS-EMPTY-AND-FAKES-A-BLANK-PANE
-- **Source:** feature:verify-human (M12 WP4b Phase 3 — agent misread a rendering pane as blank; operator screenshot disproved it)
-- **Target level:** product:arch (the bridge-caveat chain in `CLAUDE.md`, caveat (h))
-- **Type:** tech-debt (verification-method defect — a wrong instrument that reads as a confident negative)
-- **Summary:** Reading a CC pane's contents via `document.querySelector('[data-session-id]')` → `.xterm-rows` and taking `innerText` (or joining `.children` textContent) returns **empty string / zero non-empty rows for a pane that is fully rendered**. Under xterm's **DOM renderer** (which this project mandates — no WebGL) the glyphs live in absolutely-positioned spans that these reads miss. Worse, `innerText` on the `[data-session-id]` element itself returns ~55 KB of xterm's injected **stylesheet**, which looks like real content and inflates any length-based check.
-- **Context:** ⚠️ **This produced a confident FALSE "the pane is blank" verdict that survived the existing caveat-(h) defence.** The agent sampled **7 consecutive stable reads over 12.6 s** *and* took a **screenshot**, then explicitly reasoned that two independent instruments agreeing ruled out the known single-sample false alarm. Both were wrong together: the DOM reads hit the wrong nodes, and the screenshot was captured before paint. An operator screenshot showed CC's banner **and the agent's own typed prompt** had been visible the whole time. ⚠️ **The durable lesson EXTENDS caveat (h), which currently only prescribes a time series:** *instrument agreement is not correctness when both instruments share a defect — two reads of the same wrong node are one observation, not two.* This is the **sixth** false blank-pane verdict in the chain's history, and the first to defeat the documented remedy.
-- **Suggested action:** (1) Extend `CLAUDE.md` caveat (h) with the agreement-is-not-correctness rule plus the concrete selector trap (`.xterm-rows` children read empty under the DOM renderer; `[data-session-id]`'s own `innerText` returns the stylesheet). (2) Record the **positive control** as the cheap standard practice: before believing a negative read, point the same selector at a pane **known** to be painted — if it also reads empty, the instrument is broken, not the pane. (3) Note the working alternative for future runs: derive terminal state from `status-channel.log` events (`UserPromptSubmit` → `Stop`), which is out-of-band, timestamped, and was the thing that actually worked here.
-- **Priority:** medium (no product defect — but it wastes live-verification budget and has now produced a wrong verdict six times, once defeating the documented remedy)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
-
 ## SURFACE-2026-08-07-NEVER-BLOCK-CC-HAS-A-SECOND-UNGUARDED-AXIS-STDOUT-SHAPE
 - **Source:** feature:build (M12 WP4b Phase 3, P3.5 — surfaced while corroborating the hook-output schema against the official docs)
 - **Target level:** product:arch (the never-block-CC invariant's definition)
@@ -116,16 +86,6 @@
 - **Suggested action:** A one-minute check from an **operator-launched** build (`pnpm tauri:dev` typed by the operator, or the installed `.app`): open a project whose last CC conversation is known and recent, confirm the resumed history is that conversation. Fold into the next `/release` gate, where installed-build manual verification already happens.
 - **Priority:** low (wiring proven; the residual risk is a CC-side behavior the operator exercises daily through ordinary dogfooding)
 - **Status:** deferred — operator-gated; scope NARROWED at the 2026-08-12 paydown sweep to the runtime half only
-
-## SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER
-- **Source:** feature:verify-self (M12 WP3 Phase 4, sessions 1 and 2 — cost effort in both)
-- **Target level:** project (verification method for any CC-pane observation)
-- **Type:** tech-debt (verification-method trap)
-- **Summary:** Reading a CC pane's contents from the DOM **under-reports a working terminal as 1–3 characters.** Both `innerText` and `textContent` on `.xterm-rows > div` are unreliable, because xterm's DOM renderer materializes only the visible viewport. The authority is **`term.buffer.active`**, reachable by walking the React fiber from the pane element (`translateToString(true)` per line). Two further traps in the same area: **`data-session-id` is on the WP9 right-panel terminal**, not the CC pane (the CC pane is `.xterm` under `.workspace-left`, and the right-panel slot is `display:none` behind the Docs tab — so a naive selector silently samples a hidden element); and **a frozen PTY byte count means CC is blocked on a prompt** (e.g. the trust-folder prompt), not that output is being lost.
-- **Context:** Session 1 recorded `scratch-b`'s pane as "blank (3 chars), unexplained." Session 2 spent four spawns, MCP-boot comparisons and `lsof` byte-count forensics before discovering both panes had been **full the whole time** — one showing CC's trust prompt, the other its welcome banner. **There was never a defect.** This sits alongside the WP's other instrument artifacts (8 total): a sampler that must outlive a 3-minute CC turn; pane→workspace mapping that must come from the fiber, never DOM order; `[class*="no-fire"]` matching nothing (the class is `picker-recent-nofire`); and capture-phase listeners being unable to test `stopPropagation`.
-- **Suggested action:** Record the buffer-read recipe wherever the MCP-bridge verify-self conventions live (a bridge caveat (h), or `docs/lessons/`), since every future CC-pane outcome in M13's skill-buttons will face it. ⚠️ The general rule this is an instance of: **an observation is only decisive when a broken implementation would give a DIFFERENT answer** — a blank DOM read is equally consistent with "no output" and "output I cannot see", so it was never decisive.
-- **Priority:** medium (no product defect; it has now produced two false verdicts and one near-miss, and M13 will hit the same seam)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
 
 ## SURFACE-2026-08-05-WINDOW-SIZE-AND-POSITION-NOT-PERSISTED
 - **Source:** operator request (2026-08-05, mid-M12-WP3 — deliberately NOT folded into that WP; unrelated concern)
@@ -208,28 +168,6 @@
 - **Pickup shape:** fold into the next WP that touches `DocsPanel.tsx` — pick one of the three
   candidate rules (density ceiling as a test / provenance-in-WIP convention / split the file) rather
   than sweeping again. Two milestones have already paid real time to this file's prose.
-
-## SURFACE-2026-08-02-RAF-DOES-NOT-TICK-IN-MCP-BRIDGE-EVAL-CONTEXT
-- **Source:** feature:verify-self (M11 WP5 Phase 1)
-- **Target level:** product:arch (verification tooling — candidate MCP-bridge caveat (h))
-- **Type:** gap (verification-method hazard)
-- **Summary:** A `requestAnimationFrame`-driven sampler installed via
-  `mcp__tauri__webview_execute_js` **never ticks** — measured `frameCount: 0` over a ~1.5s window
-  in which a real content swap occurred. A fast `setInterval` (4ms) in the same context works
-  (17 samples over ~2s, straddling the swap).
-- **Context:** The dangerous part is not that rAF fails — it is that a rAF sampler's
-  **absence-shaped results still look like passes**. The WP5 run read
-  `everHitZero: false, minTop: null, distinctTops: []` from **zero** captured frames; had the
-  sample count not been asserted, that would have been recorded as "the scroll offset never
-  jumped" on the strength of no data at all. Same class as
-  `[[guard-predicate-completeness-vs-mutation-landing]]` and `[[verify-the-mutation-landed]]`:
-  an instrument that recorded nothing is indistinguishable from a clean result.
-- **Suggested action:** Add as **caveat (h)** to the MCP-bridge list in the root `CLAUDE.md`
-  (alongside (a)–(g)): *prefer `setInterval` over `requestAnimationFrame` for live timing
-  observations through the bridge, and always assert the sample count before believing any
-  "never happened" result.* Generalizes to any future live timing/transient check.
-- **Priority:** medium
-- **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Candidate MCP-bridge caveat **(h)**; belongs with the next bridge-driven verify-self session, not with a docs-panel milestone.
 
 ## Code-quality findings — m11-wp4-docs-live-reload (2026-08-02)
 - **Pointer:** **1 MAJOR + 4 MINOR** remaining (was 1 CRITICAL + 4 MAJOR + 4 MINOR) from
