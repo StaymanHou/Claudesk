@@ -358,33 +358,6 @@
 - **Priority:** medium
 - **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Candidate MCP-bridge caveat **(h)**; belongs with the next bridge-driven verify-self session, not with a docs-panel milestone.
 
-## SURFACE-2026-08-02-PROJECT-MEMORY-SYMLINK-NOT-IN-PLACE-TWO-COPIES-DRIFT
-- **Source:** session-capture / feature-finalize (M11 WP4 close)
-- **Target level:** product:arch (project setup / artifact tracking)
-- **Type:** gap
-- **Summary:** `~/.claude/CLAUDE.md` → "Project-memory location — harness symlink (GLOBAL)" specifies
-  ONE physical store: `<proj-dir>/.claude/memory/` git-tracked, with the harness path
-  `~/.claude/projects/<slug>/memory` a **symlink** to it. **On this machine that is not the case
-  for claudesk** — `ls -ld .claude/memory` shows a real directory (not a symlink), so the repo dir
-  and the harness store are **two independent copies**.
-- **Context:** Found while closing M11 WP4. A memory update written to the repo path did not update
-  the harness copy (and vice versa) — I wrote the memory body to the repo dir and the index line to
-  the harness `MEMORY.md`, then had to stage the repo's `MEMORY.md` separately. **Both copies happen
-  to agree right now** (identical 2714-byte memory, both index lines widened), so nothing is broken
-  today; the risk is silent divergence on every future write, where a session reads a stale
-  auto-loaded memory while the tracked one is correct — or the reverse, which is worse because the
-  git history then looks authoritative and isn't.
-- **Suggested action:** Run the existing primitive rather than hand-fixing:
-  `tools/memory-link/ensure-memory-link.sh` in the workflow-system source repo (with
-  `migrate-memory.sh` if the two copies have already diverged — diff them first). ⚠️ The slug is
-  derived from the **realpath**, not `$PWD`. Then verify `ls -ld .claude/memory` reports a symlink.
-  Worth checking the other active projects for the same drift, since the convention says
-  `session-start`/`product-context` should have converged this automatically and evidently did not
-  here — that is the more interesting question than this one project's state.
-- **Priority:** medium (no data loss yet; silent-divergence risk on every memory write, and it may
-  affect other projects)
-- **Status:** **NOT A DEFECT — the premise was a misreading (verified 2026-08-03 at `/product-context` step 2c).** The item checked whether `<proj-dir>/.claude/memory/` is a symlink; the convention wants the **opposite** — the repo dir is the *real* git-tracked store and the **harness path** is the symlink to it. That is exactly the state on this machine: `~/.claude/projects/-Users-stayman-Personal-projects-claudesk/memory -> /Users/stayman/Personal/projects/claudesk/.claude/memory` (created 2026-07-03). Proven to be ONE physical store, not two: both paths `pwd -P` to the same directory, `MEMORY.md` is the **same inode** (65156983) through both, and both list 52 entries. So the "silent divergence on every future write" risk does not exist. The M11 WP4 symptom that prompted this (a memory body and its index line needing separate staging) has some other cause — most likely ordinary git staging of two files, not two stores. `ensure-memory-link.sh` would be a no-op. **Closing rather than deferring**; if the M11 WP4 staging oddity recurs, file it as its own item with the real symptom rather than reviving this premise.
-
 ## Code-quality findings — m11-wp4-docs-live-reload (2026-08-02)
 - **Pointer:** **1 MAJOR + 4 MINOR** remaining (was 1 CRITICAL + 4 MAJOR + 4 MINOR) from
   `code-quality-reviewer` against ship baseline `480052e`. **The CRITICAL and 2 of the 4 MAJOR
@@ -544,12 +517,6 @@
 - **Suggested action:** First decide whether it is a bug at all. If yes, the question is whether the CC-edits-a-file case (the common Claudesk case, where the user *is* watching the panel while CC works, possibly with the window focused but the editor pane merely unfocused) is covered by the current trigger. Worth pairing with any future work on the disk-reload path rather than picking up alone.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*
-
-## Code-quality findings — per-project-cc-model-override (2026-07-31)
-- **Pointer:** ✅ **The 1 MAJOR (the per-row IPC N+1) was RESOLVED 2026-08-01** — see CHANGELOG → `**Backlog resolved:** SURFACE-2026-07-31-QUALITY-WP1-PER-ROW-IPC-REFETCHES-DATA-ALREADY-ON-THE-WIRE`. Its body has been deleted from `backlog-quality-findings.md` per delete-on-resolve. **This entry survives only as the record of the review's non-backlogged dispositions below** — nothing here is open work; it is kept because a future reader auditing that review needs to know which items were fixed in place and which 3 MINOR were consciously declined. Safe to prune at any cycle-close sweep.
-- **Priority:** n/a (no open work remains)
-- **Status:** resolved-record (retained for provenance, not pickup)
-- **Fixed in place at review time (NOT backlogged), for the record:** the **MAJOR** stale `modelOverrideIpc.ts` module header (it stated the workspace header was the surface and named "a picker-row badge" as the hypothetical *future* second surface — exactly backwards after the Phase 2 relocation, and it is the stated rationale for the deliberate no-broadcast decision, so leaving it would have invited a future reader to add a one-subscriber fan-out); the dead `displayModelValue` export whose two tests guarded nothing (component now routes through it); a second hardcoded `"Default"` string (now `MODEL_UNSET_LABEL`, *derived* from `MODEL_UNSET_PLACEHOLDER` so they cannot drift); a fragile multi-line CSS regex premise-check (now single-identifier assertions — it was the `SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING` class); and two stale/contradictory doc clauses. **3 MINOR remain unaddressed and un-backlogged by choice** — an `is-failed` styling flag that persists until a genuinely different value is committed, and two prose nits — all judged below the bar for their own entry.
 
 ## SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC
 - **Source:** operator question at M11.5 WP1 Phase 3 verify-human ("Then can this list be dynamic?")
