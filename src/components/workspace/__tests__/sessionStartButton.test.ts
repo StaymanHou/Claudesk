@@ -282,9 +282,29 @@ describe("wiring — the properties no value can observe (source guards)", () =>
     // would be the N+1 M11.5 WP1's review found in the model cell.
     expect(ws).toContain('invoke<Record<string, "continue" | "restore">>(');
     expect(ws).toContain('"picker_announce_actions"');
-    // The fetch must derive from the SIGNALS via the real predictor, never from the announced
-    // string — WP1 Verdict (b): a label is a prediction, never an input to an action.
-    expect(ws).toContain("predictAction({");
+
+    // ⚠️ This assertion used to demand `predictAction({`, on the stated rule that the action
+    // must derive "from the SIGNALS via the real predictor, never from the announced string."
+    // That rule is right for the CLICK path and wrong here, and the guard was enforcing the
+    // defect rather than the fix.
+    //
+    // WP1 Verdict (b) — "a label is a prediction, never an input" — guards against trusting a
+    // display string in place of real signals. But `picker_announce_actions` is not a display
+    // string: the BACKEND already resolved the arm from the two signals, and the wire value is
+    // that resolved answer. The old code fed it back through the predictor as synthetic
+    // booleans (`uncleanFlag: announced === "continue"`), i.e. re-deciding a settled question
+    // using inputs invented from its own output. It agreed only because `continue` happens to
+    // win the precedence — an accident a third arm would break silently.
+    //
+    // `actionFromAnnounced` is the purpose-built seam for exactly this mapping, and it is
+    // itself tested. Pin THAT.
+    // (`SURFACE-2026-08-05-QUALITY-WP3-INDICATOR-BYPASSES-THE-WIRE-SEAM`.)
+    expect(ws).toContain("actionFromAnnounced(announced)");
+    expect(
+      ws,
+      "the indicator must not rebuild synthetic signals from the announced value — that " +
+        "re-derives an answer the backend already resolved, and agrees only by precedence luck",
+    ).not.toMatch(/uncleanFlag:\s*announced/);
   });
 
   it("⚠️ does NOT wait 1500 ms — that measurement is about a COLD spawn", () => {

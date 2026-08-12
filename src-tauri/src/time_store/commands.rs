@@ -210,11 +210,36 @@ pub fn open_and_bootstrap(app: &AppHandle) -> Result<TimeStore, String> {
 /// — the universal status dots ride the same stream and must survive. A read failure
 /// therefore returns `false` (tracking off) rather than propagating.
 pub fn tracking_enabled(app: &AppHandle) -> bool {
-    let dir = match crate::config_store::commands::resolve_data_dir(app) {
-        Ok(d) => d,
-        Err(_) => return false,
-    };
-    crate::config_store::settings::read_time_tracking_enabled(&dir).unwrap_or(false)
+    // ⚠️ The two error-collapse decisions live in `gate_from_reads`, NOT inline here, so they
+    // are unit-testable. `resolve_data_dir` needs a live `AppHandle`, which is precisely why
+    // this body went uncovered: every gate test exercised `read_time_tracking_enabled`
+    // directly — "the same code path, minus the app→dir hop" — leaving the hop itself, the one
+    // line this function actually adds, asserted by nothing. Both `Err` arms degrade to OFF,
+    // and getting either backwards fails open on a privacy-sensitive default while every
+    // existing test stays green.
+    // (`SURFACE-2026-07-08-QUALITY-WP5-GATE-BODY-APPHANDLE-HOP-UNTESTED`.)
+    let dir = crate::config_store::commands::resolve_data_dir(app).ok();
+    gate_from_reads(
+        dir.as_deref()
+            .map(crate::config_store::settings::read_time_tracking_enabled),
+    )
+}
+
+/// The gate's decision logic, lifted out of [`tracking_enabled`] so it can be driven directly.
+///
+/// `None` = the data dir did not resolve. `Some(Err(_))` = it resolved but the settings read
+/// failed (missing or malformed file). Both collapse to **`false`**.
+///
+/// **Degrading to OFF is the load-bearing half.** This runs on the hook-stream drain thread,
+/// which also carries the universal status dots — so a read failure must not panic. And the
+/// direction matters beyond robustness: failing OPEN would silently begin recording timing
+/// data for a user who never enabled it, on exactly the malformed-settings path where nobody
+/// is watching.
+fn gate_from_reads(read: Option<Result<bool, impl std::fmt::Debug>>) -> bool {
+    match read {
+        Some(Ok(enabled)) => enabled,
+        Some(Err(_)) | None => false,
+    }
 }
 
 /// Broadcast fired when the tracking toggle changes, so every surface that reflects it
@@ -1925,6 +1950,37 @@ mod tests {
             vec![1000, 2000],
             "in-span rows, ordered by ts, end exclusive"
         );
+    }
+
+    #[test]
+    fn the_gate_degrades_to_off_on_an_unresolvable_data_dir() {
+        // The app→dir hop, which no previous test reached: every gate test drove
+        // `read_time_tracking_enabled` directly, i.e. the same path MINUS the one line
+        // `tracking_enabled` actually adds. `resolve_data_dir` needs a live AppHandle, so the
+        // decision is extracted to `gate_from_reads` and driven here instead.
+        // (`SURFACE-2026-07-08-QUALITY-WP5-GATE-BODY-APPHANDLE-HOP-UNTESTED`.)
+        let unresolvable: Option<Result<bool, String>> = None;
+        assert!(
+            !gate_from_reads(unresolvable),
+            "an unresolvable data dir must degrade to OFF — failing open would start recording \
+             timing data for a user who never enabled it"
+        );
+    }
+
+    #[test]
+    fn the_gate_degrades_to_off_on_a_malformed_settings_read() {
+        // The dir resolved, but the settings file is missing or malformed. Also OFF — and this
+        // is the arm most likely to be got backwards, since `unwrap_or(false)` reads as a
+        // formality rather than a privacy decision.
+        assert!(!gate_from_reads(Some(Err("malformed settings json"))));
+    }
+
+    #[test]
+    fn the_gate_passes_a_successful_read_through_unchanged() {
+        // The positive control. Without it, breaking the gate to `false` outright would leave
+        // both assertions above green while silently disabling the feature.
+        assert!(gate_from_reads(Some(Ok::<bool, String>(true))));
+        assert!(!gate_from_reads(Some(Ok::<bool, String>(false))));
     }
 
     #[test]

@@ -1763,6 +1763,31 @@ mod tests {
             "the raw login shell must never receive {DRIVE_MODE_ENV}; got {shell:?}"
         );
 
+        // ⚠️ …but the assertion above is about a FUNCTION'S OUTPUT, not about what the shell
+        // spawn actually passes. `shell_spawn_env()` returns `color_tty_env()` verbatim, which
+        // `color_tty_env_carries_nothing_beyond_color_and_locale` already pins — so on its own
+        // this adds no information, and would stay green if `spawn_shell` were edited to hand
+        // `cc_spawn_env(...)` to `spawn_argv` instead. The primitive is proven; the CALLER is
+        // the seam. (`SURFACE-2026-08-07-QUALITY-WP4B-SHELL-SEAM-ASSERTS-THE-PRIMITIVE-NOT-THE-CALLER`.)
+        //
+        // Source-level because the call site's argument is not observable from a unit test:
+        // `spawn_argv` reaches `CommandBuilder` and a real PTY. Whitespace is flattened so a
+        // Prettier-equivalent rustfmt reflow cannot silently stop it matching.
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let flat = production.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(
+            flat.contains("&shell_spawn_env(), \"exit\""),
+            "spawn_shell must pass shell_spawn_env() to spawn_argv — if this call site now \
+             composes or forwards a different env, the value assertion above is proving a \
+             property of an unused function"
+        );
+        assert!(
+            !flat.contains("&cc_spawn_env(") || flat.matches("&cc_spawn_env(").count() == 1,
+            "cc_spawn_env is reaching more than one spawn call site — the shell spawn must \
+             never be one of them"
+        );
+
         // And the positive control, so this cannot pass by the var having vanished everywhere:
         // the CC spawn under the same conditions DOES carry it. Without this, deleting the
         // feature outright would leave the assertion above green.

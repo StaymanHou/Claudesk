@@ -48,7 +48,7 @@ import {
 // M12 WP3 Phase 5 — the third arm. Both surfaces are GATED (a workflow skill + a statement
 // about `workflow-system/` state), unlike Phase 3.5's ungated `--continue` announcement.
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
-import { predictAction } from "../../state/predictAction";
+import { actionFromAnnounced } from "../../state/predictAction";
 import { slashCommandPayload } from "./autoResumeFire";
 import {
   nextOpenIndicator,
@@ -127,15 +127,21 @@ export function Workspace({
       .then((map) => {
         if (cancelled) return;
         const announced = map[workspace.project_path];
-        // ⚠️ Derived from the SIGNALS via the real predictor, not from the announced string —
-        // the same rule the click path follows. A label is a prediction, never an input.
+        // ⚠️ Mapped through `actionFromAnnounced`, the purpose-built seam — NOT by rebuilding
+        // synthetic signals and re-running the predictor over them.
+        //
+        // This used to call `predictAction({ uncleanFlag: announced === "continue",
+        // sessionMdPresent: announced === "restore" })`, whose comment claimed it derived the
+        // action "from the SIGNALS via the real predictor". It did not: the command had
+        // already resolved the arm, and those booleans were reconstructed FROM its answer, so
+        // the predictor was re-deciding a question using inputs invented from its own output.
+        // It happened to agree only because the two-signal precedence puts `continue` first —
+        // an accident of ordering, not a guarantee, and a third arm would break it silently.
+        // (`SURFACE-2026-08-05-QUALITY-WP3-INDICATOR-BYPASSES-THE-WIRE-SEAM`.)
         setAnnouncedNextOpen(
           nextOpenIndicator({
             workflowEnabled: true,
-            action: predictAction({
-              uncleanFlag: announced === "continue",
-              sessionMdPresent: announced === "restore",
-            }),
+            action: actionFromAnnounced(announced),
           }),
         );
       })

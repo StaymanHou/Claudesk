@@ -15,15 +15,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** medium (no user-visible defect today; it is a stated-scope gap on a feature whose whole safety story is "inert unless Claudesk set it")
 - **Status:** pending
 
-## SURFACE-2026-08-07-QUALITY-WP4B-SHELL-SEAM-ASSERTS-THE-PRIMITIVE-NOT-THE-CALLER
-- **Source:** feature-review-quality (M12 WP4b, MAJOR)
-- **Type:** tech-debt (the extract-for-testability method applied one level past its yield)
-- **Summary:** `shell_spawn_env()` returns `color_tty_env()` verbatim, and `the_raw_login_shell_never_receives_the_drive_mode_var` asserts that its output lacks the var — which `color_tty_env_carries_nothing_beyond_color_and_locale` already pins. The only new information would be *"`spawn_shell` calls this one"*, and **the test cannot observe that**: it calls `shell_spawn_env()` directly, never `spawn_shell`. A mutant routing `spawn_shell` to `cc_spawn_env(...)` would still pass.
-- **Context:** ⚠️ **This is the SAME caller-vs-primitive gap the WP correctly diagnoses and closes at `cc_spawn`** (constraint 9, P2.7, P4.3) — recurring unresolved on the shell side, in a seam added specifically to close it. `borrow_env` has a milder version of the same shape. The irony is instructive: the method (extract so a test can drive the real thing) is right, but extracting is not the same as *asserting the caller*, and only the latter discharges constraint 9.
-- **Suggested action:** Either assert what `spawn_shell` actually passes (the `spawn_argv` call site is the seam that would need to be observable), or delete `shell_spawn_env` and accept `color_tty_env`'s existing guard as sufficient — the current middle position pays the indirection cost without buying the property. Prefer deleting unless the caller assertion is genuinely wanted.
-- **Priority:** medium (no defect; a test that reads as a caller proof and is not one is worse than no test, because it discourages writing the real one)
-- **Status:** pending
-
 ## SURFACE-2026-08-07-QUALITY-WP4B-INCIDENT-NARRATIVE-TRIPLE-RECORDED-IN-CODE-COMMENTS
 - **Source:** feature-review-quality (M12 WP4b, MAJOR)
 - **Type:** tech-debt (comment density tipped from WHY into chronology)
@@ -50,15 +41,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Context:** ⚠️ The module header 140 lines above the first instance **explicitly warns about this exact claim**: *"The previous text … is no longer true, and a reader who trusts it will 'restore' an early return that suppresses a working feature."* Phase 3.5 renamed two Rust *tests* whose names overstated their scope for the same reason, and missed the three prose copies — which sit at the **most-read** entry points (the `pub fn`'s own docstring, the command's docstring, the registration comment). A reader reaches those before the header.
 - **Suggested action:** Rewrite all three to state the surviving property: *"the OFF gate suppresses only the `.session.md` arm and its stats; the unclean-flag arm is ungated and still returns entries."* Cheap and mechanical.
 - **Priority:** medium (no runtime defect; the code names this as the single most likely thing to be "fixed" back, and these three are the invitation)
-- **Status:** pending
-
-## SURFACE-2026-08-05-QUALITY-WP3-INDICATOR-BYPASSES-THE-WIRE-SEAM
-- **Source:** feature-review-quality (M12 WP3, MAJOR)
-- **Type:** tech-debt (duplicated wire-vocabulary knowledge)
-- **Summary:** The next-open indicator reconstructs **synthetic signals** from the resolved wire value — `predictAction({ uncleanFlag: announced === "continue", sessionMdPresent: announced === "restore" })` (`Workspace.tsx:126-141`) — instead of calling `actionFromAnnounced`, the purpose-built seam at `predictAction.ts:203`.
-- **Context:** That seam's own docs state its reason: both sides should *"agree by construction rather than by two call sites independently remembering what `continue` means."* `announceRow.ts:125` uses it correctly; this is the **one consumer that skipped it**, and it fabricates a signal combination that never existed on disk (it infers "the flag was set" from a resolved string). Functionally equivalent **today** only because precedence is total — a third arm or a precedence change breaks the equivalence silently.
-- **Suggested action:** Replace the reconstruction with `actionFromAnnounced(announced)`. One-line change; the seam already exists and is already tested.
-- **Priority:** medium (no live defect; it is a second home for knowledge the codebase deliberately centralized)
 - **Status:** pending
 
 ## SURFACE-2026-08-05-QUALITY-WP3-THREE-MINOR-POLISH-ITEMS
@@ -330,19 +312,6 @@ scheduling items rather than polish.*
 - **Priority:** low
 - **Pickup shape:** carry the final `downloaded` through on the finish emit (or a one-line comment). Rides any future `updater/commands.rs` touch. Dismiss via the WIP's review section.
 
-# m10-wp3-brew-detect-and-defer — 2026-07-17
-
-*(feature-review-quality on the WP3 working-tree diff [uncommitted, on HEAD `2592b2d`]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all documentary/cosmetic, auto-backlogged. Reviewer verdict: "well-built, appropriately-scoped… advances the codebase and accrues no meaningful debt." NOTE: this WP's P1.5 doc-drift fold RESOLVED the two `m10-wp2-updater-core` findings below [WP2-LIBRS-INVOKE-COMMENT-STALE + WP2-CARGO-DEP-COMMENT-STALE] — those close at finalize.)*
-
-## SURFACE-2026-07-17-QUALITY-WP3-SHORTCIRCUIT-TEST-PINS-SHAPE-NOT-ORDERING
-- **Severity:** MINOR
-- **File:** `src-tauri/src/updater/commands.rs` (`homebrew_source_short_circuits_to_defer_with_no_available_version`, ~L196-211)
-- **Finding:** The test reconstructs the `UpdateCheckResult` by hand rather than invoking `updater_check` (the `AppHandle` dependency makes a true command-level test awkward), so it pins the expected *shape* but not that `updater_check` actually orders the brew short-circuit BEFORE the network `check()`. That load-bearing invariant (Homebrew never hits the network) rests on code inspection + the live bridge verify-self, not the unit test. The limitation is honestly noted in the test comment.
-- **Fix shape:** If/when the command layer becomes testable (a mockable updater seam, or a `tauri::test` harness), add a test asserting no network call fires for a Homebrew source. Otherwise accept as a documented structural limitation.
-- **Why it matters:** the most load-bearing WP3 invariant is asserted by structure, not test — a future refactor of `updater_check`'s ordering could silently break the short-circuit.
-- **Priority:** low.
-- **Status:** pending.
-
 # m9-wp7-deprecate-claude-time — 2026-07-16
 
 *(feature-review-quality on the WP7 working-tree change [DOCS-ONLY resync: arch.md event-set/SQLite/deprecation Key Decisions + new "Milestone 9 architecture" section; CLAUDE.md Current-Milestone refresh; wbs.md pause-footer strip; runtimes.md build-observation]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer cross-checked every material architectural claim against source — all held. MINOR #1 [arch.md hook-schema omitted `source`/`prompt_length_chars`] was FIXED IN PLACE during review-quality [not backlogged], since it was a self-introduced one-line gap in the exact section under review. The 2 below are out-of-scope for WP7 — auto-backlogged.)*
@@ -373,18 +342,6 @@ scheduling items rather than polish.*
 - **Finding:** `wallTime` uses the minute-quantized session endpoints, so the "active of Xh Ym wall" denominator + the mini-timeline seg span are on a MINUTE grid, while the numerator (`sumActive`) is true-`dur_ms`. For a sub-minute session this reads "0m active of 0m wall". This is FAITHFUL + internally consistent for POSITIONING (the mini-timeline positions legitimately live on the minute grid, matching the main timeline's `viewportPct`), NOT a defect.
 - **Fix shape:** none needed. Recorded only so a future reader doesn't "fix" the mini-timeline to a `dur_ms` basis + break the wall-relative layout (the positions MUST stay on the minute grid to align with the main timeline). If the wall FIGURE (not the positions) ever needs sub-minute precision, sum `dur_ms` across the session's segs for the denominator label only — but leave the positioning math alone.
 - **Priority:** low (awareness; likely a no-op / won't-fix).
-- **Status:** pending.
-
-# m9-wp5-tracking-toggle — 2026-07-08
-
-*(feature-review-quality on the WP5 working-tree diff [uncommitted per commit-only-when-asked; HEAD `6bdca6f`]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 2 MINOR — all auto-backlogged, priority low. Reviewer: well-built, low-risk feature — faithful mirror of the pip_mode/cc_permission_mode trio, single-hook-point gate discipline held, drain-safety degrade-to-OFF tested at the seam, event-name contract pinned both IPC sides. The 2 MINORs are an intrinsic auto-tier blind spot + a naming footgun.)*
-
-## SURFACE-2026-07-08-QUALITY-WP5-GATE-BODY-APPHANDLE-HOP-UNTESTED
-- **Severity:** MINOR
-- **File:** `src-tauri/src/time_store/commands.rs` (`tracking_enabled(app)` ~1088-1094)
-- **Finding:** The gate's own body — the `resolve_data_dir(app)` → `read_time_tracking_enabled(&dir).unwrap_or(false)` hop — is not unit-covered. Every gate test exercises `read_time_tracking_enabled` directly ("same code path, minus the app→dir hop"); the hop itself (the one line WP5 added to the gate) is proven only at bridge verify-self. A regression in the resolve-then-read wiring (e.g. a wrong data-dir resolver) would pass the auto-tier suite.
-- **Fix shape:** intrinsic AppHandle-constructability constraint — a unit test can't build an AppHandle. Options: (a) accept it (live verify-self covers it, as done); (b) if a future test-seam for AppHandle-bound commands materializes, add a gate-body test then. No action needed now; on record so the blind spot is known.
-- **Priority:** low (live-verified; auto-tier blind spot only).
 - **Status:** pending.
 
 # m9-wp4-segment-model-query-layer — 2026-07-08

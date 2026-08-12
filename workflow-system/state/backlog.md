@@ -137,17 +137,6 @@
 - **Priority:** low (arm 1's wiring is proven and the failure mode is benign — resuming *some* conversation rather than the newest; no evidence of a defect, and the mechanism reads the newest transcript by CC's own contract)
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
 
-## SURFACE-2026-08-05-NO-FIRE-INTENT-DOES-NOT-CROSS-THE-IPC-BOUNDARY
-- **Source:** feature:verify-self (M12 WP3 Phase 4, session 2 — found live via the MCP bridge, reproduced 3×)
-- **Target level:** feature (M12 WP3 Phase 4) — **the live defect itself is scoped as build task P4.6**; this item tracks the transferable *method* lesson
-- **Type:** bug (shipped-behavior defect) + test-method gap
-- **Summary:** The `⏵` no-fire door **fires `--continue` anyway**. With an unclean flag set, clicking `⏵` spawns `claude --permission-mode dontAsk --continue` — the door whose entire purpose is to open *without* firing. The frontend is **correct**: `pending_action` is `null`, `⏵` hit-tests to itself (`elementFromPoint`), and `actionForIntent(argv, "no-fire") === null` is asserted and green (`announceRow.test.ts:137-141`). **The intent never crosses the IPC boundary** — `cc_spawn(app, registry, project_path)` (`commands.rs:53-57`) has no intent parameter, so `Registry::spawn` (`mod.rs:879-884`) consumes the flag and sets `ResumeArm::Continue` whenever the flag is set, with no knowledge of which door was used. `pending_action` governs **only** the inject arm.
-- **Context:** ⚠️ **FIFTH instance of M12's "proven module, unhonoring caller" class** (WP2's dead route · WP2's unconsumed spawn term · Phase 3's dropped `onOpen` arg · the fire-path primitives above · this) — but the first where the caller does something **wrong** rather than nothing, which is strictly worse: a user who deliberately chose "don't resume" gets a resumed conversation. It is the exact corollary in `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`: **extracting the contract does not answer "does the caller honor it?"; only a caller-side check does.** The suite is green *because* the proven half is the half that works. It also survived a full verify-auto, whose Check 4 enumerated all three `XtermPane` usages to prove no shell pane receives the action — a thorough check on the **inject** arm that had no reason to look at argv.
-- **Suggested action:** ✅ **FIXED under P4.6** (2026-08-05) — `cc_spawn` now takes `intent: Option<OpenIntent>`; the argv arm is gated on it, with the gate as the **left `&&` operand** so a no-fire open does not consume the flag. Live re-verified (⏵ → no `--continue`, flag preserved; row → `--continue`). The durable ask beyond the fix, which is why this item stays recorded: **when a decision is computed on one side of an IPC boundary and acted on the other, the test must drive the boundary** — re-driving the pure function passes before the fix.
-  ⚠️ **Two further findings from the fix's own mutation testing, both worth carrying:** (1) a guard asserting `intent: openIntent` **matched `intent: openIntent ? "fire" : "fire"`** — an identifier *appearing* is not the identifier being *used as the value*; anchor **and terminate** such patterns. (2) The fix's first guard covered `XtermPane`'s `invoke` but **not** the picker's `onOpen` call, so hardcoding the door one layer up restored the defect against 1887 green tests — **the "one of two call sites" shape, reproduced while fixing an instance of it.** Both mutants passed `tsc`.
-- **Priority:** medium (the live defect is fixed and live-re-verified; the retained value is the boundary-testing + guard-anchoring lesson, which M13's skill-buttons will face at the same seam)
-- **Status:** **defect FIXED in P4.6 and live-re-verified; item deliberately KEPT OPEN at WP3 close (2026-08-05).** ⚠️ Not an oversight and not a partial resolution of the *fix* — the code half is done. What stays open is the **transferable method lesson** this entry's own "Suggested action" names as its retained value: *when a decision is computed on one side of an IPC boundary and acted on the other, the test must drive the boundary.* M13's skill-buttons face the identical seam (`cc_spawn` + PTY inject), so the entry closes when that lesson is either banked as a durable lesson doc / bridge caveat or discharged by M13 honoring it. The **defect's** resolution is recorded in `CHANGELOG.md` under the M12 WP3 feature line.
-
 ## SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER
 - **Source:** feature:verify-self (M12 WP3 Phase 4, sessions 1 and 2 — cost effort in both)
 - **Target level:** project (verification method for any CC-pane observation)
@@ -553,12 +542,6 @@
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** the one surviving MINOR is a one-line fix — carry the final `downloaded` through on the finish emit (or a one-line comment) — rides any future `updater/commands.rs` touch. Dismiss via the WIP's `## Code-Quality Review` section.
 
-## Code-quality findings — m10-wp3-brew-detect-and-defer (2026-07-17)
-- **Pointer:** 1 MINOR remaining (originally 3 MINOR / 0 CRITICAL / 0 MAJOR; the mod.rs `## Layout`-list-incomplete MINOR and the resolution-asymmetry-unremarked MINOR both RESOLVED) from `feature-review-quality` on the WP3 working-tree diff. The remaining MINOR — **`WP3-SHORTCIRCUIT-TEST-PINS-SHAPE-NOT-ORDERING`**: `homebrew_source_short_circuits…` reconstructs the struct by hand (AppHandle dep), so the "Homebrew never hits the network" invariant rests on code-inspection + live bridge verify-self, not the unit test. Reviewer verdict: "well-built, appropriately-scoped… advances the codebase and accrues no meaningful debt." See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10-wp3-brew-detect-and-defer — 2026-07-17`.
-- **Priority:** low.
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** accept-as-documented-limitation unless a mockable updater seam appears. Dismiss via the WIP's `## Code-Quality Review` section.
-
 ## SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION
 <!-- Heading RESTORED at the M10.9 cycle-close sweep (2026-07-31). This item had lost its `## ` heading
      and was orphaned under SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING, making it
@@ -637,12 +620,6 @@
 - **Priority:** low (1 MINOR)
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** a shared FE/BE round-half-up parity fixture (assert the two helpers agree on shared inputs) — rides the standing WP-refactor batch. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m9-wp5-tracking-toggle (2026-07-08)
-- **Pointer:** 1 MINOR remaining (originally 2 MINOR / 0 CRITICAL / 0 MAJOR; the `setTimeTrackingEnabled_` trailing-underscore-footgun MINOR RESOLVED) from `feature-review-quality` on the WP5 working-tree diff. The remaining MINOR — **`WP5-GATE-BODY-APPHANDLE-HOP-UNTESTED`**: `tracking_enabled(app)`'s `resolve_data_dir → read` hop is only proven at bridge verify-self (unit tests exercise `read_time_tracking_enabled` directly); intrinsic AppHandle-constructability blind spot, no action needed now. Reviewer: well-built, low-risk feature — faithful mirror of the pip_mode/cc_permission_mode trio, single-hook-point gate discipline held, drain-safety degrade-to-OFF tested at the seam, event-name contract pinned both IPC sides; nothing warrants a refactor pass. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m9-wp5-tracking-toggle — 2026-07-08`.
-- **Priority:** low (1 MINOR)
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** on-record only (no fix until an AppHandle test-seam exists). Dismiss via the WIP's `## Code-Quality Review` section.
 
 ## Code-quality findings — m9-wp4-segment-model-query-layer (2026-07-08)
 - **Pointer:** **2 MINOR remaining** (0 CRITICAL / 0 MAJOR; the dup tz-math helpers MINOR RESOLVED by backlog-paydown sweep WP3, and the `ai_busy_intervals`-computed-twice MINOR RESOLVED) from `feature-review-quality` on ship commit `d8b308e`. The 2 open findings: (1) **`WP4-DAYPAYLOAD-EMPTY-NOT-ON-IPC-SURFACE`** — `DayPayload.empty` never reaches WP6 (RangePayload/FE have no `empty`); a WP6-facing decision (surface it or document inference from `projects.is_empty()`); (2) **`WP4-CUSTOM-WINDOW-MIDNIGHT-EXTRA-DAY`** — a custom window ending on midnight emits one extra empty trailing day (cosmetic boundary edge). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m9-wp4-segment-model-query-layer — 2026-07-08`.
