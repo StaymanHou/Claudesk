@@ -92,8 +92,21 @@ const cellSrc = readFileSync(
 );
 
 describe("the model cell performs NO mount-time IPC read (the N+1 removal)", () => {
-  it("does not import getProjectDefaultModel", () => {
-    expect(cellSrc).not.toContain("getProjectDefaultModel");
+  // ⚠️ This assertion used to read `not.toContain("getProjectDefaultModel")`. That symbol was
+  // DELETED at the 2026-08-12 paydown sweep (dead wrapper over a callerless command), which
+  // made the guard tautological: no file can contain a name that exists nowhere, so it passed
+  // for a reason unrelated to the property. The honest form asserts what can still regress —
+  // the cell reads NOTHING over the wire on mount, whatever a future read would be called.
+  // (The class: SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING.)
+  const readWrappers = ["getProjectDefaultModel", "readDefaultModel"];
+  it.each(readWrappers)("does not import a read wrapper (%s)", (name) => {
+    expect(cellSrc).not.toContain(name);
+  });
+
+  it("issues no bare invoke() of its own — every wire call is a named wrapper", () => {
+    // The stronger property: even a future read added via a differently-named helper, or a
+    // raw `invoke("project_get_...")`, is caught here rather than sliding past a name list.
+    expect(cellSrc).not.toContain("invoke(");
   });
 
   it("still imports the write path, which is per-action and stays", () => {

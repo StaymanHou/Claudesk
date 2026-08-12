@@ -444,7 +444,6 @@ pub fn run() {
             // WP9: prune projects whose folder was deleted between sessions.
             config_store::commands::prune_missing_projects,
             // M11.5 WP1: per-project CC model override (read at spawn → `--model`).
-            config_store::commands::project_get_default_model,
             config_store::commands::project_set_default_model,
             config_store::commands::project_set_default_drive_mode,
             // M12 WP2: clear the unclean-exit flag on a CLEAN close. There is deliberately

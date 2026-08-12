@@ -25,18 +25,17 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-/**
- * Read a project's persisted model override. `null` = the project inherits CC's own default
- * model (also the answer for a path with no stored record, so a caller never has to
- * special-case an unknown project).
- */
-export async function getProjectDefaultModel(
-  projectPath: string,
-): Promise<string | null> {
-  return invoke<string | null>("project_get_default_model", {
-    path: projectPath,
-  });
-}
+// ## There is deliberately NO read wrapper here (removed at the 2026-08-12 paydown sweep)
+//
+// A `getProjectDefaultModel` once wrapped a `project_get_default_model` command. The M11.5
+// repair (B) that fixed the picker's per-row IPC N+1 removed its last caller: `default_model`
+// now arrives on the project-list payload and seeds each row through the `seedModel` prop, so
+// the read never crosses the wire per row. The wrapper and its backend command then sat
+// registered with zero callers for two milestones.
+//
+// ⚠️ Do not re-add one to "read a project's model" — that IS the N+1 coming back. Take the
+// value from the row payload. The Rust-side `config_store::read_default_model` is unrelated
+// and still live: `cc_session` reads it at spawn time, in-process, off the IPC surface.
 
 /**
  * Persist (or clear, with `null`) a project's model override.

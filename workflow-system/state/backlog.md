@@ -50,16 +50,6 @@
 - **Priority:** medium (no live defect — the shipped width is correct and live-verified; the cost is a repeated, cheap-to-avoid error class in this repo's most layout-sensitive surface, plus wrong figures that were already propagating into new comments)
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: the three figures are corrected in source; the general method rule is not yet in `CLAUDE.md`
 
-## SURFACE-2026-08-10-ALLOW-DEAD-CODE-OUTLIVING-ITS-CONSUMER-IS-INVISIBLE-TO-THE-GATE
-- **Source:** feature:verify-self (M12 WP4c Phase 2 — found while verifying the ledger's own close condition)
-- **Target level:** product:arch (the `#[allow(dead_code)]` ledger discipline, `config_store/mod.rs` + `session_state/mod.rs:47`)
-- **Type:** gap (a guard whose failure mode its own gate cannot detect)
-- **Summary:** `read_default_drive_mode` kept its `#[allow(dead_code)]` for an entire WP **after** its named consumer landed. WP4b Phase 2 wired the real caller (`resolve_cc_spawn_env` in `cc_session/mod.rs`, production code on the CC spawn path) but did not remove the attribute, so the fn read as *"not called yet"* while being load-bearing for the whole drive-mode signal. Removed at WP4c Phase 2; `clippy --all-targets -- -D warnings` now passes with **zero** such attributes in the module.
-- **Context:** ⚠️ **The ledger's close condition cannot detect this class of staleness, by construction.** The stated condition is *"clippy passing with the attribute absent"* — but a **stale** attribute suppresses exactly the warning that would flag it, so clippy passes just as happily *with* it present. Nothing fails; the attribute simply misinforms the next reader, and each WP that reads it as accurate inherits a slightly wronger map. ⚠️ **The near-miss worth recording:** WP4c's own ledger rewrite declared *both* items retired "as named" — which was true of the one being worked on and **false** of this one. Had the header not been re-read against the actual attribute count (`grep -c` returned 6 where prose implied 0), the closed-ledger note would have shipped as a documented lie about the exact thing it exists to track. The prose was written from intent; the count came from the file. ⚠️ Note this is a **fourth** distinct instance of the milestone's recurring shape — *a mechanism that is correct in itself sitting behind a caller/record that does not honor it* — after `pendingRestore`'s undispatched `"reset"`, `shouldJump`'s self-poisoning guard, and the doc comment citing a nonexistent test.
-- **Suggested action:** Make the ledger's close condition **mechanically checkable rather than clippy-dependent**: a test (or `check-structure.sh` arm) asserting that every `#[allow(dead_code)]` in the crate is accompanied by a named-consumer comment **and** that the named consumer does not yet exist — inverting it so a *satisfied* attribution fails the build. Cheaper interim: whenever a ledger entry's named consumer lands, delete the attribute **in that same commit** (the discipline WP4c applied to `set_default_drive_mode` and WP4b omitted here), and verify with `grep -c '#\[allow(dead_code)\]'` rather than by reading the prose. ⚠️ Related: `[[rustdoc-link-to-a-nonexistent-test-fails-no-gate]]` is the same family — a claim in a comment that no gate checks.
-- **Priority:** medium (no live defect — the code is correct and now the attributes are accurate; the cost is that the ledger discipline this repo relies on has a blind spot in the direction of false reassurance, and it already produced one stale record)
-- **Status:** resolved-in-flight for the two `config_store` items (both attributes now absent, clippy green); **the mechanical-check suggestion above remains open**
-
 ## SURFACE-2026-08-10-SCROLLWIDTH-IS-BLIND-TO-SUBPIXEL-TEXT-CLIPPING
 - **Source:** feature:build (M12 WP4c Phase 1/P1.5 — two different `scrollWidth` failures in one phase)
 - **Target level:** product:arch (the bridge-caveat chain in `CLAUDE.md` — the `[[xterm-dom-reads-fake-a-blank-pane]]` family)
@@ -141,12 +131,6 @@
 - **Priority:** medium (2 MAJOR) + low (3 MINOR)
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12); **partially resolved** — the relaunch re-fire is closed, the rest is open
 - **Pickup shape:** the five remaining findings are mechanical single-line edits. ⚠️ **Note the resolved item did NOT take the fix its own entry preferred:** it asked for the two arms' consume-once guarantees to be made *symmetric*, and symmetry was rejected on evidence — clearing `pending_action` on the record needs a child→parent callback that StrictMode's discarded first mount would fire, suppressing the injection entirely. The asymmetry is now documented at the field rather than removed. A future reader "restoring symmetry" would re-break the feature.
-
-## Code-quality findings — m12-wp2-unclean-flag-lifecycle (2026-08-03)
-- **Pointer:** 1 MAJOR deferred with reason — ten `#[allow(dead_code)]` attributes survive at WP2 close against the module's own stated retirement rule. Full finding in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp2-unclean-flag-lifecycle — 2026-08-03`. (The review's CRITICAL and all 3 MINORs were FIXED in refactor, not backlogged; the CRITICAL's residual product question is its own item, `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`.)
-- **Priority:** medium
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
-- **Pickup shape:** at WP3 close, re-run `cargo clippy --all-targets` with the attributes removed; whatever still warns has no consumer and should be `#[cfg(test)]`-gated or deleted.
 
 ## SURFACE-2026-08-05-CONTINUE-LANDS-ON-INTENDED-CONVERSATION-UNVERIFIED
 - **Source:** feature:acceptance-pass (M12 WP3, post-review whole-feature pass 2026-08-05)
@@ -817,16 +801,6 @@
 - **Suggested action:** Merge into one `**Use timeout:**` + one chronological `**History:**` block. One-line cleanup, no behavior change — good candidate for a backlog-paydown sweep or any task already touching `runtimes.md`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-
-## SURFACE-2026-08-01-PROJECT-GET-DEFAULT-MODEL-NOW-DEAD-CODE
-- **Source:** task:act (M11.5 repair (B), the picker N+1 removal)
-- **Target level:** product:wbs
-- **Type:** tech-debt
-- **Summary:** Removing the picker's per-row read left **`project_get_default_model` (Tauri command) and `getProjectDefaultModel` (TS wrapper) with zero callers.** Verified repo-wide: the only remaining references are the command's own registration (`lib.rs:408`), its definition (`config_store/commands.rs:175`), the wrapper's definition (`cc/modelOverrideIpc.ts:33`), and one test asserting the cell does *not* import it.
-- **Context:** ⚠️ **This corrects a premise the repair's own plan asserted.** The plan scoped removal out on the grounds that the command is "still the right read for `SessionRegistry::spawn`" — that is **false**. The spawn path calls the **Rust function** `config_store::read_default_model` directly (`cc_session/mod.rs:797`), never the IPC command. The command existed solely to serve the frontend cell that no longer reads. So nothing on either side of the IPC boundary needs it. Left in place deliberately rather than removed mid-task: deleting a registered Tauri command is a stringly-typed FE/BE binding change that wants its own sweep + smoke-launch (`[[tauri-command-removal-needs-invoke-sweep]]`), and bundling it into an N+1 fix would mix a perf repair with an API-surface removal.
-- **Suggested action:** Delete `project_get_default_model` from `lib.rs`'s invoke handler + `config_store/commands.rs`, and `getProjectDefaultModel` from `cc/modelOverrideIpc.ts`; keep the Rust `read_default_model` (the spawn path's real dependency). Then run the invoke-sweep + a runtime smoke-launch per the memory above. Cheap and self-contained; good candidate for any picker- or config-adjacent pass. **Or** consciously keep it as a supported read API and say so in a comment — the current state (registered, exported, uncalled) is the only outcome that is *accidental*.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*
 
 ## SURFACE-2026-08-01-NOTHING-ENFORCES-FORMAT-CHECK
 - **Source:** task:plan (M11.5 repair (A) — `format:check` red on `main`)

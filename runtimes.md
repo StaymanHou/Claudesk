@@ -178,12 +178,31 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 - **History:**
   - <1s — 2026-08-04
 
+## cargo test --test stale_dead_code_allows -- --ignored
+
+The stale-`#[allow(dead_code)]` guard (paydown WP1, 2026-08-12). `#[ignore]`d because it shells out
+to its own `cargo check` with `RUSTFLAGS="--force-warn dead_code"` — run it explicitly in the
+per-phase verify-auto gate, alongside `clippy --all-targets`.
+
+⚠️ First run after any change to the crate's non-test sources pays a **full recompile into a
+separate target dir** (`target/force-warn-dead-code`, kept distinct so it does not invalidate the
+ordinary build's cache — the two use different `RUSTFLAGS`). Warm runs are ~1s.
+
+- **Last:** 33s cold / 0.65s warm (2026-08-12, paydown WP1: 9 attributes, all accurate → pass;
+  mutation-proven by adding a stale attribute above `read_default_model`, which failed it and
+  named `src/config_store/mod.rs:220`)
+- **Use timeout:** 120000
+- **History:**
+  - 33s cold / 0.65s warm — 2026-08-12
+
 ## cargo test
 
-- **Last:** 14s wall / 4.80s warm exec (2026-08-12, M12 WP5 Phase 1-3 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP5 is frontend-only so far, so this run's job is attribution — the count matches WP4d exactly, confirming the guard work is inert to Rust)
+- **Last:** 12s wall / 4.04s warm exec (2026-08-12, paydown WP1 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail, **+1 ignored**. Deleting the callerless `project_get_default_model` command left the lib count **unchanged at 823** — the right result, since no test drove it; that is the attribution. The new ignored test is `stale_dead_code_allows`, which is opt-in because it runs its own `cargo check`)
+- **Prior:** 14s wall / 4.80s warm exec (2026-08-12, M12 WP5 Phase 1-3 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP5 is frontend-only so far, so this run's job is attribution — the count matches WP4d exactly, confirming the guard work is inert to Rust)
 - **Prior:** 8s wall / 4.30s warm exec (2026-08-11, M12 WP4d verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP4d touched no Rust at all, so this run's only job is attribution — the count matches WP4c's post-review close, confirming the doc edits are inert)
 - **Use timeout:** 510000
 - **History:**
+  - 12s — 2026-08-12
   - 14s — 2026-08-12
   - 8s wall / 4.30s exec — 2026-08-11 (840 total; WP4d doc-only — run purely to prove inertness)
   - 7s wall / 3.84s exec — 2026-08-10 (838 total, unchanged; WP4c Phase 1 baseline — CSS-only change, run purely to fix attribution)

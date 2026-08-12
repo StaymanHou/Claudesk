@@ -12,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
 use super::{
-    add_or_touch, prune_missing, read_default_model, read_projects, remove as remove_project_inner,
+    add_or_touch, prune_missing, read_projects, remove as remove_project_inner,
     set_default_drive_mode, set_default_model, DriveMode, Project, PROJECTS_FILE,
 };
 
@@ -168,14 +168,14 @@ pub fn prune_missing_projects(app: AppHandle) -> Result<Vec<Project>, String> {
     prune_missing(&dir).map_err(|e| e.to_string())
 }
 
-/// Read a project's per-project CC model override (M11.5 WP1). `None` = the project
-/// inherits CC's own default model — which is also the answer for an unknown path, so a
-/// caller can seed its control without special-casing a missing record.
-#[tauri::command]
-pub fn project_get_default_model(app: AppHandle, path: String) -> Result<Option<String>, String> {
-    let dir = resolve_data_dir(&app)?;
-    read_default_model(&dir, Path::new(&path)).map_err(|e| e.to_string())
-}
+// ⚠️ NO `project_get_default_model` command — deleted at the 2026-08-12 paydown sweep.
+//
+// It read a project's model override over IPC. The M11.5 repair (B) that removed the picker's
+// per-row N+1 took its last caller: `default_model` now ships on the project-list payload and
+// seeds each row's cell directly. The command stayed registered, callerless, for two milestones.
+//
+// ⚠️ Re-adding a per-project read command re-opens the N+1. `read_default_model` itself is NOT
+// dead and is deliberately not on the IPC surface — `cc_session` calls it in-process at spawn.
 
 /// Set (`Some`) or clear (`None`) a project's CC model override.
 ///
