@@ -2,7 +2,8 @@
 stage: wbs
 state: complete
 milestone: "Milestone 12: Smart auto-resume + drive mode"
-updated: 2026-08-11  # ▶ WP4d (doc corrections) SHIPPED — the durable docs now describe what shipped. 10 sites corrected, NOT the 5 the task list named: the sweep found the DISPROVEN three-branch auto-resume table + both dead command names (`/session-pause`, `/session-resume`) still standing as LIVE DESIGN in vision.md:40/45/49, plus 2 stale roadmap facts (:4's "5 places still say header", :286's "never read or written"). Success metric 5 was UNSATISFIABLE (required the mode in the workspace header) and is now satisfiable for the first time. The rejected WIP-frontmatter mirror replaced by the signal in both vision.md + roadmap.md; Core Principle 2's arrow was BACKWARDS (Claudesk reads the workflow's world, it does not write it); the roadmap's "never a live `<select>`" rule reconciled with the as-built select (correctness reason: a bad mode string fails serde on read and takes the whole project list down); arch.md records the hook channel as BIDIRECTIONAL. ⚠️ The WBS's cited `arch.md:262` "one-directional" string DOES NOT EXIST — the claim was implicit. ⚠️ A scope list of known-wrong places is a FLOOR, not a boundary — 4d.2b's own rule caught the 5 extra sites on its first use. Docs-only: 1981 frontend / 840 Rust identity-unchanged; verify-codify N/A by reasoned scope. Next: WP5 (exit verify + the guard's 4th arm; ⚠️ task 5.5's target MOVED — the exit criterion now reads "the signal reaches CC", not "the mode is persisted").
+updated: 2026-08-12  # ⭐ WP5 (milestone-exit verify + the OFF-invariant guard's FOURTH ARM) SHIPPED — **M12 EXIT VERDICT: GO, all 8 WPs closed**, operator-approved at verify-human 2026-08-12. Verified against the exit criterion as WP4d rewrote it — "the signal REACHES CC", not "the mode is persisted" (a persisted mode already existed and was already ignored 74% of the time, so checking persistence would pass while measuring the wrong thing). Live: 3 prediction states on ONE picker, the ⊘ door opening without firing, consume-once proven by state change (announce → clean close → key removed → announces nothing), `CLAUDESK_DRIVE_MODE=autopilot` in the spawned CC's REAL process env, the variable ABSENT (not empty) on two unset spawns, and ~/.claude/ byte-identical around EACH toggle (never a relaunch). ⚠️ THE BEST LIVE RESULT: with the gate OFF the picker showed **3 announcements, all `↻ continue`** — the gated `/session-restore` rows collapsed while the ungated `--continue` rows survived, i.e. the PER-ARM gate observed in the running app. WP5 was NOT verification-only: it built the guard's 4th arm (14→19 tests, all 5 arms probed INDIVIDUALLY, every mutation confirmed in executable code) and closed the CSS↔component contract's missing direction, mutation-proven both ways. ⚠️ 3 findings banked: an INVALID PROBE AND A REAL GUARD HOLE PRESENT IDENTICALLY (the first chord probe passed 19/19 because `panelHost.ts` merely MENTIONS the seam and is thereby exempt wholesale — filed, not fixed); a test comment credited coverage to a "verify-auto className→CSS sweep" that DOES NOT EXIST, so a direction sat open for two WPs while reading as closed (an ad-hoc run is evidence about one moment, only a standing test is coverage); and the 5.5 doc sweep again found a site the task list did not name (`roadmap.md:58` described `.session.md` in the PRESENT TENSE via `/session-pause`+`/session-resume`, dead since M9 WP5) — the second consecutive WP where doc-correction-scope-list-is-a-floor earned its keep. Limits stated: 5.7's INTERACTIVE negative arm was accepted on mechanism evidence by OPERATOR DECISION (the gate is by absence, so the skill cannot differ — but the plain-terminal menu was not eyeballed), and long-context durability remains ASSUMED. Next: /product-finalize (M12 close) → M13.
+# Prior: 2026-08-11  # ▶ WP4d (doc corrections) SHIPPED — the durable docs now describe what shipped. 10 sites corrected, NOT the 5 the task list named: the sweep found the DISPROVEN three-branch auto-resume table + both dead command names (`/session-pause`, `/session-resume`) still standing as LIVE DESIGN in vision.md:40/45/49, plus 2 stale roadmap facts (:4's "5 places still say header", :286's "never read or written"). Success metric 5 was UNSATISFIABLE (required the mode in the workspace header) and is now satisfiable for the first time. The rejected WIP-frontmatter mirror replaced by the signal in both vision.md + roadmap.md; Core Principle 2's arrow was BACKWARDS (Claudesk reads the workflow's world, it does not write it); the roadmap's "never a live `<select>`" rule reconciled with the as-built select (correctness reason: a bad mode string fails serde on read and takes the whole project list down); arch.md records the hook channel as BIDIRECTIONAL. ⚠️ The WBS's cited `arch.md:262` "one-directional" string DOES NOT EXIST — the claim was implicit. ⚠️ A scope list of known-wrong places is a FLOOR, not a boundary — 4d.2b's own rule caught the 5 extra sites on its first use. Docs-only: 1981 frontend / 840 Rust identity-unchanged; verify-codify N/A by reasoned scope. Next: WP5 (exit verify + the guard's 4th arm; ⚠️ task 5.5's target MOVED — the exit criterion now reads "the signal reaches CC", not "the mode is persisted").
 # Prior: 2026-08-10  # ▶ WP4c (the picker-row drive-mode cell) SHIPPED — a mode can now be SET, which is what made WP4b's signal reachable at all. Two lines inside the EXISTING model column (Verdict (f) Option 2, `PICKER_ROW_CELLS` untouched), native `<select>` for the closed 4-value set, per-line hit regions on the WP3 `⊘` discipline, one writer for both values, gate-OFF ⇒ the mode line does not exist. Proven end to end live: cell → `projects.json` → `CLAUDESK_DRIVE_MODE` in the spawned CC's real process env (`ps eww`) → the `UserPromptSubmit` hook; negative arm (cleared ⇒ var absent) asserted just as hard. ⚠️ The column is `9.8em`, NOT the `9.61em` arithmetic gives, and Verdict (f)'s "~101px usable" was a unit error — box math for this column was wrong THREE separate ways, each caught only by measuring the live DOM. ⚠️ Code review found a LIVE layout regression no gate could see: the `<button>`→`<div>` conversion orphaned a CSS rule carrying real behavior, because every CSS guard here reads one side of the CSS↔component contract. Fixed + guarded. ⚠️ verify-human was wrongly skipped as an inferred "waiver" and then actually performed at the operator's catch — a pacing instruction is not a gate waiver (filed HIGH). Next: WP4d (doc corrections) → WP5 (exit verify + the guard's 4th arm, which now has a new hole to close).
 # Prior: 2026-08-07  # ▶ WP4b (the drive-mode signal) SHIPPED — the mechanism is LIVE and PROVEN END TO END: a real CC turn in a Claudesk-spawned workspace answered `fsd`, the exact stamped mode (a value absent from that project and no documented default, so only the signal explains it). 4 phases: DriveMode vocabulary fixed (`stepping`/`fsd`) + per-project store activated → `CLAUDESK_DRIVE_MODE` on the CC spawn, fail-closed gated, isolated from the login shell → the hook emission + exact-match allowlist (the hook channel is BIDIRECTIONAL for the first time) → 5 mutants proven individually + a cross-language caller assertion. ⚠️ NOT COMMITTED at finalize — operator has not requested a commit. ⚠️ Code review found 3 MAJOR, all backlogged: the env var inherits to ALL DESCENDANTS (confirmed empirically — a nested `claude` fires the hook with the parent workspace's mode; undecided, not a defect), `shell_spawn_env`'s test asserts the primitive not the caller, and incident-narrative comments are triple-recorded. ⚠️ Long-context durability remains ASSUMED, not proven — validated by dogfooding per the operator's WP4a call. Next: WP4c (picker cell) → WP4d (doc corrections) → WP5 (exit verify + the guard's 4th arm, which owns WP4c's surface — WP4b is deliberately outside the guard, measured).  # ⚠️ WP4 RE-DECOMPOSED into WP4a–WP4d (`/product-wbs` back-loop) — the original WP4 was invalidated on all four of its claims. It is NOT "clone `default_model`'s path" (that path ends in argv; drive mode has no argv destination and no CLI flag), NOT near-zero-unknown (the whole delivery mechanism was missing), NOT an independent parallel track (it consumes WP3's spawn path), and its task 4.4 targeted `.session.md` + WIP frontmatter — files that are DELETED at `/session-restore` step 7 and ARCHIVED at finalize, i.e. absent at the exact moment a new WP starts. ⚠️ THE DELIVERABLE IS A SIGNAL, NOT A STORE: a persisted `drive_mode` already exists in 93% of manual restores and is already ignored 74% of the time, so storing it somewhere new does nothing. Mechanism PROVEN LIVE 2026-08-06 — an env-var-gated `UserPromptSubmit` hook returning `additionalContext` makes the REAL `/session-restore` skip the mode menu (absent var → menu + `S15`; present → no menu, pointer consumed). Zero companion-repo change; `/session-restore`'s re-prompt is CORRECT for a CLI user and must NOT be changed (operator). ⚠️ Long-context durability is ASSUMED, not proven — validated by dogfooding, deliberately not by a synthetic probe. Measured pain: 524 manual opens, 82% got the menu, ~7.2×/day, 99% of replies bundle the mode word with the work instruction. The manual `/session-start` arm is DEFERRED to the backlog.
 # Prior: 2026-08-05  # ✅ WP3 SHIPPED (`80b82a1`; review `ba875df`; acceptance pass `119373b`) — auto-fire is live end-to-end: the picker announces the predicted command before you click, the row fires it on open, a `⊘` second door opens without firing, `/session-start` is never auto-fired but is one click away in the workspace header, and the already-open indicator gives WP2's ⏸ its read-back. ⚠️ **Arm 1 is the `--continue` CLI FLAG, not `/resume`** — a bare `/resume` opens an interactive picker (Phase 1 probe); every `/resume` reference in this doc was corrected 2026-08-05. ⚠️ The `⊘` shipped NESTED-and-defended, not sibling — see the STRUCTURAL note. ⚠️ The gate applies PER ARM: `--continue` ungated (serves every CC user), `/session-restore` gated. Remaining: WP4 (drive-mode cell, parallel track) → WP5 (exit verify + the guard's 4th arm).
@@ -802,19 +803,19 @@ must describe what shipped, before the exit criteria can be verified against the
 **Dependencies:** WP1–WP3, WP4a–WP4d
 **Size:** M
 **Tasks:**
-- [ ] 5.1 **Extend the OFF-invariant guard with a fourth arm** covering M12's surfaces (a picker cell + a spawn-time action are neither panel, menu id, nor chord). The guard's own header (`:33-36`) requires this as part of the work. Assert the **computed OFF-state value**, mirroring how M11 extended the panel arm to `availablePanels(false)` rather than a static array.
-- [ ] 5.2 **Probe each guard arm INDIVIDUALLY** — never with one composite bypass. M10.9's proven method: a composite tripping *some* arm reports "the guard bites" while hiding a gap, which is exactly how the `panelHost.ts` hole was found. ⚠️ And per `[[verify-the-mutation-landed]]`, confirm each mutation changed *executable code* before believing a pass — two attempts in one session reported "the guard does not bite" having modified nothing.
-- [ ] 5.3 Drive the exit criteria live via the MCP bridge on `tmp/scratch/scratch-*` (mandatory once a check spawns a CC session): each of the three prediction states, both doors, the flag surviving a hard kill, and consume-once.
-- [ ] 5.4 Verify **enable AND disable each leave `~/.claude/` byte-identical**. ⚠️ **Hash around each TOGGLE, never around a relaunch** — `hook_install` legitimately rewrites `~/.claude/settings.json` at launch and is universal; a relaunch-spanning hash false-positives on it and looks like the milestone's invariant failing.
-- [ ] 5.5 Confirm the vision/roadmap corrections from **WP4d** landed, and that success metric 5 now reads consistently with the shipped placement.
-- [ ] 5.6 Record the exit verdict + an evidence table in "Probe outcomes".
-- [ ] 5.7 **Verify the drive-mode signal end-to-end on the real app, BOTH arms.** Open a Claudesk
+- [x] 5.1 **Extend the OFF-invariant guard with a fourth arm** covering M12's surfaces (a picker cell + a spawn-time action are neither panel, menu id, nor chord). The guard's own header (`:33-36`) requires this as part of the work. Assert the **computed OFF-state value**, mirroring how M11 extended the panel arm to `availablePanels(false)` rather than a static array.
+- [x] 5.2 **Probe each guard arm INDIVIDUALLY** — never with one composite bypass. M10.9's proven method: a composite tripping *some* arm reports "the guard bites" while hiding a gap, which is exactly how the `panelHost.ts` hole was found. ⚠️ And per `[[verify-the-mutation-landed]]`, confirm each mutation changed *executable code* before believing a pass — two attempts in one session reported "the guard does not bite" having modified nothing.
+- [x] 5.3 Drive the exit criteria live via the MCP bridge on `tmp/scratch/scratch-*` (mandatory once a check spawns a CC session): each of the three prediction states, both doors, the flag surviving a hard kill, and consume-once.
+- [x] 5.4 Verify **enable AND disable each leave `~/.claude/` byte-identical**. ⚠️ **Hash around each TOGGLE, never around a relaunch** — `hook_install` legitimately rewrites `~/.claude/settings.json` at launch and is universal; a relaunch-spanning hash false-positives on it and looks like the milestone's invariant failing.
+- [x] 5.5 Confirm the vision/roadmap corrections from **WP4d** landed, and that success metric 5 now reads consistently with the shipped placement.
+- [x] 5.6 Record the exit verdict + an evidence table in "Probe outcomes".
+- [x] 5.7 **Verify the drive-mode signal end-to-end on the real app, BOTH arms.** Open a Claudesk
   workspace with a mode set → the menu does not appear; run `claude` in the **same directory from a
   plain terminal** → the menu **does** appear. ⚠️ The negative arm is the load-bearing one: it is the
   operator's stated constraint (*"`/session-restore` should behave as-is if used without Claudesk"*),
   and a check that only drives the Claudesk arm cannot distinguish "correctly inert" from "broken for
   everyone". Run both in the same session, as WP2's hard-kill case did.
-- [ ] 5.8 **Confirm the `~/.claude/` byte-identity check still holds with the new hook emission.** 5.4
+- [x] 5.8 **Confirm the `~/.claude/` byte-identity check still holds with the new hook emission.** 5.4
   hashes around each *toggle*; the signal adds a per-turn stdout write, which must not alter
   `settings.json` at all. ⚠️ **WP4a DID choose the shared script** (Verdict (c), operator-approved — this conditional is now always true): re-run 5.4 with particular care — the
   contract change touches all 10 events.
@@ -845,7 +846,7 @@ WP4c (the picker-row cell — metric 5's "always visible")
 WP4d (doc corrections + the M13 hand-off note)
  │
  ▼
-WP5 (exit verify + the guard's 4th arm)
+WP5 ✅ (exit verify + the guard's 4th arm)   ◀── M12 MILESTONE EXIT: **GO** 2026-08-12
 ```
 
 **Critical path:** WP1 → WP2 → WP3 → **WP4a → WP4b → WP4c → WP4d** → WP5. ⚠️ **There is no longer a
@@ -884,7 +885,82 @@ the familiar end will be mis-sized.
 
 ## Probe outcomes
 
-*(WP5's exit verdict lands here.)*
+### ⭐ M12 MILESTONE EXIT VERDICT: **GO** (WP5, 2026-08-12)
+
+**All 8 work packages closed** (WP1 → WP2 → WP3 → WP4a → WP4b → WP4c → WP4d → WP5). Operator
+approved at `verify-human` 2026-08-12 ("matches expectations"). M12 is ready for
+`/product-finalize`.
+
+**Verified against the exit criterion as WP4d rewrote it — *the signal reaches CC*, NOT *the mode
+is persisted*.** That distinction is the milestone: a persisted `drive_mode` already existed on disk
+in 93% of manual restores and was already ignored 74% of the time, so a check that confirmed
+persistence would have passed while measuring the wrong thing.
+
+#### Evidence table
+
+| Exit criterion | Evidence | Verdict |
+|---|---|---|
+| Workspace open fires the right resumption command without manual selection | 3 prediction states live **on one picker simultaneously**; row click on `scratch-a` → `claude … --continue` in argv | ✅ |
+| …and **announces it beforehand** | `↻ continue` / `↻ /session-restore` / silent, per row; `⊘` door present **only** where an action is predicted | ✅ |
+| The `⊘` second door opens **without** firing | `⊘` on `scratch-c` (announcing `↻ continue`) → spawn had **no `--continue`**, kept its `--model opus`; door hit-tests to **itself** | ✅ |
+| Fires **at most once** per unclean exit | `scratch-a`: announced → filmstrip `×` (clean route) → key **removed** from `session-state.json` → re-open announces **nothing**; `scratch-b` unaffected | ✅ |
+| Drive mode **visible on the picker row**, one click to change | All 4 `cellLines` states rendered live, incl. the mixed row (`opus` / `Drive Mode: None`) | ✅ |
+| **The mode REACHES the CC session** | `CLAUDESK_DRIVE_MODE=autopilot` in the spawned CC's **real process env** (`ps eww`) — cell → `projects.json` → env → `UserPromptSubmit` hook | ✅ |
+| Negative arm: cleared ⇒ variable **absent, not empty** | **0 occurrences** on two independent spawns whose projects had no mode set | ✅ |
+| Gate OFF ⇒ no workflow surface exists | drive-mode lines **0**, mode `<select>` **0**, Docs tab **0**; model line survives and renders **unprefixed** (`Default`, not `Model: Default`) | ✅ |
+| **Per-arm** gate (the subtle one) | Gate OFF: **3 announcements, all `↻ continue`** — the two `/session-restore` rows collapsed, the ungated `--continue` rows survived | ✅ |
+| Enable **and** disable each leave `~/.claude/` byte-identical | Hashed around **each toggle** (never a relaunch): identical both ways; symlinks 60 → 60; `settings.json` `04f5614c…` throughout | ✅ |
+| The bidirectional hook's per-turn stdout write alters `settings.json` not at all (5.8) | Same hash across both toggles **and** 3 live CC spawns that fired the hook, on all 10 registered events | ✅ |
+| The OFF-invariant guard gained a **fourth arm** and still bites | 14 → **19** tests; all 5 arms probed **individually**, every mutation confirmed in executable code | ✅ |
+| Docs describe what shipped (5.5) | Exit criterion reads *"reaches the CC session"*; metric 5 reads against the **picker row** and is satisfiable for the first time | ✅ |
+
+#### What WP5 built (it was not verification-only)
+
+1. **The guard's fourth arm — the ROW-CELL registry** (`cellLines(…,false,…)` +
+   `rowAffordances(…,false)`), asserting the **computed** OFF-state value as M11's precedent
+   requires. ⚠️ **Two assertions, not one, and that is load-bearing:** the gated `inject` arm must
+   collapse **and** the ungated `argv` arm must survive. A collapse-only arm passes today and would
+   be *satisfied* by someone gating `--continue` — silently removing a feature from every
+   non-workflow Claude Code user, reported as compliance. Probe P2.2 exists precisely to mutate
+   correct code into that plausible "tighten the gate" change; the guard catches it.
+2. **The CSS↔component contract's missing direction** (emitted-but-never-styled), mutation-proven
+   both ways, narrowing `SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`
+   to its repo-wide remainder.
+
+#### ⚠️ Three findings a future reader must not re-derive
+
+- **An invalid probe and a real guard hole present IDENTICALLY.** P2.3c's first attempt placed an
+  ungated workflow chord in `panelHost.ts`; the guard passed 19/19, which reads exactly like the
+  M10.9 basename hole having reopened. It had not — `isUngatedWorkflowChord` exempts any module
+  that *mentions* the seam, and `panelHost.ts` legitimately does. Re-run in a non-seam module it
+  failed correctly. **But the exemption is real and coarser than intended** →
+  `SURFACE-2026-08-12-CHORD-ARM-GATE-EXEMPTION-IS-WHOLE-MODULE` (medium, deliberately not fixed
+  here — a per-export gate-proximity predicate is its own design problem).
+- **A test comment credited coverage to a sweep that does not exist.**
+  `projectModelCellRender.test.tsx` said the inverse CSS direction was *"covered by verify-auto's
+  className→CSS sweep"*; no such standing gate exists, so the direction sat open for two WPs while
+  reading as closed. Same family as `[[rustdoc-link-to-a-nonexistent-test-fails-no-gate]]`, but it
+  cost **coverage**, not just accuracy → `SURFACE-2026-08-12-A-COMMENT-CREDITED-COVERAGE-TO-A-SWEEP-THAT-DOES-NOT-EXIST`.
+  **An ad-hoc verification run is evidence about one moment; only a standing test is coverage.**
+- **The doc sweep found a site the task list did not name — again.** 5.5 was "dischargeable by
+  reading", yet a repo-wide grep of the *retracted claims* (not just WP4d's site list) found
+  `roadmap.md:58` still describing `.session.md` as *"created by `/session-pause` and deleted by
+  `/session-resume`"* — **in the present tense**, with two commands that have not existed since M9
+  WP5. Corrected. This is the **second consecutive WP** where `[[doc-correction-scope-list-is-a-floor]]`
+  earned its keep on first use.
+
+#### Limits of this verdict (stated, not buried)
+
+- **5.7's interactive negative arm was accepted on mechanism evidence by OPERATOR DECISION**, not
+  driven: the agent proved `CLAUDESK_DRIVE_MODE` is absent outside a Claudesk spawn (two
+  independent processes) and stated plainly that it could not drive an interactive
+  `/session-restore` menu in a real terminal. Since the gate is **by absence**, the skill cannot
+  behave differently — but the menu itself was not eyeballed outside Claudesk.
+- **Long-context durability of per-turn re-injection remains ASSUMED**, unchanged from WP4a's
+  operator call. Both live proofs were short, cold contexts. Validated by dogfooding.
+- The guard remains a **source- and registry-level** invariant, never a binary diff, and its scope
+  is deliberately the **frontend** registries (WP4b's Rust/Perl surfaces are gated Rust-side).
+
 
 ### Verdict (a) — the unclean flag's store and serialized shape (WP1 Phase 1, 2026-08-03)
 

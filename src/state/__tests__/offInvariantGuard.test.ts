@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { availablePanels } from "../../components/workspace/panelHost";
 import { MENU_IDS } from "../../menu/menuBridge";
+import { cellLines } from "../../cc/driveMode";
+import { rowAffordances } from "../../components/picker/announceRow";
+import type { AnnounceMap } from "../predictAction";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // M10.9 WP2 — THE OFF-INVARIANT GUARD (WP2's load-bearing deliverable).
@@ -31,9 +34,19 @@ import { MENU_IDS } from "../../menu/menuBridge";
 //         setting directly.
 // CANNOT: byte-identity of a compiled build. This is a source- and registry-level
 //         invariant, not a binary diff. A surface rendered through a channel this
-//         test does not enumerate would slip past. The mitigation: the three
-//         registries below are the only ways this app surfaces UI today, and adding
-//         a fourth should extend this guard as part of that work.
+//         test does not enumerate would slip past. The mitigation: the registries
+//         below are the only ways this app surfaces UI today, and adding another one
+//         should extend this guard as part of that work.
+//
+// ── THE FOUR REGISTRIES (the fourth added at M12 WP5) ─────────────────────────
+//   1. PANEL      — `availablePanels(false)`, the right-panel tab set
+//   2. MENU ID    — `MENU_IDS`, the native app menu
+//   3. CHORD      — modules exporting a `*Chord*` identifier
+//   4. ROW-CELL   — the picker row's per-project cells: `cellLines(…, false, …)` and
+//                   `rowAffordances(…, false)`. Added at M12 WP5 because M12's surfaces
+//                   (a picker cell + a spawn-time action) are none of the first three,
+//                   and this header's own rule above required extending the guard as
+//                   part of that work.
 //
 // ── WHEN M11 LANDS ────────────────────────────────────────────────────────────
 // M11's Docs tab MUST NOT appear in the static AVAILABLE_PANELS array. It must be
@@ -64,6 +77,24 @@ import { MENU_IDS } from "../../menu/menuBridge";
 // The lesson generalizing both: this guard's scope is the FRONTEND registries. A
 // backend-only feature being absent from it is not a hole — but that has to be written
 // down, or the next reader re-derives it and reasonably concludes the guard is broken.
+//
+// ── ⚠️ M12 WP5 BUILT THE FOURTH ARM, AND THE GATE IS PER-ARM ──────────────────
+// The obvious phrasing of a fourth arm — "nothing M12 surfaces while the gate is OFF" —
+// is WRONG, and would go red on correct code. M12's auto-resume gate applies **per arm**
+// (operator decision 2026-08-05, `announceRow.ts`'s `armAvailable`):
+//
+//   `{kind:"argv"}`   `--continue`        reads Claudesk's OWN store   → UNGATED
+//   `{kind:"inject"}` `/session-restore`  reads `workflow-system/`     → GATED
+//
+// So the arm asserts BOTH directions: the gated arm collapses while OFF, and the ungated
+// arm SURVIVES while OFF. An arm that only checked "collapses" would pass while being
+// over-broad, and the first person to widen it would silently break a feature that
+// serves every Claude Code user. This is why the arm below is two assertions, not one.
+//
+// Also deliberately NOT demanded by the arm: `predictAction.ts` and `autoResumeFire.ts`
+// are not gate consumers, and must not become ones. The gate is applied one layer up at
+// `rowAffordances`. Recorded so the arm is not "satisfied" by wiring a gate where none
+// belongs.
 //
 // ── ARM SELECTION IS BY CONTENT, NOT FILENAME (M11.5 WP4) ─────────────────────
 // The chord arm originally selected candidates by BASENAME and provably missed
@@ -256,6 +287,120 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
       offenders,
       "these chord modules look workflow-coupled but are not gated behind the seam",
     ).toEqual([]);
+  });
+
+  // ── ARM 4: THE PICKER ROW'S PER-PROJECT CELLS (M12 WP5) ────────────────────
+  // M12 surfaced UI through a channel the first three arms do not enumerate: the picker
+  // row. Two derivations own the OFF-state shape, and both are asserted as COMPUTED
+  // VALUES — the same discipline M11 applied when it made the panel arm read
+  // `availablePanels(false)` instead of a static array. A future gated row surface that
+  // forgets its gate lands in one of these values and is caught here.
+
+  it("renders no workflow line in the OFF-state picker cell", () => {
+    // `cellLines` is the single source of truth for the stacked model/drive-mode cell.
+    // With the gate OFF it must return exactly the pre-M12 shape: ONE line, for the
+    // model, carrying no drive-mode prefix. Not a hidden line, not a disabled line, not
+    // a reserved empty row — absent, per the seam contract.
+    //
+    // Every combination of the two persisted values is checked, because the gate must
+    // win regardless of what is stored: a project with a drive mode already saved (the
+    // realistic case after a user disables the gate) must still render the OFF shape.
+    for (const model of [null, "opus"]) {
+      for (const mode of [null, "autopilot", "fsd"] as const) {
+        const off = cellLines(model, mode, false, "Default");
+
+        expect(
+          off.length,
+          `gate OFF must yield exactly one line (model=${model}, mode=${mode}) — a ` +
+            `second line is a workflow surface existing while the gate is off`,
+        ).toBe(1);
+
+        for (const line of off) {
+          expect(
+            line.kind,
+            `line kind "${line.kind}" is workflow-coupled but present while OFF`,
+          ).toBe("model");
+          expect(
+            namesWorkflowTerm(line.text),
+            `OFF-state line text "${line.text}" names a workflow term — the drive-mode ` +
+              `prefix must not leak into the ungated single-line shape`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("the picker cell is genuinely gate-DERIVED, not a constant that ignores the gate", () => {
+    // Anti-vacuity companion, exactly parallel to the panel arm's. "OFF yields one line"
+    // is satisfied just as well by a derivation that ignores its argument and always
+    // returns one line — in which case the drive-mode line could never appear at all and
+    // the assertion above would guard nothing.
+    const off = cellLines("opus", "autopilot", false, "Default");
+    const on = cellLines("opus", "autopilot", true, "Default");
+
+    expect(
+      on.length,
+      "turning the gate ON must add a line — otherwise the derivation is a constant and " +
+        "the OFF-state assertion above proves nothing",
+    ).toBeGreaterThan(off.length);
+    // ...and the line it adds is the workflow-coupled one (the reverse direction: the
+    // gate must not be smuggling in something unrelated).
+    expect(
+      on.some((l) => l.kind === "driveMode"),
+      "the gate must admit the drive-mode line specifically",
+    ).toBe(true);
+  });
+
+  it("announces no GATED auto-resume arm on an OFF-state picker row", () => {
+    // The `inject` arm promises something about `workflow-system/state/.session.md` — a
+    // file a non-workflow user does not have. While OFF it must collapse COMPLETELY:
+    // no announcement, no `⊘` no-fire door, no action. A rendered-but-inert announcement
+    // would be exactly the "present-but-disabled" shape the seam contract forbids.
+    const path = "/tmp/proj";
+    const announce: AnnounceMap = { [path]: "restore" };
+    const off = rowAffordances(path, announce, false);
+
+    expect(
+      off.announcement,
+      "a gated arm must not announce while the gate is OFF",
+    ).toBeNull();
+    expect(
+      off.showNoFireDoor,
+      "a gated arm must not render its second door while the gate is OFF",
+    ).toBe(false);
+    expect(
+      off.action,
+      "a gated arm must not fire while the gate is OFF",
+    ).toBeNull();
+  });
+
+  it("still announces the UNGATED arm while OFF — the arm must not be over-broad", () => {
+    // ⚠️ THE LOAD-BEARING HALF OF THIS ARM. The `argv` arm (`--continue`) reads
+    // Claudesk's own `session-state.json` and fires a stock Claude Code CLI flag, so it
+    // serves EVERY CC user and is ungated by operator decision (2026-08-05).
+    //
+    // Without this assertion, an over-broad fourth arm — "nothing M12 announces while
+    // OFF" — would pass today and would be *satisfied* by someone gating `--continue`,
+    // silently removing a feature from every non-workflow user. The guard would report
+    // the regression as compliance. So the arm pins the gate's SHAPE, not merely its
+    // restrictiveness.
+    const path = "/tmp/proj";
+    const announce: AnnounceMap = { [path]: "continue" };
+    const off = rowAffordances(path, announce, false);
+
+    expect(
+      off.announcement,
+      "the ungated --continue arm must still announce while the gate is OFF — it reads " +
+        "Claudesk's own store and serves every Claude Code user",
+    ).not.toBeNull();
+    expect(
+      off.action?.kind,
+      "the ungated arm must still fire, as the argv kind",
+    ).toBe("argv");
+    expect(
+      off.showNoFireDoor,
+      "the ungated arm keeps its second door — label and door are one decision",
+    ).toBe(true);
   });
 });
 
@@ -533,6 +678,44 @@ export function isSearchChord(e: { metaKey: boolean; key: string }): boolean {
       namesWorkflowTerm(stripComments(realOffender)),
       "stripping must not swallow executable code — a real workflow chord must still flag",
     ).toBe(true);
+  });
+
+  it("the row-cell arm asserts the REAL derivations, not a local re-implementation", () => {
+    // M12 WP5. The row-cell arm imports `cellLines` and `rowAffordances` from production
+    // and drives them. That is deliberate and it is the property worth pinning: the
+    // failure mode this repo has already paid for four times is a *proven module behind a
+    // caller that ignores it* — and the test-side version of the same mistake is a guard
+    // that re-implements the rule it is checking, inheriting the code's blind spot
+    // (`[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`).
+    //
+    // So: assert the imported functions are the production ones by checking a property
+    // only the real implementations have — the gate flips the shape, and the drive-mode
+    // vocabulary is the closed set the Rust enum serializes to. A stub written to satisfy
+    // the arm above would not survive both.
+    expect(typeof cellLines, "cellLines must be imported, not stubbed").toBe(
+      "function",
+    );
+    expect(
+      typeof rowAffordances,
+      "rowAffordances must be imported, not stubbed",
+    ).toBe("function");
+
+    // The real `cellLines` prefixes the model line only when a value is UNSET and the
+    // gate is ON — a rule no stub would incidentally reproduce.
+    const onUnset = cellLines(null, null, true, "Default");
+    expect(onUnset.map((l) => l.kind)).toEqual(["model", "driveMode"]);
+    expect(onUnset[0].text).toContain("Default");
+    expect(onUnset[0].isUnset).toBe(true);
+
+    // And the real `rowAffordances` derives label and door from ONE decision, so they
+    // agree in both polarities. (Pinned here rather than only in announceRow's own tests
+    // because THIS arm's correctness depends on it: a row that announced without a door
+    // would make the OFF-state assertions above ambiguous.)
+    const path = "/tmp/proj";
+    const announced = rowAffordances(path, { [path]: "continue" }, true);
+    expect(announced.announcement !== null).toBe(announced.showNoFireDoor);
+    const silent = rowAffordances(path, {}, true);
+    expect(silent.announcement !== null).toBe(silent.showNoFireDoor);
   });
 
   it("the matcher fires on real workflow terms", () => {

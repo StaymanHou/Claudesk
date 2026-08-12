@@ -38,6 +38,21 @@ import { ProjectModelCell } from "../ProjectModelCell";
 // byte-identical to the pre-M12 build), and it was otherwise pinned only by a pure-function
 // test plus a live run.
 
+/**
+ * Strip `//`, block, and JSX comments before scanning source text for class names.
+ *
+ * ⚠️ Load-bearing, not tidying — see the call site. A design-prior slug in this cell's own
+ * header (`…-where-the-spawn-is-chosen`) matches `is-chosen` and made the class sweep demand a
+ * CSS rule for a class that appears only in prose. Mirrors `offInvariantGuard.test.ts`'s helper
+ * of the same name, for the same reason.
+ */
+function stripComments(src: string): string {
+  return src
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}
+
 function renderCell(
   props: {
     seedModel?: string | null;
@@ -152,9 +167,20 @@ describe("every CSS class this cell's stylesheet styles is actually emitted", ()
   // behavior) or emitted-but-never-styled (the eleven-undefined-classes CRITICAL of M10.9
   // WP3.5a) with both sides individually green.
   //
-  // This closes the styled-but-never-emitted direction for this cell. The inverse direction is
-  // covered by verify-auto's className→CSS sweep.
+  // This closes the styled-but-never-emitted direction for this cell.
   // (`SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`)
+  //
+  // ⚠️ **CORRECTED at M12 WP5.** This comment used to end "The inverse direction is covered by
+  // verify-auto's className→CSS sweep." **That sweep does not exist as a standing gate** —
+  // checked at WP5: no `package.json` script performs it, and no test in the tree asserts it for
+  // this cell. It was an ad-hoc command run once during a verify-auto pass, which is not the
+  // same thing as coverage, and recording it as coverage is what left the direction open while
+  // reading as closed. The emitted-but-never-styled arm is now a real test, below.
+  //
+  // The two directions fail differently, which is why both are needed: a styled-but-unemitted
+  // class is dead CSS that may carry behavior (the `is-editing` regression); an
+  // emitted-but-unstyled class is a no-op className that silently does nothing (the eleven
+  // undefined classes of M10.9 WP3.5a, which broke the whole Settings panel's layout).
 
   /** Modifier classes the stylesheet defines on the cell or its lines. */
   function styledModifiers(): string[] {
@@ -200,6 +226,74 @@ describe("every CSS class this cell's stylesheet styles is actually emitted", ()
           `Either the component stopped applying it (a dead rule that may be carrying real ` +
           `behavior — this is exactly how the is-editing padding reset was lost) or the rule ` +
           `is stale and should be deleted. Do not "fix" this by deleting the assertion.`,
+      ).toBe(true);
+    }
+  });
+
+  it("styles every class the cell emits — the inverse direction (M12 WP5)", () => {
+    // The other half of the contract. An emitted class the stylesheet never defines is a
+    // no-op className: it looks like a style hook in review, and does nothing. That is the
+    // M10.9 WP3.5a CRITICAL (eleven referenced classes, zero defined, whole-panel overflow),
+    // and it was invisible to every gate for the same structural reason as its mirror image.
+    //
+    // ⚠️ Read from the SOURCE, not only the rendered DOM. Two of this cell's classes are
+    // unreachable in server rendering — `picker-recent-model-input` and
+    // `picker-recent-mode-select` render only mid-edit, and `is-editing` only while the model
+    // input is open. A DOM-only sweep would silently check ~half the surface and pass, which is
+    // precisely the "green means covered" failure this pair of tests exists to prevent.
+    const src = readFileSync(
+      join(
+        process.cwd(),
+        "src",
+        "components",
+        "picker",
+        "ProjectModelCell.tsx",
+      ),
+      "utf8",
+    );
+    const css = readFileSync(join(process.cwd(), "src", "App.css"), "utf8");
+
+    // Every class literal the component actually puts in a `className`, from both plain
+    // strings (`className="x"`) and template fragments (`className={`x${c ? " is-y" : ""}`}`).
+    //
+    // ⚠️ **SCOPED TO className POSITIONS, and comments stripped first. Both narrowings were
+    // forced by real false positives on this guard's first two runs — recorded because each
+    // would have been "fixed" by weakening the assertion:**
+    //  1. A bare namespace sweep matched `picker-recent-mode-line`, which is a **`data-testid`,
+    //     not a class** (`testId="picker-recent-mode-line"` at the `CellValueLine` call sites).
+    //     Demanding CSS for a test hook is a guard inventing work.
+    //  2. A bare `is-[a-z-]+` sweep matched `is-chosen` out of the design-prior slug
+    //     `set-a-spawn-time-choice-where-the-spawn-is-chosen` in this cell's own header — the
+    //     `[[raw-guard-identifier-satisfied-by-own-comments]]` family, and the same reason
+    //     `offInvariantGuard.test.ts` strips comments in both source-scanning arms.
+    //
+    // The lesson for anyone generalizing this repo-wide: the hard part is not the set
+    // comparison, it is establishing what counts as *emitted*. Two attribute kinds share this
+    // codebase's naming convention, so proximity to `className` is the only honest signal.
+    const emitted = new Set<string>();
+    for (const attr of stripComments(src).matchAll(
+      /className=(?:"([^"]*)"|\{`([^`]*)`\})/g,
+    )) {
+      const value = attr[1] ?? attr[2] ?? "";
+      for (const m of value.matchAll(
+        /\b(picker-recent-[a-z-]+|is-[a-z-]+)\b/g,
+      )) {
+        emitted.add(m[1]);
+      }
+    }
+
+    expect(
+      emitted.size,
+      "the class sweep found suspiciously few classes — it is probably matching nothing",
+    ).toBeGreaterThanOrEqual(6);
+
+    for (const cls of [...emitted].sort()) {
+      expect(
+        css.includes(`.${cls}`),
+        `ProjectModelCell.tsx emits "${cls}" but App.css defines no rule for it. An emitted ` +
+          `class the stylesheet never styles is a no-op that reads as a style hook — the ` +
+          `M10.9 WP3.5a whole-panel-overflow CRITICAL was eleven of these. Either add the ` +
+          `rule or stop emitting the class.`,
       ).toBe(true);
     }
   });

@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-11
+updated: 2026-08-12
 ---
 
 # Runtime Registry
@@ -180,9 +180,11 @@ the formula's value (clamped to the Bash tool's 600000 ms max).
 
 ## cargo test
 
-- **Last:** 8s wall / 4.30s warm exec (2026-08-11, M12 WP4d verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP4d touched no Rust at all, so this run's only job is attribution — the count matches WP4c's post-review close, confirming the doc edits are inert)
+- **Last:** 14s wall / 4.80s warm exec (2026-08-12, M12 WP5 Phase 1-3 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP5 is frontend-only so far, so this run's job is attribution — the count matches WP4d exactly, confirming the guard work is inert to Rust)
+- **Prior:** 8s wall / 4.30s warm exec (2026-08-11, M12 WP4d verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP4d touched no Rust at all, so this run's only job is attribution — the count matches WP4c's post-review close, confirming the doc edits are inert)
 - **Use timeout:** 510000
 - **History:**
+  - 14s — 2026-08-12
   - 8s wall / 4.30s exec — 2026-08-11 (840 total; WP4d doc-only — run purely to prove inertness)
   - 7s wall / 3.84s exec — 2026-08-10 (838 total, unchanged; WP4c Phase 1 baseline — CSS-only change, run purely to fix attribution)
   - 7s wall / 3.93s exec — 2026-08-07 (838 total: 821 lib + 16 hook + 1; WP4b complete)
