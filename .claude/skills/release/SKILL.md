@@ -385,7 +385,7 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
   They are independent repos nested on disk (the tap is gitignored by claudesk) — a
   push to one never touches the other.
 - **Unsigned, Apple-Silicon-only.** Still no Apple code-signing / notarization
-  (LOCKED at M10: stay unsigned + minisign — see `docs/product/arch.md` → "Milestone 10").
+  (LOCKED at M10: stay unsigned + minisign — see `workflow-system/product/arch/build-update-release.md`).
   The Gatekeeper `xattr` step therefore stays for `.dmg`/Homebrew first-installs. In-app
   self-updates (below) clear their own quarantine post-install (M10 WP1/WP2); the
   self-clear's live verdict lands at M10 WP6. *(Supersedes the earlier "No `tauri-plugin-updater`

@@ -60,5 +60,5 @@ have shown that; the sandboxed launch did.
 
 - [`mcp-tauri-bridge-caveats.md`](mcp-tauri-bridge-caveats.md) — driving the sandboxed build once
   it's up.
-- `arch.md` → "Milestone 10.9 WP3.5a architecture" — the provenance-not-abstinence safety model this
+- `workflow-system/product/arch/claude-substrate.md` — the provenance-not-abstinence safety model this
   verifies.

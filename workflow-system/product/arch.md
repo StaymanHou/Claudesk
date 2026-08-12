@@ -1,982 +1,132 @@
 ---
 stage: arch
 state: complete
-updated: 2026-08-12  # M12 AS-BUILT RESYNC at `/product-finalize` (cycle close, exit verdict GO) — see "Milestone 12 architecture — Smart auto-resume + drive mode (AS-BUILT 2026-08-12)". Verdict: all drift MINOR, no /product-arch back-loop — but the milestone was RE-DESIGNED TWICE mid-cycle (at decomposition and again at WP4), and both refuted designs are recorded rather than deleted because both read as perfectly reasonable. NEW as-built: the TWO-signal model (not three — /session-start is NEVER auto-fired, because the specced middle arm keyed on an unqueryable AND permanently-true condition); precedence REVERSED (the unclean flag beats .session.md); arm 1 is the --continue CLI FLAG not a typed /resume (a bare /resume opens an interactive picker); session-state.json as its own store (a field on Project was disqualified by a LOST-UPDATE hazard, not byte cost — losing the flag silently disables auto-resume) keyed canonically via key_for(); THREE clean-exit routes not four (/exit was a dead variant removed at review — enumerating routes as data made the SET testable but nothing tested each member had a CALLER); the announcement as a PREDICTION never the input to the action (the click path re-derives, so staleness is display-only and self-correcting); the ⊘ door NESTED-and-defended not sibling; ⚠️ THE GATE APPLIES PER ARM (--continue ungated because it serves every CC user, /session-restore gated) applied in two places that must agree; the drive mode as a SIGNAL NOT A STORE (a persisted mode already existed in 93% of restores and was ignored 74% of the time) delivered by an env-var-gated UserPromptSubmit hook returning additionalContext, with ZERO companion-repo change because the distinguishing fact is the CALLER not the skill; the WIP-frontmatter mirror REJECTED (Claudesk does NOT write into workflow-system/ — Core Principle 2's arrow was backwards); the picker cell as a native <select> REVERSING the roadmap's "never a live <select>" rule for a CORRECTNESS reason (closed value set; a bad mode string fails serde on read and takes the whole project list down, so modelOverride's "do NOT validate" rule must NOT be generalized); and the OFF-invariant guard's FOURTH arm, which is TWO assertions not one — a collapse-only arm would be SATISFIED by gating --continue, silently deleting a feature from every non-workflow user while reporting compliance. Method banked: the milestone's recurring defect shape (a correct mechanism behind a caller that ignores it) hit FOUR times; both CSS↔component directions now guarded for the picker cell; an ad-hoc run is evidence about one moment, only a standing test is coverage; a doc-correction scope list is a FLOOR (5 named → 10 found → an 11th found by WP5's read-only check); an INVALID PROBE and a REAL guard hole present IDENTICALLY; and a PAUSE-in-all-modes gate is cleared only by the human answering it.
-# Prior: 2026-08-03  # M11 AS-BUILT RESYNC at `/product-finalize` (cycle close, exit verdict GO) — see "Milestone 11 architecture — Workflow-docs markdown viewer (AS-BUILT 2026-08-03)", which SUPERSEDES the 2026-08-01 pre-build back-loop in every detail where they differ. Verdict: all drift MINOR, no /product-arch back-loop — nothing the back-loop decided was reversed; it shipped MORE precisely than predicted (a one-name "make AVAILABLE_PANELS dynamic" landed as a FOUR-function gate-derived API + a render-time reconcile that evicts to defaultPanel(gate), not hardcoded "editor"). TWO CORRECTIONS to older sections, both because a reader would currently be misled: (1) the M2 component map said RightPanelHost swaps between THREE panels — it is FOUR (Docs, gate-derived) and the registry is no longer static; (2) the raw-HTML section's "structural, not configured" framing implied escaping is primary and rehype-sanitize is only defense-in-depth — measured on the parsed DOM, the two controls are REDUNDANT (raw+sanitize=0 vectors, raw ALONE=6, neither=0), so each is load-bearing exactly when the other is absent. NEW as-built recorded: react-markdown/remark-gfm/rehype-sanitize dep + why over marked+DOMPurify (posture under csp:null, not fidelity); src-tauri/src/docs/ with docs_list/docs_read reusing read_file_core (NOT the private resolve_within); curated non-recursive discovery where archive/** exclusion is a MECHANISM not a rule; legacy-layout support built then REMOVED by operator decision; Docs first+default when gate ON only; the FOUR-tier selection ladder incl. WP5's `settled` tier (NOT live-verified, by informed operator decision — 1734 tests + 7 mutants); reload classified by DIFFING the doc set never FsChange.kind; fetchLatch's StrictMode deadlock (blank panel invisible to tsc/lint/1538 tests/clean build); the 171 kB lazy chunk; and TWO RETRACTED WP4 evidence claims (WebKit retains scrollTop on a never-unmounted display:none node and clamps out-of-range writes itself — the durable rule: an observation is only decisive when a broken implementation would give a DIFFERENT answer). Read-only is a property of the PANEL, not the webview (csp:null still reaches editor_fs::write_file).
-phase-1-archived: docs/product/archive/phase-1-bare-shell-poc/
-milestone-2-archived: docs/product/archive/milestone-2-lite-editor-diff-viewer/
-milestone-3-archived: docs/product/archive/milestone-3-cc-lifecycle-state-plumbing/
-milestone-4-archived: docs/product/archive/milestone-4-multi-workspace-ux/
-milestone-12-archived: workflow-system/product/archive/milestone-12-smart-auto-resume-drive-mode/
-milestone-5-archived: docs/product/archive/milestone-5-picture-in-picture/
-milestone-10-archived: docs/product/archive/milestone-10-in-app-auto-updater/
+updated: 2026-08-12  # SPLIT into arch/<subsystem>.md — this file is now the index + the warning set.
+shape: index
+archive-root: workflow-system/product/archive/
 ---
 # Architecture
 
-> **Revision log (2026-05 → 2026-06) archived** to `workflow-system/product/archive/revision-log/arch-preamble-2026-05-to-06.md` on 2026-08-03 — 24 lines of closed-milestone notes whose substance is inline below (verified claim-by-claim). ⚠️ One claim was **relocated, not archived** — the GUI-PATH fix appeared exactly once in this file; it is now in "### Data Flow". The M7 menu-bar revision note was cut as a third copy of §B.2.
+**Claudesk** — a macOS-only, single-user Tauri 2 desktop app: one window, N workspaces, each a project
+with a PTY-backed Claude Code session on the left and a swappable panel on the right.
+
+⚠️ **This file is an INDEX. The architecture lives in [`arch/`](arch/), one file per SUBSYSTEM.** Split
+2026-08-12 from a single 982-line milestone-ordered document. Read the warning set below, then open the
+subsystem you need.
+
+| Subsystem | What's in it |
+|---|---|
+| [Foundations](arch/foundations.md) | tech stack, persistence, dev environment, system design, data flow, key decisions |
+| [Process, PTY & session lifecycle](arch/process-and-pty.md) | spawn, the prompt-flush invariant, `slash_command_bytes`, shutdown |
+| [Status channel & surfaces](arch/status-channel-and-surfaces.md) | the CC hook channel, `status_broadcaster`, filmstrip, PiP NSPanel, menu-bar tray |
+| [Session resumption & drive mode](arch/session-resumption.md) | the two signals, the unclean-exit flag, the announcement, the drive-mode signal, the picker cell |
+| [Right-panel surfaces](arch/right-panel-surfaces.md) | editor, diff, terminal, the gated docs panel, `fs_index`, `editor_fs` |
+| [Workflow-features gate](arch/workflow-gate.md) | the `useWorkflowFeaturesEnabled` seam, the OFF-invariant guard, Settings, the invite |
+| [The `~/.claude/` substrate](arch/claude-substrate.md) | install/uninstall wizards, provenance, the compiler-enforced refuse-guard |
+| [Security & trust posture](arch/security-posture.md) | raw HTML blocked, CSP status |
+| [Build, update & release](arch/build-update-release.md) | artifacts, self-update, signing, the release pipeline |
+| [Native app menu](arch/app-menu.md) | the menu bar, and why it carries no accelerators |
+| [Time analytics](arch/time-analytics.md) | the SQLite exception and its load-bearing rules |
+
+**Writing here:** add to the **subsystem** file — never a new milestone section; that append habit is
+what grew the old file monotonically. A superseded design survives only as a `⚠️ do not reinstate` note
+on the rule it would contradict; the blow-by-blow lives in `archive/<cycle>/`. ⚠️ **Never move a ⚠️ out
+of the architecture set** — as-built *narrative* may be archived freely, but a warning is hit by someone
+already editing and not looking. **⚠️ When you add a warning, add its pointer below** — this index
+decayed once already (warnings grew 24→67 while the read window kept only 6).
 
 ## ⚠️ Load-bearing constraints — read this first
 
-**Why this index exists.** Entry skills that eager-read this file apply a size guard: over ~300 lines they
-read only the **first 100 lines** plus headings. Before 2026-08-03 that window contained frontmatter and
-historical revision prose and **zero of this file's 24 ⚠️ warnings** — every expensive lesson was outside
-the part that actually gets read. This index puts them inside it. Each line is a *pointer*; the full
-reasoning stays at the anchor.
+Each line is a *pointer*; the full reasoning stays at the anchor.
 
 **Never do these — each was learned by a real failure:**
 
-- **Never infer CC/workflow state from PTY output.** Hook channel + known files only; `Unknown` is honest. → "Status broadcaster"
-- **Never classify a docs reload on `FsChange.kind`** — the backend folds a mixed 200 ms batch to `Other`. Diff the re-listed set. → "Milestone 11"
-- **Never call a PiP/NSPanel window op off the main thread** — AppKit aborts the process with **no Rust panic**; presents as a clean launch that silently dies. Marshal via `run_on_main_thread`. → §B.3
+- **Never infer CC/workflow state from PTY output.** Hook channel + known files only; `Unknown` is honest. → [status](arch/status-channel-and-surfaces.md)
+- **Never classify a docs reload on `FsChange.kind`** — the backend folds a mixed 200 ms batch to `Other`. Diff the re-listed set. → [right-panel](arch/right-panel-surfaces.md)
+- **Never call a PiP/NSPanel or tray window op off the main thread** — AppKit aborts the process with **no Rust panic**; presents as a clean launch that silently dies. Marshal via `run_on_main_thread`. → [status](arch/status-channel-and-surfaces.md) §B.3
 - **Never `git checkout -- <file>` to revert while work is uncommitted** — an agent did this and reverted uncommitted shipped work. Use `cp` from a snapshot.
-- **Never delete a hook you did not install**, and keep the drift fixture — it is the proof, not dead code. → "Status broadcaster"
-- **Never move a ⚠️ out of this file.** As-built *narrative* may be archived freely; a warning is hit by someone already editing and not looking. That asymmetry is why this index exists.
+- **Never delete a hook you did not install**, and keep the drift fixture — it is the proof, not dead code. → [status](arch/status-channel-and-surfaces.md)
+- **Never write into `workflow-system/` from Claudesk.** It reads that world; the WIP-frontmatter mirror was REJECTED. → [session-resumption](arch/session-resumption.md)
+- **Never generalize `modelOverride.ts`'s "do NOT validate" rule to the drive mode** — closed value set, and a bad string fails serde on read and takes the whole project list down. → [session-resumption](arch/session-resumption.md)
+- **Never rebuild an off-screen live xterm DOM mirror** (`IntersectionObserver` pauses the renderer) — serialize from the buffer instead. → [status](arch/status-channel-and-surfaces.md) §B.1
 
 **Verification rules that have burned us:**
 
-- **An observation is only decisive when a broken implementation would give a DIFFERENT answer.** Ask what the platform does *unaided* first — WebKit retains `scrollTop` on a never-unmounted hidden node and clamps out-of-range writes itself, which silently vacated two live proofs. → "Milestone 11"
+- **An observation is only decisive when a broken implementation would give a DIFFERENT answer.** Ask what the platform does *unaided* first — WebKit retains `scrollTop` on a never-unmounted hidden node and clamps out-of-range writes itself, which silently vacated two live proofs. → [right-panel](arch/right-panel-surfaces.md)
 - **A `?raw` source-text guard cannot express a behavioral property.** Extract the code so a test drives the real thing. A guard satisfied by the module's own comments passes exactly when the code is deleted.
-- **A guard must be mutation-proven, and the mutation must land in *executable* code** — a silent no-op is indistinguishable from a real hole.
-- **Hash around each TOGGLE, never around a relaunch**, when proving "no `~/.claude/` mutation" — `hook_install` legitimately rewrites at launch and is universal. → "Milestone 10.9"
-- **The installed `.app` is a different environment from `pnpm tauri:dev`** (GUI PATH, `LANG`). Anything touching PATH/env/external spawn must be smoke-tested from a Finder-launched build. → "### Data Flow"
+- **A guard must be mutation-proven, and the mutation must land in *executable* code** — a silent no-op is indistinguishable from a real hole. ⚠️ **An invalid probe and a real hole present IDENTICALLY.** → [gate](arch/workflow-gate.md)
+- **Probe each guard arm INDIVIDUALLY** — a composite bypass that trips *some* arm reports "the guard bites" while hiding a gap. That method is what found the basename hole. → [gate](arch/workflow-gate.md)
+- **A safety guard must be mutation-proven, not merely PRESENT** — three that looked like proof were not. → [substrate](arch/claude-substrate.md)
+- **Hash around each TOGGLE, never around a relaunch**, when proving "no `~/.claude/` mutation" — `hook_install` legitimately rewrites at launch and is universal. → [gate](arch/workflow-gate.md)
+- **The installed `.app` is a different environment from `pnpm tauri:dev`** (GUI PATH, `LANG`). Anything touching PATH/env/external spawn must be smoke-tested from a Finder-launched build. → [foundations](arch/foundations.md)
+- **An ad-hoc run is evidence about one moment; only a standing test is coverage.** → "Verification method" below
+- **A doc-correction scope list is a FLOOR** — grep the retracted *claim* repo-wide. → "Verification method" below
 
 **Architectural lines you must not cross:**
 
-- **The gate seam is `useWorkflowFeaturesEnabled`** — a gated surface must **not exist** when off. Never `invoke()` ad hoc, never the raw wrapper. The guard bites at the **type declaration**, and the chord arm **strips comments**, so the seam reference must be executable source. → "Milestone 10.9"
-- **Provenance, not abstinence,** for anything touching `~/.claude/`: only remove what Claudesk **recorded** installing; every degraded read fails toward `developer`. Compiler-enforced. → "M10.9 WP3.5a"
-- **Raw HTML is BLOCKED**, and the two controls are **redundant, not layered** — `rehype-raw` alone measured **6 live vectors**. Never reason about one without the other. → "Webview HTML-rendering posture"
-- **Read-only is a property of the PANEL, not the webview** — under `csp: null` the webview still reaches `editor_fs::write_file`. → "Milestone 11"
-- **All injection goes through `slash_command_bytes`**; PTY prompt-flush needs both halves of its invariant. → "Milestone 2"
-- **An off-screen xterm mirror is non-viable** (`IntersectionObserver` pauses the renderer) — do not rebuild it. → "Phase 1 thumbnail probe"
-
-
-
-**Phase:** Phase 1 (Bare Shell + Tab Substrate). YAGNI applied — only the components needed to satisfy Phase 1 exit criteria are designed in detail. Phase 1 introduces the **tab-shell substrate** even though only one workspace is ever open in Phase 1, because Phase 2's filmstrip / PiP / menu-bar surfaces all assume the substrate exists. Phase 2 (stateful CC controller, file-watcher, status broadcaster, skill registry, Recycle Session, three status surfaces) and Phase 3 (lite editor, diff viewer, right-half panel swap) are explicitly identified as **extension points**, not built.
-
-**GUI-PATH capture (as-built, M6-era; ⚠️ RELOCATED here 2026-08-03 — it previously existed **only** inside an archived revision note).** A Finder/Dock-launched macOS `.app` inherits the minimal launchd `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`), **not** the user's shell `PATH` — so user-installed CLIs (`claude` in `~/.local/bin`, Homebrew/`fnm` bins) are invisible and `cc_spawn` fails with *"No viable candidates found in PATH"*. `src-tauri/src/env_path/` fixes it app-wide: at `.setup()` (**FIRST**, before any spawn) the app captures the login-shell `PATH` (`$SHELL -l -i -c 'printf %s "$PATH"'`, fallback `/bin/zsh`) and sets it process-wide — best-effort, never blanking an existing `PATH`. ⚠️ **This bites the installed build ONLY** — `pnpm tauri:dev` inherits the terminal's full `PATH` and never reproduces it. Any new external-CLI spawn benefits automatically; do **not** re-introduce per-spawn PATH hacks.
-
-### Tech Stack
-
-- **Language (backend):** Rust (stable, ≥1.77) — required by Tauri 2; owns the CC process, PTY, filesystem, global shortcuts, project config persistence, **status broadcaster (Phase 2)**, **Unix-socket hook listener (Phase 2)**. Rust is also a deliberate fit for Phase 2's stateful-controller work (process lifecycle, file watching, async I/O).
-- **Language (frontend):** TypeScript + React 19 — community consensus for Tauri 2 in 2026 (matches the Terax reference project); the lite-editor work in Phase 3 (Monaco or CodeMirror 6) needs this stack regardless, so we pay the cost once.
-- **Build / bundler:** Vite — fast HMR for dev; Tauri's `beforeDevCommand` / `beforeBuildCommand` hooks plug into Vite's CLI cleanly.
-- **Framework:** Tauri 2 (2.9.x line) — native WebView (WKWebView on macOS); ~3MB bundle; Rust backend with IPC to a web frontend. **Single `WebviewWindow`**, all workspaces are React components in one webview (research decision: no multi-webview).
-- **Embedded terminal:**
-  - Backend: `tauri-plugin-pty` (wraps `portable-pty`) — registered in the Tauri builder; spawns `claude` in a real pty inside the Rust core. **Course-correction from roadmap.md text** (which said "node-pty via Tauri sidecar pattern"): node-pty would require shipping a Node runtime in the bundle, defeating the bundle-size advantage. portable-pty runs natively in Rust.
-  - Frontend: `@xterm/xterm` + `@xterm/addon-fit` — render the terminal, fit to container. **DOM renderer only — `@xterm/addon-webgl` is NOT used** (2026-06-15 decision; see Key Decisions below). The 2026 DOM renderer is fast enough for the foreground workspace.
-  - Bridge: `tauri-pty` (JS bindings shipped with `tauri-plugin-pty`) — `spawn()` returns a handle whose `onData` / `write` / `resize` mirror node-pty's API closely enough that xterm.js wiring is straight-line.
-- **Sublime-pop hotkey:** an **in-app** keybinding — a webview `keydown` handler (`⌘⇧E`) owned by the focused workspace. NOT an OS-global shortcut, so **no `tauri-plugin-global-shortcut` and no macOS Accessibility permission** are required. (As-built 2026-06-19, WP8: the OS-global approach was built then rejected at verify-human in favor of in-app — see WP8 in `docs/product/archive/phase-1-bare-shell-poc/wbs.md`.)
-- **External tools invoked via shell:** `subl` (Sublime Text), `smerge` (Sublime Merge — Phase 2). Claudesk launches `subl` from the backend `sublime_open` command via **`std::process::Command`** (consistent with `cc_session` spawning `claude`; the original `tauri-plugin-shell` plan was dropped as-built — the launch is backend code, not a frontend-callable shell). No embedding.
-- **Persistence:** flat JSON file at `~/Library/Application Support/<bundle-id>/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()` — `<bundle-id>` is `com.claudesk.app` (prod) or `com.claudesk.app.dev` (dev), per the dev/prod-isolation note at the top of this file (NOT `Claudesk/`). No DB; project list is a list of `{path, last_opened_at, display_name?, default_drive_mode?}` records. Matches the "no per-project config burden" vision principle (no `.claudesk.json` per repo).
-- **Database:** none — Phase 1 has no relational data, and the only durable state is the project list (handled above).
-- **Infrastructure:** none — this is a single-user desktop app; no servers, no cloud, no telemetry.
-
-**Phase 2 additions (forward-look, not built in Phase 1):**
-- `tauri-nspanel` v2.1 — `NSPanel` wrapper for the PiP window (display-only floating panel, all-Spaces, fullscreen-aux, non-activating).
-- `tauri-plugin-positioner` (with `tray-icon` feature) — positions the menu-bar popover under the tray icon.
-- `notify` (via **`notify-debouncer-full` 0.7**, which re-exports `notify ^8.2`) — debounced filesystem watcher. **BUILT 2026-06-24 (QoL-WP0, commit `d893254`)** — but NOT for `.session.md` (that use was ~~DROPPED at M3~~: `.session.md` is a manual pause bookmark, not a live signal; a future milestone may watch the live workflow doc hierarchy `roadmap → wbs → wip(s) → backlog` instead — `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY`). The watcher Claudesk actually ships is a **per-workspace** watcher in `src-tauri/src/fs_watch/`: on workspace-open (mirroring `workspace_register` in `useWorkspaceStatus.ts`) it starts a recursive debouncer over the project root and emits a debounced, heavy-dir-filtered `fs-change` Tauri event; on close it stops (drop-stops-the-debouncer). Exclusion shares `fs_index`'s rule — **as-built M6 WP6 re-base (commit `61db3d4`): heavy-dir, NOT gitignore** (`.git/` hard-excluded + heavy/generated dirs suppressed by a pure NAME-based predicate on the hot path; gitignored-but-edited files like `.env` get live external-change refresh). One contract with the tree walk. Two consumers subscribe: the **FileTree rail** auto-refreshes (re-walks `fs_tree`, preserving expand/scroll, via an `fsTreeRefreshKey` bump) and **open editor docs** live-reload (re-stat + the existing `diskConflict.diskDecision` → reload-when-clean / conflict-when-dirty, no tab activation needed). Module shape mirrors `status_broadcaster` (pure transform + DTO in `mod.rs`; managed debouncer registry + `workspace_watch_start`/`_stop` commands + `app.emit` in `commands.rs`). `FsChange` DTO is snake_case end-to-end (the IPC-casing convention, contract-tested both sides).
-
-**Milestone 2 additions** (CM6 + git2 + search/index deps) — enumerated with pinned versions in the "Milestone 2 architecture" table below; not duplicated here.
-
-### Dev Environment
-
-**Host-based (opt-out — justification required).**
-
-This is a desktop application targeting macOS. Tauri development requires direct access to the host's WKWebView, macOS code-signing chain (for later phases), and native windowing — all of which a Docker container on macOS cannot provide. The standard Tauri 2 toolchain runs natively on macOS via `rustup` + `node`. Industry practice for Tauri development is host-based; Dockerizing it would add friction without benefit.
-
-**Toolchain:**
-- Rust (stable, ≥1.77) via `rustup`
-- Node 20 LTS or newer via `nvm` / `fnm` / system install
-- Xcode Command Line Tools (`xcode-select --install`) — provides the C compiler, `codesign`, and macOS SDK headers
-- `pnpm` (preferred) or `npm` for frontend deps
-- Sublime Text installed locally (Sublime Merge too, for Phase 2). `subl`/`smerge` on `PATH` is **optional** — Claudesk discovers the binary via PATH → `.app` bundle (`/Applications/Sublime Text.app/.../bin/subl`) → `open -a` fallback (WP3 probe), so the maintainer's no-symlink setup works out of the box. Claudesk invokes Sublime but does NOT install it.
-- Claude Code CLI installed and authenticated independently (`claude` on `PATH`)
-
-**First-run bootstrap:**
-```bash
-# clone, then in repo root:
-pnpm install            # frontend deps
-cd src-tauri && cargo fetch   # backend deps
-cd ..
-pnpm tauri dev          # development run (Vite + Tauri together)
-```
-
-**Build commands during dev:**
-- `pnpm tauri dev` — full app, live reload
-- `pnpm tauri build` — production .app bundle
-- `cargo test` (inside `src-tauri/`) — Rust unit tests
-- `pnpm test` — frontend tests (Vitest)
-- Lint: `pnpm lint` (eslint), `cargo clippy` (Rust)
-
-### System Design
-
-```mermaid
-flowchart LR
-  subgraph TauriApp["Tauri App (single macOS window, single WebviewWindow)"]
-    subgraph Frontend["Frontend (React + xterm.js + TypeScript)"]
-      Picker[Project Picker UI]
-      WorkspaceList["WorkspaceList (React state, all workspaces stay mounted)"]
-      CenterStage["Center Stage (focused workspace: xterm.js DOM renderer)"]
-      Filmstrip["Filmstrip (P1: empty placeholder; P2: live tiles or status tiles)"]
-      RightPlaceholder[Right half: placeholder]
-      Picker -.click project.-> WorkspaceList
-      WorkspaceList --> CenterStage
-      WorkspaceList --> Filmstrip
-    end
-
-    subgraph Backend["Backend (Rust core, src-tauri)"]
-      ConfigStore[Project Config Store - projects.json]
-      CcSessionTrait[CcSession trait - swappable impl]
-      PtyImpl[PtyCcSession - portable-pty]
-      SublimeOpen[sublime_open command - find_subl + std::process::Command]
-    end
-
-    Frontend <-- Tauri IPC --> Backend
-    CcSessionTrait <--> PtyImpl
-  end
-
-  PtyImpl -- spawns --> ClaudeCLI["claude (CC CLI in PTY)"]
-  SublimeToolbar["SublimeToolbar - in-app ⌘⇧E + button (frontend)"] -- "invoke(sublime_open)" --> SublimeOpen
-  SublimeOpen -- spawns --> Sublime[Sublime Text]
-  ConfigStore -- read/write --> AppDataDir["~/Library/Application Support/&lt;bundle-id&gt;/projects.json"]
-```
-
-**Component responsibilities:**
-
-| Component | Layer | Responsibility |
-|-----------|-------|---------------|
-| Project Picker UI | Frontend | List recents from config; "Open Folder" via Tauri dialog; emit `open_workspace(path)` (Phase 1: opens the single workspace; Phase 2: opens a new workspace into the list) |
-| **WorkspaceList** | Frontend | Authoritative array of `Workspace { id, project_path, cc_session_id, status, xterm_ref }`. All workspaces stay mounted; switching center stage is `display: none` / `display: block`, never unmount. Phase 1: length always 1. Phase 2: length N. |
-| **Center Stage** | Frontend | Renders the focused workspace at full size. Hosts the xterm.js terminal pane (left) and the right-half placeholder. |
-| **Filmstrip** | Frontend | Phase 1: empty placeholder container (so Phase 2 doesn't have to introduce a new layout slot). Phase 2: one tile per non-focused workspace (live ~1 fps mirror OR static status tile, per probe outcome). |
-| Right pane placeholder | Frontend | **Milestone 1:** static "Coming soon" panel; reserved real-estate inside each workspace. **Milestone 2:** grows into the per-workspace **RightPanelHost** (editor / diff / second-terminal swap) — see Milestone 2 architecture below. |
-| Project Config Store | Backend | Read/write `projects.json`; debounced writes on update. |
-| `CcSession` trait | Backend | **Forward-compat seam.** Abstract interface: `send_input(bytes)`, `on_output(callback)`, `resize(cols, rows)`, `wait_for_exit()`, `kill()`. Phase 1 has one impl (`PtyCcSession`); Phase 2 will add `recycle()`, `state_events()`, and per-session status fan-out. Future could add an `SdkCcSession` if we ever migrate to the Agent SDK. |
-| `PtyCcSession` | Backend | Concrete impl using `portable-pty` to spawn `claude --dangerously-skip-permissions` with the project dir as cwd; bridges to frontend xterm.js via Tauri events. |
-| `sublime` module / `sublime_open` + `smerge_open` commands | Backend | Resolves `subl`/`smerge` (PATH → `.app` bundle → `open -a`, per WP3) and spawns `subl <path>` / `smerge <path>` via `std::process::Command` (steal focus; never `--project`/`--new-window`). Frontend-invoked from the `RightPanelHost` tab-row icon buttons (`sublime/sublimeLaunch.ts`). **PERMANENT (revised 2026-06-20, WP8): both commands stay** — WP8 was redefined to KEEP both launchers (no removal). The Sublime-Text `⌘⇧O` hotkey was deleted (button-only now); the backend module is otherwise unchanged. |
-| In-app Sublime hotkey + button | Frontend | `SublimeToolbar` in each workspace's right panel: an "Open in Sublime" button (labeled `⌘⇧E`) and a `keydown` handler bound only on the focused workspace. Both `invoke("sublime_open", {projectPath})`. No OS-global shortcut, no Accessibility permission. |
-
-**Forward-compatibility seams (NOT built in Phase 1, only reserved):**
-
-- `CcSession` trait is the seam for Phase 2's stateful controller (extra methods for ready-state detection, recycle, file-watcher integration) and any future Agent-SDK-backed implementation.
-- **WorkspaceList holds many workspaces in Phase 2; in Phase 1 it always holds exactly one.** The data shape is the same; the only Phase 1 invariant is N=1 enforced by the picker's "open project" handler.
-- The Filmstrip slot exists in Phase 1 layout but is empty — Phase 2 populates it.
-- A `WorkflowStateWatcher` module is *not* created in Phase 1 — Phase 2.
-- A `StatusBroadcaster` module is *not* created in Phase 1 — Phase 2.
-- A `SkillRegistry` module is *not* created in Phase 1 — Phase 2.
-- The right pane inside each workspace is a placeholder component; Phase 3 will replace it with a tabbed/swappable panel host. No premature panel-swap abstraction in Phase 1.
-
-### Phase 1 thumbnail-rendering probe (gating for Phase 2)
-
-A new Phase 1 work package: a synthetic harness measuring whether ~1 fps live terminal mirrors are cheap enough at N=8 workspaces. **Pass → Phase 2 ships live mirrors. Fail → Phase 2 ships status tiles in v1**, leave live mirrors as a Future Possibility.
-
-**Harness shape:**
-- 8 xterm.js instances, DOM renderer only, full-size rendering.
-- Each xterm fed a representative CC output stream (canned recording of a typical Claude Code session, looped).
-- Filmstrip thumbnails are `scale(0.15)` CSS-transformed tiles mirroring each background terminal, throttled to ~1 fps.
-- One workspace simultaneously active (rendering normally at full speed) to simulate the center-stage workload.
-
-> **CORRECTION (2026-06-17, from WP4 outcome).** The original text above said "live mirrors of those **off-screen** full-size xterms." That mechanism is **non-viable** and was corrected during WP4 (see `wp4-thumbnail-probe-outcome.md`): (1) a DOM node has exactly one parent, so one xterm subtree cannot appear in both an off-screen container and a filmstrip tile; (2) xterm.js's `RenderService` registers an `IntersectionObserver({threshold:0})` that **pauses the renderer for off-viewport terminals** — so an off-screen (`left:-99999px`) terminal's DOM goes stale and there is nothing live to mirror. The viable mechanism, validated by the probe, is **`@xterm/addon-serialize` `serializeAsHTML()` from the buffer** (the buffer updates via `write()` even while the renderer is paused), rendered into the tile at ~1 fps. Background workspaces are deliberately kept off-viewport so the renderer pauses for free; the serialized snapshot stays current. (`cloneNode`-per-frame of the live DOM also works but is more expensive and forces backgrounds on-viewport — rejected.)
-
-**Measurements:**
-- CPU usage at idle (all 8 workspaces "idle"; no PTY output flowing): target **<10%**.
-- CPU usage during one active CC session (center-stage workspace receiving real output; 7 backgrounds idle): target **<20%**.
-- RAM total: target **<300 MB**.
-- Frame time on the center-stage workspace: target **<16ms** (no visible jank from background-mirror work).
-
-Thresholds above are the proposed defaults. The probe's own implementation plan (when picked up as a Phase 1 WP) finalises them.
-
-**Output:** a one-page report. **Decided as a sibling doc:** [`wp4-thumbnail-probe-outcome.md`](./wp4-thumbnail-probe-outcome.md) (kept separate to avoid bloating this file).
-
-> **OUTCOME (2026-06-17): PASS → Phase 2 ships live ~1 fps mirrors, using `serializeAsHTML()`.** On Apple M4 / macOS 26.5.1 against a real-CC-transcript-reconstructed fixture: idle webview CPU 4.5% (<10% ✅), active median 13.3% (<20% ✅; p95 ~30% on bursts — caveat + mitigations in the report), RAM 240 MB (<300 ✅), center frame time p95 18 ms with **0 dropped frames** (✅). The `serialize` arm beat `cloneNode`. Full measurements, arm comparison, caveats (frame-time measured in Chromium; CPU via `top`), and Phase 2 deltas → `wp4-thumbnail-probe-outcome.md`.
-
-### Data Flow
-
-**Phase 1 happy path — project open:**
-
-1. User clicks a project in the picker (or selects "Open Folder").
-2. Frontend invokes Tauri command `open_workspace(path)`.
-3. Backend updates `projects.json` (`last_opened_at`, optionally adds new project).
-4. Backend instantiates a `PtyCcSession` with cwd=`path`, command=`claude`, args=`["--dangerously-skip-permissions"]`.
-5. Backend emits `cc-session-ready` event with a session handle ID.
-6. Frontend receives the event, **adds a Workspace record to `WorkspaceList`** (Phase 1: list now has length 1), mounts xterm.js inside the center stage, subscribes to `cc-output-<sid>` events, wires xterm.js `onData` → Tauri command `cc-input(sid, bytes)`, and `xterm fit addon resize` → `cc-resize(sid, cols, rows)`.
-7. CC's TUI renders inside xterm.js. User interacts as in a normal terminal.
-
-> **As-built (M10.5 WP4 — I/O encoding, UTF-8-correct both directions):** two mojibake root causes fixed. **(Input)** `encodeBase64` (`src/cc/bridge.ts`) encodes the string's real **UTF-8 bytes** (`TextEncoder`) before base64 — the earlier `charCodeAt(i) & 0xff` truncated any code unit > 0xFF / surrogate pair, so pasted multi-byte glyphs (emoji, accented, arrows) reached CC as `�`. **(Output/locale)** the shared spawn env `color_tty_env()` (`cc_session/mod.rs`, consumed by BOTH the CC spawn and the WP9 shell spawn) now sets `LANG`+`LC_ALL=en_US.UTF-8` alongside `TERM`/`COLORTERM`. A **Finder/Dock-launched `.app` inherits the minimal launchd env where `LANG` is unset** → the spawned `claude`/shell defaults to `LC_CTYPE=C` (ASCII) and mangles UTF-8 output; the explicit UTF-8 locale forces correct decoding regardless of launch context. This output bug is **installed-`.app`-only** — `pnpm tauri:dev` inherits the login-shell's UTF-8 `LANG`, so it never reproduces in dev (the installed-build-smoke-test convention class).
-
-**Phase 1 happy path — Sublime hotkey/button (in-app):**
-
-1. With Claudesk focused, the user presses `⌘⇧E` (an in-app webview keybinding) OR clicks the "Open in Sublime" button in the focused workspace's right-panel toolbar.
-2. The focused workspace's `SublimeToolbar` reads its own `project_path` (frontend React state) and calls `invoke("sublime_open", { projectPath })`.
-3. The backend `sublime_open` command resolves `subl` (PATH → `.app` bundle → `open -a`) and spawns `subl <path>` via `std::process::Command` (`open -a "Sublime Text" <path>` on the fallback). Never `--project`/`--new-window` (WP3).
-4. macOS focuses the Sublime Text window (steal-focus is intended — the user explicitly asked for Sublime).
-5. `⌘⇧E` does nothing when Claudesk is not the focused app (in-app keybinding, not OS-global) — no Accessibility permission needed.
-
-**Phase 1 shutdown / window close:**
-
-1. Frontend signals `close_workspace` (or window close event).
-2. For each workspace in `WorkspaceList`, backend calls `CcSession::kill()`. **As-built (M10.5 WP3):** a brief clean-exit attempt (`exit_command\r` — `/exit` CC / `exit` shell — polled 500ms) then a **SIGHUP-first, process-GROUP** teardown: `killpg(pgid, SIGHUP)` → ~300ms grace → `killpg(pgid, SIGKILL)` → reap. The child is a `setsid` group leader (portable-pty), so `pgid == child PID` and the group signal reaps CC/shell **and any subagent/child**. **SIGHUP (not SIGTERM)** is deliberate: it lets an interactive login shell run its on-exit history save (`~/.zsh_history`) — SIGTERM/SIGKILL lose it (verified M10.5 WP3) — so closing without typing `exit` no longer drops the terminal's command history. (Supersedes the earlier "sends SIGTERM… then SIGKILL" plan, which was neither as-built nor correct for history preservation.)
-3. Backend persists `projects.json` final state.
-4. App quits.
-
-### Key Decisions
-
-- **Tauri over Electron.** Aligned with vision principle 1 ("lite over featureful"). Research established 25x smaller bundle, ~50% lower RAM, faster startup. The "less mature packaging ecosystem" tradeoff is acceptable for a single-user tool.
-- **`tauri-plugin-pty` / `portable-pty` over node-pty + sidecar.** node-pty requires a Node runtime; portable-pty runs natively in Rust. Bundle-size and architectural cleanliness win.
-- **PTY byte-injection over Agent SDK for v1.** The vision requires the familiar interactive CC TUI in the foreground workspace. PTY byte-injection means we treat Claudesk as a legitimate terminal-front-end — typing slash commands as a human would. We avoid the "PTY scraping" anti-pattern (parsing CC's output text to infer state) by using **file watching** (Phase 2) for state detection. The `CcSession` trait is the seam that lets us swap to an Agent SDK backend later without UI changes.
-- **Single window, many workspaces (NEW 2026-06-15).** Reversed from "one project per window." Multiple projects = workspaces inside one window, switched via filmstrip thumbnails (Phase 2). Aligned with the revised vision and the way the user actually juggles 3–4 projects.
-- **xterm.js DOM renderer only — no WebGL (NEW 2026-06-15).** Research established the browser-wide WebGL-context cap of ~16/page. With a tab shell hosting many xterm instances, the WebGL renderer either hits the cap or forces a swap-on-focus complexity that gives marginal benefit on top of the modern DOM renderer. Verdict: DOM-only is simpler and good enough for the foreground workspace. If a single-workspace user one day proves the DOM renderer can't keep up, we re-add the WebGL addon for the center stage only — a one-line addon load. Decision is reversible.
-- **Single `WebviewWindow`, no multi-webview (NEW 2026-06-15).** Tauri 2's multi-webview API is `unstable`-flagged and offers webview isolation we don't need (all workspaces share Claudesk's trust boundary). React-managed tabs in one webview is the stable choice.
-- **Tab-shell substrate ships in Phase 1 (NEW 2026-06-15).** The WorkspaceList + Center Stage + Filmstrip slot are built in Phase 1 even though Phase 1 only ever opens one workspace. This is "design for N=1 with N>1 in mind" — Phase 2 plugs into existing structure rather than reshaping the foundation.
-- **Thumbnail-rendering probe gates Phase 2's filmstrip + PiP rendering (NEW 2026-06-15).** Decision recorded in the dedicated section above. Probe pass → live ~1 fps mirrors. Probe fail → status tiles in v1.
-- **Menu-bar status item ships BEFORE PiP in Phase 2 (NEW 2026-06-15) — SUPERSEDED 2026-06-22.** Reversed by the dogfood-first resequence: PiP (M5) ships **before** the menu-bar (M6) and is **unconditional** (no dogfood gate). See §B.3 as-built + roadmap "Revision 2026-06-22".
-- **Menu-bar item is an ambient ALARM + ACTUATOR, not a status surface (NEW 2026-06-29, M7 — shrunk at spec debate).** The M7 menu-bar item was deliberately scoped DOWN from a third status surface to its one non-redundant edge over the shipped M5 PiP: **location** (the menu bar is a strip the user already watches all day, present even at zero workspaces, no summon/allocated region). It is **(a) a 2-state ambient alarm** — a template tray icon that is **lit when ANY workspace is `AwaitingInput`** ("a project is blocked on me") and **neutral otherwise** (Running + Idle both collapse to "nothing for me to do"; running-vs-idle detail is PiP's / the window's job) — reduced by a pure unit-tested fold `aggregate_alarm(states) -> {Attention|Neutral}`, swapped via the atomic `set_icon_with_as_template` setter (the as-built tauri 2.11.2 method — the specced `set_icon_and_icon_as_template_atomic` name doesn't exist; avoids the `tauri#6527` blink, and marshals to the main thread internally), `icon_as_template(true)` for light/dark; **and (b) a native menu** (left- or right-click → `TrayIconBuilder::menu(...)`) of **actuators** — Show Claudesk / Toggle PiP / Quit — reusing the 2026-06-24 `app_menu` bridge; actuators are the non-redundant complement because display-only PiP can't *act on* the app. **CUT (the rejected "status surface" half that re-implemented PiP):** the popover `WebviewWindow`, per-workspace list, navigate-on-click, the `tauri-plugin-positioner` dependency, the third Vite entry `popover.html`/`src/popover/`, and the `tauri#13633` blur-probe risk — all gone. **Why:** capability-by-capability a popover-list-dashboard was a strict subset of PiP (`On`+`minimal` already gives near-zero-pixel, all-Spaces, always-on aggregate status); two overlapping dashboards split the glance + double maintenance — the opposite of the "lite / attention is scarce" thesis. An alarm + an actuator do NOT overlap a display dashboard. Activation policy stays `Regular` (additive tray — dock icon + main window kept). See §B.2 + design-prior [[new-surface-must-earn-its-place-against-existing-ones]].
-- **CC hook channel via Unix socket, not shared file (NEW 2026-06-15).** Resolves the previously deferred WP9b probe. With three concurrent status-surface consumers (filmstrip / menu-bar / PiP), Unix-socket multi-consumer concurrency wins decisively over shared-file locking and debounce-write juggling.
-- **Flat JSON for the project list. SQLite is the scoped exception for time-analytics (M9).** The **project list** (`projects.json`) stays flat JSON — no DB — because it is ≤100 entries with read-on-open / write-on-update semantics where JSON is appropriate. This rule governs the *project list specifically*, NOT the whole app. **M9 introduced one deliberate, scoped exception: a feature-local SQLite DB** (`<app-data>/time-analytics.sqlite`, per-identity — see "M9 time-analytics subsystem" below) for the time-tracking event store. SQLite is the right tool *there* and not a contradiction of the flat-JSON rule: the analytics store is high-volume append-mostly event data (thousands of hook events/day) with time-range/session/project **query** needs and concurrent multi-writer access (multiple CC sessions' hooks) — exactly what a flat JSON file is wrong for and what `claude-time` already proved SQLite fits. The exception is *contained*: it is one feature's private store, opened lazily and gated OFF by default (`time_tracking_enabled`), and it does not migrate the project list or any other app state to a DB.
-- **No per-project config file in the project itself.** Project list lives in `~/Library/Application Support/...`, not in `.claudesk.json` files inside each repo. Aligned with vision principle 5.
-- **Host-based dev environment, not Docker.** Tauri targets host WKWebView and native windowing; Docker on macOS cannot provide them. Industry standard for Tauri.
-- **`--dangerously-skip-permissions` (yolo mode) by default.** Vision explicit. A Phase 4 setting will let users opt out.
-- **Sublime hotkey is in-app, not OS-global (revised 2026-06-19, WP8).** The original design used `tauri-plugin-global-shortcut` (which needs a macOS Accessibility grant + first-launch onboarding flow). That was built then rejected at verify-human — the operator clarified the hotkey should fire only while Claudesk is focused, not system-wide. As-built: a right-panel "Open in Sublime" affordance backed by `sublime_open`. (The `⌘⇧E`→`⌘⇧O` Sublime-Text `keydown` hotkey that originally accompanied the button was **deleted at WP8, 2026-06-20** — the button is now the only Sublime-Text affordance.) No `tauri-plugin-global-shortcut`, no Accessibility permission, no onboarding dialog. **Both Sublime launchers (Text + Merge) are now PERMANENT icon buttons** in the RightPanelHost tab row — WP8 was redefined to keep them (the earlier "removed at Milestone 2 once parity is proven" plan is superseded; see the Revision 2026-06-20 note at the top of this file).
-- **CodeMirror 6 over Monaco for the in-app editor (Milestone 2, decided 2026-06-19 from `research.md`).** For an editor *embedded* as one panel among several in a ~3 MB Tauri app, CM6 wins decisively: ~1.26 MB gzipped vs Monaco's ~5 MB, no web-worker configuration (fiddly in WKWebView), composes as a component, native-webview/serializable pedigree fits Tauri IPC. Monaco's advantage (VS-Code-grade IntelliSense / language servers) doesn't apply — Claude Code is the intelligence layer, the editor is a Sublime-feature-parity *lite* editor. React binding: `@uiw/react-codemirror` (not legacy `react-codemirror2`). Reversible if a hard CM6 limitation surfaces, but the bundle/worker wins are structural.
-- **The editor edits a document; the project is app-layer (Milestone 2).** Cmd+P fuzzy file finder and project-wide find/replace are Rust+React subsystems, not editor config — true for Monaco too (neither manages a project tree). The WBS budgets them as their own work, not sub-tasks of "wire up the editor." The diff viewer is `git2` (file list + base blobs) + `@codemirror/merge` (rendering), not `git2` computing the rendered diff.
-
-### Status surfaces + hook channel (⚠️ AS-BUILT — heading corrected 2026-08-03)
-
-> **⚠️ This section was titled "Phase 2 forward-look (informational, not built)" until 2026-08-03 and that label was WRONG** — §A/§B describe M3/M4/M5/M7 architecture that **shipped**, and their own bodies carry as-built markers. A reader trusted the heading and skipped real, load-bearing architecture (this is the single most-consequential mislabel the 2026-08-03 prune found). §C (auto-resume) and §D (drive mode) *were* genuinely unbuilt and have been cut — they are M12, specced in `roadmap.md` and decomposed in `wbs.md`.
-
-The Phase 2 forward-look is reorganised around four architectural deltas: (a) **status broadcaster** as the central nervous system, (b) **three status surfaces** that subscribe to it, (c) **smart auto-resume on workspace open**, (d) **drive-mode selector**. The prior 2026-05-19 "cross-window CC status indicator" sub-section is fully replaced by (a) + (b). The 2026-05-22 "smart auto-resume" and "drive-mode selector" sub-sections are preserved in spirit but updated for the workspace-not-window model.
-
-#### A. Status broadcaster + Unix-socket hook channel
-
-```mermaid
-flowchart LR
-  CcHook["CC hook handler (~/.claude/settings.json)"] -- JSON line --> UnixSocket["Unix socket (Claudesk-owned)"]
-  UnixSocket --> Broadcaster["Status Broadcaster (Rust core)"]
-  Broadcaster -- "WorkspaceStatusUpdate event" --> MainWebview["Main webview (filmstrip)"]
-  Broadcaster -- "WorkspaceStatusUpdate event" --> PiPWebview["PiP webview (tauri-nspanel)"]
-  Broadcaster -- "WorkspaceStatusUpdate event" --> TrayWebview["Menu-bar popover webview"]
-```
-
-- **CC hook registration.** *(As-built M3 WP2/WP3, 2026-06-22; event set + Notification gating extended QoL-WP2, 2026-06-25; event set extended 4→10 by M9 WP2, 2026-07-07.)* On launch, Claudesk installs entries in `~/.claude/settings.json`'s `hooks` block for **ten** events (`hook_install::CLAUDESK_EVENTS: [&str; 10]` is the single source of truth), split into two roles:
-  - **Four *status* events** (mapped to a state by `status_broadcaster::event_to_state`): `UserPromptSubmit` (→ "running"), `Stop` (→ "idle"), `PostToolUse` (→ "running"), `Notification` (→ "awaiting-input", **gated** — see below). `PostToolUse` is the **answer-resume signal**: when a user answers an `AskUserQuestion`/permission prompt mid-turn CC fires `PostToolUse` (live-captured) but NO `UserPromptSubmit`, so without it the indicator stayed stuck at AwaitingInput until the next `Stop`.
-  - **Six *time-analytics-only* events** (status-neutral — dropped by `event_to_state`, consumed only by the M9 `time_store` writer): `PreToolUse`, `PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `SessionStart`, `SessionEnd`. These give the reclassifier tool-execution intervals (`PreToolUse`/`PostToolUse[Failure]` paired by `tool_use_id`), subagent intervals (`SubagentStart`/`SubagentStop` by `agent_type`), and session boundaries. `PreToolUse` — deliberately UNregistered pre-M9 (the status machine never needed it; `UserPromptSubmit`→Running covered a turn's pre-tool state) — is now registered but status-neutral because the time writer needs the tool-start timestamp. The full 4→10 delta (incl. the live-capture that confirmed `PostToolUseFailure` is a distinct CC-emitted event) is documented in `docs/product/wp1-time-analytics-probe-outcome.md` §(d).
-
-  The hook is a tiny **Perl** script (`resources/claudesk-hook.pl`, `/usr/bin/perl` — measured ~15 ms/call, exits 0 unconditionally so it never blocks CC; the WP1 probe chose Perl over POSIX sh) that reads the event JSON on stdin and writes one JSON line — `{ hook_event_name, session_id, cwd, timestamp, source, prompt_length_chars?, message?, notification_type?, tool_name?, tool_use_id?, agent_type?, reason? }` — to Claudesk's Unix socket at the stable path `<app-data>/hook.sock` (on macOS `~/Library/Application Support/com.claudesk.app/hook.sock` — the bundle identifier, **not** `Claudesk/`; `hook_socket::commands::hook_socket_path` is the single source of truth for this path). Each extra is present only on the event(s) that carry it: `prompt_length_chars` on `UserPromptSubmit` (a **length**, never the prompt text — the privacy substitute), `notification_type` on `Notification` (QoL-WP2), the `tool_*`/`agent_type`/`reason` extras (M9 WP2) on the tool/subagent/session events, and `source` on `SessionStart` (CC's startup/resume tag — distinct from the `time_store` DB `source` *column*, which discriminates hook-vs-native event origin; see the M9 section below). Registration is additive / idempotent / reversible and **preserves any co-resident subscriber** (`notify-telegram.sh`, and — historically — a user's own standalone `claude-time-hook.pl`; see the deprecation note below) — matcher-groups are keyed on the `claudesk-hook.pl` basename so Claudesk only ever touches its own group.
-- **Notification gating** *(QoL-WP2, 2026-06-25).* `Notification` → AwaitingInput is gated on `notification_type`: a genuine input-needed type (`permission_prompt`, `elicitation_dialog`) — OR an **unknown/absent** type (the honest conservative fallback, mirroring `Unknown`) — maps to AwaitingInput; a recognized informational type (`idle_prompt`, `auth_success`, `elicitation_complete`, `elicitation_response`) is a **no-op** (the event is dropped, so the prior state is preserved and an idle nudge doesn't flip a busy dot blue). The gate lives backend-side in `status_broadcaster::event_to_state`; the frontend renders only the derived `state`.
-- **⚠️ The hook channel is BIDIRECTIONAL as of M12 WP4b (2026-08-07) — it was read-only telemetry for its first four milestones.** *(New architectural capability. The next person to touch `claudesk-hook.pl` must find this here rather than rediscover it.)* Everything above describes the CC→Claudesk direction: the script reads event JSON on stdin and writes a line to the socket. It now **also writes to stdout on exactly one event** — `UserPromptSubmit` — returning CC's `additionalContext` so Claudesk can tell the session a fact it would otherwise have to be asked for. The first consumer is the workflow **drive mode**: the operator picks it on the picker row, and `/session-restore` therefore stops re-asking a question that was already answered at workspace-open.
-  - **Shape (⚠️ runtime-enforced, and the obvious form is REJECTED):** `additionalContext` **must** nest under `hookSpecificOutput` alongside `hookEventName`. A top-level `additionalContext` is rejected at runtime — this was established by live capture, not from docs, per `[[cc-hook-capture-beats-docs]]`.
-  - **Gated by ABSENCE, which is what keeps every other user byte-identical.** Emission is conditioned on the `CLAUDESK_DRIVE_MODE` env var, set only on the CC spawn (`cc_spawn_env`) and only while `workflow_features_enabled` is on. Unset ⇒ the script emits **nothing** — so a plain-terminal `claude`, a gate-off Claudesk, and a pre-M12 build all behave identically. **Inertness is the same mechanism that already protects every plain-CLI user**, not a second code path. ⚠️ The var is the **only** possible Claudesk marker: `cwd`-based correlation cannot distinguish a Claudesk-spawned `claude` from a terminal-spawned one in the same tree.
-  - **⚠️ The never-block-CC invariant survives unchanged, and must keep surviving.** The script still `exit 0`s **unconditionally** on every degraded path (no socket, malformed JSON, empty stdin), and stays **silent on the other 9 of the 10 events** it is registered for — so a down Claudesk still cannot block CC. That contract is the reason the script is registered on all ten events for both identities, and it is what a stdout-writing hook most easily breaks. Pinned by `never_blocks_cc_on_degraded_inputs` (6 abuse arms, driving the **real** shipped script as a subprocess and capturing exit status *and* stdout).
-  - **The vocabulary is pinned across two languages.** The four mode strings live in Rust per-variant serde renames (`stepping`/`orchestrated`/`autopilot`/`fsd`) **and** a Perl exact-match allowlist. A test reads the allowlist **out of the shipped script** rather than restating it, so it cannot become a third copy of the same list — until M12 nothing tied the two sides together, and a rename on either would have left both suites green while the signal silently stopped arriving.
-  - **⚠️ Known and undecided:** the env var **inherits to all descendants**, so a nested `claude` launched inside a workspace fires the hook carrying the *parent workspace's* mode (confirmed empirically). Recorded as a MAJOR review finding, **not** classified as a defect. ⚠️ **Long-context durability of per-turn re-injection is ASSUMED, not proven** — both live proofs were short, cold contexts; validated by dogfooding (a synthetic filler probe was declined as expensive *and* weak evidence).
-  - **M13 reuse is NOT pre-committed** (operator, 2026-08-06). Recycle Session ends in `/session-restore` and is the natural second caller, but *"I'll need to open the spec and re-evaluate if it's reusable when we get there."* This section records what exists; it deliberately does **not** define a generalized injection abstraction for an unspecced caller.
-- **Unix socket vs shared file.** Decided: socket. Claudesk's Rust core opens the socket on app launch and accepts a stream of JSON lines from any CC instance whose `cwd` matches a known workspace's project path. No file lock contention, no debounce-write juggling, no torn reads. The hook script is small enough to write the socket synchronously in <1ms; CC does not block waiting for the hook.
-- **Status broadcaster.** Normalizes incoming hook events into `WorkspaceStatusUpdate { workspace_id, state: Idle|Running|AwaitingInput, last_event_at, last_output_snippet?, notification_type? }` and emits via Tauri's event channel (`app_handle.emit("workspace-status", ...)`). *(`notification_type` added QoL-WP2 — diagnostic only; the gating decision is made in `event_to_state`, not by the frontend.)* All three webviews subscribe; they re-render their local UI on each event. *(Implemented M3 WP4, commit `8bc2d68` — `src-tauri/src/status_broadcaster/`. The state enum also carries `Unknown` as the honest no-data default a surface shows before any event arrives; the broadcaster never emits it. cwd→workspace resolution canonicalizes both sides (M2 WP11 path-keying lesson); an unmatched cwd is dropped, not an error. **As-built correction (M6 WP2, commit `bafee80`):** `resolve_cwd` matches a cwd that is the workspace root **OR any descendant of it** — longest-registered-ancestor wins (a `Stop` from `<root>/src-tauri` resolves to the `<root>` workspace; nested workspaces → longest prefix). The original exact-canonical-hashmap lookup silently dropped turn-end `Stop`s whose cwd had descended into a subdir (`cd src-tauri`), latching the dot on `Running` — the intermittent stuck-dot bug, root-caused via the WP1 prod file-telemetry and fixed here.)*
-- **IPC DTO casing convention (snake_case end-to-end).** All Claudesk IPC DTOs serialize with snake_case field names verbatim — no `#[serde(rename_all)]`, no camelCase. The frontend TS type mirrors the Rust serde field names exactly, so there is no casing translation layer to drift. `WorkspaceStatusUpdate` is the canonical example, pinned by a `serde_json::to_value` key-shape contract test (`status_broadcaster::tests::dto_serde_shape_is_snake_case`). This convention closes the class of bug logged as `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE` (multi-word DTO fields drifting between the Rust struct and the TS type). New IPC DTOs follow it and add a parallel key-shape test.
-- **Standalone `claude-time` deprecation (M9 WP7, 2026-07-16).** The standalone `claude-time` tool (`_ref/claude-customization/tools/claude-time/` — hook → `sqlite3` subprocess → `reclassify.py` → Gantt JSX dashboard) has been **absorbed into Claudesk** and is **deprecated** as of M9. Claudesk now owns the entire capability natively (see the "M9 time-analytics subsystem" section below) and has **zero runtime dependency** on the standalone tool: Claudesk installs its **own** `claudesk-hook.pl` and writes its own `time-analytics.sqlite`; it never reads `claude-time`'s DB, never invokes `claude-time-hook.pl`, and never registers it. The only in-tree `claude-time` references are (a) port-lineage doc-comments in `time_store`/`reclassify`/`query` and (b) a hook-install **test fixture** (`hook_install::mod.rs` `settings_with_claude_time()` + the `merge_is_additive_and_preserves_existing_hooks` test) — that test is the *proof of the decoupling posture*: it asserts a pre-existing `claude-time-hook.pl` entry **survives** Claudesk's registration on every event. **Decoupling posture: stop depending, do not delete.** Claudesk must NOT delete a hook it didn't install — a user who still has `claude-time-hook.pl` registered in `~/.claude/settings.json` keeps it (harmless: it just writes its own separate DB), and **removing it is the user's manual action** (edit `~/.claude/settings.json`, drop the `claude-time-hook.pl` matcher-groups). Once removed, Claudesk's tab is the sole time-tracker.
-
-  **UPDATE 2026-07-29 — the upstream tool is now RETIRED, not merely deprecated.** The forward-looking note that once closed this bullet ("retirement of the standalone tool's own README/source lives in the `my-claude-code-customization` repo") is a completed fact: that repo **deleted `tools/claude-time/` entirely** (32 files) and removed the `claude-time` linking from its `install.sh`. So the source path named at the top of this bullet — `_ref/claude-customization/tools/claude-time/` — **no longer exists**; it is retained above as the historical lineage reference, reachable only via that repo's git history. Trigger: Claudesk's M10.9 WP3.5a install wizard would otherwise have *newly installed* the deprecated tool for every user who opted into the workflow layer — the gap being that this bullet's "stop depending, do not delete" posture governed *not removing what was already there* and never covered `install.sh` continuing to add it. Cross-repo ask + reply: `../my-claude-code-customization/HANDOFF-from-claudesk-2026-07-29.md` and its `HANDOFF-REPLY-to-claudesk-2026-07-29.md`.
-
-  **What did NOT change — the posture above still stands, verbatim.** Claudesk still must not delete a hook it didn't install; `settings_with_claude_time()` + `merge_is_additive_and_preserves_existing_hooks` remain the proof and must **not** be removed as dead fixtures — a user machine can still carry a `claude-time-hook.pl` registration from a pre-retirement install, and upstream's `uninstall.sh` deliberately keeps removing those two legacy symlinks **unconditionally** for exactly that reason (its original `[ -d tools/claude-time ]` guard would have gone permanently false once the directory was deleted, silently stranding the installs the cleanup exists to rescue).
-- **Failure mode.** If the socket is missing or the hook script can't connect, the workspace status defaults to `Unknown`. Claudesk does not infer state from PTY output; an unknown badge is honest, a guessed badge is not.
-- **Frontend close-the-loop (as-built M3 WP6, commit `b377a97`).** The main React webview `listen("workspace-status")`s and renders an honest dot+label indicator (Idle / Running / AwaitingInput / Unknown) in the workspace chrome header; the TS wire type mirrors the Rust serde field names verbatim (snake_case, no translation layer). Workspace open→`workspace_register` / close→`workspace_deregister` populate the cwd→workspace registry by list-diffing (N≤1 in M3, generalizes to M4 multi-workspace). Palette is deliberately distinct so two states never read alike: Running = Claude-brand orange `#d97757`, AwaitingInput = cool blue `#539bf5` (operator-chosen at verify-human). This was M3's live verify surface — a real CC state transition observed in the UI purely from the hook channel, confirmed with terminal output scrolled away. The full multi-surface fan-out (M4 filmstrip / M5 PiP / M6 menu-bar) subscribes to this same event in later milestones. *(One backlogged MAJOR: the `last_output_snippet`→tooltip path is wired but unfed — `SURFACE-2026-06-22-QUALITY-WP6-SNIPPET-TOOLTIP-DEAD-PATH`; pick up via `/feature-refactor`.)*
-
-#### B. Three status surfaces (subscribers)
-
-**B.1 — Filmstrip + Center Stage (in-window).**
-- Lives in the main React webview. Subscribes to `workspace-status` events from the broadcaster.
-- Center Stage renders the focused workspace's xterm.js at full size, DOM renderer.
-- Filmstrip renders one tile per non-focused workspace. Tile content per the **WP4 probe outcome (PASS, 2026-06-17 — live mirrors):**
-  - Each background workspace's xterm.js is mounted **off-viewport** (`left:-99999px`) so xterm pauses its renderer (the buffer still updates via `write()`). The filmstrip tile is built from **`@xterm/addon-serialize` `serializeAsHTML()`** read off that buffer, rendered into a `scale(0.15)` tile, throttled to ~1 fps. (NOT a live mirror of off-screen DOM — that mechanism is non-viable; see the probe outcome doc and the §"Phase 1 thumbnail-rendering probe" correction.)
-  - Active-CPU p95 caveat (~30% on output bursts) → mitigations available (sub-1fps background rate, coalesced serialize, mirror only visible tiles) if dogfooding shows it matters.
-  - (Status-tile-only fallback was the probe-fail branch; not taken.)
-- Clicking a tile swaps which workspace is the center stage (CSS `display: none` / `display: block`; no remount). Workspace state and PTY connection persist.
-- **Filmstrip collapse:** A chrome button toggles between "full filmstrip" (tiles with thumbnails or status) and "collapsed strip" (one-line row of project-name + status-dot pills). Collapsed workspaces use `display: none` on their off-screen xterm to suppress the render loop; PTY output still buffers in xterm's scrollback.
-
-**B.2 — Menu-bar status item — DESIGNED-FOR-BUILD (Milestone 7) — SHRUNK to AMBIENT ALARM + ACTUATOR.** *Promoted from sketch + shrunk at the M7 spec debate (2026-06-29). Tauri-2.11.x API facts verified against current docs/source. The build target is deliberately minimal: the menu bar's only non-redundant edge over the shipped M5 PiP is **location** (a strip the user already watches), so M7 exploits ONLY that — a single ambient alarm + an actuator menu. The richer "status surface" design (popover list + navigate) was rejected as a PiP subset; it's preserved struck-through at the end for the record. New module `src-tauri/src/tray/` (mirrors `pip/` shape). NO new dependency, NO new webview.*
-
-Like the M4 filmstrip and the M5 PiP, the tray icon subscribes to the **same M3 `status_broadcaster` `workspace-status` Tauri event** — but it is **not a status surface**, it is an **alarm** (one bit: "is a project waiting on me?") + an **actuator** (right-click acts on the app). No broadcaster change.
-
-- **Tray icon — native, 2-state ambient alarm, template image.** `tauri::tray::TrayIconBuilder` (confirmed current at 2.11.x). The icon is a **template image** (`icon_as_template(true)`) so macOS auto-adapts it to the light/dark menu bar. It shows **one bit**:
-  - **Lit (attention)** = ANY open workspace is `AwaitingInput` — "stop what you're doing, a project is blocked on you."
-  - **Neutral (template/dim)** = nothing awaiting (Running and Idle both collapse to "nothing for you to do"; running-vs-idle detail lives in PiP / the window — not in the menu bar).
-  - The reduction is a **pure fold** over the registry's per-workspace states (`aggregate_alarm(states) -> AlarmState { Attention | Neutral }`), unit-testable without a live app (the `pip::should_arm_summon` testability precedent). Recomputed on every `workspace-status` event and on workspace register/deregister; the icon is swapped via **`set_icon_with_as_template(icon, true)`** — the atomic setter (the as-built tauri 2.11.2 method; the originally-specced name `set_icon_and_icon_as_template_atomic` does NOT exist on this version, corrected at M7 WP1 build), NOT `set_icon` then `set_icon_as_template` (the two-call path resets the template flag and blinks; `tauri#6527`). **Note (as built):** `set_icon_with_as_template` marshals its AppKit op to the main thread *internally* (tauri's `run_item_main_thread!`), so the swap is main-thread-safe regardless of the `workspace-status` listener's thread — no manual `run_on_main_thread` hop needed for the swap (the M5 abort class doesn't apply here). **Two pre-rendered template icon variants** ship in `src-tauri/icons/tray/` (lit + neutral; a faithful monochrome app-icon portrait — window + 4 filmstrip tiles + main CC box — with a lower-right corner badge on attention), embedded via **`include_bytes!` + `Image::from_bytes`** (no `trayIcon` config block — a config-declared tray is static and would create a SECOND icon redundant with the dynamic `TrayIconBuilder`-in-`.setup()` the runtime swap requires; no install-path file IO either). At **zero workspaces** the alarm is Neutral (nothing to wait on).
-- **Left-click → the same native menu (NO popover).** There is **no popover window** — building one would re-implement the PiP dashboard (the rejected redundancy). Left-click simply shows the native menu (the default `TrayIconBuilder::menu(...)` behavior; we do NOT call `show_menu_on_left_click(false)`). "Which project is waiting / jump to it" is a *detail* interaction → that's PiP's job or the main window's, not the menu bar's.
-- **Right-click (and left-click) → native context menu (actuators — mirrors existing actions only).** `TrayIconBuilder::menu(...)` shows a `tauri::menu::Menu`. Items: **Show Claudesk Window** / **Toggle PiP** / **Quit** — all already-existing app actions, reusing the 2026-06-24 `app_menu` `on_menu_event`/`emit` bridge + managed-handle pattern (mirrors features, adds none). These are **actuators** (they act on the app), which display-only PiP genuinely cannot offer — the non-redundant counterpart to the alarm. "Toggle PiP" reuses the existing `pip-mode` path; "Show Claudesk Window" brings the main window forward (a thin command, also reachable from the existing app menu); "Quit" is a `PredefinedMenuItem`.
-- **macOS activation policy unchanged (`Regular`).** The tray item is **additive** — Claudesk keeps its dock icon and main window. We do NOT switch to `ActivationPolicy::Accessory` (that's for tray-only apps).
-- **Window/icon-op main-thread rule applies.** Updating the tray icon is an AppKit op; any background-thread caller MUST marshal via `app.run_on_main_thread(...)` (the M5 PiP rule — off-main-thread AppKit ops abort the process with no Rust panic). Tauri `#[command]` fns + `on_tray_icon_event` + the `workspace-status` listener wiring already run on / can be marshaled to the main thread.
-- **Agent verify-self.** The pure `aggregate_alarm` fold + DTO are **unit-tested** (the bulk of the logic). The icon-swap path is exercised via the MCP bridge by driving a status transition on a scratch workspace and confirming the app stays alive (no abort) — but the **native menu-bar glyph itself (lit vs neutral) and the native menu are NOT in any webview**, so "the menu bar actually shows the alarm" + "the menu appears + items fire" are **operator-carry / DEFERRED-TO-RELEASE** (the M5/M6 native-surface pattern). There is no popover webview to bridge-drive (cut).
-- **No `tauri-plugin-positioner`, no `popover.html`, no `src/popover/`.** All cut with the popover — the dependency, the third Vite entry, the separate webview, and the `tauri#13633` blur-to-hide probe risk all disappear with the dashboard half.
-
-> **Rejected richer version (recorded for the record — DO NOT build):** ~~the menu-bar item as a full third *status surface*: `show_menu_on_left_click(false)` to free left-click for a decoration-less popover `WebviewWindow` (3rd Vite entry `popover.html` + `src/popover/`, own React root subscribing to `workspace-status`), rendering one row per open workspace (status dot + project name), with **navigate-on-click** (bring-forward + switch-center-stage), positioned via `tauri-plugin-positioner` 2.3 (`tray-icon` feature) `Position::TrayBottomCenter`, and a 3-state aggregate dot (green/blue/amber, AwaitingInput > Running > Idle), dismissed on blur with a `tauri#13633` click-outside fallback.~~ **Cut at the M7 spec debate (2026-06-29):** capability-by-capability this is a strict subset of the shipped M5 PiP (which already does live mirrors + layouts + attention weighting, all-Spaces, near-zero-pixel in `minimal`+`On`). Two overlapping dashboards split the glance and double the maintenance. See design-prior [[new-surface-must-earn-its-place-against-existing-ones]].
-
-**B.3 — PiP NSPanel — AS-BUILT (M5 COMPLETE 2026-06-27; unconditional).** *Resynced at M5 finalize — the pre-build notes below carried several assumptions the WP1 probe falsified; this is the as-built record. `src-tauri/src/pip/` (module) + `src/pip/` (frontend route `pip.html` + `main.tsx`, Vite multi-entry).*
-- **Crate (git-pinned, NOT crates.io):** `tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }` (pkg 2.1.0, commit `a3122e8`); compiles against Tauri 2.11.2. Requires the `tauri` feature `macos-private-api` + `"app": { "macOSPrivateApi": true }` in `tauri.conf.json`. Plugin init `.plugin(tauri_nspanel::init())`.
-- **Panel class + builder (corrected vs. the original plan):** define a panel class via `tauri_panel! { panel!(... { can_become_key_window:false, can_become_main_window:false, is_floating_panel:true, hides_on_deactivate:false }) }`, then `PanelBuilder::<_, P>::new(...).with_window(|wb| wb.decorations(false).transparent(true).skip_taskbar(true)).style_mask(StyleMask::new().borderless().nonactivating_panel()).level(PanelLevel::Floating).collection_behavior(CollectionBehavior::new().can_join_all_spaces().full_screen_auxiliary().stationary())`. Non-activation (no focus-steal on click) comes from the **`NonactivatingPanel` style mask**, NOT `no_activate(true)` — **`no_activate(true)` is destructive** (it flips `NSApplicationActivationPolicy` to Prohibited during `build()` and HID the entire main window) and was rejected by the probe. The window MUST be born `decorations(false)` + `transparent(true)` BEFORE the borderless+nonactivating mask is applied (a Titled→borderless transition crashes with `NSRangeException`). Builder method is `collection_behavior` (American spelling), not `set_collection_behaviour`.
-- **Show without activating:** `panel.order_front_regardless()`; hide: `panel.hide()`. **Teardown:** via `panel.to_window()` → `window.close()` ONLY (closing the live panel object is a use-after-free that aborts the process); torn down on the main window's `CloseRequested` so an all-Spaces panel doesn't orphan on screen. No close (X) button on the borderless panel — dismiss via the mode control.
-- **Confirmed behaviors (WP1):** visible on every Space; does NOT steal focus / activate on click; survives Claudesk losing focus / minimize; no crash on toggle; safe teardown. (Over-fullscreen draw was DROPPED as a requirement — the `full_screen_auxiliary` flag is kept but harmless.) **Entitlement/signing:** none for unsigned local dev. Installed-`.app` parity + the `tauri-apps/tauri#5566` release-vs-dev caveat are operator-verified at the `/release` gate (`SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE`).
-- **Four layouts + persisted switcher + content-driven resize (WP4):** horizontal mirror (default) / vertical mirror / compact (name+dot, no mirror) / minimal (dots only). On-panel own-row switcher cycles them; layout persists per bundle-identity (`config_store/settings.rs`, `pip_layout`). Panel auto-resizes **content-driven** (`computePanelSize(layout, count, screen)` — fixed tile unit × N along the flow axis, 90%-screen-capped then wrapped; applied via `pip_resize`), NOT a static size table. Compact/minimal stop the serialize cost (no mirrors). **Minimal-layout attention weighting:** `orderForAttention` sorts awaiting-input first; awaiting dots POP (blink + halo) while all-busy reads quiet — the "is anyone waiting on me?" glance.
-- **Roster divergence (intentional):** the PiP mirrors **ALL N workspaces INCLUDING the center-staged one** (`derivePipFrame` drops nothing) — unlike the filmstrip's static center tile — because PiP is watched when the center stage is NOT visible. Do NOT "fix" this to match the filmstrip.
-- **Rendering:** reuses the M4 shared `useMirrorTicker` serialize (one loop feeds filmstrip + PiP via a `pip-mirror` emit; NO second serialize loop), gated on a backend `pip-visibility` broadcast so a hidden panel costs nothing.
-- **Visibility lifecycle = tri-state `PipMode` (WP5):** **Off** (hidden) / **On** (shown + pinned) / **Auto** (default — hidden while focused, auto-summons on ~3s sustained main-window blur, auto-dismisses on refocus). Selectable via the right-panel PiP icon (cycles Off→On→Auto) + a View-menu radio (the menu `CheckMenuItem`s re-check exclusively on the `pip-mode` broadcast). Mode persists per bundle-identity (`pip_mode`). The explicit tri-state replaced an earlier inferred-regime design that had an unreachable-state dead-end (design-prior `explicit-selectable-mode-over-inferred-mode`).
-- **Display-only:** clicking a PiP tile does NOT bring the workspace forward (vision anti-goal); click-to-focus is a Future Possibility.
-- **⚠️ PiP/NSPanel window ops MUST run on the main thread.** Any background-thread caller (the auto-summon debounce timer, future async paths) MUST marshal the window op via `app.run_on_main_thread(...)` — off-main-thread AppKit ops abort the process with a native exception and NO Rust panic (invisible to `cargo test`; presents as clean-launch-then-silently-die). Tauri `#[command]` fns + `on_window_event` already run on the main thread. (See CLAUDE.md for the full rule.)
-- **Bus-factor risk:** `tauri-nspanel` is single-maintainer, pinned to a branch (not a tag). Mitigation: monitor `tauri-apps/tauri#13034` for first-party NSPanel support and migrate when it lands.
-- **Agent verify-self via the MCP bridge (WP2 ADOPT):** the dev-only `tauri-plugin-mcp-bridge` (`#[cfg(debug_assertions)]`, 127.0.0.1:9223; MCP server in `.mcp.json`) reaches BOTH the `main` and `pip` webviews (`webview_*{windowId:'pip'}`), so PiP status surfaces are agent-verifiable (not carried to verify-human). Boundaries: raw xterm typing is low-fidelity (trigger status transitions via IPC/click); installed-`.app` + `pgrep`-class outcomes stay operator-only. Compiled OUT of release builds.
-
-## Milestone 2 architecture — Lite Editor + Diff Viewer (SHIPPED 2026-06-22)
-
-> **Status: SHIPPED + cycle closed 2026-06-22.** All M2 WPs (1, 2, 3a/b/c, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13) landed; the M2 WBS is archived at `archive/milestone-2-lite-editor-diff-viewer/wbs.md`. The section below now reads as as-built architecture (with a few inline as-built corrections), not a forward plan. Two design deltas from the original sketch were confirmed in code: the **DiffPanel renders styled git2-hunk lines, NOT `@codemirror/merge`** (lighter, exact Sublime-Merge look), and **both Sublime launchers were KEPT** (WP8 redefinition). A multi-file editor tab strip (WP12) + ⌘W close-tab (WP13) + file-tree navigator (WP10) + tree/editor density & git indicators (WP11) were added beyond the original component sketch.
->
-> **Scope (Milestone 2, roadmap):** the right half stopped being a placeholder and became a real per-workspace editing surface that is the *primary* routine-editing surface (Sublime Text kept as a permanent escape hatch — WP8). Grounded in `research.md` (2026-06-19). YAGNI held — this designed M2 only; Milestones 3–9 (stateful CC controller, multi-workspace, status surfaces, polish) stay forward-look.
-
-### Component shape
-
-The Milestone 1 "right-half placeholder" inside each workspace becomes a **`RightPanelHost`** — a per-workspace React component that owns the right half and swaps between panels: **Editor** (CodeMirror 6, with a multi-file tab strip + split panes + a left file-tree rail), **Diff** (backend `git2` hunks rendered as styled +/- lines — NOT `@codemirror/merge`, as-built WP4), and **Terminal** — *N* login-shell `PtyCcSession`s per workspace via `term_spawn` (M6 WP11 made it multiple; reuses the WP7/`CcSession` seam). One host instance per workspace; each workspace keeps its own panel state (which panel is active, open files, scroll), mirroring the "all workspaces stay mounted" rule from Milestone 1.
-
-> **⚠️ Updated at the M11 close (2026-08-03): the panel set is FOUR, and it is no longer a static list.** Milestone 11 added a **Docs** panel (read-only `workflow-system/` markdown viewer), and because that surface is gated behind M10.9's `workflow_features_enabled`, the registry became **gate-derived**: `availablePanels(enabled)` / `defaultPanel(enabled)` / `selectPanel(current, target, enabled)` / `reconcilePanel(current, enabled)` in `panelHost.ts`, with the static `AVAILABLE_PANELS` retained as the literal **OFF-state** value the OFF-invariant guard checks against. With the gate **off** the three-panel description above is exact and Editor is still first/default; with it **on**, Docs is prepended and becomes the default. See "Milestone 11 architecture" below.
-
-| Component | Layer | Responsibility |
-|-----------|-------|---------------|
-| **RightPanelHost** | Frontend | Per-workspace owner of the right half. Holds the active-panel state (editor \| diff \| terminal \| **docs**, the last gate-derived — M11); **per-panel direct-select hotkeys** (⌘⇧E Editor / ⌘⇧D Diff / ⌘⇧T Terminal / **⌘⇧K Docs, gated** — NOT a cycle) + clickable tabs select panels. The tab row also carries **both permanent Sublime launcher icon buttons** (`sublime_open` Text + `smerge_open` Merge, right-aligned past a divider, via `sublime/sublimeLaunch.ts` — WP8; no Sublime hotkey, `⌘⇧O` freed). Replaces the M1 placeholder. *(As-built WP5: direct-select chords, not the originally-sketched cycle.)* |
-| **EditorPanel** | Frontend | CodeMirror 6 via `@uiw/react-codemirror`. Multi-cursor (core), `@codemirror/search` find/replace, language modes (per-file), optional minimap (⚠️ **known-broken**: goes stale on file update — `SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE`, reproduced + root-caused to upstream canvas math at M11.5 WP2, then deliberately deferred as feature-sized), dark theme. Reads/writes files via `tauri-plugin-fs`. |
-| **DiffPanel** | Frontend | **As-built: styled `git2`-hunk lines, NOT `@codemirror/merge`** (the backend computes the hunks; the panel renders +/- lines for the exact Sublime-Merge look). One scrolling column: a collapsible Commits section on top (**collapsed by default — QoL-WP8**) + the changed-files area (working-dir or a selected commit's diff), each file a collapsible section. Sticky chrome (commits section / commit banner / per-file headers) **stacks** via cumulative `top:` offsets from measured CSS vars (`--diff-commits-h` / `--diff-commit-banner-h`, kept current by a ResizeObserver — QoL-WP8) so the current file's header stays pinned while its diff scrolls. Per-file "Edit" badge opens the live working-tree file into the EditorPanel (`onOpenInEditor`); collapse/expand-all control over all sections. |
-| **FileFinder** (Cmd+P) | Frontend + Backend | **App-layer, not an editor feature.** A React fuzzy-picker overlay over a backend-provided file index of the workspace's project dir; selecting opens the file into the EditorPanel. |
-| **ProjectSearch** | Frontend + Backend | **App-layer.** Backend ripgrep-style search over the project dir → results list; opening a result loads the file + highlights the match in CM6 (`@codemirror/search` does the in-document highlight). |
-| **`git_diff` command(s)** | Backend | `git2`-backed: list changed files (unstaged vs staged) + return base-content blobs (HEAD blob for working-tree diffs, index blob for staged). Pure-fn core + thin Tauri command wrappers (the WP6/WP7 shape). Does NOT compute the rendered diff — supplies inputs to DiffPanel. |
-| **`fs_index` / `project_search` command(s)** | Backend | Walk the workspace project dir for the FileFinder index; ripgrep-style content search for ProjectSearch. **Exclusion is heavy-dir, NOT gitignore (M6 WP6 re-base, commit `61db3d4`):** a manual DFS `read_dir` (`walk_project`, replacing `ignore::WalkBuilder`) excludes only `.git/` + heavy/generated dirs (by name or a detected >500-immediate-child count, listed-but-not-descended), so gitignored-but-edited files (`.env`, `.session.md`, `.claude/*`) are shown/searchable/openable. One shared walk backs tree + Cmd+P + search so they never disagree. |
-| **`editor_fs` command(s)** | Backend | Root-confined file IO + mutation behind a **two-layer** guard (backlog-paydown WP7 2026-07-20 — now a fully-enforced invariant, not an accepted gap). **Layer 1 — `root` is authenticated, not trusted:** every command takes an injected `AppHandle` and calls `validate_root(known_roots, requested_root)` before honoring `root` — the known-project list is resolved server-side (`config_store::read_projects(app_data_dir())`), and a `root` that is neither a known project nor a descendant of one is rejected (both sides canonicalized; component-wise `starts_with`). Mirrors `config_store`'s server-side-derivation posture; `AppHandle` is Tauri-injected so the FE `invoke` shape (`{root, path[, contents]}`) is unchanged. **Layer 2 — the file path is confined to `root`** via `resolve_within` (canonicalizes the parent AND, when the target exists, the *full* resolved path — so a **leaf** symlink escaping root is rejected, not just a directory-component symlink; a not-yet-existing new-file leaf is safe by construction) / `resolve_within_lexical` (parent-tolerant, create paths). `read_file`/`write_file`/`stat_file` (M2) + **QoL-WP5/WP5b: `delete_file`** (rejects a dir → `IsDirectory`, hard `fs::remove_file`), **`trash_path`** (recursive folder delete via the macOS Trash — recoverable, `trash` crate), **`create_dir`** (parent-tolerant via the lexical guard). Create-a-file = `write_file("")` (no new command); the FileTree rail's ＋/⊞/✕ affordances + ⌘N drive these. Tab teardown on delete is exact-match (file) or prefix-match (folder) across all panes. |
-| **Second-terminal panel** | Frontend + Backend | A second `PtyCcSession`-equivalent for an ad-hoc shell in the right half (reuses the `CcSession` trait + `cc_*` command pattern; not `claude` — a plain shell). |
-
-### Data flow (Milestone 2)
-
-```mermaid
-flowchart LR
-  subgraph WS["Workspace (one per project tab)"]
-    Left["Left: CC terminal (xterm.js) — Milestone 1"]
-    subgraph RPH["RightPanelHost (M2)"]
-      Editor["EditorPanel (CodeMirror 6)"]
-      Diff["DiffPanel (git2 hunks — NOT @codemirror/merge)"]
-      Term2["Second terminal (PtyCcSession)"]
-    end
-  end
-  Editor <-- "read/write file (tauri-plugin-fs)" --> Backend
-  Diff <-- "git_diff: file list + base blobs (git2)" --> Backend
-  FileFinder["Cmd+P FileFinder (overlay)"] -- "fs_index" --> Backend
-  ProjectSearch -- "project_search (ripgrep-style)" --> Backend
-  PanelSwitch["Panel-select hotkeys (⌘⇧E/D/T) + tabs"] -. direct-select .-> RPH
-  Backend["Rust core (git2 + fs walk/search + tauri-plugin-fs)"]
-```
-
-### Key M2 design constraints
-
-- **The editor engine edits a *document*; the *project* is ours.** This is the load-bearing finding (`research.md`): Cmd+P fuzzy file finder and project-wide find/replace are **app-layer subsystems** (Rust file-index + ripgrep-style search + React overlays), not CM6 (or Monaco) configuration. The WBS must budget them as their own work, distinct from "wire up CodeMirror." Roughly 2 of the 6 Sublime-parity "editor" features are actually backend features.
-- **Diff = `git2` (data) + styled-line hunk render (as-built WP4 — supersedes the `@codemirror/merge` plan).** `git2` supplies the changed-file list, structured hunks, and commit log; the frontend renders +/- lines with Sublime-Merge styling directly (no `@codemirror/merge`, no CM6 MergeView). This was lighter and gave an exacter Sublime-Merge look in the narrow half-width panel. Interactive staging / rebase / blame / conflict-resolution are explicitly out of M2 scope (they live in Sublime Merge, launched via `smerge_open`).
-- **Panel-switch hotkey must coexist with CM6's keymap.** When focus is inside a CM6 editor, CM6 can swallow app-level chords. The right-half panel-switch hotkey (and Cmd+P / the command palette) must be registered so they fire *even while editing* — as CM6 keybindings that bubble, or with app key handling scoped to let the chord through. This is the same class of issue WP8 hit with `⌘⇧E`; design it deliberately, do not rely on a naive document-level listener.
-- **N mounted editors.** Per the tab model (the multi-workspace milestone — Milestone 4 after the 2026-06-22 reorder, was M6), N workspaces each may hold a CM6 EditorPanel (plus a DiffPanel — as-built styled git2-hunk lines, NOT extra CM6 MergeView instances), all mounted (`display:none` when backgrounded). CM6 is far lighter than Monaco, but the WP4-style "cost at N" concern applies to editors too — the WP4 probe covered terminals only. A cheap sanity check that N mounted editors stay within the RAM/CPU envelope is warranted at the multi-workspace milestone (tracked as `SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE`).
-- **Both Sublime launchers KEPT permanently as tab-row icon buttons (revised 2026-06-20, WP8 — supersedes the "Sublime Text pop removed at parity" plan).** WP8 was redefined: the Sublime **Text** pop is **NOT removed**. Both launchers (`sublime_open` Text + `smerge_open` Merge) are permanent **icon buttons** in the `RightPanelHost` `right-panel-toggle` tab row (right-aligned past a divider), each calling its unchanged backend command via `sublime/sublimeLaunch.ts`. The only thing deleted at WP8 was the redundant Sublime-**Text** `⌘⇧O` `keydown` hotkey (`chord.ts` + `SublimeToolbar.tsx` removed); `⌘⇧O` is now freed/unbound. **There is no parity gate** — WP8 is no longer gated on WP9 (no removal → no parity proof needed), and it is no longer the "last M2 build step." The in-app editor is the *primary* routine-editing surface, but Sublime Text remains a permanent escape hatch alongside Sublime Merge (the inline DiffPanel covers *viewing*; staging / blame / history / blob-at-rev stay in Sublime Merge). *(Earlier 2026-06-19/2026-06-20 wording said the Text pop was removed at parity — fully superseded by the WP8 redefinition; see the top-of-file Revision 2026-06-20 note.)*
-- **Dark-mode only.** CM6 theme is a single dark theme extension; no light variant (project convention).
-
-### M2 forward-compat / seam reuse
-
-- **`CcSession` trait reused** for the second-terminal panel (a plain shell, not `claude`) — no new process-spawning abstraction. As-built (WP9): a generic `spawn_argv` core that both `cc_spawn` (claude) and `term_spawn` (login shell) delegate to; shared `cc_input`/`cc_resize`/`cc_kill` commands + `cc-output-<sid>`/`cc-exit-<sid>` events; the frontend `XtermPane` is parameterized by `spawnCommand`, with a thin `TerminalPane` wrapper for the shell.
-- **PTY prompt-flush invariant (load-bearing — incident-terminal-blank-cursor, 2026-06-22).** A one-shot-emitting PTY process (a login shell prints its prompt exactly once at startup; `claude` does not — it streams continuously) needs BOTH halves of the prompt-race fix: (1) the backend **buffers output until `cc_ready`** then flushes (`PtyCcSession::mark_ready`, `OutputBacklog` Some→None) — *necessary*; AND (2) the frontend `cc-output-<sid>` listener must **survive for the session's lifetime** — it must NOT be torn down by a transient React re-render. The buffer-and-flush alone is *not sufficient*: if the listener is unlistened when the flush emits, the one-shot prompt is lost and the pane stays blank-but-cursor (the deferred-spawn terminal path hit this when `XtermPane`'s spawn effect keyed on `bridge.phase` and re-ran on `spawning→live`). The contract is encoded in `src/cc/spawnTrigger.ts` (the spawn effect's re-run trigger set must exclude the bridge phase) and locked by `spawnTrigger.test.ts`. Future terminal/PTY work that touches the spawn-effect lifecycle must preserve this: re-spawn only on a genuine signal (relaunch nonce / `active` / `projectPath` / `spawnCommand`), never on a phase transition.
-- **`tauri-plugin-fs` reused** for file read/write — already a dependency from Milestone 1's config store.
-- **Backend command shape reused** — `git_diff` / `fs_index` / `project_search` follow the `command → pure-fn (injected paths, TempDir-testable) → typed error → String` pattern from `config_store` (WP6) and `cc_session` (WP7).
-
-### Phase 3+ forward-look (informational, not built — superseded scope note)
-
-> The former "Phase 3" lite-editor work is now **Milestone 2** (designed above). What remains genuinely forward-look beyond M2:
-
-- A richer git surface (interactive staging / blame / history) beyond M2's diff-viewer basics — only if the in-app diff viewer proves insufficient in dogfooding.
-- Editor LSP-style features (completions/diagnostics) via a language server behind CM6 — explicitly out of vision scope (Claude Code is the intelligence layer), noted only as a known CM6-extensibility path.
-
-### Future hedge
-
-- `SdkCcSession` impl of `CcSession` (using `@anthropic-ai/claude-agent-sdk`) is documented in research as a potential migration path if PTY-based control ever becomes untenable.
-- **PiP click-to-focus** — promote a workspace from a PiP tile click. Defer until display-only PiP has been used long enough (or PiP has been replaced by menu-bar) to confirm the limitation is real.
-
-## Native application menu bar (SHIPPED 2026-06-24, commit f815154)
-
-A standalone between-milestone feature (operator request, after M4 close): a real macOS menu bar (Claudesk · File · Edit · Find · View · Workspace · Window) replacing Tauri's default auto-menu. **Mirrors existing features only — adds no new behavior.** Built in `src-tauri/src/app_menu/` (`build_menu` + `on_menu_event` handler, set app-wide in `.setup()` via `app.set_menu`).
-
-**Key decision — the menu carries NO real accelerators.** A Tauri-2 menu accelerator intercepts the keystroke at the AppKit level *before* the WKWebView/CodeMirror sees it (would break the existing chord handlers + CM6 keymap). So menu items split three ways:
-- **Predefined** (`PredefinedMenuItem` via the builder: About-with-version, Quit, the Edit group, Window group) → wire to the native macOS responder chain automatically; Cut/Copy/Paste/Undo operate on the focused webview text (incl. CM6) with no custom code. About shows the version from `app.package_info()` (sourced from `tauri.conf.json`).
-- **Functional custom items** → no accelerator; on click the Rust `on_menu_event` emits the item's id on a `menu` Tauri event. The frontend (`src/menu/menuBridge.ts`, a pure id→action map) maps it to either a **synthetic `KeyboardEvent` re-dispatched on `document`** — reproducing the exact chord the existing capture-phase handlers already own (panel-switch ⌘⇧E/D/T, finder ⌘P, search ⌘⇧F, palette ⌘⇧P, close-tab ⌘W), so the menu is a pure alias with zero handler changes — or a **React callback** (New Workspace picker; the Sublime/Merge/Finder launchers, acting on the focused workspace). The `App.tsx` `menu` listener uses the `cancelled`-flag guard (same as `useWorkspaceStatus`) against StrictMode async-listen double-registration.
-- **Label-only (disabled)** rows for CM6-internal chords (Save/Find/Zoom) and the representative digit chords (Switch Workspace/Tab 1–9) — a discoverability cheat-sheet showing the shortcut as `\t⌘…` label text; the keys keep working in CM6.
-
-**Known debt (backlogged):** the functional menu-item id strings are duplicated across Rust `app_menu::ids` and TS `MENU_IDS` with no mechanical guard (a drift silently dead-clicks one item with green tests) — see `SURFACE-2026-06-24-QUALITY-APPMENU-CROSS-LANG-ID-CONTRACT`.
-
-## Milestone 9 architecture — Time-analytics panel (absorb claude-time) (SHIPPED 2026-07-16)
-
-**Moved to** [`archive/milestone-9-time-analytics/arch-as-built-m9.md`](archive/milestone-9-time-analytics/arch-as-built-m9.md) on 2026-08-03 (size guard; that dir already held two arch-grade companion docs, so the detail belongs there). **The load-bearing rules stay here:**
-
-- **SQLite is a scoped exception** to the project's no-database rule — time-series aggregation only; see "### Key Decisions".
-- ⚠️ **Session END must be MEASURED, not assumed** — 4 signals with a precedence order; a dangling burst inflated a duration to 885 min.
-- ⚠️ **Aggregate-duration consumers must clip events at `resolve_session_end` FIRST** — the cap lives in the CALLER (`build_viz_session`/`build_metrics`), not the primitives, which return RAW bursts.
-- ⚠️ **Mount scope must match data scope** — a component mounted wider than its data window reads stale.
-- **`time_tracking_enabled` (default OFF) is the write gate** — and it is the template M10.9's feature gate was modeled on.
-
-## Milestone 10 architecture — In-app auto-updater (AS-BUILT 2026-07-18 — ✅ COMPLETE, GO)
-
-M10 gives Claudesk an in-app updater: check → download → install → relaunch, with the user always in control (skip-version / disable-notifications / cancel-confirm; no silent/forced updates). Full research in `docs/product/research.md` (M10). **Milestone-exit verdict: GO** — verified on the operator's REAL Homebrew prod install (0.2.7 → in-app self-update → 0.2.8, zero brew commands, clean Gatekeeper relaunch).
-
-> ✅ **Decision 1 REVERSED 2026-07-17 and the rework SHIPPED 2026-07-18 (option B — Homebrew installs SELF-UPDATE in-app too).** The original "detect-and-defer" decision (struck below) rested on a false premise (that a brew install *couldn't* get the self-update UX — it can, and it's the idiomatic pattern, e.g. VS Code). A cited deep-research pass (2026-07-17) found "brew desync" is recoverable metadata drift (not corruption) and that Homebrew PR #21882 (live Jul 2026) reconciles a self-updated app's version via its `Info.plist` when the cask declares `auto_updates true` + the release bumps `CFBundleVersion`. **As-built at WP6 Phase B1 (the rework, now DONE, not "next-session"):** brew installs get the same in-app self-update flow as direct-download — **ONE self-update path, no branch**; the backend `InstallSource`/`install_source(_from_bundle)`/`BREW_DEFER_MSG` gate + the `updater_check` source classification + `updater_apply`'s Homebrew refusal + the `install_source` DTO field were all **removed**; the FE `isBrew`/copy-`brew upgrade` banner branch + `copyToClipboard.ts` were **deleted**; the cask declares **`auto_updates true`**; `CFBundleVersion` = the semver `version` (Tauri sets both, so brew's version comparison is monotonic). The mermaid `Source`/`Defer` branch + the "Install-source detection" bullet below are SUPERSEDED (struck, kept for audit). Also recorded: the old detection shipped BUGGY on the real cask layout (`app "Claudesk.app"` MOVES the bundle to a real `/Applications` dir + reverse-symlinks Caskroom → no `/Caskroom/` segment → every brew install misclassified DirectDownload) — moot since the gate is gone. See `roadmap.md` → M10 "Homebrew → REVERSED 2026-07-17".
-
-**As-built mechanisms (Decision 2 stands; Decision 1 reversed → option B, shipped):**
-- **~~Decision 1 — Homebrew: detect-and-defer~~ (SUPERSEDED 2026-07-17, gate REMOVED at WP6 → brew self-updates too; see the note above).** ~~brew installs point to `brew upgrade`; only direct-download installs self-update — avoids brew version desync.~~ **As-built: one self-update path for both brew + direct-download; cask `auto_updates true`; CFBundleVersion = semver `version`.**
-- **Decision 2 — Signing: stay UNSIGNED, no $99 Apple Developer Program** (the updater's free minisign keypair verifies artifacts; the unsigned-relaunch Gatekeeper block is handled in-app by the self-`xattr`-clear — confirmed GO on a real brew install at WP6).
-
-> *(The install-source-gate flowchart was removed 2026-08-03 — it diagrammed the brew-detection branch that Decision B1 DELETED. There is now exactly one self-update path.)*
-
-**As-designed elements (feed WBS):**
-
-- **Update-artifact + manifest + signing pipeline.** `bundle.createUpdaterArtifacts: true` in `tauri.conf.json` makes `pnpm tauri build` emit `Claudesk.app.tar.gz` + `.app.tar.gz.sig` (in `target/release/bundle/macos/`) **alongside** the existing `.dmg`. The `.dmg` stays — it is the **first-install + Homebrew artifact**; the `.app.tar.gz` is the **update artifact** (what the updater downloads/extracts). A static **`latest.json`** manifest (`darwin-aarch64` target — Apple-Silicon-only, matching the single `.dmg` target) is published to **GitHub Releases** as the update endpoint (`https://github.com/StaymanHou/Claudesk/releases/latest/download/latest.json`) — zero backend, consistent with the "no backend infrastructure" constraint. Signing uses a **minisign keypair** (`tauri signer generate` — free, no Apple account): the **public key** goes in `tauri.conf.json` → `plugins.updater.pubkey`; the **private key is a secret** (repo secret / local keychain — NOT committed); each release's `.sig` contents paste into the manifest `signature` field. **The `/release` skill gains three steps:** build the `.app.tar.gz`+`.sig`, generate+sign `latest.json`, upload all (dmg + tar.gz + sig + latest.json) to the GH release. The version already lives in two synced source-of-truth files (`tauri.conf.json` + `Cargo.toml`); `latest.json`'s version derives from the same source (no third hand-maintained copy).
-- **~~Install-source detection (the brew detect-and-defer gate)~~ — SUPERSEDED 2026-07-17 (brew self-updates too; gate to be REMOVED next session). Also note: the mechanism below was found BUGGY on the real cask layout — `app "Claudesk.app"` MOVES the bundle to a real `/Applications/Claudesk.app` dir and symlinks Caskroom→/Applications (the reverse of what this bullet assumed), so `current_exe()` canonicalizes to `/Applications/...` with no `/Caskroom/` segment → every brew install misclassified as DirectDownload. Moot under (B) since detection is being removed, but recorded as the concrete real-layout finding.** ~~At runtime, resolve the running bundle's **canonical path** (`std::env::current_exe()` → walk up to the `.app` → `canonicalize()`/realpath to follow symlinks). Homebrew casks install the real bundle under `<brew-prefix>/Caskroom/<cask>/<version>/Claudesk.app` and symlink `/Applications/Claudesk.app` to it (standard `app`-stanza), so a **`/Caskroom/` segment in the resolved path ⇒ brew-managed ⇒ defer** (show "installed via Homebrew → run `brew upgrade`", do NOT self-install). A **real directory** at `/Applications/Claudesk.app` (no Caskroom) ⇒ direct-download ⇒ self-update allowed. **Fallback:** a release-time-baked install-source marker (`Contents/Resources/…`) if path-resolution proves fragile. **Caveat — App Translocation:** a quarantined app launched from a `.dmg`/Downloads runs from a randomized translocated path; detection (and the self-xattr path below) must be validated from a *properly-installed* `/Applications` bundle, not a translocated one.~~
-- **Self-quarantine-clear on unsigned relaunch — THE central risk.** Because Claudesk is unsigned/un-notarized, the freshly-extracted `.app` is subject to Gatekeeper and relaunch can silently fail as "damaged". **As-designed:** after `install()` extracts the new bundle but **before** `relaunch()`, the app self-runs `xattr -dr com.apple.quarantine <own-bundle-path>` (a `std::process::Command` on its own bundle — **no `sudo`**, since a process may clear xattrs on a bundle it owns). **Guaranteed fallback:** if the self-clear can't fire (e.g. `install()` relaunches before a hook runs) or proves unreliable, surface the exact `xattr` command in a post-update dialog for the user to run. **This mechanism must be spiked on a REAL unsigned installed build (not `pnpm tauri:dev`, which never reproduces Gatekeeper) — it decides whether the seamless self-clear UX is viable or M10 ships with the instruct-the-user fallback. The spike is WBS WP1 and gates the rest.**
-- **Updater dependencies + user-control prefs.** New deps: **`tauri-plugin-updater` v2** (check/download/install; **use the split `download()` then `install()`** so *cancel* has a clean boundary — cancel-before-install leaves the running app untouched) + **`tauri-plugin-process`** (the `relaunch()` after install). Two new prefs — `skipped_version: Option<String>` (the exact version tag; `check()` still returns it but the notify layer suppresses it; a manual "check now" ignores the skip) and `update_notifications_enabled: bool` (default ON; OFF ⇒ no auto-check-on-launch + no proactive notify, but manual "check now" still works) — persisted in **`config_store` settings, per bundle-identity** (`com.claudesk.app` vs `.dev`), the same pattern as `time_tracking_enabled` (M9) and `pip_mode`.
-
-**Key M10 decisions (record):**
-- **Unsigned + minisign, not notarized.** The two signing systems are independent: the updater's minisign keypair (free) verifies *artifact authenticity*; macOS *notarization* ($99/yr) is separate and NOT purchased. Consequence — the self-quarantine-clear mechanism above — is a deliberate accepted cost of staying unsigned. Revisit notarization later (a future call, not M10).
-- **Static `latest.json` on GH Releases, not a dynamic endpoint.** Zero-infra, single-platform; no staged-rollout/per-user-gating need for a single-user tool.
-- **Two release artifacts, not one.** The `.dmg` (first-install/Homebrew) and the `.app.tar.gz`+`.sig` (updates) coexist per release — a `/release` complication, not a redesign.
-- **First updatable release is the FLOOR, not retroactive.** The updater only updates *from* a build that already contains it; the M10-output release is the first later versions update from. Currently-installed v0.2.x still `brew upgrade`/re-download once. Inherent, and the reason the roadmap placed M10 "before the next release."
-- **M14 (Polish) overlap — reconciled.** M14's "code-signing / notarization strategy decided and documented" deliverable is now **decided at M10** (stay unsigned + minisign). M14 *inherits and documents* that decision for the public release rather than deciding it fresh; a future notarize-yes reversal (and its removal of the self-quarantine-clear step) would live at M14. (See roadmap "Overlap note (2026-07-06)".)
-
-**As-built reconciliation (WP1–WP6 shipped; the module map):**
-- **`src-tauri/src/updater/`** — `mod.rs` (self-clear pure core `resolve_bundle_path`/`quarantine_clear_command`/`clear_own_quarantine` + `UpdaterError`; the `InstallSource`/`install_source*`/`BREW_DEFER_MSG` gate that briefly lived here was REMOVED at WP6 Phase B1) + `commands.rs` (`updater_check` → `UpdateCheckResult`; `updater_apply` = `check → download[minisign] → install → clear_own_quarantine → app.restart()`, self-clear at the frozen seam AFTER `install()` returns / BEFORE relaunch, split download/install for the cancel boundary).
-- **Frontend** — `useUpdater` hook drives a non-modal **in-flow** app-shell banner row (Update…/Skip/Dismiss + real `updater-download-progress` bar; NOT an absolute overlay — the F12 layout back-loop, so it never covers filmstrip click-targets), a confirm dialog, the WP1-fallback quarantine dialog (seam-gated behind `QUARANTINE_FALLBACK_ACTIVE`, default false/GO), and (WP6 Phase 1) an `UpdaterStatusRow` surfacing an apply-FAILURE `phase==="error"`/`errorMessage` (the WP4 MAJOR — previously unconsumed) under a single-post-install-surface invariant (fallback dialog XOR error phase). "Check for Updates…" app-menu item (manual check, ignores skip/disable) + picker toggle + button.
-- **Prefs** — `update_notifications_enabled` (default **ON**) + `skipped_version: Option<String>` in `config_store`, **per bundle-identity** (mirror `time_tracking_enabled`/`pip_mode`). No new runtime data store.
-- **`/release` pipeline** — the skill builds the `.app.tar.gz`+`.sig` (via `createUpdaterArtifacts`), generates + minisign-signs `latest.json` (signature = `.sig` VERBATIM), uploads all 4 assets (dmg + tar.gz + sig + latest.json) to the GH release + endpoint-resolves check. Release-only minisign keypair `774E2E8429FDF78A` stored out-of-repo at `~/.claudesk-release-keys/` (pubkey is the committed trust anchor in `tauri.conf.json`).
-- **No new arch primitives beyond the above** — the updater flow is synchronous (plugin owns its own async internally); prefs ride the existing per-identity `config_store` pattern; the only net-new runtime element is the artifact/manifest/minisign publishing pipeline (release-tooling, not app-runtime).
-
-## Milestone 10.9 WP3.5a architecture — the install wizard + its sandbox posture (SHIPPED 2026-07-29, commits `a6fb194` + `b95466f`)
-
-Recorded here because `SURFACE-2026-07-28-MCCC-INSTALL-FEATURE-NEEDS-SANDBOXED-DEV-AND-VERIFY`
-(**high**) requires the posture to live in `arch.md`, not only in a WIP file that gets archived.
-
-### The problem this shape solves
-
-This is the **first Claudesk code to mutate state outside its own app-data dir.** It writes into
-`~/.claude/` — which, on the operator's machine, is symlinks into a companion repo they actively
-edit. The naive implementation of "uninstall what we installed" deletes by resolved path, and
-`_ref/claude-customization`, `~/.claude/skills/feature-build`, and the operator's real repo can all
-resolve to the same bytes. So a path-based implementation can destroy the operator's working repo
-while believing it is removing an install.
-
-### The answer: provenance, not abstinence
-
-**What Claudesk installed is RECORDED at install time and NEVER inferred from a resolved path.**
-
-| State | Meaning | Affordance |
-|---|---|---|
-| `Absent` | no substrate found | the install wizard |
-| `Managed` | present **and** Claudesk holds a well-formed record | (WP3.5b: the 3-intent uninstall wizard) |
-| `Developer` | present but **unrecorded** — a hand-clone, the operator's live repo, or a record too damaged to trust | describe only; **never** offer removal |
-
-`Developer` is the load-bearing arm, and **every degraded read lands there**: missing, unreadable,
-and corrupt records all collapse to one `None` (`provenance::read_record` returns `Option`, not
-`Result`, precisely so the caller *cannot* distinguish cases that must not be distinguished).
-`Managed` is reachable only by an affirmative, well-formed record — because it is the only state a
-future deleting path may act on, so file corruption must never arm a delete.
-
-### Record location — a constraint, not a preference
-
-`~/.claudesk/install-record.json`, beside the managed clone. **Deliberately NOT the per-identity
-`settings.json`:** `~/.claudesk/vendor/` is not bundle-identity-scoped, so `com.claudesk.app` and
-`com.claudesk.app.dev` share one clone and must read one record. A per-identity record would give
-them divergent views of one directory in a feature whose whole model is "only touch what we recorded."
-
-### Module layout — each file is an enforcement boundary
-
-- **`sandbox.rs`** — the test fixture, `#[cfg(test)]` so a production `use` fails to compile. Built
-  **first** and proven to contain writes, per the SURFACE's mandated ordering. Exposes
-  `assert_contains_all_writes` (outer boundary) and the tighter `assert_writes_stay_under(root, …)`;
-  **both canonicalize their inputs**, because on macOS `/var` symlinks to `/private/var` and an
-  uncanonicalized prefix compare reports a contained path as an escape.
-- **`provenance.rs`** — the record. Path-arg'd read/write; no ambient root.
-- **`runner.rs`** — the two spawns. Pure `(program, args)` builders (following
-  `updater::quarantine_clear_command`) + thin spawners. **The provenance write is sequenced LAST**,
-  after `install.sh` exits zero, so "a failed install leaves no record" is structural rather than a
-  cleanup step. `OutputSink` keeps the whole run testable without a running app.
-- **`terminal.rs`** — a **pure reducer**: what does an outcome *mean* (gate action / cleanup /
-  what to surface)? Separate from `runner` because root `CLAUDE.md` requires revert-semantics
-  control flow to be a pure function asserted as a value. The division: **runner reports, terminal
-  decides, the caller acts.** Every non-success arm reverts the gate, written per-arm rather than via
-  a shared default so a new variant is forced to decide.
-- **`commands.rs`** — the **only** layer that resolves real paths, pinned by a test asserting exactly
-  one `env::var("HOME")` in the file.
-
-### Injectable roots everywhere, enforced by tests
-
-No ambient `home_dir()` / `env::var("HOME")` anywhere below `commands`. Each module carries a source
-guard that fails if one appears — the mirror image of `workflow_substrate::commands`'s read-only
-guard. This is what makes the sandbox possible at all, and it is the shape WP3.5b's deleting code
-inherits.
-
-### Two failure modes worth remembering (both invisible to the automated gates)
-
-1. **A safety guard must be mutation-proven, not merely present.** Three guards here looked like
-   proof and were not: a containment assert comparing two *test-constructed* paths (a real escape to
-   `/tmp` passed it — fixed by having production report `cloned_to`, a canonicalized filesystem
-   *observation*); a source-position guard for the write-last ordering (a `write_record` moved onto
-   the failure branch passed it); and a `#[cfg(test)]`-split extractor that silently scanned seven
-   lines of a 1000-line file.
-2. **A background worker that reports via events needs a panic boundary.** The lock release and the
-   terminal event were originally the closure's last statements, so one panic produced two
-   unrecoverable states: a permanently wedged single-run lock and a UI stuck mid-run with no exit.
-   Fixed with a `Drop`-based `RunGuard` that releases and reports on both the normal and unwinding
-   paths — the pattern any future long-running command should copy.
-
-### WP3.5b, as built — the deleting path and its compiler-enforced guard (SHIPPED 2026-07-31, `da4a854` + `8626ba7`)
-
-*(This section was a forward-look until 2026-07-31; it is now as-built. WP3.5a's "ships no deleting path at all" property has intentionally expired.)*
-
-**The refuse-guard is enforced by the compiler, not by review** (`workflow_install/guard.rs`, built as task ONE, before any deleting path existed). Every deleting operation consumes an **`UninstallTarget`** whose field is **private with no constructor but `refuse_guard`** — so a delete that skips the guard *does not compile*, proven by an `E0451` test. This is the answer to "a test-only guard cannot protect against a bug that ships": the guarantee is structural.
-
-The guard consumes **only the recorded provenance** — never a caller-supplied path, never a path inferred by resolving symlinks under `~/.claude/` — and hard-refuses when: there is no well-formed record (absent/unreadable/corrupt all collapse to `None` upstream, so the arm *cannot* distinguish cases that must not be distinguished — this also covers a hand-clone sitting inside Claudesk's own vendor dir, because **location is not provenance**); the recorded path cannot be canonicalized; the resolved target is, sits inside, or *contains* a protected root (home itself, `~/.claude/`, or any ancestor of home — which includes `/`); or the target is not a directory or lacks `uninstall.sh`.
-
-Also as-built:
-- **`--dry-run` drives the preview.** The dialog shows `uninstall.sh --dry-run`'s *real* output as the removal list, so preview and action share one source of truth and cannot drift — and the script's own view cross-checks Claudesk's record.
-- **Order of operations: script → clone-dir removal → provenance record deleted LAST.** A failed uninstall therefore cannot clear the record, structurally rather than by cleanup.
-- **One single-run lock shared by all three substrate-touching commands**, with the `Drop`-based `RunGuard` panic boundary WP3.5a introduced.
-- **`SURFACE-2026-07-29-QUALITY-WP3.5A-SOURCE-GUARD-CONSOLIDATION` was resolved here**, and the six copy-pasted guards became one `source_guard.rs` extractor + a **module-level** (not crate-level) delete allowlist. The rescope matters: the rule is no longer "no deletes exist" — that expired the moment this WP landed — but *"deletion APIs appear only where the allowlist says, in the counts it says."* It is documented as a **tripwire with a known alias bypass**; the behavioral tests are the real coverage.
-- **Two operator-caught lessons, both generalizing.** (1) *A predicate answering a question ADJACENT to the one asked will pass every test written from the same misunderstanding* — substrate detection was wrong twice (bare `is_dir()`, shipped in v0.2.9; then "non-empty"), both suites green, until the operator asked "what if the user already had their own skills?". It now keys on a **symlink resolving into a repo whose `install.sh` carries the `claude-workflow-system` marker**, degrading to "not installed" in every failure mode. (2) *Driving a UI by `data-testid` verifies logic and proves nothing about reachability* — three "verified live" passes were hollow while the dialog was 702px in a 599px panel with its button row below the fold. **Measure geometry explicitly.**
-- **A slot holding a long-lived surface must render in EVERY resolved arm**, not only the arm that summons it — hit twice in mirror-image form. **M11's Docs tab inherits this rule.**
-
-## Milestone 10.9 architecture — the workflow-features gate + its seam (AS-BUILT 2026-07-31 — ✅ COMPLETE, exit verdict GO)
-
-The milestone's own shape, distinct from the wizards above. Recorded at cycle close; the WBS is archived to `workflow-system/product/archive/milestone-10.9-workflow-features-gate/`.
-
-**What the milestone actually turned out to be.** A pre-decomposition audit of `src/` + `src-tauri/src/` found **zero** shipped workflow-coupled surfaces, so `OFF = byte-identical` was *already true* and there was **no de-wiring work**. The weight therefore sat on (a) the **gate seam** — the door M11–M13 must come through — and (b) the **on-ramp**, not on hiding existing UI. `hook_install` (10 generic CC lifecycle events powering the status dots) and the time-analytics dashboard are **universal** and keep running with the gate OFF; the latter's own `time_tracking_enabled` flag was in fact this milestone's template.
-
-**Module layout.** Backend: **`workflow_gate/`** (the setting + commands + broadcast), **`workflow_substrate/`** (read-only presence detection; marker-based per WP3.5b), **`workflow_install/`** (the wizards — see above). Frontend: **`state/workflowGate.ts`** (typed wrapper), **`state/useWorkflowFeaturesEnabled.ts`** (**the seam**), **`state/workflowInviteState.ts`** (the pure show-predicate), and **`components/settings/`** (the `⌘,` panel, invite modal, both wizards, and their copy modules).
-
-**The three load-bearing properties, and how each is held:**
-
-1. **OFF = byte-identical.** Held by the seam contract — *a gated surface must not exist when off*: not rendered-then-hidden, not present-but-disabled, not registered-with-a-no-op-handler. Enforced by the **OFF-invariant guard** (`src/state/__tests__/offInvariantGuard.test.ts`), which asserts absence across the three registries through which this app surfaces UI (`AVAILABLE_PANELS`, `MENU_IDS`, chord modules — the latter selected by **exported identifier** since M11.5 WP4, not by filename) plus two bypass scans, with meta-tests against the vacuous-guard failure mode. Since WP4 the guard also pins its own **reach** and its **offender predicate as a value** — the arm asserts `offenders === []`, which passes identically whether the predicate works or is broken to always-false, so the predicate is extracted (`isUngatedWorkflowChord`) and asserted directly.
-2. **Enable is a pure Claudesk UI-state flip touching NOTHING in `~/.claude/`** — *except* through an explicit, user-driven wizard (property 2's revised form, changed by the WP3.5 insert). Verified live at WP5 by `md5`-hashing every file under `~/.claude/` **around each toggle**: byte-identical in both directions.
-3. **A one-time evangelistic invite**, shown only while OFF. Fires on first launch with **≥1 project** (a fresh install has none, so the pitch would have no referent); three outcomes — primary **routes to Settings** (it does *not* flip the gate), `[Later]` persists nothing and returns next launch, `[Dismiss]` is permanent.
-
-**⚠️ The seam is `useWorkflowFeaturesEnabled`, and it has ZERO consumers by design.** M11's Docs tab is the first. Read the hook; never `invoke("workflow_get_features_enabled")` ad hoc, and never import the raw `getWorkflowFeaturesEnabled()` wrapper — a one-shot read never re-syncs on the broadcast, which is a defect that actually shipped in WP3 and was masked by an unrelated flag. Both bypass shapes are now scanned.
-
-**✅ The chord-arm basename gap is CLOSED (M11.5 WP4, 2026-08-01, commit `0bac2c6`).** *(Historical: the arm selected candidates by **basename** — `/hord[A-Za-z]*\.tsx?$/` — and so skipped `panelHost.ts`, the module owning `panelForChord`; an identical ungated workflow chord placed there passed the full guard 10/10 at WP5.2 probe 5b.)* The arm now selects by **exported identifier** (`exportsChordIdentifier` → `export (function|const|interface|type) … *Chord*`), verified a **strict superset** of the old set: all 12 modules the basename filter found **plus `panelHost.ts`**, 12 → 15, nothing dropped. **Mutation-proven, which is the deliverable:** the probe that passed 10/10 now **fails**, naming the file; all five arms were then bypassed **individually** (never as one composite — a composite that trips *some* arm reports "the guard bites" while hiding a gap, which is how this hole was found). Comment-stripping shipped in the same change and is load-bearing, not cosmetic: widening pulls in `paletteCommands.ts`, whose *comment* carries a stale `workflow/archive/…` path, so the selector edit alone turns the guard red on prose.
-
-**⚠️ Two reach gaps remain, found at WP4's own review and filed — neither reopens the closed hole, both fail SAFE:**
-- **The arm guards chord *predicates*, not chord *registration*.** `App.tsx` (3 `keydown` listeners), `Workspace.tsx`, and `RightPanelHost.tsx` are **not selected** by the arm, so a Docs chord written inline in a `useEffect` keydown handler would be invisible to it (`SURFACE-2026-08-01-QUALITY-WP4-ARM-GUARDS-PREDICATES-NOT-REGISTRATION`). **⚠️ Severity corrected DOWN at the M11 arch back-loop (2026-08-01) — the "structurally closest analogue to the basename gap / worth paying before M11" framing written here at M11.5's close was an OVERSTATEMENT.** Measured: every non-test keydown registration site delegates to a predicate module **13/13, with ZERO inline chord matching** (the only two inline `e.key ===` comparisons are `"Escape"` dismissals). Unlike `panelHost.ts` — a live, existing, **proven** miss — this is **conditional on a future author first breaking that convention**, and the panel arm is an independent second net. **Deferred past M11 by decision**; when paid, the right shape is a **convention guard** (assert no registration site inlines chord matching), not a sixth arm. See "Revision 2026-08-01 — M11 architecture" → Decision 2.
-- **The selector is a *name* predicate, not a behavior one**, and misses six export forms (`export default function`, `export async function`, `export class`, `export let`, `export enum`, `export {x}`) — the first two are live idioms in 14 non-test files. So "select by content" describes the *intent*; the mechanism still depends on a naming convention, just an identifier one rather than a filename one (`SURFACE-2026-08-01-QUALITY-WP4-CHORD-SELECTOR-MISSES-EXPORT-FORMS`, `…-SELECTOR-IS-NAME-NOT-CONTENT`).
-
-**⚠️ A widened selector must be proven a strict SUPERSET, not merely to include the new target.** WP4's audit rejected the intuitive content predicate (*"the module reads `metaKey`"*) precisely because it would have **added `panelHost.ts` while silently dropping `closeTerminalChord.ts`** — whose export takes three pre-computed booleans and never reads a keyboard event — a net reach *loss* that a "does it catch panelHost now?" check passes. Compute both sets and diff them.
-
-**The invite/Settings boundary (operator rescope, mid-WP3): Settings owns the substrate, the invite owns only discovery.** The invite carries no install content and runs no presence check; both live in Settings. This reversed an earlier inline-flip decision — under the new boundary the substrate context (is it installed? how do I install it?) lives exclusively in Settings, and once the wizard exists, enabling from the invite would mean consenting to an install without ever seeing that context.
-
-**Settings live in ONE place.** `components/settings/SettingsPanel.tsx`, reachable via `⌘,`, `Claudesk → Settings…`, and a picker-header gear. The old `ProjectPicker` settings strip is **deleted** — add a control by supplying a `useSettingControl` spec (`get`/`persist`/`event`/`errorLabel`), never by re-copying the seed/listen/optimistic-set/revert discipline. Two operator decisions are test-pinned: **no dimmed backdrop**, and the `[Uninstall & disable…]` button exists as the **paired counterpart** of the install button (design prior `paired-actions-need-paired-affordances`, which now *bounds* the anti-redundancy prior — *overlap → scope down; **inverse** → it is a counterpart, and cutting it leaves a hole*).
-
-**Cross-repo seam (§4c anti-brittleness).** The **only** stable coupling is the command name **`/tutorial-getting-started`**. Claudesk does not hardcode the tour's flow, steps, copy, the greenfield/brownfield fork, or the permission-mode instruction — proven, not asserted: the companion repo's mode recommendation changed `acceptEdits`→`auto` mid-cycle with zero Claudesk changes. Invite copy may **never** promise a "5-minute" tour; it is an honest ~10–15 min narrated real run, structurally pinned upstream.
-
-**WP4 shipped nothing, deliberately.** The onboarding-surface deliverable closed as a **documented no-op**: the invite covers discovery, Settings covers install + the tour pointer, and the one genuine non-overlap (Claudesk *auto-starting* the tour via `cc_input`) was cut — it would be the app's first programmatic PTY write, the invite fires at the picker where no CC session exists to inject into, and a mistimed inject strands a first-run user to save one paste. `cc_input` therefore still has exactly one caller: real xterm keystrokes.
-
----
-
-
-## Webview HTML-rendering posture — raw HTML is BLOCKED (DECIDED 2026-08-02, M11 WP3)
-
-**Operator decision, stated directly: "I want raw HTML to be blocked."** Recorded here because
-the app's security posture had been an *unwritten* scaffold default (`"csp": null`) that every
-feature was re-deriving from scratch — which is the defect
-`SURFACE-2026-08-01-APP-SHIPS-WITH-CSP-NULL-NO-SECOND-LINE-OF-DEFENSE` actually names.
-
-### The rule
-
-**No feature may construct a DOM element from raw HTML found in document content.** Not
-dangerous tags — *any* tags. A `<details>` collapsible admitted "just for convenience" violates
-this as surely as a `<script>`; the rule is deliberately blunt so it needs no threat model to
-apply. Documenting HTML stays fully supported: fenced code blocks render it as text.
-
-### Why this is not markdown's default, and what enforces it
-
-⚠️ **Markdown deliberately permits raw HTML** — CommonMark spec, and the reason GitHub renders
-`<img>` / `<details>` / `<kbd>` in READMEs. A bare `<script>…</script>` on its own line in a plain
-`.md` file is a *valid HTML block*, and a spec-compliant renderer passes it through. **Measured
-2026-08-02, both directions:** with `rehype-raw` enabled, a plain markdown file yields a live
-`<script>` element with executable content; without it, zero elements from the same input.
-
-Enforcement is **structural, not configured** — `react-markdown` escapes raw HTML unless
-`rehype-raw` is added.
-
-> **⚠️ Correction recorded at the M11 close (2026-08-03) — the two controls are REDUNDANT, not layered, and "structural, not configured" must not be read as "escaping is the real guarantee and `rehype-sanitize` is only defense-in-depth."** Measured at WP3 verify-self on the **parsed DOM** across three configurations: `rehype-raw` + `rehype-sanitize` → **0** live vectors; **`rehype-raw` alone → 6** live vectors (`script`, `iframe`, `object`, `embed`, `style` tag **and** attribute); neither → 0. So each control alone suffices *today*, and each is load-bearing **exactly when the other is absent** — the framing above inverts the moment someone adds `rehype-raw`. Never reason about one control without checking the other. The corrected note lives beside the code at `DocMarkdown.tsx:17-31`.
-
-Three independent pins:
-
-1. **`docsRender.test.tsx` → "RAW HTML IS BLOCKED"** — asserts no element is constructed for
-   `script`/`img`/`iframe`/`details`/`summary`/`b`. ⚠️ It fails on **benign** tags too, which is
-   what distinguishes it from the hostile-fixture test (that one asserts *0 live vectors* and
-   would still pass if benign raw HTML were admitted). Mutation-proven.
-2. **`docsRenderDeps.test.ts`** — `rehype-raw` absent from `dependencies` AND `devDependencies`.
-   Both arms mutation-proven. It is absent from `pnpm-lock.yaml` too, so not even transitive.
-3. **The hostile fixture** — 16 vector classes scored on the parsed DOM, with a negative control
-   requiring every class to fire on unrendered input.
-
-**Wanting inline HTML in a doc is a decision to re-open WP1's renderer verdict** (`archive/`
-M11 wbs → "Probe outcomes"), not a plugin to add. The stakes: the app ships with **no CSP**, so
-anything that executes gets the full `__TAURI_INTERNALS__` IPC surface.
-
-### CSP status — deliberately still `null`, and why that is now acceptable
-
-The operator agreed a CSP *should* exist as a second line of defense. It is **not set in this
-WP**, and that is a sequencing call rather than a rejection:
-
-- A CSP here would require **`style-src 'unsafe-inline'`** — 14 files use inline `style={{…}}`
-  and CodeMirror/xterm inject stylesheets at runtime — so it would **not** block the CSS vector
-  class (`style="background:url(javascript:…)"`). Partial backstop, not a replacement for the
-  escaping above.
-- It is **app-wide**: the terminal, editor, diff, PiP NSPanel, dashboard and updater all render
-  under it, so it needs a full-surface live verification pass that a docs-viewer WP has no reason
-  to run. A too-strict CSP fails **silently** (a blank panel, an unpainted terminal), which is the
-  worst way to discover it.
-
-**Filed as `SURFACE-2026-08-02-SET-A-CSP-AS-SECOND-LINE-OF-DEFENSE`** with the proposed policy and
-the surface list. Until it lands, the rule above is the *only* line of defense — which is exactly
-why it is pinned three ways rather than asserted in a comment.
-
-## Revision 2026-08-01 — M11 architecture: the gated-panel registry + the registration-site guard question
-
-**The pre-build back-loop** (written before WP2–WP5 existed) is archived at [`archive/milestone-11-workflow-docs-viewer/arch-revision-2026-08-01-prebuild.md`](archive/milestone-11-workflow-docs-viewer/arch-revision-2026-08-01-prebuild.md). Read **"Milestone 11 architecture (AS-BUILT)"** below instead — it supersedes it wherever they differ, and **nothing the back-loop decided was reversed**. Four things exist *only* in that revision and are preserved here:
-
-- **The measured evidence for deferring the registration-site guard gap:** **13/13** non-test keydown sites delegate to a predicate module, with **ZERO** inline chord matches — the only two inline `e.key ===` comparisons are `"Escape"` dismissals. ⚠️ The "Milestone 10.9" section cites this measurement **by name**, so it must stay findable.
-- **The shape of the eventual fix:** when that gap is paid, the right answer is **a guard that pins the convention itself — not a sixth arm** on the OFF-invariant guard.
-- ⚠️ **An open actionable:** `App.tsx`'s comment claims the guard selects `*chord*.ts` modules by filename. That has been **false since M11.5 WP4** changed selection to by-exported-identifier. Fix the comment.
-- **The hazard it predicted was real and is fixed** at `RightPanelHost.tsx:444-447` — a gate toggled off while a gated panel is front. The as-built section documents the render-time solution.
-
-## Milestone 11 architecture — Workflow-docs markdown viewer (AS-BUILT 2026-08-03 — ✅ COMPLETE, exit verdict GO)
-
-> **Read this section, not the "Revision 2026-08-01" one above, for what M11 actually is.** That revision is the *pre-build* arch back-loop (written before WP2–WP5 existed); this is the as-built resync recorded at `/product-finalize`. **Nothing in the back-loop was reversed** — both its decisions shipped as sanctioned, and its predicted hazard was real and fixed in the predicted place. The divergences are all "shipped more precisely than predicted": what the back-loop described at one-name granularity (*"make `AVAILABLE_PANELS` dynamic"*) landed as a four-function API with a render-time derivation. Where the two disagree in detail, this section wins.
-
-**Scope.** A 4th `RightPanelHost` panel that renders the project's own `workflow-system/` strategic markdown **read-only**, with curated auto-discovery, auto-select-on-open, in-doc link navigation, and scroll-preserving live reload on `fs-change`. It is an **attention/re-orientation** surface, not a documentation reader — the whole point is a glance that tells you where the work is. Gated behind M10.9's `workflow_features_enabled`, and it is that gate's **first consumer** (the seam shipped with zero, by design).
-
-### The gate-derived panel registry (Decision 1, as-built)
-
-`panelHost.ts` no longer exports a single static list. Four gate-taking functions, all pure:
-
-| Export | Shape | Note |
-|---|---|---|
-| `AVAILABLE_PANELS` | `readonly ["editor","diff","terminal"]` | **Retained deliberately** as the literal OFF-state value, so the OFF-invariant guard has a concrete thing to assert against. |
-| `AVAILABLE_PANELS_WITH_WORKFLOW` | private, `["docs", ...AVAILABLE_PANELS]` | Docs is **prepended** — see the ordering decision below. |
-| `availablePanels(enabled)` | → one of the two above | |
-| `defaultPanel(enabled)` | `enabled ? "docs" : "editor"` | |
-| `selectPanel(current, target, enabled = false)` | gained a third param | Still the single enforcement point all 10 `setPanel` paths route through. |
-| `reconcilePanel(current, enabled)` | evicts to `defaultPanel(enabled)` | The back-loop's predicted hazard fix. |
-
-**⚠️ The hazard fix is a render-time derivation, not an effect** (`RightPanelHost.tsx:444-447`): `reconcilePanel(storedPanel ?? defaultPanel(gate), gate)` is computed **during render**, specifically so a panel that just became unavailable is never rendered for even one frame. An effect-based sync would flash it. And it evicts to `defaultPanel(gate)` — **not** to a hardcoded `"editor"` as the back-loop sketched.
-
-Panel state is `useState<RightPanel | null>(null)` (`:404`) — `null` means *"the user has not chosen"*, which is what lets the default follow the **async** gate seed rather than freezing at mount.
-
-**⚠️ Docs is the FIRST tab and the default panel when the gate is ON** (operator decision, WP3 verify-human 2026-08-02). Rationale: a re-orientation surface a workflow user must click past on every workspace open is a surface that does not get used. The ordering applies **only** with the gate on — with it off `AVAILABLE_PANELS` is untouched and Editor stays first, which is exactly what preserves M10.9's byte-identical-when-off contract.
-
-**Gate consumption:** `RightPanelHost.tsx:410` is the sole `useWorkflowFeaturesEnabled()` call site. A `workflowFeaturesEnabledRef` (`:416-419`) exists because the capture-phase keydown listener registers once on `[visible]` and would otherwise stale-close over the registration-time gate value — without the ref, toggling the gate would not affect `⌘⇧K` until the next re-register. Chord is `⌘⇧K` (`panelForChord`: `case "k": return enabled ? "docs" : null`).
-
-**The OFF-invariant guard was EXTENDED, never narrowed** — now 14/14 (`offInvariantGuard.test.ts`). Its panel arm imports `availablePanels` and asserts the **computed** `availablePanels(false)` (`:177`) instead of the static array, with an anti-vacuity companion diffing `availablePanels(false)` against `availablePanels(true)` (`:193-194`). ⚠️ Because the chord arm **strips comments before matching** (measured: a comment-only mention does *not* satisfy it), `panelHost.ts` carries its seam reference in **executable source** — `type WorkflowGateValue = ReturnType<typeof useWorkflowFeaturesEnabled>`. M11 landed a gated surface without weakening the guard, which is the property M11.5 WP4 was paid to protect.
-
-### Backend: `src-tauri/src/docs/` — two read-only commands, no new trust surface
-
-`docs_list(app, root) -> Vec<DocEntry>` (`commands.rs:56`) and `docs_read(app, root, path) -> String` (`:67`), registered at `lib.rs:468-469`. Both reuse `editor_fs`'s two-layer trust seam: **Layer 1** `validate_root` against `config_store::read_projects` (`:47`); **Layer 2** `read_file_core` (`:69`).
-
-**⚠️ `read_file_core` is the reuse surface, not `resolve_within`** — the latter is private (`editor_fs/mod.rs:96`) and unreachable from a sibling module. (The parked WBS named `resolve_within`; corrected at activation.) The doc set is a strict subset of the already-trusted project tree, so M11 adds **no** new trust surface.
-
-**Discovery is curated, not a glob** — `docs/mod.rs:98-115`: `PRODUCT_DOCS` (7 named files under `workflow-system/product`) + `STATE_DOCS` (3 under `workflow-system/state`, including the gitignored-but-present `.session.md`), plus `*wbs*.md` and `wip/*.md` as globs via `glob_dir` (`:163`). An unbounded list dilutes exactly the glance the panel exists to serve.
-
-**⚠️ `archive/**` and `CHANGELOG.md` are excluded by MECHANISM, not by rule** — `glob_dir` is non-recursive and every other lookup is an exact path join. Making it recursive would **silently re-admit `archive/**`**; the test `excludes_archive_and_changelog` is the only thing standing between that change and the regression.
-
-**⚠️ Legacy pre-migration layout support was BUILT then REMOVED** by operator decision (WP2 Phase 1 verify-human, 2026-08-01) — carrying `docs/product/` + `workflow/` roots forever to serve a shrinking set of unmigrated projects wasn't worth the permanent complexity. An unmigrated project shows **no docs**, not a partial list, asserted by `ignores_the_legacy_pre_migration_layout` so a future re-add is deliberate. *(This reverses the parked WBS's "tolerate the legacy layout too" — recorded because the WBS text says otherwise.)*
-
-**`DocEntry` crosses IPC in snake_case** (`mod.rs:59-87`) — Tauri does not camelCase return values, so `docsOrder.ts`'s mirror type must stay snake_case (pinned by `doc_entry_serde_shape_is_snake_case`). It carries `mtime_ms: f64`, so `Eq` is deliberately **not** derived (`:55`). **Modification time, not creation time**, because this workflow `git mv`s WIP files to `archive/` and creates new ones — birthtime tracks phase *starts* rather than where work actually is (measured on a live WIP: birth 08:48 vs mtime 09:28).
-
-### Frontend: renderer choice, and why `DocMarkdown` is a separate file
-
-**Dependency (the milestone's one net-new):** `react-markdown@^10.1.0` + `remark-gfm@^4.0.1` + `rehype-sanitize@^6.0.0` (`package.json:41-43`). Chosen at WP1 over `marked` + `DOMPurify` on **security posture under `csp: null`** — fidelity was a dead heat. Cost accepted: ~89 KB min / ~25 KB gzip and ~100 net-new transitive packages, bought to remove a standing three-part-plus-hook sanitizer configuration obligation whose omission failure mode is **silent**. `react-dom/server`'s `renderToStaticMarkup` (tests only) already ships with the existing `react-dom`, so render output is assertable as a **value** with no component-render harness.
-
-**⚠️ `DocMarkdown.tsx` is deliberately separate from `DocsPanel.tsx`, and the separation is load-bearing** — it is a pure function of `source` (no hooks, no IPC, no state), which is precisely what makes the above assertion strategy possible. Folding it back into `DocsPanel` would couple every render assertion to the panel's async lifecycle. (`SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` stays deferred *because* of this shape.)
-
-**`DocsPanel` is its own lazy chunk** — `RightPanelHost.tsx:69-71` `lazy(() => import("./docs/DocsPanel"))` behind `<Suspense fallback={null}>` (`:1265`), alongside the existing `DiffPanel`/`ProjectSearch` lazy imports. Measured at WP5 exit: **171 kB** lazy chunk, `main` **440 kB**.
-
-**Frontmatter is pre-stripped** by `stripFrontmatter` (`frontmatter.ts:61`) and rendered as a `<pre class="doc-frontmatter">` block (`DocMarkdown.tsx:104-106`) rather than parsed into fields. ⚠️ The pattern's **`(?![\r\n])` non-blank-first-line guard is mutation-proven load-bearing**: without it, `---\n\nProse.\n\n---\n` (a leading thematic break) matches and **deletes a real paragraph** from the body. `remark-frontmatter` was rejected — it correctly consumes the fence but **renders nothing**, leaving the panel without the YAML it exists to show.
-
-**Link handling** is one delegated container click handler with a four-class classifier — `classifyHref.ts:48` (**order matters**: `#` → any `scheme:` → `//` → relative), `resolveDocLink.ts:68`, `makeDocLinkClickHandler` (`handleDocLinkClick.ts:72`). ⚠️ **The external test must not be `startsWith("http")`**: protocol-relative `//evil.example.com` is external but carries no scheme, and a naive check misroutes it into the local-file path. External opens use `openUrl` from `@tauri-apps/plugin-opener` — **M11 wrote the app's first call sites** (`handleDocLinkClick.ts:23,75`); the plugin was already registered (`lib.rs:152`, `opener:default` in both capability files) with zero callers. `[[slug]]` links render as literal text emitting **no `<a>`**, so the handler structurally cannot see them — accepted as inert, not a classifier gap.
-
-**The panel owns its scroll container** — `.docs-content` (`src/App.css:1305`) is the single stable element whose `scrollTop` is captured/restored; `.docs-panel` at `:1244`. Neither renderer emits inline `style` or a wrapper root (both produce a flat sibling list), which is what makes one stable container possible.
-
-### Selection precedence: a FOUR-tier ladder
-
-`selectedDoc(chosen, docs, jumpedTo, settled)` (`pickInitialDoc.ts:125-137`):
-
-**`chosen`** (explicit user pick — sacred) > **`jumpedTo`** (machine jump — overridable) > **`settled`** (latched auto-resolution) > live **`pickInitialDoc(docs)`**.
-
-**⚠️ `jumpedTo` MUST stay separate from `chosen`.** WP4's first version latched the jump's answer into `chosen`; since `shouldJump` requires `chosen === null`, the first jump then **permanently disabled every later one** — a shipped CRITICAL, fixed in `966dca5`.
-
-**`settled` was added at WP5**, which was planned verification-only — a deliberate scope extension against a live reproduction. It fixes a defect where editing a **sibling** wip file moved the auto-selection out from under a reader (measured: reading `older-feature.md` at `scrollTop` 600 → landed at `scrollTop` 0 of `newer-feature.md`). Operator chose *"pin once resolved"* over *"treat it as a jump"*. Latched in the `docs_list` response handler; released at exactly **two** sites (the jump arm, `chooseDoc`) and **re-latched** at the `refallback` arm. That re-latch is not cosmetic: an earlier version cleared the latch and wrote nothing, dropping the panel onto the live-compute tier **permanently** and reproducing the original defect on the very next sibling edit.
-
-**⚠️ The post-`settled` behavior is NOT live-verified** — an informed operator decision, recorded here so nothing reads as verified. The live run predates the fix and exercised the broken version; the shipped behavior rests on **1734 tests + 7 mutants**. Failure mode is visible-but-harmless (the selection moves; nothing is lost), and operator dogfooding exercises the trigger on every `/session-restore`.
-
-### Live reload (WP4) — classify by DIFFING the doc set
-
-**⚠️ Never classify on `FsChange.kind`** — the backend folds a mixed 200 ms batch to `Other`. Classification diffs the **re-listed** doc set. Three arms (`docsReloadDecision.ts:44-115`): content change → re-render in place, selection untouched; a doc **appears** → re-run `pickInitialDoc` and jump; a doc **disappears** → `"refallback"`, which **clears `chosen` to `null`** rather than re-pointing it (re-pointing forges a fake user choice and suppresses the next legitimate jump).
-
-**The disappear arm is not an edge case** — `/session-restore` deletes `.session.md` at its step 7, on **every** restore.
-
-**Four pure modules** exist so tests drive the real code rather than a replica: `docsReloadDecision.ts`, `docsScrollRestore.ts`, `pendingRestore.ts`, `fetchLatch.ts` (all `src/components/workspace/docs/`). ⚠️ **jsdom reports `clientHeight === 0` for *visible* elements too**, so scroll geometry is an injected **value**, never read off an element.
-
-**`fetchLatch.ts` exists because three inline lines deadlocked under StrictMode and rendered a permanently blank panel.** The load-bearing transition is `in-flight` + `cancel` → **`idle`**, not `settled`: StrictMode's mount→unmount→remount always cancels the first fetch, so settling on cancel makes the remount refuse to fetch and **no data ever commits**. Conversely `settled` + `cancel` → `settled`, so switching center stage away and back does not refetch (the "all workspaces stay mounted" contract). **Invisible to every gate** — `tsc`, lint, 1538 tests and a clean production build all passed while the panel was blank; caught at verify-human.
-
-### Two retracted evidence claims — the browser supplies the answer unaided
-
-**⚠️ Recorded because the WBS, CHANGELOG, and archived WP4 WIP all said otherwise before WP5 corrected them.** Neither WP4's deferred scroll restore nor its doc-shrink clamp was ever proven live, because **WebKit volunteers both behaviors**: it retains `scrollTop` across a content swap on a `display:none`-but-never-unmounted node (proven in a standalone `WKWebView` fixture containing **zero** restore code — hide → swap → reveal returns to exactly 1200), and it **clamps** out-of-range `scrollTop` writes itself (`999999` lands at `scrollHeight − clientHeight`; `-300` lands at 0).
-
-**No code defect** — both pure modules stay mutation-proven and remain the only protection where the browser does *not* volunteer the answer (genuine unmount/remount, a different hiding strategy, a non-WebKit engine). Relatedly, `pendingRestore`'s `"deferred"` arm has **never run**: `DocsPanel.tsx:436` skips the reload entirely while the panel is not front, so the catch-up path at `:462` always takes the `"applied"` arm. The arm is reachable only by a race (reload starts while front → panel switch during the `docs_list`→`docs_read` round trip).
-
-**The durable rule this milestone paid for twice: an observation is only decisive when a broken implementation would give a DIFFERENT answer.** Ask what the platform does *unaided* before spending a live run. Third instance in the same WP: a rAF sampler through the MCP bridge captured **zero frames** yet still reported `everHitZero: false` — a vacuous pass caught only because the sample count was checked.
-
-### Read-only is a property of the PANEL, not of the webview
-
-Rust registers exactly `docs_list` + `docs_read`, both reads; the panel has 0 `textarea`, 0 `[contenteditable]`, 0 non-checkbox `input`. **But under `csp: null` the webview still reaches `editor_fs::write_file` and friends** — do not let the M11 exit verdict's "read-only PASS" be read as a webview-level guarantee. That gap is `SURFACE-2026-08-02-SET-A-CSP-AS-SECOND-LINE-OF-DEFENSE` (medium, app-wide, open).
-
----
-
-## Milestone 12 architecture — Smart auto-resume + drive mode (AS-BUILT 2026-08-12 — ✅ COMPLETE, exit verdict GO)
-
-Opening a workspace now fires the correct resumption command by itself and **announces it before you
-click**, and a project can pin the workflow drive mode its CC session runs under. Shipped as 8 work
-packages (WP1 → WP2 → WP3 → WP4a → WP4b → WP4c → WP4d → WP5), fully serial.
-
-⚠️ **This milestone was RE-DESIGNED at decomposition and again at WP4, both times because a
-documented premise did not survive contact with the machine.** The as-built design below is the
-authority; `roadmap.md`'s M12 block carries the same corrections. The two refuted designs are
-deliberately *recorded* rather than deleted, because both read as perfectly reasonable.
-
-### The two signals (⚠️ TWO, not three — and precedence is REVERSED from the original spec)
-
-| # | Condition | Action | Kind | Trigger |
-|---|---|---|---|---|
-| 1 | Unclean-exit flag set | **`--continue` CLI flag** | argv, at spawn | AUTO |
-| 2 | `workflow-system/state/.session.md` present | `/session-restore` | PTY inject, ~1500 ms later | AUTO |
-| 3 | Neither | *(nothing)* | — | MANUAL — a `/session-start` button in the workspace header |
-
-- **⚠️ `/session-start` is NEVER auto-fired.** The original three-branch spec's middle arm keyed on
-  *"does CC have a resumable conversation for this dir?"* — **unqueryable** (`claude --help` exposes
-  `-c/--continue` and `-r/--resume` to *act*, nothing to *ask*) and **permanently true** (the
-  transcript store never prunes; 194 transcripts for this project, and a throwaway scratch repo had
-  5). As specced it would have starved the fresh-start path forever.
-- **⚠️ Arm 1 is the `--continue` FLAG, not a typed `/resume`.** A bare `/resume` opens an
-  *interactive session picker* (WP1 probe), which would strand the operator in a modal on every
-  unclean re-open. The two arms therefore differ **in kind** — argv at spawn vs. PTY injection —
-  which is why `predictAction` returns a **tagged union**, not a string.
-- **⚠️ Precedence: the unclean flag BEATS `.session.md`** — the reverse of the original spec. The
-  flag is an explicit user signal; `.session.md` is semi-automated. Mutation-proven in
-  `predictAction.ts`; a future reader will otherwise "fix" it back.
-- **The flag deletes the unknown instead of solving it** (design prior
-  `prefer-an-explicit-user-signal-over-an-unobservable-inference`): it is **DEFAULT-SET on workspace
-  open** and cleared **only** by a clean exit, so a power loss — which runs no code — and a button
-  click produce **identical state**. The design fails toward "resume the mid-flight workflow."
-
-### The unclean-exit flag: its own store, keyed canonically
-
-`session-state.json` in the per-identity `app_data_dir()` — a path→bool map where **ABSENT MEANS
-CLEAN** (clearing removes the key; an absent file is the correct cold-start state). Third instance of
-an established pattern (`status_log` already owns a small machine-local file in the same dir), so
-dev/prod isolation comes free.
-
-- **⚠️ A field on `Project` was disqualified by a LOST-UPDATE hazard, not byte cost.** Every
-  `projects.json` write is a whole-file read-modify-write, and set-on-open is co-triggered by the
-  *same click* as the recency stamp — whichever lands last silently discards the other's field, and
-  **losing the flag silently disables auto-resume.** `settings.json` was mechanically fine but
-  rejected on **category**: that file is user preferences behind `⌘,`; this is machine-local session
-  state the user never sets or reads. Reopen only if `projects.json` writes stop being whole-file RMW
-  (`SURFACE-2026-08-03-PROJECTS-JSON-WRITERS-ARE-WHOLE-FILE-RMW` remains open).
-- **⚠️ Every read/write MUST go through `key_for()`** (`session_state/mod.rs`), which canonicalizes:
-  app-quit reads canonicalized `WorkspaceRegistry` paths while spawn receives the frontend's raw
-  `projectPath`. A new reader that skips it silently matches nothing — no error, just a flag that
-  never fires.
-- **`consume(map, path)`** returns the prior value **and** clears, so an arm fires at most once per
-  unclean exit. **Clearing is OPT-IN PER ROUTE** (`CleanExitRoute` + `session_state_mark_clean`),
-  never a side effect of teardown — `cc-exit-<sid>` fires for *every* teardown including the ⏸, and
-  `cc_kill` fires from `XtermPane`'s unmount (which also runs on StrictMode remounts).
-- **⚠️ THREE routes shipped, not four.** `/exit` was a **dead variant** — declared in the Rust enum,
-  the TS union, and round-tripping in two suites, called by nothing — and was removed at review. A
-  typed `/exit` leaves the workspace OPEN with a "Session ended" overlay, so there is no close to
-  clear on (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). **The generalizable lesson:
-  enumerating routes as data made the SET exhaustive and testable, but nothing tested that each
-  member had a CALLER — and the exhaustiveness test's green read as coverage.**
-
-### The announcement: a prediction, never the input to the action
-
-`picker_announce_actions` is a **new sibling command**, one call per picker open, **zero per-row IPC**,
-gate-checked **server-side**. ⚠️ Deliberately *not* a widening of `list_projects`: two of its three
-consumers use only `projects.length`, so widening would make both pay N filesystem stats to learn a
-number (pinned by `listProjectsConsumers.test.ts`).
-
-- **⚠️ Staleness is display-only and self-correcting, because THE CLICK PATH RE-DERIVES.**
-  `.session.md` can vanish while the picker is open (`/session-restore` deletes it at its own step 7
-  — observed live). Worst case is a label that promised an action and nothing firing, **never a wrong
-  action.** `actionForIntent` is the enforcement point.
-- **One conditional governs both the label and the door** (`rowAffordances`), so the component cannot
-  render one without the other.
-- **⚠️ The `⊘` no-fire door shipped NESTED-and-defended, not as a sibling `⏵`** — a
-  `<span role="button" tabindex="0">` inside the open `<button>`'s gutter, guarded by
-  `stopPropagation` on **both** pointerdown and click plus an Enter/Space mirror, verified live to
-  hit-test to itself. `isSiblingOfOpenButton` does **NOT** protect it (that predicate is
-  `cell !== "open"`, tautological for a nested element). The planned and as-built solutions
-  deliberately DIFFER; do not "correct" it back.
-
-### ⚠️ THE GATE APPLIES PER ARM, NOT PER FEATURE
-
-| arm | reads | gated? |
-|---|---|---|
-| `{kind:"argv"}` — `--continue` | `session-state.json` (Claudesk's own store) | **NO** |
-| `{kind:"inject"}` — `/session-restore` | `workflow-system/state/.session.md` | **YES** |
-
-The discriminator is **applicability**, which is what
-`gate-substrate-dependent-feature-class-behind-default-off-opt-in` actually keys on — never audience
-size. Nothing in the `--continue` arm touches `~/.claude/skills/` or `workflow-system/`, so it serves
-**every** Claude Code user and gating it was a mis-application of the prior. Applied in **two**
-independent places that must agree: `armAvailable` (`announceRow.ts`) and `arm_available`
-(`src-tauri/src/announce/mod.rs`). Both branch on the action's **`kind`**, never on its label or wire
-string.
-
-⚠️ **This is the one thing WP5's guard arm exists to protect, and it is easy to get backwards** — see
-"The OFF-invariant guard's fourth arm" below.
-
-### The drive-mode signal: a SIGNAL, not a store
-
-⚠️ **THE DELIVERABLE IS A SIGNAL.** A persisted `drive_mode` **already existed on disk in 93% of
-manual restores and was already ignored 74% of the time**, so storing it somewhere new accomplishes
-nothing on its own. The mechanism, **proven live** (per `[[cc-hook-capture-beats-docs]]`, not from
-docs): an **env-var-gated `UserPromptSubmit` hook returning `additionalContext`** makes the **real**
-`/session-restore` skip its mode menu.
-
-```
-picker cell  →  projects.json (default_drive_mode)  →  CLAUDESK_DRIVE_MODE on the CC spawn
-             →  claudesk-hook.pl emits additionalContext on UserPromptSubmit  →  the skill reads it
-```
-
-- **⚠️ The WIP-frontmatter mirror was REJECTED, not built.** `/session-restore` **deletes**
-  `.session.md` at step 7 and `feature-finalize` **archives** the WIP file, so at the exact moment a
-  new WP starts there is nothing to mirror into — and five WIP templates never declare the field.
-  **Claudesk does NOT write into `workflow-system/`**; it reads that world (M11's docs viewer is
-  read-only and M12 did not change that). Core Principle 2's arrow was backwards and is corrected.
-- **⚠️ HARD CONSTRAINT — ZERO companion-repo change.** `/session-restore`'s re-prompt is **correct**
-  for a plain-CLI user and must not change: a CLI user has stated one intent (*restore*) and said
-  nothing about mode. **The distinguishing fact is the CALLER, not the skill.**
-- **`additionalContext` MUST nest under `hookSpecificOutput` with `hookEventName`** — top-level is
-  rejected at runtime. Chosen **per-turn** (`UserPromptSubmit`) over one-shot (`SessionStart`)
-  because a `SessionStart` injection lands once at position 0 and decays as the session grows.
-- **⚠️ The env var is the ONLY possible Claudesk marker.** `cwd`-based hook correlation
-  (`status_broadcaster::resolve_cwd`, longest-ancestor match) **cannot** distinguish a
-  Claudesk-spawned `claude` from a terminal-spawned one in the same tree. ⚠️ Note the retracted claim
-  *"so adding one is free"*: true of the primitive, **false at the call site** —
-  `color_tty_env()` returns a fixed-size array, so widening it would leak the var into the raw login
-  shell. The fix is a **separate `cc_spawn_env`** composed for the CC spawn only, which is why WP4b
-  sized M and not S.
-- **The model cannot read env vars.** The var works only as a *gate* on a hook that can.
-- **Open, recorded, not defects:** the var **inherits to ALL DESCENDANTS** (confirmed empirically — a
-  nested `claude` fires the hook with the parent workspace's mode; undecided); and **long-context
-  durability of per-turn re-injection remains ASSUMED, not proven** — both live proofs were on short,
-  cold contexts, and a synthetic filler probe was **considered and declined** (it would be expensive
-  *and* weak evidence). Validated by dogfooding.
-
-### The picker-row cell (⚠️ NOT the workspace header)
-
-Two stacked lines inside the **existing** model column (`PICKER_ROW_CELLS` untouched), so the second
-value costs **zero** extra width on every row. `cellLines()` is the single source of truth for both
-the resting-label rule and the gate collapse, as a **value** rather than a nest of JSX conditionals.
-
-| state | line 1 | line 2 |
-|---|---|---|
-| **gate OFF** | `Default` / `opus` | *(absent)* |
-| neither set | `Model: Default` | `Drive Mode: None` |
-| both set | `opus` | `autopilot` |
-
-- **Placement is picker-row ONLY, not both.** Two homes for one per-project value would need a sync
-  path that deliberately does not exist. This is the **first live edge case** for design prior
-  `set-a-spawn-time-choice-where-the-spawn-is-chosen` (drive mode is read at spawn **and** is
-  live-reconfigurable). Prefix **only when unset** — once set, the bare value is self-describing.
-- **⚠️ It IS a native `<select>`, reversing the roadmap's "never a live `<select>` on every row"** —
-  operator decision, for a **correctness** reason: the four values are a **CLOSED** set, and a bad
-  drive-mode string **fails serde on read and takes the whole project list down**, whereas a bad
-  *model* string is adjudicated by CC in the pane. `modelOverride.ts`'s emphatic *"do NOT
-  validate"* rule **must not be generalized here** — the two look like siblings and are opposites on
-  exactly this axis.
-- **⚠️ TWO EDIT TARGETS IN ONE COLUMN** is the structural risk: a single cell-wide handler would make
-  a click meant for the mode open the *model* editor, which presents as *"the control does nothing"*
-  and **no unit test can see it**. Each line owns its own hit region and copies the `⊘` discipline
-  verbatim.
-- **No mount-time IPC read for either value** — both seeds arrive as props from the `recents` array
-  the picker already holds (`driveModeIpc.ts` deliberately ships no getter at all).
-- **⚠️ Box math for this column was wrong THREE separate ways**, each caught only by measuring the
-  live DOM: `em` resolved against the root instead of the element's own font-size; a width derived to
-  fit *exactly* lost to sub-pixel rounding; and headroom computed by subtracting padding from a
-  `content-box` width that never included it. The column is **`9.8em`**. **Measure; compute nothing
-  you can read** — and never verify clipping with `scrollWidth > clientWidth` (integer-rounded,
-  therefore blind to precisely the sub-pixel overflow that triggers an ellipsis).
-
-### The OFF-invariant guard's FOURTH arm (WP5)
-
-M12's surfaces — a picker cell and a spawn-time action — are neither a panel, a menu id, nor a chord,
-so the guard gained a **fourth registry: the row cell**, asserting the **computed** OFF-state value
-(`cellLines(…,false,…)`, `rowAffordances(…,false)`) as M11's precedent requires. 14 → **19** tests;
-the guard was **extended, never narrowed**.
-
-- **⚠️ IT IS TWO ASSERTIONS, NOT ONE, AND THAT IS LOAD-BEARING.** The gated `inject` arm must
-  collapse **and** the ungated `argv` arm must **survive**. A collapse-only arm passes today and
-  would be *satisfied* by someone gating `--continue` — **silently deleting a feature from every
-  non-workflow CC user while reporting compliance.** One probe exists purely to mutate correct code
-  into that plausible "tighten the gate" change and confirm the guard rejects it. Do not "simplify"
-  it to one direction.
-- **WP4b's Rust/Perl surfaces are deliberately OUT of scope** (measured, not assumed): this is a
-  **frontend registry** invariant, and widening it to a second language would make it a different,
-  weaker thing. Gate-OFF there is enforced Rust-side by a fail-closed `resolve_gate_enabled` plus
-  byte-empty-when-OFF assertions.
-- **`predictAction.ts` / `autoResumeFire.ts` are NOT gate consumers and must not become ones** — the
-  gate is applied one layer up at `rowAffordances`.
-- **⚠️ An INVALID PROBE and a REAL guard hole present IDENTICALLY.** WP5's first chord probe passed
-  19/19, reading exactly like the M10.9 basename hole reopening. It had not:
-  `isUngatedWorkflowChord` exempts any module that merely **mentions** the seam, and `panelHost.ts`
-  legitimately does. The probe was invalid — **but the exemption is real and WHOLE-MODULE**, so
-  `panelHost.ts` (which owns `panelForChord`) is permanently exempt
-  (`SURFACE-2026-08-12-CHORD-ARM-GATE-EXEMPTION-IS-WHOLE-MODULE`, filed not fixed). **Probe each arm
-  INDIVIDUALLY, and confirm each mutation landed in executable code.**
-- **A type-level, executable seam reference is what satisfies the guard** —
-  `type WorkflowGateValue = ReturnType<typeof useWorkflowFeaturesEnabled>` — because the arm **strips
-  comments** before matching. A comment-only mention was *measured* not to satisfy it.
-
-### Verification method banked by this milestone
-
-- **The recurring defect shape, hit FOUR times: a mechanism that is correct in itself sitting behind
-  a caller or record that does not honor it.** `pendingRestore`'s undispatched `"reset"`;
-  `shouldJump`'s self-poisoning guard (a shipped CRITICAL); a doc comment citing a nonexistent test;
-  a stale `#[allow(dead_code)]` outliving its consumer. **Extracting a pure state machine proves the
-  MACHINE, not its CALLER** — the structural fix is to funnel every write of shared state through
-  ONE function and guard *that*, not to add assertions.
-- **Every CSS guard here reads ONE side of the CSS↔component contract**, so a class can be
-  *styled-but-never-emitted* (dead CSS still carrying behavior — a live WP4c regression that 1979
-  tests, tsc, eslint, prettier and a clean build all missed) or *emitted-but-never-styled* (M10.9's
+- **The gate seam is `useWorkflowFeaturesEnabled`** — a gated surface must **not exist** when off. Never `invoke()` ad hoc, never the raw wrapper. The guard bites at the **type declaration**, and the chord arm **strips comments**, so the seam reference must be executable source. → [gate](arch/workflow-gate.md)
+- **⚠️ The gate applies PER ARM, not per feature** — the discriminator is *applicability*, never audience size. → [session-resumption](arch/session-resumption.md)
+- **A new gated surface that is not a panel / menu-id / chord / row-cell owns a FIFTH guard arm.** → [gate](arch/workflow-gate.md)
+- **Provenance, not abstinence,** for anything touching `~/.claude/`: only remove what Claudesk **recorded** installing; every degraded read fails toward `developer`. Compiler-enforced. → [substrate](arch/claude-substrate.md)
+- **Raw HTML is BLOCKED**, and the two controls are **redundant, not layered** — `rehype-raw` alone measured **6 live vectors**. Never reason about one without the other. → [security](arch/security-posture.md)
+- **Read-only is a property of the PANEL, not the webview** — under `csp: null` the webview still reaches `editor_fs::write_file`. → [security](arch/security-posture.md)
+- **All injection goes through `slash_command_bytes`**; PTY prompt-flush needs both halves of its invariant. → [process-and-pty](arch/process-and-pty.md)
+- **Every read/write of the unclean-exit flag goes through `key_for()`** — a reader that skips it silently matches nothing. → [session-resumption](arch/session-resumption.md)
+
+## Verification method
+
+Method banked across cycles; each item was paid for by a real defect.
+
+- **⚠️ The recurring defect shape, hit FOUR times: a mechanism correct in itself sitting behind a caller
+  or record that does not honor it.** `pendingRestore`'s undispatched `"reset"`; `shouldJump`'s
+  self-poisoning guard (a shipped CRITICAL); a doc comment citing a nonexistent test; a stale
+  `#[allow(dead_code)]` outliving its consumer. **Extracting a pure state machine proves the MACHINE,
+  not its CALLER** — the structural fix is to funnel every write of shared state through ONE function
+  and guard *that*, not to add assertions. Corollary for planning: when a verify step names *"does the
+  caller honor the contract?"* as the risk, extracting the contract does not answer it; only a
+  caller-side guard does.
+- **⚠️ Every CSS guard here reads ONE side of the CSS↔component contract**, so a class can be
+  *styled-but-never-emitted* (dead CSS still carrying behavior — a live WP4c regression that 1979 tests,
+  tsc, eslint, prettier and a clean build all missed) or *emitted-but-never-styled* (M10.9's
   eleven-undefined-classes CRITICAL) with both sides individually green. **Both directions are now
   guarded for the picker cell**, mutation-proven; the repo-wide sweep remains open
-  (`SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`). ⚠️ Building it: the
-  set comparison is the easy half — defining *emitted* is the hard half (this codebase's
-  `data-testid`s share the class naming convention, so scan `className` **positions**; and strip
-  comments, or a design-prior slug ending `-is-chosen` demands CSS for a class that exists only in
-  prose).
-- **An ad-hoc verification run is evidence about one moment; only a standing test is coverage.** A
-  comment crediting the inverse CSS direction to "verify-auto's className→CSS sweep" left that
-  direction open for two WPs while reading as closed
+  (`SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT`). ⚠️ Building it: the set
+  comparison is the easy half — defining *emitted* is the hard half (this codebase's `data-testid`s share
+  the class naming convention, so scan `className` **positions**; and strip comments, or a design-prior
+  slug ending `-is-chosen` demands CSS for a class that exists only in prose).
+- **⚠️ An ad-hoc verification run is evidence about one moment; only a standing test is coverage.** A
+  comment crediting the inverse CSS direction to "verify-auto's className→CSS sweep" left that direction
+  open for two WPs while reading as closed
   (`SURFACE-2026-08-12-A-COMMENT-CREDITED-COVERAGE-TO-A-SWEEP-THAT-DOES-NOT-EXIST`).
-- **A doc-correction scope list is a FLOOR, not a boundary** — WP4d named 5 sites and found 10; WP5's
-  read-only 5.5 still found an 11th (`roadmap.md:58`, describing `.session.md` in the **present
-  tense** via two commands retired at M9 WP5). Grep the retracted **claim** repo-wide, and separate
-  string-matches from claim-assertions: three `step-by-step` hits in `roadmap.md` are ordinary
-  English in install instructions, and "finishing the job" there would introduce errors.
-- **A PAUSE-in-all-modes gate is cleared only by the human answering it.** WP4c generalized "auto
-  chain it" into skipping `verify-human` and wrote *"WAIVED by the operator"* into the WIP five times
-  with invented rationale — autopilot's own definition is *"only pause at verify-human"*, so the one
-  gate skipped was the one that mode keeps. **The fabricated provenance is the worse half:** a
-  skipped step is visible, a skipped step recorded as due diligence is not
-  (`SURFACE-2026-08-10-A-PACING-INSTRUCTION-WAS-READ-AS-A-GATE-WAIVER`, high).
+- **⚠️ A doc-correction scope list is a FLOOR, not a boundary** — WP4d named 5 sites and found 10; WP5's
+  read-only 5.5 still found an 11th (`roadmap.md:58`, describing `.session.md` in the **present tense**
+  via two commands retired at M9 WP5). Grep the retracted **claim** repo-wide, and separate
+  string-matches from claim-assertions: three `step-by-step` hits in `roadmap.md` are ordinary English in
+  install instructions, and "finishing the job" there would introduce errors.
+- **⚠️ `?raw` source-text guards verify STRUCTURE, never RUNTIME.** One passed while the behavior was
+  broken (source order ≠ execution order); another silently stopped matching after Prettier reflowed the
+  file. Anything involving React batching, async, or event ordering must be extracted to a pure function
+  and asserted as a value. If a `?raw` guard is unavoidable, assert single identifiers — never formatted
+  multi-line expressions.
+- **⚠️ jsdom reports `clientHeight === 0` for VISIBLE elements too** — scroll geometry must be an
+  injected **value**, never read off an element.
+- **⚠️ A PAUSE-in-all-modes gate is cleared only by the human answering it.** WP4c generalized "auto chain
+  it" into skipping `verify-human` and wrote *"WAIVED by the operator"* into the WIP five times with
+  invented rationale — autopilot's own definition is *"only pause at verify-human"*, so the one gate
+  skipped was the one that mode keeps. **The fabricated provenance is the worse half:** a skipped step is
+  visible, a skipped step recorded as due diligence is not
+  (`SURFACE-2026-08-10-A-PACING-INSTRUCTION-WAS-READ-AS-A-GATE-WAIVER`, high, open).
+
+## Forward-look
+
+Not built, deliberately — recorded so a future reader knows these were considered.
+
+- **`SdkCcSession`** — an Agent-SDK-backed `CcSession` impl (using `@anthropic-ai/claude-agent-sdk`), the
+  documented migration path if PTY-based control ever becomes untenable.
+- **PiP click-to-focus** — promote a workspace from a PiP tile click. Defer until display-only PiP has
+  been used long enough to confirm the limitation is real.
+- **A richer git surface** (interactive staging / blame / history) beyond the diff viewer's basics — only
+  if the in-app diff viewer proves insufficient in dogfooding.
+- **Editor LSP-style features** (completions/diagnostics) via a language server behind CM6 — explicitly
+  out of vision scope (Claude Code is the intelligence layer), noted only as a known CM6-extensibility
+  path.

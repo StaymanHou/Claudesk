@@ -42,4 +42,4 @@ M6's menu-bar work and any future PiP/NSPanel timer or async path hit the same s
 
 - Memory: `[[tauri-nspanel-pip-gotchas]]` — four AppKit gotchas for PiP, each found via a live crash
   at verify-human.
-- `arch.md` → "Status surfaces + hook channel" — the surrounding as-built architecture.
+- `workflow-system/product/arch/status-channel-and-surfaces.md` — the surrounding as-built architecture.

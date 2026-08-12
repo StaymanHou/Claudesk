@@ -13,8 +13,8 @@ Claudesk provides:
 - **Stateful CC controller (Phase 2):** Claudesk owns each workspace's CC process lifecycle, watches workflow state files, and exposes workflow operations (skill buttons, Recycle Session) as clicks rather than typed slash commands.
 - **Menu-bar status item (Phase 2):** an aggregate idle/running/awaiting-input dot in the macOS menu bar — click to open a popover listing every workspace + status; clicking a row brings Claudesk forward and switches the center stage. Always visible system-wide, even when the Claudesk window is hidden, minimized, or on a different Space.
 - **Picture-in-picture mini player (Phase 2, conditional):** a small always-on-top floating panel (via `tauri-nspanel`) the user can summon when the Claudesk window is out of focus. Mirrors the same status surface as the filmstrip. Display-only in v1 — clicking a tile does NOT bring the workspace forward. Conditional on Phase 2 dogfooding: if the menu-bar item alone suffices, PiP may defer to Phase 4.
-- **Smart auto-resume on workspace open (M12 — ✅ SHIPPED 2026-08-05):** opening a project fires the right resumption command by itself and **announces it before you click**. ⚠️ **TWO** signals, not three: unclean-exit flag → spawn with the `--continue` CLI flag; else `.session.md` present → inject `/session-restore`; else **nothing** (`/session-start` is *never* auto-fired — it gets an explicit button). ⚠️ **The unclean flag BEATS `.session.md`.** ⚠️ **`/session-resume` and `/session-pause` DO NOT EXIST** — renamed `/session-restore` / `/session-handoff` at M9 WP5. The refuted three-branch design + precedence proof: `arch.md` → "The two signals".
-- **Drive-mode selector on the PICKER ROW (M12; ⚠️ NOT the workspace header):** a compact readout, click to edit, showing the project's drive mode (1 `stepping` / 2 `orchestrated` / 3 `autopilot` / 4 `fsd` — ⚠️ **not** `step-by-step`/`full-autopilot`, which no workflow skill recognizes; authority is upstream `transitions.md`). ⚠️ **As built it IS a native `<select>`** — reversing the "never a live `<select>` on every row" rule, because the four values are a **closed** set and a bad mode string fails serde on read and takes the whole project list down. The model override's open-string rule must NOT be generalized here. See `arch.md` → "The picker-row cell".
+- **Smart auto-resume on workspace open (M12 — ✅ SHIPPED 2026-08-05):** opening a project fires the right resumption command by itself and **announces it before you click**. ⚠️ **TWO** signals, not three: unclean-exit flag → spawn with the `--continue` CLI flag; else `.session.md` present → inject `/session-restore`; else **nothing** (`/session-start` is *never* auto-fired — it gets an explicit button). ⚠️ **The unclean flag BEATS `.session.md`.** ⚠️ **`/session-resume` and `/session-pause` DO NOT EXIST** — renamed `/session-restore` / `/session-handoff` at M9 WP5. The refuted three-branch design + precedence proof: `arch/session-resumption.md` → "The two signals".
+- **Drive-mode selector on the PICKER ROW (M12; ⚠️ NOT the workspace header):** a compact readout, click to edit, showing the project's drive mode (1 `stepping` / 2 `orchestrated` / 3 `autopilot` / 4 `fsd` — ⚠️ **not** `step-by-step`/`full-autopilot`, which no workflow skill recognizes; authority is upstream `transitions.md`). ⚠️ **As built it IS a native `<select>`** — reversing the "never a live `<select>` on every row" rule, because the four values are a **closed** set and a bad mode string fails serde on read and takes the whole project list down. The model override's open-string rule must NOT be generalized here. See `arch/session-resumption.md` → "The picker-row cell".
 
 
 - **Sublime launchers (both KEPT permanently — revised 2026-06-20, WP8):** Sublime Text and Sublime Merge are each one click away via icon buttons in the right-panel tab row. ⚠️ The Sublime *Text* pop is **NOT removed** — the in-app editor is the *primary* editing surface, but Sublime Text stays as a permanent escape hatch. See "Key Decisions" below.
@@ -166,7 +166,7 @@ pnpm tauri build
 - **Status broadcaster fans out one stream to three subscribers.** Filmstrip (main webview), menu-bar popover (separate webview), and PiP (NSPanel webview) all subscribe to the same Tauri-event-channel broadcast of `WorkspaceStatusUpdate`. All three surfaces agree at all times.
 - **Status-surface order (resequenced 2026-06-22): PiP (M5) ships BEFORE the menu-bar (M6), and PiP is now UNCONDITIONAL.** Supersedes the earlier "menu-bar first, dogfood a week, defer PiP if sufficient" plan — that gate is dropped. All three surfaces (M4 filmstrip, M5 PiP, M6 menu-bar) subscribe to the same M3 status broadcaster regardless of build order. See `roadmap.md` → "Revision 2026-06-22".
 - **⚠️ PiP/NSPanel window ops MUST run on the main thread.** Any background-thread/timer path calling a PiP window op must marshal via `app.run_on_main_thread(…)`. Off-main-thread AppKit ops **abort the process with a native exception and NO Rust panic** — invisible to `cargo test`, presenting as clean-launch-then-silently-die. `#[command]` fns and `on_window_event` are already main-thread. See `docs/lessons/pip-nspanel-main-thread.md`.
-- **⚠️ Drive mode: Claudesk NEVER writes the WIP file's frontmatter — REVERSED 2026-08-06** (M12 WP4). The WIP-frontmatter mirror was **rejected**: `/session-restore` deletes `.session.md` at step 7 and `feature-finalize` archives the WIP file, so at the moment a new WP starts there is no file to write to. **As built:** the mode is stored per-project in `projects.json` (`default_drive_mode`) and delivered as an env-var-gated `UserPromptSubmit` hook `additionalContext` line — companion skills unchanged. Claudesk reads the workflow's world; it does not write it. Full rationale: `arch.md` → "The drive-mode signal: a SIGNAL, not a store".
+- **⚠️ Drive mode: Claudesk NEVER writes the WIP file's frontmatter — REVERSED 2026-08-06** (M12 WP4). The WIP-frontmatter mirror was **rejected**: `/session-restore` deletes `.session.md` at step 7 and `feature-finalize` archives the WIP file, so at the moment a new WP starts there is no file to write to. **As built:** the mode is stored per-project in `projects.json` (`default_drive_mode`) and delivered as an env-var-gated `UserPromptSubmit` hook `additionalContext` line — companion skills unchanged. Claudesk reads the workflow's world; it does not write it. Full rationale: `arch/session-resumption.md` → "The drive-mode signal".
 - **Pre-risky-action checklist for scaffolders.** Scaffolders (`create-tauri-app`, `npm create *`, etc.) can wipe strategic docs. Before running one in a non-empty dir, ensure git is clean and scaffold into a sibling dir then merging. The strategic docs in `workflow-system/product/`, the root `CLAUDE.md`, and the `_ref/` symlink are load-bearing and must survive any scaffold.
 
 ## Setup & Ecosystem Gotchas
@@ -185,7 +185,7 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 **M13 closes Group C** — it carries the last two of the six vision success metrics (2: Recycle is one click; 3: no slash-command typing for common skills). The other four are met. Everything M13 needs is workflow-coupled, so it all sits **behind M10.9's `workflow_features_enabled` gate**.
 
-**⚠️ Four things M13 must not re-derive** (full detail: `arch.md` → "Milestone 12 architecture"):
+**⚠️ Four things M13 must not re-derive** (full detail: `workflow-system/product/arch/session-resumption.md`):
 
 1. **Recycle must CLEAR the unclean-exit flag** — it is a clean boundary, so without the clear every recycle leaves a false mark and the next open fires a spurious `--continue`. Use `session_state_mark_clean(path, route)` with a new `CleanExitRoute` variant; ⚠️ **clearing is OPT-IN PER ROUTE, never a side effect of teardown**, and every read/write must go through `key_for()` (a reader that skips it silently matches nothing — no error, just a flag that never fires).
 2. **⚠️ Enumerating routes/skills as data makes the SET testable but does NOT prove each member has a CALLER.** M12 shipped a `/exit` clean-exit variant that round-tripped through two test suites while being called by nothing — and the exhaustiveness test's green read as coverage. A skill *registry* is exactly this shape at larger scale.
@@ -198,27 +198,27 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ## Previous Milestone (closed)
 
-**Every closed milestone's as-built architecture lives in `workflow-system/product/arch.md`; its WBS + probe outcomes live in `workflow-system/product/archive/<cycle-name>/`.** Where `arch.md` and `roadmap.md` differ, **`arch.md` is the authority** — it is the as-built record, resynced at each `/product-finalize`.
+**⚠️ As-built architecture is organized BY SUBSYSTEM, not by milestone** — `workflow-system/product/arch/<subsystem>.md`, indexed by `arch.md` (split 2026-08-12). A milestone's WBS + probe outcomes live in `workflow-system/product/archive/<cycle-name>/`. Where the `arch/` set and `roadmap.md` differ, **the `arch/` set is the authority** — it is the as-built record, resynced at each `/product-finalize`. ⚠️ **Do not add a new milestone section to it**; edit the subsystem the change belongs to.
 
-| Milestone | Closed | Verdict | As-built section in `arch.md` |
+| Milestone | Closed | Verdict | As-built home in the `arch/` set |
 |---|---|---|---|
-| **M12** Smart auto-resume + drive mode | 2026-08-12 | GO | "Milestone 12 architecture" |
-| **M11** Workflow-docs markdown viewer | 2026-08-03 | GO | "Milestone 11 architecture" |
+| **M12** Smart auto-resume + drive mode | 2026-08-12 | GO | `arch/session-resumption.md` |
+| **M11** Workflow-docs markdown viewer | 2026-08-03 | GO | `arch/right-panel-surfaces.md` → "The Docs panel" |
 | **M11.5** QoL bucket | 2026-07-31 | GO | *(no as-built section)* |
-| **M10.9** Workflow-features opt-in gate | 2026-07-31 | GO | "Milestone 10.9 architecture" + the two WP3.5 sections |
-| **M10.5** QoL polish bucket | 2026-07-19 | GO | Phase 1 shutdown (WP3) + happy-path (WP4) |
-| **M10** In-app auto-updater | 2026-07-18 | GO | "Milestone 10 architecture" |
-| **M9** Time-analytics panel | 2026-07-16 | GO | "Milestone 9 architecture" |
+| **M10.9** Workflow-features opt-in gate | 2026-07-31 | GO | `arch/workflow-gate.md` + `arch/claude-substrate.md` |
+| **M10.5** QoL polish bucket | 2026-07-19 | GO | `arch/process-and-pty.md` (shutdown + I/O encoding) |
+| **M10** In-app auto-updater | 2026-07-18 | GO | `arch/build-update-release.md` |
+| **M9** Time-analytics panel | 2026-07-16 | GO | `arch/time-analytics.md` |
 | **M8** Demo assets | 2026-06-29 | GO | *(docs/marketing only — no app code)* |
-| **M7** Menu-bar status item | 2026-06-29 | GO | "Status surfaces + hook channel" |
+| **M7** Menu-bar status item | 2026-06-29 | GO | `arch/status-channel-and-surfaces.md` §B.2 |
 | **M6** Friend-requested QoL polish | 2026-06-28 | GO | *(no as-built section)* |
-| **M5** Picture-in-picture | 2026-06-27 | GO | "Status surfaces + hook channel" |
-| **M4** Multi-workspace UX | 2026-06-24 | GO | "System Design" |
-| **M3** CC lifecycle & state plumbing | 2026-06-22 | GO | "Status surfaces + hook channel" |
-| **M2** Lite Editor + Diff Viewer | 2026-06-22 | GO | "Milestone 2 architecture" |
-| **M1** Bare Shell + Tab Substrate PoC | 2026-06-19 | GO | "System Design" |
+| **M5** Picture-in-picture | 2026-06-27 | GO | `arch/status-channel-and-surfaces.md` §B.3 |
+| **M4** Multi-workspace UX | 2026-06-24 | GO | `arch/foundations.md` → "System Design" |
+| **M3** CC lifecycle & state plumbing | 2026-06-22 | GO | `arch/status-channel-and-surfaces.md` §A |
+| **M2** Lite Editor + Diff Viewer | 2026-06-22 | GO | `arch/right-panel-surfaces.md` |
+| **M1** Bare Shell + Tab Substrate PoC | 2026-06-19 | GO | `arch/foundations.md` → "System Design" |
 
-⚠️ **The M12 properties that bind M13 are NOT repeated here** — they are in `## Current Milestone` above ("Four things M13 must not re-derive") and in full in `arch.md` → "Milestone 12 architecture".
+⚠️ **The M12 properties that bind M13 are NOT repeated here** — they are in `## Current Milestone` above ("Four things M13 must not re-derive") and in full in `arch/session-resumption.md`.
 
 **Execution order from here:** M13 (skill orchestration, incl. Recycle Session) → M14 (polish + OSS release). Numbering does not match execution order for M11/M11.5 — M11.5 ran *before* M11 by design; no catch-up is owed. ⚠️ **When M14 is next touched, correct its "default CLI args for `claude`" Settings line** — M11.5 consumed most of it, and it still misstates PiP (shipped M5) + permission-mode (shipped M6) as future work.
 
