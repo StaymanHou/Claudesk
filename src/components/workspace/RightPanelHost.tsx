@@ -58,6 +58,7 @@ import {
   type RightPanel,
 } from "./panelHost";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import { usePipMode, setPipModeOptimistic } from "../../state/usePipMode";
 // M11 WP3 — LAZY, for the same reason as DiffPanel/ProjectSearch above
 // (SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD). WP2 imported this statically when the
 // panel was just a file list; WP3 gave it a markdown renderer (react-markdown + remark-gfm
@@ -194,36 +195,15 @@ export function RightPanelHost({
   }, [workspaceId, registerDirtyProbe]);
 
   // WP5 Phase 2 (rework) — the tri-state PiP mode (Off/On/Auto), the single user-facing
-  // control. The icon button cycles it; the View-menu radio also sets it. Seed from the
-  // backend (pip_get_mode) on mount + track the `pip-mode` broadcast (the backend is the
-  // source of truth — a menu/other-surface change reflects here too). App-global, so it's
-  // fine that this lives per-RightPanelHost: every mounted instance shows the same mode.
-  const [pipMode, setPipMode] = useState<"off" | "on" | "auto">("auto");
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void invoke<"off" | "on" | "auto">("pip_get_mode")
-      .then((m) => {
-        if (!cancelled) setPipMode(m);
-      })
-      .catch(() => {
-        /* default 'auto' stands */
-      });
-    void listen<string>("pip-mode", (e) => {
-      const m = e.payload;
-      if (m === "off" || m === "on" || m === "auto") setPipMode(m);
-    }).then((fn) => {
-      if (cancelled) {
-        fn();
-        return;
-      }
-      unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
+  // control. The icon button cycles it; the View-menu radio also sets it. The backend is the
+  // source of truth, so a menu/other-surface change reflects here too.
+  //
+  // ⚠️ Read through the SEAM, not inline. This component is mounted once per workspace and
+  // never unmounted, so the previous inline `useState` + `pip_get_mode` fetch + `listen`
+  // meant N redundant IPC fetches and N live subscriptions for one app-global value, growing
+  // with every open workspace. `usePipMode` collapses that to one fetch and one listener.
+  // (`SURFACE-2026-06-27-QUALITY-WP5-PIPMODE-STATE-DUP-PER-WORKSPACE`.)
+  const pipMode = usePipMode();
 
   // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.
   const [finderOpen, setFinderOpen] = useState(false);
@@ -1068,7 +1048,9 @@ export function RightPanelHost({
             onClick={() => {
               const next =
                 pipMode === "off" ? "on" : pipMode === "on" ? "auto" : "off";
-              setPipMode(next); // optimistic; the `pip-mode` broadcast confirms
+              // Optimistic; the `pip-mode` broadcast confirms. Publishing through the seam
+              // updates EVERY workspace at once — the old per-instance state updated only this one.
+              setPipModeOptimistic(next);
               void invoke("pip_set_mode", { mode: next }).catch((e) => {
                 console.error("[claudesk] pip_set_mode failed:", e);
               });

@@ -308,6 +308,13 @@ pub type SharedRegistry = Mutex<WorkspaceRegistry>;
 /// its `cwd` matches no open workspace (both = drop, not error). Kept pure (no
 /// `AppHandle`, no IO) so the whole transform unit-tests without a Tauri app — the
 /// drain thread's only un-testable line is the `app.emit` of the returned `Some`.
+/// ⚠️ **The two hook-stream consumers filter DIFFERENTLY, and the asymmetry is deliberate.**
+/// An event whose `cwd` matches no open workspace is **DROPPED here** — a status dot needs a
+/// workspace to belong to, so an unmatchable event has no surface. The `time_store` drain
+/// (`time_store::commands::drain_loop`) deliberately does **NOT** filter: time analytics is
+/// machine-global by design and records every Claude Code session on the machine, including
+/// projects Claudesk has never opened. Neither side used to say so, which reads as one of them
+/// being buggy. (`SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED`.)
 pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<WorkspaceStatusUpdate> {
     let state = event_to_state(event)?;
     let workspace_id = registry.resolve_cwd(&event.cwd)?;

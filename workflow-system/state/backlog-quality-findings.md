@@ -388,17 +388,6 @@ scheduling items rather than polish.*
 - **Priority:** low.
 - **Status:** pending.
 
-# m5-wp5-pip-toggle-lifecycle-autosummon — 2026-06-27
-
-*(feature-review-quality on ship commit f6e3929; Mode 3 autopilot auto-backlog. 0 CRITICAL / 2 MAJOR / 2 MINOR.)*
-
-## SURFACE-2026-06-27-QUALITY-WP5-PIPMODE-STATE-DUP-PER-WORKSPACE
-- **Severity:** MINOR
-- **Finding:** `RightPanelHost.tsx:136-159` — the `pipMode` state + `pip_get_mode` fetch + `pip-mode` listener are duplicated per RightPanelHost instance (one per mounted workspace), so at N workspaces there are N redundant IPC fetches + N subscriptions for one app-global value. The inline comment acknowledges it's "fine per-RightPanelHost," but it's avoidable at the N>1 the milestone targets.
-- **Fix shape:** lift `pipMode` to App-level state (fetched + subscribed once), passed down as a prop — mirroring how `tiles` is derived once in App. Low effort.
-- **Priority:** low.
-- **Status:** pending — DEFERRED at debt-paydown WP4 (operator, 2026-06-30), anchored to **M9**. The per-`RightPanelHost` `pip-mode` subscription is the project's INTENDED "all surfaces subscribe to the same backend broadcast" pattern (PiP mode is already an app-global View-menu radio, backend = single source of truth via `pip_set_mode`/`pip_get_mode` + the `pip-mode` event), not a missing-app-state bug — the only real cost is N-1 redundant `pip_get_mode` mount fetches. M9's time-tracking toggle follows the same backend-command + `*-mode`-broadcast + per-consumer-subscribe shape, so there is no shared app-settings store to build once-vs-twice. Fold the dedup into M9's settings work IF an app-settings hook materializes there; else it stays the documented pattern.
-
 # qol-wp1-close-workspace — 2026-06-25
 
 3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9`. Reviewer rated the feature well-built and idiomatic — the standout being the per-pane `cc_kill`-on-unmount that reaps both PTY panes generically and closes a latent WP7 lifecycle gap. All findings are low-risk: two over-narrated comments + one accepted test-boundary gap. Auto-backlogged per drive_mode=autopilot.
@@ -419,19 +408,6 @@ scheduling items rather than polish.*
 - **Why deferred (operator ruling, debt-paydown sweep #2, 2026-06-30):** building the error surface is net-new UX, not a debt sweep — it needs a toast/inline-error component in RightPanelHost that does not exist. Honor the recorded "intentionally deferred" intent. The three original findings (WP5-DELETE-FAILURE-NOT-SURFACED, WP5B-TRASH-FAILURE-NOT-SURFACED, WP5-CREATE-COLLISION-GITIGNORE) collapse into this one anchor — one error-surface feature closes all three.
 - **Anchor:** a future error-surface feature (whenever RightPanelHost gains a toast/inline-error affordance).
 - **Status:** DEFERRED (anchored — net-new UX)
-
-# m9-fix-minute-quantization-ai-doing — 2026-07-13
-
-*(feature-review-quality on the working-tree diff [uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 1 MAJOR / 2 MINOR — all auto-backlogged. Reviewer: well-built, appropriately-scoped; contract-additive `dur_ms` fix, precision-disciplined [sum ms, round once], anti-pattern signposted at the type def + both sum sites, discriminating repro tests. Only real gap: a THIRD copy of the fixed `end - start` anti-pattern in a sibling file the blast-radius analysis missed. No refactor auto-invoked — MAJOR is a same-pattern follow-up on a lower-susceptibility kind, not a CRITICAL.)*
-
-## SURFACE-2026-07-13-QUALITY-MINQUANT-HELPER-PARITY-UNPINNED
-- **Severity:** MINOR
-- **File:** `src-tauri/src/time_store/query.rs` (`ms_to_minutes_round`) + `src/components/workspace/dashboard/kinds.ts` (`msToMinutesRound`)
-- **Finding:** The FE/BE round-half-up helpers are an intentional documented mirror, but no single test asserts they AGREE on the same inputs — each is pinned independently (Rust `ms_to_minutes_round_is_round_half_up_and_zero_clamped`, FE sub-minute pin). The 30_000ms pivot + formula are duplicated in 3 places (2 helpers + WIP prose). Parity is currently correct + both sides pinned, so not a bug — a latent drift channel (change one pivot, no test fails on the divergence).
-- **Fix shape:** a shared input→output fixture table asserted on both sides.
-- **Priority:** low.
-- **Status:** pending.
-
 
 # m10.9-wp2-workflow-features-gate — 2026-07-28
 
@@ -478,24 +454,6 @@ scheduling items rather than polish.*
 Review against ship baseline `bc15ae6..a6fb194`. **2 CRITICAL + 3 MAJOR were FIXED in the refactor
 pass (`b95466f`)** and are recorded in the WIP's `## Code-Quality Review` → "Refactor resolution",
 not here. This section holds only what was deliberately NOT addressed.
-
-## SURFACE-2026-07-29-QUALITY-WP3.5A-CLONE-DIR-NAME-DUPLICATED
-- **Source:** feature:review-quality (m10.9-wp3.5a), MINOR
-- **Type:** tech-debt
-- **Summary:** `CLONE_DIR_NAME` exists twice — a Rust const in `workflow_install/mod.rs:92` and a TS const in `WorkflowInstallWizard.tsx:36` — with a comment acknowledging the coupling.
-- **Context:** Not a defect today; blast radius is a Browse-picked path disagreeing with the backend default. But the mitigation is one line: `workflow_install_default_location` already crosses the IPC boundary and returns the full path, so the wizard could take the directory name from that seeded value's basename and drop the constant entirely.
-- **Suggested action:** derive the basename from the seeded default instead of hardcoding; removes a documented drift channel rather than documenting it.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-07-29-QUALITY-WP3.5A-PROVENANCE-FETCH-DUPLICATED
-- **Source:** feature:review-quality (m10.9-wp3.5a), MINOR
-- **Type:** tech-debt
-- **Summary:** `SettingsPanel.tsx:255-270` — `refreshProvenance` and the mount effect duplicate the same `invoke("workflow_install_state").then().catch()` body verbatim; the effect adds only a `cancelled` guard.
-- **Context:** Two copies of one fetch means a change to error handling has to be made twice.
-- **Suggested action:** have the mount effect call the memoized callback, keeping only the `cancelled` guard around it.
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-07-29-QUALITY-WP3.5A-DEFEAT-NARRATIVE-IN-TEST-COMMENT
 - **Source:** feature:review-quality (m10.9-wp3.5a), MINOR

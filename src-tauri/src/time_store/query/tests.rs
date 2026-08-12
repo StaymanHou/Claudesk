@@ -65,6 +65,43 @@ fn at_ms(d: chrono::NaiveDate, ms: i64) -> i64 {
 // totals accrue to real minutes instead of per-segment flooring to zero. Boundary
 // behavior is round-half-up with a 30_000ms pivot; must match the FE `msToMinutesRound`.
 
+/// The FE/BE parity contract: the SAME vector table the frontend asserts.
+///
+/// ⚠️ `ms_to_minutes_round` and the TS `msToMinutesRound` are a documented mirror, but until
+/// this test both were pinned INDEPENDENTLY — each could pass while the two diverged, most
+/// plausibly at the 30_000ms half-up pivot or the negative clamp, which are exactly the points
+/// a "simplification" touches. (`SURFACE-2026-07-13-QUALITY-MINQUANT-HELPER-PARITY-UNPINNED`.)
+///
+/// The table is duplicated deliberately — that is the point. Both sides assert the same literal
+/// pairs, and `minuteRoundingParity.test.ts` additionally asserts that THIS function exists and
+/// carries every vector, so deleting or weakening either half fails on both.
+#[test]
+fn ms_to_minutes_round_matches_the_frontend_parity_vectors() {
+    // Keep in sync with MINUTE_ROUNDING_VECTORS in
+    // src/components/workspace/dashboard/__tests__/minuteRoundingParity.test.ts
+    let vectors: [(i64, i64); 11] = [
+        (-1, 0),
+        (0, 0),
+        (1, 0),
+        (29999, 0),
+        (30000, 1),
+        (30001, 1),
+        (59999, 1),
+        (60000, 1),
+        (89999, 1),
+        (90000, 2),
+        (90001, 2),
+    ];
+    for (input, expected) in vectors {
+        assert_eq!(
+            super::ms_to_minutes_round(input),
+            expected,
+            "FE/BE parity broken at {input}ms: Rust says {}, the frontend table says {expected}",
+            super::ms_to_minutes_round(input)
+        );
+    }
+}
+
 #[test]
 fn ms_to_minutes_round_is_round_half_up_and_zero_clamped() {
     assert_eq!(super::ms_to_minutes_round(0), 0);

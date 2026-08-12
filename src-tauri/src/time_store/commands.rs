@@ -516,6 +516,13 @@ pub fn start_writer(app: AppHandle, receiver: Receiver<HookEvent>) -> thread::Jo
 
 /// The drain-loop body — blocks on `rx.recv()`, per event reads the gate + writes.
 /// Extracted so it reads top-to-bottom (mirrors `status_broadcaster`'s `drain_loop`).
+/// ⚠️ **No `cwd` filtering here, and that is deliberate — the mirror of the status drain.**
+/// `status_broadcaster::to_update` DROPS an event whose `cwd` matches no open workspace,
+/// because a status dot needs a workspace to attach to. This drain records **every** Claude
+/// Code session on the machine, including projects Claudesk has never opened — time analytics
+/// is machine-global by design, which is why the capture is gated on an explicit opt-in rather
+/// than on workspace membership. Do not "fix" this to match the status side.
+/// (`SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED`.)
 fn drain_loop(app: AppHandle, receiver: Receiver<HookEvent>) {
     while let Ok(event) = receiver.recv() {
         let gate_on = tracking_enabled(&app);

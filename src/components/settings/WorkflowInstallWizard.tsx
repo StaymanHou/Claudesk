@@ -11,7 +11,7 @@
 // pure `terminal::resolve_terminal_state`. Re-deriving any of it here would create a second
 // implementation of the terminal-state table that could silently disagree with the tested one.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useTauriListen } from "../../useTauriListen";
@@ -26,14 +26,26 @@ const ORIGIN_URL =
   "git@github.com:StaymanHou/stayman-claude-code-customization.git";
 
 /**
- * The clone's own directory name, appended to whatever parent the Browse dialog returns.
+ * The clone's own directory name, **derived** from the backend's default location rather than
+ * duplicated as a literal.
  *
- * Mirrors Rust's `workflow_install::CLONE_DIR_NAME`. Duplicated rather than plumbed through an
- * IPC call because it is a constant, not state — but note the coupling: if the Rust constant
- * changes, the default path from `workflow_install_default_location` and a Browse-picked path
- * would disagree.
+ * ⚠️ This used to be a hardcoded `"my-claude-code-customization"` mirroring Rust's
+ * `workflow_install::CLONE_DIR_NAME`, with a comment acknowledging the coupling — the drift
+ * channel being that a change to the Rust constant would make the seeded default path and a
+ * Browse-picked path disagree, silently, with no test able to see it.
+ * (`SURFACE-2026-07-29-QUALITY-WP3.5A-CLONE-DIR-NAME-DUPLICATED`.)
+ *
+ * The wizard already fetches the full default path at mount, and that path ends in exactly this
+ * basename — so there is one source of truth (Rust) and the frontend reads it instead of
+ * restating it. Documenting a drift channel is strictly worse than removing it.
+ *
+ * Falls back to the literal only if the default-location call failed, in which case the field
+ * is empty and Browse is the user's only path anyway.
  */
-const CLONE_DIR_NAME = "my-claude-code-customization";
+function cloneDirNameFrom(defaultPath: string): string {
+  const base = defaultPath.replace(/\/+$/, "").split("/").pop();
+  return base && base.length > 0 ? base : "my-claude-code-customization";
+}
 
 /** Outcome payload from Rust — mirrors `commands::InstallFinished`. */
 interface InstallFinished {
@@ -76,11 +88,19 @@ export function WorkflowInstallWizard({
   // Seed the location field with the backend's default. The path is composed in Rust from the
   // resolved home dir — the frontend never builds a `~/...` string itself, because only the
   // commands layer is allowed to know where home is.
+  //
+  // Retained in a ref as well as state so `browse` can derive the clone's basename from it
+  // without taking `dest` as a dependency — `dest` changes on every keystroke in the editable
+  // field, and the picked-parent path must not be recomposed from a half-typed value.
+  const defaultPathRef = useRef("");
   useEffect(() => {
     let cancelled = false;
     invoke<string>("workflow_install_default_location")
       .then((p) => {
-        if (!cancelled) setDest(p);
+        if (!cancelled) {
+          defaultPathRef.current = p;
+          setDest(p);
+        }
       })
       .catch(() => {
         /* Leave the field empty; the user can type a path. Not worth an error surface. */
@@ -138,7 +158,10 @@ export function WorkflowInstallWizard({
     try {
       const picked = await open({ directory: true, multiple: false });
       if (typeof picked === "string") {
-        setDest(`${picked.replace(/\/$/, "")}/${CLONE_DIR_NAME}`);
+        // Basename derived from the backend's default path (see `cloneDirNameFrom`), so a
+        // Browse-picked destination and the seeded default can never disagree.
+        const name = cloneDirNameFrom(defaultPathRef.current);
+        setDest(`${picked.replace(/\/$/, "")}/${name}`);
       }
     } catch {
       /* Dialog cancelled or unavailable — keep whatever the field already holds. */

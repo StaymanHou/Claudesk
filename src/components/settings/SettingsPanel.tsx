@@ -271,24 +271,35 @@ export default function SettingsPanel({
   // operator's live repo.
   const [provenance, setProvenance] = useState<InstallProvenance>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const refreshProvenance = useCallback(() => {
-    invoke<string>("workflow_install_state")
-      .then((s) => setProvenance(s as Exclude<InstallProvenance, null>))
-      .catch(() => setProvenance(null));
-  }, []);
-  useEffect(() => {
-    let cancelled = false;
+  // ⚠️ ONE fetch body, not two. The mount effect used to duplicate `refreshProvenance`'s
+  // `invoke().then().catch()` verbatim, differing only by a `cancelled` guard — so a change to
+  // the read (a new command name, a different fallback, an added state write) had to be made
+  // twice, and making it once would have left the two paths silently disagreeing.
+  // (`SURFACE-2026-07-29-QUALITY-WP3.5A-PROVENANCE-FETCH-DUPLICATED`.)
+  //
+  // The guard is a PARAMETER rather than dropped: the mount path must not write state after
+  // unmount, while the manual refresh has no unmount to race and passes a permanently-live
+  // predicate.
+  const refreshProvenanceIf = useCallback((isLive: () => boolean) => {
     invoke<string>("workflow_install_state")
       .then((s) => {
-        if (!cancelled) setProvenance(s as Exclude<InstallProvenance, null>);
+        if (isLive()) setProvenance(s as Exclude<InstallProvenance, null>);
       })
       .catch(() => {
-        if (!cancelled) setProvenance(null);
+        if (isLive()) setProvenance(null);
       });
+  }, []);
+  const refreshProvenance = useCallback(
+    () => refreshProvenanceIf(() => true),
+    [refreshProvenanceIf],
+  );
+  useEffect(() => {
+    let cancelled = false;
+    refreshProvenanceIf(() => !cancelled);
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshProvenanceIf]);
 
   // M10.9 WP3.5b — the uninstall dialog's open state, plus HOW it was opened. Both entry
   // points are supported (operator, 2026-07-31): the substrate row's button and the gate

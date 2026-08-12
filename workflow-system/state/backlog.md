@@ -335,15 +335,6 @@
 - **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*.
 - **Pickup shape:** Both are polish that should ride a future touch of these files, not a standalone pass. ⚠️ **Neither should be "fixed" by weakening a claim or a guard:** the hint's length is four *distinct* load-bearing facts (the machine-wide scope clause especially — removing it makes the copy misleading by omission), and the whitespace-normalization comment in the guards is what stops someone simplifying the haystack back to raw and silently re-breaking them. Dismiss via the WIP's `## Code-Quality Review` section.
 
-## SURFACE-2026-08-01-TWO-HOOK-DRAINS-FILTER-DIFFERENTLY-UNDOCUMENTED
-- **Source:** feature:build (M11.5 WP3 Phase 1, 2026-08-01)
-- **Target level:** product:wbs (comment-only; fold into any future touch of either module)
-- **Type:** tech-debt (code comprehension)
-- **Summary:** The two consumers of the hook-event fan-out treat unmatched events **differently**, and neither says so. `status_broadcaster::resolve_cwd` (`mod.rs:240`) does ancestor/longest-prefix matching and **drops** an event whose `cwd` matches no open workspace (`mod.rs:34`); `time_store::commands::drain_loop` (`commands.rs:493-513`) reads the gate and calls `write_gated` on **every** event with **no workspace filter at all**.
-- **Context:** Found while writing M11.5 WP3's privacy copy, which asserts that time tracking records "Claude Code activity across this whole Mac, not just projects open in Claudesk". That claim rests entirely on this asymmetry. The asymmetry is **deliberate and correct** — analytics wants all CC activity on the machine, while a status dot only means something for a workspace that is actually open — but it is documented at neither drain. The natural inference from reading one drain is therefore **wrong** about the other, and the wrong direction is the dangerous one: a reader who checks `status_broadcaster` first would conclude the user-facing privacy copy overstates what is captured, and might "correct" true copy into false copy. Establishing the fact required a code trace; memory `[[time-tracking-capture-is-machine-global]]` asserted it but the code is the only authority for a privacy claim.
-- **Suggested action:** one cross-referencing comment at each `drain_loop` — status side: "unmatched cwd is DROPPED here; the time_store drain deliberately does NOT filter (see …)"; time_store side the mirror. Cheapest folded into the next edit of either module; not worth a standalone task. The behavior itself needs no change.
-- **Priority:** low (comment-only, no behavior at risk — but it guards a user-facing privacy claim, which is why it is filed rather than dropped).
-
 ## SURFACE-2026-08-01-PRIVACY-TEST-IDENTIFIER-IS-STALE-IN-FOUR-DOCS
 - **Source:** feature:plan (M11.5 WP3 scope audit, 2026-08-01)
 - **Target level:** product:finalize (doc resync) — or a one-line fix any time
@@ -523,12 +514,6 @@
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** rides along the standing WP-refactor batch — finding (1) is a one-test tightening; finding (2) is doc/awareness (likely no-op). Dismiss either via the WIP's `## Code-Quality Review` section.
 
-## Code-quality findings — m9-fix-minute-quantization-ai-doing (2026-07-13)
-- **Pointer:** 1 MINOR remaining (originally 1 MAJOR + 2 MINOR / 0 CRITICAL; the MAJOR `DayTimeline` `sumKind` `end - start` third-copy and the `dur_ms` double-negative-guard MINOR both RESOLVED) from `feature-review-quality` on the minute-quantization-fix working-tree diff. The remaining MINOR — **`MINQUANT-HELPER-PARITY-UNPINNED`**: FE/BE round-half-up helpers are an intentional mirror but no test asserts they AGREE on shared inputs (latent drift channel; both individually pinned). Reviewer: well-built, appropriately-scoped — contract-additive `dur_ms`, precision-disciplined (sum ms, round once), anti-pattern signposted at the type def + both sum sites, discriminating repro tests. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m9-fix-minute-quantization-ai-doing — 2026-07-13`.
-- **Priority:** low (1 MINOR)
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** a shared FE/BE round-half-up parity fixture (assert the two helpers agree on shared inputs) — rides the standing WP-refactor batch. Dismiss via the WIP's `## Code-Quality Review` section.
-
 ## Code-quality findings — m9-wp4-segment-model-query-layer (2026-07-08)
 - **Pointer:** **2 MINOR remaining** (0 CRITICAL / 0 MAJOR; the dup tz-math helpers MINOR RESOLVED by backlog-paydown sweep WP3, and the `ai_busy_intervals`-computed-twice MINOR RESOLVED) from `feature-review-quality` on ship commit `d8b308e`. The 2 open findings: (1) **`WP4-DAYPAYLOAD-EMPTY-NOT-ON-IPC-SURFACE`** — `DayPayload.empty` never reaches WP6 (RangePayload/FE have no `empty`); a WP6-facing decision (surface it or document inference from `projects.is_empty()`); (2) **`WP4-CUSTOM-WINDOW-MIDNIGHT-EXTRA-DAY`** — a custom window ending on midnight emits one extra empty trailing day (cosmetic boundary edge). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m9-wp4-segment-model-query-layer — 2026-07-08`.
 - **Priority:** low (both remaining)
@@ -600,12 +585,6 @@
 - **Suggested action:** Optional. If a fully-clean release ACL is wanted, move `tauri-plugin-mcp-bridge` from `[dependencies]` to a dev-only dependency surface that the build-time permission codegen also skips (e.g. a `[target.'cfg(debug_assertions)'.dependencies]` entry or a feature-gated optional dep), and re-confirm `pnpm tauri:dev` still gets the bridge. Verify with `strings target/release/claudesk | grep -i mcp-bridge` → empty. Low value; the current state is functionally release-safe.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-
-## Code-quality findings — m5-wp5-pip-toggle-lifecycle-autosummon (2026-06-27)
-- **Pointer:** 1 MINOR remaining (originally 0 CRITICAL / 2 MAJOR / 2 MINOR; the View-menu-CheckMarks-stale MAJOR cluster and the stale-`pip_toggle`-rustdoc MINOR all RESOLVED) from `feature-review-quality` on ship commit `f6e3929`. The remaining MINOR — **`WP5-PIPMODE-STATE-DUP-PER-WORKSPACE`**: per-RightPanelHost duplication of the app-global `pipMode` fetch/listener. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m5-wp5-pip-toggle-lifecycle-autosummon — 2026-06-27`.
-- **Priority:** low (1 MINOR).
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** lift `pipMode` to App-level state (drop the per-RightPanelHost fetch/listener dup) — rides any future right-panel touch. Dismiss via the WIP's `## Code-Quality Review` section.
 
 ## Code-quality findings — file-op-error-surface (2026-06-30)
 - **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).

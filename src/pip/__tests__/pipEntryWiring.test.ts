@@ -7,6 +7,7 @@ import viteConfig from "../../../vite.config.ts?raw";
 import pipHtml from "../../../pip.html?raw";
 import pipMain from "../main.tsx?raw";
 import rightPanelHost from "../../components/workspace/RightPanelHost.tsx?raw";
+import pipModeSeam from "../../state/usePipMode.ts?raw";
 import appTsx from "../../App.tsx?raw";
 import defaultCapability from "../../../src-tauri/capabilities/default.json";
 
@@ -63,8 +64,24 @@ describe("M5 WP5 (rework) — PiP tri-state mode control wiring (replaces pip_to
   it("RightPanelHost cycles mode via pip_set_mode + reflects the pip-mode broadcast", () => {
     expect(rightPanelHost).toContain('invoke("pip_set_mode"');
     expect(rightPanelHost).toContain('data-testid="pip-toggle"');
-    expect(rightPanelHost).toContain('"pip-mode"'); // subscribes to the mode broadcast
     expect(rightPanelHost).not.toContain('invoke("pip_toggle")'); // the old command is gone
+
+    // ⚠️ The broadcast subscription lives in the SEAM, not here. This used to assert
+    // `rightPanelHost` contained `"pip-mode"` directly — true while every RightPanelHost
+    // instance ran its own `listen("pip-mode")`, which is exactly the per-workspace
+    // duplication removed at the 2026-08-12 paydown sweep
+    // (`SURFACE-2026-06-27-QUALITY-WP5-PIPMODE-STATE-DUP-PER-WORKSPACE`). The PROPERTY — the
+    // component reflects the broadcast — is unchanged; only its location moved, so the
+    // assertion follows it rather than pinning the old shape.
+    expect(rightPanelHost).toContain("usePipMode()");
+    expect(
+      pipModeSeam,
+      "the seam must subscribe to the broadcast — otherwise no consumer reflects a menu-driven change",
+    ).toContain('listen<string>("pip-mode"');
+    expect(
+      pipModeSeam,
+      "the seam must seed from the backend getter, or the first render shows a guessed default",
+    ).toContain('invoke<PipMode>("pip_get_mode")');
   });
 });
 
