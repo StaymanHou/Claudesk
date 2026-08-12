@@ -201,16 +201,11 @@ pub fn project_set_default_model(
 /// success for a write that vanishes on the next read is worse than failing.
 ///
 /// ⚠️ **`mode` is TYPED (`Option<DriveMode>`), deliberately unlike
-/// [`project_set_default_model`]'s free `Option<String>`** — and the asymmetry is a
-/// correctness requirement, not a style choice. An unrecognized *model* string is
-/// adjudicated by CC itself, loudly and precisely, in the pane the operator is already
-/// looking at. An unrecognized *drive-mode* string instead fails `serde` on the way back
-/// **in and takes the whole project list with it** (`read_projects` returns `Err`, so the
-/// picker cannot render at all — see `tests::an_unknown_drive_mode_string_fails_the_whole_project_list`).
-/// So this boundary must reject at the type level; do NOT "harmonize" it to a `String` for
-/// symmetry with the model command, and do NOT copy `cc/modelOverride.ts`'s emphatic
-/// "this module does NOT validate" rule across — that rule is about the open-valued
-/// sibling.
+/// [`project_set_default_model`]'s free `Option<String>`** — a correctness requirement, not
+/// a style choice: one unrecognized drive-mode string fails `serde` on read and takes the
+/// whole project list with it (`tests::an_unknown_drive_mode_string_fails_the_whole_project_list`).
+/// Do NOT "harmonize" this to a `String`. The full open-vs-closed comparison is stated once,
+/// at `src/cc/driveMode.ts`; it is deliberately not restated here.
 ///
 /// Clearing removes the key from disk (via `skip_serializing_if`) rather than writing
 /// `null`, which is what makes "absent → do not set the env var" one code path instead of

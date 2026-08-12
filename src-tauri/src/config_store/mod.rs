@@ -1181,14 +1181,10 @@ mod tests {
     /// refactor that made `projects.json` writes per-record would silently invalidate the
     /// recorded rejection without anything failing.
     ///
-    /// The property: [`write_projects`] serializes the WHOLE slice, so two writers that
-    /// each read-modify-write the list **lose each other's edits** — last `rename` wins
-    /// entirely. The existing
-    /// `set_default_model_on_one_project_leaves_every_field_of_the_others_untouched`
-    /// asserts the *sequential* case (read → write → read → write) and passes; it does NOT
-    /// cover interleaving, which is what the flag would have hit, because
-    /// `record_open`(→`add_or_touch`) and the flag write are co-triggered by ONE click
-    /// (`ProjectPicker.tsx:145-146`).
+    /// The property: [`write_projects`] serializes the WHOLE slice, so two interleaved
+    /// read-modify-write callers **lose each other's edits** — last `rename` wins. (The
+    /// sequential case is covered separately by
+    /// `set_default_model_on_one_project_leaves_every_field_of_the_others_untouched`.)
     ///
     /// ⚠️ This test asserts the hazard EXISTS. It is not aspirational — if a future change
     /// serializes writers or adds per-record writes, this test SHOULD fail, and the correct

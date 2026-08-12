@@ -15,15 +15,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** medium (no user-visible defect today; it is a stated-scope gap on a feature whose whole safety story is "inert unless Claudesk set it")
 - **Status:** pending
 
-## SURFACE-2026-08-07-QUALITY-WP4B-INCIDENT-NARRATIVE-TRIPLE-RECORDED-IN-CODE-COMMENTS
-- **Source:** feature-review-quality (M12 WP4b, MAJOR)
-- **Type:** tech-debt (comment density tipped from WHY into chronology)
-- **Summary:** The new `cc_session` region runs ~48% comments/blanks across ~560 added lines, with several doc comments spending 14-20 lines re-narrating build history (the three vacuous guards; the doc-comment-citing-a-nonexistent-test incident). `resolve_cc_spawn_env`'s doc alone spends 14 lines on retired guards' failure modes. That history is **already recorded in three places** — the WIP, the backlog SURFACEs, and these comments — and the code copy decays fastest.
-- **Context:** This repo's convention IS heavy explanatory comments encoding WHY, and most of these do that well — the finding is scoped to the *incident-narrative subset*, not the contract documentation. A reader modifying `resolve_cc_spawn_env` needs its contract and the one-line reason the shape is load-bearing; they do not need the chronology of guards that no longer exist.
-- **Suggested action:** Compress the retired-guard chronology to one line plus a pointer (the SURFACE ID or the lesson slug), keeping the *contract* statements at full length. Do NOT strip the ⚠️ contract warnings — those are the ones that have demonstrably prevented regressions.
-- **Priority:** low-medium (pure readability; no correctness risk, and over-correcting here would cost more than it saves)
-- **Status:** pending
-
 ## SURFACE-2026-08-07-QUALITY-WP4B-FOUR-MINOR-FINDINGS
 - **Source:** feature-review-quality (M12 WP4b, MINOR ×4)
 - **Type:** tech-debt (polish)
@@ -71,41 +62,12 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-08-03-QUALITY-WP1-HAZARD-TEST-DOC-COMMENT-LENGTH
-- **Source:** feature-review-quality (M12 WP1, MINOR)
-- **Type:** tech-debt (comment density)
-- **Summary:** The doc comment on `interleaved_whole_file_writes_lose_the_earlier_writers_edit` runs 16 lines for a 40-line test. The ⚠️ paragraph (what to do when it fails) is load-bearing *why*; the paragraph re-explaining what the pre-existing sequential test covers is ~one sentence of content in five lines.
-- **Context:** Reviewer's own read: *"mildly over-long, not the DocsPanel pattern"* — the inline body comments carry real *why* and should stay. Logged because comment density has been flagged four consecutive reviews in this repo and the operator wants a **budget**, not another ad-hoc trim.
-- **Suggested action:** Trim the redundant paragraph to one sentence on next touch. ⚠️ Do NOT trim the ⚠️ reopening-condition paragraph — it is the instruction that keeps a future reader from deleting the test when it correctly fails.
-- **Priority:** low
-- **Status:** pending
-
 # m11-wp3-docs-render-and-navigation — 2026-08-02
 
 *Reviewer: `code-quality-reviewer` against ship baseline `6f6df23`. 0 CRITICAL / 4 MAJOR / 3 MINOR.
 **All 4 MAJOR were FIXED IN PLACE** (three verified by reproducing the reviewer's mutations first —
 one of them passed the full 1645-test suite while re-opening a webview-hijack hole). Only the 3
 MINOR are backlogged.*
-
-## SURFACE-2026-08-02-QUALITY-WP3-COMMENT-DENSITY-PAST-USEFUL
-- **Source:** feature:review-quality (m11-wp3)
-- **Target level:** feature
-- **Type:** tech-debt (readability)
-- **Summary:** Comment density on the small pure modules has tipped past useful — **80%** comment
-  lines in `frontmatter.ts`, **69%** in `pickInitialDoc.ts`, **68%** in `classifyHref.ts`.
-  `pickInitialDoc.ts` spends 19 lines before its first import; `DocsPanel.tsx:99-115` re-explains a
-  latch that `fetchLatch.ts` already explains in its own header.
-- **Context:** ⚠️ **The previous WP's review flagged this exact thing and it grew rather than
-  shrank.** The *measurements* genuinely earn their lines — the raw/sanitize 3-configuration table,
-  birth-08:48/modified-09:28, the 54-doc frontmatter survey — because a reader cannot re-derive
-  them. What accreted around them is **process narration**: which phase found a bug, that a first
-  draft failed, what a prior version of a comment claimed.
-- **Suggested action:** Apply the reviewer's discriminator — **does the sentence survive once the
-  WIP is archived?** Measurements and invariants do; provenance does not. Move the provenance to the
-  archived WIP (where it already lives) and keep the facts. ⚠️ Do NOT strip the ⚠️-marked invariant
-  comments; those are the ones that stopped real regressions.
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-08-02-QUALITY-WP3-HEADING-SLUG-NO-COLLISION-SUFFIX
 - **Source:** feature:review-quality (m11-wp3)
@@ -163,15 +125,6 @@ scheduling items rather than polish.*
 - **Finding:** The Analytics `SettingsGroup` hint is **270 chars** against sibling group hints of **107 / 84 / 42** (lines 367, 391, 545) — still ~2.5× the longest sibling after the verify-human compression from 322.
 - **Why it matters:** Cosmetic/proportion only; the content is correct, each of its four facts is distinct, and the length was an explicit operator-delegated call. Worth recording because the WP itself banked *"measure the incumbent's siblings first"* as the reusable lesson, and this surface still sits outside the band that lesson describes.
 - **Pickup shape:** Do **not** shorten by dropping a claim — all four are load-bearing (the machine-wide scope clause especially; removing it makes the copy misleading by omission, and its truthfulness is verified in `time_store::drain_loop`). The real fix, if ever wanted, is a **dedicated privacy line** as a distinct element so the group hint returns to one sentence. That is a small UI addition, not a copy edit, so it needs to clear `new-surface-must-earn-its-place` first. Revisit only if such an element appears for another reason.
-- **Priority:** low.
-- **Status:** pending.
-
-## SURFACE-2026-08-01-QUALITY-WP3-TEST-COMMENTARY-TRIPLICATES-WIP-PROSE
-- **Severity:** MINOR
-- **Location:** `src/components/settings/__tests__/settingsTimeTrackingCopy.test.ts` + `settingsTimeTrackingCopyPromise.test.ts`
-- **Finding:** ~55 lines of commentary across ~234 total, some of it re-telling WP history that also lives in the WIP, the WBS as-built section, and the commit body — e.g. the "first pass asserted three separate phrasings" episode appears in three places.
-- **Why it matters:** Triplicated prose drifts. Once the WIP is archived and the WBS resynced at cycle close, the test-file copy becomes the stale one — and a stale comment inside a *guard* is worse than elsewhere, because it describes what the guard supposedly protects.
-- **Pickup shape:** Keep every comment that states **why an assertion exists** or **why a form was chosen over an alternative** (the whitespace-normalization note is load-bearing — it prevents someone "simplifying" the haystack back to raw and silently re-breaking the guard). Trim only the **WHAT-happened narration** of the verify-human compression episode, which the WIP and CHANGELOG already own. Rides any future touch of these files.
 - **Priority:** low.
 - **Status:** pending.
 
@@ -347,66 +300,12 @@ scheduling items rather than polish.*
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-07-28-QUALITY-WP2-MILESTONE-RATIONALE-RESTATED-SIX-TIMES
-- **Severity:** MINOR
-- **Location:** `workflow_gate/mod.rs`, `workflow_gate/commands.rs`, `config_store/settings.rs` (field doc), `lib.rs` (mod decl), `state/workflowGate.ts`, `state/useWorkflowFeaturesEnabled.ts`
-- **Finding:** The milestone rationale ("applicability, not audience size", the two invariants, the design-prior slug) is restated in near-identical form in ~6 places. Comment-to-code ratio in the smallest new modules runs 65–95% (`workflow_gate/mod.rs` is 36 comment lines over 2 lines of code).
-- **Why it matters:** Much of it is genuine WHY and worth keeping, but six copies must be updated together — a drift surface rather than a gift.
-- **Suggested action:** state it once at the owning module (`workflow_gate/mod.rs`) and point at it from the others.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-07-28-QUALITY-WP2-SETTINGSPANEL-NEAR-DOING-TOO-MUCH
 - **Severity:** MINOR
 - **Location:** `src/components/settings/SettingsPanel.tsx`
 - **Finding:** Four `useSettingControl` calls, an error surface, a `SettingsGroup` sub-component, and the JSX in one file — close to but not over the doing-too-much line.
 - **Why it matters:** Readable today, but M14 extends this panel; adding controls without extracting a per-group module is the point where it tips.
 - **Suggested action:** extract per-group modules when M14 starts, while the extraction is still cheap.
-- **Priority:** low
-- **Status:** pending
-
-# m10.9-wp3.5a-sandbox-install-wizard — 2026-07-29
-
-Review against ship baseline `bc15ae6..a6fb194`. **2 CRITICAL + 3 MAJOR were FIXED in the refactor
-pass (`b95466f`)** and are recorded in the WIP's `## Code-Quality Review` → "Refactor resolution",
-not here. This section holds only what was deliberately NOT addressed.
-
-## SURFACE-2026-07-29-QUALITY-WP3.5A-DEFEAT-NARRATIVE-IN-TEST-COMMENT
-- **Source:** feature:review-quality (m10.9-wp3.5a), MINOR
-- **Type:** tech-debt
-- **Summary:** `terminal.rs:386-471` — a 45-line comment narrating three successive failed formulations of `the_table_covers_every_error_variant` is longer than the test and its fixture combined.
-- **Context:** The honesty is right and the lesson is already captured in the backlog in full; the **placement** is wrong. A future reader has to consume a defeat narrative to learn what the test currently checks.
-- **Suggested action:** cut to a two-line pointer at the SURFACE entry; keep the "must be values, not name strings" warning inline since that one is load-bearing for anyone editing the fixture.
-- **Priority:** low
-- **Status:** pending
-
-# m11-wp5-milestone-exit-verify — 2026-08-02
-
-*Reviewer: `code-quality-reviewer` against ship baseline `0951d2d`. 0 CRITICAL / 2 MAJOR / 2 MINOR.
-**All four were FIXED IN PLACE** — MAJOR-1 was a demonstrated silent-pass hole in a guard written
-minutes earlier, MAJOR-2 re-inflated comment density, and both MINORs were stale/over-claiming
-comments. Only the reviewer's forward-looking observation is carried below.*
-
-## SURFACE-2026-08-02-QUALITY-WP5-COMMENT-DENSITY-NEEDS-A-BUDGET-NOT-A-TRIM
-- **Source:** feature:review-quality (m11-wp5)
-- **Target level:** feature (the next touch of `DocsPanel.tsx`)
-- **Type:** tech-debt (readability, process)
-- **Summary:** `DocsPanel.tsx` comment density has now been flagged **four consecutive reviews**
-  (WP2 → WP3 → WP4 → WP5). WP5 trimmed its two named offenders **and still shipped at 48%** because
-  the new `settled` documentation was itself larger than the blocks it replaced; a post-review prune
-  brought it to **46% / 650 lines** with all 25 ⚠️ markers intact. The reviewer's judgment is that
-  per-WP trimming is not converging: *"the carry needs a density **budget**, not another trim pass."*
-- **Context:** This is not aesthetics. WP4's reviewer judged it **functional** because both genuine WP4
-  defects sat inside the densest region — and WP5 then had its **P2.1 live experiment misdesigned by
-  stale prose in that same region** (a header described the deferred arm's motivating case as one the
-  skip-while-hidden gate makes impossible). Two milestones have now paid real time to this file's prose.
-- **Suggested action:** Adopt an explicit rule rather than another sweep. Candidates: (a) a density
-  ceiling for this file enforced by a test (it already has `docsPanelStyles`/wiring guards, so the
-  mechanism exists); (b) a hard convention that **process/provenance narration lives in the WIP and
-  only invariants + forbidden shapes live at the code** — WP5 applied this by hand and it worked, so
-  codifying it is cheap; (c) split `DocsPanel.tsx` (650 lines, 4 IPC call sites) so no single file
-  carries this much coordination. ⚠️ Do NOT strip ⚠️-marked invariants — those are the ones that
-  stopped real regressions.
 - **Priority:** low
 - **Status:** pending
 
@@ -440,21 +339,3 @@ comments. Only the reviewer's forward-looking observation is carried below.*
 - **Priority:** low (all four)
 - **Status:** pending
 
-# m12-wp4c-picker-drive-mode-cell — 2026-08-10
-
-*(feature-review-quality against ship commit `2356b89`. The other MINOR of this pair, `WP4C-POINTERDOWN-GUARD-DEGENERATES`, was resolved at the 2026-08-12 paydown sweep; the 3 MAJOR were fixed in-session at review time. This comment-density finding is what remains.)*
-
-## SURFACE-2026-08-10-QUALITY-WP4C-ASYMMETRY-WARNING-STATED-THREE-TIMES
-- **Severity:** MINOR
-- **Location:** `src/cc/driveMode.ts:14-27`, `src/cc/driveModeIpc.ts:9-20`, `src-tauri/src/config_store/commands.rs` (the `project_set_default_drive_mode` doc block)
-- **Finding:** The "model is open-valued and must NOT be validated / drive mode is closed-valued and
-  MUST be" warning — including its blast-radius table — is stated near-verbatim in three places.
-- **Why it matters:** three copies are three things to update, and this WP already demonstrated the
-  cost: a stale headroom figure in a *fourth* comment was one of the review's MAJOR findings. The
-  warning itself is genuinely load-bearing (it prevents a "harmonize these signatures" refactor that
-  would make one bad value blank the whole picker), so the fix is consolidation, not deletion.
-- **Suggested action:** keep the full statement in **one** canonical place — `driveMode.ts`, the pure
-  core — and reduce the other two to a one-line pointer. ⚠️ Do not delete the Rust-side mention
-  entirely: a Rust reader will not open a TS file, so that one needs a sentence plus the pointer.
-- **Priority:** low
-- **Status:** pending

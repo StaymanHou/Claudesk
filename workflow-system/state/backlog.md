@@ -66,11 +66,6 @@
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
 - **Pickup shape:** the descendant-inheritance item is a **decision first, edit second** — decide whether a nested CC *should* inherit the workspace's mode (arguably yes), then state it at `cc_spawn_env`. ⚠️ **Do NOT reach for `env_clear()`**: it would strip PATH/LANG/TERM and break both the M10.5 mojibake fix and the GUI-PATH spawn fix. The `shell_spawn_env` item is best resolved by **deleting** the seam unless a real caller assertion is wanted — the current middle position pays indirection cost without buying the property.
 
-## Code-quality findings — m12-wp4c-picker-drive-mode-cell (2026-08-10)
-- **Pointer:** **1 MINOR remaining.** The load-bearing model-vs-mode validation warning (model is open-valued and must NOT be validated; drive mode is closed-valued and MUST be) is stated near-verbatim in three files, so three things must change together. Full finding in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp4c-picker-drive-mode-cell — 2026-08-10`. *(The 3 MAJOR from this review were fixed in-session; the sibling MINOR `WP4C-POINTERDOWN-GUARD-DEGENERATES` was resolved at the 2026-08-12 paydown sweep.)*
-- **Priority:** low
-- **Status:** deferred — comment-density theme (paydown WP11)
-
 ## Code-quality findings — m12-wp3-autofire-and-announce (2026-08-05)
 - **Pointer:** ~~3 MAJOR~~ **2 MAJOR** + 3 MINOR remaining (grouped as 3 entries), auto-backlogged per `drive_mode: autopilot`. **The headline MAJOR — the inject arm re-firing on Re-launch — was RESOLVED 2026-08-05** (task `fix-inject-arm-refires-on-relaunch`, commit `051d707`; see `CHANGELOG.md`). Remaining: 3 stale doc comments still asserting the pre-Phase-3.5 whole-feature gate at the module's most-read entry points, one consumer bypassing the `actionFromAnnounced` wire seam, and 3 MINOR polish items. Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp3-autofire-and-announce — 2026-08-05`.
 - **Priority:** medium (2 MAJOR) + low (3 MINOR)
@@ -156,19 +151,6 @@
   the **fifth consecutive review** to raise density in this repo — treat it as further evidence for
   the standing *budget* ask on the M11 blocks below, not as another isolated trim.
 
-## Code-quality findings — m11-wp5-milestone-exit-verify (2026-08-02)
-- **Pointer:** 1 open item of 4 findings (0 CRITICAL / 2 MAJOR / 2 MINOR — **all four fixed in place at
-  review**, incl. a demonstrated silent-pass hole in a wiring guard). The one carried item is the
-  reviewer's forward-looking judgment that `DocsPanel.tsx` comment density, flagged **four consecutive
-  reviews**, needs a **budget rather than another trim pass**. Full body:
-  [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
-  `# m11-wp5-milestone-exit-verify — 2026-08-02`.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Held for a future `/feature-refactor` **by design**, not cycle-resolved — part of the standing code-quality batch. ⚠️ The comment-density finding is the pick across all four M11 blocks: it is ONE finding at four points in time (WP2 → WP3 → WP4 → WP5) and WP5's reviewer concluded per-WP trimming **is not converging** — it wants a density *budget*, not another sweep.
-- **Pickup shape:** fold into the next WP that touches `DocsPanel.tsx` — pick one of the three
-  candidate rules (density ceiling as a test / provenance-in-WIP convention / split the file) rather
-  than sweeping again. Two milestones have already paid real time to this file's prose.
-
 ## Code-quality findings — m11-wp4-docs-live-reload (2026-08-02)
 - **Pointer:** **1 MAJOR + 4 MINOR** remaining (was 1 CRITICAL + 4 MAJOR + 4 MINOR) from
   `code-quality-reviewer` against ship baseline `480052e`. **The CRITICAL and 2 of the 4 MAJOR
@@ -185,10 +167,9 @@
   window per workspace; fixed with a skip-and-remember-stale flag plus a catch-up re-list on
   re-front. All three mutation-proven (M23/M24/M25, one arm each).
   **⚠️ The 1 MAJOR (`SIBLING-EDIT-MOVES-AUTOSELECTION`) was RESOLVED at M11 WP5 (2026-08-02)** —
-  see CHANGELOG; its body is deleted from the findings file. **Remaining: 4 MINOR** (comment
-  density — which WP5 paid on its two named offenders and then re-inflated with its own new
-  documentation, so it is now carried forward as
-  `SURFACE-2026-08-02-QUALITY-WP5-COMMENT-DENSITY-NEEDS-A-BUDGET-NOT-A-TRIM`; a second
+  see CHANGELOG; its body is deleted from the findings file. **Remaining: 3 MINOR** (⚠️ the comment-density
+  MINOR was RESOLVED at the 2026-08-12 paydown sweep — the budget rule is now recorded in
+  `docs/lessons/source-text-guards.md` → "Comment budget", so it is no longer carried here; a second
   `fs-change` listener deviating from a stated in-repo pattern; a vestigial null-check; an
   error-surfacing asymmetry). See
   [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
@@ -293,11 +274,6 @@
 - **Priority:** medium (the minimap is a navigation aid that is actively misleading while blank — worse than absent; but the editor is fully usable, the text is always correct, and turning soft-wrap OFF is a complete workaround)
 - **Status:** **DEFERRED to backlog 2026-08-01 (operator decision) — REMOVED from Milestone 11.5.** Was M11.5 WP2; re-scoped out after the attempt above proved it is feature-sized rather than papercut-sized, and the bucket's stated value is that it stays tight. **M11.5 continues at WP3.** Revive as its own feature item when the `drawLine` rewrite is worth funding.
 
-## Code-quality findings — m10.9-wp3.5a-sandbox-install-wizard (2026-07-29)
-- **Pointer:** **3 MINOR** remaining *(was 1 MAJOR + 3 MINOR — `WP3.5A-SOURCE-GUARD-CONSOLIDATION` was RESOLVED by WP3.5b on 2026-07-31 and deleted per delete-on-resolve; see CHANGELOG)*. Bodies in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.9-wp3.5a-sandbox-install-wizard — 2026-07-29`. The original review found **2 CRITICAL + 4 MAJOR + 4 MINOR**; both CRITICALs and 3 MAJORs were fixed in `b95466f` rather than backlogged.
-- **Priority:** low (all 3 remaining)
-- **Pickup shape:** three independent one-liners suitable for any refactor pass — `CLONE-DIR-NAME-DUPLICATED` and `PROVENANCE-FETCH-DUPLICATED` are both single-line deletions of a duplicate. Dismiss via the WIP's `## Code-Quality Review` section.
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 ## Code-quality findings — m10.9-wp3-invite-settings-substrate (2026-07-29)
 - **Pointer:** **1 MAJOR + 4 MINOR** (0 CRITICAL) *(was 5 MINOR — `WP3-OPERATOR-SPECIFIC-CLONE-PATH` was RESOLVED by WP3.5a on 2026-07-29 and deleted per delete-on-resolve; see CHANGELOG)* from `feature-review-quality` against ship baseline `6193615^..5bc88f3`. **A 2nd MAJOR is NOT listed — it was a live defect and was FIXED at review time, not backlogged:** `App.tsx` read the gate via the raw `getWorkflowFeaturesEnabled()` wrapper, bypassing WP2's seam contract, and a one-shot read **never re-syncs** on `WORKFLOW_FEATURES_ENABLED_EVENT` — so enabling the gate mid-session left the value stale for the process lifetime (masked only by an unrelated `dismissedThisSession` term). Fixed by consuming `useWorkflowFeaturesEnabled()`, **and the OFF-invariant guard's blind spot that hid it was closed in the same pass** (its bypass scan matched only raw command strings, so a wrapper import was invisible; the new arm strips comments and is proven to bite on the exact shipped violation). The remaining MAJOR: **`WP3-POSITIONAL-RAW-SLICING`** (two wiring guards use positional `?raw` slicing — one line-bounded, one a fixed `at + 90` window, which is the pattern that already produced a false positive *in this same feature*; they guard the highest-value assertions in the file, `[Later]`-writes-nothing and Esc-means-Later). The 5 MINOR: a detached comment block in `SettingsPanel.tsx`; a hardcoded highlight tint in `settingsHighlight.test.ts`; the operator-specific `~/Personal/projects/…` clone path shown to secondary users (**coordinate with WP3.5's location picker**); an untestable "kebab-case" claim with only single-word variants; and the stale `..._other_seven_fields` sibling test name. Reviewer verdict: "high-quality, unusually disciplined work… the debt it accrues is a seam-discipline exception that should be made explicit rather than left implicit" — which is what the in-place fix did. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.9-wp3-invite-settings-substrate — 2026-07-29`.
 - **Priority:** medium (1 MAJOR) + low (5 MINOR).

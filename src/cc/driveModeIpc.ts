@@ -7,17 +7,10 @@
 // mistake.
 //
 // ## Divergence 1 — the value set is CLOSED, and validation is not optional
-// The model override is deliberately unvalidated: `claude --help` documents an open value
-// set, and CC itself reports an unusable model precisely, in the pane the operator is
-// already looking at. `cc/modelOverride.ts` says so emphatically ("do NOT add a validator
-// to this module").
-//
-// ⚠️ **That rule does not transfer here, and copying it would be a correctness bug.** The
-// Rust field is a typed enum, so an unrecognized string does not degrade gracefully — it
-// fails `serde` while *reading* `projects.json`, which makes `read_projects` return `Err`
-// and takes **the entire project list** down with it (the picker cannot render at all).
-// One bad value is not one bad row. Hence `DriveMode` below is a union, not `string`, and
-// the Rust command's parameter is `Option<DriveMode>` rather than `Option<String>`.
+// ⚠️ `modelOverride.ts`'s "do NOT add a validator" rule does NOT transfer here — copying it
+// would be a correctness bug, because one bad drive-mode string fails serde on read and takes
+// the WHOLE project list down, not one row. The full comparison lives at `cc/driveMode.ts`
+// (the canonical statement, with the blast-radius table); it is not restated here.
 //
 // ## Divergence 2 — there is no getter, ON PURPOSE
 // `getProjectDefaultModel` exists as a leftover; the picker does NOT call it, because

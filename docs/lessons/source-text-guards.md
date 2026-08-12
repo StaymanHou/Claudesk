@@ -155,7 +155,40 @@ or inject the geometry as a value rather than measuring it in an environment tha
 
 ---
 
-## Method notes
+## Comment budget — what belongs at the code, and what does not
+
+Comment density has been flagged in **four consecutive reviews** of the same file, and each
+review trimmed a bit and moved on. That is why it keeps coming back: trimming treats the symptom.
+The rule is a **budget with a test attached**, not a line count.
+
+**Keep at the code** — the things a reader cannot recover by any other means:
+
+- the **invariant** ("an unmeasurable box means DEFER, never restore to 0")
+- the **⚠️ what-to-do-when-this-fails** paragraph on a guard or hazard test
+- a **rejected alternative** that looks correct ("do NOT harmonize this to `String`")
+- a **measurement** whose absence would invite the wrong inference ("jsdom reports 0 for
+  visible elements too")
+
+**Move to the WIP / archive / CHANGELOG** — anything answering *how did we get here*:
+
+- how many attempts failed and in what order
+- what a previous version of this code did
+- which review caught what, and when
+
+> **The test:** would a reader who has never seen the WIP make a **worse decision** without this
+> sentence? If no, it is provenance — it belongs in the archive, which is exactly where a reader
+> looking for history will go.
+
+⚠️ **Duplication is the expensive half, not length.** The same rationale stated in six places is
+six things to update, and they drift asymmetrically: the copy someone edits becomes right while
+the other five keep asserting the old thing with equal confidence. State it **once**, at the
+canonical home, and make every other site a pointer. Measured instances in this repo: a milestone
+rationale in six files, a validation-asymmetry warning in three, an incident narrative in three.
+
+⚠️ **At high density, prose that is 95% accurate reads as authoritative** — and the wrong 5% is
+what gets acted on. Three findings in one review were stale *comments* rather than code, including
+a headroom figure the same commit corrected in three other files. Density is not free even when
+every line was true when written.
 
 - **Mutation-prove each added form INDIVIDUALLY.** A composite fixture exercising six declaration
   forms passes as soon as *one* matches, so a form that stayed blind is reported as covered.

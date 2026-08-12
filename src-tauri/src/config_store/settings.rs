@@ -89,21 +89,12 @@ pub struct AppSettings {
     /// M10.9 WP2 — the workflow-features opt-in gate. `None` = never set → the reader
     /// applies the default **`false`** (OFF for *everyone*, including the operator).
     ///
-    /// Unlike the other off-by-default flags here, this default is set by
-    /// **applicability, not audience size**: the workflow-coupled feature class (M11 docs
-    /// tab, M12 auto-resume + drive-mode selector, M13 skill buttons) depends on a
-    /// substrate Claudesk does not ship — the companion workflow system installed at
-    /// `~/.claude/`. A user without it would meet dead affordances, so the whole class is
-    /// gated as a SET behind this one flag (design-prior
-    /// `gate-substrate-dependent-feature-class-behind-default-off-opt-in`).
-    ///
-    /// Two properties this field must preserve. **OFF is byte-identical** to a build that
-    /// never had the features — a gated surface must not exist when off (not
-    /// rendered-then-hidden, not present-but-disabled, not registered-with-a-no-op
-    /// handler); the frontend seam + its guard test enforce that. And **flipping this is a
-    /// pure Claudesk UI-state flip that writes NOTHING into `~/.claude/`** — the operator's
-    /// skills are live symlinks into the companion repo, so an install-on-enable step could
-    /// clobber the source. "Enable the UI" and "install the substrate" are separate acts.
+    /// ⚠️ Two invariants this field must preserve — **OFF is byte-identical** to a build
+    /// that never had the features, and **flipping it writes NOTHING into `~/.claude/`**.
+    /// Both are stated in full, once, at `crate::workflow_gate`'s module header, along with
+    /// why the default is set by applicability rather than audience size. Not restated here:
+    /// the rationale was near-verbatim in six places, and six copies are six things to
+    /// update (`SURFACE-2026-07-28-QUALITY-WP2-MILESTONE-RATIONALE-RESTATED-SIX-TIMES`).
     ///
     /// App-global, per bundle-identity. Read by [`read_workflow_features_enabled`].
     /// Mirrors the `time_tracking_enabled` optional-with-default shape.

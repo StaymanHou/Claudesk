@@ -9,26 +9,15 @@ import { describe, expect, it } from "vitest";
 // weakens or drops it while the capture path stays the same, the app silently stops
 // disclosing something true — and nothing else in the suite would notice.
 //
-// ?raw discipline (M10.9 WP2's twice-paid lesson): assert SHORT STABLE PHRASES, never
-// formatted multi-line fragments. A guard that matches reflowed text stops matching the
-// moment Prettier rewraps the line, and a `?raw` guard verifies STRUCTURE, never runtime
-// — the live read of this copy is a verify-human check, because whether copy *reassures*
-// is not a property source text can prove.
+// ⚠️ WHITESPACE-NORMALIZED HAYSTACK, and every assertion must use it. Prose inside JSX
+// wraps at Prettier's 80 cols, so a phrase matched against raw source passes only by luck
+// about where the line broke — false alarms on correct copy in one direction, silent false
+// negatives in the other. Normalizing makes each assertion fail on a dropped CLAIM and only
+// on a dropped claim. Single-token assertions (testids, identifiers) use it too, for one
+// rule instead of two.
 //
-// ⚠️ WHITESPACE-NORMALIZED HAYSTACK — the fix that makes the line above actually true.
-// Code-quality review caught that two assertions here were themselves multi-line-fragile:
-// prose inside JSX wraps at Prettier's 80 cols, so a phrase like "local database on this
-// Mac" was passing only because it happened to land whole on one line. PROVEN by reflow,
-// not argued: rewording the sentence to "nothing is ever uploaded anywhere; your sessions
-// are stored in a local database on this Mac" — still true, still making every claim —
-// made the guard FAIL. That is the dangerous direction: a false alarm on correct copy
-// trains the next reader to loosen the guard, and the same mechanism yields silent false
-// NEGATIVES whenever a phrase happens to reassemble on one line.
-//
-// Collapsing runs of whitespace to single spaces makes every claim assertion below
-// width-independent, so they fail on a dropped CLAIM and only on a dropped claim.
-// Assertions on single-token code (testids, identifiers) can read either haystack; they
-// use the normalized one too, for one rule instead of two.
+// A `?raw` guard verifies STRUCTURE, never runtime — whether the copy *reassures* is a
+// verify-human check. Full rationale and the reflow proof: `docs/lessons/source-text-guards.md` §3.
 import settingsPanelRaw from "../SettingsPanel.tsx?raw";
 import globalDashboardRaw from "../../workspace/dashboard/GlobalDashboard.tsx?raw";
 
@@ -43,11 +32,9 @@ const globalDashboard = flat(globalDashboardRaw);
 // should fail when a CLAIM is dropped, not when a comma moves.
 describe("M11.5 WP3 — the Analytics settings copy states offline + local + scope", () => {
   it("claims fully offline, and says so concretely", () => {
-    // ONE phrasing per claim, deliberately. The first pass asserted three separate
-    // phrasings of "no network" ("Fully offline" + "nothing is uploaded" + "there is no
-    // network path"), which is what made the live copy read as legalese — over-insistence
-    // signals defensiveness. Compressed at verify-human to two: the reader-facing word
-    // and the one concrete mechanism a user can check.
+    // ONE phrasing per claim, deliberately: the reader-facing word plus the one concrete
+    // mechanism a user can check. Asserting more phrasings of "no network" pushes the copy
+    // toward legalese, and over-insistence reads as defensiveness.
     expect(settingsPanel).toContain("Fully offline");
     expect(settingsPanel).toContain("nothing is uploaded");
   });

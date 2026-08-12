@@ -26,17 +26,15 @@
 // detail, and an unmeasurable box means DEFER, never "restore to 0".
 //
 // ── Why the geometry is a VALUE and not read from the element in here ────────────
-// jsdom has no layout engine: `clientHeight` is 0 for visible and hidden elements alike
-// (measured, 2026-08-02 — not assumed). A module that sniffed `clientHeight` itself would be
-// UNTESTABLE for the exact arm that matters — the "hidden" test would pass trivially because
-// jsdom thinks everything is hidden, and it would pass just as happily against code that had
-// the logic inverted. That is the vacuous-guard failure mode this WP has already paid for
-// twice, in a new costume.
+// ⚠️ jsdom reports `clientHeight === 0` for VISIBLE elements as much as hidden ones, so a
+// module that sniffed it would be untestable for the one arm that matters — the "hidden" test
+// would pass trivially, and pass just as happily with the logic inverted.
+// (`docs/lessons/mcp-tauri-bridge-caveats.md` and `arch/right-panel-surfaces.md` carry the
+// measurement; not restated here.)
 //
-// The split: `readGeometry(el)` is the one-line DOM read (verified live in Phase 4, where a
-// real WKWebView has real layout), and every DECISION below is a pure function of a
-// `ScrollGeometry` value that a test can set to whatever it likes. The logic is fully
-// exercised in vitest; only the read itself needs a browser.
+// The split: `readGeometry(el)` is the one-line DOM read (verified live against a real
+// WKWebView), and every DECISION below is a pure function of a `ScrollGeometry` value a test
+// can set freely. The logic is fully exercised in vitest; only the read needs a browser.
 
 /** A scroll box's measured geometry — the inputs every decision here depends on. */
 export interface ScrollGeometry {
