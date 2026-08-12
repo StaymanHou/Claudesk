@@ -19,7 +19,7 @@
 //!   `std::process::Command` (never `--wait`). The [`commands::sublime_open`] Tauri
 //!   command is a thin shell over it.
 //!
-//! ## WP3 hand-off contract (`workflow/archive/wp3-sublime-cli-probe.md`)
+//! ## WP3 hand-off contract (`workflow-system/state/archive/wp3-sublime-cli-probe.md`)
 //! The exact invocation was decided by the completed WP3 probe. Claudesk does NOT
 //! require `subl` on `PATH` — the maintainer's own machine doesn't have it, and the
 //! `.app`-bundle path is a stable Sublime convention. Sublime Merge is Phase 2; the

@@ -15,7 +15,7 @@
 //! ## REDESIGN, not a port (operator, 2026-07-07)
 //! `claude-time`'s `reclassify.py` is the **starting reference**, not the oracle. The
 //! metric definitions were re-locked with the operator this session (see
-//! `workflow/wip/m9-wp3-reclassifier-redesign.md` → `## Metric Definitions`). This
+//! `workflow-system/state/archive/m9-wp3-reclassifier-redesign.md` → `## Metric Definitions`). This
 //! module (Phase 2) implements:
 //! - the **AI-activity kinds** ([`Kind::AiDoing`] / [`Kind::Subagent`] /
 //!   [`Kind::AiReasoning`]) and the reused interval mechanics ([`tool_intervals`],

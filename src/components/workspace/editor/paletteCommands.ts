@@ -79,7 +79,7 @@
 // distinct from bare ⌘F (CM6 in-file find) by the required Shift.
 // All APP-level chords (⌘⇧P, ⌘P, ⌘⇧E/D/T, ⌘⇧F) use the WP1-proven capture-phase
 // document listener; editor-internal chords use the Prec.highest CM6 keymap.
-// See workflow/archive/m2-wp1-cm6-probe.md → Objective (a).
+// See workflow-system/state/archive/m2-wp1-cm6-probe.md → Objective (a).
 
 /** Human-facing label for the palette chord, shown in hints. */
 export const PALETTE_CHORD_LABEL = "⌘⇧P";

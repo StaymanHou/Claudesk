@@ -148,8 +148,15 @@ pub struct AppSettings {
 /// `useUpdater.ts:180-183` clears the banner and writes nothing; `:173` writes
 /// `skipped_version` for permanent suppression.)
 ///
-/// Serializes kebab-case (`"acknowledged"` / `"dismissed"`) to match the TS union
-/// byte-for-byte, following the [`PipMode`](crate::pip::layout::PipMode) mold.
+/// Serializes to `"acknowledged"` / `"dismissed"`, matching the TS union byte-for-byte and
+/// following the [`PipMode`](crate::pip::layout::PipMode) mold.
+///
+/// ⚠️ The attribute below says `kebab-case`, but **both variants are single words**, so
+/// kebab-case is indistinguishable from `lowercase` here — the docs previously described a
+/// property no test could detect, and no test could detect it because it does not yet apply.
+/// The attribute is kept for the `PipMode` mold (a future multi-word variant would need it),
+/// and the wire test asserts the LITERAL strings rather than a casing rule it cannot observe.
+/// (`SURFACE-2026-07-29-QUALITY-WP3-KEBAB-CASE-CLAIM-UNTESTABLE`.)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum WorkflowInviteOutcome {
@@ -396,10 +403,20 @@ mod tests {
     }
 
     #[test]
-    fn write_pip_layout_preserves_other_fields() {
-        // read-modify-write: a hand-written file with an unknown extra key must not be
-        // clobbered when we update pip_layout. (Forward-compat: a newer build's field
-        // survives an older build's write of pip_layout.)
+    fn write_pip_layout_updates_the_field_and_tolerates_an_unknown_key() {
+        // ⚠️ RENAMED at the 2026-08-12 paydown sweep. This was
+        // `write_pip_layout_preserves_other_fields`, and its comment claimed "a newer build's
+        // field survives an older build's write" — forward-compatibility. **It does not, and
+        // this test never asserted that it did.** Measured directly: writing `pip_layout` over
+        // a file containing `{"future_field":42}` leaves NO `future_field` on disk. The
+        // read-modify-write round-trips through the typed struct, which drops unknown keys.
+        //
+        // The name and comment were a guarantee nobody had checked, and a future reader would
+        // reasonably have relied on it when adding a field in a newer build.
+        // (`SURFACE-2026-07-29-SETTINGS-PRESERVES-OTHER-FIELDS-TEST-NAME-OVERSTATES-ASSERTION`.)
+        //
+        // What IS true, and what this asserts: an unknown key does not BREAK the read or the
+        // write — the update still lands. That is tolerance, not preservation.
         let dir = TempDir::new().unwrap();
         std::fs::write(
             dir.path().join(SETTINGS_FILE),
@@ -412,11 +429,18 @@ mod tests {
             read_pip_layout(dir.path()).unwrap(),
             PipLayout::VerticalMirror
         );
-        // ...and the unknown field is still on disk (serde ignores it on read but a
-        // round-trip through our typed struct would drop it — so we assert the typed
-        // value, and separately that an unknown key does not BREAK the read).
+        // ...and the write completed despite the unknown key having been present.
         let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
         assert!(raw.contains("vertical-mirror"));
+        // The honest negative: the unknown key is GONE. Asserted rather than left implied, so
+        // the real behavior is pinned and a future forward-compat fix fails here loudly
+        // instead of quietly contradicting a stale comment.
+        assert!(
+            !raw.contains("future_field"),
+            "unknown keys are dropped by the typed round-trip. If this now passes through, \
+             that is a genuine forward-compat improvement — update this assertion and the \
+             test name, which currently promise only TOLERANCE, not preservation."
+        );
     }
 
     #[test]
@@ -502,14 +526,14 @@ mod tests {
         let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
         assert!(
             raw.contains("\"workflow_invite\": \"acknowledged\""),
-            "expected kebab-case \"acknowledged\" on the wire, got: {raw}"
+            "expected the literal \"acknowledged\" on the wire, got: {raw}"
         );
 
         write_workflow_invite(dir.path(), Some(WorkflowInviteOutcome::Dismissed)).unwrap();
         let raw = std::fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
         assert!(
             raw.contains("\"workflow_invite\": \"dismissed\""),
-            "expected kebab-case \"dismissed\" on the wire, got: {raw}"
+            "expected the literal \"dismissed\" on the wire, got: {raw}"
         );
     }
 
@@ -912,15 +936,22 @@ mod tests {
     }
 
     #[test]
-    fn workflow_features_independent_of_the_other_seven_fields() {
+    fn workflow_features_independent_of_its_exercised_siblings() {
         // Read-modify-write across the full struct: flipping the gate must not clobber any
         // sibling setting, and updating a sibling must not clobber the gate.
         //
-        // NOTE (M10.9 WP3): the name says "seven" and this exercises seven siblings, but the
-        // struct now carries NINE fields — `workflow_invite` was added and is deliberately
-        // NOT exercised here. Its own coverage is
-        // `workflow_invite_independent_of_the_other_eight_fields` above, which is the
-        // symmetric test written from the new field's side. Left as-is rather than renamed:
+        // ⚠️ RENAMED at the 2026-08-12 paydown sweep — it was
+        // `..._independent_of_the_other_seven_fields`, and the count went stale the moment a
+        // ninth field landed. A number in a test name is a maintenance obligation nobody
+        // signed up for, and the correction below had been living six lines into a comment
+        // where a reader scanning names would never see it. The name now describes the
+        // PROPERTY, which cannot go stale.
+        // (`SURFACE-2026-07-29-QUALITY-WP3-STALE-SIBLING-TEST-NAME`.)
+        //
+        // NOTE (M10.9 WP3): this exercises seven siblings, but the struct carries NINE fields
+        // — `workflow_invite` is deliberately NOT exercised here. Its own coverage is
+        // `workflow_invite_independent_of_its_exercised_siblings` above, the symmetric test
+        // written from the new field's side. Left that way rather than widened:
         // each field's independence test asserting from its own side is the pattern, and
         // widening this one would duplicate the other.
         let dir = TempDir::new().unwrap();
@@ -957,7 +988,11 @@ mod tests {
     }
 
     #[test]
-    fn workflow_invite_independent_of_the_other_eight_fields() {
+    fn workflow_invite_independent_of_its_exercised_siblings() {
+        // ⚠️ RENAMED at the 2026-08-12 paydown sweep (was `..._of_the_other_eight_fields`),
+        // for the same reason as its twin above: a COUNT in a test name goes stale the moment
+        // a field lands, and nobody updates it. The name states the property instead.
+        //
         // THE CONSUMING-SURFACE TEST for Phase 1's integration boundary (M10.9 WP3).
         //
         // `settings.rs` is read by every existing settings IPC handler

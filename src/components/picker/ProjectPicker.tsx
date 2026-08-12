@@ -141,8 +141,15 @@ export function ProjectPicker({
   const [toast, setToast] = useState<PickerToast | null>(null);
   // M12 WP3 — the batched auto-resume announcement. ONE call per picker open (never a
   // per-row probe: M11.5 WP1's review found the model cell issuing an IPC read per row for
-  // a value already on the wire, and this is the same surface). `{}` until it resolves and
-  // `{}` forever when the gate is off, so a row simply announces nothing in both cases.
+  // a value already on the wire, and this is the same surface). `{}` until it resolves.
+  //
+  // ⚠️ NOT `{}` forever when the gate is off — that claim predates the 2026-08-05 move to a
+  // PER-ARM gate and was corrected at the 2026-08-12 paydown sweep. The ungated `--continue`
+  // arm still yields entries with the gate off (it reads Claudesk's own store and serves every
+  // Claude Code user); only the `/session-restore` arm is suppressed. Found by grepping the
+  // CLAIM repo-wide rather than trusting the two sites the backlog entry named — the
+  // scope-list-is-a-floor rule, earning its keep again.
+  // (`SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS`.)
   const [announceMap, setAnnounceMap] = useState<AnnounceMap>({});
   // The M10.9 gate seam. Read the HOOK — never the underlying Tauri command ad hoc and
   // never the raw getter wrapper (a one-shot read never re-syncs on the broadcast). Both

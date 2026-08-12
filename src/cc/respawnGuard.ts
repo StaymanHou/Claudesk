@@ -6,7 +6,8 @@
 // center-stage switch-back. Each false→true edge re-ran the spawn effect and fired a fresh
 // `term_spawn` → a BRAND-NEW shell PTY, orphaning the prior shell. Symptom: typed history is
 // gone after a switch (it's a different process) and empty prompts stack up (each new shell
-// prints its prompt). See workflow/archive/qol-wp4-* and SURFACE-2026-06-24-TERMINAL-SPURIOUS-
+// prints its prompt). See workflow-system/state/archive/qol-wp4-terminal-respawn-on-switch.md
+// and SURFACE-2026-06-24-TERMINAL-SPURIOUS-
 // NEWLINE-ON-PANEL-SWITCH.
 //
 // THE FIX: spawn the shell EXACTLY ONCE — deferred until the pane is FIRST active, then never

@@ -92,7 +92,45 @@ test suites while being called by nothing, and the exhaustiveness test's green *
 **Fix:** assert the call site, not the primitive. Funnel writes of shared state through ONE
 function and guard that.
 
-## 8. A filtered test run proves nothing without a count
+## 8. A deferral must name a FILE, not a process
+
+> *"The inverse direction is covered by verify-auto's className→CSS sweep."*
+
+No such sweep existed. No `package.json` script performed it and no test asserted it — the
+comment described an ad-hoc command run once during a verify-auto pass. **An ad-hoc run is
+evidence about a single moment; only a standing test is coverage.** Because the comment read as
+authoritative, the direction stayed open across two work packages *while appearing closed*.
+
+The same shape in Rust: a doc comment asserted that a named test *"guards that this receives
+`cc_spawn_env`'s output"* — and the test did not exist. `cargo test`, `clippy`, and `fmt` all
+passed, because a prose citation of a missing item is invisible to every gate.
+
+**Fix:** when a comment defers a property to other coverage, it must name the **file** (ideally
+the test name) — a name is grep-able and rots loudly; a workflow phase or a process cannot be
+checked by anyone.
+
+⚠️ **`#![deny(rustdoc::broken_intra_doc_links)]` does NOT work for this, and the reason is worth
+knowing before someone tries it again** (measured 2026-08-12, then reverted). Two independent
+blockers:
+
+1. **This crate has zero `pub mod`** — all 28 modules are private, and rustdoc does not document
+   private items by default. Without `--document-private-items` the lint has nothing to resolve,
+   so it is silently inert. A probe that "passes" here proves nothing.
+2. **With `--document-private-items` it fires 31 times on the untouched tree**, and **all 10
+   `tests::*` citations point at tests that genuinely EXIST.** They are unresolvable only
+   because `#[cfg(test)]` modules are not compiled during `cargo doc`. Turning it on would mean
+   31 errors on correct code — a false-positive generator, which is how a guard gets deleted.
+
+So a Rust doc citation of a test is **structurally uncheckable** by rustdoc. Either grep for it
+(`grep -rc "fn <name>"` returning 1 means only the citation exists), or accept the limit and
+state it — do not ship a gate that reports 31 correct citations as broken.
+
+⚠️ The general case is worse than either instance: **a doc-correction task's enumerated site
+list is a FLOOR, not a boundary.** Grep the retracted *claim* repo-wide before trusting the
+list — a stale identifier that a backlog entry said appeared in four docs was in five, and the
+extra one had been written hours earlier in the same session.
+
+## 9. A filtered test run proves nothing without a count
 
 `cargo test -p claudesk <filter>` with a filter matching **zero tests** prints
 `test result: ok. 0 passed; 0 failed` and **exits 0**. An Observable Outcome or CI gate written

@@ -21,7 +21,7 @@
 //! status `Unknown` (arch.md failure mode), never inferred.
 //!
 //! ## Wire contract (the line the hook writes, parsed here)
-//! Always: `hook_event_name`, `session_id`, `cwd`, `timestamp`(<ms>). Event-specific
+//! Always: `hook_event_name`, `session_id`, `cwd`, `timestamp`(`<ms>`). Event-specific
 //! optional fields:
 //! - `prompt` + `prompt_length_chars` — `UserPromptSubmit` (`prompt` for the status
 //!   snippet; `prompt_length_chars` for the time-row — **length only, never text**).

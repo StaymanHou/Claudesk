@@ -785,7 +785,9 @@ impl PtyCcSession {
     /// backgrounded-job edge cases) — a broad, fragile surface for a low-certainty
     /// payoff. So a raw terminal's busyness is intentionally out of scope for v1: do NOT
     /// add foreground-process detection here by reflex. (If ever wanted, it's a new
-    /// signal, not a bug fix.) See `workflow/archive/m10.5-wp2-*` Phase 3.
+    /// signal, not a bug fix.) See `workflow-system/state/archive/m10.5-wp2-active-close-confirmation.md` Phase 3.
+    /// (Path corrected at the 2026-08-12 paydown sweep: the `workflow/` root moved to
+    /// `workflow-system/state/` in the 2026-07-28 layout migration, breaking this pointer.)
     fn spawn_shell(app: AppHandle, id: String, project_path: &str) -> Result<Self, CcError> {
         let argv = resolve_shell_argv(std::env::var("SHELL").ok());
         Self::spawn_argv(app, id, &argv, project_path, &shell_spawn_env(), "exit")

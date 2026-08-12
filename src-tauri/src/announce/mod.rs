@@ -180,10 +180,22 @@ fn has_session_md(project_root: &Path) -> bool {
 /// settings file; [`commands::picker_announce_actions`] supplies it from
 /// `read_workflow_features_enabled`.
 ///
-/// **Returns an empty map when the gate is off, before any project-dir IO.** Every degraded
-/// read (unreadable `projects.json`, missing `session-state.json`) yields *fewer*
-/// predictions rather than an error: the failure direction is "no auto-fire", which costs a
-/// click, versus a spurious fire that acts on the user's session unasked.
+/// ⚠️ **The OFF gate suppresses only the `.session.md` arm — it does NOT empty the map.**
+/// The unclean-flag (`--continue`) arm is **ungated**, because it reads Claudesk's own store
+/// and serves every Claude Code user; only the `/session-restore` arm reads
+/// `workflow-system/` and is gated. So an OFF gate returns *fewer* entries, not zero.
+///
+/// What survives from the pre-2026-08-05 whole-feature gate is the property it existed to
+/// guarantee: **an OFF gate does no project-dir IO** — now enforced at the point of use
+/// (see the `&&` in the body) rather than by an early return.
+///
+/// This comment previously claimed the early-return behavior and contradicted the code four
+/// lines below it, which states the opposite in capitals.
+/// (`SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS`.)
+///
+/// Every degraded read (unreadable `projects.json`, missing `session-state.json`) yields
+/// *fewer* predictions rather than an error: the failure direction is "no auto-fire", which
+/// costs a click, versus a spurious fire that acts on the user's session unasked.
 pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
     // ⚠️ NO EARLY RETURN ON `!gate_enabled` — deliberately removed 2026-08-05, and this is
     // the single most likely thing here to be "fixed" back. The unclean-flag arm is

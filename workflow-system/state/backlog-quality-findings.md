@@ -34,15 +34,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m12-wp3-autofire-and-announce — 2026-08-05
 
-## SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS
-- **Source:** feature-review-quality (M12 WP3, MAJOR)
-- **Type:** tech-debt (stale docs at the highest-traffic entry points)
-- **Summary:** Three doc comments still assert the **pre-Phase-3.5 whole-feature gate** — *"Returns an empty map when the gate is off, before any project-dir IO"* (`announce/mod.rs:183`), *"Returns `{}` when the workflow-features gate is off, without statting any project dir"* (`announce/commands.rs:16`), and the same claim at the invoke-handler registration (`lib.rs:454-455`). Since Phase 3.5 the `--continue` arm is **ungated**, so an OFF gate returns a **non-empty** map.
-- **Context:** ⚠️ The module header 140 lines above the first instance **explicitly warns about this exact claim**: *"The previous text … is no longer true, and a reader who trusts it will 'restore' an early return that suppresses a working feature."* Phase 3.5 renamed two Rust *tests* whose names overstated their scope for the same reason, and missed the three prose copies — which sit at the **most-read** entry points (the `pub fn`'s own docstring, the command's docstring, the registration comment). A reader reaches those before the header.
-- **Suggested action:** Rewrite all three to state the surviving property: *"the OFF gate suppresses only the `.session.md` arm and its stats; the unclean-flag arm is ungated and still returns entries."* Cheap and mechanical.
-- **Priority:** medium (no runtime defect; the code names this as the single most likely thing to be "fixed" back, and these three are the invitation)
-- **Status:** pending
-
 ## SURFACE-2026-08-05-QUALITY-WP3-THREE-MINOR-POLISH-ITEMS
 - **Source:** feature-review-quality (M12 WP3, 3× MINOR)
 - **Type:** tech-debt (polish)
@@ -166,13 +157,6 @@ scheduling items rather than polish.*
 
 *(0 CRITICAL / 4 MAJOR / 5 MINOR from `code-quality-reviewer` against ship baseline `d467877`. **7 of 9 were FIXED IN PLACE**, not backlogged — all 4 MAJOR and 2 MINOR were one-line factual corrections to a document shipped minutes earlier, and leaving a known-wrong number in the evidence trail is the exact failure this WP twice flagged as BLOCKING. The 2 below are genuinely deferrable. See the WIP's `## Code-Quality Review` for the full review + what was fixed.)*
 
-## SURFACE-2026-08-01-QUALITY-WP1-SANITIZE-STRICTNESS-UNTRACED
-- **Finding (MINOR):** The WP1 verdict's parenthetical that `rehype-sanitize` is stricter than DOMPurify in places — *"it dropped a `<form>` wrapper and flattened `<svg><a>`"* (`wbs.md`, WP1 verdict) — has **no counterpart in the WIP's `## Probe notes`**. Every other claim in the verdict traces to a recorded measurement; this one doesn't.
-- **Why it matters:** it is the claim a WP3 reader will reach for precisely when benign content goes missing from a rendered doc — and at that moment they cannot find what was actually observed, only the assertion that something was. The observation is real (it came from a verify-self subagent's adversarial pass) but was never written into the trail.
-- **Suggested action:** either record the concrete observation in the verdict (which fixture, which elements, before/after), or soften the claim to "reported at verify-self, not independently re-measured." One or two lines. Fold into any WP3 touch of the render path.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-08-01-QUALITY-WP1-RUNTIMES-UNDERCOUNTS-OBSERVATIONS
 - **Finding (MINOR):** `runtimes.md`'s `pnpm test` History bullet records a single observation labelled "M11 WP1 P1 verify-auto", but the suite actually ran **three times** during WP1 (once per phase's verify-auto, plus verify-codify runs). Results were identical (127 files / 1470 tests, ~1.9–2.2s), so nothing is *wrong* — the entry just under-describes what was observed.
 - **Why it matters:** minor fidelity issue in the registry's audit trail. The registry's value is that the second session doesn't re-estimate what the first measured; an entry naming one phase when three ran is slightly misleading about sample size, though not about the timing.
@@ -224,24 +208,6 @@ scheduling items rather than polish.*
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-07-29-QUALITY-WP3-KEBAB-CASE-CLAIM-UNTESTABLE
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/config_store/settings.rs:145,192`
-- **Finding:** The docs describe the enum as serializing kebab-case, but both variants are single words (`Acknowledged`→`"acknowledged"`), so `rename_all = "kebab-case"` is indistinguishable from `lowercase` here. The test named `workflow_invite_serializes_kebab_case_for_the_ts_union` asserts lowercasing, not kebab-casing.
-- **Why it matters:** the **same overstated-assertion class this feature logged three separate times**. A future multi-word variant would be the first real exercise of the attribute, and the existing test name would already have claimed to cover it.
-- **Suggested action:** rename the test to what it asserts, or note in it that kebab-casing is untested until a multi-word variant exists.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-07-29-QUALITY-WP3-STALE-SIBLING-TEST-NAME
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/config_store/settings.rs:917-924`
-- **Finding:** `workflow_features_independent_of_the_other_seven_fields` is misnamed (nine fields now); the correction lives six lines into an added comment rather than in the name.
-- **Why it matters:** cosmetic, and the avoid-scope-creep argument for not renaming is defensible — noted only because this feature's own Discoveries flag misleading test names as a confabulation channel (a misnamed sibling already cost a wrong test in Phase 1).
-- **Suggested action:** rename to what it asserts; pay with the related `SURFACE-2026-07-29-SETTINGS-PRESERVES-OTHER-FIELDS-TEST-NAME-OVERSTATES-ASSERTION`, which is the same file and the same class.
-- **Priority:** low
-- **Status:** pending
-
 # editor-fs-backend-hardening — 2026-07-20
 
 *(feature-review-quality on the uncommitted working-tree WP7 diff, HEAD `6f514d0`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 4 MINOR — all polish/observability notes, none blocking. Reviewer: "well-built, disciplined hardening pass… all flagged edge cases resolve correctly under the design; none rise to a finding." Backlog-paydown sweep WP7 — the last WP.)*
@@ -262,14 +228,6 @@ scheduling items rather than polish.*
 - **Suggested action:** A distinct `EditorFsError::UnknownRoot` variant would read cleanly and let the UI branch. Minimal-choice reuse is reasonable for now.
 - **Priority:** low
 
-## SURFACE-2026-07-20-QUALITY-WP7-STALE-COMPILE-GAP-TEST-COMMENT
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/editor_fs/mod.rs:434-497` (the WP7 gap-2 test block)
-- **Finding:** The test block carries a stale compile-gap RED-phase comment ("This intentionally fails to COMPILE until the fix lands…") directly above the live post-fix restatement — now historically inaccurate (it compiles + passes).
-- **Why it matters:** A future reader hits a contradictory comment pair.
-- **Suggested action:** Trim the superseded RED-phase paragraph. Cosmetic.
-- **Priority:** low
-
 ## SURFACE-2026-07-20-QUALITY-WP7-RESOLVE-WITHIN-TOCTOU-NOTE
 - **Severity:** MINOR
 - **Location:** `src-tauri/src/editor_fs/mod.rs:141` (`resolve_within` `exists()`-then-`canonicalize()`)
@@ -288,17 +246,6 @@ scheduling items rather than polish.*
 - **Finding:** `ReapLeader` discards `poll_reaped()`'s result (`let _ =`). If a process survives both `killpg(SIGKILL)` and the 300ms window (uninterruptible-sleep descendant, or a `None`-pgid path where a group child lingers holding the slave fd), `kill()` still returns `Ok` and `cc-exit-<id>` EOF may never fire — the AC-4 "wedged never-closed workspace" case — silently. The bounded wait is sound (can't hang); the concern is that a non-reap degrades invisibly. A debug-level log or distinct signal on `Ok(false)` would make the residual case observable.
 - **Priority:** low
 - **Pickup shape:** small — add a `log`/`eprintln` (or a distinct return) on the `ReapLeader` `Ok(false)` branch; rides any future kill-path touch.
-
-# m10.5-wp2-active-close-confirmation — 2026-07-18
-
-*(feature-review-quality on the uncommitted working-tree diff, HEAD `75ef6f8`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all cosmetic polish. Reviewer: "well-built… advances the codebase rather than accruing debt… no refactor pass warranted." None blocks; refactor-optional.)*
-
-## SURFACE-2026-07-18-QUALITY-WP2-SEAM-DOC-FORWARD-REF
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/cc_session/mod.rs:339` (Phase-3 `spawn_shell` doc note)
-- **Finding:** The seam doc references `workflow/archive/m10.5-wp2-*` Phase 3 — a forward-reference that only becomes valid after `feature-finalize` archives the WIP (currently at `workflow/wip/`). Acceptable if finalize always archives (the convention), but the glob-with-wildcard pointer is softer than a concrete path; a reader grepping today won't find it. **NOTE: `feature-finalize` WILL archive the WIP to exactly `workflow/archive/m10.5-wp2-active-close-confirmation.md`, so this forward-ref resolves on finalize — likely self-closing; verify at finalize.**
-- **Priority:** low
-- **Pickup shape:** verify at finalize (the archive makes the glob valid); if a concrete path is wanted, one-line edit post-archive.
 
 # m10-wp4-updater-user-control-ux — 2026-07-17
 

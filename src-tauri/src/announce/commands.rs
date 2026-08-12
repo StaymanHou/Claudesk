@@ -13,7 +13,13 @@ use super::AnnounceMap;
 /// The predicted auto-resume action for every known project, as one map.
 ///
 /// **One call per picker open; zero per-row round-trips.** Absent key = no prediction.
-/// Returns `{}` when the workflow-features gate is off, without statting any project dir.
+///
+/// ⚠️ **An OFF gate does NOT return `{}`** — it suppresses only the gated `/session-restore`
+/// arm, while the ungated `--continue` arm still yields entries (it reads Claudesk's own store
+/// and serves every Claude Code user). What the OFF gate does guarantee is **no project-dir
+/// IO**. Corrected at the 2026-08-12 paydown sweep; the claim predated the 2026-08-05 move
+/// from a whole-feature gate to a per-arm one.
+/// (`SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS`.)
 ///
 /// Infallible by design: a degraded read (unreadable `projects.json`, missing
 /// `session-state.json`, a vanished project dir) yields *fewer* predictions rather than an

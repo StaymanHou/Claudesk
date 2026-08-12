@@ -26,7 +26,7 @@
 //! it. WP3.5a ships no deleting path at all (guarded by a source test in `runner`), so the
 //! *decision* can live here while the *act* waits for a layer that is allowed to delete. Phase 4's
 //! command layer performs it; until then a `Cleanup::RemovePartialClone` is surfaced to the user as
-//! "a partial clone remains at <path>" rather than silently actioned. Honest, and it keeps the
+//! "a partial clone remains at `<path>`" rather than silently actioned. Honest, and it keeps the
 //! additive half additive.
 
 use super::runner::{InstallError, UninstallError};

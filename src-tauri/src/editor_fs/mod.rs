@@ -527,14 +527,13 @@ mod tests {
         );
     }
 
-    // WP7 gap 2 — the backend honors a frontend-supplied `root` with NO validation
-    // against the known project list. Today there is no validation seam at all in
-    // editor_fs, so the RED for this gap is a *compile-gap*: it references the pure
-    // helper the fix will add — `validate_root(known_roots, requested_root)` — which
-    // must reject a `root` that is neither a known project nor a descendant of one.
-    // This intentionally fails to COMPILE until the fix lands (a legitimate red for a
-    // missing-capability bug); the gap-1 leaf-symlink reds above are runtime-red and
-    // were captured independently before this was added, so they are on the record.
+    // ⚠️ The RED-phase comment that stood here was DELETED at the 2026-08-12 paydown sweep.
+    // It described this block as "intentionally fails to COMPILE until the fix lands" —
+    // historically accurate at feature-reproduce time, and flatly wrong ever since the fix
+    // landed, while sitting directly above its own post-fix restatement. A reader met the
+    // contradiction before the code. Reproduce-phase narration belongs in the WIP/archive;
+    // what stays at the code is the invariant.
+    // (`SURFACE-2026-07-20-QUALITY-WP7-STALE-COMPILE-GAP-TEST-COMMENT`.)
     // WP7 gap 2 — the backend now validates a frontend-supplied `root` against the
     // known project list. (Phase-2 anchor: this was the compile-gap red from
     // feature-reproduce; `validate_root` is now implemented.)
