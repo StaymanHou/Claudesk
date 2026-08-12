@@ -92,6 +92,29 @@ test suites while being called by nothing, and the exhaustiveness test's green *
 **Fix:** assert the call site, not the primitive. Funnel writes of shared state through ONE
 function and guard that.
 
+## 8. A filtered test run proves nothing without a count
+
+`cargo test -p claudesk <filter>` with a filter matching **zero tests** prints
+`test result: ok. 0 passed; 0 failed` and **exits 0**. An Observable Outcome or CI gate written
+as `<runner> <filter>` therefore passes against an empty codebase, a renamed test, or a typo —
+and reads as a green gate. Measured 2026-08-12: still true.
+
+(Vitest is the exception — `pnpm test <nonexistent>` exits non-zero. Do not generalize from it.)
+
+**Fix:** pin a **count** or name a specific test, and assert the number:
+
+```bash
+cargo test -p claudesk <filter> 2>&1 | grep -q "26 passed"   # not just "exits 0"
+```
+
+The same rule covers every "did the thing run" observation: *would this output look different
+if the code under test had been deleted?* If not, it is not evidence. Two sibling cases already
+banked — a browser supplying the behavior under test (so the check passes whether or not the
+app implements it), and jsdom reporting `clientHeight === 0` for **visible** elements just as
+much as hidden ones, which makes a visibility assertion built on it non-decisive in both
+directions. In each, the fix is the same: assert a value the implementation actually produces,
+or inject the geometry as a value rather than measuring it in an environment that has none.
+
 ---
 
 ## Method notes

@@ -128,14 +128,14 @@
 - **Pickup shape:** the five remaining findings are mechanical single-line edits. ⚠️ **Note the resolved item did NOT take the fix its own entry preferred:** it asked for the two arms' consume-once guarantees to be made *symmetric*, and symmetry was rejected on evidence — clearing `pending_action` on the record needs a child→parent callback that StrictMode's discarded first mount would fire, suppressing the injection entirely. The asymmetry is now documented at the field rather than removed. A future reader "restoring symmetry" would re-break the feature.
 
 ## SURFACE-2026-08-05-CONTINUE-LANDS-ON-INTENDED-CONVERSATION-UNVERIFIED
-- **Source:** feature:acceptance-pass (M12 WP3, post-review whole-feature pass 2026-08-05)
-- **Target level:** feature (M12 WP3, arm 1) — verification gap, not a known defect
-- **Type:** verification gap
-- **Summary:** Arm 1's **wiring** is proven (the spawned process carries `claude --permission-mode dontAsk --continue`, observed live side-by-side against a no-fire spawn that lacks it) and CC demonstrably resumes *a* prior conversation. **What is NOT verified is that `--continue` resumes the *intended* conversation** — i.e. the operator's actual last session in that project, rather than an older transcript.
-- **Context:** ⚠️ **The blocker is the agent's harness, not the feature.** An agent-launched Claudesk inherits `CLAUDE_CODE_CHILD_SESSION`, so every CC session it spawns runs with *"Transcript saving is off"* — the app-spawned session writes no transcript, so a later `--continue` cannot land on it. **`env -u CLAUDE_CODE_CHILD_SESSION` at the seeding call does NOT defeat this**: the seed (run outside the app) is written correctly, but the marker still reaches the app through the launch chain, so `--continue` inside the app resolved to an older `/exit` residue rather than the fresh seed. This is why Phase 4 seeded via a direct `claude -p` **outside** the app; the acceptance pass reproduced the same limitation from the other direction. The operator-facing checklist item covering this was **never driven** (the operator had closed the dev app before the checklist was delivered, then approved at feature level).
-- **Suggested action:** One-minute check from an **operator-launched** build (`pnpm tauri:dev` typed by the operator, or the installed `.app`): open a project whose last CC conversation is known and recent, and confirm the resumed history is that conversation. ⚠️ Any *agent-driven* attempt must first prove transcript saving is ON in the app-spawned session — otherwise the check is vacuous in the `[[…-BROWSER-SUPPLIES-THE-ANSWER…]]` sense: a broken implementation and a correct one give the same answer. Natural pickup: the next `/release` gate, alongside the standing installed-`.app` carry per `[[installed-build-verify-deferred-to-release]]`.
-- **Priority:** low (arm 1's wiring is proven and the failure mode is benign — resuming *some* conversation rather than the newest; no evidence of a defect, and the mechanism reads the newest transcript by CC's own contract)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
+- **Source:** M12 WP3 verify-self; re-confirmed unverifiable-by-agent at the 2026-08-12 paydown sweep
+- **Target level:** feature:verify-human (operator-launched build only)
+- **Type:** gap (an unverified assumption, not a known defect)
+- **Summary:** Arm 1's **wiring is fully proven** — `CC_ARG_CONTINUE` reaches argv, is absent on a fresh spawn, present on a resuming one, and never becomes a slash command (4 standing tests, `cc_session/mod.rs`). What remains unverified is a **Claude Code runtime property, not a Claudesk one**: that `--continue` resumes the *intended* conversation rather than merely *a* prior one.
+- **Context:** ⚠️ **Not agent-verifiable, and the reason is structural.** A Claudesk instance launched by an agent spawns CC sessions that inherit `CLAUDE_CODE_CHILD_SESSION` and write no transcript, so there is nothing for the agent to read back — see `[[agent-launched-app-cannot-verify-continue]]`. An agent-driven attempt does not produce a weak result; it produces a *meaningless* one. The paydown sweep confirmed the wiring tests above and deliberately did **not** claim the runtime half.
+- **Suggested action:** A one-minute check from an **operator-launched** build (`pnpm tauri:dev` typed by the operator, or the installed `.app`): open a project whose last CC conversation is known and recent, confirm the resumed history is that conversation. Fold into the next `/release` gate, where installed-build manual verification already happens.
+- **Priority:** low (wiring proven; the residual risk is a CC-side behavior the operator exercises daily through ordinary dogfooding)
+- **Status:** deferred — operator-gated; scope NARROWED at the 2026-08-12 paydown sweep to the runtime half only
 
 ## SURFACE-2026-08-05-XTERM-DOM-ROWS-ARE-NOT-THE-BUFFER
 - **Source:** feature:verify-self (M12 WP3 Phase 4, sessions 1 and 2 — cost effort in both)
@@ -229,61 +229,6 @@
   candidate rules (density ceiling as a test / provenance-in-WIP convention / split the file) rather
   than sweeping again. Two milestones have already paid real time to this file's prose.
 
-## SURFACE-2026-08-02-BROWSER-SUPPLIES-THE-ANSWER-SO-SCROLL-RESTORE-CHECKS-ARE-VACUOUS
-- **Source:** feature:build (M11 WP5 Phase 2, carries (a) + (b)); **revised at that phase's
-  verify-self audit, which reversed two of this entry's original claims**
-- **Target level:** product:arch (verification method) + the Docs panel
-- **Type:** gap (non-decisive evidence — **NOT** a code defect)
-- **Summary:** **Neither** of the Docs panel's two scroll-position behaviors — the `pendingRestore`
-  **deferred restore** nor `planRestore`'s **doc-shrink clamp** — has ever been proven live, and
-  neither can be by the obvious experiment, because **the browser supplies the correct answer on its
-  own in both cases**:
-  1. **WebKit retains `scrollTop`** across a content swap on a `display:none`-but-never-unmounted node
-     (`RightPanelHost` hides the docs slot that way). Measured in a standalone `WKWebView` fixture with
-     **zero restore code**: hide → swap while hidden → reveal ⇒ returns to the exact prior offset.
-  2. **The browser clamps `scrollTop` writes itself.** Measured in the live Claudesk webview: writing
-     `999999` or `max + 500` both land at exactly `scrollHeight − clientHeight`; `-300` lands at `0`.
-  So in each case a correct implementation and a fully-broken one are **observationally identical**.
-- **Context:** ⚠️ **Two corrections to this entry's own first version** (both found by the Phase 2
-  verify-self audit, both now fixed here and in `wbs.md` → WP4 4.4):
-  - **The `"deferred"` arm was never even reached** in the experiment that "tested" it.
-    `DocsPanel.tsx:436` skips the reload while the panel is not front and sets a stale flag; the
-    catch-up effect at `:462` re-lists only **after** re-fronting, when the box is measurable — so the
-    **`"applied"`** arm runs, not `"deferred"`. The "mutate the file while hidden" recipe does **not**
-    exercise the deferred path. ⚠️ **`docsScrollRestore.ts`'s header and `DocsPanel.tsx:71` both still
-    describe that hidden-reload case as the motivating scenario — prose and code disagree** (relevant to
-    the standing comment-density finding, whose whole point is that real defects hide in that thicket).
-  - **Carry (b) was originally recorded as the "decisive counterexample" to (a)** — *"the clamp had to
-    move the offset, so the browser could not supply the right answer"*. **Measured false** (see
-    Summary 2). That was the more damaging error, because it taught a future reader that a
-    shrink-clamp check is a safe decisive pattern.
-  - The mutation itself *was* genuinely live (executable-line `sed`, `git diff`, 3 named unit-test
-    failures, and the **Vite-transformed module read over HTTP** with `Cache-Control: no-cache`, after a
-    full `location.reload()`), so none of this is a missed-setup artifact.
-  **⚠️ NOT a defect in `pendingRestore.ts` or `docsScrollRestore.ts`** — mutation-proven pure functions
-  (20 + 22 tests) that remain the only protection wherever the browser does *not* volunteer the answer
-  (a genuine unmount/remount, a different hiding strategy, a non-WebKit engine, or a caller comparing
-  the returned value back).
-- **Suggested action:** Do **not** retry either check as driven — both are non-decisive by
-  construction, not by insufficient effort. Three paths that would actually work, in ascending cost:
-  1. **The race path (drivable on the live app today, needs no new harness):** trigger the reload with
-     the panel **front**, then switch panels *during* the `docs_list`→`docs_read` round trip. That is
-     the one sequence that genuinely reaches `"deferred"`. *(Corrects this entry's original
-     "closed as unobtainable" — it is unobtainable by the sequence tried, not in principle.)*
-  2. Hide the slot by **unmounting** (or `content-visibility`) in a dev-only harness, so the browser
-     cannot volunteer the offset.
-  3. A component-render harness (blocked by `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS`).
-  **Also worth keeping: the standalone `swiftc` + `WKWebView` probe harness** the audit built
-  (scratchpad `webkit-probe/`: `wk.swift`, `probe.html`) — it answers "what does real WebKit do on its
-  own?" without needing the Claudesk app or the MCP bridge, which is exactly the question that settles
-  decisiveness.
-  **The durable generalization is worth more than any of the fixes: an observation is only decisive
-  when a broken implementation would give a DIFFERENT answer.** Ask what the browser/framework/OS
-  would do unaided *before* spending a live run. WP5 stated this rule and then violated it in the same
-  sentence — twice.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Filed BY this cycle (WP5) as a durable method lesson, not work M11 could resolve; the two retracted claims are already corrected in all four durable records and both pure modules stay mutation-proven.
-
 ## SURFACE-2026-08-02-RAF-DOES-NOT-TICK-IN-MCP-BRIDGE-EVAL-CONTEXT
 - **Source:** feature:verify-self (M11 WP5 Phase 1)
 - **Target level:** product:arch (verification tooling — candidate MCP-bridge caveat (h))
@@ -335,33 +280,6 @@
 - **Pickup shape:** Fold into the next touch of `DocsPanel.tsx`. Read the WP5 comment-density
   item alongside this one — they are the same finding at two points in time, and WP5's reviewer
   concluded per-WP trimming is not converging (it wants a density *budget*, not another sweep).
-
-## SURFACE-2026-08-02-JSDOM-CLIENTHEIGHT-IS-ZERO-FOR-VISIBLE-ELEMENTS-TOO
-- **Source:** feature:build (M11 WP4 Phase 2)
-- **Target level:** product:arch (testing posture)
-- **Type:** gap
-- **Summary:** In vitest+jsdom, `clientHeight` is **`0` for visible elements just as much as
-  for `display:none` ones** — jsdom has no layout engine — while `scrollTop` is a plain
-  writable property that persists whatever is assigned. Measured directly (2026-08-02), not
-  inferred from docs.
-- **Context:** Any test whose property depends on element geometry (visibility, size,
-  overflow, scroll offset, `getBoundingClientRect`) **cannot distinguish laid-out from hidden**
-  in jsdom, so a guard keyed on measured geometry passes **vacuously** — and passes equally
-  against code with the logic inverted. This is the same failure class as
-  `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`, reached from a
-  different direction: not a source-text proxy, but a *runtime environment* that cannot
-  represent the states under test. It bit WP4 Phase 2, whose load-bearing arm is "a reload
-  landing while the Docs panel is `display:none` must not clobber the remembered scroll
-  offset" — the originally-planned element-sniffing signature would have shipped a
-  permanently-green test for it.
-- **Suggested action:** Record the pattern that works in `arch.md`'s testing section: take
-  geometry as an **injected value**, keep the DOM read to one thin function, and verify the
-  read itself live via the MCP bridge. Worth stating repo-wide because there is no
-  component-render harness (`SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS`), so jsdom
-  is the default reach for anything DOM-shaped. Consider auditing existing jsdom tests that
-  assert on geometry — none known, but none audited either.
-- **Priority:** medium
-- **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Filed BY this cycle (WP4); test-infra, and the mitigation (inject geometry as a VALUE) is already the shipped pattern and is recorded in `arch.md`.
 
 ## Code-quality findings — m11-wp3-docs-render-and-navigation (2026-08-02)
 - **Pointer:** **2 MINOR** remaining (was 3; 0 CRITICAL, 0 MAJOR) from `code-quality-reviewer` against ship baseline `6f6df23`. ⚠️ **`SELECTED-RECOMPUTED-FEEDS-EFFECT` was RESOLVED by M11 WP4** (2026-08-02) — the WP it named as the point it "becomes live" — and deleted per delete-on-resolve; see CHANGELOG. **All 4 MAJOR were FIXED IN PLACE, not backlogged** — three were verified by reproducing the reviewer's mutations first, and one of them (folding an empty-href bail into the anchor guard) **passed the full 1645-test suite while re-opening the `[click]()` webview-hijack hole this WP had just fixed**. The root cause the reviewer named — *"the remedy is not more `?raw` arms but mutation-probing the component rather than the copy of it"* — was acted on: the click handler was extracted to `handleDocLinkClick.ts` so the behavioral test **imports the real code**, and the source-order guard was deleted rather than re-patched (that shape had failed twice). Also fixed: `resolveDocLink`'s `fragment` was computed, documented, and discarded by its only caller, so `wbs.md#section` links landed at the top of the doc while the comment said otherwise. The 2 remaining MINOR: comment density past useful (⚠️ flagged by the *previous* WP's review too, and it grew — **and flagged a THIRD time at WP4**, where the reviewer judged it to have crossed from stylistic to functional and named specific offenders; see the WP4 findings entry), and `headingSlug` lacking GitHub's collision suffix. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m11-wp3-docs-render-and-navigation — 2026-08-02`.
@@ -498,16 +416,6 @@
 - **Priority:** medium (3 MAJOR) + low (4 MINOR).
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** **⚠️ Re-scoped 2026-08-01 — the chord-arm half of this entry is DONE.** The original advice was to pay the two MAJOR test-quality items *together* (both being about the `?raw` idiom's limits); that pairing is now moot — `WP2-CHORD-ARM-MISSES-PANELHOST` shipped in M11.5 WP4 and is deleted from the findings file. What remains: **`WP2-RAW-GUARDS-STILL-LOAD-BEARING`** (~10 `?raw` greps matching formatted multi-line fragments; best paid alongside `WP3-POSITIONAL-RAW-SLICING`, and **corroborated a third time** by the 2026-08-01 `format:check` sweep, where two such guards broke as false negatives on a pure reflow) and **`WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL`** (~8-site mechanical rename, wants its own commit to stay reviewable). The 4 MINOR are low and unchanged. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## SURFACE-2026-07-29-CARGO-TEST-FILTER-OUTCOMES-ARE-VACUOUS-WITHOUT-A-COUNT
-- **Source:** feature:verify-self (M10.9 WP3 Phase 1)
-- **Target level:** product:wbs
-- **Type:** gap
-- **Summary:** An Observable Outcome written as `<test-runner> <filter>` **verifies nothing unless it also pins a test count or names a specific test**. `cargo test -p claudesk skills_present` matches zero tests and **exits 0** — the outcome would have passed against an empty codebase. Same for `pnpm vitest run <path>` with a non-matching path, and `pytest -k <expr>` (exit 5 there, so vitest/cargo are the risky ones).
-- **Context:** Hit in M10.9 WP3 Phase 1. The plan invented the test name `skills_present` *before the tests existed*; the implementation named them differently (they landed in a `workflow_substrate` module). The verify-self subagent caught it — it ran the literal filter, saw `0 passed; 577 filtered out`, and flagged the mismatch rather than scoring a silent PASS. **This is the same false-pass shape as the `?raw` source guards that broke twice in WP2** (`WP2-RAW-GUARDS-STILL-LOAD-BEARING`): a check whose *form* looks like verification while its *content* is empty. The generalization is that the failure mode is not specific to `?raw` — it is any assertion whose selector can silently match nothing.
-- **Suggested action:** Two parts. **(1) A convention note** — in the repo's test conventions (root `CLAUDE.md` already carries the `?raw` rule at `:190-192`, which is the natural neighbour): *any Observable Outcome or CI gate of the form `<runner> <filter>` must pin a test count, name a specific test, or assert on output — never rely on the exit code alone, because a no-match filter exits 0.* **(2) A plan-time discipline** — Observable Outcomes should cite **modules or behavior**, not test identifiers that don't exist yet; plan-time test names are guesses, and a guess that drifts becomes an unfalsifiable check. Worth a one-line addition to `feature-plan`'s outcome-writing guidance in the workflow-system repo (cross-repo, so route via a handoff note rather than editing directly).
-- **Priority:** medium
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 
 ## SURFACE-2026-07-29-SETTINGS-PRESERVES-OTHER-FIELDS-TEST-NAME-OVERSTATES-ASSERTION
 - **Source:** feature:build (M10.9 WP3 Phase 1)
