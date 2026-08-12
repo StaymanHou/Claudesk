@@ -153,17 +153,6 @@ scheduling items rather than polish.*
 - **Priority:** low
 - **Status:** pending
 
-# m11-wp1-markdown-render-probe — 2026-08-01
-
-*(0 CRITICAL / 4 MAJOR / 5 MINOR from `code-quality-reviewer` against ship baseline `d467877`. **7 of 9 were FIXED IN PLACE**, not backlogged — all 4 MAJOR and 2 MINOR were one-line factual corrections to a document shipped minutes earlier, and leaving a known-wrong number in the evidence trail is the exact failure this WP twice flagged as BLOCKING. The 2 below are genuinely deferrable. See the WIP's `## Code-Quality Review` for the full review + what was fixed.)*
-
-## SURFACE-2026-08-01-QUALITY-WP1-RUNTIMES-UNDERCOUNTS-OBSERVATIONS
-- **Finding (MINOR):** `runtimes.md`'s `pnpm test` History bullet records a single observation labelled "M11 WP1 P1 verify-auto", but the suite actually ran **three times** during WP1 (once per phase's verify-auto, plus verify-codify runs). Results were identical (127 files / 1470 tests, ~1.9–2.2s), so nothing is *wrong* — the entry just under-describes what was observed.
-- **Why it matters:** minor fidelity issue in the registry's audit trail. The registry's value is that the second session doesn't re-estimate what the first measured; an entry naming one phase when three ran is slightly misleading about sample size, though not about the timing.
-- **Suggested action:** decide the convention deliberately — either log one bullet per observation (verbose but honest) or one per feature with a note that N runs agreed. Currently implicit. Worth settling once rather than re-deciding each feature.
-- **Priority:** low
-- **Status:** pending
-
 # time-tracking-offline-local-only-copy — 2026-08-01
 
 *(feature-review-quality against ship baseline `0f5a8c7^..7a1a185`; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 3 MINOR. **BOTH MAJORs were FIXED IN PLACE, not backlogged**, and so was one MINOR — see the originating WIP's `## Code-Quality Review` for the full record. The two MAJORs were reflow-fragile `?raw` assertions in this WP's own new copy guards: prose inside JSX wraps at Prettier's default 80 cols, and two assertions sat 3–6 characters from the boundary, so they passed only by luck about where the words fell. Fixed by normalizing the haystack (`src.replace(/\s+/g, " ")`) in both guard files, validated in both directions — a **pure reflow** with identical words now passes where it previously failed, while dropping a claim, dropping the scope disclosure, or renaming the advertised label each still fail. Rationale for deviating from autopilot's auto-backlog default: one line per file, the guards protect a **privacy disclosure**, and they had been written in the same session — backlogging a guard already known to misfire would ship known-broken verification. Reviewer: "well-built copy-only change that does more than its brief… the plan-audit discipline is the strongest thing here.")*
@@ -258,26 +247,6 @@ scheduling items rather than polish.*
 - **Why it matters:** trivial cosmetic; the `done`-pins-100 comment exists, but the `downloaded: 0` reset is mildly surprising.
 - **Priority:** low
 - **Pickup shape:** carry the final `downloaded` through on the finish emit (or a one-line comment). Rides any future `updater/commands.rs` touch. Dismiss via the WIP's review section.
-
-# m9-wp7-deprecate-claude-time — 2026-07-16
-
-*(feature-review-quality on the WP7 working-tree change [DOCS-ONLY resync: arch.md event-set/SQLite/deprecation Key Decisions + new "Milestone 9 architecture" section; CLAUDE.md Current-Milestone refresh; wbs.md pause-footer strip; runtimes.md build-observation]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR. Reviewer cross-checked every material architectural claim against source — all held. MINOR #1 [arch.md hook-schema omitted `source`/`prompt_length_chars`] was FIXED IN PLACE during review-quality [not backlogged], since it was a self-introduced one-line gap in the exact section under review. The 2 below are out-of-scope for WP7 — auto-backlogged.)*
-
-## SURFACE-2026-07-16-QUALITY-WP7-WBS-FRONTMATTER-STALE
-- **Severity:** MINOR
-- **File:** `docs/product/wbs.md` (frontmatter, ~L5)
-- **Finding:** After WP7 completed, the wbs.md frontmatter still reads `updated: 2026-07-15`, `state: complete`, and a comment "Only WP7 … remains for M9" — now stale (WP7 is done). The WP7 diff correctly only stripped the resolved session-pause block; the frontmatter/roadmap resync + WBS archival is deferred to `/product-finalize` by design.
-- **Fix shape:** `/product-finalize` sweeps this when it closes the M9 cycle (bumps `updated:`, archives the WBS to `docs/product/archive/milestone-9-time-analytics/`). No standalone action needed — flagged so finalize doesn't skip it.
-- **Priority:** low.
-- **Status:** pending (expected to resolve at `/product-finalize`).
-
-## SURFACE-2026-07-16-QUALITY-WP7-CLAUDEMD-WP2-WIREFIELD-COUNT
-- **Severity:** MINOR
-- **File:** `CLAUDE.md` (Current Milestone, WP2 status line, ~L162)
-- **Finding:** The unchanged WP2 status line says "10-event hook + **5 wire fields**"; the actual new-field count is 6 (`prompt_length_chars`, `tool_name`, `tool_use_id`, `agent_type`, `source`, `reason`). Pre-existing WP2-era text (not introduced by the WP7 diff), but the WP7 M9-complete resync was the natural moment to correct it.
-- **Fix shape:** one-word edit "5 wire fields" → "6 wire fields" in the WP2 status line; fold into the next CLAUDE.md touch or `/product-finalize`'s durable-doc resync.
-- **Priority:** low.
-- **Status:** pending.
 
 # m9-wp6b-2-week-month-sidepanel-range (Phase 4) — 2026-07-14
 

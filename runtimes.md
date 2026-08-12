@@ -13,6 +13,20 @@ deliberate floor, not a recording error. The floor guards against spurious
 kills on a cold/contended run where a fast command runs much slower than its
 recorded best case. Long commands (tauri dev/build) exceed the floor and use
 the formula's value (clamped to the Bash tool's 600000 ms max).
+
+History granularity: ONE BULLET PER FEATURE/WP, not one per run. A work package
+typically runs its suite three or more times (a verify-auto per phase, plus
+verify-codify), and logging each would bury the signal — what a future session
+needs is the runtime and the test COUNT at that unit's close, not a transcript.
+When several runs within a unit disagree meaningfully (a cold compile, a
+contended machine), record the SLOWEST, since the timeout is sized off it.
+Settled 2026-08-12 at the paydown sweep; it had been implicit, and one entry
+labelled "M11 WP1 P1 verify-auto" was in fact the last of three runs.
+
+Entry schema: exactly ONE `**Use timeout:**` and ONE `**History:**` per command.
+The `## cargo test` entry had accumulated two and three respectively (merged at
+the same sweep) — a stitched-together entry reads as two commands and hides the
+real chronology.
 -->
 
 ## pnpm vite build
@@ -239,8 +253,6 @@ ordinary build's cache — the two use different `RUSTFLAGS`). Warm runs are ~1s
   - 1s — 2026-07-15 (M9 WP6c-2 P1; warm, 523 lib pass)
   - 3.74s — 2026-07-14 (M9 WP6b-3 P1; cold-ish first compile)
   - 0.72s — 2026-07-08 (M9 WP5 P1; warm)
-- **Use timeout:** 120000
-- **History:**
   - 0.72s — 2026-07-08 (M9 WP5 P1: +7 tracking-toggle tests [time_tracking_enabled settings + write-gate seam], 463 lib + 5 integ = 468 pass; warm)
   - 0.80s — 2026-07-08 (M9 WP4 P3 build: +7 time_store::commands tests [time_analytics_query], 457 lib + 5 integ = 462 pass; warm)
   - 1.00s — 2026-07-08 (M9 WP4 P2 build: +15 time_store::query tests [day/range/week builders + snake_case DTO key-shape], 450 lib + 5 integ = 455 pass; warm. Cold compile of the new chrono dep was ~12s.)
@@ -262,7 +274,6 @@ ordinary build's cache — the two use different `RUSTFLAGS`). Warm runs are ~1s
   - 0.67s — 2026-06-28 (WP6 P2 codify, 285 pass)
   - 0.72s — 2026-06-28 (WP6 P1 codify, 283 pass)
   - 0.64s — 2026-06-27 (m5-wp5, 266 pass)
-- **History:**
   - 1s — 2026-06-27 (m5-wp5 MAJOR-findings refactor: View-menu checkmark refresh; 266 pass, no behavior change)
   - 1s — 2026-06-27 (M5 WP5 P2 tri-state rework: 266 pass, pip_mode enum)
   - 1s — 2026-06-27 (M5 WP5 P2 build: 264 pass, +6 settings + pip state-machine)
