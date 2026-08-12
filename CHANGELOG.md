@@ -13,6 +13,7 @@
 - **Task closed:** Pruned `CLAUDE.md` from 97.7k to 39.3k chars (under the 40k harness threshold) by collapsing the closed-milestone section to a pointer table and extracting four content-bearing blocks to a new `docs/lessons/` directory.
 - **Task closed:** Split `arch.md` (982 lines) into a 132-line index plus eleven by-subsystem files under `workflow-system/product/arch/`, so the architecture is organized by what the system *is* rather than by when each piece was built — every file now fits the ~300-line entry-skill size guard, and warnings inside the 100-line read window went from 6 to 11.
 - **Backlog resolved:** SURFACE-2026-08-03-ARCH-MD-EXCEEDS-SIZE-GUARD-982-LINES — resolved via the item's own option (b): per-milestone as-built sections became per-subsystem files under `arch/`, with `arch.md` retained as the index and the load-bearing warning set.
+- **Backlog resolved:** SURFACE-2026-08-10-A-PACING-INSTRUCTION-WAS-READ-AS-A-GATE-WAIVER — handed off to the companion workflow-system repo as `HANDOFF-from-claudesk-2026-08-12.md`, because the fix is a clause in `transitions.md` and the four `agents/*/AGENTS.md` cheat-sheets, none of which this repo owns; the WP4c instance was already resolved on 2026-08-10, so what left the backlog was an ask permanently unactionable from here.
 
 ## 2026-08-11
 
