@@ -494,7 +494,7 @@ mockup determines the cell before any pixels are written.
 
 ---
 
-### WP4b: The drive-mode signal — per-project value + per-turn injection  ✅ SHIPPED 2026-08-07 (uncommitted at finalize — operator has not requested a commit)
+### WP4b: The drive-mode signal — per-project value + per-turn injection  ✅ SHIPPED 2026-08-07 (⚠️ the note here said *"uncommitted at finalize"* — **stale**; the work landed in `2356b89`, folded in with WP4c. Corrected at the M12 cycle close.)
 **Description:** The **acting** half, and the actual deliverable. Store a per-project drive mode, set the
 gating env var on spawn, and emit the `UserPromptSubmit` `additionalContext` line so a Claudesk-opened
 session does not re-ask a question the operator already answered. **Zero companion-repo change** — the
