@@ -77,13 +77,20 @@ describe("App.tsx mounts the panel app-level, lazily, with both entry points", (
     // defers state updaters and source order is not execution order. That failure is why
     // the decision now lives in a pure function: a source guard can verify STRUCTURE, and
     // must not be trusted to verify RUNTIME.
-    expect(appSrc).toContain("escDismissTarget({");
-    expect(appSrc).toContain("dashboard: showDashboardRef.current");
-    expect(appSrc).toContain("settings: showSettingsRef.current");
+    // ⚠️ Matched against a WHITESPACE-FLATTENED haystack. These fragments span a formatted
+    // multi-line call (`escDismissTarget({\n  dashboard: …,\n  settings: …,\n})`), and a
+    // Prettier reflow that moves any of those breaks would silently stop them matching —
+    // the guard would report green while checking nothing. That exact failure already hit
+    // `announceRow.test.ts` in this repo. See `docs/lessons/source-text-guards.md` §3.
+    // (`SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING`.)
+    const flat = appSrc.replace(/\s+/g, " ");
+    expect(flat).toContain("escDismissTarget({");
+    expect(flat).toContain("dashboard: showDashboardRef.current");
+    expect(flat).toContain("settings: showSettingsRef.current");
     // Refs, not state, because the listener registers once with empty deps — reading
     // state there would close over a stale value.
-    expect(appSrc).toContain("showSettingsRef.current = showSettings");
-    expect(appSrc).toContain("showDashboardRef.current = showDashboard");
+    expect(flat).toContain("showSettingsRef.current = showSettings");
+    expect(flat).toContain("showDashboardRef.current = showDashboard");
   });
 });
 

@@ -84,7 +84,11 @@ mod tests {
         // exact and fails the moment someone adds one.
         // ═══════════════════════════════════════════════════════════════════════════
         let src = include_str!("commands.rs");
-        let production = src.split("#[cfg(test)]").next().unwrap_or(src);
+        // ⚠️ Split on `mod tests`, NOT `#[cfg(test)]` — see the twin guard in
+        // `workflow_gate::commands` for the full reasoning. Short version: the attribute
+        // legitimately appears on non-test items, and splitting on it truncates the scan
+        // invisibly. (`SURFACE-2026-07-29-CFG-TEST-SPLIT-BLINDS-SOURCE-GUARDS`.)
+        let production = src.split("mod tests").next().unwrap_or(src);
         let code: String = production
             .lines()
             .filter(|l| {
@@ -93,6 +97,14 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
+
+        // Truncation eats the TAIL, so pin a positive assertion to the last production item.
+        assert!(
+            code.contains("pub fn workflow_set_invite"),
+            "the production slice no longer reaches this module's last item — the split \
+             delimiter truncated it, and every forbidden-call check below is now scanning \
+             only part of the file"
+        );
 
         for forbidden in [
             "remove_dir",

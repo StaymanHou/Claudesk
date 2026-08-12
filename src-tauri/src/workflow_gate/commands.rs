@@ -73,7 +73,15 @@ mod tests {
         // flags itself; (2) prose about the invariant is not a violation of it. Comments
         // are stripped too (incl. `///` doc comments), since the module header discusses
         // `~/.claude/` at length by design.
-        let production = src.split("#[cfg(test)]").next().unwrap_or(src);
+        // ⚠️ Split on `mod tests`, NOT `#[cfg(test)]` — the attribute legitimately appears on
+        // non-test items (a `#[cfg(test)] pub mod fixture;` declaration near the top is the
+        // natural case), and splitting on it would truncate this scan to whatever precedes
+        // that first attribute while the guard stayed green. Not currently truncating here
+        // (measured 2026-08-12: the first attribute IS the one above `mod tests`), but the
+        // failure is invisible the moment it starts, so the delimiter is fixed pre-emptively.
+        // Matches `workflow_install::source_guard::production_code`, which was burned by this.
+        // (`SURFACE-2026-07-29-CFG-TEST-SPLIT-BLINDS-SOURCE-GUARDS`.)
+        let production = src.split("mod tests").next().unwrap_or(src);
         let code: String = production
             .lines()
             .filter(|l| {
@@ -82,6 +90,16 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n");
+
+        // Truncation always eats the TAIL, so a head-anchored scan cannot detect it. Pin a
+        // positive assertion to the last production item in this file: if the slice ever
+        // shrinks past it, this fails loudly instead of silently checking less.
+        assert!(
+            code.contains("pub fn workflow_set_features_enabled"),
+            "the production slice no longer reaches this module's last item — the split \
+             delimiter truncated it, and every forbidden-word check below is now scanning \
+             only part of the file"
+        );
 
         for forbidden in [
             ".claude",

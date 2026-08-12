@@ -80,15 +80,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low (was MAJOR pre-mitigation; the doc no longer overclaims and the decisive fact is test-pinned)
 - **Status:** pending
 
-## SURFACE-2026-08-03-QUALITY-WP1-RAW-GUARD-INTERFACE-SLICE-TRUNCATES
-- **Source:** feature-review-quality (M12 WP1, MINOR)
-- **Type:** tech-debt (guard completeness)
-- **Summary:** In `listProjectsConsumers.test.ts`, the `interface RecentProject\s*\{[\s\S]*?\}` non-greedy match truncates at the **first** `}`, so a nested-object field would defeat the "no announce field smuggled onto the wire type" assertion (verified: `meta?: { x: number }; unclean_exit?: boolean;` slices to `{ x: number }` and passes).
-- **Context:** Latent, not live — `RecentProject` is a flat wire type today and the Rust `Project` it mirrors is flat. Becomes reachable the moment anyone adds a nested field. Same family as the two MAJORs fixed at review time (incomplete `?raw` predicate ⇒ under-determined pass).
-- **Suggested action:** Brace-count instead of non-greedy matching, or assert on the *whole file* rather than a sliced interface. Cheap either way. Fold into the next touch of this file.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-08-03-QUALITY-WP1-PHASE2-OBSERVABLE-LEFT-UNAMENDED
 - **Source:** feature-review-quality (M12 WP1, MINOR)
 - **Type:** gap (process)
@@ -233,15 +224,6 @@ scheduling items rather than polish.*
 
 *(feature-review-quality against ship baseline `6193615^..5bc88f3`; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 5 MINOR. **MAJOR #1 (gate-seam bypass in App.tsx) was FIXED IN PLACE, not backlogged** — it was a live staleness defect and the fix was a 3-line import swap; the OFF-invariant guard's blind spot that hid it was closed in the same pass. Only MAJOR #2 and the 5 MINOR are listed here. Reviewer: "high-quality, unusually disciplined work — the strongest parts are the persistence model and the consistent instinct to extract a pure function whenever a decision has a truth table.")*
 
-## SURFACE-2026-07-29-QUALITY-WP3-POSITIONAL-RAW-SLICING
-- **Severity:** MAJOR
-- **Location:** `src/components/settings/__tests__/workflowInviteCopy.test.ts:148-152,167-171`
-- **Finding:** Two wiring guards use positional `?raw` slicing — `appSrc.slice(at, appSrc.indexOf("\n", at))` for the `onLater=` handler, and `appSrc.slice(at, at + 90)` for the Esc branch. Both are the fragile shape the repo convention warns against ("assert single identifiers — never formatted multi-line expressions"). The line-bounded one silently depends on Prettier keeping the handler on one line; the fixed-width window is **the exact pattern that already produced a false positive in this same feature** (documented in the test at :143-147) — it was fixed in one place and left in the other.
-- **Why it matters:** these are the highest-value assertions in the file (`[Later]` writes nothing; Esc means `[Later]`, not `[Dismiss]`) and therefore the ones whose silent failure costs most. WP2 already paid twice for `?raw` guards that stopped matching after a reflow.
-- **Suggested action:** extract the Esc-branch decision as a pure function and assert it as a value — the same treatment `escDismissTarget` received, which is already the in-repo precedent. For the `onLater` guard, assert on a single identifier rather than a sliced window. Pay alongside the open `SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING` — same idiom, same root cause.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-07-29-QUALITY-WP3-DETACHED-SUBSTRATE-COMMENT
 - **Severity:** MINOR
 - **Location:** `src/components/settings/SettingsPanel.tsx:190-199`
@@ -385,14 +367,6 @@ scheduling items rather than polish.*
 
 *(feature-review-quality on the WP6b-2 Phase-4 working-tree change [SidePanel + click-to-select seam; uncommitted per commit-only-when-asked]; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 2 MINOR — both auto-backlogged [low]. Reviewer: clean, well-disciplined render-surface port; no refactor warranted. Both MINORs are polish/awareness, not correctness.)*
 
-## SURFACE-2026-07-14-QUALITY-WP6B2P4-CLEAR-PIN-NOT-SCOPED
-- **Severity:** MINOR
-- **File:** `src/components/workspace/dashboard/__tests__/dashboardWiring.test.ts` (the WP6b-2 P4 "clears it on view-switch, day-change, and close" pin)
-- **Finding:** The pin asserts `setSelectedSegId(null)` appears (bare whole-file substring) + `onCloseSidePanel={() => setSelectedSegId(null)}` once, but does NOT distinguish the `changeView` clear from the `changeDay` clear (both are bare `setSelectedSegId(null)` lines). A regression that dropped the clear from *one* of `changeView`/`changeDay` would still leave the substring present → the pin passes silently.
-- **Fix shape:** assert the `setSelectedSegId(null)` clear within each handler's source slice (`changeView` block + `changeDay` block separately), the way the Day-view-only pin already slices the `WeekView`/`MonthViewContainer` blocks to assert `<SidePanel>` is absent from each. One-test tightening.
-- **Priority:** low.
-- **Status:** pending.
-
 ## SURFACE-2026-07-14-QUALITY-WP6B2P4-WALLTIME-QUANTIZATION-BASIS
 - **Severity:** MINOR (doc/awareness only)
 - **File:** `src/components/workspace/dashboard/SidePanel.tsx` (L65 `wallTime = Math.max(0, session.end - session.start)`)
@@ -506,16 +480,6 @@ scheduling items rather than polish.*
 
 *(feature-review-quality against ship commit `467593f`; Mode 3 autopilot. 0 CRITICAL / 4 MAJOR / 4 MINOR. **One MAJOR is NOT listed here — it was a live StrictMode double-write defect in `useSettingControl` and was fixed immediately rather than backlogged; see the WIP's `## Code-Quality Review`.** Reviewer: "well-built work that clears the bar the milestone set… the debt is concentrated in two places: the `?raw` idiom still doing load-bearing work despite this feature paying twice to learn it can't, and the (now-fixed) side-effect-in-updater.")*
 
-## SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING
-- **Severity:** MAJOR
-- **Location:** `src/components/settings/__tests__/settingsPanelWiring.test.ts:38-84`
-- **Finding:** ~10 assertions are `?raw` source-text greps against `App.tsx` for formatted multi-line fragments (`"escDismissTarget({"` plus two property lines, `"showSettingsRef.current = showSettings"`). Prettier-fragile by construction.
-- **Why it matters:** This is exactly the shape that broke **twice** during this feature — once passing while the behavior was broken (the Esc-ordering bug), once silently un-matching after Prettier reflowed the file (`dashboardWiring.test.ts`). The behavior is already covered behaviorally by `escDismiss.test.ts`, so these structural pins are net cost, not net coverage. The test file's own comment says a source guard "must not be trusted to verify RUNTIME" — and then leans on ten of them.
-- **Suggested action:** delete the fragment-matching assertions, keep only the coarse ones that survive a reformat (single identifiers, not multi-line expressions). Consider a repo-wide convention note: `?raw` guards may assert single identifiers only, never formatted expressions.
-- **Priority:** medium
-- **Status:** pending
-- **⚠️ Corroborated a THIRD time, 2026-08-01** (repair (A), the `format:check` sweep — commit `64e212f`). This finding cited `dashboardWiring.test.ts` as one of the two prior breakages; **that same file broke again**, along with `settingsUpdateNotificationsWiring.test.ts`, when a 35-file Prettier sweep re-wrapped the source they grep. Both were **false negatives** — the pinned logic was byte-identical, only re-wrapped. Two things this adds to the case: (1) the failure mode *reads backwards* — a red suite right after a formatting change looks like the change broke behavior, when in fact the guards had been pinning formatting incidentally and were never verifying what they claimed; (2) **the prediction is now empirical**: these guards do not merely *risk* rotting, they rot on the first reformat that touches their target. The two files repaired there are the in-repo precedent for the fix shape — assert the imported const's **value**, or assert **whitespace-normalized single tokens** — and both repairs were mutation-proven to bite AND to survive re-collapsing the source to one line, which is the property the old forms lacked. **This finding's own two named files (`workflowInviteCopy.test.ts`, `settingsPanelWiring.test.ts`) are still untouched and still fragile** — verified at close: the `slice(at` pattern (3 occurrences) and the `escDismissTarget({` fragment grep both remain. Nothing here is resolved; the case for paying it is just stronger.
-
 ## SURFACE-2026-07-28-QUALITY-WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL
 - **Severity:** MAJOR
 - **Location:** `src/components/settings/SettingsPanel.tsx:184,233,249,259`
@@ -540,15 +504,6 @@ scheduling items rather than polish.*
 - **Finding:** The milestone rationale ("applicability, not audience size", the two invariants, the design-prior slug) is restated in near-identical form in ~6 places. Comment-to-code ratio in the smallest new modules runs 65–95% (`workflow_gate/mod.rs` is 36 comment lines over 2 lines of code).
 - **Why it matters:** Much of it is genuine WHY and worth keeping, but six copies must be updated together — a drift surface rather than a gift.
 - **Suggested action:** state it once at the owning module (`workflow_gate/mod.rs`) and point at it from the others.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-07-28-QUALITY-WP2-ALLOWLIST-TEST-HALF-TAUTOLOGICAL
-- **Severity:** MINOR
-- **Location:** `src/state/__tests__/offInvariantGuard.test.ts:150-176`
-- **Finding:** `the allowlist grants exact paths, never a directory prefix` builds a hand-copied `ALLOWED_SAMPLE` duplicating the real `ALLOWED` array, then asserts three invented paths aren't in the copy — testing the literal it just wrote.
-- **Why it matters:** The `expect(guardSrc).toContain("!ALLOWED.includes(rel)")` half does real work; the `ALLOWED_SAMPLE` half is tautological and will drift from the real list.
-- **Suggested action:** drop the `ALLOWED_SAMPLE` half, or export the real `ALLOWED` array and assert against that.
 - **Priority:** low
 - **Status:** pending
 
@@ -654,24 +609,9 @@ comments. Only the reviewer's forward-looking observation is carried below.*
 - **Priority:** low (all four)
 - **Status:** pending
 
-# m12-wp2-unclean-flag-lifecycle — 2026-08-03
+# m12-wp4c-picker-drive-mode-cell — 2026-08-10
 
-## SURFACE-2026-08-10-QUALITY-WP4C-POINTERDOWN-GUARD-DEGENERATES
-- **Severity:** MINOR
-- **Location:** `src/components/picker/__tests__/projectModelCellStructure.test.ts:78-81`
-- **Finding:** The guard's own comment says click-alone-is-not-enough is the failure mode it exists to
-  catch, but only its first assertion bites. `expect(code).toMatch(/onClick=/)` and
-  `expect(code).toContain("stopPropagation")` are satisfied by essentially any version of the file —
-  including one where the **line-level** `onClick` was deleted and only the container's remained.
-- **Why it matters:** the pointerdown+click pair is the WP3 `⊘` discipline that makes two edit targets
-  in one column unambiguous. A guard that half-bites reads as full coverage of exactly the property
-  with no unit-test signature. Same family as the repo's four rotted `?raw` guards.
-- **Suggested action:** assert the pair **per line** — e.g. count `onPointerDown={(e) => e.stopPropagation()}`
-  occurrences (expect ≥2: the container plus `CellValueLine`), or assert the shape inside
-  `CellValueLine`'s body specifically rather than anywhere in the file. Mutation-test it by deleting
-  the line-level `onClick` only.
-- **Priority:** low
-- **Status:** pending
+*(feature-review-quality against ship commit `2356b89`. The other MINOR of this pair, `WP4C-POINTERDOWN-GUARD-DEGENERATES`, was resolved at the 2026-08-12 paydown sweep; the 3 MAJOR were fixed in-session at review time. This comment-density finding is what remains.)*
 
 ## SURFACE-2026-08-10-QUALITY-WP4C-ASYMMETRY-WARNING-STATED-THREE-TIMES
 - **Severity:** MINOR

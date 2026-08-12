@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
 import { ProjectModelCell } from "../ProjectModelCell";
+import { hasRule } from "../../../test-support/cssRule";
 
 // M12 WP4c Phase 4 — the cell's DOM, pinned as a PARSED VALUE.
 //
@@ -289,7 +290,12 @@ describe("every CSS class this cell's stylesheet styles is actually emitted", ()
 
     for (const cls of [...emitted].sort()) {
       expect(
-        css.includes(`.${cls}`),
+        // ⚠️ BOUNDARY match, not `css.includes("." + cls)` — that substring form is satisfied
+        // by any longer class sharing the stem, and this guard's own set contains such a pair:
+        // `.picker-recent-model` is a prefix of `.picker-recent-model-input`, so the shorter
+        // rule could be deleted with the suite still green. `App.css` has 17 such shadowing
+        // pairs among its 24 `picker-*` classes alone.
+        hasRule(css, cls),
         `ProjectModelCell.tsx emits "${cls}" but App.css defines no rule for it. An emitted ` +
           `class the stylesheet never styles is a no-op that reads as a style hook — the ` +
           `M10.9 WP3.5a whole-panel-overflow CRITICAL was eleven of these. Either add the ` +

@@ -73,11 +73,43 @@ describe("each line owns its own hit region (the WP's structural risk)", () => {
   it("stops propagation on BOTH pointerdown and click", () => {
     // Copied verbatim from WP3's `⊘` door. Click alone is not enough: an ancestor listening on
     // pointerdown would still fire, which is the silent "the control does the wrong thing"
-    // failure. Asserted as separate single-identifier matches so a reflow cannot break them.
-    const code = codeOnly(cellSource());
-    expect(code).toMatch(/onPointerDown=\{\(e\) => e\.stopPropagation\(\)\}/);
-    expect(code).toMatch(/onClick=/);
-    expect(code).toMatch(/stopPropagation/);
+    // failure.
+    //
+    // ⚠️ Asserted as a COUNTED PAIR, not three independent existence checks. The previous form
+    // matched `onPointerDown=…`, `onClick=`, and `stopPropagation` separately, so it degenerated
+    // in two ways: a bare `onClick=` anywhere satisfied the second, and ANY `stopPropagation` in
+    // the file satisfied the third — including the pointerdown handler's own. Deleting the
+    // click-side `stopPropagation` (the exact regression the test names in its first line) left
+    // all three green. (`SURFACE-2026-08-10-QUALITY-WP4C-POINTERDOWN-GUARD-DEGENERATES`.)
+    //
+    // Whitespace is flattened first so the pair survives a Prettier reflow — matching across a
+    // line break is what broke a sibling guard in this repo (see
+    // `docs/lessons/source-text-guards.md` §3).
+    const flat = codeOnly(cellSource()).replace(/\s+/g, " ");
+
+    const pointerStops = (
+      flat.match(/onPointerDown=\{\(e\) => e\.stopPropagation\(\)\}/g) ?? []
+    ).length;
+    const clickStops = (
+      flat.match(/onClick=\{\(e\) => \{? ?e\.stopPropagation\(\)/g) ?? []
+    ).length;
+
+    expect(
+      pointerStops,
+      "every interactive line must stop propagation on pointerdown",
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      clickStops,
+      "the click side must stop propagation TOO — a pointerdown-only guard leaves the " +
+        "ancestor row handler firing on click, which is the regression this test is named for",
+    ).toBeGreaterThanOrEqual(1);
+    // ...and they must be PAIRED: one control stopping only pointerdown while another stops
+    // only click would satisfy both counts above independently.
+    expect(
+      pointerStops,
+      "pointerdown and click stops must come in pairs — an unequal count means one control " +
+        "guards only half its activation path",
+    ).toBe(clickStops);
   });
 
   it("mirrors activation onto Enter and Space", () => {

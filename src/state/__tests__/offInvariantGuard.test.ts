@@ -512,17 +512,25 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
   });
 });
 
+/** The only files permitted to name the raw gate command.
+ *
+ *  ⚠️ Module-scoped so the allowlist-shape test below asserts against THIS array rather than a
+ *  hand-copied duplicate of it. It previously built its own `ALLOWED_SAMPLE` and checked that
+ *  invented paths were absent from the literal it had just written — a test of its own fixture,
+ *  green no matter what the real allowlist said
+ *  (`SURFACE-2026-07-28-QUALITY-WP2-ALLOWLIST-TEST-HALF-TAUTOLOGICAL`). */
+const ALLOWED = [
+  "src/state/workflowGate.ts",
+  "src/state/useWorkflowFeaturesEnabled.ts",
+  "src/state/__tests__/workflowGateContract.test.ts",
+  "src/state/__tests__/offInvariantGuard.test.ts",
+];
+
 describe("OFF-invariant: the seam is the only door", () => {
   it("no module bypasses the seam to read the setting directly", () => {
     // A second call site is a second source of truth: it would not re-render on the
     // broadcast, and it is invisible to the guard above. The seam module and its own
     // tests are the only legitimate places the raw command name appears.
-    const ALLOWED = [
-      "src/state/workflowGate.ts",
-      "src/state/useWorkflowFeaturesEnabled.ts",
-      "src/state/__tests__/workflowGateContract.test.ts",
-      "src/state/__tests__/offInvariantGuard.test.ts",
-    ];
     const offenders = sourceFiles()
       .filter((f) => {
         const src = readFileSync(f, "utf8");
@@ -597,23 +605,33 @@ describe("OFF-invariant: the seam is the only door", () => {
     );
     expect(guardSrc).toContain("!ALLOWED.includes(rel)");
     expect(guardSrc).not.toMatch(/ALLOWED\.some\([^)]*startsWith/);
-    // A near-miss sibling of an allowlisted file must NOT be treated as allowed.
-    const ALLOWED_SAMPLE = [
-      "src/state/workflowGate.ts",
-      "src/state/useWorkflowFeaturesEnabled.ts",
-      "src/state/__tests__/workflowGateContract.test.ts",
-      "src/state/__tests__/offInvariantGuard.test.ts",
-    ];
+
+    // ⚠️ Asserted against the REAL module-scoped `ALLOWED`, not a copy of it. This used to
+    // build its own `ALLOWED_SAMPLE` duplicating the array four lines away and then check that
+    // invented paths were absent from that literal — which is a test of the fixture, true by
+    // construction and green even if the real allowlist had been widened to `src/`.
+    // (`SURFACE-2026-07-28-QUALITY-WP2-ALLOWLIST-TEST-HALF-TAUTOLOGICAL`.)
+    //
+    // Every entry must name an exact FILE, so a near-miss sibling in the same directory — or a
+    // path that merely shares a prefix — must NOT be covered.
     for (const sneaky of [
       "src/state/anotherGateReader.ts",
       "src/state/__tests__/sneaky.test.ts",
-      "src/state/workflowGate.helper.ts",
+      "src/state/workflowGate.helper.ts", // shares a prefix with an allowlisted file
+      "src/state/", // the directory itself
     ]) {
       expect(
-        ALLOWED_SAMPLE.includes(sneaky),
+        ALLOWED.includes(sneaky),
         `${sneaky} must not be allowlisted — only the four exact seam paths are`,
       ).toBe(false);
     }
+
+    // ...and the allowlist is non-empty and exact-length, so a future edit that widens it has
+    // to come through this test rather than past it.
+    expect(ALLOWED).toHaveLength(4);
+    expect(ALLOWED.every((p) => p.endsWith(".ts") || p.endsWith(".tsx"))).toBe(
+      true,
+    );
   });
 
   it("the seam module states the contract a future surface must follow", () => {

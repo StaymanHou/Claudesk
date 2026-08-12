@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import appTsx from "../../../../App.tsx?raw";
 import filmstrip from "../../Filmstrip.tsx?raw";
 import globalDashboard from "../GlobalDashboard.tsx?raw";
+import { braceBlockAt } from "../../../../test-support/sourceSlice";
 import chrome from "../Chrome.tsx?raw";
 import monthView from "../MonthView.tsx?raw";
 import rangePicker from "../RangePicker.tsx?raw";
@@ -414,8 +415,31 @@ describe("M9 WP6b-2 P4 — SidePanel + click-to-select seam (the live-verified w
   it("GlobalDashboard owns selectedSegId + clears it on view-switch, day-change, and close", () => {
     expect(globalDashboard).toContain("selectedSegId");
     expect(globalDashboard).toContain("setSelectedSegId");
-    // cleared in changeView + changeRange (both reset to null) and via onCloseSidePanel.
-    expect(globalDashboard).toContain("setSelectedSegId(null)");
+
+    // ⚠️ Each clear is asserted INSIDE ITS OWN function, not as a bare whole-file substring.
+    // The name promises three independent clears, but `toContain("setSelectedSegId(null)")`
+    // is satisfied by any ONE of them — so deleting the `changeView` clear (leaving a stale
+    // SidePanel open across a view switch, the regression this test is named for) left the
+    // old form green. (`SURFACE-2026-07-14-QUALITY-WP6B2P4-CLEAR-PIN-NOT-SCOPED`.)
+    const changeView = braceBlockAt(
+      globalDashboard,
+      globalDashboard.indexOf("const changeView = useCallback("),
+    );
+    const changeRange = braceBlockAt(
+      globalDashboard,
+      globalDashboard.indexOf("const changeRange = useCallback("),
+    );
+    expect(
+      changeView,
+      "changeView must clear the SidePanel selection — otherwise a stale selection survives a view switch",
+    ).toContain("setSelectedSegId(null)");
+    expect(
+      changeRange,
+      "changeRange must clear it too — a new span's segments make the old seg id meaningless",
+    ).toContain("setSelectedSegId(null)");
+    // The two slices must be distinct, or one function's body is standing in for both.
+    expect(changeView).not.toBe(changeRange);
+
     expect(globalDashboard).toContain(
       "onCloseSidePanel={() => setSelectedSegId(null)}",
     );

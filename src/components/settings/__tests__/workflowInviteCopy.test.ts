@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import appSrc from "../../../App.tsx?raw";
+import { braceBlockAt } from "../../../test-support/sourceSlice";
 import {
   INVITE_TITLE,
   INVITE_BODY_1,
@@ -185,9 +186,20 @@ describe("App wiring — the three intents map to the right persistence", () => 
   it("Esc on the invite is [Later], not [Dismiss]", () => {
     // A keypress must not permanently suppress a one-time pitch. Asserted by locating the
     // invite branch of the Esc handler and confirming which setter it calls.
+    //
+    // ⚠️ Bounded to the BRACE-MATCHED block, not `slice(at, at + 90)`. A fixed-width window is
+    // a false-positive generator in both directions: too wide and the negative assertion fires
+    // on a neighbouring branch that legitimately calls `resolveInvite` (the exact bug the
+    // sibling test above documents at `at + 120`); too narrow — or one reflow later — and it
+    // silently stops covering the setter it exists to check, reporting green.
+    // (`SURFACE-2026-07-29-QUALITY-WP3-POSITIONAL-RAW-SLICING`.)
     const at = appSrc.indexOf('if (target === "invite")');
     expect(at).toBeGreaterThan(-1);
-    const branch = appSrc.slice(at, at + 90);
+    const branch = braceBlockAt(appSrc, at);
+    expect(
+      branch,
+      "the invite branch must be brace-delimited for this guard to bound it",
+    ).toContain("{");
     expect(branch).toContain("setInviteDismissedThisSession(true)");
     expect(branch).not.toContain("resolveInvite");
   });

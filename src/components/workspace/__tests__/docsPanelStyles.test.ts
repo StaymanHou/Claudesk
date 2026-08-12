@@ -5,6 +5,7 @@ import { join } from "node:path";
 import docsPanelSource from "../docs/DocsPanel.tsx?raw";
 import docMarkdownSource from "../docs/DocMarkdown.tsx?raw";
 import hostSource from "../RightPanelHost.tsx?raw";
+import { hasRule } from "../../../test-support/cssRule";
 
 // M11 WP2 — every CSS class the Docs panel references must actually be DEFINED.
 //
@@ -59,25 +60,14 @@ function referencedClasses(src: string): string[] {
   return [...found];
 }
 
-/**
- * Whether `css` defines a rule for `cls`, matching on a CLASS-NAME BOUNDARY.
- *
- * ⚠️ This replaced a plain `css.includes('.' + cls)`, which was **measured to not bite**:
- * renaming `.doc-frontmatter` to `.doc-frontmatter-RENAMED` left the suite green, because
- * the old selector is a prefix of the new one. The same hole covered `.doc-markdown`,
- * whose name is a prefix of `.doc-markdown-body` — so deleting the shorter rule entirely
- * would also have passed. WP2's own header calls this guard's scope out honestly; that
- * note did not anticipate prefix-shadowing, which arrives as soon as two classes share a
- * stem (exactly what WP3's render classes introduced).
- *
- * A class name may be followed only by a non-name character (`{`, `,`, `:`, `.`, ` `, a
- * combinator, a newline) — never by `-`, a letter, or a digit, which would make it a
- * different, longer class.
- */
-function hasRule(css: string, cls: string): boolean {
-  const escaped = cls.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`\\.${escaped}(?![\\w-])`).test(css);
-}
+// `hasRule` — the class-name-BOUNDARY matcher — now lives in `src/test-support/cssRule.ts`,
+// shared with `projectModelCellRender.test.tsx`, which carried the same substring hole this
+// file was burned by. The provenance is in that module's header.
+//
+// ⚠️ This file's original defect, kept here because it is the concrete evidence: renaming
+// `.doc-frontmatter` to `.doc-frontmatter-RENAMED` left the suite green, because the old
+// selector is a prefix of the new one. `.doc-markdown` had the same hole via
+// `.doc-markdown-body` — deleting the shorter rule outright would also have passed.
 
 describe("Docs panel CSS classes are all defined", () => {
   it("the stylesheet was actually loaded (anti-vacuity)", () => {
