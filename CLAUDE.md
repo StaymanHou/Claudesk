@@ -182,7 +182,14 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ## Current Milestone
 
-**Milestone 13: Skill orchestration** — ▶ **NEXT, not yet decomposed.** Run `/product-wbs` to decompose it. Goal: common workflow operations are clicks, not typed slash commands. Two deliverables in `roadmap.md`: a **skill registry** (scan `~/.claude/skills/` + `<project>/.claude/skills/`, render each as a button that sends the matching slash command) and the **"Recycle Session" one-click button** (`/session-handoff` → wait for the `.session.md` write → Ctrl+D → wait for CC exit → spawn fresh CC → `/session-restore`; manually triggered only, never automatic).
+**Milestone 13: Skill orchestration** — ▶ **DECOMPOSED 2026-08-14** into 4 WPs at `workflow-system/product/wbs.md`: **WP1 probe** (M) → **WP2 skill registry + the 5th guard arm** (M) ∥ **WP3 Recycle as a callable operation** (L) → **WP4 exit verify + Group C close** (S). Critical path WP1 → WP3 → WP4. Goal: common workflow operations are clicks, not typed slash commands. **Next: `/feature-plan` for WP1.**
+
+⚠️ **Three WBS findings that reshaped the roadmap's two deliverable lines — do not re-derive them:**
+- **`~/.claude/skills/` is 61 entries and ELEVEN ARE BROKEN SYMLINKS** (`RENAMED-*` ×3 → a deleted `/var/folders/…/tmp.Q3ZCt3e9X3/`; `tutorialX-*` ×4 + `zz-*` ×4 → a deleted `/tmp/mut/`; all July-27 mutation-test leftovers). A scanner reading `<dir>/SKILL.md` **errors on 11 of 61**, so error handling is the **modal case**, not polish. ⚠️ It is also a free fixture with two breakage flavors — but build a synthetic one too, or the test silently stops proving anything once the dir is cleaned.
+- ⚠️ **"Render each skill as a button" does NOT survive 61 entries** — that is a worse launcher than typing `/fea`+tab. The exit criterion says **"common"** skills, not all. `[PRIOR: new-surface-must-earn-its-place-against-existing-ones]` fires: typing already reaches all 61, so the button surface's irreducible non-overlap is **the handful fired constantly**, not reachability. **WP1 Q1 settles the shape with an explicit operator sign-off — no WP may pick it silently.**
+- ⚠️ **Recycle's hard part is hidden in four roadmap words** (*"wait for `.session.md` write completion"*): Claudesk must know a skill running **inside CC** finished, and has no protocol for that. ⚠️ **`Stop` fires on EVERY turn end**, so `Stop` alone cannot mean "the handoff is done." WP1 observes the real signals (scratch workspace + a **stale-`.session.md`** variant) before WP3 designs against them. **This is why WP3 is the L** — and it may re-size to M if Q1/Q3 find an unambiguous marker.
+
+⚠️ **WP3 builds Recycle as a CALLABLE OPERATION with the button as ONE caller** — **M15** (workflow supervisor, new this session) is a non-click caller. Not a widened M13 scope: the button is still the only surface M13 ships.
 
 **M13 closes Group C** — it carries the last two of the six vision success metrics (2: Recycle is one click; 3: no slash-command typing for common skills). The other four are met. Everything M13 needs is workflow-coupled, so it all sits **behind M10.9's `workflow_features_enabled` gate**.
 
@@ -195,33 +202,27 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 **⚠️ Two open items to settle before or during M13, both filed:** `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET` (a typed `/exit` leaves the workspace open with a "Session ended" overlay, so whether that counts as clean is an unanswered *product* question M13's Recycle work sits next to), and `SURFACE-2026-08-06-MANUAL-SESSION-START-MODE-MENU-INTERRUPTS-BEFORE-INTENT` (a manual `/session-start` costs 2.18 turns vs ~0.5 because the mode menu arrives *before* the operator has stated their problem — only 24 of 524 opens, hence deferred, but a skill-button surface is where it would be fixed).
 
-**Before starting: the operator is running a `CLAUDE.md`/`arch.md` prune + `/util-backlog-paydown` in the session immediately after the M12 close** (stated 2026-08-12). `arch.md` is **982 lines** (up 244 from M12's as-built section) and the backlog carries **54 deferred items**, so expect both to shrink before M13 decomposition.
+✅ **The pre-M13 prune + paydown are DONE** (2026-08-12): `arch.md` was split into `arch/<subsystem>.md` (982 → 132-line index) and the paydown sweep closed all 11 WPs, cutting the backlog **84 → 45**. Test counts at that close: **827 Rust lib + 2026 frontend** — use these for attribution.
+
+## Next Milestone (new — inserted 2026-08-14)
+
+**Milestone 15: Workflow supervisor** (`roadmap.md` → Group E) — Claudesk absorbs the workflow state machine as **typed code** and enforces auto-chaining **mechanically**. Triggered by a **measured 10x regression** in auto-chain adherence (**0.36 → 3.63** breaks per 100 `Skill` invocations, opus-4-7/4-8 → opus-5, 187 sessions mined, drive mode cleared as a confound). ⚠️ **Not decomposed — probe-gated.** Executes after M13; **its order vs M14 is a deliberately open operator call.**
+
+⚠️ **The finding that inverted the original design:** wrongful stops emit the **correct** `TRANSITION:` token and often **name the correct next skill**, so they are **textually indistinguishable** from legitimate pauses — a prose-reading LLM adjudicator (the original ask) would pass **all 19** confirmed breaks. A **mechanical** check (transition token + policy row + was-there-a-`Skill`-call) decides every one. The `claude -p` adjudicator survives **demoted to the ambiguous residual**. ⚠️ The class is **chronic, not new** — three prior P1/P2 incidents pre-date opus-5 — so **every prose mitigation has decayed**, which is the whole architectural argument.
+
+⚠️ **THE OWNERSHIP BOUNDARY WITH mccc (decided 2026-08-14 — "absorb the machine, not the skills"):** **Claudesk owns the drive mode's VALUE + TURN-BOUNDARY enforcement; mccc owns its MEANING + INTRA-TURN semantics**, with mccc's prose kept as the **no-Claudesk floor** (it runs in bare terminals — 877 transcripts). ⚠️ **Full absorption of mccc was CONSIDERED AND REJECTED** — ~85% of it is prose Claudesk could own but never *enforce*; it would break M10.9's two-tier gate; it strands non-Claudesk sessions incl. the recursive case that mccc is developed using mccc; and it puts the fastest-iterating artifact behind the slowest release pipeline. **Do not re-litigate** — full rationale + the ownership table are in `roadmap.md` → Milestone 15 and Revision 2026-08-14.
+
+⚠️ **Also settled there, do not re-derive:** context% is read from the transcript's `message.usage` (`input + cache_read + cache_creation`, **LAST assistant line only** — verified 128.5k ≈ **13.0%** against the live statusline; the **model→window map is a named stale-able seam**); the phase-boundary recycle rule is **feature-workflow-only**; fire policy is **silently, always** (⚠️ dissent recorded and sized — ~2-in-19 breaks were question-shaped, gated on the probe); and absorbing the machine **deletes** mccc's `check-structure.sh` **Phase 9** rather than moving it (the four-way `AGENTS.md` duplication it polices stops existing).
 
 ## Previous Milestone (closed)
 
 **⚠️ As-built architecture is organized BY SUBSYSTEM, not by milestone** — `workflow-system/product/arch/<subsystem>.md`, indexed by `arch.md` (split 2026-08-12). A milestone's WBS + probe outcomes live in `workflow-system/product/archive/<cycle-name>/`. Where the `arch/` set and `roadmap.md` differ, **the `arch/` set is the authority** — it is the as-built record, resynced at each `/product-finalize`. ⚠️ **Do not add a new milestone section to it**; edit the subsystem the change belongs to.
 
-| Milestone | Closed | Verdict | As-built home in the `arch/` set |
-|---|---|---|---|
-| **M12** Smart auto-resume + drive mode | 2026-08-12 | GO | `arch/session-resumption.md` |
-| **M11** Workflow-docs markdown viewer | 2026-08-03 | GO | `arch/right-panel-surfaces.md` → "The Docs panel" |
-| **M11.5** QoL bucket | 2026-07-31 | GO | *(no as-built section)* |
-| **M10.9** Workflow-features opt-in gate | 2026-07-31 | GO | `arch/workflow-gate.md` + `arch/claude-substrate.md` |
-| **M10.5** QoL polish bucket | 2026-07-19 | GO | `arch/process-and-pty.md` (shutdown + I/O encoding) |
-| **M10** In-app auto-updater | 2026-07-18 | GO | `arch/build-update-release.md` |
-| **M9** Time-analytics panel | 2026-07-16 | GO | `arch/time-analytics.md` |
-| **M8** Demo assets | 2026-06-29 | GO | *(docs/marketing only — no app code)* |
-| **M7** Menu-bar status item | 2026-06-29 | GO | `arch/status-channel-and-surfaces.md` §B.2 |
-| **M6** Friend-requested QoL polish | 2026-06-28 | GO | *(no as-built section)* |
-| **M5** Picture-in-picture | 2026-06-27 | GO | `arch/status-channel-and-surfaces.md` §B.3 |
-| **M4** Multi-workspace UX | 2026-06-24 | GO | `arch/foundations.md` → "System Design" |
-| **M3** CC lifecycle & state plumbing | 2026-06-22 | GO | `arch/status-channel-and-surfaces.md` §A |
-| **M2** Lite Editor + Diff Viewer | 2026-06-22 | GO | `arch/right-panel-surfaces.md` |
-| **M1** Bare Shell + Tab Substrate PoC | 2026-06-19 | GO | `arch/foundations.md` → "System Design" |
+**M1–M12 all closed GO** (M1 2026-06-19 → M12 2026-08-12; 15 cycles counting the M10.5/M10.9/M11.5 inserts). ⚠️ **Do not maintain a milestone→as-built table here** — it duplicated `roadmap.md` (which carries each milestone's close note) and the `arch.md` index (which maps every subsystem to its file), so it was a third copy drifting against two authorities. **Look up a closed milestone's as-built home in `arch.md`'s index; its WBS + probe outcomes are in `workflow-system/product/archive/<cycle-name>/`.**
 
 ⚠️ **The M12 properties that bind M13 are NOT repeated here** — they are in `## Current Milestone` above ("Four things M13 must not re-derive") and in full in `arch/session-resumption.md`.
 
-**Execution order from here:** M13 (skill orchestration, incl. Recycle Session) → M14 (polish + OSS release). Numbering does not match execution order for M11/M11.5 — M11.5 ran *before* M11 by design; no catch-up is owed. ⚠️ **When M14 is next touched, correct its "default CLI args for `claude`" Settings line** — M11.5 consumed most of it, and it still misstates PiP (shipped M5) + permission-mode (shipped M6) as future work.
+**Execution order from here:** **M13** (skill orchestration, incl. Recycle) → then **M14** (polish + OSS release) and **M15** (workflow supervisor) in an order that is **deliberately undecided** — M15 is a dogfooding win whose value to a stranger is unproven, which argues for shipping M14 first; operator's call. Numbering does not match execution order for M11/M11.5 — M11.5 ran *before* M11 by design; no catch-up is owed. ⚠️ **When M14 is next touched, correct its "default CLI args for `claude`" Settings line** — M11.5 consumed most of it, and it still misstates PiP (shipped M5) + permission-mode (shipped M6) as future work.
 
 **Latest release: v0.3.0** (`/release` 2026-08-03) — M10.9 + M11.5 + M11, published to GitHub (4 assets) + Homebrew tap, verified end-to-end on the operator's real installed `.app`. Trust anchor unchanged from v0.2.9 (key `774E2E8429FDF78A`), so existing installs self-update. ⚠️ **M12 is closed but NOT yet released** — `main` runs ahead of the last tag by design; the operator pushes at release time only. Releases via the `/release` skill.
 
