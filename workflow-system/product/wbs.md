@@ -101,7 +101,7 @@ Measured properties the fifth arm must respect — each already paid for by a re
 
 ---
 
-### WP2: Skill buttons — a tiny fixed set, and the gated surface ✅ VERIFIED 2026-08-14 (verify-human PASS; awaiting ship)
+### WP2: Skill buttons — a tiny fixed set, and the gated surface ✅ SHIPPED 2026-08-14 (commits `bd67758` + review fixes `e45cca8`)
 **Description:** A small fixed button row + the **fifth OFF-invariant guard arm**, in the shape WP1's Q1 verdict selected.
 **Milestone:** 13
 **Dependencies:** WP1 (Q1 decided what is rendered; Q2's scan is now optional — see below)

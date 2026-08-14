@@ -1,6 +1,6 @@
 ---
-stage: verified
-state: in-progress
+stage: shipped
+state: complete
 updated: 2026-08-14
 workflow: feature
 milestone: 13
@@ -29,8 +29,10 @@ rejected options: `workflow-system/product/archive/` (WP1 probe) and `wbs.md` �
    exclusion rested on "M12 auto-fires it", which the measurement showed does not cover the
    dominant flow (post-`/clear`, workspace already open). See D3 for the full reasoning; ⚠️ the
    superseded rationale in `wbs.md` must be corrected there too.
-6. **Recycle Session** — ⚠️ **WP3's** operation. WP2 renders its button; the button is a caller of
-   a WP3 API that does not exist yet. See P3 for how that is sequenced without a dead affordance.
+6. **Recycle Session** — ⚠️ **WP3's** operation, and ⚠️ **WP2 shipped WITHOUT it** (Phase 3
+   decision: rendering it early-and-disabled would be a promise about unbuilt work). ⚠️ Corrected
+   at close: an earlier line here said "WP2 renders its button", which is **not** what shipped.
+   The obligation moved to `wbs.md` → WP3.
 
 ⚠️ **No member is conditional.** Dropping any is a scope reduction requiring its own decision, not
 an implementation detail.
@@ -47,19 +49,21 @@ next to editor/diff tabs they have nothing to do with); one app-level row (match
 15.7 KB test and an active-workspace lookup — a bigger change for a cosmetic win).
 
 ⚠️ **The header is now crowded** — name · next-open indicator · 5 buttons · split control. Layout
-is a real risk, not a formality: verify at a narrow window, and the buttons must not push the
-split control off-row or squeeze the project name. `.workspace-session-start` already sets
-`flex-shrink: 0`.
+was a real risk, and it **measured out**: see verify-self. The buttons never shrink or clip; the
+project name truncates from ~640px and the status dot overflows below ~600px. Shown to the operator
+and accepted.
 
-**D2 — NO SCANNER. Hard-code the 4 command strings; task 2.1 is DELETED** (per its own
+**D2 — NO SCANNER. Hard-code the command strings (5 as shipped; "4" in the original wording predated D3 adding `/session-restore`); task 2.1 is DELETED** (per its own
 instruction: do not build a scanner nothing consumes). Operator-confirmed. The reasoning is
 stronger than "the set is fixed", and it is an *architectural* constraint rather than a
 convenience:
 
 - **§4c anti-brittleness** (`arch/workflow-gate.md:30`): *"The **only** stable coupling is the
   command name."* A command string is the sanctioned coupling; a filesystem path is not.
-- ⚠️ **`workflow_substrate::skills_dir_exists` already refused this exact check**, in its own
-  words: *"Still deliberately NOT a check for specific skill names: the skill set evolves in the
+- ⚠️ **The `workflow_substrate` module already refused this exact check** (⚠️ attribution corrected
+  at code-quality review: the quote is **`SKILLS_SUBPATH`'s** doc comment, not
+  `skills_dir_exists`'s — which carries the same §4c argument in its own words):
+  *"Still deliberately NOT a check for specific skill names: the skill set evolves in the
   companion repo on its own schedule, and per the return contract's §4c anti-brittleness clause a
   hardcoded roster of skill filenames would be exactly the brittle coupling that clause forbids."*
   A 4-path existence check **is** that roster. Building it would contradict a live module's
@@ -376,6 +380,62 @@ chokepoint the caller test needs.
 **All surviving guards re-proven by mutation AFTER the refactor** (a green suite following heavy
 edits is not evidence): funnel-ignores-its-arg → red; ungate-the-row (arm 5) → red, arm 5 only;
 try/catch→bare-await → red. **2052 tests pass** (2054 − the 2 deleted guard tests).
+
+## Retrospect — M13 WP2, closed 2026-08-14
+
+**Shipped:** five workflow skills as buttons in the workspace header, gated as a whole, all firing
+through one funnel. Two commits: `bd67758` (feature) → `e45cca8` (review fixes). Sized **S** as
+predicted once the scanner was dropped; frontend-only, no Rust, no new IPC.
+
+**What this WP is actually worth remembering for: three times, a measurement or a review refuted
+something I had written down as settled — and the refutations were all of MY reasoning, not of
+inherited claims.**
+
+1. **A number that meant the opposite of what it looked like.** 97.9%-of-523 was expected to
+   confirm `/session-restore`'s exclusion and instead killed it, because the *population* mattered
+   more than the ratio (post-`/clear`, workspace already open — a flow the automatic arm never
+   runs in). ⚠️ **The transferable form: a measurement that "confirms" a hypothesis has to be read
+   for WHICH CASES it covers, not just which way it points.** The two populations were
+   inseparable from the data, which is exactly why it went to the operator rather than being
+   decided from the figure.
+2. **A guard I invented that was unsound in both directions** (removed at review). The target state
+   was unsatisfiable against a constraint the WBS stated in plain words, and the trigger was blind
+   to two of three realistic call shapes. ⚠️ **A test pins the PRESENT; a future scope commitment
+   belongs in the WBS.** Filed as `SURFACE-2026-08-14-A-TEST-CANNOT-ENFORCE-A-FUTURE-SCOPE-DECISION`.
+3. **My own probe proved only the arm that worked.** I exercised the literal path and declared the
+   mechanism proven — while the doc I was quoting says *prove each form INDIVIDUALLY*. This is the
+   second time this milestone that a probe's success was mistaken for a mechanism's soundness.
+
+**The verification instruments were the other theme, and they failed more often than the code did.**
+Three MCP-bridge instruments were silent-but-broken (`ipc_monitor` captured **zero** calls even as
+a positive control; `read_logs{console}` returned nothing; `ipc_emit_event` never reached the gate
+hook). ⚠️ **Treating their silence as evidence would have produced a confident, wrong verdict in
+either direction.** What survived scrutiny was a hand-built console-wrap plus a **negative control**
+— a deliberately-failed injection that *did* warn — which is the only reason "zero warns on five
+real clicks" means anything. And the one outcome no instrument could reach (does CC *execute* the
+command) was reported unproven and sent to the operator, who confirmed it by hand.
+
+**Two guards I wrote were themselves holed, both found by mutation, neither by review:** one was
+satisfied by its **own documentation** (a backticked class name in a comment), and one passed while
+the button's entire base CSS rule was deleted (a surviving `:hover` stood in for its base class).
+⚠️ Both are the same family — *a guard satisfied by a near-miss token* — now at four appearances in
+this repo. The `hasRule` half generalizes and is filed.
+
+**What went right and should be copied:** the absorbed button was **deleted, not orphaned**
+(`SESSION_START_COMMAND` + `showSessionStartButton` removed, their tests retargeted onto the row) —
+the M12 dead-`/exit` shape avoided deliberately. The caller-proof test mocks the **Tauri boundary**
+rather than our own funnel, so it drives real bytes to the IPC edge; it caught 4-of-5 members made
+unreachable while the membership test stayed green, which is precisely the defect class it exists
+for. And the fifth guard arm's first failure was **the predicate's fault, not the set's** — fixed by
+asserting provenance rather than widening a term list shared with four other arms.
+
+**Costs accepted knowingly, not overlooked:** the row partially overlaps M12's automatic arm on the
+workspace-open path (two mechanisms, one skill); three of the five buttons were fired ≤3 times ever;
+and the header's project name truncates ~640px with the status dot overflowing ~600px — measured,
+shown to the operator, accepted.
+
+**Owed to WP3:** the row's **sixth affordance** (Recycle). Written into `wbs.md` → WP3 because the
+test that was supposed to enforce it had to be deleted.
 
 ## Discoveries
 
