@@ -1,5 +1,25 @@
 # Backlog
 
+## SURFACE-2026-08-14-CSS-CLASS-GUARDS-SATISFIED-BY-A-PSEUDO-CLASS-MODIFIER
+- **Source:** feature:verify-codify (M13 WP2 — found by mutation, not review)
+- **Target level:** `src/test-support/cssRule.ts` + every guard that calls `hasRule`
+- **Type:** gap (a guard family that reports green while the styling is gone)
+- **Summary:** `hasRule(css, cls)` is satisfied by a **pseudo-class modifier alone**. Deleting the entire `.workspace-skill-btn { … }` base block (padding, border, font, cursor) left M13 WP2's new CSS contract guard **green at 21/21**, because `.workspace-skill-btn:hover` still existed and `hasRule`'s boundary legitimately admits `:`. So the element's whole visual definition can be deleted while a guard asserting "this class is styled" passes.
+- **Context:** ⚠️ **`hasRule` is NOT at fault and must not be "fixed"** — its boundary rule is correct (a `.` and a `:` are both legal class-name boundaries; the 2026-08-12 paydown deliberately made it so, and one of its own mutation probes was invalid for exactly this reason). The defect is in **how callers ask**: "does any rule mention this class" is a weaker question than "does this class have a base rule". WP2 fixed its own call site by adding `hasBaseRule = \.<cls>\s*\{` alongside `hasRule`. ⚠️ **Other `hasRule` callers were NOT audited** — this WP only proved the hazard exists and closed its own instance. Same shape the paydown recorded for `.is-editing` satisfying its base class, now confirmed to generalize to pseudo-classes.
+- **Suggested action:** Sweep the `hasRule` call sites (`grep -rl hasRule src --include='*.test.ts'`) and decide per site whether the intended question is "mentioned" or "has a base rule"; consider exporting a `hasBaseRule` from `test-support/cssRule.ts` so the next guard imports the stronger form instead of re-deriving the weaker one. ⚠️ Prove each fix by deleting the base rule while leaving a modifier — the mutant that a `hasRule`-only guard passes.
+- **Priority:** medium (no live defect — WP2's own classes are correctly styled and now correctly guarded; but this is the fourth appearance of the "guard satisfied by a near-miss token" family, and the remaining call sites are unaudited)
+- **Status:** pending
+
+## SURFACE-2026-08-14-SESSION-RESTORE-USAGE-FIGURE-SPANS-TWO-COMMAND-NAMES
+- **Source:** feature:plan (M13 WP2 — the measurement mandated by `SURFACE-2026-08-14-SESSION-RESTORE-HAS-NO-MANUAL-DOOR`)
+- **Target level:** method / any future usage-frequency claim about this skill
+- **Type:** trap (a measurement predicate that silently under-counts)
+- **Summary:** The `/session-restore` usage figure **requires counting two command names**, because the M9 WP5 rename split one skill's history: **`/session-resume` = 390** invocations (2026-05-29 → 2026-07-21) and **`/session-restore` = 142** (2026-07-21 → 2026-08-14), raw family **532**. ⚠️ A re-measurement grepping only `/session-restore` finds **142** — a 73% under-count — and would wrongly conclude the earlier "531" was inflated.
+- **Context:** Also measured: **9 of the raw 532 were `ScheduleWakeup` self-fires**, not operator input (one overnight-training transcript, hourly). They are cleanly separable — the only family invocations carrying a `<command-args>` block matching a `ScheduleWakeup` prompt in the same file — giving **523 operator-typed**. ⚠️ A second trap in the same measurement: bucketing *every* user line mentioning the command gives **1,869**, of which only ~155 are real invocations; the rest are `tool_result` skill-listing output, skill-body text, and prose. The predicate must match `<command-name>` in **string/text content only**, never `tool_result` bodies.
+- **Suggested action:** None standing — this is a note for the next person who measures skill usage. ⚠️ Applies to any renamed skill, not just this one: `session-handoff`/`session-pause` and `session-capture`/`session-store-learning` have the same split.
+- **Priority:** low (no defect; prevents a wrong conclusion from a plausible-looking grep)
+- **Status:** pending
+
 ## SURFACE-2026-08-14-SESSION-RESTORE-HAS-NO-MANUAL-DOOR
 - **Source:** feature:verify-human (M13 WP1 Phase 3 — surfaced by the verify-self adversarial pass, explicitly left open by the operator at the gate)
 - **Target level:** product:wbs (a candidate M13 WP2 addition, or a later QoL item — deliberately NOT scoped to a WP)
@@ -8,7 +28,7 @@
 - **Context:** ⚠️ This surfaced as the residue of a **corrected false claim**. WP1's Q1 verdict excluded `/session-restore` from the button set on the stated grounds that it was "already a click — M12 auto-fire **plus `sessionStartButton.ts`**". The second half was **false**: that module exports `SESSION_START_COMMAND = "/session-start"` and renders a `/session-start` button. The exclusion still holds on the auto-fire half alone, and the operator confirmed that at verify-human — **but the confirmation was of the exclusion, not of the absence of a manual door**, which was never a decision anyone made. ⚠️ Note the interpretation that makes the exclusion coherent: the 531 typed invocations are plausibly the operator reaching for a skill the automatic path **did not** fire, which would mean a manual door has real, measurable demand rather than being redundant with the auto-fire.
 - **Suggested action:** Decide whether a manual restore affordance belongs in M13 WP2's fixed button row (it would be a 5th skill button, cheap — the row is being built anyway) or is deferred. ⚠️ **Do not treat this as re-opening Q1** — Q1 settled the *shape* of the button surface (a tiny fixed set) and that verdict stands; this asks only whether one more member belongs in it. ⚠️ Before deciding, it is worth measuring **how many of the 531 had `.session.md` present** (i.e. how many were redundant with an auto-fire that should have fired) — that number is the actual demand signal and it is derivable from the same transcripts.
 - **Priority:** medium (no defect; but it concerns the single highest-frequency manual action in the whole workflow, and the cost of adding it during WP2 is near-zero versus a separate later cycle)
-- **Status:** pending
+- **Status:** ⚠️ **RESOLVED 2026-08-14 at M13 WP2 plan time — answer YES**, `/session-restore` joins the button set as member 5 of 6. **Not yet deleted from this file**: the delete-on-resolve rule requires the `**Backlog resolved:**` CHANGELOG line to land in the *same commit* as the deletion, which happens at `feature-finalize`. Full record: `workflow-system/state/wip/m13-wp2-skill-buttons.md` → D3. ⚠️ **The mandated measurement inverted the expected reading**: 97.9% of 523 operator-typed invocations fired with `.session.md` PRESENT, which looks like "auto-fire covers it" — but those are overwhelmingly `/clear`-then-restore in an **already-open** session, a flow open-time auto-fire never runs in. The item's own guess (quoted above: "plausibly the operator reaching for a skill the automatic path did not fire") was **half right**: the automatic path indeed did not fire, but not for the reason it assumed (absent file); rather because the workspace never re-opened.
 
 ## SURFACE-2026-08-14-SKILL-SCAN-COLLAPSES-TWO-FRONTMATTER-ERRORS
 - **Source:** feature:build (M13 WP1 Phase 1, P1.3 — synthetic fixture)
@@ -18,6 +38,7 @@
 - **Context:** Matters for WP2's Q2 verdict on diagnostics: if the scanner surfaces a dirty-entry count to the operator, "unterminated frontmatter" is an actionable authoring bug in a skill the operator owns, whereas "no frontmatter" more often means "this directory is not a skill." Reporting them identically costs the operator the distinction.
 - **Suggested action:** Decide in WP2 task 2.1 whether the diagnostic vocabulary separates them. Cheap either way — it is one branch in the parser. Not worth its own work package.
 - **Priority:** low
+- **Status:** ⚠️ **MOOT as of 2026-08-14** — WP2 task 2.1 chose option (i) (**no scanner**, §4c: the command name is the only sanctioned coupling), so this item's only target no longer exists and **no scanner will be built**. Kept rather than deleted because it is not *resolved*: the finding is real about the probe instrument, and it becomes live again only if some future work reintroduces skill-frontmatter parsing. ⚠️ Do **not** treat this as a reason to build the scanner.
 - **Status:** pending
 
 ## SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT

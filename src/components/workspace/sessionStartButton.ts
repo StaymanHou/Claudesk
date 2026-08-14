@@ -39,30 +39,24 @@
 
 import type { AutoResumeAction } from "../../state/predictAction";
 
-/** The command the manual button sends. A workflow skill — hence gated. */
-export const SESSION_START_COMMAND = "/session-start";
-
-/**
- * Whether the manual `/session-start` button should exist for this workspace.
- *
- * ⚠️ **Deliberately NOT conditioned on the workspace's signals.** An earlier reading of the
- * decision table suggested showing it only when the prediction is `null` (the "neither signal"
- * row). That is wrong, and the reason is worth stating: the table describes what **auto-fires
- * on open**, not what the operator may choose to do afterwards. Starting a fresh workflow
- * session is a legitimate act on a workspace that *could* have resumed — and hiding the button
- * in exactly the case where the operator has to decide something is the opposite of helpful.
- *
- * So the only conditions are: the gate is on, and there is a live session to inject into.
- * A `null` session id means the spawn has not resolved (or failed), and firing into it would
- * be a dead click — the WP6 picker MAJOR, which is why this is a precondition rather than a
- * runtime `if` inside the handler.
- */
-export function showSessionStartButton(inputs: {
-  workflowEnabled: boolean;
-  ccSessionId: string | null;
-}): boolean {
-  return inputs.workflowEnabled && inputs.ccSessionId !== null;
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️ M13 WP2 — `SESSION_START_COMMAND` and `showSessionStartButton` WERE REMOVED FROM HERE.
+//
+// Both moved into `skillButtons.ts` when the skill-button row absorbed this module's button:
+// `/session-start` is a member of the row's fixed set, so keeping a standalone button beside
+// the row would be two affordances for one skill — the redundancy WP2 exists to remove.
+//
+//   `SESSION_START_COMMAND`      → `SKILL_BUTTONS[0].command`
+//   `showSessionStartButton(…)`  → `showSkillButtons(…)`, same two conditions, same contract
+//
+// They were **deleted rather than left exported**, deliberately: a symbol carrying tests and
+// no production caller is worse than an absent one, because the tests read as coverage of
+// something live. That is the M12 dead-`/exit` shape this milestone is explicitly warned about.
+// Their tests were retargeted onto the row, not dropped.
+//
+// ⚠️ The `/session-start`-is-never-auto-fired rationale in the header above STILL APPLIES and
+// is why the row has a `/session-start` button at all. It did not move with the constant.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * The label for the already-open indicator: what this workspace WOULD fire if reopened now,

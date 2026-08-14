@@ -95,10 +95,11 @@ real chronology.
 
 ## pnpm test
 
-- **Last:** 4.48s wall / 1.86s exec (2026-08-14, M13 WP1 Phase 1 verify-codify — 162 files / **2026** pass, 0 fail. Phase 1 is a probe: measurements + doc edits, zero lines under `src/`, so this run's only job is attribution — the count matches M12's close exactly, confirming the work is inert to the frontend. ⚠️ Note the previous entry recorded **1981**, which was already stale against `CLAUDE.md`'s 2026 at the M12 close; the registry — not the suite — had drifted)
-- **Prior:** 3.05s wall / 1.87s exec (2026-08-11, M12 WP4d verify-auto — 159 files / 1981 pass, 0 fail)
+- **Last:** 3.69s wall / 1.78s exec (2026-08-14, M13 WP2 Phase 1 verify-auto — 163 files / **2045** pass, 0 fail. +19 over WP1's 2026: 18 new in `skillButtons.test.ts` (the skill-button row) and +1 net in `sessionStartButton.test.ts`, whose assertions were retargeted rather than deleted when the row absorbed the standalone `/session-start` button)
+- **Prior:** 4.48s wall / 1.86s exec (2026-08-14, M13 WP1 Phase 1 verify-codify — 162 files / 2026 pass, 0 fail. WP1 was a probe: zero lines under `src/`, so its run's only job was attribution)
 - **Use timeout:** 120000
 - **History:**
+  - 3.69s wall / 1.78s exec — 2026-08-14
   - 4.48s wall / 1.86s exec — 2026-08-14
   - 3.05s wall / 1.87s exec — 2026-08-11
   - 3.5s wall / 2.66s exec — 2026-08-05

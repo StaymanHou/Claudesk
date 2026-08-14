@@ -6,6 +6,12 @@ import { availablePanels } from "../../components/workspace/panelHost";
 import { MENU_IDS } from "../../menu/menuBridge";
 import { cellLines } from "../../cc/driveMode";
 import { rowAffordances } from "../../components/picker/announceRow";
+// ARM 5 (M13 WP2) — the skill-button row. Imported from production, not stubbed; the
+// not-vacuous section below pins that.
+import {
+  SKILL_BUTTONS,
+  showSkillButtons,
+} from "../../components/workspace/skillButtons";
 import type { AnnounceMap } from "../predictAction";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -38,7 +44,7 @@ import type { AnnounceMap } from "../predictAction";
 //         below are the only ways this app surfaces UI today, and adding another one
 //         should extend this guard as part of that work.
 //
-// ── THE FOUR REGISTRIES (the fourth added at M12 WP5) ─────────────────────────
+// ── THE FIVE REGISTRIES (the fifth added at M13 WP2) ──────────────────────────
 //   1. PANEL      — `availablePanels(false)`, the right-panel tab set
 //   2. MENU ID    — `MENU_IDS`, the native app menu
 //   3. CHORD      — modules exporting a `*Chord*` identifier
@@ -47,6 +53,15 @@ import type { AnnounceMap } from "../predictAction";
 //                   (a picker cell + a spawn-time action) are none of the first three,
 //                   and this header's own rule above required extending the guard as
 //                   part of that work.
+//   5. SKILL-ROW  — the workspace header's skill-button row: `showSkillButtons(…, false)`
+//                   plus `SKILL_BUTTONS`. Added at M13 WP2 for the same reason arm 4 was:
+//                   a button row in the workspace header is none of the first four.
+//                   ⚠️ Unlike arm 4 this row has NO ungated half (every member is a
+//                   companion-workflow skill), so instead of "the ungated arm must
+//                   survive" the arm pins the PREMISE that licenses the wholesale gate —
+//                   every member is workflow-coupled — plus an emptiness meta-guard,
+//                   since a row emptied to zero members would satisfy the OFF assertion
+//                   vacuously.
 //
 // ── WHEN M11 LANDS ────────────────────────────────────────────────────────────
 // M11's Docs tab MUST NOT appear in the static AVAILABLE_PANELS array. It must be
@@ -480,6 +495,125 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
       off.action,
       "a gated arm must not fire while the gate is OFF",
     ).toBeNull();
+  });
+
+  // ── ARM 5: THE SKILL-BUTTON ROW (M13 WP2) ──────────────────────────────────
+  // M13 surfaces UI through a SIXTH channel none of the first four enumerate: a button row in
+  // the workspace header, whose members are workflow slash commands. Per this file's own
+  // standing rule ("adding another one should extend this guard as part of that work"), WP2
+  // owns this arm.
+  //
+  // ⚠️ Unlike arm 4, this row has NO ungated half — every member is a companion-workflow skill
+  // (`/session-start`, `/session-restore`, `/session-capture`, `/util-*`), so there is no
+  // `--continue`-shaped exception to preserve. The "must not be over-broad" direction is
+  // therefore expressed differently: rather than asserting some member survives while OFF
+  // (none may), the anti-vacuity companion pins that the predicate genuinely reads the gate.
+
+  it("renders no skill button while the gate is OFF", () => {
+    // The row is all-or-nothing: `showSkillButtons` is the single source of truth for whether
+    // ANY of it exists. Asserted as the COMPUTED value (the row-cell arm's discipline), over
+    // both session-id states, because the gate must win regardless of the other precondition.
+    for (const ccSessionId of [null, "cc-1"]) {
+      expect(
+        showSkillButtons({ workflowEnabled: false, ccSessionId }),
+        `the skill-button row must not exist while the gate is OFF (ccSessionId=${ccSessionId})` +
+          ` — a row of workflow slash commands is the definition of a workflow surface`,
+      ).toBe(false);
+    }
+  });
+
+  /**
+   * Command-name prefixes that belong to the COMPANION WORKFLOW SYSTEM.
+   *
+   * ⚠️ This is an allowlist of *provenance*, deliberately NOT a vocabulary match, and the
+   * distinction was forced by this arm failing on its first run: `namesWorkflowTerm()` rejected
+   * `/util-prune-claude-md` and `/util-backlog-paydown`, because neither contains a
+   * `WORKFLOW_TERMS` word. Both ARE workflow-coupled — verified, not assumed: each is a symlink
+   * from `~/.claude/skills/` into the companion repo, so neither exists for a user who has not
+   * installed it. The predicate was wrong, not the set.
+   *
+   * ⚠️ The tempting fix was to add "util" to `WORKFLOW_TERMS`. That would have been WRONG in a
+   * way worth recording: `WORKFLOW_TERMS` is shared by all five arms, and "util" is a generic
+   * word that would have started flagging unrelated panels, menu ids, and chord modules — a
+   * guard that cries wolf gets deleted by the next person who trips it (this file's own header
+   * says so, having already been narrowed once after a substring match on "docs" fired on
+   * "do{cs}tring").
+   *
+   * So the coupling is asserted by the one stable thing §4c permits us to couple to: the
+   * command name's prefix. Adding a member whose prefix is not here is a deliberate act that
+   * fails this test and demands a decision — exactly the intent.
+   */
+  const COMPANION_SKILL_PREFIXES = [
+    "/session-",
+    "/feature-",
+    "/task-",
+    "/incident-",
+    "/product-",
+    "/util-",
+    "/tutorial-",
+  ];
+
+  it("every member of the row is a COMPANION-workflow skill — licensing the wholesale gate", () => {
+    // ⚠️ This is the arm's real subject, and it is why a single boolean is enough for the row.
+    // The row is gated WHOLESALE, which is only sound while every member is genuinely
+    // workflow-coupled: if someone added a universal command (a stock Claude Code slash command
+    // serving every user), the correct treatment would be arm 4's per-arm split, NOT the blanket
+    // gate. So this asserts the premise that makes the blanket gate legitimate, and it fails
+    // when that premise stops holding — which is the moment the design needs revisiting.
+    //
+    // This is the counterpart to arm 4's "the ungated arm must SURVIVE" half. There, an
+    // over-broad gate would have deleted a feature from every non-workflow user. Here the
+    // failure direction is inverted: a member that ISN'T companion-coupled would be gated away
+    // from users entitled to it. Same invariant, opposite polarity.
+    for (const { command } of SKILL_BUTTONS) {
+      expect(
+        COMPANION_SKILL_PREFIXES.some((p) => command.startsWith(p)),
+        `"${command}" is in the wholesale-gated skill row but is not a companion-workflow ` +
+          `skill by prefix. If it serves every Claude Code user, it must NOT be gated with the ` +
+          `rest of the row — split it out per arm 4's precedent. If it IS a companion skill ` +
+          `with a new prefix, add that prefix DELIBERATELY and say why.`,
+      ).toBe(true);
+    }
+  });
+
+  it("the companion-prefix allowlist is not a rubber stamp", () => {
+    // ⚠️ Non-vacuity for the allowlist itself. A prefix list containing "/" (or ""), or one
+    // widened until everything matches, would make the assertion above trivially true while
+    // reading as a real check — the same shape as a `?raw` guard satisfied by its own comments.
+    // So: a stock Claude Code command and a bare slash must both be REJECTED.
+    for (const universal of ["/clear", "/resume", "/help", "/exit", "/"]) {
+      expect(
+        COMPANION_SKILL_PREFIXES.some((p) => universal.startsWith(p)),
+        `"${universal}" is a stock Claude Code command and must NOT satisfy the companion ` +
+          `allowlist — if it does, the allowlist has been widened into a rubber stamp`,
+      ).toBe(false);
+    }
+  });
+
+  it("the row is genuinely gate-DERIVED, not a constant that ignores the gate", () => {
+    // Anti-vacuity companion, exactly parallel to the panel and picker-cell arms. "OFF yields
+    // false" is satisfied just as well by a predicate that ignores its gate argument and always
+    // returns false — in which case the row could never appear at all and the assertion above
+    // would guard nothing. Pinning that ON differs from OFF is what makes the OFF assertion
+    // load-bearing rather than trivially true.
+    expect(
+      showSkillButtons({ workflowEnabled: true, ccSessionId: "cc-1" }),
+      "turning the gate ON (with a live session) must yield the row — otherwise the predicate " +
+        "is a constant and the OFF-state assertion above proves nothing",
+    ).toBe(true);
+    // ...and the gate is the term that flipped it, not the session id: holding the session id
+    // fixed and moving ONLY the gate must change the answer.
+    expect(
+      showSkillButtons({ workflowEnabled: false, ccSessionId: "cc-1" }),
+    ).toBe(false);
+  });
+
+  it("the set is non-empty — an empty row would satisfy every assertion above vacuously", () => {
+    // ⚠️ The emptiness meta-guard. Deleting every member makes "no skill button while OFF" and
+    // "every member is workflow-coupled" both trivially true (a loop over nothing passes), so
+    // the arm would report compliance while the surface it guards had ceased to exist. This is
+    // the same non-vacuity discipline the `?raw` guards in this repo learned the hard way.
+    expect(SKILL_BUTTONS.length).toBeGreaterThan(0);
   });
 
   it("still announces the UNGATED arm while OFF — the arm must not be over-broad", () => {
@@ -1087,6 +1221,40 @@ export function selectPanel(panel: RightPanel, available: readonly RightPanel[])
     expect(announced.announcement !== null).toBe(announced.showNoFireDoor);
     const silent = rowAffordances(path, {}, true);
     expect(silent.announcement !== null).toBe(silent.showNoFireDoor);
+  });
+
+  it("the skill-row arm asserts the REAL row, not a local re-implementation", () => {
+    // M13 WP2, the same discipline arm 4's test above applies. A guard that re-implemented the
+    // row's predicate — or that asserted against a locally-written array of command strings —
+    // would inherit the code's blind spot and would keep passing after the real row changed.
+    // (This repo has shipped exactly that: an allowlist test that built a hand-copied duplicate
+    // and checked invented paths against the literal it had just written,
+    // `SURFACE-2026-07-28-QUALITY-WP2-ALLOWLIST-TEST-HALF-TAUTOLOGICAL`.)
+    //
+    // So assert properties only the real production values have.
+    expect(
+      typeof showSkillButtons,
+      "showSkillButtons must be imported, not stubbed",
+    ).toBe("function");
+    expect(Array.isArray(SKILL_BUTTONS)).toBe(true);
+
+    // The real predicate needs BOTH terms — a stub returning `gate` alone would pass arm 5's
+    // assertions but not this, since the null-session case must also be false while ON.
+    expect(showSkillButtons({ workflowEnabled: true, ccSessionId: null })).toBe(
+      false,
+    );
+    expect(
+      showSkillButtons({ workflowEnabled: true, ccSessionId: "cc-1" }),
+    ).toBe(true);
+
+    // And the real set carries the full button shape (command + label + title), which a bare
+    // array of strings written to satisfy arm 5 would not. `/session-start` is asserted
+    // specifically because it is the member absorbed from the standalone button — if the row
+    // ever loses it, that button must not silently come back as a second affordance.
+    const start = SKILL_BUTTONS.find((b) => b.command === "/session-start");
+    expect(start, "the row must still own /session-start").toBeDefined();
+    expect(typeof start?.label).toBe("string");
+    expect(start?.title).toContain("/session-start");
   });
 
   it("the matcher fires on real workflow terms", () => {

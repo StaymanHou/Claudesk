@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import {
-  nextOpenIndicator,
-  SESSION_START_COMMAND,
-  showSessionStartButton,
-} from "../sessionStartButton";
+import { nextOpenIndicator } from "../sessionStartButton";
+// M13 WP2 — the skill-button row absorbed this module's `/session-start` button, so the
+// visibility predicate and the command string now live there. The four `showSkillButtons` tests
+// below are the RETARGETED originals, not new ones: each property they assert was written for
+// `showSessionStartButton` and is inherited unchanged by the row.
+import { SKILL_BUTTONS, showSkillButtons } from "../skillButtons";
 import { predictAction } from "../../../state/predictAction";
 
 // M12 WP3 Phase 5 — the third arm's contract.
@@ -18,19 +19,19 @@ import { predictAction } from "../../../state/predictAction";
 // guards at the bottom are confined to wiring, which no value can observe without a render
 // harness (`SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS`).
 
-describe("showSessionStartButton — when the manual button exists", () => {
+describe("showSkillButtons — when the skill-button row exists", () => {
   it("exists when the gate is ON and a session is live", () => {
     expect(
-      showSessionStartButton({ workflowEnabled: true, ccSessionId: "cc-1" }),
+      showSkillButtons({ workflowEnabled: true, ccSessionId: "cc-1" }),
     ).toBe(true);
   });
 
   it("does NOT exist when the gate is OFF", () => {
     // ⚠️ The M10.9 seam contract: a gated surface must not EXIST when off — not
-    // rendered-then-hidden, not disabled, not a no-op handler. `/session-start` is a
-    // companion-workflow skill, so unlike the `--continue` arm it is genuinely gated.
+    // rendered-then-hidden, not disabled, not a no-op handler. Every command in the row is a
+    // companion-workflow skill, so unlike the `--continue` arm the row is genuinely gated.
     expect(
-      showSessionStartButton({ workflowEnabled: false, ccSessionId: "cc-1" }),
+      showSkillButtons({ workflowEnabled: false, ccSessionId: "cc-1" }),
     ).toBe(false);
   });
 
@@ -38,20 +39,20 @@ describe("showSessionStartButton — when the manual button exists", () => {
     // Firing into a null session is a dead click (the WP6 picker MAJOR). Making this a
     // precondition rather than a guard inside the handler means the affordance is absent
     // rather than present-and-broken.
-    expect(
-      showSessionStartButton({ workflowEnabled: true, ccSessionId: null }),
-    ).toBe(false);
+    expect(showSkillButtons({ workflowEnabled: true, ccSessionId: null })).toBe(
+      false,
+    );
   });
 
   it("is NOT conditioned on the workspace's auto-resume signals", () => {
     // ⚠️ Asserts a DELIBERATE non-condition, so a future reader does not "complete" the
-    // decision table by hiding the button when a prediction exists. The table describes what
+    // decision table by hiding the row when a prediction exists. The table describes what
     // AUTO-FIRES ON OPEN; it says nothing about what the operator may choose afterwards, and
-    // hiding the button exactly when there is a decision to make is backwards.
+    // hiding the affordance exactly when there is a decision to make is backwards.
     //
     // The signature is the proof: there is no action/signal parameter to condition on.
     const withLiveSession = { workflowEnabled: true, ccSessionId: "cc-1" };
-    expect(showSessionStartButton(withLiveSession)).toBe(true);
+    expect(showSkillButtons(withLiveSession)).toBe(true);
     expect(Object.keys(withLiveSession)).toEqual([
       "workflowEnabled",
       "ccSessionId",
@@ -59,7 +60,12 @@ describe("showSessionStartButton — when the manual button exists", () => {
   });
 
   it("sends /session-start, and never a name that does not exist", () => {
-    expect(SESSION_START_COMMAND).toBe("/session-start");
+    // ⚠️ The original assertion was `SESSION_START_COMMAND === "/session-start"`. That constant
+    // was RETIRED at M13 WP2 rather than left exported-with-no-caller — the M12 dead-`/exit`
+    // shape, where a symbol with tests and no callers reads as coverage of something live. The
+    // command string now lives in the row's set, so the property is asserted against the thing
+    // production actually renders.
+    expect(SKILL_BUTTONS.map((b) => b.command)).toContain("/session-start");
   });
 });
 
@@ -141,27 +147,32 @@ describe("nextOpenIndicator — the unclean flag stops being write-only", () => 
 });
 
 /**
- * The `fireSessionStart` handler's body — so assertions about the FIRE are scoped to the fire,
- * rather than passing because some other part of a 500-line component happens to contain the text.
+ * The `fireSkill` handler's body — so assertions about the FIRE are scoped to the fire, rather
+ * than passing because some other part of a 500-line component happens to contain the text.
  *
  * ⚠️ Throws rather than returning `""` when the anchors are gone. A slice that silently yields an
  * empty string makes `not.toContain(...)` pass vacuously and `toContain(...)` fail confusingly —
  * the positional-`?raw` hole this repo has hit three times. Anchored on the declaration name (not
  * a line number or an ordinal), so an unrelated edit above it cannot retarget the slice.
+ *
+ * ⚠️ **RETARGETED AT M13 WP2** — was `const fireSessionStart = () => {`. The standalone
+ * `/session-start` handler became `fireSkill(command)`, the row's shared handler, when the button
+ * was absorbed into the skill-button row. The extractor was updated DELIBERATELY (as its own
+ * error message demands) rather than deleted, because what it scopes is still load-bearing.
  */
 function extractFireHandler(source: string): string {
-  const start = source.indexOf("const fireSessionStart = () => {");
+  const start = source.indexOf("const fireSkill = (command: string) => {");
   if (start === -1) {
     throw new Error(
-      "could not locate `const fireSessionStart = () => {` in Workspace.tsx. If the handler was " +
-        "renamed or reshaped, update this extractor DELIBERATELY — it is what scopes the " +
-        "injection assertions to the fire path.",
+      "could not locate `const fireSkill = (command: string) => {` in Workspace.tsx. If the " +
+        "handler was renamed or reshaped, update this extractor DELIBERATELY — it is what " +
+        "scopes the injection assertions to the fire path.",
     );
   }
   const end = source.indexOf("\n  };", start);
   if (end === -1) {
     throw new Error(
-      "found `fireSessionStart` but not its closing `};` in Workspace.tsx.",
+      "found `fireSkill` but not its closing `};` in Workspace.tsx.",
     );
   }
   return source.slice(start, end);
@@ -184,7 +195,12 @@ describe("the fire-handler extractor fails loudly rather than scanning nothing",
         "utf8",
       ),
     );
-    expect(sliced).toContain("cc_input");
+    // ⚠️ Was `toContain("cc_input")`. The handler no longer names the IPC command — M13 WP2
+    // funnelled the send through `fireSkillCommand` → `injectCommand`, which owns `cc_input`,
+    // the `.catch`, and the payload rule. Anchoring on the funnel call is the honest
+    // replacement; the `cc_input`/`.catch` properties are asserted at the funnel instead (see
+    // "the funnel owns the injection contract" below), NOT dropped.
+    expect(sliced).toContain("fireSkillCommand(");
     expect(sliced.length).toBeLessThan(1200);
   });
 });
@@ -208,9 +224,13 @@ describe("wiring — the properties no value can observe (source guards)", () =>
     expect(ws).toContain("workspace-header");
   });
 
-  it("both surfaces come from the pure module, not re-decided inline", () => {
+  it("both surfaces come from a pure module, not re-decided inline", () => {
     // Asserted as CALL shapes. A bare identifier would be satisfied by the import line.
-    expect(ws).toContain("showSessionStartButton(");
+    // ⚠️ `showSessionStartButton(` became `showSkillButtons(` at M13 WP2: the standalone button
+    // was absorbed into the skill-button row, whose visibility predicate inherits the same two
+    // conditions (gate on + live session id). The property asserted is unchanged — the decision
+    // is made in a pure module and merely consumed here.
+    expect(ws).toContain("showSkillButtons(");
     expect(ws).toContain("nextOpenIndicator(");
   });
 
@@ -249,31 +269,58 @@ describe("wiring — the properties no value can observe (source guards)", () =>
     );
   });
 
-  it("the injection goes through cc_input with the shared payload helper", () => {
-    // No new byte-composing primitive: `slashCommandPayload` mirrors Rust's
-    // `slash_command_bytes` and is pinned byte-for-byte by `autoResumeFire.test.ts`. A
-    // hand-rolled `btoa(cmd + "\r")` here would be a second source of truth AND would
-    // re-introduce the M10.5 WP4 mojibake bug (btoa truncates to `& 0xff`).
-    expect(ws).toContain("slashCommandPayload(");
+  it("Workspace.tsx composes NO payload of its own — the funnel owns that", () => {
+    // ⚠️ REWRITTEN AT M13 WP2, and the rewrite is the point. This used to assert
+    // `ws.toContain("slashCommandPayload(")` — true when the component hand-rolled its own
+    // `invoke("cc_input", …)`. WP2 funnelled the send through `fireSkillCommand` → `injectCommand`,
+    // so the component correctly no longer names the payload helper, and the old assertion would
+    // now be enforcing the DUPLICATION it was written to prevent (the second-injection-path shape
+    // the WBS forbids). The durable property is that the component composes nothing itself:
     expect(ws).not.toMatch(/btoa\(/);
+    expect(
+      ws,
+      "Workspace.tsx must not compose its own payload — one send path, in the funnel",
+    ).not.toContain("slashCommandPayload(");
+    expect(
+      ws,
+      "Workspace.tsx must not call cc_input directly — it goes through fireSkillCommand",
+    ).not.toMatch(/invoke\(\s*"cc_input"/);
   });
 
-  it("the button's handler injects into THIS workspace's session, with a .catch", () => {
-    // ⚠️ ADDED AT VERIFY-CODIFY. verify-self proved the button executes live, but nothing pinned
-    // the three things that make it correct rather than accidentally-working, and each has a
-    // named precedent for going wrong:
-    //   • the session id comes from the WORKSPACE record — a hardcoded or wrong-workspace id
-    //     would type a slash command into someone else's live conversation;
-    //   • the payload is the shared helper (asserted separately above);
+  it("the funnel owns the injection contract: cc_input, the shared payload, and a .catch", () => {
+    // ⚠️ These three assertions MOVED here from the component (M13 WP2) rather than being
+    // deleted — the properties still matter, they just have a new home. Each has a named
+    // precedent for going wrong:
+    //   • the payload is the shared helper — `slashCommandPayload` mirrors Rust's
+    //     `slash_command_bytes` and is pinned byte-for-byte by `autoResumeFire.test.ts`. A
+    //     hand-rolled `btoa(cmd + "\r")` would be a second source of truth AND would
+    //     re-introduce the M10.5 WP4 mojibake bug (btoa truncates to `& 0xff`);
     //   • the `invoke` has a `.catch` — a Tauri rejection with no handler vanishes silently
-    //     (the WP6 picker MAJOR).
+    //     (the WP6 picker MAJOR);
+    //   • no error dispatch: an injection miss must not replace a working terminal with an
+    //     error overlay over a command the user can simply type (operator-settled surfacing).
+    const fire = readFileSync(
+      fileURLToPath(new URL("../autoResumeFire.ts", import.meta.url)),
+      "utf8",
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(
+      fire.length,
+      "autoResumeFire.ts is unreadable — every assertion below would pass vacuously",
+    ).toBeGreaterThan(500);
+    expect(fire).toContain("slashCommandPayload(");
+    expect(fire).toMatch(/invoke\(\s*"cc_input"/);
+    expect(fire).toMatch(/\.catch\(|catch\s*\(/);
+    expect(fire).not.toContain("spawn-failed");
+  });
+
+  it("the handler injects into THIS workspace's session", () => {
+    // The session id comes from the WORKSPACE record — a hardcoded or wrong-workspace id would
+    // type a slash command into someone else's live conversation. Scoped to the handler body so
+    // it cannot pass on an unrelated mention elsewhere in a 900-line component.
     const handler = extractFireHandler(ws);
     expect(handler).toContain("workspace.cc_session_id");
-    expect(handler).toMatch(/invoke\(\s*"cc_input"/);
-    expect(handler).toMatch(/\.catch\(/);
-    // ⚠️ And NO error dispatch: an injection miss must not replace a working terminal with an
-    // error overlay over a command the user can simply type (the operator-settled surfacing).
-    expect(handler).not.toContain("spawn-failed");
   });
 
   it("the indicator fetches via the picker's batched command, with a .catch", () => {

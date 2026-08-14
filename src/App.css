@@ -585,14 +585,32 @@ body,
   white-space: nowrap;
 }
 
-/* M12 WP3 Phase 5 — the manual /session-start button. Deliberately ONE hardcoded
-   button, not a registry: M13 builds the generic skill palette and either absorbs
-   this or keeps it as a pinned special case.
+/* M13 WP2 — the skill-button row. ANSWERS the question M12 WP3 left here: its
+   `.workspace-session-start` comment predicted "M13 builds the generic skill palette and
+   either absorbs this or keeps it as a pinned special case", and the answer is ABSORBS —
+   `/session-start` is a member of the row's fixed set, so a standalone button beside the
+   row would be two affordances for one skill.
 
-   Styled as a quiet secondary action rather than a primary one — it is the 2.7% path
-   (the log-mined share of cold opens that start a fresh workflow session), so it must
-   be reachable without competing with the project name for attention. */
-.workspace-session-start {
+   ⚠️ NOT a "generic skill palette" either, which is the other half of that prediction:
+   there are FIVE hardcoded commands, not a registry over `~/.claude/skills/`. See
+   `skillButtons.ts`'s header for why 61 buttons would be a worse launcher than typing.
+
+   Styled as quiet secondary actions, inheriting the single button's treatment: these are
+   low-frequency paths (three of the five were fired <=3 times ever) and must be reachable
+   without competing with the project name for attention. */
+.workspace-skill-row {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+  /* ⚠️ min-width:0 + the wrapper being shrinkable is what keeps five buttons from pushing
+     the split control off the row at a narrow window. The buttons themselves do NOT
+     shrink (they would become unreadable slivers); the row clips instead. */
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace-skill-btn {
   flex-shrink: 0;
   padding: 0.1rem 0.4rem;
   border: 1px solid rgba(128, 128, 128, 0.35);
@@ -603,9 +621,10 @@ body,
   font-family: inherit;
   font-size: 0.72rem;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.workspace-session-start:hover {
+.workspace-skill-btn:hover {
   opacity: 1;
   border-color: rgba(110, 168, 255, 0.6);
 }

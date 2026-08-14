@@ -49,12 +49,16 @@ import {
 // about `workflow-system/` state), unlike Phase 3.5's ungated `--continue` announcement.
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import { actionFromAnnounced } from "../../state/predictAction";
-import { slashCommandPayload } from "./autoResumeFire";
+import { nextOpenIndicator } from "./sessionStartButton";
+// M13 WP2 — the skill-button row. ⚠️ It ABSORBED the standalone `/session-start` button that
+// used to live here: `/session-start` is a member of the row's fixed set, so keeping both would
+// be two affordances for one skill (exactly the redundancy the WBS calls "the problem").
+// `sessionStartButton.ts` still owns `nextOpenIndicator` and the never-auto-fire rationale.
 import {
-  nextOpenIndicator,
-  SESSION_START_COMMAND,
-  showSessionStartButton,
-} from "./sessionStartButton";
+  fireSkillCommand,
+  SKILL_BUTTONS,
+  showSkillButtons,
+} from "./skillButtons";
 
 interface WorkspaceProps {
   workspace: WorkspaceModel;
@@ -155,27 +159,21 @@ export function Workspace({
   }, [workflowEnabled, visible, workspace.project_path]);
 
   /**
-   * Fire `/session-start` into this workspace's live CC session, on an explicit click only.
+   * Fire a skill command into this workspace's live CC session, on an explicit click only.
    *
-   * ⚠️ No delay. Phase 1's 1500 ms settle is about a COLD spawn whose TUI has not started
-   * reading keystrokes; this fires into a session the operator is already looking at, through
-   * the same `cc_input` path every real keypress uses.
+   * ⚠️ **Every skill button routes through here, and here routes through ONE funnel**
+   * (`fireSkillCommand` → `injectCommand`). This replaced a hand-rolled `invoke("cc_input", …)`
+   * that duplicated both the `.catch` and the `\r` payload rule — a second injection path for
+   * the same rule, which is what task 2.6's "funnel every send through ONE function" forbids.
+   *
+   * Error surfacing is settled and lives in `injectCommand`: `console.warn` for diagnosis, and
+   * NO error overlay — replacing a working terminal with an error, over a command the user can
+   * simply type, would be worse.
    */
-  const fireSessionStart = () => {
+  const fireSkill = (command: string) => {
     const sessionId = workspace.cc_session_id;
-    if (sessionId === null) return; // unreachable — the button does not render without one.
-    invoke("cc_input", {
-      sessionId,
-      data: slashCommandPayload(SESSION_START_COMMAND),
-    }).catch((e) => {
-      // Same surfacing decision as the auto-fire (operator-settled): the terminal IS the
-      // evidence, so a `console.warn` for diagnosis and NO error overlay — replacing a working
-      // terminal with an error over a command the user can simply type would be worse.
-      console.warn(
-        `session-start: injecting ${SESSION_START_COMMAND} into ${sessionId} failed`,
-        e,
-      );
-    });
+    if (sessionId === null) return; // unreachable — the row does not render without one.
+    void fireSkillCommand(sessionId, command);
   };
 
   // QoL-WP3 — auto-focus the LEFT CC terminal on the false→true `visible` edge (and on
@@ -410,20 +408,33 @@ export function Workspace({
             ↻ {nextOpen}
           </span>
         )}
-        {showSessionStartButton({
+        {/* M13 WP2 — the skill-button row. Five fixed workflow commands as clicks, plus the
+            Recycle button (WP3's operation). ⚠️ GATED as a whole: every command is a companion-
+            workflow skill, so with the gate off the row is ABSENT, not hidden or disabled.
+            ⚠️ This absorbed the standalone `/session-start` button — that command is a member of
+            the set, and two affordances for one skill is the redundancy WP2 exists to avoid. */}
+        {showSkillButtons({
           workflowEnabled,
           ccSessionId: workspace.cc_session_id,
         }) && (
-          <button
-            type="button"
-            className="workspace-session-start"
-            data-testid="workspace-session-start"
-            aria-label={`Run ${SESSION_START_COMMAND} in ${workspace.display_name}`}
-            title={`Run ${SESSION_START_COMMAND} — never auto-fired; this is the one-click route`}
-            onClick={fireSessionStart}
+          <div
+            className="workspace-skill-row"
+            data-testid="workspace-skill-row"
           >
-            {SESSION_START_COMMAND}
-          </button>
+            {SKILL_BUTTONS.map((btn) => (
+              <button
+                key={btn.command}
+                type="button"
+                className="workspace-skill-btn"
+                data-testid={`workspace-skill-${btn.command.slice(1)}`}
+                aria-label={`Run ${btn.command} in ${workspace.display_name}`}
+                title={btn.title}
+                onClick={() => fireSkill(btn.command)}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
         )}
         {/* M6 WP3 — the split-ratio control. Two collapse toggles (◀ CC / ED ▶)
             flank a cycle button whose label is the current ratio (3:1 / 2:2 / 1:3).
