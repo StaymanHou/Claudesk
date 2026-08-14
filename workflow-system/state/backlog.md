@@ -1,5 +1,25 @@
 # Backlog
 
+## SURFACE-2026-08-14-SESSION-RESTORE-HAS-NO-MANUAL-DOOR
+- **Source:** feature:verify-human (M13 WP1 Phase 3 — surfaced by the verify-self adversarial pass, explicitly left open by the operator at the gate)
+- **Target level:** product:wbs (a candidate M13 WP2 addition, or a later QoL item — deliberately NOT scoped to a WP)
+- **Type:** gap (product question, not a defect)
+- **Summary:** `/session-restore` is **92.0% of all manual workflow-skill invocations** (531 of 577, measured across 2470 transcripts) and has **no click affordance whatsoever**. It reaches CC only through M12's *automatic* open-time arm (`predictAction.ts:140`, fired when `.session.md` is present). When that arm does not apply — no `.session.md`, or the operator wants to restore deliberately at a moment of their choosing — the only door is typing.
+- **Context:** ⚠️ This surfaced as the residue of a **corrected false claim**. WP1's Q1 verdict excluded `/session-restore` from the button set on the stated grounds that it was "already a click — M12 auto-fire **plus `sessionStartButton.ts`**". The second half was **false**: that module exports `SESSION_START_COMMAND = "/session-start"` and renders a `/session-start` button. The exclusion still holds on the auto-fire half alone, and the operator confirmed that at verify-human — **but the confirmation was of the exclusion, not of the absence of a manual door**, which was never a decision anyone made. ⚠️ Note the interpretation that makes the exclusion coherent: the 531 typed invocations are plausibly the operator reaching for a skill the automatic path **did not** fire, which would mean a manual door has real, measurable demand rather than being redundant with the auto-fire.
+- **Suggested action:** Decide whether a manual restore affordance belongs in M13 WP2's fixed button row (it would be a 5th skill button, cheap — the row is being built anyway) or is deferred. ⚠️ **Do not treat this as re-opening Q1** — Q1 settled the *shape* of the button surface (a tiny fixed set) and that verdict stands; this asks only whether one more member belongs in it. ⚠️ Before deciding, it is worth measuring **how many of the 531 had `.session.md` present** (i.e. how many were redundant with an auto-fire that should have fired) — that number is the actual demand signal and it is derivable from the same transcripts.
+- **Priority:** medium (no defect; but it concerns the single highest-frequency manual action in the whole workflow, and the cost of adding it during WP2 is near-zero versus a separate later cycle)
+- **Status:** pending
+
+## SURFACE-2026-08-14-SKILL-SCAN-COLLAPSES-TWO-FRONTMATTER-ERRORS
+- **Source:** feature:build (M13 WP1 Phase 1, P1.3 — synthetic fixture)
+- **Target level:** product:wbs (M13 WP2, task 2.1 — a scanner design detail, not a defect)
+- **Type:** gap
+- **Summary:** The probe classifier collapses two distinct authoring errors into one class: a `SKILL.md` with **no** `---` fenced block and a `SKILL.md` whose block is **opened but never terminated** both classify as `no-frontmatter`. The real skill dir has neither case (all 50 valid entries parse), so this only surfaced against the synthetic fixture.
+- **Context:** Matters for WP2's Q2 verdict on diagnostics: if the scanner surfaces a dirty-entry count to the operator, "unterminated frontmatter" is an actionable authoring bug in a skill the operator owns, whereas "no frontmatter" more often means "this directory is not a skill." Reporting them identically costs the operator the distinction.
+- **Suggested action:** Decide in WP2 task 2.1 whether the diagnostic vocabulary separates them. Cheap either way — it is one branch in the parser. Not worth its own work package.
+- **Priority:** low
+- **Status:** pending
+
 ## SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT
 - **Source:** M12 WP4c code review; scope NARROWED at the 2026-08-12 paydown sweep (WP7)
 - **Target level:** product:arch (repo-wide verification hygiene)

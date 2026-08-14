@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-12
+updated: 2026-08-14
 ---
 
 # Runtime Registry
@@ -95,9 +95,11 @@ real chronology.
 
 ## pnpm test
 
-- **Last:** 3.05s wall / 1.87s exec (2026-08-11, M12 WP4d verify-auto — 159 files / **1981** pass, 0 fail. WP4d is documentation-only, so this run's purpose is to establish that the doc edits changed nothing: the count is **unchanged** from WP4c's close, and a later failure must not be attributed here)
+- **Last:** 4.48s wall / 1.86s exec (2026-08-14, M13 WP1 Phase 1 verify-codify — 162 files / **2026** pass, 0 fail. Phase 1 is a probe: measurements + doc edits, zero lines under `src/`, so this run's only job is attribution — the count matches M12's close exactly, confirming the work is inert to the frontend. ⚠️ Note the previous entry recorded **1981**, which was already stale against `CLAUDE.md`'s 2026 at the M12 close; the registry — not the suite — had drifted)
+- **Prior:** 3.05s wall / 1.87s exec (2026-08-11, M12 WP4d verify-auto — 159 files / 1981 pass, 0 fail)
 - **Use timeout:** 120000
 - **History:**
+  - 4.48s wall / 1.86s exec — 2026-08-14
   - 3.05s wall / 1.87s exec — 2026-08-11
   - 3.5s wall / 2.66s exec — 2026-08-05
   - 3.5s wall / 2.5s exec — 2026-08-04
@@ -211,11 +213,13 @@ ordinary build's cache — the two use different `RUSTFLAGS`). Warm runs are ~1s
 
 ## cargo test
 
-- **Last:** 12s wall / 4.04s warm exec (2026-08-12, paydown WP1 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail, **+1 ignored**. Deleting the callerless `project_get_default_model` command left the lib count **unchanged at 823** — the right result, since no test drove it; that is the attribution. The new ignored test is `stale_dead_code_allows`, which is opt-in because it runs its own `cargo check`)
+- **Last:** 18.6s wall / 3.86s warm exec (2026-08-14, M13 WP1 Phase 1 verify-codify: full `cargo test -p claudesk`, **827 lib** + 16 hook_pl_output + 1 integration = **844 pass** / 0 fail, +1 ignored. Phase 1 touched no Rust — measurements + doc edits only — so this run's only job is attribution, and the count matches `CLAUDE.md`'s recorded 827. ⚠️ A verify-human finding claiming the app-quit clean-exit route had no caller was **retracted** this phase: the clear is implemented in `perform_quit_teardown` and covered by 4 tests. No code changed, so no count movement is expected or observed)
+- **Prior:** 12s wall / 4.04s warm exec (2026-08-12, paydown WP1 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail, **+1 ignored**. Deleting the callerless `project_get_default_model` command left the lib count **unchanged at 823** — the right result, since no test drove it; that is the attribution. The new ignored test is `stale_dead_code_allows`, which is opt-in because it runs its own `cargo check`)
 - **Prior:** 14s wall / 4.80s warm exec (2026-08-12, M12 WP5 Phase 1-3 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP5 is frontend-only so far, so this run's job is attribution — the count matches WP4d exactly, confirming the guard work is inert to Rust)
 - **Prior:** 8s wall / 4.30s warm exec (2026-08-11, M12 WP4d verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP4d touched no Rust at all, so this run's only job is attribution — the count matches WP4c's post-review close, confirming the doc edits are inert)
 - **Use timeout:** 510000
 - **History:**
+  - 18.6s — 2026-08-14
   - 12s — 2026-08-12
   - 14s — 2026-08-12
   - 8s wall / 4.30s exec — 2026-08-11 (840 total; WP4d doc-only — run purely to prove inertness)
