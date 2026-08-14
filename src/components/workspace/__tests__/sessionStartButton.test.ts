@@ -295,7 +295,7 @@ describe("wiring — the properties no value can observe (source guards)", () =>
     //     `slash_command_bytes` and is pinned byte-for-byte by `autoResumeFire.test.ts`. A
     //     hand-rolled `btoa(cmd + "\r")` would be a second source of truth AND would
     //     re-introduce the M10.5 WP4 mojibake bug (btoa truncates to `& 0xff`);
-    //   • the `invoke` has a `.catch` — a Tauri rejection with no handler vanishes silently
+    //   • the rejection is HANDLED — a Tauri rejection with no handler vanishes silently
     //     (the WP6 picker MAJOR);
     //   • no error dispatch: an injection miss must not replace a working terminal with an
     //     error overlay over a command the user can simply type (operator-settled surfacing).
@@ -311,7 +311,16 @@ describe("wiring — the properties no value can observe (source guards)", () =>
     ).toBeGreaterThan(500);
     expect(fire).toContain("slashCommandPayload(");
     expect(fire).toMatch(/invoke\(\s*"cc_input"/);
-    expect(fire).toMatch(/\.catch\(|catch\s*\(/);
+    // ⚠️ Was `/\.catch\(|catch\s*\(/` — a two-armed regex whose `.catch(` arm matched ZERO
+    // times (this funnel uses `try`/`catch`, not a promise `.catch`), leaving only the loose arm
+    // live: it passed on any `catch (` anywhere in the module, unscoped to the injection path.
+    // Narrowed to the `await invoke(…)` inside a `try` that has a `catch`, which is the property
+    // the comment above actually claims. ⚠️ The RUNTIME proof is
+    // `skillButtons.test.ts`'s "a rejected invoke does not throw" — a source guard cannot
+    // observe handling, so this only pins the shape.
+    expect(fire).toMatch(
+      /try\s*\{[\s\S]*?await invoke\([\s\S]*?\}\s*catch\s*\(/,
+    );
     expect(fire).not.toContain("spawn-failed");
   });
 

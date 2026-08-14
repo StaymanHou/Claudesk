@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { hasRule } from "../../../test-support/cssRule";
 
@@ -13,7 +13,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-const { SKILL_BUTTONS, showSkillButtons, fireSkillCommand, DECIDED_ROW_SIZE } =
+const { SKILL_BUTTONS, showSkillButtons, fireSkillCommand } =
   await import("../skillButtons");
 const { slashCommandPayload } = await import("../autoResumeFire");
 
@@ -92,73 +92,38 @@ describe("the set — what it is, and what is deliberately NOT asserted", () => 
   });
 });
 
-describe("⚠️ the sixth member (Recycle) is WP3's — and must not be forgotten", () => {
-  it("the row is 5 of a DECIDED 6 — Recycle arrives with WP3", () => {
-    // WP2 ships 5; the decided row is 6. Asserted so the gap is a recorded, visible state
-    // rather than something a reader has to infer from a comment.
-    expect(DECIDED_ROW_SIZE).toBe(6);
-    expect(SKILL_BUTTONS.length).toBe(DECIDED_ROW_SIZE - 1);
-  });
-
-  it("⚠️ FAILS once WP3 wires the recycle route while the row is still 5", () => {
-    // ⚠️ THE ANTI-FORGETTING GUARD, and the reason it is a test rather than a TODO. WP2's
-    // Phase-3 decision was to omit Recycle rather than ship it disabled; the risk of that
-    // choice is the set quietly staying at 5 forever — a scope reduction by inattention.
-    //
-    // The trigger is mechanical: `"recycle-session"` exists in `CleanExitRoute` TODAY with
-    // ZERO production callers (WP1 flagged it — the enum member, wire name, and TS union all
-    // shipped at M12 with nothing invoking them, which is the M12 dead-`/exit` shape). So the
-    // moment a real caller appears, WP3 is landing, and the row must grow to 6.
-    //
-    // ⚠️ Counted over PRODUCTION source only (`src/**`, excluding `__tests__`), because the
-    // route is already named by its own tests and by this file — counting those would make the
-    // guard fire immediately and get it deleted as a false positive.
-    const srcRoot = fileURLToPath(new URL("../../..", import.meta.url));
-    const files: string[] = [];
-    const walk = (dir: string) => {
-      for (const e of readdirSync(dir, { withFileTypes: true })) {
-        const p = `${dir}/${e.name}`;
-        if (e.isDirectory()) {
-          if (e.name !== "__tests__" && e.name !== "node_modules") walk(p);
-        } else if (/\.(ts|tsx)$/.test(e.name)) files.push(p);
-      }
-    };
-    walk(srcRoot);
-
-    // The declaration itself is not a caller — exclude the module that DEFINES the union.
-    const callers = files.filter((f) => {
-      if (f.endsWith("/state/cleanExit.ts")) return false;
-      const body = readFileSync(f, "utf8")
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "");
-      return body.includes('"recycle-session"');
-    });
-
-    if (callers.length > 0) {
-      expect(
-        SKILL_BUTTONS.length,
-        `the recycle-session route now has production caller(s) — ${callers
-          .map((f) => f.slice(srcRoot.length))
-          .join(
-            ", ",
-          )} — so WP3 is landing and the Recycle BUTTON must join the row. The ` +
-          `row is decided at ${DECIDED_ROW_SIZE} members; it still has ${SKILL_BUTTONS.length}.`,
-      ).toBe(DECIDED_ROW_SIZE);
-    } else {
-      // Non-vacuity: prove the probe can actually see the route, so a green here means "WP3
-      // has not landed" rather than "the scan is broken". A typo'd path or a wrong exclusion
-      // would otherwise read identically to the pre-WP3 state
-      // (`[[invalid-probe-and-real-hole-look-identical]]`).
-      const decl = readFileSync(`${srcRoot}/state/cleanExit.ts`, "utf8");
-      expect(
-        decl,
-        "the scan found no callers AND cannot see the route's declaration — the probe is " +
-          "broken, not the code",
-      ).toContain('"recycle-session"');
-      expect(files.length).toBeGreaterThan(50);
-    }
-  });
-});
+// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️ AN "ANTI-FORGETTING GUARD" FOR RECYCLE WAS BUILT HERE AND REMOVED (code-quality
+// review, 2026-08-14, two MAJORs). Recorded because the *idea* will recur and the
+// mechanism was unsound in BOTH directions — do not rebuild it.
+//
+// It exported `DECIDED_ROW_SIZE = 6` from production and asserted:
+//   (a) `SKILL_BUTTONS.length === DECIDED_ROW_SIZE - 1` while WP3 is pending, and
+//   (b) `SKILL_BUTTONS.length === DECIDED_ROW_SIZE` once any `src/**` file named the
+//       `"recycle-session"` route literal — the intended "WP3 has landed" trigger.
+//
+// ⚠️ FALSE POSITIVE: (a) and (b) are CONTRADICTORY the moment WP3 lands, and (b) is
+// unsatisfiable anyway. `SKILL_BUTTONS` holds slash commands (pinned by the
+// `/^\/[a-z0-9-]+$/` assertion above), and `wbs.md` states plainly that **"Recycle is
+// not a skill"** — it is an operation with a `CleanExitRoute`. So the set can never
+// legitimately reach 6, and WP3 would have met three red tests whose messages demanded
+// the opposite of each other. That is precisely the "deleted as a false positive"
+// outcome the guard's own comment claimed to avoid.
+//
+// ⚠️ FALSE NEGATIVE: the trigger matched only the LITERAL string in `src/**`. A caller
+// passing the route as a typed `CleanExitRoute` parameter — the idiomatic shape for the
+// callable operation WP3 is specified to build — never spells the literal, and
+// `wbs.md` explicitly leaves open that Recycle may clear the flag through the
+// **in-process Rust** writer (`clear_and_persist`), which puts the literal in
+// `src-tauri/` where an `src/**` scan cannot see it. The route already exists in Rust
+// today (`session_state/mod.rs:351`). WP2's own probe only exercised the literal path,
+// so it proved the one arm that worked and not the two that did not.
+//
+// THE OBLIGATION IS REAL; ITS HOME IS NOT A TEST. "The row is decided at six members,
+// five of which are slash commands" is a WBS/WIP commitment about future work, and a
+// test that tries to enforce a future scope decision encodes a membership claim the
+// design has already refuted. It lives in `wbs.md` → WP3 and in this WP's WIP file.
+// ═══════════════════════════════════════════════════════════════════════════════
 
 describe("⚠️ EVERY MEMBER HAS A LIVE CALLER — the M12 dead-/exit trap", () => {
   it("each command reaches the funnel and lands on the IPC edge, with its OWN string", () => {
@@ -313,11 +278,9 @@ describe("wiring — properties no value can observe (source guards)", () => {
   });
 
   it("⚠️ exports no *Chord* identifier — that would trip the guard's chord arm", () => {
-    // `WORKFLOW_TERMS` already contains "skill", and the chord arm selects modules by exported
-    // identifier containing "Chord". A `skillPaletteChord` export here would go red — and that
-    // exact hypothetical name was the 2026-08-12 paydown's own probe fixture. These are clicks,
-    // not chords; `⌘⇧`+digit is reserved for filmstrip switching
-    // (`[[cmd-shift-digit-reserved-for-filmstrip]]`).
+    // Why, in full: `skillButtons.ts`'s header. Short version — the OFF-invariant guard's chord
+    // arm selects by exported identifier containing "Chord" and its terms include "skill", so
+    // such an export goes red by design, not by bug.
     expect(mod).not.toMatch(
       /export\s+(const|function|type|interface)\s+\w*Chord/,
     );
@@ -401,9 +364,8 @@ describe("wiring — properties no value can observe (source guards)", () => {
   });
 
   it("⚠️ does NOT wait 1500 ms — that measurement is about a COLD spawn", () => {
-    // The settle exists because a freshly-spawned CC has not started reading keystrokes. These
-    // buttons fire into a session a human is already looking at, so importing the delay would
-    // add 1.5 s of lag to a click for no measured reason AND misrepresent what was measured.
+    // Why, in full: `fireSkillCommand`'s doc. Short version — the settle is about a cold spawn;
+    // these fire into a session a human is already looking at.
     expect(mod).not.toContain("INJECT_SETTLE_MS");
     expect(mod).not.toContain("FIRE_DELAY_MS");
   });

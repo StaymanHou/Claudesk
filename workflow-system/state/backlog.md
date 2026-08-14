@@ -1,5 +1,15 @@
 # Backlog
 
+## SURFACE-2026-08-14-A-TEST-CANNOT-ENFORCE-A-FUTURE-SCOPE-DECISION
+- **Source:** feature:review-quality (M13 WP2 — two MAJORs on one mechanism I invented)
+- **Target level:** product:arch (verification hygiene) — a rule, not a code change
+- **Type:** trap (a guard that reads as diligence and misfires in both directions)
+- **Summary:** WP2 deferred one member of a decided 6-item surface to WP3 and tried to stop it being forgotten with a **test** — `DECIDED_ROW_SIZE = 6` plus an assertion that fires once the next WP's route gains a caller. It was unsound **both** ways: the target state was **unsatisfiable** (the array holds slash commands; the deferred member is not one, per the WBS's own words), so the next WP would have met three mutually-contradictory red tests — precisely the "deleted as a false positive" outcome the guard's comment claimed to prevent; and the trigger matched only a **literal string in `src/**`**, invisible both to an idiomatic typed-parameter caller and to the in-process **Rust** writer the next WP may legitimately use.
+- **Context:** ⚠️ **The generalizable rule: a test pins the PRESENT; a scope commitment about FUTURE work belongs in the WBS/WIP.** A test that encodes "someone will later add X" must model a state that does not exist yet, and it will encode whatever the author *assumed* that state looks like — here, a membership claim the design had already refuted in writing. ⚠️ Second-order lesson, and the one that stings: the mechanism was "proven" by a probe that exercised **only the literal path**, so it demonstrated the single arm that worked and neither of the two that didn't — a direct violation of the standing *"prove each form INDIVIDUALLY"* rule (`docs/lessons/source-text-guards.md`), committed while quoting that rule in the same file.
+- **Suggested action:** No code change outstanding (guard removed; the obligation now lives in `wbs.md` → WP3). Consider folding the rule into `docs/lessons/source-text-guards.md` as an eighth failure form — "the guard whose subject does not exist yet" — at the next paydown sweep.
+- **Priority:** low (rule captured here and in the WIP; no live defect)
+- **Status:** pending
+
 ## SURFACE-2026-08-14-CSS-CLASS-GUARDS-SATISFIED-BY-A-PSEUDO-CLASS-MODIFIER
 - **Source:** feature:verify-codify (M13 WP2 — found by mutation, not review)
 - **Target level:** `src/test-support/cssRule.ts` + every guard that calls `hasRule`
@@ -38,8 +48,7 @@
 - **Context:** Matters for WP2's Q2 verdict on diagnostics: if the scanner surfaces a dirty-entry count to the operator, "unterminated frontmatter" is an actionable authoring bug in a skill the operator owns, whereas "no frontmatter" more often means "this directory is not a skill." Reporting them identically costs the operator the distinction.
 - **Suggested action:** Decide in WP2 task 2.1 whether the diagnostic vocabulary separates them. Cheap either way — it is one branch in the parser. Not worth its own work package.
 - **Priority:** low
-- **Status:** ⚠️ **MOOT as of 2026-08-14** — WP2 task 2.1 chose option (i) (**no scanner**, §4c: the command name is the only sanctioned coupling), so this item's only target no longer exists and **no scanner will be built**. Kept rather than deleted because it is not *resolved*: the finding is real about the probe instrument, and it becomes live again only if some future work reintroduces skill-frontmatter parsing. ⚠️ Do **not** treat this as a reason to build the scanner.
-- **Status:** pending
+- **Status:** pending — ⚠️ but **MOOT as of 2026-08-14**: WP2 task 2.1 chose option (i) (**no scanner**, §4c: the command name is the only sanctioned coupling), so this item's only target no longer exists and **no scanner will be built**. Still `pending` rather than resolved because the finding is real about the probe instrument and becomes live again only if future work reintroduces skill-frontmatter parsing. ⚠️ Do **not** treat this as a reason to build the scanner.
 
 ## SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT
 - **Source:** M12 WP4c code review; scope NARROWED at the 2026-08-12 paydown sweep (WP7)

@@ -28,11 +28,15 @@
 //   §4c anti-brittleness (`arch/workflow-gate.md`): the **command name** is the ONLY stable
 //   cross-repo coupling. A filesystem path is not.
 //
-// `workflow_substrate::skills_dir_exists` — which answers "is the companion system installed?"
-// — says so in its own doc comment: *"deliberately NOT a check for specific skill names: the
-// skill set evolves in the companion repo on its own schedule, and per the return contract's
-// §4c anti-brittleness clause a hardcoded roster of skill filenames would be exactly the
-// brittle coupling that clause forbids."* A per-button path check IS that roster.
+// The `workflow_substrate` module — which answers "is the companion system installed?" —
+// already refused this. ⚠️ Attribution corrected at code-quality review: the sentence below is
+// **`SKILLS_SUBPATH`'s** doc comment (`workflow_substrate/mod.rs:48`), not
+// `skills_dir_exists`'s: *"Still deliberately NOT a check for specific skill names: the skill
+// set evolves in the companion repo on its own schedule, and per the return contract's §4c
+// anti-brittleness clause a hardcoded roster of skill filenames would be exactly the brittle
+// coupling that clause forbids."* `skills_dir_exists` carries the same argument in its own doc
+// (*"no skill name is hardcoded, so the roster can change freely"*). A per-button path check IS
+// that roster.
 //
 // What happens if a skill is absent: CC prints "unknown command". **The terminal is the
 // evidence** — the same reasoning behind `injectCommand`'s deliberate no-retry.
@@ -68,26 +72,17 @@ export interface SkillButton {
 }
 
 /**
- * The number of buttons the row is DECIDED to have when M13 is complete: 5 skill commands
- * plus **Recycle Session**.
+ * The fixed set — **FIVE skill commands.**
  *
- * ⚠️ **Recycle is WP3's, and WP2 deliberately ships WITHOUT it** (decided at WP2 Phase 3). The
- * alternative — rendering it now, disabled — was rejected: this repo uses `disabled` for
- * *capability* limits that reflect real current state (`canOpenTerminal`, a collapsed split),
- * never as a promise about unbuilt work, and a button that cannot do anything is the
- * "present-but-disabled" shape the seam contract rejects elsewhere.
- *
- * ⚠️ But the risk of option (a) is that the set quietly stays at 5 and the sixth member is
- * forgotten — a scope reduction by inattention rather than decision. So it is pinned as a
- * NUMBER here and asserted in `skillButtons.test.ts`, which fails once WP3's Recycle route
- * exists while the row still has 5 members. A comment would not have failed.
- */
-export const DECIDED_ROW_SIZE = 6;
-
-/**
- * The fixed set — **FIVE skill commands.** (The sixth member of the row, Recycle Session, is
- * WP3's operation rather than a slash command, so it is not in this list — see
- * [`DECIDED_ROW_SIZE`].)
+ * ⚠️ **Recycle Session is the row's sixth affordance and is NOT in this list**, because it is
+ * WP3's *operation* (a `CleanExitRoute`), not a slash command — and this array holds slash
+ * commands only. WP2 deliberately ships without it; rendering it early-and-disabled was
+ * rejected, since this repo uses `disabled` for *capability* limits reflecting real current
+ * state (`canOpenTerminal`, a collapsed split), never as a promise about unbuilt work.
+ * ⚠️ A `DECIDED_ROW_SIZE = 6` constant lived here to stop that sixth member being forgotten;
+ * it was **removed at code-quality review** as unsound in both directions — see the long note
+ * in `__tests__/skillButtons.test.ts` before rebuilding anything like it. The obligation lives
+ * in `wbs.md` → WP3, which is a place that cannot misfire.
  *
  * ⚠️ **No member is conditional.** Dropping one is a scope reduction that needs its own
  * decision, not an implementation detail — recorded because three of these were fired ≤3
@@ -183,5 +178,10 @@ export async function fireSkillCommand(
   sessionId: string,
   command: string,
 ): Promise<void> {
-  await injectCommand(sessionId, command);
+  // ⚠️ The `"skill-button"` label is load-bearing, not cosmetic. `console.warn` is this path's
+  // ONLY failure channel (no overlay — replacing a working terminal with an error over a command
+  // the user can simply retype would be worse), and `injectCommand` defaults its prefix to
+  // `auto-resume`. Without the label every button failure would be reported as M12's *automatic*
+  // arm misfiring, i.e. the one diagnostic this feature ships would name the wrong feature.
+  await injectCommand(sessionId, command, undefined, "skill-button");
 }

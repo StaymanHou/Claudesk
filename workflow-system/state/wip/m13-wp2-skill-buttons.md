@@ -320,6 +320,63 @@ works (WP3 owns it). Adding either would be redundant coverage that reads as new
 **Final gate:** tsc clean · Prettier clean · ESLint 0 errors (1 pre-existing `XtermPane` warning) ·
 **2054 frontend tests pass, 163 files** (2026 at WP1's close → **+28**).
 
+## Code-quality review — 2026-08-14 (post-ship, commit `bd67758`)
+
+**Verdict: no CRITICAL. 4 MAJOR, 6 MINOR — all addressed in a follow-up commit; none dismissed.**
+The reviewer independently re-verified all six factual claims I asked it to check (the
+`slash_command_bytes` unreachability, the funnel's ownership of the `.catch`/payload rule, the two
+deleted symbols having zero live references, the §4c refusal, the absent dead CSS, and the
+`recycle-session` caller count) and found **no shipped falsehood of the WP1 class**. The defects
+were concentrated in the one part of the commit that reasoned about the *future*.
+
+**MAJOR 1+2 — the anti-forgetting guard was unsound in BOTH directions. REMOVED, not patched.**
+⚠️ This was my own invention at P3.1 and it was worse than the comment it replaced:
+- **False positive:** `DECIDED_ROW_SIZE = 6` with `SKILL_BUTTONS.length === 6` is **unsatisfiable**.
+  `SKILL_BUTTONS` holds slash commands (pinned by `/^\/[a-z0-9-]+$/`), and `wbs.md:125` says
+  plainly **"Recycle is not a skill"** — it is an operation with a `CleanExitRoute`. So WP3 would
+  have met *three* red tests whose messages demanded the opposite of each other: exactly the
+  "deleted as a false positive" outcome the guard's own comment claimed to prevent.
+- **False negative:** the trigger matched only the **literal** `"recycle-session"` in `src/**`. A
+  caller passing it as a typed `CleanExitRoute` parameter never spells the literal, and `wbs.md`
+  leaves open that Recycle clears via the **in-process Rust** writer — where an `src/**` scan
+  cannot see it. ⚠️ **The route already exists in Rust today** (`session_state/mod.rs:351`), which
+  I verified. My P3.2 probe only exercised the literal path, so it proved the one arm that worked
+  and not the two that didn't — the "prove each form INDIVIDUALLY" rule, violated by me.
+- **Resolution:** guard and constant deleted; a long do-not-rebuild note left in the test file. The
+  obligation is real but **its home is the WBS**, not a test that encodes a refuted membership
+  claim. ⚠️ **Lesson: a test cannot enforce a future scope decision.**
+
+**MAJOR 3 — reusing the funnel inherited a misattributed log prefix.** Every skill-button failure
+logged `auto-resume: injecting … failed`, i.e. the one diagnostic this feature ships named M12's
+*automatic* arm. `injectCommand` now takes an optional `label` (defaulting to `"auto-resume"`, so
+M12's callers are byte-identical); `fireSkillCommand` passes `"skill-button"`. ⚠️ Not a second
+injection path — the funnel decision was right, only the message was stale.
+
+**MAJOR 4 — I introduced a duplicate `- **Status:**` line** in
+`SURFACE-2026-08-14-SKILL-SCAN-COLLAPSES-TWO-FRONTMATTER-ERRORS` (the only item of 31 with a count
+other than 1), so a grep-addressed field returned two contradictory answers. Merged into one line.
+
+**MINORs, all fixed:** the JSX comment at the render site claimed the row contains a Recycle button
+(false *at the code it annotates*); the §4c quotation was attributed to `skills_dir_exists`'s doc
+when it is **`SKILLS_SUBPATH`'s** — ⚠️ corrected in `skillButtons.ts` **and** in `wbs.md`, since a
+false claim surviving in a second file is this milestone's signature failure; the tightened
+`catch` guard replaced a two-armed regex whose `.catch(` arm matched **zero** times (only the loose
+`catch\s*\(` arm was live, unscoped to the injection path) — **mutation-proven** with a
+try/catch→bare-await mutant the old form passed; `DECIDED_ROW_SIZE` removed as a production symbol
+consumed only by tests; and comment density cut — the absorb-the-button rationale was in **4
+files** and is now stated once in `skillButtons.ts`'s header with the others pointing at it.
+
+**Two findings the reviewer judged in my favour, recorded so they are not re-litigated:**
+`showSkillButtons` treating `""` as live is **right** (`!== null` matches the upstream
+`string | null` type; a truthiness check would swallow a distinct state, and failing visibly at the
+IPC edge beats an affordance that vanishes and reads as "gate off"). And `fireSkillCommand` is not
+a wrapper-of-one — `injectCommand` has three callers, and the delegation is the guardable
+chokepoint the caller test needs.
+
+**All surviving guards re-proven by mutation AFTER the refactor** (a green suite following heavy
+edits is not evidence): funnel-ignores-its-arg → red; ungate-the-row (arm 5) → red, arm 5 only;
+try/catch→bare-await → red. **2052 tests pass** (2054 − the 2 deleted guard tests).
+
 ## Discoveries
 
 [RESOLVED-2026-08-14] `SURFACE-2026-08-14-SESSION-RESTORE-HAS-NO-MANUAL-DOOR` — **settled at plan

@@ -161,11 +161,19 @@ export function slashCommandPayload(command: string): string {
  * anything. Mitigation for a wrong fire is **Esc** (CC's own interrupt) — note that is
  * *interrupt a running command*, not *cancel before send*; there is no pre-send window and
  * the docs must not imply one.
+ *
+ * ⚠️ `label` names the CALLER for the diagnostic, and it exists because it had to. M13 WP2
+ * reused this funnel for the skill-button row, which inherited a hardcoded `auto-resume:`
+ * prefix — so every *button* failure was attributed to M12's *automatic* arm. Since
+ * `console.warn` is the only failure channel this path has (no overlay, by operator decision),
+ * a misattributed prefix points the one available diagnostic at the wrong feature. Defaults to
+ * the original strings, so M12's callers are byte-identical to before.
  */
 export async function injectCommand(
   sessionId: string,
   command: string,
   onIpcError?: (message: string) => void,
+  label = "auto-resume",
 ): Promise<void> {
   try {
     await invoke("cc_input", {
@@ -173,10 +181,9 @@ export async function injectCommand(
       data: slashCommandPayload(command),
     });
   } catch (e) {
-    console.warn(
-      `auto-resume: injecting ${command} into ${sessionId} failed`,
-      e,
+    console.warn(`${label}: injecting ${command} into ${sessionId} failed`, e);
+    onIpcError?.(
+      `${label === "auto-resume" ? "Auto-resume" : label} could not run ${command}`,
     );
-    onIpcError?.(`Auto-resume could not run ${command}`);
   }
 }

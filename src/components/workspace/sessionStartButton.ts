@@ -39,24 +39,15 @@
 
 import type { AutoResumeAction } from "../../state/predictAction";
 
-// ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ M13 WP2 — `SESSION_START_COMMAND` and `showSessionStartButton` WERE REMOVED FROM HERE.
+// They moved into `skillButtons.ts` (→ `SKILL_BUTTONS[0].command` / `showSkillButtons`) when the
+// skill-button row absorbed this module's button; that module's header is the one authority for
+// why. Deleted rather than left exported: a symbol with tests and no production caller reads as
+// coverage of something live (the M12 dead-`/exit` shape). Their tests were retargeted, not
+// dropped.
 //
-// Both moved into `skillButtons.ts` when the skill-button row absorbed this module's button:
-// `/session-start` is a member of the row's fixed set, so keeping a standalone button beside
-// the row would be two affordances for one skill — the redundancy WP2 exists to remove.
-//
-//   `SESSION_START_COMMAND`      → `SKILL_BUTTONS[0].command`
-//   `showSessionStartButton(…)`  → `showSkillButtons(…)`, same two conditions, same contract
-//
-// They were **deleted rather than left exported**, deliberately: a symbol carrying tests and
-// no production caller is worse than an absent one, because the tests read as coverage of
-// something live. That is the M12 dead-`/exit` shape this milestone is explicitly warned about.
-// Their tests were retargeted onto the row, not dropped.
-//
-// ⚠️ The `/session-start`-is-never-auto-fired rationale in the header above STILL APPLIES and
-// is why the row has a `/session-start` button at all. It did not move with the constant.
-// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️ The `/session-start`-is-never-auto-fired rationale in the header above STILL APPLIES and is
+// why the row has a `/session-start` button at all. It did not move with the constant.
 
 /**
  * The label for the already-open indicator: what this workspace WOULD fire if reopened now,

@@ -408,11 +408,11 @@ export function Workspace({
             ↻ {nextOpen}
           </span>
         )}
-        {/* M13 WP2 — the skill-button row. Five fixed workflow commands as clicks, plus the
-            Recycle button (WP3's operation). ⚠️ GATED as a whole: every command is a companion-
-            workflow skill, so with the gate off the row is ABSENT, not hidden or disabled.
-            ⚠️ This absorbed the standalone `/session-start` button — that command is a member of
-            the set, and two affordances for one skill is the redundancy WP2 exists to avoid. */}
+        {/* M13 WP2 — the skill-button row: five fixed workflow commands as clicks. ⚠️ Recycle
+            Session is NOT here — it is WP3's operation, and WP2 deliberately ships without it
+            (an earlier version of this comment said "plus the Recycle button", which was false
+            at the render site itself). ⚠️ GATED as a whole: every command is a companion-workflow
+            skill, so with the gate off the row is ABSENT, not hidden or disabled. */}
         {showSkillButtons({
           workflowEnabled,
           ccSessionId: workspace.cc_session_id,
