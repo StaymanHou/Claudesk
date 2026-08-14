@@ -45,7 +45,7 @@ Two facts were established during planning that change the plan and correct the 
 ### Confirmed unchanged from the WBS
 
 - `~/.claude/skills/` = **59** entries, project-local `.claude/skills/` = **2** (`clear-build-cache`, `release`), total **61**. Exactly **11** dangling: `RENAMED-*` ×3, `tutorialX-*` ×4, `zz-*` ×4. Re-measured this session.
-- `slash_command_bytes` at `cc_session/mod.rs:266`, one production caller (`:966`, the exit command). The injection primitive is real and single.
+- `slash_command_bytes` at `cc_session/mod.rs:266`, one production caller (`:966`, the exit command). ⚠️ **CORRECTED at code-quality review 2026-08-14** — this line originally added "The injection primitive is real and single," which is **false**: it is Rust-side, not a `#[tauri::command]`, and **unreachable from a button**. The frontend seam is `injectCommand`/`slashCommandPayload` (`autoResumeFire.ts:165`/`:145`), a deliberate byte-pinned mirror. ⚠️ **This was the THIRD assert-without-reading-the-call-path error in this WP** — see the review's CRITICAL.
 - `showSessionStartButton` at `sessionStartButton.ts:60`, one caller: `Workspace.tsx:413`.
 - Scratch workspaces present: `tmp/scratch/scratch-{a,b,c}`.
 
@@ -136,7 +136,6 @@ Two facts were established during planning that change the plan and correct the 
 - **Unvisited:** none. All 3 phases `[x]`, each with all five verification nodes `[x]`.
 - **State:** **WP1 COMPLETE.** All four probe questions answered and written to `wbs.md` → "Probe outcomes". Q1, the WP3 sizing, and the Phase 3 corrections all carry operator sign-off. Next: `/feature-ship`.
 - **Open discoveries:** 1 — the frontmatter-class collapse (low, a WP2 diagnostic-vocabulary decision), logged to `backlog.md`. ⚠️ The `app-quit` "defect" was **RETRACTED at verify-human** — no defect, backlog entry deleted; the transferable lesson (sweep the state-mutating primitive, not one of its callers) is recorded below and propagated to `wbs.md` WP3.
-- **State:** Phase 1 complete (build → verify-auto → verify-self → verify-human → verify-codify all `[x]`)
 
 ## Notes on shape
 
@@ -296,7 +295,7 @@ The agent's top skills are `feature-build` (910), `feature-verify-auto` (884), `
 
 ⚠️ **The operator's manual vocabulary is essentially: resume a session (92%), start one (4%), and a long tail of one-offs.** A one-off fired 1–3 times *ever* does not clear `[PRIOR: new-surface-must-earn-its-place-against-existing-ones]` — typing it is fine.
 
-### ✅ Q1 VERDICT — operator sign-off 2026-08-14: a TINY FIXED SET (3–5 buttons)
+### ✅ Q1 VERDICT — operator sign-off 2026-08-14: a TINY FIXED SET (exactly 5)
 
 **Chosen shape:** a small, hand-fixed button row — **not** a scan-driven registry, **not** a palette, **not** per-skill buttons for all 61.
 
@@ -327,13 +326,13 @@ The agent's top skills are `feature-build` (910), `feature-verify-auto` (884), `
 
 **⚠️ Consequence for WP2 — the scan is now OPTIONAL, and this changes Q2's weight.** A **fixed** set of 4 known skills does not require enumerating `~/.claude/skills/` at all. The 61-entry scan + its 11-dangling-symlink error handling (Q2) is **no longer load-bearing for the button surface**. WP2 must decide explicitly whether to (i) hard-code the 4 and drop the scanner, or (ii) still scan, to validate that a configured skill exists before rendering its button (a cheap existence check, not a full enumeration). ⚠️ **(ii) is the smaller-looking option that quietly reintroduces the whole scan** — decide deliberately.
 
-### Implication for the deliverable (superseded by the verdict above — kept for the reasoning trail)
+### ⚠️ SUPERSEDED — pre-verdict reasoning, kept only as the trail (the verdict above governs)
 
 The exit criterion — *"no slash-command typing for common skills"* — is satisfied by a **very small** set, and **`/session-restore` is already handled**: M12 shipped auto-fire + announce for exactly this case (`.session.md` present ⇒ inject `/session-restore`). ⚠️ **So the single highest-frequency manual skill is ALREADY automatic** (⚠️ *automatic*, not "a click" — see the correction above; it has no button), which means the marginal value of a generic skill-button registry is far lower than the WBS assumed.
 
 ⚠️ **This is a candidate scope reduction for WP2, not a silent one** — it is the operator's call, and it is put to them at P3.1 rather than decided here.
 
-### P3.3 — the typed-`/exit` question, folded into Q3
+### P3.3 — the typed-`/exit` question: examined and deliberately NOT folded into Q3
 
 `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET` asks whether a typed `/exit` counts as a clean boundary. **Q3's answer does NOT settle it, and the two are less related than the WBS supposed** — recording that rather than forcing a link:
 
@@ -385,6 +384,36 @@ The subagent claimed the published numbers require silently dropping `isSidechai
 ⚠️ **The entire sidechain contribution is ONE hit, and it is the literal placeholder `/xxx`** — from the prompt text I sent the subagent, which its own transcript then contained and a later scan read back. A separate sweep for `feature-*`/`task-*`/`product-*` `<command-name>` matches across **every** role and both sidechain values returns **zero**. The original script never had a sidechain filter, which is why it produced 577 without one.
 
 **The subagent's own detail explains its error:** it reports inspecting the 24 hits and finding each was *"the skill's own SKILL.md preamble, not an operator invocation"* — i.e. it matched **skill-body text**, not `<command-name>` blocks, then attributed the resulting correction to a sidechain filter that was not doing that work. **The published method is complete as written; no disclosure is owed.** ⚠️ The `/xxx` artifact is worth knowing about for any future mining run: **an agent's own analysis prompt becomes a transcript and can be re-read as data.**
+
+## Code-Quality Review — m13-wp1-probe (2026-08-14, ship commit `578ac4d`)
+
+⚠️ **1 CRITICAL + 3 MAJOR + 3 MINOR. ALL SEVEN FIXED IN THIS CYCLE** (not backlogged) — the CRITICAL because `drive_mode: autopilot` auto-invokes refactor on CRITICAL, and the rest because they were single-line edits in files already open.
+
+### The CRITICAL — the THIRD instance of this WP's own recurring defect
+
+**[`wbs.md` Reuse inventory + task 2.3] `slash_command_bytes` was described as "**the** injection primitive — all injection goes through it," and WP2 was told to wire five buttons through it. VERIFIED FALSE.** It has exactly **one** production caller (`cc_session/mod.rs:966`, the shutdown `/exit`), is **not** a `#[tauri::command]`, and is **unreachable from any button**. Every button-initiated injection — including the existing `/session-start` button (`Workspace.tsx:169`) and all of M12 WP3 — goes through the TypeScript mirror `slashCommandPayload` → `injectCommand` → `invoke("cc_input", …)` (`autoResumeFire.ts:145`/`:165`), which is pinned byte-for-byte against the Rust helper by `autoResumeFire.test.ts` so the two cannot drift. **Two implementations of one rule is the intended design.**
+
+⚠️ **Why this one matters more than its size suggests.** Taken literally, WP2 would have had to either stall or invent a new Tauri command to reach the Rust function — *"the exact thing task 2.3's own next sentence forbids."* And the correct seam appeared **zero times** in either document, so WP2 had no pointer to it. Both files now name `injectCommand` as the button seam and mark `slash_command_bytes` explicitly unreachable-from-frontend.
+
+⚠️ **This is the same failure as the two mid-flight retractions** (`AppQuit`, `sessionStartButton.ts`): *a claim about a module's role, asserted without following its call path.* Three instances in one work package. My own P1.6/P1.8 audits **read both `sessionStartButton.ts` and `Workspace.tsx`** and still did not notice the fire path contradicted the inventory line — because I was reading those files to answer a *different* question and took the inventory's claim as given. **The transferable rule: an inventory row asserting "everything goes through X" is a claim about ALL CALLERS, and can only be verified by enumerating them — never by reading X itself.**
+
+### MAJOR (3, all fixed)
+
+1. **Cardinality was left open as "3–5 buttons"** while enumerating a determinate 5-member list, with no rule saying which were droppable. ⚠️ The "3–5" came from the *option text the decision was made from*, not the decision. Tightened to **exactly 5**, with a note that the three ≤3-invocation buttons are in deliberately and dropping any is a scope decision, not an implementation detail.
+2. **WP1's own task checkboxes 1.1–1.7 were all still `[ ]`** in the shipped commit despite the WP being complete — misreporting milestone state to `/product-finalize`'s sweep. Checked.
+3. **Finding 1's pre-probe framing was stale** ("error handling is the modal case, not polish") — Q1's verdict demotes the scan to optional-or-deleted. A WP2 reader starting at the context section rather than the verdict would inherit superseded guidance. Marked SUPERSEDED with a pointer to the Probe outcomes, and the ratio reframed to **11-of-61 entries / 50 invocable**.
+
+### MINOR (3, all fixed)
+
+Duplicate contradictory `**State:**` key in `## Current Node`; the P3.3 heading said *"folded into Q3"* while its body concluded the opposite; the superseded "Implication for the deliverable" section retained. All corrected — the P3.3 heading inversion was the one worth catching, since a heading-skimmer would have taken the reversed verdict.
+
+### What the review affirmed
+
+Every `file:line` it spot-checked resolved exactly; it **independently re-mined the transcripts** and reproduced `/session-restore` 531, `/session-start` 25, and the identical 9-item tail; and both Q3 gap computations checked out (12.191→"12.19", 9.013→"9.01"). It explicitly judged the WBS/WIP duplication **justified** on audience grounds (WBS = durable instruction, WIP = archived evidence trail) rather than excessive — the one place duplication actually bit was the CRITICAL, which is drift between an inventory claim and the *code*, not between the two documents.
+
+### If you disagree
+
+Mark any finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP. ⚠️ Note all seven are already **fixed**, so dismissing one now means reverting an edit rather than declining to make it.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

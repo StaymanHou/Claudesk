@@ -28,7 +28,7 @@ Three facts were established by reading the real machine before sizing any WP. E
 ⚠️ **Eleven of the 59 are dangling symlinks** — `RENAMED-brownfield`, `RENAMED-getting-started`, `RENAMED-product` (→ a deleted `/var/folders/…/tmp.Q3ZCt3e9X3/`), plus `tutorialX-*` ×4 and `zz-*` ×4 (→ a deleted `/tmp/mut/`). All eleven are July-27 mutation-testing leftovers. `head` on their `SKILL.md` returns **nothing**; `ls` on their directory returns **nothing**.
 
 **Consequences, all load-bearing:**
-- A scanner that reads `<dir>/SKILL.md` per entry hits an **I/O error on 11 of 61** entries. Error handling is not a polish task here — it is the **modal case on the operator's real machine**.
+- A scanner that reads `<dir>/SKILL.md` per entry hits an **I/O error on 11 of the 61** entries (so **50 are invocable**). Error handling would be the **modal case** on the operator's real machine. ⚠️ **SUPERSEDED 2026-08-14 by Q1's verdict — read the Probe outcomes before acting on this bullet.** The verdict is a *fixed* 5-button set, which needs **no directory enumeration at all**, so this consequence is now conditional on WP2 choosing scanner-option (ii); under (i) it does not apply. ⚠️ Quote the ratio as **11-of-61 entries / 50 invocable**, not "11 of 61 skills" — the dead entries are not skills.
 - ⚠️ **This is a ready-made test fixture.** The probe does not need to synthesize a broken-skill directory; one exists, with two distinct breakage flavors (dangling symlink to a deleted tmp dir, in two different tmp roots). Use it, then *also* build a synthetic fixture — the real one will eventually be cleaned up and the test must not silently start proving nothing (`SURFACE-2026-08-12`-style: a guard that passes because its subject vanished).
 - A naive "render every entry" ships **61 buttons, 11 firing dead commands**.
 
@@ -57,7 +57,8 @@ Measured properties the fifth arm must respect — each already paid for by a re
 
 | Seam | Location | Status |
 |---|---|---|
-| `slash_command_bytes(command)` | `src-tauri/src/cc_session/mod.rs:266` | ⚠️ **The** injection primitive. Trims trailing CR/LF, appends exactly one `\r`. **All injection goes through it** (arch load-bearing line). First consumed M12 WP3. |
+| `slashCommandPayload(command)` + `injectCommand(sessionId, command)` | `src/components/workspace/autoResumeFire.ts:145` / `:165` | ⚠️ **THE seam a BUTTON must use.** `injectCommand` → `invoke("cc_input", { sessionId, data: slashCommandPayload(cmd) })`. This is what the existing `/session-start` button uses (`Workspace.tsx:169`) and what M12 WP3 consumed. ⚠️ The `invoke` **MUST** have a `.catch` — an unhandled Tauri rejection vanishes silently. **No retry, deliberately** (detecting a miss would need CC output-reading, which `arch.md` forbids). |
+| `slash_command_bytes(command)` | `src-tauri/src/cc_session/mod.rs:266` | The **Rust-side** CR rule, and ⚠️ **NOT reachable from the frontend** — it is not a `#[tauri::command]` and has exactly **one** production caller (`:966`, the shutdown `/exit`). `slashCommandPayload` is its deliberate **TS mirror**, pinned byte-for-byte by `autoResumeFire.test.ts` so the two cannot drift. ⚠️ **CORRECTED 2026-08-14** (code-quality review, CRITICAL): an earlier draft of this row called it "**the** injection primitive — all injection goes through it," which is **false** and would have sent WP2 to a function no button can call. Two implementations of one rule is the *intended* design; keep both in step, do not "unify" them. |
 | `sessionStartButton.ts` | `src/components/workspace/sessionStartButton.ts` (6.2 KB) + a 15.7 KB test | The **single-button precedent**. M13 either absorbs it into the registry or keeps it pinned — ⚠️ decide explicitly, do not leave two mechanisms. |
 | `session_state::consume` | `src-tauri/src/session_state/mod.rs` | Returns-and-clears the unclean-exit flag. |
 | `key_for()` | `src-tauri/src/session_state/` | ⚠️ **Every** read/write of the unclean-exit flag goes through it — a reader that skips it silently matches nothing (no error, just a flag that never fires). |
@@ -90,13 +91,13 @@ Measured properties the fifth arm must respect — each already paid for by a re
 **Success criterion:** A written verdict per question in this file's "Probe outcomes" section, each with the evidence that produced it. Q1 carries an explicit operator sign-off. Q3 carries an observed signal table, not a proposed one.
 
 **Tasks:**
-- [ ] 1.1 Measure the real scan: enumerate both dirs, classify each entry (valid / dangling symlink / missing `SKILL.md` / unparseable frontmatter), report counts.
-- [ ] 1.2 Present Q1's options to the operator with the 61-entry reality and the "common, not all" exit-criterion reading; record the verdict + rejected alternatives.
-- [ ] 1.3 Instrument a real `/session-handoff` in a **scratch workspace** (`tmp/scratch/scratch-{a,b,c}` — mandatory once a check spawns/answers a CC session) and record every observable signal with timestamps: hook events, `.session.md` create/write/close, CC exit.
-- [ ] 1.4 Repeat 1.3 with a **stale `.session.md` pre-existing** to test marker ambiguity.
-- [ ] 1.5 Read `cc_spawn_env`'s call graph; answer Q4 yes/no in one sentence with the call path.
-- [ ] 1.6 Decide the `sessionStartButton.ts` disposition (absorb vs keep pinned) and record it.
-- [ ] 1.7 Write "Probe outcomes" into this file.
+- [x] 1.1 Measure the real scan: enumerate both dirs, classify each entry (valid / dangling symlink / missing `SKILL.md` / unparseable frontmatter), report counts.
+- [x] 1.2 Present Q1's options to the operator with the 61-entry reality and the "common, not all" exit-criterion reading; record the verdict + rejected alternatives.
+- [x] 1.3 Instrument a real `/session-handoff` in a **scratch workspace** (`tmp/scratch/scratch-{a,b,c}` — mandatory once a check spawns/answers a CC session) and record every observable signal with timestamps: hook events, `.session.md` create/write/close, CC exit.
+- [x] 1.4 Repeat 1.3 with a **stale `.session.md` pre-existing** to test marker ambiguity.
+- [x] 1.5 Read `cc_spawn_env`'s call graph; answer Q4 yes/no in one sentence with the call path.
+- [x] 1.6 Decide the `sessionStartButton.ts` disposition (absorb vs keep pinned) and record it.
+- [x] 1.7 Write "Probe outcomes" into this file.
 
 ---
 
@@ -110,14 +111,14 @@ Measured properties the fifth arm must respect — each already paid for by a re
 
 **The measured reality:** of **577** manual (operator-typed) workflow-skill invocations across all history, **`/session-restore` is 531 (92.0%)**, `/session-start` is 25 (4.3%), and *all nine others combined* are 21 (3.6%). Only **11 skills were EVER typed manually** — of **50 invocable** ones (61 directory entries minus the 11 dead symlinks). ⚠️ *Quote it as 11-of-50, not 11-of-61: the 61 figure counts entries, 11 of which cannot be invoked at all, so 11-of-61 overstates the case.* ⚠️ **Zero manual invocations of any `feature-*`, `task-*`, or `product-*` skill, ever** — those are the *agent's* vocabulary (agent-side: `feature-build` 910, `feature-verify-auto` 884, …), fired by auto-chaining. **A per-skill registry would have surfaced the agent's vocabulary, not the operator's.**
 
-**THE VERDICT — a TINY FIXED SET of 3–5 buttons:** `/session-start` · `/session-capture` · `/util-prune-claude-md` · `/util-backlog-paydown` · **Recycle Session** (WP3).
+**THE VERDICT — a TINY FIXED SET of exactly 5:** `/session-start` · `/session-capture` · `/util-prune-claude-md` · `/util-backlog-paydown` · **Recycle Session** (WP3). ⚠️ **Five, not "3–5"** (tightened 2026-08-14 at code-quality review): the "3–5" phrasing came from the option text the decision was made *from*, not from the decision — the operator selected this determinate list. **No member is conditional**, and the three low-frequency ones are in **deliberately** (see the ≤3-invocations note below), so dropping any is a scope reduction requiring its own decision, not an implementation detail. ⚠️ A 6th is under discussion — see the open question below — but the *floor* is these five.
 
 - ⚠️ **`/session-restore` is deliberately EXCLUDED despite being 92%** — it is **already automatic**: M12's open-time auto-fire + announce injects it when `.session.md` is present (`predictAction.ts:140`), so the operator does not type it. A button duplicating an *automatic* path is the redundancy `[PRIOR: new-surface-must-earn-its-place-against-existing-ones]` forbids. **Do not "fix" this omission; it is the decision.**
   - ⚠️ **CORRECTED 2026-08-14** (caught by the Phase 3 verify-self adversarial pass): an earlier draft justified this with *"M12 auto-fire **plus `sessionStartButton.ts`**"*, claiming that module gave `/session-restore` a manual door. **That was FALSE.** `sessionStartButton.ts` exports `SESSION_START_COMMAND = "/session-start"` and its sole caller renders a `/session-start` button — it fires a skill **already in the set**. ⚠️ **`/session-restore` has NO manual click door at all**; it reaches CC only via the automatic arm. The exclusion still stands on the auto-fire half alone (that is the 92% case — an operator who types `/session-restore` today is working around the absent auto-fire, not exercising a button), but it now rests on **one** support, not two. **⚠️ If M13 ever wants a manual restore door, that is a NEW decision, not a correction of this one.**
 - ⚠️ **Recorded honestly: three of the four skill buttons were fired ≤3 times EVER.** The operator accepted that knowingly, so metric #3 is carried by a **visible surface** rather than closed by argument. Do not silently re-litigate it as dead weight — but do not *widen* the set either.
 - **Rejected:** cutting WP2 entirely (agent's recommendation — operator wanted a visible surface); workflow-state-relevant buttons (couples M13 to **unbuilt, probe-gated M15**); a fuzzy palette over all 61 (re-implements the harness's `/`-matcher — the prior fires against it); the exhaustive 61-button wall (worse than typing; 11 entries are dead symlinks).
 
-⚠️ **THE SCAN IS NOW OPTIONAL — this is the biggest change to WP2 and it must be decided, not defaulted.** A **fixed** set of 4 known skills needs no enumeration of `~/.claude/skills/`, so Q2's 61-entry scan and its 11-dangling-symlink error handling are **no longer load-bearing for the button surface**. Choose explicitly: **(i)** hard-code the 4 and drop the scanner entirely, or **(ii)** keep a cheap per-skill *existence* check so a button never fires a dead command. ⚠️ **(ii) looks smaller but quietly reintroduces path resolution and the broken-symlink case** — if chosen, it is an existence check on 4 known paths, **never** a directory enumeration.
+⚠️ **THE SCAN IS NOW OPTIONAL — this is the biggest change to WP2 and it must be decided, not defaulted.** A **fixed** set whose 4 *skills* are known up front (Recycle is not a skill) needs no enumeration of `~/.claude/skills/`, so Q2's 61-entry scan and its 11-dangling-symlink error handling are **no longer load-bearing for the button surface**. Choose explicitly: **(i)** hard-code the 4 and drop the scanner entirely, or **(ii)** keep a cheap per-skill *existence* check so a button never fires a dead command. ⚠️ **(ii) looks smaller but quietly reintroduces path resolution and the broken-symlink case** — if chosen, it is an existence check on 4 known paths, **never** a directory enumeration.
 
 ⚠️ **ONE OPEN QUESTION lands on WP2's doorstep — decide it at plan time, do not silently skip it.** `SURFACE-2026-08-14-SESSION-RESTORE-HAS-NO-MANUAL-DOOR`: `/session-restore` is **92% of manual usage and has no click affordance at all** (only M12's automatic arm). Q1's verdict excluded it from the set, and the operator confirmed that exclusion — **but the confirmation was of the exclusion, not of the absence of a manual door**, which no one ever decided. ⚠️ **This is NOT a re-opening of Q1** (the *shape* — a tiny fixed set — is settled); it asks only whether a 5th member belongs. Adding it while the row is already being built is near-zero cost; a later cycle is not. ⚠️ **Before deciding, measure how many of the 531 typed invocations had `.session.md` present** — that is the real demand signal and it is derivable from the same transcripts.
 
@@ -125,8 +126,8 @@ Measured properties the fifth arm must respect — each already paid for by a re
 
 **Tasks:**
 - [ ] 2.1 ⚠️ **DECIDE FIRST: scanner or no scanner** (the (i)/(ii) choice above), and record the decision. If (ii): an existence check on **4 known paths**, never an enumeration; no frontmatter parsing is needed for a fixed set, since the command string is known. ⚠️ If (i): **delete this task** rather than building a scanner nothing consumes — an unused scanner is precisely the dead-code shape WP1 P1.8 was hunting. ⚠️ No `unwrap()`; `?` with `thiserror`.
-- [ ] 2.2 Frontend: the 3–5 fixed buttons, consuming the gate **only** via `useWorkflowFeaturesEnabled` (type-level, executable reference — the guard strips comments).
-- [ ] 2.3 Wire each button through `slash_command_bytes` to the **active** workspace's CC pane. ⚠️ Never a second injection path.
+- [ ] 2.2 Frontend: the **5** fixed buttons (4 skills + Recycle — see the verdict above; ⚠️ **not "3–5"**, no member is optional), consuming the gate **only** via `useWorkflowFeaturesEnabled` (type-level, executable reference — the guard strips comments).
+- [ ] 2.3 Wire each button through **`injectCommand`** (`autoResumeFire.ts:165`) to the **active** workspace's CC pane — the same seam the existing `/session-start` button uses. ⚠️ **NOT `slash_command_bytes`**: that is Rust-side, is not a `#[tauri::command]`, and no button can reach it (⚠️ **CORRECTED 2026-08-14** — this task previously named it, which would have forced either a stall or a brand-new Tauri command, i.e. the second injection path the next sentence forbids). ⚠️ Never a second injection path. ⚠️ Keep the `.catch` — an unhandled rejection is a silent dead click.
 - [ ] 2.4 **The fifth guard arm.** Assert the **computed** OFF-state value of the skill-button surface. Follow the row-cell arm's shape; read the file's header first (**26 tests** as of 2026-08-14, per-export chord arm).
 - [ ] 2.5 ⚠️ **Mutation-prove the fifth arm INDIVIDUALLY** — bypass only this arm, confirm red, confirm the mutant landed in **executable** code (`sed -n '<line>p'` it). ⚠️ An invalid probe and a real hole look identical.
 - [ ] 2.6 ⚠️ **Prove each rendered button has a live CALLER**, not merely an entry in the set. A test that only asserts set membership is the M12 dead-`/exit` trap. Funnel every send through ONE function and guard *that*.
@@ -232,7 +233,7 @@ Total **M + M + L + S**. The L is WP3, and it is L *because of the completion pr
 
 **WP1 complete 2026-08-14.** Evidence for every verdict below: `workflow-system/state/wip/m13-wp1-probe.md` (measurements, capture logs, rejected options). Q1 and the WP3 sizing carry explicit operator sign-off.
 
-### Q1 — which skills does the button surface show? → **A TINY FIXED SET (3–5 buttons)**
+### Q1 — which skills does the button surface show? → **A TINY FIXED SET (exactly 5)**
 
 Measured across **2470 transcripts**, separating operator-typed invocations (`user` role, `<command-name>`) from agent auto-chained ones (`assistant` role, `Skill` tool_use) — a discriminator **verified on a file containing both shapes** before counting.
 
