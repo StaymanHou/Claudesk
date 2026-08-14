@@ -193,3 +193,6 @@ Total **M + M + L + S**. The L is WP3, and it is L *because of the completion pr
 ## Probe outcomes
 
 *(WP1 writes here. Empty until the probe runs — an empty section is honest; a pre-filled one would be confabulation.)*
+
+## Session Handoff — 2026-08-14 10:15
+Handed off. See `workflow-system/state/.session.md` to restore.
