@@ -71,7 +71,7 @@ Measured properties the fifth arm must respect — each already paid for by a re
 
 ## Work Packages
 
-### WP1: Probe — registry scope, scan robustness, and the Recycle completion protocol
+### WP1: Probe — registry scope, scan robustness, and the Recycle completion protocol ✅ SHIPPED 2026-08-14 (commit `578ac4d`, review fixes `cbe4874`)
 **Type:** probe
 **Milestone:** 13 (FIRST — gates WP2, WP3, WP4)
 **Dependencies:** none

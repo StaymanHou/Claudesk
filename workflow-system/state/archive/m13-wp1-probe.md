@@ -1,6 +1,6 @@
 ---
 workflow: feature
-state: ship (complete)
+state: COMPLETED 2026-08-14
 drive_mode: autopilot
 milestone: 13
 wp: 1
@@ -11,7 +11,7 @@ created: 2026-08-14
 # Feature: M13 WP1 — Probe: registry scope, scan robustness, and the Recycle completion protocol
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** COMPLETED 2026-08-14
 **Created:** 2026-08-14
 
 ## Problem Statement
@@ -130,7 +130,7 @@ Two facts were established during planning that change the plan and correct the 
   - [x] verify-codify  <!-- status: done — no new tests warranted (decisions + a point-in-time measurement, not code). Suites green + unchanged: 2026 frontend, 844 Rust -->
 
 ## Current Node
-- **Path:** Feature > (all phases complete) > ship
+- **Path:** Feature > COMPLETED (shipped 578ac4d, review fixes cbe4874, finalized 2026-08-14)
 - **Active scope:** none — WP1 is done
 - **Blocked:** none
 - **Unvisited:** none. All 3 phases `[x]`, each with all five verification nodes `[x]`.
@@ -384,6 +384,29 @@ The subagent claimed the published numbers require silently dropping `isSidechai
 ⚠️ **The entire sidechain contribution is ONE hit, and it is the literal placeholder `/xxx`** — from the prompt text I sent the subagent, which its own transcript then contained and a later scan read back. A separate sweep for `feature-*`/`task-*`/`product-*` `<command-name>` matches across **every** role and both sidechain values returns **zero**. The original script never had a sidechain filter, which is why it produced 577 without one.
 
 **The subagent's own detail explains its error:** it reports inspecting the 24 hits and finding each was *"the skill's own SKILL.md preamble, not an operator invocation"* — i.e. it matched **skill-body text**, not `<command-name>` blocks, then attributed the resulting correction to a sidechain filter that was not doing that work. **The published method is complete as written; no disclosure is owed.** ⚠️ The `/xxx` artifact is worth knowing about for any future mining run: **an agent's own analysis prompt becomes a transcript and can be re-read as data.**
+
+## Retrospect
+
+- **What changed in our understanding:**
+  - ⚠️ **The roadmap's central deliverable line for this milestone was wrong, and only data showed it.** "Render each skill as a clickable button" would have surfaced the **agent's** vocabulary to a human who never types it: the operator has **never** manually invoked a single `feature-*`/`task-*`/`product-*` skill in 2470 transcripts, while those are the agent's top five (778–910 each). Manual usage is **92% one skill** (`/session-restore`), which M12 already automates. The two vocabularies are nearly disjoint — a fact no amount of reasoning about "which skills are common" would have produced.
+  - ⚠️ **Recycle's hard part is real and is not the byte injection.** Three captured handoffs killed every single-signal design: a run that wrote nothing still emitted a clean `Stop`; the pointer's existence was already true at t=0; and the file lands **9–12 s before the skill finishes**. The roadmap compressed all of that into four words.
+  - **A "failed" run was the most valuable one.** Run 2 refused to write (CC hit its own ambiguity guard) — that accident produced the proof that `Stop` is decoupled from success, which is precisely the case that breaks a naive implementation.
+
+- **Assumptions that held:**
+  - The pre-decomposition measurements (61 entries / 11 dangling / 50 valid) reproduced exactly.
+  - The four probe questions were the right four — each would genuinely have forced a rebuild if guessed.
+  - Q4's single-path answer held under two independent checks.
+  - `CleanExitRoute::RecycleSession` being pre-wired for M13 was correct (it exists, uncalled, deliberately).
+
+- **Assumptions that were wrong:**
+  - ⚠️ **Three claims about module behavior were asserted without reading the call path; all three were false.** (1) "`app-quit` never clears the unclean flag" — it does, in `perform_quit_teardown`, with four tests. (2) "`sessionStartButton.ts` is `/session-restore`'s manual door" — it fires `/session-start`. (3) "`slash_command_bytes` is *the* injection primitive; all injection goes through it" — it is Rust-side and unreachable from any button. **This is one defect repeated three times, not three defects.**
+  - ⚠️ **I assumed WP3 might shrink.** It did not: no unambiguous marker exists, so the L stands.
+  - I assumed the scan would be load-bearing. Q1's verdict made it **optional**, possibly deleted.
+
+- **Approach delta:**
+  - **Phase 2 grew a run.** Runs 1–2 were planned; run 3 was added when run 2 refused to write, leaving the stale-file *overwrite* case unobserved.
+  - **Q1 was re-asked.** I first offered a menu of shapes; the operator rejected it and required usage data. That instruction produced the milestone-reshaping finding — **the plan's biggest single improvement came from a mid-flight operator correction, not from the plan.**
+  - **Verification found more than the build did.** Two adversarial verify-self passes plus the code-quality review produced the CRITICAL and both retractions. ⚠️ **Every one was found by *reading the code the claim was about*** — never by a test, a consistency check, or a grep, all of which confirmed the false claims were *present and consistent* in up to six places.
 
 ## Code-Quality Review — m13-wp1-probe (2026-08-14, ship commit `578ac4d`)
 
