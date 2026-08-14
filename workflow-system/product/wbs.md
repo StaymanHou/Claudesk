@@ -59,7 +59,7 @@ Measured properties the fifth arm must respect — each already paid for by a re
 |---|---|---|
 | `slashCommandPayload(command)` + `injectCommand(sessionId, command)` | `src/components/workspace/autoResumeFire.ts:145` / `:165` | ⚠️ **THE seam a BUTTON must use.** `injectCommand` → `invoke("cc_input", { sessionId, data: slashCommandPayload(cmd) })`. This is what the existing `/session-start` button uses (`Workspace.tsx:169`) and what M12 WP3 consumed. ⚠️ The `invoke` **MUST** have a `.catch` — an unhandled Tauri rejection vanishes silently. **No retry, deliberately** (detecting a miss would need CC output-reading, which `arch.md` forbids). |
 | `slash_command_bytes(command)` | `src-tauri/src/cc_session/mod.rs:266` | The **Rust-side** CR rule, and ⚠️ **NOT reachable from the frontend** — it is not a `#[tauri::command]` and has exactly **one** production caller (`:966`, the shutdown `/exit`). `slashCommandPayload` is its deliberate **TS mirror**, pinned byte-for-byte by `autoResumeFire.test.ts` so the two cannot drift. ⚠️ **CORRECTED 2026-08-14** (code-quality review, CRITICAL): an earlier draft of this row called it "**the** injection primitive — all injection goes through it," which is **false** and would have sent WP2 to a function no button can call. Two implementations of one rule is the *intended* design; keep both in step, do not "unify" them. |
-| `sessionStartButton.ts` | `src/components/workspace/sessionStartButton.ts` (6.2 KB) + a 15.7 KB test | The **single-button precedent**. M13 either absorbs it into the registry or keeps it pinned — ⚠️ decide explicitly, do not leave two mechanisms. |
+| `sessionStartButton.ts` | `src/components/workspace/sessionStartButton.ts` (6.2 KB) + a 15.7 KB test | ⚠️ **DECIDED at WP1 P3.4 — it fires `/session-start` (NOT `/session-restore`), which is IN the new button set, so it and the new row OVERLAP.** It **IS** the `/session-start` button: WP2 renders the row *around* it or folds it in, and **exactly one `/session-start` affordance may exist when WP2 is done**. ⚠️ Do not add a second one beside it, and do not re-open this as "absorb vs keep pinned" — that framing rested on a false premise (corrected 2026-08-14). |
 | `session_state::consume` | `src-tauri/src/session_state/mod.rs` | Returns-and-clears the unclean-exit flag. |
 | `key_for()` | `src-tauri/src/session_state/` | ⚠️ **Every** read/write of the unclean-exit flag goes through it — a reader that skips it silently matches nothing (no error, just a flag that never fires). |
 | `useWorkflowFeaturesEnabled` | `src/state/useWorkflowFeaturesEnabled.ts` | ⚠️ The **only** gate door. Never `invoke()` ad hoc, never the raw wrapper. The guard bites at the **type declaration**. |
@@ -267,3 +267,6 @@ Three real `/session-handoff` runs captured against a fresh CC in `tmp/scratch/s
 
 - **WP3 stays L** — operator-confirmed. The re-size to M was conditional on finding an unambiguous marker; none exists.
 - **WP2 M → S candidate** — the scan was the bulk of its M. Decide at plan time; do not inherit M by default.
+
+## Session Handoff — 2026-08-14 13:20
+Handed off. See `workflow-system/state/.session.md` to restore.
