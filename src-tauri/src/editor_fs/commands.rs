@@ -31,7 +31,11 @@ use crate::config_store::{self, commands::resolve_data_dir};
 /// canonicalized root to confine against. Resolves the project list server-side from the
 /// real app-data dir, so the renderer can't widen the guard by passing an arbitrary
 /// `root`. Shared by all six editor-fs commands.
-fn validate_frontend_root(app: &AppHandle, root: &str) -> Result<PathBuf, String> {
+///
+/// `pub(crate)` rather than private so [`crate::docs::commands`] shares this exact
+/// implementation instead of holding a copy. A second copy of a security boundary is one
+/// that drifts — the same principle the `docs` module already applies to `read_file_core`.
+pub(crate) fn validate_frontend_root(app: &AppHandle, root: &str) -> Result<PathBuf, String> {
     let data_dir = resolve_data_dir(app)?;
     let known_roots: Vec<PathBuf> = config_store::read_projects(&data_dir)
         .map_err(|e| e.to_string())?

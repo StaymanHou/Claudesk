@@ -185,7 +185,7 @@ pub fn consume(map: &mut SessionStateMap, project_path: &str) -> bool {
 /// nothing — no error, just a flag that never fires. It exists for the in-module transition
 /// helpers (which key through [`key_for`] themselves) and for tests that construct maps
 /// directly.
-pub fn is_unclean(map: &SessionStateMap, project_path: &str) -> bool {
+pub(crate) fn is_unclean(map: &SessionStateMap, project_path: &str) -> bool {
     map.get(project_path).copied().unwrap_or(false)
 }
 

@@ -369,6 +369,18 @@ export async function recycleSession(
 }
 
 /**
+ * How long to wait for the respawn to publish a new session id.
+ *
+ * A cold `cc_spawn` resolves in well under a second in practice; this allows generous headroom
+ * because the cost of waiting is a slightly late restore, while the cost of giving up early is
+ * a recycled session the operator must restore by hand.
+ */
+export const RESPAWN_WAIT_MS = 15_000;
+
+/** Poll interval for the above. Short enough to feel immediate, long enough to be free. */
+export const RESPAWN_POLL_MS = 50;
+
+/**
  * Wait for the pane's session id to become BOTH non-null AND different from `killedSessionId`.
  *
  * ⚠️ **Waiting for merely non-null is the trap.** After `relaunch()` the caller's mirrored id
@@ -397,15 +409,3 @@ export async function waitForFreshSessionId(
     await sleep(pollMs);
   }
 }
-
-/**
- * How long to wait for the respawn to publish a new session id.
- *
- * A cold `cc_spawn` resolves in well under a second in practice; this allows generous headroom
- * because the cost of waiting is a slightly late restore, while the cost of giving up early is
- * a recycled session the operator must restore by hand.
- */
-export const RESPAWN_WAIT_MS = 15_000;
-
-/** Poll interval for the above. Short enough to feel immediate, long enough to be free. */
-export const RESPAWN_POLL_MS = 50;

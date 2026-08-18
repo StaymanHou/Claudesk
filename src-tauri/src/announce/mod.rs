@@ -531,10 +531,7 @@ mod tests {
         let route = CleanExitRoute::from_wire("recycle-session")
             .expect("`recycle-session` must parse — it is the string the frontend sends");
         assert_eq!(route, CleanExitRoute::RecycleSession);
-        assert!(session_state::clear_and_persist(
-            data.path(),
-            &recycled_key
-        ));
+        assert!(session_state::clear_and_persist(data.path(), &recycled_key));
 
         let after = announce_actions(data.path(), true);
         assert_eq!(

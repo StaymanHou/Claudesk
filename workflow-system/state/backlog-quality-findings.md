@@ -220,22 +220,32 @@ scheduling items rather than polish.*
 - **Source:** feature:review-quality (m11-wp2)
 - **Target level:** feature
 - **Type:** tech-debt (cosmetic)
-- **Summary:** Four MINOR findings, all comment/structure polish with no correctness impact:
+- **Summary:** ⚠️ **PARTIALLY RESOLVED — rewritten 2026-08-18 (paydown WP1) to the 2 remaining
+  sub-items.** Was four MINOR findings; (3) and (4) are closed (see CHANGELOG 2026-08-18). What
+  remains, both comment-density items:
   (1) `panelHost.ts:26-43` — the type-only seam import is genuinely load-bearing (verified by
   mutation), but its 18-line justification argues with the guard before describing the code, burying
-  the secondary type-safety benefit where it reads as primary. (2) `docs/mod.rs:184-201` — 9 comment
-  lines plus a dedicated private-helper test for a dedup branch no production input reaches; an
-  assertion that the fixed lists and glob sets are disjoint would pin the same invariant at its
-  source, smaller. (3) `DocsPanel.tsx:29,95` — `selected` has no consumer until WP3; the header says
-  so, the code doesn't. (4) `commands.rs:40-48` — `validate_frontend_root` is a verbatim copy of
-  `editor_fs::commands`' private fn of the same name; `pub(crate)` on the original is one keyword and
-  would make the module's own "a second guard is one that drifts" principle true across both halves.
+  the secondary type-safety benefit where it reads as primary.
+  (2) `docs/mod.rs:184-201` — 9 comment lines plus a dedicated private-helper test for a dedup
+  branch no production input reaches; an assertion that the fixed lists and glob sets are disjoint
+  would pin the same invariant at its source, smaller.
+- **Resolved sub-items (2026-08-18, paydown WP1):** (4) `validate_frontend_root`'s verbatim copy —
+  the `editor_fs` original is now `pub(crate)` and imported, and the dedup is **structurally
+  enforced**: a re-introduced copy fails to compile (`E0255`), proven by mutation. (3)
+  `DocsPanel.tsx` `selected` — resolved by the passage of the work the finding itself named
+  ("no consumer *until WP3*"); WP3/WP4/WP5 shipped, the value now has ~35 references and the stale
+  header claim is gone. **No edit was made — recorded as no-change-needed with evidence.**
 - **Context:** The reviewer's overall note is that comment-to-code ratio in `panelHost.ts` and
   `docs/mod.rs` is high enough that load-bearing sentences compete with provenance narration.
-- **Suggested action:** Sweep in a refactor pass, or dismiss individually. (4) is the one with a
-  principled argument behind it and is nearly free.
+  ⚠️ **Both survivors are comment-DENSITY items, so they belong to the deferred T1/T2 convention
+  pass** (`backlog-paydown-wbs.md` → "Deliberately NOT in a WP"), **not** to a sweep WP. Per-WP
+  trimming was measured as **not converging** — the same file was flagged in four consecutive
+  reviews. The shape that works: designate ONE authority per rule, collapse other sites to a
+  pointer, and **guard it** so it cannot drift back.
+- **Suggested action:** Carry both into the T1/T2 convention pass. ⚠️ Do **not** fix by trimming a
+  little from each site — that is the recorded failure mode.
 - **Priority:** low
-- **Status:** pending
+- **Status:** pending — 2 of 4 sub-items remain; routed to the T1/T2 convention pass
 
 # time-tracking-offline-local-only-copy — 2026-08-01
 

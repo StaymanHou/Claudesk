@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-08-18
 created: 2026-08-18
-status: not-started
+status: in-progress (WP1 done 2026-08-18; WP2 next)
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -70,7 +70,17 @@ one ruling was materially changed by what the code said.**
 
 ---
 
-## WP1 — Declaration hygiene: visibility + placement  `[impact: Med · effort: XS · risk: Lowest]`
+## WP1 — Declaration hygiene: visibility + placement  `[impact: Med · effort: XS · risk: Lowest]`  ✅ DONE 2026-08-18
+
+> **CLOSED** — archived at `workflow-system/state/archive/paydown-wp1-declaration-hygiene.md`.
+> ⚠️ **Two of the four filed items were not what the filing said, and a future WP should expect the
+> same:** the `recycleSession.ts` item named `waitForFreshSessionId` as misplaced, but that function
+> has **no in-file caller** — only its two default-value constants were late (hoisted). And the
+> `DocsPanel.tsx` `selected` item had **expired**: it was filed as "no consumer *until WP3*", and
+> WP3/WP4/WP5 have shipped, so it was recorded **no-change-needed with evidence** rather than turned
+> into an invented edit. ⚠️ **A backlog finding carries an implicit as-of date** — re-read the code,
+> not the summary. The T2 dedup is now **compile-enforced** (`E0255` on a re-introduced copy), which
+> is stronger than the finding asked for.
 
 Pure subtraction/narrowing, so it runs first — it can only shrink surface. **Serves T10, and closes
 one T1 duplication instance for free.**
@@ -377,5 +387,3 @@ Per the model: **deletions → low-risk → high-impact → co-location**; effor
    authority + guard shape intact (not silently dropped).
 5. **Delete this file.** It reserves no roadmap slot and must not be resynced into `arch.md`.
 
-## Session Handoff — 2026-08-18 14:45
-Handed off. See `workflow-system/state/.session.md` to restore.

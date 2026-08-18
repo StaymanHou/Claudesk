@@ -15,7 +15,7 @@
 //! ([`read_file_core`]) directly, since constructing an `AppHandle` needs a Tauri runtime.
 //! The root-*authentication* half ([`validate_frontend_root`]) is therefore asserted by
 //! this comment rather than pinned by a unit test — it is covered live at verify-self,
-//! and shares its implementation with the six editor-fs commands that exercise it in
+//! and it is now literally the same function the six editor-fs commands exercise in
 //! production. Stated explicitly so the claim is not mistaken for a tested one.
 //!
 //! ## Why this reuses `editor_fs` rather than re-implementing
@@ -25,27 +25,17 @@
 //! path-confinement guard (including the WP7 symlink handling) has exactly one
 //! implementation. Re-implementing it here would be a second security boundary to keep in
 //! sync, which is how such guards drift.
+//!
+//! That principle now covers **both** halves: [`validate_frontend_root`] is imported from
+//! [`crate::editor_fs::commands`] rather than copied. It was a verbatim duplicate until the
+//! 2026-08-18 paydown sweep narrowed the original to `pub(crate)`.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use tauri::AppHandle;
 
 use super::{discover, DocEntry};
-use crate::config_store::{self, commands::resolve_data_dir};
-use crate::editor_fs::{read_file_core, validate_root};
-
-/// Authenticate a frontend-supplied `root` against the known project list, returning the
-/// canonicalized root to confine against. Mirrors `editor_fs::commands`'
-/// `validate_frontend_root` (which is private to that module).
-fn validate_frontend_root(app: &AppHandle, root: &str) -> Result<PathBuf, String> {
-    let data_dir = resolve_data_dir(app)?;
-    let known_roots: Vec<PathBuf> = config_store::read_projects(&data_dir)
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .map(|p| p.path)
-        .collect();
-    validate_root(&known_roots, Path::new(root)).map_err(|e| e.to_string())
-}
+use crate::editor_fs::{commands::validate_frontend_root, read_file_core};
 
 /// List the conventional workflow docs present under the workspace `root`.
 ///

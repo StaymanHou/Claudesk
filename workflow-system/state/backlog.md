@@ -17,6 +17,16 @@
   rationale-duplication finding one level up, and the right fix is *"pick one authority and point at
   it"*, ⚠️ **not** trimming a little from each site.
 
+## SURFACE-2026-08-18-NOTHING-ENFORCES-CARGO-FMT-EITHER
+- **Source:** task:act (paydown WP1)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** The enforcement gap already filed for the frontend (`SURFACE-2026-08-01-NOTHING-ENFORCES-FORMAT-CHECK`, scheduled as paydown **WP5**) exists **identically on the Rust side**: nothing runs `cargo fmt --check`. Found empirically — WP1's `cargo fmt` silently reformatted a pre-existing drift in `src-tauri/src/announce/mod.rs:531-537` (a test assertion wrapped across 4 lines) in a file WP1 never edited.
+- **Context:** ⚠️ **This widens WP5's scope by one line, and it is cheap to fold in now.** WP5's filed shape covers only `pnpm format:check`. Rust drift accumulates the same way and surfaces the same way — as an unrelated task's diff picking up formatting noise, which is exactly what makes a diff hard to review and attribution hard to prove. The two halves have the same cause (no CI, no hook) and want the same fix.
+- **Suggested action:** When WP5 runs, add `cargo fmt --check` to the same per-phase verify-auto gate as `pnpm format:check` rather than filing a second pass for it. ⚠️ Do **not** treat this as a separate WP.
+- **Priority:** low
+- **Status:** pending — fold into paydown WP5
+
 ## SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES
 - **Source:** feature:build (M13 WP4 Phase 3 — live Recycle runs)
 - **Target level:** product:arch
@@ -328,7 +338,7 @@
 - **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Deliberately NOT folded into M11: app-wide in scope, needs `style-src 'unsafe-inline'`, fails SILENTLY, and wants its own verification pass — folding it into a docs-panel WP would have shipped it unverified. Recorded in `arch/security-posture.md` → read-only-is-the-panel-not-the-webview.
 
 ## Code-quality findings — m11-wp2-docs-panel-plumbing (2026-08-01)
-- **Pointer:** **1 MINOR batch** remaining (was 2 MAJOR + 4 MINOR). ⚠️ **Both MAJORs were RESOLVED by M11 WP3** (2026-08-02) and deleted per delete-on-resolve — the fetch-latch entanglement became an explicit state machine (`fetchLatch.ts`) before WP4's reload could turn it into a loop, and the missing wiring test landed as `docsPanelWiring.test.ts`. What remains is `SURFACE-2026-08-01-QUALITY-WP2-MINOR-BATCH`: four comment/structure polish items, of which the pick is making `editor_fs`'s `validate_frontend_root` `pub(crate)` instead of keeping a verbatim copy in `docs/commands.rs`. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m11-wp2-docs-panel-plumbing — 2026-08-01`.
+- **Pointer:** **2 MINOR** remaining (was 2 MAJOR + 4 MINOR). ⚠️ **Both MAJORs were RESOLVED by M11 WP3** (2026-08-02) and deleted per delete-on-resolve — the fetch-latch entanglement became an explicit state machine (`fetchLatch.ts`) before WP4's reload could turn it into a loop, and the missing wiring test landed as `docsPanelWiring.test.ts`. ⚠️ **2 of the 4 MINORs were resolved by paydown WP1** (2026-08-18) — the `validate_frontend_root` copy (now `pub(crate)` + imported, and the dedup is compile-enforced) and the `DocsPanel.tsx` `selected` item (resolved by WP3+ shipping; no edit needed). **The 2 survivors are comment-DENSITY items and belong to the deferred T1/T2 convention pass, not a sweep WP** — per-WP trimming was measured as not converging. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m11-wp2-docs-panel-plumbing — 2026-08-01`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Held for a future `/feature-refactor` **by design**, not cycle-resolved — part of the standing code-quality batch. ⚠️ The comment-density finding is the pick across all four M11 blocks: it is ONE finding at four points in time (WP2 → WP3 → WP4 → WP5) and WP5's reviewer concluded per-WP trimming **is not converging** — it wants a density *budget*, not another sweep.
 - **Pickup shape:** Sweep in a refactor pass or dismiss individually. Dismiss via the WIP's `## Code-Quality Review` section.
