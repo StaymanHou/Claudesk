@@ -233,6 +233,73 @@ describe("wiring — properties no value can observe (source guards)", () => {
     ),
   );
 
+  // ── M13 WP3 verify-codify — THE CONSUMING-SURFACE TEST ──────────────────────
+  //
+  // ⚠️ Phase 3 has an INTEGRATION BOUNDARY: it renders a new button inside an EXISTING UI
+  // component's header row. The boundary rule requires a test that exercises the consuming
+  // surface — `Workspace.tsx`'s row — and says explicitly that unit tests on the new module do
+  // NOT satisfy it. `recycleButton.ts`'s predicate can be perfect while the render site never
+  // calls it, which is this project's recurring "the set is not the caller" defect.
+  //
+  // ⚠️ Source-read rather than a rendered DOM because this repo has no jsdom/component harness
+  // (the standing posture). The operator verified the LIVE surface at verify-human — this test's
+  // job is to stop a regression, not to re-prove what a human already saw.
+  it("Workspace.tsx renders the Recycle button INSIDE the gated skill row", () => {
+    // The row's opening through its close. Anchoring on the testids rather than line numbers so
+    // a reflow or an inserted sibling cannot silently move the assertion off its target.
+    const rowStart = ws.indexOf('data-testid="workspace-skill-row"');
+    expect(
+      rowStart,
+      "the skill row must still exist in Workspace.tsx",
+    ).toBeGreaterThan(-1);
+
+    // ⚠️ Anchored on the JSX ATTRIBUTE, not the bare identifier. `ws.indexOf("RECYCLE_TESTID")`
+    // was tried first and matched the IMPORT at the top of the file (offset 1278 vs the row's
+    // 8451), failing while the button was rendered correctly. Third instance of this shape in
+    // this WP — a source-text search must anchor on the USE SITE's syntax, because a declaration
+    // and a use are indistinguishable to a bare-identifier match.
+    const recycleAt = ws.indexOf("data-testid={RECYCLE_TESTID}");
+    expect(
+      recycleAt,
+      "Workspace.tsx must render the Recycle button — a gated predicate with no render site is " +
+        "the orphaned-module shape this WP already hit once in Phase 1",
+    ).toBeGreaterThan(rowStart);
+
+    // ⚠️ The gate must wrap it. `showSkillButtons(...) && (` opens the row's conditional block,
+    // and the Recycle button must appear AFTER that opening — otherwise it would render even
+    // with the gate off, which is the OFF-invariant violation arm 5 exists to prevent but
+    // CANNOT see (arm 5 tests the predicate, not the JSX).
+    const gateAt = ws.indexOf("showSkillButtons({");
+    expect(gateAt).toBeGreaterThan(-1);
+    expect(
+      recycleAt,
+      "the Recycle button must render INSIDE the gated block, after showSkillButtons(...)",
+    ).toBeGreaterThan(gateAt);
+
+    // And it carries its own predicate too (double-gated, as verify-self confirmed).
+    expect(
+      ws,
+      "the Recycle button must ALSO consult its own showRecycleButton predicate",
+    ).toContain("showRecycleButton({");
+  });
+
+  it("the Recycle button is NOT a SKILL_BUTTONS member — it is a sibling", () => {
+    // ⚠️ The WBS's standing scope decision, asserted against the real array. `SKILL_BUTTONS`
+    // holds slash commands routed to `injectCommand`; Recycle is an operation. If a future edit
+    // "tidies" it into the array, its click would be sent as a literal slash command named
+    // "recycle" — CC would print "unknown command" and the operation would never run.
+    //
+    // ⚠️ This is NOT the removed `DECIDED_ROW_SIZE` guard. That one asserted a future COUNT
+    // (unsatisfiable, and a test cannot enforce a future scope decision). This asserts a
+    // present-tense property of code that exists: no member of the array is Recycle.
+    for (const btn of SKILL_BUTTONS) {
+      expect(btn.command.toLowerCase()).not.toContain("recycle");
+      expect(btn.label.toLowerCase()).not.toContain("recycle");
+    }
+    // The row therefore renders SKILL_BUTTONS.length + 1 affordances when the gate is on.
+    expect(SKILL_BUTTONS).toHaveLength(5);
+  });
+
   it("both sources are readable (non-vacuity guard)", () => {
     // Without this, a failed read makes every assertion below trivially pass.
     expect(ws.length).toBeGreaterThan(5000);
@@ -339,7 +406,15 @@ describe("wiring — properties no value can observe (source guards)", () => {
     // class followed only by optional whitespace and `{` — no pseudo-class, no descendant.
     const hasBaseRule = (cls: string) =>
       new RegExp(`\\.${cls}\\s*\\{`).test(css);
-    for (const cls of ["workspace-skill-row", "workspace-skill-btn"]) {
+    // ⚠️ `workspace-recycle-btn` added at M13 WP3 — the row's sixth affordance emits it, so it
+    // is subject to the same base-rule requirement. Extending this array (rather than writing a
+    // parallel check elsewhere) keeps ONE list of "classes the header emits", which is what makes
+    // a forgotten class detectable at all.
+    for (const cls of [
+      "workspace-skill-row",
+      "workspace-skill-btn",
+      "workspace-recycle-btn",
+    ]) {
       expect(ws, `${cls} must be emitted by Workspace.tsx`).toContain(cls);
       expect(
         hasBaseRule(cls),

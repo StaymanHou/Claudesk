@@ -12,6 +12,8 @@ import {
   SKILL_BUTTONS,
   showSkillButtons,
 } from "../../components/workspace/skillButtons";
+// ARM 5 extension (M13 WP3) — imported from production, not stubbed, same as the row above.
+import { showRecycleButton } from "../../components/workspace/recycleButton";
 import type { AnnounceMap } from "../predictAction";
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -508,6 +510,40 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
   // `--continue`-shaped exception to preserve. The "must not be over-broad" direction is
   // therefore expressed differently: rather than asserting some member survives while OFF
   // (none may), the anti-vacuity companion pins that the predicate genuinely reads the gate.
+
+  // ── ARM 5, EXTENDED: THE RECYCLE AFFORDANCE (M13 WP3) ──────────────────────
+  // ⚠️ Recycle is the row's SIXTH affordance and is NOT a `SKILL_BUTTONS` member (it is an
+  // operation, not a slash command), so `showSkillButtons` says nothing about it. A guard that
+  // only checked the array would report the row clean while a live Recycle button sat next to
+  // it — the same "the set is not the caller" shape this project keeps hitting. It therefore
+  // gets its own assertion against its OWN predicate.
+  it("renders no RECYCLE button while the gate is OFF", () => {
+    for (const ccSessionId of [null, "cc-1"]) {
+      expect(
+        showRecycleButton({ workflowEnabled: false, ccSessionId }),
+        `the Recycle button must not exist while the gate is OFF (ccSessionId=${ccSessionId})` +
+          ` — it drives /session-handoff and /session-restore, both companion-workflow skills,` +
+          ` so it is meaningless without the substrate the gate represents`,
+      ).toBe(false);
+    }
+  });
+
+  it("the Recycle predicate genuinely READS the gate (anti-vacuity)", () => {
+    // Companion to the above: a predicate hardcoded to `false` would satisfy every OFF
+    // assertion in this file forever while the feature was simply broken. Pinning the ON case
+    // is what makes the OFF case evidence rather than a tautology.
+    expect(
+      showRecycleButton({ workflowEnabled: true, ccSessionId: "cc-1" }),
+      "with the gate ON and a live session the Recycle button MUST exist — otherwise the OFF " +
+        "assertion above proves nothing",
+    ).toBe(true);
+    // And the second precondition is independently load-bearing: no session ⇒ no button, even
+    // with the gate on (the dead-click guard).
+    expect(
+      showRecycleButton({ workflowEnabled: true, ccSessionId: null }),
+      "a null session id must still suppress the button — firing into it is the WP6 picker MAJOR",
+    ).toBe(false);
+  });
 
   it("renders no skill button while the gate is OFF", () => {
     // The row is all-or-nothing: `showSkillButtons` is the single source of truth for whether

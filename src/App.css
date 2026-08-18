@@ -595,9 +595,13 @@ body,
   align-items: center;
   gap: 0.2rem;
   flex-shrink: 0;
-  /* ⚠️ min-width:0 + the wrapper being shrinkable is what keeps five buttons from pushing
+  /* ⚠️ min-width:0 + the wrapper being shrinkable is what keeps the row's buttons from pushing
      the split control off the row at a narrow window. The buttons themselves do NOT
-     shrink (they would become unreadable slivers); the row clips instead. */
+     shrink (they would become unreadable slivers); the row clips instead.
+     ⚠️ Count updated at M13 WP3: SIX affordances now (five skill commands + Recycle), so the
+     clip threshold is tighter than the "five buttons" this comment used to name. WP2 measured
+     the header truncating ~640px with the status dot overflowing ~600px and the operator
+     ACCEPTED that; the sixth button moves those numbers, which Phase 4 re-checks live. */
   min-width: 0;
   overflow: hidden;
 }
@@ -619,6 +623,26 @@ body,
 .workspace-skill-btn:hover {
   opacity: 1;
   border-color: rgba(110, 168, 255, 0.6);
+}
+
+/* M13 WP3 — the Recycle button: the row's SIXTH affordance and the only one that is an
+   operation rather than a slash command. It carries `.workspace-skill-btn` for the shared
+   look plus this class for the two things that differ:
+     1. a busy state — a recycle takes tens of seconds (WP1 measured 28–52s to the terminal
+        `Stop`), so the button must visibly stop accepting clicks for that whole window;
+     2. a hairline separator marking it as not-a-skill, so the row reads as "five commands,
+        then an operation" rather than six interchangeable buttons.
+   ⚠️ A BASE rule, not only a `:disabled` modifier — the CSS guard in `skillButtons.test.ts`
+   requires the class followed by `{` (a modifier alone would leave the element's own styling
+   undefined while satisfying a weaker check; that exact hole was measured at WP2). */
+.workspace-recycle-btn {
+  margin-left: 0.25rem;
+  border-left-width: 1px;
+}
+
+.workspace-recycle-btn:disabled {
+  opacity: 0.4;
+  cursor: progress;
 }
 
 /* M6 WP3 — the split-ratio control in the header. Sits between the project name

@@ -76,6 +76,21 @@ export interface XtermPaneHandle {
    * thin apply seam, so XtermPane stays unaware of the routing/storage.
    */
   setFontSize(px: number): void;
+  /**
+   * M13 WP3 P2.1 — kill the current CC session and re-spawn a fresh one in this pane.
+   *
+   * ⚠️ This EXPOSES the existing `handleRelaunch` (the Relaunch button's own path); it does
+   * NOT add a second respawn route. That matters because the sequence is subtle and already
+   * correct: kill → null the session ref → clear the spawn-once latch → `dispatch({relaunch})`,
+   * which lets the SINGLE deferred-spawn trigger fire the nonce bump, so relaunch and
+   * first-spawn share one nonce-bump path and cannot double-spawn.
+   *
+   * ⚠️ It deliberately does NOT clear `hasFiredRef` (auto-resume's consume-once latch). A
+   * relaunch re-spawns but must NOT re-type `/session-restore` against a `.session.md` the
+   * first fire already deleted — the M12 defect. A programmatic caller that wants a restore
+   * after relaunching must inject it itself.
+   */
+  relaunch(): void;
 }
 
 interface XtermPaneProps {
@@ -201,6 +216,9 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // M6 WP3 — holds the latest fitAndResize so the imperative handle (defined here,
     // before fitAndResize) can call it without a reorder or a stale closure.
     const fitAndResizeRef = useRef<() => void>(() => {});
+    // M13 WP3 P2.1 — same ordering trick as `fitAndResizeRef` above: `handleRelaunch` is
+    // declared below this handle, so the ref lets the handle reach it without a reorder.
+    const handleRelaunchRef = useRef<() => void>(() => {});
     useImperativeHandle(
       ref,
       () => ({
@@ -213,6 +231,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           // Re-fit after the cell size changes so cols/rows + the PTY stay correct.
           fitAndResizeRef.current();
         },
+        relaunch: () => handleRelaunchRef.current(),
       }),
       [],
     );
@@ -255,6 +274,10 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       hasSpawnedRef.current = false;
       dispatch({ type: "relaunch" });
     };
+    // M13 WP3 P2.1 — keep the imperative-handle ref pointing at the live handleRelaunch, so
+    // Recycle drives the SAME path the Relaunch button does. Assignment-on-render, mirroring
+    // `fitAndResizeRef.current = fitAndResize` below.
+    handleRelaunchRef.current = handleRelaunch;
 
     // Fit the terminal to its container and push the resulting cols/rows to the PTY.
     // The single chokepoint for size sync — used by mount, ResizeObserver, and the

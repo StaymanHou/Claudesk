@@ -255,6 +255,8 @@ pub fn announce_actions(data_dir: &Path, gate_enabled: bool) -> AnnounceMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // M13 WP3 — the recycle round-trip test parses the wire string the frontend sends.
+    use crate::session_state::CleanExitRoute;
     use std::fs;
     use tempfile::TempDir;
 
@@ -484,6 +486,69 @@ mod tests {
             map.get(&proj.path().to_string_lossy().to_string())
                 .map(String::as_str),
             Some(ACTION_RESTORE)
+        );
+    }
+
+    /// M13 WP3 Phase 4 verify-codify — the RECYCLE ROUND TRIP, end to end in one test.
+    ///
+    /// ⚠️ This is the composition Phase 4 verified LIVE and that nothing else pins. The two
+    /// halves each had coverage — `from_wire` round-trips every route
+    /// (`session_state::commands`), and a flagged project announces `continue` (the test
+    /// below) — but **no test joined them**, so a break anywhere in the chain
+    /// *wire name → parse → clear → announce goes quiet* would have passed everything.
+    ///
+    /// That chain is exactly what makes Recycle safe to fire: without the clear, every
+    /// recycle leaves a false unclean mark and the NEXT open fires a spurious `--continue`,
+    /// resuming a conversation the operator deliberately handed off.
+    ///
+    /// ⚠️ Both directions are asserted. The positive alone would pass on a `clear_and_persist`
+    /// that wiped the whole map, so the test also pins that a SIBLING project's flag survives —
+    /// the "targeted, not a wipe" property observed live (scratch-c and verify-041 were
+    /// untouched while scratch-a cleared).
+    #[test]
+    fn the_recycle_session_route_clears_the_flag_and_silences_the_continue_announcement() {
+        let recycled = TempDir::new().unwrap(); // no .session.md — the continue arm only
+        let sibling = TempDir::new().unwrap(); // must be UNAFFECTED by the clear
+        let data = data_dir_with(&[recycled.path(), sibling.path()]);
+        let recycled_key = recycled.path().to_string_lossy().to_string();
+        let sibling_key = sibling.path().to_string_lossy().to_string();
+
+        session_state::set_and_persist(data.path(), &recycled_key);
+        session_state::set_and_persist(data.path(), &sibling_key);
+
+        // Precondition — without this the "silenced" assertion below could pass vacuously
+        // (a project that never announced cannot stop announcing).
+        let before = announce_actions(data.path(), true);
+        assert_eq!(
+            before.get(&recycled_key).map(String::as_str),
+            Some(ACTION_CONTINUE),
+            "precondition: a flagged project must announce `continue`, or the post-clear \
+             assertion proves nothing"
+        );
+
+        // The route arrives from the frontend as a WIRE STRING; parse it the way the command
+        // does rather than using the enum directly, so a wire-name drift fails here too.
+        let route = CleanExitRoute::from_wire("recycle-session")
+            .expect("`recycle-session` must parse — it is the string the frontend sends");
+        assert_eq!(route, CleanExitRoute::RecycleSession);
+        assert!(session_state::clear_and_persist(
+            data.path(),
+            &recycled_key
+        ));
+
+        let after = announce_actions(data.path(), true);
+        assert_eq!(
+            after.get(&recycled_key),
+            None,
+            "after a recycle-session clear the project must announce NOTHING — an announced \
+             `continue` here is a spurious --continue on the next open, resuming a \
+             conversation the operator deliberately handed off"
+        );
+        assert_eq!(
+            after.get(&sibling_key).map(String::as_str),
+            Some(ACTION_CONTINUE),
+            "the clear must be TARGETED: a sibling project's flag must survive. Without this \
+             the test above would also pass on a clear that wiped the entire map"
         );
     }
 

@@ -1,5 +1,44 @@
 # Backlog
 
+## SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE
+- **Source:** feature:build (M13 WP3 Phase 4 — live verification)
+- **Target level:** product:wbs (a verification gap, not a code defect)
+- **Type:** gap
+- **Summary:** Recycle's **success path was never observed end-to-end in one live run.** Every
+  component is proven — injection reaches the PTY, CR submits and CC runs a turn, the
+  `recycle-session` clear works and is targeted, the announce arm goes quiet afterwards, and the
+  completion machine is mutation-proven plus driven with a live-measured stale mtime — but the
+  **composition** (fresh write → next `Stop` → clear → kill → respawn → restore) was not seen in a
+  single continuous run.
+- **Context:** ⚠️ **The blocker is the FIXTURE, not the code.** `/session-handoff` refused on
+  `tmp/scratch/scratch-a` because it is an empty scratch repo with no `CLAUDE.md` and no real
+  session state, and CC correctly declines to fabricate a pointer a future `/session-restore` would
+  act on. That refusal was itself valuable — it reproduced WP1's **run-2 shape** live and proved the
+  FAILURE arm (flag not cleared, session not killed, reason `no-fresh-write`). But it means the
+  success arm needs a scratch repo CC will actually hand off from. ⚠️ Note the recursive constraint:
+  an agent-launched CC inherits `CLAUDE_CODE_CHILD_SESSION`, so transcript saving is off — which
+  bounds what any agent-driven run can observe about the resumed conversation
+  (`[[agent-launched-app-cannot-verify-continue]]`).
+- **Suggested action:** Either (a) build a richer scratch fixture — a `CLAUDE.md` plus a WIP item
+  with genuine-looking state — until `/session-handoff` writes a pointer, then re-run the single
+  continuous click; or (b) accept it as an **operator-dogfooding** check: the operator recycles a
+  real session once and confirms the chain, which is the flow the feature exists for anyway.
+  ⚠️ Do NOT "fix" this by weakening the completion marker to fire on the write alone — that is
+  precisely the 9–12s trap WP1 measured, and it would truncate the WIP annotation.
+- **Priority:** medium (no known defect; the risk is that a composition bug between proven
+  components would not have been caught by anything run so far)
+- **Status:** pending
+
+## SURFACE-2026-08-16-IDLE-DOT-CONFLATES-DONE-WITH-WAITING-ON-A-BACKGROUND-JOB
+- **Source:** operator (dogfooding observation, 2026-08-16)
+- **Target level:** product — the status *vocabulary* gains a fourth live state; the dot palette and all three surfaces follow. Queued for the **next QoL polish bucket** (the M6 / M10.5 / M11.5 pattern — no bucket is currently open).
+- **Type:** gap (a real CC state the status model cannot express)
+- **Summary:** When CC returns control to the operator but is still **waiting on a backgrounded command/job** it started, the workspace dot goes **gray (`idle`)** — reading as "this workspace is done, nothing to see." It isn't: the turn ended but work is still outstanding, and the operator will need to come back when the job lands. This scenario deserves its **own color/state — neither busy nor idle**.
+- **Context:** The broadcaster has exactly **three live states** (`Running` / `AwaitingInput` / `Idle`; `Unknown` is the pre-first-event default and is never emitted) — `status_broadcaster/mod.rs:63`. `Stop` maps unconditionally to `Idle` (`:124`), and `Stop` fires at **every** turn end regardless of whether a background job is still running, so today there is no place in the model for "control returned, work outstanding." ⚠️ **Distinct from `SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT`** — that one is a **stale blue** dot (a background *agent* lit AwaitingInput and nothing ever clears it); this one is a **wrongly-gray** dot (a background *shell job* leaves no trace in the status model at all). They share a root cause worth noting: the status model was designed around a single foreground turn, and every background-work shape falls outside it. Consider settling both in one pass. ⚠️ All three surfaces (filmstrip · PiP · menu-bar) fold the same broadcast, so a fourth state means a fourth glyph/color in each — and the menu-bar aggregate needs a rule for how it ranks against the other three.
+- **Suggested action:** ⚠️ **First establish whether the signal exists at all** — this is the gating unknown, and the answer must come from a **live hook capture, not the docs** (`[[cc-hook-capture-beats-docs]]`). Open questions: does CC emit any hook event when a backgrounded job is launched or completes; does `Stop`'s payload carry any "background work outstanding" field; if not, is the only available signal the `Bash(run_in_background)` `PostToolUse` payload plus a later completion event? If **no** distinguishable signal reaches the hook channel, the item is blocked on CC upstream and should be re-filed as such rather than inferred from PTY output (which the architecture forbids). If a signal **does** exist: add a fourth `WorkspaceState` variant, pick a color distinct from gray/green/blue, and thread it through the three surfaces + the M9 reclassifier (which shares `notification_awaits_input` as a single source of truth — check whether the new state needs an analogous analytics meaning).
+- **Priority:** low-medium (no correctness/data impact; it degrades the same ambient-attention purpose M7 exists for — a workspace that looks finished but isn't is exactly the "find the one waiting on you" tax the product exists to remove)
+- **Status:** pending
+
 ## SURFACE-2026-08-14-A-TEST-CANNOT-ENFORCE-A-FUTURE-SCOPE-DECISION
 - **Source:** feature:review-quality (M13 WP2 — two MAJORs on one mechanism I invented)
 - **Target level:** product:arch (verification hygiene) — a rule, not a code change

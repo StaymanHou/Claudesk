@@ -59,6 +59,16 @@ import {
   SKILL_BUTTONS,
   showSkillButtons,
 } from "./skillButtons";
+// M13 WP3 P3.1 — the Recycle operation. ⚠️ NOT a skill button: it is a multi-step operation
+// (two injections + a completion wait + a flag clear + a respawn), so it is a sibling in the
+// same row rather than a `SKILL_BUTTONS` member.
+import { recycleSession, waitForFreshSessionId } from "./recycleSession";
+import {
+  RECYCLE_LABEL,
+  RECYCLE_TESTID,
+  recycleTitle,
+  showRecycleButton,
+} from "./recycleButton";
 
 interface WorkspaceProps {
   workspace: WorkspaceModel;
@@ -174,6 +184,68 @@ export function Workspace({
     const sessionId = workspace.cc_session_id;
     if (sessionId === null) return; // unreachable — the row does not render without one.
     void fireSkillCommand(sessionId, command);
+  };
+
+  // M13 WP3 P3.1 — the live session id, mirrored into a ref so `awaitFreshSessionId` can watch
+  // it CHANGE after a relaunch. The id arrives by a push (XtermPane's `onSessionId` → App state
+  // → back down as this prop), which a promise cannot await; a ref updated every render is the
+  // only place a polling closure can read the current value without going stale.
+  // ⚠️ Written in an EFFECT, not during render. Assignment-on-render trips eslint's
+  // `Cannot access refs during render` as an ERROR (it caught this), and the rule is pointing at
+  // something real: a render-phase ref write is invisible to React's update model. The same
+  // latest-ref-via-effect idiom is used by `XtermPane`'s `onSessionIdRef`.
+  const ccSessionIdRef = useRef(workspace.cc_session_id);
+  useEffect(() => {
+    ccSessionIdRef.current = workspace.cc_session_id;
+  }, [workspace.cc_session_id]);
+
+  // M13 WP3 P3.1 — one Recycle at a time. Guards the double-click: the sequence takes tens of
+  // seconds (WP1 measured 28–52s to the terminal `Stop`), so a second click mid-run would start
+  // a competing operation against the same session and both would race the same signals.
+  const [recycling, setRecycling] = useState(false);
+
+  /**
+   * Run the Recycle operation for this workspace, on an explicit click only.
+   *
+   * ⚠️ This is NOT a skill button and does NOT go through `fireSkill`. `SKILL_BUTTONS` holds
+   * slash commands routed to `injectCommand`; Recycle is a multi-step OPERATION that injects two
+   * different commands, waits on a composite completion signal, clears the unclean-exit flag,
+   * and respawns CC. It is a sibling affordance in the same row, wired to `recycleSession`.
+   *
+   * ⚠️ The failure arm is surfaced, not swallowed. `recycleSession` never throws — every failure
+   * is a value — so the only way a refused handoff becomes visible is if this caller reads it.
+   */
+  const fireRecycle = () => {
+    const sessionId = workspace.cc_session_id;
+    if (sessionId === null || recycling) return;
+    setRecycling(true);
+    void recycleSession({
+      workspaceId: workspace.id,
+      projectPath: workspace.project_path,
+      ccSessionId: sessionId,
+      relaunch: () => ccPaneRef.current?.relaunch(),
+      // Poll the mirrored ref for an id that is BOTH non-null AND different from the one we
+      // just killed. ⚠️ Waiting for merely non-null would return the DEAD id immediately, since
+      // the prop still holds it until the respawn resolves — and the restore would then be typed
+      // into a killed PTY, failing silently.
+      awaitFreshSessionId: () =>
+        waitForFreshSessionId(ccSessionIdRef, sessionId),
+      // ⚠️ No `onProgress`. It exists on the interface for a caller that renders progress, and
+      // this one does not: the CC pane is right there and shows the handoff running. Wiring a
+      // state setter that only ever feeds an unread variable would be surface with no reader.
+    })
+      .then((outcome) => {
+        if (!outcome.ok) {
+          // ⚠️ `console.warn`, matching the row's established failure channel: replacing a
+          // working terminal with an error overlay, over an operation the user can retry, would
+          // be worse. The reason distinguishes "nothing happened" from "recycled — now restore
+          // by hand", which is exactly why Phase 2 split the two.
+          console.warn(
+            `recycle: ${workspace.display_name} did not complete (${outcome.reason})`,
+          );
+        }
+      })
+      .finally(() => setRecycling(false));
   };
 
   // QoL-WP3 — auto-focus the LEFT CC terminal on the false→true `visible` edge (and on
@@ -434,6 +506,26 @@ export function Workspace({
                 {btn.label}
               </button>
             ))}
+            {/* M13 WP3 P3.1 — THE SIXTH AFFORDANCE. ⚠️ Rendered as a SIBLING of the mapped
+                skill buttons, NOT as a `SKILL_BUTTONS` member: that array holds slash commands
+                routed to `injectCommand`, and Recycle is an operation. Same row, same look,
+                different wiring — see `recycleButton.ts`. */}
+            {showRecycleButton({
+              workflowEnabled,
+              ccSessionId: workspace.cc_session_id,
+            }) && (
+              <button
+                type="button"
+                className="workspace-skill-btn workspace-recycle-btn"
+                data-testid={RECYCLE_TESTID}
+                aria-label={`Recycle the CC session in ${workspace.display_name}`}
+                title={recycleTitle(recycling)}
+                disabled={recycling}
+                onClick={fireRecycle}
+              >
+                {RECYCLE_LABEL}
+              </button>
+            )}
           </div>
         )}
         {/* M6 WP3 — the split-ratio control. Two collapse toggles (◀ CC / ED ▶)
