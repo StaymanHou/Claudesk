@@ -22,6 +22,23 @@ const row = (text: string) => `<div><span>${text}</span></div>`;
 /** A blank row: spaces only (how serializeAsHTML renders an empty line). */
 const blankRow = (n = 10) => `<div><span>${" ".repeat(n)}</span></div>`;
 
+/**
+ * A REALISTIC row: real xterm output splits a single row into MULTIPLE spans at every style
+ * transition (`…</span><span style='color: #0dbc79;'>…`), because each colored run gets its own
+ * span. Added 2026-08-18 (paydown WP4): every fixture above is the simplified one-span shape, so
+ * nothing pinned the multi-span case even though it is what the terminal actually emits — a
+ * future reader would have concluded rows are single-span, and a "simplification" of `ROW_RE`
+ * (e.g. `<div><span>(.*?)</span></div>`) would have passed the whole suite while breaking every
+ * colored row in production.
+ */
+const styledRow = (runs: string[]) =>
+  `<div>${runs
+    .map(
+      (t, i) =>
+        `<span${i === 0 ? "" : ` style='color: #0dbc7${i};'`}>${t}</span>`,
+    )
+    .join("")}</div>`;
+
 const wrap = (rows: string[]) => PREFIX + rows.join("") + SUFFIX;
 
 describe("trimTrailingBlankRows", () => {
@@ -87,5 +104,34 @@ describe("trimTrailingBlankRows", () => {
     // Missing the styled row-region wrapper → structure unrecognized → returned verbatim.
     const noWrapper = "<pre><div><span>x</span></div></pre>";
     expect(trimTrailingBlankRows(noWrapper)).toBe(noWrapper);
+  });
+
+  it("handles MULTI-SPAN rows — the real xterm shape (paydown WP4)", () => {
+    // ⚠️ The load-bearing case the other fixtures miss. A colored prompt is one row made of
+    // several spans; blankness must be judged on the row's COMBINED text, and a multi-span
+    // content row must not be mistaken for blank (which would trim real output away).
+    const html = wrap([
+      styledRow(["$ ", "claude", " --continue"]),
+      styledRow(["ok ", "done"]),
+      blankRow(),
+      blankRow(),
+    ]);
+    const out = trimTrailingBlankRows(html);
+    // Both content rows survive, with their span structure intact and untouched.
+    expect(out).toContain("claude");
+    expect(out).toContain(" --continue");
+    expect(out).toContain("style='color: #0dbc71;'");
+    // ...and the trailing blanks are gone.
+    expect(out.match(/<div>/g) ?? []).toHaveLength(2);
+  });
+
+  it("treats a multi-span WHITESPACE-ONLY row as blank (paydown WP4)", () => {
+    // The inverse: a row split across spans that contains only spaces is still blank. Judging
+    // per-span rather than per-row would leave it in place and re-introduce the occlusion this
+    // module exists to fix.
+    const html = wrap([styledRow(["content"]), styledRow(["  ", "   "])]);
+    const out = trimTrailingBlankRows(html);
+    expect(out).toContain("content");
+    expect(out.match(/<div>/g) ?? []).toHaveLength(1);
   });
 });

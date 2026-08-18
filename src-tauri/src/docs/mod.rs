@@ -392,6 +392,30 @@ mod tests {
     }
 
     #[test]
+    fn the_fixed_doc_lists_are_disjoint_from_the_wbs_glob() {
+        // ⚠️ **Pins the PREMISE the dedup branch's "currently UNREACHABLE" claim rests on**
+        // (paydown WP4, 2026-08-18). That claim is load-bearing documentation — it is why the
+        // sibling test below drives `push_if_present` directly instead of through `discover` —
+        // but nothing asserted it, so adding any `*wbs*`-matching name to `PRODUCT_DOCS` would
+        // silently make the branch live and leave the comment lying. This is the smaller
+        // assertion the original finding asked for, kept ALONGSIDE the branch test rather than
+        // replacing it: this one pins *why* the branch is unreachable, that one pins *what the
+        // branch does* if it ever becomes reachable. Neither substitutes for the other.
+        for (file, _kind) in PRODUCT_DOCS.iter().chain(STATE_DOCS.iter()) {
+            let name = Path::new(file)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            assert!(
+                !(name.contains("wbs") && name.ends_with(".md")),
+                "fixed doc `{file}` collides with the `*wbs*.md` glob — the dedup branch in \
+                 `push_if_present` is now REACHABLE from `discover`, so its \
+                 \"currently UNREACHABLE\" comment is stale and must be corrected"
+            );
+        }
+    }
+
+    #[test]
     fn dedupes_a_file_matched_twice() {
         // Drives `push_if_present` DIRECTLY, because `discover` cannot currently produce
         // a collision (see the guard's comment). Without this, the dedup branch is

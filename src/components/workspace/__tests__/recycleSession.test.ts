@@ -396,6 +396,53 @@ describe("signal filtering and subscription hygiene", () => {
     await recycleSession(baseInputs({ completionTimeoutMs: 10 }));
     expect(unlistenCalls).toBe(2);
   });
+
+  it("disposes a LATE-arriving subscription — the `settled ? un()` arm (paydown WP4)", async () => {
+    // ⚠️ **This arm was UNREACHABLE by the suite, and its absence is a real leak.** The default
+    // mock returns `Promise.resolve(un)`, a microtask that always wins the race against any
+    // `feed`, so `settled` is invariably `false` by the time `.then` runs and both sibling tests
+    // above only ever exercise `unlisteners.push(un)`. Mutation-proven 2026-08-18: replacing both
+    // `(un) => (settled ? un() : unlisteners.push(un))` with a bare `unlisteners.push(un)` leaks
+    // one `fs-change` listener per Recycle and the ENTIRE suite stayed green (2119 pass).
+    //
+    // The fix is to make the subscription land AFTER the operation settles, which is the real
+    // ordering whenever `listen()`'s IPC round-trip is slower than the completion signal — and
+    // then assert disposal happened anyway. `unlisteners` is already drained by `finish`, so if
+    // this arm is missing, nothing ever calls the late `un`.
+    let releaseFsUnlisten: (() => void) | undefined;
+    listenMock.mockImplementation((name: string, handler: Handler) => {
+      if (name === WORKSPACE_STATUS_EVENT) {
+        statusHandlers.push(handler);
+        return Promise.resolve(() => {
+          unlistenCalls += 1;
+        });
+      }
+      // The fs-change subscription resolves only when the test releases it — i.e. after the
+      // `Stop` below has already driven the operation to a terminal state.
+      fsHandlers.push(handler);
+      return new Promise<() => void>((resolve) => {
+        releaseFsUnlisten = () =>
+          resolve(() => {
+            unlistenCalls += 1;
+          });
+      });
+    });
+
+    const promise = recycleSession(baseInputs());
+    await tick();
+    emitStop();
+    await promise;
+
+    // Precondition: the operation has settled and only the STATUS unlisten has run. If this is
+    // ever 2 here, the fs subscription resolved early and the test is no longer exercising the
+    // late path — the assertion below would then pass for the wrong reason.
+    expect(unlistenCalls).toBe(1);
+
+    // Now the late subscription arrives, post-settlement. The `settled ? un()` arm must fire.
+    releaseFsUnlisten?.();
+    await tick();
+    expect(unlistenCalls).toBe(2);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

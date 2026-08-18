@@ -51,10 +51,20 @@ describe("the highlight blinks three times", () => {
   it("has three distinct peaks in the keyframes", () => {
     // The operator asked for 3 blinks, not one fade. Count the tinted stops: each peak sets a
     // non-transparent background, and there must be exactly three.
+    //
+    // ⚠️ **Deliberately COLOR-AGNOSTIC** (paydown WP4, 2026-08-18). This previously matched the
+    // literal `rgba(120, 165, 240`, which made a pure re-tint — zero behavior change — fail a
+    // test and read as a regression. The load-bearing property is *"three tinted peaks"*, not
+    // *"three peaks of this exact blue"*. A peak is any stop whose background is NOT
+    // `transparent`; counting those pins the blink count while leaving the palette free.
     const block = keyframesBlock();
-    const peaks =
-      block.match(/background-color:\s*rgba\(120,\s*165,\s*240/g) ?? [];
+    const stops = block.match(/background-color:\s*[^;]+/g) ?? [];
+    const peaks = stops.filter((d) => !/transparent/.test(d));
     expect(peaks).toHaveLength(3);
+    // The troughs are the other half of "blinks" — without them three peaks could be one long
+    // tint declared three times, which is a fade, not a blink.
+    const troughs = stops.filter((d) => /transparent/.test(d));
+    expect(troughs.length).toBeGreaterThanOrEqual(3);
   });
 
   it("returns to transparent between blinks and at the end", () => {
@@ -96,6 +106,8 @@ describe("the highlight blinks three times", () => {
     const block = css.slice(at, at + 400);
     expect(block).toContain(".settings-group-highlight");
     expect(block).toContain("animation: none");
-    expect(block).toContain("background-color: rgba(120, 165, 240");
+    // ⚠️ Color-agnostic for the same reason as the peak count above: the requirement is that a
+    // VISIBLE background survives when the animation is killed, not that it is one exact blue.
+    expect(block).toMatch(/background-color:\s*(?!transparent)[^;]+;/);
   });
 });

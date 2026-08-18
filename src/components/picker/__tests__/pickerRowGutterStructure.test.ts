@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
-// M12 WP3 Phase 3, verify-codify (2026-08-05) — the ⏵ gutter's STRUCTURE, asserted on a
+// M12 WP3 Phase 3, verify-codify (2026-08-05) — the ⊘ gutter's STRUCTURE, asserted on a
 // parsed DOM rather than on source text.
 //
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -60,11 +60,17 @@ const row = (opts: { announcing: boolean }): string => `
     <span class="picker-recent-path">/Users/x/proj</span>
   </span>
   <span class="picker-recent-gutter"${opts.announcing ? "" : ' aria-hidden="true"'}>
-    ${opts.announcing ? '<span role="button" tabindex="0" class="picker-recent-nofire">⏵</span>' : ""}
+    ${opts.announcing ? '<span role="button" tabindex="0" class="picker-recent-nofire">⊘</span>' : ""}
   </span>
 </button>`;
 
-describe("the ⏵ gutter's structure (parsed DOM, not source text)", () => {
+// ⚠️ The fixture's glyph was `⏵` until 2026-08-18 (paydown WP4). It is FIXTURE DATA mirroring
+// what `ProjectPicker` renders, and it had gone stale when the operator replaced the play
+// triangle with `⊘` at M12 WP3. No assertion here reads the character — every one targets
+// `.picker-recent-nofire` — so nothing was broken, which is exactly why it survived: a fixture
+// that no assertion depends on drifts silently and then misinforms the next reader about what
+// the DOM looks like. `ProjectPicker.tsx`'s render site is the authority on the glyph.
+describe("the ⊘ gutter's structure (parsed DOM, not source text)", () => {
   it("the gutter exists on an announcing row AND on a silent one", () => {
     // THE P3.9 INVARIANT, stated structurally: presence is unconditional. If someone
     // hoists the conditional back out, the silent row loses the element entirely and the

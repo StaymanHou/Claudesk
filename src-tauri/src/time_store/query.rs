@@ -133,6 +133,20 @@ pub struct DayPayload {
     /// fallback [6,23].
     pub hour_range: [i64; 2],
     /// Present + `true` only on an empty day (absent on a non-empty day).
+    ///
+    /// ⚠️ **NEVER REACHES THE FRONTEND, and that is not a bug to "fix" by wiring it up**
+    /// (investigated 2026-08-18, paydown WP4). Three facts, each verified:
+    ///   1. `commands.rs` imports `RangePayload`, not `DayPayload` — the day shape only crosses
+    ///      IPC *through* `build_range`, whose single-day path carries `iso` + `hour_range`
+    ///      forward for back-compat but has **no `empty` field** to carry it into.
+    ///   2. The frontend does not want it: `GlobalDashboard.tsx`'s `activeEmpty` derives
+    ///      emptiness as `!activeData || activeData.projects.length === 0`.
+    ///   3. So the flag is live only *within* this module, where the tests exercise it.
+    ///
+    /// Kept rather than deleted because it is a correct property of the internal type and
+    /// `skip_serializing_if` makes it free on the wire. ⚠️ **If you add it to `RangePayload`,
+    /// you are adding a SECOND source of truth for emptiness** — the frontend already has one
+    /// that cannot disagree with the data it renders, which is the stronger shape.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub empty: Option<bool>,
 }

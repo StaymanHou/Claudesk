@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-08-18
 created: 2026-08-18
-status: in-progress (WP1-WP3 done 2026-08-18; WP4 next)
+status: in-progress (WP1-WP4 done 2026-08-18; WP5 next)
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -167,7 +167,17 @@ which rule governs and why the other is exempt — or a conversion. **Includes t
 
 **Resolves theme T4 (6 items) + T8's `arch` half + the D2 ruling.**
 
-## WP4 — Test integrity: make each test able to fail  `[impact: High · effort: S · risk: Low]`
+## WP4 — Test integrity: make each test able to fail  `[impact: High · effort: S · risk: Low]`  ✅ DONE 2026-08-18
+
+> **CLOSED** — archived at `workflow-system/state/archive/paydown-wp4-test-integrity.md`.
+> **The MAJOR was REPRODUCED before being fixed** (the leaking mutation left all 2119 tests green)
+> and the same mutation now goes red. ⚠️ **Filed accurately — the first WP in this sweep needing NO
+> correction.** ⚠️ **The dedup item's real insight was the UNPINNED PREMISE**, not the test shape:
+> the "currently UNREACHABLE" claim had nothing asserting it. New disjointness guard sits ALONGSIDE
+> the branch test — neither substitutes for the other. ⚠️ **`DayPayload.empty` is dead on the IPC
+> path and was DELIBERATELY not wired up** — that would add a second source of truth for emptiness.
+> ⚠️ **A brittleness fix must be proven in BOTH directions** (re-tint passes / dropped peak fails);
+> proving only the first is indistinguishable from deleting the test.
 
 The project's own named discipline (`docs/lessons/source-text-guards.md`) recurring as findings.
 **Carries one behavioral MAJOR.** The standing test: *could this still pass if the code it names
