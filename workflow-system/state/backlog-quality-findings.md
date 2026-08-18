@@ -85,25 +85,30 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** medium (no live defect observed; the window is real and widens under M15)
 - **Status:** pending
 
-## SURFACE-2026-08-18-QUALITY-WP3-COMMENT-DENSITY-AND-FIVE-WAY-RATIONALE-DUPLICATION
+## SURFACE-2026-08-18-QUALITY-WP3-COMMENT-DENSITY-AND-RATIONALE-DUPLICATION
 - **Source:** feature-review-quality (M13 WP3, MAJOR — readability)
 - **Type:** tech-debt (documentary)
-- **Summary:** Comment density **52% / 71% / 70%** in `recycleSession.ts` / `recycleMachine.ts` /
-  `recycleButton.ts`, with the **same rationale restated across five files**: *"Recycle is NOT a
-  `SKILL_BUTTONS` member"* appears in `recycleButton.ts`, `skillButtons.ts`, `Workspace.tsx` (import
-  comment AND JSX comment) and two test files; *"WP1 measured 28–52s"* appears in `App.css`,
-  `recycleButton.ts`, `recycleSession.ts` (×2) and `Workspace.tsx`.
-- **Context:** ⚠️ **The drift has ALREADY STARTED** — `App.css` says *28–52s* while
-  `recycleSession.ts` cites *51.9s* and the *9–12s tail*, with no single authority. This is verbatim
-  the failure `CLAUDE.md` names (*"duplication is the expensive half — the same rationale in six
-  places drifts asymmetrically"*), and the repo was bitten by it in **four consecutive reviews of one
-  file**.
-- **Suggested action:** Keep the **invariant** at the code (*"the marker is composite — do not
-  simplify"*); move the **provenance** (three-run table, killed candidates, measured latencies) to
-  the archive with **one** pointer. Pick a single authority for the latency figures and delete the
-  other four. ⚠️ Do NOT trim a little from each site and move on — that is precisely how the
-  four-consecutive-reviews case happened.
-- **Priority:** low-medium (readability only; no correctness impact)
+- **⚠️ PARTIALLY RESOLVED at M13 WP4 (2026-08-18) — rewritten to the REMAINING open work.** The
+  **latency-figure half is CLOSED**: the figures now live only in `RECYCLE_TIMEOUT_MS`'s doc comment
+  (`recycleSession.ts`), every other production site points there, and a **guard enforces it** (plus
+  an anti-vacuity companion blocking the wrong-direction "fix" of deleting the measurement). See the
+  `**Backlog resolved:**` entry in `CHANGELOG.md` for 2026-08-18.
+- **Summary (what REMAINS):** (a) the *"Recycle is NOT a `SKILL_BUTTONS` member"* rationale is still
+  restated across **five sites** — `recycleButton.ts`, `skillButtons.ts`, `Workspace.tsx` (import
+  comment AND JSX comment) and two test files; (b) raw **comment density 52% / 71% / 70%** in
+  `recycleSession.ts` / `recycleMachine.ts` / `recycleButton.ts` is unaddressed — WP4 collapsed
+  duplication but did not thin any module.
+- **Context:** ⚠️ Unlike the latency half, **(a) has NOT drifted** — all five sites currently agree.
+  This is duplication *risk*, not live drift, which is why it is lower priority than the half already
+  paid. ⚠️ **The scope-boundary lesson from the paid half applies here too:** when this is picked up,
+  state at the fix site what the enforcement does and does not cover, or the next reader inherits a
+  guard that claims more than it checks.
+- **Suggested action:** Pick ONE authority for the not-a-skill-button rationale (`recycleButton.ts`'s
+  module doc is the natural home — it is the module the rule is *about*) and reduce the other four to
+  pointers. ⚠️ **Do NOT trim a little from each site** — that is precisely how the
+  four-consecutive-reviews case happened. Consider whether a guard is warranted, as with the latency
+  half; a paydown without one silently re-accumulates.
+- **Priority:** low (readability only; no drift observed, no correctness impact)
 - **Status:** pending
 
 ## SURFACE-2026-08-18-QUALITY-WP3-THREE-MINOR

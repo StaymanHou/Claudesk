@@ -1,7 +1,7 @@
 # Feature: M13 WP4 — Milestone exit verify + Group C close
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** COMPLETED 2026-08-18
 **Created:** 2026-08-18
 **Drive mode:** autopilot
 **WBS:** `workflow-system/product/wbs.md` → WP4 (Size **S**, depends on WP2 + WP3)
@@ -1059,6 +1059,60 @@ lesson from the four-consecutive-reviews case.
 
 ### If you disagree
 Mark any finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
+
+## Retrospect
+
+- **What changed in our understanding:**
+  ⚠️ **The single biggest thing: WP3's "fixture-blocked" diagnosis was WRONG, and the wrongness was
+  invisible until a second fixture was tried.** WP3 concluded CC refuses to hand off from an *empty
+  scratch repo* — true, but it generalized a correct observation into a wrong cause. On a fixture with
+  a 19.7 KB incident WIP and real history the handoff **still failed**, because the dev profile's
+  `cc_permission_mode` had drifted to `dontAsk`, which suppresses the prompt **without granting the
+  write**. ⚠️ **No amount of fixture engineering would ever have fixed it**, and the next person to
+  retry on a richer fixture would have blamed the fixture a second time. The generalizable form: *a
+  diagnosis that explains the observed failure is not thereby the cause — it is one hypothesis that
+  survived one test.*
+
+  Second: **the "verified vs. the precondition never occurred" distinction earned its keep.** Runs 1
+  and 2 both failed. Had the plan been written in the optimistic voice ("Recycle still succeeds"),
+  both would have been recordable as passes-by-omission. Written falsifiably, they were recorded as
+  NOT-VERIFIED — which is what forced the third run that actually found the cause.
+
+- **Assumptions that held:**
+  - All four WP1 probe verdicts survived contact as-built, including **Q4** (the respawn goes through
+    `cc_spawn_env`), which the live run could have falsified and instead confirmed with direct
+    evidence — the respawned session picked up the corrected permission mode.
+  - The composite completion marker behaved exactly as WP1 predicted, in **both** directions: the
+    success path fired only after write-then-next-`Stop`, and both failures were `no-fresh-write`,
+    the shape WP1 captured as "run 2".
+  - The five guard arms all bite. Seven individual probes, every one attributable to its own arm.
+
+- **Assumptions that were wrong:**
+  - ⚠️ **I assumed my own guards measured what their titles said.** The arm-count pin did **not**
+    detect a deleted arm — reproduced: the suite stayed **green at 33/33**. This is the *same*
+    "assertion says X, measures Y" gap this WP's problem statement quotes from WP3, reproduced inside
+    the guard written to prevent it. Caught only by the code-quality review.
+  - The plan predicted `arch/session-resumption.md` needed "THREE routes → four". **Wrong** — the
+    count never changed; what changed is that `RecycleSession` gained its first caller. Checking the
+    enum before writing a number is what caught it.
+  - I recorded the latency sites as "already drifted". **They agree** — the different figures describe
+    *different measurements*. The real risk was duplication, not drift.
+
+- **Approach delta:**
+  The four-phase shape held exactly. Two deltas worth recording. (1) **Phase 3 took three live runs
+  rather than one**, and the two failures were worth more than a clean first attempt — they bracket
+  the success on the same fixture, so the difference is attributable to the permission mode rather
+  than fixture luck, and they re-prove the destructive arm is safe against **two** independent real
+  refusals. (2) **verify-codify wrote nothing in Phase 3** — every live behavior was already pinned,
+  and the honest output of a codify pass is sometimes "no new tests, here is why", verified rather
+  than assumed.
+
+  ⚠️ **The method lesson, stated once because it recurred five times:** an instrument that *cannot*
+  match reports absence indistinguishably from real absence. It hit as a monkey-patched `invoke` that
+  captured nothing, a transcript that was never written, a shell-mangled en-dash reporting zero
+  figures, a grep tally counting a quotation as a live claim, and a subject list that proved functions
+  exist rather than arms. **Every one initially read as a stronger result than the truth.**
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

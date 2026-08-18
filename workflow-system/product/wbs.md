@@ -186,7 +186,7 @@ Measured properties the fifth arm must respect — each already paid for by a re
 
 ---
 
-### WP4: Milestone exit verify + Group C close ✅ SHIPPED 2026-08-18
+### WP4: Milestone exit verify + Group C close ✅ SHIPPED 2026-08-18 (commits `1dba27b` → `ca0c973`, review fixes `22a58a9`)
 **Description:** Verify both exit criteria live, then confirm Group C's metrics 2 and 3 are met.
 **Milestone:** 13
 **Dependencies:** WP2, WP3
