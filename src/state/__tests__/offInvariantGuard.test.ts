@@ -832,6 +832,55 @@ describe("OFF-invariant: the seam is the only door", () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe("the guard is not vacuous", () => {
+  // M13 WP4 P1.2 — THE ARM-COUNT PIN.
+  //
+  // ⚠️ This guard is routinely run FILTERED (`vitest run <this file>`) when probing a single
+  // arm. A filtered run that matches ZERO tests prints a green summary and **exits 0** — the
+  // repo has been bitten by exactly that shape on the Rust side (`cargo test <filter>` matching
+  // nothing prints `ok. 0 passed` and exits 0). So "the guard passed" is not evidence the guard
+  // RAN; only a count is.
+  //
+  // The floor is the number of OFF-state arms, not the number of tests: test count churns as
+  // meta-guards are added, but an ARM disappearing is a real regression — it means a registry
+  // this app surfaces UI through stopped being policed. Each entry names its own subject so a
+  // deletion fails here with the arm's name rather than as a silent shrink.
+  it("still polices all five registries — no arm has been deleted", () => {
+    const armSubjects: ReadonlyArray<readonly [string, () => unknown]> = [
+      ["1 PANEL", () => availablePanels(false)],
+      ["2 MENU ID", () => MENU_IDS],
+      ["3 CHORD", () => chordModules()],
+      ["4 ROW-CELL/cellLines", () => cellLines(null, null, false, "Default")],
+      ["4 ROW-CELL/rowAffordances", () => rowAffordances("/tmp/p", {}, false)],
+      [
+        "5 SKILL-ROW",
+        () => showSkillButtons({ workflowEnabled: false, ccSessionId: null }),
+      ],
+      [
+        "5 RECYCLE",
+        () => showRecycleButton({ workflowEnabled: false, ccSessionId: null }),
+      ],
+    ];
+
+    // ⚠️ Seven subjects, not five: arm 4 owns TWO derivations and arm 5 owns TWO predicates
+    // (`showSkillButtons` and `showRecycleButton` are separate functions with identical
+    // bodies — a mutation to one does not exercise the other, which is the "the set is not
+    // the caller" shape arm 5 was written to catch).
+    expect(
+      armSubjects.length,
+      "an OFF-state arm subject was removed — every registry this app surfaces UI through " +
+        "must stay policed; see this file's header for the registry list",
+    ).toBe(7);
+
+    // Each subject must be really callable and really defined — a subject that threw or
+    // resolved to undefined would make its arm's assertions vacuous rather than absent.
+    for (const [name, subject] of armSubjects) {
+      expect(
+        subject(),
+        `arm subject "${name}" resolved to undefined`,
+      ).toBeDefined();
+    }
+  });
+
   it("walks a non-trivial set of source files", () => {
     // If sourceFiles() ever resolved to the wrong root or returned [], all three registry
     // assertions above would pass having scanned nothing. 50 is a deliberately loose floor
@@ -1291,6 +1340,41 @@ export function selectPanel(panel: RightPanel, available: readonly RightPanel[])
     expect(start, "the row must still own /session-start").toBeDefined();
     expect(typeof start?.label).toBe("string");
     expect(start?.title).toContain("/session-start");
+  });
+
+  // M13 WP4 P1 codify. Arms 4 and 5 each got a "REAL, not a re-implementation" meta-guard when
+  // they were built; arm 5x (Recycle, M13 WP3) did not — found while assessing this phase's
+  // coverage. The omission matters more here than elsewhere: `showRecycleButton` and
+  // `showSkillButtons` are two functions with BYTE-IDENTICAL bodies, so a stub written to satisfy
+  // arm 5x would look exactly like the real thing, and the guard imports only the one symbol.
+  it("the Recycle arm asserts the REAL predicate, not a local re-implementation", () => {
+    expect(
+      typeof showRecycleButton,
+      "showRecycleButton must be imported, not stubbed",
+    ).toBe("function");
+
+    // The real predicate needs BOTH terms. A stub returning the gate alone would satisfy arm 5x's
+    // OFF assertion and its anti-vacuity companion, but not this: the null-session case must be
+    // false even while the gate is ON (the dead-click guard).
+    expect(
+      showRecycleButton({ workflowEnabled: true, ccSessionId: null }),
+      "a null session must suppress the button even with the gate ON",
+    ).toBe(false);
+    expect(
+      showRecycleButton({ workflowEnabled: true, ccSessionId: "cc-1" }),
+    ).toBe(true);
+
+    // ⚠️ And the two predicates must stay INDEPENDENT symbols. Mutation-proved separately at
+    // P1.3–P1.7 (the arm-5a mutant left Recycle's assertions green and vice versa), but nothing
+    // pinned it: collapsing them to one shared function — the tempting "dedupe" on two identical
+    // bodies — would silently make arm 5x an alias of arm 5, and a future gate change to the row
+    // would move Recycle with it unnoticed. Recycle is NOT a `SKILL_BUTTONS` member (it is an
+    // operation, not a slash command), so its predicate is deliberately its own.
+    expect(
+      showRecycleButton,
+      "showRecycleButton and showSkillButtons must remain separate predicates — Recycle is an " +
+        "operation, not a skill command, and arm 5x must not become an alias of arm 5",
+    ).not.toBe(showSkillButtons);
   });
 
   it("the matcher fires on real workflow terms", () => {

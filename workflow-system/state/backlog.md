@@ -1,5 +1,34 @@
 # Backlog
 
+## SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION
+- **Source:** feature:build (M13 WP4 Phase 1 — individual guard-arm probes)
+- **Target level:** product:arch
+- **Type:** gap (guard predicate completeness, not a live defect)
+- **Summary:** The OFF-invariant guard's shared `WORKFLOW_TERMS` list — `["workflow", "docs",
+  "skill", "drivemode", "drive-mode"]` (`offInvariantGuard.test.ts:153`) — contains neither
+  **"recycle"** nor **"session"**. Arms 1 (panel), 2 (menu id) and 3 (chord) all match through
+  `namesWorkflowTerm`, so a `RECYCLE_SESSION` menu id, a `"recycle"` panel, or a `recycleChord`
+  export would register **unseen** while the gate is OFF.
+- **Context:** Found because an *invalid* probe presented **identically to a real hole**: adding
+  `RECYCLE_SESSION: "workspace.recycleSession"` to `MENU_IDS` landed in executable code and left the
+  guard 33/33 green. Re-probing with `WORKFLOW_DOCS` made arm 2 bite immediately, proving the arm's
+  **assertion** is sound and its **vocabulary** is what is incomplete — the
+  *guard-predicate-completeness* failure mode, distinct from a mutation that never lands.
+  ⚠️ Live exposure today is **nil**: M13's Recycle affordance is a button guarded by its own
+  predicate (`showRecycleButton`, arm 5x — mutation-proven this phase), and no menu id, panel, or
+  chord names Recycle. The risk is entirely in the next surface: M15's supervisor is the likeliest
+  author of a Recycle **menu item**, and it would land in exactly this blind spot.
+- **Suggested action:** Decide deliberately rather than reflexively widening. Two shapes: (a) add
+  "recycle"/"session" to `WORKFLOW_TERMS` — ⚠️ cheap but cross-arm, and "session" is a **common**
+  word in this codebase (`ccSessionId`, `SessionRegistry`, `cc_session`), so it risks the
+  cry-wolf false positives the term list's own doc comment warns get a guard deleted; or (b) follow
+  WP2's precedent and assert **provenance by command prefix** for the new surface's own arm, leaving
+  the shared list alone. ⚠️ WP2 deliberately declined to widen the shared list, so (b) is the
+  standing precedent and (a) reverses it.
+- **Priority:** medium (no live exposure; the arm's assertion is sound — the risk is the next
+  surface, most likely M15's)
+- **Status:** pending
+
 ## SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE
 - **Source:** feature:build (M13 WP3 Phase 4 — live verification)
 - **Target level:** product:wbs (a verification gap, not a code defect)
