@@ -491,6 +491,22 @@ pub const DRIVE_MODE_ENV: &str = "CLAUDESK_DRIVE_MODE";
 ///
 /// ⚠️ **Returns an owned `Vec`, and must NOT be folded into [`color_tty_env`]** — that array
 /// is shared with the raw login-shell spawn, which must never receive this var.
+///
+/// ⚠️ **CONTAINMENT, STATED PRECISELY (corrected 2026-08-18, paydown WP3 / ruling D2).** The
+/// boundary this function draws is between the **CC spawn and the sibling login-shell spawn** —
+/// NOT around CC itself. There is no `env_clear` anywhere in this crate, so once the var is on
+/// the CC process it is inherited by CC's **entire descendant chain**: a nested `claude`, a
+/// `claude` typed inside CC's own shell, anything CC execs.
+///
+/// **That is intended, not a leak.** A nested `claude` running inside a workspace *is* working on
+/// that project, so the workspace's drive mode is the right answer for it. The inertness argument
+/// above is unaffected: a plain-terminal `claude` outside Claudesk still has no var and the hook
+/// still emits nothing.
+///
+/// ⚠️ **Do NOT "tighten" this with `env_clear()`.** It would strip `PATH`/`LANG`/`TERM` and break
+/// both the M10.5 mojibake fix and the GUI-PATH spawn fix (`env_path/`) — a real regression traded
+/// for a containment nobody needs. The only boundary worth enforcing is the shell-spawn one, and
+/// [`shell_spawn_env`] already enforces it structurally.
 fn cc_spawn_env(
     drive_mode: Option<crate::config_store::DriveMode>,
     gate_enabled: bool,
@@ -572,7 +588,7 @@ fn resolve_cc_spawn_env(
 ///
 /// ⚠️ **This exists to make the SHELL side's env source assertable, mirroring [`borrow_env`] on
 /// the CC side.** Before M12 WP4b, `spawn_shell` called [`color_tty_env`] inline, and the only
-/// protection against the CC-only `CLAUDESK_DRIVE_MODE` reaching a login shell was
+/// protection against the CC-side `CLAUDESK_DRIVE_MODE` reaching a login shell was
 /// [`tests::color_tty_env_carries_nothing_beyond_color_and_locale`] — which pins what is *in*
 /// that array but says nothing about **which** env `spawn_shell` passes. A change routing the
 /// CC env here (exactly the leak constraint 5 forbids, and the one verified live at

@@ -174,6 +174,36 @@ describe("WP4 — the live-reload wiring", () => {
     );
   });
 
+  it("surfaces a FAILED reload without blanking the retained list (paydown WP3)", () => {
+    // The reload's `.catch` was EMPTY, so a doc dir that became permanently unreadable read
+    // as "nothing is changing". The fix has TWO halves and both matter:
+    //   1. the failure is surfaced at all;
+    //   2. it is surfaced NON-destructively — `docsView` ranks `error` above the list, so
+    //      calling `setError` here would blank a still-readable panel. That is why a DISTINCT
+    //      state is used rather than reuse of the existing error state.
+    //
+    // ⚠️ **This assertion is deliberately the SURFACING CALL, with its argument, not the bare
+    // identifier `setReloadNote(`.** The bare form was written first and MUTATION-REFUTED: it
+    // is satisfied by the `useState` declaration and by the success path's
+    // `setReloadNote(null)`, so it passed with the entire catch body reverted to the shipped
+    // defect. Declaration-and-use are indistinguishable to a bare-identifier match
+    // ([[raw-guard-identifier-satisfied-by-own-comments]]) — assert the shape that only the
+    // surfacing site has.
+    expect(stripped).toContain(
+      "setReloadNote(`Could not refresh the doc list:",
+    );
+    // The clear on the success path is the other half of the pair — without it a transient
+    // failure's note would persist over a list that has since refreshed fine.
+    expect(stripped).toContain("setReloadNote(null)");
+    // ⚠️ The load-bearing negative: the reload must NOT route the caught value into
+    // `setError`, which ranks above the list in `docsView` and would blank a readable panel —
+    // trading a silent failure for a destructive one.
+    expect(stripped).not.toContain(
+      "setError(String(e));\n          setReloadNote",
+    );
+    expect(stripped).toContain('data-testid="docs-reload-note"');
+  });
+
   it("decides what changed by DIFFING the re-listed set, not by reading FsChange.kind", () => {
     // `kind` is documented as "a hint only" and the backend folds a mixed 200ms batch to
     // `Other`, so it cannot classify appear-vs-change-vs-disappear. Diffing the list is

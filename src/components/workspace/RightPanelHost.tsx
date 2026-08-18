@@ -203,6 +203,15 @@ export function RightPanelHost({
   // meant N redundant IPC fetches and N live subscriptions for one app-global value, growing
   // with every open workspace. `usePipMode` collapses that to one fetch and one listener.
   // (`SURFACE-2026-06-27-QUALITY-WP5-PIPMODE-STATE-DUP-PER-WORKSPACE`.)
+  //
+  // ⚠️ **This one-listener rule is about APP-GLOBAL values, and does NOT extend to
+  // `fs-change`** (clarified 2026-08-18, paydown WP3, where it was filed as a contradiction
+  // and refuted). `fs-change` is a PER-WORKSPACE broadcast: every consumer filters with
+  // `appliesToWorkspace`, so the three live listeners (this file, `DocsPanel`,
+  // `recycleSession`) are correct — each wants a different subset for a different workspace.
+  // Collapsing them would mean routing one subscription's payload to N unrelated consumers.
+  // The discriminator is CARDINALITY: one value for the whole app → one listener; one event
+  // per workspace → one listener per interested consumer.
   const pipMode = usePipMode();
 
   // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.

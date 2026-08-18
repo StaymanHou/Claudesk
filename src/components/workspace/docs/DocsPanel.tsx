@@ -151,6 +151,18 @@ export function DocsPanel({
   // set. Cleared on the next successful navigation.
   const [linkNote, setLinkNote] = useState<string | null>(null);
 
+  // A one-line note for a failed live RELOAD — deliberately NOT the `error` state
+  // (paydown WP3, 2026-08-18). `docsView` gives `error` precedence over the list, so
+  // reusing it here would blank a panel whose content is still perfectly readable. This
+  // surfaces the failure *alongside* the retained list instead, mirroring `linkNote`.
+  //
+  // ⚠️ Why it needed surfacing at all: the initial fetch sets `error` on failure
+  // ("surfaced, never swallowed"), but the reload path's `.catch` was EMPTY. Keeping the
+  // stale list is right for a transient failure and wrong for a persistent one — a doc dir
+  // that becomes permanently unreadable read as "nothing is changing", with no signal
+  // anywhere. Cleared on the next successful reload.
+  const [reloadNote, setReloadNote] = useState<string | null>(null);
+
   // The scroll box. WP4 restores `scrollTop` on this element; P2.4 scopes
   // anchor-scrolling to it so a `#fragment` scrolls the panel, not the app shell.
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -361,6 +373,7 @@ export function DocsPanel({
           // `null`: that would re-arm the fetch latch (see the latch comment above).
           setDocs(next);
           setError(null);
+          setReloadNote(null);
 
           switch (decision.kind) {
             case "none":
@@ -426,9 +439,16 @@ export function DocsPanel({
               break;
           }
         })
-        .catch(() => {
+        .catch((e: unknown) => {
           // A failed refresh leaves the current list in place rather than blanking the
           // panel — the reader keeps what they had, and the next event retries.
+          //
+          // ⚠️ But it is no longer SILENT (paydown WP3). Deliberately `setReloadNote`, not
+          // `setError`: `docsView` ranks `error` above the list, so `setError` here would
+          // blank a readable panel — trading a silent failure for a destructive one. The
+          // note renders above the list, which stays.
+          if (!isLive()) return;
+          setReloadNote(`Could not refresh the doc list: ${String(e)}`);
         });
     },
     [projectPath],
@@ -576,6 +596,14 @@ export function DocsPanel({
       {view === "empty" && (
         <div className="docs-panel-empty" data-testid="docs-panel-empty">
           No workflow docs found in this project.
+        </div>
+      )}
+
+      {/* A failed live reload — the list below is retained and still usable, so this is a
+          note rather than the `docs-panel-error` view. See `reloadNote`'s declaration. */}
+      {reloadNote !== null && (
+        <div className="docs-link-note" data-testid="docs-reload-note">
+          {reloadNote}
         </div>
       )}
 

@@ -192,8 +192,16 @@ export function Workspace({
   // only place a polling closure can read the current value without going stale.
   // ⚠️ Written in an EFFECT, not during render. Assignment-on-render trips eslint's
   // `Cannot access refs during render` as an ERROR (it caught this), and the rule is pointing at
-  // something real: a render-phase ref write is invisible to React's update model. The same
-  // latest-ref-via-effect idiom is used by `XtermPane`'s `onSessionIdRef`.
+  // something real: a render-phase ref write can land for a render React later discards, so the
+  // polling closure would read a value that was never committed. The same latest-ref-via-effect
+  // idiom is used by `XtermPane`'s `onSessionIdRef` (which is likewise written inside a
+  // `useEffect`).
+  //
+  // ⚠️ **This rule is about LATEST-VALUE refs, not all refs** (reconciled 2026-08-18, paydown
+  // WP3). `XtermPane` deliberately assigns `handleRelaunchRef`/`fitAndResizeRef` DURING render,
+  // and that is correct: those are imperative-handle forwarding refs, never read during render.
+  // The full discriminator lives at `XtermPane.tsx`'s `handleRelaunchRef` assignment — read it
+  // before concluding either file is wrong.
   const ccSessionIdRef = useRef(workspace.cc_session_id);
   useEffect(() => {
     ccSessionIdRef.current = workspace.cc_session_id;

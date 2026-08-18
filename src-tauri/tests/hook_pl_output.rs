@@ -409,6 +409,15 @@ fn status_event_shape_is_unchanged() {
 /// The exact sentence from WP4a Verdict (d), operator-approved. Transcribed here as a
 /// literal rather than built from a format string shared with the script, so a drift in
 /// either one shows up as a test failure instead of two mirrors agreeing with each other.
+///
+/// ⚠️ **This duplication is DELIBERATE and must not be "deduplicated"** (filed as a violation
+/// of the repo's rationale-duplication rule 2026-08-18 and refuted at paydown WP3). Sharing the
+/// literal with the script is precisely what would destroy this test's only value: the two
+/// copies existing independently is the mechanism that detects the script drifting. It is the
+/// same independent-transcription discipline `config_store::DriveMode`'s wire strings use —
+/// transcribed from `transitions.md` rather than round-tripped through our own serializer,
+/// which would prove symmetry rather than correctness. **The duplication rule governs
+/// RATIONALE PROSE, not a test's independently-transcribed expected value.**
 fn expected_context(mode: &str) -> String {
     format!("Claudesk reports the drive mode for this workspace as {mode}.")
 }

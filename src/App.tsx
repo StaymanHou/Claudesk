@@ -395,6 +395,13 @@ function App() {
         if (target === "invite") setInviteDismissedThisSession(true);
         if (target === "settings") setShowSettings(false);
         if (target === "dashboard") setShowDashboard(false);
+        // ⚠️ Added 2026-08-18 (paydown WP3) for SYMMETRY with the dashboard-chord branch
+        // above, which returns. Without it an Escape fell through to `isSettingsChord(e)`.
+        // That was HARMLESS — `isSettingsChord` requires `e.key === ","`, which Escape can
+        // never be — so this fixes no live bug. It removes a trap: the next chord predicate
+        // added below this point inherits the fall-through, and a predicate that keys on
+        // modifiers rather than a specific character would fire on Escape.
+        return;
       }
       // M10.9 WP2 — ⌘, toggles the Settings panel. Also NOT gated on `view`: Settings is
       // app-global and must be reachable from the picker AND with a workspace focused —

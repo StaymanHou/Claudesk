@@ -277,6 +277,21 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // M13 WP3 P2.1 — keep the imperative-handle ref pointing at the live handleRelaunch, so
     // Recycle drives the SAME path the Relaunch button does. Assignment-on-render, mirroring
     // `fitAndResizeRef.current = fitAndResize` below.
+    //
+    // ⚠️ **Reconciled 2026-08-18 (paydown WP3) with `Workspace.tsx`'s opposite-sounding rule.**
+    // `Workspace.tsx` documents render-phase ref assignment as an eslint ERROR and routes its
+    // `ccSessionIdRef` through an effect instead. Both are correct, because they are different
+    // kinds of ref, and THIS is the discriminator:
+    //   • An **imperative-handle forwarding ref** (this one and `fitAndResizeRef`) exists only so
+    //     a `useImperativeHandle` method can reach a callback declared later in the body. It is
+    //     never read during render and never feeds rendered output, so a render-phase write has
+    //     nothing to be inconsistent with.
+    //   • A **latest-value ref** (`Workspace.tsx`'s `ccSessionIdRef`) mirrors a prop that a
+    //     long-lived closure polls. There a render-phase write IS the bug the rule names: it can
+    //     land for a render React later discards, so the closure reads a value that was never
+    //     committed. Those go in an effect.
+    // ⚠️ Do NOT "fix" this into an effect by analogy, and do NOT move `Workspace.tsx`'s back out
+    // of one. If you add a ref here, classify it first.
     handleRelaunchRef.current = handleRelaunch;
 
     // Fit the terminal to its container and push the resulting cols/rows to the PTY.

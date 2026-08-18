@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-08-18
 created: 2026-08-18
-status: in-progress (WP1+WP2 done 2026-08-18; WP3 next)
+status: in-progress (WP1-WP3 done 2026-08-18; WP4 next)
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -130,7 +130,19 @@ drifted — App.tsx moved ~106 lines. Re-anchor by SYMBOL, never by the recorded
 
 **Resolves theme T3 (8 items).**
 
-## WP3 — Reconcile conflicting precedents + the containment story  `[impact: Med-High · effort: S · risk: Low]`
+## WP3 — Reconcile conflicting precedents + the containment story  `[impact: Med-High · effort: S · risk: Low]`  ✅ DONE 2026-08-18
+
+> **CLOSED** — archived at `workflow-system/state/archive/paydown-wp3-conflicting-precedents.md`.
+> **4 genuine · 2 REFUTED · 1 was a BEHAVIOR gap, not prose.**
+> ⚠️ **Two filings are REFUTED and "reconciling" either would REGRESS — do NOT re-file:**
+> (a) `expected_context()`'s duplication is the **drift detector** — sharing the literal leaves two
+> mirrors agreeing with each other; (b) the "single listener" rule governs **app-global** values
+> (`usePipMode`), while `fs-change` is **per-workspace** — 3 listeners are correct. Discriminator:
+> CARDINALITY. Both now recorded at their sites.
+> ⚠️ **D2 applied documentation-only** — the var DOES reach the whole descendant chain and that is
+> intended; `env_clear()` remains forbidden.
+> ⚠️ **The reload-error guard was mutation-REFUTED on its first draft** (a bare-identifier assertion
+> satisfied by the declaration + the success-path clear) and rewritten to a call shape.
 
 ⚠️ **This is the theme most likely to produce a FUTURE defect** rather than describe a present one:
 each pair leaves the next consumer inheriting two contradictory rules. **One sentence each** naming
