@@ -376,3 +376,6 @@ Per the model: **deletions → low-risk → high-impact → co-location**; effor
 4. Confirm the **T1/T2 convention pass** is recorded as a deferred item with its
    authority + guard shape intact (not silently dropped).
 5. **Delete this file.** It reserves no roadmap slot and must not be resynced into `arch.md`.
+
+## Session Handoff — 2026-08-18 14:45
+Handed off. See `workflow-system/state/.session.md` to restore.
