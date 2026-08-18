@@ -200,7 +200,7 @@ export function Workspace({
   }, [workspace.cc_session_id]);
 
   // M13 WP3 P3.1 — one Recycle at a time. Guards the double-click: the sequence takes tens of
-  // seconds (WP1 measured 28–52s to the terminal `Stop`), so a second click mid-run would start
+  // seconds (figures: `RECYCLE_TIMEOUT_MS`, the single authority), so a second click mid-run would start
   // a competing operation against the same session and both would race the same signals.
   const [recycling, setRecycling] = useState(false);
 

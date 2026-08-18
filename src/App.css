@@ -628,8 +628,9 @@ body,
 /* M13 WP3 — the Recycle button: the row's SIXTH affordance and the only one that is an
    operation rather than a slash command. It carries `.workspace-skill-btn` for the shared
    look plus this class for the two things that differ:
-     1. a busy state — a recycle takes tens of seconds (WP1 measured 28–52s to the terminal
-        `Stop`), so the button must visibly stop accepting clicks for that whole window;
+     1. a busy state — a recycle takes tens of seconds (figures live on `RECYCLE_TIMEOUT_MS`
+        in `recycleSession.ts`, the single authority), so the button must visibly stop
+        accepting clicks for that whole window;
      2. a hairline separator marking it as not-a-skill, so the row reads as "five commands,
         then an operation" rather than six interchangeable buttons.
    ⚠️ A BASE rule, not only a `:disabled` modifier — the CSS guard in `skillButtons.test.ts`

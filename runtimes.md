@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-14
+updated: 2026-08-18
 ---
 
 # Runtime Registry
@@ -95,7 +95,8 @@ real chronology.
 
 ## pnpm test
 
-- **Last:** 3.69s wall / 1.78s exec (2026-08-14, M13 WP2 Phase 1 verify-auto — 163 files / **2045** pass, 0 fail. +19 over WP1's 2026: 18 new in `skillButtons.test.ts` (the skill-button row) and +1 net in `sessionStartButton.test.ts`, whose assertions were retargeted rather than deleted when the row absorbed the standalone `/session-start` button)
+- **Last:** 3.57s wall / 2.77s exec (2026-08-18, M13 WP4 verify-codify — 165 files / **2115** pass, 0 fail. +70 over WP2's 2045: +60 from WP3 (2112 at its close) and **+3 from WP4** — the arm-count pin and the Recycle real-vs-stub meta-guard in `offInvariantGuard.test.ts`, plus the exactly-one-/session-start render-site guard in `skillButtons.test.ts`. WP4 changed no production code)
+- **Prior:** 3.69s wall / 1.78s exec (2026-08-14, M13 WP2 Phase 1 verify-auto — 163 files / **2045** pass, 0 fail. +19 over WP1's 2026: 18 new in `skillButtons.test.ts` (the skill-button row) and +1 net in `sessionStartButton.test.ts`, whose assertions were retargeted rather than deleted when the row absorbed the standalone `/session-start` button)
 - **Prior:** 4.48s wall / 1.86s exec (2026-08-14, M13 WP1 Phase 1 verify-codify — 162 files / 2026 pass, 0 fail. WP1 was a probe: zero lines under `src/`, so its run's only job was attribution)
 - **Use timeout:** 120000
 - **History:**
@@ -214,7 +215,8 @@ ordinary build's cache — the two use different `RUSTFLAGS`). Warm runs are ~1s
 
 ## cargo test
 
-- **Last:** 18.6s wall / 3.86s warm exec (2026-08-14, M13 WP1 Phase 1 verify-codify: full `cargo test -p claudesk`, **827 lib** + 16 hook_pl_output + 1 integration = **844 pass** / 0 fail, +1 ignored. Phase 1 touched no Rust — measurements + doc edits only — so this run's only job is attribution, and the count matches `CLAUDE.md`'s recorded 827. ⚠️ A verify-human finding claiming the app-quit clean-exit route had no caller was **retracted** this phase: the clear is implemented in `perform_quit_teardown` and covered by 4 tests. No code changed, so no count movement is expected or observed)
+- **Last:** 3.92s exec (2026-08-18, M13 WP4 verify-codify: full `cargo test -p claudesk`, **828 lib** + 16 hook_pl_output + 1 integration = **845 pass** / 0 fail, +1 ignored. ⚠️ **Exactly the WP3 close baseline** — WP4 touched no Rust, so an unchanged count IS the attribution. Run from `src-tauri/` with an explicit cargo PATH; the dev app was running but a running binary does not contend on the `target/` lock)
+- **Prior:** 18.6s wall / 3.86s warm exec (2026-08-14, M13 WP1 Phase 1 verify-codify: full `cargo test -p claudesk`, **827 lib** + 16 hook_pl_output + 1 integration = **844 pass** / 0 fail, +1 ignored. Phase 1 touched no Rust — measurements + doc edits only — so this run's only job is attribution, and the count matches `CLAUDE.md`'s recorded 827. ⚠️ A verify-human finding claiming the app-quit clean-exit route had no caller was **retracted** this phase: the clear is implemented in `perform_quit_teardown` and covered by 4 tests. No code changed, so no count movement is expected or observed)
 - **Prior:** 12s wall / 4.04s warm exec (2026-08-12, paydown WP1 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail, **+1 ignored**. Deleting the callerless `project_get_default_model` command left the lib count **unchanged at 823** — the right result, since no test drove it; that is the attribution. The new ignored test is `stale_dead_code_allows`, which is opt-in because it runs its own `cargo check`)
 - **Prior:** 14s wall / 4.80s warm exec (2026-08-12, M12 WP5 Phase 1-3 verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP5 is frontend-only so far, so this run's job is attribution — the count matches WP4d exactly, confirming the guard work is inert to Rust)
 - **Prior:** 8s wall / 4.30s warm exec (2026-08-11, M12 WP4d verify-auto: full `cargo test -p claudesk`, **823 lib** + 16 hook_pl_output + 1 integration = **840 pass** / 0 fail. WP4d touched no Rust at all, so this run's only job is attribution — the count matches WP4c's post-review close, confirming the doc edits are inert)

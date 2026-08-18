@@ -663,3 +663,82 @@ describe("waitForFreshSessionId — the respawn handshake (M13 WP3 P3.1)", () =>
     );
   });
 });
+
+describe("⚠️ the measured latencies have exactly ONE authority", () => {
+  // M13 WP4 P4.4 codify. The figures were restated across NINE lines in FIVE files, which is
+  // verbatim the failure `CLAUDE.md` names: *"duplication is the expensive half — the same
+  // rationale in six places drifts asymmetrically"*, flagged in FOUR CONSECUTIVE REVIEWS of one
+  // file. WP4 collapsed them to `RECYCLE_TIMEOUT_MS`'s doc comment, where a figure is actually
+  // load-bearing (it derives the constant). ⚠️ Nothing stopped that from re-accumulating, so a
+  // paydown without a guard is a paydown that silently undoes itself.
+  //
+  // ⚠️ EN DASH (U+2013), not a hyphen. The verify-self pass first reported ZERO matches because
+  // a shell mangled the character — which reads as a STRONGER pass than the truth. These are
+  // TS string literals, so the bytes are exact and no shell is involved.
+  const FIGURES = ["28\u201352", "51.9", "9\u201312"];
+
+  /** Every non-test module under `src/` that could restate a figure. */
+  async function nonTestSources(): Promise<string[]> {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const root = path.resolve(__dirname, "../../..");
+    const out: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir)) {
+        const full = path.join(dir, entry);
+        if (fs.statSync(full).isDirectory()) {
+          if (entry !== "__tests__") walk(full);
+        } else if (/\.(tsx?|css)$/.test(entry)) {
+          out.push(full);
+        }
+      }
+    };
+    walk(root);
+    return out;
+  }
+
+  it("no production module outside the authority restates a measured figure", async () => {
+    const fs = await import("node:fs");
+    const files = await nonTestSources();
+    const offenders = files.filter((f) => {
+      if (f.endsWith("recycleSession.ts")) return false; // THE authority
+      const src = fs.readFileSync(f, "utf8");
+      return FIGURES.some((fig) => src.includes(fig));
+    });
+    expect(
+      offenders.map((f) => f.split("/src/")[1]),
+      "these modules restate a latency figure — point at RECYCLE_TIMEOUT_MS instead; the " +
+        "figures live in exactly one place so they cannot drift apart",
+    ).toEqual([]);
+  });
+
+  it("is not vacuous — the authority itself DOES carry every figure", async () => {
+    // Without this, the guard above passes trivially if the figures are deleted everywhere,
+    // which would "fix" duplication by destroying the measurement — the wrong direction.
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const authority = fs.readFileSync(
+      path.resolve(__dirname, "../recycleSession.ts"),
+      "utf8",
+    );
+    for (const fig of FIGURES) {
+      expect(authority, `the authority must still carry ${fig}`).toContain(fig);
+    }
+  });
+
+  it("the walker reaches a non-trivial set, and really sees the pointer sites", async () => {
+    // A walker resolving to the wrong root or returning [] would make the arm above pass having
+    // scanned nothing — the vacuous-guard shape this repo keeps hitting.
+    const files = await nonTestSources();
+    const rel = files.map((f) => f.split("/src/")[1]);
+    expect(files.length).toBeGreaterThan(50);
+    for (const site of [
+      "App.css",
+      "components/workspace/Workspace.tsx",
+      "components/workspace/recycleButton.ts",
+      "state/recycleMachine.ts",
+    ]) {
+      expect(rel, `the walker must reach ${site}`).toContain(site);
+    }
+  });
+});

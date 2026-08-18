@@ -63,11 +63,38 @@ it trims trailing CR/LF and appends **exactly one `\r`**.
 bare `\n` only triggers CC's autocomplete typeahead instead of executing the command. This applies to
 every PTY-driven subprocess, not just CC.
 
+⚠️ **`slash_command_bytes` is the RUST-side rule and is NOT reachable from the frontend** — it is not
+a `#[tauri::command]`, and its one production caller is the shutdown `/exit`. A **button** injects via
+`injectCommand`/`slashCommandPayload` (`autoResumeFire.ts`) → `invoke("cc_input", …)`.
+`slashCommandPayload` is the deliberate TS **mirror** of the Rust helper, pinned byte-for-byte by
+`autoResumeFire.test.ts`. ⚠️ **Two implementations of one rule is intended — keep them in step, do not
+"unify" them.** (Corrected 2026-08-14: an earlier revision called `slash_command_bytes` "the
+PTY-injection primitive", which would send a button implementer to a function no button can call.)
+
 ⚠️ **Claudesk composing input on its own initiative is a DISTINCT ACT from relaying the user.** The
 "byte-injection is legitimate because Claudesk *is* the terminal" argument is about **relaying
-keystrokes**. `cc_input`'s callers are real xterm keystrokes (`XtermPane.tsx`) plus the auto-resume
-inject; adding a third is a deliberate decision, not free reuse. (This is why WP4 cut auto-starting the
-tutorial tour — see [the workflow gate](workflow-gate.md).)
+keystrokes**. (This is why WP4 cut auto-starting the tutorial tour — see
+[the workflow gate](workflow-gate.md).)
+
+**The composing callers, as built (M13):**
+
+| Caller | Label | Fires |
+|---|---|---|
+| `XtermPane.tsx` | — | real keystrokes (relay, not composition) |
+| auto-resume (M12) | `auto-resume` | `/session-restore` at workspace open |
+| skill-button row (M13 WP2) | `skill-button` | the five fixed commands, on click |
+| Recycle (M13 WP3) | `recycle` | `/session-handoff`, then `/session-restore` into the fresh session |
+
+⚠️ **The `label` argument exists because it had to.** WP2 reused the funnel and inherited a hardcoded
+`auto-resume:` prefix, so every *button* failure was attributed to M12's *automatic* arm — and
+`console.warn` is the only failure channel this path has (no overlay, by operator decision), so a
+misattributed prefix points the one available diagnostic at the wrong feature.
+
+⚠️ **Recycle's teardown reuses the pane's existing `handleRelaunch` — NOT Ctrl+D.** The roadmap line
+says Ctrl+D; that is not what shipped. Reusing the relaunch path means kill → clear the spawn-once
+latch → one nonce-bump, so **no second respawn route exists**. It also means Recycle's fresh spawn
+goes through `cc_spawn` and therefore inherits `cc_spawn_env` — so the drive-mode signal is acquired
+for free, with nothing built for it (WP1 Q4).
 
 ## Shutdown / teardown
 

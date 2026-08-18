@@ -186,21 +186,34 @@ Measured properties the fifth arm must respect — each already paid for by a re
 
 ---
 
-### WP4: Milestone exit verify + Group C close
+### WP4: Milestone exit verify + Group C close ✅ SHIPPED 2026-08-18
 **Description:** Verify both exit criteria live, then confirm Group C's metrics 2 and 3 are met.
 **Milestone:** 13
 **Dependencies:** WP2, WP3
 **Size:** S
 
 **Tasks:**
-- [ ] 4.1 Exit criterion 1 — no slash-command typing for common skills (against Q1's curated set, live).
-- [ ] 4.2 Exit criterion 2 — Recycle Session is a single click, end-to-end on a real session.
-- [ ] 4.3 ⚠️ **The negative arm, asserted as hard as the positive:** gate OFF ⇒ no skill buttons, no Recycle button, nothing. Run all **five** guard arms individually.
-- [ ] 4.4 Update `vision.md`'s success-metric status: 2 and 3 → met; Group C closes at M13.
-- [ ] 4.5 ⚠️ Resync the `arch/` set **by subsystem, not by milestone** — the registry and Recycle belong in existing subsystem docs (`process-and-pty.md` for injection; `session-resumption.md` for the flag route; `workflow-gate.md` for the fifth arm). **Do not add a milestone section to `arch.md`.**
-- [ ] 4.6 Confirm the WP1 probe outcomes still hold as-built; correct any that did not survive contact.
+- [x] 4.1 Exit criterion 1 — no slash-command typing for common skills (against Q1's curated set, live).
+- [x] 4.2 Exit criterion 2 — Recycle Session is a single click, end-to-end on a real session.
+- [x] 4.3 ⚠️ **The negative arm, asserted as hard as the positive:** gate OFF ⇒ no skill buttons, no Recycle button, nothing. Run all **five** guard arms individually.
+- [x] 4.4 Update `vision.md`'s success-metric status: 2 and 3 → met; Group C closes at M13.
+- [x] 4.5 ⚠️ Resync the `arch/` set **by subsystem, not by milestone** — the registry and Recycle belong in existing subsystem docs (`process-and-pty.md` for injection; `session-resumption.md` for the flag route; `workflow-gate.md` for the fifth arm). **Do not add a milestone section to `arch.md`.**
+- [x] 4.6 Confirm the WP1 probe outcomes still hold as-built; correct any that did not survive contact.
 
 ---
+
+### ⚠️ P4.6 — the four verdicts RE-CONFIRMED as-built (M13 WP4, 2026-08-18)
+
+Checked against shipped code and Phase 3's live run, not re-derived from the probe's own notes.
+
+| Q | Verdict | Survived contact? |
+|---|---|---|
+| **Q1** — which skills the surface shows | a TINY FIXED SET (five + Recycle) | ✅ **Held.** Shipped exactly as decided; verified live at Phase 2 (6 affordances, commands set-equal to `SKILL_BUTTONS`). The one plan-time change — adding `/session-restore` as member 5 — is recorded in WP2 → D3 and is a *widening within the shape*, not a reversal of it. |
+| **Q2** — scanner behaviour on the real dir | measured, then **demoted to moot** by Q1 | ✅ **Held, and the demotion was right.** Option (i) shipped: **no scanner exists**, so the 11 dangling symlinks were never load-bearing. ⚠️ Do not resurrect the scan for a future surface without re-reading §4c — the command name is the only sanctioned cross-repo coupling. |
+| **Q3** — Recycle's completion protocol | **no single marker; a COMPOSITE** (fresh write beating a pre-sampled baseline, then the next `Stop`) | ✅ **Held, and now confirmed against a live success.** Phase 3 observed the composite firing **in order**: write at +38s, operation still busy at the write, completing only on the following `Stop`. ⚠️ Both failure runs were `no-fresh-write` — the exact shape WP1 predicted from run 2. |
+| **Q4** — does the respawn go through `cc_spawn_env`? | **YES, one unbroken path** | ✅ **Held — and this is the verdict the live run could have falsified.** `relaunch()` → nonce bump → the shared spawn effect → `cc_spawn` → `resolve_cc_spawn_env` → `cc_spawn_env`. **Direct evidence:** Phase 3's respawned session picked up the corrected `cc_permission_mode` (pane footer changed `don't ask on` → `bypass permissions on`), which is only possible if the env was recomposed at spawn. So the drive-mode signal is acquired for free, and **nothing was built** for it. |
+
+**Sizing note, for the record:** WP3 stayed **L** as the probe predicted (the re-size to M was conditional on finding an unambiguous marker; none exists). WP2's **M → S** re-size was taken at plan time and held.
 
 ## Learning-sequence ordering
 

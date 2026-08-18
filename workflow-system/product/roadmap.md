@@ -374,10 +374,12 @@ Milestones are a **flat, continuous list** (`Milestone 1`, `Milestone 2`, …). 
 > | 4 | every workspace's status visible in-window | ✅ M3 + M4 |
 > | 6 | …and visible when Claudesk is NOT focused | ✅ M5 (PiP) + M7 (menu-bar) |
 > | **5** | **workspace open lands on the right resumption command, and the drive mode is visible** | ✅ **M12** — ⚠️ this metric was **unsatisfiable as originally written** (it required the mode in the *workspace header*, which is not where it shipped); restated against the **picker row** at WP4d and verified at WP5 |
-> | 2 | Recycle Session is one click | ⏳ **M13** |
-> | 3 | no slash-command typing for common skills | ⏳ **M13** |
+> | 2 | Recycle Session is one click | ✅ **M13 WP3** — verified end-to-end on a real session at WP4 Phase 3 (2026-08-18) |
+> | 3 | no slash-command typing for common skills | ✅ **M13 WP2** — verified live at WP4 Phase 2 (2026-08-18) |
 >
-> So **four of six are met** and the remaining two — 2 and 3 — are both M13's, which is what makes M13 the Group-C-closing milestone.
+> **✅ ALL SIX ARE MET. Group C is CLOSED (M13 WP4, 2026-08-18.)**
+>
+> ⚠️ **Both metrics needed their own wording corrected before they could be marked met — see `vision.md` for each.** Metric 2 named a 4-step dance using **two commands that do not exist** (`/session-pause`/`/session-resume`, renamed at M9 WP5) and a **Ctrl+D** teardown that is not what shipped. Metric 3 said *"**Every** installed workflow skill is a clickable button"*, which WP1's measurement **refuted** — only 11 of 50 invocable skills were ever typed by hand, and zero `feature-*`/`task-*`/`product-*` ones, so an exhaustive row would have surfaced the *agent's* vocabulary to a human who never types it. The exit criterion's operative word is **"common"**, and the shipped set is a deliberate fixed five plus Recycle. ⚠️ **This is the second time a Group-C metric proved unsatisfiable as originally written** (metric 5 was restated at M12 WP4d against the picker row) — worth noting at the next `/product-vision`: metrics written as *"every X"* or naming a *specific mechanism* tend to be refuted by the build, whereas metrics naming an *outcome* survive.
 >
 > ⚠️ **Group C still closes at M13 — the new M15 (workflow supervisor) does NOT belong to it** (inserted 2026-08-14). None of the six vision success metrics covers mechanical auto-chain enforcement; metrics 2 and 3 are about *clicks*, which M13 delivers in full. M15 is a **new capability** in its own Group E, deliberately kept out of Group C so its research risk cannot block this close.
 

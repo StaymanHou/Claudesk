@@ -1,7 +1,7 @@
 # Feature: M13 WP4 — Milestone exit verify + Group C close
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** ship (complete)
 **Created:** 2026-08-18
 **Drive mode:** autopilot
 **WBS:** `workflow-system/product/wbs.md` → WP4 (Size **S**, depends on WP2 + WP3)
@@ -88,7 +88,7 @@ was reading each outcome's **operative words** against the code, not against the
   - [x] verify-human  <!-- AUTO-SKIPPED per drive_mode=autopilot: no integration boundary; verify-self all-PASS -->
   - [x] verify-codify
 
-- [ ] Phase 2: Exit criterion 1 — no slash-command typing for common skills (live)  <!-- status: in-progress -->
+- [x] Phase 2: Exit criterion 1 — no slash-command typing for common skills (live)
   **Observable outcomes:**
   - Browser (MCP `tauri` bridge, live WKWebView): with `workflow_features_enabled` **ON**, the
     focused workspace header contains **exactly 6** affordances from the M13 row — 5 skill buttons
@@ -124,11 +124,11 @@ was reading each outcome's **operative words** against the code, not against the
   - [x] P2.6 Restore the gate to ON and confirm the row returns (proves the OFF result was the gate,
         not a broken query).
   - [x] verify-auto
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-self
+  - [x] verify-human  <!-- AUTO-SKIPPED per drive_mode=autopilot: no boundary (phase changed NO source); verify-self all-PASS. ⚠️ Subagent outcome-6 FAIL classified as UNREACHABILITY (bridge not exposed to subagents), not a defect — orchestrator observed those outcomes directly. -->
+  - [x] verify-codify
 
-- [ ] Phase 3: Exit criterion 2 — Recycle end-to-end on a real session  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [x] Phase 3: Exit criterion 2 — Recycle end-to-end on a real session
   **Observable outcomes:**
   - ⚠️ **PRECONDITION, asserted not assumed:** the target workspace is a **real project with real
     work in it** (not an empty scratch repo — CC correctly refuses to hand off from one, which is
@@ -148,25 +148,27 @@ was reading each outcome's **operative words** against the code, not against the
     project **announces nothing** (the flag was genuinely cleared, so no spurious `--continue`).
   - CLI: total elapsed from click to fresh-prompt is recorded as a **measurement** (WP1's captured
     range was 28–52s to terminal `Stop`, slowest 51.9s) — recorded, not asserted as a threshold.
-  - [ ] P3.1 Choose the fixture and **state why it satisfies the precondition** — the WBS's own
+  - [x] P3.1 Choose the fixture and **state why it satisfies the precondition** — the WBS's own
         guidance is that this closes most cheaply by recycling **a real session once**, rather than
-        building a fixture elaborate enough to fool CC.  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 Record the before-state: `.session.md` presence + mtime baseline, the **full** flag
-        store (for the sibling assertion), the CC PID.  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 Click Recycle once. Observe the composite marker firing in order (fresh write → next
-        `Stop`), not just the end state.  <!-- status: NOT-STARTED -->
-  - [ ] P3.4 Assert every after-state above, including the sibling-flags-unchanged arm.  <!-- status: NOT-STARTED -->
-  - [ ] P3.5 Re-open the project and assert **no announcement** fires.  <!-- status: NOT-STARTED -->
-  - [ ] P3.6 Resolve `SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE` **only if
+        building a fixture elaborate enough to fool CC.
+  - [x] P3.2 Record the before-state: `.session.md` presence + mtime baseline, the **full** flag
+        store (for the sibling assertion), the CC PID.
+  - [x] P3.3 Click Recycle once. Observe the composite marker firing in order (fresh write → next
+        `Stop`), not just the end state.
+  - [x] P3.4 Assert every after-state above, including the sibling-flags-unchanged arm.
+  - [x] P3.5 Re-open the project and assert **no announcement** fires.
+  - [x] P3.6 Resolve `SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE` **only if
         the composition was actually observed**; if the precondition failed, leave it open and record
         why. ⚠️ Claiming a resolve that did not happen is the exact failure WP3 avoided when it
-        declined to claim the `cc_ready` doc-fix.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+        declined to claim the `cc_ready` doc-fix.
+  - [x] verify-auto
+  - [x] verify-self  <!-- outcome 7 UNVERIFIED/COSMETIC: instrument reach (bridge not exposed to subagents; run non-repeatable) — orchestrator-attested -->
+  - [x] verify-human  <!-- operator-approved 2026-08-18; NOT auto-skipped (gate (b) failed on the UNVERIFIED outcome 7) -->
+    - [x] P3.verify-human.1 exit criterion 2 met (orchestrator-attested; run non-repeatable)
+    - [x] P3.verify-human.2 dev cc_permission_mode dontAsk→bypassPermissions stands; prod untouched
+  - [x] verify-codify  <!-- no new tests: every live behavior already pinned; verified, not assumed -->
 
-- [ ] Phase 4: Doc resync — `arch/` by subsystem, metrics, probe re-confirm, one latency authority  <!-- status: NOT-STARTED; depends on Phase 3 -->
+- [x] Phase 4: Doc resync — `arch/` by subsystem, metrics, probe re-confirm, one latency authority
   **Observable outcomes:**
   - CLI: `grep -c "^## " workflow-system/product/arch.md` is **unchanged** from before the phase —
     ⚠️ proves no milestone section was added to the index (task 4.5's explicit prohibition).
@@ -181,38 +183,37 @@ was reading each outcome's **operative words** against the code, not against the
     shows 2 and 3 ✅ and Group C closed. `grep` finds **no** remaining `⏳ **M13**` in that table.
   - CLI: `pnpm test` + `cargo test -p claudesk` + `cargo clippy --all-targets -- -D warnings` +
     `pnpm format:check` all exit 0, with counts ≥2112 frontend / ≥828 Rust lib.
-  - [ ] P4.1 Resync `arch/session-resumption.md` (Recycle's flag route + the composite completion
-        marker as an **invariant**, with provenance pointed at the archive).  <!-- status: NOT-STARTED -->
-  - [ ] P4.2 Resync `arch/process-and-pty.md` (Recycle's injection + teardown reuses `handleRelaunch`
-        — **not** Ctrl+D, so no second respawn route exists).  <!-- status: NOT-STARTED -->
-  - [ ] P4.3 Resync `arch/workflow-gate.md` (the fifth arm; arm 5 asserts companion-skill
+  - [x] P4.1 Resync `arch/session-resumption.md` (Recycle's flag route + the composite completion
+        marker as an **invariant**, with provenance pointed at the archive).
+  - [x] P4.2 Resync `arch/process-and-pty.md` (Recycle's injection + teardown reuses `handleRelaunch`
+        — **not** Ctrl+D, so no second respawn route exists).
+  - [x] P4.3 Resync `arch/workflow-gate.md` (the fifth arm; arm 5 asserts companion-skill
         **provenance by command prefix**, deliberately *not* by widening the shared `WORKFLOW_TERMS`).
-        <!-- status: NOT-STARTED -->
-  - [ ] P4.4 Pay the documentary MAJOR: pick **ONE** latency authority, delete the other four, move
+      
+  - [x] P4.4 Pay the documentary MAJOR: pick **ONE** latency authority, delete the other four, move
         provenance to the archive. ⚠️ **Do NOT trim a little from each site** — that is precisely how
         the four-consecutive-reviews case happened. Keep the *invariant* at the code (*"the marker is
         composite — do not simplify"*); move the *provenance* (three-run table, killed candidates,
-        measured figures) out.  <!-- status: NOT-STARTED -->
-  - [ ] P4.5 Update `vision.md` metrics 2 + 3 → met; `roadmap.md` M13 table + Group C close note.
-        <!-- status: NOT-STARTED -->
-  - [ ] P4.6 Re-confirm WP1's four probe verdicts still hold as-built (Q1 the fixed set; Q2 moot by
+        measured figures) out.
+  - [x] P4.5 Update `vision.md` metrics 2 + 3 → met; `roadmap.md` M13 table + Group C close note.
+      
+  - [x] P4.6 Re-confirm WP1's four probe verdicts still hold as-built (Q1 the fixed set; Q2 moot by
         Q1; Q3 the composite marker; Q4 respawn goes through `cc_spawn_env` → the drive-mode signal
         is free). Correct any that did not survive contact — ⚠️ **Q4 is the one to actually re-check
         against Phase 3's live run**, since it is the only verdict Recycle's real respawn can falsify.
-        <!-- status: NOT-STARTED -->
-  - [ ] P4.7 Tick WP4's tasks in `wbs.md`; update `runtimes.md` with this WP's observed runtimes +
-        counts (one bullet per WP, not per run).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+      
+  - [x] P4.7 Tick WP4's tasks in `wbs.md`; update `runtimes.md` with this WP's observed runtimes +
+        counts (one bullet per WP, not per run).
+  - [x] verify-auto
+  - [x] verify-self
+  - [x] verify-human  <!-- AUTO-SKIPPED per drive_mode=autopilot: no integration boundary (source edits comment-only, proven); verify-self 8/8 PASS. Affirmation printed for read-time veto. -->
+  - [x] verify-codify
 
 ## Current Node
-- **Path:** Feature > Phase 2: Exit criterion 1 (live) > verify-self
-- **Active scope:** Phase 2 verify-auto `[x]` (no source changed; probing residue cleared, static↔live cross-check agrees); verify-self next
+- **Path:** Feature > ALL PHASES COMPLETE > ship
+- **Active scope:** none — all four phases `[x]`, every verification node `[x]`. Ready to ship.
 - **Blocked:** none
-- **Unvisited:** Phase 3 (exit criterion 2, Recycle end-to-end) → Phase 4 (doc resync + metrics +
-  probe re-confirm)
+- **Unvisited:** (none — Phase 4 is the last)
 - **Open discoveries:** 1 — `SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION` (logged to backlog)
 
 
@@ -439,6 +440,562 @@ so the scoped checks are about **residue from live probing**, not about new code
   `SKILL_BUTTONS` source and the five rendered in the live DOM are set-equal, and Recycle is a
   separate sibling. This is what closes the gap between "the array says X" and "the screen shows X".
 - Standing gate on Phase 1's delta: `tsc` / `eslint` / `prettier --check` clean, guard at **34 passed**.
+
+
+## Phase 2 — verify-self result
+
+**All five reachable outcomes PASS** (independent subagent, static + persisted claims).
+
+| Outcome | Result | Note |
+|---|---|---|
+| `SKILL_BUTTONS` is exactly 5, Recycle not a member | ✅ PASS | Parsed the array **programmatically**, not by eyeballing the heavily-commented file; no "recycle" anywhere in the literal |
+| Exactly ONE `/session-start` render path | ✅ PASS | `SESSION_START_COMMAND` / `showSessionStartButton` **no longer exist as definitions** — surviving mentions are comments/test prose documenting the removal. `sessionStartButton.ts` survives exporting only `nextOpenIndicator`, a display-only `<span>`, not a button |
+| Both gate predicates consulted at the render site | ✅ PASS | + a nesting finding, below |
+| Dev gate back at `true`, prod untouched | ✅ PASS | Both read `true`; the profiles differ only in **pre-existing unrelated** fields the phase never claimed to touch |
+| Guard at 34 passed | ✅ PASS | Ran the local binary directly; **re-measured the exit code** after a `PIPESTATUS` read came back empty under zsh, rather than assuming it |
+
+⚠️ **Outcome 6 (the live-DOM outcomes) came back `FAIL/BLOCKING`, and it is NOT a genuine blocker.**
+The subagent's own words: *"this is 'not reached by me,' not 'observed broken.'"* `mcp__tauri__*` is
+**not exposed to subagents** (`[[mcp-bridge-tools-not-exposed-to-subagents]]`) — it had only Playwright,
+which reaches a Tauri-less Vite page. ⚠️ **It correctly REFUSED to substitute a Playwright visit to
+`localhost:1420`**, which would have rendered without `__TAURI_INTERNALS__` and produced instrument
+error dressed as a finding. Those outcomes were observed **directly by the orchestrator** through the
+bridge against the real WKWebView, and a subagent's unreachability does not retract a direct
+observation. Not a back-loop.
+
+### ⚠️ The nesting finding — independently confirmed, and it sharpens WP3's MINOR (a)
+
+Both predicates ARE consulted, but the Recycle button sits **inside** the row's `showSkillButtons`
+conditional (`Workspace.tsx:488-527`), a sibling of the five *mapped* buttons rather than of the row
+itself. Today behavior is identical because the two predicates are byte-identical
+(`workflowEnabled && ccSessionId !== null`).
+
+⚠️ **The sharpened form is the useful part:** `recycleButton.ts`'s own doc says the predicates are
+deliberately separate **so their conditions can diverge** — but under this nesting a future divergence
+could only ever **REMOVE** Recycle, never **show** it when the skill row is hidden. The documented
+independence is **half-realized at the render site**. This matches the pre-read note recorded before
+Phase 2 ran and confirms WP3 review MINOR (a) from a second, independent reading. Filed as part of
+that existing finding rather than as a new one — it is the same defect seen more precisely.
+
+
+## Phase 2 — verify-codify result
+
+**No integration boundary** — the phase added no artifacts; it observed existing ones.
+
+**Coverage assessment first.** `skillButtons.test.ts` already covers Phase 2's behaviors well and
+those were deliberately NOT duplicated: membership + order, per-member live callers through the real
+funnel, the CR-not-LF payload rule, the row gate, Recycle-inside-the-row structure, Recycle-not-a-
+member, and a **dead-CSS guard** forbidding the absorbed button's old `.workspace-session-start` class.
+The absorption is also pinned at module level (`SESSION_START_COMMAND` / `showSessionStartButton` no
+longer exist as definitions).
+
+**One genuine gap found and closed.** ⚠️ **Every existing absorption assertion is about ABSENCE of the
+OLD button; none is about the COUNT.** Nothing stopped a *new* second render site — a hand-written
+`<button onClick={() => fireSkill("/session-start")}>` added anywhere in `Workspace.tsx` — from
+satisfying all of them while putting **two** `/session-start` buttons on screen. That is exactly the
+"two mechanisms serving one skill" shape the WBS calls "the problem", and WP1's Q3 disposition is a
+**count** ("exactly one may exist when it is done"), not an absence.
+
+**Test added:** `"renders EXACTLY ONE /session-start affordance — the absorption, asserted at the
+render site"`. Asserts no hand-written `/session-start` literal exists in the render path (the row
+emits from `SKILL_BUTTONS.map`, so any JSX literal is by construction a second affordance), that the
+rendered testid is **derived** from the command rather than hardcoded, and that the array carries the
+command exactly once.
+
+**Mutation-proven:** injecting a second `/session-start` button into `Workspace.tsx` (diff-confirmed as
+7 executable JSX lines) → **1 failed / 21 passed**. ⚠️ **The new test caught it and nothing else did** —
+all 21 pre-existing assertions passed with two buttons rendering. Reverted; `Workspace.tsx` byte-clean.
+
+**Suite: 2115 frontend passed** (165 files), +1 over the post-Phase-1 count of 2114, attributable to
+this one test. `tsc` / `eslint` / `prettier --check` clean. Rust untouched.
+
+
+## Phase 3 — live Recycle run 1 (in progress / see outcome below)
+
+**P3.1 — fixture precondition, stated not assumed.** `~/Tmp/yitang-copy` (operator-selected) carries a
+**19.7 KB incident WIP mid-workflow** (`incident-mitigate` pending), a real `backlog.md`, real git
+history, and a pre-existing `.session.md`. That is genuine substance for `/session-handoff` to write
+about — the thing `scratch-b` structurally cannot provide (one baseline commit, two trivial files),
+which is precisely why WP3 was **fixture-blocked** rather than code-blocked.
+
+⚠️ **The fixture also happens to exercise WP1 Q3's ambiguity case for free:** a **stale `.session.md`
+already existed** (mtime `1785257920`, Jul 28) *before* the operation. Existence-as-marker would fire
+instantly here — which is exactly why the marker is a composite (fresh mtime beating a
+**pre-sampled** baseline, then the next `Stop`).
+
+**P3.2 — before-state.** Fresh baseline epoch sampled BEFORE the click: **1787071250**. Flag store
+immediately pre-click:
+
+```
+/Users/stayman/Personal/projects/claudesk/tmp/scratch/scratch-c : true
+/Users/stayman/Personal/projects/claudesk/tmp/scratch/verify-041: true
+/Users/stayman/Tmp/yitang-copy                                  : true   <- Recycle must CLEAR this
+```
+
+⚠️ **`yitang-copy` had an unclean flag set by the act of opening it** — so this run tests the
+clear-on-clean-boundary rule against a *real* set flag, not a synthetic one. `scratch-c` and
+`verify-041` are the **sibling-unchanged** assertion's subjects.
+
+⚠️ **Incidental evidence worth keeping:** closing `scratch-b` **removed** its entry from the store
+(it was `true` at P3.2, absent by pre-click). A clean close clears the flag — the mechanism works.
+
+### ⚠️ A real trap avoided: the focused workspace was NOT the one just opened
+
+Opening `yitang-copy` from the picker mounted it as a **background filmstrip tile** while the header —
+and therefore the Recycle button — still belonged to **`scratch-b`**. **Clicking Recycle at that moment
+would have recycled the wrong workspace.** Caught by asserting the header's project name before
+clicking rather than assuming the newly-opened project was focused.
+
+⚠️ Neither a DOM `.click()` on the tile nor a `⌘⇧2` synthetic keypress promoted it (the tile body is a
+plain `<div>`; only close/pause carry `onClick`). Resolved by **closing `scratch-b`** so the target was
+the only workspace — then the header read `yitang-copy` and the switch was verifiable rather than
+assumed.
+
+**P3.3 — clicked once at epoch 1787071259.** Busy state confirmed immediately: button `disabled`,
+tooltip → *"Recycling — handing off, then restarting this session…"*. So the operation genuinely
+started (not a silent no-op), and the double-click guard is live.
+
+**Handoff observed running inside CC** — the pane showed `/session-handoff` reading the incident WIP
+(`grep -l "tour:" …`, `head -10 … incident-v2-no-lark-doc…`). ⚠️ At ~18s CC hit **`API error ·
+Retrying … attempt 2/10`** and stalled there. **Recycle correctly kept waiting** rather than firing on
+a partial signal — which is the composite marker doing its job under an unplanned condition.
+
+
+### Run 1 OUTCOME — the FAILURE arm fired, and it failed SAFELY (all three checks)
+
+CC declined to write the handoff. Its own words in the pane: *"Not labeling a transition — **S17 was
+not reached, since `.session.md` was never written**."* (It had stalled on `API error · Retrying …
+attempt 2/10` mid-skill, then ended the turn without writing.)
+
+⚠️ **This is `no-fresh-write` — the source calls it "run 2's shape"**: *"`Stop` arrived without a
+preceding fresh write. The handoff did not happen (CC refused, errored, or answered with a question
+instead)."* WP1 captured the same shape empirically. **Not** the dangerous `restore-not-injected`.
+
+**The three safety checks, all correct:**
+
+| Check | Observed | Why it matters |
+|---|---|---|
+| Was CC killed? | **NO** — session alive, `Idle`, xterm mounted | `recycleMachine.ts`'s own invariant on this arm: *"⚠️ Never kill the session on this arm."* Held. |
+| Was the unclean flag cleared? | **NO** — `yitang-copy: true` still set | ⚠️ **The load-bearing one.** A failed handoff is **not** a clean boundary, so clearing would have left a false clean mark and suppressed the next open's `--continue`. |
+| Was `.session.md` written? | **NO** — still mtime `1785257920` (Jul 28) | Recycle did not fabricate a write to satisfy its own marker. |
+
+**Siblings unchanged:** `scratch-c` and `verify-041` both still `true`.
+
+**Recovery is clean:** button re-enabled, tooltip back to the idle text, operation retryable.
+
+⚠️ **No toast — and that is CORRECT, not a defect.** `Workspace.tsx:238-246` deliberately uses
+`console.warn` as this row's failure channel: *"replacing a working terminal with an error overlay,
+over an operation the user can retry, would be worse."* The CC pane itself is the evidence surface.
+(The bridge's console capture returned nothing, so the arm was determined from **observed state** —
+no kill + no write ⇒ terminated at the handoff-wait stage — which is stronger evidence than a log line.)
+
+**What run 1 does and does not establish.** It **re-proves the failure arm against a real refusal**
+(already proven at WP3) and adds the flag-not-cleared and siblings-unchanged assertions against a
+**real set flag**. It does **NOT** establish the success path, which is what
+`SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE` and exit criterion 2 actually
+require. ⚠️ **Recorded as NOT-VERIFIED rather than counted as a pass** — this is exactly the
+"verified vs. the precondition never occurred" distinction the plan was written in the falsifiable
+voice to keep visible.
+
+
+### ⚠️ RUN 2 — the same failure arm, but it exposed the REAL blocker, and it is NOT Recycle
+
+Run 2 (clicked 1787071412, target re-confirmed as `yitang-copy` before clicking) hit `no-fresh-write`
+again — but this time CC stated its reason explicitly, and it is **not** an API error and **not** the
+fixture's content:
+
+> *"Write to `workflow-system/state/.session.md` was **denied** again… the block is the **permission
+> mode**, not anything about the skill or the content."* — and, decisively: *"the content is composed
+> and ready."*
+
+**Root cause: the DEV profile ran `cc_permission_mode: "dontAsk"` while PROD runs
+`bypassPermissions`.** Per `cc_session/mod.rs:97`, `dontAsk` *"just stops the prompting"* — it does
+**not** grant the write. So `/session-handoff` composed a correct handoff and was then silently
+refused at the write, with **no prompt to accept**. Yolo (`bypassPermissions`) is the vision's default
+and what prod uses; the dev profile had drifted.
+
+⚠️ **This reframes WP3's "fixture-blocked" conclusion, and the correction matters.** WP3 concluded CC
+*"correctly refuses to hand off from an empty scratch repo"* — true for `scratch-b`, but **not the
+whole story**. On a fixture with ample real content, the handoff still failed — because of a
+**permission-mode configuration**, which no amount of fixture-building would have fixed. ⚠️ **Anyone
+retrying this on a richer fixture without checking the permission mode would keep failing and
+mis-attribute it to the fixture again.**
+
+**Fixed by setting the dev profile to `bypassPermissions`** (through the real `⌘,` Settings select,
+verified on disk; prod untouched — it was already `bypassPermissions`). ⚠️ **The mode is read at
+SPAWN time**, so the running CC kept the old mode — the workspace was closed and reopened to respawn
+under the corrected mode before run 3.
+
+**Run 2's safety checks: identical to run 1 and all correct** — CC not killed, `yitang-copy: true`
+flag still set, `.session.md` still at the Jul-28 mtime, siblings unchanged. ⚠️ **Two independent
+real refusals now confirm the failure arm** — the arm that can destroy work — which is a stronger
+result than WP3's single one.
+
+
+## ✅ RUN 3 — THE SUCCESS PATH, COMPOSED END-TO-END IN ONE CONTINUOUS RUN
+
+**Exit criterion 2 is MET.** After the permission-mode fix (and a respawn to pick it up — the pane
+confirmed `⏵⏵ bypass permissions on`, previously `don't ask on`), one click composed the whole
+sequence. ⚠️ **This is the composition WP3 could never observe** and what
+`SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE` was filed for.
+
+**Before-state** — baseline epoch **1787071590** sampled BEFORE the click; `.session.md` **ABSENT**
+(the prior restore consumed it, so no stale-file ambiguity); flags `scratch-c:true`,
+`verify-041:true`, **`yitang-copy:true`** (a real set flag to clear).
+
+**Clicked once at 1787071596**, target header re-asserted as `yitang-copy` first.
+
+| # | Assertion | Observed | Verdict |
+|---|---|---|---|
+| a | Fresh write, mtime > pre-sampled baseline, ignoring `*.tmp.*` | mtime **1787071634** = **+44s** past baseline, **38s** after click, 5564 bytes | ✅ |
+| b | Does **NOT** terminate at the write — waits for the next `Stop` | Recycle still **busy** at the write; pane showed *"No `tour:` field, one active WIP. Writing the pointer."* then continued | ✅ |
+| c | Unclean flag cleared | See the re-set analysis below — **clear confirmed empirically** | ✅ |
+| d | Fresh CC process | Pane read **`Ctx Used: 0.0%`** — a brand-new context, so the kill+respawn really happened | ✅ |
+| e | Fresh session ran `/session-restore` | `❯ /session-restore` typed and executed; emitted transition **`S6`** (standard restore) and restored the incident context (field test, NEEDS-MIGRATION item) | ✅ |
+| f | Siblings' flags unchanged | `scratch-c` and `verify-041` `true` throughout all three runs | ✅ |
+| g | Cleared project announces nothing on reopen | Picker row reads plain `yitang-copy` — **no `↻`** at all | ✅ |
+
+**Elapsed: ~38s click→write**, within WP1's measured 28–52s band.
+
+### ⚠️ The flag read `true` right after Recycle — and that is CORRECT, not a missed clear
+
+The naive read of assertion (c) fails: immediately post-Recycle the store still showed
+`yitang-copy: true`. **Do not "fix" this.** Three independent lines of evidence say the clear worked
+and the **respawn legitimately re-set** it:
+
+1. **Ordering is explicit in the code** (`recycleSession.ts:320-330`): `markSessionClean(projectPath,
+   "recycle-session")` at **step 4**, `relaunch()` at **step 5** — with a written rationale for that
+   order (*"marking before the kill means a crash between the two leaves the flag CLEAR on a session
+   that never respawned… the benign direction"*).
+2. **Setting is owned by the spawn path.** `session_state/commands.rs` states there is deliberately
+   **no `mark_unclean` command** — *"setting is owned by the backend spawn path
+   (`SessionRegistry::spawn`)"*. So a live respawned session **must** carry the flag again.
+3. **Empirically proven:** closing the recycled workspace cleanly **removed `yitang-copy` from the
+   store entirely**, while both siblings survived. A clear that "did not work" could not then clear
+   on a clean close.
+
+⚠️ **The lesson for the next reader:** the post-Recycle flag state is **not** a direct observable of
+the clear — it is `clear → respawn re-set`, and only the *reopen announcement* (assertion g, which
+reads clean) shows the operator-visible consequence the rule actually cares about.
+
+### Run tally — three runs, and the two failures were worth more than a clean first try
+
+| Run | Result | What it proved |
+|---|---|---|
+| 1 | `no-fresh-write` (CC stalled on a transient API error, then ended the turn) | Failure arm safe: no kill, flag NOT falsely cleared, no fabricated write |
+| 2 | `no-fresh-write` — **write DENIED by permission mode** | Exposed the real blocker; **corrected WP3's "fixture-blocked" diagnosis** |
+| 3 | **SUCCESS** | The full composition, all seven assertions |
+
+⚠️ **Two independent real refusals** now back the failure arm (WP3 had one), and they bracket the
+success run on the same fixture — so the difference between the arms is attributable to the
+permission mode, not to fixture luck.
+
+
+### Phase 3 verify-auto
+
+Phase 3 changed **no source** (live observation + docs), so the scoped checks are invariants and
+residue rather than compilation:
+
+| Check | Result |
+|---|---|
+| **CHANGELOG-then-delete invariant** | ✅ resolve line present in `CHANGELOG.md` (1), backlog entry **gone** (0), both staged in the same commit |
+| Backlog integrity after the delete | ✅ 34 entries, **0** orphaned field lines — the block delete left no remnant |
+| CHANGELOG shape | ✅ `# Changelog`, `## 2026-08-18` section, entry appended to the **bottom** of the day (chronological within a day) |
+| Dev persisted settings | ✅ only `cc_permission_mode` changed (`dontAsk`→`bypassPermissions`, the deliberate Phase 3 fix); every other key unchanged |
+| Prod profile | ✅ byte-identical to how it was found |
+| Flag store | ✅ `yitang-copy` correctly gone after the clean close; both pre-existing siblings intact; no test junk |
+| Fixture end state | ✅ `.session.md` absent — consumed by the injected restore, the correct terminal state |
+| `tsc --noEmit` | ✅ |
+| Targeted units (`recycleMachine`, `skillButtons`, `offInvariantGuard`) | ✅ **86 passed** |
+
+⚠️ **One extra check worth keeping: the live run corroborates the machine's encoded constants.**
+Run 3's click→write was **38s**; WP1's captured run 1 was **39.7s** to the write and 51.9s to `Stop`;
+`RECYCLE_TIMEOUT_MS = 180_000` retains ~3.5× headroom over that worst case. **No drift** — the
+timeout is still sized off a measurement that reality still matches. (Had the live figure landed
+outside the band, the constant would have been the finding, not the run.)
+
+⚠️ **And it independently re-confirms P4.4's target:** three sites cite *"28–52s"*
+(`recycleButton.ts`, `App.css`, `Workspace.tsx`) while `recycleSession.ts` cites *51.9s* and the
+*9–12s tail* — and this run adds a **fourth** live figure. That is the duplication needing ONE
+authority, now with a measurement to anchor it.
+
+
+## Phase 4 — pre-read: the exact resync targets (recorded before editing)
+
+⚠️ **`arch.md` is an INDEX (a subsystem table, lines 19-29) — Phase 4 adds no row and no milestone
+section.** All edits land in the three subsystem files.
+
+**P4.1 → `arch/session-resumption.md`.** The precise stale claim is the bullet **"⚠️ THREE routes
+shipped, not four"** (in *"The unclean-exit flag: its own store, keyed canonically"*). As of WP3,
+`CleanExitRoute::RecycleSession` **has a production caller**, so the count is now **four**. ⚠️ The
+bullet's *lesson* (enumerating routes made the SET testable but nothing proved each member had a
+CALLER) must SURVIVE the edit — it is the generalizable half and M13 WP1 re-confirmed it. The
+`/exit` dead-variant history stays too.
+
+**P4.2 → `arch/process-and-pty.md`.** Existing section *"⚠️ Slash-command injection —
+`slash_command_bytes`"* (line 57). Recycle's injection belongs here, plus the as-built correction the
+roadmap still gets wrong: teardown reuses the pane's existing `handleRelaunch` (**not Ctrl+D**), so no
+second respawn route exists.
+
+**P4.3 → `arch/workflow-gate.md`.** ⚠️ **A concrete factual error, not just an omission:** line 12
+says the guard *"asserts absence across the **three** registries"*. There are **five** (arm 4 at M12
+WP5, arm 5 at M13 WP2, plus the Recycle extension) — and **line 18 of the same file already says
+"all five arms"**, so the file contradicts itself today. Fix the count and add arm 5, noting it
+asserts companion-skill provenance **by command prefix** rather than by widening the shared
+`WORKFLOW_TERMS`.
+
+**P4.4 → the one latency authority.** Confirmed sites: `recycleButton.ts:50`, `App.css:631`,
+`Workspace.tsx:203` all say *"28–52s"*; `recycleSession.ts:76-77` says *51.9s* (write at 39.7s);
+`recycleMachine.ts:119,242` says the *9–12s tail*. ⚠️ Phase 3's live run adds a **fourth** figure
+(38s click→write), which is why picking ONE authority now matters more than before.
+
+
+## Phase 3 — verify-self result
+
+**All six verifiable outcomes PASS** (independent subagent, source + persisted + bookkeeping claims).
+
+| Outcome | Result | Key evidence |
+|---|---|---|
+| `markSessionClean` **before** `relaunch()` | ✅ | line **326** (STEP 4) vs **330** (STEP 5); ⚠️ **and it sits inside the `succeeded` arm only** — the failure arm returns at line 308 *before* it, which is why runs 1–2 left the flag correctly set |
+| No `mark_unclean` command; setting owned by the spawn path | ✅ | verbatim module doc; exactly one `#[tauri::command]` in the file |
+| Composite marker is ORDERED | ✅ | `awaiting-stop` is distinct from `succeeded`; `no-fresh-write` documented as *"run 2's shape"*; failed state carries *"⚠️ Never kill the session on this arm"*; a `stop` in `awaiting-fresh-write` transitions **straight to failed** |
+| Live latency consistent with the code | ✅ | 38s click→write sits **just under** WP1's run-1 write at 39.7s, inside the 28–52s band; 180s timeout ≈ 3.5× the 51.9s worst case |
+| Persisted state | ✅ | dev fix persisted (mtime Aug 18 12:44); ⚠️ **prod `settings.json` mtime is Aug 3** — untouched by today's runs, which is stronger than a content match |
+| CHANGELOG-then-delete invariant | ✅ | resolve bullet under `## 2026-08-18` at the day's bottom; ID absent from backlog (grep exit 1); **zero** field lines outside a heading; neighbours intact |
+
+**Outcome 7 (the live-run observations): UNVERIFIED — classified COSMETIC, not BLOCKING.** The
+subagent's own reasoning: *"not a claim I found any evidence against… the failure is one of instrument
+reach, not of the feature."* Three reasons it could not reach them — the run is **non-repeatable**
+(run 3 consumed `.session.md` and the close cleared the flag, so re-driving would test a different
+starting state), the bridge is not exposed to subagents, and it was barred from clicking. ⚠️ Its
+closing instruction is the honest framing and is adopted: **treat those five as orchestrator-attested,
+not independently re-confirmed.**
+
+### ⚠️ Two corrections it made to MY records — both verified, both matter
+
+1. **`verify-041` is NOT a "scratch sibling."** I had called the two surviving flags "the two scratch
+   siblings"; `ls -d tmp/scratch/verify-041` fails — it is a verify-run fixture living elsewhere. The
+   substantive assertion (yitang absent, two entries survive) holds, but the **description** was
+   wrong, and a future reader hunting `tmp/scratch/` for it would find nothing.
+2. ⚠️ **The latency-citation site list is BIGGER than my pre-read said: NINE lines across FIVE files**,
+   not five across four. My Phase 4 pre-read missed `recycleMachine.test.ts:106` and
+   `recycleSession.ts:33`. **P4.4 must use the corrected list**, or the paydown "picks one authority"
+   while leaving sites behind — the exact half-fix the four-consecutive-reviews case warns about:
+   - `28–52`: `App.css:631`, `recycleButton.ts:50`, `Workspace.tsx:203`
+   - `51.9`: `recycleSession.ts:76`, `:77`
+   - `9–12`: `recycleMachine.ts:119`, `:242`, `recycleMachine.test.ts:106`, `recycleSession.ts:33`
+
+   ⚠️ It also noted all sites **currently agree with each other** — so this is duplication-risk, not
+   live drift. (My earlier "already drifted" framing was about the *different figures* — 28–52 vs 51.9
+   vs 9–12 — which describe *different measurements*, not contradictory ones. Corrected here.)
+
+
+## Phase 3 — verify-human result (operator approved 2026-08-18)
+
+⚠️ **This phase did NOT auto-skip, and that was correct.** Gate (b) failed: verify-self outcome 7 was
+`UNVERIFIED`, and the auto-skip rule requires every leaf `[x]`. The pre-filter table likewise mandates
+that `UNVERIFIED` items be **presented**, annotated "agent could not verify". Since outcome 7 covers
+the five observations that *constitute* exit criterion 2, this is exactly the case a human should see
+— the gate behaved as designed rather than being an obstacle.
+
+| Leaf | Result |
+|---|---|
+| **P3.verify-human.1** — exit criterion 2 met ("Recycle Session is a single click, end-to-end on a real session"), presented as orchestrator-attested-only with the non-repeatability stated | ✅ **APPROVED** |
+| **P3.verify-human.2** — the dev-profile `cc_permission_mode` change (`dontAsk`→`bypassPermissions`) standing, prod untouched | ✅ **APPROVED** |
+
+Operator response: *"ok. all good"* — both leaves accepted, no corrections, no rejections.
+
+**No design prior captured.** The capture discriminant requires a product-design tradeoff (or an
+identity/non-goal/anti-persona) **plus a transferable why**. This was an acceptance of evidence
+already presented, not a correction and not a tradeoff — so per the exclusions there is nothing to
+propose. (The permission-mode issue is a *technical/environment* matter, which the contract routes to
+`arch.md`/backlog, explicitly **not** to `design-priors.md`; it is already filed as
+`SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES`.)
+
+
+## Phase 3 — verify-codify result
+
+**No integration boundary** — the phase changed no source.
+
+**NO NEW TESTS WRITTEN, and that is the finding.** Every behavior Phase 3's live run exercised is
+already pinned, so writing more would be the duplication this skill forbids. Checked before
+concluding, not assumed:
+
+| Live behavior | Already covered by |
+|---|---|
+| The ordered sequence handoff→markClean→relaunch→restore | `recycleSession.test.ts:143` — asserted as an **ordered array**, so a reordering fails |
+| Failure arm does not clear the flag (runs 1–2's shape) | `:226` run-2 shape, `:239` stale write, `:262` timeout — each asserts `markSessionClean` **not** called |
+| The composite marker's ordering + all three WP1 run shapes | `recycleMachine.test.ts` — 30 tests incl. stale/temp exclusion, reversed order, and the **illegal state being unrepresentable** |
+| Sibling isolation | `:317` / `:344` — ignores fs-change and status events for other workspaces |
+| Restore injected exactly once, into the FRESH id | `:406`, `:173`, `:621` |
+
+⚠️ **The one thing the live run uniquely surfaced — the post-Recycle flag reading `true` — is ALSO
+already covered, on the Rust side.** `cc_session/mod.rs:1108-1119` documents the consume-before-set
+ordering as *"subtle and load-bearing"* and cites `consume_before_set_or_nothing_ever_resumes` as its
+pin. ⚠️ **The citation was verified, not trusted** — a rustdoc reference to a nonexistent test passes
+`cargo test`, `clippy` and `fmt` (`[[rustdoc-link-to-a-nonexistent-test-fails-no-gate]]`). The
+function really exists at `mod.rs:1871` (3 references = 1 definition + 2 citations). So both legs of
+the clear→respawn-reset sequence are pinned: the clear's ordering frontend-side, the re-set's
+ordering backend-side.
+
+**Suites (no regressions, both matching expectations):**
+- Frontend **2115 passed** / 165 files — unchanged from Phase 2's close, correct since Phase 3 wrote no code.
+- Rust **828 lib** + 16 `hook_pl_output` + 1 integration, 0 failed, 1 ignored — **exactly** the WP3
+  close baseline, confirming neither phase touched Rust.
+
+⚠️ **Run hygiene:** `cargo test` was run from `src-tauri/` with an explicit cargo PATH
+(`[[bash-cargo-env]]` — subshells do not inherit `~/.cargo/env`). The dev app was still running, but
+it is a *running binary*, not a concurrent `cargo` invocation, so there was no `target/` lock
+contention (Long-running-commands Rule 2 does not fire).
+
+
+## Phase 4 — doc resync, as executed
+
+⚠️ **`arch.md` is UNTOUCHED** — 3 `## ` sections before and after, identical to HEAD. All edits landed
+in the three subsystem files (task 4.5's explicit prohibition, mechanically verified).
+
+**P4.1 `arch/session-resumption.md`.** ⚠️ **The expected edit was WRONG and the correction is the
+useful part.** The pre-read predicted "THREE routes shipped, not four" had become *four*. It has not:
+the enum still holds exactly **three** variants (`WorkspaceClose`, `AppQuit`, `RecycleSession`) — what
+changed is that WP3 gave the last one a **production caller**, closing the one member that was still
+the caller-less shape the `/exit` bullet warns about. Recorded as *"the count did NOT change"*, with
+the lesson kept **and** noted as re-confirmed (WP1 hit the identical shape on `AppQuit` and retracted
+the finding before any code changed). Also added: the clear fires only on the success arm, its
+before-the-kill ordering, and ⚠️ **that a live post-Recycle flag reads `true` and is NOT a missed
+clear** — the trap Phase 3 walked into.
+
+**P4.2 `arch/process-and-pty.md`.** Corrected the reachability claim (`slash_command_bytes` is
+Rust-side and **not** callable from a button; `slashCommandPayload` is its intended TS mirror — two
+implementations of one rule, kept in step deliberately), added the four composing callers as a table
+with the `label` argument's rationale, and recorded that Recycle's teardown reuses `handleRelaunch`
+**not Ctrl+D** — which is also why its respawn inherits `cc_spawn_env` for free.
+
+**P4.3 `arch/workflow-gate.md`.** ⚠️ **A real factual error, not an omission:** the file said the guard
+asserts across *"the **three** registries"* while a later paragraph already said *"all five arms"* —
+it contradicted itself. Now a five-row table with each arm's **computed** OFF subject, plus arm 5's
+provenance-by-command-prefix premise, the seven-subject individual-probe rule, the
+`showRecycleButton`-dominated-at-the-render-site caveat, and the `WORKFLOW_TERMS` vocabulary gap.
+
+**P4.4 — ONE authority, 9 sites → 1.** `RECYCLE_TIMEOUT_MS`'s doc in `recycleSession.ts` now carries a
+four-row measurement table (51.9s worst case · 28–52s range · 9–12s tail · **38s live confirmation**);
+the other sites keep their **invariant** and point at it. ⚠️ **Chosen because that is the one place a
+figure is load-bearing** — it derives the constant. ⚠️ **One site deliberately left alone:** the test
+*name* `"…waits out the 9–12s tail"` in `recycleMachine.test.ts`. A test name is not a documentation
+site a reader would treat as authority, and renaming churns the suite for nothing.
+
+**P4.5 — metrics 2 and 3 marked MET, but both needed their own wording corrected first.** Metric 2
+named **two commands that do not exist** and a Ctrl+D teardown that never shipped; metric 3 said
+*"**Every** installed workflow skill"*, which WP1's measurement refuted. Annotated in place following
+metric 5's precedent rather than silently rewritten. Roadmap table: all six ✅, **Group C CLOSED**.
+⚠️ **Flagged for the next `/product-vision`:** this is the **second** Group-C metric to prove
+unsatisfiable as written (metric 5 was restated at M12 WP4d) — metrics phrased as *"every X"* or
+naming a *specific mechanism* get refuted by the build; outcome-shaped ones survive.
+
+**P4.6 — all four probe verdicts re-confirmed as-built** (table in `wbs.md`). ⚠️ **Q4 was the one the
+live run could have falsified, and it held with direct evidence:** Phase 3's respawned session picked
+up the corrected `cc_permission_mode`, which is only possible if `cc_spawn_env` recomposed at spawn.
+
+**P4.7** — WP4's six tasks ticked, WP4 marked SHIPPED, `runtimes.md` updated (frontend 2115, Rust 828
+lib + 16 + 1 = 845; ⚠️ the unchanged Rust count **is** the attribution, since WP4 touched no Rust).
+
+
+### Phase 4 verify-auto
+
+⚠️ **The scoped risk here is specific: Phase 4 edited COMMENTS in five source files, and this repo has
+a documented history of comment edits silently disarming `?raw`/source guards** (a Prettier reflow
+once broke a `?raw` guard that then reported green while checking nothing). So the checks target that,
+not compilation alone.
+
+| Check | Result |
+|---|---|
+| **Phase 4's source edits are comment-only** — no executable line changed | ✅ proven per-file via `git diff -U0` with comment lines filtered out; the `App.css` hits were confirmed by hand to sit inside the `/* … */` block (lines 628-638), which the `//`-shaped filter cannot see |
+| The four guards that **read these very comments** (`skillButtons`, `recycleSession`, `recycleMachine`, `offInvariantGuard`) | ✅ **112 passed** |
+| `tsc --noEmit` | ✅ |
+| `prettier --check` on all six touched source files | ✅ |
+| **One-authority claim holds** | ✅ exactly one non-test file carries a raw figure (`recycleSession.ts`); the other is the deliberately-kept test **name** |
+| **Every pointer resolves** | ✅ all four pointer sites name `RECYCLE_TIMEOUT_MS`, which is defined exactly once |
+| `arch.md` untouched (task 4.5's prohibition) | ✅ `git diff --quiet` clean |
+| `workflow-gate.md` no longer self-contradicts | ✅ authoritative line now says **FIVE** |
+| vision 2+3 marked MET; roadmap has **zero** remaining `⏳ M13` | ✅ |
+
+⚠️ **One near-miss worth recording as method:** the "three registries" grep still returns **1**, which
+reads as "the fix did not land." It is my own annotation *quoting* the former wording to document the
+contradiction. Checked the line rather than trusting the count — a grep tally cannot distinguish a
+live claim from a quotation of a retired one, which is the same
+declaration-vs-use confusion that has bitten this WP's source guards twice.
+
+
+## Phase 4 — verify-self result
+
+**All eight outcomes PASS**, including the honesty check. The subagent was given an explicit
+**falsify-don't-confirm** mandate, because a doc resync is exactly where prose can read plausibly
+while asserting what the code does not support.
+
+| Outcome | Result |
+|---|---|
+| `CleanExitRoute` still THREE variants; WP3 added the missing caller | ✅ + a nuance (below) |
+| `slash_command_bytes` unreachable from the frontend; buttons use `injectCommand` | ✅ no `#[tauri::command]`, absent from `invoke_handler`, one production caller (the shutdown `/exit`) |
+| The guard has FIVE registries; the doc's table matches | ✅ matches the test file **row-for-row**, including the "seven subjects" count |
+| ONE latency authority | ✅ all three figures only in `RECYCLE_TIMEOUT_MS`'s doc + the one intentional test name; four pointers resolve; constant defined once |
+| `arch.md` unmodified | ✅ |
+| Metrics 2+3 met, and metric 3 **honestly discloses** the narrowing | ✅ *"more disclosing than required"* |
+| `runtimes.md` matches reality | ✅ **independently re-ran both suites**: 2115 frontend / 828 Rust lib, exact match |
+| **Honesty check on the `arch/` diffs** | ✅ *"the diffs UNDERSTATE rather than overstate in two places"* |
+
+⚠️ **One imprecision it caught, now FIXED.** I wrote *"all three are now live."* True of the clean-exit
+**routes**, but imprecise about the **variant**: the app-quit clean exit is implemented **in Rust**
+(`perform_quit_teardown` → `clear_and_persist`), which **bypasses the enum** — so `AppQuit` still has
+no caller routing through it, and nothing sends its `"app-quit"` wire name outside type declarations.
+Verified directly, then tightened the bullet to say so and to name the **two-writers-by-design** shape
+that makes a caller audit of one mechanism generalize wrongly to the other. ⚠️ **This is the third
+appearance of that exact trap in this WP** (WP1's retracted `AppQuit` finding, the `/exit` dead
+variant, now my own wording), which is why the bullet now states it rather than implying it.
+
+⚠️ **The subagent also caught an instrument error in its OWN work and redid it** — its first figure
+sweep reported **zero** matches because the shell mangled the en-dash (U+2013); `grep -rnF` found the
+real set. Had it stopped at the first result it would have reported "no figures anywhere", which
+would have looked like a *stronger* pass than the truth. Same class as this WP's other instrument
+failures: a query that cannot match reports absence indistinguishably from real absence.
+
+**Limit stated honestly:** it could not verify WP1's archived measurement *provenance* (2470
+transcripts, 11-of-50 skills, the capture table) — those live in the archive, not the code. It
+correctly noted these are **attributed** to the WP1 archive rather than asserted bare, which is
+appropriate sourcing rather than an unverified claim.
+
+
+## Phase 4 — verify-codify result
+
+**No integration boundary** — the source edits are comment-only.
+
+**One new guard written, and it is the only codifiable thing Phase 4 produced.** The phase output was
+documentation, not behavior — but the **one-authority property was UNGUARDED**, and this repo has
+been bitten by exactly that: *"the same rationale in six places drifts asymmetrically"*, flagged in
+**four consecutive reviews of one file**. ⚠️ **A paydown with no guard silently undoes itself** — the
+next author restates a figure "for convenience" and the nine-site sprawl re-accumulates.
+
+**Added** (`recycleSession.test.ts`, 3 tests):
+1. **no production module outside the authority restates a figure** — walks every non-test
+   `.ts/.tsx/.css` under `src/`, exempting only `recycleSession.ts`.
+2. **anti-vacuity: the authority itself still carries every figure** — blocks "fixing" duplication by
+   *deleting the measurement*, which is the wrong direction and would otherwise pass arm 1 trivially.
+3. **walker reach** — asserts a non-trivial file count *and* that it really sees the four pointer
+   sites by name.
+
+⚠️ **The figures are TS string literals with an explicit `\u2013` escape.** The verify-self pass first
+reported **zero** matches because a shell mangled the en-dash — which reads as a *stronger* pass than
+the truth. In-file literals remove the shell from the loop entirely.
+
+**Mutation-proven, each mutant `diff`-confirmed and reverted (production files verified byte-identical
+to their pre-mutation snapshots, not merely "changed back"):**
+
+| Mutant | Result | Caught by |
+|---|---|---|
+| A — re-scatter `28–52s` into `recycleButton.ts` (**the exact regression**) | 🔴 1 failed / 28 passed | arm 1, offender named |
+| B — delete a figure row from the authority (the wrong-direction "fix") | 🔴 1 failed / 28 passed | arm 2 |
+| C — point the walker at a subdirectory (the vacuous-scan shape) | 🔴 1 failed / 28 passed | arm 3 |
+
+**Full gate:** frontend **2118 passed** (165 files, +3 for this guard), Rust **828 lib** + 16 + 1,
+`cargo clippy --all-targets -- -D warnings` clean, `tsc --noEmit` clean, `prettier --check` clean.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

@@ -306,6 +306,43 @@ describe("wiring — properties no value can observe (source guards)", () => {
     expect(mod.length).toBeGreaterThan(1000);
   });
 
+  it("renders EXACTLY ONE /session-start affordance — the absorption, asserted at the render site", () => {
+    // M13 WP4 Phase 2 codify. The absorption is already pinned two ways — `SESSION_START_COMMAND`
+    // and `showSessionStartButton` no longer exist as definitions, and a dead-CSS guard forbids
+    // the old `.workspace-session-start` class. Neither stops someone ADDING a second render
+    // site: a new `<button onClick={() => fireSkill("/session-start")}>` elsewhere in this file
+    // would satisfy every existing assertion while putting two /session-start buttons on screen.
+    //
+    // ⚠️ WP1's Q3 disposition is a COUNT, not an absence: "exactly one /session-start affordance
+    // may exist when it is done." The row absorbed the standalone button rather than sitting
+    // beside it, and the whole point was to avoid the "two mechanisms serving one skill" shape
+    // the WBS calls "the problem". Verified live at Phase 2 (DOM count = 1, searched wider than
+    // the row); this is that observation made permanent.
+    //
+    // Counted from the RENDER path only. The row emits its buttons through one `.map`, so the
+    // literal string can legitimately appear at most... zero times in JSX: it lives in the array.
+    // Any literal `/session-start` inside a JSX attribute or handler is therefore a SECOND,
+    // hand-written affordance.
+    const renderSiteLiterals = ws.match(/["'`]\/session-start["'`]/g) ?? [];
+    expect(
+      renderSiteLiterals,
+      "Workspace.tsx must not hand-write a /session-start affordance — the row already renders " +
+        "it from SKILL_BUTTONS, and a second one recreates the standalone button the row absorbed",
+    ).toEqual([]);
+
+    // ...and the one that DOES render comes from the mapped array, whose testid is derived from
+    // the command. Pinning the derivation (not a literal testid) is what keeps this honest: the
+    // affordance exists, and it exists exactly once because the array holds the command once.
+    expect(ws).toContain(
+      "data-testid={`workspace-skill-${btn.command.slice(1)}`}",
+    );
+    expect(
+      SKILL_BUTTONS.filter((b) => b.command === "/session-start"),
+      "the array must carry /session-start exactly once — a duplicate member would render two " +
+        "buttons with the same testid",
+    ).toHaveLength(1);
+  });
+
   it("the component renders one button PER MEMBER — not a hardcoded list", () => {
     // ⚠️ The set having five entries proves nothing if the JSX hardcodes four buttons. Pinning
     // the map over the real array is what ties render count to set size, so adding a member

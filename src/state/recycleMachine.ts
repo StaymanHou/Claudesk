@@ -116,7 +116,8 @@ export type RecycleState =
   /** Start. A fresh `.session.md` write has not been seen yet. A `stop` here is FAILURE. */
   | { readonly phase: "awaiting-fresh-write" }
   /**
-   * A fresh write landed; now waiting out the measured 9–12s tail for the NEXT `Stop`.
+   * A fresh write landed; now waiting out the measured tail for the NEXT `Stop` (figures:
+   * `RECYCLE_TIMEOUT_MS` in `recycleSession.ts`, the single authority).
    * `freshWriteMtimeMs` is retained as evidence for the caller's diagnostics.
    */
   | { readonly phase: "awaiting-stop"; readonly freshWriteMtimeMs: number }
@@ -239,7 +240,7 @@ export function recycleTransition(
 
     case "awaiting-stop":
       if (signal.kind === "stop") {
-        // The measured 9–12s tail has now elapsed by construction: this is the first turn
+        // The measured write→`Stop` tail has now elapsed by construction: this is the first turn
         // end AFTER the fresh write, so the skill has finished its post-write work.
         return { phase: "succeeded" };
       }

@@ -30,9 +30,10 @@
 //
 // Step 3 is not a sleep and not a file poll. WP1 measured that no single signal means "the
 // handoff finished": `Stop` fires on every turn end (a refused handoff emits a clean one having
-// written nothing), and the `.session.md` write lands 9–12s BEFORE the skill is done. The
-// machine in `state/recycleMachine.ts` owns that logic; this module owns turning real Tauri
-// events into its alphabet and performing the effects.
+// written nothing), and the `.session.md` write lands well BEFORE the skill is done (figures:
+// `RECYCLE_TIMEOUT_MS` below, the single authority). The machine in `state/recycleMachine.ts`
+// owns that logic; this module owns turning real Tauri events into its alphabet and performing
+// the effects.
 //
 // ⚠️ ON FAILURE NOTHING IS TORN DOWN. Not the flag, not the session. Run 2's shape — CC returns
 // a clean `Stop` and a question, having written nothing — must never be treated as "done",
@@ -73,11 +74,20 @@ export const RESTORE_COMMAND = "/session-restore";
 /**
  * How long to wait for the whole completion composite before giving up.
  *
- * ⚠️ Derived from measurement, not taste. WP1's slowest captured handoff took **51.9s** from
- * prompt to the terminal `Stop` (run 1: write at 39.7s, `Stop` at 51.9s). This allows ~3.5×
- * that. Generous on purpose: the cost of waiting too long is a late failure message the
- * operator can see, while the cost of firing too early is killing CC mid-skill — the exact
- * hazard the composite marker exists to avoid.
+ * ⚠️ **THE SINGLE AUTHORITY FOR RECYCLE'S MEASURED LATENCIES.** Other sites that need a figure
+ * point here rather than restating one; provenance (the three-run capture table, the killed
+ * single-signal candidates) lives in the M13 WP1 archive.
+ *
+ * | measurement | value | source |
+ * |---|---|---|
+ * | slowest handoff, prompt → terminal `Stop` | **51.9s** (write at 39.7s) | WP1 run 1 |
+ * | observed range to the terminal `Stop` | **28–52s** | WP1, three runs |
+ * | write-to-`Stop` tail — the write lands this far BEFORE the skill finishes | **9–12s** | WP1 |
+ * | live end-to-end confirmation, click → write | **38s** | WP4 Phase 3, real session |
+ *
+ * ⚠️ Derived from measurement, not taste: ~3.5× the 51.9s worst case. Generous on purpose — the
+ * cost of waiting too long is a late failure message the operator can see, while the cost of
+ * firing too early is killing CC mid-skill, the exact hazard the composite marker exists to avoid.
  */
 export const RECYCLE_TIMEOUT_MS = 180_000;
 

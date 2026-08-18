@@ -63,6 +63,34 @@ dev/prod isolation comes free.
   clear on (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). **The generalizable lesson:
   enumerating routes as data made the SET exhaustive and testable, but nothing tested that each
   member had a CALLER — and the exhaustiveness test's green read as coverage.**
+- **⚠️ M13 WP3 closed the one remaining caller-less variant — the count did NOT change.**
+  `RecycleSession` was declared at M12 WP2 *ahead of* the feature (deliberately, so M13 would inherit
+  the contract rather than rediscover it), which made it the same shape the `/exit` bullet above
+  warns about: a member of an exhaustive, tested set with no production caller. WP3 gave it one
+  (`recycleSession.ts` → `markSessionClean(projectPath, "recycle-session")`). So the set is still
+  **three**, and all three clean-exit *routes* are now live. ⚠️ **Be precise about `AppQuit`,
+  though:** the app-quit clean exit is real and implemented, but **in Rust** — `perform_quit_teardown`
+  (`lib.rs`) calls `session_state::clear_and_persist` **directly**, bypassing the enum — so the
+  `AppQuit` *variant* still has no caller that routes through it, and nothing sends its `"app-quit"`
+  wire name outside type declarations. **Two writers by design** (`session_state_mark_clean` over IPC
+  for the frontend routes; `clear_and_persist` in-process for quit), which is exactly what makes a
+  caller audit of one mechanism generalize wrongly to the other. ⚠️ **The lesson survives unchanged and was re-confirmed, not
+  retired** — M13 WP1 hit the identical shape again while auditing this very flag, mis-reporting
+  `AppQuit` as caller-less and **retracting the finding before any code changed** (the sweep had
+  audited one mechanism's callers and generalized to a second writer that does not use it).
+- **⚠️ Recycle's clear fires ONLY on the success arm, and its ORDER is load-bearing.**
+  `markSessionClean` runs at step 4, **before** the kill at step 5 — so a crash between the two
+  leaves the flag CLEAR on a session that never respawned (benign: the handoff is on disk and
+  `.session.md` drives the next open), whereas the reverse order risks a flag left SET after a clean
+  handoff, which is the spurious `--continue` the clear exists to prevent. The failure arm returns
+  *before* the clear, which is why a refused handoff correctly leaves the flag set.
+- **⚠️ A live post-Recycle flag reads `true`, and that is NOT a missed clear** (verified end-to-end
+  2026-08-18, M13 WP4 Phase 3). Setting is owned by the spawn path — there is deliberately **no**
+  `mark_unclean` command — so Recycle's own respawn re-sets the flag for the now-live session
+  immediately after clearing it. The consume-before-set ordering is pinned by
+  `consume_before_set_or_nothing_ever_resumes` (`cc_session/mod.rs`). **The operator-visible
+  consequence is the only honest observable:** a cleared project announces **nothing** on reopen.
+  Reading the raw flag right after a recycle and concluding the clear failed is the available trap.
 
 ### The announcement: a prediction, never the input to the action
 

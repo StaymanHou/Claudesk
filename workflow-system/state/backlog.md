@@ -1,5 +1,34 @@
 # Backlog
 
+## SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES
+- **Source:** feature:build (M13 WP4 Phase 3 — live Recycle runs)
+- **Target level:** product:arch
+- **Type:** gap (dev-environment configuration, with a documentation consequence)
+- **Summary:** The **dev** profile (`com.claudesk.app.dev`) had drifted to
+  `cc_permission_mode: "dontAsk"` while **prod** runs `bypassPermissions` (the yolo default the
+  vision specifies). Per `cc_session/mod.rs:97`, `dontAsk` *"just stops the prompting"* — it does
+  **not** grant the write. A CC session spawned under it composes a correct `/session-handoff` and is
+  then **silently denied** at the write, with no prompt to accept. CC's own words in the pane:
+  *"the block is the permission mode, not anything about the skill or the content… the content is
+  composed and ready."*
+- **Context:** ⚠️ **This corrected a recorded diagnosis.** WP3 concluded the Recycle success path was
+  **fixture-blocked** (*"CC correctly refuses to hand off from an empty scratch repo"*). True for
+  `scratch-b` — but on `~/Tmp/yitang-copy`, a fixture with a 19.7 KB incident WIP, a real backlog and
+  real git history, the handoff **still failed**, for a reason no fixture work could fix. ⚠️ **Anyone
+  retrying on a richer fixture without checking the permission mode would fail again and
+  mis-attribute it to the fixture a second time.** The mode is read at **spawn** time, so changing it
+  requires a respawn — the pane's footer is the tell (`⏵⏵ don't ask on` vs `⏵⏵ bypass permissions on`).
+- **Suggested action:** Two parts, and the second is the durable one. (1) Already applied: dev set to
+  `bypassPermissions` via the real `⌘,` Settings select (prod untouched). (2) **Decide whether the dev
+  profile should seed its permission mode from prod** the way `projects.json` already seeds on first
+  launch — today a dev profile can silently diverge from prod on a setting that changes whether
+  workflow skills can write at all, which makes dev an unfaithful rehearsal of the shipped app. If
+  seeding is rejected, record the divergence in `docs/lessons/verify-self-tiers.md` as a
+  check-this-first item for any live workflow verification.
+- **Priority:** medium (no production defect — prod is correctly `bypassPermissions`; the cost is
+  dev-time misdiagnosis, which has already happened once and consumed a WP's accepted-gap slot)
+- **Status:** pending
+
 ## SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION
 - **Source:** feature:build (M13 WP4 Phase 1 — individual guard-arm probes)
 - **Target level:** product:arch
@@ -27,35 +56,6 @@
   standing precedent and (a) reverses it.
 - **Priority:** medium (no live exposure; the arm's assertion is sound — the risk is the next
   surface, most likely M15's)
-- **Status:** pending
-
-## SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE
-- **Source:** feature:build (M13 WP3 Phase 4 — live verification)
-- **Target level:** product:wbs (a verification gap, not a code defect)
-- **Type:** gap
-- **Summary:** Recycle's **success path was never observed end-to-end in one live run.** Every
-  component is proven — injection reaches the PTY, CR submits and CC runs a turn, the
-  `recycle-session` clear works and is targeted, the announce arm goes quiet afterwards, and the
-  completion machine is mutation-proven plus driven with a live-measured stale mtime — but the
-  **composition** (fresh write → next `Stop` → clear → kill → respawn → restore) was not seen in a
-  single continuous run.
-- **Context:** ⚠️ **The blocker is the FIXTURE, not the code.** `/session-handoff` refused on
-  `tmp/scratch/scratch-a` because it is an empty scratch repo with no `CLAUDE.md` and no real
-  session state, and CC correctly declines to fabricate a pointer a future `/session-restore` would
-  act on. That refusal was itself valuable — it reproduced WP1's **run-2 shape** live and proved the
-  FAILURE arm (flag not cleared, session not killed, reason `no-fresh-write`). But it means the
-  success arm needs a scratch repo CC will actually hand off from. ⚠️ Note the recursive constraint:
-  an agent-launched CC inherits `CLAUDE_CODE_CHILD_SESSION`, so transcript saving is off — which
-  bounds what any agent-driven run can observe about the resumed conversation
-  (`[[agent-launched-app-cannot-verify-continue]]`).
-- **Suggested action:** Either (a) build a richer scratch fixture — a `CLAUDE.md` plus a WIP item
-  with genuine-looking state — until `/session-handoff` writes a pointer, then re-run the single
-  continuous click; or (b) accept it as an **operator-dogfooding** check: the operator recycles a
-  real session once and confirms the chain, which is the flow the feature exists for anyway.
-  ⚠️ Do NOT "fix" this by weakening the completion marker to fire on the write alone — that is
-  precisely the 9–12s trap WP1 measured, and it would truncate the WIP annotation.
-- **Priority:** medium (no known defect; the risk is that a composition bug between proven
-  components would not have been caught by anything run so far)
 - **Status:** pending
 
 ## SURFACE-2026-08-16-IDLE-DOT-CONFLATES-DONE-WITH-WAITING-ON-A-BACKGROUND-JOB

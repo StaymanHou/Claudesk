@@ -47,7 +47,8 @@ export function showRecycleButton(inputs: {
 
 /**
  * The button's tooltip. A function of the busy state because a recycle takes tens of seconds
- * (WP1 measured 28–52s to the terminal `Stop`), and a button that looks inert for that long
+ * (tens of seconds — figures live on `RECYCLE_TIMEOUT_MS`, the single authority), and a button
+ * that looks inert for that long
  * without saying why reads as broken.
  */
 export function recycleTitle(recycling: boolean): string {
