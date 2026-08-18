@@ -1,7 +1,7 @@
 ---
 stage: arch
 state: complete
-updated: 2026-08-12  # SPLIT into arch/<subsystem>.md — this file is now the index + the warning set.
+updated: 2026-08-18  # SPLIT into arch/<subsystem>.md — this file is now the index + the warning set.
 shape: index
 archive-root: workflow-system/product/archive/
 ---
@@ -59,6 +59,7 @@ Each line is a *pointer*; the full reasoning stays at the anchor.
 - **A safety guard must be mutation-proven, not merely PRESENT** — three that looked like proof were not. → [substrate](arch/claude-substrate.md)
 - **Hash around each TOGGLE, never around a relaunch**, when proving "no `~/.claude/` mutation" — `hook_install` legitimately rewrites at launch and is universal. → [gate](arch/workflow-gate.md)
 - **The installed `.app` is a different environment from `pnpm tauri:dev`** (GUI PATH, `LANG`). Anything touching PATH/env/external spawn must be smoke-tested from a Finder-launched build. → [foundations](arch/foundations.md)
+- **A diagnosis that EXPLAINS a failure is not thereby the CAUSE** — a *fixture*-blocked verdict was falsified by a second fixture; the real cause was `cc_permission_mode: "dontAsk"`, which suppresses the prompt **without granting the write** (read at **spawn** — the pane footer is the tell). → [session-resumption](arch/session-resumption.md)
 - **An ad-hoc run is evidence about one moment; only a standing test is coverage.** → "Verification method" below
 - **A doc-correction scope list is a FLOOR** — grep the retracted *claim* repo-wide. → "Verification method" below
 
@@ -66,7 +67,7 @@ Each line is a *pointer*; the full reasoning stays at the anchor.
 
 - **The gate seam is `useWorkflowFeaturesEnabled`** — a gated surface must **not exist** when off. Never `invoke()` ad hoc, never the raw wrapper. The guard bites at the **type declaration**, and the chord arm **strips comments**, so the seam reference must be executable source. → [gate](arch/workflow-gate.md)
 - **⚠️ The gate applies PER ARM, not per feature** — the discriminator is *applicability*, never audience size. → [session-resumption](arch/session-resumption.md)
-- **A new gated surface that is not a panel / menu-id / chord / row-cell owns a FIFTH guard arm.** → [gate](arch/workflow-gate.md)
+- **A new gated surface that is not a panel / menu-id / chord / row-cell / skill-row owns a SIXTH guard arm** — arms 1–5 are TAKEN (the fifth landed at M13 WP2). ⚠️ **Probe each arm INDIVIDUALLY** — there are **7 subjects** across the 5 arms (arm 4 owns two derivations, arm 5 two predicates). ⚠️ `WORKFLOW_TERMS` contains neither `"recycle"` nor `"session"`, so a `RECYCLE_SESSION` menu id or panel registers **unseen** by arms 1–3. → [gate](arch/workflow-gate.md)
 - **Provenance, not abstinence,** for anything touching `~/.claude/`: only remove what Claudesk **recorded** installing; every degraded read fails toward `developer`. Compiler-enforced. → [substrate](arch/claude-substrate.md)
 - **Raw HTML is BLOCKED**, and the two controls are **redundant, not layered** — `rehype-raw` alone measured **6 live vectors**. Never reason about one without the other. → [security](arch/security-posture.md)
 - **Read-only is a property of the PANEL, not the webview** — under `csp: null` the webview still reaches `editor_fs::write_file`. → [security](arch/security-posture.md)

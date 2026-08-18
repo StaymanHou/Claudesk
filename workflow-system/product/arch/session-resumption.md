@@ -233,7 +233,7 @@ the guard was **extended, never narrowed**.
   `type WorkflowGateValue = ReturnType<typeof useWorkflowFeaturesEnabled>` — because the arm **strips
   comments** before matching. A comment-only mention was *measured* not to satisfy it.
 
-### Verification method banked by this milestone
+### Verification method banked here (M12–M13)
 
 - **The recurring defect shape, hit FOUR times: a mechanism that is correct in itself sitting behind
   a caller or record that does not honor it.** `pendingRestore`'s undispatched `"reset"`;
@@ -255,6 +255,21 @@ the guard was **extended, never narrowed**.
   comment crediting the inverse CSS direction to "verify-auto's className→CSS sweep" left that
   direction open for two WPs while reading as closed
   (`SURFACE-2026-08-12-A-COMMENT-CREDITED-COVERAGE-TO-A-SWEEP-THAT-DOES-NOT-EXIST`).
+- **⚠️ A diagnosis that EXPLAINS the observed failure is not thereby the CAUSE** (M13 WP3→WP4). WP3
+  recorded Recycle's unproven success path as *fixture*-blocked — CC does refuse to hand off from an
+  empty scratch repo, so the story fit. A second fixture with ample real content **falsified it**: the
+  handoff still failed, and CC named the real cause itself — the DEV profile had drifted to
+  `cc_permission_mode: "dontAsk"`, which **suppresses the permission prompt without granting the
+  write**, so a correct skill output is composed and then silently denied
+  (`SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES`). ⚠️ **The mode is read at
+  SPAWN** — correcting the setting does nothing until the session is respawned, and **the pane footer
+  is the tell** (`don't ask on` → `bypass permissions on`). Two consequences worth keeping: the next
+  person retrying on a richer repo would have blamed the fixture a second time; and **two failed runs
+  bracketing a success on the SAME fixture** is stronger evidence than a clean first attempt, because
+  it attributes the difference to the variable changed rather than to fixture luck.
+- **⚠️ Writing observable outcomes in the FALSIFIABLE voice is what forces the extra run** (M13 WP4).
+  Phrased optimistically, runs 1 and 2 would have been recordable as passes-by-omission; phrased as a
+  claim that a failure contradicts, they could not be, and the third run happened.
 - **A doc-correction scope list is a FLOOR, not a boundary** — WP4d named 5 sites and found 10; WP5's
   read-only 5.5 still found an 11th (`roadmap.md:58`, describing `.session.md` in the **present
   tense** via two commands retired at M9 WP5). Grep the retracted **claim** repo-wide, and separate
