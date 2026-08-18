@@ -997,6 +997,69 @@ to their pre-mutation snapshots, not merely "changed back"):**
 **Full gate:** frontend **2118 passed** (165 files, +3 for this guard), Rust **828 lib** + 16 + 1,
 `cargo clippy --all-targets -- -D warnings` clean, `tsc --noEmit` clean, `prettier --check` clean.
 
+
+## Code-Quality Review — m13-wp4-milestone-exit-verify
+
+**0 CRITICAL · 2 MAJOR · 4 MINOR.** Both MAJORs were **verified by reproduction, then FIXED in this
+WP** rather than backlogged — each was a defect in a guard *this* WP wrote, and shipping a guard whose
+title overstates its coverage is precisely the failure the WP exists to prevent.
+
+### Strengths (reviewer's, abridged)
+- The one-authority guard closes **both** vacuity directions, including "fix duplication by deleting
+  the measurement", which most such guards miss.
+- The Recycle real-vs-stub meta-guard asserts `showRecycleButton !== showSkillButtons` — the only
+  assertion that catches byte-identical-body aliasing.
+- The exactly-one-`/session-start` guard reads post-`strip()`, so the file's own prose cannot satisfy
+  it (the `[[raw-guard-identifier-satisfied-by-own-comments]]` trap avoided).
+- The `arch/workflow-gate.md` table fixes a real self-contradiction.
+
+### MAJOR 1 — the arm-count pin did not detect the failure its own title named ✅ **FIXED**
+`armSubjects` was a literal declared inside the test body, so it proved only that seven **functions**
+are importable — not that seven **arms** exist. ⚠️ **Reproduced before accepting:** deleting the
+arm-5x OFF test left the whole suite **green at 33/33**. That is the repo's own *"could this still
+pass if the code it names were deleted?"* test failing — and it is the **same "assertion says X,
+measures Y" gap this WP's problem statement quotes from WP3**, reproduced inside the guard written to
+prevent it.
+**Fix:** the count is now **derived from this file's own source** — every OFF-assertion `it()` title
+in the gate-off block — and reconciled against the subject list. **Regression-proven:** the identical
+deletion now **fails**, with the diagnostic *"found 6 title(s) but 7 subject(s)."*
+
+### MAJOR 2 — the one-authority guard asserted more than it enforced ✅ **FIXED**
+Scope is non-test `src/` only, so four restatements survive it: `wbs.md:171`, `wbs.md:276`,
+`roadmap.md:354`, and `recycleMachine.test.ts:106`. ⚠️ **Confirmed by grep.** Neither the guard nor
+`RECYCLE_TIMEOUT_MS`'s "SINGLE AUTHORITY" header disclosed that boundary.
+**Fix:** the boundary is now stated at **both** sites, with the *reason* each exclusion is
+deliberate — the WBS/roadmap are WP1's **historical record** (rewriting them to point at code would
+erase the provenance that makes the authority trustworthy), and a test **name** is not a site a reader
+treats as authority. The enforced invariant is now stated as what it is: *"no production module
+restates a figure."*
+
+### MINOR 1 — stale registry header ✅ **FIXED**
+The file header listed arm 5's subjects without `showRecycleButton`, while the pin uses it — so a
+reader following the pin's own pointer found a list that disagreed. Header now names both subjects and
+explains the seven-vs-five reconciliation.
+
+### MINOR 2 — reflow artifacts ✅ **FIXED**
+`recycleButton.ts` said "tens of seconds" twice in one sentence with a mid-clause break;
+`Workspace.tsx:203` overran the wrap width. Both rewritten as authored prose.
+
+### MINOR 3 + 4 — documentation shape → **AUTO-BACKLOGGED** (drive_mode=autopilot)
+(a) The WIP's phase sections interleave out of execution order (pre-reads appended in wall-clock
+order). (b) `arch/workflow-gate.md`'s three prose paragraphs after the table partly mirror
+`offInvariantGuard.test.ts`'s header — the same rationale-duplication shape one level up.
+⚠️ **Deliberately not fixed at ship time:** both are judgment calls about the shape of a 1023-line
+archive record, and (b) is a real instance of this project's standing duplication finding that
+deserves a considered pass rather than a hasty trim — *"do NOT trim a little from each site"* is the
+lesson from the four-consecutive-reviews case.
+
+### Assessment (reviewer's, verbatim conclusion)
+> *"the single finding I would act on"* was MAJOR 1 — acted on. The reviewer also judged the
+> no-production-behavior-changed claim to hold under inspection, and the one-authority guard *"the
+> best artifact here — it converts a documentary finding into an enforced invariant."*
+
+### If you disagree
+Mark any finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
+
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->

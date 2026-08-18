@@ -4,6 +4,46 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m13-wp4-milestone-exit-verify — 2026-08-18
+
+## SURFACE-2026-08-18-QUALITY-WP4-WIP-PHASE-SECTIONS-INTERLEAVED
+- **Source:** feature-review-quality (M13 WP4, MINOR)
+- **Type:** tech-debt (documentary)
+- **Summary:** The WP4 WIP file's phase sections are **interleaved out of execution order** — "Phase 2
+  — pre-read" sits between two Phase 1 sections, and "Phase 4 — pre-read" sits between Phase 3's
+  verify-auto and verify-self. Cause: pre-reads were appended in **wall-clock** order into a document
+  otherwise organized **by phase**.
+- **Context:** The pre-reads being recorded *before* observation is the whole point of them (it is
+  what makes "recorded before observing" a real claim rather than a post-hoc one), so the ordering
+  itself is correct — it is the **placement** that costs a reader. At 1023 lines the file is the
+  archive record for the milestone-closing WP, so navigability has real value.
+- **Suggested action:** Group by phase and keep a `⚠️ recorded before observing` marker on each
+  pre-read, which preserves the ordering claim without the interleave. ⚠️ Cheap only if done as a
+  **move**, not a rewrite — this repo has a logged case of a prose rewrite silently dropping 259
+  identifiers while preserving every warning (`[[grep-addressed-doc-loses-value-to-prose-rewrite]]`).
+- **Priority:** low (readability of an archived record; no correctness impact)
+- **Status:** pending
+
+## SURFACE-2026-08-18-QUALITY-WP4-ARCH-DOC-MIRRORS-TEST-FILE-HEADER
+- **Source:** feature-review-quality (M13 WP4, MINOR)
+- **Type:** tech-debt (documentary)
+- **Summary:** `arch/workflow-gate.md`'s property-1 bullet grew from one paragraph to a table plus
+  four `⚠️` paragraphs, and the last three **partly restate** content that also lives in
+  `offInvariantGuard.test.ts`'s own header: the arm-5-has-no-ungated-half rationale, the
+  probe-each-arm-individually rule, and the `WORKFLOW_TERMS` vocabulary gap (the last **also** fully
+  stated in `backlog.md`).
+- **Context:** ⚠️ **This is the project's standing rationale-duplication finding, one level up** — an
+  `arch/` doc mirroring a test-file header will drift against it asymmetrically, which is exactly what
+  the WP4 latency paydown just fixed inside `src/`. The **table and the count correction are clearly
+  worth keeping** (they fixed a real self-contradiction); it is the three prose paragraphs after it
+  that are candidates for a pointer instead of a restatement.
+- **Suggested action:** Replace the three paragraphs with one pointer at the test file, keeping the
+  table. ⚠️ **Do NOT trim a little from each site** — that is precisely how the
+  four-consecutive-reviews case happened. Decide which document is authoritative for the guard's
+  *mechanics* (almost certainly the test file, since it is executable) and make the other point at it.
+- **Priority:** low-medium (readability only; the risk is future asymmetric drift, not a live defect)
+- **Status:** pending
+
 # m13-wp3-recycle-session — 2026-08-18
 
 ## SURFACE-2026-08-18-QUALITY-WP3-LATE-SUBSCRIPTION-DISPOSAL-UNTESTED

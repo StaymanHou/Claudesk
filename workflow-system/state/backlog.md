@@ -1,5 +1,22 @@
 # Backlog
 
+## Code-quality findings — m13-wp4-milestone-exit-verify (2026-08-18)
+- **Pointer:** **2 MINOR** (documentary only) from WP4's code-quality review — the WIP file's phase
+  sections interleave out of execution order, and `arch/workflow-gate.md` mirrors
+  `offInvariantGuard.test.ts`'s header in three prose paragraphs. Full bodies:
+  [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under
+  `# m13-wp4-milestone-exit-verify — 2026-08-18`.
+- **⚠️ The review's 2 MAJORs are NOT here — both were FIXED in the WP**, because each was a defect in
+  a guard that WP itself wrote: the arm-count pin did not detect a deleted arm (reproduced: the
+  suite stayed green at 33/33; now derived from the file's own source and regression-proven), and the
+  one-authority guard asserted more than its non-test-`src/` scope enforces (boundary now disclosed at
+  both the guard and the authority).
+- **Priority:** low (both MINOR; readability of documentation, no correctness impact)
+- **Status:** pending
+- **Pickup shape:** the `arch/` one is the more valuable — it is this project's standing
+  rationale-duplication finding one level up, and the right fix is *"pick one authority and point at
+  it"*, ⚠️ **not** trimming a little from each site.
+
 ## SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES
 - **Source:** feature:build (M13 WP4 Phase 3 — live Recycle runs)
 - **Target level:** product:arch

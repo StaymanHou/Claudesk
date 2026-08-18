@@ -56,7 +56,11 @@ import type { AnnounceMap } from "../predictAction";
 //                   and this header's own rule above required extending the guard as
 //                   part of that work.
 //   5. SKILL-ROW  — the workspace header's skill-button row: `showSkillButtons(…, false)`
-//                   plus `SKILL_BUTTONS`. Added at M13 WP2 for the same reason arm 4 was:
+//                   plus `SKILL_BUTTONS`, AND `showRecycleButton(…, false)` as its own second
+//                   subject (M13 WP3's Recycle extension — a SEPARATE predicate, not a member of
+//                   the array). ⚠️ So arms 4 and 5 each own TWO subjects, which is why the
+//                   arm-count pin below reconciles SEVEN subjects against FIVE registries.
+//                   Added at M13 WP2 for the same reason arm 4 was:
 //                   a button row in the workspace header is none of the first four.
 //                   ⚠️ Unlike arm 4 this row has NO ungated half (every member is a
 //                   companion-workflow skill), so instead of "the ungated arm must
@@ -868,7 +872,7 @@ describe("the guard is not vacuous", () => {
     expect(
       armSubjects.length,
       "an OFF-state arm subject was removed — every registry this app surfaces UI through " +
-        "must stay policed; see this file's header for the registry list",
+        "must stay policed; see the registry table at the top of this file",
     ).toBe(7);
 
     // Each subject must be really callable and really defined — a subject that threw or
@@ -879,6 +883,30 @@ describe("the guard is not vacuous", () => {
         `arm subject "${name}" resolved to undefined`,
       ).toBeDefined();
     }
+
+    // ⚠️ THE HALF THAT ACTUALLY POLICES DELETION — added at code-quality review, which caught
+    // that the array above does NOT. `armSubjects` is a literal declared in this body, so
+    // deleting a real arm `it()` left it green at 7/7: the test asserted that seven FUNCTIONS
+    // are importable, not that seven ARMS exist. Verified by deleting the arm-5x OFF test —
+    // the whole suite stayed green at 33. That is exactly the "assertion says X, measures Y"
+    // gap this WP's own problem statement quotes, reproduced in the guard written to prevent it.
+    //
+    // So the count is now derived from THIS FILE'S SOURCE: every OFF-assertion `it()` title in
+    // the gate-off describe block. Deleting an arm removes its title and fails here.
+    const selfSrc = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const offAssertionTitles = [
+      ...selfSrc.matchAll(
+        /\n {2}it\("((?:registers|matches|renders|announces) no [^"]+)"/g,
+      ),
+    ].map((m) => m[1]);
+
+    expect(
+      offAssertionTitles.length,
+      `expected one OFF-assertion test per arm subject; found ${offAssertionTitles.length} ` +
+        `title(s) but ${armSubjects.length} subject(s). An arm's test was deleted, or a new ` +
+        `arm was added without a subject — reconcile against the registry table above.\n` +
+        offAssertionTitles.map((t) => `  - ${t}`).join("\n"),
+    ).toBe(armSubjects.length);
   });
 
   it("walks a non-trivial set of source files", () => {

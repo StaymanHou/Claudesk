@@ -74,9 +74,12 @@ export const RESTORE_COMMAND = "/session-restore";
 /**
  * How long to wait for the whole completion composite before giving up.
  *
- * ⚠️ **THE SINGLE AUTHORITY FOR RECYCLE'S MEASURED LATENCIES.** Other sites that need a figure
- * point here rather than restating one; provenance (the three-run capture table, the killed
- * single-signal candidates) lives in the M13 WP1 archive.
+ * ⚠️ **THE SINGLE AUTHORITY FOR RECYCLE'S MEASURED LATENCIES — among production modules.**
+ * Other `src/` modules that need a figure point here rather than restating one, and a guard in
+ * `__tests__/recycleSession.test.ts` enforces that. ⚠️ **Scope boundary, so this header does not
+ * overclaim:** the WBS and roadmap still carry the figures as WP1's *historical record*, and one
+ * test NAME does — both deliberate, neither enforced here. Provenance (the three-run capture
+ * table, the killed single-signal candidates) lives in the M13 WP1 archive.
  *
  * | measurement | value | source |
  * |---|---|---|

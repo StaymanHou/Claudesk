@@ -675,6 +675,18 @@ describe("⚠️ the measured latencies have exactly ONE authority", () => {
   // ⚠️ EN DASH (U+2013), not a hyphen. The verify-self pass first reported ZERO matches because
   // a shell mangled the character — which reads as a STRONGER pass than the truth. These are
   // TS string literals, so the bytes are exact and no shell is involved.
+  //
+  // ⚠️ SCOPE, stated because the guard otherwise claims more than it enforces (code-quality
+  // review): this polices **non-test modules under `src/` only**. Deliberately OUT of scope, and
+  // still carrying figures today:
+  //   - `src/state/__tests__/recycleMachine.test.ts:106` — a test NAME; renaming churns the
+  //     suite for nothing, and a test name is not a site a reader treats as authority.
+  //   - `workflow-system/product/*.md` (`wbs.md`, `roadmap.md`) — the WBS/roadmap are the
+  //     *historical record* of what WP1 measured; rewriting them to point at code would erase
+  //     the provenance that makes the authority's table trustworthy.
+  // The invariant this enforces is therefore narrower than "the figure appears once anywhere":
+  // it is "no PRODUCTION MODULE restates a figure", which is where asymmetric drift actually
+  // costs a reader deciding whether the constant is still right.
   const FIGURES = ["28\u201352", "51.9", "9\u201312"];
 
   /** Every non-test module under `src/` that could restate a figure. */
