@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-08-18
 created: 2026-08-18
-status: in-progress (WP1 done 2026-08-18; WP2 next)
+status: in-progress (WP1+WP2 done 2026-08-18; WP3 next)
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -96,7 +96,15 @@ one T1 duplication instance for free.**
 
 **Resolves theme T10 (4 items) + 1 of T1.**
 
-## WP2 — Over-claiming prose: narrow every claim to what the code does  `[impact: Med · effort: S · risk: Low]`
+## WP2 — Over-claiming prose: narrow every claim to what the code does  `[impact: Med · effort: S · risk: Low]`  ✅ DONE 2026-08-18
+
+> **CLOSED** — archived at `workflow-system/state/archive/paydown-wp2-over-claiming-prose.md`.
+> **6 narrowed · 1 REFUTED · 1 wider than filed.** ⚠️ **Item 2 (the "vice versa" test) is REFUTED
+> — do NOT re-file it:** the body asserts both directions (`config_store/mod.rs:1427-1436`); the
+> name is accurate. ⚠️ **Item 1 was ~5× its filed scope (11 sites, not 2) AND contained 7 sites
+> that must NOT change** — past-tense narration where `⏵` is the correct subject; `ProjectPicker.tsx:550`
+> stays the single authority on the glyph. ⚠️ **"Re-anchor by SYMBOL" is necessary but INSUFFICIENT**
+> — it gets you to the right code; you still must judge whether the claim is wrong *there*.
 
 The **highest-count theme (8 instances)**, all cheap, all documentary. ⚠️ **Line numbers have
 drifted — App.tsx moved ~106 lines. Re-anchor by SYMBOL, never by the recorded line.**

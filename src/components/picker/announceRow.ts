@@ -10,8 +10,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ ONE CONDITIONAL GOVERNS BOTH THE LABEL AND THE BUTTON
 //
-// The announcement and the `⏵` no-fire door appear **exactly together**, because with no
-// predicted action both doors are identical and `⏵` would be a control that provably does
+// The announcement and the `⊘` no-fire door appear **exactly together**, because with no
+// predicted action both doors are identical and `⊘` would be a control that provably does
 // nothing. [`rowAffordances`] returns both from a single decision so the component cannot
 // render one without the other — the alternative (two independent `action !== null` checks
 // in JSX) is two places to forget.
@@ -53,7 +53,7 @@ type WorkflowGateValue = ReturnType<typeof useWorkflowFeaturesEnabled>;
 export interface RowAffordances {
   /** The command text to display next to the project name, or `null` for no announcement. */
   announcement: string | null;
-  /** Whether to render the `⏵` open-without-firing button. */
+  /** Whether to render the `⊘` open-without-firing button. */
   showNoFireDoor: boolean;
   /** The action a normal row click should fire, or `null` to open plainly. */
   action: AutoResumeAction;
@@ -109,7 +109,7 @@ function armAvailable(
  * ⚠️ **`enabled` no longer collapses the whole row.** Before 2026-08-05 this returned
  * {@link SILENT} unconditionally when the gate was off; that was correct-as-built and is now
  * wrong. The gate applies **per arm** — see {@link armAvailable}. A gated-out arm still
- * collapses completely (no announcement, no `⏵`, no action), honoring the seam contract
+ * collapses completely (no announcement, no `⊘`, no action), honoring the seam contract
  * *a gated surface must not exist when off*; an ungated arm renders regardless.
  *
  * Belt-and-braces with the backend, which applies the same split server-side: an OFF build's

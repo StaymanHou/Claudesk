@@ -31,6 +31,15 @@ export const RECYCLE_TESTID = "workspace-recycle";
  * requiring the workflow substrate on disk, which the skill row explicitly does NOT require —
  * would silently change the skill row too).
  *
+ * ⚠️ **But the divergence is NOT reachable at today's render site, and this doc used to imply it
+ * was.** The button renders at `Workspace.tsx:514`, *inside* the `showSkillButtons(…) &&` block
+ * opened at `:489` — so the row's gate **strictly dominates** this predicate, and since both are
+ * byte-identical one-liners, relaxing this one alone changes nothing observable. The separation
+ * above is therefore **forward-looking insurance, not a live behavioral difference.** ⚠️ Do NOT
+ * "fix" the nesting by un-nesting the button: sharing the row's container is correct (same row,
+ * same look), and a diverging Recycle precondition would be expressed by hoisting the render out
+ * of the row's gate at that time. The claim narrowed here is the doc's, not the code's.
+ *
  * ⚠️ `workflowEnabled` is a GATE, not a disable: with the gate off the button must be ABSENT, not
  * greyed. Recycle drives two companion-workflow skills, so it is meaningless without them, and
  * M10.9's invariant is that OFF is byte-identical to a build that never had the feature.

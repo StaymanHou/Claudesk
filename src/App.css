@@ -3184,7 +3184,7 @@ body,
 .picker-recent {
   /* M12 WP3 — was `column` (name over path). Now a ROW holding exactly TWO children:
      the name/path stack (`.picker-recent-text`, which carries the announcement on the
-     name's line) and the ALWAYS-PRESENT ⏵ gutter (`.picker-recent-gutter`).
+     name's line) and the ALWAYS-PRESENT ⊘ gutter (`.picker-recent-gutter`).
      ⚠️ "Always present" is the correctness property, not a stylistic choice. The
      original version rendered the ⏵ conditionally and claimed rows "line up whether
      or not they announce" — measured FALSE at verify-human 2026-08-05, because
@@ -3217,7 +3217,7 @@ body,
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  /* Takes all leftover width. ⚠️ That is exactly why the ⏵ gutter must be RESERVED
+  /* Takes all leftover width. ⚠️ That is exactly why the ⊘ gutter must be RESERVED
      rather than conditionally rendered — `flex: 1 1 auto` means this stack absorbs
      the gutter's width whenever the gutter is absent, which is the P3.9 defect
      (369px on a non-announcing row vs 331px on an announcing one). Reserving the
@@ -3241,7 +3241,7 @@ body,
   justify-content: center;
   /* An EMPTY gutter must not be a click target: without this, the reserved box on a
      non-announcing row would swallow clicks that belong to the open button — trading
-     the layout defect for a worse interaction one. The ⏵ inside re-enables itself. */
+     the layout defect for a worse interaction one. The ⊘ inside re-enables itself. */
   pointer-events: none;
 }
 
@@ -3264,7 +3264,7 @@ body,
   opacity: 0.6;
   /* Equal width on EVERY row, announcing or not. Two things buy that, and BOTH are
      required: the badge lives on the name's line (so it never competes with the
-     path), AND the ⏵ gutter is reserved unconditionally (so the parent text stack
+     path), AND the ⊘ gutter is reserved unconditionally (so the parent text stack
      resolves to one width everywhere).
      ⚠️ This comment previously claimed "full width on EVERY row" from the placement
      alone. That was MEASURED FALSE at verify-human 2026-08-05 — the path was 331px
@@ -3474,7 +3474,7 @@ body,
   color: #ff8a7a;
 }
 
-/* ── M12 WP3 — the auto-resume announcement + the ⏵ no-fire door ────────────
+/* ── M12 WP3 — the auto-resume announcement + the ⊘ no-fire door ────────────
    BOTH LIVE INSIDE the open <button> (operator spec, 2026-08-04: "clicking the
    title box would just auto-fire by default; have another small button inside the
    box to open without auto-fire").

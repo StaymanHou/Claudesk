@@ -323,6 +323,11 @@ export function DocsPanel({
     if (!hasPending(pendingRef.current)) return;
     const el = contentRef.current;
     const plan = planRestore(readGeometry(el), pendingRef.current.offset);
+    // ⚠️ `el !== null` is a `tsc` NARROWING, not a condition: `plan.apply` is only ever true
+    // when the element was found, so this conjunct never decides the branch. Spelled out
+    // because the `isMeasurable`-as-type-predicate rationale earlier in this file argues the
+    // opposite habit (let the predicate carry the narrowing) — the two read as contradictory
+    // unless this one says why it is here.
     if (plan.apply && el !== null) {
       el.scrollTop = plan.scrollTop;
       pendingRef.current = pendingNext(pendingRef.current, { type: "applied" });

@@ -103,9 +103,17 @@ export function anchorSelector(href: string): string {
  * anything existed to select. Long WBS/WIP docs lean on their tables of contents, so this
  * is the common case, not an edge one.
  *
- * Mirrors GitHub's algorithm, which is what markdown authors write links against:
- * lowercase, strip anything that is not a word character / space / hyphen, then spaces to
- * hyphens. `## Probe outcomes` → `probe-outcomes`; `## 3. The 90% path` → `3-the-90-path`.
+ * Mirrors GitHub's algorithm **except for collision handling**, which is what markdown
+ * authors write links against: lowercase, strip anything that is not a word character /
+ * space / hyphen, then spaces to hyphens. `## Probe outcomes` → `probe-outcomes`;
+ * `## 3. The 90% path` → `3-the-90-path`.
+ *
+ * ⚠️ **The one rule NOT mirrored: GitHub disambiguates duplicate slugs with a `-1`/`-2`
+ * suffix; this does not.** Two headings differing only in punctuation therefore emit the
+ * same `id`, and an anchor to either reaches the first. That matters here because the
+ * target corpus is precisely the colliding case — WBS/WIP docs with repeated `## Tasks` /
+ * `## Context` headings. The behavior is filed as paydown WP6; this comment previously
+ * claimed an unqualified mirror, which overstated by exactly this rule.
  *
  * Deliberately NOT a new dependency (`rehype-slug` would do this): it is six lines, and
  * WP1's verdict makes adding rehype plugins a decision to weigh rather than a reflex.

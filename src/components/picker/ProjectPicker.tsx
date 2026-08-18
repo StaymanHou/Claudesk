@@ -216,7 +216,7 @@ export function ProjectPicker({
   /**
    * Open a project via one of the two doors.
    *
-   * ⚠️ **BOTH doors funnel through here** — the row click (`"fire"`) and the ⏵
+   * ⚠️ **BOTH doors funnel through here** — the row click (`"fire"`) and the ⊘
    * (`"no-fire"`). That is deliberate: a second open path would be a second place for the
    * recency stamp, the error handling, and the re-derivation to drift, and only one of them
    * would get fixed when a bug appeared. `intent` is the ONLY difference between them.

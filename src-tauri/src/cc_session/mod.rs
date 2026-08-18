@@ -324,8 +324,18 @@ pub fn resolve_shell_argv(env_shell: Option<String>) -> Vec<String> {
 /// Build the argv for a CC spawn from the persisted permission mode + per-project model.
 ///
 /// Every mode maps to an explicit `--permission-mode <value>` pair (including
-/// `Default` — passing `--permission-mode default` is a harmless no-op that keeps the
-/// mapping uniform and makes the chosen mode visible in the process args). Pure
+/// `Default` — passing `--permission-mode default` keeps the mapping uniform and makes
+/// the chosen mode visible in the process args).
+///
+/// ⚠️ **ASSUMPTION, not a verified fact: that `--permission-mode default` is a harmless
+/// no-op rather than distinct from omitting the flag.** It rests on `default` being one of
+/// `claude --help`'s own listed values, never on an observed comparison of the two spawns.
+/// It is load-bearing — every `Default`-mode session ships the flag — so if a CC release
+/// ever makes explicit-`default` differ from absent, this uniformity becomes a behavior
+/// change and the fix is the `--model` shape below (omit entirely when unset). Not pinned
+/// by a test, because a test here would assert our own mapping, not CC's response to it.
+///
+/// Pure
 /// (mode in → argv out) so the mapping is unit-testable without spawning a real
 /// `claude`; the setting read happens at the call site ([`SessionRegistry::spawn`]).
 ///

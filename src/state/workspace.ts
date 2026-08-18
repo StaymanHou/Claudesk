@@ -57,7 +57,7 @@ export interface Workspace {
    *
    * ⚠️ **This cannot be inferred from `pending_action`, and trying to was the shipped defect.**
    * `pending_action === null` conflates two states that need opposite argv behavior:
-   *   • the `⏵` no-fire door — the argv arm must be SUPPRESSED;
+   *   • the `⊘` no-fire door — the argv arm must be SUPPRESSED;
    *   • the row door on a project with no signal — nothing to suppress, and a suppression here
    *     would be indistinguishable from the first case.
    * The ambiguity is harmless for the inject arm (both mean "inject nothing"), which is exactly

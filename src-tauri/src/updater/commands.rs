@@ -153,6 +153,10 @@ pub async fn updater_apply(app: AppHandle) -> Result<String, String> {
                 let _ = finish_app.emit(
                     UPDATER_DOWNLOAD_PROGRESS_EVENT,
                     DownloadProgress {
+                        // ⚠️ `0` is deliberate and IGNORED, not a lost total: the frontend's
+                        // `progressPercent` short-circuits `if (p.done) return 100;`
+                        // (`updateFlowState.ts:56`) before reading this field. Carrying the
+                        // real byte count here would be dead data that reads as meaningful.
                         downloaded: 0,
                         total: None,
                         done: true,

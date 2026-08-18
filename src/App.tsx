@@ -306,7 +306,12 @@ function App() {
         const invite = await getWorkflowInvite();
         if (cancelled) return;
         setInviteSettings({ workflowInvite: invite });
-        // Gate the project-count read on an UNRESOLVED invite (Verdict (b)'s requirement):
+        // Gate the project-count read on an UNRESOLVED invite — **M10.9's** Verdict (b)
+        // (the invite-lifecycle verdict, issued at its WP1 probe and implemented by WP3).
+        // ⚠️ Disambiguated 2026-08-18: this is NOT **M12 WP1's** Verdict (b), a different
+        // rule entirely (the batched announce query — the announcement is a prediction,
+        // never read back from the rendered label), which six sibling files cite as
+        // "WP1 Verdict (b)". Two verdicts share the letter; always name the milestone:
         // once the invite has resolved — permanently, for all but first-run users — this
         // second `list_projects` call site is skipped entirely.
         if (invite === null) {

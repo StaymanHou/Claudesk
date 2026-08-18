@@ -49,7 +49,7 @@ export type PickerRowCell = (typeof PICKER_ROW_CELLS)[number];
  * `cell !== "open"`, i.e. it restates the *declared* order; it never looks at the rendered
  * JSX. Read it as documentation that names the property, not as evidence the property holds.
  *
- * That limitation was noted explicitly when M12 WP3 added the `⏵` cell (the affordance most
+ * That limitation was noted explicitly when M12 WP3 added the no-fire cell (the affordance most
  * at risk from the nesting trap), because the plan had cited this function as the assertion
  * protecting it — which would have been a green test standing in for a check nobody ran.
  *
@@ -73,7 +73,7 @@ export function isSiblingOfOpenButton(cell: PickerRowCell): boolean {
  * rather than a restatement of one member's name: it fails if `"open"` were duplicated, or
  * absent, or if the array were reshaped into something nested (e.g. entries carrying their
  * own children). It still cannot see the JSX — nothing in a pure module can — but it is the
- * strongest statement available at this level, and it is what the `⏵` cell's test asserts.
+ * strongest statement available at this level, and it is what the no-fire cell's test asserts.
  */
 export function cellsAreFlatSiblings(): boolean {
   const openCount = PICKER_ROW_CELLS.filter((c) => c === "open").length;
