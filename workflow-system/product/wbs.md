@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-08-14
+updated: 2026-08-18
 milestone: 13
 ---
 
@@ -141,7 +141,7 @@ Measured properties the fifth arm must respect — each already paid for by a re
 
 ---
 
-### WP3: Recycle Session — the callable operation
+### WP3: Recycle Session — the callable operation ✅ SHIPPED 2026-08-18 (commit `be29dea`)
 **Description:** The 6-step recycle sequence as a **programmatically callable operation**, per the roadmap's 2026-08-14 scope note.
 **Milestone:** 13
 **Dependencies:** WP1 (Q3's completion protocol is the whole design; Q4 settles the drive-mode question)
@@ -174,15 +174,15 @@ Measured properties the fifth arm must respect — each already paid for by a re
 - ⚠️ **The Edit tool CAN write via temp+rename** (`<file>.tmp.<pid>.<hash>` CREATE→DELETE→MODIFY) — observed once, not on every Edit. A state-dir watcher must tolerate that form without firing on the transient.
 
 **Tasks:**
-- [ ] 3.1 Model the sequence as an explicit **state machine** (a pure function over observed signals → next action), separate from any UI. ⚠️ The composite marker above is *why* this must be a machine over a sequence and not a file poll. ⚠️ `?raw` guards verify structure, never runtime — anything involving async/event ordering must be **extracted to a pure function and asserted as a value**.
-- [ ] 3.2 Implement each step's wait against Q3's **observed** signal table above, with an explicit timeout + failure surface per step. ⚠️ A hung step must be visible, not silent.
-- [ ] 3.3 ⚠️ **CORRECTED at WP1 P1.7 — the variant ALREADY EXISTS; this task is WIRING, not adding.** `CleanExitRoute::RecycleSession` is present in the Rust enum (`session_state/mod.rs:351`), in `CleanExitRoute::ALL` (3 variants), with wire name `"recycle-session"` (`:369`), in the TS union (`cleanExit.ts:39`), and pinned by a test named *"RECYCLE SESSION is a CLEAN boundary — pinned for M13 (P2.5)"* (`cleanExit.test.ts:109`). It was pinned **deliberately** ahead of M13 so Recycle would inherit the contract rather than rediscover it. **Production callers today: zero.** So: send the existing route from Recycle's funnel, clearing through `key_for()`. ⚠️ Opt-in at this route only. ⚠️ **Do not read the existing tests' green as evidence the route works end-to-end** — it is the same set-vs-caller shape that hid the M12 dead `/exit` variant. Task 3.6's negative arm is what actually proves the wiring.
+- [x] 3.1 Model the sequence as an explicit **state machine** (a pure function over observed signals → next action), separate from any UI. ⚠️ The composite marker above is *why* this must be a machine over a sequence and not a file poll. ⚠️ `?raw` guards verify structure, never runtime — anything involving async/event ordering must be **extracted to a pure function and asserted as a value**.
+- [x] 3.2 Implement each step's wait against Q3's **observed** signal table above, with an explicit timeout + failure surface per step. ⚠️ A hung step must be visible, not silent.
+- [x] 3.3 ⚠️ **CORRECTED at WP1 P1.7 — the variant ALREADY EXISTS; this task is WIRING, not adding.** `CleanExitRoute::RecycleSession` is present in the Rust enum (`session_state/mod.rs:351`), in `CleanExitRoute::ALL` (3 variants), with wire name `"recycle-session"` (`:369`), in the TS union (`cleanExit.ts:39`), and pinned by a test named *"RECYCLE SESSION is a CLEAN boundary — pinned for M13 (P2.5)"* (`cleanExit.test.ts:109`). It was pinned **deliberately** ahead of M13 so Recycle would inherit the contract rather than rediscover it. **Production callers today: zero.** So: send the existing route from Recycle's funnel, clearing through `key_for()`. ⚠️ Opt-in at this route only. ⚠️ **Do not read the existing tests' green as evidence the route works end-to-end** — it is the same set-vs-caller shape that hid the M12 dead `/exit` variant. Task 3.6's negative arm is what actually proves the wiring.
 
 ⚠️ **Note on the OTHER two variants, established at WP1 P1.8 (and a corrected error worth inheriting):** `WorkspaceClose` clears via the **IPC** path (`markSessionClean` → `session_state_mark_clean`); `AppQuit` clears **in-process** from `perform_quit_teardown` via `clear_and_persist`, never crossing IPC — correctly, since the paths come from a Rust-side registry. WP1 initially recorded `AppQuit` as uncalled and filed it as a defect; that was **wrong and was retracted before any code changed**, because the sweep audited the IPC command and generalized to a second writer that does not use it. ⚠️ **The flag has TWO writers by design.** When WP3 wires Recycle, decide *which* writer it uses (Recycle is frontend-initiated, so likely IPC) — and when tasks 3.4/3.5 build the caller-side guard, guard the **state-mutating funnel (`clear_and_persist`/`clear`)**, not enum membership or a single command's call sites, or the guard reproduces WP1's error in test form.
-- [ ] 3.4 The button (one caller) + the programmatic entry point (the seam M15 will call). ⚠️ **Funnel both through ONE function and guard that function** — the recurring four-times-hit defect is a correct mechanism behind a caller that does not honor it.
-- [ ] 3.5 ⚠️ **A caller-side guard, not only a machine-side one.** Extracting a pure state machine proves the MACHINE, not its CALLER — hit twice in M11 WP4, one a shipped CRITICAL. Guard the single funnel.
-- [ ] 3.6 Verify the flag actually clears on a real recycle, and that a **subsequent open fires no `--continue`** (the negative arm — assert it just as hard).
-- [ ] 3.7 Handle the stale-`.session.md` case from 1.4.
+- [x] 3.4 The button (one caller) + the programmatic entry point (the seam M15 will call). ⚠️ **Funnel both through ONE function and guard that function** — the recurring four-times-hit defect is a correct mechanism behind a caller that does not honor it.
+- [x] 3.5 ⚠️ **A caller-side guard, not only a machine-side one.** Extracting a pure state machine proves the MACHINE, not its CALLER — hit twice in M11 WP4, one a shipped CRITICAL. Guard the single funnel.
+- [x] 3.6 Verify the flag actually clears on a real recycle, and that a **subsequent open fires no `--continue`** (the negative arm — assert it just as hard).
+- [x] 3.7 Handle the stale-`.session.md` case from 1.4.
 
 ---
 

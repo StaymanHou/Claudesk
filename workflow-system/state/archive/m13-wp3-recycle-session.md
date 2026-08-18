@@ -1,7 +1,7 @@
 # Feature: M13 WP3 — Recycle Session as a callable operation
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** COMPLETED 2026-08-18
 **Drive mode:** autopilot  <!-- drive_mode: autopilot — added 2026-08-18 at Phase 1 verify-human; the WIP was created without it, which correctly FAILED that gate's condition (a) and forced the confirmation path. Recorded for later phases; NOT backdated to license the skip it already blocked. -->
 **Created:** 2026-08-18
 **WBS:** `workflow-system/product/wbs.md` → WP3 (M13, size L, critical path WP1→WP3→WP4)
@@ -266,8 +266,8 @@ path. Recycle injects its restore explicitly through the funnel; the latch stays
   - [x] verify-codify  <!-- status: done 2026-08-18 — codified the ONE chain Phase 4 proved live that nothing pinned: wire name -> parse -> clear -> announce goes quiet. Both halves had coverage; NO test joined them. Rust 827->828. Mutation-proven: no-op clear -> FAILED; map-wipe -> FAILED (⚠️ the wipe probe's FIRST attempt did not land — an unlanded mutation and a real gap look identical, so the anchor was verified against the real source before re-running). -->
 
 ## Current Node
-- **Path:** Feature > COMPLETE (all 4 phases)
-- **Active scope:** none — ready to ship
+- **Path:** Feature > finalize (COMPLETE)
+- **Active scope:** none — feature closed 2026-08-18
 - **Blocked:** none
 - **Unvisited:** (none — Phase 4 is the last)
 - **Open discoveries:** none
@@ -970,3 +970,134 @@ affordance in `Workspace.tsx` · `XtermPaneHandle.relaunch()` · CSS · one Rust
 single live run (`SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE`). Every
 component is proven and the failure arm — the one that can destroy work — is proven against a **real
 CC refusal**. To be closed by dogfooding rather than fixture engineering.
+
+## Code-Quality Review — m13-wp3-recycle-session
+
+Reviewed against ship commit `be29dea` by a fresh-context subagent. **0 CRITICAL · 3 MAJOR ·
+3 MINOR.** Auto-backlogged per `drive_mode: autopilot`.
+
+### Strengths
+- `recycleMachine.ts` makes the illegal state **unrepresentable** rather than guarding it with a
+  flag pair — run 2's shape is a transition to `failed`, not a combination a reader must remember
+  to reject.
+- The temp-path exclusion was moved **inside** the machine after an earlier revision left it as a
+  caller-side predicate with no production caller — the project's standing "the set is not the
+  caller" defect caught and structurally fixed rather than commented around.
+- `awaitCompletion` subscribes to the **raw** `workspace-status` stream rather than the derived map,
+  with the reason stated. A non-obvious trap avoided by design, not luck.
+- The failure arm is asserted as hard as the success arm — three tests prove a refused/stale/
+  timed-out handoff does **not** `markClean` and does **not** `relaunch`.
+- OFF-invariant arm 5 gained both an OFF assertion and an anti-vacuity ON assertion, and the new
+  source guard anchors the button *inside* the gated block (`recycleAt > gateAt`) — catching the one
+  thing the predicate test structurally cannot see.
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR**
+1. **[`recycleSession.ts:1-46`, `recycleMachine.ts:1-48`, `recycleButton.ts:1-15`] Comment density
+   52%/71%/70%, with the same rationale restated across FIVE files.** "Recycle is NOT a
+   `SKILL_BUTTONS` member" appears in 5+ places; "WP1 measured 28–52s" in 4. ⚠️ **The drift has
+   ALREADY STARTED** — `App.css` says 28–52s while `recycleSession.ts` cites 51.9s and the 9–12s
+   tail, with no single authority. This is verbatim the failure `CLAUDE.md` names.
+2. **[`recycleSession.ts:259,271`] The late-subscription disposal branch is untested.**
+   `(un) => (settled ? un() : unlisteners.push(un))` handles a `listen()` that resolves *after* the
+   operation settled. ⚠️ **The test mock always resolves synchronously**, so that branch is
+   unreachable by the suite and `unlistenCalls === 2` passes either way. **VERIFIED
+   INDEPENDENTLY.** A future "simplification" to a bare `push(un)` would pass everything while
+   leaking one `fs-change` listener per Recycle for the app's lifetime.
+3. **[`Workspace.tsx:186-249`] The operation is UNCANCELLABLE across unmount.** Nothing aborts an
+   in-flight `recycleSession` when the workspace closes; it runs up to 180s, `relaunch()` no-ops
+   silently on a dead ref — **but `markSessionClean` has already fired.** ⚠️ Silent in the damaging
+   direction: the flag is cleared for a project whose session never respawned. `RecycleInputs` has
+   **no abort seam**. **VERIFIED INDEPENDENTLY.** ⚠️ M15's non-click caller hits this harder — it
+   fires with no human watching.
+
+**MINOR**
+4. **[`recycleButton.ts:22-40` vs `Workspace.tsx:509-514`] The doc overstates the wiring.**
+   `showRecycleButton` is documented as deliberately independent so the two can diverge — but the
+   button renders *inside* the `showSkillButtons(...) &&` block, so that gate strictly dominates and
+   the documented divergence is unreachable as wired. (The separate predicate itself is right — arm
+   5 needs an independently-testable one.)
+5. **[`XtermPane.tsx:280` vs `Workspace.tsx:196-199`] Two opposite rules for one idiom, in one
+   commit.** `XtermPane` writes a ref during render ("mirroring `fitAndResizeRef`"); `Workspace`
+   documents at length that render-phase ref writes are an eslint ERROR and uses an effect.
+6. **[`recycleSession.ts:355-375`] Bottom-referencing-forward ordering** — `waitForFreshSessionId`
+   and its two constants are defined after their use, in a file whose header presents a numbered
+   sequence.
+
+### Assessment
+Well-built work whose strongest property is being **honest about what it does not know** — a
+composite marker derived from three measured runs rather than a plausible `Stop` poll, a failure arm
+that tears nothing down, and a verify record that downgrades two outcomes it could not compose
+rather than declaring them green. The debt is **almost entirely documentary**: at 52–71% density with
+five or six rationales restated across five files, the provenance has outgrown the code it
+annotates, and the first measurable drift is already visible. Two real gaps remain under the prose —
+an untested disposal branch and an uncancellable three-minute operation whose orphaned completion
+clears a durable flag — neither threatening shipped behavior today, **both sharper the moment M15
+calls this without a human watching.**
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives this WIP.
+
+
+## Retrospect
+
+- **What changed in our understanding:** ⚠️ **Four defects were found across the four gates, and NOT
+  ONE was a coding error** — every one was a gap between what an assertion *said* and what it
+  *measured*. (1) verify-self found an **unasserted outcome** (a temp-path predicate with zero
+  production callers); (2) verify-codify found an **unexercised input** (a stale write in
+  `awaiting-stop` silently overwrote the retained evidence); (3) Phase 2 found a **mis-specified
+  outcome** (`grep -c` counting a function's *definition* as a call site — and it would have
+  INVERTED in Phase 3, reading as failing precisely when it became satisfied); (4) Phase 3 found the
+  same shape one level down (`indexOf` matching an *import*). **The generalizable rule, banked: a
+  source-text search must anchor on the USE SITE's syntax, because a declaration and a use are
+  indistinguishable to a bare-identifier match.**
+- **Assumptions that held:** the plan's five pre-build findings all survived contact — the kill/
+  respawn half really did already exist as `handleRelaunch`; the status map really does collapse
+  consecutive `Stop`s (so the raw stream was mandatory); the `.session.md` watcher really was already
+  emitting; the IPC route really was the right clean-exit path; and the auto-resume latch really does
+  stay closed across a relaunch, so no double-restore defense was needed. Reading the code before
+  planning is what made Phases 1–3 mostly assembly.
+- **Assumptions that were wrong:** ⚠️ **The plan never noticed the session id CHANGES mid-operation.**
+  `relaunch()` kills the session, so injecting the restore into `ccSessionId` writes to a dead PTY —
+  and fails *silently*, since `cc_input` rejects into a `.catch` that only warns. That forced a new
+  input (`awaitFreshSessionId`) mid-build. Also wrong: I assumed a scratch repo would be a sufficient
+  fixture for a live success run. **CC correctly refuses to hand off from an empty repo**, which is
+  right behavior and blocked the one thing Phase 4 most wanted to prove.
+- **Approach delta:** the four-phase shape held exactly. Two deltas: (a) Phase 4 became *verification
+  of components* rather than *one continuous end-to-end run*, and the gap was recorded and accepted
+  rather than papered over; (b) three in-place fixes were taken under the verify-self shortcut
+  (temp-path exclusion, the `no-session` conflation, the mis-specified outcome) instead of three
+  build back-loops — each with a fresh-subagent re-verification and an audit-trail entry.
+
+⚠️ **The most transferable thing this WP produced is not the feature.** It is that **a green suite
+plus passing mutants is not evidence an outcome was verified** — Phase 1 had 23/23 green and 4/4
+mutants biting while an outcome went entirely unasserted. The instrument that caught it every time
+was reading the outcome's *operative words* against the code, not against the test names. And twice
+an **invalid probe was indistinguishable from a real hole** (the whole-map-wipe mutant that never
+landed; the `sed`-range landing check that printed the wrong line) — `diff` against a pristine copy
+is the only landing check that held up.
+
+## Ship record (2026-08-18)
+
+**Commit `be29dea`** — `feat(m13-wp3): Recycle Session as a callable operation, button as one caller`.
+13 files, +3260/-3.
+
+⚠️ **NOT pushed.** `main` is 46 ahead of `origin/main` **by design** — the operator pushes at release
+time only. This is not a pending action.
+
+**Cleanup:** no `console.log` / `TODO` / `FIXME` / `debugger` / commented-out code in the three new
+modules; no leftover probe files (the `/tmp` mutation backups and the dev-run log were removed);
+working tree clean after commit.
+
+**Final gates:** frontend **2112** (165 files) · Rust **828 lib** · `tsc --noEmit` 0 ·
+`format:check` clean · `eslint` 0 errors (1 pre-existing `XtermPane` warning) ·
+`cargo clippy --all-targets -- -D warnings` exit 0.
+
+⚠️ **The commit carries one unrelated change and says so:** the operator's own
+`SURFACE-2026-08-16-IDLE-DOT-CONFLATES-DONE-WITH-WAITING-ON-A-BACKGROUND-JOB` backlog entry was
+already uncommitted in the working tree and lives in the same file as WP3's new SURFACE item.
+Rather than silently absorbing it into a feature commit, the message names it as not-part-of-WP3.

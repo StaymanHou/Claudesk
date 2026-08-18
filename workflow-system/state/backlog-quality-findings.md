@@ -4,6 +4,83 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m13-wp3-recycle-session — 2026-08-18
+
+## SURFACE-2026-08-18-QUALITY-WP3-LATE-SUBSCRIPTION-DISPOSAL-UNTESTED
+- **Source:** feature-review-quality (M13 WP3, MAJOR) — **VERIFIED INDEPENDENTLY at review**
+- **Type:** gap (real code with no reachable test)
+- **Summary:** `awaitCompletion`'s `(un) => (settled ? un() : unlisteners.push(un))` at
+  `recycleSession.ts:259` and `:271` disposes a subscription whose `listen()` resolved **after** the
+  operation already settled. ⚠️ **The test mock always resolves its unlisten synchronously**
+  (`Promise.resolve(() => …)`), so the `settled ? un()` half is **unreachable by the suite** — both
+  "unsubscribes both sources" tests settle after the subscriptions have landed, and
+  `unlistenCalls === 2` passes either way.
+- **Context:** The real ordering it guards is a `listen()` round-trip slower than the operation —
+  reachable via a slow IPC or a short `completionTimeoutMs`. ⚠️ This fails the repo's own test:
+  *"could this still pass if the code it names were deleted?"* A future simplification to a bare
+  `unlisteners.push(un)` would pass the entire suite while **leaking one `fs-change` listener per
+  Recycle for the app's lifetime**.
+- **Suggested action:** Make the mock's unlisten resolution **deferred and controllable** (resolve it
+  on a later tick, or expose a resolver the test fires after settle), then assert the un-pushed
+  unlisten was still called. Small, and it converts real-but-unreachable code into guarded code.
+- **Priority:** medium (no live defect — the code is correct; the risk is entirely in the next edit)
+- **Status:** pending
+
+## SURFACE-2026-08-18-QUALITY-WP3-RECYCLE-IS-UNCANCELLABLE-ACROSS-UNMOUNT
+- **Source:** feature-review-quality (M13 WP3, MAJOR) — **VERIFIED INDEPENDENTLY at review**
+- **Type:** gap (missing abort seam with a durable-state consequence)
+- **Summary:** Nothing cancels an in-flight `recycleSession` when the workspace unmounts (filmstrip
+  ×, app teardown). The operation continues for up to **180s**; `relaunch()` then no-ops silently on
+  a dead `ccPaneRef` — **but `markSessionClean` has already fired.** `RecycleInputs` exposes **no
+  `signal`/abort seam**, so a caller cannot opt out.
+- **Context:** ⚠️ **Silent in the damaging direction:** the unclean-exit flag is cleared for a
+  project whose session was never actually respawned, so the next open fires no `--continue` for
+  work that was mid-flight. ⚠️ **M15's context-pressure recycle will hit this harder than the button
+  does** — it fires programmatically with no human watching the pane.
+- **Suggested action:** Add an `AbortSignal` (or a `cancelled` ref) to `RecycleInputs`, thread it
+  through `awaitCompletion`'s terminal check, and have `Workspace` abort on unmount. ⚠️ **Decide the
+  ordering question explicitly:** on abort *after* a successful handoff but *before* the respawn, is
+  the clean mark correct? (Arguably yes — the handoff really did complete and `.session.md` is on
+  disk — but it should be a stated decision, not an accident of where the await happens to sit.)
+- **Priority:** medium (no live defect observed; the window is real and widens under M15)
+- **Status:** pending
+
+## SURFACE-2026-08-18-QUALITY-WP3-COMMENT-DENSITY-AND-FIVE-WAY-RATIONALE-DUPLICATION
+- **Source:** feature-review-quality (M13 WP3, MAJOR — readability)
+- **Type:** tech-debt (documentary)
+- **Summary:** Comment density **52% / 71% / 70%** in `recycleSession.ts` / `recycleMachine.ts` /
+  `recycleButton.ts`, with the **same rationale restated across five files**: *"Recycle is NOT a
+  `SKILL_BUTTONS` member"* appears in `recycleButton.ts`, `skillButtons.ts`, `Workspace.tsx` (import
+  comment AND JSX comment) and two test files; *"WP1 measured 28–52s"* appears in `App.css`,
+  `recycleButton.ts`, `recycleSession.ts` (×2) and `Workspace.tsx`.
+- **Context:** ⚠️ **The drift has ALREADY STARTED** — `App.css` says *28–52s* while
+  `recycleSession.ts` cites *51.9s* and the *9–12s tail*, with no single authority. This is verbatim
+  the failure `CLAUDE.md` names (*"duplication is the expensive half — the same rationale in six
+  places drifts asymmetrically"*), and the repo was bitten by it in **four consecutive reviews of one
+  file**.
+- **Suggested action:** Keep the **invariant** at the code (*"the marker is composite — do not
+  simplify"*); move the **provenance** (three-run table, killed candidates, measured latencies) to
+  the archive with **one** pointer. Pick a single authority for the latency figures and delete the
+  other four. ⚠️ Do NOT trim a little from each site and move on — that is precisely how the
+  four-consecutive-reviews case happened.
+- **Priority:** low-medium (readability only; no correctness impact)
+- **Status:** pending
+
+## SURFACE-2026-08-18-QUALITY-WP3-THREE-MINOR
+- **Source:** feature-review-quality (M13 WP3, 3 MINOR)
+- **Type:** tech-debt
+- **Summary:** (a) `showRecycleButton`'s doc claims deliberate independence so the two predicates can
+  diverge, but the button renders **inside** the `showSkillButtons(...) &&` block, so that gate
+  strictly dominates and the documented divergence is unreachable as wired — the new source guard
+  even pins the nesting. (b) ⚠️ **Two opposite rules for one idiom in a single commit:**
+  `XtermPane.tsx:280` writes a ref **during render** while `Workspace.tsx:196-199` documents at
+  length that render-phase ref writes are an eslint **ERROR** and uses an effect. (c)
+  `waitForFreshSessionId` and its two constants are defined **after** their use.
+- **Suggested action:** (a) one sentence acknowledging the current nesting; (b) state which rule
+  governs and why the `XtermPane` precedent is exempt (or convert it); (c) reorder.
+- **Priority:** low (all three)
+- **Status:** pending
+
 # m12-wp4b-drive-mode-signal — 2026-08-07
 
 ## SURFACE-2026-08-07-QUALITY-WP4B-ENV-VAR-INHERITS-TO-ALL-DESCENDANTS
