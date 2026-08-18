@@ -17,16 +17,6 @@
   rationale-duplication finding one level up, and the right fix is *"pick one authority and point at
   it"*, ⚠️ **not** trimming a little from each site.
 
-## SURFACE-2026-08-18-NOTHING-ENFORCES-CARGO-FMT-EITHER
-- **Source:** task:act (paydown WP1)
-- **Target level:** product:wbs
-- **Type:** gap
-- **Summary:** The enforcement gap already filed for the frontend (`SURFACE-2026-08-01-NOTHING-ENFORCES-FORMAT-CHECK`, scheduled as paydown **WP5**) exists **identically on the Rust side**: nothing runs `cargo fmt --check`. Found empirically — WP1's `cargo fmt` silently reformatted a pre-existing drift in `src-tauri/src/announce/mod.rs:531-537` (a test assertion wrapped across 4 lines) in a file WP1 never edited.
-- **Context:** ⚠️ **This widens WP5's scope by one line, and it is cheap to fold in now.** WP5's filed shape covers only `pnpm format:check`. Rust drift accumulates the same way and surfaces the same way — as an unrelated task's diff picking up formatting noise, which is exactly what makes a diff hard to review and attribution hard to prove. The two halves have the same cause (no CI, no hook) and want the same fix.
-- **Suggested action:** When WP5 runs, add `cargo fmt --check` to the same per-phase verify-auto gate as `pnpm format:check` rather than filing a second pass for it. ⚠️ Do **not** treat this as a separate WP.
-- **Priority:** low
-- **Status:** pending — fold into paydown WP5
-
 ## SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES
 - **Source:** feature:build (M13 WP4 Phase 3 — live Recycle runs)
 - **Target level:** product:arch
@@ -95,26 +85,6 @@
 - **Priority:** low-medium (no correctness/data impact; it degrades the same ambient-attention purpose M7 exists for — a workspace that looks finished but isn't is exactly the "find the one waiting on you" tax the product exists to remove)
 - **Status:** deferred — carry to next cycle (M13 close 2026-08-18); queued for the next QoL polish bucket (none currently open). ⚠️ Gated on a live hook capture proving the signal exists at all; consider settling with `SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT` in one pass (shared root cause)
 
-## SURFACE-2026-08-14-A-TEST-CANNOT-ENFORCE-A-FUTURE-SCOPE-DECISION
-- **Source:** feature:review-quality (M13 WP2 — two MAJORs on one mechanism I invented)
-- **Target level:** product:arch (verification hygiene) — a rule, not a code change
-- **Type:** trap (a guard that reads as diligence and misfires in both directions)
-- **Summary:** WP2 deferred one member of a decided 6-item surface to WP3 and tried to stop it being forgotten with a **test** — `DECIDED_ROW_SIZE = 6` plus an assertion that fires once the next WP's route gains a caller. It was unsound **both** ways: the target state was **unsatisfiable** (the array holds slash commands; the deferred member is not one, per the WBS's own words), so the next WP would have met three mutually-contradictory red tests — precisely the "deleted as a false positive" outcome the guard's comment claimed to prevent; and the trigger matched only a **literal string in `src/**`**, invisible both to an idiomatic typed-parameter caller and to the in-process **Rust** writer the next WP may legitimately use.
-- **Context:** ⚠️ **The generalizable rule: a test pins the PRESENT; a scope commitment about FUTURE work belongs in the WBS/WIP.** A test that encodes "someone will later add X" must model a state that does not exist yet, and it will encode whatever the author *assumed* that state looks like — here, a membership claim the design had already refuted in writing. ⚠️ Second-order lesson, and the one that stings: the mechanism was "proven" by a probe that exercised **only the literal path**, so it demonstrated the single arm that worked and neither of the two that didn't — a direct violation of the standing *"prove each form INDIVIDUALLY"* rule (`docs/lessons/source-text-guards.md`), committed while quoting that rule in the same file.
-- **Suggested action:** No code change outstanding (guard removed; the obligation now lives in `wbs.md` → WP3). Consider folding the rule into `docs/lessons/source-text-guards.md` as an eighth failure form — "the guard whose subject does not exist yet" — at the next paydown sweep.
-- **Priority:** low (rule captured here and in the WIP; no live defect)
-- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); no code change outstanding (guard removed at WP2). Remaining work is the doc fold-in — an eighth failure form in `docs/lessons/source-text-guards.md` — at the next paydown sweep
-
-## SURFACE-2026-08-14-CSS-CLASS-GUARDS-SATISFIED-BY-A-PSEUDO-CLASS-MODIFIER
-- **Source:** feature:verify-codify (M13 WP2 — found by mutation, not review)
-- **Target level:** `src/test-support/cssRule.ts` + every guard that calls `hasRule`
-- **Type:** gap (a guard family that reports green while the styling is gone)
-- **Summary:** `hasRule(css, cls)` is satisfied by a **pseudo-class modifier alone**. Deleting the entire `.workspace-skill-btn { … }` base block (padding, border, font, cursor) left M13 WP2's new CSS contract guard **green at 21/21**, because `.workspace-skill-btn:hover` still existed and `hasRule`'s boundary legitimately admits `:`. So the element's whole visual definition can be deleted while a guard asserting "this class is styled" passes.
-- **Context:** ⚠️ **`hasRule` is NOT at fault and must not be "fixed"** — its boundary rule is correct (a `.` and a `:` are both legal class-name boundaries; the 2026-08-12 paydown deliberately made it so, and one of its own mutation probes was invalid for exactly this reason). The defect is in **how callers ask**: "does any rule mention this class" is a weaker question than "does this class have a base rule". WP2 fixed its own call site by adding `hasBaseRule = \.<cls>\s*\{` alongside `hasRule`. ⚠️ **Other `hasRule` callers were NOT audited** — this WP only proved the hazard exists and closed its own instance. Same shape the paydown recorded for `.is-editing` satisfying its base class, now confirmed to generalize to pseudo-classes.
-- **Suggested action:** Sweep the `hasRule` call sites (`grep -rl hasRule src --include='*.test.ts'`) and decide per site whether the intended question is "mentioned" or "has a base rule"; consider exporting a `hasBaseRule` from `test-support/cssRule.ts` so the next guard imports the stronger form instead of re-deriving the weaker one. ⚠️ Prove each fix by deleting the base rule while leaving a modifier — the mutant that a `hasRule`-only guard passes.
-- **Priority:** medium (no live defect — WP2's own classes are correctly styled and now correctly guarded; but this is the fourth appearance of the "guard satisfied by a near-miss token" family, and the remaining call sites are unaudited)
-- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); WP2 closed its OWN call site (`hasBaseRule`). ⚠️ The other `hasRule` callers remain **unaudited** — that sweep is the open work. Do NOT "fix" `hasRule` itself
-
 ## SURFACE-2026-08-14-SESSION-RESTORE-USAGE-FIGURE-SPANS-TWO-COMMAND-NAMES
 - **Source:** feature:plan (M13 WP2 — the measurement mandated by `SURFACE-2026-08-14-SESSION-RESTORE-HAS-NO-MANUAL-DOOR`)
 - **Target level:** method / any future usage-frequency claim about this skill
@@ -144,26 +114,6 @@
 - **Suggested action:** Extend `cssModifierAudit.test.ts` from modifiers to all `^\.[a-z-]+` blocks. ⚠️ Two traps, both already paid for once: defining *emitted* is the hard part (interpolation above; also `data-testid`s share the class naming convention, so proximity to `className` is the only honest signal), and **comments must be stripped first** (a design-prior slug ending `-is-chosen` demanded CSS for a class existing only in prose). Budget for false positives on ~298 classes, not 13.
 - **Priority:** low *(was medium — the behavioral half is now guarded; the remainder is largely cosmetic-risk classes)*
 - **Status:** deferred — scope narrowed to the base-class direction at the 2026-08-12 paydown sweep
-
-## SURFACE-2026-08-10-THE-NO-RENDER-HARNESS-NOTE-IS-HALF-TRUE-AND-COSTS-COVERAGE
-- **Source:** feature:verify-codify (M12 WP4c Phase 4 — probed rather than assumed)
-- **Target level:** product:arch (`SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` + the several files citing it)
-- **Type:** gap (a standing note that is more discouraging than the facts warrant)
-- **Summary:** `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` ("zero of 123 test files render a component") is cited across this codebase as the reason component behavior can only be pinned by `?raw` / source-text guards — guards this repo has then been burned by **four** separate times. **The note is only half true.** M11 WP3 already established the other half in `docsRender.test.tsx`: `renderToStaticMarkup` ships with the installed `react-dom`, and `jsdom` is already a devDependency, so a component's markup can be **rendered and parsed as a DOM tree** with no new dependency and without adopting `@testing-library/react`.
-- **Context:** ⚠️ **Confirmed to work on a component with hooks AND IPC, not just a pure one.** The M11 precedent was `DocMarkdown` (a pure function of its props), which made it easy to read the technique as "only works for pure components". WP4c probed `ProjectModelCell` — `useState` ×5, `useRef` ×4, `useEffect` ×2, and `useWorkflowFeaturesEnabled` (which invokes Tauri IPC) — and it renders server-side cleanly. That converted 6 assertions from source-text guessing into parsed-DOM values, including the feature's single most important invariant (gate-OFF ⇒ the surface does not exist). ⚠️ **The boundary is real and must be stated wherever this is used:** server rendering cannot dispatch events or transition state, and any hook seeding asynchronously returns its **pre-seed default** — for `useWorkflowFeaturesEnabled` that is `false`, which is why only the gate-OFF shape is reachable. So this complements live MCP-bridge verification; it does not replace it. ⚠️ The reason this matters beyond one WP: every future gated surface (M13 skill buttons, anything later) needs exactly this "the surface is ABSENT when off" assertion, and the honest version of it is a parsed DOM, not a grep.
-- **Suggested action:** Amend the 2026-07-31 note (and the files quoting it — `applyCommittedModel.ts`, `projectModelCellStructure.test.ts`, and others found by grepping the SURFACE id) to read: *"no `@testing-library/react` harness; use `renderToStaticMarkup` + jsdom for resting-DOM assertions, which is available today — see `docsRender.test.tsx` and `projectModelCellRender.test.tsx`."* State the pre-seed-default caveat in the same breath, since a reader who does not know it will mis-attribute a gate-OFF render as a bug. Prefer this over a new `?raw` guard whenever the property is *"what does the DOM look like"* rather than *"what does the source say"*.
-- **Priority:** medium (no defect — this is unclaimed capability; the cost is that the discouraging half of the note keeps steering work toward the guard style that has already failed four times here)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: used and proven in WP4c; the note itself and its citing files are not yet updated
-
-## SURFACE-2026-08-07-NEVER-BLOCK-CC-HAS-A-SECOND-UNGUARDED-AXIS-STDOUT-SHAPE
-- **Source:** feature:build (M12 WP4b Phase 3, P3.5 — surfaced while corroborating the hook-output schema against the official docs)
-- **Target level:** product:arch (the never-block-CC invariant's definition)
-- **Type:** gap (invariant is narrower than its name implies)
-- **Summary:** Claudesk's documented **never-block-CC** invariant is guarded entirely on **exit codes** (`never_blocks_cc_on_degraded_inputs`, the `eval { decode_json }` at `claudesk-hook.pl:79`, the header's *"exits 0 UNCONDITIONALLY"*). M12 WP4b made the hook write **stdout** for the first time, which adds a **second, previously-nonexistent axis**: per Claude Code's hooks reference + `anthropics/claude-code#57483`, a `hookSpecificOutput` that is **not an Object** raises an unhandled `TypeError` that **terminates the session** and loses in-flight work. An exit-0 hook can therefore still kill a CC session via stdout shape alone.
-- **Context:** ⚠️ **WP4b is covered** — `stdout_is_always_empty_or_exactly_one_cc_accepted_object` pins the property (mutation-proven against both the top-level-`additionalContext` shape and the non-Object crash shape), and the mode **allowlist doubles as crash safety**: hostile values (`{"injected":1}`, embedded newlines) never reach `encode_json`, so stdout is always byte-empty or exactly one valid object. The gap is **definitional and forward-looking**: `arch.md` and the script header still describe the invariant as exit-code-only, so the *next* feature that writes hook stdout has no stated rule to follow and no reason to think one exists. This is the same class as the CC-side caller gap that bit twice in this WP — a correct implementation with an under-specified contract behind it.
-- **Suggested action:** Restate the invariant in `arch.md` (and the script header) as **two** properties: (1) always exit 0, and (2) stdout is always byte-empty or exactly one CC-accepted JSON object. WP4d.3 already owns an `arch.md` correction for the now-bidirectional hook channel — fold this in there rather than opening a separate pass. ⚠️ Do **not** treat `#57483` as guaranteed-stable behavior: it is an open upstream bug whose *fix* would be to soft-fail, so the guard should assert **our** shape is correct, never rely on CC crashing to detect a bad one.
-- **Priority:** medium (no live defect — the one feature that writes stdout is guarded and mutation-proven; the risk is entirely in the next one)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
 
 ## SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT
 - **Source:** operator reproduction 2026-08-06 (while attempting to reproduce an unrelated freeze); captured live in `status-channel.log`
@@ -393,11 +343,11 @@
 - **Source:** feature:verify-codify (M11.5 WP1 Phase 2)
 - **Target level:** product:arch
 - **Type:** gap
-- **Summary:** This repo has **no React component-render test harness** — `@testing-library/react` is not a dependency and **not one of the 123 test files renders a component**. Every frontend test is either a pure-function test or a source-text guard.
+- **Summary:** ⚠️ **PARTIALLY RESOLVED — the factual claim below was REFUTED and is corrected 2026-08-18 (paydown WP5); only the DECISION remains open.** The original text read *"not one of the 123 test files renders a component"*, which was true when written and is not now: **`renderToStaticMarkup` + jsdom renders components today with no new dependency** (`docsRender.test.tsx`, `projectModelCellRender.test.tsx`), proven on a component with hooks AND IPC. ⚠️ **Do NOT cite this entry for "components cannot be render-tested here"** — the authority is `docs/lessons/source-text-guards.md` → "The render-harness note, corrected", which states both halves plus the boundary. What remains genuinely open: **`@testing-library/react` is still not a dependency**, so there is no harness for INTERACTION — event dispatch, state transitions, `act()`, or the StrictMode double-invoke class. Every frontend test is a pure-function test, a source-text guard, or a resting-DOM render.
 - **Context:** Surfaced when codifying the picker-row model control (M11.5 WP1 Phase 2). Two verify-human-verified behaviors were **honestly un-pinnable**: (1) click-to-edit yielding exactly one `<input>` + N-1 labels across a list, and (2) a commit reverting the visible value on IPC rejection. Both need a real render with state transitions. The gap has been *worked around* repeatedly rather than named: pure-function extraction (`decideCommit`, `escDismissTarget`, `PICKER_ROW_CELLS`) is the standing mitigation and is genuinely good practice — but it cannot reach render-output or interaction-sequence properties, so those currently rely on live MCP-bridge verification, which is operator/agent-driven and not a regression gate. Note this is *also* what made M10.9 WP2's StrictMode double-write invisible to tests (the tests there modelled `set` with a plain closure, which has no React semantics to double-invoke).
 - **Suggested action:** decide deliberately whether to adopt a render harness (`@testing-library/react` + `jsdom`; Vitest already present) or to **formally accept** the "pure-core + live-verify" posture and stop treating render-level coverage as a gap. Either is defensible — the cost of the current implicit position is that each feature re-discovers the limit and re-argues it. If adopted, the first targets are the two behaviors above plus the StrictMode-double-invoke class.
 - **Priority:** low
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*
+- **Status:** deferred — carry to next cycle; **rewritten at paydown WP5 (2026-08-18)** to the remaining open decision (adopt an INTERACTION harness or formally accept pure-core + live-verify). The resting-DOM half is no longer a gap.
 
 ## SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE
 - **Source:** operator report (2026-07-31, during the M11.5 bucket-scoping discussion)
@@ -588,16 +538,6 @@
 
 ## Code-quality findings — file-op-error-surface (2026-06-30)
 - **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
-
-## SURFACE-2026-08-01-NOTHING-ENFORCES-FORMAT-CHECK
-- **Source:** task:plan (M11.5 repair (A) — `format:check` red on `main`)
-- **Target level:** product:wbs
-- **Type:** tech-debt
-- **Summary:** Nothing enforces `pnpm format:check`. There is **no CI at all** (`.github/workflows/` absent), no verify-auto gate runs it, and it has no `runtimes.md` entry — which is why **38 files** drifted out of format unnoticed across many milestones before anyone looked.
-- **Context:** Found while planning the repair of that drift. The sweep itself is mechanical and safe (nothing depends on formatting state), but it fixes a *symptom*: with no enforcement the same drift resumes on the next un-formatted edit. Related, and the reason this is more than cosmetic: two backlogged code-quality findings (`backlog-quality-findings.md:26`, `:308`) are `?raw` source-text guards that **break when Prettier reflows a file** — so unenforced formatting is a live tripwire under those guards, not just an aesthetic gap. Measured while planning: the configured `printWidth` (Prettier's default 80) IS the real convention — 253 of 287 src TS/TSX files (88%) already conform, and raising it to 100 would make 217 fail — so enforcement would be pinning the existing style, not imposing a new one.
-- **Suggested action:** Pick an enforcement point and commit to it: (a) add `format:check` to the per-phase verify-auto gate alongside `tsc`/`eslint`/`clippy`; (b) a pre-commit hook; or (c) explicitly accept periodic manual sweeps and record that as the posture so it stops looking like an oversight. Note there is no CI to add (a) to today, which is itself part of the decision.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*
 
 ## Buried
 *Items moved out of active — low-impact + not worth carrying forward as active work. Not resolved (no CHANGELOG entry); revive only if the anchoring condition fires.*

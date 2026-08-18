@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { hasRule } from "../../../test-support/cssRule";
+import { hasBaseRule, hasRule } from "../../../test-support/cssRule";
 
 // ⚠️ Mock the TAURI boundary, not our own funnel. Mocking `injectCommand` would make the
 // caller-proof test below assert that our test double was called — the replica trap
@@ -441,8 +441,9 @@ describe("wiring — properties no value can observe (source guards)", () => {
     //
     // `hasRule` is right; the weak part was asking it the wrong question. A BASE rule is the
     // class followed only by optional whitespace and `{` — no pseudo-class, no descendant.
-    const hasBaseRule = (cls: string) =>
-      new RegExp(`\\.${cls}\\s*\\{`).test(css);
+    // ⚠️ Now IMPORTED from `test-support/cssRule` (paydown WP5, 2026-08-18) rather than defined
+    // here. It was inline for four days and the other three `hasRule` call sites kept asking the
+    // weaker question because there was nothing to import.
     // ⚠️ `workspace-recycle-btn` added at M13 WP3 — the row's sixth affordance emits it, so it
     // is subject to the same base-rule requirement. Extending this array (rather than writing a
     // parallel check elsewhere) keeps ONE list of "classes the header emits", which is what makes
@@ -454,7 +455,7 @@ describe("wiring — properties no value can observe (source guards)", () => {
     ]) {
       expect(ws, `${cls} must be emitted by Workspace.tsx`).toContain(cls);
       expect(
-        hasBaseRule(cls),
+        hasBaseRule(css, cls),
         `.${cls} is emitted by the component but has no BASE rule in App.css — an unstyled ` +
           `element. (A \`:hover\` or other modifier alone does not count: it would leave the ` +
           `element's own padding/border/font undefined while looking styled to a weaker guard.)`,

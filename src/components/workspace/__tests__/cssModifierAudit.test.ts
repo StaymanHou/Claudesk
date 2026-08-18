@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { hasRule } from "../../../test-support/cssRule";
+import { hasBaseRule } from "../../../test-support/cssRule";
 
 // ── The CSS↔component contract, for MODIFIER selectors ──────────────────────────────────────
 //
@@ -132,8 +132,34 @@ describe("every CSS modifier selector is actually emitted by a component", () =>
   it("each styled base class exists as a rule (the inverse direction, spot-checked)", () => {
     // The other half of the contract for this set: the base each modifier qualifies must
     // itself be styled, or the modifier is qualifying nothing.
+    // ⚠️ `hasBaseRule`, not `hasRule` (paydown WP5) — the sharpest case of the four. "The base
+    // each modifier qualifies must itself be styled" is EXACTLY the base-rule question, and
+    // `hasRule` here can be satisfied by a SIBLING MODIFIER of the very base being checked.
+    //
+    // ⚠️ **The stronger question found one real exemption, and it is an exemption rather than a
+    // defect.** `.file-tree-file` has no base rule and does not need one: `FileTree.tsx` always
+    // emits it as `"file-tree-row file-tree-file"`, so `.file-tree-row` carries the styling and
+    // this class exists purely as a semantic hook for `.is-active`. Listed explicitly — with the
+    // co-emitted class that styles it — rather than weakening the assertion, so a base class that
+    // is genuinely unstyled still fails.
+    const STYLED_BY_A_CO_EMITTED_CLASS: Record<string, string> = {
+      "file-tree-file": "file-tree-row",
+    };
     for (const { base } of modifierSelectors()) {
-      expect(hasRule(css, base), `.${base} has no rule of its own`).toBe(true);
+      const via = STYLED_BY_A_CO_EMITTED_CLASS[base];
+      if (via !== undefined) {
+        // The exemption is only valid while the class that styles it still has a base rule —
+        // otherwise both are unstyled and the exemption hides it.
+        expect(
+          hasBaseRule(css, via),
+          `.${base} is exempt because .${via} styles it, but .${via} has no base rule either`,
+        ).toBe(true);
+        continue;
+      }
+      expect(
+        hasBaseRule(css, base),
+        `.${base} has no BASE rule of its own — a modifier alone qualifies nothing`,
+      ).toBe(true);
     }
   });
 });

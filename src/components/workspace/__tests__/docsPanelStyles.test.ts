@@ -5,7 +5,7 @@ import { join } from "node:path";
 import docsPanelSource from "../docs/DocsPanel.tsx?raw";
 import docMarkdownSource from "../docs/DocMarkdown.tsx?raw";
 import hostSource from "../RightPanelHost.tsx?raw";
-import { hasRule } from "../../../test-support/cssRule";
+import { hasBaseRule } from "../../../test-support/cssRule";
 
 // M11 WP2 — every CSS class the Docs panel references must actually be DEFINED.
 //
@@ -97,7 +97,10 @@ describe("Docs panel CSS classes are all defined", () => {
         ...referencedClasses(hostSource),
       ]),
     ];
-    const undefinedClasses = referenced.filter((cls) => !hasRule(css, cls));
+    // ⚠️ `hasBaseRule`, not `hasRule` (paydown WP5): "referenced in JSX" must mean "has a base
+    // declaration", since a lone `:hover`/`.is-*` rule leaves the element itself unstyled while
+    // satisfying a mentioned-at-all check.
+    const undefinedClasses = referenced.filter((cls) => !hasBaseRule(css, cls));
 
     expect(
       undefinedClasses,

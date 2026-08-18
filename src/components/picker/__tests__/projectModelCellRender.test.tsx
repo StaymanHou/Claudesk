@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
 import { ProjectModelCell } from "../ProjectModelCell";
-import { hasRule } from "../../../test-support/cssRule";
+import { hasBaseRule } from "../../../test-support/cssRule";
 
 // M12 WP4c Phase 4 — the cell's DOM, pinned as a PARSED VALUE.
 //
@@ -295,7 +295,11 @@ describe("every CSS class this cell's stylesheet styles is actually emitted", ()
         // `.picker-recent-model` is a prefix of `.picker-recent-model-input`, so the shorter
         // rule could be deleted with the suite still green. `App.css` has 17 such shadowing
         // pairs among its 24 `picker-*` classes alone.
-        hasRule(css, cls),
+        //
+        // ⚠️ And `hasBaseRule`, not `hasRule` (paydown WP5, 2026-08-18): the question here is
+        // *"is this emitted class STYLED"*, which a surviving `:hover` does not answer — the
+        // base declaration can be deleted while a modifier keeps a `hasRule` guard green.
+        hasBaseRule(css, cls),
         `ProjectModelCell.tsx emits "${cls}" but App.css defines no rule for it. An emitted ` +
           `class the stylesheet never styles is a no-op that reads as a style hook — the ` +
           `M10.9 WP3.5a whole-panel-overflow CRITICAL was eleven of these. Either add the ` +

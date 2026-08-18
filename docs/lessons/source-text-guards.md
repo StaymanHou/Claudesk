@@ -155,6 +155,27 @@ or inject the geometry as a value rather than measuring it in an environment tha
 
 ---
 
+## 10. The guard whose subject does not exist yet
+
+A test can only pin the **present**. An assertion about work that has not happened — "the next
+milestone will not widen this list", "no future surface may add an arm here" — has no subject to
+observe, so it either passes vacuously forever or fails the moment someone does the very thing the
+project decided to allow.
+
+Measured instance (`SURFACE-2026-08-14-A-TEST-CANNOT-ENFORCE-A-FUTURE-SCOPE-DECISION`): a guard was
+proposed to enforce a *scope commitment* — that a particular vocabulary would not be widened later.
+There is nothing to assert. The commitment is real and worth recording, but its home is the **WBS or
+the WIP file**, where the next planner reads it, not a test file where it masquerades as coverage.
+
+**The discriminator:** ask what code change would make the assertion go red. If the answer is
+"someone deciding differently in a planning conversation", it is not a guard — it is a note in the
+wrong file. If the answer names a concrete edit to a concrete symbol, it is a guard.
+
+⚠️ **The failure mode is not a false pass — it is misplaced confidence.** The scope decision looks
+protected, so nobody re-states it where planners look, and the guard is deleted (correctly) the first
+time it obstructs an intentional change. Both halves of the protection are then gone at once.
+
+
 ## Comment budget — what belongs at the code, and what does not
 
 Comment density has been flagged in **four consecutive reviews** of the same file, and each
@@ -202,3 +223,32 @@ every line was true when written.
 - **Prefer extract-for-import for BEHAVIORAL properties.** A better source-text predicate can only
   encode shapes you already thought of. `renderToStaticMarkup` + jsdom is available today for
   resting-DOM assertions — no new dependency, no `@testing-library/react`.
+
+## The render-harness note, corrected (THE authority — cite this, do not restate it)
+
+⚠️ **"This repo has no component-render harness" is HALF TRUE, and the discouraging half has been
+steering work toward the guard style that failed the nine ways above.** Stated once here because
+**29 files** cite the original note; they are pointers, and this is the text.
+
+**What is true:** `@testing-library/react` is not a dependency, so there is no harness for
+*interaction* — no click dispatch, no state transition, no `act()`.
+
+**What is ALSO true, and was under-claimed:** `renderToStaticMarkup` ships with the installed
+`react-dom` and `jsdom` is already a devDependency, so a component's markup can be **rendered and
+parsed as a real DOM tree today**, with no new dependency. Proven on a component with `useState` ×5,
+`useRef` ×4, `useEffect` ×2 **and** Tauri IPC — not just a pure one. Working precedents:
+`docsRender.test.tsx`, `projectModelCellRender.test.tsx`.
+
+⚠️ **The boundary, which must be stated wherever this is used** — a reader who does not know it will
+mis-attribute a correct render as a bug:
+  - Server rendering **cannot dispatch events or transition state.** Anything sequential stays a
+    pure-function test or live MCP-bridge verification.
+  - A hook that seeds **asynchronously returns its pre-seed default.** For
+    `useWorkflowFeaturesEnabled` that default is `false` — which is why only the **gate-OFF** shape
+    is reachable in a server render. That is not a limitation to work around; for gated surfaces it
+    is the single most valuable assertion available ("the surface is ABSENT when off"), and a parsed
+    DOM is the honest form of it rather than a grep.
+
+**The rule:** when the question is *"what does the DOM look like at rest"*, render it. When it is
+*"what does the source say"*, guard the source. Reaching for `?raw` on a DOM question is how this
+repo accumulated its nine failure forms.

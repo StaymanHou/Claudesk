@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-08-18
 created: 2026-08-18
-status: in-progress (WP1-WP4 done 2026-08-18; WP5 next)
+status: in-progress (WP1-WP5 done 2026-08-18; WP6 next)
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -204,7 +204,20 @@ were deleted?*
 
 **Resolves theme T5 (4 items) + T6 (3 items). Includes 1 MAJOR.**
 
-## WP5 — Guard/verification-method hygiene  `[impact: Med · effort: S · risk: Lowest]`
+## WP5 — Guard/verification-method hygiene  `[impact: Med · effort: S · risk: Lowest]`  ✅ DONE 2026-08-18
+
+> **CLOSED** — archived at `workflow-system/state/archive/paydown-wp5-guard-hygiene.md`.
+> **6 SURFACEs resolved** (the 5 filed + `NOTHING-ENFORCES-CARGO-FMT-EITHER`, filed by this sweep at
+> WP1 and folded in rather than run as a second pass). Backlog 35 → 29 open.
+> ⚠️ **`pnpm verify:auto` IS the gate now** — one command, proven to exit non-zero on BOTH a Prettier
+> and a `cargo fmt` violation. There is no CI and no git hook, which is why prose was not enough.
+> ⚠️ **The render-harness note is corrected in ONE authority** (`docs/lessons/source-text-guards.md`)
+> — 29 files cite it; do NOT restate it at the citing sites. The original `SURFACE-2026-07-31` entry
+> was **rewritten, not deleted**: its factual claim is refuted, its DECISION (an interaction harness)
+> is still open.
+> ⚠️ **The new failure form is the 10th, not the "8th"** — this line was written at an older count.
+> ⚠️ **`hasBaseRule`'s first regex produced a FALSE POSITIVE** on a comma-group base rule; widened to
+> `[{,]`. A guard that flags correct code is how guards get deleted.
 
 Co-located with WP4 (same files/discipline). All doc-or-export moves; no behavior changes.
 

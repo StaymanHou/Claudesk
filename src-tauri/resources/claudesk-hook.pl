@@ -32,6 +32,23 @@
 # Discipline (proven in the WP1 probe, see docs/product/wp1-hook-socket-probe-outcome.md):
 #   - reads the event payload as JSON on stdin,
 #   - exits 0 UNCONDITIONALLY — a down Claudesk (no listener) must NEVER block CC,
+#
+#   ⚠️ NEVER-BLOCK-CC IS **TWO** PROPERTIES, NOT ONE (restated 2026-08-18, paydown WP5).
+#   Before M12 WP4b this script never wrote stdout, so exit-0 was the whole invariant.
+#   It is now the FIRST of two, and the second is just as capable of killing a session:
+#     (1) EXIT STATUS — always `exit 0`, on every degraded path (no socket, malformed
+#         JSON, empty stdin, absent env).
+#     (2) STDOUT SHAPE — stdout is byte-empty, or EXACTLY ONE CC-accepted JSON object.
+#         Per CC's hooks reference (and anthropics/claude-code#57483), a
+#         `hookSpecificOutput` that is not an Object raises an unhandled TypeError that
+#         TERMINATES the session and loses in-flight work. An exit-0 hook can therefore
+#         still kill CC via stdout shape alone.
+#   ⚠️ Do NOT treat #57483 as stable behavior: it is an open upstream bug whose FIX
+#   would be to soft-fail. Assert OUR shape is correct; never rely on CC crashing to
+#   detect a bad one. Both properties are pinned by
+#   `never_blocks_cc_on_degraded_inputs` (captures exit status AND stdout) and
+#   `stdout_is_always_empty_or_exactly_one_cc_accepted_object`. The mode allowlist
+#   doubles as crash safety — hostile values never reach encode_json.
 #   - uses only macOS-bundled Perl stdlib (JSON::PP, IO::Socket::UNIX, Time::HiRes,
 #     File::Basename),
 #   - ~15 ms/call (Perl cold-start dominated; the socket write adds ~3 ms).
