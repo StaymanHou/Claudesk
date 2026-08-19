@@ -1,6 +1,6 @@
 ---
 workflow: task
-state: plan (complete)
+state: act (complete)
 created: 2026-08-19
 docs-only: false
 ---
@@ -8,7 +8,7 @@ docs-only: false
 # Task: Recycle's restore settle is spent on spawn-wait — reorder step 6 (+ fold in WP7's abort)
 
 **Workflow:** task
-**State:** plan (complete)
+**State:** act (complete)
 **Created:** 2026-08-19
 
 ## Problem Statement
@@ -137,13 +137,22 @@ Doing them apart pays that twice. Binding constraints carried forward verbatim:
       where it can be — the mutation-tested suite; the live runs prove end-to-end EXECUTION.
       Teardown: fixture commit reverted, dev PIDs killed by explicit PID (11303/11006); the
       operator prod app (PID 1425) verified untouched.
-- [ ] T5 Close out: CHANGELOG + delete both backlog entries, mark WP7 done in the paydown WBS  <!-- status: NOT-STARTED -->
+- [x] T5 Close out: CHANGELOG + delete both backlog entries, mark WP7 done in the paydown WBS  <!-- status: [x] -->
       CHANGELOG-then-delete invariant: `**Backlog resolved:**` lines land in the SAME commit as
       the backlog deletes. Two items close here — the new SURFACE and WP7's MAJOR.
+      **DONE 2026-08-19, commit `42bfe0c`** — CHANGELOG + both deletes + code in ONE commit.
+      The SURFACE block was fully deleted from `backlog.md`. WP7's MAJOR body was deleted from
+      `backlog-quality-findings.md`, and its **grouped** pointer stub in `backlog.md` was
+      **REWRITTEN, not deleted** (partial-resolution carve-out — the stub covers several findings
+      and only one is resolved). ⚠️ While rewriting it I nearly asserted that the
+      late-subscription-disposal MAJOR closed at paydown WP4; a test for it does exist but its
+      `Status:` still reads `pending`, and confirming the test fully satisfies the finding was
+      outside this task's scope — so the stub states that fact instead of claiming a closure.
+      WP7 marked done out-of-order in the paydown WBS with the fold-in rationale.
 
 ## Current Node
-- **Path:** Task > T5
-- **Active scope:** T5 (close out — CHANGELOG, backlog deletes, mark WP7 done)
+- **Path:** Task > all complete
+- **Active scope:** all complete
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
