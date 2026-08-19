@@ -222,3 +222,6 @@ it is the one item here that is a live reproducible defect with a known cause.
   **measure-then-decide**, not a build; it needs a fresh measurement pass before it can be scoped.
 - Everything else in `backlog.md` — 29 open items at bucket open; the rest are tech-debt, guard
   completeness, or gated on unmet preconditions.
+
+## Session Handoff — 2026-08-19 15:25
+Handed off. See `workflow-system/state/.session.md` to restore.
