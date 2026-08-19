@@ -166,6 +166,46 @@ installed through `webview_execute_js` never fires, so a measurement loop built 
 initial value forever — which reads as "the value never changed". Use `setInterval` for sampling
 (caveat (e)'s technique), and take one-shot geometry reads synchronously.
 
+### (l) ⚠️ `__TAURI_INTERNALS__` has no `invoke` PROPERTY to patch — wrapping it observes nothing
+
+Note the asymmetry with caveats (e) and (h), which correctly tell you to **call**
+`__TAURI_INTERNALS__.invoke('cc_input', {...})` from `webview_execute_js`. **Calling works.**
+**Patching-to-observe does not**, and it fails silently:
+
+```js
+const internals = window.__TAURI_INTERNALS__;
+Object.keys(internals)          // → ["plugins"]     ⚠️ no "invoke"
+const orig = internals.invoke;  // → undefined
+internals.invoke = fn;          // sets a NEW property nothing reads
+```
+
+So the natural instrument for "did the app write to the PTY?" — wrap `invoke`, log `cc_input` calls
+— records **zero calls for a run whose injection demonstrably executed**. Measured 2026-08-19 while
+verifying Recycle's restore injection: the tap reported an empty call log while the CC pane showed
+the injected skill having run to completion. Two independent facts had to disagree before the
+instrument was suspected.
+
+⚠️ **Why this is the dangerous class:** frontend modules import `invoke` from
+`@tauri-apps/api/core`, so a production call site holds a **bundled binding** — not a property
+lookup on `__TAURI_INTERNALS__` at call time. There is nothing on that object for a monkey-patch to
+intercept. An empty log therefore means "the tap could not see" and looks exactly like "the app did
+not write", which is the standing *instrument-that-cannot-observe-reports-absence* trap
+(see [`verify-self-tiers.md`](verify-self-tiers.md)).
+
+**What to do instead**, in order of preference:
+
+1. **Assert the effect, not the call.** For an injected slash command the honest observable is
+   whether the command **EXECUTED** — a state change the command causes (a file consumed, a skill's
+   output in the pane). `injectCommand` resolves successfully even when the TUI drops the bytes.
+2. **Take the ordering/position property to the unit suite**, where the module boundary is mockable
+   for real (`vi.mock('@tauri-apps/api/core')`). This is where such a property can be proven
+   exactly; see `source-text-guards.md` entry 11.
+3. If you must observe IPC live, use `ipc_monitor` / `ipc_get_captured` — the bridge's own capture,
+   which sits at the transport rather than at a JS property.
+
+⚠️ **Do not conclude "no IPC happened" from a JS-level tap under any circumstances.** Confirm the
+tap can see a *known-positive* call first — a positive control — or use a different instrument.
+
 ## Related
 
 - [`verify-self-tiers.md`](verify-self-tiers.md) — what the agent can and cannot observe, and when

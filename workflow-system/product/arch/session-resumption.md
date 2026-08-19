@@ -84,6 +84,39 @@ dev/prod isolation comes free.
   `.session.md` drives the next open), whereas the reverse order risks a flag left SET after a clean
   handoff, which is the spurious `--continue` the clear exists to prevent. The failure arm returns
   *before* the clear, which is why a refused handoff correctly leaves the flag set.
+- **⚠️ THE STEP-6 SETTLE MUST FOLLOW `awaitFreshSessionId()`, NOT PRECEDE IT** (fixed 2026-08-19;
+  shipped wrong in v0.3.3 and hit on first real use). `relaunch()` only *dispatches* the respawn —
+  the fresh session id arrives asynchronously, pushed through `XtermPane` → `App` state → the prop →
+  the ref the caller polls. A settle placed before that await therefore runs **concurrently with the
+  spawn**, and the window that actually protects the injection is only what remains once the id
+  lands: near zero on a cold or loaded spawn. The symptom is M12's measured 0 ms mode — the restore
+  typed into CC's input box with the autocomplete open, `\r` not acting as Enter, **never executed**.
+  ⚠️ **The delay was never missing, so a bigger number is not the fix**: under the old ordering a
+  larger value partly buys more spawn-wait rather than more settle. ⚠️ **And do NOT raise the shared
+  `INJECT_SETTLE_MS`** — the auto-resume arm is correct precisely because its timer starts when the
+  pane is *already* spawned (same constant, different starting line). Re-measured 2026-08-19 on
+  CC 2.1.235, 5 cold spawns per arm: 350 ms **NOT-EXECUTED 5/5** (M12 recorded that row as *flaky*
+  1/5 — the cliff moved **up**), 700/1000/1500 ms EXECUTED 5/5, so 1500 ms keeps a 2-3x margin and
+  stays shared. ⚠️ The suite could not see the defect because the settle was a bare inline `sleep()`
+  logging no effect; it is now an injectable `settle` seam whose position the ordered-sequence
+  assertion pins. **Do not collapse it back to an inline sleep** — that re-blinds the assertion.
+- **⚠️ Recycle is ABORTABLE, and the abort's flag semantics are a DECIDED asymmetry — not an
+  accident of where the await sits** (2026-08-19, paydown WP7 / ruling D1). The operation runs up to
+  `RECYCLE_TIMEOUT_MS` (180s) and its caller genuinely unmounts when the operator closes the
+  workspace, so `RecycleInputs.signal` is checked at three points: after the completion wait, between
+  the clean mark and the respawn, and after the settle. **On abort after a successful handoff but
+  before the respawn, the clean mark STAYS.** The handoff really did complete and `.session.md` is on
+  disk, so `--continue` would resume an already-cleanly-handed-off conversation; what the next open
+  *should* do is read that handoff, which a CLEAR flag is exactly what makes it do. ⚠️ There is
+  deliberately still **no `mark_unclean` primitive** — this site is precisely where one looks
+  tempting, and a mutant adding an undo here is caught by a test rather than passing silently.
+  Before this, closing a workspace mid-Recycle cleared the flag and then `relaunch()`
+  (`() => ccPaneRef.current?.relaunch()`) **silently no-opped on the nulled ref**, so the next open
+  announced nothing where it should have offered `--continue`. ⚠️ M15's context-pressure caller fires
+  with **no human watching**, which is what widened this from a rare race to unattended silent flag
+  corruption. The abort is proven **at the caller** in its own file (`recycleAbortOnUnmount.test.ts`),
+  not only in the operation — `recycleMachine.ts` was already correct and already proven when the
+  defect shipped, which is the standing "proves the MACHINE, not its CALLER" trap.
 - **⚠️ A live post-Recycle flag reads `true`, and that is NOT a missed clear** (verified end-to-end
   2026-08-18, M13 WP4 Phase 3). Setting is owned by the spawn path — there is deliberately **no**
   `mark_unclean` command — so Recycle's own respawn re-sets the flag for the now-live session

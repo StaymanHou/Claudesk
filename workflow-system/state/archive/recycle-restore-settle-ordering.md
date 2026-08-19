@@ -1,6 +1,6 @@
 ---
 workflow: task
-state: act (complete)
+state: closed
 created: 2026-08-19
 docs-only: false
 ---
@@ -8,7 +8,8 @@ docs-only: false
 # Task: Recycle's restore settle is spent on spawn-wait — reorder step 6 (+ fold in WP7's abort)
 
 **Workflow:** task
-**State:** act (complete)
+**State:** closed
+**Completed:** 2026-08-19
 **Created:** 2026-08-19
 
 ## Problem Statement
@@ -151,11 +152,133 @@ Doing them apart pays that twice. Binding constraints carried forward verbatim:
       WP7 marked done out-of-order in the paydown WBS with the fold-in rationale.
 
 ## Current Node
-- **Path:** Task > all complete
-- **Active scope:** all complete
+- **Path:** Task > verify (complete)
+- **Active scope:** all complete, ready for close
 - **Blocked:** none
 - **Unvisited:** none
 - **Open discoveries:** none
+
+## Verification Observable
+
+**Observable:** With the ordering fixed, `recycleSession`'s settle elapses strictly AFTER the fresh
+session id resolves and strictly BEFORE the restore is injected — and that ordering is *falsifiable*:
+restoring the shipped (pre-fix) arrangement from a pristine copy must turn the gate red.
+
+⚠️ **Why the observable is stated as a falsifiable ordering rather than "a live Recycle works".** A
+live Recycle is the end-to-end surface and it WAS driven for real (twice, T4) — but it is not a
+*mechanical* observable: it takes ~50s, needs a hand-built workflow fixture, and its pass/fail is
+read out of a terminal pane. Worse, per this task's own findings it is exactly where instruments lie:
+`injectCommand` resolves successfully when the TUI drops the bytes, which is *why the defect shipped
+green*, and two separate live instruments returned false readings during T4. So the live run supplies
+the **execution** evidence (recorded under T4: the fresh session ran the skill to completion, emitting
+S6 then S15) and the gate below supplies the **mechanical, re-runnable, falsifiable** evidence. Neither
+alone is sufficient; the pairing is the verdict.
+
+**Verification command:**
+```
+pnpm verify:auto                      # the whole project gate — must exit 0
+# then the falsification arm, which is the part that makes the above mean anything:
+#   revert step 6 to the shipped order (settle before awaitFreshSessionId) from a pristine copy
+#   -> the ordering test MUST fail; restore -> MUST pass
+```
+
+**Expected result:** `pnpm verify:auto` exits **0** with frontend **2136** and Rust **846** passing;
+and with the pre-fix ordering re-applied, `recycleSession.test.ts` fails on the named ordering
+assertion (`settleAt` not greater than `idAt`) rather than on anything incidental — proving the gate
+detects the specific defect that shipped, not merely that the suite is green.
+
+## Verification Result
+
+**Status:** PASS
+**Date:** 2026-08-19
+**Evidence:**
+- `pnpm verify:auto` → **`GATE EXIT=0`**; `Test Files 166 passed (166)`, `Tests 2136 passed (2136)`;
+  Rust `test result: ok.` lines summing to **846 passed**. Matches the declared expectation exactly
+  (2136 frontend / 846 Rust / exit 0).
+- **Falsification arm (the load-bearing half).** Pristine copy taken from `git show HEAD:` — not from
+  a remembered file — and `diff -q` confirmed the working tree was byte-identical to HEAD first. The
+  shipped pre-fix ordering was then re-applied (settle hoisted above `awaitFreshSessionId()`), the
+  mutation was confirmed to have landed in **executable code at line 479** (`grep -n` on the moved
+  statement), and the suite went red:
+  ```
+  × ⚠️ settles AFTER the fresh session id lands, so the wait is post-spawn
+  AssertionError: expected 3 to be greater than 4
+  Tests  3 failed | 35 passed (38)
+  ```
+  `3 > 4` is the settle at effect-index 3 and the fresh id at 4 — i.e. it failed on the **named
+  ordering assertion**, not on something incidental. Restored from the pristine copy: `git diff
+  --stat` empty, 44/44 green across both recycle test files.
+- **Execution evidence (from T4, recorded there in full):** two consecutive live Recycles in
+  `tmp/scratch/scratch-a`; in both, the freshly-spawned CC session ran `/session-restore` to
+  completion — read the pointer, restored context, stripped the WIP's stale footer, deleted
+  `.session.md`, printed the drive-mode menu, emitted **S6** (run 1) and **S15** (run 2).
+
+**Notes:** PASS on both halves of the observable. The pairing is deliberate and each half covers the
+other's blind spot: the live runs prove the restore genuinely **executed** (the only honest observable
+here — `injectCommand` resolves even when the TUI drops the bytes, which is *why the defect shipped
+green*), while the falsification arm proves the gate would **catch a regression**, mechanically and
+repeatably, without a 50s live run and a hand-built fixture. ⚠️ No sibling bug surfaced, so §4b's
+in-place-fix shortcut was not used and no `[SHORTCUT-…]` entry is owed. ⚠️ The one thing this gate
+does **not** establish is a wall-clock settle duration — both live instruments for that failed during
+T4 and are recorded there as instrument failures, not findings.
+
+## Retrospect
+
+- **What changed in our understanding:**
+  - **A delay can be present, correctly sized, imported-not-copied, documented with its measurement
+    table — and still be in the wrong place.** Every hygiene signal around `RESTORE_SETTLE_MS` was
+    green; the constant was never the defect. The bug lived in what the `await` *before* it was
+    waiting for. Reviewing a timing value tells you nothing about the timing.
+  - **The most valuable finding was about the SUITE, not the code.** The ordered-sequence assertion
+    pinned five effects in order and would have caught almost any reordering — except this one,
+    because `sleep()` logged nothing. **A step that emits no observable is invisible to an
+    ordering assertion no matter how strict the assertion is.** The generalizable form: when
+    asserting an order, first ask which steps can actually *appear* in the log.
+  - **Two instruments failed in the same run, in opposite directions, and both would have produced a
+    confident wrong answer.** One patched `__TAURI_INTERNALS__.invoke` — a property that does not
+    exist on that object (it exposes only `plugins`), so it reported "no injection" for a run whose
+    injection demonstrably executed. The other matched the *previous* run's scrollback and reported
+    a 0 ms settle. ⚠️ **Neither failure was detectable from its own output**; both were caught only
+    by cross-checking against an independent observable. This is the fifth-and-sixth instance of the
+    cycle's standing lesson (an instrument that cannot observe its subject reports absence
+    indistinguishably from real absence) and the first time TWO fired in one verification.
+  - **The `?raw` caller-guard needed the mutants run individually to be worth anything.** All five
+    arms killed exactly one test each — which is the evidence that no arm is redundant *and* none is
+    a false positive. A composite bypass would have said "the guard bites" while hiding whichever
+    arm did nothing.
+
+- **Assumptions that held:**
+  - The handoff's diagnosis was correct, including its insistence that the delay was **not** missing
+    and that raising the number would be the wrong fix. Re-reading the code confirmed it rather than
+    correcting it — the first WP in this sweep where the filing was right on the first pass.
+  - Folding WP7 in was the right call: it edited `markSessionClean` and `relaunch()` immediately
+    above the lines the ordering fix rewrote, so it genuinely was one pass over one region.
+  - WP7's own guess at the open ordering question ("arguably yes — the handoff really did complete")
+    was right; it became a *stated* decision with a mutation-proof against reversal.
+  - `pnpm verify:auto` as a single gate did its job — one command, no hand-assembled list.
+
+- **Assumptions that were wrong:**
+  - **Expected the live run to yield a clean wall-clock settle measurement.** It did not, twice, for
+    instrument reasons. Reported as instrument failure rather than dressed up as `gapMs: 0`.
+  - **Assumed `scratch-a` was a usable fixture as-is.** It has no `workflow-system/state/`, so
+    `/session-handoff` had nothing to write and the composite would have correctly FAILED — the exact
+    "fixture-blocked" shape that was **misdiagnosed** at M13 WP3. Building a real workflow item first
+    was the difference between a verified pass and a second misdiagnosis.
+  - **Nearly asserted a closure I had not verified.** While rewriting the m13-wp3 stub I was about to
+    write that the late-subscription-disposal MAJOR closed at paydown WP4. A test for it exists, but
+    its `Status:` still reads `pending` and confirming the test satisfies the finding was outside
+    scope. Caught it before writing — the stub now states the fact instead.
+  - The runtime registry's frontend baseline (2118) was **stale**; HEAD read 2122. Re-derived with
+    `git stash -u` rather than trusting the entry — the same hand-maintained-figure-as-drift-channel
+    trap banked at M13's close, hit again one WP later.
+
+- **Approach delta:** Plan followed as written, with two additions the plan did not anticipate.
+  (1) **The seam had to be installed with the OLD ordering first**, so the pre-fix failure was
+  `expected 3 to be greater than 4` (a genuine ordering signal) rather than `settleAt === -1` (which
+  only proves the seam is missing — an under-determined failure that would have "passed" a mutation
+  test for the wrong reason). (2) **A dedicated caller-side guard file** was added; the plan said
+  "prove the abort at the caller" without settling where, and a separate file is what keeps the
+  operation's proof and the caller's obligation from being confused for each other.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

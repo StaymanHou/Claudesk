@@ -10,9 +10,18 @@ reported green while checking nothing**, found by mutation rather than by review
 is always the same shape and it is the dangerous one: *false reassurance*. A missing guard is
 visible. A guard that passes for the wrong reason reads as coverage.
 
+⚠️ **Entries 1–10 are source-text guards; entry 11 is a BEHAVIORAL assertion** (an ordered
+effect-log) that failed the same way for a different reason — the step that was wrong could not
+appear in what the assertion asserted over. It lives here because the discipline is identical and a
+reader looking for "how did a green suite miss this?" should find both in one place.
+
 > **The one-line test, applied before trusting any source-text guard:**
 > *Could this assertion still pass if the code it names were deleted?*
 > If you cannot answer from the assertion alone, mutate the code and watch it fail.
+>
+> **Its companion, for a behavioral/ordering assertion (entry 11):**
+> *Which steps in this sequence can actually APPEAR in what I am asserting over?*
+> A step that emits no observable is outside the guard however strictly the guard is written.
 
 ---
 
@@ -174,6 +183,50 @@ wrong file. If the answer names a concrete edit to a concrete symbol, it is a gu
 ⚠️ **The failure mode is not a false pass — it is misplaced confidence.** The scope decision looks
 protected, so nobody re-states it where planners look, and the guard is deleted (correctly) the first
 time it obstructs an intentional change. Both halves of the protection are then gone at once.
+
+
+## 11. An ordering assertion is blind to any step that emits NO observable
+
+Entries 1–10 are about *source-text* guards. This one is the **behavioral-assertion** analogue, and
+it is worse in one specific way: the assertion can be strict, exhaustive, and correct about every
+step it can see, while being structurally incapable of seeing the step that is wrong.
+
+Measured instance (`SURFACE-2026-08-18-RECYCLE-TYPES-SESSION-RESTORE-BEFORE-THE-FRESH-TUI-IS-READY`,
+fixed 2026-08-19). `recycleSession.test.ts` asserted the full recycle sequence as an **ordered
+array** — five effects, each position deliberate, with a comment explaining why each mattered:
+
+```
+expect(effects).toEqual([
+  `inject:${HANDOFF_COMMAND}`, "markClean:recycle-session", "relaunch",
+  "awaitFreshSessionId", `inject:${RESTORE_COMMAND}`,
+]);
+```
+
+Every step in that list pushes an entry into `effects`. The **settle did not** — it was a bare
+`await sleep(ms)`. So the settle's position was unobservable, it sat on the wrong side of
+`awaitFreshSessionId()` for the whole of v0.3.3, the restore was typed into a TUI that was not yet
+reading keystrokes, and **the suite stayed green the entire time.** The operator found it by using
+the feature.
+
+**Why the standing test does not catch this.** *"Could this still pass if the code it names were
+deleted?"* asks about the code the assertion **names**. Here the assertion named five things and all
+five were correct; the defect was in a sixth thing it did not name and could not have named. The
+question to add is: **which steps in this sequence can actually APPEAR in what I am asserting over?**
+Anything that cannot appear is outside the guard regardless of how the guard is written.
+
+**The fix is a seam, not a stricter assertion.** Give the invisible step an injectable form that
+records itself — here, `RecycleInputs.settle?: (ms) => Promise<void>`, defaulting to the real
+`sleep`, which tests replace with one that pushes `"settle"` into the effect log. The ordering then
+becomes an ordinary asserted position. ⚠️ **Do not collapse such a seam back to an inline call to
+save a line** — that re-blinds the assertion, and the re-blinding is invisible.
+
+**Prove it the same way as any guard, but mind the under-determined failure.** Installing the seam
+and *then* reordering is the wrong sequence: with no seam, the pre-fix run fails with
+`settleAt === -1` ("the seam is missing"), which is **not** evidence of a wrong order and would
+"pass" a mutation test for the wrong reason. Install the seam **first, leaving the old order in
+place**, and confirm the failure reads as a genuine ordering violation (it read `expected 3 to be
+greater than 4` — the settle at index 3, the awaited id at 4). Then fix, then re-mutate from a
+pristine copy.
 
 
 ## Comment budget — what belongs at the code, and what does not
