@@ -181,7 +181,9 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ## Current Milestone
 
-**None — M13 closed 2026-08-18.** Next is **M14 (polish + OSS release)** or **M15 (workflow supervisor)**, in an order that is a **deliberate operator call** (see `## Next Milestone`). Start with `/product-finalize` if the M13 cycle has not been archived yet.
+**Milestone 13.5 — QoL polish bucket.** Inserted 2026-08-19 at the clean boundary after the backlog-paydown sweep closed 8/8; decomposed in `workflow-system/product/wbs.md` (4 WPs). The fourth bucket of its kind (M6 · M10.5 · M11.5, all closed at 4 WPs). **WP1 (window geometry persistence) is next.**
+
+⚠️ **ORDER SETTLED — M13.5 → M15 → M14 — which REVERSES `roadmap.md`'s own M14-first lean.** Operator chose dogfooding-first with the counter-argument on the table; **do not "correct" it back.** The OSS release is therefore last. Full reasoning + the cheap-reversal note: `roadmap.md` → Revision 2026-08-19.
 
 **⚠️ Milestone 13 (Skill orchestration) COMPLETE — and GROUP C CLOSED with it: all six vision success metrics are met.** All 4 WPs shipped (probe → skill buttons + the 5th guard arm → Recycle as a callable operation → exit verify). Common workflow operations are now clicks. As-built detail lives in `arch/` **by subsystem**; the WBS + probe outcomes archive at `workflow-system/product/archive/<cycle-name>/`.
 
@@ -211,7 +213,7 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ⚠️ **The M12 properties that bind M13 are NOT repeated here** — they are in `## Current Milestone` above ("Four things M13 must not re-derive") and in full in `arch/session-resumption.md`.
 
-**Execution order from here:** **M13** (skill orchestration, incl. Recycle) → then **M14** (polish + OSS release) and **M15** (workflow supervisor) in an order that is **deliberately undecided** — M15 is a dogfooding win whose value to a stranger is unproven, which argues for shipping M14 first; operator's call. Numbering does not match execution order for M11/M11.5 — M11.5 ran *before* M11 by design; no catch-up is owed. ⚠️ **When M14 is next touched, correct its "default CLI args for `claude`" Settings line** — M11.5 consumed most of it, and it still misstates PiP (shipped M5) + permission-mode (shipped M6) as future work.
+**Execution order from here (SETTLED 2026-08-19):** **M13.5** (QoL bucket) → **M15** (workflow supervisor) → **M14** (polish + OSS release). ⚠️ This reverses the earlier "M14 first" lean by operator decision — see `## Current Milestone`. Numbering does not match execution order for M11/M11.5 — M11.5 ran *before* M11 by design; no catch-up is owed. ⚠️ **When M14 is next touched, correct its "default CLI args for `claude`" Settings line** — M11.5 consumed most of it, and it still misstates PiP (shipped M5) + permission-mode (shipped M6) as future work.
 
 **Latest release: v0.3.3** (`/release` 2026-08-18) — M12's tail (WP5 + cycle close) + the 11-WP backlog-paydown sweep + all of **M13**, published to GitHub (4 assets) + Homebrew tap; updater endpoint verified resolving with a verbatim signature. Trust anchor unchanged since v0.2.9 (key `774E2E8429FDF78A`), so existing installs self-update. ⚠️ **Do NOT read a stale "latest" here as authority — this line went two releases stale once** (it read v0.3.0 while v0.3.2 was live, and claimed M12 unreleased when v0.3.2 carried most of it). **`git tag --sort=-v:refname | head -1` is the authority**; `main` runs ahead of the last tag by design and the operator pushes at release time only. Releases via the `/release` skill.
 
