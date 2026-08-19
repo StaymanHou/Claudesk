@@ -166,9 +166,17 @@ export function monthMax(dayTotals: Map<string, number>): number {
 }
 
 // ── Month → custom-query bounds ─────────────────────────────────────────────
-// Month is a `{kind:"custom", start_ms, end_ms}` query over the month's LOCAL-midnight
-// span. start = first-day 00:00 local; end = last-day 23:59:59.999 local (the inclusive
-// end of the month, matching the backend's inclusive `resolve_window` bounds).
+// Month is a `{kind:"custom", start_ms, end_ms}` query over the month's span:
+// start = first-day 00:00 local; end = last-day **23:59:59.999** local.
+//
+// ⚠️ `end_ms` IS INCLUSIVE-END, NEVER A MIDNIGHT BOUNDARY — and that is load-bearing, not
+// stylistic. The backend reads rows half-open (`ts < end`) but lists days INCLUSIVE, so an
+// `end_ms` sitting exactly on midnight would append a trailing day no row can fall in. The
+// backend now normalizes that case (`midnight_aware_end_day`, paydown WP6), but every producer
+// here should keep sending the inclusive end so the two layers agree without correction.
+// (This header previously said "the month's LOCAL-midnight span", which described a convention
+// the code does not use and made the backend arm read as live-broken. The code was always
+// `23:59:59.999`.)
 
 /** Local-midnight epoch-ms bounds for an ISO month → `{start_ms, end_ms}`. `end_ms` is
  *  the last millisecond of the last day (local), so the custom range covers the whole

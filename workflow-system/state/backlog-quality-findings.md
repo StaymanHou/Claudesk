@@ -180,14 +180,33 @@ MINOR are backlogged.*
   punctuation (`## Probe outcomes` / `## Probe outcomes!`) emit the same `id`, so an anchor link
   reaches only the first. GitHub appends `-1`, `-2`; the comment claiming it "mirrors GitHub's
   algorithm" overstates by one rule.
-- **Context:** The corpus most likely to collide is exactly this panel's target — long WBS/WIP files
-  with repeated section names (`## Tasks`, `## Probe outcomes` per WP).
-- **Suggested action:** Either append a `-N` suffix on repeat (needs a per-render counter threaded
-  through the `components` override) or narrow the comment to say collisions are unhandled. **The
-  comment fix is not a cop-out** — an accurate limitation beats an overstated claim, which is this
-  WP's own recurring lesson.
-- **Priority:** low
-- **Status:** pending
+- **⚠️ Context — MEASURED 2026-08-19 (paydown WP6). The original context claim was REFUTED.** It read:
+  *"The corpus most likely to collide is exactly this panel's target — long WBS/WIP files with
+  repeated section names (`## Tasks`, `## Probe outcomes` per WP)."* Scanned every `.md` the viewer
+  can open (`workflow-system/`, `docs/`, `CHANGELOG.md`, `README.md`) — **197 files**:
+  - **1 file** has any colliding slugs: `workflow-system/state/archive/m12-wp3-autofire-and-announce.md`
+  - **4 colliding slugs** there (`gate`, `hygiene`, `session-hygiene`,
+    `what-was-deliberately-not-codified`) — ⚠️ **none is `tasks` or `context`**, the two the filing named
+  - **3 `](#...)` occurrences in the whole corpus, and all 3 are prose *examples* of the syntax**
+    inside WBS/probe text — not navigable links
+  - **0 anchor links target a colliding slug**, so the defect has no reachable consumer today
+- **⚠️ And the fix is not the small change the filing implies.** `headingSlug` is a pure function of
+  one string; de-duplication needs **per-document counter state**. Its only production caller is
+  `DocMarkdown.tsx`'s `HEADING_COMPONENTS`, which is **module-scope deliberately** — *"so the object
+  identity is stable across renders and does not force the renderer to rebuild its component map on
+  every keystroke-driven re-render."* A counter means reversing that documented decision or threading
+  a `useMemo`'d per-doc map.
+- **Resolved half:** the over-claiming comment was narrowed at paydown WP2, and WP6 appended the
+  measurement to it. ⚠️ Note the finding itself proposed this as a legitimate close — *"the comment fix
+  is not a cop-out"*.
+- **Suggested action (remaining):** **Leave the behavior as-is.** Revisit only if one of these becomes
+  true — and check, do not assume: (a) a doc gains a *real* in-doc anchor link that targets a colliding
+  slug, (b) a heading collision appears on a common slug (`tasks` / `context` / `summary`) in a
+  non-archived doc, or (c) `HEADING_COMPONENTS` stops being module-scope for an unrelated reason, making
+  the counter nearly free. Re-run the corpus scan before re-scoring — this entry's numbers are true
+  as-of 2026-08-19 (`[[backlog-finding-carries-an-implicit-as-of-date]]`).
+- **Priority:** low (latent; no reachable consumer measured)
+- **Status:** open — behavior deliberately unchanged, measured latent at paydown WP6 (2026-08-19)
 
 # m11-wp2-docs-panel-plumbing — 2026-08-01
 

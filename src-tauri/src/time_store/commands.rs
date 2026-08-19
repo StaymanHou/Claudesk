@@ -732,6 +732,26 @@ enum WindowMode {
 /// `day` → today's [local-midnight, next-local-midnight); `week` → the ISO week
 /// (Mon 00:00 local .. next Mon 00:00 local) containing today; `custom` → the explicit
 /// span (mapped to the day-range builder over the local days it touches).
+/// The last local day a half-open span `[start_ms, end_ms)` actually covers.
+///
+/// ⚠️ Exists so the exact-midnight rule has ONE home and a name, rather than an inline expression
+/// a future edit can silently re-derive differently. See the call site in `resolve_window`'s
+/// `Custom` arm for why the rule is needed at all (paydown WP6).
+///
+/// A zero-width span (`end_ms == start_ms`) keeps its own day rather than inverting the range:
+/// `build_range` returns `Err` when `end_day < start_day`, so underflowing here would turn a
+/// degenerate query into a hard error instead of an empty day.
+fn midnight_aware_end_day(start_ms: i64, end_ms: i64) -> chrono::NaiveDate {
+    let end_day = local_date_of(end_ms);
+    if end_ms > start_ms && end_ms == local_midnight_ms(end_day) {
+        // Exactly on midnight: the half-open query excludes this instant, so the span really
+        // ends on the previous day.
+        end_day - chrono::Duration::days(1)
+    } else {
+        end_day
+    }
+}
+
 fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
     use chrono::{Duration, Local};
     let today = Local::now().date_naive();
@@ -766,7 +786,24 @@ fn resolve_window(window: &QueryWindow) -> (i64, i64, WindowMode) {
         QueryWindow::Custom { start_ms, end_ms } => {
             // Map the explicit span to the local days it touches (inclusive).
             let start_day = local_date_of(*start_ms);
-            let end_day = local_date_of(*end_ms);
+            // ⚠️ AN `end_ms` EXACTLY ON LOCAL MIDNIGHT BELONGS TO THE PREVIOUS DAY HERE.
+            //
+            // The two halves of this window disagree about inclusivity by design: rows are read
+            // half-open (`query_window` filters `ts < end`), but `build_range` builds its day list
+            // INCLUSIVE (`day_count = (end_day - start_day) + 1`). So deriving `end_day` straight
+            // from a midnight `end_ms` appends a day that no row can ever fall in — an empty
+            // trailing column, guaranteed, not merely likely. (Paydown WP6.)
+            //
+            // ⚠️ Only the exact-midnight instant is adjusted. `23:59:59.999` — the convention every
+            // current frontend producer actually sends (`rangeMath.ts`, `monthMath.ts`) — is INSIDE
+            // its own day and must keep it. A blanket "subtract a day" would silently drop a real
+            // day of data, which is why both directions are pinned by tests.
+            //
+            // ⚠️ Latent, not live, when written (2026-08-19): no current caller sends midnight. It
+            // is handled because `QueryWindow::Custom` is a serde IPC boundary — the "always send
+            // an inclusive end" rule exists only as an unwritten convention spread across three
+            // frontend files, so the next caller inherits the bug rather than the convention.
+            let end_day = midnight_aware_end_day(*start_ms, *end_ms);
             (*start_ms, *end_ms, WindowMode::Range { start_day, end_day })
         }
         QueryWindow::Metrics { window } => {
@@ -1793,6 +1830,96 @@ mod tests {
         assert_eq!(start, 1_700_000_000_000);
         assert_eq!(end, 1_700_100_000_000);
         assert!(matches!(mode, WindowMode::Range { .. }));
+    }
+
+    // ── Paydown WP6 — the Custom window's midnight boundary ─────────────────────────
+    //
+    // ⚠️ Rows are read half-open (`query_window` filters `ts < end`), but `build_range` builds
+    // its day list INCLUSIVE (`day_count = (end_day - start_day) + 1`). So if `end_day` is
+    // derived from an `end_ms` sitting exactly ON local midnight, the resulting trailing day
+    // is empty BY CONSTRUCTION — no row can ever fall inside it.
+    //
+    // ⚠️ Latent, not live, as of 2026-08-19: every frontend producer uses the inclusive-end
+    // convention `23:59:59.999` (`rangeMath.ts:97`, `monthMath.ts:183`, `monthMath.ts:198`),
+    // so none sends midnight today. It is pinned anyway because `QueryWindow::Custom` is a
+    // serde-deserialized IPC boundary — the "never send a midnight end" rule lives only as an
+    // unwritten convention spread across three frontend files, and a fourth caller (or M15's
+    // programmatic one) would inherit a silently wrong trailing day.
+
+    #[test]
+    fn resolve_window_custom_end_on_local_midnight_excludes_the_empty_trailing_day() {
+        use chrono::NaiveDate;
+        let d1 = NaiveDate::from_ymd_opt(2026, 3, 10).unwrap();
+        let d2 = NaiveDate::from_ymd_opt(2026, 3, 12).unwrap();
+        // `end_ms` EXACTLY on d2's local midnight: the half-open row query excludes that
+        // instant, so d2 contributes nothing and must not appear as a day.
+        let (_, _, mode) = resolve_window(&QueryWindow::Custom {
+            start_ms: local_midnight_ms(d1),
+            end_ms: local_midnight_ms(d2),
+        });
+        match mode {
+            WindowMode::Range { start_day, end_day } => {
+                assert_eq!(start_day, d1, "start day is unaffected");
+                assert_eq!(
+                    end_day,
+                    d1 + chrono::Duration::days(1),
+                    "an end_ms on d2's midnight must end the range at d2-1, not d2 — \
+                     otherwise build_range emits a trailing day no row can fall in"
+                );
+            }
+            _ => panic!("custom → Range mode"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_custom_end_just_before_midnight_still_includes_that_day() {
+        use chrono::NaiveDate;
+        let d1 = NaiveDate::from_ymd_opt(2026, 3, 10).unwrap();
+        let d2 = NaiveDate::from_ymd_opt(2026, 3, 12).unwrap();
+        // ⚠️ THE OTHER DIRECTION, and the one that makes the fix falsifiable rather than a
+        // blanket decrement: the real frontend convention is `23:59:59.999` — i.e. one ms
+        // BEFORE the following midnight, which is the last instant of the day before. That
+        // day HAS rows and must still be listed. A fix that always subtracts a day would pass
+        // the test above and silently drop a real day here.
+        let last_full_day = d2 - chrono::Duration::days(1); // 2026-03-11
+        let (_, _, mode) = resolve_window(&QueryWindow::Custom {
+            start_ms: local_midnight_ms(d1),
+            end_ms: local_midnight_ms(d2) - 1, // 2026-03-11 23:59:59.999 local
+        });
+        match mode {
+            WindowMode::Range { start_day, end_day } => {
+                assert_eq!(start_day, d1);
+                assert_eq!(
+                    end_day, last_full_day,
+                    "23:59:59.999 is inside its own day, so that day must be the end day"
+                );
+            }
+            _ => panic!("custom → Range mode"),
+        }
+    }
+
+    #[test]
+    fn resolve_window_custom_degenerate_single_instant_keeps_its_own_day() {
+        use chrono::NaiveDate;
+        let d = NaiveDate::from_ymd_opt(2026, 3, 10).unwrap();
+        // ⚠️ Guards the fix against underflowing a zero-width span into an inverted range:
+        // `build_range` REJECTS `end_day < start_day` with an Err, so a naive decrement here
+        // would turn a degenerate query into a hard error instead of an empty day.
+        let midnight = local_midnight_ms(d);
+        let (_, _, mode) = resolve_window(&QueryWindow::Custom {
+            start_ms: midnight,
+            end_ms: midnight,
+        });
+        match mode {
+            WindowMode::Range { start_day, end_day } => {
+                assert_eq!(start_day, d);
+                assert_eq!(
+                    end_day, d,
+                    "a zero-width span must not invert the range (build_range Errs on that)"
+                );
+            }
+            _ => panic!("custom → Range mode"),
+        }
     }
 
     #[test]

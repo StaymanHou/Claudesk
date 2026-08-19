@@ -110,10 +110,18 @@ export function anchorSelector(href: string): string {
  *
  * ⚠️ **The one rule NOT mirrored: GitHub disambiguates duplicate slugs with a `-1`/`-2`
  * suffix; this does not.** Two headings differing only in punctuation therefore emit the
- * same `id`, and an anchor to either reaches the first. That matters here because the
- * target corpus is precisely the colliding case — WBS/WIP docs with repeated `## Tasks` /
- * `## Context` headings. The behavior is filed as paydown WP6; this comment previously
- * claimed an unqualified mirror, which overstated by exactly this rule.
+ * same `id`, and an anchor to either reaches the first.
+ *
+ * ⚠️ **MEASURED 2026-08-19 (paydown WP6) — this is latent, and the earlier claim that "the
+ * target corpus is precisely the colliding case" was WRONG.** Across all **197** docs the
+ * viewer can open: **1 file** has colliding slugs (4 of them, in one archived WIP), **0**
+ * in-doc anchor links target a collision, and the corpus's only 3 `](#...)` occurrences are
+ * prose *examples* of the syntax. Notably none of the collisions is `tasks` or `context` —
+ * the two the original filing named. Adding the suffix also is NOT the six-line change it
+ * looks like: this is a pure function of one string, so collision handling needs per-document
+ * counter state, and its only caller (`DocMarkdown`'s `HEADING_COMPONENTS`) is module-scope
+ * *on purpose* for render-identity stability. Left as-is deliberately; re-filed with the
+ * numbers and with what would change the answer.
  *
  * Deliberately NOT a new dependency (`rehype-slug` would do this): it is six lines, and
  * WP1's verdict makes adding rehype plugins a decision to weigh rather than a reflex.

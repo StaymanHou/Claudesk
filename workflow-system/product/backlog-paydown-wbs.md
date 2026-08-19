@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-08-18
 created: 2026-08-18
-status: in-progress (WP1-WP5 done 2026-08-18; WP7 done 2026-08-19 out of order, folded into the Recycle ordering fix; WP6 next)
+status: in-progress (WP1-WP7 done; WP8 is the only one left)
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -255,6 +255,25 @@ Co-located with WP4 (same files/discipline). All doc-or-export moves; no behavio
 **Resolves 5 SURFACEs. Serves T5/T8.**
 
 ## WP6 — Boundary / off-by-one edges  `[impact: Med · effort: S · risk: Low]`
+
+> ✅ **DONE 2026-08-19 — one item FIXED, one item REFUTED-AND-RE-FILED (operator decision).**
+> ⚠️ **Both items were LATENT, not live** — established by measurement, not assumed.
+> - **Custom-window midnight extra day: FIXED + pinned.** Real off-by-one (`midnight_aware_end_day`,
+>   `time_store/commands.rs`). Latent only because all three FE producers happen to send
+>   `23:59:59.999`; fixed anyway because `QueryWindow::Custom` is a serde IPC boundary where the
+>   convention was unenforced. ⚠️ **Three tests, because the naive fix is worse than the bug** — a
+>   blanket decrement passes the midnight case while silently dropping a real day, and inverts a
+>   zero-width span into a `build_range` `Err`. All 3 mutants run individually, each killing a
+>   different test. Rust 846 → 849.
+> - **⚠️ `headingSlug` collision suffix: NOT BUILT — this WP's own corpus claim was REFUTED.** The
+>   filing said *"the target corpus IS the collision case — WBS/WIP docs with repeated `## Tasks` /
+>   `## Context`"*. Measured across all **197** docs the viewer opens: **1** colliding file, **4**
+>   colliding slugs (**none** of them `tasks`/`context`), **3** total `](#...)` occurrences — **all
+>   prose examples** — and **0** links targeting a collision. Also not a six-line fix: it needs
+>   per-document counter state, and its only caller is module-scope *by documented decision*.
+>   Re-filed with the numbers + the 3 conditions that would change the answer.
+> **Lesson for WP8:** three of the seven WPs so far had filings that were wrong, and every correction
+> came from reading/measuring, never from the summary line.
 
 Two real (if small) correctness edges, both currently untested at the boundary.
 
