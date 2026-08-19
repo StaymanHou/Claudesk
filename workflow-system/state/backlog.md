@@ -1,5 +1,39 @@
 # Backlog
 
+## SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED
+- **Source:** backlog-paydown sweep 2026-08-19 (carried out of `backlog-paydown-wbs.md` at sweep
+  close, so it survives that file's deletion — it was the sweep's only surviving obligation)
+- **Target level:** product:wbs (a dedicated convention pass, NOT a code-quality trim)
+- **Type:** tech-debt (documentary, with a guard requirement)
+- **Summary:** The two big documentary themes — **T1 rationale duplication** and **T2 comment
+  density** — were deliberately **NOT** swept as WPs in the 2026-08-18/19 paydown. They need a
+  **dedicated convention pass**, and its shape is already decided: **(a)** designate ONE authority
+  per rule, **(b)** reduce every other site to a pointer, **(c)** ⚠️ **GUARD it so it cannot drift
+  back.**
+- **⚠️ Context — why this is not "just trim some comments":** T2 has been flagged in **FOUR
+  consecutive reviews of the same file**, and per-WP trimming was **measured as not converging** —
+  each review trimmed a little and moved on, which is exactly how a finding survives four reviews.
+  The reviewer's own conclusion was that it wants a **density budget**, not another trim. ⚠️ **A
+  pass that does (a) and (b) without (c) will be re-flagged a fifth time.** M13 WP4's partial
+  payment is the evidence for the shape: the *guard-backed single-authority* approach is the one
+  that actually held (the latency figures now live in one doc comment with a guard forbidding
+  restatement, plus an anti-vacuity companion blocking the wrong-direction "fix" of deleting the
+  measurement).
+- **In scope for the pass:** the remaining half of `m13-wp3`'s comment-density MAJOR — the *"Recycle
+  is not a `SKILL_BUTTONS` member"* rationale restated at **5 sites**, plus raw density measured at
+  **52% / 71% / 70%** in `recycleSession.ts` / `recycleMachine.ts` / `recycleButton.ts`. ⚠️ It is
+  **not** WP2/WP4 work even though those WPs touched the same files — they narrowed *claims* and
+  fixed *tests*; this is a density/duplication convention.
+- **Already paid (do not re-scope these):** the `validate_frontend_root` `pub(crate)` dedup was
+  pulled into paydown WP1 as a pure win (now **compile-enforced**, `E0255`); the latency-figure half
+  of the duplication MAJOR closed at M13 WP4.
+- **Suggested action:** run it as its own small WBS/feature, not a sweep item. Pick the authority
+  per rule first (that is the design decision), and write the guard **before** deleting sites, so
+  the deletion is verified rather than trusted.
+- **Priority:** low-medium (documentary; no correctness impact, but it is this project's most
+  persistently re-flagged finding)
+- **Status:** open — deferred by decision, shape recorded
+
 ## Code-quality findings — m13-wp4-milestone-exit-verify (2026-08-18)
 - **Pointer:** **2 MINOR** (documentary only) from WP4's code-quality review — the WIP file's phase
   sections interleave out of execution order, and `arch/workflow-gate.md` mirrors
@@ -216,16 +250,6 @@
 - **Context:** Found at code review — the `CleanExitRoute::CcExitCommand` variant existed in the Rust enum, the TS union, and round-tripped in two test suites, but **no caller ever sent it**. The variant was **REMOVED** in refactor rather than wired, because wiring it is new functionality gated on a product question, and a dead enum member reads as a covered case (it is precisely what made the gap invisible — the exhaustiveness test proves the *set*, never that each member has a caller). ⚠️ The WP2 verify-self log wrongly asserted `/exit` "shares the clearing path proven above"; that sentence has been corrected in the WIP.
 - **Suggested action:** Decide the product question first: **is a typed `/exit` a clean exit?** It is genuinely ambiguous — the user deliberately ended the session (argues clean), but the workspace remains open and Relaunch starts a NEW session that should itself be flagged unclean (argues the flag is simply not yet decidable at that moment). Three viable answers: (a) treat `/exit` as clean and clear on the `ended` transition; (b) leave as-is — the flag resolves correctly on whatever close follows; (c) clear on `ended` but re-set on Relaunch. **(b) is the current behavior and is defensible**, which is why this is not a bug fix.
 - **Priority:** medium (no data loss; worst case is one unasked-for `/resume` offer, which WP3's announce makes visible before it fires)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
-
-## SURFACE-2026-08-03-PROJECTS-JSON-WRITERS-ARE-WHOLE-FILE-RMW
-- **Source:** feature:build (M12 WP1 Phase 1 — Verdict (a))
-- **Target level:** product:arch
-- **Type:** tech-debt (latent correctness hazard)
-- **Summary:** Every writer of `projects.json` is a **read-modify-write of the whole `Vec<Project>`** (`config_store/mod.rs:115-122` `write_projects`; callers `add_or_touch`, `set_default_model`, `remove`, `prune_missing`). Two writers racing on the same list **silently discard each other's field** — whichever `rename`s last wins entirely. There is no per-record write path and no lock serializing writers.
-- **Context:** Found while choosing the M12 unclean-flag store. It is the **disqualifying reason** candidate 1 (a field on `Project`) was rejected: the flag's set-on-open would be **co-triggered by the same user action** as `add_or_touch`'s recency stamp — `ProjectPicker.tsx:145-146` does `await invoke("record_open")` then `onOpen(path)` — so one click issues two whole-file RMWs. Modeled both directions (`scratchpad/wp1/measure_lost_update.py`): losing the flag silently disables auto-resume; losing the stamp mis-sorts the picker. **M12 side-steps it entirely** (the flag went to its own store), so this is **not** a live M12 defect. What remains open is the general hazard: `set_default_model` and `add_or_touch` are *already* both reachable from a project-open flow, so a lost `default_model` write is possible today in principle — unmeasured, and likely rare because the model cell is edited outside the open path.
-- **Suggested action:** Decide whether to (a) accept it as tolerable given the low real-world collision rate and **document the constraint** at `write_projects` so nobody adds a co-triggered writer, (b) serialize writers behind a single in-process mutex, or (c) add a per-field write path. ⚠️ At minimum do (a) — the next person to add a per-project field will otherwise reach for `Project` exactly as M12 nearly did. Any *new* per-project field written during workspace open should be treated as unsafe on `projects.json` until this is settled.
-- **Priority:** medium (no confirmed live defect; the cost is that the next per-project field lands on a trap)
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
 
 ## Code-quality findings — m12-wp1-probe-flag-store-and-announce (2026-08-03)

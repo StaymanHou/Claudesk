@@ -201,9 +201,10 @@ pub fn read_pip_layout(data_dir: &Path) -> Result<PipLayout, ConfigError> {
 /// Persist the chosen PiP layout, preserving any other settings fields (read-modify-
 /// write so a future field isn't clobbered). The single writer `pip_set_layout` calls.
 pub fn write_pip_layout(data_dir: &Path, layout: PipLayout) -> Result<(), ConfigError> {
-    let mut settings = read_settings(data_dir)?;
-    settings.pip_layout = Some(layout);
-    write_settings(data_dir, &settings)
+    super::update_settings(data_dir, |settings| {
+        settings.pip_layout = Some(layout);
+        Ok(())
+    })
 }
 
 /// Read the PiP mode, defaulting **`Auto`** when unset / first run — the operator-benefit
@@ -216,9 +217,10 @@ pub fn read_pip_mode(data_dir: &Path) -> Result<PipMode, ConfigError> {
 /// Persist the PiP mode, preserving other fields (read-modify-write). The single writer
 /// `pip_set_mode` calls.
 pub fn write_pip_mode(data_dir: &Path, mode: PipMode) -> Result<(), ConfigError> {
-    let mut settings = read_settings(data_dir)?;
-    settings.pip_mode = Some(mode);
-    write_settings(data_dir, &settings)
+    super::update_settings(data_dir, |settings| {
+        settings.pip_mode = Some(mode);
+        Ok(())
+    })
 }
 
 /// Read the CC permission mode, defaulting [`CcPermissionMode::Default`] when unset /
@@ -257,10 +259,11 @@ pub fn write_cc_permission_mode(
     data_dir: &Path,
     mode: CcPermissionMode,
 ) -> Result<(), ConfigError> {
-    let mut settings = read_settings(data_dir)?;
-    settings.cc_permission_mode = Some(mode);
-    settings.cc_yolo = None; // the new field is authoritative; drop the legacy boolean
-    write_settings(data_dir, &settings)
+    super::update_settings(data_dir, |settings| {
+        settings.cc_permission_mode = Some(mode);
+        settings.cc_yolo = None; // the new field is authoritative; drop the legacy boolean
+        Ok(())
+    })
 }
 
 /// Read the time-analytics tracking toggle, defaulting **`false`** when unset / first run
@@ -276,9 +279,10 @@ pub fn read_time_tracking_enabled(data_dir: &Path) -> Result<bool, ConfigError> 
 /// Persist the tracking toggle, preserving other fields (read-modify-write). The single
 /// writer `time_set_tracking_enabled` calls. (Mirror of `write_pip_mode`.)
 pub fn write_time_tracking_enabled(data_dir: &Path, enabled: bool) -> Result<(), ConfigError> {
-    let mut settings = read_settings(data_dir)?;
-    settings.time_tracking_enabled = Some(enabled);
-    write_settings(data_dir, &settings)
+    super::update_settings(data_dir, |settings| {
+        settings.time_tracking_enabled = Some(enabled);
+        Ok(())
+    })
 }
 
 /// Read the workflow-features gate, defaulting **`false`** when unset / first run (M10.9
@@ -297,9 +301,10 @@ pub fn read_workflow_features_enabled(data_dir: &Path) -> Result<bool, ConfigErr
 /// `settings.json` — never to `~/.claude/` (the milestone invariant).
 /// (Mirror of `write_time_tracking_enabled`.)
 pub fn write_workflow_features_enabled(data_dir: &Path, enabled: bool) -> Result<(), ConfigError> {
-    let mut settings = read_settings(data_dir)?;
-    settings.workflow_features_enabled = Some(enabled);
-    write_settings(data_dir, &settings)
+    super::update_settings(data_dir, |settings| {
+        settings.workflow_features_enabled = Some(enabled);
+        Ok(())
+    })
 }
 
 /// Read the update-notification toggle, defaulting **`true`** (ON) when unset / first run
@@ -319,9 +324,10 @@ pub fn write_update_notifications_enabled(
     data_dir: &Path,
     enabled: bool,
 ) -> Result<(), ConfigError> {
-    let mut settings = read_settings(data_dir)?;
-    settings.update_notifications_enabled = Some(enabled);
-    write_settings(data_dir, &settings)
+    super::update_settings(data_dir, |settings| {
+        settings.update_notifications_enabled = Some(enabled);
+        Ok(())
+    })
 }
 
 /// Read the skipped-version tag, `None` when unset / first run (M10 WP4). The single
@@ -334,9 +340,10 @@ pub fn read_skipped_version(data_dir: &Path) -> Result<Option<String>, ConfigErr
 /// `None` clears the skip (used by "unskip"/a manual check that offers the version
 /// again). The single writer `updater_set_skipped_version` calls.
 pub fn write_skipped_version(data_dir: &Path, version: Option<String>) -> Result<(), ConfigError> {
-    let mut settings = read_settings(data_dir)?;
-    settings.skipped_version = version;
-    write_settings(data_dir, &settings)
+    super::update_settings(data_dir, |settings| {
+        settings.skipped_version = version;
+        Ok(())
+    })
 }
 
 /// Read the one-time invite's outcome (M10.9 WP3). `None` = never resolved, which is the
@@ -364,15 +371,109 @@ pub fn write_workflow_invite(
     data_dir: &Path,
     outcome: Option<WorkflowInviteOutcome>,
 ) -> Result<(), ConfigError> {
-    let mut settings = read_settings(data_dir)?;
-    settings.workflow_invite = outcome;
-    write_settings(data_dir, &settings)
+    super::update_settings(data_dir, |settings| {
+        settings.workflow_invite = outcome;
+        Ok(())
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    // ── Paydown WP8 — the lost-update window ─────────────────────────────────────────
+    //
+    // ⚠️ THIS TEST IS THE PREMISE CHECK FOR THE WHOLE WP. It must FAIL before the funnel
+    // exists and PASS after, with the test itself unchanged. That before/after pair is the
+    // verdict — a concurrency fix is exactly the class a green suite cannot vouch for.
+    //
+    // ⚠️ Why it is not a `thread::spawn` race: a real race is nondeterministic, so a passing
+    // run would prove nothing and a flaky one would get deleted. Instead the interleaving is
+    // FORCED — writer A reads, then writer B completes entirely, then A writes. That is a
+    // legal interleaving of two concurrent RMWs (Tauri dispatches commands on a thread pool),
+    // reproduced deterministically. If the funnel serializes correctly, this sequence cannot
+    // occur at all, which is what the post-fix version asserts.
+
+    /// **The hazard, reproduced on the RAW primitives.** Kept because it is what makes the next
+    /// test meaningful: it proves the interleaving really does lose a field when a caller does its
+    /// own read-modify-write, so the funnel is guarding a real property rather than a hypothetical.
+    ///
+    /// ⚠️ This is the shape EVERY per-field writer had before paydown WP8.
+    #[test]
+    fn raw_read_modify_write_loses_a_field_when_interleaved() {
+        let dir = TempDir::new().unwrap();
+
+        // Writer A reads first — its snapshot predates B entirely.
+        let mut a_snapshot = read_settings(dir.path()).unwrap();
+
+        // Writer B completes a whole read-modify-write inside A's window.
+        crate::config_store::update_settings(dir.path(), |s| {
+            s.time_tracking_enabled = Some(true);
+            Ok(())
+        })
+        .unwrap();
+
+        // A finishes against its stale snapshot, using the raw primitive.
+        a_snapshot.pip_mode = Some(PipMode::Off);
+        write_settings(dir.path(), &a_snapshot).unwrap();
+
+        let after = read_settings(dir.path()).unwrap();
+        assert_eq!(after.pip_mode, Some(PipMode::Off), "A's field survived");
+        assert_eq!(
+            after.time_tracking_enabled, None,
+            "B's field is clobbered — this is why write_settings must not be called directly"
+        );
+    }
+
+    /// **THE WP8 PROPERTY: two concurrent funnelled writers both survive.** Real threads, real
+    /// contention, one shared dir — the pre-funnel code loses one of these fields.
+    ///
+    /// ⚠️ Deliberately a REAL race rather than a forced interleaving, because the funnel's job is
+    /// to make the interleaving impossible; forcing one would be testing the harness. Many
+    /// iterations with two threads hammering different fields: without the lock, at least one
+    /// iteration loses a field (verified by mutation — removing the guard fails this test).
+    #[test]
+    fn concurrent_funnelled_writers_never_lose_a_field() {
+        use std::sync::Arc;
+        let dir = Arc::new(TempDir::new().unwrap());
+
+        // Enough iterations that an unsynchronized read→write window is hit in practice; each
+        // iteration is a fresh pair of writes to two DIFFERENT fields.
+        for i in 0..40 {
+            // Reset to a known state through the funnel.
+            crate::config_store::update_settings(dir.path(), |s| {
+                s.time_tracking_enabled = None;
+                s.pip_mode = None;
+                Ok(())
+            })
+            .unwrap();
+
+            let d1 = Arc::clone(&dir);
+            let d2 = Arc::clone(&dir);
+            let t1 = std::thread::spawn(move || {
+                write_time_tracking_enabled(d1.path(), true).unwrap();
+            });
+            let t2 = std::thread::spawn(move || {
+                write_pip_mode(d2.path(), PipMode::Off).unwrap();
+            });
+            t1.join().unwrap();
+            t2.join().unwrap();
+
+            let after = read_settings(dir.path()).unwrap();
+            // ⚠️ BOTH must survive. The pre-WP8 code drops whichever writer read first.
+            assert_eq!(
+                after.time_tracking_enabled,
+                Some(true),
+                "iteration {i}: the tracking write was lost"
+            );
+            assert_eq!(
+                after.pip_mode,
+                Some(PipMode::Off),
+                "iteration {i}: the pip-mode write was lost"
+            );
+        }
+    }
 
     #[test]
     fn missing_file_reads_as_defaults() {

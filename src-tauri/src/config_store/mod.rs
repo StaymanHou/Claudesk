@@ -43,6 +43,7 @@ pub mod commands;
 pub mod settings;
 
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -183,27 +184,106 @@ pub fn write_projects(data_dir: &Path, projects: &[Project]) -> Result<(), Confi
     Ok(())
 }
 
+/// Serializes every config read-modify-write in this process (paydown WP8).
+///
+/// ⚠️ **ONE lock for BOTH stores**, deliberately. A caller can legitimately touch
+/// `projects.json` and `settings.json` in the same logical operation, and two locks invite a
+/// lock-ordering bug for no benefit: these writes are sub-millisecond and uncontended in
+/// practice, so the coarser lock costs nothing measurable and removes a whole failure class.
+///
+/// ⚠️ **In-process only, and that IS the whole surface.** A dev build and a prod build resolve
+/// different `app_data_dir`s by bundle identity (`com.claudesk.app` vs `.dev`), so they never
+/// share these files — cross-process locking would guard a collision that cannot happen. If that
+/// isolation is ever removed, this becomes insufficient and needs a real file lock.
+///
+/// ⚠️ Poisoning is deliberately ignored (`unwrap_or_else(|e| e.into_inner())`): a panic mid-write
+/// leaves the *file* intact because writes are atomic (tmp + rename), so the next writer's
+/// read-modify-write is still correct. Refusing all further config writes because an unrelated
+/// write panicked once would be a worse outcome than proceeding.
+///
+/// ⚠️ **THE LOCK GUARDS TWO DISTINCT FAILURES, AND THE SECOND IS WORSE THAN THE FILED ONE.**
+/// Paydown WP8 was filed as a *lost update* (two writers clobber one another's field), and the
+/// filing explicitly said "this is NOT a torn-write problem" because each write is atomic. That is
+/// half right. Each write IS atomic — but **all writers of a store share ONE fixed tmp path**
+/// (`settings.json.tmp` / `projects.json.tmp`), so two concurrent writers also race on the sidecar
+/// itself: one `rename`s it away while the other is still writing to it, and the loser's write
+/// fails outright with `ENOENT` rather than merely losing a field. Measured, not theorized —
+/// removing this lock makes `settings::tests::concurrent_funnelled_writers_never_lose_a_field`
+/// panic with `Io(NotFound)` from the writer thread, not just fail its field assertion.
+/// So serializing here is what makes the atomic-write scheme actually atomic under concurrency.
+/// A per-writer unique tmp name would fix the `ENOENT` half alone and leave the lost update.
+static CONFIG_WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+fn config_write_guard() -> MutexGuard<'static, ()> {
+    CONFIG_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// **THE funnel for every `projects.json` mutation.** Read → apply `mutate` → write, all while
+/// holding [`CONFIG_WRITE_LOCK`], so no other config writer can interleave.
+///
+/// ⚠️ **THIS IS THE ONLY THING THAT MAY CALL [`write_projects`] outside a test**, and a guard in
+/// `settings.rs`'s tests enforces that. The point is not merely the lock — it is that there is now
+/// exactly ONE place to add serialization, validation, or a migration, instead of five call sites
+/// each with its own read→write window. Before this, two mutators touching different fields
+/// clobbered one another (reproduced deterministically in
+/// `settings::tests::interleaved_field_writers_...`).
+///
+/// ⚠️ Standing lesson this implements: *"funnel every write of shared state through ONE function
+/// and guard THAT"* (`docs/lessons/verify-self-tiers.md` §4) — banked from two shipped defects in
+/// this repo, one a CRITICAL, where a correct mechanism sat behind a caller that bypassed it.
+///
+/// The closure returns a value so a mutator can report what it did (e.g. `add_or_touch`'s record)
+/// without a second read.
+pub(crate) fn update_projects<T>(
+    data_dir: &Path,
+    mutate: impl FnOnce(&mut Vec<Project>) -> Result<T, ConfigError>,
+) -> Result<T, ConfigError> {
+    let _guard = config_write_guard();
+    let mut projects = read_projects(data_dir)?;
+    let out = mutate(&mut projects)?;
+    write_projects(data_dir, &projects)?;
+    Ok(out)
+}
+
+/// **THE funnel for every `settings.json` mutation** — the `settings.rs` twin of
+/// [`update_projects`], sharing the same lock. Lives here rather than in `settings.rs` so both
+/// funnels and the lock they share are in one place; `settings.rs` calls it.
+///
+/// ⚠️ Same rule: this is the ONLY thing that may call `write_settings` outside a test.
+pub(crate) fn update_settings<T>(
+    data_dir: &Path,
+    mutate: impl FnOnce(&mut settings::AppSettings) -> Result<T, ConfigError>,
+) -> Result<T, ConfigError> {
+    let _guard = config_write_guard();
+    let mut current = settings::read_settings(data_dir)?;
+    let out = mutate(&mut current)?;
+    settings::write_settings(data_dir, &current)?;
+    Ok(out)
+}
+
 /// Add a project if its path is new, or refresh `last_opened_at` if it already
 /// exists. Paths are compared verbatim (the frontend supplies canonicalized
 /// dialog/dir paths). Returns the resulting record. Persists the full list.
 pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Project, ConfigError> {
-    let mut projects = read_projects(data_dir)?;
-    let record = if let Some(existing) = projects.iter_mut().find(|p| p.path == path) {
-        existing.last_opened_at = now_ms;
-        existing.clone()
-    } else {
-        let project = Project {
-            display_name: derive_display_name(&path),
-            path,
-            last_opened_at: now_ms,
-            default_model: None,
-            default_drive_mode: None,
+    update_projects(data_dir, |projects| {
+        let record = if let Some(existing) = projects.iter_mut().find(|p| p.path == path) {
+            existing.last_opened_at = now_ms;
+            existing.clone()
+        } else {
+            let project = Project {
+                display_name: derive_display_name(&path),
+                path,
+                last_opened_at: now_ms,
+                default_model: None,
+                default_drive_mode: None,
+            };
+            projects.push(project.clone());
+            project
         };
-        projects.push(project.clone());
-        project
-    };
-    write_projects(data_dir, &projects)?;
-    Ok(record)
+        Ok(record)
+    })
 }
 
 /// Read one project's per-project CC model override (M11.5 WP1).
@@ -242,19 +322,19 @@ pub fn set_default_model(
     project_path: &Path,
     model: Option<String>,
 ) -> Result<(), ConfigError> {
-    let mut projects = read_projects(data_dir)?;
-    let target = projects
-        .iter_mut()
-        .find(|p| p.path == project_path)
-        .ok_or_else(|| {
-            ConfigError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("no project record for {}", project_path.display()),
-            ))
-        })?;
-    target.default_model = normalize_model(model);
-    write_projects(data_dir, &projects)?;
-    Ok(())
+    update_projects(data_dir, |projects| {
+        let target = projects
+            .iter_mut()
+            .find(|p| p.path == project_path)
+            .ok_or_else(|| {
+                ConfigError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("no project record for {}", project_path.display()),
+                ))
+            })?;
+        target.default_model = normalize_model(model);
+        Ok(())
+    })
 }
 
 /// Read one project's drive-mode override, or `None` if the project has no record or no
@@ -322,19 +402,19 @@ pub fn set_default_drive_mode(
     project_path: &Path,
     mode: Option<DriveMode>,
 ) -> Result<(), ConfigError> {
-    let mut projects = read_projects(data_dir)?;
-    let target = projects
-        .iter_mut()
-        .find(|p| p.path == project_path)
-        .ok_or_else(|| {
-            ConfigError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("no project record for {}", project_path.display()),
-            ))
-        })?;
-    target.default_drive_mode = mode;
-    write_projects(data_dir, &projects)?;
-    Ok(())
+    update_projects(data_dir, |projects| {
+        let target = projects
+            .iter_mut()
+            .find(|p| p.path == project_path)
+            .ok_or_else(|| {
+                ConfigError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("no project record for {}", project_path.display()),
+                ))
+            })?;
+        target.default_drive_mode = mode;
+        Ok(())
+    })
 }
 
 /// Trim a model override, mapping blank to `None` (= inherit CC's default).
@@ -351,13 +431,15 @@ fn normalize_model(model: Option<String>) -> Option<String> {
 /// Remove a project by path. No-op (and not an error) if the path is absent.
 /// Persists the resulting list.
 pub fn remove(data_dir: &Path, path: &Path) -> Result<(), ConfigError> {
-    let mut projects = read_projects(data_dir)?;
-    let before = projects.len();
-    projects.retain(|p| p.path != path);
-    if projects.len() != before {
-        write_projects(data_dir, &projects)?;
-    }
-    Ok(())
+    // ⚠️ Goes through the funnel even though the original skipped the write when nothing
+    // changed. The funnel always writes, so an absent path now rewrites an identical file —
+    // a no-op rename, not a behavior change (the list is byte-identical). Keeping the
+    // short-circuit would mean a second write path outside the funnel, which is the thing
+    // this WP exists to remove.
+    update_projects(data_dir, |projects| {
+        projects.retain(|p| p.path != path);
+        Ok(())
+    })
 }
 
 /// Drop projects whose directory no longer exists on disk.
@@ -372,13 +454,16 @@ pub fn remove(data_dir: &Path, path: &Path) -> Result<(), ConfigError> {
 /// stat error (including permission denied) as "does not exist". For the picker that
 /// is the right call: an entry we cannot stat is one we cannot open either.
 pub fn prune_missing(data_dir: &Path) -> Result<Vec<Project>, ConfigError> {
-    let projects = read_projects(data_dir)?;
-    let (kept, dropped): (Vec<Project>, Vec<Project>) =
-        projects.into_iter().partition(|p| p.path.exists());
-    if !dropped.is_empty() {
-        write_projects(data_dir, &kept)?;
-    }
-    Ok(dropped)
+    // ⚠️ Like `remove`, this now always writes (the funnel does), where before it skipped the
+    // write when nothing was dropped. The file content is identical in that case, so this is a
+    // redundant atomic rename rather than a behavior change — and it buys a single write path.
+    update_projects(data_dir, |projects| {
+        let (kept, dropped): (Vec<Project>, Vec<Project>) = std::mem::take(projects)
+            .into_iter()
+            .partition(|p| p.path.exists());
+        *projects = kept;
+        Ok(dropped)
+    })
 }
 
 /// Sort most-recently-opened first (descending `last_opened_at`).
@@ -818,6 +903,136 @@ mod tests {
             field_docs.contains("pub default_drive_mode"),
             "the guard's haystack no longer contains the default_drive_mode field — \
              re-scope it; every assertion above is vacuous as written."
+        );
+    }
+
+    // ── Paydown WP8 — the funnel must be the ONLY write path ─────────────────────────
+    //
+    // ⚠️ WHY A GUARD AND NOT JUST THE FUNNEL. The standing lesson in this repo is that
+    // extracting a correct mechanism proves the MECHANISM, not that callers use it — hit
+    // four times here, once shipped as a CRITICAL (`docs/lessons/verify-self-tiers.md` §4).
+    // `update_projects`/`update_settings` can be perfectly correct while a thirteenth mutator
+    // is added next month that calls `write_projects` directly and silently re-opens both the
+    // lost update and the shared-tmp `ENOENT` race. That regression is invisible to every
+    // other test, because each individual write still works.
+
+    /// Strip Rust comments so a guard is not satisfied by the very prose that describes it.
+    ///
+    /// ⚠️ Load-bearing here: the funnel's own doc comments name `write_projects` and
+    /// `write_settings` repeatedly (they must, to say "only this may call them"), so an
+    /// unstripped haystack would match those mentions and the guard would pass **exactly when
+    /// the funnel was deleted** (`[[raw-guard-identifier-satisfied-by-own-comments]]`).
+    fn strip_rust_comments(src: &str) -> String {
+        let mut out = String::with_capacity(src.len());
+        let mut rest = src;
+        loop {
+            // Block comments first, then line comments; whichever comes first wins.
+            let block = rest.find("/*");
+            let line = rest.find("//");
+            // Whichever delimiter appears first decides; `None` sorts last.
+            let block_first = match (block, line) {
+                (Some(b), Some(l)) => b < l,
+                (Some(_), None) => true,
+                _ => false,
+            };
+            if block_first {
+                let b = block.expect("block_first implies Some");
+                out.push_str(&rest[..b]);
+                rest = match rest[b + 2..].find("*/") {
+                    Some(e) => &rest[b + 2 + e + 2..],
+                    None => return out,
+                };
+            } else if let Some(l) = line {
+                out.push_str(&rest[..l]);
+                rest = match rest[l..].find('\n') {
+                    Some(e) => &rest[l + e..],
+                    None => return out,
+                };
+            } else {
+                out.push_str(rest);
+                return out;
+            }
+        }
+    }
+
+    /// The set of `fn` bodies in a module that call `needle(`, excluding `#[cfg(test)]` code.
+    fn callers_of(src: &str, needle: &str) -> Vec<String> {
+        let code = strip_rust_comments(src);
+        // Everything before `mod tests` — test code may legitimately call the primitives.
+        let prod = match code.find("mod tests {") {
+            Some(i) => &code[..i],
+            None => &code[..],
+        };
+        let mut found = Vec::new();
+        let mut current = String::from("<module scope>");
+        for line in prod.lines() {
+            let t = line.trim_start();
+            if let Some(rest) = t
+                .strip_prefix("pub(crate) fn ")
+                .or_else(|| t.strip_prefix("pub fn ").or_else(|| t.strip_prefix("fn ")))
+            {
+                current = rest
+                    .split(['(', '<'])
+                    .next()
+                    .unwrap_or("?")
+                    .trim()
+                    .to_string();
+            }
+            if t.contains(&format!("{needle}(")) && !t.starts_with('#') {
+                found.push(current.clone());
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn only_the_funnel_writes_the_project_list() {
+        let callers = callers_of(include_str!("mod.rs"), "write_projects");
+        // The funnel is the only legitimate caller. `write_projects` itself appears as its own
+        // definition line, which `callers_of` attributes to `write_projects` — allow that.
+        let unexpected: Vec<_> = callers
+            .iter()
+            .filter(|f| f.as_str() != "update_projects" && f.as_str() != "write_projects")
+            .collect();
+        assert!(
+            unexpected.is_empty(),
+            "these fns call write_projects directly instead of going through update_projects, \
+             which re-opens the lost update AND the shared-tmp ENOENT race: {unexpected:?}"
+        );
+    }
+
+    #[test]
+    fn only_the_funnel_writes_the_settings_file() {
+        let callers = callers_of(include_str!("settings.rs"), "write_settings");
+        // In `settings.rs` the only permitted mention is `write_settings`'s own definition;
+        // every mutator must route through `update_settings` (which lives in `mod.rs`).
+        let unexpected: Vec<_> = callers
+            .iter()
+            .filter(|f| f.as_str() != "write_settings")
+            .collect();
+        assert!(
+            unexpected.is_empty(),
+            "these fns in settings.rs call write_settings directly instead of update_settings: \
+             {unexpected:?}"
+        );
+    }
+
+    #[test]
+    fn the_funnel_guard_is_not_vacuous() {
+        // ⚠️ The anti-vacuity arm. If `callers_of` silently found nothing — a renamed helper, an
+        // over-eager comment strip, a changed `fn` prefix — both guards above would pass while
+        // checking nothing. Prove the walker actually resolves a known caller.
+        let found = callers_of(include_str!("mod.rs"), "read_projects");
+        assert!(
+            found.iter().any(|f| f == "update_projects"),
+            "the walker cannot see update_projects calling read_projects; it is broken, so the \
+             two guards above are not checking anything. Found: {found:?}"
+        );
+        // And the comment stripper must really remove prose that names the primitives.
+        let stripped = strip_rust_comments("// write_projects(x)\nlet y = 1;");
+        assert!(
+            !stripped.contains("write_projects"),
+            "strip_rust_comments left a commented mention in place"
         );
     }
 
