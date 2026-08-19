@@ -75,6 +75,14 @@ function baseInputs(over: Partial<RecycleInputs> = {}): RecycleInputs {
       return NEW_SID;
     },
     restoreSettleMs: 0,
+    // ⚠️ Logged as an EFFECT, which is the whole point of this seam existing. Before the
+    // 2026-08-19 fix the settle was a bare `sleep(ms)` that pushed nothing, so its POSITION in
+    // the sequence was invisible to this suite — and the suite therefore stayed green while the
+    // settle sat on the wrong side of `awaitFreshSessionId` and measured spawn-wait instead of
+    // TUI-readiness. A delay you cannot see the position of is a delay you cannot assert.
+    settle: async () => {
+      effects.push("settle");
+    },
     completionTimeoutMs: 50,
     ...over,
   };
@@ -160,12 +168,15 @@ describe("the success path — the full ordered sequence", () => {
 
     expect(outcome).toEqual({ ok: true });
     // ⚠️ Asserted as an ORDERED array, so a reordering fails. Each position matters:
-    // the clean mark must precede the kill, and the restore must follow the fresh id.
+    // the clean mark must precede the kill, the restore must follow the fresh id, and the
+    // settle must sit BETWEEN the fresh id and the restore (see the dedicated test below —
+    // that position is the 2026-08-19 defect fix, not an incidental detail).
     expect(effects).toEqual([
       `inject:${HANDOFF_COMMAND}`,
       "markClean:recycle-session",
       "relaunch",
       "awaitFreshSessionId",
+      "settle",
       `inject:${RESTORE_COMMAND}`,
     ]);
   });
@@ -197,6 +208,58 @@ describe("the success path — the full ordered sequence", () => {
       (c) => c[1] === HANDOFF_COMMAND,
     );
     expect(handoffCall?.[0]).toBe(OLD_SID);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // ⚠️ THE 2026-08-19 DEFECT: the settle was measuring the SPAWN, not the TUI.
+  //
+  // `relaunch()` only DISPATCHES the respawn — the fresh session id arrives asynchronously,
+  // pushed through `XtermPane` → `App` state → the prop → the ref that `awaitFreshSessionId`
+  // polls. So a settle that runs BEFORE the id resolves overlaps the spawn, and the window that
+  // actually protects the injection is only whatever is LEFT OVER once the id lands: near zero
+  // on a cold or loaded spawn. The operator saw exactly M12's 0 ms failure mode — the restore
+  // typed into CC's input box with the autocomplete open, `\r` not acting as Enter, never
+  // executed. (`SURFACE-2026-08-18-RECYCLE-TYPES-SESSION-RESTORE-BEFORE-THE-FRESH-TUI-IS-READY`.)
+  //
+  // ⚠️ The delay was never MISSING, so raising the number was the wrong fix and a bigger number
+  // would partly buy more spawn-wait rather than more settle. The bug is ORDERING.
+  //
+  // ⚠️ The auto-resume arm shares `INJECT_SETTLE_MS` and is CORRECT, because its timer starts
+  // when the pane is already spawned — same constant, different starting line. That asymmetry is
+  // why the fix is here and not in the constant.
+  // ═══════════════════════════════════════════════════════════════════════════════
+  it("⚠️ settles AFTER the fresh session id lands, so the wait is post-spawn", async () => {
+    invokeMock.mockImplementationOnce(() =>
+      Promise.reject(new Error("ENOENT")),
+    );
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "stat_file"
+        ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
+        : Promise.resolve(),
+    );
+
+    const promise = recycleSession(baseInputs());
+    await tick();
+    emitSessionMdWrite();
+    await tick();
+    emitStop();
+    await promise;
+
+    // The three positions that encode the property, read off the effect log by name rather than
+    // by index so an unrelated added effect cannot silently invalidate the assertion.
+    const idAt = effects.indexOf("awaitFreshSessionId");
+    const settleAt = effects.indexOf("settle");
+    const injectAt = effects.indexOf(`inject:${RESTORE_COMMAND}`);
+
+    expect(idAt).toBeGreaterThanOrEqual(0);
+    expect(settleAt).toBeGreaterThanOrEqual(0);
+    expect(injectAt).toBeGreaterThanOrEqual(0);
+
+    // ⚠️ THE defect assertion: pre-fix this was `settleAt < idAt` and the suite was green.
+    expect(settleAt).toBeGreaterThan(idAt);
+    // And the settle must still precede the write it protects — a settle after the injection
+    // would be observable in the log but useless.
+    expect(injectAt).toBeGreaterThan(settleAt);
   });
 
   it("samples the baseline BEFORE injecting the handoff", async () => {
@@ -310,6 +373,188 @@ describe("⚠️ the FAILURE arms — nothing is torn down", () => {
     expect(
       injectCommandMock.mock.calls.some((c) => c[1] === RESTORE_COMMAND),
     ).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ⚠️ PAYDOWN WP7 — THE OPERATION IS ABORTABLE, AND RULING D1 IS A DELIBERATE ASYMMETRY.
+//
+// The operation runs up to 3 minutes; its caller is a `<Workspace>` that genuinely UNMOUNTS when
+// the operator closes it. Before this, closing mid-Recycle cleared the unclean-exit flag and then
+// `relaunch()` silently no-opped on the nulled ref — a session that never respawned, with its
+// flag wrongly clear, and the next open announcing nothing.
+//
+// ⚠️ These tests pin the CALLER-VISIBLE behavior of `recycleSession`, and the caller-side wiring
+// is pinned separately in `Workspace.abort.test.tsx`. That split is deliberate: a state machine
+// or an operation can be perfectly abortable behind a caller that never passes a signal, and this
+// repo has shipped a CRITICAL exactly that way (twice in M11 WP4). Proving it here alone would
+// reproduce that class.
+// ═══════════════════════════════════════════════════════════════════════════════
+describe("⚠️ WP7 — abort across unmount", () => {
+  /** Drive the success path up to (and including) the completion composite. */
+  function mockStatSequence() {
+    invokeMock.mockImplementationOnce(() =>
+      Promise.reject(new Error("ENOENT")),
+    );
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "stat_file"
+        ? Promise.resolve({ mtime_ms: 5_000, size: 800 })
+        : Promise.resolve(),
+    );
+  }
+
+  it("an abort DURING the completion wait tears nothing down", async () => {
+    const ac = new AbortController();
+    const promise = recycleSession(
+      baseInputs({ signal: ac.signal, completionTimeoutMs: 10_000 }),
+    );
+    await tick();
+    ac.abort();
+    const outcome = await promise;
+
+    expect(outcome).toEqual({ ok: false, reason: "aborted" });
+    // ⚠️ The whole point: no clean mark, no kill, no restore. The session is still live and
+    // still unclean-flagged, so the next open offers `--continue` exactly as if Recycle were
+    // never clicked.
+    expect(effects).toEqual([`inject:${HANDOFF_COMMAND}`]);
+    expect(markSessionCleanMock).not.toHaveBeenCalled();
+  });
+
+  it("unsubscribes BOTH event sources on abort", async () => {
+    const ac = new AbortController();
+    const promise = recycleSession(
+      baseInputs({ signal: ac.signal, completionTimeoutMs: 10_000 }),
+    );
+    await tick();
+    expect(unlistenCalls).toBe(0);
+    ac.abort();
+    await promise;
+    // A 3-minute operation that leaks two Tauri subscriptions per abort is a leak the operator
+    // pays for by closing workspaces, which is the exact gesture that triggers it.
+    expect(unlistenCalls).toBe(2);
+  });
+
+  it("an ALREADY-aborted signal never subscribes at all", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const outcome = await recycleSession(baseInputs({ signal: ac.signal }));
+
+    expect(outcome).toEqual({ ok: false, reason: "aborted" });
+    // Zero listeners registered — the early return precedes both `listen` calls.
+    expect(listenMock).not.toHaveBeenCalled();
+    expect(markSessionCleanMock).not.toHaveBeenCalled();
+  });
+
+  it("⚠️ D1: aborting between the clean mark and the respawn KEEPS the mark, and does NOT relaunch", async () => {
+    // ⚠️ THE RULING, PINNED. The mark stays because the handoff SUCCEEDED — `.session.md` is on
+    // disk, so `--continue` would resume an already-cleanly-handed-off conversation. A future
+    // reader seeing "flag cleared, session never respawned" will read it as corruption and want
+    // to re-set it; that is the wrong offer, and there is deliberately no `mark_unclean`
+    // primitive to do it with. If this test is failing because someone added one, the primitive
+    // is the bug.
+    mockStatSequence();
+    const ac = new AbortController();
+    // Abort at the instant the mark lands — the narrow window D1 is about.
+    markSessionCleanMock.mockImplementation((_p: string, route: string) => {
+      effects.push(`markClean:${route}`);
+      ac.abort();
+    });
+
+    const promise = recycleSession(baseInputs({ signal: ac.signal }));
+    await tick();
+    emitSessionMdWrite();
+    await tick();
+    emitStop();
+    const outcome = await promise;
+
+    expect(outcome).toEqual({ ok: false, reason: "aborted" });
+    // The mark WAS made and is NOT undone...
+    expect(markSessionCleanMock).toHaveBeenCalledWith(
+      PROJECT,
+      "recycle-session",
+    );
+    // ...and nothing after it ran.
+    expect(effects).toEqual([
+      `inject:${HANDOFF_COMMAND}`,
+      "markClean:recycle-session",
+    ]);
+  });
+
+  it("aborting during the SETTLE does not type into a pane being torn down", async () => {
+    // The settle is a real window (1500 ms in production) during which the operator can close
+    // the workspace. Re-checking after it is the same rule `shouldInject` encodes for M12's arm.
+    mockStatSequence();
+    const ac = new AbortController();
+    const promise = recycleSession(
+      baseInputs({
+        signal: ac.signal,
+        settle: async () => {
+          effects.push("settle");
+          ac.abort();
+        },
+      }),
+    );
+    await tick();
+    emitSessionMdWrite();
+    await tick();
+    emitStop();
+    const outcome = await promise;
+
+    expect(outcome).toEqual({ ok: false, reason: "aborted" });
+    expect(effects).toEqual([
+      `inject:${HANDOFF_COMMAND}`,
+      "markClean:recycle-session",
+      "relaunch",
+      "awaitFreshSessionId",
+      "settle",
+    ]);
+    // The restore specifically was NOT injected.
+    expect(
+      injectCommandMock.mock.calls.some((c) => c[1] === RESTORE_COMMAND),
+    ).toBe(false);
+  });
+
+  it("no signal at all behaves exactly as before — the parameter is optional", async () => {
+    mockStatSequence();
+    const outcome = await (async () => {
+      const promise = recycleSession(baseInputs());
+      await tick();
+      emitSessionMdWrite();
+      await tick();
+      emitStop();
+      return promise;
+    })();
+    expect(outcome).toEqual({ ok: true });
+  });
+
+  it("⚠️ 'aborted' is a DISTINCT reason from the other two", async () => {
+    // Same discipline as the no-session/restore-not-injected split: a caller switching on
+    // `reason` must be able to tell "you closed the workspace, nothing is owed you" from
+    // "your session was recycled, now restore it by hand".
+    const reasons = new Set<string>();
+
+    const ac = new AbortController();
+    ac.abort();
+    const a = await recycleSession(baseInputs({ signal: ac.signal }));
+    if (!a.ok) reasons.add(a.reason);
+
+    const b = await recycleSession(baseInputs({ ccSessionId: null }));
+    if (!b.ok) reasons.add(b.reason);
+
+    mockStatSequence();
+    const cPromise = recycleSession(
+      baseInputs({ awaitFreshSessionId: async () => null }),
+    );
+    await tick();
+    emitSessionMdWrite();
+    await tick();
+    emitStop();
+    const c = await cPromise;
+    if (!c.ok) reasons.add(c.reason);
+
+    expect(reasons).toEqual(
+      new Set(["aborted", "no-session", "restore-not-injected"]),
+    );
   });
 });
 

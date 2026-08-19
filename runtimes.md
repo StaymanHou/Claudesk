@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-18
+updated: 2026-08-19
 ---
 
 # Runtime Registry
@@ -189,6 +189,14 @@ real chronology.
 - **History:**
   - <1s — 2026-07-28
   - 1s — 2026-06-16
+
+## tooling/autofire-timing/probe.sh --arm cc-ready --runs 5
+- **Last:** 54s (2026-08-19)
+- **Use timeout:** 141000
+- **Note:** one delay arm, 5 cold CC spawns. A `--arm delay-sweep` run walks 6 delays and costs
+  roughly 6x this — budget ~5 min and pass a timeout accordingly.
+- **History:**
+  - 54s — 2026-08-19
 
 ## python3 tooling/autofire-timing/test_probe.py
 

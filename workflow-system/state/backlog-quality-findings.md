@@ -66,25 +66,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** medium (no live defect — the code is correct; the risk is entirely in the next edit)
 - **Status:** pending
 
-## SURFACE-2026-08-18-QUALITY-WP3-RECYCLE-IS-UNCANCELLABLE-ACROSS-UNMOUNT
-- **Source:** feature-review-quality (M13 WP3, MAJOR) — **VERIFIED INDEPENDENTLY at review**
-- **Type:** gap (missing abort seam with a durable-state consequence)
-- **Summary:** Nothing cancels an in-flight `recycleSession` when the workspace unmounts (filmstrip
-  ×, app teardown). The operation continues for up to **180s**; `relaunch()` then no-ops silently on
-  a dead `ccPaneRef` — **but `markSessionClean` has already fired.** `RecycleInputs` exposes **no
-  `signal`/abort seam**, so a caller cannot opt out.
-- **Context:** ⚠️ **Silent in the damaging direction:** the unclean-exit flag is cleared for a
-  project whose session was never actually respawned, so the next open fires no `--continue` for
-  work that was mid-flight. ⚠️ **M15's context-pressure recycle will hit this harder than the button
-  does** — it fires programmatically with no human watching the pane.
-- **Suggested action:** Add an `AbortSignal` (or a `cancelled` ref) to `RecycleInputs`, thread it
-  through `awaitCompletion`'s terminal check, and have `Workspace` abort on unmount. ⚠️ **Decide the
-  ordering question explicitly:** on abort *after* a successful handoff but *before* the respawn, is
-  the clean mark correct? (Arguably yes — the handoff really did complete and `.session.md` is on
-  disk — but it should be a stated decision, not an accident of where the await happens to sit.)
-- **Priority:** medium (no live defect observed; the window is real and widens under M15)
-- **Status:** pending
-
 ## SURFACE-2026-08-18-QUALITY-WP3-COMMENT-DENSITY-AND-RATIONALE-DUPLICATION
 - **Source:** feature-review-quality (M13 WP3, MAJOR — readability)
 - **Type:** tech-debt (documentary)

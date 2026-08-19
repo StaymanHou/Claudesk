@@ -213,6 +213,25 @@ export function Workspace({
   // signals.
   const [recycling, setRecycling] = useState(false);
 
+  // Paydown WP7 — abort an in-flight Recycle when this workspace unmounts.
+  //
+  // ⚠️ Closing a workspace REMOVES it from the WorkspaceList array, so this component genuinely
+  // unmounts (the documented exception to "all workspaces stay mounted" — a center-stage switch
+  // only flips `display`). A Recycle runs up to 3 minutes, so that gesture lands mid-operation
+  // easily. Without this, step 4 cleared the unclean-exit flag and then `relaunch()` below
+  // **silently no-opped on the nulled `ccPaneRef`** — leaving a session that never respawned with
+  // its flag wrongly clear, so the next open announced nothing instead of offering `--continue`.
+  //
+  // ⚠️ A ref, not state: the controller must survive re-renders unchanged, and aborting is a
+  // cleanup effect, never a render-time concern.
+  const recycleAbortRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      recycleAbortRef.current?.abort();
+    },
+    [],
+  );
+
   /**
    * Run the Recycle operation for this workspace, on an explicit click only.
    *
@@ -228,7 +247,10 @@ export function Workspace({
     const sessionId = workspace.cc_session_id;
     if (sessionId === null || recycling) return;
     setRecycling(true);
+    const ac = new AbortController();
+    recycleAbortRef.current = ac;
     void recycleSession({
+      signal: ac.signal,
       workspaceId: workspace.id,
       projectPath: workspace.project_path,
       ccSessionId: sessionId,
@@ -244,7 +266,11 @@ export function Workspace({
       // state setter that only ever feeds an unread variable would be surface with no reader.
     })
       .then((outcome) => {
-        if (!outcome.ok) {
+        // ⚠️ `aborted` is deliberately NOT warned. The other reasons describe something that
+        // happened TO the operator's session; `aborted` means they closed the workspace, so there
+        // is nothing to tell them and no surface left to tell it on. Logging it would make an
+        // ordinary close read as a defect in the log.
+        if (!outcome.ok && outcome.reason !== "aborted") {
           // ⚠️ `console.warn`, matching the row's established failure channel: replacing a
           // working terminal with an error overlay, over an operation the user can retry, would
           // be worse. The reason distinguishes "nothing happened" from "recycled — now restore
@@ -254,7 +280,12 @@ export function Workspace({
           );
         }
       })
-      .finally(() => setRecycling(false));
+      .finally(() => {
+        // Drop the controller once the run is over — a stale one would have `abort()` called on
+        // it at unmount, which is harmless but makes the ref lie about whether a run is in flight.
+        if (recycleAbortRef.current === ac) recycleAbortRef.current = null;
+        setRecycling(false);
+      });
   };
 
   // QoL-WP3 — auto-focus the LEFT CC terminal on the false→true `visible` edge (and on

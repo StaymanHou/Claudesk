@@ -26,7 +26,9 @@
 //   3. wait for the composite completion marker      ← the whole difficulty (see recycleMachine)
 //   4. on SUCCESS ONLY: mark the clean-exit route
 //   5. kill + respawn CC                             ← via the pane's existing relaunch path
-//   6. inject `/session-restore` into the fresh session
+//   6. await the FRESH session id, THEN settle, THEN inject `/session-restore`
+//      ⚠️ That order is load-bearing — see step 6's own comment. `relaunch()` merely dispatches
+//      the respawn, so settling before the id lands measures spawn-wait, not TUI-readiness.
 //
 // Step 3 is not a sleep and not a file poll. WP1 measured that no single signal means "the
 // handoff finished": `Stop` fires on every turn end (a refused handoff emits a clean one having
@@ -38,6 +40,12 @@
 // ⚠️ ON FAILURE NOTHING IS TORN DOWN. Not the flag, not the session. Run 2's shape — CC returns
 // a clean `Stop` and a question, having written nothing — must never be treated as "done",
 // because recycling there destroys the very work the handoff was meant to preserve.
+//
+// ⚠️ THE OPERATION IS ABORTABLE (paydown WP7). It runs up to 3 minutes and its caller genuinely
+// unmounts when the operator closes the workspace, so `signal` is checked at three points — after
+// the completion wait, between the clean mark and the respawn, and after the settle. Each site
+// carries its own reason; the middle one implements ruling D1 and is the one most likely to be
+// "fixed" wrongly by a future reader.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -104,12 +112,19 @@ export const RECYCLE_TIMEOUT_MS = 180_000;
  *   • `restore-not-injected` — the handoff SUCCEEDED, the clean-exit flag was marked, and CC was
  *                              killed and respawned. Only the final `/session-restore` was
  *                              missed, so the operator must run it by hand.
+ *   • `aborted`              — the caller went away mid-operation (workspace closed). Distinct
+ *                              from both: NOTHING is owed to the operator, because the workspace
+ *                              they would act on no longer exists. A caller must not surface it
+ *                              as a failure the way it surfaces the other two.
  *
  * A caller switching on `reason` to render a message cannot tell "nothing to do" from "your
  * session was recycled, now restore it" if both arrive as the same value — and the second needs
  * an action from the operator that the first does not.
  */
-export type RecycleCallerFailure = "no-session" | "restore-not-injected";
+export type RecycleCallerFailure =
+  | "no-session"
+  | "restore-not-injected"
+  | "aborted";
 
 /** What a Recycle attempt produced. */
 export type RecycleOutcome =
@@ -180,13 +195,44 @@ export interface RecycleInputs {
    * ⚠️ Unlike step 3's composite, this one IS a delay, and it is the same reason M12 needed
    * one: a COLD spawn's TUI has not started reading keystrokes yet, so bytes sent immediately
    * are dropped. M12 measured ~1500 ms (`INJECT_SETTLE_MS`). Injectable so tests need not wait.
+   *
+   * ⚠️ It is only a *true* settle because step 6 waits for the fresh session id BEFORE spending
+   * it. Read step 6's comment before moving either.
    */
   readonly restoreSettleMs?: number;
+  /**
+   * Perform the settle wait. Defaults to a real `sleep(restoreSettleMs ?? RESTORE_SETTLE_MS)`.
+   *
+   * ⚠️ This exists so the settle's POSITION in the sequence is observable to a test, and that is
+   * not incidental — it is the fix for a shipped defect. While the settle was a bare inline
+   * `sleep()` it pushed no effect anywhere, so the suite's ordered-sequence assertion could not
+   * see which side of `awaitFreshSessionId()` it fell on. The settle sat on the wrong side for
+   * the whole of v0.3.3 and every test stayed green
+   * (`SURFACE-2026-08-18-RECYCLE-TYPES-SESSION-RESTORE-BEFORE-THE-FRESH-TUI-IS-READY`).
+   * ⚠️ Do NOT collapse this back to an inline sleep to save a line; that re-blinds the assertion.
+   */
+  readonly settle?: (ms: number) => Promise<void>;
   /**
    * Override the completion deadline. Production leaves it unset (`RECYCLE_TIMEOUT_MS`);
    * tests set it small so the timeout arm is exercisable without a 3-minute wait.
    */
   readonly completionTimeoutMs?: number;
+  /**
+   * Abort the operation early — wired to the caller's unmount (paydown WP7).
+   *
+   * ⚠️ **WHY THIS IS NOT OPTIONAL POLISH.** The operation runs for up to
+   * {@link RECYCLE_TIMEOUT_MS} (3 minutes), and its caller is a `<Workspace>` that genuinely
+   * UNMOUNTS when the operator closes it — the documented exception to "all workspaces stay
+   * mounted". Without a signal, closing a workspace mid-Recycle left the sequence running
+   * against a dead pane: step 4 cleared the unclean-exit flag, then `relaunch()` —
+   * `() => ccPaneRef.current?.relaunch()` — **silently no-opped on the nulled ref**. The next
+   * open then announced nothing where it should have offered `--continue`.
+   *
+   * ⚠️ M15 wires a context-pressure caller that fires with **no human watching**, which is what
+   * widens this from a rare operator race to unattended silent flag corruption. That is why it
+   * lands before M15, not after.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -196,6 +242,23 @@ export interface RecycleInputs {
  * silent-drift seam: retuning `INJECT_SETTLE_MS` after measuring a slower spawn would leave this
  * copy stale, and the symptom — a restore typed into a TUI not yet reading stdin — is a dropped
  * command with no error. There is no reason to copy a value the same bundle can import.
+ *
+ * ⚠️ **RE-MEASURED 2026-08-19 AND DELIBERATELY LEFT SHARED — do not fork it without new data.**
+ * The v0.3.3 defect made it look as though Recycle might need a LARGER settle than the
+ * auto-resume arm. It does not; it needed the settle to happen after the respawn resolved (see
+ * step 6). Re-running `tooling/autofire-timing/probe.sh` on the current machine + CC 2.1.235:
+ *
+ * | delay | verdict (5 cold spawns each) |
+ * |---|---|
+ * | 350 ms | NOT-EXECUTED 5/5 — M12 recorded this row as *flaky* 1/5, so the cliff moved UP |
+ * | 700 ms | EXECUTED 5/5 |
+ * | 1000 ms | EXECUTED 5/5 |
+ * | **1500 ms** | **EXECUTED 5/5** |
+ *
+ * So the cliff still sits between 350 and 700 ms and 1500 ms keeps a ~2-3x margin over it. A
+ * Recycle respawn follows a kill plus a completed `/session-handoff` and could in principle be
+ * slower than a bare cold spawn — but that would show up as a longer wait for the fresh session
+ * id, which step 6 now absorbs BEFORE spending the settle, so it does not eat this budget.
  */
 export const RESTORE_SETTLE_MS = INJECT_SETTLE_MS;
 
@@ -218,21 +281,28 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 async function awaitCompletion(
   inputs: RecycleInputs,
   baselineMtimeMs: number | null,
-): Promise<RecycleState> {
-  const { workspaceId, projectPath, onProgress } = inputs;
+): Promise<RecycleState | "aborted"> {
+  const { workspaceId, projectPath, onProgress, signal } = inputs;
   let state = initialRecycleState();
 
-  return new Promise<RecycleState>((resolve) => {
+  return new Promise<RecycleState | "aborted">((resolve) => {
     const unlisteners: Array<() => void> = [];
     let settled = false;
 
-    const finish = (final: RecycleState) => {
+    const finish = (final: RecycleState | "aborted") => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
       for (const un of unlisteners) un();
       resolve(final);
     };
+
+    // ⚠️ An abort resolves the wait; it does NOT feed the machine. The machine's alphabet is
+    // "what CC did", and an abort is a statement about the CALLER, not about the handoff — a
+    // synthetic signal would put a caller-lifecycle fact into a machine whose every other input
+    // is a real hook event, and its terminal states are already load-bearing elsewhere.
+    const onAbort = () => finish("aborted");
 
     // Feed one signal in. Sequential by construction — JS callbacks do not interleave — so the
     // machine sees a well-ordered stream even though two async sources produce it.
@@ -250,6 +320,14 @@ async function awaitCompletion(
       () => feed({ kind: "timeout" }),
       inputs.completionTimeoutMs ?? RECYCLE_TIMEOUT_MS,
     );
+
+    // Already aborted before we started listening — resolve now rather than subscribing to two
+    // event sources we would immediately tear down.
+    if (signal?.aborted) {
+      finish("aborted");
+      return;
+    }
+    signal?.addEventListener("abort", onAbort);
 
     void listen<FsChange>(FS_CHANGE_EVENT, (event) => {
       if (settled) return;
@@ -315,6 +393,14 @@ export async function recycleSession(
 
   // STEP 3 — wait for the composite marker.
   const final = await awaitCompletion(inputs, baselineMtimeMs);
+
+  // ⚠️ ABORT DURING THE WAIT — the benign case, and the reason the check is HERE rather than
+  // only later. Nothing has been torn down yet: no clean mark, no kill. The handoff may well
+  // have completed on CC's side and written `.session.md`, which is fine — the session is still
+  // live and still unclean-flagged, so the next open offers `--continue` exactly as it would
+  // have if Recycle were never clicked. Returning before step 4 is what keeps that true.
+  if (final === "aborted") return { ok: false, reason: "aborted" };
+
   if (final.phase !== "succeeded") {
     // ⚠️ FAILURE ARM: nothing is torn down. No clean-exit mark (the exit was not clean), no
     // kill (the session still holds the work), no restore. The caller surfaces the reason.
@@ -338,8 +424,26 @@ export async function recycleSession(
   // to prevent.
   markSessionClean(projectPath, "recycle-session");
 
+  // ⚠️ ABORT AFTER THE MARK, BEFORE THE RESPAWN — and **THE CLEAN MARK STAYS.** (Paydown WP7,
+  // ruling D1 / Option A. Decided deliberately; do NOT "fix" it back.)
+  //
+  // The temptation is to see a cleared flag on a session that never respawned as corruption and
+  // to re-set it. It is not, and re-setting it would be the wrong offer: the handoff SUCCEEDED
+  // (step 3 only reaches here on `succeeded`), so `.session.md` is on disk. `--continue` would
+  // resume a conversation that has already been cleanly handed off, when what the next open
+  // should do is read that handoff — which is precisely what a CLEAR flag makes it do.
+  //
+  // ⚠️ **There is deliberately NO `mark_unclean` primitive**, and this site is the reason one
+  // looks tempting. Setting the flag stays owned by the spawn path alone; adding a second writer
+  // for this case would hand every future caller a way to forge an unclean exit.
+  if (inputs.signal?.aborted) return { ok: false, reason: "aborted" };
+
   // STEP 5 — kill + respawn through the pane's EXISTING relaunch path (one nonce-bump path,
   // no double-spawn). Synchronous dispatch; the spawn resolves asynchronously inside the pane.
+  //
+  // ⚠️ On an unmounted caller this SILENTLY NO-OPS (`() => ccPaneRef.current?.relaunch()` on a
+  // nulled ref) — which is why the abort check above must precede it rather than trusting the
+  // relaunch to fail loudly. It does not fail at all.
   relaunch();
 
   // STEP 6 — type the restore into the FRESH session, after the cold-spawn settle.
@@ -349,8 +453,27 @@ export async function recycleSession(
   // defect). So this injection is the only one, and there is no double-fire to defend against.
   // ⚠️ Do NOT "fix" that latch to make this automatic — it would re-open the M12 defect for the
   // ordinary Relaunch button.
-  await sleep(inputs.restoreSettleMs ?? RESTORE_SETTLE_MS);
-
+  //
+  // ⚠️ AWAIT THE FRESH ID *FIRST*, THEN SETTLE. THIS ORDER IS THE FIX FOR A SHIPPED DEFECT —
+  // do not swap it back to read more like steps 1-5.
+  //
+  // `relaunch()` above only DISPATCHES the respawn; the new session id arrives asynchronously,
+  // pushed through `XtermPane` → `App` state → the prop → the ref `awaitFreshSessionId` polls.
+  // So a settle placed before that await runs CONCURRENTLY with the spawn and measures the wrong
+  // thing: the window that actually protects the injection is only what is LEFT OVER after the
+  // id lands — near zero on a cold or loaded spawn. v0.3.3 shipped that way and the operator hit
+  // M12's exact 0 ms failure mode: `/session-restore` typed into CC's input box with the
+  // slash-command autocomplete open, the `\r` not acting as Enter, the restore never executed.
+  // (`SURFACE-2026-08-18-RECYCLE-TYPES-SESSION-RESTORE-BEFORE-THE-FRESH-TUI-IS-READY`.)
+  //
+  // ⚠️ The delay was never MISSING, so raising the number is NOT the fix — with the old ordering a
+  // larger value partly buys more spawn-wait rather than more settle, so it would "work" for
+  // reasons that do not survive a slower machine.
+  //
+  // ⚠️ And do NOT raise the shared `INJECT_SETTLE_MS` on this evidence: the auto-resume arm is
+  // correct precisely because its timer starts when the pane is ALREADY spawned, so its full
+  // 1500 ms is true post-spawn settle. Same constant, different starting line.
+  //
   // ⚠️ The session id CHANGED — `relaunch()` killed the old one. Injecting into `ccSessionId`
   // here would write to a dead PTY and the restore would silently never happen.
   const freshSessionId = await inputs.awaitFreshSessionId();
@@ -363,6 +486,18 @@ export async function recycleSession(
     // but only if the message says so.
     return { ok: false, reason: "restore-not-injected" };
   }
+
+  // The settle, now genuinely POST-spawn: the id above proves the fresh session exists, so this
+  // whole window is TUI-readiness time. Placed after the null-check on purpose — there is no
+  // reason to wait 1500 ms before reporting a respawn that never produced an id.
+  await (inputs.settle ?? sleep)(inputs.restoreSettleMs ?? RESTORE_SETTLE_MS);
+
+  // ⚠️ Re-checked AFTER the settle, not only before it — the settle is a window during which the
+  // operator can close the workspace, and this is the same "re-check at fire time, not at
+  // schedule time" rule `autoResumeFire`'s `shouldInject` exists for. Typing into a pane being
+  // torn down is at best a wasted write and at worst a slash command in the wrong conversation.
+  if (inputs.signal?.aborted) return { ok: false, reason: "aborted" };
+
   await injectCommand(freshSessionId, RESTORE_COMMAND, undefined, "recycle");
 
   return { ok: true };

@@ -146,11 +146,22 @@
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: **deferred by operator decision 2026-08-06** (*"session-start can be a later item in the backlog. much lower priority than session-restore, but not nothing"*)
 
 ## Code-quality findings — m13-wp3-recycle-session (2026-08-18)
-- **Pointer:** 3 MAJOR + 3 MINOR (grouped as 4 entries), auto-backlogged per `drive_mode: autopilot`. **Two are behavioral and were VERIFIED INDEPENDENTLY at review**, not accepted on assertion: (1) `awaitCompletion`'s late-subscription disposal branch (`settled ? un()`) is **unreachable by the test suite** because the mock always resolves its unlisten synchronously — real code that fails the repo's own *"could this pass if the code it names were deleted?"* test, and a future simplification would leak one `fs-change` listener per Recycle; (2) an in-flight Recycle is **uncancellable across unmount** — it runs up to 180s and `relaunch()` no-ops on a dead ref **after `markSessionClean` already fired**, clearing the flag for a session that never respawned. ⚠️ **Both get sharper at M15**, whose context-pressure caller fires with no human watching. The third MAJOR is documentary: **52–71% comment density with the same rationale in five files**, and the latency figures have **already drifted** (`App.css` 28–52s vs `recycleSession.ts` 51.9s/9–12s). Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m13-wp3-recycle-session — 2026-08-18`.
-- **Priority:** medium (2 behavioral MAJOR) + low-medium (1 readability MAJOR) + low (3 MINOR)
-- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); **partially resolved** — the latency-figure half of the density MAJOR is closed and now guard-enforced (WP4). ⚠️ **The two BEHAVIORAL MAJORs are the ones that matter and both are OPEN** (the unreachable disposal branch; the uncancellable in-flight Recycle) — ⚠️ **both get sharper at M15, whose context-pressure caller fires with no human watching**, so pay them *before* M15 wires that second caller, not after
-- **Pickup shape:** the two behavioral items are **cheap and worth doing before M15 calls this seam** — the disposal one is a test-mock change (defer the unlisten resolution, then assert it was still called), and the cancellation one is an `AbortSignal` on `RecycleInputs` plus an unmount abort. ⚠️ The cancellation fix carries **a decision, not just an edit**: on abort *after* a successful handoff but *before* the respawn, is the clean mark correct? (Arguably yes — the handoff completed and `.session.md` is on disk — but state it deliberately.) ⚠️ For the density item, do **NOT** trim a little from each site and move on: that is exactly how the four-consecutive-reviews case happened. Pick one authority for the latency figures, delete the other four, and move the WP1 provenance to the archive behind a single pointer.
-
+- **Pointer:** **2 MAJOR + 3 MINOR remaining** (grouped), auto-backlogged per `drive_mode: autopilot`.
+  ⚠️ **REWRITTEN 2026-08-19 — one MAJOR is RESOLVED and removed from this pointer:** *Recycle is
+  uncancellable across unmount* closed with the abort-signal work (see the `**Backlog resolved:**`
+  entry in `CHANGELOG.md` for 2026-08-19); the ordering question it asked to be decided explicitly
+  is now decided (**on abort after a successful handoff but before the respawn, the clean mark
+  STAYS**) and mutation-pinned against reversal.
+  **Still open:** (1) `awaitCompletion`'s late-subscription disposal branch (`settled ? un()`) —
+  ⚠️ **its `Status:` reads `pending` but a test for it EXISTS** (`recycleSession.test.ts`, *"disposes
+  a LATE-arriving subscription"*, labelled paydown WP4). Not closed here because verifying that the
+  test fully satisfies the finding was outside this task's scope — **re-read the code before
+  re-scoring it**, per the standing lesson that a filing is true only as-of its filing date;
+  (2) the documentary MAJOR: **52–71% comment
+  density with the same rationale in five files** — ⚠️ the *latency-figure* half closed at M13 WP4,
+  the *"Recycle is not a skill-button member"* half and the raw density are untouched; plus 3 MINOR.
+  Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md)
+  under `# m13-wp3-recycle-session — 2026-08-18`.
 ## Code-quality findings — m12-wp4b-drive-mode-signal (2026-08-07)
 - **Pointer:** 3 MAJOR + 4 MINOR (grouped as 4 entries), auto-backlogged per `drive_mode: autopilot`. The headline MAJOR is a **stated-scope gap, CONFIRMED EMPIRICALLY at review rather than accepted on assertion**: `CLAUDESK_DRIVE_MODE` inherits down the **entire descendant chain** (no `env_clear` anywhere), so a `claude` launched from inside a Claudesk-spawned CC fires the hook with the **parent workspace's** mode — while the WP's stated containment story is only CC-yes / login-shell-no. The other two: `shell_spawn_env`'s test asserts the primitive it extracted rather than the caller it was extracted to prove (the same gap the WP closes at `cc_spawn`), and incident-narrative comments are triple-recorded in code + WIP + backlog. Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp4b-drive-mode-signal — 2026-08-07`.
 - **Priority:** medium (2 MAJOR) + low-medium (1 MAJOR readability) + low (4 MINOR)

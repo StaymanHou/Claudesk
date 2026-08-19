@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-08-18
 created: 2026-08-18
-status: in-progress (WP1-WP5 done 2026-08-18; WP6 next)
+status: in-progress (WP1-WP5 done 2026-08-18; WP7 done 2026-08-19 out of order, folded into the Recycle ordering fix; WP6 next)
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -271,6 +271,17 @@ Two real (if small) correctness edges, both currently untested at the boundary.
 
 ## WP7 — Make Recycle abortable across unmount  `[impact: High · effort: S-M · risk: Med]`  ⚠️ D1
 
+> ✅ **DONE 2026-08-19 — shipped OUT OF ORDER, folded into the v0.3.3 Recycle restore-timing fix.**
+> Both edit the same ~20 lines of `recycleSession.ts` step 5/6, so doing them apart would have paid
+> for the same function, the same mutation proofs, and the same live-Recycle verification twice.
+> As built: `signal?: AbortSignal` on `RecycleInputs`, a third caller-failure reason `aborted`
+> (excluded from the `console.warn` channel — the operator closed the workspace, so nothing is owed
+> them), and three abort sites. **Ruling D1 honored and mutation-pinned:** a mutant that adds a
+> `mark_unclean`-shaped undo at the D1 site is CAUGHT, so a future reader who "fixes" the ruling
+> back gets a red test rather than silence. **Proven at the caller** in its own file
+> (`recycleAbortOnUnmount.test.ts`) as the WP demanded; all 10 mutants run individually, each
+> killing exactly one assertion. See `CHANGELOG.md` 2026-08-19.
+
 **Carries one behavioral MAJOR, and it is the sharpest item in the sweep.** Today: closing a
 workspace mid-Recycle leaves the unclean-exit flag **cleared** for a session that was **never
 respawned** — `markSessionClean` fires at `recycleSession.ts:339`, `relaunch()` at `:343`, and
@@ -429,7 +440,3 @@ Per the model: **deletions → low-risk → high-impact → co-location**; effor
 4. Confirm the **T1/T2 convention pass** is recorded as a deferred item with its
    authority + guard shape intact (not silently dropped).
 5. **Delete this file.** It reserves no roadmap slot and must not be resynced into `arch.md`.
-
-
-## Session Handoff — 2026-08-18 17:40
-Handed off. See `workflow-system/state/.session.md` to restore.
