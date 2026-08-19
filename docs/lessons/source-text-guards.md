@@ -141,8 +141,8 @@ extra one had been written hours earlier in the same session.
 
 ## 9. A filtered test run proves nothing without a count
 
-`cargo test -p claudesk <filter>` with a filter matching **zero tests** prints
-`test result: ok. 0 passed; 0 failed` and **exits 0**. An Observable Outcome or CI gate written
+`cargo test <filter>` (and `cargo test -p claudesk <filter>`) with a filter matching **zero tests**
+prints `test result: ok. 0 passed; 0 failed` and **exits 0**. An Observable Outcome or CI gate written
 as `<runner> <filter>` therefore passes against an empty codebase, a renamed test, or a typo —
 and reads as a green gate. Measured 2026-08-12: still true.
 
@@ -203,7 +203,7 @@ expect(effects).toEqual([
 ```
 
 Every step in that list pushes an entry into `effects`. The **settle did not** — it was a bare
-`await sleep(ms)`. So the settle's position was unobservable, it sat on the wrong side of
+`await sleep(ms)`, and a plain `sleep()` emits nothing anywhere. So the settle's position was unobservable, it sat on the wrong side of
 `awaitFreshSessionId()` for the whole of v0.3.3, the restore was typed into a TUI that was not yet
 reading keystrokes, and **the suite stayed green the entire time.** The operator found it by using
 the feature.

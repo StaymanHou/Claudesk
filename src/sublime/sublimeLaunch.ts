@@ -5,6 +5,14 @@
 // the workspace's project path and SURFACES a rejection (console.error) rather
 // than dead-clicking — the WP6 picker lesson.
 //
+// ⚠️ BUTTON-ONLY, BY DECISION — and `⌘⇧O` IS FREE. These launchers are reached from the panel
+// tab row, not a keybinding. The launch went OS-global first (`tauri-plugin-global-shortcut` +
+// a macOS Accessibility flow, rejected at verify-human 2026-06-19 — see `src-tauri/src/sublime/`),
+// was then rebuilt as an in-app `⌘⇧E`→`⌘⇧O` keydown hotkey, and at WP8's 2026-06-20 redefinition
+// the `⌘⇧O` half was DELETED as redundant with the button. So `⌘⇧O` is unclaimed and available to
+// a future feature; do not assume it is taken. (`⌘⇧`+digit is NOT — that is reserved for
+// filmstrip/workspace switching.)
+//
 // The Tauri `invoke` is injected (defaulting to the real one) so the two helpers
 // are unit-testable without mocking the module — matching this codebase's
 // pure-core test convention (no `vi.mock` anywhere else).
