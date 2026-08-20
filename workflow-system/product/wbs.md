@@ -10,7 +10,10 @@ state: complete
 
 > **An OPEN collection bucket**, the fourth of its kind — following **M6** (friend-requested QoL,
 > closed 2026-06-28), **M10.5** (closed 2026-07-19) and **M11.5** (closed 2026-08-01). All three
-> closed at 4 WPs; this one is scoped to match.
+> closed at 4 WPs; this one opened scoped to match and now stands at **5** — the drive-mode
+> workspace surface (WP4) was added 2026-08-20 from a direct operator ask, which is the bucket
+> convention working as intended (an OPEN bucket accepts items while it runs). ⚠️ **If WP3
+> escalates out per its own gate 3.2, the bucket closes at WP1+WP2+WP4+WP5 — still four.**
 >
 > **Numbered 13.5** so the M14/M15 tail keeps its numbers — the same reason M10.5 and M11.5 were
 > `.5` inserts rather than renumbering everything after them.
@@ -34,6 +37,7 @@ the tree is clean.
 | WP1 | `SURFACE-2026-08-05-WINDOW-SIZE-AND-POSITION-NOT-PERSISTED` | Operator request; friction paid on **every** launch |
 | WP2 | `SURFACE-2026-08-16-IDLE-DOT-CONFLATES-DONE-WITH-WAITING-ON-A-BACKGROUND-JOB` + `SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT` | Both tagged for a QoL bucket; **shared root cause** |
 | WP3 | `SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION` | Operator-felt, recurring; ⚠️ **scope risk, see WP3** |
+| WP4 | *(no backlog entry — direct operator ask, 2026-08-20)* | Daily-driver papercut found by dogfooding M12; ⚠️ **reverses a recorded M12 decision, see WP4** |
 
 ⚠️ **NOT in this bucket — already fixed.** `SURFACE-...-RECYCLE-TYPES-SESSION-RESTORE-BEFORE-THE-FRESH-TUI-IS-READY`
 was resolved 2026-08-19 (`42bfe0c`) and its entry deleted. ⚠️ **And the fix was NOT "wait a few
@@ -170,20 +174,133 @@ that and nothing more.
 
 ---
 
-## WP4: Bucket exit verify
+## WP4: Drive-mode readout + selector on the workspace surface
+
+**Description:** The drive mode is settable and legible **only** on the picker row. Once a
+workspace is open — which is where the operator actually spends the day — there is no way to see
+which mode this session is running under, and no way to change it without navigating back to the
+picker. Add a drive-mode readout + selector to the **workspace** surface.
+**Milestone:** 13.5
+**Dependencies:** none (technical); ordered after WP1–WP3 by bucket convention only
+**Size:** S–M
+**Trigger:** operator, 2026-08-20, after dogfooding M12's picker-row cell — *"a drive mode
+indicator + selector is needed in the workspace view, not just in the workspace selector page."*
+
+⚠️ **THIS IS A DELIBERATE REVERSAL OF A RECORDED M12 DECISION, NOT A GAP.** Do not implement it
+as though the second surface were merely overlooked. Three artifacts say "picker row **only**":
+
+- `arch/session-resumption.md` → "The picker-row cell (⚠️ NOT the workspace header)":
+  *"Placement is picker-row ONLY, not both. Two homes for one per-project value would need a sync
+  path that deliberately does not exist."*
+- `cc/driveModeIpc.ts` → "No broadcast event, same reasoning as the model override": *"If a
+  genuinely second surface ever appears (a workspace-header readout, a filmstrip badge), add the
+  event then; note that would be a real reversal rather than an extension."*
+- Design prior `set-a-spawn-time-choice-where-the-spawn-is-chosen`, whose origin is the operator
+  **rejecting** the model override on the workspace header at M11.5 WP1 verify-human.
+
+**Why the reversal is legitimate anyway — the prior names this exact edge as untested.** Its own
+`Why:` closes with: *"the untested edge is a setting read at creation that is ALSO
+live-reconfigurable later, which may want both."* Drive mode **is** that setting, and
+`arch/session-resumption.md` already flagged it as *"the **first live edge case** for design prior
+`set-a-spawn-time-choice-where-the-spawn-is-chosen` (drive mode is read at spawn **and** is
+live-reconfigurable)"*. So the reversal resolves a hole the prior itself marked open — it does not
+overturn the prior's decided cases.
+
+⚠️ **THE MODEL OVERRIDE DOES NOT COME ALONG.** The prior's rejected case (`--model`, fixed at
+spawn for the process's life) is untouched: it stays picker-row-only. The discriminator is the
+prior's own decision rule — *"read at creation, immutable afterward"* vs *"read continuously /
+live-reconfigurable"* — and drive mode is the only one of the two stacked values that is the
+latter. A change that moves both, or that generalizes "workspace surfaces get the picker's cells",
+is out of scope and contradicts the prior.
+
+**Tasks:**
+
+- [ ] 4.1 **Decide readout-only vs readout+selector FIRST, and get the operator's call on record.**
+      The ask says both, so build both unless 4.2 says the write path cannot be made honest. A
+      readout alone is a strictly cheaper fallback and still solves the stated "no way to see it"
+      half.
+- [ ] 4.2 ⚠️ **Resolve the LIVENESS QUESTION before building the selector — it is the whole
+      correctness risk.** Two distinct consumers read the mode and they do NOT agree on when:
+      - the `UserPromptSubmit` hook's `additionalContext` line reads
+        `CLAUDESK_DRIVE_MODE`, an **env var fixed at spawn** — so changing the mode mid-session
+        does **not** reach the live session, exactly as `setProjectDefaultDriveMode`'s doc
+        comment states (*"Takes effect on that project's NEXT CC spawn … does not affect an
+        already-running session — the env of a live process is fixed"*);
+      - the picker's stored value in `projects.json` changes immediately.
+      **A selector on the running workspace therefore looks live and is not** — which is
+      *precisely* the failure mode the design prior was written to prevent (*"Placing it on the
+      created instance makes it look live when it is not"*). Pick one and say which:
+      **(a)** label it as next-spawn-only (cheapest, honest, matches the existing
+      `↻ <nextOpen>` prediction idiom already in the header); **(b)** make the hook read the
+      mode at prompt time instead of from spawn env, so the change is genuinely live (larger —
+      touches the Perl hook + `workflow_gate`, and re-opens "who owns the value at read time");
+      **(c)** offer an inline Recycle affordance so the operator can *make* it take effect (WP3's
+      Recycle already exists as a sibling button in the same row).
+      ⚠️ **Do not ship an unlabelled live-looking `<select>` under option (a).**
+- [ ] 4.3 ⚠️ **Add the broadcast event that M12 deliberately omitted.** With a second surface, the
+      picker and the workspace can disagree, and `driveModeIpc.ts` says outright that this is when
+      to add it. Mirror the **permission mode's** pattern (app-global value, re-broadcasts on
+      write because it has a View-menu radio as a second surface) — that is the in-repo precedent
+      for two-surfaces-one-value; the model override's no-event pattern is now the wrong template.
+      Both surfaces must re-sync on a write from either.
+- [ ] 4.4 ⚠️ **GATE IT, and take the OFF-invariant guard's SIXTH arm.** The mode is a
+      workflow-system concept, so this surface is `workflow_features_enabled`-gated exactly as the
+      skill row and `workspace-header-nextopen` are — **ABSENT when off, not hidden or disabled**.
+      Per the guard's own header, a new gated surface owns a new arm. ⚠️ **Probe the new arm
+      INDIVIDUALLY** — the guard now has five arms and seven subjects, and a composite bypass that
+      trips *some* arm reports "the guard bites" while hiding this one's gap. Confirm the mutation
+      landed in **executable** code (`[[verify-the-mutation-landed]]`,
+      `[[invalid-probe-and-real-hole-look-identical]]`).
+- [ ] 4.5 **Reuse `cc/driveMode.ts` as-is; add no second vocabulary.** `DRIVE_MODES`,
+      `DRIVE_MODE_UNSET_PLACEHOLDER` and `driveModeChanged` already exist in the pure module and
+      are the single source of truth for the wire strings. ⚠️ **`fsd` and `stepping` are the
+      load-bearing spellings** — `full-autopilot` / `step-by-step` are the wrong guesses and fail
+      serde on read, taking the whole project list down. A native `<select>` over the closed set is
+      correct here for the same correctness reason it was correct on the picker row; the model
+      override's open-string / do-NOT-validate rule must not be generalized to it.
+      ⚠️ `cellLines()` is the **picker cell's** layout, not a shared widget — do not reuse it here
+      and do not widen it to serve two callers.
+- [ ] 4.6 **Placement on the workspace surface.** The `workspace-header` already carries the name,
+      the gated `↻ <nextOpen>` prediction, the gated skill row (+ Recycle), and the split control.
+      ⚠️ `[PRIOR: new-surface-must-earn-its-place-against-existing-ones]` fires: put it **in the
+      existing header row**, not in a new bar, panel, or settings popover. Check the header's
+      horizontal budget at a narrow window before adding a wide control — the picker column's box
+      math was wrong three separate ways and only measuring the live DOM caught it. **Measure;
+      compute nothing you can read.**
+- [ ] 4.7 ⚠️ **If a selector is built, it has its OWN hit region.** M12's structural risk in the
+      picker cell was two edit targets in one column, where a single cell-wide handler routes a
+      click meant for the mode into the *model* editor — *"presents as 'the control does nothing'
+      and no unit test can see it."* The header now has several adjacent clickable affordances;
+      the same trap applies.
+- [ ] 4.8 Live verify-self: change the mode from the workspace, confirm the picker row re-syncs
+      (and vice versa), and confirm the OFF-gate collapse. ⚠️ Verify the **liveness claim actually
+      chosen in 4.2** end-to-end — if (b), prove the running session's next turn sees the new mode
+      by reading the hook's `additionalContext`, not by reading `projects.json` back.
+
+**Open question for the operator (do not guess):** does the workspace readout need to show the
+**effective** mode of the *running* session (what it spawned with) or the **stored** project
+default (what the next spawn will use)? After a mid-session change under option (a) these differ,
+and showing the stored value while the session runs on the old one is a new confabulation channel.
+The `↻ <nextOpen>` prediction next to it is a *prediction* idiom and reads naturally as
+next-spawn — which argues for stored-with-a-label, but the ask said "indicator", which reads as
+current-state.
+
+---
+
+## WP5: Bucket exit verify
 
 **Description:** Live-verify the bucket's shipped WPs, close the resolved backlog items, and sweep.
 **Milestone:** 13.5
-**Dependencies:** WP1, WP2, WP3 (or WP3's escalation)
+**Dependencies:** WP1, WP2, WP3 (or WP3's escalation), WP4
 **Size:** XS
 
 **Tasks:**
-- [ ] 4.1 Live verify-self per shipped WP. ⚠️ **WP1 needs the installed-`.app` tier**, not
+- [ ] 5.1 Live verify-self per shipped WP. ⚠️ **WP1 needs the installed-`.app` tier**, not
       `pnpm tauri:dev` — window geometry + `app_data_dir` behaviour differ, and the operator defers
       installed-build manual verification to the `/release` gate
       (`[[installed-build-verify-deferred-to-release]]`).
-- [ ] 4.2 CHANGELOG + delete-on-resolve for each fully-resolved item; **rewrite** any partial.
-- [ ] 4.3 `/product-finalize` — resync `arch/status-channel-and-surfaces.md` if WP2 added a state,
+- [ ] 5.2 CHANGELOG + delete-on-resolve for each fully-resolved item; **rewrite** any partial.
+- [ ] 5.3 `/product-finalize` — resync `arch/status-channel-and-surfaces.md` if WP2 added a state,
       archive this WBS.
 
 ---
@@ -201,15 +318,20 @@ not an unknown API shape — deviation noted deliberately), and no orchestration
   exist?) and must resolve before WP3, because if WP2 turns out to be a one-task fix the bucket has
   budget for WP3's design pass — and if WP2 grows into a full fourth-state thread-through, WP3 is
   the natural thing to escalate out. **Sequencing WP3 last is what makes its escalation cheap.**
-- **WP3 → WP4 rationale:** exit verify last, so an interrupted bucket leaves nothing half-applied.
+- **WP3 → WP4 rationale:** WP4 arrived after the bucket opened and has **no technical dependency**
+  on anything here — it is ordered late purely so it does not preempt the two items that were
+  already committed. ⚠️ **It is the most independently shippable WP in the bucket after 2.2**: if
+  WP3 escalates out (its expected outcome), WP4 can be pulled forward without touching WP1/WP2.
+- **WP4 → WP5 rationale:** exit verify last, so an interrupted bucket leaves nothing half-applied.
 
 ## Dependency map
 
-**Critical path:** WP1 → WP2 → WP3 → WP4 (sequential; a bucket is small enough that parallel tracks
-buy nothing and cost context-switching).
+**Critical path:** WP1 → WP2 → WP3 → WP4 → WP5 (sequential; a bucket is small enough that parallel
+tracks buy nothing and cost context-switching).
 
-**Parallel tracks:** none. **WP2 task 2.2 is independently shippable** if the bucket is interrupted —
-it is the one item here that is a live reproducible defect with a known cause.
+**Parallel tracks:** none, but **two items are independently shippable** if the bucket is
+interrupted: **WP2 task 2.2** (a live reproducible defect with a known cause) and **WP4** (no
+technical dependency on WP1–WP3). WP5 depends on whatever actually shipped.
 
 ## Not in this bucket (anchors intact)
 
