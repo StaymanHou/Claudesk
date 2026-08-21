@@ -247,20 +247,6 @@
 - **Priority:** low (wiring proven; the residual risk is a CC-side behavior the operator exercises daily through ordinary dogfooding)
 - **Status:** deferred — operator-gated; scope NARROWED at the 2026-08-12 paydown sweep to the runtime half only
 
-## SURFACE-2026-08-05-WINDOW-SIZE-AND-POSITION-NOT-PERSISTED
-- **Source:** operator request (2026-08-05, mid-M12-WP3 — deliberately NOT folded into that WP; unrelated concern)
-- **Target level:** feature (QoL) — **SCHEDULED as Milestone 13.5 WP1** (bucket inserted 2026-08-19; see `workflow-system/product/wbs.md`)
-- **Type:** gap (missing QoL behavior)
-- **Summary:** The main window is **hardcoded to 1280×800 on every launch** (`tauri.conf.json` → `app.windows[0]`, mirrored in the `tauri.dev.json` overlay) and **nothing about its geometry is persisted**. There is no window-state plugin registered and no hand-rolled equivalent. The operator resizes the window on essentially every launch: their display is **1920×1080**, so the 1280×800 default occupies about a third of the screen.
-- **Operator's ask, and what "fullscreen" means here:** *"let the desktop app remember its window size. So that if it was closed 'fullscreen', next time user opens it, it will also launch 'fullscreen'."* ⚠️ **Clarified by screenshot (2026-08-05): they mean ZOOMED/MAXIMIZED — the green-button state — NOT true macOS fullscreen.** The evidence in the screenshot is unambiguous: traffic lights visible, the system menu bar visible, window filling the display but not in its own Space. **Persist size + position + `maximized`; do NOT persist `fullscreen`.** The distinction matters because the two states restore through different APIs, and relaunching into a separate Space is a different (more disorienting) behavior than the one asked for.
-- **Suggested action:** Use the **first-party `tauri-plugin-window-state`** (`2.4.1`, `tauri-apps/plugins-workspace`, ~2.7M downloads) — same Tauri v2 line as the seven plugins already in `Cargo.toml`, so this is a dependency + a `.plugin()` registration + a `StateFlags` choice, not hand-rolled persistence. Set flags to size/position/maximized and **omit** `FULLSCREEN`.
-- **⚠️ Three things the implementer must not skip:**
-  1. **Off-screen restore is the classic footgun.** A window restored to coordinates on a since-disconnected monitor lands invisible, and the app then looks like it failed to launch. Verify the plugin's clamping actually fires, or clamp to the current visible frame — do not assume.
-  2. **Dev/prod isolation must hold.** State goes in the per-identity `app_data_dir()` so `com.claudesk.app` and `com.claudesk.app.dev` do not share geometry (the dogfooding requirement — both run concurrently by design). Confirm the plugin honors the identity rather than a fixed path.
-  3. **The PiP NSPanel must be excluded.** It has its own position logic (M10.5 WP1's top-right default + the in-session `positioned` flag in `pip_resize`), and a generic save/restore over all windows would fight it. Scope the plugin to the `main` label, and re-check M5 WP5's rule that **PiP/NSPanel window ops must run on the main thread** if any restore path touches it.
-- **Priority:** low-medium (pure QoL; no correctness impact, but it is friction paid on every single launch)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
-
 ## SURFACE-2026-08-04-CC-READY-NAME-INVITES-MISREADING-AS-CC-READINESS
 - **Source:** feature:spec (M12 WP3 reconciliation)
 - **Target level:** product:arch (or a one-line doc fix at the command)

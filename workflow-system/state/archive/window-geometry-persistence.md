@@ -1,7 +1,7 @@
 # Feature: Window size + position persistence (M13.5 WP1)
 
 **Workflow:** feature
-**State:** review-quality (complete)
+**State:** COMPLETED 2026-08-21
 **Created:** 2026-08-21
 **Milestone:** 13.5 WP1
 **Resolves:** `SURFACE-2026-08-05-WINDOW-SIZE-AND-POSITION-NOT-PERSISTED`
@@ -546,6 +546,58 @@ open `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`.
 ### If you disagree
 Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
 `feature-finalize` archives this WIP.
+
+## Retrospect
+
+- **What changed in our understanding:** ⚠️ **Reading the dependency's source was the whole
+  feature.** The WBS and backlog both framed this as "a dependency plus a `.plugin()` registration"
+  with three named traps; reading `tauri-plugin-window-state` 2.4.1's 549 lines contradicted or
+  sharpened **all four** of its load-bearing claims — and the single most important property (the
+  disk write happens **only** on `RunEvent::Exit`, which our `prevent_close` quit path might have
+  bypassed) **was not in either document at all**. The general lesson: for a third-party integration
+  whose behavior the test suite cannot observe, the dependency's source is a primary document, not a
+  fallback when the README is unclear.
+- **Assumptions that held:** the plugin was the right tool (first-party, same Tauri v2 line, no new
+  transitive deps — the lockfile grew by exactly one package); the PiP denylist was genuinely
+  load-bearing rather than tidiness; `SIZE | POSITION | MAXIMIZED` with `FULLSCREEN` omitted matched
+  what the operator actually asked for; and the pure-policy seam made the untestable surface testable.
+- **Assumptions that were wrong:**
+  1. ⚠️ **"Verify the off-screen clamping fires" — there is no clamping.** The mechanism is
+     skip-if-no-monitor-intersects, and `set_size` applies *outside* that guard. Two traps therefore
+     resolved toward *no code*: no hand-rolled clamp, and no `save_window_state` call in
+     `perform_quit_teardown`. **Both plan fallbacks were written and neither was taken.**
+  2. ⚠️ **`app_data_dir()` was the wrong accessor** in the backlog's trap 3 — the plugin uses
+     `app_config_dir()`. The conclusion (dev/prod isolation holds) was right for the wrong reason,
+     which is exactly the case that survives a careless read.
+  3. **`read_logs{source:"console"}` captures nothing for this app.** It returned empty, which reads
+     as "no JS errors." Only a deliberate positive control (emitting `console.error` and re-reading)
+     exposed it as a dead instrument.
+  4. ⚠️ **`osascript`/System Events cannot safely address the un-bundled dev binary** — and it fails
+     *silently and misdirected*, resolving to the prod app instead. This one had a real cost: it quit
+     the operator's live Claudesk. The existing memory's advice ("target by title or bundle id, not
+     process name") does **not** cover this case, because the dev binary has neither.
+- **Approach delta:** implementation matched the plan almost exactly — 7 tasks, one phase, no
+  back-loop, no F22/F23/F26. Two deltas, both *subtractive*: the two fallback branches the plan
+  pre-authorized were not needed. One addition at verify-codify: a **fifth test** (the vacuity guard),
+  written because mutant E demonstrated that the four value tests all stay green if `register()`
+  inlines its literals. The plan had anticipated the *need* for that guard but not that it would take
+  four separately-proven assertions to close.
+- **What the operator's pass caught that the agent's could not:** the agent proved size- and
+  maximize-restore with a **synthetic IPC resize** and a **hand-seeded** `maximized: true`; neither
+  exercises the `Moved`/`Resized` events the plugin actually saves from. The operator's real drag and
+  real green-button click covered the input path, and their PiP summon upgraded the denylist claim
+  from *"no key for a panel that never appeared"* to the strong form. **A live verification can be
+  green and still not touch the mechanism under test.**
+
+## Closure notice
+
+> **Feature complete:** M13.5 WP1 — window size + position persistence has shipped. Claudesk's main
+> window now remembers its size, position, and maximized state across launches, so a window closed
+> maximized reopens maximized instead of reverting to the hardcoded 1280×800. To see it: resize or
+> maximize the window, quit (⌘Q), and relaunch — the geometry comes back. State lives per-identity,
+> so the dev build and an installed build never share geometry.
+
+Requester = operator — closure notice for self-record.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

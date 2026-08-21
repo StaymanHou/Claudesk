@@ -85,7 +85,7 @@ not macOS native fullscreen).
 why this is a WP and not a task. Each is an operator-visible failure if skipped, and 1.3 is the one
 that looks like a crash.
 
-**✅ SHIPPED 2026-08-21.** All five tasks done; `pnpm verify:auto` exit 0 (Rust 859 / frontend 2136).
+**✅ SHIPPED 2026-08-21** (`25a68bc`; review `fe091f9`). All five tasks done; `pnpm verify:auto` exit 0 (Rust 859 / frontend 2136).
 ⚠️ **Both traps 1.3 and 1.4 resolved toward the SIMPLER build** — no hand-rolled clamping, no
 `save_window_state` call in `perform_quit_teardown` (`RunEvent::Exit` **does** fire through
 `prevent_close` → `quit_now` → `app.exit(0)`, proven 3×). Implementation is 3 files: the dep,

@@ -396,12 +396,21 @@ supervisor and the OSS release. Decomposed in `wbs.md`.
 > the bucket exists to absorb. Numbered **13.5** so M14/M15 keep their numbers.
 
 **Deliverables:**
-- [ ] **WP1 — window size/position persistence.** The main window is hardcoded 1280×800 on every
-      launch and nothing is persisted; a maximized window should relaunch maximized (operator ask
-      2026-08-05, clarified by screenshot to mean **maximized**, not macOS native fullscreen).
-      First-party `tauri-plugin-window-state`. ⚠️ The three traps are the work: off-screen restore
-      clamping, dev/prod geometry isolation, and scoping the plugin to the `main` label so it does
-      not fight the PiP panel's own position logic.
+- [x] **WP1 — window size/position persistence.** ✅ **SHIPPED 2026-08-21** (`25a68bc`; review
+      `fe091f9`). The main window was hardcoded 1280×800 on every launch with nothing persisted; a
+      maximized window now relaunches maximized (operator ask 2026-08-05, clarified by screenshot to
+      mean **maximized**, not macOS native fullscreen — flags are `SIZE | POSITION | MAXIMIZED`,
+      `FULLSCREEN` deliberately omitted). First-party `tauri-plugin-window-state` 2.4.1.
+      ⚠️ **Two of the three traps resolved toward the SIMPLER build, and this line's framing of one
+      was wrong:** off-screen safety is **skip-if-no-monitor-intersects, NOT clamping** (the plugin
+      applies `set_position` only when a monitor intersects the saved rect, while `set_size` applies
+      unconditionally — so a window saved on a disconnected monitor returns at its saved *size* at an
+      OS-chosen *position*), so **no hand-rolled clamping was needed**; and dev/prod isolation holds
+      via `app_config_dir()` (**not** `app_data_dir()` as the backlog stated — on macOS both resolve
+      to the same per-identity dir). The third trap was real: scoping to `main` via a denylist keyed
+      on `pip::commands::PANEL_LABEL`. ⚠️ Also load-bearing and **not** in this line: the plugin
+      writes to disk **only** on `RunEvent::Exit`, and Claudesk's quit path holds the close
+      (`prevent_close` → `quit_now` → `app.exit(0)`) — verified live 3× that the save still lands.
 - [ ] **WP2 — the status model's missing background-work state(s).** ⚠️ **Probe-gated, and it covers
       TWO items with a shared root cause but opposite symptoms:** a **wrongly-gray** dot (CC returned
       control while a backgrounded shell job runs — `Stop` maps unconditionally to `Idle`) and a
