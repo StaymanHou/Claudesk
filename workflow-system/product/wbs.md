@@ -359,3 +359,6 @@ technical dependency on WP1–WP3). WP5 depends on whatever actually shipped.
   **measure-then-decide**, not a build; it needs a fresh measurement pass before it can be scoped.
 - Everything else in `backlog.md` — 29 open items at bucket open; the rest are tech-debt, guard
   completeness, or gated on unmet preconditions.
+
+## Session Handoff — 2026-08-21 15:21
+Handed off. See `workflow-system/state/.session.md` to restore.
