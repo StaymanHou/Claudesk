@@ -1,5 +1,13 @@
 # Backlog
 
+## Code-quality findings — window-geometry-persistence (2026-08-21)
+- **Pointer:** **2 MAJOR + 4 MINOR** (grouped as 3 entries), auto-backlogged per `drive_mode: autopilot`. ⚠️ **Both MAJORs are about PROSE, not code** — the review found 0 CRITICAL and explicitly states "nothing here needs a refactor pass to be safe." (1) `window_state/mod.rs` carries **117 comment lines for 14 lines of executable code**, with a clean keep/move split — the four plugin-source properties and two flag-omission rationales stay; the provenance (display size, "verified live at P1.3", the `1280×800` history, the mutant-E narrative) is **already verbatim in commit `25a68bc`**, so it is deletion not relocation. (2) The **PiP-denylist rationale is stated at four sites** (`mod.rs` ×2, `lib.rs` ×2 regions, `Cargo.toml`) — the asymmetric-drift shape this repo has measured before. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# window-geometry-persistence — 2026-08-21`.
+- **⚠️ Both MAJORs are instances of an already-open standing finding, not new work:** `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, whose own resolution shape is **"one authority per rule + a pointer at every other site + a GUARD"** and which records that **per-WP trimming was measured as NOT converging** (four consecutive reviews of one file). **Fold these into it rather than paying them down separately** — a fifth per-file trim is the thing that finding exists to stop.
+- **The 4 MINORs:** a bare `"main"` literal in a test that argues the opposite principle elsewhere; ⚠️ the vacuity guard's `!code.contains('"')` assertion being **broader than the property it names** (it would also reject a legitimate `.with_filename(..)`, and an over-broad guard is how guards get deleted rather than narrowed); `denylist()`'s fixed-size array baking the count into the signature; and the guard's doc comment restating commit-message history.
+- **Priority:** medium (2 MAJOR — documentary/drift risk, no correctness impact) + low (4 MINOR)
+- **Status:** pending
+- **Pickup shape:** read the three entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+
 ## SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY
 - **Source:** feature:ship (M13.5 WP1 final verification — unrelated to that feature)
 - **Target level:** task (a small test-hygiene fix)

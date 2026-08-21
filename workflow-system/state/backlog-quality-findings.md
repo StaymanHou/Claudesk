@@ -4,6 +4,37 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# window-geometry-persistence — 2026-08-21
+
+## SURFACE-2026-08-21-QUALITY-WP1-COMMENT-DENSITY-117-LINES-FOR-14
+- **Source:** feature-review-quality (M13.5 WP1, MAJOR)
+- **Type:** tech-debt (documentary)
+- **Summary:** `src-tauri/src/window_state/mod.rs` ships **117 lines of comment for 14 lines of executable code** (58 `//!` module-doc lines + 45 `///` item-doc lines). A large share is **provenance** rather than decision-support.
+- **Context:** Judged against `docs/lessons/source-text-guards.md` → "Comment budget" and its test — *would a reader make a worse decision without this sentence?* ⚠️ **The keep/move split is unusually clean here.** KEEP (a future reader adding `FULLSCREEN` or `VISIBLE`, or removing the denylist, would genuinely decide worse without them): the four plugin-source properties, and the two flag-omission rationales. MOVE (answers *how did we get here*, which the lesson routes to WIP/archive/CHANGELOG): the `1280×800`/`tauri.conf.json` history, "the operator resized it on essentially every launch", "their display is 1920×1080", "verified live at P1.3 rather than assumed", "the backlog entry says X", and the mutant-E narrative in the vacuity guard's doc comment (`mod.rs`:132-141). ⚠️ **All of the MOVE material is already in the ship commit message `25a68bc` verbatim** — that is its correct home, so this is deletion, not relocation.
+- **Suggested action:** Trim the MOVE set; keep the KEEP set at the code. ⚠️ **Do NOT treat this as a generic "trim comments" pass** — per `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, per-WP trimming was **measured as not converging** (four consecutive reviews of one file). This item is a concrete instance of that standing finding and should be **folded into it**, not paid down separately.
+- **Priority:** medium (no correctness impact; the cost is that at this density 95%-accurate prose reads as authoritative and the wrong 5% is what gets acted on — the lesson's own warning)
+- **Status:** pending
+
+## SURFACE-2026-08-21-QUALITY-WP1-PIP-RATIONALE-AT-FOUR-SITES
+- **Source:** feature-review-quality (M13.5 WP1, MAJOR)
+- **Type:** tech-debt (duplication → drift risk)
+- **Summary:** The PiP-denylist rationale is stated at **four sites**: `M10.5 WP1's top-right anchor` at `mod.rs`:90, `mod.rs`:218 and `lib.rs`:212; "load-bearing not cosmetic" at `mod.rs`:84 and `lib.rs`:104; and the four-plugin-properties list summarized again in `Cargo.toml`:118-126.
+- **Context:** `docs/lessons/source-text-guards.md` is unambiguous that **duplication is the expensive half** — state it once at the canonical home, make every other site a pointer — and names measured instances in this repo of a rationale living in six files and drifting **asymmetrically**. ⚠️ This is the *same* failure class as the already-open `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, whose own resolution shape is **"one authority per rule + a pointer at every other site + a GUARD"**.
+- **Suggested action:** Make `denylist()`'s doc comment the single authority; collapse the `lib.rs` and `Cargo.toml` blocks to one-line pointers to it. ⚠️ Per the standing finding above, the durable fix needs **a guard**, not just this one consolidation — otherwise the next feature re-adds a fourth site.
+- **Priority:** medium (no live defect; four copies are four things to update, and the copy someone edits becomes right while the others keep asserting the old thing with equal confidence)
+- **Status:** pending
+
+## SURFACE-2026-08-21-QUALITY-WP1-MINOR-SET
+- **Source:** feature-review-quality (M13.5 WP1, 4 MINOR grouped)
+- **Type:** tech-debt (consistency + guard precision)
+- **Summary + suggested action, one per finding:**
+  1. **`mod.rs`:235 — bare `"main"` literal in a test** that argues the opposite principle three other places (`denylist()` avoids re-spelling labels; the guard at :171 forbids string literals in `register()` for that reason). `tray/commands.rs:42` already holds a **private** `const MAIN_WINDOW_LABEL`. → Promote that const, or add one line noting this literal is the **framework default**, not a Claudesk-owned label. Defensible as-is; the asymmetry is the cost.
+  2. ⚠️ **`mod.rs`:171-175 — the `!code.contains('"')` assertion is BROADER than the property it names.** It reads as "no window labels inline" but also rejects `.with_filename("…")`, a legitimate builder option (plugin source :346) a future dev/prod-isolation change might want. → Narrow it (or widen the failure message to say what it really forbids). *An over-broad guard that fires on a legitimate change is how guards get **deleted** rather than narrowed.*
+  3. **`mod.rs`:102 — `denylist() -> [&'static str; 1]`** bakes the count into the signature, so a second excluded label is a type change rippling to both call sites. → `&'static [&'static str]` costs nothing. Not a correctness issue; `with_denylist` takes `&[&str]` either way.
+  4. **`mod.rs`:132-141 — the vacuity guard's doc comment restates the mutant-E narrative** already in commit `25a68bc`. → Keep the ⚠️ what-to-do-when-this-fails paragraph (it earns its place); drop the history. Overlaps finding 1 of the comment-density item above.
+- **Priority:** low (all four)
+- **Status:** pending
+
 # m13-wp4-milestone-exit-verify — 2026-08-18
 
 ## SURFACE-2026-08-18-QUALITY-WP4-WIP-PHASE-SECTIONS-INTERLEAVED

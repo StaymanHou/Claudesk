@@ -1,7 +1,7 @@
 # Feature: Window size + position persistence (M13.5 WP1)
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** review-quality (complete)
 **Created:** 2026-08-21
 **Milestone:** 13.5 WP1
 **Resolves:** `SURFACE-2026-08-05-WINDOW-SIZE-AND-POSITION-NOT-PERSISTED`
@@ -149,8 +149,8 @@ Two further facts worth not re-discovering:
   - [x] verify-codify  <!-- status: done — +1 vacuity guard, 4 assertions mutation-proven individually + meta-probe (2026-08-21) -->
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** none — shipped as `ab885ad` (Phase 1 complete: all impl + all 4 gates `[x]`)
+- **Path:** Feature > finalize
+- **Active scope:** none — shipped as `25a68bc`; review-quality complete (0 CRITICAL, 2 MAJOR + 4 MINOR auto-backlogged per autopilot)
 - **Blocked:** none
 - **Unvisited:** none — single-phase feature, all phases complete
 - **Open discoveries:** none — the live-PiP denylist residual was CLOSED at verify-human (P1.verify-human.3)
@@ -468,6 +468,84 @@ is `feature-finalize`'s job. Ship deliberately did not pre-empt it.
 it was one flaky socket test, and my own `grep -cE '^error'` had matched cargo's *"test failed"* line.
 Triaged as flaky per §3b (3/3 in isolation, next full run green), **nothing modified to quiet it**, and
 filed as `SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY`. See `## Test Triage` above.
+
+## Code-Quality Review — window-geometry-persistence (M13.5 WP1)
+
+Reviewed against ship commit `25a68bc`. **0 CRITICAL · 2 MAJOR · 4 MINOR.** Both MAJORs are about
+**prose, not code**; the reviewer independently re-verified all four plugin-source claims against
+`tauri-plugin-window-state` 2.4.1 and they hold.
+
+### Strengths
+- The pure-policy seam (`state_flags()`/`denylist()` as fns `register()` actually calls) is the right
+  answer to an untestable third-party surface — tests drive the real values instead of
+  re-implementing them (`[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`).
+- All four plugin-source claims verify against the crate (`app_config_dir` at :122/:515,
+  `RunEvent::Exit` save at :503-504, `set_position` inside `if m.intersects` with `set_size` outside,
+  `on_window_ready` at :407) — measurements, not inferences, and correct enough to refute the WBS and
+  backlog on four points.
+- `denylist()` sources the label from `crate::pip::commands::PANEL_LABEL` rather than re-spelling
+  `"pip"`, so a rename cannot silently drop the panel back into scope.
+- The vacuity guard follows the `announce/mod.rs` precedent (anchor-split, tail-bounded at
+  `\n}\n`, comment-stripped, single-token assertions that survive `cargo fmt` reflow), and its two
+  negative assertions catch the alongside-a-literal mutant the positive ones cannot.
+- Both disproven WBS trap claims corrected in place with `→ RESOLVED:` lines rather than left as live
+  spec; ship correctly deferred the backlog delete to finalize's coupled CHANGELOG-then-delete commit.
+
+### Issues
+
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`src-tauri/src/window_state/mod.rs`:1-117] **117 lines of comment for 14 lines of executable
+  code** (58 `//!` + 45 `///`). A large share fails the comment-budget test in
+  `docs/lessons/source-text-guards.md` — *would a reader make a worse decision without this
+  sentence?* The `1280×800`/`tauri.conf.json` history, "resized on essentially every launch", "their
+  display is 1920×1080", "verified live at P1.3 rather than assumed", and "the backlog entry says X"
+  are **provenance**, which that lesson routes to the WIP/archive/CHANGELOG. The four plugin
+  properties and the two flag-omission rationales genuinely belong at the code. ⚠️ **The commit
+  message already carries all of it verbatim — that is the correct home.** *Why it matters: the
+  lesson records comment density flagged in four consecutive reviews of one file, and warns that at
+  high density 95%-accurate prose reads as authoritative while the wrong 5% is what gets acted on.*
+- [`mod.rs`:84-102, `lib.rs`:101-104 + 208-213, `Cargo.toml`:118-126] **The PiP-denylist rationale is
+  stated at FOUR sites.** `M10.5 WP1's top-right anchor` appears at mod.rs:90, mod.rs:218 and
+  lib.rs:212; "load-bearing not cosmetic" at mod.rs:84 and lib.rs:104; the four-properties list is
+  summarized again in `Cargo.toml`. The lesson: state it **once** at the canonical home, make every
+  other site a pointer. `denylist()`'s doc comment is the obvious home. *Why it matters: four copies
+  are four things to update; the one someone edits becomes right while the others keep asserting the
+  old thing with equal confidence — the drift shape this repo has already been bitten by.*
+
+**MINOR**
+- [`mod.rs`:235] `does_not_denylist_the_main_window` asserts `!deny.contains(&"main")` with a **bare
+  literal**, while `denylist()` twelve lines above deliberately avoids re-spelling a label and the
+  guard at :171 forbids string literals in `register()` for that reason.
+  `tray/commands.rs:42` already holds a (private) `MAIN_WINDOW_LABEL`. Defensible — the plugin keys
+  off the framework default — but the module argues the opposite principle in three other places.
+- [`mod.rs`:171-175] The `!code.contains('"')` assertion is **broader than the property it names**.
+  It also rejects `.with_filename("…")`, a legitimate builder option (plugin source :346) a future
+  dev/prod-isolation change might want. *An over-broad guard that fires on a legitimate change is how
+  guards get deleted rather than narrowed.*
+- [`mod.rs`:102] `denylist() -> [&'static str; 1]` bakes the count into the signature, so a second
+  excluded label is a type change rippling to both call sites. `&'static [&'static str]` would cost
+  nothing. Not a correctness issue — `with_denylist` takes `&[&str]` either way.
+- [`mod.rs`:132-141] The vacuity guard's doc comment restates the mutant-E narrative from the commit
+  message. The ⚠️ what-to-do-when-this-fails paragraph earns its place; the history does not.
+
+### Assessment
+Well-built for what it is: a three-line integration whose entire risk lives in third-party code the
+test suite cannot see, answered by reading that code, expressing the two decisions that are ours as
+pure functions, and pinning them with an honestly-scoped source tripwire built to the repo's own
+precedent rather than the anti-pattern its lesson warns about. Correctness judgment sound throughout
+— omitting `FULLSCREEN`/`VISIBLE` both right, the denylist genuinely load-bearing, and declining to
+hand-roll clamping or a `save_window_state` call are the correct resolutions of traps the WBS guessed
+wrong. **The debt is entirely in prose, not code.** `register<R: Runtime>()` is the right seam —
+parameterizing the flags would move policy back to the call site the module exists to keep it out of.
+Nothing needs a refactor pass to be safe; the comment consolidation pairs naturally with the already-
+open `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives this WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
