@@ -60,22 +60,37 @@ not macOS native fullscreen).
 **Size:** S
 
 **Tasks:**
-- [ ] 1.1 Add `tauri-plugin-window-state` (`2.4.1`, first-party `tauri-apps/plugins-workspace`, same
+- [x] 1.1 Add `tauri-plugin-window-state` (`2.4.1`, first-party `tauri-apps/plugins-workspace`, same
       Tauri v2 line as the seven plugins already in `Cargo.toml`) + register it.
-- [ ] 1.2 ⚠️ **Scope the plugin to the `main` label only.** The PiP NSPanel has its own position
+- [x] 1.2 ⚠️ **Scope the plugin to the `main` label only.** The PiP NSPanel has its own position
       logic (M10.5 WP1's top-right default + the in-session `positioned` flag in `pip_resize`); a
       generic save/restore over all windows would fight it.
-- [ ] 1.3 ⚠️ **Verify off-screen restore clamping actually fires.** A window restored to coordinates
+- [x] 1.3 ⚠️ **Verify off-screen restore clamping actually fires.** A window restored to coordinates
       on a since-disconnected monitor lands invisible and the app reads as "failed to launch."
       Either confirm the plugin's own clamping, or clamp to the current display set.
-- [ ] 1.4 ⚠️ **Confirm dev/prod geometry isolation.** State must live in the per-identity
+      → **RESOLVED: no clamping needed.** ⚠️ The mechanism is **skip-if-no-monitor-intersects, NOT
+      clamping** — `restore_state` applies `set_position` only inside `if m.intersects(...)`, while
+      `set_size` applies unconditionally. Verified live (seeded `-9000,-9000` → window returned
+      on-screen at saved size, OS-chosen position, screenshot-confirmed).
+- [x] 1.4 ⚠️ **Confirm dev/prod geometry isolation.** State must live in the per-identity
       `app_data_dir()` so `com.claudesk.app` and `com.claudesk.app.dev` never share geometry — they
       run concurrently by design (the dogfooding requirement).
-- [ ] 1.5 Verify the maximized case specifically: close maximized → relaunch → still maximized.
+      → **RESOLVED: isolation holds.** ⚠️ But the plugin actually uses **`app_config_dir()`**, not
+      `app_data_dir()` — on macOS both resolve to `~/Library/Application Support/<identifier>/`, so
+      this is right for a different reason than stated. Verified by observing the file (a **dotfile**
+      — `.window-state.json`; plain `ls` hides it).
+- [x] 1.5 Verify the maximized case specifically: close maximized → relaunch → still maximized.
 
 ⚠️ **The three traps ARE the work.** The dependency-plus-registration is nearly free; 1.2–1.4 are
 why this is a WP and not a task. Each is an operator-visible failure if skipped, and 1.3 is the one
 that looks like a crash.
+
+**✅ SHIPPED 2026-08-21.** All five tasks done; `pnpm verify:auto` exit 0 (Rust 859 / frontend 2136).
+⚠️ **Both traps 1.3 and 1.4 resolved toward the SIMPLER build** — no hand-rolled clamping, no
+`save_window_state` call in `perform_quit_teardown` (`RunEvent::Exit` **does** fire through
+`prevent_close` → `quit_now` → `app.exit(0)`, proven 3×). Implementation is 3 files: the dep,
+`lib.rs` (+2 lines), and `src-tauri/src/window_state/` (registration policy as pure fns + 5 tests,
+each assertion mutation-proven individually). Operator-approved at verify-human on real gestures.
 
 ---
 
@@ -344,6 +359,3 @@ technical dependency on WP1–WP3). WP5 depends on whatever actually shipped.
   **measure-then-decide**, not a build; it needs a fresh measurement pass before it can be scoped.
 - Everything else in `backlog.md` — 29 open items at bucket open; the rest are tech-debt, guard
   completeness, or gated on unmet preconditions.
-
-## Session Handoff — 2026-08-19 15:25
-Handed off. See `workflow-system/state/.session.md` to restore.

@@ -1,5 +1,26 @@
 # Backlog
 
+## SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY
+- **Source:** feature:ship (M13.5 WP1 final verification — unrelated to that feature)
+- **Target level:** task (a small test-hygiene fix)
+- **Type:** tech-debt (flaky test)
+- **Summary:** `hook_socket::tests::loop_exits_cleanly_when_receiver_is_dropped` fails intermittently at `src-tauri/src/hook_socket/mod.rs:568` with `Os { code: 57, kind: NotConnected }` from `client.shutdown(..).unwrap()`.
+- **Context:** The race is **intrinsic to what the test exercises**: it drops the receiver so `accept_loop` returns and closes the connection: when the server wins that race, the client's later `shutdown` has nothing connected. Observed once in ~4 full-suite runs on 2026-08-21; passed 3/3 in isolation and the next full run was green. **Not caused by the WP1 change** (that diff is a dependency, two `lib.rs` lines, and a new module — nothing touching sockets or threads). ⚠️ Per the workflow's own triage rule, no code or test was modified to make it quiet.
+- **Suggested action:** Treat `shutdown` as best-effort in this test — `let _ = client.shutdown(..)` (the assertion that matters is the `handle.join()` below it, i.e. the loop returns rather than hanging or panicking). ⚠️ Do **not** "fix" it by adding a sleep: the race is the point of the test, and a sleep would make the pass timing-dependent in the other direction. Confirm the `join()` assertion still fails if `accept_loop` is mutated to hang.
+- **Priority:** low (no product defect; cost is one spurious red full-suite run and the re-diagnosis it invites)
+- **Status:** pending
+
+## SURFACE-2026-08-21-OSASCRIPT-CANNOT-SAFELY-ADDRESS-THE-DEV-BUILD
+- **Source:** feature:build (M13.5 WP1, window geometry persistence)
+- **Target level:** product:arch (verify-self method) — or a `docs/lessons/` addition
+- **Type:** gap (a verification-method hazard with a live blast radius)
+- **Summary:** `osascript`/System Events **cannot safely address the `pnpm tauri:dev` build while a prod Claudesk is running**, and its failures are silent and *misdirected* rather than erroring. The dev binary is `target/debug/claudesk` launched by `cargo run` — **not a bundled `.app`** — so System Events reports `bundle identifier = missing value` for it and, early in a launch, **no windows at all**.
+- **Context:** ⚠️ **Two distinct misfires in one session, and one of them quit the operator's live app.** (a) `set frontmost of <process whose unix id is DEV>` + `keystroke "q"`: the activation silently did not take (no bundle id), and `keystroke` delivers to whatever is *actually* frontmost — so **the ⌘Q hit the operator's prod app (PID 18806) and quit it**; it relaunched as a new PID. (b) `first process whose unix id is DEV` then `every window of` it **returned the PROD app's windows** (`Claudesk` / `Tauri App`, 1280×800) while nominally addressing the dev PID — detected **only** because the MCP bridge concurrently reported the true dev geometry (1111×733); the **instrument disagreement was the tell**. Trusting that enumeration would have sent a maximize gesture to the operator's window.
+- **⚠️ Why the existing memory is insufficient:** `[[verify-self-dev-vs-prod-process-name-collision]]` prescribes "target by window title or bundle id, not process name." Here **both of those degrade to the prod app** — the dev binary has no bundle id, and its windows are invisible to System Events for a while after launch — so title/bundle-id targeting *silently resolves to the wrong process* instead of failing loudly. The prescribed mitigation does not cover the un-bundled dev-binary case.
+- **Suggested action:** Record the stronger rule: **drive the dev build through the MCP bridge only** (`127.0.0.1:9223`, registered under `#[cfg(debug_assertions)]`, so it structurally cannot reach a prod install — `manage_window`, `ipc_emit_event`). **Never** use a global `keystroke`, `set frontmost`, or a System Events window enumeration for the dev app while a same-named prod app runs. Note the working quit trigger found here: `ipc_emit_event('quit-requested')` exercises the real `prevent_close` → `quit_now` → `app.exit(0)` path (proven 3×). Fold into `docs/lessons/verify-self-tiers.md` (or the MCP-bridge caveats doc) and consider amending the memory above.
+- **Priority:** medium (no product defect; it is a verification-method hazard whose realized cost was quitting the operator's live app mid-session, and the silent-misdirection shape means the next session repeats it)
+- **Status:** pending
+
 ## SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED
 - **Source:** backlog-paydown sweep 2026-08-19 (carried out of `backlog-paydown-wbs.md` at sweep
   close, so it survives that file's deletion — it was the sweep's only surviving obligation)

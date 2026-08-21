@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-19
+updated: 2026-08-21
 ---
 
 # Runtime Registry
@@ -28,6 +28,13 @@ The `## cargo test` entry had accumulated two and three respectively (merged at
 the same sweep) — a stitched-together entry reads as two commands and hides the
 real chronology.
 -->
+
+## pnpm verify:auto
+
+- **Last:** 55s (2026-08-21, M13.5 WP1 close: tauri-plugin-window-state + window_state module; Rust 859 / frontend 2136 — full gate, warm incremental)
+- **Use timeout:** 143000
+- **History:**
+  - 55s — 2026-08-21 (M13.5 WP1; Rust 859 / frontend 2136)
 
 ## pnpm vite build
 

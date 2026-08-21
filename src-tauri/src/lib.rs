@@ -98,6 +98,11 @@ mod workflow_substrate;
 // to write outside its own app-data dir, into a tree that is live-edited source on the
 // operator's machine. Ships NO deleting path: uninstall is WP3.5b, refuse-guard first.
 mod workflow_install;
+// M13.5 WP1: main-window geometry persistence (size/position/maximized across launches).
+// Owns the tauri-plugin-window-state registration POLICY — which state we persist
+// (deliberately NOT fullscreen: the operator's ask means maximized/green-button) and
+// which windows are in scope (the PiP NSPanel is denylisted, load-bearing not cosmetic).
+mod window_state;
 
 use std::sync::Mutex;
 
@@ -199,7 +204,14 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         // M5: tauri-nspanel plugin — required for the NSPanel conversion the
         // `pip` module's PanelBuilder performs.
-        .plugin(tauri_nspanel::init());
+        .plugin(tauri_nspanel::init())
+        // M13.5 WP1: persist + restore the MAIN window's size/position/maximized state.
+        // Flags and denylist come from `window_state` (pure fns the registration calls,
+        // so tests drive the real values rather than a re-implementation). The PiP panel
+        // is excluded there — the plugin's on_window_ready fires for runtime-created
+        // windows too, and generic save/restore would fight M10.5 WP1's top-right anchor
+        // and read panel geometry during the teardown that closes it.
+        .plugin(window_state::register());
 
     // M5 WP2 (PROBE): the MCP bridge plugin drives the real WKWebView over a local
     // WebSocket so an agent UI-driver can mount + inspect a live workspace (the
