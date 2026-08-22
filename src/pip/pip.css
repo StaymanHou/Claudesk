@@ -297,6 +297,16 @@ body,
   box-shadow: 0 0 4px rgba(83, 155, 245, 0.6);
 }
 
+/* BackgroundWork (M13.5 WP2) — kept byte-identical to App.css per this file's
+   copied-verbatim rule; the full purple rationale lives there. ⚠️ Short version: teal was
+   rejected at verify-human because it reads as blue-adjacent, and blue means "needs my
+   immediate attention" — the opposite of what a background job wants. Do not shift this
+   back toward teal/cyan. */
+.status-dot-background {
+  background-color: #a371f7;
+  box-shadow: 0 0 4px rgba(163, 113, 247, 0.55);
+}
+
 .status-dot-unknown {
   background-color: #484f58;
 }
@@ -311,6 +321,12 @@ body,
 
   .status-dot-awaiting {
     animation: status-blink 0.7s steps(1, end) infinite;
+  }
+
+  /* Slower breathe than Running — alive but not urgent. Never blinks: on the PiP the
+     blink IS the "needs me" alarm, and a background job needs nothing. */
+  .status-dot-background {
+    animation: status-breathe 3.2s ease-in-out infinite;
   }
 }
 

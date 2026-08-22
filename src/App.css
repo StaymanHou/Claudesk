@@ -746,6 +746,25 @@ body,
   box-shadow: 0 0 4px rgba(83, 155, 245, 0.6);
 }
 
+/* BackgroundWork (M13.5 WP2) — control returned, a backgrounded job still running.
+   PURPLE. ⚠️ Operator-corrected at verify-human 2026-08-22: teal was tried first and
+   REJECTED because teal reads as blue-adjacent, and blue is the "needs my immediate
+   attention" colour (awaiting-input). A background job explicitly does NOT want
+   attention, so the hue must not sit anywhere near the blue family — being merely
+   *distinguishable* from blue is not enough when the semantics are opposite.
+   ⚠️ Do NOT "improve" this back toward teal/cyan/blue-green.
+
+   Why purple specifically: the other candidates are all taken or misleading —
+   Running is warm orange #d97757, Awaiting is blue #539bf5, Idle/Unknown are greys,
+   the active-tile glyph is rgba(110,168,255,.7), #6ea8ff blue is used 40× as the UI
+   accent, and #e2c08d gold already means git-modified. Purple is absent from the entire
+   stylesheet, so it carries no competing meaning and cannot be confused with the alarm
+   colour. Brighter than Idle grey — the point is that this workspace is NOT finished. */
+.status-dot-background {
+  background-color: #a371f7;
+  box-shadow: 0 0 4px rgba(163, 113, 247, 0.55);
+}
+
 .status-dot-unknown {
   background-color: #484f58;
 }
@@ -765,6 +784,15 @@ body,
 
   .status-dot-awaiting {
     animation: status-blink 0.7s steps(1, end) infinite;
+  }
+
+  /* BackgroundWork breathes like Running, but SLOWER (3.2s vs 1.8s) — alive, yet
+     visibly less urgent. It must never blink: blinking is reserved for "needs me",
+     and a background job needs nothing. Reusing status-breathe keeps the two
+     "work is happening" states in the same visual family, with tempo as the
+     distinction and colour as the identity. */
+  .status-dot-background {
+    animation: status-breathe 3.2s ease-in-out infinite;
   }
 }
 

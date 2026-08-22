@@ -66,15 +66,28 @@ export type CloseWorkspaceChoice = "close" | "cancel";
 /**
  * Is a workspace's CC "active" for the close/quit guard? (M10.5-WP2, design prior
  * `explicit-selectable-mode-over-inferred-mode`.) True iff CC is mid-work — a running
- * turn (`running`) or a prompt the operator hasn't answered (`awaiting_input`). `idle`
- * and `unknown` are NOT active (nothing in flight to protect). Scoped to the reliable M3
- * `stateFor` signal; a raw right-panel terminal's "running command" is deliberately NOT
- * a signal here (no cheap foreground-process detection on a raw PTY — see WP2 Phase 3).
- * The single source of truth for "active" — reused by the App-level per-workspace close
- * gate AND the app-quit aggregate.
+ * turn (`running`), a prompt the operator hasn't answered (`awaiting_input`), or a
+ * backgrounded job still running (`background_work`). `idle` and `unknown` are NOT active
+ * (nothing in flight to protect). Scoped to the reliable M3 `stateFor` signal; a raw
+ * right-panel terminal's "running command" is deliberately NOT a signal here (no cheap
+ * foreground-process detection on a raw PTY — see WP2 Phase 3). The single source of
+ * truth for "active" — reused by the App-level per-workspace close gate AND the app-quit
+ * aggregate.
+ *
+ * ⚠️ **`background_work` counts as active, and that is the whole point** (M13.5 WP2).
+ * Closing the workspace kills the CC session, and killing the session **kills its
+ * background jobs** — measured directly: the session died, its job shell died with it,
+ * and the job never completed. So this is precisely the "work in flight would be
+ * destroyed" case the guard exists for. Excluding it would let a click silently discard
+ * running work, which is worse than the pre-M13.5 behaviour where the same close at least
+ * showed an honest `idle` dot.
  */
 export function isActiveState(state: WireWorkspaceState): boolean {
-  return state === "running" || state === "awaiting_input";
+  return (
+    state === "running" ||
+    state === "awaiting_input" ||
+    state === "background_work"
+  );
 }
 
 /** Why a workspace close needs confirming — either/both may fire (M10.5-WP2). */

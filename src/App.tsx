@@ -464,7 +464,7 @@ function App() {
 
   // Close a workspace from the filmstrip × (QoL-WP1 + M10.5-WP2). Confirm before
   // destroying in-flight work: if its editor has unsaved docs (dirty) OR its CC is
-  // mid-work (running/awaiting_input — `isActiveState`), open the discard-or-cancel
+  // mid-work (running/awaiting_input/background_work — `isActiveState`), open the discard-or-cancel
   // confirm; otherwise close immediately. The one dialog composes whichever reason(s)
   // fired (M10.5-WP2 spec: never two stacked dialogs). The actual teardown (CC +
   // second-terminal kill on unmount, workspace_deregister, workspace_watch_stop) rides

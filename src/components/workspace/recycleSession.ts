@@ -356,8 +356,22 @@ async function awaitCompletion(
     void listen<WorkspaceStatusUpdate>(WORKSPACE_STATUS_EVENT, (event) => {
       if (settled) return;
       if (event.payload.workspace_id !== workspaceId) return;
-      // `Stop` is what the backend maps to `idle`. Every other state is noise for this purpose.
-      if (event.payload.state === "idle") feed({ kind: "stop" });
+      // This machine needs "a `Stop` hook event arrived", and the wire carries only the
+      // DERIVED state — so it must match every state a `Stop` can map to.
+      //
+      // ⚠️ `Stop` maps to `idle` OR `background_work` (M13.5 WP2): a turn that ends while a
+      // backgrounded job is still running emits `background_work`. Matching only `idle` made
+      // that `Stop` invisible here, hanging `awaiting-stop` to its timeout and suppressing the
+      // `no-fresh-write` failure in `awaiting-fresh-write` — and Recycle runs `/session-handoff`
+      // in a session that may well have a job outstanding, so it is the *likely* case, not an
+      // edge one. Keep this list in sync with `event_to_state`'s `Stop` arm, NOT with the set
+      // of states that happen to mean "not busy".
+      if (
+        event.payload.state === "idle" ||
+        event.payload.state === "background_work"
+      ) {
+        feed({ kind: "stop" });
+      }
     }).then(
       (un) => (settled ? un() : unlisteners.push(un)),
       () => {

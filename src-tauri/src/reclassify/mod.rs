@@ -28,8 +28,9 @@
 //!
 //! ## What "reused unchanged" means
 //! `tool_durations_ms` / `tool_intervals` (Pre→Post by `tool_use_id`),
-//! `subagent_intervals` / `subagent_durations_ms` (Start→Stop FIFO by `agent_type`),
-//! and `active_bursts` / `session_active_ms` (last-UPS-before-Stop anchor) match the
+//! `subagent_intervals` / `subagent_durations_ms` (Start→Stop FIFO, keyed on
+//! `agent_type` — but see the caveat below), and `active_bursts` /
+//! `session_active_ms` (last-UPS-before-Stop anchor) match the
 //! operator's intent as-is, so their mechanics are ported verbatim from the reference.
 //! `active` is NOT a segment kind in the redesign — `active_bursts`/`session_active_ms`
 //! survive only to feed the DERIVED "engaged time" summary metric.
@@ -285,6 +286,18 @@ fn post_by_tool_use_id(events: &[EventRow]) -> HashMap<String, &EventRow> {
 /// breakdown is a future drill-down. Feeds [`Kind::Subagent`] segmentation.
 ///
 /// Mechanics unchanged from `claude-time`.
+///
+/// ⚠️ **Measured caveat (M13.5 WP2, 2026-08-21) — in practice this pairs on ONE bucket,
+/// and drops ~2/3 of the stops.** CC does not send `subagent_type`, so `agent_type` is
+/// **NULL on 100% of 3,977 subagent events** across both corpora and every event lands in
+/// the `<unknown>` bucket below. Worse, **`SubagentStop` outnumbers `SubagentStart`
+/// 3,031:946** (3.2:1; per-session imbalances like 0:19 and 5:50), so most stops find no
+/// open start and are silently discarded — subagent durations are therefore computed from
+/// a minority of the stop events. The `unwrap_or("<unknown>")` fallback is what keeps this
+/// correct-but-coarse rather than panicking, so nothing here is *broken*; the numbers are
+/// just narrower than the code reads. Filed as a backlog item by that WP; not fixed there
+/// because it is a time-analytics accuracy question, not a status defect. Do not "fix" the
+/// label handling alone — the stop surplus is the larger half.
 pub fn subagent_intervals(events: &[EventRow]) -> Vec<(i64, i64)> {
     let mut pairs: Vec<(i64, i64)> = Vec::new();
     for sid_events in group_by_session(events, is_subagent_event).values() {

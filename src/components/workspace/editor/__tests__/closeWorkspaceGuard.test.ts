@@ -69,6 +69,15 @@ describe("isActiveState — M10.5-WP2", () => {
     expect(isActiveState("idle")).toBe(false);
     expect(isActiveState("unknown")).toBe(false);
   });
+
+  it("is true for background_work — closing would KILL the running job (M13.5 WP2)", () => {
+    // ⚠️ Not a cosmetic addition. Closing the workspace kills the CC session, and a CC
+    // session exiting kills its background jobs (measured: the session died, its job
+    // shell died with it, the job never completed, no orphan reparented). So this is
+    // exactly the "work in flight would be destroyed" case the guard exists for —
+    // omitting it would let one click silently discard running work.
+    expect(isActiveState("background_work")).toBe(true);
+  });
 });
 
 describe("closeWorkspaceSpec — QoL-WP1 (dirty) + M10.5-WP2 (active)", () => {

@@ -58,7 +58,18 @@ use thiserror::Error;
 ///   `None` for each (its `_ => None` fall-through), so registering them does NOT
 ///   flip any dot. They give the reclassifier (WP3) tool durations (`PreToolUse` +
 ///   `PostToolUse`/`PostToolUseFailure` paired by `tool_use_id`), subagent intervals
-///   (`SubagentStart`/`Stop` by `agent_type`), and session boundaries.
+///   (`SubagentStart`/`Stop`), and session boundaries.
+///
+/// ⚠️ **Measured correction (M13.5 WP2, 2026-08-21): CC does NOT send `subagent_type`.**
+/// This comment previously said subagent intervals pair "by `agent_type`". Across both
+/// corpora `agent_type` is **NULL on 100% of 3,977 subagent events**, so the hook's
+/// `$payload->{subagent_type}` read (`claudesk-hook.pl`) never fires and every interval
+/// falls into `reclassify`'s `<unknown>` bucket. Also measured: **`SubagentStop`
+/// outnumbers `SubagentStart` 3,031:946** (3.2:1, per-session imbalances like 0:19), so
+/// the pairing is unreliable independently of the label. Do not build a per-agent counter
+/// on these two events — see the backlog item filed by that WP. The properly-paired
+/// subagent signal is `PreToolUse`/`PostToolUse` with `tool_name == "Agent"`, which
+/// balances exactly and carries `tool_use_id`.
 ///
 /// `PostToolUse` was added (QoL-WP2, 2026-06-25) as the **resume signal**: when a
 /// user answers an `AskUserQuestion`/permission prompt mid-turn, CC fires

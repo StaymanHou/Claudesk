@@ -327,7 +327,14 @@ fn subagent_start_maps_subagent_type_to_agent_type() {
     if !perl_available() {
         return;
     }
-    // CC sends `subagent_type`; the hook forwards it as `agent_type`.
+    // WHEN a payload carries `subagent_type`, the hook forwards it as `agent_type`.
+    //
+    // ⚠️ This is a SYNTHETIC payload, and the distinction matters (measured M13.5 WP2,
+    // 2026-08-21): real CC does NOT send `subagent_type` — `agent_type` is NULL on 100%
+    // of 3,977 subagent events across both corpora. So this test pins the hook's
+    // TRANSFORMATION (correct, and forward-compatible if CC ever starts sending the
+    // field), NOT a claim about what CC emits. Do not cite it as evidence that
+    // `agent_type` is populated in practice; see `reclassify::subagent_intervals`.
     let payload = r#"{"hook_event_name":"SubagentStart","session_id":"s","cwd":"/p","subagent_type":"Explore"}"#;
     let v = as_json(&run_hook_capture_line(payload).expect("line"));
     assert_eq!(v["hook_event_name"].as_str(), Some("SubagentStart"));
@@ -350,6 +357,93 @@ fn session_start_emits_source() {
     let v = as_json(&run_hook_capture_line(payload).expect("line"));
     assert_eq!(v["hook_event_name"].as_str(), Some("SessionStart"));
     assert_eq!(v["source"].as_str(), Some("startup"));
+}
+
+#[test]
+fn stop_emits_background_task_count_as_a_count_never_the_commands() {
+    // M13.5 WP2 — codifies the by-hand socket probe from the build step. Two properties in
+    // one test because they are inseparable: the count must be CORRECT, and the task
+    // details must NOT be on the wire.
+    if !perl_available() {
+        return;
+    }
+    // ⚠️ PRIVACY INVARIANT. CC's real `Stop` payload carries
+    // `background_tasks: [{id, type, status, description, command}]`, and `command` /
+    // `description` are arbitrary user shell text — the same class the
+    // `prompt_length_chars` rule exists to keep off the wire. The status machine only asks
+    // "is any work outstanding", so the hook forwards a COUNT. This asserts the secret in
+    // the command never appears in the emitted line.
+    let payload = r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":[{"id":"x1","type":"shell","status":"running","description":"deploy","command":"deploy --token=SUPERSECRET"}]}"#;
+    let line = run_hook_capture_line(payload).expect("line");
+    assert!(
+        !line.contains("SUPERSECRET") && !line.contains("command") && !line.contains("deploy"),
+        "the task's command/description must never reach the wire; got: {line}"
+    );
+    let v = as_json(&line);
+    assert_eq!(v["hook_event_name"].as_str(), Some("Stop"));
+    assert_eq!(v["background_task_count"].as_u64(), Some(1));
+
+    // Two outstanding tasks → 2. (The dot renders no count, but a wrong number here would
+    // mean the array length is not what is being read.)
+    let two = r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":[{"id":"a"},{"id":"b"}]}"#;
+    let v2 = as_json(&run_hook_capture_line(two).expect("line"));
+    assert_eq!(v2["background_task_count"].as_u64(), Some(2));
+}
+
+#[test]
+fn stop_background_task_count_degrades_to_zero_on_every_bad_shape() {
+    // ⚠️ THE STALE-SEAM TEST. `background_tasks` is UNDOCUMENTED in CC's public hooks
+    // reference (checked directly during the M13.5 WP2 research pass), so it can change or
+    // vanish without notice. Every non-array shape must read as 0 — i.e. degrade to the
+    // pre-M13.5 `Stop -> Idle` behaviour — rather than erroring or, worse, turning every
+    // turn-end purple. Empty / absent / wrong-type are asserted individually because they
+    // reach the guard by different paths (`ref eq 'ARRAY'` fails for the last two only).
+    if !perl_available() {
+        return;
+    }
+    for (name, payload) in [
+        (
+            "empty array",
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":[]}"#,
+        ),
+        (
+            "field absent",
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p"}"#,
+        ),
+        (
+            "wrong type (string)",
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":"nope"}"#,
+        ),
+        (
+            "wrong type (object)",
+            r#"{"hook_event_name":"Stop","session_id":"s","cwd":"/p","background_tasks":{"id":"x"}}"#,
+        ),
+    ] {
+        let v = as_json(&run_hook_capture_line(payload).expect("line"));
+        assert_eq!(
+            v["background_task_count"].as_u64(),
+            Some(0),
+            "{name} must degrade to a count of 0"
+        );
+    }
+}
+
+#[test]
+fn background_task_count_is_emitted_only_on_stop() {
+    // The field is Stop-scoped. A stray `background_tasks` on another event must not
+    // produce the count — the Rust mapping refuses to derive BackgroundWork from a
+    // non-Stop event anyway, but keeping the wire minimal means the two layers agree
+    // instead of one relying on the other's guard.
+    if !perl_available() {
+        return;
+    }
+    let payload = r#"{"hook_event_name":"UserPromptSubmit","session_id":"s","cwd":"/p","prompt":"hi","background_tasks":[{"id":"z"}]}"#;
+    let v = as_json(&run_hook_capture_line(payload).expect("line"));
+    assert_eq!(v["hook_event_name"].as_str(), Some("UserPromptSubmit"));
+    assert!(
+        v.get("background_task_count").is_none(),
+        "background_task_count must appear only on Stop"
+    );
 }
 
 #[test]

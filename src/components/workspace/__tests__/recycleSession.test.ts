@@ -1046,3 +1046,68 @@ describe("⚠️ the measured latencies have exactly ONE authority", () => {
     }
   });
 });
+
+describe("⚠️ M13.5 WP2 regression — the `stop` signal must match EVERY state `Stop` maps to", () => {
+  // THE BUG THIS PINS (found at code-quality review, shipped-and-fixed in the same WP):
+  // `recycleSession`'s status listener derives "a `Stop` hook event arrived" from the DERIVED
+  // wire state, and it matched only `"idle"`. When WP2 gave `Stop` a second possible mapping
+  // (`background_work`, when the turn ends with a backgrounded job still running), that Stop
+  // became invisible here — `awaiting-stop` would hang to its timeout and `awaiting-fresh-write`
+  // would never raise `no-fresh-write`. Recycle runs `/session-handoff` in a session that may
+  // well have a job outstanding, so this was the LIKELY case, not an edge one.
+  //
+  // ⚠️ Why a SOURCE-READING test and not a behavioural one: the literal lives inside the
+  // `listen()` callback in `startRecycle`, which needs a live Tauri IPC runtime — unreachable
+  // from vitest. The property is "these two sources of truth agree", and it spans the language
+  // boundary, so it is pinned the same way `SESSION_MD_REL` is: read the RUST source, derive the
+  // authoritative set, and assert the TS listener covers it. Comparing two TS constants would
+  // prove only that I typed the same string twice.
+
+  it("covers every WorkspaceState the Rust `Stop` arm can produce", async () => {
+    const fs = await import("node:fs");
+    const url = await import("node:url");
+    const read = (rel: string) =>
+      fs.readFileSync(url.fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+
+    const rust = read("../../../../src-tauri/src/status_broadcaster/mod.rs");
+    // The `Stop` arm of `event_to_state`, up to the next match arm. Everything this arm can
+    // return is a state a `Stop` event can surface as.
+    const stopArm = rust.match(/"Stop" => Some\((?:[^;]*?)\),\n/s)?.[0];
+    expect(
+      stopArm,
+      "the `Stop` arm of event_to_state was not found in the Rust source — the shape this test " +
+        "derives its authority from has changed, so the comparison below would be vacuous",
+    ).toBeTruthy();
+
+    const variants = [...stopArm!.matchAll(/WorkspaceState::(\w+)/g)].map(
+      (m) => m[1],
+    );
+    // Non-vacuity floor: a regex that matched the arm but extracted nothing would pass the
+    // loop below trivially. `Stop` maps to at least Idle and BackgroundWork.
+    expect(variants.length).toBeGreaterThanOrEqual(2);
+    expect(variants).toContain("Idle");
+    expect(variants).toContain("BackgroundWork");
+
+    // Rust variant -> wire literal (serde rename_all = "snake_case").
+    const toWire = (v: string) =>
+      v.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+
+    const listener = read("../recycleSession.ts");
+    // Scope to the status-listener block so an unrelated mention elsewhere in the file cannot
+    // satisfy this (the "guard satisfied by the wrong text" shape).
+    const block = listener.slice(
+      listener.indexOf("WORKSPACE_STATUS_EVENT, (event)"),
+    );
+    expect(block.length).toBeGreaterThan(100);
+
+    for (const v of variants) {
+      const wire = toWire(v);
+      expect(
+        block,
+        `recycleSession's status listener must treat "${wire}" as a \`stop\` signal — Rust's ` +
+          `Stop arm can map to WorkspaceState::${v}, and a Stop that this listener does not ` +
+          `recognize hangs the recycle to its timeout`,
+      ).toContain(`"${wire}"`);
+    }
+  });
+});

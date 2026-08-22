@@ -52,8 +52,25 @@ pub enum AlarmState {
 /// Running and Idle deliberately COLLAPSE to Neutral: the menu bar carries one bit, and
 /// running-vs-idle detail is PiP's / the window's job (the M7 shrink). `Unknown` (no hook
 /// event yet) is also Neutral — an unobserved workspace is not "waiting on me."
+///
+/// ⚠️ **[`WorkspaceState::BackgroundWork`] is Neutral, and that is a DECISION, not a
+/// fallthrough** (M13.5 WP2). The alarm's one bit means *"a project needs me"* — a
+/// running background job needs nothing; it is closer to Running than to AwaitingInput.
+/// Lighting the menu bar for it would train the operator to ignore the lit glyph, which
+/// is the one failure this surface cannot afford.
+///
+/// ⚠️ The `match` below is deliberate where a `states.contains(&AwaitingInput)` one-liner
+/// would do the same job today: the exhaustive arms mean **adding a 5th
+/// `WorkspaceState` fails to compile here** until someone chooses its side. A `contains`
+/// check would silently default a new variant to Neutral — the exact silent-default trap
+/// this WP's plan flagged before the variant existed.
 pub fn aggregate_alarm(states: &[WorkspaceState]) -> AlarmState {
-    if states.contains(&WorkspaceState::AwaitingInput) {
+    let attention = states.iter().any(|s| match s {
+        WorkspaceState::AwaitingInput => true,
+        WorkspaceState::BackgroundWork => false,
+        WorkspaceState::Running | WorkspaceState::Idle | WorkspaceState::Unknown => false,
+    });
+    if attention {
         AlarmState::Attention
     } else {
         AlarmState::Neutral
@@ -95,6 +112,28 @@ pub fn toggle_pip_mode(current: PipMode) -> PipMode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn background_work_alone_is_neutral() {
+        // M13.5 WP2 — the DECISION, pinned: the menu bar's one bit means "a project needs
+        // me", and a running background job needs nothing. Lighting the glyph for it would
+        // train the operator to ignore a lit menu bar, which is the one failure this
+        // surface cannot afford.
+        assert_eq!(
+            aggregate_alarm(&[WorkspaceState::BackgroundWork]),
+            AlarmState::Neutral
+        );
+        // ...and it does not mask a real alarm alongside it.
+        assert_eq!(
+            aggregate_alarm(&[
+                WorkspaceState::BackgroundWork,
+                WorkspaceState::AwaitingInput,
+            ]),
+            AlarmState::Attention,
+            "an awaiting-input workspace must still light the glyph when another \
+             workspace is merely doing background work"
+        );
+    }
 
     #[test]
     fn empty_is_neutral() {

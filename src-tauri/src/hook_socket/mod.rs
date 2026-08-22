@@ -125,6 +125,27 @@ pub struct HookEvent {
     /// in v1). Enum-ish tag, never content.
     #[serde(default)]
     pub reason: Option<String>,
+
+    /// How many backgrounded jobs were still outstanding at turn end — present only on
+    /// `Stop` (M13.5 WP2). `Some(0)` means "turn ended, nothing outstanding"; `Some(n>0)`
+    /// means CC handed control back while work continues, which is the
+    /// [`WorkspaceState::BackgroundWork`](crate::status_broadcaster::WorkspaceState)
+    /// signal.
+    ///
+    /// **A COUNT, never the tasks.** CC's `Stop` payload carries a full
+    /// `background_tasks: [{id, type, status, description, command}]` array, but
+    /// `command`/`description` are arbitrary user shell text — the same privacy class as
+    /// the raw prompt. The hook forwards only the length of that array (mirroring
+    /// `prompt_length_chars`), which is strictly sufficient: the status machine asks only
+    /// "is any work outstanding".
+    ///
+    /// ⚠️ `background_tasks` is **UNDOCUMENTED** in CC's public hooks reference (checked
+    /// directly during M13.5 WP2 research). Treat it as a stale-able seam: `None` and `0`
+    /// are handled identically, and the Perl side maps a missing or non-array value to
+    /// `0`, so a CC-side change degrades to the pre-M13.5 behaviour rather than breaking
+    /// the dot.
+    #[serde(default)]
+    pub background_task_count: Option<u64>,
 }
 
 /// Errors from the socket listener's IO/lifecycle (bind, remove-stale, accept).

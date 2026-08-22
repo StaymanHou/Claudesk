@@ -317,6 +317,165 @@ mod tests {
         assert_eq!(emitted[1].last_output_snippet.as_deref(), Some("perm?"));
     }
 
+    /// M13.5 WP2 verify-codify: the **consuming-surface** regression test for the
+    /// `agent_completed` fix. Codifies the verify-self run that was performed by hand
+    /// through the live `AF_UNIX` socket — same shape, same seam (real socket →
+    /// `to_update` over a registry), so it now runs on every `cargo test`.
+    ///
+    /// This test exists at THIS level, not only as a `event_to_state` unit test, because
+    /// the fix's whole point is what the status *surfaces* render: `to_update` is the
+    /// function the filmstrip / PiP / tray broadcast is built from, and a `None` from it
+    /// is what makes a dot hold its prior colour. A unit test on the classifier alone
+    /// cannot show that the event is dropped rather than emitted-as-something.
+    ///
+    /// ⚠️ **The negative control is the load-bearing half.** Asserting only that
+    /// `agent_completed` is dropped would pass equally if the fix had over-suppressed
+    /// *every* agent notification — so `agent_needs_input` is asserted to still emit
+    /// `AwaitingInput` in the same stream. ⚠️ And an unknown type is asserted to STILL
+    /// fall back to `AwaitingInput`: that conservative default is load-bearing (never
+    /// silently swallow a future input-needed type) and must not be weakened to get the
+    /// `agent_completed` behaviour.
+    ///
+    /// ⚠️ **Why this test is the primary evidence rather than a live capture:** a real
+    /// backgrounded `Agent`-tool run at verify-human emitted NO `agent_completed` (its only
+    /// notification was `idle_prompt`), so the defect could not be reproduced on demand.
+    /// The type is real — 3 live captures in the corpus, one of them the reported defect —
+    /// but the emitter appears to be a background CC *session*, not an in-turn subagent.
+    /// See `SURFACE-2026-08-21-NOTIFICATION-TYPE-FALLBACK-IS-WRONG-FOR-COMPLETION-TYPES`.
+    #[test]
+    fn end_to_end_socket_agent_completed_is_dropped_while_agent_needs_input_still_emits() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let sock = dir.path().join("hook.sock");
+        let listener = bind_listener(&sock).unwrap();
+        let (tx, rx) = mpsc::channel::<HookEvent>();
+        let _handle = spawn_listener(listener, tx);
+
+        let ws_dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(ws_dir.path(), "ws-1".to_string());
+        let ws_cwd = ws_dir.path().to_string_lossy().to_string();
+
+        // The verify-self sequence, verbatim in shape: establish Idle, then deliver the
+        // agent-completion notification (must be DROPPED — the fix), then the sibling
+        // agent-needs-input notification (must still EMIT — the negative control), then
+        // an unknown type (must still emit — the preserved honest fallback).
+        let mut client = UnixStream::connect(&sock).unwrap();
+        for line in [
+            format!("{{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\"}}\n"),
+            format!("{{\"hook_event_name\":\"Notification\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"notification_type\":\"agent_completed\"}}\n"),
+            format!("{{\"hook_event_name\":\"Notification\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"notification_type\":\"agent_needs_input\"}}\n"),
+            format!("{{\"hook_event_name\":\"Notification\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"notification_type\":\"a_type_cc_adds_later\"}}\n"),
+        ] {
+            client.write_all(line.as_bytes()).unwrap();
+        }
+        // Best-effort: the listener may already have closed its side (see
+        // SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY). The assertions below
+        // are what matter, not the shutdown.
+        let _ = client.shutdown(std::net::Shutdown::Both);
+
+        // All 4 lines parse and arrive; the transform decides which produce updates.
+        let mut emitted = Vec::new();
+        for _ in 0..4 {
+            let ev = rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("event should arrive");
+            if let Some(update) = to_update(&ev, &reg) {
+                emitted.push(update);
+            }
+        }
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+
+        // Stop → Idle, agent_completed → DROPPED, agent_needs_input → AwaitingInput,
+        // unknown → AwaitingInput. Three updates from four events: the dropped one is
+        // the fix, and its absence here is the whole assertion.
+        let states: Vec<WorkspaceState> = emitted.iter().map(|u| u.state).collect();
+        assert_eq!(
+            states,
+            vec![
+                WorkspaceState::Idle,
+                WorkspaceState::AwaitingInput,
+                WorkspaceState::AwaitingInput,
+            ],
+            "agent_completed must be dropped (no update between Idle and the two \
+             AwaitingInputs); agent_needs_input and an unknown type must both still emit"
+        );
+        // Pin the count explicitly too: 4 events in, 3 updates out.
+        assert_eq!(
+            emitted.len(),
+            3,
+            "exactly one of the four events (agent_completed) must produce no update"
+        );
+        assert!(emitted.iter().all(|u| u.workspace_id == "ws-1"));
+    }
+
+    /// M13.5 WP2 Phase 3 — the **consuming-surface** test for the `BackgroundWork` state,
+    /// at the same real-socket → `to_update` seam the other two end-to-end tests use.
+    /// Codifies the live socket run performed by hand at verify-self: the emitted DTO is
+    /// what the filmstrip / PiP / tray actually fold, so a unit test on `event_to_state`
+    /// alone cannot show that the new state reaches a surface as `background_work`.
+    ///
+    /// ⚠️ The **clearing edge is the second half of the assertion**, not a bonus. This
+    /// state has no completion event (CC emits nothing when a background job finishes —
+    /// a `BackgroundTasksIdle` hook was requested upstream and closed as not planned), so
+    /// the only thing that ever clears it is a later `Stop` with a zero count. If that
+    /// stopped working the dot would stick purple forever — the same stuck-state class as
+    /// the stale-blue defect Phase 1 fixed.
+    #[test]
+    fn end_to_end_socket_background_work_emits_then_clears_on_a_clean_stop() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let sock = dir.path().join("hook.sock");
+        let listener = bind_listener(&sock).unwrap();
+        let (tx, rx) = mpsc::channel::<HookEvent>();
+        let _handle = spawn_listener(listener, tx);
+
+        let ws_dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(ws_dir.path(), "ws-1".to_string());
+        let ws_cwd = ws_dir.path().to_string_lossy().to_string();
+
+        // The verify-self sequence verbatim: a turn ends with work outstanding (purple),
+        // then a later turn ends clean (grey). The middle UserPromptSubmit is what makes
+        // this a realistic two-turn stream rather than two adjacent Stops.
+        let mut client = UnixStream::connect(&sock).unwrap();
+        for line in [
+            format!("{{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"background_task_count\":2}}\n"),
+            format!("{{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"prompt\":\"next\"}}\n"),
+            format!("{{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"background_task_count\":0}}\n"),
+        ] {
+            client.write_all(line.as_bytes()).unwrap();
+        }
+        // Best-effort per SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY.
+        let _ = client.shutdown(std::net::Shutdown::Both);
+
+        let mut emitted = Vec::new();
+        for _ in 0..3 {
+            let ev = rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("event should arrive");
+            if let Some(update) = to_update(&ev, &reg) {
+                emitted.push(update);
+            }
+        }
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+
+        let states: Vec<WorkspaceState> = emitted.iter().map(|u| u.state).collect();
+        assert_eq!(
+            states,
+            vec![
+                WorkspaceState::BackgroundWork,
+                WorkspaceState::Running,
+                WorkspaceState::Idle,
+            ],
+            "a Stop with outstanding work must emit BackgroundWork to the surfaces, and a \
+             later clean Stop must clear it back to Idle"
+        );
+        assert!(emitted.iter().all(|u| u.workspace_id == "ws-1"));
+        // Pin the WIRE rendering too: the surfaces key on this string, so a serde drift
+        // would leave every surface rendering the honest-but-wrong "unknown" grey dot.
+        let wire = serde_json::to_value(emitted[0].state).unwrap();
+        assert_eq!(wire, serde_json::Value::String("background_work".into()));
+    }
+
     #[test]
     fn init_registry_starts_empty() {
         let reg = init_registry();

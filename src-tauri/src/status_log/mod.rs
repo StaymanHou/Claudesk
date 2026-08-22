@@ -131,7 +131,8 @@ impl StatusLog {
 /// `<ts_ms> STATUS event=<name> cwd=<raw> mapped=<state|none> resolved=<id|none> outcome=<emitted|dropped>`
 ///
 /// - `mapped` is the [`event_to_state`](crate::status_broadcaster::event_to_state)
-///   result rendered (`running`/`idle`/`awaiting_input`) or `none` (non-lifecycle /
+///   result rendered (`running`/`idle`/`awaiting_input`/`background_work`) or `none`
+///   (non-lifecycle /
 ///   informational notification).
 /// - `resolved` is the workspace id the `cwd` matched, or `none` (no open workspace —
 ///   the cwd-miss case).

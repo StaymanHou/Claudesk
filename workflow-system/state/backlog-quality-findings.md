@@ -502,3 +502,21 @@ scheduling items rather than polish.*
 - **Priority:** low (all four)
 - **Status:** pending
 
+
+# wp2-background-work-status-states — 2026-08-22
+
+## SURFACE-2026-08-22-QUALITY-CSS-REGEX-GUARD-SHAPE-BLINDNESS
+- **Severity:** MINOR
+- **Location:** `src/state/__tests__/workspaceStatus.test.ts` (the two CSS guards)
+- **Finding:** The guards read `App.css`/`pip.css` as text and regex-match rule bodies, so they only understand the CSS shapes I happened to write: a flat `.status-dot-x { background-color: #hex; }`. They will **false-fail** on an ordinary refactor — a nested rule, a `var(--token)` custom property, or a shorthand `background:` — and the failure message will be opaque to whoever trips it (it will read as "pip.css must define a background-color", implying the colour is missing when it is merely expressed differently).
+- **Why it matters:** the instrument itself is defensible and was kept for a real reason — `pip.css` holds a **deliberate verbatim copy** of the dot palette, that duplication has no other guard, and a silent main-vs-PiP colour divergence is precisely the "all three surfaces agree" invariant breaking. The predicate shape is also mutation-justified (a weaker rule-presence form was proven green-while-broken). So this is not "delete the guard" — it is that a guard whose failure mode is a **confusing false alarm** trains people to delete it.
+- **Suggested action:** add one line to each guard naming the shapes it does NOT understand (nested rules, custom properties, shorthand `background:`), so a tripped guard tells its own story. Cheap; no logic change.
+- **Priority:** low
+
+## SURFACE-2026-08-22-QUALITY-DEAD-LEGACY-WORKSPACESTATUS-TYPE
+- **Severity:** MINOR
+- **Location:** `src/state/workspace.ts:14`
+- **Finding:** A legacy `WorkspaceStatus = "idle" | "running" | "awaiting-input" | "unknown"` type still sits alongside the live `WireWorkspaceState`, differing in **casing** (hyphenated `awaiting-input` vs snake_case `awaiting_input`). It was not extended with `background_work` — correctly, because it appears unused for status rendering (only a literal `status: "idle"` at line 119).
+- **Why it matters:** not a bug today, but two near-identical state vocabularies differing only in casing is a standing trap for the next person adding a state — they may extend the wrong one and see nothing break. ⚠️ Note this WP already demonstrated the cost of a sweep keyed on the wrong predicate (the CRITICAL), and this is the same hazard one layer over.
+- **Suggested action:** confirm it is genuinely dead, then delete it. If something does depend on it, the fix is to migrate that consumer to `WireWorkspaceState` rather than to maintain two vocabularies.
+- **Priority:** low

@@ -97,7 +97,13 @@ export function coercePipLayout(value: unknown): PipLayout {
 export type AttentionStatusMap = Record<string, { state: string }>;
 
 /** The wire state literal that means "this workspace is waiting on the operator". Kept
- *  in sync with `WireWorkspaceState`'s `awaiting_input` (snake_case wire contract). */
+ *  in sync with `WireWorkspaceState`'s `awaiting_input` (snake_case wire contract).
+ *
+ *  ⚠️ M13.5 WP2 added a `background_work` state, and it is deliberately NOT included
+ *  here. Attention-ordering and the brighter `.pip-tile-awaiting` halo are the
+ *  "needs me" cues; a running background job needs nothing, so sorting it to the front
+ *  would dilute exactly the signal this predicate exists to carry. BackgroundWork is
+ *  distinguished by its own dot COLOUR (purple) and a slow breathe, not by priority. */
 export const AWAITING_INPUT_STATE = "awaiting_input";
 
 /** True iff the workspace's current wire state is awaiting-input (the "needs me" cue). */

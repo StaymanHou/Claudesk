@@ -893,6 +893,7 @@ mod tests {
             agent_type: None,
             source: None,
             reason: None,
+            background_task_count: None,
         }
     }
 

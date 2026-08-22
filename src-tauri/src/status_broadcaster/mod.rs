@@ -10,21 +10,27 @@
 //!
 //! ## State mapping (the M3 contract, extended QoL-WP2 2026-06-25)
 //! - `UserPromptSubmit` → [`WorkspaceState::Running`] (CC is working a prompt)
-//! - `Stop`             → [`WorkspaceState::Idle`] (CC finished, awaiting nothing)
+//! - `Stop`             → [`WorkspaceState::Idle`] (CC finished, awaiting nothing) —
+//!   **unless** the event's `background_task_count > 0`, in which case
+//!   [`WorkspaceState::BackgroundWork`] (M13.5 WP2: control returned, a backgrounded job
+//!   is still running). A missing count is treated as 0, so an older hook script degrades
+//!   to the plain `Stop → Idle` contract.
 //! - `PostToolUse`      → [`WorkspaceState::Running`] (a tool finished, CC resumed —
 //!   the **answer-resume signal**: when a user answers an `AskUserQuestion`/permission
 //!   prompt CC fires `PostToolUse` but NO `UserPromptSubmit`, so this is what clears a
 //!   stuck `AwaitingInput`)
 //! - `Notification`     → [`WorkspaceState::AwaitingInput`] **gated on
 //!   `notification_type`**: a genuine input-needed type (`permission_prompt`,
-//!   `elicitation_dialog`) or an unknown/absent type → AwaitingInput; a known
-//!   non-input type (`idle_prompt`, `auth_success`, …) → no-op (`None`), so the dot
-//!   doesn't flip blue on an idle nudge.
+//!   `agent_needs_input`, `elicitation_dialog`) or an unknown/absent type →
+//!   AwaitingInput; a known non-input type (`idle_prompt`, `auth_success`,
+//!   `agent_completed`, …) → no-op (`None`), so the dot doesn't flip blue on an idle
+//!   nudge or on a background agent *finishing* (M13.5 WP2 — the latter was the
+//!   stale-blue defect; see [`is_known_informational_notification`]).
 //! - any other event    → no-op (`None`) — never guessed, never emitted
 //!
 //! [`WorkspaceState::Unknown`] is the **honest no-data default** a surface shows for
 //! a workspace before any event has arrived (arch.md failure mode). The broadcaster
-//! never *emits* `Unknown` from an event — an event either maps to one of the three
+//! never *emits* `Unknown` from an event — an event either maps to one of the four
 //! live states or is dropped. `Unknown` is the registry/frontend initial value.
 //!
 //! ## cwd→workspace mapping
@@ -67,9 +73,36 @@ pub enum WorkspaceState {
     Running,
     /// CC has paused for the user (permission / input) — emitted on `Notification`.
     AwaitingInput,
+    /// CC returned control but a **backgrounded job it launched is still running** —
+    /// emitted on a `Stop` whose `background_task_count > 0` (M13.5 WP2). Neither busy
+    /// nor done: the turn ended, so CC wants nothing from you, but the workspace is not
+    /// finished either.
+    ///
+    /// This exists because `Stop` → [`Idle`](Self::Idle) unconditionally read as "done,
+    /// nothing to see" while work was outstanding
+    /// (`SURFACE-2026-08-16-IDLE-DOT-CONFLATES-DONE-WITH-WAITING-ON-A-BACKGROUND-JOB`).
+    ///
+    /// ⚠️ **Deliberately has NO completion edge, and does not need one.** CC emits nothing
+    /// when a background job finishes — the M13.5 WP2 research pass confirmed this against
+    /// the official hook list (31 events, none of them applicable), and a
+    /// `BackgroundTasksIdle` request was closed **as not planned**; the notifications are
+    /// injected at the conversation level, bypassing the hooks pipeline entirely. It
+    /// clears on the workspace's **next `Stop`** (with a zero count), which is
+    /// self-healing. That is sufficient rather than a compromise, because of the measured
+    /// fact below.
+    ///
+    /// ⚠️ **When a CC session exits, it KILLS its background jobs** (probed directly:
+    /// the session died, its job shell died with it, the job never completed and no orphan
+    /// was reparented). So the feared "stuck forever because the job outlived the session"
+    /// case **does not exist** — the work is cancelled, not orphaned, and there is nothing
+    /// left to report. Do not add a PID-polling watchdog for it: that was probed too, and
+    /// it buys coverage for a non-existent case while depending on an undocumented
+    /// `~/.claude/shell-snapshots/` path.
+    BackgroundWork,
     /// No hook event observed yet — the honest default a surface shows before any
     /// event arrives. Never *emitted* from an event (the broadcaster only ever
-    /// produces the three live states); it exists on the Rust side so the DTO enum
+    /// produces the four live states — Idle / Running / AwaitingInput /
+    /// BackgroundWork); it exists on the Rust side so the DTO enum
     /// is complete and its `"unknown"` serde rendering is pinned. The frontend (TS)
     /// owns it as the initial state a workspace shows before its first hook event.
     /// Marked the `#[default]` because Unknown IS the absence-of-data state — this
@@ -80,12 +113,31 @@ pub enum WorkspaceState {
 
 /// The `notification_type` values that mean CC is GENUINELY blocked on the user —
 /// these map to [`WorkspaceState::AwaitingInput`]. Everything else CC sends as a
-/// `Notification` (`idle_prompt`, `auth_success`, `elicitation_complete`,
-/// `elicitation_response`, …) is informational and must NOT flip a busy dot blue
-/// (QoL-WP2). An UNKNOWN or ABSENT type falls back to AwaitingInput (honest default —
-/// never silently swallow a future CC notification type; mirrors the `Unknown`
-/// no-data principle). Live-captured type for AskUserQuestion/permission: `permission_prompt`.
-const INPUT_NEEDED_NOTIFICATION_TYPES: [&str; 2] = ["permission_prompt", "elicitation_dialog"];
+/// `Notification` (`idle_prompt`, `auth_success`, `agent_completed`, …) is informational
+/// and must NOT flip a busy dot blue (QoL-WP2). An UNKNOWN or ABSENT type falls back to
+/// AwaitingInput (honest default — never silently swallow a future CC notification type;
+/// mirrors the `Unknown` no-data principle).
+///
+/// ## The measured vocabulary (M13.5 WP2, 2026-08-21)
+/// CC's **complete** observed `notification_type` set, counted across both the prod and
+/// dev corpora (~108MB of `time-analytics.sqlite`, every `Notification` ever recorded):
+/// `idle_prompt` 1723 · `permission_prompt` 392 · `agent_completed` 3 · `auth_success` 2 ·
+/// `agent_needs_input` 1.
+///
+/// ⚠️ **`agent_needs_input` is listed here EXPLICITLY, not left to the fallback.** It was
+/// classified correctly before only *by accident* — the unknown-type fallback happened to
+/// give the right answer. That same fallback gave the WRONG answer for `agent_completed`
+/// (see [`is_known_informational_notification`]), so relying on it for a type we have
+/// actually observed is exactly the gap that produced the stale-blue defect.
+///
+/// ⚠️ **`elicitation_dialog` has NEVER been observed** in either corpus — it is a
+/// speculative entry retained from QoL-WP2. Harmless (its classification matches the
+/// fallback), but do not cite it as evidence of CC's behavior.
+const INPUT_NEEDED_NOTIFICATION_TYPES: [&str; 3] = [
+    "permission_prompt",
+    "agent_needs_input",
+    "elicitation_dialog",
+];
 
 /// Whether a `Notification`'s `notification_type` means "awaiting genuine user input."
 /// The unknown/absent→AwaitingInput honest-fallback rationale is on
@@ -107,10 +159,31 @@ pub(crate) fn notification_awaits_input(notification_type: Option<&str>) -> bool
 /// The recognized informational `notification_type`s that do NOT mean "awaiting input."
 /// Kept explicit so an unknown future type falls through to the AwaitingInput default
 /// rather than being treated as informational (see [`INPUT_NEEDED_NOTIFICATION_TYPES`]).
+///
+/// ⚠️ **`agent_completed` is here because its ABSENCE was the stale-blue defect**
+/// (`SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT`, fixed
+/// M13.5 WP2). A background agent finishing sends `agent_completed`; because the type was
+/// unlisted, the honest-fallback in [`notification_awaits_input`] classified it as
+/// input-needed and turned the dot **blue**. ⚠️ The defect was therefore a dot **lit
+/// wrongly**, NOT — as the backlog item, the WBS, and `CLAUDE.md` all described it — a dot
+/// "lit honestly that nothing ever cleared." There was no missing clearing edge.
+/// `SubagentStop` (long suspected, and the basis of two proposed fixes) is unrelated: it
+/// fires unpaired at a 3.2:1 surplus and belonged to a different CC session entirely.
+///
+/// The fallback direction is right for *input-needed* types and wrong for *completion*
+/// ones, and Claudesk cannot tell which a new type is — so when a new `notification_type`
+/// appears in the corpus it must be classified deliberately here or in
+/// [`INPUT_NEEDED_NOTIFICATION_TYPES`]. `SELECT DISTINCT
+/// json_extract(meta,'$.notification_type') FROM events` over `time-analytics.sqlite` is
+/// the check; it would have caught this one the day it first fired.
 fn is_known_informational_notification(t: &str) -> bool {
     matches!(
         t,
-        "idle_prompt" | "auth_success" | "elicitation_complete" | "elicitation_response"
+        "idle_prompt"
+            | "auth_success"
+            | "agent_completed"
+            | "elicitation_complete"
+            | "elicitation_response"
     )
 }
 
@@ -121,7 +194,19 @@ fn is_known_informational_notification(t: &str) -> bool {
 pub fn event_to_state(event: &HookEvent) -> Option<WorkspaceState> {
     match event.hook_event_name.as_str() {
         "UserPromptSubmit" => Some(WorkspaceState::Running),
-        "Stop" => Some(WorkspaceState::Idle),
+        // Stop = the turn ended. Which state that means depends on whether CC left any
+        // backgrounded job running (M13.5 WP2): a positive count is BackgroundWork
+        // ("control returned, work outstanding"), zero/absent is plain Idle.
+        //
+        // ⚠️ `None` and `Some(0)` MUST behave identically — an older hook script (or a CC
+        // that stops sending the field) omits it entirely, and that has to degrade to the
+        // pre-M13.5 `Stop → Idle` behaviour rather than to a wrong colour. `unwrap_or(0)`
+        // is what makes the undocumented upstream field safe to depend on.
+        "Stop" => Some(if event.background_task_count.unwrap_or(0) > 0 {
+            WorkspaceState::BackgroundWork
+        } else {
+            WorkspaceState::Idle
+        }),
         // The answer-resume signal: a tool call (incl. AskUserQuestion) finished and
         // CC resumed working — clears a stuck AwaitingInput (QoL-WP2 Phase 1).
         "PostToolUse" => Some(WorkspaceState::Running),
@@ -148,6 +233,7 @@ pub(crate) fn state_label(state: WorkspaceState) -> &'static str {
         WorkspaceState::Idle => "idle",
         WorkspaceState::Running => "running",
         WorkspaceState::AwaitingInput => "awaiting_input",
+        WorkspaceState::BackgroundWork => "background_work",
         WorkspaceState::Unknown => "unknown",
     }
 }
@@ -348,6 +434,7 @@ mod tests {
             agent_type: None,
             source: None,
             reason: None,
+            background_task_count: None,
         }
     }
 
@@ -367,6 +454,7 @@ mod tests {
             agent_type: None,
             source: None,
             reason: None,
+            background_task_count: None,
         }
     }
 
@@ -429,6 +517,175 @@ mod tests {
     fn notification_auth_success_is_a_noop() {
         // Another recognized informational type → no-op.
         assert_eq!(event_to_state(&notif(Some("auth_success"), "/p")), None);
+    }
+
+    /// Build a `Stop` carrying an explicit background-task count (M13.5 WP2).
+    fn stop_with_bg(count: Option<u64>, cwd: &str) -> HookEvent {
+        HookEvent {
+            background_task_count: count,
+            ..ev("Stop", cwd)
+        }
+    }
+
+    #[test]
+    fn stop_with_outstanding_background_work_maps_to_background_work() {
+        // M13.5 WP2 — THE fix for
+        // SURFACE-2026-08-16-IDLE-DOT-CONFLATES-DONE-WITH-WAITING-ON-A-BACKGROUND-JOB.
+        // A turn that ends while a backgrounded job runs is neither busy nor done.
+        assert_eq!(
+            event_to_state(&stop_with_bg(Some(1), "/p")),
+            Some(WorkspaceState::BackgroundWork)
+        );
+        // More than one outstanding job is the same state (the count is a boolean here —
+        // the dot has no "how many" to render).
+        assert_eq!(
+            event_to_state(&stop_with_bg(Some(4), "/p")),
+            Some(WorkspaceState::BackgroundWork)
+        );
+    }
+
+    #[test]
+    fn stop_with_zero_or_absent_background_count_still_maps_to_idle() {
+        // ⚠️ The BACKWARD-COMPATIBILITY assertion, and the reason it matters: the upstream
+        // `background_tasks` field is UNDOCUMENTED, and an older deployed hook script does
+        // not send the count at all. `None` and `Some(0)` must be indistinguishable, both
+        // degrading to the pre-M13.5 `Stop -> Idle` contract — otherwise a CC-side change
+        // (or a stale hook on disk) turns every turn-end teal.
+        assert_eq!(
+            event_to_state(&stop_with_bg(Some(0), "/p")),
+            Some(WorkspaceState::Idle)
+        );
+        assert_eq!(
+            event_to_state(&stop_with_bg(None, "/p")),
+            Some(WorkspaceState::Idle)
+        );
+        // And the plain helper (which sets no count) must agree — this is the exact shape
+        // every pre-existing Stop test uses, so it pins that they stayed correct.
+        assert_eq!(
+            event_to_state(&ev("Stop", "/p")),
+            Some(WorkspaceState::Idle)
+        );
+    }
+
+    #[test]
+    fn background_work_only_ever_comes_from_stop() {
+        // ⚠️ A stray count on a NON-Stop event must not produce BackgroundWork. The Perl
+        // hook only emits the field on `Stop`, but the wire is untrusted input: a future
+        // hook change (or a hand-crafted line) must not be able to flip the dot teal
+        // through UserPromptSubmit/PostToolUse/Notification.
+        for name in ["UserPromptSubmit", "PostToolUse", "Notification"] {
+            let ev = HookEvent {
+                background_task_count: Some(3),
+                ..ev(name, "/p")
+            };
+            assert_ne!(
+                event_to_state(&ev),
+                Some(WorkspaceState::BackgroundWork),
+                "{name} must never map to BackgroundWork"
+            );
+        }
+    }
+
+    #[test]
+    fn background_work_clears_on_the_next_clean_stop() {
+        // The self-healing expiry rule, end to end: a turn ends with work outstanding
+        // (teal), then a later turn ends with none (grey). This is the ONLY clearing edge
+        // — CC emits nothing when a background job finishes (confirmed against the
+        // official hook list; a BackgroundTasksIdle event was requested and declined), and
+        // it is sufficient because a session exiting KILLS its background jobs.
+        let seq = [
+            ev("UserPromptSubmit", "/p"),
+            stop_with_bg(Some(1), "/p"),
+            ev("UserPromptSubmit", "/p"),
+            stop_with_bg(Some(0), "/p"),
+        ];
+        let states: Vec<Option<WorkspaceState>> = seq.iter().map(event_to_state).collect();
+        assert_eq!(
+            states,
+            vec![
+                Some(WorkspaceState::Running),
+                Some(WorkspaceState::BackgroundWork),
+                Some(WorkspaceState::Running),
+                Some(WorkspaceState::Idle),
+            ]
+        );
+    }
+
+    #[test]
+    fn notification_agent_completed_is_a_noop() {
+        // M13.5 WP2 — THE regression anchor for
+        // SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT.
+        // A background agent FINISHING sends `agent_completed`. Before the fix this type
+        // was unlisted, so the unknown-type fallback classified it as input-needed and
+        // turned the dot blue — the dot was lit WRONGLY, not "lit honestly and never
+        // cleared." It must be a no-op (prior state preserved).
+        assert_eq!(event_to_state(&notif(Some("agent_completed"), "/p")), None);
+    }
+
+    #[test]
+    fn notification_agent_needs_input_maps_to_awaiting() {
+        // The sibling of `agent_completed`: a background agent that genuinely NEEDS input.
+        assert_eq!(
+            event_to_state(&notif(Some("agent_needs_input"), "/p")),
+            Some(WorkspaceState::AwaitingInput)
+        );
+    }
+
+    #[test]
+    fn agent_needs_input_is_classified_explicitly_not_by_fallback() {
+        // ⚠️ This test exists because the behavioral assertion above CANNOT detect the
+        // property we actually care about. `agent_needs_input` was classified correctly
+        // even BEFORE M13.5 WP2 — the unknown-type fallback happened to give the right
+        // answer. So `event_to_state(agent_needs_input) == AwaitingInput` passes whether
+        // or not the type is listed, which a mutation probe confirmed: deleting the entry
+        // from INPUT_NEEDED_NOTIFICATION_TYPES left every behavioral test GREEN.
+        //
+        // The property worth pinning is therefore *membership*, not the derived state: the
+        // type must be recognized DELIBERATELY, because relying on the fallback for a type
+        // we have actually observed is precisely the gap that produced the stale-blue
+        // defect for its sibling `agent_completed`. Assert the list directly — this is the
+        // one form that fails if the entry is removed.
+        assert!(
+            INPUT_NEEDED_NOTIFICATION_TYPES.contains(&"agent_needs_input"),
+            "agent_needs_input must be classified explicitly, not left to the \
+             unknown-type fallback (see is_known_informational_notification)"
+        );
+    }
+
+    #[test]
+    fn captured_background_agent_completion_resolves_running_idle_not_awaiting() {
+        // The verify-codify anchor from the live-captured instance
+        // (status-channel.log.1:15948-15950, 2026-08-04): UserPromptSubmit -> Stop ->
+        // Notification{agent_completed}. The measured defect was the dot sitting BLUE for
+        // ~150s after this sequence, until an unrelated later prompt incidentally moved it.
+        //
+        // Note the ORDER that makes this defect's shape distinctive: the Notification
+        // arrives AFTER Stop — the foreground turn has already ended, so no PostToolUse
+        // follows to clear it. That is why every "find the clearing edge" fix failed: the
+        // correct fix is to never light the dot in the first place.
+        let seq = [
+            ev("UserPromptSubmit", "/p"),
+            ev("Stop", "/p"),
+            notif(Some("agent_completed"), "/p"),
+        ];
+        let states: Vec<Option<WorkspaceState>> = seq.iter().map(event_to_state).collect();
+        assert_eq!(
+            states,
+            vec![
+                Some(WorkspaceState::Running),
+                Some(WorkspaceState::Idle),
+                None, // the fix: no-op, so the dot STAYS idle rather than going blue
+            ]
+        );
+        // And the resolved end state a surface would render: fold the sequence the way the
+        // frontend does (None preserves the prior state) and assert it is Idle, not
+        // AwaitingInput. This is the operator-visible property; the per-event vector above
+        // is the mechanism.
+        let mut rendered = WorkspaceState::Unknown;
+        for s in states.into_iter().flatten() {
+            rendered = s;
+        }
+        assert_eq!(rendered, WorkspaceState::Idle);
     }
 
     #[test]
@@ -519,14 +776,19 @@ mod tests {
     #[test]
     fn state_label_matches_serde_snake_case_rendering() {
         // M6 WP1: the status-channel log renders each state via `state_label`. Pin that
-        // it agrees with the serde snake_case wire rendering for ALL four variants, so a
+        // it agrees with the serde snake_case wire rendering for ALL FIVE variants, so a
         // future enum reorder/rename can't silently drift the log label away from the DTO
         // (the same drift-guard discipline as `dto_serde_shape_is_snake_case`). Assert
         // against serde to keep the two derivations in lockstep, not against literals.
+        //
+        // ⚠️ This list is HAND-WRITTEN, so it does not fail to compile when a variant is
+        // added — it just silently stops covering it. M13.5 WP2 added `BackgroundWork`;
+        // whoever adds a sixth variant must extend this array by hand.
         for state in [
             WorkspaceState::Idle,
             WorkspaceState::Running,
             WorkspaceState::AwaitingInput,
+            WorkspaceState::BackgroundWork,
             WorkspaceState::Unknown,
         ] {
             let serde_rendered = serde_json::to_value(state).unwrap();
@@ -539,6 +801,10 @@ mod tests {
         // And spot-check the exact literals the operator reads in the log.
         assert_eq!(state_label(WorkspaceState::Running), "running");
         assert_eq!(state_label(WorkspaceState::AwaitingInput), "awaiting_input");
+        assert_eq!(
+            state_label(WorkspaceState::BackgroundWork),
+            "background_work"
+        );
     }
 
     #[test]

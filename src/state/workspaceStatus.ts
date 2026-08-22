@@ -22,6 +22,7 @@ export type WireWorkspaceState =
   | "idle"
   | "running"
   | "awaiting_input"
+  | "background_work"
   | "unknown";
 
 /**
@@ -75,13 +76,37 @@ export function statusPresentation(
       return { label: "Idle", dotClass: "status-dot-idle" };
     case "awaiting_input":
       return { label: "Awaiting input", dotClass: "status-dot-awaiting" };
+    case "background_work":
+      // M13.5 WP2: CC returned control but a backgrounded job is still running.
+      // "Working in background" (not "Background work") so the label reads as a state
+      // the workspace is IN, matching the tense of "Running" / "Awaiting input".
+      return {
+        label: "Working in background",
+        dotClass: "status-dot-background",
+      };
     case "unknown":
-    default:
-      // Default arm also covers any future wire state we don't yet render —
-      // honest Unknown rather than a thrown error (a surface must never crash
-      // on an unrecognized status).
       return { label: "Unknown", dotClass: "status-dot-unknown" };
   }
+  // Two DIFFERENT protections, and collapsing them into one `default:` arm cost this
+  // module its compile-time half (M13.5 WP2 review):
+  //
+  //  1. COMPILE-TIME exhaustiveness — the `never` assignment below fails `tsc` if a
+  //     member of the closed `WireWorkspaceState` union has no `case`. The old
+  //     `case "unknown": default:` pairing silently absorbed a new member instead, so a
+  //     new state rendered as a grey "Unknown" dot with a green build. That is a SILENT
+  //     wrong-colour, not a visible break, and it is exactly what happened to
+  //     `background_work` until a test caught it. The Rust side gained the same guarantee
+  //     this WP (`tray::aggregate_alarm`'s exhaustive match); this is the TS half.
+  //  2. RUNTIME fallback — still required, and NOT redundant with (1): the state arrives
+  //     over IPC from a separate process, so a string outside the union genuinely can
+  //     reach here (a newer backend against an older webview). A surface must never crash
+  //     on an unrecognized status, so it degrades to the honest Unknown dot.
+  //
+  // `never` gives (1) without giving up (2): the cast is unreachable for any declared
+  // member, and the return after it is what runs for an undeclared one.
+  const exhaustive: never = state;
+  void exhaustive;
+  return { label: "Unknown", dotClass: "status-dot-unknown" };
 }
 
 /**

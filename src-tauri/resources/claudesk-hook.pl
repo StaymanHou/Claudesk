@@ -183,8 +183,15 @@ if ($event eq 'PreToolUse' || $event eq 'PostToolUse' || $event eq 'PostToolUseF
     $out{tool_name}   = $payload->{tool_name}   if defined $payload->{tool_name};
     $out{tool_use_id} = $payload->{tool_use_id} if defined $payload->{tool_use_id};
 }
-# CC sends the subagent kind as `subagent_type`; forward it under `agent_type` (the
-# name the reclassifier + HookEvent use).
+# Forward the subagent kind under `agent_type` (the name the reclassifier + HookEvent
+# use) when CC supplies it as `subagent_type`.
+#
+# WARNING (measured M13.5 WP2, 2026-08-21): CC does NOT actually send `subagent_type` —
+# `agent_type` is NULL on 100% of 3,977 subagent events across both corpora, so this
+# assignment never fires in practice. The `defined` guard is what makes that harmless.
+# Kept (not deleted) because it is forward-compatible and free: if CC starts sending the
+# field, the reclassifier's per-agent-type bucketing begins working with no change here.
+# Do not cite this line as evidence that agent_type is populated.
 if ($event eq 'SubagentStart' || $event eq 'SubagentStop') {
     $out{agent_type} = $payload->{subagent_type} if defined $payload->{subagent_type};
 }
@@ -198,6 +205,26 @@ if ($event eq 'SessionStart') {
 # v1). A short enum-ish tag, never content — same privacy class as `source`.
 if ($event eq 'SessionEnd') {
     $out{reason} = $payload->{reason} if defined $payload->{reason};
+}
+# Stop carries `background_tasks`: an array of the backgrounded jobs still outstanding
+# at turn end (M13.5 WP2). Live-captured shape, per entry:
+#   { id, type:"shell", status:"running", description, command }
+# An empty array means "turn ended, nothing outstanding" — it discriminates correctly
+# (measured), which is what makes it usable as a signal rather than a hint.
+#
+# PRIVACY INVARIANT — forward a COUNT, never the tasks. `command` and `description` are
+# user content (arbitrary shell text), exactly the class the prompt_length_chars rule
+# exists to keep off the wire. The status machine only needs "is any work outstanding",
+# a boolean, so a count is strictly sufficient and leaks nothing. Same reasoning as
+# forwarding length($prompt) instead of $prompt for time-analytics.
+#
+# WARNING: `background_tasks` is UNDOCUMENTED (it does not appear in CC's public hooks
+# doc, which the M13.5 WP2 research pass checked directly). Treat it as a stale-able
+# seam: a missing or non-array value must read as "no outstanding work", never as an
+# error, so a CC change degrades to today's behaviour instead of breaking the dot.
+if ($event eq 'Stop') {
+    my $bg = $payload->{background_tasks};
+    $out{background_task_count} = (ref $bg eq 'ARRAY') ? scalar(@$bg) + 0 : 0;
 }
 
 my $line = encode_json(\%out) . "\n";
