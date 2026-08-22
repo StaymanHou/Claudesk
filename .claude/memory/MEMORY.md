@@ -52,6 +52,7 @@
 
 ## Architecture, seams & precedents
 
+- [derived-state-is-not-a-proxy-for-its-event.md](derived-state-is-not-a-proxy-for-its-event.md) — A consumer needing "event X arrived" must match EVERY state X can map to; when a closed enum gains a member, sweep consumers of every SIBLING literal, not the nearest one. Shipped a CRITICAL — the failure mode is a silent hang.
 - [workspace-status-map-collapses-consecutive-events.md](workspace-status-map-collapses-consecutive-events.md) — The status MAP overwrites per workspace, so two consecutive `Stop`s are indistinguishable; per-event consumers must use the RAW event stream. ⚠️ The failure mode is a feature that SILENTLY never fires.
 - [claudesk-philosophy.md](claudesk-philosophy.md) — The deliberate design philosophy: opinionated, Claude-specific, parallel-across-projects, attention as the scarce resource.
 - [app-ships-with-no-csp.md](app-ships-with-no-csp.md) — Claudesk ships `"csp": null`, so anything executing in the webview gets the full `__TAURI_INTERNALS__` surface and a sanitizer is the ONLY defense. A plan asking "does it run under our CSP?" has no answer — invert it.

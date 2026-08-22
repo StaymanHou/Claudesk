@@ -1,7 +1,7 @@
 # Feature: WP2 — Background-work status states (probe + stale-blue fix)
 
 **Workflow:** feature
-**State:** review-quality (complete) — 1 CRITICAL + 2 MAJOR fixed in place, 2 MINOR backlogged; finalize next
+**State:** COMPLETED 2026-08-22 — shipped `e3eaed8`, archived
 **Created:** 2026-08-21
 **WBS:** Milestone 13.5, WP2
 **Backlog items:** `SURFACE-2026-08-16-IDLE-DOT-CONFLATES-DONE-WITH-WAITING-ON-A-BACKGROUND-JOB` (wrongly-gray, probe-gated) + `SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT` (stale-blue)
@@ -505,6 +505,50 @@ this test **FAIL**, so it genuinely catches the regression rather than passing a
 - `client.shutdown` is best-effort (`let _ =`), matching
   `SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY` — the listener may already have closed its
   side, and the assertions are what matter, not the shutdown. This avoids importing a known flake.
+
+## Retrospect
+
+- **What changed in our understanding:** ⚠️ **Both halves of this WP were built on a wrong premise,
+  and finding that out WAS the work.** (1) The stale-blue defect's diagnosis — recorded identically in
+  the backlog item, the WBS and `CLAUDE.md` — named `SubagentStop` as a missing clearing edge. The
+  measured cause was the opposite shape: CC sends `notification_type: "agent_completed"`, the type was
+  unlisted, and the *deliberate* unknown-type fallback (which exists so a future input-needed type is
+  never swallowed) classified it as needing attention. **The dot was lit wrongly; there was nothing to
+  clear.** (2) The gray half's gating question — "does a signal even exist?" — had a better answer
+  than the plan's best case: `Stop` already carries a structured `background_tasks[]` array, on the
+  very event that maps to `Idle`. (3) The completion side has genuinely **no** signal, and that is now
+  cited rather than assumed (31 documented hook events, none applicable; `BackgroundTasksIdle`
+  requested and **closed as not planned**; injected at the conversation level, bypassing hooks). (4)
+  The finding that dissolved the hardest design question: **a CC session exit KILLS its background
+  jobs** — the work is cancelled, not orphaned — so the feared stuck-forever state does not exist.
+
+- **Assumptions that held:** The undocumented-field caution was right — building `unwrap_or(0)`
+  degradation *before* knowing whether CC would keep the field cost nothing and is now the reason a
+  future CC change degrades to grey instead of breaking. Mutation-proving each assertion individually
+  held its value **three times**: it caught two of my own guards being vacuous (a CSS rule-presence
+  check satisfied by the animation block; a `blue-dominance` predicate that purple *fails*) and one
+  behavioural test that could not distinguish deliberate classification from accidental. The
+  socket-injection instrument was the right verify-self tool.
+
+- **Assumptions that were wrong:** ⚠️ **Three of my own, each caught by someone/something other than
+  me:** (a) I claimed the `agent_completed` fix was "verified on real CC" — the operator's run emitted
+  only `idle_prompt`, which was *already* correct pre-fix, so the gray dot proved nothing about the
+  changed path; I caught it only by tracing the actual notification type. (b) I chose **teal** on
+  distinguishability and it passed that test — but distinguishability is the wrong criterion when the
+  meaning is opposite; the operator rejected it on sight. (c) ⚠️ **The consumer sweep — a shipped
+  CRITICAL.** I grepped `awaiting_input` consumers and reported that as a strength; the predicate was
+  structurally blind to `recycleSession.ts`'s `state === "idle"`, so widening `Stop`'s meaning hung
+  Recycle to its 180s timeout in the *likely* case. **The rule: when adding a variant to a closed
+  enum, sweep consumers of EVERY sibling literal, not the semantically nearest one.**
+
+- **Approach delta:** Substantial, in both directions. Phase 1 came out **far smaller** than planned
+  (two lines, not a fourth state or a counter — two backlog-proposed designs and two of my own were
+  refuted before any code). Phase 2 grew a **research pass and a PID-polling probe that were not in
+  the plan**, both because the operator pushed back on "no signal / no workaround" — and both changed
+  the outcome: the citations made the verdict defensible, and the killed-on-exit finding retired the
+  expiry rule *and* the watchdog design. Phase 3 gained an unplanned consumer (the close/quit guard)
+  and an unplanned colour rebuild. ⚠️ **The plan's task 2.4 branch was never taken**, and it is marked
+  as not-taken in the WBS rather than falsely ticked.
 
 ## Code-Quality Review — wp2-background-work-status-states
 

@@ -3,6 +3,7 @@ shape: wbs
 cycle: milestone-13.5-qol-polish-bucket
 milestone: 13.5
 created: 2026-08-19
+updated: 2026-08-22  # WP1 + WP2 shipped; WP3/WP4/WP5 remain
 state: complete
 ---
 
@@ -94,7 +95,7 @@ each assertion mutation-proven individually). Operator-approved at verify-human 
 
 ---
 
-## WP2: Probe — does the status model need a fourth state, and can it get one?
+## WP2: Probe — does the status model need a fourth state, and can it get one?  ✅ SHIPPED 2026-08-22 (commit `e3eaed8`)
 
 **Type:** probe (with a build arm that is unblocked regardless — see below)
 **Milestone:** 13.5
@@ -131,15 +132,15 @@ status model was designed around a single foreground turn — but opposite sympt
    truth).
 
 **Tasks:**
-- [ ] 2.1 Live hook capture against a real CC session running a backgrounded job. Record the raw
+- [x] 2.1 Live hook capture against a real CC session running a backgrounded job. Record the raw
       event stream; answer Q1 from data.
-- [ ] 2.2 **Build the stale-blue fix regardless of Q1** — map `SubagentStop` so a finished
+- [x] 2.2 **Build the stale-blue fix regardless of Q1** — map `SubagentStop` so a finished
       background agent clears `AwaitingInput`. ⚠️ **This half is NOT probe-gated:** the event already
       exists and is merely dropped, so it needs no new signal and no new state. It is a live,
       reproducible defect with a known cause.
-- [ ] 2.3 If Q1 says a signal exists: add the fourth `WorkspaceState`, pick a colour distinct from
+- [x] 2.3 If Q1 says a signal exists: add the fourth `WorkspaceState`, pick a colour distinct from
       gray/green/blue, thread it through all three surfaces + the aggregate ranking rule.
-- [ ] 2.4 If Q1 says no signal: re-file the gray half as blocked-upstream with the capture as
+- [x] 2.4 ~~If Q1 says no signal:~~ **BRANCH NOT TAKEN** — re-file the gray half as blocked-upstream with the capture as
       evidence, and close WP2 on 2.2 alone. ⚠️ **That is a legitimate WP outcome, not a failure** —
       say so in the close rather than padding the WP.
 
@@ -156,6 +157,36 @@ status model was designed around a single foreground turn — but opposite sympt
   rather than missed (the over-infer guard).
 
 ---
+
+**✅ SHIPPED 2026-08-22** (`e3eaed8`). ⚠️ **The WP's own framing was wrong in three places, and the
+corrections are the deliverable as much as the code is:**
+
+1. **The stale-blue half was MISDIAGNOSED here, in the backlog, and in `CLAUDE.md`.** All three named
+   `SubagentStop` as a missing clearing edge. Measured cause: CC sends `notification_type:
+   "agent_completed"`, the type was unlisted, and the deliberate unknown-type fallback classified it
+   as input-needed. The dot was lit **wrongly** — there was nothing to clear. ⚠️ Task 2.2's
+   instruction ("map `SubagentStop`") is therefore **refuted**: that event fires unpaired at a 3.2:1
+   surplus and belonged to a *different session*, and the per-agent counter alternative is impossible
+   (`agent_type` is NULL on 100% of 3,977 events). Fix was two lines, elsewhere.
+2. **Task 2.4's branch was NOT taken** — the probe found the signal, so the gray half was never
+   re-filed as blocked-upstream. `Stop` already carries a structured `background_tasks[]` array,
+   empty when nothing is outstanding, decidable at the exact moment the dot goes gray. Better than
+   this WP's hypothesised launch-flag inference.
+3. **The expiry question dissolved rather than being answered.** There is genuinely no completion
+   signal (31 documented hook events, none applies; `BackgroundTasksIdle` requested and **closed as
+   not planned**; injected at the conversation level, bypassing hooks) — but **a CC session exit
+   KILLS its background jobs**, so the feared stuck-forever state does not exist. Do not build a
+   PID-polling watchdog; it was probed, it works, and it covers a case that cannot happen.
+
+**As built:** `WorkspaceState::BackgroundWork`, **purple `#a371f7`** (teal shipped first and was
+operator-rejected — it reads blue-adjacent, and blue means "needs me now"; captured as the design
+prior `semantic-distance-not-just-visual-distance-for-status-colour`). Threaded through filmstrip ·
+PiP · tray, plus the close/quit guard — closing kills the session, which kills the job.
+`tray::aggregate_alarm` rewritten to an exhaustive match so a 5th state fails to **compile**.
+⚠️ Code review caught a **shipped CRITICAL**: `recycleSession.ts` inferred "a `Stop` arrived" from
+`state === "idle"` alone, so the new mapping hung Recycle to its timeout. Root cause was method —
+the consumer sweep grepped `awaiting_input` consumers, blind to a site keyed on `"idle"`. Fixed +
+cross-language regression test. Rust 859→873, frontend 2136→2141.
 
 ## WP3: Turn-output reorientation
 
