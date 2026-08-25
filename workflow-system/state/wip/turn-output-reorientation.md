@@ -310,7 +310,7 @@ geometry; its build+verify notes survive below as history. **Do not resume it.**
 **modification of shipped, committed code** (`turnMarkers.ts` + 38 tests, backend `is_turn_start`,
 the `XtermPane` listener/handle), not a greenfield build — every phase below edits existing files.
 
-- [ ] Phase 1: Position-based model with viewport geometry  <!-- status: NOT-STARTED -->
+- [ ] Phase 1: Position-based model with viewport geometry  <!-- status: in-progress -->
   **Observable outcomes:**
   - CLI: `pnpm vitest run src/components/workspace/__tests__/turnMarkers.test.ts` exits 0 and the
     suite asserts the position model directly — `stepTurn` moves ±1 in list order, clamps at both
@@ -320,32 +320,33 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
     clamped scroll target of `130`, NOT "moved with no viewport change and the walk advanced past it".
   - CLI: `./node_modules/.bin/tsc --noEmit` exits 0 — `nextJump`'s removal is a compile error at every
     call site, so nothing can silently keep the old semantics.
-  - [ ] P1.1 Add viewport geometry to the model: a `TurnViewport {length, rows}` input and a
+  - [x] P1.1 Add viewport geometry to the model: a `TurnViewport {length, rows}` input and a
         `maxScroll(viewport)` helper. ⚠️ The model currently has NO geometry at all — that absence is
         why 38 green tests could not see the defect.  <!-- status: NOT-STARTED -->
-  - [ ] P1.2 Replace `TurnWalkState {cursor}` with `TurnPosition {index: number | null}` — an index
+  - [x] P1.2 Replace `TurnWalkState {cursor}` with `TurnPosition {index: number | null}` — an index
         into the live list, **oldest-first** (`0` = oldest), `null` = "at newest / not navigating".
         ⚠️ Deliberately the OPPOSITE indexing from the old cursor (which counted from the newest);
         oldest-first makes `prev`/`next` read as `-1`/`+1` instead of one of them being inverted.  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 Add `stepTurn(markers, position, direction)` → `{position, atOldest, atNewest}`. Pure
+  - [x] P1.3 Add `stepTurn(markers, position, direction)` → `{position, nav}` (as built: it
+        returns the nav state too, so a caller needs no second call). Pure
         position arithmetic, **no** viewport input: per AC-1 the already-visible case is NOT special,
         so geometry must not influence which turn is selected.  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 Add `scrollTargetFor(markers, position, viewport)` → `{line} | null`. Clamps to
+  - [x] P1.4 Add `scrollTargetFor(markers, position, viewport)` → `{line} | null`. Clamps to
         `maxScroll` so the caller never discovers the clamp as a failed scroll (AC-2).  <!-- status: NOT-STARTED -->
-  - [ ] P1.5 Add `navState(markers, position)` → `{canPrev, canNext, ordinal, total}` — the single
+  - [x] P1.5 Add `navState(markers, position)` → `{canPrev, canNext, ordinal, total}` — the single
         source for AC-4's disabled ends and AC-5's readout, so the two can never disagree.  <!-- status: NOT-STARTED -->
-  - [ ] P1.6 Add `clampPosition(markers, position)` for AC-7 (eviction re-clamp), and
+  - [x] P1.6 Add `clampPosition(markers, position)` for AC-7 (eviction re-clamp), and
         `positionAtNewest()` for AC-6's reset edge.  <!-- status: NOT-STARTED -->
-  - [ ] P1.7 DELETE `nextJump`, `TurnWalkState`, `initialWalkState`, `resetWalk`, `JumpOutcome`,
+  - [x] P1.7 DELETE `nextJump`, `TurnWalkState`, `initialWalkState`, `resetWalk`, `JumpOutcome`,
         `NoJumpReason`, `inertAfter`, `JumpInertEvent`. ⚠️ **Delete, do not deprecate** — a surviving
         `nextJump` is a second live path with the old semantics. `tsc` is the guard that every caller
         moved.  <!-- status: NOT-STARTED -->
-  - [ ] P1.8 Rewrite `turnMarkers.test.ts` for the new surface, keeping the eviction/`isLiveMarker`/
+  - [x] P1.8 Rewrite `turnMarkers.test.ts` for the new surface, keeping the eviction/`isLiveMarker`/
         `compact` coverage that is still correct. ⚠️ **Mutation-prove each new guard INDIVIDUALLY**
         and confirm each mutant lands in EXECUTABLE code (`docs/lessons/source-text-guards.md`) —
         and test **both** directions of every two-way thing (the F12 lesson: a two-way flag tested
         one way has an untested half).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: in-progress -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
@@ -405,16 +406,24 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 — add `TurnViewport` + `maxScroll` to the pure model
+- **Path:** Feature > Phase 1 > verify-auto
+- **Active scope:** Phase 1 impl COMPLETE (P1.1–P1.8 all `[x]`); verify-auto is next
 - **Blocked:** none
-- **Unvisited:** Phase 2 (caller/XtermPane), then Phase 3 (the control pair)
-- **Open discoveries:** 6 in `## Discoveries` + 3 SURFACEs filed 2026-08-25 (none blocking). One
-  non-blocking build-time question: the exact form of the position readout (AC-5 requires only that
-  it be visible).
+- **Unvisited:** Phase 1 verify-{auto,self,human,codify}; then Phase 2 (caller/XtermPane), then
+  Phase 3 (the control pair)
+- **Open discoveries:** 8 in `## Discoveries` (2 added at plan) + 3 SURFACEs filed 2026-08-25 —
+  none blocking.
+- **⚠️ EXPECTED tsc errors right now, do NOT "fix" them in Phase 1.** Deleting `nextJump` /
+  `resetWalk` / `initialWalkState` / `inertAfter` / `TurnWalkState` is a **breaking change on
+  purpose** (P1.7), so `XtermPane.tsx` and `Workspace.tsx` do not compile until Phase 2/3 move
+  them. That compile error IS the guard proving no caller kept the old semantics. ⚠️ Consequence:
+  **`pnpm verify:auto` cannot pass until Phase 3 lands** — Phase 1's verify-auto is scoped to the
+  model's own suites (`turnMarkers.test.ts`, `turnMarkersPurity.test.ts`) plus `cargo`, not the
+  whole gate.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
-  build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and must
-  not be cited. The two `## Research` sections at the bottom are the authority on substrate behaviour.
+  build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
+  must not be cited. The two `## Research` sections at the bottom are the authority on substrate
+  behaviour.
 
 ### Phasing rationale (re-plan, 2026-08-25)
 
@@ -433,6 +442,66 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   half-built control pair is the one state that would ship a worse UI than today's.
 - **No phase touches the backend.** `is_turn_start` and its socket test are proven and unchanged.
 
+
+## Build notes — Phase 1 (2026-08-25, re-plan)
+
+**The model is rewritten, not extended.** `turnMarkers.ts` now owns two *separate* questions —
+"which turn is selected?" (`stepTurn`) and "what line do we scroll to for it?"
+(`scrollTargetFor`) — because conflating them is what produced the shipped defect.
+
+**New surface:** `TurnPosition {index}` · `positionAtNewest` · `TurnViewport {length, rows}` ·
+`maxScroll` · `StepDirection` · `TurnNavState` · `resolvePosition` · `clampPosition` · `stepTurn` ·
+`scrollTargetFor` · `navState`. **Deleted:** `nextJump`, `TurnWalkState`, `initialWalkState`,
+`resetWalk`, `JumpOutcome`, `NoJumpReason`, `inertAfter`, `JumpInertEvent`.
+
+⚠️ **Three decisions worth not re-deriving:**
+
+1. **Oldest-first indexing** (`0` = oldest), the OPPOSITE of the deleted newest-first walk cursor.
+   It makes `prev` = `-1` and `next` = `+1` against buffer order, so neither direction is the
+   inverted one. A newest-first index would leave one direction reading backwards — the asymmetry
+   that produced an off-by-one-turn in the first place.
+2. **`stepTurn` takes NO viewport, on purpose (AC-1).** Selection is position arithmetic; geometry
+   enters only in `scrollTargetFor`. A test pins this by stepping *onto* a turn whose line is above
+   `maxScroll` and asserting it is still selected, with only the *scroll* clamped. Letting geometry
+   pick the turn is the rejected viewport-based design.
+3. **The clamp moved INTO the model.** `scrollTargetFor` returns `min(line, maxScroll)`, so the
+   caller can compare against `viewportY` and know the truth — and, more importantly, the position
+   advances regardless, so the controls never stall. The old code passed a raw line, xterm clamped
+   silently, and the caller reported success for a viewport that had not moved.
+
+**The shipped defect is now a test.** `describe("⚠️ THE SHIPPED DEFECT …")` replays the live-pane
+measurement verbatim — markers `[19, 137]`, `length 198`, `rows 68`, `maxScroll 130` — and asserts
+the newest turn reads `2/2` with a clamped target of `130`, that ONE prev reaches line 19, and that
+prev→next round-trips. Those fail against the old semantics; red-green without `/feature-reproduce`,
+since the repro was arithmetic already measured on a live pane.
+
+**Tests: 38 → 61** in `turnMarkers.test.ts` (+ 4 unchanged in the purity guard). Kept the
+`isLiveMarker` / `liveMarkers` / `compact` / `reachableCount` / `shouldRecordTurnStart` coverage
+(still correct); replaced the `nextJump` / `resetWalk` / `inertAfter` blocks.
+
+⚠️ **14 mutants, each killed, each verified to land on an EXECUTABLE line** (L107–L285; the harness
+refuses a mutant whose line begins `//`, `*` or `/*`, per
+`[[verify-the-mutation-landed]]`): `maxScroll` 0-floor and `-`→`+`; `scrollTargetFor` clamp dropped;
+`stepTurn` prev/next inverted, upper clamp dropped (wrap), lower clamp dropped, stale re-clamp
+skipped; `navState` `canPrev`/`canNext` off-by-one and 0-based ordinal; `resolvePosition`
+null→oldest, upper clamp dropped, empty→0-not-null, and eviction ignored. Kill counts ranged 1–14
+tests; the two clamp-drop mutants kill exactly **1** test each, which is the honest minimum for a
+boundary and is why they were probed **individually** rather than as a composite.
+
+⚠️ **The purity guard's emptiness meta-guard was anchored on `nextJump` — a symbol this phase
+DELETED.** Re-anchored to `stepTurn`/`scrollTargetFor`/`navState`. Left unfixed it would have failed
+loudly (fine), but the trap worth recording is the other direction: an emptiness guard naming a
+symbol that never returns is **permanently vacuous**, and every `not.toMatch` beneath it then passes
+while checking nothing. Both arms re-proven: emptying the haystack fails the meta-guard, and adding
+a real `document.body.clientHeight` read to the model fails the absence test.
+
+⚠️ **`pnpm verify:auto` CANNOT pass until Phase 3.** P1.7's deletion is a deliberate breaking
+change, so `XtermPane.tsx` and `Workspace.tsx` do not compile until Phase 2/3 move them — and that
+compile error IS the guard proving no caller kept the old semantics. Phase 1's verify-auto is
+therefore scoped to the model's own suites plus the Rust side, not the whole gate.
+
+**Gate (Phase 1 scope):** `turnMarkers.test.ts` **61 passed** · `turnMarkersPurity.test.ts`
+**4 passed** · `tsc` clean except the two expected caller files.
 
 ## Build notes — Phase 1 (2026-08-22)
 

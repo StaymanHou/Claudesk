@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import turnMarkersSource from "../turnMarkers.ts?raw";
 
-// M13.5 WP3 P2 verify-codify — turnMarkers.ts must stay DOM-free and dependency-free.
+// M13.5 WP3 — turnMarkers.ts must stay DOM-free and dependency-free.
+// (Anchors refreshed at the 2026-08-25 re-plan, which replaced the backward walk with
+// bidirectional position-based navigation; the guard's PURPOSE is unchanged.)
 //
-// ⚠️ WHY THIS GUARD EXISTS AT ALL. The behavioural tests in `turnMarkers.test.ts` prove the walk is
+// ⚠️ WHY THIS GUARD EXISTS AT ALL. The behavioural tests in `turnMarkers.test.ts` prove the navigation is
 // correct; none of them would FAIL if a future edit reached into the DOM. That gap was surfaced by
 // the Phase 2 verify-self subagent, and it matters more here than it would elsewhere: the module was
 // extracted **precisely because** DOM/geometry reads are untrustworthy in this codebase. `arch.md`
@@ -13,7 +15,7 @@ import turnMarkersSource from "../turnMarkers.ts?raw";
 // exactly the hazard the extraction removed, and every existing test would stay green while it did.
 //
 // ⚠️ This is a STRUCTURAL guard, and that is all it is. Per `docs/lessons/source-text-guards.md` a
-// `?raw` guard verifies shape, never runtime; the walk's BEHAVIOUR is owned by
+// `?raw` guard verifies shape, never runtime; the navigation's BEHAVIOUR is owned by
 // `turnMarkers.test.ts`, which drives the real functions. This file only pins "the module cannot be
 // reading the DOM", which is a property of the source text and therefore the one thing a source-text
 // guard can honestly assert.
@@ -34,7 +36,14 @@ describe("turnMarkers.ts stays a pure module", () => {
     // a presence test. Every assertion below is `not.toMatch`, so an over-eager strip (a regex
     // change, a `?raw` import that silently resolved to "") would leave `code` empty and every
     // absence assertion would PASS while checking nothing. Pin the haystack before trusting it.
-    expect(code).toMatch(/export function nextJump\(/);
+    // ⚠️ Pin the functions that CARRY the behaviour, so a rewrite that guts the module cannot
+    // leave these absence assertions checking an empty string. Updated at the 2026-08-25 re-plan:
+    // the old anchor was `nextJump`, which that re-plan DELETED — an emptiness guard naming a
+    // removed symbol fails loudly (good), but naming a symbol that never returns would have made
+    // this guard permanently vacuous. Anchor on live exports only.
+    expect(code).toMatch(/export function stepTurn\(/);
+    expect(code).toMatch(/export function scrollTargetFor\(/);
+    expect(code).toMatch(/export function navState\(/);
     expect(code).toMatch(/export function isLiveMarker\(/);
     expect(code).toMatch(/export function liveMarkers\(/);
     expect(code.length).toBeGreaterThan(600);
