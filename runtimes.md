@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-21
+updated: 2026-08-25
 ---
 
 # Runtime Registry
@@ -31,9 +31,12 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 55s (2026-08-21, M13.5 WP1 close: tauri-plugin-window-state + window_state module; Rust 859 / frontend 2136 — full gate, warm incremental)
-- **Use timeout:** 143000
+- **Last:** 30s (2026-08-25, M13.5 WP3 pre-probe commit gate: baseline confirm before the signal-trace probe; Rust 879 / frontend 2184 — full gate, warm incremental)
+- **Use timeout:** 120000
 - **History:**
+  - 30s — 2026-08-25
+  - 31s — 2026-08-25
+  - 34s — 2026-08-22
   - 55s — 2026-08-21 (M13.5 WP1; Rust 859 / frontend 2136)
 
 ## pnpm vite build

@@ -47,6 +47,30 @@ export interface WorkspaceStatusUpdate {
    * (`applyStatusUpdate`) keys only on `state` — it does NOT read this field.
    */
   notification_type?: string;
+  /**
+   * `true` iff this event is the one that **begins a CC turn** (`UserPromptSubmit`) —
+   * M13.5 WP3, the turn-marker signal. Classified BACKEND-side in
+   * `status_broadcaster::event_is_turn_start`; never re-derived here.
+   *
+   * ⚠️ **Consumers MUST match this field, never `state`.** `event_to_state` maps *two*
+   * events to `"running"`: `UserPromptSubmit` (a turn starts — once) and `PostToolUse`
+   * (a turn resumes after a tool call — many times per turn). Inferring "a turn started"
+   * from `state === "running"` therefore fires on every tool call, which in a measured
+   * p95 turn is hundreds of spurious markers. Same defect class as the M13.5 WP2
+   * CRITICAL that read "a `Stop` arrived" off `state === "idle"`
+   * (`[[derived-state-is-not-a-proxy-for-its-event]]`).
+   *
+   * ⚠️ **And it must be read off the RAW event stream, not the map.** `applyStatusUpdate`
+   * folds by `workspace_id`, so consecutive events overwrite each other and "a turn
+   * started" is unrecoverable from `WorkspaceStatusMap`
+   * (`[[workspace-status-map-collapses-consecutive-events]]`). The reducer deliberately
+   * does NOT read this field — like `notification_type`, it is per-event data that only a
+   * per-event subscriber can use.
+   *
+   * Absent (omitted on the wire) means the same as `false`: an older or degraded payload
+   * loses the turn marker rather than inventing one.
+   */
+  is_turn_start?: boolean;
 }
 
 /** The Tauri event name — mirrors `status_broadcaster::commands::STATUS_EVENT`. */

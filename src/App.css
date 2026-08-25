@@ -681,6 +681,37 @@ body,
   cursor: default;
 }
 
+/* M13.5 WP3 P3.5 — the "jump to a previous turn start" affordance. Borrows the
+   split-control chrome so it reads as part of the same ungated terminal-chrome cluster
+   rather than as a new surface. ⚠️ It is NOT in the gated skill-button row — a turn is a
+   plain Claude Code concept, so this surface ships for every user (see Workspace.tsx).
+   Both classes below are EMITTED by that button; an emitted-but-unstyled class was a
+   prior CRITICAL here (arch.md → "Every CSS guard reads ONE side of the contract"). */
+.workspace-jump-turn-btn {
+  padding: 0.1rem 0.45rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+  color: #b0b0b0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.workspace-jump-turn-btn:hover {
+  color: #e0e0e0;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Last click found nothing to jump to (fresh session, or every marker evicted from the
+   scrollback). Dimmed rather than disabled: the count lives in a ref inside XtermPane, so
+   this is an honest POST-HOC signal, not a predictive one. */
+.workspace-jump-turn-btn.is-inert {
+  opacity: 0.4;
+  color: #8a8a8a;
+}
+
 /* M6 WP3 — the two collapse toggles flanking the cycle button. Same chrome
    as the cycle button; .is-active marks the currently-collapsed half (pressed look). */
 .split-collapse-btn {

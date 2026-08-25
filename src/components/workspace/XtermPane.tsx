@@ -50,6 +50,29 @@ import {
 } from "./terminalMirror";
 import { trimTrailingBlankRows } from "./mirrorTrim";
 import { loadTerminalFontSize } from "./terminalFontZoom";
+import { useTauriListen } from "../../useTauriListen";
+import {
+  WORKSPACE_STATUS_EVENT,
+  type WorkspaceStatusUpdate,
+} from "../../state/workspaceStatus";
+import {
+  compact,
+  initialWalkState,
+  nextJump,
+  reachableCount,
+  resetWalk,
+  shouldRecordTurnStart,
+  type TurnMarker,
+  type TurnWalkState,
+} from "./turnMarkers";
+
+// M13.5 WP3 — a `TURN_MARKER_COLOR = "#6e7681"` constant lived here for the overview-ruler tick.
+// Removed with the decoration call (the tick is not the chosen affordance — see the marker site
+// below). ⚠️ KEEP ITS REASONING for whatever the re-spec's affordance turns out to be: a neutral
+// GREY, never a status hue. `[PRIOR: semantic-distance-not-just-visual-distance-for-status-colour]`
+// fires — the status palette is spoken for (orange `#d97757` Running, blue `#539bf5`
+// AwaitingInput, purple `#a371f7` BackgroundWork), and M13.5 WP2 rejected teal for reading
+// blue-adjacent. A turn landmark is NAVIGATION, not state, so it must borrow no status meaning.
 
 /**
  * Imperative handle exposed via `ref` (QoL-WP3). The parent `Workspace` calls
@@ -91,6 +114,22 @@ export interface XtermPaneHandle {
    * after relaunching must inject it itself.
    */
   relaunch(): void;
+  /**
+   * M13.5 WP3 P3.4 — scroll the viewport to the start of a previous CC turn.
+   *
+   * First call jumps to the NEWEST turn start; repeat calls walk backward to older ones and
+   * go inert at the oldest (no wrap — see `turnMarkers.ts`). Returns `true` if the viewport
+   * moved, `false` when there was nothing to jump to, so the caller can keep the affordance
+   * honest instead of silently doing nothing (AC-5).
+   *
+   * ⚠️ The DECISION is `turnMarkers.nextJump` — a pure function asserted as a value. This
+   * method only applies the result. `arch.md`: scroll geometry must never be read off an
+   * element (jsdom reports `clientHeight === 0` for visible ones; WebKit's own `scrollTop`
+   * retention has vacated live proofs here before), so the target is computed, not measured.
+   */
+  jumpToPreviousTurn(): boolean;
+  /** M13.5 WP3 — how many turn starts are currently reachable (0 → affordance is inert). */
+  reachableTurnStarts(): number;
 }
 
 interface XtermPaneProps {
@@ -153,6 +192,33 @@ interface XtermPaneProps {
    * Only forwarded for `cc_spawn`; `term_spawn` (the WP9 shell) has no resume arm.
    */
   openIntent?: OpenIntent;
+  /**
+   * M13.5 WP3 P3.3 — record a turn-start marker each time this pane's CC session begins a
+   * turn, so the jump affordance can scroll back to it.
+   *
+   * ⚠️ **Defaults to `false`, and that default is load-bearing.** `XtermPane` is SHARED: the
+   * WP9 right-panel terminal mounts it with `spawnCommand="term_spawn"` for a login shell
+   * (`TerminalPane.tsx`), and a shell has no notion of a "turn". Marking unconditionally
+   * would give every second-terminal panel a meaningless affordance and a marker per stray
+   * hook event. Only the left-half CC pane opts in.
+   */
+  markTurnStarts?: boolean;
+  /**
+   * M13.5 WP3 — fired each time a turn-start marker is recorded for this pane.
+   *
+   * ⚠️ **This edge exists because its absence was a shipped defect** (found by the operator at
+   * Phase 3 verify-human). The marker list lives in a ref here, so the parent's affordance has
+   * no way to learn that a *new* turn made a previously-empty list non-empty. Without this
+   * callback, `Workspace`'s `jumpInert` flag — set when a click finds nothing — could only ever
+   * be cleared by a later *successful* click, so after one dead click on a fresh session the
+   * button stayed dimmed and kept asserting "no earlier turn start is still in the scrollback"
+   * even while markers existed. A UI that lies is worse than the dead click it replaced.
+   *
+   * Same defect SHAPE as the M13.5 WP2 CRITICAL: a mechanism correct in itself sitting behind a
+   * caller that never learns about it (`arch.md` — hit four times in this repo). The fix is the
+   * missing edge, not a re-read.
+   */
+  onTurnStartRecorded?: () => void;
 }
 
 export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
@@ -168,12 +234,20 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       active = true,
       pendingAction = null,
       openIntent = "fire",
+      markTurnStarts = false,
+      onTurnStartRecorded,
     },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const termRef = useRef<Terminal | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
+    // M13.5 WP3 — the recorded turn-start markers, oldest→newest, and where the backward
+    // walk currently sits. REFS, not state: nothing in the render output depends on them
+    // (the affordance asks via the imperative handle), so re-rendering on every turn start
+    // would be pure cost. The pure model in `turnMarkers.ts` owns all the logic.
+    const turnMarkersRef = useRef<TurnMarker[]>([]);
+    const turnWalkRef = useRef<TurnWalkState>(initialWalkState);
     // Live session id for the input/resize callbacks (a ref so the handlers wired at
     // mount always see the current id without re-subscribing).
     const sessionIdRef = useRef<string | null>(null);
@@ -219,6 +293,77 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     // M13 WP3 P2.1 — same ordering trick as `fitAndResizeRef` above: `handleRelaunch` is
     // declared below this handle, so the ref lets the handle reach it without a reorder.
     const handleRelaunchRef = useRef<() => void>(() => {});
+    // M13.5 WP3 P3.2 — record a marker at each TURN START.
+    //
+    // ⚠️ THE RAW EVENT STREAM, NOT THE STATUS MAP. `useWorkspaceStatus` folds updates into a
+    // map keyed by workspace id, so consecutive events overwrite and "a turn started" is
+    // UNRECOVERABLE from it ([[workspace-status-map-collapses-consecutive-events]] — whose
+    // failure mode is a feature that silently never fires). A per-event consumer must tap the
+    // event itself.
+    //
+    // ⚠️ AND IT MATCHES `is_turn_start`, NEVER `state`. `event_to_state` maps BOTH
+    // `UserPromptSubmit` (a turn starts, once) and `PostToolUse` (a turn resumes, many times
+    // per turn) to `running`, so keying on the state would plant a marker on every tool call —
+    // hundreds in a measured p95 turn. That is the M13.5 WP2 CRITICAL's exact shape
+    // ([[derived-state-is-not-a-proxy-for-its-event]]); the backend classifies, we match.
+    //
+    // Uses the shared `useTauriListen` seam, which owns the async-listen +
+    // torn-down-before-resolve guard. Subscribing unconditionally and filtering inside keeps
+    // the hook order stable; `markTurnStarts` gates the WORK, not the subscription.
+    useTauriListen<WorkspaceStatusUpdate>(WORKSPACE_STATUS_EVENT, (event) => {
+      // ⚠️ The predicate is `shouldRecordTurnStart`, NOT inline conditions. It was extracted so a
+      // test can drive the CALLER's contract (arch.md's recurring "the machine is proven, the
+      // caller is not" shape); re-inlining these guards silently removes that coverage.
+      if (
+        !shouldRecordTurnStart({
+          markTurnStarts,
+          paneWorkspaceId: workspaceId,
+          payload: event.payload,
+        })
+      ) {
+        return;
+      }
+      const term = termRef.current;
+      if (!term) return;
+
+      // ⚠️⚠️ `registerMarker` IS SOUND — probe-proven on a live CC pane 2026-08-25.
+      //
+      // ⚠️ A PRIOR "REFUTED — alternate buffer" NOTE STOOD HERE AND WAS WRONG. Do not restore it.
+      // It claimed CC runs in xterm's ALTERNATE buffer, so markers/decorations could never work.
+      // Measured on a live CC pane (v2.1.245): `buffer.active.type === "normal"`,
+      // `buffer.active === buffer.normal` (identity), `buffer.alternate.length === 0` — the alt
+      // buffer is NEVER used, and `onBufferChange` fired ZERO times across a full turn and a
+      // `/clear`. CC repaints the normal buffer; it does not switch buffers. That note was
+      // written from a doc comment instead of a one-line runtime read, and it closed real work.
+      //
+      // What actually broke the three live tests: `registerDecoration` is xterm PROPOSED API and
+      // throws "You must set the allowProposedApi option to true to use proposed API" — a flag
+      // this codebase never sets. The throw was SILENT because the call sat un-caught inside this
+      // listener, so it presented as "nothing renders". Proven causal by A/B (same buffer, same
+      // marker, flag off → throws / flag on → real decoration object).
+      const marker = term.registerMarker();
+      if (!marker) return;
+
+      // ⚠️ THE DECORATION CALL IS DELIBERATELY REMOVED, NOT FIXED. Two options must BOTH be set
+      // for a ruler tick (`allowProposedApi` AND terminal-level `overviewRuler.width`), and even
+      // with both the ruler canvas painted ZERO pixels in the probe — likely because the overview
+      // ruler is CANVAS-based while this app is DOM-renderer-only by hard architectural rule.
+      // That question is OPEN, not refuted (`wbs.md` → WP3). The re-spec's chosen affordance is a
+      // jump BUTTON, which needs no gutter tick at all — so re-adding a decoration here would
+      // re-introduce a silent throw for a visual nothing. Markers alone drive `scrollToLine`.
+
+      // Drop markers xterm has already disposed (their lines left the scrollback) so the list
+      // cannot grow without bound across a long session.
+      turnMarkersRef.current = compact([...turnMarkersRef.current, marker]);
+      // A new turn means the reader's old walk is stale — the next jump should target this
+      // newest start rather than continuing from wherever they had scrolled back to.
+      turnWalkRef.current = resetWalk();
+      // ⚠️ Tell the parent. Without this the affordance cannot recover from its inert state —
+      // see `onTurnStartRecorded`'s docs. `useTauriListen` holds this handler in a latest-ref,
+      // so no separate ref is needed here.
+      onTurnStartRecorded?.();
+    });
+
     useImperativeHandle(
       ref,
       () => ({
@@ -232,6 +377,21 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           fitAndResizeRef.current();
         },
         relaunch: () => handleRelaunchRef.current(),
+        jumpToPreviousTurn: () => {
+          const term = termRef.current;
+          if (!term) return false;
+          // Compact first so an evicted marker cannot be chosen as a target, then let the
+          // pure model decide. `outcome.next` is stored whichever arm fires — the "none"
+          // arms carry a deliberate cursor (reset on no-markers, held at the oldest) that the
+          // caller must persist for a repeat click to behave.
+          turnMarkersRef.current = compact(turnMarkersRef.current);
+          const outcome = nextJump(turnMarkersRef.current, turnWalkRef.current);
+          turnWalkRef.current = outcome.next;
+          if (outcome.kind !== "scroll") return false;
+          term.scrollToLine(outcome.line);
+          return true;
+        },
+        reachableTurnStarts: () => reachableCount(turnMarkersRef.current),
       }),
       [],
     );
@@ -328,7 +488,26 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
         // historical hardcode) so the terminal mounts at the last-chosen size with
         // no flash-then-jump. Live changes go through the setFontSize handle.
         fontSize: loadTerminalFontSize(),
-        scrollback: 1000,
+        // ⚠️ A "PREMISE INVALIDATED" NOTE STOOD HERE AND WAS ITSELF VOID — do not restore it.
+        // It claimed the CC pane is an alternate-buffer TUI that accumulates no normal-buffer
+        // scrollback, so this raise was paid for nothing. MEASURED FALSE on a live pane
+        // 2026-08-25: the pane is in the NORMAL buffer and accumulates real scrollback — one
+        // "print 1..120" turn took `buffer.length` 68 → 146 and `baseY` 0 → 78. The OQ-1
+        // rationale below therefore STANDS ON ITS MERITS and is a genuine memory-vs-reach
+        // tradeoff, not an accident. (Still the operator's call to re-tune; it is no longer
+        // resting on a false premise.)
+        // M13.5 WP3 P3.1 — raised 1000 → 10000 so a long turn's START stays reachable by the
+        // turn-marker jump. Measured on this project's own 1857 turns: p90 = 257 events,
+        // p95 = 378, max = 1239 — comfortably capable of emitting >1000 lines, so at 1000 a
+        // turn could evict its own start WHILE STILL RUNNING, breaking the jump on exactly
+        // the turns that motivated it. Operator's call at spec (OQ-1).
+        //
+        // ⚠️ 10000 is a larger bound, NOT an unbounded one — eviction is still reachable, and
+        // `turnMarkers.ts` treats a disposed marker as a normal state rather than an error.
+        // ⚠️ This does NOT change the filmstrip/PiP mirror cost: the mirror's own
+        // `scrollback: 40` below is a `serializeAsHTML()` OPTION (last-40-rows of this same
+        // buffer), not a second Terminal config, so it is unaffected by this number.
+        scrollback: 10000,
         cursorBlink: true,
         // Explicit DARK theme (dark-mode-only project): light fg on a near-black bg. This
         // also drives the filmstrip mirror's colors — serializeAsHTML() emits each cell

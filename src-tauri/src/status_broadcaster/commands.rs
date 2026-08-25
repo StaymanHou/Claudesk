@@ -476,6 +476,93 @@ mod tests {
         assert_eq!(wire, serde_json::Value::String("background_work".into()));
     }
 
+    /// **M13.5 WP3 — the turn-start discriminator, end-to-end through the real socket.**
+    ///
+    /// The consuming-surface test for this phase's integration boundary: the tray, PiP and
+    /// filmstrip all read `WorkspaceStatusUpdate` off this emit path, so the DTO unit tests
+    /// in `mod.rs` are necessary but not sufficient — they never exercise
+    /// socket → parse → `to_update`.
+    ///
+    /// ⚠️ The stream is a **realistic multi-tool turn**, which is the shape that exposes the
+    /// defect this field prevents. One turn contains ONE `UserPromptSubmit` and MANY
+    /// `PostToolUse`s, and every one of them maps to `Running`. A consumer keying on
+    /// `state == Running` would mark a turn start **four times here** (and hundreds of times
+    /// in a real p95 turn); keying on `is_turn_start` marks it exactly once. Asserting the
+    /// *count* — not just per-event values — is what makes that difference visible.
+    #[test]
+    fn end_to_end_socket_one_turn_start_per_turn_not_one_per_tool_call() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let sock = dir.path().join("hook.sock");
+        let listener = bind_listener(&sock).unwrap();
+        let (tx, rx) = mpsc::channel::<HookEvent>();
+        let _handle = spawn_listener(listener, tx);
+
+        let ws_dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(ws_dir.path(), "ws-1".to_string());
+        let ws_cwd = ws_dir.path().to_string_lossy().to_string();
+
+        // One turn: a prompt, three tool calls, then a clean end.
+        let mut client = UnixStream::connect(&sock).unwrap();
+        for line in [
+            format!("{{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"prompt\":\"go\"}}\n"),
+            format!("{{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\"}}\n"),
+            format!("{{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\"}}\n"),
+            format!("{{\"hook_event_name\":\"PostToolUse\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\"}}\n"),
+            format!("{{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"{ws_cwd}\",\"background_task_count\":0}}\n"),
+        ] {
+            client.write_all(line.as_bytes()).unwrap();
+        }
+        // Best-effort per SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY.
+        let _ = client.shutdown(std::net::Shutdown::Both);
+
+        let mut emitted = Vec::new();
+        for _ in 0..5 {
+            let ev = rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("event should arrive");
+            if let Some(update) = to_update(&ev, &reg) {
+                emitted.push(update);
+            }
+        }
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+
+        // Four of the five events render as Running — this is the collision, on the wire.
+        let running = emitted
+            .iter()
+            .filter(|u| u.state == WorkspaceState::Running)
+            .count();
+        assert_eq!(
+            running, 4,
+            "one UserPromptSubmit + three PostToolUse all map to Running — the collision \
+             this field exists to disambiguate"
+        );
+
+        // ...but exactly ONE of them begins a turn.
+        let turn_starts = emitted
+            .iter()
+            .filter(|u| u.is_turn_start == Some(true))
+            .count();
+        assert_eq!(
+            turn_starts, 1,
+            "a turn has exactly ONE start; keying a marker on state==Running would place {running} \
+             markers in this single turn"
+        );
+
+        // And it is the FIRST event, not an arbitrary one of the four.
+        assert_eq!(emitted[0].is_turn_start, Some(true));
+        assert!(
+            emitted[1..].iter().all(|u| u.is_turn_start == Some(false)),
+            "no event after the prompt may claim a turn start"
+        );
+
+        // Pin the WIRE key too: the surfaces read this JSON, so a serde drift on the field
+        // name would silently stop every marker from ever being placed.
+        let wire = serde_json::to_value(&emitted[0]).unwrap();
+        assert_eq!(wire["is_turn_start"], serde_json::Value::Bool(true));
+        assert_eq!(wire["state"], serde_json::Value::String("running".into()));
+    }
+
     #[test]
     fn init_registry_starts_empty() {
         let reg = init_registry();

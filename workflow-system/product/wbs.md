@@ -3,7 +3,7 @@ shape: wbs
 cycle: milestone-13.5-qol-polish-bucket
 milestone: 13.5
 created: 2026-08-19
-updated: 2026-08-22  # WP1 + WP2 shipped; WP3/WP4/WP5 remain
+updated: 2026-08-25  # WP1 + WP2 shipped; WP3 ESCALATED out (probe-first re-spec); WP4/WP5 remain
 state: complete
 ---
 
@@ -15,6 +15,12 @@ state: complete
 > workspace surface (WP4) was added 2026-08-20 from a direct operator ask, which is the bucket
 > convention working as intended (an OPEN bucket accepts items while it runs). ⚠️ **If WP3
 > escalates out per its own gate 3.2, the bucket closes at WP1+WP2+WP4+WP5 — still four.**
+>
+> **⚠️ WP3 ESCALATED 2026-08-25 — the bucket now closes at WP1 + WP2 + WP4 + WP5, i.e. FOUR**, the
+> same as its three predecessors, exactly as the clause above anticipated. It escalated on a
+> **measured mechanism refutation** (the CC pane is an xterm **alternate** buffer, where
+> `registerDecoration` is a no-op), not on a size estimate — see WP3. **Remaining work in this
+> bucket: WP4, then WP5.**
 >
 > **Numbered 13.5** so the M14/M15 tail keeps its numbers — the same reason M10.5 and M11.5 were
 > `.5` inserts rather than renumbering everything after them.
@@ -188,37 +194,125 @@ PiP · tray, plus the close/quit guard — closing kills the session, which kill
 the consumer sweep grepped `awaiting_input` consumers, blind to a site keyed on `"idle"`. Fixed +
 cross-language regression test. Rust 859→873, frontend 2136→2141.
 
-## WP3: Turn-output reorientation
+## WP3: Turn-output reorientation — ⚠️ STILL ESCALATED, but the REFUTATION WAS OVERTURNED 2026-08-25
 
 **Description:** With heavy cross-workspace switching, a single CC turn can run 10+ minutes and
 100+ lines, and it is hard to locate **where the last turn's output began** — acutely in the common
 case where the operator layers a question on top of a workflow instruction, so the answer and the
 workflow output interleave.
-**Milestone:** 13.5
-**Dependencies:** WP1, WP2 (ordering only — see the rationale below; no technical dependency)
-**Size:** M–L ⚠️ **and that is the problem**
+**Milestone:** ~~13.5~~ → **its own milestone (to be numbered at the next `/product-roadmap`)**
+**Status:** **ESCALATED** (stays out of this bucket — the re-spec is a fresh design pass, not a
+resume). ⚠️ **But the reason changed completely:** the mechanism is **FEASIBLE**. Task 3.1's probe
+ran and **overturned the refutation that escalated it.**
 
-⚠️ **SCOPE RISK, STATED UP FRONT RATHER THAN DISCOVERED LATE.** The QoL-bucket convention is
-explicitly for *"`/feature-plan`-scale dogfooding papercuts"* (M11.5's own rationale). This item is a
-**UX/attention feature**, not a papercut: it has no obvious minimal form, it touches the terminal
-render path, and its backlog entry is `[type: new-work (UX / attention feature)]`.
+### ⚠️ THE ALTERNATE-BUFFER REFUTATION WAS FALSE. Do not re-derive it.
 
-**Therefore, a hard gate:**
-- [ ] 3.1 **Design pass FIRST** — `/feature-spec`, not `/feature-plan`. Enumerate the candidate
-      mechanisms (a turn-start marker/divider in the xterm buffer · a "jump to last turn start"
-      affordance · a scroll-position memory per workspace · something else) and pick one.
-- [ ] 3.2 ⚠️ **If the spec comes back larger than one WP, SPLIT IT OUT as its own milestone and
-      close the bucket at WP1+WP2+WP4.** Do not let it sprawl inside the bucket — a bucket that
-      absorbs a feature stops being a bucket, and the three prior buckets all closed at 4 WPs of
-      genuinely small work. Escalating here is the expected outcome, not a failure.
-- [ ] 3.3 Build only if 3.1 yields a WP-sized mechanism.
+A prior revision of this WP said: *"CC is a full-screen TUI → it runs in the ALTERNATE buffer →
+`registerMarker` targets the normal buffer and `registerDecoration` returns undefined, so no tick
+could ever render."* **The first clause is false, which voids the whole chain.** Measured by
+`/feature-research` on a **live CC pane** (v2.1.245) through the MCP bridge:
 
-⚠️ **Do NOT reach for a new panel or view.** `[PRIOR: new-surface-must-earn-its-place-against-existing-ones]`
-fires directly: the terminal already shows this output, so any new surface would be a strict subset
-plus a sync cost. The irreducible non-overlap is **navigation within the existing buffer** — build
-that and nothing more.
+| Read | Value |
+|---|---|
+| `buffer.active.type` | **`"normal"`** |
+| `buffer.active === buffer.normal` | **`true`** (identity-checked) |
+| `buffer.alternate.length` | **`0`** — the alt buffer was **never used at all** |
+| `buffer.onBufferChange` events | **`0`**, across a full turn *and* a `/clear` |
 
----
+**CC repaints the normal buffer; it never switches buffers.** That note was written from a **doc
+comment** rather than a **one-line runtime read**, and it closed real work on a false basis.
+
+### What the probe actually established (all by RUNNING the APIs, not reading types)
+
+- **Scrollback accumulates, abundantly.** One "print 1..120" turn: `buffer.length` **68 → 146**,
+  `baseY` **0 → 78**. A later turn reached 151/83. "Scroll back to the turn start" is **not**
+  impossible in principle — the history is really there.
+- **Navigation works.** `registerMarker(0)` → a live marker (line 90, not disposed).
+  `scrollToLine(0)` → `viewportY` **0**; `scrollToLine(40)` → **40**; `scrollLines(-10)` → **30**;
+  `scrollToBottom()` → **78**. `getLine().translateToString()` returns real CC text at every index.
+- **⚠️ THE ACTUAL ROOT CAUSE OF THE THREE FAILED TESTS — a one-line config omission.**
+  `registerDecoration` is xterm **proposed API** and throws
+  `"You must set the allowProposedApi option to true to use proposed API"`. **`allowProposedApi` is
+  set nowhere in this codebase** (`grep` over `src/`: zero hits). Proven causal by a **controlled
+  A/B** — same constructor, same `normal` buffer, same marker, only the flag differing: `false` →
+  throws, `true` → a real decoration `object`. Confirmed on the live pane too.
+- **⚠️ The throw was SILENT in production.** The call sat un-caught inside a listener, so the
+  exception was swallowed and presented as *"nothing renders"* — which is what sent three rounds of
+  debugging at the wrong layer.
+- **`/clear` does not reset the buffer** — it *grew* it (146 → 151, `baseY` 78 → 83). CC's `/clear`
+  clears its conversation, not the terminal scrollback.
+
+### ⚠️ ONE QUESTION IS OPEN — NOT refuted, just unfinished
+
+The overview **ruler** never painted. It needs a **second** unset option — terminal-level
+`overviewRuler.width` (the typings: *"must be set in order to see the overview ruler"*), also absent
+from this codebase. Setting it **did** create the canvas (`canvas.xterm-decoration-overview-ruler`,
+14×884, correctly positioned at x:946/y:120) — but it painted **0 non-zero pixels** across 4
+decorations spread over the buffer, `position: "right"` and `"full"`, `refresh()`, scroll nudges, a
+real CC turn, and a ~3s settle.
+
+**Untested hypothesis:** the overview ruler is **canvas**-based while this app is **DOM-renderer
+only** by hard architectural rule — there were **zero `<canvas>` elements in the whole document**
+before one was forced. Setting the width *at construction* (rather than after) was not conclusively
+tested; the dev app was closed mid-run. ⚠️ **Treat this as open.** It affects only the *gutter-tick*
+presentation, and the recommended affordance sidesteps it entirely.
+
+### The restructure: RE-SPEC on the probe's findings (3.1 is DONE)
+
+- [x] 3.1 ✅ **PROBE COMPLETE 2026-08-25** — feasibility answered on a live CC pane; all four
+      questions closed (buffer type · scrollback accumulation · which APIs work · buffer exits).
+      Full write-up: `workflow-system/state/wip/turn-output-reorientation.md`
+      → `## Research`. ⚠️ **Verdict: FEASIBLE.** The blocker was two unset xterm options, not a
+      platform contract.
+- [ ] 3.2 **Re-spec on the probe data.** ⚠️ Do NOT resume the old spec verbatim — but note its
+      *mechanism* is now vindicated, not refuted. **Recommended direction:** keep `registerMarker`
+      + `scrollToLine` (both proven), set `allowProposedApi: true`, and make the affordance a
+      **jump BUTTON** rather than a gutter tick — a button needs no ruler, so it moots the one open
+      question above. `workspace-split-control` is the ungated neighbour to host it.
+- [ ] 3.3 Build once 3.2 lands and is WP-sized.
+
+### What the first attempt leaves behind — REUSABLE, do not rebuild
+
+⚠️ These shipped, are tested, and — now that the mechanism is vindicated — **more of them survive
+than the escalation assumed**:
+
+- **`is_turn_start` on `WorkspaceStatusUpdate`** + `event_is_turn_start` (backend), with an
+  end-to-end socket test proving **exactly one** turn-start per multi-tool turn. This is the honest
+  turn-boundary signal and it works; **the problem was never detecting a turn.**
+- **`turnMarkers.ts`** — the walk/eviction/`inertAfter` model + `shouldRecordTurnStart`, 38 tests,
+  each guard mutation-proven. ⚠️ **Its marker source is NO LONGER refuted** — `registerMarker`
+  works on the CC pane, so the whole module is live, not just its logic.
+- **`registerMarker` + `scrollToLine` as the navigation primitive** — probe-proven end to end.
+- **The ungated-placement finding** — the skill-button row is gated wholesale, so an ungated
+  affordance must NOT live there (`workspace-split-control` is the ungated neighbour).
+- **`turnMarkersPurity.test.ts`** — and its inverted comment-strip lesson.
+- **The `scrollback: 10000` raise** — ⚠️ its "premise invalidated" marking is **itself void**. The
+  pane *does* accumulate normal-buffer scrollback, so the original OQ-1 rationale (p95 = 378 events
+  could evict a turn's own start at 1000) **stands on its merits**. Re-tune it as a real
+  memory-vs-reach tradeoff if wanted, but it is no longer a mistake to inherit.
+
+⚠️ **The `[PRIOR: new-surface-must-earn-its-place-against-existing-ones]` question resolves toward
+NO new surface.** The prior fired on the first pass because "the terminal already shows this
+output," and the probe **confirms** that premise: the buffer is navigable, so a jump affordance over
+the existing pane is the right shape. A separate read-only surface is **not** needed.
+
+### ⚠️ THE PROCESS LESSON — the probe gate fired twice and was skipped twice
+
+`SURFACE-2026-08-25-PROBE-CHECK-EXEMPTS-ALREADY-INSTALLED-DEPENDENCIES` said *"a dependency being
+installed says nothing about whether its API works in our runtime conditions."* The probe confirms
+it and **sharpens it**: the failure was not exotic runtime conditions but **two unset options
+documented in the dependency's own typings**.
+
+⚠️ **And it compounded.** The *post-mortem* then mis-attributed the cause to the alternate buffer by
+**reading a doc comment instead of reading a runtime value** — `buffer.active.type` is a single
+property access and it refutes the entire escalation. The cheap mechanical test was the same both
+times: *"does any shipped code already call this API in this context?"* → `grep` said **no**, twice.
+
+⚠️ **Meta-lesson (new, and the more valuable one): A REFUTATION NEEDS THE SAME EMPIRICAL BAR AS A
+CLAIM — arguably higher, because a refutation CLOSES work.** This one was built from typings, earned
+three rounds of trust, escalated a WP out of its milestone, and marked working code as dead. Filed
+as `SURFACE-2026-08-25-REFUTATION-FROM-TYPINGS-NOT-RUNTIME`.
+
 
 ## WP4: Drive-mode readout + selector on the workspace surface
 
@@ -390,6 +484,3 @@ technical dependency on WP1–WP3). WP5 depends on whatever actually shipped.
   **measure-then-decide**, not a build; it needs a fresh measurement pass before it can be scoped.
 - Everything else in `backlog.md` — 29 open items at bucket open; the rest are tech-debt, guard
   completeness, or gated on unmet preconditions.
-
-## Session Handoff — 2026-08-22 15:29
-Handed off. See `workflow-system/state/.session.md` to restore.

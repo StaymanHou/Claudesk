@@ -245,8 +245,9 @@ pub(crate) fn state_label(state: WorkspaceState) -> &'static str {
 /// them exactly. `last_event_at` carries the hook-side send time (`HookEvent.timestamp`,
 /// epoch ms) when present; `last_output_snippet` carries the event's `prompt`
 /// (`UserPromptSubmit`) or `message` (`Notification`) when present; `notification_type`
-/// carries the `Notification` subtype (QoL-WP2). All three are `Option` and
-/// `skip_serializing_if`-omitted when absent so the wire shape is minimal.
+/// carries the `Notification` subtype (QoL-WP2); `is_turn_start` marks the one event that
+/// begins a CC turn (M13.5 WP3). All four are `Option` and `skip_serializing_if`-omitted
+/// when absent so the wire shape is minimal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceStatusUpdate {
     /// The registry id of the workspace this event belongs to.
@@ -268,6 +269,27 @@ pub struct WorkspaceStatusUpdate {
     /// tooltip) without re-deriving.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub notification_type: Option<String>,
+    /// `Some(true)` iff this event is the one that **begins a CC turn**
+    /// (`UserPromptSubmit`) — M13.5 WP3, the turn-output-reorientation marker signal.
+    ///
+    /// ⚠️ **This field exists because `state` CANNOT express it.** [`event_to_state`] maps
+    /// **two** different events to [`WorkspaceState::Running`]: `UserPromptSubmit` (a turn
+    /// starts — once per turn) and `PostToolUse` (a turn resumes after a tool call — many
+    /// times per turn). A consumer that infers "a turn started" from `state == Running`
+    /// therefore fires on **every tool call**; in a measured p95 turn that is hundreds of
+    /// spurious firings, not a graceful degradation. Same defect class as the M13.5 WP2
+    /// CRITICAL that inferred "a `Stop` arrived" from `state == Idle`.
+    ///
+    /// Like `notification_type`, the classification is made **backend-side, here** so no
+    /// surface re-derives it from a raw event name. Consumers must match this field, never
+    /// `state`. ⚠️ And they must read it off the **raw event stream** — the frontend's
+    /// `WorkspaceStatusMap` folds by workspace id, so consecutive events overwrite and
+    /// "a turn started" is unrecoverable from the map.
+    ///
+    /// `None` (omitted on the wire) and `Some(false)` mean the same thing — not a turn
+    /// start — so an older payload degrades to "no marker", never to a wrong one.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_turn_start: Option<bool>,
 }
 
 /// Maps a canonicalized project path → its `workspace_id`. The cwd→workspace seam:
@@ -411,7 +433,22 @@ pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<Work
         last_event_at: event.timestamp,
         last_output_snippet,
         notification_type: event.notification_type.clone(),
+        is_turn_start: Some(event_is_turn_start(event)),
     })
+}
+
+/// Is this the hook event that **begins a CC turn**? M13.5 WP3.
+///
+/// `UserPromptSubmit` and nothing else. ⚠️ In particular **NOT `PostToolUse`**, even though
+/// [`event_to_state`] maps both to [`WorkspaceState::Running`] — `PostToolUse` is the
+/// *resume* signal and fires many times within a single turn. That collision is the entire
+/// reason `WorkspaceStatusUpdate::is_turn_start` exists rather than a consumer reading
+/// `state`; see that field's docs.
+///
+/// Kept as a named predicate (mirroring [`notification_awaits_input`]) so the rule has ONE
+/// home and a test can pin it directly.
+pub fn event_is_turn_start(event: &HookEvent) -> bool {
+    event.hook_event_name == "UserPromptSubmit"
 }
 
 #[cfg(test)]
@@ -1065,6 +1102,100 @@ mod tests {
         assert_eq!(update.last_output_snippet.as_deref(), Some("do the thing"));
     }
 
+    // ---- is_turn_start: the M13.5-WP3 turn-start discriminator ----
+
+    #[test]
+    fn turn_start_separates_the_two_running_producers() {
+        // ⚠️ THE CORE OF M13.5 WP3, and the reason the field exists at all.
+        //
+        // `UserPromptSubmit` and `PostToolUse` BOTH map to Running. A consumer that reads
+        // "a turn started" off `state == Running` therefore fires on every tool call — in a
+        // measured p95 turn (378 events) that is hundreds of spurious turn markers. This
+        // test pins the property that makes the two distinguishable ON THE WIRE while their
+        // `state` stays deliberately identical.
+        //
+        // If this test is ever "simplified" to assert only the state, the feature it guards
+        // silently breaks: the markers still appear, just in all the wrong places.
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "ws-1".to_string());
+        let cwd = dir.path().to_string_lossy().to_string();
+
+        let start = to_update(&ev("UserPromptSubmit", &cwd), &reg).expect("mapped+resolved");
+        let resume = to_update(&ev("PostToolUse", &cwd), &reg).expect("mapped+resolved");
+
+        // Same derived state — this is NOT a bug to "fix"; it is why the field is needed.
+        assert_eq!(start.state, WorkspaceState::Running);
+        assert_eq!(resume.state, WorkspaceState::Running);
+        assert_eq!(
+            start.state, resume.state,
+            "the two producers must remain state-identical — the discriminator, not the \
+             state, is what separates them"
+        );
+
+        // ...but only one of them begins a turn.
+        assert_eq!(
+            start.is_turn_start,
+            Some(true),
+            "UserPromptSubmit begins a turn"
+        );
+        assert_eq!(
+            resume.is_turn_start,
+            Some(false),
+            "PostToolUse RESUMES a turn (fires many times per turn) — it must never read as \
+             a turn start"
+        );
+    }
+
+    #[test]
+    fn turn_start_is_false_for_every_other_mapped_event() {
+        // No event other than UserPromptSubmit may claim a turn start. Enumerated rather
+        // than sampled: a future mapped event added to event_to_state without a thought
+        // about this field should surface here.
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut reg = WorkspaceRegistry::new();
+        reg.register(dir.path(), "ws-1".to_string());
+        let cwd = dir.path().to_string_lossy().to_string();
+
+        // Stop (→ Idle) and Stop-with-background-work (→ BackgroundWork, M13.5 WP2).
+        let stop = to_update(&ev("Stop", &cwd), &reg).expect("mapped");
+        assert_eq!(stop.state, WorkspaceState::Idle);
+        assert_eq!(stop.is_turn_start, Some(false));
+
+        let mut bg_ev = ev("Stop", &cwd);
+        bg_ev.background_task_count = Some(2);
+        let bg = to_update(&bg_ev, &reg).expect("mapped");
+        assert_eq!(bg.state, WorkspaceState::BackgroundWork);
+        assert_eq!(bg.is_turn_start, Some(false));
+
+        // An input-needed Notification (→ AwaitingInput).
+        let mut notif_ev = ev("Notification", &cwd);
+        notif_ev.notification_type = Some("permission_prompt".to_string());
+        let notif = to_update(&notif_ev, &reg).expect("mapped");
+        assert_eq!(notif.state, WorkspaceState::AwaitingInput);
+        assert_eq!(notif.is_turn_start, Some(false));
+    }
+
+    #[test]
+    fn event_is_turn_start_predicate_pins_the_rule() {
+        // The predicate directly — one home for the rule, so a caller can't drift from it.
+        assert!(event_is_turn_start(&ev("UserPromptSubmit", "/p")));
+        for name in [
+            "PostToolUse",
+            "PreToolUse",
+            "Stop",
+            "SubagentStop",
+            "Notification",
+            "SessionStart",
+            "",
+        ] {
+            assert!(
+                !event_is_turn_start(&ev(name, "/p")),
+                "{name} must not read as a turn start"
+            );
+        }
+    }
+
     #[test]
     fn status_update_serde_round_trips_for_tray_consumer() {
         // M7: the menu-bar tray consumes the emitted `workspace-status` payload IN-PROCESS
@@ -1080,15 +1211,20 @@ mod tests {
             last_event_at: Some(1_718_000_000_000),
             last_output_snippet: Some("perm?".to_string()),
             notification_type: Some("permission_prompt".to_string()),
+            is_turn_start: Some(false),
         };
         let json = serde_json::to_string(&full).unwrap();
         let back: WorkspaceStatusUpdate = serde_json::from_str(&json).unwrap();
         assert_eq!(back, full);
 
-        // (2) MINIMAL wire shape — the three Option fields are skip_serializing_if-omitted
+        // (2) MINIMAL wire shape — the four Option fields are skip_serializing_if-omitted
         // when None, so the emitted JSON has only workspace_id + state. The tray must still
         // deserialize it (the #[serde(default)] guard). This is the common live shape (a
         // Stop/UserPromptSubmit with no timestamp/snippet/type).
+        //
+        // ⚠️ `is_turn_start` absent must deserialize to None — i.e. "not a turn start" —
+        // NOT fail and NOT default to a marker. An older/degraded payload must lose the
+        // turn marker, never invent one (M13.5 WP3).
         let minimal_json = r#"{"workspace_id":"ws-2","state":"running"}"#;
         let parsed: WorkspaceStatusUpdate = serde_json::from_str(minimal_json).unwrap();
         assert_eq!(parsed.workspace_id, "ws-2");
@@ -1096,6 +1232,7 @@ mod tests {
         assert_eq!(parsed.last_event_at, None);
         assert_eq!(parsed.last_output_snippet, None);
         assert_eq!(parsed.notification_type, None);
+        assert_eq!(parsed.is_turn_start, None);
 
         // (3) The snake_case state rendering the tray folds over is pinned end-to-end.
         assert_eq!(
@@ -1240,16 +1377,19 @@ mod tests {
             last_event_at: Some(123),
             last_output_snippet: Some("hi".to_string()),
             notification_type: Some("permission_prompt".to_string()),
+            is_turn_start: Some(true),
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
 
-        // Exact key set, all snake_case (incl. the QoL-WP2 notification_type field).
+        // Exact key set, all snake_case (incl. the QoL-WP2 notification_type field and
+        // the M13.5-WP3 is_turn_start field).
         let mut keys: Vec<&String> = obj.keys().collect();
         keys.sort();
         assert_eq!(
             keys,
             vec![
+                &"is_turn_start".to_string(),
                 &"last_event_at".to_string(),
                 &"last_output_snippet".to_string(),
                 &"notification_type".to_string(),
@@ -1267,6 +1407,7 @@ mod tests {
             obj["notification_type"],
             serde_json::json!("permission_prompt")
         );
+        assert_eq!(obj["is_turn_start"], serde_json::json!(true));
     }
 
     #[test]
@@ -1278,12 +1419,14 @@ mod tests {
             last_event_at: None,
             last_output_snippet: None,
             notification_type: None,
+            is_turn_start: None,
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
         assert!(!obj.contains_key("last_event_at"));
         assert!(!obj.contains_key("last_output_snippet"));
         assert!(!obj.contains_key("notification_type"));
+        assert!(!obj.contains_key("is_turn_start"));
         assert_eq!(obj["state"], serde_json::json!("unknown"));
     }
 }
