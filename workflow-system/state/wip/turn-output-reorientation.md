@@ -422,32 +422,20 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [x] P3.5 CSS in `App.css` beside the existing split-control rules; drop `.workspace-jump-turn-btn`
         and `.is-inert`. ⚠️ Read CSS source-guards via `node:fs`, NOT a Vitest `?raw` import
         (`[[vitest-raw-import-css-returns-processed-not-text]]`).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: in-progress; COMBINED gate covering Phase 2 + Phase 3 outcomes -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: done; COMBINED gate, pnpm verify:auto exit 0 -->
+  - [x] verify-self  <!-- status: done; COMBINED — Phase 2 + Phase 3 outcomes proven on a bootable app -->
+  - [ ] verify-human  <!-- status: in-progress; COMBINED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 > verify-auto (COMBINED Phase 2 + Phase 3 gate)
-- **Active scope:** Phase 3 impl COMPLETE (P3.1–P3.5). ⚠️ **Phase 3 was built OUT OF ORDER** to
-  unblock a runtime-broken app (see below), so its verify cycle covers **both** phases' observable
-  outcomes — Phase 2's surface is only observable *with* the Phase 3 controls, and Phase 2's own
-  verify-self was VOIDED.
+- **Path:** Feature > Phase 3 > verify-human (COMBINED Phase 2 + Phase 3 gate)
+- **Active scope:** combined verify-auto + verify-self PASSED on a **bootable** app. verify-human next.
 - **Blocked:** none
-- **Unvisited:** Phase 3 verify-{auto,self,human,codify} — the combined gate. Then WP4, WP5.
+- **Unvisited:** Phase 3 verify-{human,codify}; then WP4, WP5.
 - **Open discoveries:** 13 in `## Discoveries` + 5 SURFACEs pending (one **high**) — none blocking.
-- **⚠️ WHY PHASE 2's VERIFICATION WAS VOIDED — do not re-bank it.** Phase 1 deleted `inertAfter`
-  while `Workspace.tsx` still imported it. **A missing ES-module export is a RUNTIME
-  module-resolution failure, not just a `tsc` error** — `SyntaxError: Importing binding name
-  'inertAfter' is not found` aborted `main.tsx` before mount, so the dev app was **blank and
-  unlaunchable for the whole of Phase 2**. Phase 2's "live-pane" readings only appeared to work
-  because the webview still held a **pre-deletion bundle**. The operator found the blank window.
-  Filed **high**: `SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC`.
-  ⚠️ **The framing "that compile error IS the guard" was WRONG** and the operator approved
-  phase-by-phase on it. Never describe a failing `tsc` as a guard when the failure class includes
-  module resolution.
-- **⚠️ `pnpm verify:auto` NOW PASSES** (exit 0; Rust 879, frontend 2216) for the first time since
-  Phase 1. A green gate here is meaningful again.
+- **⚠️ `pnpm verify:auto` PASSES** — exit 0, Rust **879**, frontend **2220**. Meaningful again.
+- **⚠️ Phase 2's own verify-self stays VOIDED** — it ran against a pre-deletion bundle. Its outcome
+  was re-proven here jointly; do not re-bank the original readings.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -1066,6 +1054,61 @@ gate (a) to accept the body-line form. Worth settling once. Filed below.
 
 **No design prior proposed** — a skip confirmation carries no product-design tradeoff and no
 transferable *why*. The capture discriminant does not fire.
+
+## Verify-auto + Verify-self — Phase 3 (COMBINED with Phase 2, 2026-08-25)
+
+⚠️ **Why combined.** Phase 3 was built **out of order** to unblock a runtime-broken app, and Phase
+2's own verify-self was **VOIDED** — its "live-pane" readings came from a webview holding a
+pre-deletion bundle. Phase 2's surface (the handle's round-trip symmetry) is only observable
+*through* the Phase 3 controls anyway, so one honest gate replaces two, one of which would have been
+a re-run of discredited checks. Operator approved.
+
+**Boot smoke-test first** — the gate the incident recommends: `#root` has children and stylesheets
+are loaded. ⚠️ **This is the check whose absence let a blank app pass a full verify cycle.** Run it
+before trusting any live observation on a phase that deleted anything.
+
+**Combined outcome — real DOM clicks, `viewportY` read after React commits.** Three real
+turn-starts with ~120 lines of buffer growth between each, so markers land at distinct depths
+(`length 341`, `rows 68`, `maxScroll 273`):
+
+| Click | Readout | prev | next | `viewportY` |
+|---|---|---|---|---|
+| start | 3/3 | enabled | **disabled** | 273 |
+| prev | 2/3 | enabled | enabled | **220** |
+| prev | 1/3 | **disabled** | enabled | **100** |
+| next | 2/3 | enabled | enabled | **220** |
+| next | 3/3 | enabled | **disabled** | **273** |
+
+**Three distinct viewports (100 · 220 · 273)**, round trip exact on *both* viewport and readout,
+both ends disabling correctly. That covers Phase 2's outcome (round-trip symmetry with the viewport
+genuinely moving) **and** Phase 3's (the controls, AC-4 disabled ends, AC-5 readout).
+
+Fresh pane before any turn: both controls present and `disabled`, `cursor: default`, readout hidden
+(`total === 0`). AC-6 confirmed: a new turn-start makes the readout appear at `N/N` with `next`
+disabled. Console: **0 errors** across 8 clicks, on a tap with a proven positive control
+(`[[read-logs-console-captures-nothing]]` — an untested tap's empty read is a false green).
+
+⚠️ **AN INSTRUMENT ERROR THAT LOOKED EXACTLY LIKE A DEFECT, worth carrying.** A first pass clicked
+the buttons and read the DOM **synchronously in the same tick**, showing the readout frozen at `3/3`
+and `nextDisabled` stuck `true` — i.e. *"clicking does nothing"*, indistinguishable from a broken
+handler. React had simply not committed yet. Reading after `requestAnimationFrame` shows the correct
+walk. ⚠️ **For any React-state assertion driven by a synthetic click, the read must be deferred a
+frame; a same-tick read reports the PREVIOUS render.** (Related but distinct from
+`[[mcp-bridge-interact-click-needs-el-click-fallback]]`: `el.click()` *did* reach React here — the
+bug was when I looked, not how I clicked.)
+
+**New guard: `turnNavExportContract.test.ts` (4 tests).** Asserts every **value** import each
+consumer takes from `turnMarkers` actually exists on the runtime module — the property whose absence
+shipped the blank app. Type-only specifiers are excluded (erased at compile time, cannot fail at
+runtime); the emptiness meta-guard asserts the **parse** rather than a value-import count, because
+`Workspace.tsx` legitimately holds only a type import now and demanding otherwise would fail on
+correct code. Three arms mutation-proven, including **reconstructing the real defect** — re-adding
+`inertAfter` to `Workspace.tsx`'s import fails with the exact diagnostic. ⚠️ One probe initially
+"passed" because a `sed` escaping slip meant the mutation never landed — redone and confirmed; **an
+invalid probe and a real hole look identical** (`[[invalid-probe-and-real-hole-look-identical]]`).
+
+**Gate:** `pnpm verify:auto` exit **0** · Rust **879** · frontend **2220** · `tsc` **0 errors** —
+the first clean full gate since Phase 1.
 
 ## Verify-codify — Phase 2 (2026-08-22)
 
