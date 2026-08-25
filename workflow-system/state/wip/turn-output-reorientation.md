@@ -1,13 +1,13 @@
 # Feature: Turn-output reorientation — find where the last turn began
 
 **Workflow:** feature
-**State:** **plan COMPLETE (task 3.3, 2026-08-25)** — spec re-written and phased. Both probes are
-closed; the mechanism is proven and the real defect (a viewport-clamp off-by-one-turn in `nextJump`)
-is identified and reproduced. ⚠️ **This is a RE-SPEC + RE-PLAN, not a resume:** the affordance is now
-a **bidirectional prev/next pair** and navigation is **position-based** (operator decisions,
-2026-08-25). ⚠️ **The spec sections + `## Work Tree` below are CURRENT**; the Phase 1/2/3
-build+verify history further down predates both probes, and `## MECHANISM REFUTED` is **retracted —
-do not cite it**. *(File renamed from `-REFUTED-mechanism` 2026-08-25.)*
+**State:** **ship (complete) — 2026-08-25.** All three phases and every verify node are `[x]`.
+Final gate: `pnpm verify:auto` exit **0**, Rust **879**, frontend **2230** (171 files), `tsc` **0
+errors**, plus a **boot smoke-test** (`#root` has children, stylesheets loaded — APP MOUNTS). ⚠️
+**NOT PUSHED:** `main` is **27 ahead of origin** by standing policy (push only when the operator
+asks). ⚠️ **The spec sections + `## Work Tree` below are CURRENT**; the Phase 1/2/3 build+verify
+history further down predates both probes, and `## MECHANISM REFUTED` is **retracted — do not cite
+it**. *(File renamed from `-REFUTED-mechanism` 2026-08-25.)*
 **Created:** 2026-08-22
 **Entry:** spec (complex feature — WP3's gate 3.1 mandates a design pass, not `/feature-plan`)
 **Source:** `SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION`; M13.5 WBS → WP3
@@ -432,21 +432,25 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [x] verify-codify  <!-- status: done; COMBINED — 1 real gap found + closed (10 tests) -->
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE → ship
-- **Active scope:** none. Phases 1, 2 and 3 are all `[x]` including every verify node. Next is
-  `/feature-ship`.
+- **Path:** Feature > ship COMPLETE → review-quality
+- **Active scope:** none. Next is `/feature-review-quality` (autopilot, so the review runs; only
+  `fsd` skips it).
 - **Blocked:** none
-- **Unvisited:** none in this feature. After ship/finalize: M13.5 **WP4** (drive-mode readout on the
+- **Unvisited:** review-quality → finalize. After that: M13.5 **WP4** (drive-mode readout on the
   workspace surface), then **WP5** (bucket exit verify).
-- **Open discoveries:** 13 in `## Discoveries` + 5 SURFACEs pending (one **high**) — none blocking.
-  ⚠️ The **high** one is
-  `SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC` and it is a
-  workflow-system change, not a Claudesk one.
-- **⚠️ Phase 2's verify nodes are CLOSED BY COMBINATION, not independently passed.** Its verify-self
-  readings were VOIDED (pre-deletion bundle) and re-proven inside Phase 3's combined gate; its
-  verify-human was folded in and operator-approved there. Recorded this way rather than back-dated
-  so the history stays legible.
-- **⚠️ Final gate:** `pnpm verify:auto` exit **0** · Rust **879** · frontend **2230** · `tsc` **0**.
+- **Open discoveries:** 13 in `## Discoveries` + 5 SURFACEs pending — none blocking. ⚠️ The **high**
+  one, `SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC`, is a
+  **workflow-system** change (a `feature-plan` blocker + a boot-smoke-test gate), **not** a Claudesk
+  one — it belongs in the owed cross-repo handoff to mccc, alongside the other two cross-repo items.
+- **⚠️ SHIP STATE: committed, NOT pushed.** 18 commits (`aacfaeb`..`51aab74`); `main` 27 ahead of
+  origin, 0 behind. Pushing is the operator's call.
+- **⚠️ What a reviewer should know before reading the diff:** this WP shipped a **blank-app defect
+  mid-flight** — Phase 1 deleted `inertAfter` while `Workspace.tsx` still imported it, which is a
+  **runtime** module-resolution failure, not merely a `tsc` error. The operator found it, not a gate.
+  It is fixed and now guarded by `turnNavExportContract.test.ts` (mutation-proven by reconstructing
+  the defect). ⚠️ **Consequence: Phase 2's verify nodes are CLOSED BY COMBINATION, not independently
+  passed** — its verify-self readings came from a pre-deletion bundle and were VOIDED, then re-proven
+  inside Phase 3's combined gate.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -1247,6 +1251,45 @@ taken by Running/AwaitingInput/BackgroundWork, and WP2 rejected teal for reading
 navigation landmark must not borrow status meaning.
 
 **Both mutations restored via `cp` from snapshots, not `git checkout`.**
+
+## Ship notes (2026-08-25)
+
+**Cleanup:** clean. No probe/instrument residue in `src/` (every temporary tap was reverted and the
+tree verified byte-identical at each step), no debug logging added, no commented-out code, no new
+TODO/FIXME, no scratch files inside the repo (the ignored paths are all pre-existing and correctly
+covered by the artifact-tracking policy).
+
+**Final verification:** `pnpm verify:auto` exit **0** · Rust **879** · frontend **2230** across
+**171** files · `tsc` **0 errors**.
+
+⚠️ **Plus a BOOT SMOKE-TEST, and it is not ceremony here.** `#root` has children and stylesheets are
+loaded → **APP MOUNTS**. This WP is the reason that check exists: a green `pnpm verify:auto` and a
+green `tsc` were *both true* while the app was blank and unlaunchable, because a deleted ES export is
+a **runtime** module-resolution failure. **Any future phase that deletes or renames an export must
+run this before shipping** — the unit gate cannot see it.
+
+**Release prep:** 18 commits, `aacfaeb`..`51aab74`, each already carrying a full message; no
+squash-and-summarise step, matching this repo's history. Branch `main`, **27 ahead of origin, 0
+behind**. ⚠️ **NOT PUSHED** — standing policy is push only when the operator asks, and the operator
+restated it for this WP.
+
+⚠️ **Do not read "all phases `[x]`" as "all phases independently verified".** Phase 2's verify nodes
+are marked **CLOSED BY COMBINATION**: its verify-self readings were VOIDED (pre-deletion bundle) and
+re-proven inside Phase 3's combined gate, and its verify-human was folded there and operator-approved.
+Recorded this way rather than back-dated so the history stays legible about what was voided and where
+it was re-proven.
+
+**What shipped:** bidirectional, position-based turn navigation — `↑ N/N ↓` in the ungated
+split-control cluster. Model (`turnMarkers.ts`) rewritten around `TurnPosition` + `TurnViewport` with
+selection and geometry deliberately separated; `XtermPane` exposing `stepTurn(direction)` +
+`turnNavState()` behind a single position writer; `Workspace` rendering the paired controls with real
+`disabled` ends and a live readout. The backward-only jump button, its `inertAfter` state machine and
+the `registerDecoration`/overview-ruler path are all deleted.
+
+**Test surface added by this WP:** `turnMarkers.test.ts` 38 → **62** · `turnMarkersPurity` **4**
+(anchors refreshed) · `turnNavWiring` **9** · `turnNavExportContract` **4** · `turnNavControls`
+**10**. Every guard arm mutation-proven **individually**, and three of them caught real holes that a
+composite probe would have masked.
 
 ## Verify-codify — Phase 3 (COMBINED with Phase 2, 2026-08-25)
 
