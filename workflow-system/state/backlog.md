@@ -661,3 +661,31 @@
 *Items moved out of active — low-impact + not worth carrying forward as active work. Not resolved (no CHANGELOG entry); revive only if the anchoring condition fires.*
 - **SURFACE-2026-06-24-QUALITY-APPMENU-LISTENER-NOT-EXTRACTED** (buried 2026-07-20, backlog-paydown sweep §Completion) — the `src/App.tsx` `menu` listener isn't extracted to a pure testable `dispatchMenuAction(action, effects)` seam. LOW-impact + med-effort + low-risk; explicitly "defer unless the listener grows"; consistent with the repo's "runtime-bound listeners aren't unit-tested" posture (the higher-value `menuBridge` mapping IS fully tested). **Revive only if** the App.tsx menu listener grows new branches. (Was: `# app-menu-bar` finding, now removed from `backlog-quality-findings.md`.)
 
+
+## SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS
+- **Source:** feature:verify-self (M13.5 WP3 Phase 1)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** A plan-time Observable outcome asserted `tsc --noEmit` **exits 0** while the *same
+  sentence's* rationale said the phase's deletion "is a compile error at every call site". Both
+  halves cannot be true. The phase deliberately deletes exports two consumers still use (P1.7), so a
+  green `tsc` is impossible until Phase 3 — the outcome was unsatisfiable **as written** the moment
+  it was authored.
+- **Context:** ⚠️ **The generalizable trap: a phase that intentionally breaks the build cannot use a
+  whole-gate green as its Observable outcome.** `feature-plan`'s template pushes for mechanically
+  verifiable outcomes (rightly), and "the type checker exits 0" is the most obviously mechanical one
+  available — which is exactly why it gets written down without checking whether *this* phase can
+  satisfy it. ⚠️ It is also a **false-green risk in the other direction**: had the callers happened
+  to still compile, the outcome would have passed while proving nothing about the deletion. The
+  honest outcome for a deliberate-breakage phase is a **shape** assertion — "errors appear in exactly
+  these N files, all of kind X, all naming the deleted symbols" — which is what verify-auto actually
+  checked and what caught this.
+- **Suggested action:** In `feature-plan`, when a phase's tasks include a deliberate deletion or
+  signature change with existing consumers left for a later phase, require the phase's gate outcome
+  to be expressed as an **expected-failure shape** rather than a whole-gate pass. A cheap mechanical
+  prompt: *"does any task in this phase break a consumer that a later phase fixes? then no
+  whole-suite/whole-gate green may be an outcome of THIS phase."* Consider also having
+  `feature-verify-auto` treat "outcome asserts a green gate that the phase's own plan says it
+  breaks" as a plan-defect signal rather than a test failure.
+- **Priority:** medium
+- **Status:** pending

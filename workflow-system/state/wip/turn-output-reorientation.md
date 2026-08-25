@@ -205,6 +205,16 @@ its stated why ("difficult to navigate back and forth") already covered by the e
 principle is already recorded is not a new prior. Flag if you read it as one.
 
 ## Discoveries
+
+[SURFACED-2026-08-25] Phase 1 verify-self — ⚠️ **An Observable outcome asserted a green gate that
+this phase's own plan says it breaks** (`tsc --noEmit` exits 0, alongside a rationale reading
+"removal is a compile error at every call site"). Corrected in the Work Tree to an expected-failure
+SHAPE assertion; filed as
+`SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS` (medium). ⚠️ The
+trap generalizes: for a phase that intentionally breaks consumers a later phase fixes, a whole-gate
+green is both unsatisfiable AND a false-green risk — it would pass while proving nothing about the
+deletion.
+
 <!-- Format: [SURFACED-<date>] <target node> — <summary> -->
 
 [SURFACED-2026-08-25] feature-plan — `wbs.md` exceeds size guard (491 lines). Read was SKIPPED per
@@ -318,8 +328,18 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - CLI: a test replays the SHIPPED DEFECT and FAILS against the old semantics — markers
     `[19, 137]`, `length 198`, `rows 68`: stepping to the newest turn must report position 2/2 and a
     clamped scroll target of `130`, NOT "moved with no viewport change and the walk advanced past it".
-  - CLI: `./node_modules/.bin/tsc --noEmit` exits 0 — `nextJump`'s removal is a compile error at every
-    call site, so nothing can silently keep the old semantics.
+  - CLI: ~~`./node_modules/.bin/tsc --noEmit` exits 0~~ — ⚠️ **CORRECTED at verify-self 2026-08-25:
+    this outcome was UNSATISFIABLE AS WRITTEN.** Its two halves contradict each other — the phase
+    deliberately deletes exports two consumers still use (P1.7), so a green `tsc` is impossible
+    until Phase 3. ⚠️ It was also a false-green risk the other way: had the callers happened to
+    still compile, "exits 0" would have passed while proving nothing about the deletion. **The
+    honest outcome for a deliberate-breakage phase is an expected-failure SHAPE:**
+    `./node_modules/.bin/tsc --noEmit` reports errors in **exactly two files**
+    (`XtermPane.tsx`, `Workspace.tsx`), **all** of kind `TS2305`/`TS2724` (missing export), and
+    **every** named symbol is one P1.7 deleted (`nextJump`, `resetWalk`, `initialWalkState`,
+    `inertAfter`, `TurnWalkState`). An error in a third file, or any other error kind in those two,
+    is a genuine finding. Filed as
+    `SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS`.
   - [x] P1.1 Add viewport geometry to the model: a `TurnViewport {length, rows}` input and a
         `maxScroll(viewport)` helper. ⚠️ The model currently has NO geometry at all — that absence is
         why 38 green tests could not see the defect.  <!-- status: NOT-STARTED -->
