@@ -395,13 +395,11 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
         re-add a decoration — it throws without `allowProposedApi` and the throw is SILENT inside a
         listener (3.1 probe).  <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: done -->
-  - [x] verify-self  <!-- status: done; 3 PASS, 1 UNVERIFIED-by-subagent (orchestrator-verified), 1 guard weakness found + FIXED -->
-  - [ ] verify-human  <!-- status: in-progress -->
-    - [ ] P2.verify-human.1 Capture the consuming-surface trace (boundary applies — required)  <!-- status: NOT-STARTED -->
-    - [ ] P2.verify-human.2 Accept that Phase 2 ships no visible UI (controls land in Phase 3)  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: VOIDED 2026-08-25 — its live-pane readings came from a webview holding a PRE-DELETION bundle; the app could not boot. Re-verified jointly with Phase 3. -->
+  - [ ] verify-human  <!-- status: SUPERSEDED — folded into Phase 3's gate; P2's surface is only observable WITH the Phase 3 controls -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
-- [ ] Phase 3: The prev/next control pair  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [ ] Phase 3: The prev/next control pair  <!-- status: in-progress; built OUT OF ORDER 2026-08-25 to unblock a runtime-broken app -->
   **Observable outcomes:**
   - Browser (live pane): `[data-testid="workspace-turn-prev"]` and `[data-testid="workspace-turn-next"]`
     both exist, sit adjacent in the ungated terminal chrome, and are BOTH `disabled` on a fresh pane
@@ -412,33 +410,44 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - Browser: the controls are present with `workflow_features_enabled` OFF (AC-10) — the OFF-invariant
     guard must NOT gain an arm for them, and a test asserts they are absent from the gated row.
   - Console: no JS errors; no React duplicate-`ref` or controlled/uncontrolled warnings.
-  - [ ] P3.1 Replace the single `workspace-jump-turn` button with the prev/next pair, INSIDE
+  - [x] P3.1 Replace the single `workspace-jump-turn` button with the prev/next pair, INSIDE
         `workspace-split-control` (the shipped button sat beside it, not in it) so the cluster reads
         as one ungated group.  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 Delete `jumpInert` state and the `.is-inert` CSS; drive `disabled` from `turnNavState()`
+  - [x] P3.2 Delete `jumpInert` state and the `.is-inert` CSS; drive `disabled` from `turnNavState()`
         (AC-4). ⚠️ The inert state existed to explain a dead click; a correct `disabled` makes a dead
         click impossible, so keeping both would be two mechanisms for one job.  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 Add the position readout (AC-5) — `ordinal/total`, hidden when `total === 0`.  <!-- status: NOT-STARTED -->
-  - [ ] P3.4 `aria-label` + `title` on both controls; the readout gets `aria-live="polite"` so a
+  - [x] P3.3 Add the position readout (AC-5) — `ordinal/total`, hidden when `total === 0`.  <!-- status: done -->
+  - [x] P3.4 `aria-label` + `title` on both controls; the readout gets `aria-live="polite"` so a
         step is announced.  <!-- status: NOT-STARTED -->
-  - [ ] P3.5 CSS in `App.css` beside the existing split-control rules; drop `.workspace-jump-turn-btn`
+  - [x] P3.5 CSS in `App.css` beside the existing split-control rules; drop `.workspace-jump-turn-btn`
         and `.is-inert`. ⚠️ Read CSS source-guards via `node:fs`, NOT a Vitest `?raw` import
         (`[[vitest-raw-import-css-returns-processed-not-text]]`).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: in-progress; COMBINED gate covering Phase 2 + Phase 3 outcomes -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > verify-human
-- **Active scope:** Phase 2 verify-self PASSED — round-trip symmetry proven on a live pane, console
-  clean, wiring guard mutation-proven, and one guard weakness found + fixed in-flight. **No
-  BLOCKING.** verify-human next.
+- **Path:** Feature > Phase 3 > verify-auto (COMBINED Phase 2 + Phase 3 gate)
+- **Active scope:** Phase 3 impl COMPLETE (P3.1–P3.5). ⚠️ **Phase 3 was built OUT OF ORDER** to
+  unblock a runtime-broken app (see below), so its verify cycle covers **both** phases' observable
+  outcomes — Phase 2's surface is only observable *with* the Phase 3 controls, and Phase 2's own
+  verify-self was VOIDED.
 - **Blocked:** none
-- **Unvisited:** Phase 2 verify-{human,codify}; then Phase 3 (the control pair)
-- **Open discoveries:** 12 in `## Discoveries` + 4 SURFACEs pending — none blocking.
-- **⚠️ tsc: exactly 2 errors, `Workspace.tsx` only** — Phase 3 resolves them. `pnpm verify:auto`
-  (full gate) still cannot pass until then; operator-accepted phase-by-phase build.
+- **Unvisited:** Phase 3 verify-{auto,self,human,codify} — the combined gate. Then WP4, WP5.
+- **Open discoveries:** 13 in `## Discoveries` + 5 SURFACEs pending (one **high**) — none blocking.
+- **⚠️ WHY PHASE 2's VERIFICATION WAS VOIDED — do not re-bank it.** Phase 1 deleted `inertAfter`
+  while `Workspace.tsx` still imported it. **A missing ES-module export is a RUNTIME
+  module-resolution failure, not just a `tsc` error** — `SyntaxError: Importing binding name
+  'inertAfter' is not found` aborted `main.tsx` before mount, so the dev app was **blank and
+  unlaunchable for the whole of Phase 2**. Phase 2's "live-pane" readings only appeared to work
+  because the webview still held a **pre-deletion bundle**. The operator found the blank window.
+  Filed **high**: `SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC`.
+  ⚠️ **The framing "that compile error IS the guard" was WRONG** and the operator approved
+  phase-by-phase on it. Never describe a failing `tsc` as a guard when the failure class includes
+  module resolution.
+- **⚠️ `pnpm verify:auto` NOW PASSES** (exit 0; Rust 879, frontend 2216) for the first time since
+  Phase 1. A green gate here is meaningful again.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
