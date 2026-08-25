@@ -681,14 +681,19 @@ body,
   cursor: default;
 }
 
-/* M13.5 WP3 P3.5 — the "jump to a previous turn start" affordance. Borrows the
-   split-control chrome so it reads as part of the same ungated terminal-chrome cluster
-   rather than as a new surface. ⚠️ It is NOT in the gated skill-button row — a turn is a
-   plain Claude Code concept, so this surface ships for every user (see Workspace.tsx).
-   Both classes below are EMITTED by that button; an emitted-but-unstyled class was a
-   prior CRITICAL here (arch.md → "Every CSS guard reads ONE side of the contract"). */
-.workspace-jump-turn-btn {
-  padding: 0.1rem 0.45rem;
+/* M13.5 WP3 — the prev/next turn-navigation controls + position readout. Borrows the
+   split-control chrome so they read as part of the same ungated terminal-chrome cluster
+   rather than as a new surface. ⚠️ NOT in the gated skill-button row — a turn is a plain
+   Claude Code concept, so this surface ships for every user (AC-10; see Workspace.tsx).
+   Every class below is EMITTED by those controls; an emitted-but-unstyled class was a
+   prior CRITICAL here (arch.md → "Every CSS guard reads ONE side of the contract").
+
+   ⚠️ `.workspace-jump-turn-btn` and `.workspace-jump-turn-btn.is-inert` were DELETED at the
+   2026-08-25 re-plan along with the single backward-only button and its `inertAfter` state
+   machine. The inert class existed to explain a dead click; `:disabled` below makes a dead
+   click impossible, so keeping both would be two mechanisms for one job. Do not reinstate. */
+.workspace-turn-nav-btn {
+  padding: 0.1rem 0.35rem;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 3px;
@@ -699,17 +704,29 @@ body,
   user-select: none;
 }
 
-.workspace-jump-turn-btn:hover {
+.workspace-turn-nav-btn:hover:not(:disabled) {
   color: #e0e0e0;
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* Last click found nothing to jump to (fresh session, or every marker evicted from the
-   scrollback). Dimmed rather than disabled: the count lives in a ref inside XtermPane, so
-   this is an honest POST-HOC signal, not a predictive one. */
-.workspace-jump-turn-btn.is-inert {
+/* AC-4 — at an end (or with no turns recorded) the control is genuinely disabled, not
+   dimmed-after-a-dead-click. `cursor: default` matters: a pointer cursor on an inert
+   control is the same lie the deleted `.is-inert` state told. */
+.workspace-turn-nav-btn:disabled {
   opacity: 0.4;
   color: #8a8a8a;
+  cursor: default;
+}
+
+/* AC-5 — the position readout between the two arrows. Tabular numerals so stepping does
+   not shift the arrows sideways as the ordinal changes width (1/9 → 10/12). */
+.workspace-turn-nav-readout {
+  padding: 0 0.15rem;
+  color: #8a8a8a;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
 }
 
 /* M6 WP3 — the two collapse toggles flanking the cycle button. Same chrome

@@ -689,3 +689,31 @@
   breaks" as a plan-defect signal rather than a test failure.
 - **Priority:** medium
 - **Status:** pending
+
+## SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC
+- **Source:** feature:build (M13.5 WP3 Phase 3, found by the OPERATOR — the dev app was blank)
+- **Target level:** product:wbs
+- **Type:** gap
+- **Summary:** A phase plan deliberately deleted exports (`inertAfter` et al.) and left two consumers
+  un-migrated to a later phase, treating the resulting `tsc` errors as a *guard* ("that compile
+  error IS the guard proving no caller kept the old semantics"). ⚠️ **That framing was wrong in a
+  load-bearing way: a missing ES-module export is not only a compile-time error — it is a RUNTIME
+  module-resolution failure.** `SyntaxError: Importing binding name 'inertAfter' is not found`
+  aborted `main.tsx` before it mounted, so **the whole dev app was blank/unlaunchable** for the
+  entire duration of Phase 2.
+- **Context:** ⚠️ **The compounding harm is what makes this worth filing.** Phase 2's verify-self
+  ran "live-pane" checks against an app that could no longer boot — it only appeared to work because
+  the running webview still held a bundle loaded *before* the deletion. So a full verify-self →
+  verify-human cycle passed on **stale-runtime evidence**, and the operator approved
+  phase-by-phase build on the agent's own (incorrect) assurance that a non-compiling tree was safe.
+  ⚠️ This is `[[hmr-stale-across-file-rename]]` at milestone scale: the agent *knew* that lesson,
+  cited it, and still banked live readings from a runtime that could not have been rebuilt.
+- **Suggested action:** In `feature-plan`, treat **"does this phase remove or rename an exported
+  binding that any un-migrated consumer still imports?"** as a hard blocker on splitting the change
+  across phases — for ESM the migration must land in the SAME phase as the deletion (or the deletion
+  must come last). ⚠️ A cheap mechanical gate: after any phase whose tasks include a deletion, run
+  a **boot smoke-test** (load the app and assert `#root` has children) before accepting any
+  live-observation outcome. `tsc` passing is not the same property, and `tsc` *failing* must never
+  be described as a guard when the failure class includes module resolution.
+- **Priority:** high
+- **Status:** pending

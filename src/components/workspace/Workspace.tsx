@@ -63,9 +63,11 @@ import {
 // (two injections + a completion wait + a flag clear + a respawn), so it is a sibling in the
 // same row rather than a `SKILL_BUTTONS` member.
 import { recycleSession, waitForFreshSessionId } from "./recycleSession";
-// M13.5 WP3 — the jump affordance's inert-state machine (extracted at the Phase 3
-// verify-human back-loop; the "a new turn re-enables it" edge was the shipped defect).
-import { inertAfter } from "./turnMarkers";
+// M13.5 WP3 — the nav state the prev/next controls render from. ⚠️ The old `inertAfter`
+// inert-state machine is DELETED: it existed to explain a dead click, and a correct `disabled`
+// state (driven by `canPrev`/`canNext`) makes a dead click impossible, so keeping both would be
+// two mechanisms for one job. Do not reintroduce it.
+import { type TurnNavState } from "./turnMarkers";
 import {
   RECYCLE_LABEL,
   RECYCLE_TESTID,
@@ -215,14 +217,21 @@ export function Workspace({
   // would start a competing operation against the same session and both would race the same
   // signals.
   const [recycling, setRecycling] = useState(false);
-  // M13.5 WP3 P3.5 — true when the last jump attempt found nothing to jump to (fresh session,
-  // or every marker evicted from the scrollback). Drives an `is-inert` class + the tooltip so
-  // a dead click SAYS SO instead of looking like a broken button (AC-5: "honest when it cannot
-  // help"). Cleared on the next successful jump. Deliberately NOT a disabled state: the marker
-  // list lives in a ref inside XtermPane (nothing in this render depends on it), so this
-  // component cannot know the count until it asks — the honest signal is post-hoc, not
-  // predictive.
-  const [jumpInert, setJumpInert] = useState(false);
+  // M13.5 WP3 — the turn-navigation state the prev/next controls render from (AC-4 + AC-5).
+  //
+  // ⚠️ THIS IS STATE, NOT A REF, and that is the whole point of the re-plan. The previous design
+  // kept only a post-hoc `jumpInert` boolean because "the marker list lives in a ref inside
+  // XtermPane, so this component cannot know the count until it asks". That reasoning produced an
+  // affordance that could only learn it was wrong AFTER a dead click — and then lied until the
+  // next successful one. `XtermPane` now PUSHES the nav state on every turn-start
+  // (`onTurnStartRecorded`) and every step returns it, so the count is known BEFORE the click and
+  // the controls can be honestly `disabled` instead of dimmed-after-the-fact.
+  const [turnNav, setTurnNav] = useState<TurnNavState>({
+    canPrev: false,
+    canNext: false,
+    ordinal: 0,
+    total: 0,
+  });
 
   // Paydown WP7 — abort an in-flight Recycle when this workspace unmounts.
   //
@@ -584,42 +593,68 @@ export function Workspace({
             Collapse + cycle are orthogonal: the cycle steps the three ratios; the
             toggles fully hide a half (and restore to the last ratio on re-click).
             At most one half collapsed at a time (toggleCollapse mutual exclusion). */}
-        {/* M13.5 WP3 P3.5 — jump to the start of a previous CC turn.
-            ⚠️ DELIBERATELY *NOT* IN THE SKILL-BUTTON ROW ABOVE. That row is gated as a whole
-            (`showSkillButtons({workflowEnabled, …})`), and a "turn" is a plain Claude Code
-            concept that exists for every user with or without `~/.claude/skills/` — nothing
-            here reads `workflow-system/`, a skill, or a drive mode. Per the gate's
-            applicability rule (`arch.md`: the gate applies PER ARM, by applicability, never by
-            audience size) this surface is UNGATED and takes NO guard arm. Putting it in the
-            skill row would make it vanish whenever the gate is off. It sits with the split
-            control because that cluster is the ungated terminal-chrome neighbour. */}
-        <button
-          type="button"
-          className={`workspace-jump-turn-btn${jumpInert ? " is-inert" : ""}`}
-          data-testid="workspace-jump-turn"
-          aria-label={`Jump to the start of a previous turn in ${workspace.display_name}`}
-          title={
-            jumpInert
-              ? "No earlier turn start is still in the scrollback"
-              : "Jump to the start of a previous turn (repeat for older)"
-          }
-          onClick={() => {
-            // The pure model decides; a false return means "nothing to jump to", which the
-            // affordance must surface honestly rather than silently no-op (AC-5).
-            const moved = ccPaneRef.current?.jumpToPreviousTurn() ?? false;
-            // ⚠️ Both edges go through `inertAfter`, the extracted machine — NOT an inline
-            // boolean. The `turn-recorded` edge (on the pane's callback) was the missing one.
-            setJumpInert(
-              inertAfter(moved ? "jump-moved" : "jump-found-nothing"),
-            );
-          }}
-        >
-          ↰ turn
-        </button>
         <div
           className="workspace-split-control"
           data-testid="workspace-split-control"
         >
+          {/* M13.5 WP3 — step to the previous / next CC turn start.
+              ⚠️ DELIBERATELY *NOT* IN THE SKILL-BUTTON ROW ABOVE. That row is gated as a whole
+              (`showSkillButtons({workflowEnabled, …})`), and a "turn" is a plain Claude Code
+              concept that exists for every user with or without `~/.claude/skills/` — nothing
+              here reads `workflow-system/`, a skill, or a drive mode. Per the gate's
+              applicability rule (`arch.md`: the gate applies PER ARM, by applicability, never by
+              audience size) this surface is UNGATED and takes NO guard arm (AC-10). Putting it in
+              the skill row would make it vanish whenever the gate is off. ⚠️ It lives INSIDE the
+              split control (the shipped single button sat beside it) so the cluster reads as one
+              ungated terminal-chrome group.
+              ⚠️ PAIRED AFFORDANCES, per design-prior [[paired-actions-need-paired-affordances]]:
+              prev and next are INVERSES, so both get a control of the same kind. A single
+              backward-only button that dead-ends cannot support the actual task, which is
+              SCANNING — stepping back and forward to re-locate a spot. */}
+          <button
+            type="button"
+            className="workspace-turn-nav-btn"
+            data-testid="workspace-turn-prev"
+            disabled={!turnNav.canPrev}
+            aria-label={`Go to the previous turn start in ${workspace.display_name}`}
+            title="Previous turn start"
+            onClick={() => {
+              // The pane owns the position; it returns the fresh nav state so this component
+              // never has to poll or re-derive it (the two could then disagree — AC-5).
+              ccPaneRef.current?.stepTurn("prev");
+              const next = ccPaneRef.current?.turnNavState();
+              if (next) setTurnNav(next);
+            }}
+          >
+            ↑
+          </button>
+          {/* AC-5 — the position readout. Hidden at zero turns: two disabled arrows are
+              self-explanatory, and "0/0" is noise. */}
+          {turnNav.total > 0 && (
+            <span
+              className="workspace-turn-nav-readout"
+              data-testid="workspace-turn-readout"
+              aria-live="polite"
+              title={`Turn ${turnNav.ordinal} of ${turnNav.total}`}
+            >
+              {turnNav.ordinal}/{turnNav.total}
+            </span>
+          )}
+          <button
+            type="button"
+            className="workspace-turn-nav-btn"
+            data-testid="workspace-turn-next"
+            disabled={!turnNav.canNext}
+            aria-label={`Go to the next turn start in ${workspace.display_name}`}
+            title="Next turn start"
+            onClick={() => {
+              ccPaneRef.current?.stepTurn("next");
+              const next = ccPaneRef.current?.turnNavState();
+              if (next) setTurnNav(next);
+            }}
+          >
+            ↓
+          </button>
           <button
             type="button"
             className={`split-collapse-btn${leftCollapsed ? " is-active" : ""}`}
@@ -685,11 +720,12 @@ export function Workspace({
           // reasoning as `pendingAction` below: `TerminalPane` mounts this component for a
           // login SHELL, which has no turns, so it never opts in (the prop defaults false).
           markTurnStarts
-          // ⚠️ Clears the inert state when a NEW turn arrives. Without this edge the button
-          // could only recover via a later SUCCESSFUL click, so one dead click on a fresh
-          // session left it dimmed and asserting "no earlier turn start" forever — a UI that
-          // lies, found by the operator at Phase 3 verify-human.
-          onTurnStartRecorded={() => setJumpInert(inertAfter("turn-recorded"))}
+          // ⚠️ AC-6 — a new turn PUSHES fresh nav state, so the controls learn that an empty
+          // list became non-empty. Without this edge the affordance could only ever learn the
+          // truth from a click, which is the shipped defect: one dead click on a fresh session
+          // left it dimmed and asserting "no earlier turn start" forever — a UI that lies.
+          // The pane resets its position to the newest at the same moment.
+          onTurnStartRecorded={(nav) => setTurnNav(nav)}
           // M12 WP3 Phase 4 — the auto-resume action, read off the workspace model this
           // component already receives. NO new `Workspace` prop was needed: `pending_action`
           // rides on the record (set on the mint branch of `openReducer`, deliberately

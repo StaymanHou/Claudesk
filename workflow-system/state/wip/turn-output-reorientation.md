@@ -397,6 +397,8 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [x] verify-auto  <!-- status: done -->
   - [x] verify-self  <!-- status: done; 3 PASS, 1 UNVERIFIED-by-subagent (orchestrator-verified), 1 guard weakness found + FIXED -->
   - [ ] verify-human  <!-- status: in-progress -->
+    - [ ] P2.verify-human.1 Capture the consuming-surface trace (boundary applies — required)  <!-- status: NOT-STARTED -->
+    - [ ] P2.verify-human.2 Accept that Phase 2 ships no visible UI (controls land in Phase 3)  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [ ] Phase 3: The prev/next control pair  <!-- status: NOT-STARTED; depends on Phase 2 -->
