@@ -4,6 +4,56 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# turn-output-reorientation — 2026-08-25
+
+## SURFACE-2026-08-25-QUALITY-WP3-RAW-GUARD-ON-A-DOM-QUESTION
+- **Source:** feature-review-quality (M13.5 WP3, MAJOR)
+- **Type:** tech-debt (guard shape)
+- **Summary:** `src/components/workspace/__tests__/turnNavControls.test.ts` (161 lines, 10 tests) is entirely `?raw` source-grepping for questions that are **DOM-at-rest** questions — `disabled` bound to the right flag, the readout hidden at `total === 0`, the controls positioned outside the gated row.
+- **Context:** ⚠️ **This contradicts a rule the repo wrote down for itself.** `docs/lessons/source-text-guards.md` says: *"when the question is what does the DOM look like at rest, render it… Reaching for `?raw` on a DOM question is how this repo accumulated its nine failure forms"* — and names **two working precedents needing no new dependency** (`docsRender.test.tsx`, `projectModelCellRender.test.tsx`). The WIP never mentions `renderToStaticMarkup`. Concretely brittle: `disabled=\{!turnNav\.canPrev\}` breaks on a Prettier reflow or any trivially-equivalent refactor, and the `[\s\S]{0,200}?` proximity windows are order-dependent. ⚠️ **It also cannot see the rendered attribute at all**, so it cannot cover the gate-OFF case a parsed DOM would get for free. Not a correctness defect today — the 10 arms were each mutation-proven — but it is a guard that will rot in the catalogued ways.
+- **Suggested action:** Port to a render test (`renderToStaticMarkup` + a parsed DOM), following the two named precedents. Assert the same three properties off the rendered output, and add the gate-OFF case the grep cannot reach. ⚠️ Expect the port to **delete** most of the regex machinery rather than translate it.
+- **Priority:** medium
+
+## SURFACE-2026-08-25-QUALITY-WP3-EXPORT-GUARD-IS-A-ONE-MODULE-PATCH
+- **Source:** feature-review-quality (M13.5 WP3, MAJOR)
+- **Type:** gap
+- **Summary:** `turnNavExportContract.test.ts` — the guard for this WP's blank-app defect — is scoped to **one import edge** (`./turnMarkers`, two named consumers) and re-implements an ESM export check by regex-parsing import statements. ⚠️ **The reviewer answered the orchestrator's own question in the negative: it is a point patch, not the structural fix.**
+- **Context:** The SURFACE it cites (`SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC`) **proposes the general remedy itself** — a boot smoke-test asserting `#root` has children after any deletion phase — and that was **filed rather than built**. So the next module to lose an export strands its consumer exactly as before; `src/components/workspace/` alone has **4 sibling import edges** with no such guard. ⚠️ **The guard's own header overclaims:** it says *"deliberate redundancy on a failure mode whose blast radius is 'the app does not start'"* while covering one module. The failure class is repo-wide; the mitigation is one-module-wide.
+- **Suggested action:** Build the boot smoke-test as a real gate (it would **subsume** this guard, cover every import edge at once, and let the regex-parsed import-list machinery be deleted). ⚠️ Until then, at minimum **correct the header's claim** so it does not read as broader coverage than it has. Filing the general fix while shipping the narrow one is defensible sequencing — the overclaim is not.
+- **Priority:** medium
+
+## SURFACE-2026-08-25-QUALITY-WP3-PUSH-NOT-POLL-CONTRACT-DRIFT
+- **Source:** feature-review-quality (M13.5 WP3, MAJOR)
+- **Type:** tech-debt (contract drift)
+- **Summary:** A **three-layer drift** on the "returns it so the caller never polls" claim. `turnMarkers.ts:224-243`'s `stepTurn` returns `{position, nav}` and its docstring says the caller *"never has to make a second call"* — but `XtermPane.tsx:416-441` **discards `stepped.nav`** and recomputes via `navState`; the handle's `stepTurn` then returns a **`boolean`** which `Workspace.tsx:622-626` **discards entirely** in favour of a follow-up `turnNavState()` call.
+- **Context:** ⚠️ **Two places assert push-not-poll in PROSE while the code polls** — `Workspace.tsx:222-230` and `turnNavControls.test.ts:96`. The returned `nav` is **dead weight at two of three layers**, and a future maintainer reading *"every step returns it"* will hunt for a consumer that does not exist. ⚠️ The boolean's **own docstring already concedes it is not the honest signal** ("`true` does NOT promise the viewport pixel-moved… the honest signal for the UI is `turnNavState`"), which is the smell that it should not be the return type.
+- **Suggested action:** Pick one and make all three layers agree: **either** thread `nav` through (`stepTurn(dir): TurnNavState | null`) and drop the boolean, **or** drop the returned `nav` and state plainly that the surface re-reads. ⚠️ **Fix the comments in the same change** — the prose is the part actively misleading readers.
+- **Priority:** medium
+
+## SURFACE-2026-08-25-QUALITY-WP3-DEAD-CONSTANT-COMMENT
+- **Source:** feature-review-quality (M13.5 WP3, MINOR)
+- **Type:** tech-debt (documentary)
+- **Summary:** `XtermPane.tsx:72-78` — a 7-line comment documenting a `TURN_MARKER_COLOR` constant **that no longer exists**, for the overview-ruler affordance the re-spec rejected, including its full palette rationale.
+- **Context:** The clearest single instance in this WP of *retracted reasoning promoted to permanent code prose*. A reader hunting for the marker colour finds a constant that is not there. By the comment-budget test — *would a reader who has never seen the WIP make a **worse decision** without this sentence?* — this is provenance and belongs in the archived WIP.
+- **Suggested action:** Delete. The rationale is already in the WIP and the ship commit history.
+- **Priority:** low
+
+## SURFACE-2026-08-25-QUALITY-WP3-COMMENT-DENSITY-58-PERCENT
+- **Source:** feature-review-quality (M13.5 WP3, MINOR)
+- **Type:** tech-debt (documentary)
+- **Summary:** ⚠️ **Comment density DID get materially worse in this WP** (the orchestrator asked the reviewer to judge exactly this): **58% of newly added production lines are comments — 388 of 673**. `XtermPane.tsx` moved **51% → 55%** while growing **714 → 944** lines. The `.workspace-jump-turn-btn` deletion rationale is stated in **four places** (`App.css:687-694`, `Workspace.tsx:66-70`, plus two test headers).
+- **Context:** ⚠️ **The keep/cut split is clean and should be respected.** The individual *retraction* blocks (`XtermPane.tsx:361-372` alternate-buffer, `:451-458` premise-invalidated) **ARE load-bearing** — each prevents a specific re-derivation that already cost real work, and both are anchored to the code they warn about. The **duplicated deletion rationale** is the "same rationale in N places" pattern the lesson doc names as the expensive half. ⚠️ **No comment was found stale or contradicting the code**, so this is polish, not correctness.
+- **Suggested action:** ⚠️ **FOLD INTO `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`; do NOT pay down separately.** That standing finding records that **per-WP trimming was measured as NOT converging** (four consecutive reviews of one file), and its own resolution shape is *"one authority per rule + a pointer at every other site + a GUARD"* — which is exactly what the four-copy deletion rationale needs. This entry is a concrete instance of that finding, and the **second** WP in M13.5 to produce one (see `# window-geometry-persistence — 2026-08-21`), which is itself evidence for the standing item's thesis.
+- **Priority:** low
+
+## SURFACE-2026-08-25-QUALITY-WP3-ARIA-LIVE-ON-A-CONDITIONAL-NODE
+- **Source:** feature-review-quality (M13.5 WP3, MINOR)
+- **Type:** bug (a11y, minor)
+- **Summary:** `Workspace.tsx:636-641` — `aria-live="polite"` sits on the readout `<span>`, but that span is conditionally **mounted** on `turnNav.total > 0`. ⚠️ **A live region that does not exist when the value first appears will not announce it** — so the *first* turn is silent and only subsequent ordinal changes are announced.
+- **Context:** Real but small: it degrades the AC-5 announcement rather than breaking navigation, and the surface is unannounced by any test either way. ⚠️ Note the interaction with the AC-5 decision to hide the readout at zero turns — the fix must preserve that visual behaviour, so it is *render the region unconditionally and empty its TEXT*, not *drop the conditional*.
+- **Suggested action:** Render the `<span>` unconditionally with `aria-live="polite"`; gate only its text content on `turnNav.total > 0`. Verify with a screen reader or an `aria-live` assertion that the first turn announces.
+- **Priority:** low
+
 # window-geometry-persistence — 2026-08-21
 
 ## SURFACE-2026-08-21-QUALITY-WP1-COMMENT-DENSITY-117-LINES-FOR-14

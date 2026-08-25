@@ -432,25 +432,26 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [x] verify-codify  <!-- status: done; COMBINED — 1 real gap found + closed (10 tests) -->
 
 ## Current Node
-- **Path:** Feature > ship COMPLETE → review-quality
-- **Active scope:** none. Next is `/feature-review-quality` (autopilot, so the review runs; only
-  `fsd` skips it).
+- **Path:** Feature > review-quality COMPLETE → finalize
+- **Active scope:** none. Next is `/feature-finalize`.
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize. After that: M13.5 **WP4** (drive-mode readout on the
-  workspace surface), then **WP5** (bucket exit verify).
-- **Open discoveries:** 13 in `## Discoveries` + 5 SURFACEs pending — none blocking. ⚠️ The **high**
-  one, `SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC`, is a
-  **workflow-system** change (a `feature-plan` blocker + a boot-smoke-test gate), **not** a Claudesk
-  one — it belongs in the owed cross-repo handoff to mccc, alongside the other two cross-repo items.
-- **⚠️ SHIP STATE: committed, NOT pushed.** 18 commits (`aacfaeb`..`51aab74`); `main` 27 ahead of
-  origin, 0 behind. Pushing is the operator's call.
-- **⚠️ What a reviewer should know before reading the diff:** this WP shipped a **blank-app defect
-  mid-flight** — Phase 1 deleted `inertAfter` while `Workspace.tsx` still imported it, which is a
-  **runtime** module-resolution failure, not merely a `tsc` error. The operator found it, not a gate.
-  It is fixed and now guarded by `turnNavExportContract.test.ts` (mutation-proven by reconstructing
-  the defect). ⚠️ **Consequence: Phase 2's verify nodes are CLOSED BY COMBINATION, not independently
-  passed** — its verify-self readings came from a pre-deletion bundle and were VOIDED, then re-proven
-  inside Phase 3's combined gate.
+- **Unvisited:** finalize. Then M13.5 **WP4** (drive-mode readout on the workspace surface), then
+  **WP5** (bucket exit verify).
+- **Open discoveries:** 13 in `## Discoveries`; backlog now carries 5 pending SURFACEs **+ 6
+  code-quality findings** for this WP — none blocking.
+- **⚠️ Code-quality review: 0 CRITICAL · 3 MAJOR · 3 MINOR — all backlogged, no refactor owed.**
+  ⚠️ **Two of the three MAJORs indict this WP's own VERIFICATION work, not the feature:**
+  `turnNavControls.test.ts` `?raw`-greps DOM-at-rest questions the repo's own lesson doc routes to a
+  render test, and the blank-app guard covers **one** import edge while standing in for the
+  **repo-wide boot smoke-test that was filed rather than built** (its header overclaims). The third
+  is a real push-not-poll **contract drift** across three layers, with comments asserting the
+  opposite of what the code does.
+- **⚠️ The density MINOR must be FOLDED INTO
+  `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, not trimmed per-WP** — that item
+  records per-WP trimming as measured NOT converging, and this is the second M13.5 WP to produce
+  such an entry. ⚠️ **The retraction blocks are load-bearing; do not sweep them.**
+- **⚠️ SHIP STATE: committed, NOT pushed.** `main` is well ahead of origin; pushing is the
+  operator's call.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -1254,12 +1255,13 @@ navigation landmark must not borrow status meaning.
 
 ## Code-Quality Review — turn-output-reorientation
 
-> ⚠️ **Reviewer subagent completed AFTER the operator called a turn-level hold (2026-08-25).** The
-> findings are recorded verbatim below so they survive the session; **no severity-tier action has
-> been taken.** Per autopilot policy the 3 MAJORs would auto-backlog to
-> `backlog-quality-findings.md` with a pointer in `backlog.md`, and the 3 MINORs likewise — that
-> write is **still owed**, and `review-quality` should be re-entered to perform it (this section's
-> presence makes the skill idempotent, so it will append a `### Re-run` rather than duplicate).
+> ⚠️ **Reviewer subagent completed AFTER the operator called a turn-level hold (2026-08-25)**, so the
+> findings were recorded verbatim below and **no severity-tier action was taken at the time**.
+> ✅ **ACTION COMPLETED on re-entry (2026-08-25):** all 6 findings are in
+> `workflow-system/state/backlog-quality-findings.md` under `# turn-output-reorientation —
+> 2026-08-25` (3 MAJOR medium + 3 MINOR low), with **one** pointer in `workflow-system/state/backlog.md`.
+> **0 CRITICAL → no refactor required** (F39, not F40). The reviewer was **not** re-spawned — this
+> section is the record, and its presence is what makes re-entry idempotent.
 
 **Verdict: 0 CRITICAL · 3 MAJOR · 3 MINOR** → no refactor required (F39 path, not F40).
 
