@@ -373,7 +373,7 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
     - [x] P1.verify-human.2 Accept phase-by-phase build (tree sits non-compiling until Phase 3)  <!-- status: done -->
   - [x] verify-codify  <!-- status: done; 1 real coverage hole found + closed -->
 
-- [ ] Phase 2: Caller — XtermPane exposes bidirectional navigation  <!-- status: in-progress -->
+- [x] Phase 2: Caller — XtermPane exposes bidirectional navigation  <!-- status: done; its verify nodes CLOSED BY COMBINATION with Phase 3 -->
   **Observable outcomes:**
   - CLI: `pnpm vitest run src/components/workspace/__tests__/` exits 0 with a caller-contract test
     proving the handle funnels BOTH directions through the shared position ref — per `arch.md`, a
@@ -395,11 +395,11 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
         re-add a decoration — it throws without `allowProposedApi` and the throw is SILENT inside a
         listener (3.1 probe).  <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: done -->
-  - [ ] verify-self  <!-- status: VOIDED 2026-08-25 — its live-pane readings came from a webview holding a PRE-DELETION bundle; the app could not boot. Re-verified jointly with Phase 3. -->
-  - [ ] verify-human  <!-- status: SUPERSEDED — folded into Phase 3's gate; P2's surface is only observable WITH the Phase 3 controls -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-self  <!-- status: CLOSED BY COMBINATION — re-proven in Phase 3's combined gate; original readings VOIDED 2026-08-25 — its live-pane readings came from a webview holding a PRE-DELETION bundle; the app could not boot. Re-verified jointly with Phase 3. -->
+  - [x] verify-human  <!-- status: CLOSED BY COMBINATION — folded into Phase 3's gate, operator-approved 2026-08-25; SUPERSEDED — folded into Phase 3's gate; P2's surface is only observable WITH the Phase 3 controls -->
+  - [x] verify-codify  <!-- status: CLOSED BY COMBINATION — Phase 3's codify covers the Workspace+pane surface jointly -->
 
-- [ ] Phase 3: The prev/next control pair  <!-- status: in-progress; built OUT OF ORDER 2026-08-25 to unblock a runtime-broken app -->
+- [x] Phase 3: The prev/next control pair  <!-- status: done; built OUT OF ORDER 2026-08-25 to unblock a runtime-broken app -->
   **Observable outcomes:**
   - Browser (live pane): `[data-testid="workspace-turn-prev"]` and `[data-testid="workspace-turn-next"]`
     both exist, sit adjacent in the ungated terminal chrome, and are BOTH `disabled` on a fresh pane
@@ -429,22 +429,24 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
     - [x] P3.verify-human.2 fresh workspace: both disabled, no 0/0 readout  <!-- status: done -->
     - [x] P3.verify-human.3 the affordance (↑ 3/3 ↓ in the split-control cluster) is right  <!-- status: done -->
     - [x] P3.verify-human.4 prev = older, ↑ = earlier, follows scroll direction  <!-- status: done -->
-  - [ ] verify-codify  <!-- status: in-progress; COMBINED -->
+  - [x] verify-codify  <!-- status: done; COMBINED — 1 real gap found + closed (10 tests) -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 > verify-codify (COMBINED Phase 2 + Phase 3 gate)
-- **Active scope:** verify-human APPROVED by operator 2026-08-25 (all 4 leaves). verify-codify is
-  the last node before the feature's phases are all complete.
+- **Path:** Feature > ALL PHASES COMPLETE → ship
+- **Active scope:** none. Phases 1, 2 and 3 are all `[x]` including every verify node. Next is
+  `/feature-ship`.
 - **Blocked:** none
-- **Unvisited:** Phase 3 verify-codify. Then the feature exits to ship/finalize; then WP4, WP5.
+- **Unvisited:** none in this feature. After ship/finalize: M13.5 **WP4** (drive-mode readout on the
+  workspace surface), then **WP5** (bucket exit verify).
 - **Open discoveries:** 13 in `## Discoveries` + 5 SURFACEs pending (one **high**) — none blocking.
-- **⚠️ OPERATOR-CONFIRMED DESIGN CALLS 2026-08-25 — do not re-litigate:** the affordance is
-  **`↑ N/N ↓`** inside the split-control cluster (not text labels, not a different glyph pair, and
-  the readout sits BETWEEN the arrows); and **`↑` = prev = OLDER**, following scroll direction. Both
-  were offered with their alternatives on the table and confirmed.
-- **⚠️ `pnpm verify:auto` PASSES** — exit 0, Rust **879**, frontend **2220**.
-- **⚠️ Phase 2's own verify-self stays VOIDED** (pre-deletion bundle); its outcome was re-proven in
-  the combined gate. Do not re-bank the original readings.
+  ⚠️ The **high** one is
+  `SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC` and it is a
+  workflow-system change, not a Claudesk one.
+- **⚠️ Phase 2's verify nodes are CLOSED BY COMBINATION, not independently passed.** Its verify-self
+  readings were VOIDED (pre-deletion bundle) and re-proven inside Phase 3's combined gate; its
+  verify-human was folded in and operator-approved there. Recorded this way rather than back-dated
+  so the history stays legible.
+- **⚠️ Final gate:** `pnpm verify:auto` exit **0** · Rust **879** · frontend **2230** · `tsc` **0**.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -1245,6 +1247,52 @@ taken by Running/AwaitingInput/BackgroundWork, and WP2 rejected teal for reading
 navigation landmark must not borrow status meaning.
 
 **Both mutations restored via `cp` from snapshots, not `git checkout`.**
+
+## Verify-codify — Phase 3 (COMBINED with Phase 2, 2026-08-25)
+
+**Integration boundary APPLIES** (`Workspace.tsx` backs a UI surface), so the test set had to reach
+the consuming surface, not just the new module.
+
+⚠️ **Codify's job was to find what the four existing suites CANNOT fail on.** Model (62), purity (4),
+pane wiring (9) and export contract (4) would **all stay green** if `Workspace.tsx` rendered the
+controls wrongly — crossed `disabled` flags, a readout visible at zero turns, a dropped AC-6 push.
+That is `arch.md`'s recurring shape one level further out: *the machine is proven, the caller is
+proven, and the SURFACE the operator actually touches is not.* **A real gap, closed.**
+
+⚠️ **`cssModifierAudit.test.ts` does NOT cover the new classes, and that is correct rather than a
+hole in it** — its measured scope is `.block.is-*` MODIFIER selectors, and these are base classes
+plus a `:disabled` pseudo-class. Note the irony worth remembering: the one modifier it *would* have
+covered (`.workspace-jump-turn-btn.is-inert`) is precisely the one this phase deleted. So the
+emitted↔styled contract for the replacements had to be asserted here or nowhere.
+
+**New guard: `turnNavControls.test.ts` (10 tests).** Pins: both controls present and of the same
+element kind (paired affordances); `disabled` wired to the *correct* flag on each; the readout hidden
+at `total === 0`; the AC-6 push; nav state stored after **both** directions' steps; the deleted
+`jumpInert`/`inertAfter`/`jumpToPreviousTurn` absent; every emitted class actually styled **and** the
+deleted classes gone from **both** sides; `cursor: default` on `:disabled`; and ungated placement
+inside the split-control cluster.
+
+⚠️ **10 arms + 2 meta-guards, each mutation-proven INDIVIDUALLY** (crossed `disabled` flags · readout
+at zero turns · AC-6 push removed · `next` handler dropping its store · readout class unstyled ·
+`:disabled` cursor made a pointer · `next` control deleted · controls moved outside the ungated
+cluster · haystack emptied · CSS emptied). Every one failed by the intended assertion. ⚠️ **The
+mutants were re-run AFTER `prettier --write`** — a Prettier reflow has silently broken a guard in
+this repo before, and a regex-adjacent reformat is exactly when a source-text predicate stops
+matching. Both highest-value mutants still bite post-format.
+
+⚠️ **CSS is read via `node:fs`, not a `?raw` import** — Vite's CSS plugin intercepts `?raw` for
+`.css` and returns PROCESSED output rather than source text
+(`[[vitest-raw-import-css-returns-processed-not-text]]`). A `?raw` CSS guard here would have been
+asserting against the wrong text entirely.
+
+**Nothing else added.** No React render harness was introduced: `docsRender.test.tsx` is the only
+precedent, the behaviour was already proven live through real DOM clicks at verify-self, and a
+render harness for this surface would need an xterm mock — cost without new information. Recorded as
+a deliberate choice, not an omission.
+
+**Final gate:** `pnpm verify:auto` exit **0** · Rust **879** · frontend **2230** (2220 → +10) ·
+`tsc` **0 errors** · prettier clean (reformat proven inert by re-running the transform on the
+pre-change input).
 
 ## Verify-self notes — Phase 3 (2026-08-22)
 
