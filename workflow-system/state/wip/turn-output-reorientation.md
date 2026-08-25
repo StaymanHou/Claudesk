@@ -424,18 +424,27 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
         (`[[vitest-raw-import-css-returns-processed-not-text]]`).  <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: done; COMBINED gate, pnpm verify:auto exit 0 -->
   - [x] verify-self  <!-- status: done; COMBINED — Phase 2 + Phase 3 outcomes proven on a bootable app -->
-  - [ ] verify-human  <!-- status: in-progress; COMBINED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-human  <!-- status: done; operator APPROVED 2026-08-25 (all 4 leaves) -->
+    - [x] P3.verify-human.1 prev/next walk + readout + disabled ends, live  <!-- status: done -->
+    - [x] P3.verify-human.2 fresh workspace: both disabled, no 0/0 readout  <!-- status: done -->
+    - [x] P3.verify-human.3 the affordance (↑ 3/3 ↓ in the split-control cluster) is right  <!-- status: done -->
+    - [x] P3.verify-human.4 prev = older, ↑ = earlier, follows scroll direction  <!-- status: done -->
+  - [ ] verify-codify  <!-- status: in-progress; COMBINED -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 > verify-human (COMBINED Phase 2 + Phase 3 gate)
-- **Active scope:** combined verify-auto + verify-self PASSED on a **bootable** app. verify-human next.
+- **Path:** Feature > Phase 3 > verify-codify (COMBINED Phase 2 + Phase 3 gate)
+- **Active scope:** verify-human APPROVED by operator 2026-08-25 (all 4 leaves). verify-codify is
+  the last node before the feature's phases are all complete.
 - **Blocked:** none
-- **Unvisited:** Phase 3 verify-{human,codify}; then WP4, WP5.
+- **Unvisited:** Phase 3 verify-codify. Then the feature exits to ship/finalize; then WP4, WP5.
 - **Open discoveries:** 13 in `## Discoveries` + 5 SURFACEs pending (one **high**) — none blocking.
-- **⚠️ `pnpm verify:auto` PASSES** — exit 0, Rust **879**, frontend **2220**. Meaningful again.
-- **⚠️ Phase 2's own verify-self stays VOIDED** — it ran against a pre-deletion bundle. Its outcome
-  was re-proven here jointly; do not re-bank the original readings.
+- **⚠️ OPERATOR-CONFIRMED DESIGN CALLS 2026-08-25 — do not re-litigate:** the affordance is
+  **`↑ N/N ↓`** inside the split-control cluster (not text labels, not a different glyph pair, and
+  the readout sits BETWEEN the arrows); and **`↑` = prev = OLDER**, following scroll direction. Both
+  were offered with their alternatives on the table and confirmed.
+- **⚠️ `pnpm verify:auto` PASSES** — exit 0, Rust **879**, frontend **2220**.
+- **⚠️ Phase 2's own verify-self stays VOIDED** (pre-deletion bundle); its outcome was re-proven in
+  the combined gate. Do not re-bank the original readings.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -1147,6 +1156,30 @@ failures.** No test failed, so §3b triage did not fire and no `## Test Triage` 
 Restored both mutations via `cp` from snapshots, not `git checkout`.
 
 **Phase 2 total: +29 frontend tests** over the 2141 baseline (25 behavioural + 4 structural).
+
+## Verify-human — Phase 3 (COMBINED with Phase 2, 2026-08-25): APPROVED
+
+**Integration boundary APPLIES** (`Workspace.tsx` + `XtermPane.tsx` both back a UI surface), so the
+F11 skip path was forbidden and auto-skip irrelevant. All four leaves approved.
+
+- **P3.verify-human.1** — the live walk: `↑` twice then `↓` twice, readout `3/3 → 2/3 → 1/3` and
+  back, ends greying out, returning where it began.
+- **P3.verify-human.2** — fresh workspace: both arrows visible but disabled, no `0/0` readout.
+- **P3.verify-human.3** — ⚠️ **the affordance is CONFIRMED as `↑ N/N ↓` inside the split-control
+  cluster**, with the alternatives (text labels, other glyph pairs, readout outside the arrows)
+  explicitly on the table and declined.
+- **P3.verify-human.4** — ⚠️ **`↑` = prev = OLDER is CONFIRMED**, following scroll direction; the
+  inverse was offered as defensible and declined.
+
+**No design prior proposed.** Both judgment calls were *confirmations of the agent's proposal*, not
+corrections, and neither carried a transferable why beyond this surface — per the capture
+discriminant that is FACT/NOTHING. Glyph choice and direction convention are also close to the
+label/copy exclusion. ⚠️ Note for a future capture: had the operator *reversed* either call with a
+reason ("controls on this app always read top-down because …"), that would have been a prior.
+
+⚠️ **The out-of-order build was disclosed at this gate and accepted.** Phase 3 landed before Phase
+2's gate finished, Phase 2's verify-self is recorded VOIDED, and its outcome was re-proven in the
+combined run. The operator was offered a different bookkeeping treatment and declined.
 
 ## Build notes — Phase 3 (2026-08-22)
 
