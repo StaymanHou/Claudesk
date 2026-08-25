@@ -346,8 +346,8 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
         and confirm each mutant lands in EXECUTABLE code (`docs/lessons/source-text-guards.md`) —
         and test **both** directions of every two-way thing (the F12 lesson: a two-way flag tested
         one way has an untested half).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: in-progress -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: done -->
+  - [ ] verify-self  <!-- status: in-progress -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
@@ -406,20 +406,17 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-auto
-- **Active scope:** Phase 1 impl COMPLETE (P1.1–P1.8 all `[x]`); verify-auto is next
+- **Path:** Feature > Phase 1 > verify-self
+- **Active scope:** Phase 1 verify-auto PASSED (scoped); verify-self is next
 - **Blocked:** none
-- **Unvisited:** Phase 1 verify-{auto,self,human,codify}; then Phase 2 (caller/XtermPane), then
-  Phase 3 (the control pair)
-- **Open discoveries:** 8 in `## Discoveries` (2 added at plan) + 3 SURFACEs filed 2026-08-25 —
-  none blocking.
-- **⚠️ EXPECTED tsc errors right now, do NOT "fix" them in Phase 1.** Deleting `nextJump` /
-  `resetWalk` / `initialWalkState` / `inertAfter` / `TurnWalkState` is a **breaking change on
-  purpose** (P1.7), so `XtermPane.tsx` and `Workspace.tsx` do not compile until Phase 2/3 move
-  them. That compile error IS the guard proving no caller kept the old semantics. ⚠️ Consequence:
-  **`pnpm verify:auto` cannot pass until Phase 3 lands** — Phase 1's verify-auto is scoped to the
-  model's own suites (`turnMarkers.test.ts`, `turnMarkersPurity.test.ts`) plus `cargo`, not the
-  whole gate.
+- **Unvisited:** Phase 1 verify-{self,human,codify}; then Phase 2 (caller/XtermPane), then Phase 3
+  (the control pair)
+- **Open discoveries:** 8 in `## Discoveries` + 3 SURFACEs filed 2026-08-25 — none blocking.
+- **⚠️ EXPECTED tsc errors, do NOT "fix" them in Phase 1.** `tsc` reports **5 errors across
+  EXACTLY 2 files** (`XtermPane.tsx` ×4, `Workspace.tsx` ×1), every one a missing-export reference
+  to a symbol P1.7 deliberately deleted. **That is the guard, not breakage.** Verified at
+  verify-auto that no *other* file and no *other* error kind appears — an error elsewhere would be
+  a real finding. ⚠️ **`pnpm verify:auto` (the full gate) cannot pass until Phase 3.**
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -533,6 +530,36 @@ not cover `PostToolUse` — that is the other test's job). Neither is redundant 
 ⚠️ **The filtered-run trap was avoided**: `cargo test status_broadcaster` is a *filtered* run, and a
 filter that matches nothing still prints `ok` and **exits 0** (`docs/lessons/source-text-guards.md`).
 Each new test was confirmed **by name** in the output, not inferred from a green summary.
+
+## Verify-auto notes — Phase 1 (2026-08-25, re-plan)
+
+**Scoped to the change, per this state's role** — the model's own suites plus the Rust side, NOT
+the full `pnpm verify:auto` gate (which cannot pass until Phase 3 by design).
+
+| Check | Result |
+|---|---|
+| `tsc --noEmit` — error **files** | **exactly 2**: `XtermPane.tsx` (4), `Workspace.tsx` (1) |
+| `tsc --noEmit` — error **kinds** | **all** `TS2305`/`TS2724` missing-export, for the 5 symbols P1.7 deleted |
+| `eslint` (model + both test files) | exit **0** |
+| `prettier --check` | ✅ after a fix — see below |
+| `vitest` `turnMarkers.test.ts` + `turnMarkersPurity.test.ts` | **65 passed** (61 + 4) |
+| `cargo fmt --check` | exit **0** |
+| `cargo clippy --all-targets -D warnings` | clean |
+| `cargo test` | **879 passed, 0 failed** — unchanged, no collateral |
+
+⚠️ **The load-bearing check here was not "does it compile" but "do the EXPECTED failures match
+exactly".** P1.7's deletion makes a green `tsc` impossible, so the honest gate is the *shape* of the
+failure: 5 errors, 2 files, all missing-export, all naming a deliberately-deleted symbol. Anything
+else — a third file, or a different error kind in those two — would have been a real finding. Both
+were checked explicitly rather than eyeballed.
+
+⚠️ **Prettier flagged the model and its test file; fixing it required proving the reformat inert.**
+Per `[[prove-mechanical-transform-by-rerunning-it]]` the check is to re-run the transform on the
+**pre-change input** and diff against the current file — NOT to hand-write a normalizer. First
+attempt compared against a copy in the session scratchpad and reported a spurious difference (one
+line-wrap): **prettier resolves `.prettierrc` from the file's own directory, so a copy outside the
+repo is formatted with DEFAULTS.** Re-run with the copy placed inside `src/components/workspace/`:
+byte-identical. The reformat is inert.
 
 ## Verify-self notes — Phase 1 (2026-08-22)
 

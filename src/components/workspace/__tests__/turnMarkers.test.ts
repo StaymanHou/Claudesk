@@ -84,7 +84,6 @@ describe("liveMarkers / compact / reachableCount", () => {
   });
 });
 
-
 // ---------------------------------------------------------------------------------------
 // THE SHIPPED DEFECT, as a test. This is the red-green anchor for the whole re-plan.
 // ---------------------------------------------------------------------------------------
@@ -131,7 +130,12 @@ describe("⚠️ THE SHIPPED DEFECT — the newest turn start is above maxScroll
     // IS the newest, so the first prev goes somewhere.
     const { position, nav } = stepTurn(markers, positionAtNewest, "prev");
     expect(scrollTargetFor(markers, position, viewport)).toBe(19);
-    expect(nav).toEqual({ canPrev: false, canNext: true, ordinal: 1, total: 2 });
+    expect(nav).toEqual({
+      canPrev: false,
+      canNext: true,
+      ordinal: 1,
+      total: 2,
+    });
   });
 
   it("⚠️ prev then next RETURNS to the newest — the round-trip the old walk could not do", () => {
@@ -203,24 +207,34 @@ describe("stepTurn — bidirectional, position-based (AC-1)", () => {
   const markers = [m(1, 10), m(2, 20), m(3, 30), m(4, 40)];
 
   it("prev steps one turn EARLIER (lower index)", () => {
-    expect(stepTurn(markers, { index: 2 }, "prev").position).toEqual({ index: 1 });
+    expect(stepTurn(markers, { index: 2 }, "prev").position).toEqual({
+      index: 1,
+    });
   });
 
   it("next steps one turn LATER (higher index)", () => {
-    expect(stepTurn(markers, { index: 1 }, "next").position).toEqual({ index: 2 });
+    expect(stepTurn(markers, { index: 1 }, "next").position).toEqual({
+      index: 2,
+    });
   });
 
   it("from the resting position, prev goes to the second-newest", () => {
-    expect(stepTurn(markers, positionAtNewest, "prev").position).toEqual({ index: 2 });
+    expect(stepTurn(markers, positionAtNewest, "prev").position).toEqual({
+      index: 2,
+    });
   });
 
   it("⚠️ CLAMPS at the oldest — does NOT wrap to the newest", () => {
     // A wrap would teleport the reader from the top of the scrollback to the bottom.
-    expect(stepTurn(markers, { index: 0 }, "prev").position).toEqual({ index: 0 });
+    expect(stepTurn(markers, { index: 0 }, "prev").position).toEqual({
+      index: 0,
+    });
   });
 
   it("⚠️ CLAMPS at the newest — does NOT wrap to the oldest", () => {
-    expect(stepTurn(markers, { index: 3 }, "next").position).toEqual({ index: 3 });
+    expect(stepTurn(markers, { index: 3 }, "next").position).toEqual({
+      index: 3,
+    });
   });
 
   it("⚠️ BOTH DIRECTIONS round-trip — step away and back returns to the start", () => {
@@ -259,12 +273,19 @@ describe("stepTurn — bidirectional, position-based (AC-1)", () => {
 
   it("⚠️ re-clamps a stale index BEFORE stepping — eviction cannot strand it", () => {
     // index 9 against a 4-long live list resolves to 3, so prev lands on 2 (not 8).
-    expect(stepTurn(markers, { index: 9 }, "prev").position).toEqual({ index: 2 });
+    expect(stepTurn(markers, { index: 9 }, "prev").position).toEqual({
+      index: 2,
+    });
   });
 
   it("carries the nav state so the caller needs no second call", () => {
     const { nav } = stepTurn(markers, { index: 1 }, "prev");
-    expect(nav).toEqual({ canPrev: false, canNext: true, ordinal: 1, total: 4 });
+    expect(nav).toEqual({
+      canPrev: false,
+      canNext: true,
+      ordinal: 1,
+      total: 4,
+    });
   });
 
   it("is pure — same inputs, same answer; input not mutated", () => {
@@ -297,7 +318,9 @@ describe("scrollTargetFor — geometry enters here and only here (AC-2)", () => 
   });
 
   it("⚠️ clamps to maxScroll when the line is above it", () => {
-    expect(scrollTargetFor(markers, { index: 1 }, { length: 198, rows: 68 })).toBe(130);
+    expect(
+      scrollTargetFor(markers, { index: 1 }, { length: 198, rows: 68 }),
+    ).toBe(130);
   });
 
   it("returns null when nothing is selected", () => {
@@ -306,7 +329,11 @@ describe("scrollTargetFor — geometry enters here and only here (AC-2)", () => 
 
   it("⚠️ NEVER returns -1 — an evicted marker cannot become a scroll target", () => {
     // -1 would scroll to the buffer top and read as a successful jump.
-    const target = scrollTargetFor([m(1, 10), evicted(2)], positionAtNewest, roomy);
+    const target = scrollTargetFor(
+      [m(1, 10), evicted(2)],
+      positionAtNewest,
+      roomy,
+    );
     expect(target).toBe(10);
     expect(target).toBeGreaterThanOrEqual(0);
   });
@@ -316,7 +343,9 @@ describe("scrollTargetFor — geometry enters here and only here (AC-2)", () => 
   });
 
   it("clamps every target to 0 when the buffer cannot scroll at all", () => {
-    expect(scrollTargetFor(markers, { index: 1 }, { length: 40, rows: 68 })).toBe(0);
+    expect(
+      scrollTargetFor(markers, { index: 1 }, { length: 40, rows: 68 }),
+    ).toBe(0);
   });
 });
 
@@ -428,7 +457,12 @@ describe("the realistic long-turn scenario", () => {
     expect(scrolledBack).toEqual({ index: 0 });
     const after = [...before, m(3, 130)];
     const nav = navState(after, positionAtNewest);
-    expect(nav).toEqual({ canPrev: true, canNext: false, ordinal: 3, total: 3 });
+    expect(nav).toEqual({
+      canPrev: true,
+      canNext: false,
+      ordinal: 3,
+      total: 3,
+    });
   });
 });
 describe("shouldRecordTurnStart — the listener's contract", () => {

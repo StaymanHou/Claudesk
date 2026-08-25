@@ -230,7 +230,10 @@ export function stepTurn(
   const current = resolvePosition(markers, position);
   if (current === null) {
     // Nothing reachable — reset so a later turn starts clean, and report both ends closed.
-    return { position: positionAtNewest, nav: navState(markers, positionAtNewest) };
+    return {
+      position: positionAtNewest,
+      nav: navState(markers, positionAtNewest),
+    };
   }
   const delta = direction === "prev" ? -1 : 1;
   const next = Math.min(Math.max(current + delta, 0), live.length - 1);
