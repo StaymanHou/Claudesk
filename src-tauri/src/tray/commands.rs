@@ -246,8 +246,29 @@ fn reconcile(state: &TrayState) {
             return;
         }
     };
-    let icon = state.icon.lock().unwrap_or_else(|p| p.into_inner());
-    if let Some(tray) = icon.as_ref() {
+    // ⚠️⚠️ CLONE THE HANDLE, THEN DROP THE LOCK — do NOT call `set_icon_*` while holding it.
+    //
+    // `set_icon_with_as_template` "marshals to the main thread internally", which means it
+    // BLOCKS this thread until the main thread services it (`Thread::park` →
+    // `semaphore_wait`). Holding `state.icon` across that wait is a lock-ordering deadlock:
+    //
+    //   this thread  : holds `state.icon`      → waits for the MAIN THREAD
+    //   main thread  : wants `state.icon`      (workspace_deregister → forget_workspace →
+    //                                           reconcile) → waits for this lock
+    //
+    // Measured in the 2026-08-25 P1 capture: this thread sat in
+    // `set_icon_with_as_template` → `park` → `semaphore_wait` for **1362 samples (~1.8s)**
+    // while the main thread was blocked in `__psynch_mutexwait` (654 samples) on the very
+    // lock this call was holding. The main thread was ALSO asleep in `cc_kill`'s
+    // `poll_reaped`, which is what made the window long enough to collide.
+    //
+    // `TrayIcon` is a cheap cloneable handle, so cloning it out and releasing the guard costs
+    // nothing and removes this thread from the cycle entirely.
+    let tray = {
+        let icon = state.icon.lock().unwrap_or_else(|p| p.into_inner());
+        icon.as_ref().cloned()
+    };
+    if let Some(tray) = tray {
         if let Err(e) = tray.set_icon_with_as_template(Some(image), true) {
             eprintln!("[claudesk] tray: set_icon failed: {e}");
         }
@@ -264,6 +285,68 @@ mod tests {
     // unit-tested in the parent `mod.rs`. The glyph PNGs are embedded via include_bytes!, so
     // a decode test confirms they're valid (and the feature flags are wired) without an app.
     use tauri::image::Image;
+
+    // ⚠️ REGRESSION GUARD — P1 close-hang, 2026-08-25 (incident:codify), the SECOND defect.
+    //
+    // THE DEFECT: `reconcile` held the `state.icon` mutex across
+    // `set_icon_with_as_template`, which "marshals to the main thread internally" — i.e. it
+    // BLOCKS until the main thread services it. That is a lock-ordering cycle:
+    //   status-broadcaster thread : holds `icon` → waits for the MAIN THREAD
+    //   main thread               : wants `icon` (workspace_deregister → forget_workspace
+    //                               → reconcile) → waits for that lock
+    // Measured: 1362 samples (~1.8s) parked in `set_icon` while the main thread sat in
+    // `__psynch_mutexwait` (654 samples) on the very lock it held.
+    //
+    // ⚠️ WHY A SOURCE GUARD AND NOT A BEHAVIOURAL TEST. `reconcile` needs a live `TrayIcon`
+    // (AppKit + AppHandle), which is why this module's own header says the runtime path is
+    // verify-self territory. A deadlock also cannot be asserted by a passing test — a test that
+    // deadlocks HANGS rather than fails. So the guard asserts the structural property whose
+    // violation *is* the bug: the icon guard must not be alive at the call.
+    //
+    // ⚠️ Comments are STRIPPED via `production_code` — mandatory here, because the prose above
+    // and at the fix site both mention `state.icon.lock()`, and a naive substring scan would be
+    // satisfied by its own explanation (`docs/lessons/source-text-guards.md`).
+    // Mutation-proven 2026-08-25: reverting the fix to `let icon = state.icon.lock()...;` with
+    // the `set_icon` call inside that scope fails this test.
+    #[test]
+    fn reconcile_does_not_hold_the_icon_lock_across_the_appkit_marshal() {
+        let code =
+            crate::workflow_install::source_guard::production_code(include_str!("commands.rs"));
+        let body = code
+            .split_once("fn reconcile(")
+            .expect("reconcile still exists — rename means this guard needs re-anchoring")
+            .1;
+
+        // The lock must be taken into a scope that ENDS before the marshal: the fix clones the
+        // handle out (`icon.as_ref().cloned()`) so the guard drops at the end of that block.
+        assert!(
+            body.contains("icon.as_ref().cloned()"),
+            "reconcile must clone the TrayIcon handle out of the mutex and drop the guard \
+             BEFORE calling set_icon_with_as_template. Holding it across that (main-thread) \
+             marshal is the 2026-08-25 P1 deadlock."
+        );
+
+        // And the marshal must not appear inside a live `icon.lock()` binding. Anchor on the
+        // ordering: the cloned-out binding has to come before the set_icon call.
+        let clone_at = body.find("icon.as_ref().cloned()").expect("checked above");
+        let set_icon_at = body
+            .find("set_icon_with_as_template")
+            .expect("reconcile still swaps the glyph");
+        assert!(
+            clone_at < set_icon_at,
+            "the icon handle must be cloned out (and the lock released) BEFORE \
+             set_icon_with_as_template is called, not after."
+        );
+
+        // The lock must be released before the marshal, so no `lock()` call may appear between
+        // the clone-out and the marshal — that would be a re-acquire spanning the wait.
+        let between = &body[clone_at..set_icon_at];
+        assert!(
+            !between.contains(".lock()"),
+            "a mutex is acquired between cloning the icon handle and the main-thread marshal: \
+             {between:?} — that re-creates the deadlock this guard exists to prevent."
+        );
+    }
 
     #[test]
     fn embedded_glyphs_decode() {

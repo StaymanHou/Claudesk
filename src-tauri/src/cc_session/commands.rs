@@ -164,21 +164,60 @@ pub fn cc_resize(
 }
 
 /// Terminate a session (`/exit\r`, then SIGKILL fallback) and drop it.
+///
+/// ⚠️⚠️ **THE TEARDOWN RUNS ON A WORKER THREAD, AND THAT IS THE WHOLE POINT — do not "simplify"
+/// this back to a direct `reg.kill(..)` call.** A synchronous `#[tauri::command]` body is
+/// dispatched by Tauri on the **main thread**, and [`PtyCcSession::kill`] polls with
+/// `thread::sleep` between `try_wait` calls. So the old direct call ran a sleeping loop on the UI
+/// thread and **froze the entire single-window app** whenever a leader was slow to reap — the
+/// P1 filed 2026-08-25 (`sample` caught `cc_kill` → `SessionRegistry::kill` → `poll_reaped` under
+/// `com.apple.main-thread`, ~977ms of sleep in one 5s window with the process still alive).
+///
+/// ⚠️ **`kill_all` was ALREADY threaded** (`SessionRegistry::kill_all`) to overlap its grace
+/// windows, so app-quit was protected and this single-close path was not. That asymmetry is why
+/// the bug only ever showed on a workspace close.
+///
+/// **The split:** removing the session from the registry is O(1) and stays inline (so the id is
+/// consumed exactly once and a double-close still errors); the *blocking* part — the signal
+/// walk + reap polling — moves to a worker. The frontend already treats this as
+/// fire-and-forget (`XtermPane`'s unmount does `void invoke("cc_kill", ..)`), so returning
+/// before the reap completes loses no information the caller was using.
 #[tauri::command]
 pub fn cc_kill(
     app: AppHandle,
     registry: State<'_, Registry>,
     session_id: String,
 ) -> Result<(), String> {
-    {
+    // Take ownership OUT of the registry under a short lock hold. This is the commit point:
+    // an unknown id still fails fast and synchronously, exactly as before.
+    let session = {
         let mut reg = registry
             .lock()
             .map_err(|_| "session registry lock poisoned".to_string())?;
-        reg.kill(&session_id).map_err(|e| e.to_string())?;
-    } // drop the registry lock before the (independent, gated) telemetry write.
-      // M9 WP6.5 signal 1: record the explicit session-end marker for the closed session.
-      // Best-effort + gated (zero-IO when tracking is OFF); a telemetry miss must not affect
-      // the kill, which already succeeded above.
+        reg.take(&session_id).map_err(|e| e.to_string())?
+    }; // lock dropped here — before the (independent, gated) telemetry write below.
+
+    // The blocking teardown, off the UI thread. `CcSession: Send`, so the box moves freely —
+    // the same ownership move `kill_all` makes per session.
+    //
+    // ⚠️ Detached deliberately, NOT joined. Joining here would re-block the main thread and
+    // reintroduce the exact freeze this split exists to prevent. Nothing downstream waits on
+    // the reap: the pane's teardown is already unmount-driven, and `cc-exit-<id>` fires from
+    // the reader thread hitting EOF whenever the process actually dies.
+    let kill_id = session_id.clone();
+    std::thread::spawn(move || {
+        if let Err(e) = session.kill() {
+            // The only failure channel this path has — a silent drop here would make an
+            // unreapable child invisible (the diagnostic that cost this incident its first
+            // close-as-unreproducible).
+            eprintln!("[cc_kill] teardown failed for {kill_id}: {e}");
+        }
+    });
+
+    // M9 WP6.5 signal 1: record the explicit session-end marker for the closed session.
+    // Best-effort + gated (zero-IO when tracking is OFF); a telemetry miss must not affect
+    // the kill. ⚠️ Recorded on the REMOVAL, not the reap — the session is gone from the
+    // registry either way, and this must not wait on the worker.
     crate::time_store::commands::record_workspace_close(&app, &session_id);
     Ok(())
 }

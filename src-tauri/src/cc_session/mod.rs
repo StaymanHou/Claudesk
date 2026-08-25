@@ -1226,13 +1226,33 @@ impl SessionRegistry {
         Ok(())
     }
 
-    /// Kill a session and drop it from the registry. Unknown id is an error.
-    pub fn kill(&mut self, id: &str) -> Result<(), CcError> {
-        let session = self
-            .sessions
+    // ⚠️ THERE IS DELIBERATELY NO `kill(&mut self, id)` HERE — DO NOT RE-ADD ONE.
+    //
+    // It existed until 2026-08-25 and was removed as part of the P1 close-hang fix. Its whole
+    // body was `self.take(id)?.kill()`, which reads as harmless but BLOCKS for the full
+    // `PtyCcSession::kill` window (~800ms, unbounded when the leader resists reaping) — and its
+    // only caller was the synchronous `#[tauri::command] cc_kill`, which Tauri dispatches on the
+    // MAIN THREAD. The result was a frozen single-window app on every slow-reaping close.
+    //
+    // A convenience wrapper that hides a multi-hundred-millisecond sleep behind a one-line call
+    // is exactly how that defect got written, so the convenience is not restored. Callers use
+    // `take()` and own the decision of WHERE to run the teardown. `kill_all` keeps its own
+    // (already-threaded) path.
+
+    /// Remove a session from the registry and hand back ownership **without killing it**.
+    ///
+    /// The caller becomes responsible for calling `kill()` on it — the point being that the
+    /// caller can do so *off* the main thread while this method's registry-lock hold stays
+    /// O(1). [`CcSession`] is `Send` (the supertrait), so the returned box moves into a worker
+    /// freely; this is the same ownership move [`Self::kill_all`] already makes per session.
+    ///
+    /// ⚠️ Removal is the commit point: once this returns `Ok`, the session is out of the map
+    /// and nothing else can reach it, so a caller that drops the box without calling `kill()`
+    /// leaks the child process. Kill it or hand it to something that will.
+    pub fn take(&mut self, id: &str) -> Result<Box<dyn CcSession>, CcError> {
+        self.sessions
             .remove(id)
-            .ok_or_else(|| CcError::UnknownSession(id.to_string()))?;
-        session.kill()
+            .ok_or_else(|| CcError::UnknownSession(id.to_string()))
     }
 
     /// Kill every live session (window-close shutdown). Best-effort: a failure on one
@@ -2591,20 +2611,100 @@ mod tests {
             Err(CcError::UnknownSession(_))
         ));
         assert!(matches!(
-            reg.kill("cc-999"),
+            reg.take("cc-999"),
             Err(CcError::UnknownSession(_))
         ));
     }
 
+    // ⚠️ `take` (not `kill`) is what `cc_kill` calls — the P1 fix (2026-08-25) moved the
+    // blocking teardown to a worker thread, so the registry's job is now ONLY the O(1)
+    // removal. These two tests split what `kill_removes_session_and_invokes_kill` used to
+    // assert as one thing, because the split is the whole point of the fix:
+    //   • `take` REMOVES and hands back ownership, and must NOT kill (that would put the
+    //     ~800ms sleep back on the caller's thread — the main thread, for a `#[tauri::command]`).
+    //   • the returned session, when killed by the caller, DOES tear down.
     #[test]
-    fn kill_removes_session_and_invokes_kill() {
+    fn take_removes_session_without_killing_it() {
         let (mut reg, killed, ids) = reg_with_fakes(1);
         assert_eq!(reg.len(), 1);
-        reg.kill(&ids[0]).unwrap();
-        assert_eq!(reg.len(), 0);
+        let session = reg.take(&ids[0]).unwrap();
+        assert_eq!(reg.len(), 0, "take must remove from the registry");
+        assert_eq!(
+            killed.load(Ordering::SeqCst),
+            0,
+            "take must NOT kill — the caller kills off-thread (P1 2026-08-25)"
+        );
+        // Taking the same id again is unknown: removal is the commit point.
+        assert!(matches!(reg.take(&ids[0]), Err(CcError::UnknownSession(_))));
+        // The caller still owns a live session and killing it works.
+        session.kill().unwrap();
         assert_eq!(killed.load(Ordering::SeqCst), 1);
-        // Second kill of the same id is now unknown.
-        assert!(matches!(reg.kill(&ids[0]), Err(CcError::UnknownSession(_))));
+    }
+
+    // ⚠️ REGRESSION TEST — P1 close-hang, 2026-08-25 (incident:codify).
+    //
+    // THE DEFECT: `cc_kill` called a registry method that killed the session INLINE, so
+    // `PtyCcSession::kill`'s `thread::sleep` poll loop ran on the caller's thread — and for a
+    // synchronous `#[tauri::command]` that caller IS the main thread. A slow-reaping leader
+    // therefore froze the whole single-window app (`sample` caught ~977ms of main-thread sleep
+    // with the process still alive).
+    //
+    // ⚠️ WHAT THIS TEST CAN AND CANNOT PROVE. It cannot assert "the main thread is not blocked"
+    // — there is no main thread in `cargo test`, and Tauri's dispatch is not in scope here. What
+    // it CAN prove is the property the fix actually rests on, and the one whose absence caused
+    // the bug: **removing a session from the registry does not pay the teardown's cost.** If a
+    // future edit re-inlines the kill (restoring the deleted `SessionRegistry::kill`, or making
+    // `take` kill on the way out), this test fails on wall-clock — which is exactly how the
+    // regression would return.
+    //
+    // Modelled on `kill_all_runs_grace_windows_in_parallel_not_serially` above: a fixed fake
+    // delay plus a two-sided timing assertion (fast enough to prove decoupling, and a positive
+    // control that the sleep really ran).
+    #[test]
+    fn take_does_not_pay_the_teardown_cost_so_a_slow_kill_cannot_block_the_caller() {
+        // A pathological session: 800ms to tear down — the real worst-case window, and the
+        // shape that froze the app.
+        let slow = Duration::from_millis(800);
+        let (mut reg, killed, ids) = reg_with_delayed_fakes(1, slow);
+
+        // The registry-side operation the command performs inline.
+        let start = Instant::now();
+        let session = reg.take(&ids[0]).expect("session present");
+        let take_elapsed = start.elapsed();
+
+        // Removal is O(1) and must NOT have run the teardown.
+        assert_eq!(reg.len(), 0, "take must remove the session");
+        assert_eq!(
+            killed.load(Ordering::SeqCst),
+            0,
+            "take must not kill — a killing take would put the sleep back on the caller"
+        );
+        assert!(
+            take_elapsed < Duration::from_millis(100),
+            "take() took {take_elapsed:?} for a session whose kill() sleeps {slow:?} — it must \
+             be O(1) and NOT pay the teardown cost. A killing take re-freezes the main thread \
+             (P1 2026-08-25)."
+        );
+
+        // And the teardown still happens when the (off-thread) owner runs it — the work is
+        // deferred, never dropped. Positive control: the sleep genuinely runs, so the sub-100ms
+        // assertion above is meaningful rather than measuring a no-op fake.
+        let worker = thread::spawn(move || {
+            let t = Instant::now();
+            session.kill().expect("kill succeeds");
+            t.elapsed()
+        });
+        let kill_elapsed = worker.join().expect("worker did not panic");
+        assert_eq!(
+            killed.load(Ordering::SeqCst),
+            1,
+            "the taken session must still be tearable down by its new owner"
+        );
+        assert!(
+            kill_elapsed >= slow,
+            "kill() returned in {kill_elapsed:?}, faster than its own {slow:?} delay — the fake's \
+             sleep did not run, so the timing assertion above proves nothing."
+        );
     }
 
     #[test]
