@@ -367,8 +367,8 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
         and test **both** directions of every two-way thing (the F12 lesson: a two-way flag tested
         one way has an untested half).  <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: done -->
-  - [ ] verify-self  <!-- status: in-progress -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
+  - [x] verify-self  <!-- status: done; 2 PASS, 1 FAILED-cosmetic (the outcome's own wording) -->
+  - [ ] verify-human  <!-- status: in-progress -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [ ] Phase 2: Caller — XtermPane exposes bidirectional navigation  <!-- status: NOT-STARTED; depends on Phase 1 -->
@@ -426,17 +426,18 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-self
-- **Active scope:** Phase 1 verify-auto PASSED (scoped); verify-self is next
+- **Path:** Feature > Phase 1 > verify-human
+- **Active scope:** Phase 1 verify-self PASSED (2 PASS, 1 FAILED-cosmetic — the failing item is the
+  outcome's own contradictory wording, already corrected + filed; **no BLOCKING**). verify-human next.
 - **Blocked:** none
-- **Unvisited:** Phase 1 verify-{self,human,codify}; then Phase 2 (caller/XtermPane), then Phase 3
-  (the control pair)
-- **Open discoveries:** 8 in `## Discoveries` + 3 SURFACEs filed 2026-08-25 — none blocking.
-- **⚠️ EXPECTED tsc errors, do NOT "fix" them in Phase 1.** `tsc` reports **5 errors across
-  EXACTLY 2 files** (`XtermPane.tsx` ×4, `Workspace.tsx` ×1), every one a missing-export reference
-  to a symbol P1.7 deliberately deleted. **That is the guard, not breakage.** Verified at
-  verify-auto that no *other* file and no *other* error kind appears — an error elsewhere would be
-  a real finding. ⚠️ **`pnpm verify:auto` (the full gate) cannot pass until Phase 3.**
+- **Unvisited:** Phase 1 verify-{human,codify}; then Phase 2 (caller/XtermPane), then Phase 3 (the
+  control pair)
+- **Open discoveries:** 9 in `## Discoveries` + 4 SURFACEs pending — none blocking.
+- **⚠️ EXPECTED tsc errors, do NOT "fix" them in Phase 1.** 5 errors, **exactly 2 files**
+  (`XtermPane.tsx` ×4, `Workspace.tsx` ×1), **all** missing-export (4× `TS2305`, 1× `TS2724`), every
+  named symbol one P1.7 deleted. Independently re-confirmed at verify-self, including a repo-wide
+  grep finding **no** consumer of the five deleted symbols beyond those two files. **That is the
+  guard.** ⚠️ **`pnpm verify:auto` (full gate) cannot pass until Phase 3.**
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -632,6 +633,46 @@ filtered-**in** count, and all five relevant tests confirmed by name.
 **Cleanup verified by the orchestrator, not taken on trust:** `grep -c mutation_probe_field` → **0**;
 `git status` byte-identical to pre-spawn (4 modified + the untracked `wip/`); backend still shows
 **zero** non-comment deleted lines; full `cargo test` **876 passed**; `pnpm verify:auto` **exit 0**.
+
+## Verify-self notes — Phase 1 (2026-08-25, re-plan)
+
+**Subagent verdict: 2 PASS · 1 FAIL/COSMETIC · 0 BLOCKING.** No integration boundary — Phase 1
+modified only `turnMarkers.ts` and its two test files; no line was added or changed inside either
+consumer (`XtermPane.tsx`, `Workspace.tsx`), so no boundary clause fires. The boundary is
+deliberately Phase 2's, whose outcome cites the consuming surface by name.
+
+| Outcome | Verdict |
+|---|---|
+| model suite exits 0 and asserts the position model directly | **PASS** — 61/61, plus 4/4 purity |
+| a test replays the SHIPPED DEFECT and fails under the old semantics | **PASS — and PROVEN, not reasoned** |
+| `tsc --noEmit` "exits 0" | **FAIL / COSMETIC** — the outcome's own wording; the guard works |
+
+⚠️ **THE FINDING WORTH KEEPING — the subagent proved the red-green EMPIRICALLY where I had only
+asserted it.** I claimed the defect test "would fail against the old semantics" by reasoning, which
+is the weaker move; the old code was deleted, so I treated the claim as unprovable. **It was not:
+the pre-rewrite module is still recoverable at `git show aacfaeb:.../turnMarkers.ts`.** The subagent
+extracted it and ran the exact live-pane numbers through the OLD `nextJump`, confirming:
+
+- it returns raw line **137** (> `maxScroll` 130 — the silent xterm clamp);
+- its outcome shape is `{kind, line, next}` with **no ordinal field at all**, so `2/2` is not merely
+  wrong but inexpressible;
+- it advances its cursor past the un-moved turn, so click 2 lands on line **19** and click 3 returns
+  `{kind:"none", reason:"at-oldest"}` — **the operator's 0/1/2 report reproduced exactly**;
+- it has no direction parameter, so the `prev`→`next` round-trip is not expressible either.
+
+All five assertions in `turnMarkers.test.ts:101-149` are unsatisfiable under the old model. ⚠️ **The
+transferable lesson: "the old code is deleted so red-green is unprovable" is FALSE in a git repo —
+`git show <pre-change-sha>:<path>` recovers the old implementation and it can be RUN.** Reach for
+that before downgrading a red-green claim to an assertion.
+
+⚠️ **The one FAIL is a plan-authoring defect of mine, not a code defect.** The outcome asserted
+`tsc --noEmit` exits 0 *and* that the deletion "is a compile error at every call site" — mutually
+exclusive. Observed exit **2**, matching the rationale (the load-bearing half). All three shape
+sub-checks clean: (a) exactly two files, no third, and a repo-wide grep finds no other consumer of
+the deleted symbols; (b) all 5 errors missing-export only — no type-mismatch, arity, or unrelated
+error; (c) every named symbol is one of the five deleted. Corrected in the Work Tree (struck
+through, not silently rewritten) and filed as
+`SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS`.
 
 ## Verify-human — Phase 1 (2026-08-22): APPROVED
 
