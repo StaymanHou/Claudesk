@@ -373,7 +373,7 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
     - [x] P1.verify-human.2 Accept phase-by-phase build (tree sits non-compiling until Phase 3)  <!-- status: done -->
   - [x] verify-codify  <!-- status: done; 1 real coverage hole found + closed -->
 
-- [ ] Phase 2: Caller — XtermPane exposes bidirectional navigation  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [ ] Phase 2: Caller — XtermPane exposes bidirectional navigation  <!-- status: in-progress -->
   **Observable outcomes:**
   - CLI: `pnpm vitest run src/components/workspace/__tests__/` exits 0 with a caller-contract test
     proving the handle funnels BOTH directions through the shared position ref — per `arch.md`, a
@@ -383,18 +383,18 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
     raises it back to the same value it started from — **round-trip symmetry**, which is the property
     the rejected viewport-based design could not provide.
   - Console: no JS errors across a full turn plus 4 navigation steps.
-  - [ ] P2.1 Replace the `turnWalkRef` walk state with a position ref; route every write through one
+  - [x] P2.1 Replace the `turnWalkRef` walk state with a position ref; route every write through one
         setter so eviction re-clamp (AC-7) and the newest-reset (AC-6) cannot diverge.  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 Replace `jumpToPreviousTurn(): boolean` on the handle with `stepTurn(direction): boolean`
+  - [x] P2.2 Replace `jumpToPreviousTurn(): boolean` on the handle with `stepTurn(direction): boolean`
         plus `turnNavState(): {canPrev, canNext, ordinal, total}`. Reads `term.buffer.active.length`
         and `term.rows` at call time and passes them as the viewport — geometry is an injected VALUE,
         never read off a DOM element (the module header's own rule).  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 Keep the existing `onTurnStartRecorded` edge, but have it reset position to newest AND
+  - [x] P2.3 Keep the existing `onTurnStartRecorded` edge, but have it reset position to newest AND
         push fresh nav state to the parent so AC-4/AC-6 hold without the parent polling.  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 Delete the `registerDecoration` remnants and the `.is-inert` code path. ⚠️ Do **not**
+  - [x] P2.4 Delete the `registerDecoration` remnants and the `.is-inert` code path. ⚠️ Do **not**
         re-add a decoration — it throws without `allowProposedApi` and the throw is SILENT inside a
         listener (3.1 probe).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: in-progress -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
@@ -428,17 +428,20 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** **Phase 1 COMPLETE** (all impl + all four verify nodes `[x]`). Phase 2 next —
-  the caller: `XtermPane` exposes bidirectional navigation.
+- **Path:** Feature > Phase 2 > verify-auto
+- **Active scope:** Phase 2 impl COMPLETE (P2.1–P2.4 all `[x]`); verify-auto next.
 - **Blocked:** none
-- **Unvisited:** Phase 2 (caller/XtermPane) → Phase 3 (the control pair)
-- **Open discoveries:** 10 in `## Discoveries` + 4 SURFACEs pending — none blocking.
-- **⚠️ OPERATOR DECISION 2026-08-25 — build stays PHASE-BY-PHASE**, so `pnpm verify:auto` (full
-  gate) CANNOT pass until Phase 3 lands. Do not treat as a regression; do not "fix" the 5 expected
-  `tsc` errors (exactly 2 files — `XtermPane.tsx` ×4, `Workspace.tsx` ×1 — all missing-export, every
-  symbol one P1.7 deleted). **That compile error IS the guard.** Phase 2 resolves the `XtermPane`
-  four; Phase 3 resolves the `Workspace` one.
+- **Unvisited:** Phase 2 verify-{auto,self,human,codify}; then Phase 3 (the control pair)
+- **Open discoveries:** 11 in `## Discoveries` + 4 SURFACEs pending — none blocking.
+- **⚠️ tsc is now down to ONE expected error, in `Workspace.tsx` only** (`inertAfter` import +
+  `jumpToPreviousTurn` call). Phase 2 resolved all four `XtermPane` errors. **Phase 3 resolves the
+  last one.** ⚠️ `pnpm verify:auto` (full gate) still cannot pass until Phase 3 — operator-accepted
+  phase-by-phase build, 2026-08-25.
+- **⚠️ Phase 2 HAS an integration boundary** (`XtermPane` backs a UI surface), so verify-self must
+  exercise the consuming surface by name: **round-trip symmetry on a live pane via the handle**
+  (`stepTurn("prev")` then `stepTurn("next")` returns `viewportY` to its starting value). A unit
+  test does not satisfy this. Dev app is running: PID 60923, `com.claudesk.app.dev`, MCP bridge
+  127.0.0.1:9223, scratch workspaces in the picker.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -843,6 +846,59 @@ untouched and not mine.)
 
 **Restored both mutations via `cp` from a snapshot, deliberately not `git checkout`** — applying this
 session's own logged lesson.
+
+## Build notes — Phase 2 (2026-08-25, re-plan)
+
+**The caller now speaks the position model.** `XtermPane`'s handle drops
+`jumpToPreviousTurn(): boolean` for `stepTurn(direction): boolean` + `turnNavState(): TurnNavState`.
+All four of Phase 1's expected `tsc` errors in this file are resolved; the single remaining one is
+`Workspace.tsx`, which is Phase 3's.
+
+⚠️ **`stepTurn`'s `true` deliberately does NOT mean "the viewport pixel-moved"**, and the handle's
+doc comment says so at length. It means "a turn was selected". Near the buffer end the scroll clamps
+while the position advances — conflating those two is the exact defect this WP fixes, and the honest
+signal for the UI is `turnNavState()`, not the boolean. A future edit that "fixes" the boolean to
+report movement would re-introduce the defect.
+
+⚠️ **ONE writer of `turnPositionRef`** (`setTurnPosition`), per `arch.md`'s funnel rule — *extracting
+a pure state machine proves the MACHINE, not its CALLER; funnel shared-state writes through ONE
+function and guard THAT function*. It **always** re-clamps rather than clamping only on a
+notionally-eviction path, so no caller has to remember whether markers might have been evicted since
+the position was captured. Both AC-6 (new-turn reset) and AC-7 (eviction re-clamp) go through it.
+
+⚠️ **Geometry is read at CALL time and passed as a value** — `{length: term.buffer.active.length,
+rows: term.rows}`. `arch.md` forbids reading scroll geometry off an element; a *cached* viewport is
+the other half of that hazard, since `length` grows as CC writes and `rows` changes on resize, so a
+stale ceiling clamps against the wrong number.
+
+⚠️ **`compact()` runs BEFORE `stepTurn`**, so the step and the scroll see one list — otherwise a
+disposed marker could shift the very indices the position is expressed in.
+
+**New guard: `turnNavWiring.test.ts` (9 tests).** Phase 1's 62 tests would ALL stay green if this
+file wired the model up wrongly, which is the `arch.md` shape exactly. The guard pins: exactly one
+raw write to the position ref, the clamp being unconditional, geometry read at call time, compact
+ordering, the AC-6 reset going through the setter, fresh nav state reaching the parent, the deleted
+walk API not creeping back (`tsc` catches an import but not a locally re-introduced same-named
+helper), and `registerDecoration` staying out.
+
+⚠️ **A MUTATION PROBE CAUGHT ONE ARM OF THAT GUARD CHECKING NOTHING — and this is the finding worth
+carrying.** The "hands the parent fresh nav state" assertion matched
+`onTurnStartRecorded?.(navState(` — a **call-shape** predicate. Replacing the live ref with
+`positionAtNewest` (a literal, i.e. reporting a position the pane is not at) left the guard **green**.
+Fixed by asserting the **arguments**, not the call. ⚠️ **The rule: a source-text predicate must name
+the value that can be WRONG, not the function that can be MISSING** — otherwise it tests that
+someone called something. This is why all 7 arms were probed **individually**; a composite mutant
+would have tripped one of the other six and reported "the guard bites".
+
+**Also fixed:** `exhaustive-deps` correctly flagged `setTurnPosition` missing from the handle's dep
+array. Added rather than suppressed — it is `useCallback([])`-stable so listing it cannot re-create
+the handle, and silencing the rule is what would hide a genuinely unstable dependency added later.
+(The one remaining lint warning, a spread element at :859, is **pre-existing** — confirmed by
+`git stash`.)
+
+**Gate (Phase 2 scope):** 3 suites **75 passed** (62 + 4 + 9) · eslint 0 errors · prettier clean
+(reformat proven inert by re-running the transform on the pre-change input) · `tsc` down to the
+single expected `Workspace.tsx` error · 7/7 wiring mutants killed + the emptiness meta-guard proven.
 
 ## Verify-self notes — Phase 2 (2026-08-22)
 

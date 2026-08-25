@@ -56,14 +56,17 @@ import {
   type WorkspaceStatusUpdate,
 } from "../../state/workspaceStatus";
 import {
+  clampPosition,
   compact,
-  initialWalkState,
-  nextJump,
-  reachableCount,
-  resetWalk,
+  navState,
+  positionAtNewest,
+  scrollTargetFor,
   shouldRecordTurnStart,
+  stepTurn,
+  type StepDirection,
   type TurnMarker,
-  type TurnWalkState,
+  type TurnNavState,
+  type TurnPosition,
 } from "./turnMarkers";
 
 // M13.5 WP3 — a `TURN_MARKER_COLOR = "#6e7681"` constant lived here for the overview-ruler tick.
@@ -115,21 +118,32 @@ export interface XtermPaneHandle {
    */
   relaunch(): void;
   /**
-   * M13.5 WP3 P3.4 — scroll the viewport to the start of a previous CC turn.
+   * M13.5 WP3 — step the viewport one CC turn earlier (`"prev"`) or later (`"next"`).
    *
-   * First call jumps to the NEWEST turn start; repeat calls walk backward to older ones and
-   * go inert at the oldest (no wrap — see `turnMarkers.ts`). Returns `true` if the viewport
-   * moved, `false` when there was nothing to jump to, so the caller can keep the affordance
-   * honest instead of silently doing nothing (AC-5).
+   * ⚠️ **POSITION-based, not viewport-based (AC-1).** The selected turn advances by exactly one
+   * in list order on every call, whether or not that turn's start happens to be on screen
+   * already. Returns `true` when a turn was selected at all — i.e. there was something to
+   * navigate — and `false` only when nothing is reachable.
    *
-   * ⚠️ The DECISION is `turnMarkers.nextJump` — a pure function asserted as a value. This
-   * method only applies the result. `arch.md`: scroll geometry must never be read off an
-   * element (jsdom reports `clientHeight === 0` for visible ones; WebKit's own `scrollTop`
-   * retention has vacated live proofs here before), so the target is computed, not measured.
+   * ⚠️ **`true` does NOT promise the viewport pixel-moved, and must not be read that way.**
+   * Near the buffer end the scroll clamps to `maxScroll` (the last `rows` lines are always on
+   * screen together), so the position advances while the viewport stays put. Conflating those
+   * two is the exact defect this WP fixes: the old `jumpToPreviousTurn` returned "moved" for a
+   * clamped scroll, the caller believed it, and the walk advanced past a turn it never showed.
+   * The honest signal for the UI is {@link turnNavState}, not this boolean.
+   *
+   * ⚠️ The DECISION is `turnMarkers.stepTurn` + `scrollTargetFor` — pure functions asserted as
+   * values. This method only reads the geometry and applies the result. `arch.md`: scroll
+   * geometry must never be read off an element (jsdom reports `clientHeight === 0` for visible
+   * ones; WebKit's own `scrollTop` retention has vacated live proofs here before), so the
+   * target is computed, not measured.
    */
-  jumpToPreviousTurn(): boolean;
-  /** M13.5 WP3 — how many turn starts are currently reachable (0 → affordance is inert). */
-  reachableTurnStarts(): number;
+  stepTurn(direction: StepDirection): boolean;
+  /**
+   * M13.5 WP3 — the nav state for the CURRENT position: which ends are open (AC-4) and where
+   * we are (AC-5). One call, one source, so a disabled button and its readout cannot disagree.
+   */
+  turnNavState(): TurnNavState;
 }
 
 interface XtermPaneProps {
@@ -218,7 +232,7 @@ interface XtermPaneProps {
    * caller that never learns about it (`arch.md` — hit four times in this repo). The fix is the
    * missing edge, not a re-read.
    */
-  onTurnStartRecorded?: () => void;
+  onTurnStartRecorded?: (nav: TurnNavState) => void;
 }
 
 export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
@@ -242,12 +256,28 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
     const hostRef = useRef<HTMLDivElement | null>(null);
     const termRef = useRef<Terminal | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
-    // M13.5 WP3 — the recorded turn-start markers, oldest→newest, and where the backward
-    // walk currently sits. REFS, not state: nothing in the render output depends on them
-    // (the affordance asks via the imperative handle), so re-rendering on every turn start
-    // would be pure cost. The pure model in `turnMarkers.ts` owns all the logic.
+    // M13.5 WP3 — the recorded turn-start markers, oldest→newest, and which one is currently
+    // selected. REFS, not state: nothing in the render output depends on them (the controls ask
+    // via the imperative handle), so re-rendering on every turn start would be pure cost. The
+    // pure model in `turnMarkers.ts` owns all the logic.
     const turnMarkersRef = useRef<TurnMarker[]>([]);
-    const turnWalkRef = useRef<TurnWalkState>(initialWalkState);
+    const turnPositionRef = useRef<TurnPosition>(positionAtNewest);
+    // ⚠️ THE ONE WRITER of `turnPositionRef` — every position change goes through here.
+    //
+    // `arch.md` records this repo's recurring defect shape, hit four times and once as a shipped
+    // CRITICAL: *"extracting a pure state machine proves the MACHINE, not its CALLER"*, with the
+    // corollary that shared-state writes must be funnelled through ONE function and the guard
+    // placed on THAT function. Two writers here is how the eviction re-clamp (AC-7) and the
+    // new-turn reset (AC-6) drift apart: one path re-clamps, the other does not, and the stale
+    // index survives until it targets a disposed marker.
+    //
+    // ⚠️ It ALWAYS re-clamps. `clampPosition` is not an optimisation applied on the eviction
+    // path — it is applied on every write, so no caller has to remember whether markers might
+    // have been evicted since the position was captured.
+    const setTurnPosition = useCallback((next: TurnPosition) => {
+      turnPositionRef.current = clampPosition(turnMarkersRef.current, next);
+    }, []);
+
     // Live session id for the input/resize callbacks (a ref so the handlers wired at
     // mount always see the current id without re-subscribing).
     const sessionIdRef = useRef<string | null>(null);
@@ -349,19 +379,25 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       // with both the ruler canvas painted ZERO pixels in the probe — likely because the overview
       // ruler is CANVAS-based while this app is DOM-renderer-only by hard architectural rule.
       // That question is OPEN, not refuted (`wbs.md` → WP3). The re-spec's chosen affordance is a
-      // jump BUTTON, which needs no gutter tick at all — so re-adding a decoration here would
-      // re-introduce a silent throw for a visual nothing. Markers alone drive `scrollToLine`.
+      // prev/next BUTTON PAIR, which needs no gutter tick at all — so re-adding a decoration
+      // here would re-introduce a silent throw for a visual nothing. Markers alone drive
+      // `scrollToLine`.
 
       // Drop markers xterm has already disposed (their lines left the scrollback) so the list
       // cannot grow without bound across a long session.
       turnMarkersRef.current = compact([...turnMarkersRef.current, marker]);
-      // A new turn means the reader's old walk is stale — the next jump should target this
-      // newest start rather than continuing from wherever they had scrolled back to.
-      turnWalkRef.current = resetWalk();
-      // ⚠️ Tell the parent. Without this the affordance cannot recover from its inert state —
-      // see `onTurnStartRecorded`'s docs. `useTauriListen` holds this handler in a latest-ref,
-      // so no separate ref is needed here.
-      onTurnStartRecorded?.();
+      // AC-6 — a new turn means the reader is back at "now", so selection snaps to the newest
+      // start rather than continuing from wherever they had stepped back to. Through the ONE
+      // setter, so this write is re-clamped like every other.
+      setTurnPosition(positionAtNewest);
+      // ⚠️ Tell the parent, and hand it the FRESH nav state. Without this edge the controls
+      // cannot learn that a new turn made a previously-empty list non-empty — the shipped defect
+      // (see `onTurnStartRecorded`'s docs). Passing the state rather than making the parent
+      // poll is what keeps AC-4's disabled ends correct without a re-render loop.
+      // `useTauriListen` holds this handler in a latest-ref, so no separate ref is needed here.
+      onTurnStartRecorded?.(
+        navState(turnMarkersRef.current, turnPositionRef.current),
+      );
     });
 
     useImperativeHandle(
@@ -377,23 +413,38 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
           fitAndResizeRef.current();
         },
         relaunch: () => handleRelaunchRef.current(),
-        jumpToPreviousTurn: () => {
+        stepTurn: (direction) => {
           const term = termRef.current;
           if (!term) return false;
-          // Compact first so an evicted marker cannot be chosen as a target, then let the
-          // pure model decide. `outcome.next` is stored whichever arm fires — the "none"
-          // arms carry a deliberate cursor (reset on no-markers, held at the oldest) that the
-          // caller must persist for a repeat click to behave.
+          // Compact FIRST so a disposed marker can neither be selected nor shift the indices
+          // the position is expressed in. Both the step and the scroll then see one list.
           turnMarkersRef.current = compact(turnMarkersRef.current);
-          const outcome = nextJump(turnMarkersRef.current, turnWalkRef.current);
-          turnWalkRef.current = outcome.next;
-          if (outcome.kind !== "scroll") return false;
-          term.scrollToLine(outcome.line);
+          const stepped = stepTurn(
+            turnMarkersRef.current,
+            turnPositionRef.current,
+            direction,
+          );
+          setTurnPosition(stepped.position);
+          // ⚠️ Geometry is read HERE, at call time, and passed as a VALUE — never read inside
+          // the model. `buffer.active.length` grows as CC writes and `rows` changes on resize,
+          // so a cached viewport would clamp against a stale ceiling.
+          const target = scrollTargetFor(
+            turnMarkersRef.current,
+            turnPositionRef.current,
+            { length: term.buffer.active.length, rows: term.rows },
+          );
+          if (target === null) return false;
+          term.scrollToLine(target);
           return true;
         },
-        reachableTurnStarts: () => reachableCount(turnMarkersRef.current),
+        turnNavState: () =>
+          navState(turnMarkersRef.current, turnPositionRef.current),
       }),
-      [],
+      // `setTurnPosition` is the only non-ref value the handle closes over. It is
+      // `useCallback([])`-stable, so listing it cannot re-create the handle — but listing it
+      // keeps `exhaustive-deps` honest rather than silencing the rule, which is what would
+      // hide a genuinely unstable dependency added here later.
+      [setTurnPosition],
     );
     // Spawn trigger. The spawn effect keys on THIS (not `bridge.phase`) so the
     // spawning→live dispatch does NOT re-run the effect — which previously fired the
