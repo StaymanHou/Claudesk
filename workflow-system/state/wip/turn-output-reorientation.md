@@ -1252,6 +1252,45 @@ navigation landmark must not borrow status meaning.
 
 **Both mutations restored via `cp` from snapshots, not `git checkout`.**
 
+## Code-Quality Review — turn-output-reorientation
+
+> ⚠️ **Reviewer subagent completed AFTER the operator called a turn-level hold (2026-08-25).** The
+> findings are recorded verbatim below so they survive the session; **no severity-tier action has
+> been taken.** Per autopilot policy the 3 MAJORs would auto-backlog to
+> `backlog-quality-findings.md` with a pointer in `backlog.md`, and the 3 MINORs likewise — that
+> write is **still owed**, and `review-quality` should be re-entered to perform it (this section's
+> presence makes the skill idempotent, so it will append a `### Re-run` rather than duplicate).
+
+**Verdict: 0 CRITICAL · 3 MAJOR · 3 MINOR** → no refactor required (F39 path, not F40).
+
+### Strengths
+- The model/caller split in `turnMarkers.ts` is the right seam for the right reason: geometry enters only as an injected `TurnViewport` value, so the clamp ceiling (`maxScroll`) becomes an assertable number instead of an unobservable xterm side effect — that inversion *is* the fix for the shipped defect, not a wrapper around it.
+- `navState` as the single derivation of both `canPrev`/`canNext` and `ordinal`/`total` structurally forecloses the "1/3 next to an enabled prev" class, and `turnMarkers.test.ts` pins the agreement property directly rather than trusting it.
+- `is_turn_start` is classified backend-side in one named predicate (`event_is_turn_start`), and `commands.rs`'s socket test asserts a *count* (1 turn start across 4 `Running` events) rather than per-event values — the shape that makes the `PostToolUse`-collision regression impossible to reintroduce quietly.
+- `setTurnPosition` as the sole writer of `turnPositionRef`, always re-clamping, with `turnNavWiring.test.ts` counting raw writes to exactly 1 — a direct, correct application of the repo's funnel rule.
+- Both source-text guards strip comments before asserting absence and carry non-vacuity meta-guards anchored on live symbols only; `turnNavControls.test.ts` reads CSS via `node:fs` rather than `?raw`. Two guards were tightened by mutation probes mid-flight and the findings are recorded at the assertion.
+
+### Issues
+
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`__tests__/turnNavControls.test.ts:1-161`] The whole control-surface guard is `?raw` source-grepping for **DOM-at-rest questions** (`disabled` bound to the right flag, readout hidden at `total === 0`, controls outside the gated row). ⚠️ `docs/lessons/source-text-guards.md` states the opposite rule explicitly — *"when the question is what does the DOM look like at rest, render it… Reaching for `?raw` on a DOM question is how this repo accumulated its nine failure forms"* — and names two working precedents needing no new dependency (`docsRender.test.tsx`, `projectModelCellRender.test.tsx`). *Why it matters:* the assertions are regex-brittle (a Prettier reflow or trivially-equivalent refactor breaks `disabled=\{!turnNav\.canPrev\}`; `[\s\S]{0,200}?` windows are order-dependent), cannot see the rendered attribute, and cannot cover the gate-OFF case a parsed DOM would get for free.
+- [`__tests__/turnNavExportContract.test.ts:1-129`] The blank-app guard is scoped to **one import edge** in two named consumers and re-implements an ESM export check by regex-parsing import statements. It answers the orchestrator's question in the negative: **a point patch, not the structural fix.** The SURFACE it cites proposes the general remedy (a boot smoke-test asserting `#root` has children after any deletion phase) and that was **filed rather than built** — so the next module to lose an export strands its consumer exactly as before; `src/components/workspace/` alone has 4 sibling import edges with no such guard. *Why it matters:* the failure class is "the app does not start", blast radius repo-wide, mitigation one-module-wide — and the guard's own header ("deliberate redundancy on a failure mode whose blast radius is 'the app does not start'") **overclaims coverage it does not have.**
+- [`turnMarkers.ts:224-243` + `XtermPane.tsx:416-441` + `Workspace.tsx:622-626`] **Three-layer contract drift on the "returns it so the caller never polls" claim.** `stepTurn` returns `{position, nav}` and its docstring says the caller "never has to make a second call" — but `XtermPane` **discards `stepped.nav`** and recomputes via `navState`; the handle then returns a `boolean` that `Workspace` **discards entirely** in favour of a follow-up `turnNavState()` call. `Workspace.tsx:222-230` and `turnNavControls.test.ts:96` both assert push-not-poll **in prose while the code polls.** *Why it matters:* the returned `nav` is dead weight at two of three layers and the comments actively mis-describe the data flow. Either thread `nav` through (`stepTurn(dir): TurnNavState | null`) and drop the boolean, or drop the returned `nav` and say plainly that the surface re-reads. The boolean's own docstring already concedes it is not the honest signal.
+
+**MINOR**
+- [`XtermPane.tsx:72-78`] A 7-line comment documenting a `TURN_MARKER_COLOR` constant **that no longer exists**, for an affordance the re-spec rejected, including its palette rationale. Clearest single instance of retracted reasoning promoted to permanent code prose; a reader hunting the marker colour finds a constant that isn't there.
+- [`XtermPane.tsx`, `Workspace.tsx`, `App.css`] ⚠️ **Comment density DID get materially worse:** 58% of newly added production lines are comments (**388 of 673**); `XtermPane.tsx` moved **51% → 55%** while growing **714 → 944** lines. The `.workspace-jump-turn-btn` deletion rationale is stated in **four places**. ⚠️ The individual *retraction* blocks (`:361-372` alternate-buffer, `:451-458` premise-invalidated) **are load-bearing** — each prevents a re-derivation that already cost real work — but the duplicated deletion rationale is the "same rationale in six places" pattern. **No comment was stale or contradicted the code**, so this is polish: collapse the four copies to one canonical home plus pointers.
+- [`Workspace.tsx:636-641`] `aria-live="polite"` sits on a span that is **conditionally mounted** on `turnNav.total > 0`. A live region that does not exist when the value first appears **will not announce the first turn** — only subsequent ordinal changes. Render it unconditionally and empty its text.
+
+### Assessment
+Well-built work, notably better-built than the thing it replaces. The re-plan diagnosed the real defect correctly — a walk cursor with no viewport geometry could not express the clamp that was silently eating the first click — and the fix is a genuine architectural improvement rather than a patch: position arithmetic separated from scroll geometry, geometry injected as a value, one derivation for both the disabled ends and the readout, one writer for the shared position. The backend signal is classified in exactly one place with a test that asserts the property rather than the mechanism. The test suite is real coverage, not shape-theatre: a red-green anchor built from measured live numbers, `shouldRecordTurnStart` existing specifically so the caller's contract is testable, and two guards tightened by mutation probes that found them half-vacuous. Against that, the verification strategy has one systematic weakness: the two newest guards reach for `?raw` on questions the repo documents as render-the-DOM questions, and the export-contract guard is a one-module patch standing in for a repo-wide boot check that was filed instead of built. Neither is a correctness defect today; both are guards that will rot in the ways the lesson doc catalogues. Future readers will find the code clear and the *reasoning* over-supplied — the retraction notes earn their place, the duplicated deletion rationale and the dead-constant paragraph do not. **Net: advances the codebase, with a modest, well-identified debt in guard shape and comment budget.**
+
+### If you disagree
+Dismiss any finding by editing this section in the WIP file and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
 ## Ship notes (2026-08-25)
 
 **Cleanup:** clean. No probe/instrument residue in `src/` (every temporary tap was reverted and the
