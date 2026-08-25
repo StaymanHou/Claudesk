@@ -1156,13 +1156,20 @@ directions, cheapest first:
 absence cost three test rounds.
 
 ## Current Node
-- **Path:** Feature > Phase 3 > build (F12 back-loop)
-- **Active scope:** **P3.verify-human.1** — two defects found by the operator at verify-human:
-  (1) `jumpInert` is never cleared by a new turn (the button lies after one dead click);
-  (2) the ruler tick renders on the `left` edge, not the scrollbar side.
+- **Path:** Feature > WP3 task 3.2 — re-spec (`/feature-spec`)
+- **Active scope:** **task 3.2, the re-spec.** Two probes have closed (3.1 feasibility; the
+  signal-trace probe). The mechanism is proven and the real defect is identified + reproduced: a
+  **viewport-clamp off-by-one-turn in `nextJump`** (`moved` reports target-selection, not viewport
+  movement). ⚠️ **Scope grew at re-admission** — bidirectional prev/next turn navigation on the
+  find-widget model, superseding the single backward-only button.
 - **Blocked:** none
-- **Unvisited:** (none — Phase 3 is the last)
-- **Open discoveries:** 6 (see `## Discoveries`) — all recorded, none blocking
+- **Unvisited:** task 3.2 (re-spec) → task 3.3 (build) → phase verification; then WP4, WP5
+- **Open discoveries:** 6 in `## Discoveries` + 3 SURFACEs filed 2026-08-25 (all recorded, none
+  blocking). ⚠️ One open xterm question (the overview-**ruler** canvas paints 0 pixels) is **moot**
+  for the chosen affordance — buttons need no gutter tick.
+- **Superseded:** the earlier Phase-1/2/3 build+verify history below predates both probes. The
+  `registerDecoration` half is deliberately removed; the marker + `scrollToLine` half is
+  probe-proven. ⚠️ The `## MECHANISM REFUTED` section is **retracted in place** — do not cite it.
 
 ---
 
@@ -1296,3 +1303,122 @@ any shipped code already calls this API in this context — it said no, twice.**
 **Meta-lesson for the mechanism-refutation class:** a refutation built from typings is a
 *hypothesis*, and it earned three rounds of trust without a single runtime read. **Refutations need
 the same empirical bar as claims** — arguably higher, since a refutation closes work.
+
+---
+
+## Research — WP3 signal-trace probe (2026-08-25, same day as 3.1)
+
+**Why a SECOND probe.** After 3.1 closed FEASIBLE, the operator reported the shipped affordance
+still did nothing: *"nothing that I can notice from the UI. Nothing happens except for it disabling
+itself"* — dimmed, at **0, 1, and 2 turns**. 3.1 had proven the xterm APIs by driving them directly
+through the MCP bridge, which **bypasses the hook signal entirely**, so the wire was never
+exercised. This probe traced the signal.
+
+**Vehicle:** dev app (`com.claudesk.app.dev`) + MCP bridge, with a temporary tap in
+`useTauriListen` (every `workspace-status` payload) and in `XtermPane` (each guard's verdict, each
+`registerMarker` result, plus a buffer-state handle). Instruments reverted; tree byte-identical to
+`aacfaeb` after.
+
+### ⚠️ HEADLINE: the signal path is WHOLE. The defect is VIEWPORT ARITHMETIC in `nextJump`.
+
+Every layer works, driven by a **real CC turn**:
+
+| Layer | Observed |
+|---|---|
+| hook → socket → backend | `{is_turn_start: true, state: "running", workspace_id: "ws-1", …}` |
+| `shouldRecordTurnStart` | `verdict: true` on the CC pane; correctly `false` on the shell pane (`ws-1-term-0`) |
+| `registerMarker()` | live marker, `isDisposed: false` |
+| `nextJump` → `scrollToLine` | returns `moved: true` |
+
+**⚠️ THE DEFECT, with the arithmetic that proves it.** On a live pane after two real turns:
+`markerLines: [19, 137]` · `length: 198` · `rows: 68` · `baseY: 130` → `maxScroll = 198 − 68 = 130`.
+
+| Click | Target | `viewportY` | Effect |
+|---|---|---|---|
+| 1 | newest marker, line **137** | 130 → **130** | **nothing moves** (137 > maxScroll 130, so `scrollToLine` clamps to where we already are) |
+| 2 | older marker, line **19** | 130 → **19** | jumps — but **two turns back** |
+| 3 | walk exhausted | 19 → 19 | `moved: false` → **button dims** |
+
+⚠️ **`moved` reports TARGET-SELECTION, not VIEWPORT MOVEMENT.** A marker already inside the
+viewport counts as a successful jump, so click 1 is consumed doing nothing and the walk advances
+past it. **The newest turn's start is STRUCTURALLY almost always unreachable** — a turn that just
+ended leaves the cursor near the buffer end, and everything within `rows` of the end is already on
+screen. That exactly reproduces the operator's report at every turn count.
+
+**Fix shape:** `nextJump` must skip markers that would not move the viewport, which means it needs
+`maxScroll` (`length − rows`) passed in — the pure model currently has **no viewport geometry at
+all**. That is a signature change, and it raises a spec question (below), so it is not a one-liner.
+
+### ⚠️ TWO EARLIER CONCLUSIONS OF THIS PROBE WERE WRONG — retracted here
+
+Both came from measuring with `claude -p "say ok"`, a turn far too short to overflow 68 rows:
+
+1. **"CC's pane accumulates no scrollback"** — **FALSE.** `baseY: 130` on a real turn.
+2. **"Successive turns mark the same line"** — **FALSE.** `[19, 137]`, distinct.
+
+⚠️ **The transferable lesson, and it is the THIRD instance on this WP:** a degenerate input
+(one-line turn) produced a confident, coherent, wrong generalization — the same failure shape as
+3.1's typings-only refutation. **A measurement's INPUT must be representative of the use case, or
+the reading is about the input, not the system.** The operator's pain case is a 10-min / 100+-line
+turn; that is the only input that exercises the buffer.
+
+### ⚠️ CLAIM SPLIT: "in-place repaint" is TRUE of one CC profile and FALSE of Claudesk's pane
+
+Operator-supplied screenshots settled a distinction the WP had been conflating:
+
+- **Default-config CC profile:** CC draws its **own** "Jump to bottom (click) ↓" affordance, and the
+  host scrollbar sits at the bottom while CC's content does not. **CC owns its scroll region** —
+  history is NOT in xterm's scrollback. This IS in-place repainting.
+- **Claudesk's pane:** content and scrollbar move **together** when scrolled; no CC-drawn jump
+  button. **Append-only with real scrollback** — corroborated by `baseY: 130`.
+
+⚠️ **CC-managed-scroll is OUT OF SCOPE** (operator, 2026-08-25). The feature targets Claudesk's
+append-only pane. ⚠️ **Do not cite "CC repaints in place" as a constraint on this WP** — it
+describes a profile Claudesk does not use.
+
+⚠️ **A contaminated measurement, recorded so it is not mistaken for evidence:** a line-content diff
+run to test the repaint claim reported `changedInSettledHistory: 12` — but every changed line was
+the CC welcome banner **reflowing to a wider terminal** (an HMR-triggered re-fit between snapshots),
+`appendedCount: 0`. **That diff proves nothing about repainting.** The screenshots are the evidence.
+
+### Refuted candidate causes (do not re-derive)
+
+- **`CLAUDE_CODE_CHILD_SESSION=1` suppressing hooks** — REFUTED by A/B: hooks fire fine with it set.
+  (It IS inherited by any CC pane spawned from an agent-launched dev app, and it does suppress
+  transcript writes — but not hooks.)
+- **A dev-vs-prod CC config divergence** — REFUTED by reading `cc_spawn_env`: it sets only `TERM`,
+  `COLORTERM`, `LANG`, `LC_ALL` (+ gated `CLAUDESK_DRIVE_MODE`). **No `CLAUDE_CONFIG_DIR`, no `HOME`
+  override**; `env_clear()` is explicitly forbidden. The probed pane read the real `~/.claude`
+  (carried `CLAUDE_EFFORT`, telemetry vars, `--model opus` from `projects.json`).
+- **Stale dev binary** — REFUTED: binary mtime postdated the last backend source edit.
+- **MCP bridge in the prod build** — it is `#[cfg(debug_assertions)]`, so **prod cannot be probed**
+  at all. Only the dev build is instrumentable.
+
+### ⚠️ SCOPE GREW AT RE-ADMISSION — bidirectional navigation (operator, 2026-08-25)
+
+> *"Current UI/UX is bad. there should be a move up 1 turn and move down 1 turn. Just like in the
+> 'find' feature. Otherwise it's gonna be difficult to navigate back and forth"*
+
+The single backward-only jump button is **rejected as the affordance**. The re-spec must design a
+**prev/next turn pair** on the find-widget model (two buttons, bidirectional, stateful position),
+NOT one button that walks one way and dead-ends. ⚠️ This supersedes the 3.1 write-up's
+"jump BUTTON" recommendation, which assumed a single direction.
+
+### The spec question the defect raises
+
+"Jump to previous turn start" needs defining for the case where that start is **already visible**:
+
+- **(a)** Skip it — target the newest turn start actually **off** screen. *(Recommended: matches
+  "get me back to where output I can't see began.")*
+- **(b)** Treat already-visible as success and say so — no movement, no dim, honest message.
+- **(c)** Scroll it to the **top** of the viewport rather than clamping — needs room below, which
+  does not exist at the buffer end.
+
+⚠️ With bidirectional navigation now in scope, this question compounds: `prev`/`next` need a shared
+notion of "current position in the turn list" that survives both directions and new turns arriving.
+
+### Current status
+
+- Task 3.1 ✅ (feasibility, mechanism vindicated) · this probe ✅ (defect identified + reproduced)
+- **Task 3.2 (re-spec) is the next action** — `/feature-spec`, scoped to Claudesk's append-only
+  pane, with bidirectional prev/next and the already-visible question resolved.

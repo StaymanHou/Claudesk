@@ -3,7 +3,7 @@ shape: wbs
 cycle: milestone-13.5-qol-polish-bucket
 milestone: 13.5
 created: 2026-08-19
-updated: 2026-08-25  # WP1 + WP2 shipped; WP3 ESCALATED out (probe-first re-spec); WP4/WP5 remain
+updated: 2026-08-25  # WP1 + WP2 shipped; WP3 RE-ADMITTED (probe + signal trace closed); WP3/WP4/WP5 remain
 state: complete
 ---
 
@@ -13,14 +13,17 @@ state: complete
 > closed 2026-06-28), **M10.5** (closed 2026-07-19) and **M11.5** (closed 2026-08-01). All three
 > closed at 4 WPs; this one opened scoped to match and now stands at **5** — the drive-mode
 > workspace surface (WP4) was added 2026-08-20 from a direct operator ask, which is the bucket
-> convention working as intended (an OPEN bucket accepts items while it runs). ⚠️ **If WP3
-> escalates out per its own gate 3.2, the bucket closes at WP1+WP2+WP4+WP5 — still four.**
+> convention working as intended (an OPEN bucket accepts items while it runs). ⚠️ **That clause
+> anticipated a WP3 escalation closing the bucket at four; WP3 escalated and was re-admitted the
+> same day, so the bucket closes at FIVE — see the note below.**
 >
-> **⚠️ WP3 ESCALATED 2026-08-25 — the bucket now closes at WP1 + WP2 + WP4 + WP5, i.e. FOUR**, the
-> same as its three predecessors, exactly as the clause above anticipated. It escalated on a
-> **measured mechanism refutation** (the CC pane is an xterm **alternate** buffer, where
-> `registerDecoration` is a no-op), not on a size estimate — see WP3. **Remaining work in this
-> bucket: WP4, then WP5.**
+> **⚠️ WP3 ESCALATED 2026-08-25, then RE-ADMITTED the same day — the bucket closes at WP1 + WP2 +
+> WP3 + WP4 + WP5, i.e. FIVE.** The escalation rested on a **mechanism refutation that was itself
+> false** (it claimed the CC pane is an xterm **alternate** buffer, making `registerDecoration` a
+> no-op). Task 3.1's probe overturned that, and a follow-up **signal-trace probe** (same day) then
+> found the real defect: a **viewport-clamp off-by-one-turn in `nextJump`**, not a platform limit.
+> With the mechanism proven and the defect understood, WP3 is **cheap** and belongs in a polish
+> bucket — operator re-admitted it 2026-08-25. **Remaining work: WP3, then WP4, then WP5.**
 >
 > **Numbered 13.5** so the M14/M15 tail keeps its numbers — the same reason M10.5 and M11.5 were
 > `.5` inserts rather than renumbering everything after them.
@@ -194,16 +197,18 @@ PiP · tray, plus the close/quit guard — closing kills the session, which kill
 the consumer sweep grepped `awaiting_input` consumers, blind to a site keyed on `"idle"`. Fixed +
 cross-language regression test. Rust 859→873, frontend 2136→2141.
 
-## WP3: Turn-output reorientation — ⚠️ STILL ESCALATED, but the REFUTATION WAS OVERTURNED 2026-08-25
+## WP3: Turn-output reorientation — ✅ RE-ADMITTED 2026-08-25 (refutation overturned; real defect found)
 
 **Description:** With heavy cross-workspace switching, a single CC turn can run 10+ minutes and
 100+ lines, and it is hard to locate **where the last turn's output began** — acutely in the common
 case where the operator layers a question on top of a workflow instruction, so the answer and the
 workflow output interleave.
-**Milestone:** ~~13.5~~ → **its own milestone (to be numbered at the next `/product-roadmap`)**
-**Status:** **ESCALATED** (stays out of this bucket — the re-spec is a fresh design pass, not a
-resume). ⚠️ **But the reason changed completely:** the mechanism is **FEASIBLE**. Task 3.1's probe
-ran and **overturned the refutation that escalated it.**
+**Milestone:** **13.5** (re-admitted 2026-08-25 by operator decision, after escalating earlier the
+same day — the escalation's premise was refuted by its own gate-3.1 probe)
+**Status:** **ACTIVE — re-spec (task 3.2) in progress.** The mechanism is **FEASIBLE** and the
+real defect is **identified and reproduced**: a viewport-clamp off-by-one-turn in `nextJump`
+(see "The signal-trace probe" below). ⚠️ **The re-spec is a fresh design pass, not a resume** —
+scope grew at re-admission (bidirectional up/down navigation, per operator 2026-08-25).
 
 ### ⚠️ THE ALTERNATE-BUFFER REFUTATION WAS FALSE. Do not re-derive it.
 
