@@ -229,6 +229,50 @@ greater than 4` — the settle at index 3, the awaited id at 4). Then fix, then 
 pristine copy.
 
 
+## 12. A substring that OCCURS at the site is not ANCHORED to the site
+
+**Found 2026-08-25 (M13.5 WP3), by a verify-self subagent auditing the orchestrator's own guard.**
+
+`turnNavWiring.test.ts` asserted that turn-nav geometry is read at call time — the property that
+stops a cached viewport clamping against a stale ceiling — with two loose substrings:
+
+```ts
+expect(code).toMatch(/length: term\.buffer\.active\.length/);
+expect(code).toMatch(/rows: term\.rows/);          // ⚠️ NOT unique to the nav site
+```
+
+⚠️ **`rows: term.rows` appears TWICE in `XtermPane.tsx`** — once at the `scrollTargetFor` nav call
+this guard is about, and once in the unrelated `cc_resize`/fit path. So mutating the **nav** call to
+a hardcoded literal (`rows: 24`) left that assertion **GREEN**: it went on matching the *resize*
+line. The mutant died only by luck, because the sibling `length:` substring happens to be unique.
+
+**This is not form 1** (the needle is not in the assertion), **not form 2** (the boundary is right),
+and **not form 5** (the predicate is complete). The predicate was well-formed and the comments were
+stripped. The defect is that **the string it leaned on was not unique to the site**, so the guard
+was asserting a fact about a *different* line than the one it named.
+
+**Anchor to the enclosing call, not to a token that appears inside it:**
+
+```ts
+expect(code).toMatch(
+  /scrollTargetFor\([\s\S]{0,200}?\{\s*length: term\.buffer\.active\.length,\s*rows: term\.rows,?\s*\}/,
+);
+```
+
+**The mechanical check, before leaning on any substring:** `grep -c '<substring>' <file>`. If it is
+not **1**, anchor to the site. This costs one command and is the whole prevention.
+
+⚠️ **Only individual probing finds this.** A composite mutant would have tripped one of the guard's
+six other assertions and reported "the guard bites" while this half checked nothing — which is
+exactly the trap form 11's header warns about, one level in.
+
+**The sibling instance, same session, same root:** an assertion matching a **call shape** —
+`onTurnStartRecorded?.(navState(` — passed while the *argument* was swapped for a literal
+(`positionAtNewest` instead of the live ref), i.e. reporting a position the pane was not at. The
+generalized rule covering both: **a source-text predicate must name the value that can be WRONG,
+not the function that can be MISSING.**
+
+
 ## Comment budget — what belongs at the code, and what does not
 
 Comment density has been flagged in **four consecutive reviews** of the same file, and each

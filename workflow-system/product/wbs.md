@@ -3,7 +3,7 @@ shape: wbs
 cycle: milestone-13.5-qol-polish-bucket
 milestone: 13.5
 created: 2026-08-19
-updated: 2026-08-25  # WP1 + WP2 shipped; WP3 RE-ADMITTED (probe + signal trace closed); WP3/WP4/WP5 remain
+updated: 2026-08-25  # WP1 + WP2 + WP3 shipped; WP4/WP5 remain
 state: complete
 ---
 
@@ -197,7 +197,7 @@ PiP · tray, plus the close/quit guard — closing kills the session, which kill
 the consumer sweep grepped `awaiting_input` consumers, blind to a site keyed on `"idle"`. Fixed +
 cross-language regression test. Rust 859→873, frontend 2136→2141.
 
-## WP3: Turn-output reorientation — ✅ RE-ADMITTED 2026-08-25 (refutation overturned; real defect found)
+## WP3: Turn-output reorientation — ✅ SHIPPED 2026-08-25 (commit `2086ae8`)
 
 **Description:** With heavy cross-workspace switching, a single CC turn can run 10+ minutes and
 100+ lines, and it is hard to locate **where the last turn's output began** — acutely in the common
@@ -205,10 +205,13 @@ case where the operator layers a question on top of a workflow instruction, so t
 workflow output interleave.
 **Milestone:** **13.5** (re-admitted 2026-08-25 by operator decision, after escalating earlier the
 same day — the escalation's premise was refuted by its own gate-3.1 probe)
-**Status:** **ACTIVE — re-spec (task 3.2) in progress.** The mechanism is **FEASIBLE** and the
-real defect is **identified and reproduced**: a viewport-clamp off-by-one-turn in `nextJump`
-(see "The signal-trace probe" below). ⚠️ **The re-spec is a fresh design pass, not a resume** —
-scope grew at re-admission (bidirectional up/down navigation, per operator 2026-08-25).
+**Status:** ✅ **SHIPPED 2026-08-25** (`2086ae8`; closed `27772ce`). Bidirectional position-based
+navigation — `↑ N/N ↓` in the ungated split-control cluster. ⚠️ **The mechanism was never the
+problem:** the shipped defect was a **viewport clamp** — the newest turn's start sits inside the
+final screenful, so `scrollToLine` clamped and the caller read that as a successful jump.
+⚠️ **Partially resolves** `SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION` (1 of 4 directions); the
+answer-burial half remains open. Code-quality review: **0 CRITICAL, 3 MAJOR, 3 MINOR** — all
+backlogged, no refactor owed.
 
 ### ⚠️ THE ALTERNATE-BUFFER REFUTATION WAS FALSE. Do not re-derive it.
 
@@ -269,12 +272,12 @@ presentation, and the recommended affordance sidesteps it entirely.
       Full write-up: `workflow-system/state/wip/turn-output-reorientation.md`
       → `## Research`. ⚠️ **Verdict: FEASIBLE.** The blocker was two unset xterm options, not a
       platform contract.
-- [ ] 3.2 **Re-spec on the probe data.** ⚠️ Do NOT resume the old spec verbatim — but note its
+- [x] 3.2 **Re-spec on the probe data.** ⚠️ Do NOT resume the old spec verbatim — but note its
       *mechanism* is now vindicated, not refuted. **Recommended direction:** keep `registerMarker`
       + `scrollToLine` (both proven), set `allowProposedApi: true`, and make the affordance a
       **jump BUTTON** rather than a gutter tick — a button needs no ruler, so it moots the one open
       question above. `workspace-split-control` is the ungated neighbour to host it.
-- [ ] 3.3 Build once 3.2 lands and is WP-sized.
+- [x] 3.3 Build once 3.2 lands and is WP-sized.
 
 ### What the first attempt leaves behind — REUSABLE, do not rebuild
 

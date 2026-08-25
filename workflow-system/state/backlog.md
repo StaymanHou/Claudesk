@@ -527,6 +527,49 @@
      unfindable by ID and making that item appear twice in a heading scan. Pre-existing defect, not
      introduced by this cycle. -->
 - **Source:** operator (raised mid-M9, 2026-07-14)
+- **⚠️ PARTIALLY RESOLVED 2026-08-25 by M13.5 WP3 — REWRITTEN to the remaining open work, not deleted.**
+  Solution direction 1 of 4 shipped: **turn-boundary markers + a bidirectional jump affordance**
+  (`↑ N/N ↓` in the terminal chrome, stepping through turn starts over the existing scrollback).
+  See `CHANGELOG.md` 2026-08-25 and `workflow-system/state/archive/turn-output-reorientation.md`.
+  ⚠️ **The original problem is NOT fully solved** — a jump control helps you *navigate* to a turn
+  start; it does not stop an inline answer being **buried** by continued task output, which is the
+  half the operator actually reported ("can't find that answer anymore").
+- **Target level:** product:roadmap — the remaining directions are a further capability, not a bug.
+- **Type:** new-work (UX / attention feature).
+- **Summary (remaining):** With heavy cross-workspace switching, the operator asks a *question layered
+  on top of a workflow instruction*, the LLM **answers first and then proceeds without pausing**, and
+  by the time the operator switches back the answer is buried mid-scroll. Navigation to turn starts
+  now exists; **surfacing or preserving the answer itself does not.**
+- **Context:** Squarely in Claudesk's thesis — *attention is the scarce resource*
+  ([[claudesk-philosophy]]). Real-time status surfaces say *that* a workspace changed state; WP3 now
+  helps you re-orient to *where a turn began*. Neither helps you find **the answer inside it**.
+  Adjacent-but-distinct from the M11 docs-viewer ([[m7-docs-viewer-intent]]).
+- **Remaining solution directions (3 of the original 4 — all still undecided):**
+  - ~~**Turn-boundary markers in the terminal**~~ — ✅ **SHIPPED M13.5 WP3** (2026-08-25).
+  - **Per-turn "answer/notable" capture:** detect when CC emitted a direct answer to an operator
+    question (vs. pure task output) and surface it in a persistent, non-scrolling side rail or a
+    "last answer" chip that survives the turn.
+  - **A turn digest / re-orientation panel** opened on returning to a workspace: "since you left:
+    turn ended, here's the answer to your question + what got done."
+  - **Behavior-side:** make the orchestrator pause (or visibly flag) after answering an inline
+    question layered on an AUTO task, so the answer isn't immediately buried. ⚠️ This one is a
+    **workflow-system** change, not a Claudesk one — it belongs in the owed cross-repo handoff.
+- **⚠️ WHEN ADDRESSED — REQUIRED FIRST STEP, STILL NOT DONE:** **scan the recent session logs /
+  transcripts for concrete real examples** of the pattern (question layered on a workflow instruction
+  → LLM answered-then-proceeded → answer buried in a long turn). Ground the spec in captured
+  instances, not a hypothetical — the operator explicitly asked for this. ⚠️ **M13.5 WP3 did NOT do
+  this** (it was scoped to the navigation half, whose design was settled by probe data instead), so
+  the requirement carries forward intact. Likely sources: harness session logs under
+  `~/.claude/projects/<slug>/`, long-turn transcripts. Extract 2–3 concrete examples (the question,
+  where the answer landed, how far it scrolled).
+- **Priority:** medium (the navigation half is shipped, which lowers the felt friction; the
+  answer-burial half remains real and recurring).
+
+## ` heading
+     and was orphaned under SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING, making it
+     unfindable by ID and making that item appear twice in a heading scan. Pre-existing defect, not
+     introduced by this cycle. -->
+- **Source:** operator (raised mid-M9, 2026-07-14)
 - **Target level:** product:roadmap / product:vision — a NEW Claudesk capability (attention/output-navigation feature), not a bug in existing code. Likely a future milestone or a Phase-4-polish-class item. **Not scoped into M9.**
 - **Type:** new-work (UX / attention feature).
 - **Summary:** With heavy cross-workspace context-switching, a single CC turn can run **10+ minutes and 100+ lines of output**. It's hard to locate **where the last turn's output began** — especially the common case where the operator asks a *question layered on top of a workflow instruction*, the LLM **answers the question first and then proceeds with the task without pausing**, and by the time the operator switches back the answer is buried mid-scroll (or scrolled off / lost when the turn's output is long). The operator "can't find that answer anymore." Net effect: answers to in-line questions get missed precisely because Claudesk's value prop (run many projects in parallel, switch away while CC works) means you're *not watching* when the answer scrolls by.

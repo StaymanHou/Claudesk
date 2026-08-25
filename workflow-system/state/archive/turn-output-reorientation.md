@@ -1,13 +1,13 @@
 # Feature: Turn-output reorientation — find where the last turn began
 
 **Workflow:** feature
-**State:** **ship (complete) — 2026-08-25.** All three phases and every verify node are `[x]`.
-Final gate: `pnpm verify:auto` exit **0**, Rust **879**, frontend **2230** (171 files), `tsc` **0
-errors**, plus a **boot smoke-test** (`#root` has children, stylesheets loaded — APP MOUNTS). ⚠️
-**NOT PUSHED:** `main` is **27 ahead of origin** by standing policy (push only when the operator
-asks). ⚠️ **The spec sections + `## Work Tree` below are CURRENT**; the Phase 1/2/3 build+verify
-history further down predates both probes, and `## MECHANISM REFUTED` is **retracted — do not cite
-it**. *(File renamed from `-REFUTED-mechanism` 2026-08-25.)*
+**State:** ✅ **COMPLETED 2026-08-25.** Shipped `2086ae8`; code-quality findings backlogged
+`27772ce`; closed at finalize. Final gate: `pnpm verify:auto` exit **0**, Rust **879**, frontend
+**2230**, `tsc` **0 errors**, boot smoke-test APP MOUNTS. ⚠️ **Partially resolves**
+`SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION` — 1 of its 4 directions; the answer-burial half is
+still open and that entry was **rewritten, not deleted**. ⚠️ **The spec sections + `## Work Tree`
+below are CURRENT**; the Phase 1/2/3 build+verify history further down predates both probes, and
+`## MECHANISM REFUTED` is **retracted — do not cite it**.
 **Created:** 2026-08-22
 **Entry:** spec (complex feature — WP3's gate 3.1 mandates a design pass, not `/feature-plan`)
 **Source:** `SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION`; M13.5 WBS → WP3
@@ -432,30 +432,23 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [x] verify-codify  <!-- status: done; COMBINED — 1 real gap found + closed (10 tests) -->
 
 ## Current Node
-- **Path:** Feature > review-quality COMPLETE → finalize
-- **Active scope:** none. Next is `/feature-finalize`.
+- **Path:** ✅ **CLOSED** — feature complete, archived 2026-08-25.
+- **Active scope:** none.
 - **Blocked:** none
-- **Unvisited:** finalize. Then M13.5 **WP4** (drive-mode readout on the workspace surface), then
-  **WP5** (bucket exit verify).
-- **Open discoveries:** 13 in `## Discoveries`; backlog now carries 5 pending SURFACEs **+ 6
-  code-quality findings** for this WP — none blocking.
-- **⚠️ Code-quality review: 0 CRITICAL · 3 MAJOR · 3 MINOR — all backlogged, no refactor owed.**
-  ⚠️ **Two of the three MAJORs indict this WP's own VERIFICATION work, not the feature:**
-  `turnNavControls.test.ts` `?raw`-greps DOM-at-rest questions the repo's own lesson doc routes to a
-  render test, and the blank-app guard covers **one** import edge while standing in for the
-  **repo-wide boot smoke-test that was filed rather than built** (its header overclaims). The third
-  is a real push-not-poll **contract drift** across three layers, with comments asserting the
-  opposite of what the code does.
-- **⚠️ The density MINOR must be FOLDED INTO
-  `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, not trimmed per-WP** — that item
-  records per-WP trimming as measured NOT converging, and this is the second M13.5 WP to produce
-  such an entry. ⚠️ **The retraction blocks are load-bearing; do not sweep them.**
-- **⚠️ SHIP STATE: committed, NOT pushed.** `main` is well ahead of origin; pushing is the
-  operator's call.
-- **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
-  build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
-  must not be cited. The two `## Research` sections at the bottom are the authority on substrate
-  behaviour.
+- **Unvisited:** none in this feature. Next in M13.5: **WP4** (drive-mode readout on the workspace
+  surface), then **WP5** (bucket exit verify).
+- **Open work this feature leaves behind (all backlogged, none blocking):** 6 code-quality findings
+  (3 MAJOR + 3 MINOR, `backlog-quality-findings.md` → `# turn-output-reorientation — 2026-08-25`);
+  the rewritten `SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION` (3 of 4 directions still open, plus
+  its never-done transcript-grounding first step); and 3 process SURFACEs filed by this WP's probes,
+  **all three of which are workflow-system changes** belonging in the owed cross-repo handoff to
+  mccc — including the **high** one,
+  `SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC`.
+- **⚠️ Reading order for this archived file:** the spec sections + `## Work Tree` above are the
+  as-built record. The Phase 1/2/3 build+verify notes below predate both probes;
+  `## MECHANISM REFUTED` is **retracted in place** and must not be cited. The two `## Research`
+  sections at the bottom are the authority on substrate behaviour. `## Retrospect` and
+  `## Code-Quality Review` are the closure record.
 
 ### Phasing rationale (re-plan, 2026-08-25)
 
@@ -1252,6 +1245,50 @@ taken by Running/AwaitingInput/BackgroundWork, and WP2 rejected teal for reading
 navigation landmark must not borrow status meaning.
 
 **Both mutations restored via `cp` from snapshots, not `git checkout`.**
+
+## Retrospect
+
+- **What changed in our understanding:**
+  ⚠️ **The biggest thing: a REFUTATION needs the same empirical bar as a claim — arguably higher,
+  because a refutation CLOSES work.** This WP was escalated out of its milestone on an
+  "alternate buffer" refutation built entirely from **typings and a doc comment**. One property read
+  on a live pane (`buffer.active.type === "normal"`) demolished it. That false refutation had earned
+  three rounds of trust, marked working code as dead, and voided a shipped config decision.
+  ⚠️ **Second: a missing ES-module export is a RUNTIME failure, not a compile-time one.** We planned
+  a deliberate red `tsc` across phases and called it "the guard". It was also a blank, unlaunchable
+  app — and the operator found that, not any gate.
+  ⚠️ **Third: `maxScroll` was the invisible variable.** The whole defect was that the newest turn's
+  start is structurally *inside* the final viewport, so `scrollToLine` clamped and the caller read
+  that as success.
+
+- **Assumptions that held:**
+  The model/caller seam was the right place to work. Extracting the pure model made the arithmetic
+  assertable as a *value* rather than an unobservable xterm side effect, and that inversion turned
+  out to be the fix rather than scaffolding around it. Hook-channel-only state detection held —
+  `is_turn_start` needed no change across all three phases. The `arch.md` funnel rule (one writer,
+  guard that writer) was correct and cheap to apply.
+
+- **Assumptions that were wrong:**
+  ⚠️ **"CC repaints in place / accumulates no scrollback"** — false, and it came from measuring with
+  `claude -p "say ok"`, a turn far too short to overflow 68 rows. A degenerate input produced a
+  confident, coherent, wrong generalization. **The operator's pushback was right twice** where the
+  agent's reading was wrong.
+  ⚠️ **"A red `tsc` is a safe guard"** — wrong, and it was stated to the operator as reassurance,
+  which is worse: the phase-by-phase decision was approved on a false premise.
+  ⚠️ **"Phase 2's live-pane verification passed"** — it ran against a **pre-deletion bundle**. A full
+  verify-self → verify-human cycle banked stale-runtime evidence.
+
+- **Approach delta:**
+  Substantial. The plan was model → caller → UI, gated per phase. **Phase 3 was built out of order**
+  to unblock the blank app, so Phase 2's gate never completed independently and its verify nodes are
+  recorded **CLOSED BY COMBINATION** rather than back-dated. The affordance also changed shape at
+  re-admission — from one backward-only jump button to a bidirectional `↑ N/N ↓` pair — on operator
+  input, which is why the model is position-based rather than viewport-based (the latter cannot
+  round-trip). ⚠️ **Three guards were found half-vacuous by mutation probes and tightened mid-flight**
+  (a `?raw` identifier matching a non-unique substring, a call-shape assertion ignoring its
+  arguments, and a two-clause predicate whose clauses were correlated in every fixture). Each was
+  found only because arms were probed **individually**.
+
 
 ## Code-Quality Review — turn-output-reorientation
 
