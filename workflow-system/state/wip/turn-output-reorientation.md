@@ -395,8 +395,8 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
         re-add a decoration — it throws without `allowProposedApi` and the throw is SILENT inside a
         listener (3.1 probe).  <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: done -->
-  - [ ] verify-self  <!-- status: in-progress -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
+  - [x] verify-self  <!-- status: done; 3 PASS, 1 UNVERIFIED-by-subagent (orchestrator-verified), 1 guard weakness found + FIXED -->
+  - [ ] verify-human  <!-- status: in-progress -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [ ] Phase 3: The prev/next control pair  <!-- status: NOT-STARTED; depends on Phase 2 -->
@@ -428,24 +428,15 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > verify-self
-- **Active scope:** Phase 2 verify-auto PASSED (scoped); verify-self next.
+- **Path:** Feature > Phase 2 > verify-human
+- **Active scope:** Phase 2 verify-self PASSED — round-trip symmetry proven on a live pane, console
+  clean, wiring guard mutation-proven, and one guard weakness found + fixed in-flight. **No
+  BLOCKING.** verify-human next.
 - **Blocked:** none
-- **Unvisited:** Phase 2 verify-{self,human,codify}; then Phase 3 (the control pair)
-- **Open discoveries:** 11 in `## Discoveries` + 4 SURFACEs pending — none blocking.
-- **⚠️ tsc: exactly 2 errors, `Workspace.tsx` ONLY** (`TS2305 inertAfter`, `TS2339
-  jumpToPreviousTurn`). **Zero in `XtermPane.tsx`** — all four resolved by Phase 2, verified by
-  matching on the filename POSITION (`^…XtermPane.tsx(`), not message text: the string
-  `XtermPaneHandle` appears inside a `Workspace.tsx` error and makes a naive `grep -c XtermPane`
-  report a false 1. **Phase 3 resolves the last two.** ⚠️ `pnpm verify:auto` (full gate) still
-  cannot pass until then — operator-accepted phase-by-phase build.
-- **⚠️ Phase 2 HAS an integration boundary** (`XtermPane` backs a UI surface). verify-self must
-  exercise the consuming surface **by name**: round-trip symmetry on a live pane via the handle
-  (`stepTurn("prev")` then `stepTurn("next")` returns `viewportY` to its starting value). A unit
-  test does not satisfy this. Dev app running: PID 60923, `com.claudesk.app.dev`, MCP bridge
-  127.0.0.1:9223, scratch workspaces in the picker. ⚠️ The handle is **not** exposed on `window` in
-  committed code (that was a temporary probe instrument, reverted) — verify-self must reach it via
-  the React fiber or re-instrument temporarily and revert.
+- **Unvisited:** Phase 2 verify-{human,codify}; then Phase 3 (the control pair)
+- **Open discoveries:** 12 in `## Discoveries` + 4 SURFACEs pending — none blocking.
+- **⚠️ tsc: exactly 2 errors, `Workspace.tsx` only** — Phase 3 resolves them. `pnpm verify:auto`
+  (full gate) still cannot pass until then; operator-accepted phase-by-phase build.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -976,6 +967,64 @@ in the suite would fail if a future edit added `document.querySelector` to `turn
 as scoped is verified — purity holds *today*, proven from source — but the property is unenforced.
 Filed as a Discovery; the natural home for a `?raw`-style source guard is the Phase 3 wiring, where
 this project's existing guards live.
+
+## Verify-self notes — Phase 2 (2026-08-25, re-plan)
+
+**Integration boundary APPLIES** (`XtermPane` backs a UI surface), so the skip path was forbidden
+and the consuming surface was exercised **by name**: the `XtermPane` handle on the visible CC pane.
+
+⚠️ **Split execution, deliberately.** `mcp__tauri__*` reaches the orchestrator but **not** spawned
+subagents (`[[mcp-bridge-tools-not-exposed-to-subagents]]`) — a subagent driving the live app
+silently falls back to bare Vite and returns a false verdict. So the **orchestrator drove the live
+pane** and the **subagent audited the wiring guard**. The subagent was told to report the console
+outcome UNVERIFIED rather than guess, and did.
+
+| Outcome | Verdict |
+|---|---|
+| round-trip symmetry on a live pane (the load-bearing one) | **PASS** — orchestrator-driven |
+| caller-contract test proves the one-writer funnel, both directions | **PASS** — subagent, mutation-proven |
+| no JS console errors across a turn + 4 nav steps | **PASS** — orchestrator (subagent: UNVERIFIED) |
+| *(sub-finding)* geometry guard's `rows` half was half-vacuous | **FAIL/COSMETIC → FIXED in-flight** |
+
+**Live-pane evidence.** Handle reached via the React fiber — **no instrumentation needed**, so the
+tree stayed byte-identical throughout. Handle shape:
+`[focus, refit, setFontSize, relaunch, stepTurn, turnNavState]` — the deleted `jumpToPreviousTurn` is
+gone from the **live object**, not merely from source. Round trip at `length 556 / rows 68 /
+maxScroll 488`: `viewportY` **488 → 488 → 285 → 488 → 488** with ordinals `6→5→4→5→6`; a full walk to
+both ends visited **three distinct viewports (85, 285, 488)**, so the return-equality is not hiding a
+collapse. Ends: oldest `1/5 canPrev:false`, newest `5/5 canNext:false`. AC-6 confirmed live — a new
+turn-start reset selection to the newest.
+
+⚠️ **A first attempt at this outcome PROVED NOTHING and was not banked.** On the initial buffer
+(`length 90 / rows 68 / maxScroll 22`) every marker sat at or above the ceiling, so `viewportY`
+stayed pinned at 22 through the whole round trip — *correct behaviour*, and completely uninformative
+about movement. `arch.md`'s rule is the test: *an observation is only decisive when a broken
+implementation would give a DIFFERENT answer.* Grew the buffer and re-ran.
+
+⚠️ **Console check used a POSITIVE CONTROL first.** `read_logs{source:"console"}` captures nothing
+for this app (`[[read-logs-console-captures-nothing]]`), so an empty read is a false green by
+default. A self-installed tap was proven to capture (a seeded `console.error` was observed) before
+the empty result was accepted as meaningful. Tap removed afterwards.
+
+### ⚠️ THE SUBAGENT FOUND A GUARD WEAKNESS THE ORCHESTRATOR MISSED — and this is the keeper
+
+`turnNavWiring.test.ts`'s geometry assertion was **half-vacuous**. It asserted two loose substrings,
+and `rows: term.rows` appears **twice** in `XtermPane.tsx` — at the `scrollTargetFor` nav call site
+(:434) *and* in the unrelated `cc_resize`/fit path (:523). Hard-coding the **nav** call's rows to a
+literal therefore left that assertion **GREEN**; the mutant was caught only because the sibling
+`length:` substring happens to be unique to :434. One half of a two-part predicate was checking a
+line it was not about.
+
+**Fixed** by anchoring both fields inside a single `scrollTargetFor(...)` argument list. Re-probed
+each half **independently**: `rows`-only hardcoded → FAIL (previously PASS), `length`-only hardcoded
+→ FAIL, both-cached → FAIL. All three now bite.
+
+⚠️ **The transferable rule, and it is the second instance this WP:** *a source-text predicate must
+be anchored to the SITE it is about, not merely to a substring that occurs there.* Phase 2's build
+already hit the sibling form of this (asserting a **call shape** instead of the **arguments**); this
+is the same defect one level out — asserting a substring that is **not unique** to the site. Both
+were found by mutating **individually**, and both would have been hidden by a composite mutant that
+tripped some other assertion. ⚠️ **Check uniqueness (`grep -c`) of every substring a guard leans on.**
 
 ## Verify-human — Phase 2 (2026-08-22): SKIPPED via F11, operator-confirmed
 

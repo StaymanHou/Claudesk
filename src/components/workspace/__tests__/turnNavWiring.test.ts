@@ -62,10 +62,18 @@ describe("XtermPane turn-navigation wiring", () => {
     // `arch.md`: scroll geometry must never be read off a DOM element, and a CACHED viewport is
     // the other half of that hazard — `buffer.active.length` grows as CC writes and `rows` changes
     // on resize, so a stale ceiling would clamp against the wrong number.
-    expect(code).toMatch(/length: term\.buffer\.active\.length/);
-    expect(code).toMatch(/rows: term\.rows/);
-    // The geometry goes to scrollTargetFor, i.e. into the model — not consumed locally.
-    expect(code).toMatch(/scrollTargetFor\(/);
+    //
+    // ⚠️ ANCHORED TO THE `scrollTargetFor` CALL SITE, not asserted as two loose substrings. A
+    // verify-self mutation probe caught the first draft half-vacuous: `rows: term.rows` also
+    // appears in the unrelated `cc_resize`/fit path, so hard-coding the nav call's rows to a
+    // literal left that assertion GREEN — it was matching a line the guard is not about, and only
+    // the sibling `length:` assertion (unique to the nav site) caught the mutant. Matching BOTH
+    // fields inside one `scrollTargetFor(...)` argument list is what makes each half load-bearing.
+    // Same class as `[[raw-guard-identifier-satisfied-by-own-comments]]`: a bare identifier match
+    // finds the identifier somewhere other than where the check meant.
+    expect(code).toMatch(
+      /scrollTargetFor\([\s\S]{0,200}?\{\s*length: term\.buffer\.active\.length,\s*rows: term\.rows,?\s*\}/,
+    );
   });
 
   it("⚠️ compacts BEFORE stepping, so both step and scroll see one list", () => {
