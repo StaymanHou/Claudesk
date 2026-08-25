@@ -1246,6 +1246,35 @@ navigation landmark must not borrow status meaning.
 
 **Both mutations restored via `cp` from snapshots, not `git checkout`.**
 
+## Operator live verification — post-close (2026-08-25)
+
+⚠️ **Added AFTER the close commit, because the operator correctly challenged what had actually been
+verified:** *"so is the turn nav working? I haven't verified in live action yet."*
+
+**The gap was real.** Every live reading taken during the workflow came from **synthetic
+`UserPromptSubmit` events written into the dev hook socket** — xterm ignores synthetic keystrokes, so
+that was the only way the agent could drive a turn. That exercises the signal path end-to-end, but it
+never exercised **a real typed prompt in a real CC pane**. The distinction was not surfaced at
+verify-human, where the operator's "all good" was recorded as approval of the whole surface; on
+re-reading, that was plausibly approval of the **design** (`↑ N/N ↓`, arrow direction) rather than a
+statement that they had driven it.
+
+⚠️ **Two things made the challenge especially fair.** (1) For most of Phase 2 the app **could not
+boot**, and readings banked then came from a pre-deletion bundle — so "the agent said live, was
+actually stale" had already happened once in this WP. (2) The agent's own measurements had twice been
+wrong from an unrepresentative input ([[measurement-input-must-be-representative]]).
+
+**Closed 2026-08-25.** Fresh dev app launched clean (boot smoke-test: `#root` has children,
+stylesheets loaded → APP MOUNTS), operator opened a scratch workspace, **typed real prompts**, and
+drove the controls by hand. **Verdict: PASS.** The three things no automated check could judge —
+whether the arrows are findable in a crowded chrome row, whether the scroll lands somewhere useful,
+and whether `↑` = older reads correctly — were all confirmed by the operator at the same time.
+
+⚠️ **Method note worth carrying:** socket-injected turn-starts are a legitimate *agent* instrument
+for this feature and prove the wire, but they are **not** a substitute for an operator-typed turn, and
+the difference should be stated at verify-human rather than left implicit. Do not describe a
+socket-driven run as "verified live" without that qualifier.
+
 ## Retrospect
 
 - **What changed in our understanding:**
