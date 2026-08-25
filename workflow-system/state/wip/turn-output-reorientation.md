@@ -320,7 +320,7 @@ geometry; its build+verify notes survive below as history. **Do not resume it.**
 **modification of shipped, committed code** (`turnMarkers.ts` + 38 tests, backend `is_turn_start`,
 the `XtermPane` listener/handle), not a greenfield build — every phase below edits existing files.
 
-- [ ] Phase 1: Position-based model with viewport geometry  <!-- status: in-progress -->
+- [x] Phase 1: Position-based model with viewport geometry  <!-- status: done -->
   **Observable outcomes:**
   - CLI: `pnpm vitest run src/components/workspace/__tests__/turnMarkers.test.ts` exits 0 and the
     suite asserts the position model directly — `stepTurn` moves ±1 in list order, clamps at both
@@ -371,7 +371,7 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [x] verify-human  <!-- status: done; operator APPROVED 2026-08-25 -->
     - [x] P1.verify-human.1 Accept the corrected Observable outcome (the `tsc exits 0` contradiction)  <!-- status: done -->
     - [x] P1.verify-human.2 Accept phase-by-phase build (tree sits non-compiling until Phase 3)  <!-- status: done -->
-  - [ ] verify-codify  <!-- status: in-progress -->
+  - [x] verify-codify  <!-- status: done; 1 real coverage hole found + closed -->
 
 - [ ] Phase 2: Caller — XtermPane exposes bidirectional navigation  <!-- status: NOT-STARTED; depends on Phase 1 -->
   **Observable outcomes:**
@@ -428,19 +428,17 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-codify
-- **Active scope:** Phase 1 verify-human APPROVED by operator 2026-08-25 (both leaves `[x]`);
-  verify-codify is next, and is the last node before Phase 2.
+- **Path:** Feature > Phase 2 > P2.1
+- **Active scope:** **Phase 1 COMPLETE** (all impl + all four verify nodes `[x]`). Phase 2 next —
+  the caller: `XtermPane` exposes bidirectional navigation.
 - **Blocked:** none
-- **Unvisited:** Phase 1 verify-codify; then Phase 2 (caller/XtermPane), then Phase 3 (the control
-  pair)
-- **Open discoveries:** 9 in `## Discoveries` + 4 SURFACEs pending — none blocking.
-- **⚠️ OPERATOR DECISION 2026-08-25 — build stays PHASE-BY-PHASE.** The operator was offered the
-  option of folding Phases 2+3 into one build so the tree never sits non-compiling, and chose to
-  proceed phase-by-phase. ⚠️ **Consequence, accepted deliberately: `pnpm verify:auto` (the full
-  gate) CANNOT pass until Phase 3 lands.** Do not treat that as a regression, and do not "fix" the
-  5 expected `tsc` errors (exactly 2 files — `XtermPane.tsx` ×4, `Workspace.tsx` ×1 — all
-  missing-export, every symbol one P1.7 deleted). **That compile error IS the guard.**
+- **Unvisited:** Phase 2 (caller/XtermPane) → Phase 3 (the control pair)
+- **Open discoveries:** 10 in `## Discoveries` + 4 SURFACEs pending — none blocking.
+- **⚠️ OPERATOR DECISION 2026-08-25 — build stays PHASE-BY-PHASE**, so `pnpm verify:auto` (full
+  gate) CANNOT pass until Phase 3 lands. Do not treat as a regression; do not "fix" the 5 expected
+  `tsc` errors (exactly 2 files — `XtermPane.tsx` ×4, `Workspace.tsx` ×1 — all missing-export, every
+  symbol one P1.7 deleted). **That compile error IS the guard.** Phase 2 resolves the `XtermPane`
+  four; Phase 3 resolves the `Workspace` one.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -758,6 +756,45 @@ lesson (see `## Discoveries`).
 **Full suite: `pnpm verify:auto` exit 0 · Rust 876 → 877 · frontend 2141 · zero failures.** No test
 failed, so §3b triage did not fire and no `## Test Triage` entry is owed. Phase 1 total: **+4 Rust
 tests** over the 873 baseline.
+
+## Verify-codify — Phase 1 (2026-08-25, re-plan)
+
+**No integration boundary** — the phase changed only `turnMarkers.ts` and its two test suites;
+neither consumer was touched. Consuming-surface coverage is Phase 2's obligation.
+
+⚠️ **Codify's job here was to find what the build's own testing MISSED, not to re-write it.** Build
+already took tests 38 → 61 and probed 14 mutants individually. So the audit was: enumerate every
+export and every branch, then probe the branches the build's mutants did **not** directly target.
+Three such branches; probing them found **one real hole**.
+
+⚠️ **THE HOLE — `isLiveMarker`'s two-condition guard had a half that was never load-bearing.**
+Deleting `!marker.isDisposed` (keeping only `marker.line >= 0`) left **all 61 tests green**. Cause:
+every evicted fixture in the suite sets **both** `isDisposed: true` **and** `line: -1` — which is
+what xterm really does — so the `line >= 0` half alone caught them all and the disposal half was
+decorative. The module's own comment calls the pair *"belt and braces"*; nothing proved the belt
+existed.
+
+⚠️ **This is the exact shape of `[[raw-guard-identifier-satisfied-by-own-comments]]` generalized to
+a BEHAVIOURAL predicate: a compound guard whose clauses are correlated in every fixture is only as
+strong as its weakest clause, and the suite cannot tell you which clause did the work.** The
+mechanical test is to delete each clause **separately** — a composite fixture that trips both hides
+the gap, the same way a composite guard-bypass reports "the guard bites" while hiding an arm.
+
+**Closed** with one test asserting a disposed marker with a *non-negative* line is rejected
+(`{id: 1, line: 42, isDisposed: true}`). Re-probed after: **both** halves now fail independently.
+The scenario is not hypothetical — a marker observed between `dispose()` and the `-1` write, or a
+future xterm that stops writing `-1`, presents exactly that shape, and scrolling to it would target
+a line no longer in the buffer while reading as success.
+
+**Nothing else was added.** Every export is exercised; the other two untargeted branches
+(`clampPosition`'s null-resolve arm, `isLiveMarker`'s `line >= 0` half) already fail under mutation,
+so tests there would have been duplication. ⚠️ Coverage tooling (`@vitest/coverage-v8`) is **not
+installed**, and installing it here was declined as scope creep that would also dirty
+`pnpm-lock.yaml` (`[[pnpm-spike-in-tmp-mutates-repo-lockfile]]`); the branch-enumeration + per-clause
+mutation audit is the substitute and is strictly stronger than line coverage.
+
+**Gate (Phase 1 scope):** `turnMarkers.test.ts` **62** · `turnMarkersPurity.test.ts` **4** = **66
+passed** · eslint 0 · prettier clean · `tsc` shape unchanged (still exactly the 2 expected files).
 
 ## Build notes — Phase 2 (2026-08-22)
 

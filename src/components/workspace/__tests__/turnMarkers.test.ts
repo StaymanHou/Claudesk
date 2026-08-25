@@ -51,6 +51,21 @@ describe("isLiveMarker", () => {
     expect(isLiveMarker(evicted(1))).toBe(false);
   });
 
+  it("⚠️ rejects a DISPOSED marker whose line is still non-negative — the belt, not the braces", () => {
+    // ⚠️ ADDED AT VERIFY-CODIFY (2026-08-25) because a mutation probe found this uncovered:
+    // deleting the `!marker.isDisposed` half of the predicate left ALL 61 tests green. Every
+    // other evicted fixture sets BOTH `isDisposed: true` AND `line: -1` (which is what xterm
+    // really does), so the `line >= 0` half alone caught them and the disposal half was never
+    // load-bearing in any assertion. The module's comment calls the pair "belt and braces" —
+    // this is the test that proves the BELT exists.
+    //
+    // The scenario is real, not hypothetical: xterm sets `line = -1` on disposal, but a marker
+    // observed in the window BETWEEN `dispose()` and that write — or any future xterm version
+    // that stops writing -1 — would present exactly this shape. Scrolling to it would target a
+    // line that is no longer in the buffer while reading as a successful jump.
+    expect(isLiveMarker({ id: 1, line: 42, isDisposed: true })).toBe(false);
+  });
+
   it("rejects a negative line even when isDisposed is somehow false", () => {
     // Defensive: the two fields normally agree, but -1 is the value that would silently
     // scroll to the top and read as a successful jump.
