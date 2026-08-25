@@ -394,8 +394,8 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [x] P2.4 Delete the `registerDecoration` remnants and the `.is-inert` code path. ⚠️ Do **not**
         re-add a decoration — it throws without `allowProposedApi` and the throw is SILENT inside a
         listener (3.1 probe).  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: in-progress -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: done -->
+  - [ ] verify-self  <!-- status: in-progress -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
@@ -428,20 +428,24 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > verify-auto
-- **Active scope:** Phase 2 impl COMPLETE (P2.1–P2.4 all `[x]`); verify-auto next.
+- **Path:** Feature > Phase 2 > verify-self
+- **Active scope:** Phase 2 verify-auto PASSED (scoped); verify-self next.
 - **Blocked:** none
-- **Unvisited:** Phase 2 verify-{auto,self,human,codify}; then Phase 3 (the control pair)
+- **Unvisited:** Phase 2 verify-{self,human,codify}; then Phase 3 (the control pair)
 - **Open discoveries:** 11 in `## Discoveries` + 4 SURFACEs pending — none blocking.
-- **⚠️ tsc is now down to ONE expected error, in `Workspace.tsx` only** (`inertAfter` import +
-  `jumpToPreviousTurn` call). Phase 2 resolved all four `XtermPane` errors. **Phase 3 resolves the
-  last one.** ⚠️ `pnpm verify:auto` (full gate) still cannot pass until Phase 3 — operator-accepted
-  phase-by-phase build, 2026-08-25.
-- **⚠️ Phase 2 HAS an integration boundary** (`XtermPane` backs a UI surface), so verify-self must
-  exercise the consuming surface by name: **round-trip symmetry on a live pane via the handle**
+- **⚠️ tsc: exactly 2 errors, `Workspace.tsx` ONLY** (`TS2305 inertAfter`, `TS2339
+  jumpToPreviousTurn`). **Zero in `XtermPane.tsx`** — all four resolved by Phase 2, verified by
+  matching on the filename POSITION (`^…XtermPane.tsx(`), not message text: the string
+  `XtermPaneHandle` appears inside a `Workspace.tsx` error and makes a naive `grep -c XtermPane`
+  report a false 1. **Phase 3 resolves the last two.** ⚠️ `pnpm verify:auto` (full gate) still
+  cannot pass until then — operator-accepted phase-by-phase build.
+- **⚠️ Phase 2 HAS an integration boundary** (`XtermPane` backs a UI surface). verify-self must
+  exercise the consuming surface **by name**: round-trip symmetry on a live pane via the handle
   (`stepTurn("prev")` then `stepTurn("next")` returns `viewportY` to its starting value). A unit
-  test does not satisfy this. Dev app is running: PID 60923, `com.claudesk.app.dev`, MCP bridge
-  127.0.0.1:9223, scratch workspaces in the picker.
+  test does not satisfy this. Dev app running: PID 60923, `com.claudesk.app.dev`, MCP bridge
+  127.0.0.1:9223, scratch workspaces in the picker. ⚠️ The handle is **not** exposed on `window` in
+  committed code (that was a temporary probe instrument, reverted) — verify-self must reach it via
+  the React fiber or re-instrument temporarily and revert.
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -899,6 +903,36 @@ the handle, and silencing the rule is what would hide a genuinely unstable depen
 **Gate (Phase 2 scope):** 3 suites **75 passed** (62 + 4 + 9) · eslint 0 errors · prettier clean
 (reformat proven inert by re-running the transform on the pre-change input) · `tsc` down to the
 single expected `Workspace.tsx` error · 7/7 wiring mutants killed + the emptiness meta-guard proven.
+
+## Verify-auto notes — Phase 2 (2026-08-25, re-plan)
+
+Scoped to the changed files (`XtermPane.tsx`, new `turnNavWiring.test.ts`), not the full gate.
+
+| Check | Result |
+|---|---|
+| `tsc` — errors **in** `XtermPane.tsx` | **0** — all four resolved |
+| `tsc` — total | **2**, both `Workspace.tsx`, both expected kinds, no others |
+| `eslint` (both changed files) | **0 errors**, 1 warning — **pre-existing** |
+| `prettier --check` | clean |
+| 3 affected suites | **75 passed** (62 + 4 + 9) |
+| Rust collateral | none — no `src-tauri/` file changed |
+
+⚠️ **A near-miss worth recording: `grep -c "XtermPane"` on tsc output reports a FALSE 1.** The string
+`XtermPaneHandle` appears inside a **`Workspace.tsx`** error message
+(*"Property 'jumpToPreviousTurn' does not exist on type 'XtermPaneHandle'"*), so a naive filename
+grep counts a message-text match as an error in that file. The correct predicate anchors on the
+filename **position**: `^src/components/workspace/XtermPane.tsx(`. Same class as
+`[[raw-guard-identifier-satisfied-by-own-comments]]` — a bare identifier match found the identifier
+somewhere other than where the check meant.
+
+⚠️ **The pre-existing-warning check was ALSO initially invalid, and the tell was in the output.**
+First attempt used `git stash` to compare against "before Phase 2" — but the tree was already
+committed, so the stash was a **no-op** (`"No stash entries found"`) and the comparison compared
+`HEAD` to itself, producing a meaningless `1 == 1` PASS. Redone by recovering the pre-Phase-2 file
+(`git show 2a45cf7:…`) into the repo (so `.eslintrc` resolves) and linting that: the same single
+spread-element warning is present at **:810** pre-Phase-2 and **:861** now — same warning, shifted by
+this phase's insertions. ⚠️ **A clean tree makes `git stash` a silent no-op, and a stash-based
+before/after then always agrees with itself.**
 
 ## Verify-self notes — Phase 2 (2026-08-22)
 
