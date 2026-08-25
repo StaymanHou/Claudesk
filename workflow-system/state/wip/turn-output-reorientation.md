@@ -368,8 +368,10 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
         one way has an untested half).  <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: done -->
   - [x] verify-self  <!-- status: done; 2 PASS, 1 FAILED-cosmetic (the outcome's own wording) -->
-  - [ ] verify-human  <!-- status: in-progress -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-human  <!-- status: done; operator APPROVED 2026-08-25 -->
+    - [x] P1.verify-human.1 Accept the corrected Observable outcome (the `tsc exits 0` contradiction)  <!-- status: done -->
+    - [x] P1.verify-human.2 Accept phase-by-phase build (tree sits non-compiling until Phase 3)  <!-- status: done -->
+  - [ ] verify-codify  <!-- status: in-progress -->
 
 - [ ] Phase 2: Caller — XtermPane exposes bidirectional navigation  <!-- status: NOT-STARTED; depends on Phase 1 -->
   **Observable outcomes:**
@@ -426,18 +428,19 @@ the `XtermPane` listener/handle), not a greenfield build — every phase below e
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-human
-- **Active scope:** Phase 1 verify-self PASSED (2 PASS, 1 FAILED-cosmetic — the failing item is the
-  outcome's own contradictory wording, already corrected + filed; **no BLOCKING**). verify-human next.
+- **Path:** Feature > Phase 1 > verify-codify
+- **Active scope:** Phase 1 verify-human APPROVED by operator 2026-08-25 (both leaves `[x]`);
+  verify-codify is next, and is the last node before Phase 2.
 - **Blocked:** none
-- **Unvisited:** Phase 1 verify-{human,codify}; then Phase 2 (caller/XtermPane), then Phase 3 (the
-  control pair)
+- **Unvisited:** Phase 1 verify-codify; then Phase 2 (caller/XtermPane), then Phase 3 (the control
+  pair)
 - **Open discoveries:** 9 in `## Discoveries` + 4 SURFACEs pending — none blocking.
-- **⚠️ EXPECTED tsc errors, do NOT "fix" them in Phase 1.** 5 errors, **exactly 2 files**
-  (`XtermPane.tsx` ×4, `Workspace.tsx` ×1), **all** missing-export (4× `TS2305`, 1× `TS2724`), every
-  named symbol one P1.7 deleted. Independently re-confirmed at verify-self, including a repo-wide
-  grep finding **no** consumer of the five deleted symbols beyond those two files. **That is the
-  guard.** ⚠️ **`pnpm verify:auto` (full gate) cannot pass until Phase 3.**
+- **⚠️ OPERATOR DECISION 2026-08-25 — build stays PHASE-BY-PHASE.** The operator was offered the
+  option of folding Phases 2+3 into one build so the tree never sits non-compiling, and chose to
+  proceed phase-by-phase. ⚠️ **Consequence, accepted deliberately: `pnpm verify:auto` (the full
+  gate) CANNOT pass until Phase 3 lands.** Do not treat that as a regression, and do not "fix" the
+  5 expected `tsc` errors (exactly 2 files — `XtermPane.tsx` ×4, `Workspace.tsx` ×1 — all
+  missing-export, every symbol one P1.7 deleted). **That compile error IS the guard.**
 - **⚠️ Reading order:** the spec sections + `## Work Tree` above are CURRENT. The Phase 1/2/3
   build+verify notes below predate both probes; `## MECHANISM REFUTED` is retracted in place and
   must not be cited. The two `## Research` sections at the bottom are the authority on substrate
@@ -697,6 +700,34 @@ boundary is exactly what it exists to catch.
 lives on the wire) — `arch.md` territory per the capture exclusions, not a product-design tradeoff, and
 no transferable product-design *why* was stated. Proposing one here would be the over-infer failure the
 capture discriminant exists to prevent.
+
+## Verify-human — Phase 1 (2026-08-25, re-plan): APPROVED
+
+**No integration boundary** — affirmed in writing and diff-verified across all four Phase 1
+commits (`aacfaeb..14cefd6`): only `turnMarkers.ts` and its two test files changed; **neither
+consumer was touched**. Their wiring is Phase 2/3 scope.
+
+⚠️ **The §2 auto-skip gate was NOT clean, so the prompt was presented rather than elided.** Gates
+(a), (c), (d) passed; **gate (b) failed** — verify-self carried a `FAILED-cosmetic`, which that
+gate's own table lists as disqualifying alongside `FAILED`/`UNVERIFIED`. Worth noting because the
+cosmetic item was *my own* plan-authoring defect rather than a product flaw: the gate still
+correctly refused to auto-skip, which is the conservative behaviour one wants — a non-PASS is a
+non-PASS regardless of whose mistake produced it.
+
+**Both leaves approved:**
+
+- **P1.verify-human.1** — the corrected Observable outcome accepted. The original asserted
+  `tsc --noEmit` exits 0 *while also* asserting the deletion breaks every call site; replaced with
+  an expected-failure SHAPE assertion, struck through rather than silently rewritten. Filed as
+  `SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS`.
+- **P1.verify-human.2** — ⚠️ **operator chose PHASE-BY-PHASE over folding Phases 2+3 together**,
+  accepting that the full gate cannot pass until Phase 3. Recorded in `## Current Node` so a later
+  session does not read the non-compiling tree as breakage and "helpfully" restore the deleted API.
+
+**No design prior proposed.** Neither approval was a product-design correction — one accepted a
+plan-artifact fix, the other a build-sequencing preference with no transferable *why* beyond this
+WP's mechanics. Per the capture discriminant that is FACT/NOTHING, not a prior. (Build sequencing is
+also closer to a technical tradeoff, which belongs in `arch.md` if anywhere, not `design-priors.md`.)
 
 ## Verify-codify — Phase 1 (2026-08-22)
 
