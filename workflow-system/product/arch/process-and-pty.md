@@ -121,3 +121,49 @@ round-trip. Terminal-active is scoped CC-status-only per
 **On app quit:** each workspace's `CcSession::kill()` runs, `projects.json` is persisted, and the
 unclean-exit flag is cleared **only** on a recognized clean-exit route — see
 [session resumption](session-resumption.md).
+
+## Turn-output reorientation — jumping to turn starts (M13.5 WP3, `2086ae8`)
+
+A single CC turn can run 10+ minutes and 100+ lines, so locating **where the last turn's output
+began** is a real attention cost. Shipped as bidirectional position-based navigation: `↑ N/N ↓` in the
+**ungated** `workspace-split-control` cluster (⚠️ **not** the skill row — that is gated wholesale, so
+an ungated affordance must not live there; a "turn" is a plain Claude Code concept every user has).
+
+**The signal:** `is_turn_start` on `WorkspaceStatusUpdate` + `event_is_turn_start` (backend), with an
+end-to-end socket test proving **exactly one** turn-start per multi-tool turn. `turnMarkers.ts` owns
+the walk/eviction/`inertAfter` model. Navigation primitive: xterm `registerMarker` + `scrollToLine`.
+
+⚠️ **THREE REFUTATIONS BANKED HERE — each closed real work on a false basis. Do not re-derive them.**
+
+1. **"CC runs in the xterm ALTERNATE buffer, so markers/decorations can't work"** — **FALSE**, and it
+   voided a whole escalation. Measured on a live CC pane (v2.1.245): `buffer.active.type` is
+   **`"normal"`**, `buffer.active === buffer.normal` is **`true`**, `buffer.alternate.length` is
+   **`0`** (never used at all), and `onBufferChange` fired **0** times across a full turn *and* a
+   `/clear`. **CC repaints the normal buffer; it never switches.** That claim was written from a
+   **doc comment** instead of a one-line runtime read.
+2. **The real cause of three failed attempts was a one-line config omission** —
+   `registerDecoration` is xterm **proposed API** and throws without `allowProposedApi: true`, which
+   is set **nowhere** in this codebase. Proven by controlled A/B. ⚠️ **The throw was SILENT in
+   production** (un-caught inside a listener), presenting as "nothing renders" and sending three
+   rounds of debugging at the wrong layer.
+3. **The shipped defect was a VIEWPORT CLAMP, not the mechanism** — the newest turn's start sits
+   inside the final screenful, so `scrollToLine` clamped and the caller read that as a successful
+   jump. ⚠️ **"The click landed" is therefore not evidence of a jump**; read `viewportY` before/after.
+
+⚠️ **Scrollback accumulates abundantly** (one 120-line turn: `buffer.length` 68→146, `baseY` 0→78),
+and **`/clear` does not reset it** — it *grew* the buffer (146→151). CC's `/clear` clears its
+conversation, not the terminal scrollback. The `scrollback: 10000` raise stands on its merits.
+
+⚠️ **One question remains OPEN, and it is presentation-only:** the overview **ruler** never painted
+even with terminal-level `overviewRuler.width` set — the canvas was created (14×884, correctly
+positioned) but painted **0 non-zero pixels** across 4 decorations, both `position` values,
+`refresh()`, scroll nudges and a real turn. Untested hypothesis: the ruler is **canvas**-based while
+this app is **DOM-renderer only** by hard rule (zero `<canvas>` elements existed before one was
+forced). ⚠️ **Partially resolves** `SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION` — 1 of its 4
+directions; the **answer-burial** half (an inline answer buried by continued task output) remains open.
+
+⚠️ **THE PROCESS LESSON — a REFUTATION NEEDS THE SAME EMPIRICAL BAR AS A CLAIM, arguably higher,
+because a refutation CLOSES work.** This one was built from typings, earned three rounds of trust,
+escalated a WP out of its milestone, and marked working code as dead. The cheap mechanical test both
+times was *"does any shipped code already call this API in this context?"* — `grep` said **no**, twice.
+Filed `SURFACE-2026-08-25-REFUTATION-FROM-TYPINGS-NOT-RUNTIME`.

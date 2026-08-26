@@ -517,6 +517,33 @@
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** the one surviving MINOR is a one-line fix — carry the final `downloaded` through on the finish emit (or a one-line comment) — rides any future `updater/commands.rs` touch. Dismiss via the WIP's `## Code-Quality Review` section.
 
+## SURFACE-2026-08-26-DELETE-ON-RESOLVE-REWRITE-PATH-SKIPS-THE-DELETE
+- **Source:** feature:plan (M13.5 WP5 exit verify — found while reading the TURN-OUTPUT entry)
+- **Target level:** workflow-system (cross-repo — `~/.claude/CLAUDE.md` "Append discipline" prose)
+- **Type:** gap (invariant wording does not cover one of its own two paths).
+- **Summary:** The delete-on-resolve invariant spells out the **full**-resolution path (CHANGELOG
+  line, then delete the whole `## SURFACE-` block, staged together) and the **partial**-resolution
+  carve-out (rewrite the entry to the remaining open work). ⚠️ **But on the rewrite path there is no
+  instruction to remove the OLD body** — and in practice the new body was inserted while the old one
+  survived, leaving two contradictory bodies for one ID. Found live in this repo: the pre-WP3
+  `SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION` body survived under a mangled `` ## ` heading ``
+  heading, still listing as *undecided* the turn-boundary-marker work WP3 had shipped.
+- **Context:** ⚠️ **The failure is self-concealing in the exact way that matters** — a `grep` for the
+  SURFACE ID finds the *correct* rewritten entry first, so the duplicate only surfaces if someone
+  reads the surrounding lines. The same file already recorded this defect class once before (an
+  orphaned heading fixed at the M10.9 sweep, 2026-07-31), which makes this the second instance, not
+  a one-off. A stale body asserting shipped work as open is a confabulation channel into the next
+  planning pass.
+- **Suggested action:** In the `## CHANGELOG.md convention (GLOBAL)` → "Append discipline" →
+  partial-resolution carve-out, state explicitly that a rewrite **replaces** the entry body in place
+  (old text removed in the same edit), and that the result must be **exactly one** `## SURFACE-<ID>`
+  block per ID. ⚠️ A cheap mechanical guard: assert every `^## ` line in `backlog.md` matches the
+  expected heading shapes and that no SURFACE ID appears as a heading twice — this would have caught
+  both instances.
+- **Priority:** medium (cheap prose fix + a cheap guard; the failure silently contradicts a shipped
+  record and nothing re-reads a closed item).
+- **Status:** pending
+
 ## SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION
 <!-- Heading RESTORED at the M10.9 cycle-close sweep (2026-07-31). This item had lost its `## ` heading
      and was orphaned under SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING, making it
@@ -560,24 +587,6 @@
   where the answer landed, how far it scrolled).
 - **Priority:** medium (the navigation half is shipped, which lowers the felt friction; the
   answer-burial half remains real and recurring).
-
-## ` heading
-     and was orphaned under SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING, making it
-     unfindable by ID and making that item appear twice in a heading scan. Pre-existing defect, not
-     introduced by this cycle. -->
-- **Source:** operator (raised mid-M9, 2026-07-14)
-- **Target level:** product:roadmap / product:vision — a NEW Claudesk capability (attention/output-navigation feature), not a bug in existing code. Likely a future milestone or a Phase-4-polish-class item. **Not scoped into M9.**
-- **Type:** new-work (UX / attention feature).
-- **Summary:** With heavy cross-workspace context-switching, a single CC turn can run **10+ minutes and 100+ lines of output**. It's hard to locate **where the last turn's output began** — especially the common case where the operator asks a *question layered on top of a workflow instruction*, the LLM **answers the question first and then proceeds with the task without pausing**, and by the time the operator switches back the answer is buried mid-scroll (or scrolled off / lost when the turn's output is long). The operator "can't find that answer anymore." Net effect: answers to in-line questions get missed precisely because Claudesk's value prop (run many projects in parallel, switch away while CC works) means you're *not watching* when the answer scrolls by.
-- **Context:** This is squarely in Claudesk's thesis — *attention is the scarce resource* ([[claudesk-philosophy]]). The real-time status surfaces (filmstrip/PiP/menu-bar) tell you *that* a workspace changed state, but nothing helps you **re-orient to what happened in the turn you were away for** — a retrospective, per-turn navigation aid. Adjacent-but-distinct from the M11 docs-viewer ([[m7-docs-viewer-intent]] — that's workflow-doc re-orientation; this is *terminal-output* re-orientation). Related tension: the LLM answering-then-proceeding is partly a workflow-orchestration behavior (AUTO transitions don't pause after answering an inline question), so a solution could be UI-side (mark/jump to turn boundaries) OR behavior-side (surface inline answers distinctly) OR both.
-- **Possible solution directions (not yet decided — for the eventual spec):**
-  - **Turn-boundary markers in the terminal:** a visual delimiter + a "jump to start of last turn" / "jump to previous turn" affordance in the xterm view (the terminal already has scrollback — this is a marker + scroll-to control over it).
-  - **Per-turn "answer/notable" capture:** detect when CC emitted a direct answer to an operator question (vs. pure task output) and surface it in a persistent, non-scrolling side rail or a "last answer" chip that survives the turn — so switching away doesn't lose it.
-  - **A turn digest / re-orientation panel** the operator opens on returning to a workspace: "since you left: turn ended, here's the answer to your question + what got done."
-  - Behavior-side: make the orchestrator pause (or visibly flag) after answering an inline question layered on an AUTO task, so the answer isn't immediately buried by continued task output.
-- **⚠️ WHEN ADDRESSED — REQUIRED FIRST STEP:** **scan the recent session logs / transcripts for concrete real examples** of this pattern (operator question layered on a workflow instruction → LLM answered-then-proceeded → answer buried in a long turn). Ground the spec in actual captured instances, not a hypothetical — the operator explicitly asked for this. Likely sources: this session's own transcript (multiple AskUserQuestion + AUTO-chain turns), the harness session logs under `~/.claude/projects/<slug>/`, and any `/loop`/long-turn transcripts. Extract 2–3 concrete examples (the question, where the answer landed, how far it scrolled) to anchor the design.
-- **Priority:** medium (real, recurring, operator-felt friction that undercuts the parallel-work value prop; not blocking any current milestone — surfaced mid-M9, to be triaged into the roadmap at a cycle boundary / `/product-finalize` sweep).
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)* (captured 2026-07-14; not scoped to a WP yet — roadmap-level triage needed). — **deferred, carry to next cycle** *(M10.9 close, 2026-07-31)*
 
 ## SURFACE-2026-07-14-M9-CUSTOM-RANGE-NEEDS-MULTIDAY-TIMELINE
 - **Source:** feature:build (M9 WP6b-2 Phase 3 build-entry — the Custom-range render surfaced a `DayTimeline` constraint).

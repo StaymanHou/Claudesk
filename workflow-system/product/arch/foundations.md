@@ -22,6 +22,20 @@
 - **Sublime-pop hotkey:** an **in-app** keybinding — a webview `keydown` handler (`⌘⇧E`) owned by the focused workspace. NOT an OS-global shortcut, so **no `tauri-plugin-global-shortcut` and no macOS Accessibility permission** are required. (As-built 2026-06-19, WP8: the OS-global approach was built then rejected at verify-human in favor of in-app — see WP8 in `../archive/phase-1-bare-shell-poc/wbs.md`.)
 - **External tools invoked via shell:** `subl` (Sublime Text), `smerge` (Sublime Merge — Phase 2). Claudesk launches `subl` from the backend `sublime_open` command via **`std::process::Command`** (consistent with `cc_session` spawning `claude`; the original `tauri-plugin-shell` plan was dropped as-built — the launch is backend code, not a frontend-callable shell). No embedding.
 - **Persistence:** flat JSON file at `~/Library/Application Support/<bundle-id>/projects.json` via `tauri-plugin-fs` + `path::app_data_dir()` — `<bundle-id>` is `com.claudesk.app` (prod) or `com.claudesk.app.dev` (dev), per the dev/prod-isolation note at the top of this file (NOT `Claudesk/`). No DB; project list is a list of `{path, last_opened_at, display_name?, default_drive_mode?}` records. Matches the "no per-project config burden" vision principle (no `.claudesk.json` per repo).
+- **Window geometry persistence (M13.5 WP1, `25a68bc`):** `tauri-plugin-window-state` 2.4.1, scoped to
+  the **`main` label only** — the PiP NSPanel owns its own position logic (M10.5 WP1's top-right
+  default + the in-session `positioned` flag), and a generic save/restore over all windows would fight
+  it. Registration policy lives in `src-tauri/src/window_state/` as pure fns. ⚠️ **The state file is
+  `.window-state.json` — a DOTFILE, invisible to plain `ls`** — and it lives under
+  **`app_config_dir()`**, NOT `app_data_dir()`; on macOS both resolve to
+  `~/Library/Application Support/<bundle-id>/`, so dev/prod isolation holds, but for a different
+  reason than the WP's task text claimed. ⚠️ **Off-screen restore is handled by SKIP, not CLAMP:**
+  `restore_state` applies `set_position` only inside `if m.intersects(...)` while `set_size` applies
+  unconditionally, so a window saved on a since-disconnected monitor returns at its saved size in an
+  OS-chosen position — verified live by seeding `-9000,-9000`. No hand-rolled clamping was needed, and
+  none should be added. `RunEvent::Exit` **does** fire through `prevent_close` → `quit_now` →
+  `app.exit(0)` (proven 3×), so no explicit `save_window_state` call in `perform_quit_teardown` is
+  required either.
 - **Database:** none — Phase 1 has no relational data, and the only durable state is the project list (handled above).
 - **Infrastructure:** none — this is a single-user desktop app; no servers, no cloud, no telemetry.
 

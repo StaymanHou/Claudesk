@@ -1429,4 +1429,106 @@ mod tests {
         assert!(!obj.contains_key("is_turn_start"));
         assert_eq!(obj["state"], serde_json::json!("unknown"));
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Arch-doc coupling guard (M13.5 WP5).
+    //
+    // ⚠️ WHY THIS EXISTS: M13.5 WP2 shipped the `BackgroundWork` state on 2026-08-22 and
+    // `arch/status-channel-and-surfaces.md` went FOUR DAYS still describing the model as
+    // three states. That doc is declared the AUTHORITY in CLAUDE.md ("where the arch/ set
+    // and roadmap.md differ, the arch/ set is the authority"), so a stale arch doc does not
+    // merely lag — it actively states a refuted model as live specification. Nothing failed;
+    // the resync depended on a closing agent remembering a conditional WBS task
+    // (`SURFACE-2026-08-26-NO-GATE-FAILS-WHEN-A-SHIPPED-STATE-HAS-NO-ARCH-MENTION`).
+    //
+    // `tray::aggregate_alarm` already makes a 5th state fail to COMPILE. This is the
+    // documentation half of that same property: a 5th state also fails to be UNDOCUMENTED.
+    //
+    // ⚠️ The variant list is written out literally rather than derived. Rust has no stable
+    // variant reflection, and a derive-based list would be satisfied by the enum agreeing
+    // with itself. `unknown_variant_is_rejected` below pins the literal list against the
+    // real enum via serde, so adding a variant without touching this block fails there.
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// The arch doc must name every wire-visible `WorkspaceState` variant.
+    ///
+    /// ⚠️ `Unknown` is deliberately EXCLUDED: it is the pre-first-event default and is
+    /// never emitted by the broadcaster, so it is not part of the surface contract the doc
+    /// describes. The other four all cross the socket and all render.
+    #[test]
+    fn arch_doc_names_every_emitted_workspace_state() {
+        let doc =
+            include_str!("../../../workflow-system/product/arch/status-channel-and-surfaces.md");
+        // Meta-guard: a doc that failed to load (or was emptied) would pass every
+        // `contains` below vacuously if the assertions were negative — pin non-emptiness
+        // and a known anchor so a broken include cannot read as green.
+        assert!(
+            doc.len() > 5_000,
+            "arch doc unexpectedly small ({} bytes) — include_str! path may be wrong",
+            doc.len()
+        );
+        assert!(
+            doc.contains("Status broadcaster."),
+            "arch doc missing its Status-broadcaster section — wrong file?"
+        );
+
+        for variant in ["Idle", "Running", "AwaitingInput", "BackgroundWork"] {
+            assert!(
+                doc.contains(variant),
+                "arch/status-channel-and-surfaces.md does not mention WorkspaceState::{variant}. \
+                 A shipped state that the authoritative arch doc omits reads as a refuted model \
+                 left standing as live spec — document it there, do not delete this assertion."
+            );
+        }
+    }
+
+    /// The `BackgroundWork` signal + colour must be recorded, not just the variant name.
+    ///
+    /// ⚠️ Asserts `background_task_count` specifically, because the WBS, the WP2 CHANGELOG
+    /// line and this WP's own plan all said `background_tasks[]` (the ARRAY). The hook
+    /// forwards only the array's LENGTH — `command`/`description` in that array are
+    /// arbitrary user shell text, the same privacy class as the raw prompt. A doc that
+    /// says "array" invites a future reader to forward the tasks themselves.
+    #[test]
+    fn arch_doc_records_the_background_work_signal_and_colour() {
+        let doc =
+            include_str!("../../../workflow-system/product/arch/status-channel-and-surfaces.md");
+        assert!(
+            doc.contains("background_task_count"),
+            "arch doc must name the COUNT field (not `background_tasks[]`) as BackgroundWork's signal"
+        );
+        assert!(
+            doc.contains("a371f7"),
+            "arch doc must record BackgroundWork's colour so the three surfaces stay in agreement"
+        );
+    }
+
+    /// Pins the literal variant list above against the real enum.
+    ///
+    /// ⚠️ **Measured, not assumed: a 5th variant does not reach this test — it fails to
+    /// COMPILE.** Probed by adding one: two `non-exhaustive patterns` errors fire first
+    /// (`tray::aggregate_alarm` and one sibling match), so the build stops before any test
+    /// runs. This assertion is therefore a **redundant backstop**, not the primary guard —
+    /// it earns its place only for the case where a future variant is added *alongside* new
+    /// match arms (which compiles cleanly and would otherwise reach the arch doc undocumented).
+    /// Recorded so a later reader does not mistake it for the mechanism that actually bites.
+    #[test]
+    fn every_emitted_variant_round_trips_and_no_fifth_exists() {
+        for (variant, wire) in [
+            (WorkspaceState::Idle, "idle"),
+            (WorkspaceState::Running, "running"),
+            (WorkspaceState::AwaitingInput, "awaiting_input"),
+            (WorkspaceState::BackgroundWork, "background_work"),
+        ] {
+            let json = serde_json::to_string(&variant).expect("serialize");
+            assert_eq!(json, format!("\"{wire}\""));
+        }
+        // The sentinel: a name no current variant uses. If someone adds a variant and
+        // happens to name it this, that is a deliberate collision, not an accident.
+        assert!(
+            serde_json::from_str::<WorkspaceState>("\"a_fifth_state_was_added\"").is_err(),
+            "a 5th WorkspaceState exists — add it to `arch_doc_names_every_emitted_workspace_state` \
+             and document it in arch/status-channel-and-surfaces.md"
+        );
+    }
 }

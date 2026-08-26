@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-25
+updated: 2026-08-26
 ---
 
 # Runtime Registry
@@ -31,9 +31,10 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 29s (2026-08-25, M13.5 WP4 Phase 1 verify-auto: registry entry-struct + turn-respawn intent; Rust 882 / frontend 2230 — full gate, warm incremental)
+- **Last:** 31s (2026-08-26, M13.5 WP5 Phase 1 verify-codify: arch-doc coupling guard; Rust 886 / frontend 2260 — full gate, warm incremental)
 - **Use timeout:** 120000
 - **History:**
+  - 31s — 2026-08-26
   - 29s — 2026-08-25
   - 30s — 2026-08-25
   - 31s — 2026-08-25

@@ -3,7 +3,7 @@ shape: wbs
 cycle: milestone-13.5-qol-polish-bucket
 milestone: 13.5
 created: 2026-08-19
-updated: 2026-08-26  # WP1 + WP2 + WP3 shipped; WP4/WP5 remain
+updated: 2026-08-26  # ALL FIVE WPs shipped — bucket closed; awaiting /product-finalize archive
 state: complete
 ---
 
@@ -459,7 +459,7 @@ never was. **An unchallenged assumption is not an approved one.**
    turn-0 case the operator caught. ⚠️ Do NOT copy `recycleSession`'s `idle || background_work`
    match: it answers a different question and its own comment says so.
 
-## WP5: Bucket exit verify
+## WP5: Bucket exit verify — ✅ COMPLETE 2026-08-26
 
 **Description:** Live-verify the bucket's shipped WPs, close the resolved backlog items, and sweep.
 **Milestone:** 13.5
@@ -467,13 +467,56 @@ never was. **An unchallenged assumption is not an approved one.**
 **Size:** XS
 
 **Tasks:**
-- [ ] 5.1 Live verify-self per shipped WP. ⚠️ **WP1 needs the installed-`.app` tier**, not
+- [x] 5.1 Live verify-self per shipped WP. ⚠️ **WP1 needs the installed-`.app` tier**, not
       `pnpm tauri:dev` — window geometry + `app_data_dir` behaviour differ, and the operator defers
       installed-build manual verification to the `/release` gate
       (`[[installed-build-verify-deferred-to-release]]`).
-- [ ] 5.2 CHANGELOG + delete-on-resolve for each fully-resolved item; **rewrite** any partial.
-- [ ] 5.3 `/product-finalize` — resync `arch/status-channel-and-surfaces.md` if WP2 added a state,
+      → **DONE (dev tier) + installed tier DEFERRED on a harder ground than this task states.**
+      All four surfaces verified coexisting live in one `.workspace-header` on a scratch workspace.
+      ⚠️ **The deferral is not merely the operator's `/release` preference:** WP1's commit `25a68bc`
+      is **not an ancestor of `v0.3.4`**, so the installed binary does not link
+      `tauri-plugin-window-state` **at all** (corroborated — the prod app-data dir is populated yet
+      has no `.window-state.json`, while dev's has real geometry + `maximized: true`). The tier is
+      **unsatisfiable without cutting a release first**; it is met at the next `/release`.
+      ⚠️ **Two outcomes were NOT met and are recorded as such, not as passes:** WP3's
+      viewport-advance needs real recorded CC turn starts (a fresh session has zero, so the cluster
+      was correctly present-but-**disabled**) — operator-accepted, riding on WP3's own 2026-08-25
+      verify-human; and WP4's queued-apply defect was **not reproduced** (it needs a busy agent; the
+      whole run was idle — the same blind spot the filing itself names). Its filing was re-read at
+      source and **is still accurate**, so it stays open and backlogged.
+- [x] 5.2 CHANGELOG + delete-on-resolve for each fully-resolved item; **rewrite** any partial.
+      → ⚠️ **ALREADY SATISFIED INSIDE THE WPs — this task was a no-op as written, and re-running it
+      would have DOUBLE-COUNTED the paper trail.** All four source items were CHANGELOG'd and
+      deleted/rewritten at their own closes (`CHANGELOG.md` lines 13/18/19/24): WP1's, WP2's two
+      (deleted), WP3's (correctly **rewritten** to the remaining open work per the partial-resolution
+      carve-out), and WP4's (no entry — direct operator ask).
+      ⚠️ **But it left a real defect, which IS this task's delivered work:** a **stale duplicate of
+      the pre-WP3 `SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION` body** survived under a mangled
+      `` ## ` heading `` — the *rewrite* half of delete-on-resolve was done and the *delete* half was
+      not, leaving two contradictory bodies for one ID, the older of which still listed as
+      **undecided** the turn-boundary work WP3 shipped. Deleted. Root cause: the surviving entry's
+      own HTML comment contains the literal text ``## `` (in *"lost its `## ` heading"*), so
+      truncating that comment manufactures a heading — the **same mechanism** as the orphan fixed
+      here on 2026-07-31, making this the second instance. Filed as
+      `SURFACE-2026-08-26-DELETE-ON-RESOLVE-REWRITE-PATH-SKIPS-THE-DELETE` (the invariant's prose
+      covers the full-resolution delete but never says a *rewrite* must remove the old body).
+- [x] 5.3 `/product-finalize` — resync `arch/status-channel-and-surfaces.md` if WP2 added a state,
       archive this WBS.
+      → **The conditional was TRUE and the resync is DONE** (executed in WP5 Phase 1, ahead of
+      `/product-finalize`). ⚠️ **`arch/status-channel-and-surfaces.md` had described a THREE-state
+      model for four days after WP2 shipped the fourth** — and because `CLAUDE.md` declares the
+      `arch/` set *the authority*, that is not a lagging note but the authority asserting a refuted
+      model as live spec. Now records `BackgroundWork`, purple `#a371f7`, the `Neutral` aggregate
+      ranking, and the exhaustive-match-so-a-5th-state-fails-to-compile property.
+      ⚠️ **A CORRECTION THIS WBS ITSELF NEEDS: the signal is `background_task_count > 0` — a COUNT,
+      not the `background_tasks[]` ARRAY** that WP2's task text, the WP2 CHANGELOG line and WP5's own
+      plan all named. The hook forwards only the array's **length**, deliberately: `command` /
+      `description` in that array are arbitrary user shell text — the same privacy class as the raw
+      prompt. A doc saying "array" invites a future reader to forward the tasks themselves.
+      Now pinned by a test (`arch_doc_records_the_background_work_signal_and_colour`). Filed
+      `SURFACE-2026-08-26-NO-GATE-FAILS-WHEN-A-SHIPPED-STATE-HAS-NO-ARCH-MENTION` — nothing failed
+      when a shipped enum variant had no `arch/` mention; 5.3 phrased it as a *conditional*, i.e. a
+      remembered checklist step, which is exactly what decays.
 
 ---
 
@@ -516,6 +559,3 @@ technical dependency on WP1–WP3). WP5 depends on whatever actually shipped.
   **measure-then-decide**, not a build; it needs a fresh measurement pass before it can be scoped.
 - Everything else in `backlog.md` — 29 open items at bucket open; the rest are tech-debt, guard
   completeness, or gated on unmet preconditions.
-
-## Session Handoff — 2026-08-26 12:55
-Handed off. See `workflow-system/state/.session.md` to restore.

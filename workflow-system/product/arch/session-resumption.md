@@ -201,7 +201,43 @@ picker cell  →  projects.json (default_drive_mode)  →  CLAUDESK_DRIVE_MODE o
   cold contexts, and a synthetic filler probe was **considered and declined** (it would be expensive
   *and* weak evidence). Validated by dogfooding.
 
-### The picker-row cell (⚠️ NOT the workspace header)
+### The picker-row cell (⚠️ and, since M13.5 WP4, the workspace header TOO)
+
+⚠️ **THIS SECTION'S OLD TITLE — "NOT the workspace header" — WAS DELIBERATELY REVERSED AT M13.5 WP4
+(2026-08-26, `efa7798`). Do not restore it, and do not treat the second surface as an oversight.**
+The picker-row-only rule was correct when written (M12) and was overturned by dogfooding it: once a
+workspace is open — where the operator actually spends the day — the mode was neither legible nor
+changeable without navigating back to the picker. Operator ask, 2026-08-20.
+
+**As built on the workspace surface:** a clickable `span.workspace-header-drivemode` in the
+**existing** `workspace-header` row (not a new bar, panel, or popover — `[PRIOR:
+new-surface-must-earn-its-place-against-existing-ones]`), reading `⇅ <mode>` or `⇅ None`, with its
+**own hit region** distinct from the adjacent skill row and split control. Click opens a native
+`<select>` over the closed set — the same correctness reason as the picker cell.
+
+⚠️ **Changing the mode IS the intent to apply it.** The originally-planned "label it next-spawn-only /
+offer an inline Recycle" design was **rejected by the operator at Phase 3 verify-human**: a change
+raises a **confirm**, and Apply drives the turn-level respawn itself — immediately when the agent is
+idle, **queued until idle** when it is not. **Cancel is a true no-op** (proven by a byte-identical
+`projects.json` hash, not by eye). Two properties this established that later work must not
+re-derive: `OpenIntent::TurnRespawn` resumes **without** consuming the unclean-exit flag
+(`authorizes_resume` and `should_consume_for_resume` are **two** predicates — collapsing them
+reintroduces a silent auto-resume killer); and `readyToRespawn` is **`idle` ONLY** (do not copy
+`recycleSession`'s `idle || background_work`, which answers a different question).
+
+⚠️ **Known open defect (filed, not fixed):** during a **queued** apply the readout stays clickable and
+a **second Apply is silently discarded** while the readout shows the new value — the very
+"readout claims a mode the session is not obeying" state the confirm exists to prevent, reached by
+another door. Reachable only behind a busy agent, which is why every live verification missed it.
+`SURFACE-2026-08-26-QUALITY-DRIVEMODE-REENTRANCY-DISCARDS-A-SECOND-APPLY`.
+
+⚠️ **The OFF-invariant guard's SIXTH arm** covers this surface (the fifth is M13's skill row). Arm 6
+asserts `workspaceDriveModeReadout` returns `null` when the gate is off — which **is** DOM absence,
+because the render site is `{driveModeReadout && (...)}`. ⚠️ Arm 6 proves the **derivation** only;
+`workspaceDriveModeRender.test.tsx` server-renders the real `Workspace` to prove the **caller**. Both
+are needed — that split is this codebase's most-repeated defect shape.
+
+#### The picker-row cell (unchanged by WP4)
 
 Two stacked lines inside the **existing** model column (`PICKER_ROW_CELLS` untouched), so the second
 value costs **zero** extra width on every row. `cellLines()` is the single source of truth for both

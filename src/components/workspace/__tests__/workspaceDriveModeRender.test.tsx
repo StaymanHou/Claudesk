@@ -131,6 +131,47 @@ describe("Workspace header — the drive-mode readout's render site", () => {
     // And the gated siblings are gone, confirming this render really is in the OFF state.
     expect(doc.querySelector('[data-testid="workspace-skill-row"]')).toBeNull();
   });
+
+  // M13.5 WP5 P2 verify-codify — the ungated NAV BUTTONS, not just their container.
+  //
+  // ⚠️ WHY THIS IS NOT REDUNDANT WITH THE TEST ABOVE: that one asserts
+  // `workspace-split-control` survives. The split control is a CONTAINER — it also holds the
+  // collapse/cycle buttons, so it can survive intact while WP3's turn-nav buttons vanish from
+  // inside it, and every existing assertion would still pass. WP5's exit-verify observed the
+  // nav LIVE in a real header; this pins the same property mechanically.
+  //
+  // ⚠️ AND WHY THE SIBLING ASSERTION IS `contains`, NOT two independent lookups: two separate
+  // `not.toBeNull()` checks would pass if a refactor moved the nav OUT of the split control to
+  // somewhere else in the header. The live observation was specifically that the nav renders
+  // *inside* the ungated cluster — which is what makes it ungated in the first place (the
+  // skill row is gated wholesale, so an ungated affordance must not live there). Verified
+  // reachable in server render before writing this: both testids are present and nested.
+  //
+  // ⚠️ SCOPE LIMIT, stated rather than implied: this is the gate-OFF shape only, per this
+  // file's header — `useWorkflowFeaturesEnabled` returns its restrictive pre-seed default in
+  // server rendering, so the gate-ON *coexistence* of all four M13.5 surfaces is NOT writable
+  // in this harness and is NOT claimed here. That property's evidence is the live MCP-bridge
+  // observation recorded in the WP5 WIP, and it stays that way.
+  it("WP3's turn-nav buttons render INSIDE the ungated split control", () => {
+    const doc = renderWorkspaceHeader();
+
+    const splitControl = doc.querySelector(
+      '[data-testid="workspace-split-control"]',
+    );
+    expect(splitControl, "the ungated container must exist").not.toBeNull();
+
+    for (const id of ["workspace-turn-prev", "workspace-turn-next"]) {
+      const btn = doc.querySelector(`[data-testid="${id}"]`);
+      expect(
+        btn,
+        `${id} is ungated (a "turn" exists for every Claude Code user) and must render with the gate OFF`,
+      ).not.toBeNull();
+      expect(
+        splitControl!.contains(btn),
+        `${id} must live INSIDE the ungated split control, not merely somewhere in the header — the gated skill row is not a legal home for an ungated affordance`,
+      ).toBe(true);
+    }
+  });
 });
 
 describe("the confirm's write decision is honored by its CALLER", () => {
