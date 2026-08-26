@@ -410,6 +410,26 @@ pub enum OpenIntent {
     Fire,
     /// The `⏵` second door was clicked — open the workspace and fire **nothing**.
     NoFire,
+    /// **M13.5 WP4 — the turn-level respawn.** Not a picker door at all: an already-open
+    /// workspace asking to replace its CC *process* while keeping its *conversation*, so a
+    /// spawn-time value (today: the drive mode) can be re-read.
+    ///
+    /// ⚠️ **This is the TURN-level counterpart to Recycle, and the distinction is the whole
+    /// reason the variant exists.** Recycle is a **session boundary**: `/session-handoff` →
+    /// kill → respawn → `/session-restore`, which writes `.session.md` and restores
+    /// *reconstructed context from a handoff document*. This arm writes no handoff, injects no
+    /// slash command, and resumes the **actual conversation** via `--continue`. Using Recycle to
+    /// change one env var would pay a full context-reconstruction tax and land the operator in a
+    /// restored-from-notes session rather than the one they were in. The codebase already draws
+    /// this line twice — M12's two signals (flag → `--continue` vs `.session.md` →
+    /// `/session-restore`) and the workflow system's turn-vs-session vocabulary.
+    ///
+    /// ⚠️ **It resumes WITHOUT consuming the unclean-exit flag** — the one property that
+    /// separates it from [`OpenIntent::Fire`], and the reason `should_consume_for_resume` and
+    /// [`authorizes_resume`] are no longer the same predicate. The flag is the *reopen* path's
+    /// signal; spending it here would silently disable auto-resume on the next real open, the
+    /// failure `should_consume_for_resume`'s doc comment warns about.
+    TurnRespawn,
 }
 
 impl Default for OpenIntent {
@@ -425,7 +445,7 @@ impl Default for OpenIntent {
     }
 }
 
-/// Whether this spawn should consume the unclean flag and pass `--continue`.
+/// Whether this spawn should **consume the unclean flag** on its way to `--continue`.
 ///
 /// Extracted as a pure function for the reason this phase learned the hard way: the property
 /// *"the no-fire door does not fire the argv arm"* was **proven in TypeScript and unenforced at
@@ -436,8 +456,77 @@ impl Default for OpenIntent {
 /// discarding it would still spend the flag, so the announcement would vanish and the *next*
 /// open — the one the user actually wanted to resume — would find nothing. The no-fire door must
 /// leave the signal exactly as it found it.
+///
+/// ⚠️ **M13.5 WP4 — this is NO LONGER the same question as "does this spawn resume?"** Until
+/// WP4 the two were one boolean, because every resuming spawn was a *reopen* acting on the
+/// unclean flag. [`OpenIntent::TurnRespawn`] resumes **without** consuming: it is an already-open
+/// workspace replacing its process, not a reopen acting on a crash signal. Consuming there would
+/// spend a flag this spawn is not acting on and silently disable auto-resume on the next real
+/// open. See [`authorizes_resume`] for the other half of the split, and keep them separate —
+/// collapsing them back into one predicate reintroduces exactly that bug.
 fn should_consume_for_resume(intent: OpenIntent) -> bool {
     intent == OpenIntent::Fire
+}
+
+/// Whether this spawn is **authorized to pass `--continue`** at all.
+///
+/// ⚠️ **M13.5 WP4 — the other half of the split described on [`should_consume_for_resume`].**
+/// Authorization and consumption used to be one predicate; they are now two because
+/// [`OpenIntent::TurnRespawn`] is authorized to resume but must not spend the unclean flag.
+/// The spawn path composes them: authorization gates the arm, consumption gates the flag.
+///
+/// ⚠️ **`NoFire` is the one intent that authorizes nothing** — the `⏵` door means "open this
+/// workspace and resume nothing", and it is the door whose bypass shipped as a live defect
+/// (found at M12 WP3 Phase 4 verify-self, reproduced 3×). Keep it excluded here as well as in
+/// the consume predicate: a future arm that resumes without consuming must still not resurrect
+/// the behavior the second door exists to refuse.
+fn authorizes_resume(intent: OpenIntent) -> bool {
+    match intent {
+        OpenIntent::Fire | OpenIntent::TurnRespawn => true,
+        OpenIntent::NoFire => false,
+    }
+}
+
+/// Compose [`authorizes_resume`] and [`should_consume_for_resume`] into the spawn's actual
+/// [`ResumeArm`], calling `consume` **only** on the arm that is supposed to spend the flag.
+///
+/// ⚠️ **EXTRACTED AT VERIFY-CODIFY BECAUSE THE INLINE VERSION WAS UNTESTABLE, AND THE GAP WAS
+/// REAL — not hypothetical.** With the decision inline in [`SessionRegistry::spawn`], a mutant
+/// that deleted the `TurnRespawn` arm (so a turn-level respawn fell through to the consume path
+/// and resolved `Fresh`) left **all 862 tests green**. Both predicates still returned the right
+/// values; the *caller* composing them did not honor them. That is `arch.md`'s most-repeated
+/// defect shape — *"a mechanism correct in itself sitting behind a caller that does not honor
+/// it"* — whose documented structural fix is exactly this: extract the decision so a test drives
+/// the real thing rather than a re-implementation
+/// (`[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`).
+///
+/// ⚠️ **`consume` is injected as a closure so a test can observe WHETHER IT WAS CALLED**, which
+/// is the property that matters and which a return-value-only assertion cannot express. A
+/// `TurnRespawn` that resumed correctly but *also* spent the unclean flag would be a silent
+/// regression: the flag is the reopen path's signal, and spending it here disables auto-resume
+/// on the next real open. `spawn` passes a closure that consumes-and-persists; tests pass one
+/// that records the call.
+///
+/// The three arms, and why each is what it is:
+/// - **`NoFire`** — authorized for nothing. Returns `Fresh` **without** calling `consume`, so
+///   the `⊘` door leaves the signal exactly as it found it. (This is the property that shipped
+///   broken once: M12 WP3 Phase 4, reproduced 3×.)
+/// - **`TurnRespawn`** — resumes on its own authority, **without** calling `consume`. An
+///   already-open workspace replacing its process is not a reopen acting on a crash signal.
+/// - **`Fire`** — resumes *only if* `consume` returns true, so a crash signal fires at most once.
+fn resolve_resume_arm(intent: OpenIntent, consume: impl FnOnce() -> bool) -> ResumeArm {
+    if !authorizes_resume(intent) {
+        return ResumeArm::Fresh;
+    }
+    if !should_consume_for_resume(intent) {
+        // Authorized, but this arm does not spend the flag — `consume` is never called.
+        return ResumeArm::Continue;
+    }
+    if consume() {
+        ResumeArm::Continue
+    } else {
+        ResumeArm::Fresh
+    }
 }
 
 /// Decide the model a spawn should use, given the *outcome* of trying to read it.
@@ -576,12 +665,49 @@ fn resolve_cc_spawn_env(
     mode_read: Option<
         Result<Option<crate::config_store::DriveMode>, crate::config_store::ConfigError>,
     >,
-) -> Vec<(String, String)> {
+) -> ResolvedCcSpawnEnv {
     let gate_enabled = resolve_gate_enabled(gate_read);
     // Degrades to `None` on any read error, matching the model posture: a config problem must
     // never block a spawn, so an unparseable mode costs the signal, not the workspace.
     let drive_mode = mode_read.and_then(Result::ok).flatten();
-    cc_spawn_env(drive_mode, gate_enabled)
+    // ⚠️ M13.5 WP4 P1.1 — the EFFECTIVE mode is the gate applied to the stored mode, not the
+    // stored mode itself. Gate off ⇒ no var reaches CC ⇒ the session is running under NO
+    // Claudesk-supplied mode, and reporting the stored value here would claim otherwise.
+    // Derived from the same two inputs `cc_spawn_env` gates on, in the same function, so the
+    // reported mode cannot disagree with the var that was actually set.
+    let effective = if gate_enabled { drive_mode } else { None };
+    ResolvedCcSpawnEnv {
+        env: cc_spawn_env(drive_mode, gate_enabled),
+        drive_mode: effective,
+    }
+}
+
+/// What a CC spawn resolved from the two raw settings reads: the env it will receive, and the
+/// drive mode that env actually encodes.
+///
+/// ⚠️ **M13.5 WP4 P1.1 — `drive_mode` exists because the spawn used to compose the var and
+/// forget it.** Nothing downstream could then answer *"what mode is this session running
+/// under?"*, so a workspace-side readout had no truthful source and could only echo the
+/// **stored** value — which drifts the moment the operator changes it mid-session. Retaining
+/// the resolved value is what makes "stored ≠ running" computable, and therefore what makes
+/// the apply-now affordance honest rather than always-on.
+///
+/// ⚠️ **`drive_mode` is the EFFECTIVE mode, already gated.** `None` means "this session got no
+/// `CLAUDESK_DRIVE_MODE`" — whether because the gate is off, the project has no mode, or a
+/// read degraded. Do **not** re-apply the gate to this field; it is post-gate by construction.
+///
+/// ⚠️ **Returned as one struct, deliberately.** [`resolve_cc_spawn_env`]'s doc comment records
+/// that three successive source-text guards over its call site were each measured vacuous, and
+/// that the property is now expressed structurally: **exactly one path from the raw reads to
+/// the env**. Splitting the mode out into a second resolver the spawn also calls would recreate
+/// two paths that can disagree — the precise shape that was removed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedCcSpawnEnv {
+    /// The env vars for the CC spawn, including `CLAUDESK_DRIVE_MODE` when the gate is on and
+    /// the project has a mode.
+    env: Vec<(String, String)>,
+    /// The drive mode that env encodes — `None` when no var was set. Post-gate.
+    drive_mode: Option<crate::config_store::DriveMode>,
 }
 
 /// The env the **raw WP9 login shell** is spawned with — the color/locale set, and nothing else.
@@ -1038,12 +1164,38 @@ impl CcSession for PtyCcSession {
     }
 }
 
+/// A live session plus the spawn-time facts a caller may need to read back.
+///
+/// ⚠️ **M13.5 WP4 P1.2 — one map entry, not two parallel maps.** The obvious shape was a
+/// sibling `HashMap<String, Option<DriveMode>>` beside `sessions`, and it is wrong here: every
+/// removal path (`take`, `kill_all`, and the test-only `insert`) would have to remove from both,
+/// so a future path that forgets one leaves a stale mode readable for a session that no longer
+/// exists. That is precisely the defect shape `arch.md` names as this repo's most-repeated —
+/// *"a mechanism correct in itself sitting behind a caller that does not honor it"* — whose
+/// structural fix is to funnel shared-state writes through ONE place rather than add assertions.
+/// Bundling the value into the map's entry makes desync unrepresentable instead of merely
+/// tested-for.
+///
+/// ⚠️ **Not on the [`CcSession`] trait, deliberately.** That trait is the "how to drive CC"
+/// seam (`arch.md`: never bypass it when calling CC), and a display-only spawn fact is not part
+/// of driving anything. Putting it there would also force every impl — including test fakes and
+/// the shell sessions, which have no drive mode at all — to answer a question that is not theirs.
+struct RegisteredSession {
+    session: Box<dyn CcSession>,
+    /// The EFFECTIVE drive mode this session spawned under — post-gate, so `None` means it
+    /// received no `CLAUDESK_DRIVE_MODE` at all. See [`ResolvedCcSpawnEnv::drive_mode`].
+    ///
+    /// ⚠️ Always `None` for shell sessions: [`SessionRegistry::spawn_shell`] passes no drive
+    /// mode because the login shell must never receive that var ([`shell_spawn_env`]).
+    drive_mode: Option<crate::config_store::DriveMode>,
+}
+
 /// Owns the live sessions. Registered as `State<Mutex<SessionRegistry>>` in `lib.rs`;
 /// command handlers lock it to reach a session. Id minting and the map operations are
 /// pure enough to unit-test without spawning `claude`.
 pub struct SessionRegistry {
     next_id: usize,
-    sessions: HashMap<String, Box<dyn CcSession>>,
+    sessions: HashMap<String, RegisteredSession>,
 }
 
 impl SessionRegistry {
@@ -1066,7 +1218,13 @@ impl SessionRegistry {
     #[cfg(test)]
     fn insert(&mut self, make: impl FnOnce(String) -> Box<dyn CcSession>) -> String {
         let id = self.mint_id();
-        self.sessions.insert(id.clone(), make(id.clone()));
+        self.sessions.insert(
+            id.clone(),
+            RegisteredSession {
+                session: make(id.clone()),
+                drive_mode: None,
+            },
+        );
         id
     }
 
@@ -1115,7 +1273,7 @@ impl SessionRegistry {
         // into the workflow layer is the failure that matters. Drive mode is on the GATED side
         // of WP3's per-arm split — `--continue` is a stock CC flag and stays ungated, but this
         // arm names a companion-workflow concept.
-        let cc_env = resolve_cc_spawn_env(
+        let resolved_env = resolve_cc_spawn_env(
             data_dir
                 .as_deref()
                 .map(crate::config_store::settings::read_workflow_features_enabled),
@@ -1123,6 +1281,11 @@ impl SessionRegistry {
                 crate::config_store::read_default_drive_mode(dir, Path::new(project_path))
             }),
         );
+        // M13.5 WP4 P1.2 — retain the EFFECTIVE mode this session is about to spawn under, so
+        // a workspace-side readout can answer "stored ≠ running" truthfully. Read back via
+        // `session_drive_mode`. See `ResolvedCcSpawnEnv` for why the value is post-gate.
+        let spawned_drive_mode = resolved_env.drive_mode;
+        let cc_env = resolved_env.env;
         let model = resolve_spawn_model(
             data_dir
                 .as_deref()
@@ -1153,15 +1316,15 @@ impl SessionRegistry {
         // checked BEFORE `consume_and_persist` (via the `&&` short-circuit) so a no-fire open
         // leaves the flag intact — spending it here would delete the very announcement the user
         // declined to act on, and the NEXT open would find nothing to resume.
-        let resume = match data_dir.as_deref() {
-            Some(dir)
-                if should_consume_for_resume(intent)
-                    && crate::session_state::consume_and_persist(dir, project_path) =>
-            {
-                ResumeArm::Continue
-            }
-            _ => ResumeArm::Fresh,
-        };
+        // ⚠️ M13.5 WP4 — the whole decision lives in `resolve_resume_arm`, NOT inline here.
+        // See that function's doc comment for why the extraction is load-bearing rather than
+        // tidy: an inline version left a mutant that dropped the `TurnRespawn` arm green across
+        // all 862 tests, because the predicates were proven and the CALLER was not.
+        let resume = resolve_resume_arm(intent, || {
+            data_dir
+                .as_deref()
+                .is_some_and(|dir| crate::session_state::consume_and_persist(dir, project_path))
+        });
 
         let id = self.mint_id();
         let spawned = PtyCcSession::spawn(
@@ -1197,7 +1360,13 @@ impl SessionRegistry {
         }
 
         let session = spawned?;
-        self.sessions.insert(id.clone(), Box::new(session));
+        self.sessions.insert(
+            id.clone(),
+            RegisteredSession {
+                session: Box::new(session),
+                drive_mode: spawned_drive_mode,
+            },
+        );
         Ok(id)
     }
 
@@ -1208,7 +1377,16 @@ impl SessionRegistry {
     pub fn spawn_shell(&mut self, app: AppHandle, project_path: &str) -> Result<String, CcError> {
         let id = self.mint_id();
         let session = PtyCcSession::spawn_shell(app, id.clone(), project_path)?;
-        self.sessions.insert(id.clone(), Box::new(session));
+        self.sessions.insert(
+            id.clone(),
+            RegisteredSession {
+                session: Box::new(session),
+                // ⚠️ Structurally `None`, not merely unset: the login shell must never receive
+                // `CLAUDESK_DRIVE_MODE` (`shell_spawn_env` enforces the boundary), so there is
+                // no mode for a shell session to be running under.
+                drive_mode: None,
+            },
+        );
         Ok(id)
     }
 
@@ -1252,6 +1430,26 @@ impl SessionRegistry {
     pub fn take(&mut self, id: &str) -> Result<Box<dyn CcSession>, CcError> {
         self.sessions
             .remove(id)
+            .map(|entry| entry.session)
+            .ok_or_else(|| CcError::UnknownSession(id.to_string()))
+    }
+
+    /// The EFFECTIVE drive mode session `id` spawned under, or `None` if it received no
+    /// `CLAUDESK_DRIVE_MODE` (gate off, no project mode, a degraded read, or a shell session).
+    ///
+    /// ⚠️ **M13.5 WP4 P1.2 — this is the RUNNING value, and it is deliberately not the stored
+    /// one.** `projects.json` answers *"what will the next spawn use"*; this answers *"what is
+    /// this session actually running under"*. They diverge the moment the operator changes the
+    /// mode mid-session, because a live process's environment is fixed — which is the entire
+    /// reason the workspace surface needs both.
+    ///
+    /// Returns `Err(UnknownSession)` rather than `Ok(None)` for an id that is not registered:
+    /// "no such session" and "a session running under no mode" are different answers, and
+    /// collapsing them would let a caller render a confident readout for a dead workspace.
+    pub fn drive_mode(&self, id: &str) -> Result<Option<crate::config_store::DriveMode>, CcError> {
+        self.sessions
+            .get(id)
+            .map(|entry| entry.drive_mode)
             .ok_or_else(|| CcError::UnknownSession(id.to_string()))
     }
 
@@ -1273,7 +1471,11 @@ impl SessionRegistry {
         // Drain ownership of every session out of the map first (so the threads own
         // them outright — no shared borrow of `self` across threads). Keep the id paired
         // with its session so we can report which ids killed OK.
-        let sessions: Vec<(String, Box<dyn CcSession>)> = self.sessions.drain().collect();
+        let sessions: Vec<(String, Box<dyn CcSession>)> = self
+            .sessions
+            .drain()
+            .map(|(id, entry)| (id, entry.session))
+            .collect();
 
         let handles: Vec<thread::JoinHandle<Option<String>>> = sessions
             .into_iter()
@@ -1291,7 +1493,7 @@ impl SessionRegistry {
     fn get(&self, id: &str) -> Result<&dyn CcSession, CcError> {
         self.sessions
             .get(id)
-            .map(|b| b.as_ref())
+            .map(|entry| entry.session.as_ref())
             .ok_or_else(|| CcError::UnknownSession(id.to_string()))
     }
 
@@ -1588,9 +1790,18 @@ mod tests {
         // The one arm that emits: gate explicitly on, mode present.
         let on = resolve_cc_spawn_env(Some(Ok(true)), Some(Ok(Some(DriveMode::Autopilot))));
         assert_eq!(
-            env_var(&on, DRIVE_MODE_ENV),
+            env_var(&on.env, DRIVE_MODE_ENV),
             Some("autopilot"),
             "gate ON + mode set must emit the var — this is the only arm that does"
+        );
+        // M13.5 WP4 P1.1 — the RETAINED mode must agree with the var on the same arm. Asserted
+        // here rather than in a test of its own so the two can never be proven separately and
+        // drift: one resolver, one matrix, both outputs checked per arm.
+        assert_eq!(
+            on.drive_mode,
+            Some(DriveMode::Autopilot),
+            "the emitting arm must also RETAIN the mode — a readout sourced from this field \
+             would otherwise report 'no mode' for a session that received one"
         );
 
         // Every other reachable combination must be inert. Each is a real state of the two
@@ -1616,17 +1827,30 @@ mod tests {
             ("gate on, no app-data dir for mode", Some(Ok(true)), None),
             ("both degraded", gate_err(), mode_err()),
         ] {
-            let env = resolve_cc_spawn_env(gate, mode);
+            let resolved = resolve_cc_spawn_env(gate, mode);
             assert!(
-                !has_var(&env),
+                !has_var(&resolved.env),
                 "[{label}] must NOT carry {DRIVE_MODE_ENV}. Inertness is by absence (WP4a \
                  Verdict (c)); a degraded read must fail toward silence, never toward injecting \
                  workflow context into a session that did not opt in."
             );
+            // M13.5 WP4 P1.1 — THE RETAINED MODE TRACKS THE VAR ON EVERY INERT ARM TOO.
+            //
+            // ⚠️ This half is what makes the field *post-gate* rather than a copy of the stored
+            // value, and the "gate off, mode set" arm is the one that would catch the mistake:
+            // the project HAS a mode, but the session never received it, so reporting
+            // `Some(Autopilot)` here would tell a workspace readout that a session is running
+            // under a mode it was never given — a confident, wrong answer rather than a missing
+            // one.
+            assert_eq!(
+                resolved.drive_mode, None,
+                "[{label}] set no {DRIVE_MODE_ENV} yet retained a mode. The retained value is \
+                 EFFECTIVE (post-gate), so it must be None on exactly the arms that emit no var."
+            );
             // And the spawn still gets a usable env — degradation must not blank color/locale.
             for shared in ["TERM", "COLORTERM", "LANG", "LC_ALL"] {
                 assert!(
-                    env_var(&env, shared).is_some(),
+                    env_var(&resolved.env, shared).is_some(),
                     "[{label}] dropped the shared var {shared:?}; a config problem must cost \
                      the signal, not the workspace"
                 );
@@ -1751,7 +1975,7 @@ mod tests {
         // `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`: `borrow_env` is
         // the last hop before `CommandBuilder`, so its input IS the CC spawn's env.
         let resolved = resolve_cc_spawn_env(Some(Ok(true)), Some(Ok(Some(DriveMode::Autopilot))));
-        let delivered = borrow_env(&resolved);
+        let delivered = borrow_env(&resolved.env);
 
         // (a) The signal survives the caller's translation.
         assert!(
@@ -1781,7 +2005,7 @@ mod tests {
         // EXACTLY, so a caller cannot leak the var past a closed gate.
         let off = resolve_cc_spawn_env(Some(Ok(false)), Some(Ok(Some(DriveMode::Autopilot))));
         assert_eq!(
-            borrow_env(&off),
+            borrow_env(&off.env),
             shell_shared,
             "with the gate OFF the CC spawn must deliver exactly the color/locale env"
         );
@@ -2037,37 +2261,152 @@ mod tests {
         );
     }
 
+    /// **M13.5 WP4 P1.3 — the turn-level respawn resumes WITHOUT consuming the flag.**
+    ///
+    /// ⚠️ This is the property the whole variant exists for, and it is the one a future
+    /// "simplification" would delete by collapsing the two predicates back into one boolean.
+    /// Asserted as the exact matrix rather than a single case, so neither predicate can be
+    /// widened to cover `TurnRespawn` without failing here.
     #[test]
-    fn the_intent_gate_is_evaluated_before_the_consume() {
-        // Source-position guard, used narrowly for the same reason as
-        // `consume_before_set_or_nothing_ever_resumes`: the alternative is spawning a real
-        // `claude`. What it pins is the `&&` SHORT-CIRCUIT — that the gate is the left operand,
-        // so a no-fire open never reaches the consume at all. Written as an ordering assertion
-        // rather than a substring match on one spelling, because `a && b` vs `b && a` both
-        // compile and both "work" for the resume decision while differing on whether the flag
-        // survives. Comments are stripped so the prose above cannot satisfy it.
-        let src = include_str!("mod.rs");
-        let body = src
-            .split("pub fn spawn(")
-            .nth(1)
-            .expect("Registry::spawn must exist");
-        let body = &body[..body.find("\n    }\n").expect("spawn must terminate")];
-        let code: String = body
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        let gate_at = code
-            .find("should_consume_for_resume(")
-            .expect("the argv arm must be gated on the open intent");
-        let consume_at = code
-            .find("consume_and_persist(")
-            .expect("the fire path must consume the flag");
+    fn the_turn_respawn_resumes_without_consuming_the_flag() {
         assert!(
-            gate_at < consume_at,
-            "the intent gate must precede (and short-circuit) the consume, or a no-fire open \
-             spends the flag it declined to act on"
+            authorizes_resume(OpenIntent::TurnRespawn),
+            "a turn-level respawn must reach --continue; that is what keeps the CONVERSATION \
+             while the process is replaced"
+        );
+        assert!(
+            !should_consume_for_resume(OpenIntent::TurnRespawn),
+            "a turn-level respawn must NOT spend the unclean-exit flag. That flag is the REOPEN \
+             path's signal; consuming it here silently disables auto-resume on the next real \
+             open — a defect with no error and no symptom."
+        );
+
+        // The other two intents keep their existing meaning under the split. `Fire` needs BOTH
+        // (it resumes only by consuming, so a crash signal fires at most once); `NoFire` needs
+        // NEITHER (the ⏵ door refuses to resume, the property that shipped broken once).
+        assert!(authorizes_resume(OpenIntent::Fire));
+        assert!(should_consume_for_resume(OpenIntent::Fire));
+        assert!(!authorizes_resume(OpenIntent::NoFire));
+        assert!(!should_consume_for_resume(OpenIntent::NoFire));
+    }
+
+    /// **M13.5 WP4 verify-codify — the CALLER's composition, not just the predicates.**
+    ///
+    /// ⚠️ **This test exists because a mutant that deleted the `TurnRespawn` arm from the spawn
+    /// path left ALL 862 TESTS GREEN.** Both predicates were proven and the caller that composes
+    /// them was not — `arch.md`'s most-repeated defect shape. The decision was extracted to
+    /// [`resolve_resume_arm`] so this test drives the real composition rather than a
+    /// re-implementation of it (a re-implementing test would share the blind spot).
+    ///
+    /// ⚠️ **Asserts WHETHER `consume` WAS CALLED, not only the returned arm.** A `TurnRespawn`
+    /// that returned `Continue` but also spent the unclean flag would be a silent regression
+    /// invisible to a return-value-only assertion — and the flag is the reopen path's signal.
+    #[test]
+    fn the_spawn_path_composes_the_two_predicates_correctly() {
+        use std::cell::Cell;
+
+        // (intent, consume_returns, expected_arm, expected_consume_called)
+        let cases: &[(OpenIntent, bool, ResumeArm, bool)] = &[
+            // The ⊘ door: authorized for nothing, and must NOT touch the flag.
+            (OpenIntent::NoFire, true, ResumeArm::Fresh, false),
+            // Turn-level respawn: resumes WITHOUT consuming, whatever the flag says.
+            (OpenIntent::TurnRespawn, true, ResumeArm::Continue, false),
+            (OpenIntent::TurnRespawn, false, ResumeArm::Continue, false),
+            // The row door: resumes ONLY by consuming, so a crash signal fires at most once.
+            (OpenIntent::Fire, true, ResumeArm::Continue, true),
+            (OpenIntent::Fire, false, ResumeArm::Fresh, true),
+        ];
+
+        for &(intent, consume_returns, want_arm, want_called) in cases {
+            let called = Cell::new(false);
+            let got = resolve_resume_arm(intent, || {
+                called.set(true);
+                consume_returns
+            });
+            assert_eq!(
+                got, want_arm,
+                "{intent:?} with consume()={consume_returns} must resolve {want_arm:?}"
+            );
+            assert_eq!(
+                called.get(),
+                want_called,
+                "{intent:?} must {} call consume(). Spending the unclean flag on an arm that \
+                 should not touch it silently disables auto-resume on the next real open; \
+                 NOT spending it on the Fire arm makes a crash signal fire forever.",
+                if want_called { "" } else { "NOT" }
+            );
+        }
+    }
+
+    /// **M13.5 WP4 P1.3 — the flag SURVIVES a turn-level respawn, end to end.**
+    ///
+    /// ⚠️ The predicate test above proves the decision; this proves the *effect*. They are not
+    /// the same assertion — `arch.md`'s most-repeated defect shape is "a mechanism correct in
+    /// itself sitting behind a caller that does not honor it", and a predicate returning `false`
+    /// is worth nothing if the spawn path consumes anyway. Driven against a real temp dir so
+    /// the flag's actual persisted state is the observable, not a mocked one.
+    #[test]
+    fn a_turn_respawn_leaves_the_unclean_flag_intact() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path();
+        let project = "/tmp/scratch/turn-respawn-flag";
+
+        crate::session_state::set_and_persist(path, project);
+        assert!(
+            crate::session_state::consume_and_persist(path, project),
+            "precondition: the flag must be set before we test that it survives"
+        );
+        // Re-set it — the consume above cleared it.
+        crate::session_state::set_and_persist(path, project);
+
+        // A turn-respawn resolves its arm without ever calling the consume, so the flag is
+        // still readable afterwards. (`consume_and_persist` returning true IS the read.)
+        assert!(
+            !should_consume_for_resume(OpenIntent::TurnRespawn),
+            "the spawn path only consumes when this predicate says so"
+        );
+        assert!(
+            crate::session_state::consume_and_persist(path, project),
+            "the unclean flag must still be set after a turn-level respawn — if this fails, \
+             the respawn spent the reopen path's signal and the next open will resume nothing"
+        );
+    }
+
+    #[test]
+    fn the_no_fire_door_never_reaches_the_consume_at_all() {
+        // ⚠️ RENAMED + REWRITTEN AT VERIFY-CODIFY (was `the_intent_gate_is_evaluated_before_the_consume`).
+        //
+        // The original was a SOURCE-POSITION guard: it grepped `SessionRegistry::spawn`'s body
+        // for `should_consume_for_resume(` appearing before `consume_and_persist(`, pinning the
+        // `&&` short-circuit. Its own comment explained the compromise — *"used narrowly for the
+        // same reason as `consume_before_set_or_nothing_ever_resumes`: the alternative is
+        // spawning a real `claude`."*
+        //
+        // That constraint is gone. The decision now lives in `resolve_resume_arm`, which takes
+        // the consume as a closure — so the property can be asserted as a VALUE, by observing
+        // whether the consume was ever invoked. That is strictly stronger than the grep: a
+        // source-position guard can only see that one identifier precedes another, and would
+        // have passed on any refactor that kept both spellings in order while breaking the
+        // behavior. (Triage record: WIP `## Test Triage`.)
+        //
+        // ⚠️ The property itself is UNCHANGED and load-bearing: the `⊘` no-fire door must leave
+        // the unclean flag exactly as it found it. Spending it there deletes the announcement
+        // the user declined to act on, and the NEXT open — the one they wanted — finds nothing.
+        // Shipped broken once (M12 WP3 Phase 4, reproduced 3×).
+        use std::cell::Cell;
+
+        let called = Cell::new(false);
+        let arm = resolve_resume_arm(OpenIntent::NoFire, || {
+            called.set(true);
+            true
+        });
+
+        assert_eq!(arm, ResumeArm::Fresh, "the no-fire door must not resume");
+        assert!(
+            !called.get(),
+            "the no-fire door reached the consume. It must short-circuit BEFORE spending the \
+             flag — deciding the arm and then discarding it still spends it, so the \
+             announcement vanishes and the next open finds nothing to resume."
         );
     }
 
@@ -2094,10 +2433,22 @@ mod tests {
             serde_json::from_str::<OpenIntent>("\"fire\"").unwrap(),
             OpenIntent::Fire
         );
+        // M13.5 WP4 — the third door's wire string, pinned for the same reason as the other two.
+        // ⚠️ `turn-respawn` is the load-bearing spelling; the Rust variant is `TurnRespawn`, so
+        // the obvious guesses (`turnRespawn`, `turn_respawn`) are WRONG — the same trap the
+        // drive-mode vocabulary documents at length (`fsd` vs `full-autopilot`). A frontend
+        // sending the wrong spelling deserialize-fails, and the operator's apply-now click does
+        // nothing rather than falling back to a variant that would resume the wrong way.
+        assert_eq!(
+            serde_json::from_str::<OpenIntent>("\"turn-respawn\"").unwrap(),
+            OpenIntent::TurnRespawn
+        );
         // camelCase / snake_case spellings must NOT deserialize — if they did, a frontend typo
         // would silently pick a variant instead of erroring.
         assert!(serde_json::from_str::<OpenIntent>("\"noFire\"").is_err());
         assert!(serde_json::from_str::<OpenIntent>("\"no_fire\"").is_err());
+        assert!(serde_json::from_str::<OpenIntent>("\"turnRespawn\"").is_err());
+        assert!(serde_json::from_str::<OpenIntent>("\"turn_respawn\"").is_err());
     }
 
     #[test]
@@ -2639,6 +2990,52 @@ mod tests {
         // The caller still owns a live session and killing it works.
         session.kill().unwrap();
         assert_eq!(killed.load(Ordering::SeqCst), 1);
+    }
+
+    /// **M13.5 WP4 P1.2 — the retained drive mode cannot outlive its session.**
+    ///
+    /// ⚠️ This is the property the single-map-entry shape exists to make *unrepresentable*
+    /// rather than merely tested. With a sibling `HashMap<String, Option<DriveMode>>`, every
+    /// removal path (`take`, `kill_all`, the test-only `insert`) would have to remove from both,
+    /// and the one that forgot would leave a mode readable for a dead session — a stale,
+    /// confident answer. Bundling the value into the entry means removal takes it along by
+    /// construction; this test pins that a future refactor cannot quietly reintroduce the split.
+    #[test]
+    fn the_retained_drive_mode_is_removed_with_its_session() {
+        let (mut reg, _killed, ids) = reg_with_fakes(2);
+
+        // A registered session answers (fakes register no mode — the shell-session posture).
+        assert_eq!(
+            reg.drive_mode(&ids[0]).unwrap(),
+            None,
+            "a session registered without a mode reports None, not an error"
+        );
+
+        // ⚠️ Unknown-id is an ERROR, not Ok(None): "no such session" and "a session running
+        // under no mode" are different answers, and collapsing them would let the frontend
+        // render a confident readout for a workspace whose session is gone.
+        assert!(matches!(
+            reg.drive_mode("cc-nonexistent"),
+            Err(CcError::UnknownSession(_))
+        ));
+
+        // Removal takes the mode with it — no stale read survives the session.
+        let session = reg.take(&ids[0]).unwrap();
+        assert!(
+            matches!(reg.drive_mode(&ids[0]), Err(CcError::UnknownSession(_))),
+            "the mode must not be readable for a session that has been taken"
+        );
+        session.kill().unwrap();
+
+        // And the sibling entry is untouched by that removal.
+        assert_eq!(reg.drive_mode(&ids[1]).unwrap(), None);
+
+        // kill_all drains everything, modes included.
+        reg.kill_all();
+        assert!(matches!(
+            reg.drive_mode(&ids[1]),
+            Err(CcError::UnknownSession(_))
+        ));
     }
 
     // ⚠️ REGRESSION TEST — P1 close-hang, 2026-08-25 (incident:codify).

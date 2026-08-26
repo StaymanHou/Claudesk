@@ -91,9 +91,19 @@ export type AutoResumeAction = ArgvAction | InjectAction | null;
  * on to the spawn call; a picker-local type would pull a component path into the state layer. The
  * picker re-exports it so existing importers are unchanged.
  *
+ * ⚠️ **`"turn-respawn"` is NOT a picker door** (M13.5 WP4). It is an already-open workspace asking
+ * to replace its CC *process* while keeping its *conversation*, so a spawn-time value (the drive
+ * mode) can be re-read. It resumes with `--continue` **without consuming the unclean-exit flag** —
+ * that flag is the reopen path's signal, and spending it here would silently disable auto-resume
+ * on the next real open. Rust splits the two questions across `authorizes_resume` and
+ * `should_consume_for_resume` for exactly this reason; do not re-collapse them.
+ *
  * Wire form is kebab-case, matching Rust's `#[serde(rename_all = "kebab-case")] OpenIntent`.
+ * ⚠️ `turn-respawn` is the load-bearing spelling — the Rust variant is `TurnRespawn`, so
+ * `turnRespawn` / `turn_respawn` fail serde (pinned both sides by
+ * `the_wire_form_of_open_intent_is_kebab_case` and `driveModeIpc.test.ts`).
  */
-export type OpenIntent = "fire" | "no-fire";
+export type OpenIntent = "fire" | "no-fire" | "turn-respawn";
 
 /**
  * How long to wait after spawn before injecting, in milliseconds.

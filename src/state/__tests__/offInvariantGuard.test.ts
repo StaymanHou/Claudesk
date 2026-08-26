@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { availablePanels } from "../../components/workspace/panelHost";
 import { MENU_IDS } from "../../menu/menuBridge";
 import { cellLines } from "../../cc/driveMode";
+// ARM 6 (M13.5 WP4) — imported from production, not stubbed, same as the arms above.
+import { workspaceDriveModeReadout } from "../../cc/workspaceDriveMode";
 import { rowAffordances } from "../../components/picker/announceRow";
 // ARM 5 (M13 WP2) — the skill-button row. Imported from production, not stubbed; the
 // not-vacuous section below pins that.
@@ -684,6 +686,58 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
       "the ungated arm keeps its second door — label and door are one decision",
     ).toBe(true);
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // ARM 6 (M13.5 WP4 P2.4) — the WORKSPACE-HEADER drive-mode readout.
+  //
+  // ⚠️ A NEW ARM, per this file's own header rule: a gated surface that is not a panel,
+  // menu id, chord, row-cell, or skill-row owns its own arm. The readout is none of those —
+  // it is a span in `.workspace-header`, reached through no registry that arms 1–5 walk.
+  //
+  // ⚠️ FOLLOWS STANDING PRECEDENT (b), NOT (a). `SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION`
+  // records two shapes for covering a new surface: (a) widen the shared `WORKFLOW_TERMS` list,
+  // or (b) assert provenance/predicate in the new surface's OWN arm. WP2 deliberately declined
+  // to widen the shared list, making (b) the standing precedent — and (a) would be doubly wrong
+  // here, since `WORKFLOW_TERMS` ALREADY contains "drivemode"/"drive-mode", so arms 1–3 would
+  // catch a drive-mode *panel* or *menu id* while remaining blind to this *header span*. The
+  // vocabulary is not the gap; the registry coverage is.
+  //
+  // The subject is the surface's own derivation, asserted as a COMPUTED VALUE — the row-cell
+  // arm's discipline. `workspaceDriveModeReadout` returning `null` IS the absence: the render
+  // site is `{driveModeReadout && (...)}`, so a null derivation means no element in the DOM.
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  it("renders no drive-mode readout on the workspace header while the gate is OFF", () => {
+    // ⚠️ Over the FULL cross-product of the other three inputs, because the gate must win
+    // regardless of any of them. A version that only checked the (null, null, false, false)
+    // corner would pass while a stored mode leaked the readout through.
+    for (const stored of [null, "autopilot"] as const) {
+      for (const running of [null, "fsd"] as const) {
+        for (const sessionLive of [false, true]) {
+          expect(
+            workspaceDriveModeReadout(stored, running, false, sessionLive),
+            `the drive-mode readout must not exist while the gate is OFF ` +
+              `(stored=${stored}, running=${running}, sessionLive=${sessionLive}) — the drive ` +
+              `mode is a companion-workflow concept, so OFF must be byte-identical to a build ` +
+              `that never had the feature`,
+          ).toBeNull();
+        }
+      }
+    }
+  });
+
+  it("the drive-mode readout is genuinely gate-DERIVED, not a constant that ignores the gate", () => {
+    // ⚠️ ANTI-VACUITY. The assertion above is "returns null"; a derivation that returned null
+    // for EVERY input would satisfy it while the feature was simply broken — the same shape the
+    // panel and picker-cell arms each carry a paired positive for. So: gate ON must produce a
+    // readout, proving the null above is caused by the GATE and not by the function.
+    const on = workspaceDriveModeReadout("autopilot", "autopilot", true, true);
+    expect(
+      on,
+      "gate ON must produce a readout — otherwise the OFF assertion is vacuous",
+    ).not.toBeNull();
+    expect(on?.text).toContain("autopilot");
+  });
 });
 
 /** The only files permitted to name the raw gate command.
@@ -848,7 +902,7 @@ describe("the guard is not vacuous", () => {
   // meta-guards are added, but an ARM disappearing is a real regression — it means a registry
   // this app surfaces UI through stopped being policed. Each entry names its own subject so a
   // deletion fails here with the arm's name rather than as a silent shrink.
-  it("still polices all five registries — no arm has been deleted", () => {
+  it("still polices all six registries — no arm has been deleted", () => {
     const armSubjects: ReadonlyArray<readonly [string, () => unknown]> = [
       ["1 PANEL", () => availablePanels(false)],
       ["2 MENU ID", () => MENU_IDS],
@@ -863,17 +917,21 @@ describe("the guard is not vacuous", () => {
         "5 RECYCLE",
         () => showRecycleButton({ workflowEnabled: false, ccSessionId: null }),
       ],
+      [
+        "6 WORKSPACE-DRIVEMODE",
+        () => workspaceDriveModeReadout(null, null, false, false),
+      ],
     ];
 
-    // ⚠️ Seven subjects, not five: arm 4 owns TWO derivations and arm 5 owns TWO predicates
+    // ⚠️ EIGHT subjects, not six: arm 4 owns TWO derivations and arm 5 owns TWO predicates
     // (`showSkillButtons` and `showRecycleButton` are separate functions with identical
     // bodies — a mutation to one does not exercise the other, which is the "the set is not
-    // the caller" shape arm 5 was written to catch).
+    // the caller" shape arm 5 was written to catch). Arm 6 (M13.5 WP4) owns one.
     expect(
       armSubjects.length,
       "an OFF-state arm subject was removed — every registry this app surfaces UI through " +
         "must stay policed; see the registry table at the top of this file",
-    ).toBe(7);
+    ).toBe(8);
 
     // Each subject must be really callable and really defined — a subject that threw or
     // resolved to undefined would make its arm's assertions vacuous rather than absent.

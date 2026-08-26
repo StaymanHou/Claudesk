@@ -545,6 +545,10 @@ body,
    Spans both columns above the left/right split. Thin, dark, unobtrusive. */
 .workspace-header {
   grid-column: 1 / -1;
+  /* ⚠️ M13.5 WP4 — the containing block for `.drivemode-confirm`, which is absolutely
+     positioned just below this row. Without it the dialog would anchor to whatever ancestor
+     happens to be positioned, landing somewhere unrelated. */
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -583,6 +587,140 @@ body,
   color: #6ea8ff;
   font-size: 0.72rem;
   white-space: nowrap;
+}
+
+/* M13.5 WP4 P2 — the drive-mode readout. What the NEXT spawn will use, with a stale marker
+   when the running session no longer matches.
+
+   ⚠️ `flex-shrink: 0` for the SAME reason `.workspace-header-nextopen` above declares it:
+   `.workspace-header-name` ellipsizes but sets no shrink limit, so a shrinkable sibling lets
+   the browser squeeze the NAME instead — or resolve the contest differently at different header
+   widths. Everything in this row is rigid; the name is the only thing that ever gives.
+
+   Deliberately quieter than `.workspace-header-nextopen` (grey, not the #6ea8ff accent): that
+   one is a per-open PREDICTION worth noticing, this is standing state. */
+.workspace-header-drivemode {
+  flex-shrink: 0;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  background-color: rgba(128, 128, 128, 0.12);
+  color: #9aa0a6;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* Stale: the operator changed the mode and the running session has not picked it up.
+
+   ⚠️ PURPLE (#a371f7), NOT the alarm-blue #6ea8ff that means AwaitingInput. Per
+   `semantic-distance-not-just-visual-distance-for-status-colour`, a state whose meaning is
+   "worth knowing, not urgent" must not borrow the alarm's hue — a "sort of blue" that turns out
+   to be ignorable teaches the operator that blue-ish means "probably nothing", which destroys
+   the alarm itself. Purple is already this codebase's ignorable-but-notable colour (M13.5 WP2's
+   BackgroundWork dot), so it inherits the right meaning rather than a new one. */
+.workspace-header-drivemode.is-stale {
+  background-color: rgba(163, 113, 247, 0.14);
+  color: #a371f7;
+}
+
+/* M13.5 WP4 P3.3 — the drive-mode editor. A native <select> over the CLOSED set, for the same
+   correctness reason it is correct on the picker row: a bad string fails serde on read and takes
+   the whole project list down. Sized to sit in the header row without shifting its siblings. */
+.workspace-header-drivemode-select {
+  flex-shrink: 0;
+  max-width: 11em;
+  padding: 0.02rem 0.2rem;
+  border: 1px solid rgba(128, 128, 128, 0.45);
+  border-radius: 3px;
+  background-color: #1b1b1b;
+  color: #ddd;
+  font-family: inherit;
+  font-size: 0.72rem;
+}
+
+/* The resting readout is a click target now (P3.4), so it needs an affordance — but a QUIET
+   one: this is standing state in a row the operator scans all day, not a call to action. */
+.workspace-header-drivemode {
+  cursor: pointer;
+}
+
+.workspace-header-drivemode:hover {
+  background-color: rgba(128, 128, 128, 0.22);
+}
+
+.workspace-header-drivemode.is-stale:hover {
+  background-color: rgba(163, 113, 247, 0.24);
+}
+
+.workspace-header-drivemode:focus-visible {
+  outline: 1px solid #6ea8ff;
+  outline-offset: 1px;
+}
+
+/* M13.5 WP4 P4.1 — the drive-mode confirm. Anchored to the header rather than centred on the
+   app: workspaces stay mounted, so an app-level dialog would need a workspace id to say WHICH
+   session it is about. Styled after `.workflow-invite` (the app's other dialog) so the two read
+   as one idiom. */
+.drivemode-confirm {
+  position: absolute;
+  top: 100%;
+  left: 0.6rem;
+  z-index: 40;
+  width: min(24rem, calc(100% - 1.2rem));
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 6px;
+  background-color: #17171a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  text-align: left;
+}
+
+.drivemode-confirm-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #eee;
+}
+
+.drivemode-confirm-body {
+  margin: 0 0 0.6rem;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #bbb;
+}
+
+.drivemode-confirm-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.drivemode-confirm-btn {
+  padding: 0.2rem 0.7rem;
+  border: 1px solid rgba(128, 128, 128, 0.45);
+  border-radius: 4px;
+  background-color: #202024;
+  color: #ddd;
+  font-family: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.drivemode-confirm-btn:hover {
+  background-color: #2a2a30;
+}
+
+.drivemode-confirm-btn-primary {
+  border-color: #6ea8ff;
+  color: #6ea8ff;
+}
+
+/* The queued-apply indicator: an apply confirmed while the agent was busy, waiting for idle.
+   ⚠️ Muted deliberately — it reports a normal wait, not a problem. */
+.workspace-header-drivemode-pending {
+  opacity: 0.85;
+}
+
+.workspace-header-drivemode-stale {
+  font-weight: 600;
 }
 
 /* M13 WP2 — the skill-button row (absorbed M12 WP3's single `.workspace-session-start`

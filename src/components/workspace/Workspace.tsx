@@ -21,8 +21,9 @@
 // The `visible` prop drives that toggle, and is forwarded to RightPanelHost to gate
 // panel liveness + the capture-phase hotkey (only the focused workspace's host reacts).
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Workspace as WorkspaceModel } from "../../state/workspace";
 import { XtermPane, type XtermPaneHandle } from "./XtermPane";
 import { RightPanelHost } from "./RightPanelHost";
@@ -48,6 +49,29 @@ import {
 // M12 WP3 Phase 5 — the third arm. Both surfaces are GATED (a workflow skill + a statement
 // about `workflow-system/` state), unlike Phase 3.5's ungated `--continue` announcement.
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
+import { workspaceDriveModeReadout } from "../../cc/workspaceDriveMode";
+import {
+  readyToRespawn,
+  waitForIdle,
+  driveModeWriteFor,
+  type DriveModeOutcome,
+  APPLY_PENDING_LABEL,
+  RESPAWN_INTENT_HOLD_MS,
+} from "./applyDriveMode";
+import { DriveModeConfirm } from "./DriveModeConfirm";
+import {
+  DRIVE_MODES,
+  DRIVE_MODE_UNSET_PLACEHOLDER,
+  driveModeChanged,
+} from "../../cc/driveMode";
+import {
+  getProjectDefaultDriveMode,
+  getSessionDriveMode,
+  setProjectDefaultDriveMode,
+  PROJECT_DRIVE_MODE_EVENT,
+  type DriveMode,
+  type ProjectDriveModeChanged,
+} from "../../cc/driveModeIpc";
 import { actionFromAnnounced } from "../../state/predictAction";
 import { nextOpenIndicator } from "./sessionStartButton";
 // M13 WP2 — the skill-button row. ⚠️ It ABSORBED the standalone `/session-start` button that
@@ -133,6 +157,266 @@ export function Workspace({
   //      render-time derivation, so it is never rendered for even one frame. A state write
   //      would let a stale label survive until the next commit.
   const nextOpen = workflowEnabled && visible ? announcedNextOpen : null;
+
+  // ── M13.5 WP4 P2 — the drive-mode readout ────────────────────────────────────────
+  //
+  // TWO values, because they can disagree and the disagreement is the feature: `stored` is what
+  // the NEXT spawn will use (`projects.json`); `running` is what this live session actually
+  // spawned under (P1's retained value). A live process's env is fixed, so a mid-session change
+  // reaches the first and not the second.
+  const [storedDriveMode, setStoredDriveMode] = useState<DriveMode | null>(
+    null,
+  );
+  const [runningDriveMode, setRunningDriveMode] = useState<DriveMode | null>(
+    null,
+  );
+  // ⚠️ DERIVED AT RENDER, same rule as `nextOpen` above and for the same two reasons — the
+  // gate-off branch must not be a `setState` (eslint `react-hooks` rejects the cascading render
+  // as an ERROR), and a gated surface must never render for even one frame after the gate
+  // closes. `workspaceDriveModeReadout` returns `null` when the gate is off, so the gate
+  // decision lives in ONE place and this render simply follows the data.
+  const driveModeReadout = workspaceDriveModeReadout(
+    storedDriveMode,
+    runningDriveMode,
+    workflowEnabled && visible,
+    workspace.cc_session_id !== null,
+  );
+  useEffect(() => {
+    // Fetch-only, like the indicator effect below. Re-read on every `visible` edge: workspaces
+    // stay mounted forever (the standing invariant), so a mount-only read would go stale for
+    // the app's whole life — and the picker can change this value while the workspace is open.
+    // ⚠️ Phase 3 adds the broadcast that makes the two surfaces re-sync on a write; until then
+    // this refresh-on-reveal is the only re-read, which is why it is not mount-only.
+    if (!workflowEnabled || !visible) return;
+    let cancelled = false;
+    const sid = workspace.cc_session_id;
+    // ⚠️ `.catch` on BOTH, mandatory: an unhandled Tauri rejection vanishes silently (the WP6
+    // picker MAJOR). `cc_drive_mode` genuinely rejects on an unknown session id, which is a
+    // reachable state here — a workspace whose CC died still renders.
+    void getProjectDefaultDriveMode(workspace.project_path)
+      .then((m) => {
+        if (!cancelled) setStoredDriveMode(m);
+      })
+      .catch((e) => {
+        console.warn("drive-mode readout: stored read failed", e);
+        if (!cancelled) setStoredDriveMode(null);
+      });
+    // ⚠️ NO `setState` on the no-session branch — the effect only FETCHES, and declines to
+    // when there is nothing to fetch. `sessionLive` already collapses that case at the
+    // derivation above (a dead session cannot be stale), so clearing state here would be a
+    // cascading render that eslint's `react-hooks` rule rejects as an ERROR — which it did,
+    // catching exactly this on the first run. Same rule the `nextOpen` block above documents.
+    if (sid !== null) {
+      void getSessionDriveMode(sid)
+        .then((m) => {
+          if (!cancelled) setRunningDriveMode(m);
+        })
+        .catch((e) => {
+          console.warn("drive-mode readout: running read failed", e);
+          if (!cancelled) setRunningDriveMode(null);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    workflowEnabled,
+    visible,
+    workspace.project_path,
+    workspace.cc_session_id,
+  ]);
+
+  // ── M13.5 WP4 P3.3–P3.5 — the selector ───────────────────────────────────────────
+  const [editingDriveMode, setEditingDriveMode] = useState(false);
+  const driveModeSelectRef = useRef<HTMLSelectElement>(null);
+  // ⚠️ P3.5 — the persisted value, readable OUTSIDE a state updater. React StrictMode
+  // double-invokes updater callbacks, so a `persist()` called inside one fires TWO IPC writes
+  // per user action — the exact defect that shipped in M10.9 WP2's `useSettingControl` and was
+  // caught at code review, not by tests. The picker cell carries the same ref for the same
+  // reason.
+  const storedDriveModeRef = useRef<DriveMode | null>(null);
+  useEffect(() => {
+    storedDriveModeRef.current = storedDriveMode;
+  }, [storedDriveMode]);
+
+  // Focus the select on entering edit mode, so it is immediately usable.
+  useEffect(() => {
+    if (editingDriveMode) driveModeSelectRef.current?.focus();
+  }, [editingDriveMode]);
+
+  // ── M13.5 WP4 P4 — confirm-on-change + idle-gated apply ──────────────────────────
+  //
+  // The mode the operator picked but has NOT yet confirmed. Non-null ⇒ the confirm is open.
+  // ⚠️ Held as state rather than written straight through, which is the whole of P4.2: Cancel
+  // must leave `projects.json` byte-identical.
+  const [pendingDriveMode, setPendingDriveMode] = useState<{
+    next: DriveMode | null;
+  } | null>(null);
+  // An apply has been confirmed and persisted; the respawn is owed. Stays true while the agent
+  // is busy, which is what makes "wait until idle" a queue rather than a dropped click.
+  const [respawnWanted, setRespawnWanted] = useState(false);
+  // ⚠️ The intent the NEXT spawn uses. Set immediately before `relaunch()` and cleared once the
+  // respawn has produced a fresh session id — so the spawn (whose effect does NOT list
+  // `openIntent` as a dep; it reads the closure at nonce-bump time) sees `turn-respawn` rather
+  // than the door this workspace was originally opened with. The difference is load-bearing:
+  // `fire` CONSUMES the unclean-exit flag, which is correct for a reopen acting on a crash
+  // signal and wrong here — it would spend the signal the next real open depends on.
+  const [spawnAsTurnRespawn, setSpawnAsTurnRespawn] = useState(false);
+  // Mirror of the live status prop, readable from inside the async apply operation. Same idiom
+  // as `ccSessionIdRef` above: a closure captured at click time would poll a frozen value.
+  const statusStateRef = useRef(statusState);
+  useEffect(() => {
+    statusStateRef.current = statusState;
+  }, [statusState]);
+  // Mirrors whether a CC session is live, for the same reason as `statusStateRef`: the poll runs
+  // inside an async operation and a captured boolean would freeze at click time.
+  const sessionLiveRef = useRef(workspace.cc_session_id !== null);
+  useEffect(() => {
+    sessionLiveRef.current = workspace.cc_session_id !== null;
+  }, [workspace.cc_session_id]);
+
+  // ⚠️ P4.2 — CHOOSING A MODE NO LONGER WRITES. It stages a PENDING value and raises the
+  // confirm; only Apply persists. The Phase 3 version wrote optimistically here, which under the
+  // rejected model was fine (the write WAS the whole interaction) and under this one is a bug:
+  // Cancel must leave `projects.json` byte-identical, and a persisted-but-not-respawned mode is
+  // precisely the "looks live and is not" state AC-5 exists to prevent.
+  const chooseDriveMode = useCallback((next: DriveMode | null) => {
+    setEditingDriveMode(false);
+    // ⚠️ Unchanged pick → no dialog, no write. `driveModeChanged` also suppresses the redundant
+    // whole-file read-modify-write of `projects.json`
+    // (`SURFACE-2026-08-03-PROJECTS-JSON-WRITERS-ARE-WHOLE-FILE-RMW`). Compared against the REF,
+    // not the state, for the StrictMode reason above.
+    if (!driveModeChanged(next, storedDriveModeRef.current)) return;
+    setPendingDriveMode({ next });
+  }, []);
+
+  // Apply: persist, then respawn — immediately if the agent is idle, otherwise as soon as it is.
+  //
+  // ⚠️ **ONE ASYNC OPERATION IN A HANDLER, not an effect-driven state machine.** Three attempts
+  // at the latter were each rejected by eslint's `react-hooks` rule (setState-in-effect /
+  // refs-during-render), and the rule was right: sequencing an imperative multi-step operation
+  // is not what effects are for. `recycleSession` — the app's other multi-step operation — has
+  // exactly this shape (an async function in an event handler, polling `waitForFreshSessionId`
+  // for a genuinely NEW id), so this follows that precedent instead of inventing a second one.
+  const startApply = useCallback(
+    (next: DriveMode | null) => {
+      const previous = storedDriveModeRef.current;
+      // Optimistic local apply; the broadcast arrives and sets the same value, idempotently.
+      storedDriveModeRef.current = next;
+      setStoredDriveMode(next);
+      setRespawnWanted(true);
+
+      void (async () => {
+        try {
+          await setProjectDefaultDriveMode(workspace.project_path, next);
+        } catch (e) {
+          // ⚠️ Revert AND abandon the respawn — restarting CC to pick up a mode that never
+          // reached disk would kill the session for nothing.
+          console.warn("drive-mode apply: write failed", e);
+          storedDriveModeRef.current = previous;
+          setStoredDriveMode(previous);
+          setRespawnWanted(false);
+          return;
+        }
+        // ⚠️ P4.4 — WAIT FOR IDLE by OBSERVING THE STATE, not by waiting on a transition EVENT.
+        // `statusStateRef` mirrors the prop, which is fed from a COLLAPSED MAP: two consecutive
+        // same-state updates are indistinguishable
+        // (`[[workspace-status-map-collapses-consecutive-events]]`, failure mode *a feature that
+        // silently never fires*). "Is it idle NOW", polled, is expressible; "it BECAME idle" is
+        // not. The idle case needs no separate branch — it is simply the first poll succeeding.
+        const wentIdle = await waitForIdle(statusStateRef, sessionLiveRef);
+        if (!wentIdle) {
+          console.warn(
+            "drive-mode apply: timed out waiting for the agent to go idle",
+          );
+          setRespawnWanted(false);
+          return;
+        }
+        // ⚠️ P4.5 — the pane's EXISTING relaunch path (one nonce-bump path, shared with Recycle
+        // and `cc-relaunch`). NOT `recycleSession`: that is the session-boundary instrument and
+        // injects `/session-handoff` + `/session-restore`, restoring from notes rather than
+        // keeping this conversation.
+        setSpawnAsTurnRespawn(true);
+        // Let the intent land in a committed render before the spawn closure reads it — the spawn
+        // effect does NOT list `openIntent` as a dep, so it captures whatever the closure holds at
+        // nonce-bump time.
+        await Promise.resolve();
+        ccPaneRef.current?.relaunch();
+        // ⚠️ Hold the `turn-respawn` intent across the relaunch chain, which is asynchronous
+        // (kill → clear the spawn-once latch → nonce bump → spawn effect). `openIntent` is NOT in
+        // that effect's dep list — it is read from the closure at nonce-bump time — so clearing
+        // the latch immediately would let the spawn read the ORIGINAL door and consume the
+        // unclean-exit flag. One settle beat past the nonce bump is enough, and matches the
+        // `INJECT_SETTLE_MS` idiom the auto-resume arm already uses for the same reason.
+        await new Promise((r) => setTimeout(r, RESPAWN_INTENT_HOLD_MS));
+        setSpawnAsTurnRespawn(false);
+        setRespawnWanted(false);
+      })();
+    },
+    [workspace.project_path],
+  );
+
+  /** Cancel: ⚠️ a TRUE no-op. Nothing persisted, nothing queued, nothing respawned. */
+  /**
+   * Close the confirm with an outcome. ⚠️ **BOTH Cancel and Apply route through here**, so the
+   * write decision is taken in ONE place from `driveModeWriteFor` rather than being implicit in
+   * two handlers. A mutant that made Cancel persist passed all 2255 tests when the handlers were
+   * separate; funnelling them is the structural fix (`arch.md`: funnel shared-state writes
+   * through ONE function and guard THAT, rather than adding assertions).
+   */
+  const resolveDriveMode = useCallback(
+    (outcome: DriveModeOutcome) => {
+      const pending = pendingDriveMode;
+      setPendingDriveMode(null);
+      const { persist } = driveModeWriteFor(outcome);
+      // ⚠️ `persist === false` is the ONLY thing standing between Cancel and the "looks live and
+      // is not" state. There is no second write path in this component.
+      if (!pending || !persist || respawnWanted) return;
+      startApply(pending.next);
+    },
+    [pendingDriveMode, respawnWanted, startApply],
+  );
+
+  // Apply: persist, then respawn — immediately if the agent is idle, otherwise as soon as it is.
+  //
+  // ⚠️ **ONE ASYNC OPERATION IN A HANDLER, not an effect-driven state machine.** Three attempts
+  // at the latter were each rejected by eslint's `react-hooks` rule (setState-in-effect /
+  // refs-during-render), and the rule was right: sequencing an imperative multi-step operation
+  // is not what effects are for. `recycleSession` — the app's other multi-step operation — has
+  // exactly this shape (an async function in an event handler, polling `waitForFreshSessionId`
+  // for a genuinely NEW id), so this follows that precedent instead of inventing a second one.
+
+  // M13.5 WP4 P3.2 — re-sync on the broadcast, from EITHER surface.
+  //
+  // ⚠️ **This is the fix for a defect Phase 2's verify-self reproduced**, not a nicety. The
+  // effect above re-reads on a `visible` edge, and there is often no such edge: the reopen-dedup
+  // FOCUSES an already-open workspace rather than remounting it, so changing the mode from the
+  // picker left this readout showing a stale value with no stale marker. Workspaces also stay
+  // mounted forever (the standing invariant), so "it will refresh on reveal" is not a guarantee.
+  //
+  // ⚠️ **NOT gated on `visible`.** A backgrounded workspace must stay truthful — it is one
+  // filmstrip click from being centre stage, and a readout that is only correct while focused is
+  // the write-only problem this surface exists to fix. It IS gated on `workflowEnabled`, because
+  // with the gate off there is no readout to keep in sync.
+  useEffect(() => {
+    if (!workflowEnabled) return;
+    let cancelled = false;
+    const un = listen<ProjectDriveModeChanged>(
+      PROJECT_DRIVE_MODE_EVENT,
+      (e) => {
+        // ⚠️ THE PATH CHECK IS LOAD-BEARING. The payload is per-project (unlike the permission
+        // mode's app-global bare enum), so without this every open workspace would adopt one
+        // project's new mode — a silent cross-project corruption of the readout.
+        if (cancelled || e.payload.path !== workspace.project_path) return;
+        setStoredDriveMode(e.payload.mode);
+      },
+    );
+    return () => {
+      cancelled = true;
+      void un.then((f) => f());
+    };
+  }, [workflowEnabled, workspace.project_path]);
+
   useEffect(() => {
     // No `setState` on this path — the derivation above already hides the surface. The effect
     // only FETCHES, and simply declines to when there is nothing to show.
@@ -540,6 +824,124 @@ export function Workspace({
             ↻ {nextOpen}
           </span>
         )}
+        {/* M13.5 WP4 P2 — the drive-mode readout. ⚠️ GATED: `workspaceDriveModeReadout` returns
+            null when the gate is off, so with workflow features disabled this element does not
+            exist in the DOM at all — not hidden, not disabled, not an empty reserved slot
+            (`useWorkflowFeaturesEnabled`'s contract). The gate decision lives in the pure module;
+            this render follows the data, the same shape the picker cell uses.
+            ⚠️ THIS IS A DELIBERATE REVERSAL of M12's "picker row ONLY" placement, not an
+            oversight — design prior `set-a-spawn-time-choice-where-the-spawn-is-chosen` names
+            this exact edge as untested ("a setting read at creation that is ALSO
+            live-reconfigurable later, which may want both"). ⚠️ The MODEL OVERRIDE does not come
+            along: it is fixed at spawn for the process's life and stays picker-row-only. */}
+        {driveModeReadout &&
+          (editingDriveMode ? (
+            /* M13.5 WP4 P3.3 — the editor. ⚠️ A native <select> is CORRECT here, and the model
+               override's "do NOT validate" rule must NOT be generalized to it: the four modes are
+               a CLOSED set, and one bad string fails serde on read and takes the WHOLE project
+               list down (not just this row). See `cc/driveMode.ts`'s blast-radius table.
+               ⚠️ Options come from `DRIVE_MODES` — no second vocabulary. */
+            <select
+              ref={driveModeSelectRef}
+              className="workspace-header-drivemode-select"
+              data-testid="workspace-header-drivemode-select"
+              value={storedDriveMode ?? ""}
+              aria-label={`Workflow drive mode for ${workspace.display_name}`}
+              title={driveModeReadout.title}
+              onChange={(e) =>
+                chooseDriveMode(
+                  e.target.value === "" ? null : (e.target.value as DriveMode),
+                )
+              }
+              onBlur={() => setEditingDriveMode(false)}
+              onKeyDown={(e) => {
+                // Keep Escape/typing away from the workspace's own key handlers.
+                e.stopPropagation();
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditingDriveMode(false);
+                }
+              }}
+            >
+              <option value="">{DRIVE_MODE_UNSET_PLACEHOLDER}</option>
+              {DRIVE_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          ) : (
+            /* ⚠️ P3.4 — ITS OWN HIT REGION. The header now carries several adjacent clickable
+               affordances (skill row, recycle, turn-nav, split control), which is the same
+               structural risk M12 hit in the picker cell: a click meant for one control routed
+               into another "presents as 'the control does nothing' and no unit test can see it."
+               Every defence is copied from `CellValueLine`, which solved it: stopPropagation on
+               BOTH pointerdown and click, plus an explicit Enter/Space mirror (a
+               <span role="button"> has no implicit keyboard activation) and tabIndex. */
+            <span
+              role="button"
+              tabIndex={0}
+              className={`workspace-header-drivemode${driveModeReadout.isStale ? " is-stale" : ""}`}
+              data-testid="workspace-header-drivemode"
+              aria-label={`Workflow drive mode for ${workspace.display_name}: ${driveModeReadout.text}. Click to change.`}
+              title={driveModeReadout.title}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingDriveMode(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setEditingDriveMode(true);
+                }
+              }}
+            >
+              ⇅ {driveModeReadout.text}
+              {/* The stale marker. ⚠️ Purple, NOT the alarm-blue used for AwaitingInput — an
+                  ambient signal that borrows the alarm's urgency erodes the alarm itself
+                  (`[[semantic-distance-not-just-visual-distance-for-status-colour]]`). */}
+              {driveModeReadout.isStale && (
+                <span
+                  className="workspace-header-drivemode-stale"
+                  data-testid="workspace-header-drivemode-stale"
+                >
+                  {" "}
+                  ⚠
+                </span>
+              )}
+              {/* ⚠️ P4.4 — the QUEUED state must be visible. An apply that is waiting on a busy
+                  agent otherwise looks like a click that did nothing, which is the write-only
+                  problem this whole surface exists to fix. */}
+              {respawnWanted && (
+                <span
+                  className="workspace-header-drivemode-pending"
+                  data-testid="workspace-header-drivemode-pending"
+                  title={APPLY_PENDING_LABEL}
+                >
+                  {" "}
+                  ⏳
+                </span>
+              )}
+            </span>
+          ))}
+        {/* M13.5 WP4 P4.1 — the confirm. Rendered inside the header so it is scoped to THIS
+            workspace (backgrounded workspaces stay mounted, so an app-level dialog would need a
+            workspace id to disambiguate). ⚠️ Gated on `pendingDriveMode` alone: it can only be
+            non-null via `chooseDriveMode`, which is itself only reachable from the gated
+            selector — so no separate gate check is needed or wanted here. */}
+        {pendingDriveMode && (
+          <DriveModeConfirm
+            next={pendingDriveMode.next ?? "None"}
+            canApplyNow={readyToRespawn(
+              statusState,
+              workspace.cc_session_id !== null,
+            )}
+            onApply={() => resolveDriveMode("apply")}
+            onCancel={() => resolveDriveMode("cancel")}
+          />
+        )}
         {/* M13 WP2 — the skill-button row: five fixed workflow commands as clicks. ⚠️ Recycle
             Session is NOT here — it is WP3's operation, and WP2 deliberately ships without it
             (an earlier version of this comment said "plus the Recycle button", which was false
@@ -740,7 +1142,20 @@ export function Workspace({
           // the same workspace record as `pending_action` for the same reason, but stays a
           // DISTINCT field: `pending_action === null` cannot distinguish the no-fire door from
           // "no signal", and the argv arm needs that distinction.
-          openIntent={workspace.open_intent}
+          // ⚠️ M13.5 WP4 P4.5 — the intent the NEXT spawn uses.
+          //
+          // A relaunch driven by the drive-mode apply must spawn as `turn-respawn`, NOT as the
+          // door this workspace was originally opened with. The difference is load-bearing:
+          // `fire` CONSUMES the unclean-exit flag (correct for a reopen acting on a crash
+          // signal, wrong here — it would spend the signal the next real open depends on),
+          // while `turn-respawn` resumes with `--continue` and leaves the flag intact.
+          // `no-fire` would not resume at all, losing the conversation.
+          //
+          // Falls back to the original door for every other relaunch path (the `cc-relaunch`
+          // control, Recycle), so their behavior is unchanged.
+          openIntent={
+            spawnAsTurnRespawn ? "turn-respawn" : workspace.open_intent
+          }
         />
       </div>
       <RightPanelHost

@@ -31,9 +31,10 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 30s (2026-08-25, M13.5 WP3 pre-probe commit gate: baseline confirm before the signal-trace probe; Rust 879 / frontend 2184 — full gate, warm incremental)
+- **Last:** 29s (2026-08-25, M13.5 WP4 Phase 1 verify-auto: registry entry-struct + turn-respawn intent; Rust 882 / frontend 2230 — full gate, warm incremental)
 - **Use timeout:** 120000
 - **History:**
+  - 29s — 2026-08-25
   - 30s — 2026-08-25
   - 31s — 2026-08-25
   - 34s — 2026-08-22

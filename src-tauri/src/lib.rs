@@ -458,6 +458,10 @@ pub fn run() {
             // M11.5 WP1: per-project CC model override (read at spawn → `--model`).
             config_store::commands::project_set_default_model,
             config_store::commands::project_set_default_drive_mode,
+            // M13.5 WP4 P2.1: the STORED mode for one project (what the next spawn will use).
+            // ⚠️ Pairs with `cc_drive_mode`, which reports what the RUNNING session actually
+            // spawned under — the two disagree after a mid-session change, which is the point.
+            config_store::commands::project_get_default_drive_mode,
             // M12 WP2: clear the unclean-exit flag on a CLEAN close. There is deliberately
             // no `mark_unclean` counterpart — setting is owned by the spawn path, where it
             // is co-located with the `?` guaranteeing a failed spawn leaves no flag.
@@ -480,6 +484,11 @@ pub fn run() {
             // (closes the shell-prompt race where a shell's one-shot prompt emitted
             // before the frontend's listener attached).
             cc_session::commands::cc_ready,
+            // M13.5 WP4: the RUNNING session's effective drive mode (post-gate), so the
+            // workspace readout can tell "stored ≠ running" and offer the turn-level respawn
+            // only when it would actually change something. NOT the stored value — see the
+            // command's doc comment.
+            cc_session::commands::cc_drive_mode,
             // Read/persist the CC permission mode (the friend-requested dropdown).
             // get seeds the picker dropdown + View-menu radio on mount; set persists +
             // broadcasts `cc-permission-mode` so both re-render. Read at spawn time →

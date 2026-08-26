@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
@@ -27,6 +28,10 @@ import {
   applyCommittedModel,
 } from "./applyCommittedModel";
 import type { DriveMode } from "../../cc/driveMode";
+import {
+  PROJECT_DRIVE_MODE_EVENT,
+  type ProjectDriveModeChanged,
+} from "../../cc/driveModeIpc";
 import { PICKER_ROW_CELLS } from "./pickerRowOrder";
 import {
   actionForIntent,
@@ -54,11 +59,15 @@ type PickerToast = { kind: "info" | "error"; message: string };
 //
 // `default_drive_mode` is read for the SAME reason as of M12 WP4c — it seeds the second line
 // of that same cell. ⚠️ This comment previously said the field was "unused by this
-// component", which is no longer true; and note there is deliberately no
-// `project_get_default_drive_mode` command to fall back on (`driveModeIpc.ts` ships no
-// getter, precisely so the N+1 above cannot be reintroduced for the new field). The Rust
-// side is pinned to keep this on the wire by
+// component", which is no longer true. The Rust side is pinned to keep this on the wire by
 // `tests::the_drive_mode_is_serialized_onto_the_list_projects_wire`.
+//
+// ⚠️ **NARROWED at M13.5 WP4:** this comment used to add that there is "deliberately no
+// `project_get_default_drive_mode` command to fall back on". That command NOW EXISTS — for the
+// WORKSPACE surface, which has no project record to seed from. The rule it protected is
+// unchanged and still binds HERE: the picker must never call it per row, because that is the
+// N+1 M11.5's repair (B) removed. Pinned by `driveModeIpc.test.ts`'s
+// "the PICKER never reads the drive mode per row", which asserts THIS file's source.
 export interface RecentProject {
   display_name?: string;
   project_path: string;
@@ -314,6 +323,32 @@ export function ProjectPicker({
     },
     [],
   );
+
+  // M13.5 WP4 P3.2 — re-sync when the WORKSPACE surface changes the mode.
+  //
+  // ⚠️ The picker used to be the only writer, so its own `onDriveModeCommitted` callback was
+  // enough to keep `recents` truthful. WP4 added a second writer (the workspace header), and a
+  // change made there would otherwise leave this list stale until the next `list_projects` —
+  // which is exactly the "two overlapping surfaces must always agree" cost the design prior
+  // names. Both directions now flow through the same broadcast.
+  //
+  // ⚠️ Reuses `applyCommittedDriveMode`, the SAME pure reducer the local commit path uses, so
+  // the two entry points cannot diverge on how a row is updated. The payload's `path` needs no
+  // filtering here (unlike the workspace's own subscriber, which serves ONE project): the
+  // reducer matches on path itself and is a no-op for an unknown one.
+  useEffect(() => {
+    const un = listen<ProjectDriveModeChanged>(
+      PROJECT_DRIVE_MODE_EVENT,
+      (e) => {
+        setRecents((rs) =>
+          applyCommittedDriveMode(rs, e.payload.path, e.payload.mode),
+        );
+      },
+    );
+    return () => {
+      void un.then((f) => f());
+    };
+  }, []);
 
   async function handleRemove(projectPath: string) {
     try {

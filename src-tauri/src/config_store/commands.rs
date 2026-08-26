@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use super::{
     add_or_touch, prune_missing, read_projects, remove as remove_project_inner,
@@ -217,7 +217,75 @@ pub fn project_set_default_drive_mode(
     mode: Option<DriveMode>,
 ) -> Result<(), String> {
     let dir = resolve_data_dir(&app)?;
-    set_default_drive_mode(&dir, Path::new(&path), mode).map_err(|e| e.to_string())
+    set_default_drive_mode(&dir, Path::new(&path), mode).map_err(|e| e.to_string())?;
+    // M13.5 WP4 P3.1 — broadcast so the OTHER surface re-syncs. Emitted only after the write
+    // succeeds: a fan-out for a value that never reached disk would make both surfaces agree on
+    // something `read_projects` will not return.
+    let _ = app.emit(
+        PROJECT_DRIVE_MODE_EVENT,
+        ProjectDriveModeChanged { path, mode },
+    );
+    Ok(())
+}
+
+/// The Tauri event broadcast when a project's drive mode changes — the M13.5 WP4 P3.1 fan-out.
+///
+/// ⚠️ **This is a DELIBERATE REVERSAL of M12's no-broadcast decision, and the condition it named
+/// has now been met.** `driveModeIpc.ts` said outright: *"This value is per-project and has
+/// exactly ONE surface — the picker row that just changed it — so a fan-out would have one
+/// subscriber. If a genuinely second surface ever appears (a workspace-header readout, a
+/// filmstrip badge), add the event then."* WP4 added the workspace-header readout, so this is
+/// the extension that comment specified rather than an unplanned change.
+///
+/// ⚠️ **Not a copy of `CC_PERMISSION_MODE_EVENT`'s payload, and the difference is the bug it
+/// prevents.** The permission mode is **app-global**, so it broadcasts a bare enum. This value is
+/// **per-project**: a bare mode would tell every open workspace to adopt one project's new
+/// setting. The path is what lets a subscriber decide whether the change is theirs.
+pub const PROJECT_DRIVE_MODE_EVENT: &str = "project-drive-mode";
+
+/// The [`PROJECT_DRIVE_MODE_EVENT`] payload: which project changed, and to what.
+///
+/// `mode: None` means the override was cleared — the same "absent → the hook stays inert" state
+/// the store records by removing the key, not a distinct third value.
+#[derive(Clone, serde::Serialize)]
+pub struct ProjectDriveModeChanged {
+    pub path: String,
+    pub mode: Option<DriveMode>,
+}
+
+/// Read one project's **stored** drive mode — what its NEXT CC spawn will use (M13.5 WP4 P2.1).
+///
+/// ⚠️ **This is NOT the `getProjectDefaultDriveMode` that `driveModeIpc.ts` refuses to ship, and
+/// the distinction is the whole reason this is allowed to exist.** That refusal is about
+/// **per-picker-row** reads: M11.5's repair (B) removed exactly that shape, where each of N rows
+/// re-read + re-parsed + re-sorted the whole `projects.json` for a field `list_projects` had
+/// already put on the wire — and because filtered-out rows unmount, clearing the filter box
+/// re-fired all N
+/// (`SURFACE-2026-07-31-QUALITY-WP1-PER-ROW-IPC-REFETCHES-DATA-ALREADY-ON-THE-WIRE`).
+///
+/// A workspace is a different shape: there are a handful open at once, not 20+; the workspace
+/// model carries no project record to seed from (only `project_path`); and the alternative —
+/// threading the mode through `openWorkspace`'s argument list — walks straight into the arity
+/// trap that has dropped a parameter **four times** in this milestone
+/// (`pickerOnOpenArity.test.ts` exists because of it). One read per open workspace, on the same
+/// gated + visible-only path as the next-open indicator, is the cheaper and safer seam.
+///
+/// ⚠️ **Returns the STORED value, never the running one.** What the live session actually
+/// spawned under is `cc_session::commands::cc_drive_mode`; a live process's env is fixed, so the
+/// two disagree the moment the operator changes the mode mid-session. Reading this one and
+/// calling it "the session's mode" is the confabulation this pair of commands exists to prevent.
+///
+/// A project with no record, or an unreadable list, yields `None` rather than an error: the cost
+/// of a missing readout is a label that does not appear, whereas a rejected `invoke` would put an
+/// error on a purely advisory surface. Same posture as `picker_announce_actions`.
+#[tauri::command]
+pub fn project_get_default_drive_mode(app: AppHandle, path: String) -> Option<DriveMode> {
+    let Ok(dir) = resolve_data_dir(&app) else {
+        return None;
+    };
+    crate::config_store::read_default_drive_mode(&dir, Path::new(&path))
+        .ok()
+        .flatten()
 }
 
 #[cfg(test)]

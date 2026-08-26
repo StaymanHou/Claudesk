@@ -85,6 +85,37 @@ pub fn cc_spawn(
         .map_err(|e| e.to_string())
 }
 
+/// Read the **effective drive mode the running session spawned under** — `null` when it
+/// received no `CLAUDESK_DRIVE_MODE` at all (gate off, no project mode, a degraded read, or a
+/// shell session).
+///
+/// ⚠️ **M13.5 WP4 — this is the RUNNING value, and it is deliberately NOT the stored one.**
+/// `projects.json` answers *"what will the next spawn use"*; this answers *"what is this session
+/// actually running under"*. The two diverge the moment the operator changes the mode
+/// mid-session, because a live process's environment is fixed — and that divergence is exactly
+/// what the workspace readout must be able to show. Reading `projects.json` back and calling it
+/// the running mode would be a confident wrong answer.
+///
+/// ⚠️ **Stays inline rather than moving to a worker, unlike [`cc_kill`].** That command is
+/// threaded because its teardown *blocks* (sleep-polling a reap) and a `#[tauri::command]` body
+/// runs on the **main thread** — the P1 filed 2026-08-25. This one is an O(1) `HashMap` read
+/// under a short lock hold with no I/O and no sleep, so inline is correct; adding a thread here
+/// would buy nothing and cost a channel.
+///
+/// An unknown id is an error rather than `null`: "no such session" and "a session running under
+/// no mode" are different answers, and collapsing them would let the frontend render a confident
+/// readout for a workspace whose session is gone.
+#[tauri::command]
+pub fn cc_drive_mode(
+    registry: State<'_, Registry>,
+    session_id: String,
+) -> Result<Option<crate::config_store::DriveMode>, String> {
+    let reg = registry
+        .lock()
+        .map_err(|_| "session registry lock poisoned".to_string())?;
+    reg.drive_mode(&session_id).map_err(|e| e.to_string())
+}
+
 /// Spawn the WP9 second-terminal panel's interactive login shell for `project_path`;
 /// returns the new session id. Reuses the shared registry + the command-agnostic
 /// `cc_input`/`cc_resize`/`cc_kill` + the `cc-output-<sid>`/`cc-exit-<sid>` events,
