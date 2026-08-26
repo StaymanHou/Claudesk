@@ -1,7 +1,7 @@
 # Feature: Drive-mode readout + selector on the workspace surface
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** finalize (complete) — ARCHIVED
 **Created:** 2026-08-25
 **Entry:** spec (complex feature)
 **Milestone:** 13.5 — WP4
@@ -545,8 +545,8 @@ nothing in this plan removes a binding another phase still imports.
   - [x] verify-codify  <!-- status: done — NO new tests needed; both properties probed and already covered -->
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** none — SHIPPED as `fd03a42`
+- **Path:** Feature > finalize
+- **Active scope:** none — shipped `efa7798`; review 0 CRITICAL / 4 MAJOR / 4 MINOR, all backlogged
 - **Blocked:** none. ⚠️ Phase 3's `verify-human` stays OPEN by design: its three leaves are
   re-testable only once Phase 4's interaction model exists, so they are re-presented at Phase 4's
   verify-human rather than re-run against a model the operator already rejected.
@@ -1425,6 +1425,122 @@ passing gate is not by itself evidence the app boots. Exit 0.
 
 Final: `pnpm verify:auto` exit 0 · Rust **883** (baseline 879, +4) · frontend **2260**
 (baseline 2230, +30) · 20 files, +3704/-100.
+
+## Retrospect
+
+- **What changed in our understanding:** The feature's hardest problem was never the UI — it was
+  that **a mid-session drive-mode change could not reach a running CC process at all**, because the
+  mode is baked into `CLAUDESK_DRIVE_MODE` at spawn and a live process's env is fixed. The spec's
+  first three options (label it next-spawn-only / make the hook read live / lean on Recycle) were
+  all wrong, and the operator named why: **Recycle is a session-boundary instrument** (handoff →
+  restore from notes) while what was needed is the **turn-level** counterpart (`/exit` → new env →
+  `--continue`, conversation preserved). That primitive did not exist; building it was the real work.
+
+- **Assumptions that held:** The gate seam, the picker-cell idioms (compact readout → click-to-edit,
+  per-line hit regions, StrictMode-safe refs), and the permission-mode broadcast precedent all
+  transferred cleanly. The design prior's own `Why:` correctly predicted this exact edge
+  ("read at creation that is ALSO live-reconfigurable later, which may want both").
+
+- **Assumptions that were wrong:**
+  1. ⚠️ **"Apply-now is a distinct affordance, never an implicit side-effect of choosing a mode."**
+     Recorded in §Assumed, then **cited downstream as "operator-reviewed"** — which it never was.
+     The concern (too much consequence behind a dropdown) was right; the resolution was wrong. A
+     confirm dialog answers it without splitting one intent across two gestures. **An unchallenged
+     assumption is not an approved one**, and promoting one to reviewed status is how a silent
+     default hardens into a spec.
+  2. **`readyToRespawn` rejecting `unknown`.** Technically defensible, practically wrong: a
+     freshly-spawned workspace IS `unknown` until its first turn, so the dialog said "busy" over an
+     idle session. The operator's *"only present at turn 0"* pinned it exactly.
+  3. **That effects could sequence the apply.** Three shapes, three eslint rejections. The rule was
+     right — effects are not for sequencing imperative operations — and `recycleSession` already had
+     the answer (one async function in a handler).
+
+- **Approach delta:** Phase 4 was **re-planned from scratch** mid-flight (F12 → plan) after the
+  interaction model was rejected; Phase 3's verify-human deferred its three leaves to be re-tested
+  under the corrected model rather than re-run against a rejected one. Phase 3's `verify-codify` was
+  **skipped by the back-loop** and had to be run late (at Phase 4), where it found a real gap.
+  ⚠️ **Four separate mutation probes each passed a fully green suite** — the Cancel-persists, the
+  caller-bypass, the broadcast path-check, and the Phase-1 caller composition. Every one was the
+  same shape: *the mechanism was proven, the caller was not.* That shape is now the thing to probe
+  for first, not last.
+
+## Code-Quality Review — drive-mode-on-the-workspace-surface
+
+Reviewed against ship commit `efa7798`. **0 CRITICAL · 4 MAJOR · 4 MINOR** — no refactor owed.
+
+⚠️ **The reviewer was handed three of the author's own suspicions and REFUTED the framing on all
+three** (it was told to judge them itself, not accept them). That is the outcome worth recording:
+a reviewer that inherits the author's rationalisations is not reviewing.
+
+### Strengths (reviewer's, abridged)
+- `resolve_resume_arm` with an injected `consume` closure and `driveModeWriteFor` are "exemplary
+  responses to measured mutation gaps" — untestable inline decisions replaced with value-assertable
+  ones; the closure makes *"was the flag spent?"* observable rather than inferred.
+- Splitting `should_consume_for_resume` / `authorizes_resume` is "the right decomposition for the
+  right reason", with doc comments naming which future "simplification" reintroduces the bug.
+- `ResolvedCcSpawnEnv` makes stored-vs-running desync **structurally unrepresentable**.
+- Retiring the fragile source-position guard in favour of value tests is "a net reduction in guard
+  debt, not just an addition."
+- Stale comments invalidated by the feature were narrowed in place rather than left to go false.
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR**
+1. ⚠️ **[`Workspace.tsx:374`] A LIVE re-entrancy defect, verified by the orchestrator before
+   filing.** `respawnWanted` gates the HANDLER but nothing gates the AFFORDANCE: during a queued
+   apply the readout stays clickable, the `<select>` stays reachable, and `storedDriveMode` was
+   already optimistically written. So a second mode change → confirm → **Apply is silently
+   discarded** while the readout shows the new value. That is the *"readout claims a mode the
+   session is not obeying"* state AC-5 exists to prevent, reached by a different door. Confirmed at
+   source: no `disabled`, no click guard; line 917 renders only the ⏳ indicator. Fix: disable the
+   affordance while `respawnWanted`, or let the second apply supersede the queued one.
+2. **[`applyDriveMode.ts:165`] `RESPAWN_INTENT_HOLD_MS` synchronises against the React scheduler,
+   not an event.** `await Promise.resolve()` is a microtask and does NOT guarantee a committed
+   render. ⚠️ A deterministic mechanism was available **and is the house idiom in this very file** —
+   `onSessionIdRef` (`XtermPane.tsx:467`) solves exactly this. The failure mode if the window is
+   missed is the silent one the comment itself names: consuming the unclean-exit flag and disabling
+   auto-resume on the next real open, unobservable by any test.
+3. **[`applyDriveMode.ts:161-164`] The justifying comment overstates its pedigree.** It claims to
+   match `INJECT_SETTLE_MS`'s idiom — but that constant is empirically measured, documents its
+   sample, and is pinned by a test asserting value + floor. This one has no measurement, no test,
+   one call site. ⚠️ *"Borrowing a measured constant's credibility for an unmeasured one is the kind
+   of comment that stops a future reader from questioning the number."*
+4. **[`workspaceDriveModeRender.test.tsx:136-205`] The "floor, not proof" defence does not follow.**
+   The reasoning about `?raw` guards is correct, but `arch.md`'s rule is an argument **for
+   extraction** — which this same feature applied twice (`driveModeWriteFor`, `readyToRespawn`). The
+   path filter is equally extractable (`shouldApplyBroadcast(payloadPath, myPath)`). The current
+   regex breaks on any rename while a semantically-equivalent-but-wrong comparison would pass.
+
+**MINOR**
+5. [`Workspace.tsx:380-387`] Orphaned 8-line comment block describing `startApply`, now ~90 lines
+   from it — phase-accretion leftover pointing at the wrong function.
+6. [`Workspace.tsx:359-366`] A leftover `/** Cancel: a TRUE no-op */` doc comment now mislabels
+   `resolveDriveMode`, which handles BOTH outcomes.
+7. [`App.css:602-625, 642-660`] `.workspace-header-drivemode` declared twice, split by an unrelated
+   rule; the second block reads as if adding to a distant declaration.
+8. [`Workspace.tsx:229-357`] ~130 inline lines of drive-mode state/refs/effects/handlers in a
+   component past 1170 lines. Not wrong as shipped, but *"the next addition should not go inline"* —
+   a `useDriveModeApply(...)` hook would also make findings 1 and 4 directly testable.
+
+### Assessment (reviewer's)
+*"Careful, defect-driven work… the backend half in particular is a model of how to respond to 'the
+mechanism was proven, the caller was not'… The frontend half is weaker in exactly one dimension:
+the async apply operation was left inline in an already-oversized component, and the two properties
+that could not then be observed were covered with regex source guards whose own comments concede
+they are not proof — even though this same feature demonstrates the correct fix twice. Net: the
+codebase advances… with a modest, well-localised debt in `Workspace.tsx` that a follow-up hook
+extraction would clear."*
+
+⚠️ **Findings 1, 2 and 4 have a common root and a single fix:** extracting the apply operation into
+a `useDriveModeApply` hook would gate the affordance, expose the intent latch as a ref, and make
+both source-guarded properties value-testable. Whoever picks this up should treat them as one item,
+not four.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives the WIP.
 
 ## Discoveries
 

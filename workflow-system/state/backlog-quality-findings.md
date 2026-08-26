@@ -4,6 +4,92 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# drive-mode-on-the-workspace-surface — 2026-08-26
+
+⚠️ **Findings 1, 2 and 4 share a root cause and ONE fix** — extracting the apply operation into a
+`useDriveModeApply` hook gates the affordance, exposes the intent latch as a ref, and makes both
+source-guarded properties value-testable. Treat them as one item, not four.
+
+## SURFACE-2026-08-26-QUALITY-DRIVEMODE-REENTRANCY-DISCARDS-A-SECOND-APPLY
+- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface, ship `efa7798`)
+- **Type:** bug (live, user-facing)
+- **Summary:** ⚠️ **A LIVE DEFECT, verified at source before filing.** `respawnWanted` gates the
+  HANDLER (`Workspace.tsx:374`) but nothing gates the AFFORDANCE. During a queued apply the readout
+  stays clickable, the `<select>` stays reachable, and `storedDriveMode` was already optimistically
+  written — so a second mode change → confirm → **Apply is silently discarded** while the readout
+  shows the new value.
+- **Context:** This is the *"readout claims a mode the session is not obeying"* state that AC-5 and
+  `applyDriveMode.ts`'s own header exist to prevent, reached through a different door. Confirmed: no
+  `disabled` and no click guard on the readout; `Workspace.tsx:917` renders only the ⏳ indicator.
+  Reachable only while an apply is queued behind a busy agent, which is why live verification missed
+  it — every verified apply ran against an idle session.
+- **Suggested action:** Disable the readout/selector while `respawnWanted`, **or** let a second
+  apply supersede the queued one. ⚠️ Decide which deliberately: superseding is friendlier but needs
+  the first queued apply cancelled, not merely overwritten.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-26-QUALITY-RESPAWN-INTENT-HOLD-IS-SCHEDULER-TIMING
+- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
+- **Type:** tech-debt
+- **Summary:** `RESPAWN_INTENT_HOLD_MS = 400` (`applyDriveMode.ts:165`) synchronises against the
+  React scheduler rather than an event. `await Promise.resolve()` is a microtask and does **not**
+  guarantee a committed render before `relaunch()`.
+- **Context:** ⚠️ A deterministic mechanism was available **and is the house idiom in the same
+  file** — `onSessionIdRef` (`XtermPane.tsx:467`) solves exactly this problem. The failure mode if
+  the window is missed is the silent one the comment itself names: the spawn reads the ORIGINAL
+  door, consuming the unclean-exit flag and disabling auto-resume on the next real open. **No test
+  can observe it.**
+- **Suggested action:** Replace the sleep with a ref the spawn effect reads at spawn time. Folds
+  into the `useDriveModeApply` extraction.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-26-QUALITY-CONSTANT-BORROWS-A-MEASURED-SIBLINGS-CREDIBILITY
+- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
+- **Type:** tech-debt (comment correctness)
+- **Summary:** `applyDriveMode.ts:161-164` justifies `RESPAWN_INTENT_HOLD_MS` by claiming it
+  "matches the `INJECT_SETTLE_MS` idiom … for the same reason." It does not: `INJECT_SETTLE_MS` is
+  empirically measured, documents its sample, and is pinned by a test asserting both the value and a
+  floor. This one has no measurement, no test, and one call site.
+- **Context:** ⚠️ *"Borrowing a measured constant's credibility for an unmeasured one is the kind of
+  comment that stops a future reader from questioning the number."* A generalizable comment
+  anti-pattern worth naming beyond this instance.
+- **Suggested action:** Either measure and pin it, or delete the comparison and state plainly that
+  the value is unmeasured. Moot if the ref fix above lands.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-08-26-QUALITY-SOURCE-GUARDS-WHERE-EXTRACTION-WAS-AVAILABLE
+- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
+- **Type:** tech-debt (guard shape)
+- **Summary:** Two source-text guards (`workspaceDriveModeRender.test.tsx:136-205`) assert that
+  `Workspace.tsx` destructures `persist` and compares `e.payload.path`. Labelled "floor, not proof"
+  — honest, but the conclusion does not follow.
+- **Context:** ⚠️ `arch.md`'s "a `?raw` guard cannot express a behavioural property" is an argument
+  **FOR EXTRACTION**, which this same feature applied twice (`driveModeWriteFor`, `readyToRespawn`).
+  The path filter is equally extractable (`shouldApplyBroadcast(payloadPath, myPath)`). The current
+  regex breaks on any rename or reorder, while a semantically-equivalent-but-wrong comparison passes.
+- **Suggested action:** Extract both predicates and replace the regexes with value tests.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-08-26-QUALITY-DRIVEMODE-MINOR-POLISH
+- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
+- **Type:** tech-debt (4 MINOR findings, grouped)
+- **Summary:** (a) `Workspace.tsx:380-387` — orphaned 8-line comment describing `startApply`, now
+  ~90 lines away, pointing at the wrong function. (b) `Workspace.tsx:359-366` — a leftover
+  `/** Cancel: a TRUE no-op */` doc comment mislabels `resolveDriveMode`, which handles BOTH
+  outcomes. (c) `App.css:602-625, 642-660` — `.workspace-header-drivemode` declared twice, split by
+  an unrelated rule. (d) `Workspace.tsx:229-357` — ~130 inline lines of drive-mode state in a
+  component past 1170 lines.
+- **Context:** (a)–(c) are phase-accretion artifacts from the Phase 3→4 re-plan; ⚠️ two of them make
+  a reader hit a comment describing the WRONG function, which is worse than no comment. (d) is the
+  hook extraction that also fixes findings 1, 2 and 4.
+- **Suggested action:** Sweep (a)–(c) in any refactor pass; (d) is the shared fix above.
+- **Priority:** low
+- **Status:** pending
+
 # turn-output-reorientation — 2026-08-25
 
 ## SURFACE-2026-08-25-QUALITY-WP3-RAW-GUARD-ON-A-DOM-QUESTION

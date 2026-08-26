@@ -3,7 +3,7 @@ shape: wbs
 cycle: milestone-13.5-qol-polish-bucket
 milestone: 13.5
 created: 2026-08-19
-updated: 2026-08-25  # WP1 + WP2 + WP3 shipped; WP4/WP5 remain
+updated: 2026-08-26  # WP1 + WP2 + WP3 shipped; WP4/WP5 remain
 state: complete
 ---
 
@@ -322,7 +322,7 @@ three rounds of trust, escalated a WP out of its milestone, and marked working c
 as `SURFACE-2026-08-25-REFUTATION-FROM-TYPINGS-NOT-RUNTIME`.
 
 
-## WP4: Drive-mode readout + selector on the workspace surface
+## WP4: Drive-mode readout + selector on the workspace surface — ✅ SHIPPED 2026-08-26 (commit `efa7798`)
 
 **Description:** The drive mode is settable and legible **only** on the picker row. Once a
 workspace is open — which is where the operator actually spends the day — there is no way to see
@@ -363,11 +363,11 @@ is out of scope and contradicts the prior.
 
 **Tasks:**
 
-- [ ] 4.1 **Decide readout-only vs readout+selector FIRST, and get the operator's call on record.**
+- [x] 4.1 **Decide readout-only vs readout+selector FIRST, and get the operator's call on record.**
       The ask says both, so build both unless 4.2 says the write path cannot be made honest. A
       readout alone is a strictly cheaper fallback and still solves the stated "no way to see it"
       half.
-- [ ] 4.2 ⚠️ **Resolve the LIVENESS QUESTION before building the selector — it is the whole
+- [x] 4.2 ⚠️ **Resolve the LIVENESS QUESTION before building the selector — it is the whole
       correctness risk.** Two distinct consumers read the mode and they do NOT agree on when:
       - the `UserPromptSubmit` hook's `additionalContext` line reads
         `CLAUDESK_DRIVE_MODE`, an **env var fixed at spawn** — so changing the mode mid-session
@@ -385,13 +385,13 @@ is out of scope and contradicts the prior.
       **(c)** offer an inline Recycle affordance so the operator can *make* it take effect (WP3's
       Recycle already exists as a sibling button in the same row).
       ⚠️ **Do not ship an unlabelled live-looking `<select>` under option (a).**
-- [ ] 4.3 ⚠️ **Add the broadcast event that M12 deliberately omitted.** With a second surface, the
+- [x] 4.3 ⚠️ **Add the broadcast event that M12 deliberately omitted.** With a second surface, the
       picker and the workspace can disagree, and `driveModeIpc.ts` says outright that this is when
       to add it. Mirror the **permission mode's** pattern (app-global value, re-broadcasts on
       write because it has a View-menu radio as a second surface) — that is the in-repo precedent
       for two-surfaces-one-value; the model override's no-event pattern is now the wrong template.
       Both surfaces must re-sync on a write from either.
-- [ ] 4.4 ⚠️ **GATE IT, and take the OFF-invariant guard's SIXTH arm.** The mode is a
+- [x] 4.4 ⚠️ **GATE IT, and take the OFF-invariant guard's SIXTH arm.** The mode is a
       workflow-system concept, so this surface is `workflow_features_enabled`-gated exactly as the
       skill row and `workspace-header-nextopen` are — **ABSENT when off, not hidden or disabled**.
       Per the guard's own header, a new gated surface owns a new arm. ⚠️ **Probe the new arm
@@ -399,7 +399,7 @@ is out of scope and contradicts the prior.
       trips *some* arm reports "the guard bites" while hiding this one's gap. Confirm the mutation
       landed in **executable** code (`[[verify-the-mutation-landed]]`,
       `[[invalid-probe-and-real-hole-look-identical]]`).
-- [ ] 4.5 **Reuse `cc/driveMode.ts` as-is; add no second vocabulary.** `DRIVE_MODES`,
+- [x] 4.5 **Reuse `cc/driveMode.ts` as-is; add no second vocabulary.** `DRIVE_MODES`,
       `DRIVE_MODE_UNSET_PLACEHOLDER` and `driveModeChanged` already exist in the pure module and
       are the single source of truth for the wire strings. ⚠️ **`fsd` and `stepping` are the
       load-bearing spellings** — `full-autopilot` / `step-by-step` are the wrong guesses and fail
@@ -408,19 +408,19 @@ is out of scope and contradicts the prior.
       override's open-string / do-NOT-validate rule must not be generalized to it.
       ⚠️ `cellLines()` is the **picker cell's** layout, not a shared widget — do not reuse it here
       and do not widen it to serve two callers.
-- [ ] 4.6 **Placement on the workspace surface.** The `workspace-header` already carries the name,
+- [x] 4.6 **Placement on the workspace surface.** The `workspace-header` already carries the name,
       the gated `↻ <nextOpen>` prediction, the gated skill row (+ Recycle), and the split control.
       ⚠️ `[PRIOR: new-surface-must-earn-its-place-against-existing-ones]` fires: put it **in the
       existing header row**, not in a new bar, panel, or settings popover. Check the header's
       horizontal budget at a narrow window before adding a wide control — the picker column's box
       math was wrong three separate ways and only measuring the live DOM caught it. **Measure;
       compute nothing you can read.**
-- [ ] 4.7 ⚠️ **If a selector is built, it has its OWN hit region.** M12's structural risk in the
+- [x] 4.7 ⚠️ **If a selector is built, it has its OWN hit region.** M12's structural risk in the
       picker cell was two edit targets in one column, where a single cell-wide handler routes a
       click meant for the mode into the *model* editor — *"presents as 'the control does nothing'
       and no unit test can see it."* The header now has several adjacent clickable affordances;
       the same trap applies.
-- [ ] 4.8 Live verify-self: change the mode from the workspace, confirm the picker row re-syncs
+- [x] 4.8 Live verify-self: change the mode from the workspace, confirm the picker row re-syncs
       (and vice versa), and confirm the OFF-gate collapse. ⚠️ Verify the **liveness claim actually
       chosen in 4.2** end-to-end — if (b), prove the running session's next turn sees the new mode
       by reading the hook's `additionalContext`, not by reading `projects.json` back.
@@ -434,6 +434,30 @@ next-spawn — which argues for stored-with-a-label, but the ask said "indicator
 current-state.
 
 ---
+
+**Status:** ✅ **SHIPPED 2026-08-26** (`efa7798`). Gate: `pnpm verify:auto` exit 0 · Rust **883**
+(was 879) · frontend **2260** (was 2230). Code-quality review: **0 CRITICAL · 4 MAJOR · 4 MINOR**,
+all auto-backlogged — no refactor owed.
+
+⚠️ **THE WP'S OWN INTERACTION DESIGN WAS REJECTED MID-FLIGHT AND RE-PLANNED.** Tasks 4.1/4.2 asked
+whether to build a readout-only or a selector, and framed apply as *"label it next-spawn-only"* or
+*"offer an inline Recycle affordance"*. The operator rejected that at Phase 3 verify-human: changing
+the mode **IS** the intent to apply it, so it raises a **confirm**, and Apply drives the turn-level
+respawn itself — immediately when the agent is idle, **queued until idle** when it is not. Cancel is
+a true no-op. See the archived WIP's rewritten **AC-5**.
+
+⚠️ **The root cause is worth carrying forward:** the rejected design came from an assumption the
+agent recorded in §Assumed and then **cited in a downstream task as "operator-reviewed"**, which it
+never was. **An unchallenged assumption is not an approved one.**
+
+⚠️ **Two properties this WP established that later work must not re-derive:**
+1. **`OpenIntent::TurnRespawn` resumes WITHOUT consuming the unclean-exit flag.** `authorizes_resume`
+   and `should_consume_for_resume` are now **two predicates**; collapsing them back into one boolean
+   reintroduces a silent auto-resume killer.
+2. **`readyToRespawn` is `idle` ONLY.** `background_work` means a backgrounded job is still running
+   (respawning kills it), and `unknown` **with a live session** means "spawned, no turn yet" — the
+   turn-0 case the operator caught. ⚠️ Do NOT copy `recycleSession`'s `idle || background_work`
+   match: it answers a different question and its own comment says so.
 
 ## WP5: Bucket exit verify
 
