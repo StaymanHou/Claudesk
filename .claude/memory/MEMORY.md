@@ -71,6 +71,7 @@
 
 ## Toolchain & environment traps
 
+- [bsd-sed-lacks-word-boundary.md](bsd-sed-lacks-word-boundary.md) — BSD `sed` has no `\b`, so a mutation probe using it silently no-ops and every mutant reads as "guard survived" — a hole that isn't there. Use `perl -pi -e`; assert the mutation landed.
 - [bash-cargo-env.md](bash-cargo-env.md) — Bash subshells don't inherit `~/.cargo/env`; cargo/rustc need an explicit PATH prefix.
 - [hmr-stale-across-file-rename.md](hmr-stale-across-file-rename.md) — A long-lived Vite/HMR window can half-apply and fake a regression after a RENAME *or* any edit to a component holding `useRef`/`useState`. Relaunch before believing a verify RESULT.
 - [strictmode-remount-deadlocks-an-unreleased-fetch-latch.md](strictmode-remount-deadlocks-an-unreleased-fetch-latch.md) — A fetch-once latch set before the await and never released on cancel deadlocks under StrictMode and renders BLANK while every gate is green. Release in cleanup; model as a pure state machine.
