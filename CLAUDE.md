@@ -181,7 +181,7 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ## Current Milestone
 
-**Milestone 15 — Workflow supervisor.** Next up; see `## Next Milestone` below for the full brief (probe-gated, not decomposed). ⚠️ Execution order is **M13.5 → M15 → M14**, settled by the operator 2026-08-19.
+**Milestone 14 — Polish + OSS release.** Next up. ⚠️ **ORDER REVERSED 2026-08-26 by the operator: M14 → M15**, to release everything through M13.5. This supersedes the 2026-08-19 M13.5→M15→M14 call and lands back on `roadmap.md`'s original lean; **do not "correct" it back, and do not treat the older note's own "do not correct it back" guard as still binding** — it protected the superseded decision. Full reasoning: `roadmap.md` → Revision 2026-08-26.
 
 **⚠️ M13.5 (QoL polish bucket) CLOSED 2026-08-26 at FIVE WPs** — the fourth bucket of its kind (M6 · M10.5 · M11.5 all closed at 4), but WP3 escalated out on a mechanism refutation and was **re-admitted the same day** when its own probe overturned it. WP1 (window state) · WP2 (`BackgroundWork` 4th status state) · WP3 (turn-output jump nav) · WP4 (workspace drive-mode readout) · WP5 (exit verify) all ✅.
 
@@ -193,7 +193,7 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ⚠️ **A deleted ES-module export is a RUNTIME failure, not just a `tsc` error** — it cost M13.5 WP3 a blank app and a voided verify cycle (`verify:auto` and `tsc` both green while `#root` was empty and the "live" reads came from a pre-deletion bundle). **Never split an export deletion from its consumer migration across phases; run a boot smoke-test before trusting any live observation on a phase that deleted anything.** Full write-up: the `high`-priority entry in `backlog.md`.
 
-⚠️ **ORDER SETTLED — M13.5 → M15 → M14 — which REVERSES `roadmap.md`'s own M14-first lean.** Operator chose dogfooding-first with the counter-argument on the table; **do not "correct" it back.** The OSS release is therefore last. Full reasoning + the cheap-reversal note: `roadmap.md` → Revision 2026-08-19.
+⚠️ **ORDER NOW M14 → M15 (reversed 2026-08-26).** ⚠️ **`main` is ~40 commits ahead of the last tag `v0.3.4`** — M13, M13.5 and the paydown sweep are all shipped-but-undelivered, which is what flipped the call. ⚠️ **A release is now a VERIFICATION prerequisite, not just distribution:** M13.5 WP1's installed-`.app` tier was unsatisfiable because the installed build predates the feature (`25a68bc` is not an ancestor of `v0.3.4`). M15's argument (the measured 10x auto-chain regression, paid every session) is **deferred, not refuted**.
 
 **⚠️ Milestone 13 (Skill orchestration) COMPLETE — GROUP C CLOSED: all six vision success metrics met.** Common workflow operations are now clicks.
 
@@ -223,7 +223,7 @@ Setup-time pitfalls discovered during WP1 that any fresh checkout will hit.
 
 ⚠️ **The M12 properties that bind M13 are NOT repeated here** — they are in `## Current Milestone` above ("Five things from M13 that must NOT be re-derived") and in full in `arch/session-resumption.md`.
 
-**Execution order from here (SETTLED 2026-08-19):** **M13.5** (QoL bucket) → **M15** (workflow supervisor) → **M14** (polish + OSS release). ⚠️ This reverses the earlier "M14 first" lean by operator decision — see `## Current Milestone`. Numbering does not match execution order for M11/M11.5 — M11.5 ran *before* M11 by design; no catch-up is owed. ⚠️ **When M14 is next touched, correct its "default CLI args for `claude`" Settings line** — M11.5 consumed most of it, and it still misstates PiP (shipped M5) + permission-mode (shipped M6) as future work.
+**Execution order from here (REVERSED 2026-08-26):** **M14** (polish + OSS release) → **M15** (workflow supervisor). M13.5 closed 2026-08-26. ⚠️ **This supersedes the 2026-08-19 M13.5→M15→M14 call** — see `## Current Milestone` and `roadmap.md` → Revision 2026-08-26. Numbering does not match execution order for M11/M11.5 — M11.5 ran *before* M11 by design; no catch-up is owed. ⚠️ **When M14 is next touched, correct its "default CLI args for `claude`" Settings line** — M11.5 consumed most of it, and it still misstates PiP (shipped M5) + permission-mode (shipped M6) as future work.
 
 **Releases** via the `/release` skill. ⚠️ **Do NOT record the latest version here — this line went two releases stale once, then went stale again.** `git tag --sort=-v:refname | head -1` is the authority; `main` runs ahead of the last tag by design. Trust anchor unchanged since v0.2.9 (key `774E2E8429FDF78A`), so existing installs self-update; CHANGELOG carries each release's contents.
 

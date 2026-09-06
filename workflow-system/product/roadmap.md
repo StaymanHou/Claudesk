@@ -538,6 +538,32 @@ precedent. Closed 2026-08-26.
 
 **Exit Criteria:** In autopilot across **N open workspaces**, a turn that ends where the pause policy says AUTO is detected and the next command fired **without operator input** — verified against the **replayed real corpus** (all 19 known breaks flagged, zero known-legitimate pauses flagged) *and* live on at least one real multi-workspace session. Above 50% context at a non-final phase boundary, the session recycles instead of chaining. ⚠️ **Verified against the DECISION, not against a stored value** — the deliverable is an enforcement decision, so "the graph is modeled" is an insufficient exit check; the criterion is that a break is *caught and corrected* end-to-end. ⚠️ **The negative arm asserted just as hard:** a legitimate `verify-human` pause, an ESCALATE, and a **Mode-0 direct invocation** must each produce **no fire at all**.
 
+## Revision 2026-08-26 — execution order REVERSED back to M14 → M15 (operator, at the M13.5 close)
+
+⚠️ **THIS SUPERSEDES THE 2026-08-19 ORDER BELOW. The order is now M14 (polish + OSS release) → M15
+(workflow supervisor).** Operator-directed at the M13.5 close, with the stated rationale: **release
+everything up to and including M13.5.**
+
+⚠️ **Do NOT "correct" this back to M13.5 → M15 → M14, and do not read the 2026-08-19 note's own
+"do not correct it back" guard as still binding** — that guard protected the *earlier* decision from
+being reverted toward this roadmap's original lean. The operator has now made that reversion
+deliberately, which lands back on **the lean this roadmap recorded in the first place** (*"the
+supervisor is a dogfooding win first, and its value to a stranger is unproven, which argues for
+shipping M14 first"*). Both decisions are the operator's; this is the current one.
+
+**What changed between the two calls:** on 2026-08-19 the dogfooding-first argument won because the
+measured 10x auto-chain regression was being paid every session while M14's value accrued to
+strangers who did not exist yet. By 2026-08-26, M13.5 had closed at five WPs and **`main` stood 40
+commits ahead of the last release tag (`v0.3.4`)** — an unreleased backlog spanning M13, M13.5, and
+the paydown sweep. That inverts the "value accrues to nobody yet" premise: the shipped work is real
+and undelivered. ⚠️ **The M13.5 close supplied concrete evidence for this** — WP1's installed-`.app`
+verification tier was **unsatisfiable** precisely because the installed build predates the feature
+(commit `25a68bc` is not an ancestor of `v0.3.4`), so a release is now a **prerequisite for
+verification**, not only a distribution act.
+
+**The M15 argument is unchanged and still stands** — the auto-chain regression is still being paid
+every session. It is deferred, not refuted.
+
 ## Revision 2026-08-19 — QoL bucket inserted as Milestone 13.5; execution order settled M13.5 → M15 → M14
 
 **Operator-directed insert (2026-08-19), at the clean boundary after the backlog-paydown sweep closed
