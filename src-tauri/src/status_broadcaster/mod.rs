@@ -1450,6 +1450,38 @@ mod tests {
     // real enum via serde, so adding a variant without touching this block fails there.
     // ─────────────────────────────────────────────────────────────────────────────
 
+    /// The authoritative arch doc for this subsystem, embedded at COMPILE time.
+    ///
+    /// ⚠️ One binding rather than a repeated `include_str!`, so the four-level traversal out
+    /// of the crate root into the docs tree is stated once and is greppable. `include_str!`
+    /// (not `std::fs`) deliberately: a moved or renamed doc then breaks the BUILD loudly
+    /// instead of failing a test at runtime. The TS-side sibling guard uses `node:fs`
+    /// because its file is outside the Vite graph — different tool, same intent.
+    fn arch_doc() -> &'static str {
+        include_str!("../../../workflow-system/product/arch/status-channel-and-surfaces.md")
+    }
+
+    /// Anti-vacuity: prove the doc actually loaded and is the file we think it is.
+    ///
+    /// ⚠️ **A HEAD ANCHOR CANNOT SEE TRUNCATION — truncation eats the TAIL.** So this pins
+    /// one anchor near the top (§A) *and* one near the bottom (§B); a file cut in half
+    /// still satisfies the first and fails the second. That pair replaces a bare
+    /// `doc.len() > 5_000` byte threshold, which was the wrong instrument twice over: the
+    /// number was underived (this doc is ~37 KB, so 5 KB was ~7× slack and would miss a
+    /// gut-to-20%), and an unexplained numeric threshold is the shape a future reader
+    /// LOWERS on first failure instead of investigating.
+    fn assert_doc_loaded(doc: &str) {
+        assert!(
+            doc.contains("## A. Status broadcaster + Unix-socket hook channel"),
+            "arch doc missing its §A heading — wrong file, or the include path moved?"
+        );
+        assert!(
+            doc.contains("## B. Three status surfaces (subscribers)"),
+            "arch doc missing its §B heading — the file is TRUNCATED (a head-only check \
+             would have passed this). Do not relax the assertions below to compensate."
+        );
+    }
+
     /// The arch doc must name every wire-visible `WorkspaceState` variant.
     ///
     /// ⚠️ `Unknown` is deliberately EXCLUDED: it is the pre-first-event default and is
@@ -1457,27 +1489,36 @@ mod tests {
     /// describes. The other four all cross the socket and all render.
     #[test]
     fn arch_doc_names_every_emitted_workspace_state() {
-        let doc =
-            include_str!("../../../workflow-system/product/arch/status-channel-and-surfaces.md");
-        // Meta-guard: a doc that failed to load (or was emptied) would pass every
-        // `contains` below vacuously if the assertions were negative — pin non-emptiness
-        // and a known anchor so a broken include cannot read as green.
-        assert!(
-            doc.len() > 5_000,
-            "arch doc unexpectedly small ({} bytes) — include_str! path may be wrong",
-            doc.len()
-        );
-        assert!(
-            doc.contains("Status broadcaster."),
-            "arch doc missing its Status-broadcaster section — wrong file?"
-        );
+        let doc = arch_doc();
+        assert_doc_loaded(doc);
 
-        for variant in ["Idle", "Running", "AwaitingInput", "BackgroundWork"] {
+        // ⚠️ ANCHORED TO THE SITE, NOT TO FOUR FREE-FLOATING WORDS. The bare variant names
+        // are NOT unique to this doc — across the file `Idle` occurs 4×, `Running` 5×,
+        // `AwaitingInput` 7×, `BackgroundWork` 3×, in unrelated prose (a menu-bar
+        // aggregation sentence, an `aggregate_alarm` note). A `contains("Idle")` loop
+        // therefore passes with the state contract *gutted*, which was measured, not
+        // supposed: replacing the union below with `state: REDACTED` left the old guard
+        // GREEN. That is failure form 12 in `docs/lessons/source-text-guards.md` — "a
+        // substring that OCCURS at the site is not ANCHORED to it".
+        //
+        // ⚠️ AND THE MUTATION PROOF THAT MISSED IT IS THE LESSON: the original probe was a
+        // RENAME (`BackgroundWork` -> `BackgroundWorkX`), which tests boundary-matching and
+        // is blind to anchoring. `grep -c` is the one-command check that finds this, and it
+        // is prescribed by that same lesson. Both target strings below were `grep -c`'d
+        // before being relied on: each occurs exactly ONCE.
+        for site in [
+            // The wire contract itself (the `WorkspaceStatusUpdate` DTO).
+            "state: Idle|Running|AwaitingInput|BackgroundWork",
+            // The rendered indicator list, which carries `Unknown` too.
+            "Idle / Running / AwaitingInput / BackgroundWork / Unknown",
+        ] {
             assert!(
-                doc.contains(variant),
-                "arch/status-channel-and-surfaces.md does not mention WorkspaceState::{variant}. \
-                 A shipped state that the authoritative arch doc omits reads as a refuted model \
-                 left standing as live spec — document it there, do not delete this assertion."
+                doc.contains(site),
+                "arch/status-channel-and-surfaces.md no longer states the full state union \
+                 `{site}`. Every emitted WorkspaceState must appear THERE, not merely \
+                 somewhere in the file — a shipped state the authoritative arch doc omits \
+                 reads as a refuted model left standing as live spec. Document it at the \
+                 site; do not weaken this to a bare-word search."
             );
         }
     }
@@ -1491,8 +1532,8 @@ mod tests {
     /// says "array" invites a future reader to forward the tasks themselves.
     #[test]
     fn arch_doc_records_the_background_work_signal_and_colour() {
-        let doc =
-            include_str!("../../../workflow-system/product/arch/status-channel-and-surfaces.md");
+        let doc = arch_doc();
+        assert_doc_loaded(doc);
         assert!(
             doc.contains("background_task_count"),
             "arch doc must name the COUNT field (not `background_tasks[]`) as BackgroundWork's signal"
