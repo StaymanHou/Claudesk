@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-08-26
+updated: 2026-09-06
 ---
 
 # Runtime Registry
@@ -72,10 +72,11 @@ real chronology.
 
 ## pnpm tauri build
 
-- **Last:** 106s (2026-08-19, /release v0.3.4: cargo clean removed 32363 files / 10.8 GiB + cold build, bundle triad [.dmg/.app.tar.gz/.sig], signed — "Finished 1 updater signature" confirms the key was read as CONTENTS not a path)
-- **Prior:** 114s (2026-08-18, /release v0.3.3: cargo clean removed 107736 files / 36.1 GiB + cold build, 1m28s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed)
+- **Last:** 131s (2026-09-06, /release v0.4.0: cargo clean removed 116836 files / 38.7 GiB — largest yet + cold build, 1m22s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed — "Finished 1 updater signature" confirms the key was read as CONTENTS not a path)
+- **Prior:** 106s (2026-08-19, /release v0.3.4: cargo clean removed 32363 files / 10.8 GiB + cold build, bundle triad, signed)
 - **Use timeout:** 600000
 - **History:**
+  - 131s — 2026-09-06 (/release v0.4.0: cargo clean 116836 files/38.7GiB — largest yet, 1m22s rust + bundle, signed)
   - 106s — 2026-08-19
   - 114s — 2026-08-18 (/release v0.3.3: cargo clean 107736 files/36.1GiB — largest yet, 1m28s rust + bundle, signed)
   - 110s — 2026-08-06 (/release v0.3.2: cargo clean 81435 files/25.9GiB, 1m18s rust + bundle, signed)
