@@ -517,6 +517,52 @@
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** the one surviving MINOR is a one-line fix — carry the final `downloaded` through on the finish emit (or a one-line comment) — rides any future `updater/commands.rs` touch. Dismiss via the WIP's `## Code-Quality Review` section.
 
+## SURFACE-2026-08-28-SUPERSEDED-TEXT-IN-DURABLE-DOCS-HAS-NO-CONVENTION
+- **Source:** cross-project global learning, ported 2026-08-28 from `knowledge_base` (CMC ad-ops).
+  Draft parked at `.claude/learnings/2026-08-28-superseded-text-doc-hygiene.md` (gitignored per the
+  artifact-tracking MAP — global-scope drafts await hand-porting to the workflow-system source repo).
+- **Target level:** workflow-system (cross-repo — `CLAUDE.snippet.md` + `product-finalize` §2,
+  `product-arch`, and the three terminal-close skills). ⚠️ **NOT a Claudesk code change.**
+- **Type:** gap (a durable-doc convention the skills assume but never state).
+- **Summary:** Skills that resync durable docs say "update in place" and "flag significant drift
+  explicitly" but never say **what a correction should look like on the page**. With no rule the agent
+  decides per instance and the decisions disagree *within a single session* — the source session left
+  **16 supersede markers in three different styles** across five docs, including strikethrough and a
+  `> **CORRECTED**` block **both on the same claim**. The proposed rule: **correct in place by
+  default** (`git log` holds the history); keep the old claim visible **only when a reader of the new
+  text would plausibly re-derive the old one**, and then say *why* it was wrong. Markers: `~~…~~` for
+  a short phrase edited against a quoted original; a `> **CORRECTED <date>.**` block for a reversed
+  conclusion; **never both**; **never strike status** (a completion marker or dependency is replaced,
+  not struck).
+- **Context:** ⚠️ **This is directly load-bearing here, and M13.5 supplies fresh evidence.** WP5 spent
+  real effort on exactly this class: a **stale duplicate** of a pre-WP3 backlog body survived beside
+  its own rewrite (`SURFACE-2026-08-26-DELETE-ON-RESOLVE-REWRITE-PATH-SKIPS-THE-DELETE`), and the
+  cycle close found `arch/session-resumption.md` still **titled** *"NOT the workspace header"* after
+  WP4 reversed it — retitled rather than deleted precisely because that reversal *does* teach
+  something, which is the discriminant this rule names. ⚠️ The learning's own payoff was the same
+  shape: chasing an unexplained strikethrough surfaced a **factual error** (an `arch.md` Unknown
+  recorded as resolved while the matching backlog item was still open). **Consistent supersede
+  markers make a doc greppable; inconsistent ones hide contradictions** — and in this project the
+  `arch/` set is declared *the authority*, so a hidden contradiction there outranks a correct record.
+- **Suggested action:** Port the draft into the workflow-system source repo — a short
+  `### Superseded text in durable docs (GLOBAL)` section in `CLAUDE.snippet.md` (the
+  CHANGELOG-convention neighbourhood shares the "what closing skills write" concern), plus a one-line
+  pointer from `product-finalize` §2 and the sibling doc-editing skills. ⚠️ **Cheap mechanical
+  enforcement is available for the clearest case only:** `tests/check-structure.sh` can flag a `~~` on
+  the same line as, or directly above, a `CORRECTED`/`Superseded` marker — the "never both" case.
+  Do **not** try to mechanize the judgment call (*"does the reversal teach anything?"*); that is the
+  part that needs a human-authored discriminant, and a guard asserting it would pass on prose saying
+  the opposite.
+- **⚠️ Fold into the mccc handoff already owed** — this is the **fourth** cross-repo item queued
+  there, alongside `SURFACE-2026-08-25-PROBE-CHECK-EXEMPTS-ALREADY-INSTALLED-DEPENDENCIES`,
+  `SURFACE-2026-08-25-REFUTATION-FROM-TYPINGS-NOT-RUNTIME`, and
+  `SURFACE-2026-08-26-DELETE-ON-RESOLVE-REWRITE-PATH-SKIPS-THE-DELETE` (whose target is the same
+  "Append discipline" neighbourhood — ⚠️ **consider porting the two together**, since a rewrite that
+  must replace the old body in place *is* the delete-side instance of this same convention).
+- **Priority:** medium (cheap prose fix; no live defect, but the failure mode is self-concealing —
+  an inconsistent marker hides a contradiction and nothing re-reads a closed doc).
+- **Status:** pending — cross-repo (`my-claude-code-customization`).
+
 ## SURFACE-2026-08-26-DELETE-ON-RESOLVE-REWRITE-PATH-SKIPS-THE-DELETE
 - **Source:** feature:plan (M13.5 WP5 exit verify — found while reading the TURN-OUTPUT entry)
 - **Target level:** workflow-system (cross-repo — `~/.claude/CLAUDE.md` "Append discipline" prose)

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   DRIVE_MODES,
   DRIVE_MODE_LINE_PREFIX,
@@ -157,3 +158,53 @@ describe("driveModeChanged — suppresses redundant whole-file writes", () => {
 // Compile-time: the runtime list cannot drift from the union.
 const _exhaustive: readonly DriveMode[] = DRIVE_MODES;
 void _exhaustive;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M13.5 WP5 verify-codify — the arch doc must name every drive-mode wire string.
+//
+// ⚠️ WHY: at the M13.5 cycle close, THREE of the four spellings — `stepping`,
+// `orchestrated`, `fsd` — appeared NOWHERE in `arch/session-resumption.md`, the doc that
+// `arch.md` designates as the authority on drive mode. Only `autopilot` was present, and
+// only incidentally. These are exactly the strings CLAUDE.md flags as load-bearing: a wrong
+// guess (`full-autopilot` / `step-by-step`) fails serde on read and takes the WHOLE project
+// list down, so a reader who reconstructs the vocabulary from the authoritative doc gets an
+// incomplete set and no warning.
+//
+// ⚠️ THIS GUARD'S SHAPE DOES NOT GENERALIZE, AND THAT WAS CHECKED RATHER THAN ASSUMED.
+// The sibling guard in `status_broadcaster` works because `WorkspaceState` is a CLOSED enum
+// to anchor on. The same cycle's other two resynced docs have no such anchor — WP1's window
+// -state work is a plugin registration policy (pure fns, no variant list) and WP3's
+// `turnMarkers` exposes a shape, not a variant set. Writing "assert some string appears in
+// some doc" for those would pass on prose that says the OPPOSITE, which is the
+// guard-that-checks-nothing shape. `DRIVE_MODES` is a real closed set, so this one bites.
+//
+// Read via `node:fs`, the convention this file's sibling `driveModeIpc.test.ts` settled on
+// for files outside the Vite graph.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("arch/session-resumption.md names every drive-mode wire string", () => {
+  const archDoc = readFileSync(
+    new URL(
+      "../../../workflow-system/product/arch/session-resumption.md",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  it("is not vacuous — the doc loaded and is the right one", () => {
+    // Meta-guard: without this, an unreadable or emptied file would satisfy every
+    // `toContain` below only if they were negative — and a wrong path would throw, but a
+    // TRUNCATED file would not. Anchor on a heading unique to this subsystem.
+    expect(archDoc.length).toBeGreaterThan(5_000);
+    expect(archDoc).toContain("The drive-mode signal");
+  });
+
+  it.each(DRIVE_MODES)("names the `%s` wire string", (mode) => {
+    expect(
+      archDoc,
+      `arch/session-resumption.md never mentions the drive mode "${mode}". It is the ` +
+        `authority on drive mode, so a reader reconstructing the vocabulary from it gets an ` +
+        `incomplete set — and a wrong guess fails serde on read and takes the whole project ` +
+        `list down. Document it there; do not delete this assertion.`,
+    ).toContain(mode);
+  });
+});

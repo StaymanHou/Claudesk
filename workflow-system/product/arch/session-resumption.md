@@ -165,6 +165,25 @@ string.
 
 ### The drive-mode signal: a SIGNAL, not a store
 
+**The vocabulary — the four wire strings, and they are load-bearing.** `DRIVE_MODES`
+(`src/cc/driveMode.ts`) is the single source of truth; upstream authority is the companion
+workflow-system's `transitions.md`.
+
+| wire string | mode | pause behaviour (per `transitions.md`) |
+|---|---|---|
+| `stepping` | 1 — Stepping | pause after every skill |
+| `orchestrated` | 2 — Orchestrated | standard policy |
+| `autopilot` | 3 — Autopilot | pause only at `verify-human` |
+| `fsd` | 4 — FSD | no stops; `verify-human` skipped |
+
+⚠️ **`full-autopilot` and `step-by-step` are the WRONG GUESSES** — no workflow skill recognizes
+either, and a bad string **fails serde on read and takes the whole project list down**. That
+severity is why the picker cell and the workspace readout are both a native `<select>` over this
+**closed** set, and why `modelOverride.ts`'s open-string "do NOT validate" rule must **not** be
+generalized here. Pinned by a test that fails if any of the four goes unmentioned in this document
+(`src/cc/__tests__/driveMode.test.ts`) — added at the M13.5 close, when three of the four were
+absent from this very file.
+
 ⚠️ **THE DELIVERABLE IS A SIGNAL.** A persisted `drive_mode` **already existed on disk in 93% of
 manual restores and was already ignored 74% of the time**, so storing it somewhere new accomplishes
 nothing on its own. The mechanism, **proven live** (per `[[cc-hook-capture-beats-docs]]`, not from
