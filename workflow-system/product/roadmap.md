@@ -464,6 +464,14 @@ precedent. Closed 2026-08-26.
 
 ### Milestone 14: Polish & Open-Source Release
 
+> ⚠️ **SPLIT 2026-09-06 — do NOT decompose this milestone as a whole; part of it has shipped.** The
+> operator cut the **release half** (release note + MIT LICENSE + README correctness pass) out of
+> this milestone and shipped it as a single task, deliberately skipping `/product-wbs`. **Still
+> open here:** the Settings UI (project-list management + hotkeys, *extending* the `⌘,` panel),
+> Developer-ID signing + notarization, the full two-tier setup docs, and repo description/topics —
+> and those now execute **after M15**, though the M14 → M15 *order* itself is unchanged. See
+> **Revision 2026-09-06**. The README/license deliverables below are **DONE**; read them as history.
+
 **Goal:** Make Claudesk usable by other people who run the same workflow setup, without claiming to be a general-purpose tool. *(2026-06-22: PiP is no longer parked here — it ships unconditionally as Milestone 5; the "home for deferred PiP" role is retired.)* *(2026-06-25: the workflow-docs markdown viewer was inserted as Milestone 7, sliding Skill orchestration to M9 and this Polish milestone to M10.)* *(2026-06-26: the time-analytics panel was inserted as Milestone 8, sliding Skill orchestration to M10 and this Polish milestone to M11.)* *(2026-06-26b: the friend-QoL milestone was inserted as Milestone 6, sliding everything after it +1 — time-analytics → M9, Skill orchestration → M11, this Polish milestone → M12.)* *(2026-06-29b: the demo-assets milestone was inserted as Milestone 8 and the time-analytics ↔ docs-viewer pair swapped, sliding the tail +1 again — time-analytics → M9, docs-viewer → M10, auto-resume → M11, Skill orchestration → M12, this Polish milestone → M13.)* *(2026-07-06: the in-app auto-updater was inserted as Milestone 10, sliding the tail +1 again — docs-viewer → M11, auto-resume → M12, Skill orchestration → M13, this Polish milestone → M14.)*
 
 > **Overlap note (2026-07-06):** M14 deliverable "code-signing / notarization strategy decided and documented" now **overlaps** M10 (auto-updater), which forces the sign-vs-unsigned decision earlier because the updater's post-install relaunch depends on it. At M10 the decision gets *made*; M14 inherits it as *documented/finalized for the public release* rather than deciding it fresh. Reconcile at M10 close.
@@ -471,8 +479,8 @@ precedent. Closed 2026-08-26.
 **Deliverables:**
 - [ ] **Settings UI — ⚠️ CORRECTED 2026-07-31 (M11.5 WP1); most of the old line had already shipped.** What remains for M14: **project list management** and **hotkeys**, plus **EXTENDING** the `⌘,` Settings panel that M10.9 WP2 already built (the framing shifted from "fold in / consolidate" to "extend what exists" — the panel, its 4 labelled groups, and the `workflow_features_enabled` toggle all shipped at M10.9). **Struck from this line as already delivered:** menu-bar visibility (M7 tray), PiP mode (M5, a View-menu window command — deliberately *not* a preference), the `claude` permission-mode dropdown (M6, app-global), and the per-project `--model` override (**M11.5 WP1** — and note it is *not* a Settings control at all: it lives on the **picker row**, because a value read once at spawn belongs on the surface where the spawn is chosen; see design prior `set-a-spawn-time-choice-where-the-spawn-is-chosen`). If a further "default CLI args" need appears, add the specific flag then rather than carrying a generic placeholder.
 - [ ] **macOS app bundle + DMG;** code-signing / notarization strategy decided and documented.
-- [ ] **README + minimum setup docs.** *(Stance refined 2026-07-20 — see Revision 2026-07-20 + vision §Target Audience.)* The workflow-coupled features are **opt-in and gated** (M10.9), so the README no longer "assumes the workflow system is installed with no hand-holding." It documents **two coherent tiers**: (1) the workflow-independent lite-IDE core (picker, workspaces, terminal, editor/diff, hook-driven status surfaces) that any Claude Code user gets out of the box; (2) the opt-in workflow-orchestration layer (behind the gate) for users who install the companion workflow system, with a pointer to that system.
-- [ ] **Public repo + open-source license** chosen and added.
+- [x] **README + minimum setup docs.** ⚠️ **PARTIAL — the correctness pass shipped 2026-09-06** (status block, four-state dots, two-tier stance, dead links); the full two-tier setup-doc buildout defers to after M15. *(Stance refined 2026-07-20 — see Revision 2026-07-20 + vision §Target Audience.)* The workflow-coupled features are **opt-in and gated** (M10.9), so the README no longer "assumes the workflow system is installed with no hand-holding." It documents **two coherent tiers**: (1) the workflow-independent lite-IDE core (picker, workspaces, terminal, editor/diff, hook-driven status surfaces) that any Claude Code user gets out of the box; (2) the opt-in workflow-orchestration layer (behind the gate) for users who install the companion workflow system, with a pointer to that system.
+- [x] **Public repo + open-source license** chosen and added. ✅ **DONE 2026-09-06 — MIT.** The repo was already public with no license; `LICENSE` added + linked from the README.
 
 **Exit Criteria:** A stranger **who does NOT run the workflow system** can install Claudesk and use the lite-IDE core with a clean, coherent UX (gate off → no dead affordances) and discover the workflow system via the one-time invite. A stranger **who DOES** run the workflow system (installed at `~/.claude/skills/`) enables the gate once and gets the full workflow-aware tool. *(Refined 2026-07-20 — the old single-audience exit criterion "a stranger WITH the workflow system…" is superseded by this two-tier one.)*
 
@@ -537,6 +545,38 @@ precedent. Closed 2026-08-26.
 **Why full absorption was rejected** (recorded so it is not re-litigated): (1) ~85% of mccc is prose Claudesk could own but never *enforce*, so absorption means shipping ~50 prompt files inside a self-described *lite* IDE; (2) it breaks the **M10.9 two-tier stance** — a `workflow_features_enabled` gate whose OFF state is byte-identical is incoherent when the workflow system *is* half the product, and it inverts the dependency direction the gate exists to protect; (3) it strands every non-Claudesk session, including the recursive case that **mccc is developed using mccc**; (4) **distribution asymmetry** — a skill is a markdown edit effective next turn, while a Claudesk feature needs a release + `.dmg` + tap bump + self-update, so absorption puts the fastest-iterating artifact behind the slowest pipeline.
 
 **Exit Criteria:** In autopilot across **N open workspaces**, a turn that ends where the pause policy says AUTO is detected and the next command fired **without operator input** — verified against the **replayed real corpus** (all 19 known breaks flagged, zero known-legitimate pauses flagged) *and* live on at least one real multi-workspace session. Above 50% context at a non-final phase boundary, the session recycles instead of chaining. ⚠️ **Verified against the DECISION, not against a stored value** — the deliverable is an enforcement decision, so "the graph is modeled" is an insufficient exit check; the criterion is that a break is *caught and corrected* end-to-end. ⚠️ **The negative arm asserted just as hard:** a legitimate `verify-human` pause, an ESCALATE, and a **Mode-0 direct invocation** must each produce **no fire at all**.
+
+## Revision 2026-09-06 — M14 SPLIT: the release ships now as a task; the polish defers to after M15
+
+⚠️ **M14 is no longer executing as a milestone.** Operator decision 2026-09-06, on reading the M14
+decomposition prompt: *"Just treat M14 as a feature. I just want to publish the works so far with a
+proper release note. The full polish should be after M15."* `/product-wbs` was **not** run.
+
+**What ships now**, as the single task `release-prep-m13-5-publish` (then a manual `/release`):
+- a **human-readable release note** for the work since `v0.3.4`,
+- an **MIT LICENSE** — ⚠️ the repo was already **public with no license at all**, so nobody had
+  rights to use the code; this closes a live exposure, not a formality, and
+- a **README correctness pass** — four independent staleness classes, all verified at source: a
+  status block 5 milestones and 11 releases behind; the status-dot vocabulary still claiming
+  **three** states after M13.5 WP2 shipped a fourth; the *"no design concession"* stance the vision
+  **refined** on 2026-07-20 into the two-tier framing; and two **404** `docs/product/*` links (the
+  tree moved 2026-07-28) plus a footnote calling in-app auto-update deferred when it shipped at M10.
+
+**What defers to after M15** — the rest of M14's deliverable list stands unchanged and unstarted:
+the **Settings UI** (project-list management + hotkeys, extending the `⌘,` panel), **Developer-ID
+signing + notarization**, the **full two-tier setup docs**, and repo **description/topics**
+(explicitly out of scope for this pass).
+
+⚠️ **The execution order is NOT changed by this split** — it remains **M14 → M15** per the
+2026-08-26 revision below. What changed is M14's *size*: its release half is being cut off and
+shipped immediately, and its polish half now lands after M15. ⚠️ **A release was already a
+VERIFICATION prerequisite** (M13.5 WP1's installed-`.app` tier is unsatisfiable until a build
+containing `25a68bc` exists), so shipping the release half first also unblocks a deferred check.
+
+⚠️ **The M13.5 handoff misstated what is undelivered** — it said "M13, M13.5 and the paydown sweep".
+Verified false: `v0.3.4` was tagged **2026-08-19, after M13 closed on 08-18**, and the tag contains
+12 `m13-` commits. **Undelivered = M13.5 + the workspace-close-hang incident fix.** The release note
+is written from that, not from the handoff's phantom three-milestone backlog.
 
 ## Revision 2026-08-26 — execution order REVERSED back to M14 → M15 (operator, at the M13.5 close)
 
@@ -784,6 +824,3 @@ Decompose M8 at its `/product-wbs` pass; WP1 (the capture/render pipeline probe 
 
 > 2026-06-15: Major rewrite driven by the vision pivot (multi-window → single-window tabbed workspaces + filmstrip + PiP + menu-bar) and research resolving the open design questions. Phase 1 gained the tab-shell substrate + a gating thumbnail-rendering probe; xterm.js settled on DOM-renderer-only (WebGL ~16-context cap); the prior "cross-window CC status indicator" milestone was replaced by three status surfaces (filmstrip / menu-bar / PiP) fed by a single Rust broadcaster over a Unix-socket hook channel (resolving the old "WP9b probe").
 > 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone; added a drive-mode selector + indicator milestone. Both additive to the stateful-controller phase.
-
-## Session Handoff — 2026-08-26 15:40
-Handed off. See `workflow-system/state/.session.md` to restore.

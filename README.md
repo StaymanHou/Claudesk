@@ -15,8 +15,8 @@ through windows and hopping Spaces — a constant attention tax on top of the
 setup tax.
 
 **The filmstrip:** Every open project is a live tile across the top with an
-**idle / running / awaiting-input** status dot. One glance shows which one needs
-you; one click jumps there.
+**idle / running / awaiting-input / working-in-background** status dot. One glance
+shows which one needs you; one click jumps there.
 
 <p align="center">
   <img src="docs/demo/filmstrip.gif" alt="Filmstrip demo: four Claude Code projects in flight at once, status dots shifting as attention moves; one flips to awaiting-input and a click jumps to it" width="720">
@@ -42,15 +42,19 @@ workflow in **one window with multiple virtual workspaces inside it**. Pick a pr
 inside a workspace — no more "open terminal → `cd` → `claude`" every time, across 20+
 rotating projects.
 
-> **Status: Milestones 1–8 shipped — released as v0.2.3, daily-driver ready.** Click a
-> project → a working CC session in the project dir inside a workspace; a built-in lite
-> editor + git-diff viewer in the right half; Sublime Text / Sublime Merge / Reveal-in-Finder
-> one click away; N projects open concurrently as workspaces switched via a live filmstrip
-> with per-workspace idle/running/awaiting-input status; an always-on-top picture-in-picture
-> panel that keeps sessions watchable from any other app; and a menu-bar status item that
-> lights up when any project needs input. Installable via a [Homebrew tap](#install). Next:
-> M9 time-analytics, M10 workflow-docs viewer, M11 auto-resume, M12 skill orchestration,
-> M13 polish (Developer-ID signing + notarization + auto-update).
+> **Status: daily-driver ready.** Click a project → a working CC session in the project
+> dir inside a workspace; a built-in lite editor + git-diff viewer in the right half;
+> Sublime Text / Sublime Merge / Reveal-in-Finder one click away; N projects open
+> concurrently as workspaces switched via a live filmstrip with per-workspace status; an
+> always-on-top picture-in-picture panel that keeps sessions watchable from any other app;
+> a menu-bar status item that lights up when any project needs input; time analytics; a
+> workflow-docs viewer; smart auto-resume; skill buttons; and in-app auto-update.
+> Installable via a [Homebrew tap](#install).
+>
+> For what shipped when, see [`CHANGELOG.md`](CHANGELOG.md) and the
+> [releases](https://github.com/StaymanHou/Claudesk/releases). Still ahead: a settings UI
+> for project-list management and hotkeys, Developer-ID signing + notarization, and a
+> workflow supervisor that enforces drive-mode chaining mechanically.
 
 ## Install
 
@@ -107,7 +111,7 @@ session: a true terminal on the left, a lite code-editor + git-diff viewer on th
 right. A **Mission-Control-style layout** runs the show — one workspace is the
 full-size *center stage*, and a *filmstrip* of live thumbnails/status-tiles across
 the top shows every other open project at a glance, each with an
-**idle / running / awaiting-input** status dot. Click a tile (or press a hotkey)
+**idle / running / awaiting-input / working-in-background** status dot. Click a tile (or press a hotkey)
 to promote that project to center stage. It replaces the old routine of juggling
 terminal tabs, Sublime Text, and Sublime Merge across many windows and macOS Spaces.
 
@@ -123,11 +127,13 @@ projects, 3–4 in flight on any given day.
   *filmstrip* of the rest across the top. No window-juggling, no Spaces-hopping;
   every in-flight project is one glance and one click away, so you instantly see
   which project needs you and switch without breaking flow.
-- **Per-workspace status at a glance (idle / running / awaiting-input).** Every
-  filmstrip tile carries a live status dot driven by Claude Code's real lifecycle
-  (not guesswork). The "which of my 4 running agents is waiting on me?" question is
-  answered in under a second, zero clicks — no more hunting through windows for the
-  one stalled on a prompt.
+- **Per-workspace status at a glance (idle / running / awaiting-input /
+  working-in-background).** Every filmstrip tile carries a live status dot driven by
+  Claude Code's real lifecycle (not guesswork). The "which of my 4 running agents is
+  waiting on me?" question is answered in under a second, zero clicks — no more hunting
+  through windows for the one stalled on a prompt. A session that hands control back
+  while a backgrounded job keeps running reads *working in background* rather than
+  falsely idle, so "done" and "still churning" are never the same dot.
 - **Instant project launch.** Pick a project → its full environment (CC session
   `cd`'d in, editor, diff) fires up in seconds as a new workspace, eliminating the
   minutes of repetitive setup (open terminal → `cd` → `claude`, open Sublime, load
@@ -152,9 +158,19 @@ wrong tool, and that's by design.
   one workflow (heavy Claude Code use, the custom
   [`stayman-claude-code-customization`](https://github.com/StaymanHou/stayman-claude-code-customization)
   workflow system installed at `~/.claude/skills/`, Sublime, macOS, 20+ rotating
-  projects). It's open-sourced for others with the *same* setup — but no design
-  concession is made for users who don't share it. A tool that fits one workflow
-  exactly beats a tool that fits every workflow approximately.
+  projects). A tool that fits one workflow exactly beats a tool that fits every
+  workflow approximately, and no feature is built for a secondary user at the primary
+  user's expense — the roadmap is not distorted for them.
+
+- **Two tiers, one app.** That narrowness is *not* a wall, because the product splits
+  cleanly in two. The **lite-IDE core** — project picker, tabbed workspaces, PTY
+  terminals, editor/diff, and the status surfaces (filmstrip / PiP / menu-bar, all built
+  on Claude Code's *native* hook channel) — is workflow-independent and works for **any**
+  Claude Code user out of the box, zero config. The **workflow-orchestration layer**
+  (docs viewer, smart auto-resume, drive-mode selector, skill buttons) assumes the
+  companion workflow system and is **opt-in, default off** behind a single setting. With
+  it off the app is byte-identical to one that never had those features — no dead
+  affordances, no controls pointing at files you don't have.
 
 - **Tuned for Claude Code specifically — not OpenAI, not Gemini.** Portability across
   models was attempted and abandoned: not all models are created the same, and the
@@ -180,7 +196,7 @@ wrong tool, and that's by design.
   on any single item.
 
 - **Human-in-the-loop, surfaced not hidden.** Every CC session keeps a real, visible
-  status (idle / running / awaiting-input) precisely because the bottleneck in this
+  status (idle / running / awaiting-input / working-in-background) precisely because the bottleneck in this
   model is *operator attention* — the scarce resource is the one human steering N
   sessions. The filmstrip, PiP, and menu-bar surfaces all exist to answer "which
   project needs me right now?" in under a second. Claudesk doesn't try to remove the
@@ -213,7 +229,7 @@ wrong tool, and that's by design.
   zero latency, your own environment and secrets, full offline capability, and nothing
   to pay for or trust beyond the tools you already run.
 
-See [`docs/product/vision.md`](docs/product/vision.md) for the full vision, principles,
+See [`workflow-system/product/vision.md`](workflow-system/product/vision.md) for the full vision, principles,
 and anti-goals.
 
 ## Prerequisites
@@ -310,13 +326,18 @@ Gatekeeper `xattr` step reappears on each replaced unsigned build.
 
 > **Cutting a release** (maintainer): the build → tag → GitHub release → tap-cask bump
 > flow is driven by the project-local `/release` skill — see
-> [`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md). Proper
-> Developer-ID signing + notarization + in-app auto-update (which removes the `xattr`
-> step entirely) is deferred to a later polish milestone.
+> [`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md). In-app
+> auto-update has shipped: an installed build checks for new versions and updates
+> itself. Proper Developer-ID signing + notarization — which is what would remove the
+> `xattr` step entirely — is still deferred to a later polish milestone.
 
 ## More
 
 - [`CLAUDE.md`](CLAUDE.md) — project overview, conventions, and current phase
-- [`docs/product/vision.md`](docs/product/vision.md) — full product vision
-- [`docs/product/arch.md`](docs/product/arch.md) — architecture and key decisions
+- [`workflow-system/product/vision.md`](workflow-system/product/vision.md) — full product vision
+- [`workflow-system/product/arch.md`](workflow-system/product/arch.md) — architecture and key decisions
 - [`CHANGELOG.md`](CHANGELOG.md) — what has shipped
+
+## License
+
+[MIT](LICENSE) © Stayman Hou

@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-09-06
+
+- **Release notes — the work since v0.3.4.** This release delivers Milestone 13.5, a
+  quality-of-life bucket of five improvements, plus a fix for an app-freezing bug found
+  while dogfooding. **The headline: your window stays where you put it, and the status
+  dot stopped lying about background work.**
+  - **The window remembers itself.** Size, position, and maximized state now persist
+    across launches. Claudesk previously opened at a hardcoded 1280×800 every single
+    time, which on a large display meant resizing it by hand at the start of every
+    session. A window closed maximized reopens maximized.
+  - **A fourth status state: *working in background*.** A session that hands control
+    back while a backgrounded job is still running now shows its own purple dot instead
+    of reading as idle — so "finished" and "still churning" are no longer the same
+    signal. This also fixes a dot that used to light up blue, as if waiting for input,
+    when an agent had merely completed.
+  - **Jump to where a turn started.** Arrows in the terminal chrome step backward and
+    forward through the start of each Claude Code turn, with a position readout and
+    each arrow greying out at its end — instead of hand-scrolling thousands of lines to
+    find where the last answer began.
+  - **The drive mode is visible and changeable from inside the workspace**, not only
+    from the project picker, and changing it now applies to the session you are in
+    rather than waiting for the next one. Picking a new mode raises a confirmation;
+    applying it restarts Claude Code for that workspace while keeping the conversation,
+    firing immediately when the agent is idle and queueing until it goes idle when it
+    is mid-turn.
+  - **Closing a workspace no longer freezes the app.** Tearing down a Claude Code
+    session polled the process on the same thread that draws the window, so any session
+    slow to exit took the whole single-window app down with it; teardown now runs on a
+    worker. A second, independent deadlock between the menu-bar glyph update and the
+    closing workspace was found in the same measurement and fixed alongside it.
+  - **Also in this release:** the project now carries an MIT license, and the README has
+    been brought back in line with what actually ships.
+  - **Known issue:** while an agent is mid-turn, the workspace drive-mode readout stays
+    clickable and a second Apply is silently discarded even though the readout shows the
+    new value. Changing the mode again once the agent is idle applies correctly.
+- **Task closed:** Release-prep for the work since `v0.3.4` — the repository now carries an **MIT license** (it had been public with no license at all, so nobody had rights to use the code), and the README was corrected across four independent staleness classes: a status block five milestones and eleven releases out of date, a status-dot vocabulary still claiming three states after a fourth shipped, a philosophy stance the vision had refined into the two-tier framing six weeks earlier, and two dead links plus a footnote calling in-app auto-update deferred when it had already shipped. ⚠️ **The session handoff's account of what was undelivered was wrong and would have produced a false release note** — it named three milestones, but the previous tag was cut a day *after* the first of them closed and already contained it; the note describes what is actually undelivered. ⚠️ **The staleness sweep found six sites where the plan had named four**, caught only by grepping the claim rather than trusting the enumerated list.
+
 ## 2026-08-26
 
 - **Feature shipped:** The workflow drive mode is now visible and changeable from inside the workspace you are working in, not only from the project picker — and changing it **applies to the session you are in** rather than waiting for the next one. Picking a new mode raises a confirmation; Apply restarts Claude Code for that workspace while keeping the conversation (`--continue`), firing immediately when the agent is idle and **queueing until it goes idle** when it is mid-turn; Cancel writes nothing at all. ⚠️ **This is a deliberate reversal of an earlier decision that the mode belongs on the picker row only** — legitimate because the design prior behind that decision names this exact edge as untested (a setting read at creation that is *also* live-reconfigurable later), and the model override, which is genuinely fixed at spawn, deliberately does **not** come along. ⚠️ **The interaction shipped here is the operator's, not the plan's:** the original design stored the change silently, marked it stale, and left a separate apply button to find later — rejected on review, because changing the mode *is* the intent to apply it. That wrong design traced to an assumption recorded as a default and then cited downstream as "operator-reviewed" when it never had been. ⚠️ **Four separate mutation probes each passed a fully green suite during this work** — a Cancel that silently persisted, a caller ignoring the decision it was handed, a broadcast subscriber that would rewrite every open workspace, and a spawn path ignoring its own predicates — every one the same shape: the mechanism was proven and the caller was not.
