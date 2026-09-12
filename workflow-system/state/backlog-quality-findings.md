@@ -4,6 +4,30 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m15-wp2-state-machine-as-code — 2026-09-12
+
+⚠️ **0 CRITICAL · 2 MAJOR · 3 MINOR — but BOTH MAJORs and ONE MINOR were FIXED IN PLACE before finalize, not backlogged.** Only the two low-value MINORs below remain open. See the WIP's `## Code-Quality Review` for the full review and the fix record.
+
+## SURFACE-2026-09-12-QUALITY-DERIVED-COUNTS-DUPLICATED-ACROSS-TESTS
+
+- **Priority:** low
+- **Source:** feature:review-quality (m15-wp2), MINOR
+- **Location:** `src/state/__tests__/workflowMachineLookup.test.ts`, `workflowMachine.test.ts`, `workflowMachinePolicy.test.ts`
+
+The five test files pin ~27 hardcoded measured counts (111 edges, 58 rows, 67/44 dispatchable, 156/153/7/4 cells, 232 cells, …). Each carries its `measured 2026-09-12` provenance and each is a deliberate regression sentinel — **but several are ARITHMETICALLY DERIVED from each other** (`232 = 58 × 4`; `44 = 111 − 67`). A single upstream edge addition therefore breaks five or six assertions that all say the same thing once.
+
+**Not a correctness risk** — a maintenance tax at WP3's first upstream resync. **Suggested action:** collapse the arithmetic-derived expectations to one computed expression each, keeping the independently-measured ones (111, 58, 67, the histograms) as literals.
+
+## SURFACE-2026-09-12-QUALITY-FUNNEL-PREDICATES-DECLARED-TWICE
+
+- **Priority:** low
+- **Source:** feature:review-quality (m15-wp2), MINOR
+- **Location:** `src/state/__tests__/workflowMachineFunnel.test.ts` — the discrimination block
+
+The discrimination block re-declares `wiresGraphToPolicy` and `importsMachine` as local copies of the live guard's **inline** regexes, then closes the gap with `uses the SAME predicates the live guard uses`. ⚠️ That reconciliation test does real work — **it drove out the dead-allowlist finding** — but the two regexes still exist twice in one file and could drift in a direction the reconciliation does not cover.
+
+**Suggested action:** extract both predicates to module scope so the guard and the discrimination block call the same functions, removing the copy entirely. That is what `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]` actually prescribes.
+
 # m15-wp1-supervisor-probe — 2026-09-12
 
 ⚠️ **Findings 2 and 3 are the ones that change what a reader BELIEVES**, not just how the code looks: one lets the decisive `0.8` bar drift silently, the other overstates what the headline `119` baseline measures. Both were verified at source before filing.

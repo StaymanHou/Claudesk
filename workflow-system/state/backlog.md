@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m15-wp2-state-machine-as-code (2026-09-12)
+- **Pointer:** **2 MAJOR + 3 MINOR**, but ⚠️ **BOTH MAJORs and ONE MINOR were FIXED IN PLACE before finalize** — only 2 low-value MINORs remain open. **0 CRITICAL.** ⚠️ **The first MAJOR was a real latent defect in the module WP3 consumes:** `unmappedReason()` keyed on `workflow === "session-ops"` and returned `meta-op` for all 19, but only 12 actually are (6 are `cross-workflow`, 1 `terminal`, 2 dispatchable skills) — so a future session-ops edge with a real skill target and no policy row would have been silently labelled "no row owed", **hiding a genuine gap from the one report whose job is to surface them.** Fixed by keying on `dispatchTarget` with `terminal`/`cross-workflow` as their own reasons; ⚠️ this also **sharpened the gap report from 2 entries to 1** (`P13` is terminal — no row was ever owed; `I2` alone is the real gap). The second MAJOR: the `TRANSITION:` regex was exported from a **test file** — extracted to `src/state/workflowMachine/transitionToken.ts`, since shipping the parse half of the contract in `__tests__/` is this WP's own single-source thesis failing one layer up. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp2-state-machine-as-code — 2026-09-12`.
+- **Priority:** low (both remaining)
+- **Status:** pending
+- **Pickup shape:** both are test-file polish — collapse the arithmetic-derived count expectations, and extract the two funnel predicates to module scope. `/feature-refactor` handles them together in one pass.
+
 ## Code-quality findings — m15-wp1-supervisor-probe (2026-09-12)
 - **Pointer:** **3 MAJOR + 3 MINOR** (6 entries), auto-backlogged per `drive_mode: autopilot`. **0 CRITICAL — no refactor owed.** ⚠️ **Two change what a reader BELIEVES, not just how the code looks, and both were verified at source before filing:** (1) the decisive `0.8` bar is stated **twice** — hardcoded in `scoreArm` and as unparsed prose in `_meta.threshold` — so the two can drift while each keeps asserting confidently; compounding it, **haiku's margin is computed against SONNET's `minTpForBar`**, correct only because both arms happen to share 29 positives, a coincidence never asserted. (2) the comment calls the naive baseline "consults no policy table at all", but it **excludes the 472 `undecided` records** — measured, a genuinely policy-free predicate flags **234, not 119**, and 119 is the headline figure in the ship commit, the probe report's Q1, and the circularity backlog entry. The third MAJOR is structural: both fixtures are read from a **cycle-archive directory `/product-finalize` owns and may relocate**, putting a 33-test break under the control of the skill whose job is to move those files. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp1-supervisor-probe — 2026-09-12`.
 - **Priority:** medium (the three MAJORs); low for the tautology/comment-density/naming polish
@@ -50,7 +56,9 @@ WP3's first act will be to write a consumer of `src/state/workflowMachine/`. **T
 
 **Also inherited, cheaply:** `extractTransitionId()` in `workflowMachineUpstreamContract.test.ts` is the ported Phase-3d regex — the shapes WP3's transcript reader must handle, with the `F10b`-vs-`F10` trap already pinned (a bare `/F[0-9]+/` captures the WRONG id rather than failing to match). ⚠️ It currently lives in a test file; WP3 should **move it to a module** and keep the test importing it, rather than re-deriving a second regex.
 
-## SURFACE-2026-09-12-TWO-TRANSITIONS-HAVE-NO-PAUSE-POLICY-ROW-UPSTREAM
+## SURFACE-2026-09-12-ONE-TRANSITION-HAS-NO-PAUSE-POLICY-ROW-UPSTREAM
+
+⚠️ **NARROWED 2026-09-12 at code-quality review — was "TWO TRANSITIONS".** `P13` (product-finalize → EXIT) is **terminal**, so no pause-policy row is owed and its absence was never a gap. The over-broad claim came from a gap classifier that keyed on an edge's *workflow* rather than its *target*; fixed, and the report now names exactly the dispatchable edge that is genuinely missing a row. **`I2` alone stands.**
 
 - **Priority:** medium
 - **Surfaced by:** M15 WP2 Phase 3 (feature:build) — the edge→policy-row derivation's coverage survey

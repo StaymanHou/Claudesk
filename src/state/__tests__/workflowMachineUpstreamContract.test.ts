@@ -40,6 +40,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { edgeById, EDGES } from "../workflowMachine/edges";
 import {
+  extractTransitionId,
+  TRANSITION_TOKEN_RE,
+} from "../workflowMachine/transitionToken";
+import {
   cellForMode,
   DRIVE_MODES,
   POLICY_ROWS,
@@ -55,29 +59,6 @@ import { isDispatchable } from "../workflowMachine/types";
 // gitignored `_ref/` symlink. So this port owns its OWN regex — the one WP3's reader
 // will use — and keeps the honesty differently: the `_ref/`-gated block below compares
 // the two when upstream is present.
-
-/**
- * The transition-token regex WP3's transcript reader will use.
- *
- * ⚠️ Must admit every shape upstream's corpus actually contains:
- *   • plain ids (`F1`, `T2`, `P10`, `S18`)
- *   • letter-suffixed ids (`F9b`, `F10b`, `F17b`, `T5a`) — ⚠️ a bare `F[0-9]+` silently
- *     drops six real edges, two of which (F9b/F10b) are exactly the ones the stale
- *     AGENTS.md copy omits
- *   • compound/legacy scenario ids (`F-CHGLOG-1`, `F16-triage-ambiguous`)
- *   • hyphenated sidebar tokens (`DEBUG-BISECT-START`)
- *   • markdown decoration (`**TRANSITION:**`, `*TRANSITION:*`)
- *   • an arrow suffix (`TRANSITION: T2 (plan → act)`)
- * …and must NOT match prose that merely says the word.
- */
-export const TRANSITION_TOKEN_RE =
-  /TRANSITION:\s*\*{0,2}\s*([A-Za-z0-9][A-Za-z0-9-]*)/;
-
-/** Extract a transition id the way the reader will. Strips markdown emphasis first. */
-export function extractTransitionId(line: string): string | null {
-  const m = TRANSITION_TOKEN_RE.exec(line.replace(/\*/g, ""));
-  return m ? m[1] : null;
-}
 
 describe("M15 WP2 Phase 5 — PORT of mccc Phase 3d: the TRANSITION-line contract", () => {
   it("captures every positive shape upstream's cases cover", () => {
@@ -108,6 +89,20 @@ describe("M15 WP2 Phase 5 — PORT of mccc Phase 3d: the TRANSITION-line contrac
         `${input} → ${expected}`,
       );
     }
+  });
+
+  it("exports the regex itself, and it is stateless (no /g lastIndex trap)", () => {
+    // ⚠️ `TRANSITION_TOKEN_RE` is exported for WP3's reader, so it is part of the
+    // contract and owes a test. Found at code-quality review: it was exported and
+    // imported but never directly exercised.
+    //
+    // ⚠️ The specific hazard for a shared module-level regex: a `/g` flag makes `.exec`
+    // STATEFUL via `lastIndex`, so consecutive calls on the same instance silently skip
+    // matches. Asserting the flag is absent is cheaper than debugging that later.
+    expect(TRANSITION_TOKEN_RE.global).toBe(false);
+    expect(TRANSITION_TOKEN_RE.exec("TRANSITION: F7")?.[1]).toBe("F7");
+    // Same instance, twice — a /g regex would return null on the second call.
+    expect(TRANSITION_TOKEN_RE.exec("TRANSITION: F7")?.[1]).toBe("F7");
   });
 
   it("does NOT match prose that merely mentions the word", () => {

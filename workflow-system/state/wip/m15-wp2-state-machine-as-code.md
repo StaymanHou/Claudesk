@@ -584,7 +584,7 @@ Frontend suite 2299 → **2410**.
 - **`I2`** (report → triage) — upstream's `triage (I2→I3 / I2→I13)` row governs the exits FROM triage, not the entry INTO it. ⚠️ **Dispatchable**, so an unmapped→AUTO default would fire here.
 - **`P13`** (product-finalize → EXIT) — the product table has a row for P14 (back-loop) but none for P13 (cycle exit). Terminal, so no behavioral risk.
 
-⚠️ **Neither was patched in Claudesk.** Inventing a policy row would be Claudesk deciding mccc's policy, crossing the ownership boundary settled 2026-08-14. The model records what upstream **says, including where it says nothing.** Logged as `SURFACE-2026-09-12-TWO-TRANSITIONS-HAVE-NO-PAUSE-POLICY-ROW-UPSTREAM`.
+⚠️ **Neither was patched in Claudesk.** Inventing a policy row would be Claudesk deciding mccc's policy, crossing the ownership boundary settled 2026-08-14. The model records what upstream **says, including where it says nothing.** Logged as `SURFACE-2026-09-12-TWO-TRANSITIONS-HAVE-NO-PAUSE-POLICY-ROW-UPSTREAM`. ⚠️ **[Superseded 2026-09-12 at code-quality review — see `## Code-Quality Review` → MAJOR-1.] `P13` is TERMINAL, so no row was ever owed; the gap list narrowed to `I2` alone and the backlog entry was renamed `SURFACE-2026-09-12-ONE-TRANSITION-HAS-NO-PAUSE-POLICY-ROW-UPSTREAM`. Left as written because this is a dated BUILD RECORD — the reasoning as of that moment is the record; only the pointer needed correcting.**
 
 **Design decisions:**
 - **Precedence: a row that NAMES the edge beats the from-state row.** F22 proves this matters — `REDIRECT (F22)` says PAUSE while its from-state `build` says AUTO; picking the wrong one inverts the verdict.
@@ -689,6 +689,46 @@ Frontend suite 2299 → **2410**.
 
 ⚠️ **Vacuity is real in this file and is guarded, not assumed away.** The `for`-loop tests (`every from/to`, `non-empty condition`, terminal/SURFACE classification) pass vacuously over an empty `EDGES` — confirmed by M5, where they did NOT appear among the 8 failures. The `holds a nonzero number of edges` test is what makes the rest non-vacuous.
 
+## Code-Quality Review — m15-wp2-state-machine-as-code
+
+**0 CRITICAL · 2 MAJOR · 3 MINOR.** ⚠️ **Both MAJORs and one MINOR were FIXED IN PLACE before finalize** rather than auto-backlogged, because one was a latent correctness defect in the module WP3 consumes and the other was a file move. The two remaining MINORs are backlogged.
+
+### Strengths (reviewer's, abbreviated)
+- `resolvePolicy` makes the "caller forgets the exclusion" defect **unrepresentable rather than documented** — the `unmapped` arm structurally carries no `cell`.
+- The funnel guard's anti-vacuity design "is exemplary": non-trivial-walk and non-empty-population asserted *before* the allowlist.
+- Counts asserted from what was **absorbed**, not `wbs.md`'s stale 113. ✅ The reviewer **independently re-derived the drift regex against live `_ref/`** and confirmed it captures exactly 111.
+- The A-2 finding is enforced live, not just recorded: a future "fix" toward the stale `AGENTS.md` value fails loudly.
+
+### MAJOR-1 — `unmappedReason()` classified by WORKFLOW, not by target ✅ **FIXED**
+`unmappedReason` returned `"meta-op"` for every `session-ops` edge. ⚠️ **Only 12 of 21 actually are** — 6 are `cross-workflow` (S1–S5, S18), 1 `terminal` (S20), 2 dispatchable skills (S22, S23). Harmless in today's graph, but **a future session-ops edge with a real skill target and no policy row would have been silently labelled "no row owed" — hiding a genuine gap from `unmappedReport()`, the one report whose job is to surface them.**
+
+**Fixed** by keying on `edge.dispatchTarget.kind`, with `terminal` and `cross-workflow` as their **own reasons** so `no-row-upstream` means what its name says. ⚠️ **Keying on dispatchTarget ALONE would have been wrong too** — it dumped 7 correctly-rowless edges into the gap bucket, burying the real one among nine.
+
+✅ **The fix SHARPENED the finding this WP reported.** The gap list went **2 → 1**: `P13` is `terminal`, so no row was ever owed; **`I2` alone is the genuine gap**, and it is dispatchable. ⚠️ The earlier "two upstream gaps" claim was over-broad — corrected in the tests, the module, and the hand-off note.
+
+### MAJOR-2 — the `TRANSITION:` regex was exported from a TEST FILE ✅ **FIXED**
+`TRANSITION_TOKEN_RE` / `extractTransitionId`, described as "the regex WP3's reader will use", lived in `__tests__/`. WP3 would have imported production code from a test dir or re-derived a second regex — leaving the `F10b`-truncation trap pinned on a copy nobody used. ⚠️ **That is this WP's own thesis (*one funnel, guarded*) failing one layer up.**
+
+**Fixed:** extracted to `src/state/workflowMachine/transitionToken.ts`; the test imports it. ✅ **And the extraction surfaced a second gap:** the constant was exported but **never directly exercised** — now tested, including that it carries **no `/g` flag** (a shared module-level regex with `/g` is stateful via `lastIndex` and silently skips matches). ⚠️ Mutation-proving that added flag fails **6 tests**.
+
+### MINOR-1 — `types.ts` comment density + the A-2 restatement ✅ **FIXED**
+Measured: `types.ts` **3.81:1** against `edges.ts` 0.09 and `policy.ts` 0.29 — a genuine instance of `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`. The A-2 finding was restated **in full across four files**; one sourced statement in four places drifts in three. **Collapsed to one authority** (`edges.ts`) with pointers elsewhere → 3.42:1. ⚠️ The remainder is the load-bearing `dispatchTarget` rationale with its 223-vs-96 measurement, which that standing finding explicitly says to KEEP.
+
+### MINOR-2, MINOR-3 — backlogged
+Arithmetic-derived count duplication across tests, and the funnel test's two locally-re-declared predicates. Both test-file polish; bodies in `backlog-quality-findings.md`.
+
+### A gap the fixes themselves exposed ✅ **FIXED**
+Adding `transitionToken.ts` left `MACHINE_INTERNALS` at **4 of 5 files and NOTHING FAILED** — the list was checked for *deadness* and for *pointing at real files*, both of which a stale-but-shorter list satisfies. ⚠️ **The missing direction was COMPLETENESS**, and an incomplete list would make a real internal read as a production consumer — a false alarm that trains the next reader to widen the allowlist reflexively. Now asserted against the directory.
+
+### Assessment (reviewer's)
+> "Unusually well-built for a foundation WP with no consumers… every guard in the diff passes the *could this pass if the code it names were deleted?* test… It advances the codebase rather than accruing debt."
+
+On the four questions put to the reviewer: comment density **mostly justified** (`types.ts` the exception); the five-file test split **earns itself** (overlap near-zero, one file per phase's acceptance question); `policy.ts` at 889 lines is **the right shape** (separating the literal from its types would put drift risk exactly where the WP removes it); and the allowlist is **correct, not a nuisance** — "a guard that failed identically on both would have been the nuisance."
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+
 ## Discoveries
 
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
@@ -696,6 +736,6 @@ Frontend suite 2299 → **2410**.
 
 [SURFACED-2026-09-12] P1.2 / P5.3 — ⚠️ **The two upstream copies of the feature graph DISAGREE.** `transitions.md` has `F10 = verify-auto → verify-self` plus `F9b`/`F10b`/`F30`; `agents/feature-workflow/AGENTS.md` has `F10 = verify-auto → verify-human` and omits all three — it predates `verify-self` being a state. Merging the copies would import a wrong `F10` target straight into the detector's lookup. `transitions.md` is the sole authority (D-1). This is also direct evidence that mccc's `check-structure.sh` Phase 9 is not holding the duplication in sync, strengthening the case for its deletion (WBS 2.9).
 
-[SURFACED-2026-09-12] P3.2 — ⚠️ **Two transitions have NO pause-policy row upstream.** `I2` (report → triage; upstream's row governs the exits FROM triage, not the entry INTO it) and `P13` (product-finalize → EXIT; the table has a row for P14 but not P13). `I2` is **dispatchable**, so an unmapped→AUTO default would fire it. Not patched in Claudesk — inventing a row crosses the ownership boundary; the model records what upstream says, including where it says nothing. Logged to backlog as `SURFACE-2026-09-12-TWO-TRANSITIONS-HAVE-NO-PAUSE-POLICY-ROW-UPSTREAM`.
+[SURFACED-2026-09-12] P3.2 — ⚠️ **Two transitions have NO pause-policy row upstream.** `I2` (report → triage; upstream's row governs the exits FROM triage, not the entry INTO it) and `P13` (product-finalize → EXIT; the table has a row for P14 but not P13). `I2` is **dispatchable**, so an unmapped→AUTO default would fire it. Not patched in Claudesk — inventing a row crosses the ownership boundary; the model records what upstream says, including where it says nothing. Logged to backlog as `SURFACE-2026-09-12-TWO-TRANSITIONS-HAVE-NO-PAUSE-POLICY-ROW-UPSTREAM`. ⚠️ **[Superseded 2026-09-12 at code-quality review — see `## Code-Quality Review` → MAJOR-1.] `P13` is TERMINAL, so no row was ever owed; the gap list narrowed to `I2` alone and the backlog entry was renamed `SURFACE-2026-09-12-ONE-TRANSITION-HAS-NO-PAUSE-POLICY-ROW-UPSTREAM`. Left as written because this is a dated BUILD RECORD — the reasoning as of that moment is the record; only the pointer needed correcting.**
 
 [SURFACED-2026-09-12] P1.5 / P2.5 — ⚠️ **`wbs.md`'s M-7/M-8 counts are stale against the live source.** Measured this pass: 111 edge rows (M-7 says 113); 81 `AGENTS.md` policy rows (M-7 says 89); feature policy rows 12 edge-keyed / 13 step-keyed (M-8 says 8/19 of 27 — it counted the `AGENTS.md` copy, not `transitions.md`). The M-8 *hazard* is confirmed; only its numbers are for the other copy. **Tests must assert the count absorbed at build time, never a hardcoded 113.**

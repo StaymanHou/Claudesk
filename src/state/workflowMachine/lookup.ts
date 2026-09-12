@@ -77,10 +77,22 @@ export type UnmappedReason =
    */
   | "entry-or-sentinel"
   /**
-   * A session-ops meta-op with no dispatchable target — the supervisor never fires it,
-   * so no policy row is owed.
+   * A meta-op with no dispatchable target — the supervisor never fires it, so no policy
+   * row is owed. ⚠️ Keyed on the edge's own `dispatchTarget`, NOT on its workflow.
    */
   | "meta-op"
+  /**
+   * The edge ENDS a workflow (`terminal`). Nothing follows it to chain into, so no
+   * pause-policy row is owed. ⚠️ Distinct from `no-row-upstream`: this is "correctly has
+   * no row", not "upstream forgot one".
+   */
+  | "terminal"
+  /**
+   * The edge hands control to a DIFFERENT workflow (ESCALATE / REDIRECT / a
+   * session-start classification output). The receiving workflow's own entry governs
+   * what happens next, so no row is owed here.
+   */
+  | "cross-workflow"
   /**
    * ⚠️ A real state's edge with no governing row upstream. THIS IS A GAP and the only
    * reason that should ever prompt an upstream question. Currently exactly one: `I2`.
@@ -128,11 +140,41 @@ function fromStateRows(edge: Edge): readonly PolicyRow[] {
   );
 }
 
-/** Classify why an edge has no governing row. */
+/**
+ * Classify why an edge has no governing row.
+ *
+ * ⚠️ GATES `meta-op` ON THE EDGE'S OWN `dispatchTarget`, NOT ON ITS WORKFLOW. An earlier
+ * revision returned `"meta-op"` for every `session-ops` edge — harmless in the absorbed
+ * graph (measured: no session-ops edge is both dispatchable and unmapped, so the
+ * `no-row-upstream` bucket was still exactly `{I2, P13}`) but WRONG IN SHAPE. Of the 21
+ * session-ops edges, only 12 are meta-ops: 6 are `cross-workflow` (S1-S5, S18), 1 is
+ * `terminal` (S20), and 2 are dispatchable skills (S22, S23).
+ *
+ * ⚠️ The failure that fix prevents: if upstream ever adds a session-ops edge with a real
+ * skill target and no policy row, the workflow-keyed version would label it "no policy
+ * row is owed" — silently hiding a genuine upstream gap from `unmappedReport()`, the ONE
+ * report whose job is to surface them. Found at code-quality review.
+ *
+ * ⚠️ `terminal` and `cross-workflow` are their own reasons rather than being folded into
+ * `meta-op`, because `no-row-upstream` must mean what its NAME says. Keying on
+ * dispatchTarget alone would have dumped 7 correctly-rowless edges (S1-S5, S18, S20)
+ * into the gap bucket and buried the one real gap (`I2`) among nine entries.
+ */
 function unmappedReason(edge: Edge): UnmappedReason {
   if (SENTINEL_FROM.has(edge.from)) return "entry-or-sentinel";
-  if (edge.workflow === "session-ops") return "meta-op";
-  return "no-row-upstream";
+  switch (edge.dispatchTarget.kind) {
+    case "meta-op":
+      return "meta-op";
+    case "terminal":
+      return "terminal";
+    case "cross-workflow":
+      return "cross-workflow";
+    // ⚠️ `skill` and `surface` fall through DELIBERATELY. A dispatchable edge with no
+    // policy row IS the gap this report exists to surface — today exactly `I2`.
+    case "skill":
+    case "surface":
+      return "no-row-upstream";
+  }
 }
 
 /**

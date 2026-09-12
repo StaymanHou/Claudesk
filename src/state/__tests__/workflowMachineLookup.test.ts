@@ -119,34 +119,41 @@ describe("M15 WP2 Phase 3 — unmapped is a RESULT, never a default", () => {
     expect(report.length).toBe(31);
     const byReason: Record<string, number> = {};
     for (const u of report) byReason[u.reason] = (byReason[u.reason] ?? 0) + 1;
+    // ⚠️ REVISED at code-quality review [2026-09-12]. `unmappedReason` originally keyed
+    // on `workflow === "session-ops"` and returned `meta-op` for all 19 of them — but
+    // only 12 are actually meta-ops. It now keys on the edge's own `dispatchTarget`,
+    // with `terminal` and `cross-workflow` as their own reasons so that
+    // `no-row-upstream` MEANS WHAT ITS NAME SAYS.
     expect(byReason).toEqual({
       "entry-or-sentinel": 10,
-      "meta-op": 19,
-      "no-row-upstream": 2,
+      "meta-op": 12,
+      "cross-workflow": 6,
+      terminal: 2,
+      "no-row-upstream": 1,
     });
   });
 
-  it("leaves exactly TWO genuine upstream gaps — P13 and I2", () => {
-    // ⚠️ `no-row-upstream` is the only reason that represents a real gap, and BOTH were
-    // found by this test rather than by the pre-implementation survey — the survey only
-    // eyeballed the dispatchable ones and missed P13.
+  it("leaves exactly ONE genuine upstream gap, and it is I2", () => {
+    // ⚠️ NARROWED from TWO to ONE at code-quality review [2026-09-12] — and the narrowing
+    // is a STRENGTHENING, not a weakening. `P13` (product-finalize → EXIT) was previously
+    // bucketed `no-row-upstream`; it is `terminal`, so **no policy row is owed** and it
+    // was never a gap. Reclassifying it leaves the report naming exactly the edges that
+    // are genuinely missing a row.
     //
-    //   • I2 (report → triage): upstream's incident row `triage (I2→I3 / I2→I13)`
-    //     governs the exits FROM triage, not the entry INTO it. ⚠️ DISPATCHABLE, so a
-    //     supervisor that defaulted unmapped→AUTO would fire here.
-    //   • P13 (product-finalize → EXIT): upstream's product table has a row for P14 (the
-    //     back-loop) but none for P13 (the cycle exit). Non-dispatchable and terminal, so
-    //     nothing would fire either way — but the gap is real.
+    //   • I2 (report → triage): upstream's incident row `triage (I2→I3 / I2→I13)` governs
+    //     the exits FROM triage, not the entry INTO it. ⚠️ DISPATCHABLE, so a supervisor
+    //     that defaulted unmapped→AUTO would fire here.
     //
     // ⚠️ Surfaced to the backlog rather than patched: inventing a row here would be
-    // Claudesk deciding mccc's policy, which crosses the ownership boundary settled
+    // Claudesk deciding mccc's policy, crossing the ownership boundary settled
     // 2026-08-14. The model records what upstream SAYS, including where it says nothing.
     const gaps = unmappedReport().filter((u) => u.reason === "no-row-upstream");
-    expect(gaps.map((g) => g.edgeId).sort()).toEqual(["I2", "P13"]);
-    // Only one of the two could ever cause a wrong fire.
-    expect(gaps.filter((g) => g.dispatchable).map((g) => g.edgeId)).toEqual([
-      "I2",
-    ]);
+    expect(gaps.map((g) => g.edgeId)).toEqual(["I2"]);
+    // ⚠️ And the one gap is dispatchable — which is exactly why it matters.
+    expect(gaps.every((g) => g.dispatchable)).toBe(true);
+    // P13 is still unmapped, just correctly reasoned.
+    const p13 = unmappedReport().find((u) => u.edgeId === "P13")!;
+    expect(p13.reason).toBe("terminal");
   });
 
   it("leaves every remaining dispatchable-unmapped edge an ENTRY edge", () => {
@@ -338,11 +345,14 @@ describe("M15 WP2 Phase 3 — resolvePolicy is TOTAL over the whole matrix", () 
         reasons[r.reason] = (reasons[r.reason] ?? 0) + 1;
       }
     }
-    // 8 = the two upstream gaps (I2, P13) × 4 modes.
+    // ⚠️ REVISED at code-quality review [2026-09-12] alongside the per-edge histogram
+    // above — same reclassification, ×4 modes. 4 = the ONE genuine gap (I2) × 4 modes.
     expect(reasons).toEqual({
-      "meta-op": 76,
+      "meta-op": 48,
       "entry-or-sentinel": 40,
-      "no-row-upstream": 8,
+      "cross-workflow": 24,
+      terminal: 8,
+      "no-row-upstream": 4,
     });
   });
 });

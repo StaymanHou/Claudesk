@@ -82,6 +82,7 @@ const MACHINE_INTERNALS = [
   "state/workflowMachine/edges.ts",
   "state/workflowMachine/lookup.ts",
   "state/workflowMachine/policy.ts",
+  "state/workflowMachine/transitionToken.ts",
   "state/workflowMachine/types.ts",
 ];
 
@@ -228,6 +229,24 @@ describe("M15 WP2 Phase 4 — the importer population is pinned", () => {
     for (const name of ALLOWED_IMPORTERS) {
       expect(`${name} exists=${present.has(name)}`).toBe(`${name} exists=true`);
     }
+  });
+
+  it("lists EVERY file in the machine directory — no silent omission", () => {
+    // ⚠️ Found at code-quality review [2026-09-12]: adding `transitionToken.ts` left
+    // MACHINE_INTERNALS at 4 of 5 files and NOTHING FAILED. The list was only checked
+    // for DEADNESS and for POINTING AT REAL FILES — both of which a stale-but-shorter
+    // list satisfies perfectly. The missing direction was COMPLETENESS.
+    //
+    // ⚠️ Why an incomplete list is not harmless: `records that NO production module
+    // consumes the machine yet` SUBTRACTS this list from the importer population. An
+    // internal missing from it would read as a production consumer — a false alarm that
+    // trains the next reader to widen the allowlist reflexively.
+    const onDisk = sourceFiles()
+      .map(rel)
+      .filter((f) => f.startsWith("state/workflowMachine/"))
+      .sort();
+    expect(onDisk.length).toBeGreaterThan(0);
+    expect([...MACHINE_INTERNALS].sort()).toEqual(onDisk);
   });
 
   it("records that the MACHINE_INTERNALS names are unreachable by the predicate", () => {

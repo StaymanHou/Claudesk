@@ -38,20 +38,21 @@ This is the "genuine simplification, not a transfer" the WBS anticipated (task 2
 
 ---
 
-## ⚠️ Two genuine gaps in `transitions.md` — a question for you, not a fix for us
+## ⚠️ ONE genuine gap in `transitions.md` — a question for you, not a fix for us
 
-Resolving all 111 edges against all 58 policy rows found **two transitions with no governing pause-policy row**:
+Resolving all 111 edges against all 58 policy rows found **one transition that is dispatchable and has no governing pause-policy row**:
 
 | Edge | From → To | Why there's no row | Dispatchable? |
 |---|---|---|---|
 | **`I2`** | `report → triage` | The incident table's `triage (I2→I3 / I2→I13)` row governs the exits **from** triage, not the entry **into** it | ⚠️ **YES** |
-| **`P13`** | `product-finalize → EXIT` | The product table has a row for **P14** (the back-loop) but none for **P13** (the cycle exit) | no (terminal) |
 
-**`I2` is the one that matters.** It is dispatchable, so a supervisor that defaulted "no row found" to AUTO would fire `/incident-triage` with no policy sanctioning it. Claudesk does not do that — `resolvePolicy` returns an explicit `{outcome: "unmapped", reason: "no-row-upstream"}` whose union arm structurally has **no `cell` field**, so it cannot be mistaken for a verdict — and a standing test pins both ids so a third gap fails loudly.
+⚠️ **An earlier draft of this note also listed `P13` (product-finalize → EXIT). That was over-broad and is retracted** — `P13` is *terminal*, so no pause-policy row is owed and its absence is correct, not a gap. (Caught at code-quality review, when the gap classifier was corrected to key on an edge's target rather than its workflow.) Worth one line of your attention only as a documentation note: the product table does have a row for **P14** (the back-loop) but none for **P13**, which is fine.
 
-**The open question is yours:** should `I2` PAUSE like every other incident row, or AUTO? `P13` is a documentation inconsistency with no behavioral consequence.
+**`I2` matters because it is dispatchable** — a supervisor that defaulted "no row found" to AUTO would fire `/incident-triage` with no policy sanctioning it. Claudesk does not do that — `resolvePolicy` returns an explicit `{outcome: "unmapped", reason: "no-row-upstream"}` whose union arm structurally has **no `cell` field**, so it cannot be mistaken for a verdict — and a standing test pins this id so a second gap appearing upstream fails loudly.
 
-(Also recorded in Claudesk's backlog as `SURFACE-2026-09-12-TWO-TRANSITIONS-HAVE-NO-PAUSE-POLICY-ROW-UPSTREAM`.)
+**The open question is yours:** should `I2` PAUSE like every other incident row, or AUTO?
+
+(Also recorded in Claudesk's backlog as `SURFACE-2026-09-12-ONE-TRANSITION-HAS-NO-PAUSE-POLICY-ROW-UPSTREAM`.)
 
 ---
 
@@ -90,7 +91,7 @@ So: the edit is yours to make, from a session rooted in mccc. Claudesk's `git st
 
 ## Suggested order
 
-1. **Answer the `I2` question** (PAUSE or AUTO) and add the row to `transitions.md`. Optionally add `P13`.
+1. **Answer the `I2` question** (PAUSE or AUTO) and add the row to `transitions.md`.
 2. **Delete Phase 9** (and Phase 9b) from `tests/check-structure.sh`.
 3. **Keep Phase 3d.** Keep Phase 18's (b), (f), (g), (h); drop (d) and (e) along with Phase 9, since they pin the same duplication.
 4. Consider whether the four `AGENTS.md` cheat-sheet tables still earn their place once nothing checks them. They remain useful as the **no-Claudesk floor** (bare-terminal sessions), which was the explicit reason full absorption of mccc was rejected — but they are now prose-for-humans, not a machine contract.

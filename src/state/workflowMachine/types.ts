@@ -19,25 +19,12 @@
 // ⚠️ ACCEPTED COST: the model can drift from upstream. Mitigated by the drift test
 // (Phase 4 P4.5), which reads `_ref/` when present and skips cleanly when absent.
 //
-// ═══════════════════════════════════════════════════════════════════════════════
-// ⚠️ `transitions.md` IS THE SOLE AUTHORITY — THE `AGENTS.md` TABLES ARE NOT ABSORBED
-//
-// The graph is duplicated upstream across `transitions.md` and four
-// `agents/<workflow>-workflow/AGENTS.md` files. THE COPIES DISAGREE. Measured
-// 2026-09-12 against the live source:
-//
-//   • `transitions.md`: F10 = verify-auto → **verify-self**, plus F9b, F10b, F30.
-//   • `AGENTS.md`:      F10 = verify-auto → **verify-human**, and F9b/F10b/F30 are
-//     ABSENT ENTIRELY. Its state table has 12 rows and does not list `verify-self`
-//     at all — it predates verify-self being a state.
-//
-// Transcribing from `AGENTS.md`, or merging the two, would import a wrong F10 target
-// straight into the lookup that the WP3 detector's verdict IS. A wrong edge target is a
-// wrong policy row is a wrong fire.
-//
-// This is also why mccc's `check-structure.sh` Phase 9 is handed back for DELETION
-// rather than transfer (WBS 2.9): Phase 9 exists to keep those four copies in sync, and
-// it is demonstrably not keeping them in sync with `transitions.md`.
+// ⚠️ `transitions.md` IS THE SOLE AUTHORITY — the four `AGENTS.md` copies are NOT
+// absorbed, because they DISAGREE with it (F10's target differs; F9b/F10b/F30 are
+// absent). ⚠️ **The full finding, with the measured evidence, lives in ONE place:
+// `edges.ts`'s header.** Stated here as a pointer only — it was previously restated in
+// full across four files, and one sourced statement in four places drifts in three
+// (collapsed at code-quality review, 2026-09-12).
 
 /**
  * The five workflows the machine spans.
