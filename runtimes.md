@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-09-11
+updated: 2026-09-12
 ---
 
 # Runtime Registry
@@ -31,9 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 93s (2026-09-12, M15 WP1 Phase 4 verify-codify: no new tests; frontend 2299 / Rust 866 ALL GREEN — the trash_* env failures cleared on their own)
+- **Last:** 32s (2026-09-12, M15 WP2 Phase 1: WARM incremental cargo cache; frontend 2318 / Rust ALL GREEN)
 - **Use timeout:** 216000
+  <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
+       incremental cargo cache; a cold one is the realistic worst case and the history
+       below shows 93-104s. Recomputing from the warm figure would set a timeout that
+       kills the next cold run. -->
 - **History:**
+  - 32s — 2026-09-12 (warm cargo cache)
   - 93s — 2026-09-12
   - 96s — 2026-09-11
   - 104s — 2026-09-11

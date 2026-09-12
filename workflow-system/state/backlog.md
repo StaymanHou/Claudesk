@@ -34,6 +34,83 @@
 - **Status:** pending
 - **Pickup shape:** read the two entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
+## SURFACE-2026-09-12-WP3-INHERITS-A-TYPED-MACHINE-WITH-THREE-LIVE-CONTRACTS
+
+- **Priority:** high
+- **Surfaced by:** M15 WP2 Phase 5 (feature:build)
+- **Target:** M15 WP3 (break detection + auto-fire)
+
+WP3's first act will be to write a consumer of `src/state/workflowMachine/`. **Three contracts it inherits are not obvious from reading the module, and one of them will make WP3's first commit fail a test on purpose.**
+
+**1. ⚠️ The funnel guard will FAIL on WP3's first consumer — BY DESIGN.** `workflowMachineFunnel.test.ts` pins the set of modules importing `workflowMachine/` by name. A new importer fails `admits no importer outside the allowlist` and `records that NO production module consumes the machine yet` until it is added. **That is the review prompt, not a defect.** ⚠️ **Read WHICH tests fail:** if `wires graph to policy in exactly ONE module` is ALSO in the failure set, the consumer is importing both `edges` and `policy` to hand-roll the derivation — **route it through `resolvePolicy` instead of widening the allowlist.** (Measured: a bypassing consumer fails 3, a correct one fails 2.)
+
+**2. `unmapped` is a RESULT, never a default.** 31 of 111 edges have no governing policy row. `resolvePolicy` returns `{outcome: "unmapped", reason}` whose union arm **structurally has no `cell` field**, so it cannot be read as a verdict. ⚠️ **Do not add an `?? "auto"` fallback anywhere near this** — that single change would fire the supervisor on 31 ungoverned edges, including `I2` (report → triage), which is dispatchable.
+
+**3. The funnel already applies `resolveCell` and the incident override.** A caller never receives a conditional `auto-skip` cell, and an incident edge always resolves at Mode 2 regardless of the mode passed in. ⚠️ **Do not re-apply either** — and do not read `POLICY_ROWS` columns directly, which would skip both.
+
+**Also inherited, cheaply:** `extractTransitionId()` in `workflowMachineUpstreamContract.test.ts` is the ported Phase-3d regex — the shapes WP3's transcript reader must handle, with the `F10b`-vs-`F10` trap already pinned (a bare `/F[0-9]+/` captures the WRONG id rather than failing to match). ⚠️ It currently lives in a test file; WP3 should **move it to a module** and keep the test importing it, rather than re-deriving a second regex.
+
+## SURFACE-2026-09-12-TWO-TRANSITIONS-HAVE-NO-PAUSE-POLICY-ROW-UPSTREAM
+
+- **Priority:** medium
+- **Surfaced by:** M15 WP2 Phase 3 (feature:build) — the edge→policy-row derivation's coverage survey
+- **Target level:** mccc (`transitions.md`) — a cross-repo question, NOT a Claudesk fix
+- **Type:** gap
+
+⚠️ **Two transitions in `transitions.md` have no governing pause-policy row**, found by exhaustively resolving all 111 edges against all 58 policy rows:
+
+| Edge | From → To | Why it has no row | Dispatchable? |
+|---|---|---|---|
+| **`I2`** | `report → triage` | The incident table's `triage (I2→I3 / I2→I13)` row governs the exits **FROM** triage, not the entry **INTO** it | ⚠️ **YES** |
+| **`P13`** | `product-finalize → EXIT` | The product table has a row for **P14** (the back-loop) but none for **P13** (the cycle exit) | no (terminal) |
+
+**Why `I2` matters and `P13` does not (much):** `I2` is dispatchable, so a supervisor that defaulted "no row found" to AUTO would fire `/incident-triage` into a session with no policy sanctioning it. `P13` is terminal — nothing to fire — so its gap is a documentation inconsistency rather than a behavioral risk.
+
+**How Claudesk handles them today (no patch applied):** `lookup.ts` returns an explicit `{outcome: "unmapped", reason: "no-row-upstream"}` — **never a default**, and the result union structurally has **no `cell` field** on that arm, so a caller cannot mistake it for a verdict. A standing test pins both ids, so a third gap appearing upstream fails loudly.
+
+⚠️ **Deliberately NOT patched in Claudesk.** Inventing a policy row would be Claudesk deciding mccc's policy, crossing the ownership boundary settled 2026-08-14 (*Claudesk owns the drive mode's VALUE + TURN-BOUNDARY enforcement; mccc owns its MEANING*). The typed model records what upstream **says**, including where it says nothing. **The question belongs upstream:** should `I2` (report → triage) PAUSE like every other incident row, or AUTO?
+
+⚠️ **Found by a TEST, not by the survey that preceded it.** The pre-implementation survey classified the unmapped edges but only eyeballed the **dispatchable** ones, so it reported one gap (`I2`) and missed `P13`. The exhaustive assertion caught the second. *A survey that filters before counting reports the filter, not the population.*
+
+## SURFACE-2026-09-12-THE-TWO-UPSTREAM-COPIES-OF-THE-FEATURE-GRAPH-DISAGREE
+
+- **Priority:** high
+- **Surfaced by:** M15 WP2 (feature-plan, pre-plan measurement A-2)
+- **Target:** M15 WP2 task 2.1/2.9 (the transcription source + the mccc Phase 9 hand-off)
+
+⚠️ **`transitions.md` and `agents/feature-workflow/AGENTS.md` record DIFFERENT feature graphs.** Measured against the live `_ref/` source:
+
+| | `transitions.md` (authority) | `AGENTS.md` (stale) |
+|---|---|---|
+| `F10` target | `verify-auto → **verify-self**` | `verify-auto → **verify-human**` |
+| `F9b`, `F10b`, `F30` | present | **absent entirely** |
+
+`AGENTS.md` predates `verify-self` being a state — it lists 12 states, omitting it from the state table while mentioning it 7 times in prose.
+
+**Consequence for WP2:** the typed graph must be transcribed from **`transitions.md` only**. Merging the `AGENTS.md` tables would import a wrong `F10` target directly into the lookup the WP3 detector's verdict *is* — a wrong edge target is a wrong policy row is a wrong fire.
+
+**Consequence for WBS 2.9 (the mccc hand-off):** `check-structure.sh` Phase 9 exists to keep the four `AGENTS.md` copies in sync with each other. It is **demonstrably not holding them in sync with `transitions.md`**. That is evidence the duplication should stop existing rather than be better policed — strengthening the "Phase 9 DISAPPEARS" position from a tidiness argument to a correctness one.
+
+⚠️ **Do not fix this by editing mccc from a Claudesk session** — every `~/.claude/skills/` entry is a symlink into that repo (`SURFACE-2026-09-11-EVERY-INSTALLED-SKILL-IS-A-SYMLINK-INTO-THE-MCCC-SOURCE-REPO`). The correction belongs in the hand-off note (WP2 P5.3).
+
+## SURFACE-2026-09-12-WBS-M7-M8-COUNTS-ARE-STALE-AGAINST-THE-LIVE-SOURCE
+
+- **Priority:** medium
+- **Surfaced by:** M15 WP2 (feature-plan, pre-plan measurements A-1/A-3/A-4)
+- **Target:** M15 WP2 tasks 2.1/2.2 (the tests that pin the absorbed counts)
+
+⚠️ **`wbs.md`'s pre-decomposition measurements have drifted from the live docs**, and one of them counted a different file than it names:
+
+| WBS claim | Measured 2026-09-12 | Note |
+|---|---|---|
+| M-7: **113** transition rows | **111** (F 43 · I 20 · S 21 · P 14 · T 13) | live doc drifted by 2 |
+| M-7: **89** pause-policy rows across 4 `AGENTS.md` | **81** (feature 32 · incident 22 · product 14 · task 13) | drifted by 8 |
+| M-8: feature policy rows **8 edge-keyed / 19 step-keyed of 27** | **12 edge-keyed / 13 step-keyed of 25** in `transitions.md` | ⚠️ M-8 counted the **`AGENTS.md`** copy, not `transitions.md` |
+
+**The M-8 *hazard* is confirmed** — policy rows really are keyed by step more often than by edge id, so the edge→policy mapping is derivation work rather than a lookup. Only the numbers belong to the other copy.
+
+**Consequence:** any test pinning a count must assert **the count absorbed at transcription time**, never a hardcoded 113/89. A hardcoded stale constant would fail on a correct absorption and pass on an incomplete one. (Compare `[[backlog-finding-carries-an-implicit-as-of-date]]`: a measurement is true as-of its date.)
+
 ## SURFACE-2026-09-11-EVERY-INSTALLED-SKILL-IS-A-SYMLINK-INTO-THE-MCCC-SOURCE-REPO
 
 - **Priority:** high
