@@ -59,6 +59,7 @@
 ## Architecture, seams & precedents
 
 - [derived-state-is-not-a-proxy-for-its-event.md](derived-state-is-not-a-proxy-for-its-event.md) — A consumer needing "event X arrived" must match EVERY state X can map to; when a closed enum gains a member, sweep consumers of every SIBLING literal, not the nearest one. Shipped a CRITICAL — the failure mode is a silent hang.
+- [classifier-must-key-on-the-classified-property.md](classifier-must-key-on-the-classified-property.md) — A classifier keyed on a grouping attribute that merely CORRELATES with the classified property is correct today, wrong in shape; the failure is a SILENT under-report. ⚠️ And the right field with too coarse a taxonomy is also wrong — it buried the one real finding among nine.
 - [workspace-status-map-collapses-consecutive-events.md](workspace-status-map-collapses-consecutive-events.md) — The status MAP overwrites per workspace, so two consecutive `Stop`s are indistinguishable; per-event consumers must use the RAW event stream. ⚠️ The failure mode is a feature that SILENTLY never fires.
 - [claudesk-philosophy.md](claudesk-philosophy.md) — The deliberate design philosophy: opinionated, Claude-specific, parallel-across-projects, attention as the scarce resource.
 - [app-ships-with-no-csp.md](app-ships-with-no-csp.md) — Claudesk ships `"csp": null`, so anything executing in the webview gets the full `__TAURI_INTERNALS__` surface and a sanitizer is the ONLY defense. A plan asking "does it run under our CSP?" has no answer — invert it.
@@ -74,6 +75,7 @@
 
 ## Toolchain & environment traps
 
+- [node-strip-types-fails-on-extensionless-runtime-imports.md](node-strip-types-fails-on-extensionless-runtime-imports.md) — `node --experimental-strip-types` fails on a module with extensionless RUNTIME imports but works when siblings are `import type` (erased first) — so it appears to work then break. Use a throwaway vitest spec; `vite-node` is NOT installed.
 - [bsd-sed-lacks-word-boundary.md](bsd-sed-lacks-word-boundary.md) — BSD `sed` has no `\b`, so a mutation probe using it silently no-ops and every mutant reads as "guard survived" — a hole that isn't there. Use `perl -pi -e`; assert the mutation landed.
 - [bash-cargo-env.md](bash-cargo-env.md) — Bash subshells don't inherit `~/.cargo/env`; cargo/rustc need an explicit PATH prefix.
 - [hmr-stale-across-file-rename.md](hmr-stale-across-file-rename.md) — A long-lived Vite/HMR window can half-apply and fake a regression after a RENAME *or* any edit to a component holding `useRef`/`useState`. Relaunch before believing a verify RESULT.

@@ -10,7 +10,7 @@ created: 2026-09-12
 # Feature: M15 WP2 — The state machine as executable code
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** COMPLETED 2026-09-12
 **Created:** 2026-09-12
 
 ## Problem Statement
@@ -127,8 +127,8 @@ Each one changes a task. Measured rather than inherited, because `wbs.md`'s M-7/
   - [x] verify-codify  <!-- status: [x] -->
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** ⚠️ **SHIPPED** as `7ef9f35` (local commit; NOT pushed). review-quality next.
+- **Path:** Feature > finalize (COMPLETE)
+- **Active scope:** ⚠️ **WP2 COMPLETE 2026-09-12.** Shipped `938750e`, review fixes `2c08459`. ⚠️ **NOT pushed** — `main` has an unresolved divergence (see the Ship record). ⚠️ **Task 2.9 is `[~]` not `[x]`** — the mccc-side Phase 9 deletion has not happened.
 - **Blocked:** none
 - **Unvisited:** Phase 5 (port 3d/18, hand off Phase 9)
 - **Open discoveries:** two — A-2, the two upstream copies disagree on `F10`; recorded below and destined for the mccc hand-off note (P5.3)
@@ -688,6 +688,16 @@ Frontend suite 2299 → **2410**.
 ⚠️ **THREE of the six probes were INVALID on their first attempt and had to be redone** — twice a `perl`/single-line replace produced syntactically invalid TS (esbuild failed with `Tests no tests`, which is NOT a guard verdict), once because Prettier had wrapped the target onto two lines. This is `[[verify-the-mutation-landed]]` and `[[invalid-probe-and-real-hole-look-identical]]` firing three times in one phase: **a mutant that does not compile proves nothing, and looks exactly like a passing guard if you only grep for `Tests <n> passed`.** Every result above was re-confirmed with the mutant compiling.
 
 ⚠️ **Vacuity is real in this file and is guarded, not assumed away.** The `for`-loop tests (`every from/to`, `non-empty condition`, terminal/SURFACE classification) pass vacuously over an empty `EDGES` — confirmed by M5, where they did NOT appear among the 8 failures. The `holds a nonzero number of edges` test is what makes the rest non-vacuous.
+
+## Retrospect
+
+- **What changed in our understanding:** ⚠️ **The WBS anticipated the wrong hazard.** It sized WP2 around *"ambiguous cases"* in the edge→policy mapping — edges with two candidate rows. Measured: **ZERO ambiguous cases.** The real hazard is the exact opposite — **31 of 111 edges have NO row at all**, and would silently fall through to whatever a default happened to be. That inverted the design: `unmapped` became a first-class result whose union arm structurally carries **no `cell` field**, rather than an error case. ⚠️ Second: **making a prose table executable is itself a measurement instrument.** Three real defects in upstream docs became visible only because the table had to compile — the two copies disagreeing on `F10`, the missing `I2` row, and four mis-classified policy rows (one *correct only by accident*).
+
+- **Assumptions that held:** The ownership boundary (2026-08-14) held under pressure and decided several close calls cleanly — `session-capture`'s gate stayed upstream while its policy cell came here. `recycleMachine.ts` was the right idiom to copy. The probe's `dispatchable_target` correction was load-bearing exactly as reported. The five-file test split earned itself (the reviewer independently confirmed near-zero overlap).
+
+- **Assumptions that were wrong:** ⚠️ **`wbs.md`'s M-7/M-8 counts were stale, and M-8 counted a different file than it named** (113 vs 111 rows; 89 vs 81; 8/19-of-27 was the `AGENTS.md` copy, not `transitions.md`). ⚠️ **I reported "two upstream gaps" and that was over-broad** — `P13` is terminal, so no row was ever owed; only `I2` is real. Caught at code-quality review, three steps after I first stated it. ⚠️ **Two Observable outcomes were written against facts that changed** (the 6-vs-5 cell arms; "AUTO in all four modes"), and one **named a file that never existed**. ⚠️ And a comment I wrote contradicted the code two files away.
+
+- **Approach delta:** Phases matched the plan; **the verification work did not.** Three plan-time outcomes were corrected mid-flight rather than satisfied as written, and **three separate findings came from adversarial verification rather than from building** — the subagent that challenged my transcription found the comment contradiction; the code-quality reviewer found the `unmappedReason` classifier defect; and adding one file exposed that `MACHINE_INTERNALS` had no completeness check. ⚠️ **The pattern worth carrying: every one of those was found by something other than the tests I wrote for the thing itself.** Also unplanned: WP2 fixed both review MAJORs in place rather than backlogging, because one was a latent correctness defect in the module WP3 consumes and the other was a file move.
 
 ## Code-Quality Review — m15-wp2-state-machine-as-code
 

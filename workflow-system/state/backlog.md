@@ -82,42 +82,15 @@ WP3's first act will be to write a consumer of `src/state/workflowMachine/`. **T
 
 ## SURFACE-2026-09-12-THE-TWO-UPSTREAM-COPIES-OF-THE-FEATURE-GRAPH-DISAGREE
 
-- **Priority:** high
-- **Surfaced by:** M15 WP2 (feature-plan, pre-plan measurement A-2)
-- **Target:** M15 WP2 task 2.1/2.9 (the transcription source + the mccc Phase 9 hand-off)
+- **Priority:** medium *(was high — Claudesk's exposure is closed; what remains is upstream hygiene)*
+- **Surfaced by:** M15 WP2 (feature-plan, measurement A-2)
+- **Target:** ⚠️ **mccc** — a cross-repo item. **Claudesk's half is DONE (2026-09-12).**
 
-⚠️ **`transitions.md` and `agents/feature-workflow/AGENTS.md` record DIFFERENT feature graphs.** Measured against the live `_ref/` source:
+⚠️ **`transitions.md` and `agents/feature-workflow/AGENTS.md` record DIFFERENT feature graphs.** `F10` targets `verify-self` in the authority and `verify-human` in the copy; `F9b`/`F10b`/`F30` are absent from the copy entirely, whose state table has 12 rows and omits `verify-self`.
 
-| | `transitions.md` (authority) | `AGENTS.md` (stale) |
-|---|---|---|
-| `F10` target | `verify-auto → **verify-self**` | `verify-auto → **verify-human**` |
-| `F9b`, `F10b`, `F30` | present | **absent entirely** |
+✅ **CLAUDESK IS NO LONGER EXPOSED.** The typed graph was transcribed from `transitions.md` **only**, and a live drift test (`agrees with upstream on the F10 target`) reads the authority file and fails if anyone "fixes" the absorbed value toward the stale copy. ⚠️ It is `_ref/`-gated, so it **skips** on a fresh checkout — reported as skipped, never silently passed.
 
-`AGENTS.md` predates `verify-self` being a state — it lists 12 states, omitting it from the state table while mentioning it 7 times in prose.
-
-**Consequence for WP2:** the typed graph must be transcribed from **`transitions.md` only**. Merging the `AGENTS.md` tables would import a wrong `F10` target directly into the lookup the WP3 detector's verdict *is* — a wrong edge target is a wrong policy row is a wrong fire.
-
-**Consequence for WBS 2.9 (the mccc hand-off):** `check-structure.sh` Phase 9 exists to keep the four `AGENTS.md` copies in sync with each other. It is **demonstrably not holding them in sync with `transitions.md`**. That is evidence the duplication should stop existing rather than be better policed — strengthening the "Phase 9 DISAPPEARS" position from a tidiness argument to a correctness one.
-
-⚠️ **Do not fix this by editing mccc from a Claudesk session** — every `~/.claude/skills/` entry is a symlink into that repo (`SURFACE-2026-09-11-EVERY-INSTALLED-SKILL-IS-A-SYMLINK-INTO-THE-MCCC-SOURCE-REPO`). The correction belongs in the hand-off note (WP2 P5.3).
-
-## SURFACE-2026-09-12-WBS-M7-M8-COUNTS-ARE-STALE-AGAINST-THE-LIVE-SOURCE
-
-- **Priority:** medium
-- **Surfaced by:** M15 WP2 (feature-plan, pre-plan measurements A-1/A-3/A-4)
-- **Target:** M15 WP2 tasks 2.1/2.2 (the tests that pin the absorbed counts)
-
-⚠️ **`wbs.md`'s pre-decomposition measurements have drifted from the live docs**, and one of them counted a different file than it names:
-
-| WBS claim | Measured 2026-09-12 | Note |
-|---|---|---|
-| M-7: **113** transition rows | **111** (F 43 · I 20 · S 21 · P 14 · T 13) | live doc drifted by 2 |
-| M-7: **89** pause-policy rows across 4 `AGENTS.md` | **81** (feature 32 · incident 22 · product 14 · task 13) | drifted by 8 |
-| M-8: feature policy rows **8 edge-keyed / 19 step-keyed of 27** | **12 edge-keyed / 13 step-keyed of 25** in `transitions.md` | ⚠️ M-8 counted the **`AGENTS.md`** copy, not `transitions.md` |
-
-**The M-8 *hazard* is confirmed** — policy rows really are keyed by step more often than by edge id, so the edge→policy mapping is derivation work rather than a lookup. Only the numbers belong to the other copy.
-
-**Consequence:** any test pinning a count must assert **the count absorbed at transcription time**, never a hardcoded 113/89. A hardcoded stale constant would fail on a correct absorption and pass on an incomplete one. (Compare `[[backlog-finding-carries-an-implicit-as-of-date]]`: a measurement is true as-of its date.)
+⚠️ **WHAT REMAINS IS UPSTREAM'S:** the four `AGENTS.md` copies are still wrong, and mccc's `check-structure.sh` Phase 9 — which exists to keep them in sync — is **not catching it**. The hand-off note (`HANDOFF-to-mccc-m15-wp2.md`) asks for Phase 9's deletion and carries the evidence. **Blocked on a session rooted in the mccc repo** (editing from Claudesk would silently dirty a different git repository).
 
 ## SURFACE-2026-09-11-EVERY-INSTALLED-SKILL-IS-A-SYMLINK-INTO-THE-MCCC-SOURCE-REPO
 
@@ -174,15 +147,13 @@ WP3's first act will be to write a consumer of `src/state/workflowMachine/`. **T
 
 - **Priority:** high
 - **Surfaced by:** M15 WP1 probe, Phase 1 (feature-build)
-- **Target:** M15 WP2 task 2.4 (edge->policy-row mapping) + WP3 task 3.4 (verdict)
+- **Target:** ⚠️ **WP2's half is DONE (2026-09-12); WP3 task 3.4 (the verdict) still owes its half.**
 
-⚠️ **A policy cell that reads AUTO does NOT imply there is a next skill to fire.** Labelling the corpus on the mode cell alone marked **223** breaks; the great majority were **terminal / SURFACE / meta-op edges** — `S20` (session-capture terminal), `S17` (writes `.session.md`), `F19`/`F30` (exit to reflect / product-finalize), `P13` (product cycle EXIT), `S6` (session-restore) — whose *from-state* policy row says AUTO but whose **target is not a dispatchable skill**.
+⚠️ **A policy cell that reads AUTO does NOT imply there is a next skill to fire.** Labelling the corpus on the mode cell alone marked **223** breaks; the excess were terminal / SURFACE / meta-op edges — `S20`, `S17`, `F19`, `F30`, `P13`, `S6` — whose *from-state* row says AUTO but whose **target is not a dispatchable skill**. Adding a `NON_DISPATCHABLE_TARGET` set took the count 223 → 127.
 
-**The distinction:** the policy cell answers *"may the orchestrator chain without pausing?"*. It does **not** answer *"is there something to chain to?"*. Those are different questions and the table only encodes the first.
+✅ **WP2 DELIVERED THE MODEL HALF.** `Edge.dispatchTarget` is a per-edge property held **separately** from the policy cell (`types.ts`), with 5 target kinds; `isDispatchable()` is the single narrowing predicate; the six probe-named edges are pinned non-dispatchable by test; and `workflowMachineLookup.test.ts` asserts that AUTO cells on NON-dispatchable edges **still exist** — so the two properties cannot silently collapse into one.
 
-**Consequence for WP2:** the typed graph needs a per-edge **`dispatchable_target`** property (or an explicit terminal/SURFACE/meta-op classification) held **separately** from the 5-value policy cell. Without it WP3 will fire into terminal states — injecting a command after a workflow has ended.
-
-**Measured effect:** adding a `NON_DISPATCHABLE_TARGET` set took the break count 223 -> 127 with no other change.
+⚠️ **WHAT REMAINS IS WP3's:** the detector must read the two properties **independently** — policy says "may I chain?", `dispatchTarget` says "is there anything to chain to?" — and fire only when BOTH answer yes. ⚠️ **The model makes this easy but does not enforce it at the call site**: `resolvePolicy` returns the policy verdict; nothing stops a caller from firing on `cell.kind === "auto"` without consulting `isDispatchable`. **That is the remaining risk, and it is a WP3 code-review item.**
 
 ## SURFACE-2026-09-07-CHAIN-DETECTION-WINDOW-MUST-NOT-CLOSE-EARLY
 

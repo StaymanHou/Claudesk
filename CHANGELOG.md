@@ -4,6 +4,9 @@
 
 - **Feature shipped:** M15 WP1 — a probe establishing that the drive mode's auto-chain policy can be enforced mechanically: a transition-token + policy-row + did-a-Skill-call-follow check flags 96 wrongful stops across 2,284 real turns with no false positives, and catches all 36 breaks the operator had to nudge the agent out of.
 - **Milestone:** WP1 (Probe — does the mechanical rule actually decide real stops?) of Milestone 15, Workflow supervisor — the gate on the milestone; WP2–WP5 are now unblocked with GO, GO-WITH-CONDITIONS, GO and GO.
+- **Feature shipped:** M15 WP2 — the workflow state machine absorbed into Claudesk as typed code: 111 transitions and 58 pause-policy rows, with a single funnel that resolves an edge and drive mode to a verdict, so the supervisor enforces a compiled model rather than a markdown table it re-reads.
+- **Backlog resolved:** SURFACE-2026-09-12-WBS-M7-M8-COUNTS-ARE-STALE-AGAINST-THE-LIVE-SOURCE — closed by absorbing the graph and pinning every count from what was actually transcribed rather than from the WBS's stale constants.
+- **Milestone:** WP2 (The state machine as executable code) of Milestone 15, Workflow supervisor — WP3's detector now inherits a total, compile-checked policy lookup instead of re-deriving the edge→row mapping by hand.
 
 ## 2026-09-06
 

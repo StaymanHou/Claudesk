@@ -101,7 +101,7 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 
 ---
 
-### WP2: The state machine as executable code
+### WP2: The state machine as executable code  ✅ **SHIPPED 2026-09-12 (commits `938750e` + `2c08459`)**
 **Description:** States, edges, the AUTO/PAUSE matrix and the four drive modes become a **typed model in Claudesk** rather than a markdown table Claudesk parses at runtime. Includes the **edge→policy-row derivation** (M-8) and the exhaustiveness tests a prose-grep cannot express.
 **Milestone:** 15
 **Dependencies:** WP1 (Q3 decides whether the graph couples to skill frontmatter; Q1 validates the lookup the detector will use)
@@ -119,15 +119,16 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 ⚠️ **Extraction hazard (M-9):** `transitions.md` interleaves mccc's intra-turn semantics with the graph. The 2 `behavior-within-state` rows (the drive-mode-conditional `session-capture` gate; the reflect candidate filter) **stay upstream** — absorbing them would cross the ownership boundary.
 
 **Tasks:**
-- [ ] 2.1 Type the states + edges per workflow (5 workflows: product, feature, task, incident, session-ops).
-- [ ] 2.2 Type the policy cell as a **sum type** over the 5 values, with `AUTO-SKIP`'s condition modeled as data, not a comment.
-- [ ] 2.3 Model Mode 0 explicitly as a mode-like input that is **not** one of the four.
-- [ ] 2.4 ⚠️ Build the **edge→policy-row mapping** (M-8: 19 of 27 feature rows key on a step, 8 on an edge id) and make the ambiguous cases explicit rather than guessed.
-- [ ] 2.5 Funnel every policy read through ONE function; add the **caller-side** guard (per the standing trap — extracting the machine does not prove the caller).
-- [ ] 2.6 Exhaustiveness test over (state × mode) cells.
-- [ ] 2.7 Port mccc `check-structure.sh` **Phase 3d** (the `TRANSITION:` regex contract) — mccc keeps its copy while skills still emit the token.
-- [ ] 2.8 Port **Phase 18** (the boundary auto-chain pin).
-- [ ] 2.9 Hand off to mccc: **Phase 9 DISAPPEARS** (it exists only to keep 4 `AGENTS.md` copies in sync; once Claudesk owns the graph the duplication it polices is gone). ⚠️ A genuine simplification, not a transfer — and a **cross-repo** item.
+- [x] 2.1 Type the states + edges per workflow (5 workflows: product, feature, task, incident, session-ops).
+- [x] 2.2 Type the policy cell as a **sum type** over the 5 values, with `AUTO-SKIP`'s condition modeled as data, not a comment.
+- [x] 2.3 Model Mode 0 explicitly as a mode-like input that is **not** one of the four.
+- [x] 2.4 ⚠️ Build the **edge→policy-row mapping** (M-8: 19 of 27 feature rows key on a step, 8 on an edge id) and make the ambiguous cases explicit rather than guessed.
+- [x] 2.5 Funnel every policy read through ONE function; add the **caller-side** guard (per the standing trap — extracting the machine does not prove the caller).
+- [x] 2.6 Exhaustiveness test over (state × mode) cells.
+- [x] 2.7 Port mccc `check-structure.sh` **Phase 3d** (the `TRANSITION:` regex contract) — mccc keeps its copy while skills still emit the token.
+- [x] 2.8 Port **Phase 18** (the boundary auto-chain pin).
+- [~] 2.9 Hand off to mccc: **Phase 9 DISAPPEARS** (it exists only to keep 4 `AGENTS.md` copies in sync; once Claudesk owns the graph the duplication it polices is gone). ⚠️ A genuine simplification, not a transfer — and a **cross-repo** item.  
+  ⚠️ **CLAUDESK'S HALF DONE; mccc's EDIT IS NOT.** The hand-off note is written and committed here (`HANDOFF-to-mccc-m15-wp2.md`, 96 lines) with the evidence, the port/no-port table and a suggested order. ⚠️ **Deliberately NOT ticked `[x]`** — Phase 9 still exists in mccc, and the deletion must be made from a session rooted in that repo (every `~/.claude/skills/` entry is a symlink into it, so editing from here silently dirties a different git repository). ⚠️ **A `[x]` here would tell a downstream planning skill the duplication is gone when it is not.** Carries one open question for the operator: should `I2` (report → triage) PAUSE or AUTO?
 
 **WP2 → WP3 rationale:** the detector's verdict *is* a policy lookup, so the typed graph is a hard build-dependency, not merely a tidier home for the table. Writing the detector against a hand-rolled lookup would mean writing the mapping (2.4) twice and shipping the throwaway one.
 
