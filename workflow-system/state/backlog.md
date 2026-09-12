@@ -28,6 +28,97 @@
 - **Status:** pending
 - **Pickup shape:** read the two entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
+## SURFACE-2026-09-11-EVERY-INSTALLED-SKILL-IS-A-SYMLINK-INTO-THE-MCCC-SOURCE-REPO
+
+- **Priority:** high
+- **Surfaced by:** M15 WP1 probe, Phase 4 Q3 (feature:build)
+- **Target:** M15 WP2 (any frontmatter/skill-file coupling work) + any future skill edit
+
+⚠️ **Every skill under `~/.claude/skills/` is a SYMLINK into `my-claude-code-customization/skills/`.** Editing an installed skill file therefore writes into a **different git repository** — silently dirtying the mccc source tree from inside a Claudesk session.
+
+**Verified:** `ls -l ~/.claude/skills/` shows every entry as a symlink (e.g. `feature-plan -> /Users/stayman/Personal/projects/my-claude-code-customization/skills/feature-plan`). `~/.claude/skills` itself is a real directory, so the hazard is per-skill and easy to miss.
+
+**The safe pattern, used by this probe:** copy with **`cp -RL`** to dereference the link, work only on the copy in gitignored scratch, and **verify the source repo's `git status` stays clean** before and after. A plain `cp -R` copies the symlink, not the content, and a subsequent write goes straight through to the source.
+
+**Why it matters beyond Q3:** WP2 considers coupling the typed graph to skill frontmatter. Any experiment that "just adds a key to a skill to see what happens" would mutate the companion repo. ⚠️ The failure is silent — nothing in the Claudesk session reports it, and it surfaces later as unexplained dirt in a different project.
+
+**Also recorded (the compatibility answer itself):** extra frontmatter keys ARE inert — **6 of 48 shipped skills already carry `allowed-tools`** beyond the standard three keys, so the harness tolerates extra keys in production today. The open question was never compatibility; it is whether the enumerator is worth building at all (probe says no — see the WP1 WIP, Q3b).
+
+## SURFACE-2026-09-11-Q2-SEPARABILITY-IS-MODEL-CONDITIONAL
+
+- **Priority:** high
+- **Surfaced by:** M15 WP1 probe, Phase 3 (feature-build)
+- **Target:** M15 WP3 task 3.7 (the adjudicator) + the fire policy
+
+⚠️ **The Q2 gate opens ONLY with a sufficiently strong adjudicator model.** Measured over the 96-turn FIRE population against operator-behavior ground truth (96 `claude -p` calls per arm, zero errors):
+
+| Model | Wrong-fire recall | Real breaks preserved | Verdict @ 0.80/0.80 |
+|---|---|---|---|
+| `haiku` | 0.793 (23/29) | 0.878 (36/41) | **NOT_SEPARABLE** |
+| `sonnet` | 0.862 (25/29) | 0.854 (35/41) | **SEPARABLE** |
+
+⚠️ **AND THE MARGIN IS ONE RECORD.** `sonnet` clears the 0.80 recall bar by exactly **+1 record** (25/29; it needs ≥24). `haiku` misses by **−1** (23/29). The entire SEPARABLE/NOT_SEPARABLE split between the two models rests on a **2-record difference on a 29-record denominator**, and only **70 of 96** records are scorable at all (26 have no recorded operator response). ⚠️ **The 0.80/0.80 threshold is a judgment call, not a measured constant** — a 0.85 bar fails both arms, a 0.75 bar passes both.
+
+**Consequence:** WP3's GO is not *"the hybrid works"* — it is *"the hybrid works with a strong enough adjudicator, on a thin margin."* Treat it as **GO-WITH-CONDITIONS**: pin the model, **re-measure on a larger labelled set before relying on the margin**, and keep the fire policy biased toward withholding (the safe direction). ⚠️ **A silent model downgrade moves the supervisor from SEPARABLE to NOT_SEPARABLE with no code change and no signal.** The adjudicator model must be **pinned explicitly**, and changing it is a **behavioral change that requires re-measurement**, not a config tweak.
+
+✅ **The failure direction is the safe one.** The stronger arm's 6 false positives all *withhold* a fire on a turn that was a real break, so the supervisor stays silent and the operator nudges — today's status quo, and recoverable. The dangerous direction (firing into a turn awaiting an answer) is caught at 0.86.
+
+⚠️ **Cost on the critical path:** ~3s per call, one call per fire candidate before firing. Routing must cover **every** candidate, not just the verify-human-adjacent class — the narrow router misses 10 of 32 awaiting-turns (see the routing entry in the WP1 WIP).
+
+## SURFACE-2026-09-11-A-DETECTOR-SCORED-AGAINST-ITS-OWN-POLICY-TABLE-IS-CIRCULAR
+
+- **Priority:** high
+- **Surfaced by:** M15 WP1 probe, Phase 2 (feature-build)
+- **Target:** M15 WP3 task 3.4 (the verdict) + any future detector tuning
+
+⚠️ **A detector scored against a fixture that its OWN policy table produced is measuring itself, and will report a perfect score no matter how wrong both are.** The probe's `detect.py` and `mine.py` both called the same `lookup()` with the same branch order on the same inputs, yielding **precision 1.000 / recall 1.000** — arithmetic identity, not evidence. It would have read 1.000 even if `policy.py`'s 95 hand-transcribed edges were entirely wrong.
+
+**How it was caught:** by treating a perfect score as a *symptom* rather than a success. Nothing in the run flagged it; the numbers looked like the best possible outcome.
+
+**The only non-circular truth in this corpus is the operator prod** — a short, content-free nudge (`"so?"`, `"next"`, `"chain"`, `"autopilot it! why returning control?"`) typed immediately after a verdict. It is derived from **operator behavior**, not from the policy table, so scoring against it actually tests whether the policy lookup models reality. Measured that way: **36/36 ground-truth breaks caught.**
+
+**Consequence for WP3:** when the real detector is tuned, its acceptance measurement must come from a signal the detector does not itself produce. Re-deriving labels from the same typed graph the detector consults is not a test — it is a tautology with a percentage attached.
+
+## SURFACE-2026-09-07-AUTO-CELL-DOES-NOT-IMPLY-A-DISPATCHABLE-TARGET
+
+- **Priority:** high
+- **Surfaced by:** M15 WP1 probe, Phase 1 (feature-build)
+- **Target:** M15 WP2 task 2.4 (edge->policy-row mapping) + WP3 task 3.4 (verdict)
+
+⚠️ **A policy cell that reads AUTO does NOT imply there is a next skill to fire.** Labelling the corpus on the mode cell alone marked **223** breaks; the great majority were **terminal / SURFACE / meta-op edges** — `S20` (session-capture terminal), `S17` (writes `.session.md`), `F19`/`F30` (exit to reflect / product-finalize), `P13` (product cycle EXIT), `S6` (session-restore) — whose *from-state* policy row says AUTO but whose **target is not a dispatchable skill**.
+
+**The distinction:** the policy cell answers *"may the orchestrator chain without pausing?"*. It does **not** answer *"is there something to chain to?"*. Those are different questions and the table only encodes the first.
+
+**Consequence for WP2:** the typed graph needs a per-edge **`dispatchable_target`** property (or an explicit terminal/SURFACE/meta-op classification) held **separately** from the 5-value policy cell. Without it WP3 will fire into terminal states — injecting a command after a workflow has ended.
+
+**Measured effect:** adding a `NON_DISPATCHABLE_TARGET` set took the break count 223 -> 127 with no other change.
+
+## SURFACE-2026-09-07-CHAIN-DETECTION-WINDOW-MUST-NOT-CLOSE-EARLY
+
+- **Priority:** high
+- **Surfaced by:** M15 WP1 probe, Phase 1 (feature-build)
+- **Target:** M15 WP3 task 3.4 (the idempotency / "did it already chain?" check)
+
+⚠️ **The "did a `Skill` call follow this verdict?" window must not close on an intervening tool call, nor on a re-quoted `TRANSITION:` token.** Between emitting a verdict and invoking the next skill, the agent routinely runs `Bash`/`Read` calls (start a dev server, check a file) and narrates in between — and that narration frequently re-quotes the transition token.
+
+**Proven false-positive case:** session `06eb0e92-995a-43e1-b0c0-36f23abdd066.jsonl` turn 504 emitted `TRANSITION: F10` and **did** chain correctly — the `Skill` call landed at line 511, after two `Bash` calls and two narration lines. An early-closing window labelled it a break.
+
+**The rule:** only a **real user *prose* turn** ends the window. ⚠️ Tool results arrive with role=`user` and MUST be skipped, as must `system`/`attachment`/`queue-operation` lines. Erring permissive is correct here — this milestone's standing lesson is that naive predicates *over*-flag (M-3: 15x).
+
+**Measured effect:** fixing the window took the break count 127 -> 96 with no other change.
+
+## SURFACE-2026-09-07-TRANSITION-TOKENS-ECHO-ONTO-USER-LINES
+
+- **Priority:** high
+- **Surfaced by:** M15 WP1 probe (feature-plan, pre-plan measurement A-2)
+- **Target:** M15 WP3 task 3.3 (the real transcript reader)
+
+⚠️ **~Half of all `TRANSITION:` occurrences in a CC transcript sit on `user` lines, not assistant lines** — measured 559 user / 555 assistant across a 40-file sample of this project's transcripts. The cause: skill bodies (which contain the full transitions table) and tool results echoing docs are injected into the conversation as user-role content.
+
+**Consequence:** a file-level `grep 'TRANSITION:'` reads **documentation as emitted verdicts**. The parse MUST be scoped to the **last assistant text block** of the turn. A correctly-scoped parse yields 2,281 emitted verdicts across 150 files — which reproduces the WBS's independently-measured M-3 turn count exactly, cross-validating the scoping.
+
+**Why this is filed rather than just noted in the WIP:** it bears on WP3's shippable reader, not only WP1's throwaway one, and `wbs.md` does not record it. The failure mode is silent — a file-scoped reader would flag verdicts that were never emitted and attribute them to real turns.
+
 ## SURFACE-2026-08-25-PROBE-CHECK-EXEMPTS-ALREADY-INSTALLED-DEPENDENCIES
 - **Source:** feature:verify-human (M13.5 WP3, 2026-08-25) — cost **three failed live test rounds** and a full WP escalation.
 - **Target level:** workflow-system (`feature-spec` / `feature-plan` §"3rd-Party Probe Check") — a **process** defect, not a Claudesk one.

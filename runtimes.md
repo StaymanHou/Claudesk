@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-09-06
+updated: 2026-09-11
 ---
 
 # Runtime Registry
@@ -31,9 +31,12 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 31s (2026-08-26, M13.5 WP5 Phase 1 verify-codify: arch-doc coupling guard; Rust 886 / frontend 2260 — full gate, warm incremental)
-- **Use timeout:** 120000
+- **Last:** 93s (2026-09-12, M15 WP1 Phase 4 verify-codify: no new tests; frontend 2299 / Rust 866 ALL GREEN — the trash_* env failures cleared on their own)
+- **Use timeout:** 216000
 - **History:**
+  - 93s — 2026-09-12
+  - 96s — 2026-09-11
+  - 104s — 2026-09-11
   - 31s — 2026-08-26
   - 29s — 2026-08-25
   - 30s — 2026-08-25

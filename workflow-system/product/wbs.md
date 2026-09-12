@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 cycle: milestone-15-workflow-supervisor
 milestone: 15
-updated: 2026-09-07
+updated: 2026-09-12
 ---
 
 # WBS — Milestone 15: Workflow supervisor
@@ -57,10 +57,13 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 | **R-2** | ⚠️ **The recycle threshold is an ABSOLUTE TOKEN COUNT, not a percentage.** | **Deletes the model→window seam entirely** — the roadmap's own *"real, named maintenance seam — not free"*. Computable from data proven present (M-4). Tuned once against the real corpus. ⚠️ **Probe Q6 narrows** from *"how do we get the window?"* to *"what absolute number?"*. ⚠️ **The roadmap's "above 50%" is superseded** — correct it at WP5. Accepted cost: the number means less in a 200k-window session. |
 | **R-3** | ⚠️ **Rebuild the fixture FRESH; the old counts are historical context, NOT the acceptance criterion.** Re-mine and label from scratch; judge the detector against the **new** labelled set. | Chasing the unverifiable "19" invites **fitting the detector to a list nobody can check**, and the original selection method is unrecorded. The naive pass already located 289 candidate stops, so the real population is knowable now. ⚠️ **Q1's success criterion is REWRITTEN** (see WP1). The checked-in labelled fixture is the durable asset either way — *"only a standing test is coverage."* |
 | **R-4** | ⚠️ **The verdict lives in TYPESCRIPT; Rust does file IO only.** Rust reads the transcript (or exposes a command that does); TS owns the parse, the policy lookup, the verdict, and both actions. | **Resolves the M-13 fork for WP3 and WP4 together — task 3.0 is now DECIDED, not open.** Both fire paths already live in TS (`injectCommand`, `recycleSession`); needs **no** new backend→frontend IPC direction; keeps the policy graph single-sided so *"funnel every policy read through ONE function"* stays structurally easy. ⚠️ **Accepted cost:** the supervisor stops when the webview is gone — acceptable, since a workspace with no webview has no PTY to inject into. |
+| **R-5** | ⚠️ **Q2's mechanism is the HYBRID: mechanical rule first, headless `claude -p` on the residual — NOT a regex.** The rule decides everything it can (token → policy row → dispatchable? → already chained?); the residual it declines, **plus the verify-human-adjacent fires** where 70% of wrong-fires concentrate, route to `claude -p` answering one question: *is this turn awaiting operator input?* **Structure picks who gets asked; the model answers what a regex cannot.** | **Supersedes the regex direction WP1 Phase 2 was drifting toward.** Measured: the question-mark predicate is noise (2% of true breaks vs 10% of wrong-fires); a reply-instruction regex catches only **7 of 30** wrong-fires at a cost of **4 of 43** true breaks, and needed a hand-tuned carve-out fitted to **4 records**. ⚠️ **A regex over natural-language tails IS a prose-reading adjudicator with worse judgment than an LLM** — the failure class this milestone exists to remove, re-introduced in a cheaper-looking form. ⚠️ **ACCEPTED COST:** `claude -p` becomes **load-bearing for correctness** on the Q2 slice, not just a cleanup tail. The demotion still holds for the dominant path (the rule decides ~1,900 of ~2,284), but **WP3 must treat the adjudicator as a first-class component with real failure handling** (slow / error / unavailable), not best-effort polish. ⚠️ This partially inverts §4's rationale for exempting the adjudicator from its own probe WP — **re-check that exemption at WP5.** |
+| **R-6** | ⚠️ **WP3 is GO-WITH-CONDITIONS, not a clean GO.** Q2 came back `SEPARABLE` but on a **+1-record margin** (sonnet 25/29 against a ≥24 bar; haiku is NOT_SEPARABLE at 23/29), with only **70 of 96** records scorable. The **0.80/0.80 threshold is accepted as-is but is a CHOSEN bar, not a measured constant**, and **`sonnet` is PINNED** as the adjudicator. | **Three conditions travel with WP3:** (1) **pin the adjudicator model** and fail loudly on absence/change — a silent downgrade regresses the supervisor with no code change and no signal; (2) **bias the failure direction toward WITHHOLDING** — on adjudicator error/timeout/unavailability the supervisor must NOT fire, since "stays silent, operator nudges" is today's recoverable status quo while firing into an awaiting turn is unrecoverable (`injectCommand` has no retry, no pre-send cancel); (3) **re-measure on a larger labelled set before relying on the margin** (R-3 already established the fixture is rebuildable). ✅ **Not thin:** the hybrid's superiority over a regex is wide — 25/29 caught at a cost of 6/41 vs the best regex arm's 7/30 at a cost of 4/43. Only the pass/fail verdict is close. Accepted cost: **~3s per fire** on the critical path. |
+| **R-7** | ⚠️ **WP2's typed graph does NOT couple to skill frontmatter — the enumerator/YAML parser is NOT built.** Also: Q6's threshold is **400,000 tokens as a tunable STARTING VALUE** (≤37.7% upper-bound firing rate), and Q4's **NO_DISCRIMINATOR is final** (no further search). | ⚠️ **Compatibility was never the blocker** — probe Q3a measured extra frontmatter keys as INERT, and **6 of 48 shipped skills already carry `allowed-tools`** in production. The reasons to decline are that it is **net-new** work (no scan exists to piggyback on: `skills_dir_exists()` answers one boolean and there is no YAML parser in either manifest — the roadmap's "same scan M13's registry already performs" is FALSE), it **reverses a recorded §4c anti-brittleness decision**, and **R-5 removed the motive** (the policy lookup already works from the transition token alone at 0 FP on the decidable population). ⚠️ **This CLOSES a design option** — disclosed and accepted. ⚠️ Q6's 400k is deliberately **not the median** (340,730 would churn runs that completed fine) and **not p90** (626,024 is too rare to earn the complexity); the real trigger also needs a **non-final phase boundary** AND the **feature workflow**, so observed firing is strictly lower than 37.7%. Next rung down if too eager: **500k (21.7%)**. |
 
 ## Work Packages
 
-### WP1: Probe — does the mechanical rule actually decide real stops?
+### WP1: Probe — does the mechanical rule actually decide real stops?  ✅ **COMPLETE 2026-09-12**
 **Type:** probe
 **Milestone:** 15
 **Dependencies:** none — **FIRST. ⚠️ Nothing else in this milestone may be built before this reports.**
@@ -82,15 +85,15 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 **Success criterion:** a written probe report answering all six, each with the evidence that decided it, plus **an explicit GO/NO-GO/RESHAPE recommendation per downstream WP**. A probe that answers 4 of 6 and says so is a success; one that guesses at the other 2 is a failure.
 
 **Tasks:**
-- [ ] 1.1 **Build the fixture FRESH (R-3)** — mine + label from scratch: an addressable list (session file + turn index + edge id + expected verdict), persisted as a **checked-in regression fixture**. ⚠️ Label the verdict from the policy row, **not** from how the turn reads — wrongful stops and legitimate pauses are *textually indistinguishable* (the milestone's load-bearing finding). ⚠️ Prerequisite for Q1 being checkable at all.
-- [ ] 1.1b Report the new population against the historical 19/46+5 as **context**, and say plainly where they diverge — without treating divergence as failure.
-- [ ] 1.2 Build the candidate detector as a **throwaway script** (not shippable code — WP3 owns the real one), run it over the fixture, record precision/recall against both arms.
-- [ ] 1.3 Q2 — attempt question-shaped-tail detection; report whether the 2 known cases are separable, with the false-positive/negative rate.
-- [ ] 1.4 Q4 — look for a cheap Mode-0 discriminator. ⚠️ **A null result is an acceptable answer (R-1)** and blocks nothing; report and move on.
-- [ ] 1.5 Q5 — determine an idempotency signal (did a `Skill` call already land for this edge?).
-- [ ] 1.6 Q3 — add a throwaway frontmatter key to a scratch skill copy; prove inertness to the harness and to the skill's own parse.
-- [ ] 1.7 Q6 — recommend the **absolute token threshold** value from corpus evidence (form already settled by R-2).
-- [ ] 1.8 Write the probe report + per-WP GO/NO-GO/RESHAPE.
+- [x] 1.1 **Build the fixture FRESH (R-3)** — mine + label from scratch: an addressable list (session file + turn index + edge id + expected verdict), persisted as a **checked-in regression fixture**. ⚠️ Label the verdict from the policy row, **not** from how the turn reads — wrongful stops and legitimate pauses are *textually indistinguishable* (the milestone's load-bearing finding). ⚠️ Prerequisite for Q1 being checkable at all.  — ✅ DONE — `wp1-break-fixture.json`, 2,284 records, labelled from the policy row
+- [x] 1.1b Report the new population against the historical 19/46+5 as **context**, and say plainly where they diverge — without treating divergence as failure.  — ✅ DONE — fresh 96/36 vs historical 19 reported as CONTEXT; operator accepted 96/36 as the baseline
+- [x] 1.2 Build the candidate detector as a **throwaway script** (not shippable code — WP3 owns the real one), run it over the fixture, record precision/recall against both arms.  — ✅ DONE — 96 flagged, 0 FP / 0 FN; naive control 119/23 in the same run
+- [x] 1.3 Q2 — attempt question-shaped-tail detection; report whether the 2 known cases are separable, with the false-positive/negative rate.  — ⚠️ DONE but RESHAPED by R-5 — "question-shaped tail" was REFUTED as the discriminator (2% vs 10%, noise); answered via the hybrid instead: `Q2_VERDICT: SEPARABLE` on a +1-record margin
+- [x] 1.4 Q4 — look for a cheap Mode-0 discriminator. ⚠️ **A null result is an acceptable answer (R-1)** and blocks nothing; report and move on.  — ✅ DONE — `Q4_VERDICT: NO_DISCRIMINATOR` (3 markers vs 175 chaining sessions); blocks nothing per R-1, final per R-7
+- [x] 1.5 Q5 — determine an idempotency signal (did a `Skill` call already land for this edge?).  — ✅ DONE — 1,675 already-chained; a solved lookup, but ONLY with the corrected chain window
+- [x] 1.6 Q3 — add a throwaway frontmatter key to a scratch skill copy; prove inertness to the harness and to the skill's own parse.  — ⚠️ DONE, and the ANSWER INVERTED THE TASK — inertness proven (INERT, 6 checks; plus 6 of 48 shipped skills already carry `allowed-tools`), but R-7 rules **do NOT build the enumerator**
+- [x] 1.7 Q6 — recommend the **absolute token threshold** value from corpus evidence (form already settled by R-2).  — ✅ DONE — **400,000 tokens** as a tunable starting value (R-7), expressed as a ≤37.7% upper-bound firing rate
+- [x] 1.8 Write the probe report + per-WP GO/NO-GO/RESHAPE.  — ✅ DONE — `wp1-probe-report.md`; all 6 questions answered on evidence, 4 per-WP recommendations
 
 ---
 
@@ -103,6 +106,11 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 **Milestone:** 15
 **Dependencies:** WP1 (Q3 decides whether the graph couples to skill frontmatter; Q1 validates the lookup the detector will use)
 **Size:** L
+
+✅ **WP1 REPORTED — GO, with two MANDATORY structural corrections and one thing explicitly NOT built (2026-09-12):**
+1. ⚠️ **`dispatchable_target` must be a per-edge property held SEPARATELY from the 5-value policy cell.** An `AUTO` cell does **not** imply there is anything to fire into. Labelling on the cell alone marked **223** breaks, most of them terminal/SURFACE/meta-op edges (`S20`, `S17`, `F19`, `F30`, `P13`, `S6`); adding this took **223 → 127**. Without it WP3 injects commands into workflows that have already ended.
+2. ⚠️ **`F3`/`F4` (spec exits) are the cheap regression sentinel for a policy-lookup bug — NOT `F10`/`F13`/`F19`.** All 23 of the naive predicate's false positives are spec exits (F4 20, F3 3), which PAUSE in Mode 3; `F10`/`F13`/`F19` contribute **zero** FPs on either arm.
+3. ⚠️ **DO NOT build the skill enumerator / frontmatter coupling (R-7).** Task 2.x must not depend on skill frontmatter.
 
 ⚠️ **Do NOT model the cells as booleans.** M-7: 5 cell values across ~356 cells, plus Mode 0 which is not one of the four modes. `AUTO-SKIP` is *conditional* (verify-human: no integration boundary **and** verify-self all-PASS); `SKIP (entire skill)` removes a state in Mode 4; `F17b` routes ship **around** a skipped state.
 
@@ -130,6 +138,16 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 **Milestone:** 15
 **Dependencies:** WP1 (**Q2 gates the fire policy** — Q4 no longer does, per R-1), WP2 (the policy lookup)
 **Size:** L
+
+⚠️ **WP1 REPORTED — GO-WITH-CONDITIONS (R-6, 2026-09-12). The three conditions are BINDING, not advisory:**
+1. ⚠️ **Pin the adjudicator model** and fail loudly on absence/change. `haiku` is NOT_SEPARABLE on identical data, so a silent downgrade regresses the supervisor with **no code change and no signal**.
+2. ⚠️ **Bias the failure direction toward WITHHOLDING.** On adjudicator error/timeout/unavailability the supervisor must **NOT fire** — "stays silent, operator nudges" is today's recoverable status quo; firing into a turn awaiting an answer is not.
+3. ⚠️ **Re-measure on a larger labelled set before relying on the margin** (+1 record; only 70 of 96 scorable).
+
+**Plus three measured implementation constraints:**
+- ⚠️ **Route EVERY fire candidate to the adjudicator**, not just the verify-human-adjacent class — the narrow router sends 40 of 96 and **misses 10 of 32** awaiting-turns. The 70%-concentration finding is a *density* fact, not a *coverage* fact.
+- ⚠️ **The chain-detection window must not close early** on an intervening tool call or a re-quoted `TRANSITION:` token (proven case: `06eb0e92` turn 504 chained at line 511 after two `Bash` calls). Only a real **user prose turn** ends it.
+- ⚠️ **The supervisor reads its own writes** — the corpus is live and includes the supervising session's transcript (observed drifting 2282 → 2284 → 2286 in one session). Key "have I already fired?" on the **turn**, never a corpus-wide count.
 
 ⚠️ **ONE CONDITIONAL REMAINS, AND IT IS Q2 ONLY.** The roadmap's instruction stands: *"if a question-shaped tail cannot be excluded, revisit the fire policy before building this deliverable, do not build it anyway."* ✅ **The Q4/Mode-0 conditional is CLOSED by R-1** (stored mode is the authority). So the single open gate on this WP is whether an answer-awaiting tail can be detected.
 
@@ -164,6 +182,8 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 **Dependencies:** WP3 (the turn-end trigger + transcript reader), WP1 **Q6** (the threshold's *value*)
 **Size:** M
 
+✅ **WP1 REPORTED — GO. The VALUE is now settled too: 400,000 tokens (R-7), a TUNABLE STARTING VALUE, not a derived constant.** Fires on **≤37.7%** of sessions as an **upper bound** — the real trigger additionally requires a **non-final phase boundary** AND the **feature workflow**, so observed firing is strictly lower. Deliberately not the median (340,730) and not p90 (626,024). Next rung down if too eager: **500k (21.7%)**.
+
 ✅ **THE THRESHOLD IS AN ABSOLUTE TOKEN COUNT (R-2) — form settled; only the value is probe-gated.** ⚠️ **The roadmap's "above 50%" is SUPERSEDED** and there is **no model→window map to build or maintain** — M-5 refuted its derivation (`claude-opus-5` at 833k, no `[1m]` marker in 238 transcripts) and R-2 removes the need for it. Accepted: the number carries less meaning in a 200k-window session.
 
 - ⚠️ **`npx ccstatusline` is NOT the mechanism** — Claudesk must not shell out to a third-party npm package per turn when the data is one file read away.
@@ -191,6 +211,8 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 **Dependencies:** WP2, WP3, WP4
 **Size:** S
 
+✅ **WP1 REPORTED — GO. WP5 inherits SIX upstream doc corrections** (enumerated in `archive/milestone-15-workflow-supervisor/wp1-probe-report.md` → P5.4), including **one the probe itself created**: ⚠️ **R-5 partially inverts §4's rationale for exempting the `claude -p` adjudicator from its own probe WP** — the adjudicator is no longer purely off the dominant path, it is **load-bearing for correctness** on the Q2 slice. §4's own text says that inversion would require a probe. **Re-check the exemption at WP5.**
+
 ⚠️ **Verified against the DECISION, not a stored value** — the deliverable is an *enforcement* decision, so "the graph is modeled" is an insufficient exit check. The criterion is that a break is **caught and corrected end-to-end**.
 
 ⚠️ **The gate arm question is live, and the count is SEVEN not six (M-15).** `arch.md`'s *"arms 1–5 are TAKEN"* line is **stale** — arm 6 (WORKSPACE-DRIVEMODE) landed at M13.5 WP4, and the guard now pins **6 arms / 8 subjects** (`offInvariantGuard.test.ts:930`). A new supervisor surface therefore owns a **SEVENTH** arm, and the arm-count pin must be bumped in the same change. ⚠️ **`WORKFLOW_TERMS` is `["workflow","docs","skill","drivemode","drive-mode"]` — it contains neither `"recycle"` nor `"session"`**, so a `RECYCLE_SESSION`-style menu id or panel registers **unseen** by arms 1–3 (`SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION`). **`arch.md` names M15's supervisor as the likely author of exactly such a surface.** ⚠️ **Probe each arm INDIVIDUALLY** — a composite bypass trips *some* arm and hides a gap. ⚠️ **The guard scans `src/**` only, deliberately** — backend OFF is fail-closed Rust-side; **do not "fix" it to reach into `src-tauri/`**. ⚠️ **Naming constraint:** do not export any identifier containing `Chord` from a workflow-coupled module (arm 3 selects by exported identifier).
@@ -217,8 +239,11 @@ WP1 (probe)  ──┬──> WP2 (typed graph) ──> WP3 (detect + fire) ─�
                │         ▲                      ▲                       ▲
                │         │ Q3 (frontmatter)     │ Q1, Q2, Q5            │ Q6 (threshold VALUE)
                └─────────┴──────────────────────┴───────────────────────┘
-   ⚠️ ONE live gate remains: Q2 (question-shaped tail) → WP3's fire policy.
+   ✅ **NO LIVE GATE REMAINS — WP1 REPORTED 2026-09-12.** Q2 is answered: `SEPARABLE`, via the R-5 hybrid
+   (mechanical rule + `claude -p`), NOT the "question-shaped tail" the gate was originally framed around.
+   ⚠️ WP3 is **GO-WITH-CONDITIONS** (R-6), not a clean GO — the verdict rests on a **+1-record margin**.
    ✅ CLOSED by the grill: Q4/Mode-0 (R-1) · threshold form (R-2) · fixture criterion (R-3) · verdict home (R-4).
+   ✅ CLOSED by the probe: Q2's mechanism (R-5) · WP3's disposition (R-6) · Q3b/Q6/Q4 (R-7).
 ```
 
 **Critical path:** WP1 → WP2 → WP3 → WP4 → WP5. Fully serial; **no parallel track**. That is a property of a probe-gated milestone, not an oversight — every WP consumes a probe answer, and WP3/WP4 share a trigger.
@@ -233,12 +258,14 @@ WP1 (probe)  ──┬──> WP2 (typed graph) ──> WP3 (detect + fire) ─�
 
 ## Open items (still undecided after the grill)
 
-1. ⚠️ **WP3's fire policy remains probe-conditional on Q2 alone.** Silent-always is the recorded decision with the dissent sized (~2-in-19 question-shaped); if an answer-awaiting tail cannot be excluded, **revisit before building** — the roadmap's own instruction. ⚠️ Sharpened by the survey: `injectCommand` has **no retry and no pre-send cancel window** by design, so a wrong silent fire is unrecoverable except via CC's **Esc**.
-2. ⚠️ **Probe Q3's premise is false** — there is no skill scan to piggyback on (one boolean, no YAML parser), and building one **reverses a recorded §4c anti-brittleness decision**. Q3 is therefore partly a *product* question, not only a compatibility check.
+1. ✅ **RESOLVED by WP1 (2026-09-12).** ~~WP3's fire policy remains probe-conditional on Q2 alone.~~ Q2 answered `SEPARABLE` — but ⚠️ **the "question-shaped tail" framing was REFUTED** (a trailing-`?` predicate fires on 2% of true breaks vs 10% of wrong-fires — noise). **R-5** set the mechanism (mechanical rule first, `claude -p` on the routed population; a regex over prose IS the drift-prone adjudicator this milestone removes). **R-6** set the disposition: **GO-WITH-CONDITIONS** on a **+1-record margin** (sonnet 25/29 against a ≥24 bar; haiku 23/29 is NOT_SEPARABLE on identical data). ⚠️ `injectCommand`'s no-retry/no-cancel property still stands, which is exactly why R-6 condition 2 requires the failure direction to bias toward **withholding**.
+2. ✅ **RESOLVED by WP1 + R-7 (2026-09-12).** The premise was confirmed false by measurement (`skills_dir_exists()` answers one boolean and enumerates nothing; no YAML parser in either manifest). ⚠️ **Compatibility was never the blocker** — extra frontmatter keys measured **INERT**, and **6 of 48 shipped skills already carry `allowed-tools`** in production. The product answer is **DO NOT BUILD the enumerator**: it is net-new work, it reverses the §4c decision, and **R-5 removed the motive** (the policy lookup works from the transition token alone at 0 FP). **WP2 does not couple to skill frontmatter.**
 3. **No vision success metric covers M15.** Group C closed at M13 with all six met. M15 is roadmap-and-evidence-driven, not metric-driven — worth a conscious decision on whether a 7th metric is owed. **Not grilled** (cheap to add later; fails clause (c)).
 4. ⚠️ **`arch.md`'s guard-arm count is stale** (says arms 1–5; the guard pins 6 arms / 8 subjects). Corrected at WP5 — flagged here because the same stale line could mislead WP5's own planning.
 
-**Closed by the grill (R-1…R-4):** Mode-0 handling · the threshold's form · the fixture's acceptance criterion · the verdict's home. See **Operator rulings** above.
+**Closed by the grill (R-1…R-4):** Mode-0 handling · the threshold's form · the fixture's acceptance criterion · the verdict's home.
+
+**Closed by the WP1 probe (R-5…R-7):** Q2's mechanism (the hybrid, not a regex) · WP3's disposition (GO-WITH-CONDITIONS) · Q3b (no enumerator) · Q6's value (400k, tunable) · Q4 (NO_DISCRIMINATOR, final). ⚠️ **Items 3 and 4 above remain OPEN** — the 7th-metric question and `arch.md`'s stale guard-arm count, both for WP5. See **Operator rulings** above and `archive/milestone-15-workflow-supervisor/wp1-probe-report.md`.
 
 ## Corrections this WBS pass makes to upstream docs
 
@@ -251,5 +278,7 @@ Recorded so they are not re-derived, and because **a stale `arch/` doc outranks 
 | *"arms 1–5 are TAKEN"* / *"a SIXTH guard arm"* | `arch.md` → load-bearing constraints | ⚠️ **STALE** (M-15): 6 arms / 8 subjects since M13.5 WP4; a new surface owns the **seventh**. |
 | *"the corpus is the test fixture"* implying a fixture exists | `roadmap.md` → M15 probe Q1 | ⚠️ **The corpus exists; the LABELLED FIXTURE does not.** The 19 breaks + 46+5 pauses are prose only, and the selection method is unrecorded. **R-3: rebuild fresh; old counts are context, not criterion.** |
 | *"Above **50% context usage** …"* | `roadmap.md` → M15 deliverable 4 | ⚠️ **SUPERSEDED by R-2** — the threshold is an **absolute token count**; no percentage, no window map. |
+| Q2 framed as *"question-shaped tail detection"* | `roadmap.md` → M15, `wbs.md` → WP1 Q2 | ⚠️ **REFRAMED by R-5 (WP1, 2026-09-12)** — a trailing-`?` predicate is noise (2% of true breaks vs 10% of wrong-fires). The discriminator is an **instruction-to-reply**, and the mechanism is the **hybrid**, not a regex. |
+| §4's rationale exempting the `claude -p` adjudicator from its own probe WP | `wbs.md` → Reordering / rule-deviation notes | ⚠️ **PARTIALLY INVERTED by R-5** — the adjudicator is now **load-bearing for correctness** on the Q2 slice, not merely off the dominant path. §4 says that inversion would need a probe. **Re-check at WP5.** |
 
 ⚠️ **These are corrected in `roadmap.md`/`arch.md` at WP5 (task 5.6/5.7), not now** — a WBS pass records findings; the durable-doc resync is the milestone's own exit step. **Do not leave them uncorrected at close.**
