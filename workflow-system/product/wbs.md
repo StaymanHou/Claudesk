@@ -63,7 +63,7 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 
 ## Work Packages
 
-### WP1: Probe — does the mechanical rule actually decide real stops?  ✅ **COMPLETE 2026-09-12**
+### WP1: Probe — does the mechanical rule actually decide real stops?  ✅ **SHIPPED 2026-09-12 (commit `446a033`)**
 **Type:** probe
 **Milestone:** 15
 **Dependencies:** none — **FIRST. ⚠️ Nothing else in this milestone may be built before this reports.**

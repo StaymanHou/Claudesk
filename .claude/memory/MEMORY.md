@@ -2,6 +2,8 @@
 
 ## Verification method & instrument traps
 
+- [detector-scored-against-its-own-table-is-circular.md](detector-scored-against-its-own-table-is-circular.md) — A detector scored against a fixture its OWN policy table produced reports 1.000/1.000 no matter how wrong the table is (arithmetic identity, not evidence). Treat a perfect score as a SYMPTOM; score against a signal the detector doesn't produce — here, the operator's own nudge.
+- [installed-skills-are-symlinks-into-the-mccc-repo.md](installed-skills-are-symlinks-into-the-mccc-repo.md) — Every `~/.claude/skills/` entry is a symlink into the mccc repo, so editing one silently dirties a DIFFERENT git repo; `cp -RL` to dereference and diff that repo's `git status` before/after.
 - [verify-the-mutation-landed.md](verify-the-mutation-landed.md) — A mutation test must confirm it changed *executable code*, not just that the test ran; `sed -n '<line>p'` the mutated line before believing a pass. A silent no-op looks exactly like a real guard hole and leads to weakening a guard that was fine.
 - [measurement-input-must-be-representative.md](measurement-input-must-be-representative.md) — A measurement's INPUT must exercise the use case or the reading is about the input, not the system; `claude -p "say ok"` never overflowed the pane and produced two confident wrong generalizations about CC's scrollback.
 - [raw-guard-substring-must-be-unique-to-its-site.md](raw-guard-substring-must-be-unique-to-its-site.md) — A `?raw` guard must anchor on a substring UNIQUE to the site; `rows: term.rows` also occurs in an unrelated resize path, so hardcoding the nav value left it green. `grep -c` before leaning on a substring.

@@ -1,7 +1,7 @@
 # Feature: M15 WP1 — Probe: does the mechanical auto-chain rule decide real stops?
 
 **Workflow:** feature
-**State:** verify-codify (ALL PHASES COMPLETE) — ready for ship
+**State:** COMPLETED 2026-09-12 — shipped `446a033`, finalized and archived
 **Created:** 2026-09-07
 **Cycle:** milestone-15-workflow-supervisor
 **WBS ref:** `workflow-system/product/wbs.md` → WP1
@@ -123,7 +123,7 @@ M15 proposes that Claudesk enforce the drive mode's auto-chaining policy **mecha
 
 ## Current Node
 - **Path:** Feature > COMPLETE — all 5 phases, all leaves [x]
-- **Active scope:** none — WP1 COMPLETE. Next: /feature-ship
+- **Active scope:** none — review-quality complete (0 CRITICAL / 3 MAJOR / 3 MINOR, auto-backlogged). Next: /feature-finalize
 - **Blocked:** none
 - **Unvisited:** none — Phase 5 is the last
 - **Open discoveries:** 4 — A-2 (logged to backlog), plus three found while building (below)
@@ -412,3 +412,64 @@ Deliverable: `workflow-system/product/archive/milestone-15-workflow-supervisor/w
 **WBS updated:** WP1 marked COMPLETE with all 9 tasks annotated; the dependency map's live-gate line replaced; open items 1–2 resolved; WP2–WP5 annotated with the constraints the probe produced; 2 new correction rows; frontmatter dated.
 
 **Durable assets:** 2 fixtures · 33 standing tests · 1 probe report. ⚠️ The probe's own scripts were throwaway by design — WP3 owns the shippable reader.
+
+## Ship (2026-09-12) — committed to `main` as `446a033`
+
+**8 files, 1,219 insertions.** Cleanup verified before commit: the throwaway scratch dir (`tmp/scratch/m15-probe/`, 13 files) is gitignored and **0 scratch files are in the commit**; no `console.log`/`TODO`/`.only(`/`.skip(` in the tracked test. Final gate green — frontend **2,299** / Rust **866**, zero failures.
+
+⚠️ **Committed directly to `main` with no branch**, per the Git Branch Policy in `~/.claude/CLAUDE.md` (the default branch IS the working branch for this operator; never auto-branch). **Not pushed** — pushing was not requested.
+
+| What shipped | |
+|---|---|
+| Probe report | `workflow-system/product/archive/milestone-15-workflow-supervisor/wp1-probe-report.md` |
+| Fixtures (2) | `wp1-break-fixture.json` · `wp1-q2-adjudication.json` |
+| Standing tests (33) | `src/state/__tests__/m15SupervisorFixture.test.ts` |
+| WBS | WP1 COMPLETE; WP2–WP5 annotated with the probe's constraints |
+| Backlog | 4 new SURFACE entries, all high-priority, all binding WP2/WP3 |
+
+✅ **Zero application code changed** — the single `.ts` file is the standing test.
+
+## Code-Quality Review — m15-wp1-supervisor-probe
+
+Reviewed against ship commit `446a033` by a fresh-context subagent. **0 CRITICAL · 3 MAJOR · 3 MINOR** → auto-backlogged per `drive_mode: autopilot`; **no refactor owed**.
+
+### Strengths
+- The opening block answers the hardest question about a probe artifact — *why pin anything when the scripts are throwaway* — by distinguishing properties of the **transcript format and policy table** from properties of any one implementation. That is what makes the file WP3's spec rather than coverage with a built-in expiry.
+- `naiveFlagged`/`naiveFalsePositives` re-derive **both arms from the same fixture in the same test**, so the `119 − 96 = 23` delta is attributable rather than two asserted constants — directly answering the circularity hazard the probe itself filed.
+- Lines 267-281 are exemplary: the comment records that *an earlier version of this very assertion was wrong* and narrows the claim to the false-positive arm only, preserving the "appears in fire" vs "is a false positive" distinction.
+- `it.each` decomposition on both the terminal-edge and over-flag arms — a composite passing on one arm while hiding five others is the documented failure mode, and the file structurally avoids it.
+- Positive controls precede every loop-over-filter (`terminal.length > 0`, `sfIndex >= 0`), guarding the case where an empty filter asserts nothing.
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR**
+- `[test:30-33, 366-374]` Fixtures read from a **cycle-archive directory `/product-finalize` owns and may relocate** — a 33-test break under the control of the skill whose job is to move those files.
+- `[test:402-406, 476, 490]` The decisive `0.8` bar is **stated twice** (hardcoded in `scoreArm`; unparsed prose in `_meta.threshold`) and can drift. ⚠️ Compounding: **haiku's margin is computed against sonnet's `minTpForBar`** — correct only because both arms share 29 positives, a coincidence never asserted. **Verified at source: `haiku.tp + haiku.fn` appears nowhere in the file.**
+- `[test:228-229, 238-241]` The comment claims the naive baseline "consults no policy table at all", but it **excludes the 472 `undecided` records**. ⚠️ **Verified at source: 119 + 115 = 234** — a genuinely policy-free predicate flags **234, not 119**. The number is fine; the framing overstates it, and 119 is the headline figure in the ship commit, the probe report's Q1, and the circularity entry.
+
+**MINOR**
+- `[test:74-76, 196-210]` Near-tautological assertions that guard a serializer that no longer exists.
+- `[test whole file]` ~32% comments, much of it provenance already held verbatim by the WIP and backlog — a **third copy that will drift**. The lesson doc records this being flagged in four consecutive reviews of another file.
+- `[test:35, 429, 442-443]` `Record_` naming; `Object.values` order-dependence mixed with named indexing.
+
+### Assessment
+> "Unusually strong work for a probe artifact, and the thing it gets most right is also the hardest: it resists the pull to pin the probe's *scripts* and instead pins the probe's *findings*… The two things that will cost a future reader are structural rather than logical… Neither is a defect today; both are latent maintenance coupling introduced for convenience. Net: this advances the codebase. The knowledge WP2-WP5 depend on is now mechanically checked rather than asserted in prose, which is precisely the architectural argument M15 was opened on."
+
+⚠️ **I independently verified the two substantive MAJORs before filing** rather than accepting them: the 234-vs-119 arithmetic, and that `haiku.tp + haiku.fn` is never asserted. **Both findings are correct.** The naive-baseline one is a genuine overstatement in my own comment and in the probe report's Q1 framing.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `/feature-finalize` archives this WIP.
+
+## Retrospect
+
+- **What changed in our understanding:** The milestone's premise held — a mechanical rule *does* decide real stops (96 flagged, 0 FP/0 FN on the decidable population; 36/36 against independent ground truth). But **three of the probe's own framings were wrong and had to be corrected mid-flight**: Q2's "question-shaped tail" is not the discriminator (a `?` predicate is noise at 2% vs 10%); the naive baseline's over-flag source is **spec exits (`F3`/`F4`)**, not the `F10`/`F13`/`F19` the plan assumed; and the 70%-concentration of wrong-fires on verify-human-adjacent edges is a **density** fact, not a **coverage** fact — routing on it alone misses 10 of 32 awaiting-turns. The deepest shift: **the operator's own behavior is the only non-circular ground truth in this corpus.** A detector scored against a fixture its own policy table produced reports 1.000/1.000 no matter how wrong both are.
+
+- **Assumptions that held:** R-1 through R-4, all four taken before the probe ran, survived contact with the data. R-3 in particular (rebuild the fixture fresh; the historical 19 is context, not criterion) was **load-bearing** — the fresh count came in at 96/36, and chasing 19 would have meant fitting the detector to an unverifiable list. The corpus was reachable, the `usage` triple was present, and `Skill` calls carried the skill name, exactly as M-2/M-4 predicted.
+
+- **Assumptions that were wrong:** That an `AUTO` policy cell implies something to fire into — it does not, and labelling on the cell alone marked **223** breaks instead of 96. That the chain-detection window could close on a re-quoted token — it cannot, and doing so manufactured false breaks on turns that chained correctly. That a regex could settle Q2 — it cannot, and attempting it would have re-introduced the prose-reading adjudicator this milestone exists to remove. Each was caught only by **hand-auditing actual transcript lines**, never by reasoning about the predicate.
+
+- **Approach delta:** The plan's five phases ran in order with no back-loops, but **Phase 3 was rebuilt around a mechanism the plan did not contain** (R-5's hybrid), and its title had to be retitled mid-probe so the old framing would not misdirect the work. Two phases produced **no new tests by deliberate decision** rather than omission — Phase 4 had no durable artifact to pin, and Phase 5's numbers were already covered by 13 existing assertions (verified, not assumed). Three operator rulings (R-5, R-6, R-7) were taken *during* execution rather than at planning time, because the probe surfaced decisions the plan could not have anticipated.
+
+- **⚠️ The recurring hazard worth carrying forward:** three distinct instrument failures each bit **more than once inside this single probe** — substring presence read as role-attributed evidence (3×, including a 68× over-count), an invalid mutation probe indistinguishable from a real guard hole (2×), and a metric transcribed from a rounded printout (1×, caught only because verify-auto re-derived it). **These are standing hazards for WP3's real reader, not anecdotes.**

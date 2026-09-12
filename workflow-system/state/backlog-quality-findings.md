@@ -4,6 +4,72 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m15-wp1-supervisor-probe — 2026-09-12
+
+⚠️ **Findings 2 and 3 are the ones that change what a reader BELIEVES**, not just how the code looks: one lets the decisive `0.8` bar drift silently, the other overstates what the headline `119` baseline measures. Both were verified at source before filing.
+
+## SURFACE-2026-09-12-QUALITY-FIXTURE-PATH-REACHES-INTO-A-CYCLE-ARCHIVE
+
+- **Severity:** MAJOR · **Priority:** medium · **Status:** pending
+- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:30-33, 366-374`
+
+Both fixtures are read from `workflow-system/product/archive/milestone-15-workflow-supervisor/` — but **M15 is the ACTIVE cycle**, and `/product-finalize` owns that directory: its job is to move cycle-scoped docs into `archive/<cycle-name>/` at cycle close. The path is stable today only because the files were pre-placed there.
+
+⚠️ **This puts a 33-test suite break under the control of a skill whose job is to relocate those exact files.** A closing sweep that renames or reorganizes the cycle dir turns the suite red for a reason unrelated to any behavior.
+
+**Fix shape:** a `src/state/__tests__/fixtures/` copy (or symlink) as the test-owned root, with the archive kept as the narrative home.
+
+## SURFACE-2026-09-12-QUALITY-THE-DECISIVE-BAR-IS-STATED-TWICE-AND-CAN-DRIFT
+
+- **Severity:** MAJOR · **Priority:** medium · **Status:** pending
+- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:402-406, 476, 490`
+
+`scoreArm` hardcodes the `0.8 / 0.8` bar inline, while the same threshold is carried in `q2._meta.threshold` as **unparsed prose** and asserted only via `toContain("CHOSEN")`. The number that actually decides SEPARABLE/NOT_SEPARABLE lives in code; the artifact's record of it lives in a string. ⚠️ **Change one and the other keeps asserting the old bar with equal confidence** — the asymmetric-drift shape `docs/lessons/source-text-guards.md` warns about.
+
+⚠️ **Compounding (verified at source):** line 476 computes **haiku's** margin against **sonnet's** `minTpForBar` (`const positives = sonnet.tp + sonnet.fn`). It is arithmetically correct **only because both arms happen to share 29 positives**, and that coincidence is **never asserted** — `haiku.tp + haiku.fn` appears nowhere in the file. If the arms ever diverge, the haiku margin assertion silently measures the wrong thing.
+
+**Fix shape:** read the bar from `_meta` (or cross-check code against it), and derive each arm's `minTpForBar` from its own positives.
+
+## SURFACE-2026-09-12-QUALITY-THE-NAIVE-BASELINE-COMMENT-OVERSTATES-ITS-SCOPE
+
+- **Severity:** MAJOR · **Priority:** medium · **Status:** pending
+- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:228-229, 238-241`
+
+The comment says the naive predicate "consults no policy table at all" — but the computation runs over `fire + no_fire` only, **excluding the 472 `undecided` records**, and that exclusion *is* a policy-table decision.
+
+⚠️ **VERIFIED AT SOURCE:** 119 in-scope + **115 undecided-with-no-chain** = **234**. A genuinely policy-table-free predicate would flag **234, not 119**.
+
+The 119/23 figure is defensible as a measurement — "naive *within the population the discriminating predicate already decided*" — but the comment describes something stronger. ⚠️ **This is the headline number in the ship commit message, the probe report (Q1), and the circularity backlog entry**, so a reader trusting the current framing will **mis-size WP3's expected improvement**.
+
+**Fix shape:** correct the comment's claim (not the number) in the test, the probe report's Q1 evidence line, and the commit-message framing if it is ever restated.
+
+## SURFACE-2026-09-12-QUALITY-NEAR-TAUTOLOGICAL-ASSERTIONS-INFLATE-THE-TEST-COUNT
+
+- **Severity:** MINOR · **Priority:** low · **Status:** pending
+- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:74-76, 196-210`
+
+Several assertions are near-tautological given how the fixture is serialized: `expected_verdict` is 1:1 with arm membership (`fire[]` is 96/96 `FIRE`), so "labels every record" can only fail if the serializer omitted a field it never omits; likewise `confidence === "n/a"` outside `fire[]`, and `groundTruth + ruleOnly === fire.length` over a two-valued enum. They **guard a serializer that no longer exists** and pass the "could this fail if the named code were deleted?" test only weakly.
+
+## SURFACE-2026-09-12-QUALITY-COMMENT-DENSITY-IS-A-THIRD-COPY-OF-THE-WIP
+
+- **Severity:** MINOR · **Priority:** low · **Status:** pending
+- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts` (whole file)
+
+~158 of 494 lines (**~32%**) are comments, much of it **provenance**: the 223→127→96 attempt history, "an earlier version of this test also asserted…". ⚠️ `docs/lessons/source-text-guards.md` §Comment budget names exactly this, and the lesson doc records it being flagged in **four consecutive reviews of another file**.
+
+Applying its test — *would a reader who has never seen the WIP make a worse decision without this sentence?* — the **failure-direction and what-to-do-when-this-fails** paragraphs earn their place (keep). The **attempt-history narrative** does not: the WIP and backlog already carry it verbatim, making the test file a **third copy that will drift**.
+
+**Fix shape:** pointer-to-canonical-home, not shorter sentences — trimming treats the symptom.
+
+## SURFACE-2026-09-12-QUALITY-TYPE-ALIAS-AND-ACCESS-STYLE-NITS
+
+- **Severity:** MINOR · **Priority:** low · **Status:** pending
+- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:35, 429, 442-443`
+
+(a) `Record_` uses a trailing underscore to dodge the `Record` builtin; `FixtureRecord` reads better and needs no explanation. (b) `Object.values(q2.arms)` relies on **insertion order** for `[a, b]` destructuring while lines 442-443 correctly index by name (`q2.arms.sonnet`) — harmonize to the named form.
+
+---
+
 # drive-mode-on-the-workspace-surface — 2026-08-26
 
 ⚠️ **Findings 1, 2 and 4 share a root cause and ONE fix** — extracting the apply operation into a

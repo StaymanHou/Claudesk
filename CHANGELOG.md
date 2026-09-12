@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-12
+
+- **Feature shipped:** M15 WP1 — a probe establishing that the drive mode's auto-chain policy can be enforced mechanically: a transition-token + policy-row + did-a-Skill-call-follow check flags 96 wrongful stops across 2,284 real turns with no false positives, and catches all 36 breaks the operator had to nudge the agent out of.
+- **Milestone:** WP1 (Probe — does the mechanical rule actually decide real stops?) of Milestone 15, Workflow supervisor — the gate on the milestone; WP2–WP5 are now unblocked with GO, GO-WITH-CONDITIONS, GO and GO.
+
 ## 2026-09-06
 
 - **Release notes — the work since v0.3.4.** This release delivers Milestone 13.5, a
