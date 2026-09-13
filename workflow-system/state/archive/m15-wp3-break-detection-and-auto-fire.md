@@ -1,7 +1,7 @@
 # Feature: M15 WP3 — Break detection + auto-fire across all open workspaces
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-09-13
 **Created:** 2026-09-13
 **Milestone:** 15 (workflow supervisor)
 **Size:** L
@@ -271,10 +271,12 @@ on the property being classified, not one that merely correlates with it. The fa
   - [x] verify-codify  <!-- status: DONE -->
 
 ## Current Node
-- **Path:** Feature > ship (complete)
-- **Active scope:** none — shipped as `8dbc660` (24 files, +4356/-14). ⚠️ **NOT PUSHED:** `main`
+- **Path:** Feature > review-quality (complete) > finalize next
+- **Active scope:** none — shipped as `e186e33` (24 files, +4358/-14). ⚠️ **NOT PUSHED:** `main`
   is ahead 8 / behind 1 and the divergence is NOT a fast-forward (flagged in the inbound
-  handoff); a rebase-or-merge is the operator's call. Next: `/feature-review-quality`.
+  handoff); a rebase-or-merge is the operator's call. ⚠️ **Code-quality review DONE:** 0 CRITICAL,
+  3 MAJOR + 4 MINOR auto-backlogged (1 MINOR fixed in place), pointer in `backlog.md`. Next:
+  `/feature-finalize`.
   ⚠️ Phase 4's carried live-console check is now meaningful and belongs to this phase's verify.
 - **Blocked:** none
 - **Unvisited:** none — all five phases complete
@@ -294,6 +296,132 @@ on the property being classified, not one that merely correlates with it. The fa
   control); frontend 2489→2509.
 - **WP3 TOTALS:** Rust 869→887 (+18), frontend 2412→2509 (+97).
 - **Open discoveries:** none
+
+## Retrospect
+
+- **What changed in our understanding:**
+  - ⚠️ **An agent-launched Claudesk cannot produce a real CC hook event.** The spawned CC
+    inherits `CLAUDE_CODE_CHILD_SESSION`, so transcript saving is OFF and the hook chain never
+    fires — a full live turn left the status at `Unknown`. The working substitute is writing
+    hook JSON directly to the dev app's `hook.sock`, which drives the REAL backend path
+    (only the CC process is replaced, no Claudesk code is stubbed). This was not anticipated
+    and it shapes how every future live status check must be driven.
+  - ⚠️ **`git checkout --` silently no-ops on an UNTRACKED file** and exits 0. It left a
+    mutation probe in place in `fanOut.ts`; only a pre-captured `shasum` caught it. For any
+    mutation test on a new module, `git diff`/`git checkout` are not weak evidence — they are
+    **inapplicable**. Logged high-priority.
+  - **A redaction verified field-by-field verifies nothing.** The committed fixture leaked
+    4,443 chars of the prior session's handoff via `toolUseResult.stdout` — a field the
+    redactor never named — while a grep of the fields it DID redact came back clean. The right
+    question is the inverse and content-shaped: *what is still unredacted?*
+
+- **Assumptions that held:**
+  - R-4's Rust/TS split held cleanly with no logic leakage (confirmed at review).
+  - The WP2 handoff's predicted funnel-guard signature was exact — **2 failures = correct
+    consumer** — and it fired identically all three times a consumer landed.
+  - `is_turn_start` was consumable as-is; only the turn-END correlate was net-new.
+  - The mechanical rule decides the dominant path; the adjudicator stayed demoted to the tail.
+
+- **Assumptions that were wrong:**
+  - ⚠️ **My own tests were weaker than their names claimed, three times, and only mutation
+    testing found it.** (1) `isUserProseTurn`'s two arms MASKED each other — deleting either
+    left the suite green. (2) The failure-isolation test threw from `readTail`, which `fireOne`
+    catches internally, so `Promise.all` never saw a rejection and the test proved nothing.
+    (3) The NUL-separator collision test embedded a NUL in the INPUT — a character that never
+    occurs in a real path — so it passed even with a naive `-` separator.
+  - ⚠️ **A mutation that does not land looks exactly like a surviving mutant.** One `perl -pi`
+    silently failed to match; I nearly recorded "the guard is weak" from an invalid probe.
+  - **The WP1 fixture is label-circular.** Every one of its 2,284 records is labelled by the
+    same policy table the detector uses, so the obvious full-corpus score is an arithmetic
+    identity. Only the 36 operator-nudge records are independent signal.
+  - **`F5` is PAUSE in `orchestrated`.** My first live fixture assumed AUTO; the supervisor was
+    right and the fixture was wrong.
+
+- **Approach delta:**
+  - Plan followed phase-for-phase; no back-loops, no re-plan.
+  - **Two deviations, both recorded:** one in-place fix at Phase 5 verify-self (the injection
+    label, all three shortcut gates met), and the P5.5 arch record landed in
+    `arch/session-resumption.md` rather than a new file, since that doc already owns
+    "Claudesk reads the workflow's world; it does not write it."
+  - ⚠️ **The review's verdict on the debt is worth carrying into WP4:** three MAJORs, one
+    shape — *a contract stated in PROSE where it could have been stated in a TYPE*. My
+    verify-self fix for the injection label chose the documentation form when the structural
+    one (widen the dep signature) was available. That is the habit to correct, not the
+    instance.
+
+## Code-Quality Review — m15-wp3-break-detection-and-auto-fire
+
+Reviewed against ship commit `e186e33` by a fresh-context subagent, 2026-09-13.
+**0 CRITICAL · 3 MAJOR · 5 MINOR.** Drive mode `autopilot` → MAJORs auto-backlogged with chat
+surface; MINORs auto-backlogged.
+
+### Strengths
+- The three-gate structure in `decideVerdict` is genuinely enforced, not merely conventional:
+  `resolvePolicy` has exactly ONE production caller, and the dispatchability read sits in that
+  same function — no reachable path reads a policy cell without also reading `isDispatchable`.
+- `FireLedger.claim()` is race-free by construction: the `has`-check and the `add` are one
+  synchronous block with no `await` between, so JS run-to-completion guarantees no two
+  `fireOne` calls win the same key. Claiming before ADJUDICATION (not just injection) closes
+  the ~3s window — the non-obvious half.
+- `adjudicator.ts` has no route to `PROCEED` except the pinned model's exact-match reply; all
+  failure arms funnel through one `withheld()` helper typed `Exclude<…, "model">`, so a new
+  failure arm cannot accidentally be typed as a success.
+- The R-4 language boundary holds on both sides with no logic leakage.
+- The funnel guard was STRENGTHENED, not relaxed: vacuous `toEqual([])` → exact-set assertion.
+- The real-fixture pipeline tests pair a positive case with an anti-vacuity control.
+
+### Issues
+
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- `[fanOut.ts:149-170]` — `fireOne` calls `readTurn`, then `decideSupervised` calls it AGAIN on
+  the same input. The ledger key comes from the first reading; the fire/withhold decision from
+  the second. They agree today only because `readTurn` is deterministic, and **nothing asserts
+  that coupling**. A future parameter or short-circuit would desynchronize the claimed key from
+  the decided turn — a key claimed for turn A while a fire is issued for turn B, defeating
+  idempotency with no error. Fix: pass the computed `TurnReading` into the verdict, or pin the
+  agreement with a test.
+- `[fanOut.ts:74-96]` — `SUPERVISOR_INJECT_LABEL` exists but `FanOutDeps.inject` has **no label
+  parameter**, so the requirement is enforced only by a doc comment and a source-text test.
+  ⚠️ **The cheap structural fix was available now:** widen the dep to
+  `(pty, command, label)` and have `fireOne` pass the label itself, making omission impossible.
+  As shipped, the guard is documentation checking documentation.
+- `[verdict.ts:117-123]` — the "no stored drive mode" refusal returns `reason:
+  "policy-not-auto"`, overloading a reason documented as *"the policy says pause"* onto a case
+  where **no policy was consulted at all**. An operator debugging "why didn't my project fire?"
+  is sent to the policy table instead of the unset `default_drive_mode`. Wants its own
+  `not-supervised` arm. (The tell: `fanOut.test.ts:97` asserts only `fired === false`.)
+
+**MINOR**
+- Comment density 43–53% in the TS supervisor modules, and the **duplication** half of the
+  comment budget is breached: three measured facts appear in 3–6 places each *within one diff*
+  (the 40-of-96 router rationale; the 2282→2284→2286 drift; the "bitten four times" framing).
+  ⚠️ Duplication, not length, is the expensive half — copies drift asymmetrically.
+- `[adjudicator/mod.rs:214-240]` — `run_program_with_timeout` in the test module RE-IMPLEMENTS
+  the production wait/kill loop, so the timeout test proves the copy kills its child, not that
+  `run_adjudicator` does (`[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`).
+- `[adjudicator/mod.rs:110-115]` — `AdjudicateError::Failed` discards the captured stderr
+  (`String::new()`), so the one diagnostic for a failing `claude -p` always prints blank.
+- The supervisor has **zero production callers** — deliberate and disclosed, but it means
+  `assertPinnedModel`, the sole enforcement of R-6 condition 1, currently pins nothing at
+  runtime. ⚠️ Name this in WP4's plan so it does not lapse.
+- ✅ **FIXED IN PLACE:** the WIP recorded ship SHA `8dbc660`, which does not exist (a pre-amend
+  SHA). Corrected to `e186e33` and verified with `git cat-file -e`. A wrong SHA in an archived
+  WIP is worse than none.
+
+### Assessment
+Strong work, above the bar for a feature whose failure direction is unrecoverable. Every
+load-bearing invariant holds under scrutiny. The tests are unusually honest — anti-vacuity
+controls, recorded mutation-testing corrections, and an explicit refusal to score against a
+circular fixture. **The debt is modest and of one kind: contracts stated in PROSE where they
+could have been stated in a TYPE** — the injection label, the reading-vs-key coupling, the
+overloaded reason. Each converts a comment into a compiler or a test.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives the WIP.
 
 ## Deferred to WP5 (not this WP's scope)
 - ⚠️ **R-6 condition 3 — re-measure the Q2 margin on a larger labelled set.** The +1-record

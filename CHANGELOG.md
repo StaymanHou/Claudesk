@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-13
+
+- **Feature shipped:** M15 WP3 — the workflow supervisor now reads a Claude Code transcript at turn end, applies the absorbed policy graph mechanically, and injects the next command into **every open workspace** rather than only the focused one, so a wrongful stop is corrected without the operator noticing it happened.
+- **Backlog resolved:** SURFACE-2026-09-12-WP3-INHERITS-A-TYPED-MACHINE-WITH-THREE-LIVE-CONTRACTS — closed by routing the first production consumers through `resolvePolicy`, handling `unmapped` as an explicit result with no `?? "auto"` fallback anywhere, and importing the shared `extractTransitionId` rather than re-deriving a second regex.
+- **Backlog resolved:** SURFACE-2026-09-07-AUTO-CELL-DOES-NOT-IMPLY-A-DISPATCHABLE-TARGET — closed by reading the policy cell and `isDispatchable` as independent gates inside the single funnel caller, with a whole-graph property sweep asserting no edge in any mode ever fires on a non-skill target.
+- **Backlog resolved:** SURFACE-2026-09-07-CHAIN-DETECTION-WINDOW-MUST-NOT-CLOSE-EARLY — closed by ending the chain window only on a real user *prose* turn, so intervening tool calls and re-quoted transition tokens no longer make a correctly-chained turn read as a break.
+- **Backlog resolved:** SURFACE-2026-09-07-TRANSITION-TOKENS-ECHO-ONTO-USER-LINES — closed by scoping the token parse to the last assistant text block; measured live, a naive file-level grep would have read 13 of 27 occurrences as emitted verdicts when they were documentation echoes.
+- **Milestone:** WP3 (Break detection + auto-fire across all open workspaces) of Milestone 15, Workflow supervisor.
+
 ## 2026-09-12
 
 - **Feature shipped:** M15 WP1 — a probe establishing that the drive mode's auto-chain policy can be enforced mechanically: a transition-token + policy-row + did-a-Skill-call-follow check flags 96 wrongful stops across 2,284 real turns with no false positives, and catches all 36 breaks the operator had to nudge the agent out of.

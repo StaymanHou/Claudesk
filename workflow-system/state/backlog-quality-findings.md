@@ -4,6 +4,154 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m15-wp3-break-detection-and-auto-fire — 2026-09-13
+
+**0 CRITICAL · 3 MAJOR · 5 MINOR.** ⚠️ **ONE MINOR (the wrong ship SHA) was FIXED IN PLACE** —
+the rest are open below. The three MAJORs share one shape, which is the useful way to read them:
+**a contract stated in PROSE where it could have been stated in a TYPE.** Each fix converts a
+comment into a compiler or a test. See the WIP's `## Code-Quality Review` for the full review.
+
+## SURFACE-2026-09-13-QUALITY-LEDGER-KEY-AND-VERDICT-READ-THE-TURN-TWICE
+
+- **Priority:** medium
+- **Source:** feature:review-quality (m15-wp3), MAJOR
+- **Location:** `src/state/supervisor/fanOut.ts:149-170`
+
+⚠️ **`readTurn` is called TWICE on the same input, and the two results are used for different
+purposes.** `fireOne` calls it to build the `FireLedger` key (`edgeId` + `verdictIndex`); then
+`decideSupervised` calls it AGAIN to produce the fire/withhold decision.
+
+They agree today only because `readTurn` is deterministic and the array is identical — and
+**nothing asserts that coupling**. A future change giving `readTurn` a parameter, a mode flag,
+or a short-circuit would silently desynchronize them.
+
+⚠️ **The failure direction is the bad one:** a key claimed for turn A while a fire is issued for
+turn B. Idempotency is defeated with **no error** — the supervisor would re-fire a turn it had
+already claimed.
+
+**Suggested action:** pass the already-computed `TurnReading` into `decideSupervised`, or add a
+test pinning that the two reads agree. The former is better — it removes the second read.
+- **Status:** pending
+
+## SURFACE-2026-09-13-QUALITY-INJECT-LABEL-IS-PROSE-NOT-A-PARAMETER
+
+- **Priority:** medium
+- **Source:** feature:review-quality (m15-wp3), MAJOR
+- **Location:** `src/state/supervisor/fanOut.ts:74-96`
+
+⚠️ **`SUPERVISOR_INJECT_LABEL` exists, but `FanOutDeps.inject` has NO label parameter** — its
+signature is `(ptySessionId, command) => Promise<void>`. The requirement to pass the label is
+enforced only by a doc comment plus a source-text test asserting the string `"MUST pass"`
+appears in the file. ⚠️ **As shipped, the guard is documentation checking documentation.**
+
+⚠️ **The cheap structural fix was available at build time and was not taken:** widen the dep to
+`(ptySessionId, command, label)` and have `fireOne` pass `SUPERVISOR_INJECT_LABEL` itself. The
+wiring site then *physically cannot* omit it.
+
+**Context:** the label exists because `injectCommand` defaults to `"auto-resume"`, so an
+unlabelled supervisor failure misattributes to M12's arm in the only diagnostic that path has —
+the exact defect that forced the `label` parameter to exist when M13's skill row hit it.
+
+**Suggested action:** widen the signature. This is owed BEFORE WP4 wires a production caller,
+not after.
+- **Status:** pending
+
+## SURFACE-2026-09-13-QUALITY-NO-STORED-MODE-OVERLOADS-POLICY-NOT-AUTO
+
+- **Priority:** medium
+- **Source:** feature:review-quality (m15-wp3), MAJOR
+- **Location:** `src/state/supervisor/verdict.ts:117-123`
+
+⚠️ **The "no stored drive mode" refusal returns `reason: "policy-not-auto"`** — a reason whose
+documented meaning is *"the policy says pause (or skip) in this mode"* — for a case where **no
+policy was consulted at all** (the function returns before `resolvePolicy`).
+
+The module's own header makes *"every refusal is named, not a bare false"* load-bearing, so that
+a non-fire is diagnosable. ⚠️ **Here the diagnostic actively misleads:** an operator debugging
+"why didn't my project fire?" reads `policy-not-auto` and goes looking at the policy table
+instead of at the unset `default_drive_mode`.
+
+⚠️ **The tell:** `fanOut.test.ts:97` asserts only `fired === false` for this case, not the
+reason — the one negative-arm test that does not check its reason.
+
+**Suggested action:** add a `not-supervised` arm to `WithholdReason` and assert it.
+- **Status:** pending
+
+## SURFACE-2026-09-13-QUALITY-COMMENT-DUPLICATION-ACROSS-SUPERVISOR-MODULES
+
+- **Priority:** low
+- **Source:** feature:review-quality (m15-wp3), MINOR
+- **Location:** `src/state/supervisor/*.ts`, `src-tauri/src/transcript/mod.rs`
+
+Comment density runs 43–53% in the TS supervisor modules. ⚠️ **Length is not the problem —
+DUPLICATION is**, and it is measurable: three facts appear in 3–6 places each *within one diff*.
+- the "narrow router sends 40 of 96 / misses 10 of 32" rationale → `adjudicator.ts:41`,
+  `verdict.ts:315`, `verdict.test.ts:334`
+- the "2282 → 2284 → 2286" live-corpus drift → `verdict.ts:134`, `verdict.ts:230`,
+  `transcript/mod.rs:39`
+- the "bitten this repo four times" framing → `turnEnd.ts:14`, `fanOut.ts:14`
+
+⚠️ Copies drift asymmetrically: the edited one becomes right while the others keep asserting the
+old thing with equal confidence.
+
+**Suggested action:** collapse each repeated MEASUREMENT to one canonical statement with
+pointers; keep the invariants and the ⚠️-what-to-do-on-failure paragraphs. The
+`arch/session-resumption.md` section added in this same commit is the natural home for several.
+- **Status:** pending
+
+## SURFACE-2026-09-13-QUALITY-TIMEOUT-TEST-REIMPLEMENTS-THE-PRODUCTION-LOOP
+
+- **Priority:** low
+- **Source:** feature:review-quality (m15-wp3), MINOR
+- **Location:** `src-tauri/src/adjudicator/mod.rs:214-240` (and `:177`)
+
+⚠️ `run_program_with_timeout` in the test module is a **hand-copied re-implementation** of the
+production wait/kill loop (`run_adjudicator`, lines 102-130). So
+`a_slow_child_times_out_and_is_reaped` proves **the copy** kills its child — not that
+`run_adjudicator` does. `run_adjudicator_with_program` (line 177) is the same pattern for the
+`NotFound` arm.
+
+This is exactly `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`: a test that
+re-implements the code shares its blind spot.
+
+**Suggested action:** extract the wait/kill loop to take a pre-spawned `Child`, so the test
+drives the real thing.
+- **Status:** pending
+
+## SURFACE-2026-09-13-QUALITY-ADJUDICATOR-DISCARDS-CAPTURED-STDERR
+
+- **Priority:** low
+- **Source:** feature:review-quality (m15-wp3), MINOR
+- **Location:** `src-tauri/src/adjudicator/mod.rs:110-115`
+
+On a non-zero exit, `AdjudicateError::Failed` is built with `stderr: String::new()` — **throwing
+away the stderr that was captured**. The child is spawned with `stderr(Stdio::piped())` and
+`wait_with_output()` has it in hand. The `Display` impl renders `stderr.trim()`, so it always
+prints an empty parenthetical.
+
+The DECISION is unaffected (both paths withhold), but ⚠️ **the one diagnostic an operator gets
+for a failing `claude -p` is blank.**
+
+**Suggested action:** thread the captured stderr into the error.
+- **Status:** pending
+
+## SURFACE-2026-09-13-QUALITY-ASSERT-PINNED-MODEL-HAS-NO-RUNTIME-CALLER
+
+- **Priority:** low
+- **Source:** feature:review-quality (m15-wp3), MINOR
+- **Location:** `src/state/supervisor/adjudicator.ts` (`assertPinnedModel`)
+
+The whole supervisor has **zero production callers** — deliberate and disclosed (WP4 wires it).
+⚠️ **But it means `assertPinnedModel`, the SOLE enforcement of R-6 condition 1, is called by
+nobody and pins nothing at runtime.** It is currently a tested function, not a live guard.
+
+⚠️ Condition 3 (re-measure the margin) is already flagged as likely to lapse; this is the same
+hazard one condition over.
+
+**Suggested action:** name this explicitly in WP4's plan — the wiring must call
+`assertPinnedModel` at the point the adjudicator is configured, not merely import it.
+- **Status:** pending
+
 # m15-wp2-state-machine-as-code — 2026-09-12
 
 ⚠️ **0 CRITICAL · 2 MAJOR · 3 MINOR — but BOTH MAJORs and ONE MINOR were FIXED IN PLACE before finalize, not backlogged.** Only the two low-value MINORs below remain open. See the WIP's `## Code-Quality Review` for the full review and the fix record.

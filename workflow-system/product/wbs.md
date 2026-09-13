@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 cycle: milestone-15-workflow-supervisor
 milestone: 15
-updated: 2026-09-12
+updated: 2026-09-13
 ---
 
 # WBS — Milestone 15: Workflow supervisor
@@ -134,7 +134,7 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 
 ---
 
-### WP3: Break detection + auto-fire across all open workspaces
+### WP3: Break detection + auto-fire across all open workspaces  ✅ **SHIPPED 2026-09-13 (commit `e186e33`)**
 **Description:** On CC turn end, Claudesk reads the transcript, applies the rule, and — where policy says AUTO and the turn did not chain — **injects the next command**, in **every** open workspace rather than only the focused one.
 **Milestone:** 15
 **Dependencies:** WP1 (**Q2 gates the fire policy** — Q4 no longer does, per R-1), WP2 (the policy lookup)
@@ -163,15 +163,15 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 - **Residual adjudicator:** a headless `claude -p`, **DEMOTED to the ambiguous tail** (no transition token / rule cannot decide). ⚠️ **NOT the primary mechanism** — an LLM adjudicator is itself a model-judgment component that can drift, which is the failure class this milestone exists to remove.
 
 **Tasks:**
-- [ ] 3.0 Record R-4 (TS verdict, Rust file-IO-only) in `arch/` as the supervisor's boundary. ⚠️ **Decision already made — implement it, do not re-open it.**
-- [ ] 3.1 Turn-end detection built on the **existing** `is_turn_start` seam, read off the **raw** stream; match **every** state `Stop` can map to (`Idle` **and** `BackgroundWork`).
-- [ ] 3.2 uuid↔workspace mapping: thread the hook's `session_id` through to the DTO (dropped today) so two sessions in one tree are distinguishable.
-- [ ] 3.3 Transcript reader: last-assistant-line parse, `TRANSITION:` extraction, last-content-block classification.
-- [ ] 3.4 Verdict = the WP2 lookup + the idempotency check (WP1 Q5).
-- [ ] 3.5 Fire via `slash_command_bytes`; honor the prompt-flush invariant and the settle's ordering.
-- [ ] 3.6 Fan out across **all** open workspaces, not only the focused one.
-- [ ] 3.7 The ambiguous-tail `claude -p` adjudicator, behind the mechanical path.
-- [ ] 3.8 ⚠️ **The negative arm, asserted as hard as the positive:** a legitimate `verify-human` PAUSE, an `ESCALATE`, and a **Mode-0 direct invocation** each produce **no fire at all**.
+- [x] 3.0 Record R-4 (TS verdict, Rust file-IO-only) in `arch/` as the supervisor's boundary. ⚠️ **Decision already made — implement it, do not re-open it.**
+- [x] 3.1 Turn-end detection built on the **existing** `is_turn_start` seam, read off the **raw** stream; match **every** state `Stop` can map to (`Idle` **and** `BackgroundWork`).
+- [x] 3.2 uuid↔workspace mapping: thread the hook's `session_id` through to the DTO (dropped today) so two sessions in one tree are distinguishable.
+- [x] 3.3 Transcript reader: last-assistant-line parse, `TRANSITION:` extraction, last-content-block classification.
+- [x] 3.4 Verdict = the WP2 lookup + the idempotency check (WP1 Q5).
+- [x] 3.5 Fire via `slash_command_bytes`; honor the prompt-flush invariant and the settle's ordering.
+- [x] 3.6 Fan out across **all** open workspaces, not only the focused one.
+- [x] 3.7 The ambiguous-tail `claude -p` adjudicator, behind the mechanical path.
+- [x] 3.8 ⚠️ **The negative arm, asserted as hard as the positive:** a legitimate `verify-human` PAUSE, an `ESCALATE`, and a **Mode-0 direct invocation** each produce **no fire at all**.
 
 **WP3 → WP4 rationale:** WP4 is a *second consumer* of WP3's turn-end trigger and transcript reader, differing only in what it does at the boundary (recycle instead of chain). Building WP4 first would mean building the trigger for the harder-to-verify case, with no working chain to compare against.
 
@@ -283,3 +283,6 @@ Recorded so they are not re-derived, and because **a stale `arch/` doc outranks 
 | §4's rationale exempting the `claude -p` adjudicator from its own probe WP | `wbs.md` → Reordering / rule-deviation notes | ⚠️ **PARTIALLY INVERTED by R-5** — the adjudicator is now **load-bearing for correctness** on the Q2 slice, not merely off the dominant path. §4 says that inversion would need a probe. **Re-check at WP5.** |
 
 ⚠️ **These are corrected in `roadmap.md`/`arch.md` at WP5 (task 5.6/5.7), not now** — a WBS pass records findings; the durable-doc resync is the milestone's own exit step. **Do not leave them uncorrected at close.**
+
+## Session Handoff — 2026-09-13 12:05
+Handed off. See `workflow-system/state/.session.md` to restore.

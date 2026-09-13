@@ -1,5 +1,11 @@
 # Backlog
 
+## Code-quality findings — m15-wp3-break-detection-and-auto-fire (2026-09-13)
+- **Pointer:** **3 MAJOR + 5 MINOR** (7 open; ⚠️ **one MINOR — a ship SHA recorded in the WIP that does not exist — was FIXED IN PLACE**). **0 CRITICAL — no refactor owed.** ⚠️ **The three MAJORs share ONE shape, and that is the useful way to read them: a contract stated in PROSE where it could have been stated in a TYPE.** (1) `readTurn` is called **twice** on the same input — once to build the `FireLedger` key, once to make the fire decision — and nothing asserts they agree; a future parameter or short-circuit desynchronizes the claimed key from the decided turn, **defeating idempotency with no error**. (2) `SUPERVISOR_INJECT_LABEL` exists but `FanOutDeps.inject` **has no label parameter**, so the requirement is enforced by a doc comment and a source-text test — *documentation checking documentation* — when widening the signature would make omission impossible; ⚠️ **owed BEFORE WP4 wires a caller, not after.** (3) the "no stored drive mode" refusal returns `policy-not-auto`, a reason documented as *"the policy says pause"*, for a case where **no policy was consulted at all** — sending an operator debugging "why didn't it fire?" to the policy table instead of the unset `default_drive_mode`. ⚠️ **One MINOR is a live-guard gap worth reading with the MAJORs:** the supervisor has zero production callers, so `assertPinnedModel` — the sole enforcement of R-6 condition 1 — **pins nothing at runtime** and must be called explicitly at WP4's wiring point. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
+- **Priority:** medium (the three MAJORs + the `assertPinnedModel` gap); low for comment-duplication, the re-implemented timeout test, and the discarded stderr
+- **Status:** pending
+- **Pickup shape:** the two `fanOut.ts` MAJORs and the `verdict.ts` reason arm are each a small typed change — `/feature-refactor` handles all three in one pass, and doing so **before** WP4 wires a production caller is materially cheaper than after. The MINORs are independent polish.
+
 ## Code-quality findings — m15-wp2-state-machine-as-code (2026-09-12)
 - **Pointer:** **2 MAJOR + 3 MINOR**, but ⚠️ **BOTH MAJORs and ONE MINOR were FIXED IN PLACE before finalize** — only 2 low-value MINORs remain open. **0 CRITICAL.** ⚠️ **The first MAJOR was a real latent defect in the module WP3 consumes:** `unmappedReason()` keyed on `workflow === "session-ops"` and returned `meta-op` for all 19, but only 12 actually are (6 are `cross-workflow`, 1 `terminal`, 2 dispatchable skills) — so a future session-ops edge with a real skill target and no policy row would have been silently labelled "no row owed", **hiding a genuine gap from the one report whose job is to surface them.** Fixed by keying on `dispatchTarget` with `terminal`/`cross-workflow` as their own reasons; ⚠️ this also **sharpened the gap report from 2 entries to 1** (`P13` is terminal — no row was ever owed; `I2` alone is the real gap). The second MAJOR: the `TRANSITION:` regex was exported from a **test file** — extracted to `src/state/workflowMachine/transitionToken.ts`, since shipping the parse half of the contract in `__tests__/` is this WP's own single-source thesis failing one layer up. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp2-state-machine-as-code — 2026-09-12`.
 - **Priority:** low (both remaining)
@@ -103,22 +109,6 @@ demonstrably flowing — ⚠️ a tap on it is an INVALID PROBE, not a negative 
 script under `tooling/` so each phase does not re-derive it.
 - **Status:** pending
 
-## SURFACE-2026-09-12-WP3-INHERITS-A-TYPED-MACHINE-WITH-THREE-LIVE-CONTRACTS
-
-- **Priority:** high
-- **Surfaced by:** M15 WP2 Phase 5 (feature:build)
-- **Target:** M15 WP3 (break detection + auto-fire)
-
-WP3's first act will be to write a consumer of `src/state/workflowMachine/`. **Three contracts it inherits are not obvious from reading the module, and one of them will make WP3's first commit fail a test on purpose.**
-
-**1. ⚠️ The funnel guard will FAIL on WP3's first consumer — BY DESIGN.** `workflowMachineFunnel.test.ts` pins the set of modules importing `workflowMachine/` by name. A new importer fails `admits no importer outside the allowlist` and `records that NO production module consumes the machine yet` until it is added. **That is the review prompt, not a defect.** ⚠️ **Read WHICH tests fail:** if `wires graph to policy in exactly ONE module` is ALSO in the failure set, the consumer is importing both `edges` and `policy` to hand-roll the derivation — **route it through `resolvePolicy` instead of widening the allowlist.** (Measured: a bypassing consumer fails 3, a correct one fails 2.)
-
-**2. `unmapped` is a RESULT, never a default.** 31 of 111 edges have no governing policy row. `resolvePolicy` returns `{outcome: "unmapped", reason}` whose union arm **structurally has no `cell` field**, so it cannot be read as a verdict. ⚠️ **Do not add an `?? "auto"` fallback anywhere near this** — that single change would fire the supervisor on 31 ungoverned edges, including `I2` (report → triage), which is dispatchable.
-
-**3. The funnel already applies `resolveCell` and the incident override.** A caller never receives a conditional `auto-skip` cell, and an incident edge always resolves at Mode 2 regardless of the mode passed in. ⚠️ **Do not re-apply either** — and do not read `POLICY_ROWS` columns directly, which would skip both.
-
-**Also inherited, cheaply:** `extractTransitionId()` in `workflowMachineUpstreamContract.test.ts` is the ported Phase-3d regex — the shapes WP3's transcript reader must handle, with the `F10b`-vs-`F10` trap already pinned (a bare `/F[0-9]+/` captures the WRONG id rather than failing to match). ⚠️ It currently lives in a test file; WP3 should **move it to a module** and keep the test importing it, rather than re-deriving a second regex.
-
 ## SURFACE-2026-09-12-ONE-TRANSITION-HAS-NO-PAUSE-POLICY-ROW-UPSTREAM
 
 ⚠️ **NARROWED 2026-09-12 at code-quality review — was "TWO TRANSITIONS".** `P13` (product-finalize → EXIT) is **terminal**, so no pause-policy row is owed and its absence was never a gap. The over-broad claim came from a gap classifier that keyed on an edge's *workflow* rather than its *target*; fixed, and the report now names exactly the dispatchable edge that is genuinely missing a row. **`I2` alone stands.**
@@ -205,44 +195,6 @@ WP3's first act will be to write a consumer of `src/state/workflowMachine/`. **T
 **The only non-circular truth in this corpus is the operator prod** — a short, content-free nudge (`"so?"`, `"next"`, `"chain"`, `"autopilot it! why returning control?"`) typed immediately after a verdict. It is derived from **operator behavior**, not from the policy table, so scoring against it actually tests whether the policy lookup models reality. Measured that way: **36/36 ground-truth breaks caught.**
 
 **Consequence for WP3:** when the real detector is tuned, its acceptance measurement must come from a signal the detector does not itself produce. Re-deriving labels from the same typed graph the detector consults is not a test — it is a tautology with a percentage attached.
-
-## SURFACE-2026-09-07-AUTO-CELL-DOES-NOT-IMPLY-A-DISPATCHABLE-TARGET
-
-- **Priority:** high
-- **Surfaced by:** M15 WP1 probe, Phase 1 (feature-build)
-- **Target:** ⚠️ **WP2's half is DONE (2026-09-12); WP3 task 3.4 (the verdict) still owes its half.**
-
-⚠️ **A policy cell that reads AUTO does NOT imply there is a next skill to fire.** Labelling the corpus on the mode cell alone marked **223** breaks; the excess were terminal / SURFACE / meta-op edges — `S20`, `S17`, `F19`, `F30`, `P13`, `S6` — whose *from-state* row says AUTO but whose **target is not a dispatchable skill**. Adding a `NON_DISPATCHABLE_TARGET` set took the count 223 → 127.
-
-✅ **WP2 DELIVERED THE MODEL HALF.** `Edge.dispatchTarget` is a per-edge property held **separately** from the policy cell (`types.ts`), with 5 target kinds; `isDispatchable()` is the single narrowing predicate; the six probe-named edges are pinned non-dispatchable by test; and `workflowMachineLookup.test.ts` asserts that AUTO cells on NON-dispatchable edges **still exist** — so the two properties cannot silently collapse into one.
-
-⚠️ **WHAT REMAINS IS WP3's:** the detector must read the two properties **independently** — policy says "may I chain?", `dispatchTarget` says "is there anything to chain to?" — and fire only when BOTH answer yes. ⚠️ **The model makes this easy but does not enforce it at the call site**: `resolvePolicy` returns the policy verdict; nothing stops a caller from firing on `cell.kind === "auto"` without consulting `isDispatchable`. **That is the remaining risk, and it is a WP3 code-review item.**
-
-## SURFACE-2026-09-07-CHAIN-DETECTION-WINDOW-MUST-NOT-CLOSE-EARLY
-
-- **Priority:** high
-- **Surfaced by:** M15 WP1 probe, Phase 1 (feature-build)
-- **Target:** M15 WP3 task 3.4 (the idempotency / "did it already chain?" check)
-
-⚠️ **The "did a `Skill` call follow this verdict?" window must not close on an intervening tool call, nor on a re-quoted `TRANSITION:` token.** Between emitting a verdict and invoking the next skill, the agent routinely runs `Bash`/`Read` calls (start a dev server, check a file) and narrates in between — and that narration frequently re-quotes the transition token.
-
-**Proven false-positive case:** session `06eb0e92-995a-43e1-b0c0-36f23abdd066.jsonl` turn 504 emitted `TRANSITION: F10` and **did** chain correctly — the `Skill` call landed at line 511, after two `Bash` calls and two narration lines. An early-closing window labelled it a break.
-
-**The rule:** only a **real user *prose* turn** ends the window. ⚠️ Tool results arrive with role=`user` and MUST be skipped, as must `system`/`attachment`/`queue-operation` lines. Erring permissive is correct here — this milestone's standing lesson is that naive predicates *over*-flag (M-3: 15x).
-
-**Measured effect:** fixing the window took the break count 127 -> 96 with no other change.
-
-## SURFACE-2026-09-07-TRANSITION-TOKENS-ECHO-ONTO-USER-LINES
-
-- **Priority:** high
-- **Surfaced by:** M15 WP1 probe (feature-plan, pre-plan measurement A-2)
-- **Target:** M15 WP3 task 3.3 (the real transcript reader)
-
-⚠️ **~Half of all `TRANSITION:` occurrences in a CC transcript sit on `user` lines, not assistant lines** — measured 559 user / 555 assistant across a 40-file sample of this project's transcripts. The cause: skill bodies (which contain the full transitions table) and tool results echoing docs are injected into the conversation as user-role content.
-
-**Consequence:** a file-level `grep 'TRANSITION:'` reads **documentation as emitted verdicts**. The parse MUST be scoped to the **last assistant text block** of the turn. A correctly-scoped parse yields 2,281 emitted verdicts across 150 files — which reproduces the WBS's independently-measured M-3 turn count exactly, cross-validating the scoping.
-
-**Why this is filed rather than just noted in the WIP:** it bears on WP3's shippable reader, not only WP1's throwaway one, and `wbs.md` does not record it. The failure mode is silent — a file-scoped reader would flag verdicts that were never emitted and attribute them to real turns.
 
 ## SURFACE-2026-08-25-PROBE-CHECK-EXEMPTS-ALREADY-INSTALLED-DEPENDENCIES
 - **Source:** feature:verify-human (M13.5 WP3, 2026-08-25) — cost **three failed live test rounds** and a full WP escalation.
