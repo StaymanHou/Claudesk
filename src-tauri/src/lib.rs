@@ -1,6 +1,7 @@
 // Native macOS application menu (the menu bar). Mirrors existing features only —
 // predefined items (About/version, Edit, Window) wire to the native responder chain;
 // custom items emit a `menu` event the frontend bridge acts on (see app_menu).
+mod adjudicator;
 mod app_menu;
 mod cc_session;
 mod config_store;
@@ -69,6 +70,7 @@ mod time_store;
 // tray glyph lit when ANY workspace is AwaitingInput, neutral otherwise. Subscribes
 // to the existing M3 `workspace-status` broadcast (no broadcaster change). The pure
 // `aggregate_alarm` fold lives in tray/mod.rs; the tray-icon ops in tray/commands.rs.
+mod transcript;
 mod tray;
 // M10 (in-app auto-updater): the production update flow. The pure core lives in
 // updater/mod.rs — self-clear (bundle-path resolution + `xattr -dr com.apple.quarantine`
@@ -466,6 +468,8 @@ pub fn run() {
             // no `mark_unclean` counterpart — setting is owned by the spawn path, where it
             // is co-located with the `?` guaranteeing a failed spawn leaves no flag.
             session_state::commands::session_state_mark_clean,
+            transcript::commands::transcript_tail,
+            adjudicator::commands::supervisor_adjudicate,
             // M12 WP3: the batched auto-resume announcement. ONE call per picker open
             // returning every project's predicted action; gate-checked server-side, so an
             // OFF gate returns {} without statting any project dir. Deliberately a sibling

@@ -321,6 +321,44 @@ the guard was **extended, never narrowed**.
   `type WorkflowGateValue = ReturnType<typeof useWorkflowFeaturesEnabled>` — because the arm **strips
   comments** before matching. A comment-only mention was *measured* not to satisfy it.
 
+### ⚠️ The supervisor's language boundary (M15 WP3 — ruling R-4, DECIDED, not open)
+
+**Rust does file IO only. TypeScript owns the verdict.** The supervisor reads a transcript, applies
+the workflow policy, and injects the next command — and the split between the two languages is a
+**settled ruling**, not an implementation accident. Re-opening it is the one change this section
+exists to prevent.
+
+| Side | Owns | Does NOT own |
+|---|---|---|
+| **Rust** (`transcript/`, `adjudicator/`) | resolving the transcript slug, reading a byte-bounded tail, spawning `claude -p` with a hard timeout | parsing JSONL, reading `TRANSITION:` tokens, any policy lookup, any decision |
+| **TypeScript** (`state/supervisor/`) | the parse, the policy lookup via `resolvePolicy`, the dispatchability gate, idempotency, the adjudicator's prompt/parse, the fire | file IO |
+
+**Why the boundary is where it is** — three reasons, each load-bearing:
+
+1. ⚠️ **It keeps the policy graph SINGLE-SIDED.** The whole of WP2 rests on *"funnel every policy
+   read through ONE function and guard THAT"* — the fix for the defect shape that has bitten this
+   repo four times (twice in M11 WP4, one shipped CRITICAL). A second copy of the derivation in Rust
+   would make that funnel unguardable, because a source-scanning guard cannot see across languages.
+2. **Both fire paths already live in TS.** `injectCommand` and `recycleSession` are TS with
+   caller-owned React state; there is no Rust recycle command. A Rust verdict would need a **new
+   backend→frontend IPC direction that does not exist today.**
+3. ⚠️ **ACCEPTED COST, recorded so it is not re-litigated as a bug:** the supervisor stops when the
+   webview is gone. That is fine — a workspace with no webview has no PTY to inject into, so there is
+   nothing to supervise.
+
+⚠️ **The one place the boundary is load-bearing at runtime is the error contract.** The TS side
+classifies an adjudicator timeout by matching the message Rust produces
+(`AdjudicateError::TimedOut` → *"claude -p timed out after {ms}ms"*). Both sides were once tested
+against a hand-written copy of that string, which meant a Rust reword would leave **both** suites
+green while every timeout was mislabelled. There is now a test that reads the real `write!` format
+string out of `mod.rs` and drives it through the real TS classifier — the cheapest available form of
+a cross-language contract test.
+
+⚠️ **Consequences for anyone extending the supervisor:** a new capability that needs a decision goes
+in TS and reads the funnel; a new capability that needs bytes off disk or a subprocess goes in Rust
+and returns raw data. If a change seems to need a decision in Rust, that is the signal to re-read
+this section rather than to add one.
+
 ### Verification method banked here (M12–M13)
 
 - **The recurring defect shape, hit FOUR times: a mechanism that is correct in itself sitting behind

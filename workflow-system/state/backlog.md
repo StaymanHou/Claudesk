@@ -40,6 +40,69 @@
 - **Status:** pending
 - **Pickup shape:** read the two entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
+## SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE
+
+- **Priority:** high
+- **Surfaced by:** M15 WP3 Phase 5 (feature:build, mutation testing)
+- **Target:** verification method (`docs/lessons/source-text-guards.md`)
+- **Type:** gap
+
+⚠️ **`git checkout -- <path>` on an UNTRACKED file does nothing and reports success.** Used to
+restore a mutation probe in `src/state/supervisor/fanOut.ts` (a new, untracked module); the
+command exited 0, printed nothing, and **left the mutated file in place**. Caught only because
+the restore was verified by `shasum` against a pre-mutation baseline rather than by trusting
+the command.
+
+⚠️ **The failure mode is a MUTATED FILE SHIPPING**, and it is silent in both directions: the
+mutant stays, and the "restore" looks done. `git status` would show the file as `??` either
+way, so it is not a tell.
+
+**The rule:** for any mutation probe, capture `shasum` BEFORE and verify it AFTER. ⚠️ For an
+untracked file `git diff`/`git checkout` are not merely weak evidence — they are **inapplicable**,
+and a `git diff --stat` that shows "no change" is vacuously true. (A subagent independently
+flagged the `git diff --stat` half of this at Phase 4 verify-self; this is the `checkout` half,
+which actually bit.)
+
+**Suggested action:** fold into `docs/lessons/source-text-guards.md` as a mutation-testing
+precondition — `cp` the file aside, or capture the SHA, before mutating.
+- **Status:** pending
+
+## SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT
+
+- **Priority:** high
+- **Surfaced by:** M15 WP3 Phase 1 (feature:verify-self)
+- **Target:** M15 WP3 Phases 2-5 (every phase whose outcomes need a real turn-end)
+- **Type:** gap
+
+⚠️ **A CC session spawned by an agent-launched Claudesk produces NO hook events, so no
+turn-end can be observed the obvious way.** The child inherits `CLAUDE_CODE_CHILD_SESSION`,
+which turns transcript saving OFF (the pane itself prints the warning) and the hook chain
+never fires. Measured: a full live CC turn in `scratch-a` left the status label at `Unknown`
+and appended nothing to the session's transcript — `grep -c` for the typed prompt returned 0
+against a file whose mtime was one minute old.
+
+⚠️ **This makes the naive verify-self read a FALSE FAIL** — the feature works, the instrument
+cannot drive it. It extends `[[agent-launched-app-cannot-verify-continue]]` from `--continue`
+to the whole hook channel.
+
+**The working technique (used to verify Phase 1):** write hook JSON directly to the dev app's
+Unix socket at `~/Library/Application Support/com.claudesk.app.dev/hook.sock` — one JSON
+object per line, same shape the hook script sends. This drives the REAL backend path
+(`hook_socket` -> `status_broadcaster::to_update` -> `workspace-status` emit -> the webview),
+so it is not a stub: only the CC process is replaced, not any Claudesk code. Confirmed by
+`status-channel.log` showing `outcome=emitted` and by a live `listen` tap receiving the payload.
+
+⚠️ **Also needed to see the payload at all:** register the listener through the app's own
+bundled module (`await import("/node_modules/@tauri-apps/api/event.js")` inside an injected
+`<script type="module">`). A bare `@tauri-apps/api/event` specifier does not resolve, there is
+no `window.__TAURI__` global, `__TAURI_INTERNALS__` exposes only `plugins` (no `invoke`), and
+the `__internal_unstable_listeners_object_id__` registry reads EMPTY even while events are
+demonstrably flowing — ⚠️ a tap on it is an INVALID PROBE, not a negative result.
+
+**Suggested action:** use socket injection for WP3's remaining phases; consider a small helper
+script under `tooling/` so each phase does not re-derive it.
+- **Status:** pending
+
 ## SURFACE-2026-09-12-WP3-INHERITS-A-TYPED-MACHINE-WITH-THREE-LIVE-CONTRACTS
 
 - **Priority:** high

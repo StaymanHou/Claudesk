@@ -290,6 +290,54 @@ pub struct WorkspaceStatusUpdate {
     /// start — so an older payload degrades to "no marker", never to a wrong one.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_turn_start: Option<bool>,
+    /// `Some(true)` iff this event is the one that **ENDS a CC turn** (`Stop`) — M15 WP3,
+    /// the workflow supervisor's trigger.
+    ///
+    /// ⚠️ **This is the `is_turn_start` mirror, and it exists for a SHARPER reason.** A
+    /// consumer needing *"a `Stop` arrived"* cannot read `state`, because [`event_to_state`]
+    /// maps `Stop` to **TWO** states: [`WorkspaceState::Idle`] and — when
+    /// `background_task_count > 0` — [`WorkspaceState::BackgroundWork`]. Matching only
+    /// `Idle` is precisely the shipped-CRITICAL shape from M13.5 WP2
+    /// (`[[derived-state-is-not-a-proxy-for-its-event]]`): when a closed enum gains a
+    /// member, every consumer of a SIBLING literal must be swept, and the failure mode is a
+    /// silent hang — the supervisor simply never fires on a turn that ended with background
+    /// work outstanding.
+    ///
+    /// Classifying it **backend-side, here** is what makes that unrepeatable: the rule has
+    /// one home ([`event_is_turn_end`]), and a future third `Stop`-mapped state updates that
+    /// predicate rather than every consumer.
+    ///
+    /// ⚠️ Consumers must read this off the **RAW event stream**, never the frontend's folded
+    /// `WorkspaceStatusMap` — the map overwrites by workspace id, so two consecutive `Stop`s
+    /// are indistinguishable in it
+    /// (`[[workspace-status-map-collapses-consecutive-events]]`).
+    ///
+    /// ⚠️ **A turn ending in `BackgroundWork` gets no LATER completion event** — do not wait
+    /// for one, and do not add a PID-polling watchdog (probed and rejected). This marker is
+    /// the only turn-end signal such a turn will ever produce.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_turn_end: Option<bool>,
+    /// The CC session id this event came from — the uuid that disambiguates **two CC
+    /// sessions running in the same directory tree**. M15 WP3.
+    ///
+    /// ⚠️ **This value was already arriving and was being DROPPED here.** The hook parses it
+    /// into [`HookEvent::session_id`], but every DTO built before M15 WP3 discarded it, so
+    /// the only workspace key on the wire was the one [`WorkspaceRegistry::resolve_cwd`]
+    /// derives from `cwd` — and that registry is a **1:1 `by_path` map** whose `resolve_cwd`
+    /// returns a **single** id by longest-path-ancestor match. Two CC sessions in one tree
+    /// therefore collapse onto one workspace and are indistinguishable
+    /// (`SURFACE-2026-08-21-STATUS-PATH-KEYS-ON-CWD-ALONE-COLLAPSING-SESSIONS`).
+    ///
+    /// Threading it through does not by itself fix the collapse — `workspace_id` is still
+    /// cwd-derived — but it puts the disambiguator **on the wire**, which is what lets the
+    /// supervisor address a turn by the session that produced it rather than by the
+    /// directory it happened to run in.
+    ///
+    /// Empty string on the wire is treated as absent (the hook's `#[serde(default)]` yields
+    /// `""` for a payload that omits the key), so a degraded payload loses the id rather
+    /// than inventing one.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub session_id: Option<String>,
 }
 
 /// Maps a canonicalized project path → its `workspace_id`. The cwd→workspace seam:
@@ -434,6 +482,10 @@ pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<Work
         last_output_snippet,
         notification_type: event.notification_type.clone(),
         is_turn_start: Some(event_is_turn_start(event)),
+        is_turn_end: Some(event_is_turn_end(event)),
+        // ⚠️ Empty means absent — the hook's `#[serde(default)]` yields `""` for a payload
+        // that omits the key, and an empty-string session id is not a usable address.
+        session_id: Some(event.session_id.clone()).filter(|s| !s.is_empty()),
     })
 }
 
@@ -449,6 +501,28 @@ pub fn to_update(event: &HookEvent, registry: &WorkspaceRegistry) -> Option<Work
 /// home and a test can pin it directly.
 pub fn event_is_turn_start(event: &HookEvent) -> bool {
     event.hook_event_name == "UserPromptSubmit"
+}
+
+/// Is this the hook event that **ENDS a CC turn**? M15 WP3.
+///
+/// `Stop` and nothing else — ⚠️ **irrespective of which state it maps to.** This is the
+/// whole point of the predicate: [`event_to_state`] sends `Stop` to [`WorkspaceState::Idle`]
+/// *or* [`WorkspaceState::BackgroundWork`] depending on `background_task_count`, so a
+/// consumer that asks "did a turn end?" by matching a state matches only one of the two and
+/// silently never fires on the other
+/// (`[[derived-state-is-not-a-proxy-for-its-event]]` — the M13.5 WP2 shipped CRITICAL).
+///
+/// ⚠️ Deliberately keyed on the **event name**, not on the state and not on
+/// `background_task_count`. A turn that ends with background work outstanding has still
+/// ENDED — the supervisor's trigger is the turn boundary, and `BackgroundWork` produces no
+/// later completion event to wait for. Gating on the count here would reintroduce exactly
+/// the hole this predicate closes.
+///
+/// Kept as a named predicate (mirroring [`event_is_turn_start`] and
+/// [`notification_awaits_input`]) so the rule has ONE home: if upstream ever maps a third
+/// state off `Stop`, this function is the only edit.
+pub fn event_is_turn_end(event: &HookEvent) -> bool {
+    event.hook_event_name == "Stop"
 }
 
 #[cfg(test)]
@@ -1197,6 +1271,104 @@ mod tests {
     }
 
     #[test]
+    fn event_is_turn_end_predicate_pins_the_rule() {
+        // M15 WP3. The mirror of the turn-start pin — one home for the rule.
+        assert!(event_is_turn_end(&ev("Stop", "/p")));
+        for name in [
+            "UserPromptSubmit",
+            "PostToolUse",
+            "PreToolUse",
+            // ⚠️ `SubagentStop` is NOT a turn end. It was never involved in the M13.5 WP2
+            // BackgroundWork work either — a subagent finishing is not the operator's turn
+            // ending, and firing the supervisor on it would chain mid-turn.
+            "SubagentStop",
+            "Notification",
+            "SessionStart",
+            "",
+        ] {
+            assert!(
+                !event_is_turn_end(&ev(name, "/p")),
+                "{name} must not read as a turn end"
+            );
+        }
+    }
+
+    #[test]
+    fn turn_end_fires_for_both_states_stop_can_map_to() {
+        // ⚠️ THE REGRESSION THIS TEST EXISTS FOR, STATED PLAINLY.
+        //
+        // `event_to_state` sends `Stop` to TWO states — Idle, and BackgroundWork when
+        // `background_task_count > 0`. A supervisor that asked "did a turn end?" by matching
+        // a STATE would match one of them and silently never fire on the other. That is the
+        // exact shape of the M13.5 WP2 shipped CRITICAL
+        // (`[[derived-state-is-not-a-proxy-for-its-event]]`): when a closed enum gains a
+        // member, every consumer of a sibling literal must be swept, and the failure mode is
+        // a silent hang, not an error.
+        //
+        // So: assert the marker is true across BOTH mappings, and assert the mappings really
+        // are different — otherwise this test would still pass if a future edit collapsed
+        // `Stop` onto one state and made the whole hazard vanish silently.
+        let plain = stop_with_bg(Some(0), "/p");
+        let background = stop_with_bg(Some(3), "/p");
+
+        assert_eq!(event_to_state(&plain), Some(WorkspaceState::Idle));
+        assert_eq!(
+            event_to_state(&background),
+            Some(WorkspaceState::BackgroundWork),
+            "the two Stop mappings must remain DISTINCT — if they collapse, this test's \
+             premise is gone and the turn-end marker needs re-examining, not just re-running"
+        );
+
+        assert!(event_is_turn_end(&plain), "Stop → Idle is a turn end");
+        assert!(
+            event_is_turn_end(&background),
+            "⚠️ Stop → BackgroundWork is ALSO a turn end — a turn that ends with background \
+             work outstanding has still ENDED, and gets NO later completion event to wait for"
+        );
+
+        // And end-to-end through the DTO, since the marker's whole job is to reach a consumer.
+        let mut registry = WorkspaceRegistry::default();
+        registry.register(Path::new("/p"), "ws-1".to_string());
+        for event in [&plain, &background] {
+            let update = to_update(event, &registry).expect("Stop maps to a state");
+            assert_eq!(
+                update.is_turn_end,
+                Some(true),
+                "state {:?} must still carry the turn-end marker",
+                update.state
+            );
+        }
+    }
+
+    #[test]
+    fn session_id_reaches_the_dto_and_empty_reads_as_absent() {
+        // M15 WP3 task 3.2 — the uuid that disambiguates two CC sessions in one tree. It was
+        // already being parsed off the wire and DROPPED before the DTO; this pins that it
+        // now arrives.
+        let mut registry = WorkspaceRegistry::default();
+        registry.register(Path::new("/p"), "ws-1".to_string());
+
+        let with_id = HookEvent {
+            session_id: "sess-abc".to_string(),
+            ..ev("Stop", "/p")
+        };
+        assert_eq!(
+            to_update(&with_id, &registry).unwrap().session_id,
+            Some("sess-abc".to_string())
+        );
+
+        // ⚠️ Empty must read as ABSENT, not as a session whose id is "". `HookEvent`'s
+        // `#[serde(default)]` yields `""` for a payload that omits the key, so without the
+        // filter a degraded payload would present an unusable id as a real address — and
+        // every such payload would compare EQUAL to every other one.
+        let without_id = HookEvent {
+            session_id: String::new(),
+            ..ev("Stop", "/p")
+        };
+        assert_eq!(to_update(&without_id, &registry).unwrap().session_id, None);
+    }
+
+    #[test]
     fn status_update_serde_round_trips_for_tray_consumer() {
         // M7: the menu-bar tray consumes the emitted `workspace-status` payload IN-PROCESS
         // via serde_json::from_str::<WorkspaceStatusUpdate>(event.payload()). This pins the
@@ -1212,6 +1384,8 @@ mod tests {
             last_output_snippet: Some("perm?".to_string()),
             notification_type: Some("permission_prompt".to_string()),
             is_turn_start: Some(false),
+            is_turn_end: Some(false),
+            session_id: Some("sess-abc".to_string()),
         };
         let json = serde_json::to_string(&full).unwrap();
         let back: WorkspaceStatusUpdate = serde_json::from_str(&json).unwrap();
@@ -1233,12 +1407,78 @@ mod tests {
         assert_eq!(parsed.last_output_snippet, None);
         assert_eq!(parsed.notification_type, None);
         assert_eq!(parsed.is_turn_start, None);
+        // ⚠️ M15 WP3 — the same absent-means-None guarantee for the two NEW fields.
+        //
+        // ⚠️ HONEST SCOPE, because the obvious reading is wrong: this does NOT guard the
+        // `#[serde(default)]` attribute. Mutation-tested 2026-09-13 — removing `default`
+        // from `is_turn_end` leaves this test GREEN, because serde already treats a missing
+        // `Option<T>` as `None` without it (the attribute is belt-and-braces on an Option,
+        // and is kept only for symmetry with the sibling fields).
+        //
+        // What it DOES guard is the property that actually matters to the supervisor: a
+        // degraded or older payload reads as "no turn-end marker" rather than failing to
+        // parse or inventing one. (A change to a bare `bool` is caught EARLIER, at compile
+        // time — also mutation-checked. So the runtime hole this closes is narrow: a future
+        // `#[serde(deny_unknown_fields)]` or a rename of the wire key, which would make the
+        // minimal payload stop parsing.) Documented precisely rather than overclaimed,
+        // because a test whose comment promises more than it checks is how a guard quietly
+        // stops guarding.
+        assert_eq!(parsed.is_turn_end, None);
+        assert_eq!(parsed.session_id, None);
 
         // (3) The snake_case state rendering the tray folds over is pinned end-to-end.
         assert_eq!(
             serde_json::from_str::<WorkspaceState>("\"awaiting_input\"").unwrap(),
             WorkspaceState::AwaitingInput
         );
+    }
+
+    #[test]
+    fn a_stop_event_survives_the_whole_emit_path_to_the_tray_consumer() {
+        // M15 WP3 Phase 1 — THE CONSUMING-SURFACE TEST.
+        //
+        // ⚠️ WHY A SEPARATE TEST WHEN THE PARTS ARE ALREADY COVERED. This phase changed the
+        // payload SHAPE of a DTO that the menu-bar tray, the PiP webview, the filmstrip and
+        // XtermPane already consume — an integration boundary. Every piece of that path had
+        // a test (`to_update` builds the DTO; the round-trip test parses one) but NOTHING
+        // asserted the pieces compose: that a real `HookEvent` entering the broadcaster comes
+        // out the other side, through serialization, still carrying the new fields.
+        //
+        // That gap is this repo's standing defect shape — *a mechanism correct in itself
+        // behind a caller that does not honor it*, four occurrences, one shipped CRITICAL.
+        // This is the end-to-end codification of what was verified live at verify-self by
+        // writing hook JSON to the dev app's socket and reading the emitted payload back.
+        let mut registry = WorkspaceRegistry::default();
+        registry.register(Path::new("/proj"), "ws-1".to_string());
+
+        // Both Stop mappings, because the whole point of `is_turn_end` is that it survives
+        // BOTH — a consumer keying on `state` would see only one of these.
+        for (bg, expected_state) in [
+            (0, WorkspaceState::Idle),
+            (3, WorkspaceState::BackgroundWork),
+        ] {
+            let event = HookEvent {
+                session_id: "sess-live".to_string(),
+                background_task_count: Some(bg),
+                ..ev("Stop", "/proj")
+            };
+
+            let update = to_update(&event, &registry).expect("a Stop in a registered cwd emits");
+            assert_eq!(update.state, expected_state);
+
+            // Serialize exactly as the broadcaster emits, then parse exactly as the tray does.
+            let wire = serde_json::to_string(&update).unwrap();
+            let seen: WorkspaceStatusUpdate = serde_json::from_str(&wire).unwrap();
+
+            assert_eq!(
+                seen.is_turn_end,
+                Some(true),
+                "the turn-end marker must survive the wire for state {expected_state:?}"
+            );
+            assert_eq!(seen.session_id, Some("sess-live".to_string()));
+            assert_eq!(seen.is_turn_start, Some(false));
+            assert_eq!(seen.state, expected_state);
+        }
     }
 
     #[test]
@@ -1378,21 +1618,25 @@ mod tests {
             last_output_snippet: Some("hi".to_string()),
             notification_type: Some("permission_prompt".to_string()),
             is_turn_start: Some(true),
+            is_turn_end: Some(false),
+            session_id: Some("sess-abc".to_string()),
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
 
-        // Exact key set, all snake_case (incl. the QoL-WP2 notification_type field and
-        // the M13.5-WP3 is_turn_start field).
+        // Exact key set, all snake_case (incl. the QoL-WP2 notification_type field, the
+        // M13.5-WP3 is_turn_start field, and the M15-WP3 is_turn_end + session_id fields).
         let mut keys: Vec<&String> = obj.keys().collect();
         keys.sort();
         assert_eq!(
             keys,
             vec![
+                &"is_turn_end".to_string(),
                 &"is_turn_start".to_string(),
                 &"last_event_at".to_string(),
                 &"last_output_snippet".to_string(),
                 &"notification_type".to_string(),
+                &"session_id".to_string(),
                 &"state".to_string(),
                 &"workspace_id".to_string(),
             ]
@@ -1408,6 +1652,8 @@ mod tests {
             serde_json::json!("permission_prompt")
         );
         assert_eq!(obj["is_turn_start"], serde_json::json!(true));
+        assert_eq!(obj["is_turn_end"], serde_json::json!(false));
+        assert_eq!(obj["session_id"], serde_json::json!("sess-abc"));
     }
 
     #[test]
@@ -1420,6 +1666,8 @@ mod tests {
             last_output_snippet: None,
             notification_type: None,
             is_turn_start: None,
+            is_turn_end: None,
+            session_id: None,
         };
         let value = serde_json::to_value(&update).unwrap();
         let obj = value.as_object().unwrap();
@@ -1427,6 +1675,8 @@ mod tests {
         assert!(!obj.contains_key("last_output_snippet"));
         assert!(!obj.contains_key("notification_type"));
         assert!(!obj.contains_key("is_turn_start"));
+        assert!(!obj.contains_key("is_turn_end"));
+        assert!(!obj.contains_key("session_id"));
         assert_eq!(obj["state"], serde_json::json!("unknown"));
     }
 

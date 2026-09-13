@@ -71,6 +71,41 @@ export interface WorkspaceStatusUpdate {
    * loses the turn marker rather than inventing one.
    */
   is_turn_start?: boolean;
+  /**
+   * `true` iff this event is the one that **ENDS a CC turn** (`Stop`) — M15 WP3, the
+   * workflow supervisor's trigger. Classified BACKEND-side in
+   * `status_broadcaster::event_is_turn_end`; never re-derived here.
+   *
+   * ⚠️ **Consumers MUST match this field, never `state`** — and the reason is sharper than
+   * it is for `is_turn_start`. `event_to_state` maps `Stop` to **two** states: `"idle"`, and
+   * `"background_work"` when the turn ended with background tasks outstanding. A consumer
+   * asking "did a turn end?" by matching `state === "idle"` matches one of them and
+   * **silently never fires** on the other — the shipped-CRITICAL shape from M13.5 WP2
+   * (`[[derived-state-is-not-a-proxy-for-its-event]]`), whose failure mode is a hang, not
+   * an error.
+   *
+   * ⚠️ **And it must be read off the RAW event stream, not the map** — `applyStatusUpdate`
+   * folds by `workspace_id`, so two consecutive `Stop`s are indistinguishable in
+   * `WorkspaceStatusMap` (`[[workspace-status-map-collapses-consecutive-events]]`). The
+   * reducer deliberately does NOT read this field.
+   *
+   * Absent means the same as `false`.
+   */
+  is_turn_end?: boolean;
+  /**
+   * The CC session id this event came from — M15 WP3.
+   *
+   * ⚠️ **The disambiguator for two CC sessions in the SAME directory tree.** `workspace_id`
+   * is derived from `cwd` by a **1:1** registry whose `resolve_cwd` returns a single id by
+   * longest-path-ancestor match, so two sessions in one tree collapse onto one workspace
+   * (`SURFACE-2026-08-21-STATUS-PATH-KEYS-ON-CWD-ALONE-COLLAPSING-SESSIONS`). This field was
+   * already arriving at the hook and being dropped before the DTO; it is now on the wire so
+   * a per-event consumer can address a turn by the session that produced it.
+   *
+   * Absent (omitted on the wire) when the hook payload carried no id — an empty string is
+   * normalized to absent backend-side rather than presented as a real address.
+   */
+  session_id?: string;
 }
 
 /** The Tauri event name — mirrors `status_broadcaster::commands::STATUS_EVENT`. */

@@ -111,6 +111,54 @@ const ALLOWED_IMPORTERS = [
   // `wires graph to policy in exactly ONE module` — that test exempts `__tests__`, and
   // tripping it would have meant a hand-rolled derivation rather than a contract check.
   "state/__tests__/workflowMachineUpstreamContract.test.ts",
+  // ⚠️ THE FIRST PRODUCTION CONSUMER — M15 WP3 Phase 2, added BECAUSE THIS GUARD FIRED.
+  // This is the moment the guard was built for, so the review it forces is recorded here:
+  //
+  //   • It imports EXACTLY ONE symbol — `extractTransitionId` from `transitionToken` — to
+  //     parse the `TRANSITION:` token out of an assistant text block. It does NOT import
+  //     `edges`, `policy`, or `POLICY_ROWS`, and it produces NO verdict.
+  //   • ⚠️ Confirmed against the failure signature the WP2 handoff specified: a correct
+  //     consumer fails exactly TWO tests (this one and `records that NO production module
+  //     consumes the machine yet`); a consumer hand-rolling the derivation ALSO fails
+  //     `wires graph to policy in exactly ONE module`. That third test PASSED, which is the
+  //     mechanical evidence that this module is not bypassing the funnel.
+  //   • The policy lookup lands in Phase 3, in a SEPARATE module, and that one WILL owe a
+  //     `resolvePolicy` call. Parsing a token is not resolving a policy — the split is
+  //     deliberate so the verdict has exactly one home.
+  "state/supervisor/transcript.ts",
+  // ⚠️ M15 WP3 Phase 3 — the SECOND production consumer, and the one that actually produces
+  // verdicts. Review recorded, per this allowlist's own contract:
+  //
+  //   • It calls `resolvePolicy` — the funnel — and reads NO `POLICY_ROWS` column directly,
+  //     so `resolveCell` and the incident Mode-2 override are applied exactly once.
+  //   • It handles all THREE `PolicyResolution` arms explicitly (`resolved` / `unmapped` /
+  //     `unknown-edge`) with no default branch, so `unmapped` stays a RESULT.
+  //   • ⚠️ It reads `isDispatchable(edge.dispatchTarget)` as a SEPARATE gate from the policy
+  //     cell — the "(2) and (3) are different questions" rule. That pairing is what
+  //     `AUTO-CELL-DOES-NOT-IMPLY-A-DISPATCHABLE-TARGET` names as WP3's half of that finding.
+  //   • ⚠️ Failure signature confirmed again: exactly TWO tests failed (this one and the
+  //     production-set pin); `wires graph to policy in exactly ONE module` PASSED, which is
+  //     the mechanical evidence it is not hand-rolling the derivation.
+  "state/supervisor/verdict.ts",
+  // ⚠️ The verdict's own test file. It imports `EDGES` + `isDispatchable` + `DRIVE_MODES` to
+  // run a PROPERTY SWEEP — "no edge in the whole graph, in any mode, ever fires with a
+  // non-skill target" — which is the structural backstop behind the sampled cases. Like the
+  // upstream-contract test above it asserts the model's shape rather than producing verdicts,
+  // so it owes no `resolvePolicy` call of its own (and it drives the real `decideVerdict`,
+  // which does route through the funnel).
+  "state/supervisor/__tests__/verdict.test.ts",
+  // ⚠️ M15 WP3 Phase 5 — the fan-out. Review recorded:
+  //
+  //   • It imports ONLY TYPES from the machine (`DriveMode`, `PolicyContext`) — no `EDGES`, no
+  //     `POLICY_ROWS`, no `resolvePolicy`. It carries a workspace's stored mode to the verdict
+  //     and carries the answer back; it makes no policy decision of its own.
+  //   • ⚠️ The decision stays in `verdict.ts`, which DOES route through the funnel. That split
+  //     is the point: `fireOne` owns "did I already fire, and can I reach the pty", and the
+  //     verdict owns "may I fire at all". Merging them would put an injection path next to a
+  //     policy read, which is how a caller starts hand-rolling.
+  //   • ⚠️ Failure signature confirmed a third time: exactly TWO tests failed; `wires graph to
+  //     policy in exactly ONE module` PASSED.
+  "state/supervisor/fanOut.ts",
 ];
 
 describe("M15 WP2 Phase 4 — the guard is scanning something real", () => {
@@ -263,18 +311,29 @@ describe("M15 WP2 Phase 4 — the importer population is pinned", () => {
     }
   });
 
-  it("records that NO production module consumes the machine yet", () => {
-    // ⚠️ States the vacuity honestly rather than hiding it. When WP3 lands its consumer
-    // this test FAILS and must be updated deliberately — which is the intended moment to
-    // re-read the funnel contract, not a nuisance.
-    const production = importersOfMachine().filter(
-      (f) => !f.includes("__tests__") && !MACHINE_INTERNALS.includes(f),
-    );
+  it("pins the exact set of PRODUCTION modules consuming the machine", () => {
+    // ⚠️ THE SUCCESSOR TO `records that NO production module consumes the machine yet`,
+    // which was true-over-an-empty-set until M15 WP3 Phase 2 landed the first consumer.
+    //
+    // ⚠️ IT IS DELIBERATELY AN EXACT-SET ASSERTION, NOT `toContain` OR A COUNT. The original
+    // test's whole value was that a NEW importer could not appear unnoticed; a relaxed
+    // assertion (`length > 0`, or "contains transcript.ts") would keep passing while a
+    // second, third, or bypassing consumer arrived silently — converting a live guard into
+    // exactly the green-while-checking-nothing shape this file was written to avoid
+    // (docs/lessons/source-text-guards.md). Adding a name here must stay a deliberate act.
+    const production = importersOfMachine()
+      .filter((f) => !f.includes("__tests__") && !MACHINE_INTERNALS.includes(f))
+      .sort();
     expect(
       production,
-      "A production consumer appeared. Confirm it calls resolvePolicy() for verdicts, " +
-        "then update this test's expectation.",
-    ).toEqual([]);
+      "The production-consumer set changed. For each new entry, confirm it routes verdicts " +
+        "through resolvePolicy() (and does NOT read POLICY_ROWS directly), then update " +
+        "this expectation and ALLOWED_IMPORTERS together.",
+    ).toEqual([
+      "state/supervisor/fanOut.ts",
+      "state/supervisor/transcript.ts",
+      "state/supervisor/verdict.ts",
+    ]);
   });
 });
 
