@@ -125,6 +125,16 @@ describe("⚠️ wiring guards (source-level)", () => {
     expect(code).toMatch(/storedMode === null/);
   });
 
+  it("⚠️ logs a SUCCESSFUL fire, not only failures", () => {
+    // ⚠️ `outcome.fired === true` used to be discarded entirely, so a supervisor that injected
+    // a slash command into an unwatched workspace left NO trace — `injectCommand` logs only on
+    // IPC rejection. The rarer recycle branch had the announcement the common fire lacked.
+    // ⚠️ Asserted as a READ of `outcome.fired` guarding a warn, not as the bare identifier: the
+    // identifier alone is satisfied by a discarded destructure.
+    expect(code).toMatch(/if\s*\(outcome\.fired\)/);
+    expect(code).toMatch(/warn\(\s*`supervisor: fired/);
+  });
+
   it("meta: the source guard is reading real code, not an empty string", () => {
     // ⚠️ Without this, every `not.toMatch` above passes vacuously if the read ever breaks.
     expect(code.length).toBeGreaterThan(1000);

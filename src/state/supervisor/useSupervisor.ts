@@ -163,6 +163,19 @@ export function useSupervisor(host: SupervisorHost): void {
       return;
     }
 
+    // ⚠️ **A SUCCESSFUL FIRE IS ANNOUNCED.** It used to be discarded entirely — only throws,
+    // sweep failures and recycles were logged, and `injectCommand` logs only on IPC *rejection*
+    // — so the supervisor could inject a slash command into an unwatched workspace and leave no
+    // trace at all. The rarer recycle branch had the mitigation the far more common fire lacked,
+    // and the argument for it is identical: an operator returning to the pane must be able to
+    // see that something acted on their behalf. This is also the ONLY evidence a fire leaves
+    // while M15's five behavioral checks remain deferred to dogfooding.
+    if (outcome.fired) {
+      warn(
+        `supervisor: fired ${outcome.command ?? "(unknown command)"} into ${host.workspaceId}`,
+      );
+    }
+
     // ⚠️ The recycle is handed to the CALLER. This hook never calls `recycleSession` itself —
     // see the module header for why that is structural, not stylistic.
     if (outcome.recycle) host.onRecycle(outcome.recycle);

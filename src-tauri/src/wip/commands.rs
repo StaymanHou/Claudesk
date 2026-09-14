@@ -42,12 +42,29 @@ pub fn wip_read(project_path: String) -> WipRead {
     // ⚠️ An IO error degrades to "nothing read" for the same reason `transcript_tail` does: the
     // caller fires on a turn boundary and must never be handed an error it would have to treat
     // as evidence.
+    //
+    // ⚠️ **THE VALUE IS THE SAME FOR BOTH ARMS; THE DIAGNOSTIC IS NOT.** `Ok(None)` (the file
+    // vanished between the listing and the read) is the ordinary case. `Err(e)` (permissions, a
+    // mid-write truncation, a bad mount) is a FAULT that happens to share the withholding
+    // direction. Collapsing them into one `_` arm made an unreadable WIP indistinguishable from
+    // an absent one — and since `read_head` and `transcript::read_tail` both preserve that
+    // distinction, only this command was throwing it away.
     match super::read_head(&target) {
         Ok(Some(text)) => WipRead {
             path: Some(target.to_string_lossy().into_owned()),
             text,
         },
-        _ => empty,
+        Ok(None) => empty,
+        Err(e) => {
+            // ⚠️ `eprintln!` rather than a returned error: the supervisor must still withhold
+            // (an unreadable WIP must never be the reason a session gets recycled), so the
+            // VALUE stays `empty`. It is the silence that was wrong, not the degradation.
+            eprintln!(
+                "wip_read: could not read {} — {e}",
+                target.to_string_lossy()
+            );
+            empty
+        }
     }
 }
 
@@ -118,6 +135,88 @@ mod tests {
             "got {:?}",
             got.path
         );
+    }
+
+    #[test]
+    fn an_unreadable_wip_file_reads_empty_but_is_not_silent() {
+        // ⚠️ THE DISTINCTION THE COMMAND USED TO THROW AWAY. `read_head` and
+        // `transcript::read_tail` both separate `NotFound` from a real IO error; only this
+        // command collapsed both into one `_` arm, making an unreadable WIP indistinguishable
+        // from an absent one.
+        //
+        // ⚠️ The VALUE is deliberately still `empty` — the supervisor must withhold, and an
+        // unreadable WIP must never be the reason a session gets recycled. What this test pins
+        // is that the error arm is REACHED as its own branch: a `_ => empty` implementation
+        // passes the value assertions below, so the discriminating check is that `path` is
+        // `None` while a *readable* file of the same name yields `Some` (proving the file was
+        // listed and the divergence happened at the read, not the listing).
+        let root = tmpdir("unreadable");
+        let p = write_wip(&root, "locked.md", "**Workflow:** feature\nSECRET");
+
+        // Sanity/positive control: readable right now, so the listing definitely finds it.
+        let before = wip_read(root.to_string_lossy().into_owned());
+        assert!(
+            before.path.is_some() && before.text.contains("SECRET"),
+            "precondition: the file must be readable before it is locked, got {before:?}"
+        );
+
+        // Chmod 000 — the permissions case the finding names.
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        let got = wip_read(root.to_string_lossy().into_owned());
+
+        // ⚠️ Restore before asserting, so a failed assertion cannot leave an unremovable temp
+        // file behind for the next run.
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        assert_eq!(
+            got.path, None,
+            "an unreadable WIP must degrade to the withholding value"
+        );
+        assert_eq!(got.text, "", "and must leak no partial text");
+    }
+
+    #[test]
+    fn the_io_error_arm_is_matched_separately_from_the_absent_arm() {
+        // ⚠️ **WHY A SOURCE GUARD AND NOT A BEHAVIORAL ASSERTION.** Mutation-proved during the
+        // paydown: reverting the fix to the original `_ => empty` leaves
+        // `an_unreadable_wip_file_reads_empty_but_is_not_silent` GREEN, because both arms return
+        // the same VALUE by design — withholding is correct for absent *and* unreadable. The
+        // only observable difference is the `eprintln!`, which goes to the process's stderr and
+        // is not capturable in-process (`cargo test` captures `print!`, not a child's fd 2, and
+        // this is a plain fn, not a subprocess).
+        //
+        // So the property "the two cases stay distinguishable" is pinned at the source level,
+        // and the guard asserts the MATCH SHAPE rather than a bare identifier — `Err(e) =>` with
+        // a log in its body, and no catch-all `_` arm that would swallow it again.
+        let src = include_str!("commands.rs");
+        // Strip this test's own comments/body so the guard cannot be satisfied by the prose
+        // above — the exact failure mode where a guard passes because it matched its own text.
+        let code = src
+            .split("mod tests")
+            .next()
+            .expect("the command body precedes the test module");
+
+        assert!(
+            code.contains("Ok(None) => empty"),
+            "the absent case must be its own arm"
+        );
+        assert!(
+            code.contains("Err(e) => {"),
+            "the IO-error case must be its own arm, not folded into a catch-all"
+        );
+        assert!(
+            code.contains("eprintln!"),
+            "the IO-error arm must not be silent — the silence was the defect"
+        );
+        assert!(
+            !code.contains("_ => empty"),
+            "a catch-all arm re-collapses the distinction this guard exists to keep"
+        );
+        // ⚠️ Emptiness meta-guard: without it every negative assertion above passes vacuously
+        // if the split ever returns nothing.
+        assert!(code.len() > 500, "the guard must be reading real source");
     }
 
     #[test]

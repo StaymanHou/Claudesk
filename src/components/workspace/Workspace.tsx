@@ -550,9 +550,15 @@ export function Workspace({
    * ⚠️ The failure arm is surfaced, not swallowed. `recycleSession` never throws — every failure
    * is a value — so the only way a refused handoff becomes visible is if this caller reads it.
    */
-  const fireRecycle = () => {
+  const fireRecycle = (): boolean => {
     const sessionId = workspace.cc_session_id;
-    if (sessionId === null || recycling) return;
+    // ⚠️ **RETURNS WHETHER IT ACTUALLY STARTED** — the button ignores this, but the supervisor
+    // must not. It announces the recycle BEFORE calling, and the `FireLedger` has already
+    // claimed the turn, so a silent `return` here leaves the turn neither fired nor recycled
+    // and never reconsidered — with a log line asserting the opposite. The two refusal arms
+    // are NOT equivalent: `recycling` is genuinely protective (a second recycle on top of a
+    // running one), while a null session id means there was nothing to recycle at all.
+    if (sessionId === null || recycling) return false;
     setRecycling(true);
     const ac = new AbortController();
     recycleAbortRef.current = ac;
@@ -593,6 +599,7 @@ export function Workspace({
         if (recycleAbortRef.current === ac) recycleAbortRef.current = null;
         setRecycling(false);
       });
+    return true;
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -604,8 +611,10 @@ export function Workspace({
   // separate programmatic path would duplicate the `recycling` re-entrancy guard, the
   // AbortController wiring, and the failure-arm surfacing — three chances to diverge.
   //
-  // ⚠️ `fireRecycle` already no-ops when `recycling` is true or the session id is null, so the
-  // supervisor cannot start a second recycle on top of a running one.
+  // ⚠️ `fireRecycle` no-ops when `recycling` is true or the session id is null — protective for
+  // the first arm, but NOT a benign outcome for the second, so it now REPORTS which happened and
+  // `onRecycle` below logs the declined case distinctly. (The old comment framed both arms as
+  // purely protective; that reading is what let an announced-but-never-started recycle look fine.)
   // ⚠️ Reuses the app's existing gate hook rather than a second source of truth.
   const workflowFeaturesEnabled = useWorkflowFeaturesEnabled();
   useSupervisor({
@@ -617,15 +626,32 @@ export function Workspace({
     storedModeRef: storedDriveModeRef,
     ccSessionIdRef,
     onRecycle: (info) => {
-      // ⚠️ Announced BEFORE the recycle runs. The operation is unattended and takes up to 3
-      // minutes; without this line an operator returning to the pane sees a session that
-      // restarted for no visible reason. `console.warn` matches the row's established failure
-      // channel (an overlay over a working terminal would be worse — M13's decision).
+      // ⚠️ **THE ANNOUNCEMENT IS GATED ON THE RECYCLE ACTUALLY STARTING.** It used to precede
+      // the call, which read as a courtesy but was a false statement whenever `fireRecycle`
+      // declined — and the `FireLedger` has ALREADY claimed this turn (`fanOut.ts`, before the
+      // recycle decision), so a declined recycle is neither fired nor recycled and is never
+      // reconsidered. Announcing first made that silent stall's only diagnostic assert the
+      // opposite of what happened.
+      //
+      // The operation is unattended and takes up to 3 minutes, so the started case still must
+      // say so: without it an operator returning to the pane sees a session that restarted for
+      // no visible reason. `console.warn` matches the row's established failure channel (an
+      // overlay over a working terminal would be worse — M13's decision).
+      if (fireRecycle()) {
+        console.warn(
+          `supervisor: recycling ${workspace.display_name} at ${info.tokens} tokens — ` +
+            `deferring /${info.skill} to the fresh session`,
+        );
+        return;
+      }
+      // ⚠️ The declined arm is logged DISTINCTLY, not merely skipped. This is the turn the
+      // ledger consumed for nothing; naming it is the only way the stall is diagnosable, and
+      // it is exactly the case the deferred behavioral checks would otherwise hit blind.
       console.warn(
-        `supervisor: recycling ${workspace.display_name} at ${info.tokens} tokens — ` +
-          `deferring /${info.skill} to the fresh session`,
+        `supervisor: recycle DECLINED for ${workspace.display_name} at ${info.tokens} tokens ` +
+          `(${workspace.cc_session_id === null ? "no CC session" : "a recycle is already running"}) — ` +
+          `/${info.skill} was NOT fired and this turn will not be reconsidered`,
       );
-      fireRecycle();
     },
   });
 

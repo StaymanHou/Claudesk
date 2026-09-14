@@ -74,12 +74,27 @@ describe("⚠️ Workspace.tsx mounts the supervisor (the consuming surface)", (
     expect(code.match(/recycleSession\(\{/g) ?? []).toHaveLength(1);
   });
 
-  it("⚠️ announces the recycle BEFORE it runs", () => {
+  it("⚠️ announces the recycle ONLY WHEN IT ACTUALLY STARTS", () => {
     // The operation is unattended and runs up to 3 minutes. Without the announcement an operator
     // returning to the pane sees a session that restarted for no visible reason. `console.warn`
     // matches the row's established failure channel (M13's decision — an error overlay over a
     // working terminal would be worse).
+    //
+    // ⚠️ **THIS GUARD USED TO PIN THE DEFECT.** It asserted the announcement came BEFORE the
+    // call, which is precisely the bug: `fireRecycle` declines when the session id is null or a
+    // recycle is already running, and the `FireLedger` has ALREADY claimed the turn — so an
+    // announced-but-declined recycle is neither fired nor recycled, never reconsidered, and its
+    // only diagnostic asserts the opposite of what happened. The announcement must be GATED on
+    // the return value.
+    expect(code).toMatch(/if\s*\(fireRecycle\(\)\)/);
     expect(code).toMatch(/supervisor: recycling/);
+  });
+
+  it("⚠️ logs the DECLINED recycle distinctly", () => {
+    // ⚠️ The declined arm is the turn the ledger consumed for nothing. Naming it is the only way
+    // the stall is diagnosable — and it is exactly the case M15's deferred behavioral checks
+    // would otherwise hit blind.
+    expect(code).toMatch(/supervisor: recycle DECLINED/);
   });
 
   it("⚠️ does NOT wire fanOut — the host is per-workspace", () => {

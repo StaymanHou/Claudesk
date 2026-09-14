@@ -8,6 +8,9 @@
 - **Backlog resolved:** SURFACE-2026-09-13-QUALITY-ASSERT-PINNED-MODEL-HAS-NO-RUNTIME-CALLER — closed by calling `assertPinnedModel` inside `adjudicate` before the subprocess spawns, making condition 1 a live guard rather than a function awaiting a caller that might never come.
 - **Feature shipped:** M15 WP4 — above 400,000 tokens of context, at a feature-workflow phase boundary that is not the last phase, the supervisor now recycles the session (handoff → fresh Claude Code → restore) instead of chaining, so a long-running feature carries its workflow forward in a clean context rather than degrading; this is also the supervisor's first production caller.
 - **Milestone:** WP4 — Context-pressure recycle at phase boundaries (M15, the workflow supervisor).
+- **Backlog resolved:** SURFACE-2026-09-14-QUALITY-ANNOUNCED-RECYCLE-CAN-SILENTLY-NOT-HAPPEN — closed by having `fireRecycle` report whether it started and gating the announcement on that, so a declined recycle is logged distinctly instead of leaving a consumed turn behind a log line asserting the opposite.
+- **Backlog resolved:** SURFACE-2026-09-14-QUALITY-A-SUCCESSFUL-SUPERVISOR-FIRE-IS-UNLOGGED — closed by announcing a successful fire with the workspace and injected command, giving the common path the trace the rarer recycle branch already had.
+- **Backlog resolved:** SURFACE-2026-09-14-QUALITY-WIP-READ-COLLAPSES-IO-ERROR-INTO-NO-WIP — closed by matching `Ok(None)` and `Err(e)` as separate arms and logging the error case, so an unreadable WIP file is no longer indistinguishable from an absent one.
 
 ## 2026-09-13
 
