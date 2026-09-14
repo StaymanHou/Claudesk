@@ -48,6 +48,12 @@ import {
   type AdjudicationResult,
   type AdjudicatorDeps,
 } from "./adjudicator";
+import { isOverPressure } from "./contextPressure";
+import {
+  atNonFinalPhaseBoundary,
+  isFeatureWorkflow,
+  type ParsedWip,
+} from "./wipPhases";
 
 /** Why the supervisor declined to fire. Every arm is a real, observed case. */
 export type WithholdReason =
@@ -59,6 +65,15 @@ export type WithholdReason =
   | "unmapped"
   /** The policy says pause (or skip) in this mode. A legitimate stop, not a break. */
   | "policy-not-auto"
+  /**
+   * The project has NO stored drive mode, so it is not supervised at all.
+   *
+   * ⚠️ **Distinct from `policy-not-auto` on purpose.** No policy was consulted for this case —
+   * the decision returns before `resolvePolicy` is ever called. Reporting it as
+   * `policy-not-auto` sent an operator asking *"why didn't my project fire?"* to the policy
+   * table, when the actual answer is an unset `default_drive_mode` in `projects.json`.
+   */
+  | "not-supervised"
   /** Policy says AUTO but the edge's target is not a dispatchable skill. */
   | "not-dispatchable"
   /** The turn already invoked the next skill — nothing to do. */
@@ -97,6 +112,39 @@ export interface VerdictInput {
   readonly storedMode: DriveMode | null;
   /** Evidence for the one conditional cell (feature/verify-human in autopilot). */
   readonly context?: PolicyContext;
+  /**
+   * A {@link TurnReading} the caller ALREADY computed from these same `lines`.
+   *
+   * ⚠️ **This exists to remove a SECOND `readTurn` call, not as an optimization.** The fan-out
+   * reads the turn to build its `FireLedger` key, then used to hand `lines` here and have this
+   * module read it again. The two agreed only because `readTurn` is deterministic over an
+   * identical array — a coupling **nothing asserted**. A future parameter, mode flag, or
+   * short-circuit would desynchronize them, and the failure direction is the bad one: a key
+   * claimed for turn A while a fire is issued for turn B, defeating idempotency with NO error.
+   *
+   * ⚠️ When omitted this module reads the turn itself, so a caller holding only `lines` (the
+   * replay harness, every unit test) is unaffected.
+   */
+  readonly reading?: TurnReading;
+  /**
+   * M15 WP4 — the context reading, in absolute tokens, or `null` when unreadable.
+   *
+   * ⚠️ **ABSENT AND `null` BOTH MEAN "DO NOT RECYCLE", AND THAT IS THE SAFE DIRECTION.** The
+   * recycle branch ends the CC session; a caller that did not supply evidence must not trigger
+   * it. Every existing caller (the replay harness, WP3's tests) therefore keeps chaining
+   * exactly as before without being touched.
+   *
+   * ⚠️ Supplied by the caller rather than read here because only the caller has the transcript,
+   * mirroring the {@link VerdictInput.reading} precedent.
+   */
+  readonly contextTokens?: number | null;
+  /**
+   * M15 WP4 — the active WIP file's parse, or `null` when there is none.
+   *
+   * ⚠️ Both the **feature-workflow gate** and the **non-final boundary** are read off this. As
+   * with `contextTokens`, absent means no recycle.
+   */
+  readonly wip?: ParsedWip | null;
 }
 
 /**
@@ -116,13 +164,15 @@ export function decideVerdict(input: VerdictInput): Verdict {
 
   if (input.storedMode === null) {
     return withhold(
-      "policy-not-auto",
+      "not-supervised",
       null,
       "project has no stored drive mode — supervision is opt-in",
     );
   }
 
-  const reading: TurnReading = readTurn(input.lines);
+  // ⚠️ Reuse the caller's reading when it supplied one — see {@link VerdictInput.reading}.
+  // Reading twice is what let the ledger key and the fire decision describe different turns.
+  const reading: TurnReading = input.reading ?? readTurn(input.lines);
   if (reading.edgeId === null) {
     return withhold("no-verdict", null, "the turn emitted no TRANSITION token");
   }
@@ -331,6 +381,32 @@ export type SupervisedVerdict =
       readonly mode: DriveMode;
     }
   | {
+      /**
+       * M15 WP4 — recycle the session instead of chaining.
+       *
+       * ⚠️ **A SEPARATE ARM, NOT A BOOLEAN ON `fire`.** The caller must do something completely
+       * different here — `recycleSession()` (handoff → fresh CC → restore), not
+       * `injectCommand()` — and a closed union is what makes that switch exhaustive. A
+       * `fire & {recycle: true}` shape lets an existing caller that only reads `kind === "fire"`
+       * inject the skill command AND ignore the flag, which is the silent-wrong-action failure
+       * this codebase has shipped before (`[[derived-state-is-not-a-proxy-for-its-event]]`).
+       */
+      readonly kind: "recycle";
+      /** The edge that was emitted — the work the fresh session will resume into. */
+      readonly edgeId: string;
+      /**
+       * The skill that WOULD have been fired had context been low.
+       *
+       * ⚠️ Carried deliberately: the recycle's `/session-restore` hands the fresh session back to
+       * the workflow, and a diagnostic that cannot say *what was deferred* makes an unattended
+       * recycle unexplainable after the fact.
+       */
+      readonly skill: string;
+      readonly mode: DriveMode;
+      /** The context reading that crossed the threshold, for the diagnostic. */
+      readonly tokens: number;
+    }
+  | {
       readonly kind: "withhold";
       readonly reason: WithholdReason | "adjudicator-says-awaiting";
       readonly edgeId: string | null;
@@ -363,5 +439,54 @@ export async function decideSupervised(
       detail: `adjudicator (${ruling.basis}): ${ruling.detail}`,
     };
   }
+
+  // ⚠️ M15 WP4 — THE RECYCLE BRANCH. Applied ONLY to a would-be fire, and only AFTER the
+  // adjudicator has cleared it. Both halves of that ordering are load-bearing:
+  //
+  //   • **Only a would-be fire.** A turn the mechanical rule WITHHELD is returned untouched
+  //     above and never reaches here — the recycle can no more promote a withhold than the
+  //     adjudicator can. Every reason the rule declined to chain (paused policy, unmapped edge,
+  //     already-chained, not-dispatchable) is equally a reason not to END THE SESSION.
+  //
+  //   • **After the adjudicator.** A turn that is awaiting human input must not be recycled any
+  //     more than it may be chained — recycling it would destroy the very question the operator
+  //     was about to answer. Placing this check BEFORE the adjudicator would do exactly that,
+  //     and it is the single most damaging ordering mistake available in this function.
+  if (shouldRecycle(input)) {
+    return {
+      kind: "recycle",
+      edgeId: mechanical.edgeId,
+      skill: mechanical.skill,
+      mode: mechanical.mode,
+      // Non-null by construction: `shouldRecycle` returns false for a null reading.
+      tokens: input.contextTokens as number,
+    };
+  }
   return mechanical;
+}
+
+/**
+ * Should this would-be fire recycle the session instead of chaining?
+ *
+ * ⚠️ **ALL THREE CONDITIONS, AND EACH IS SEPARATELY NECESSARY.** Extracted as a named predicate
+ * rather than inlined as a three-way `&&` so a test can drive each condition's falsification
+ * independently — this repo's standing defect shape is *a mechanism correct in itself behind a
+ * caller that does not honor it*, and a bare inline conjunction is exactly what makes the
+ * individual arms untestable.
+ *
+ *   1. **Over the context threshold.** ⚠️ A `null` (unreadable) reading is NOT over — see
+ *      `isOverPressure`. The recycle is the destructive branch; no evidence means no recycle.
+ *   2. **The feature workflow.** Task/incident/product WIPs have no phase structure, so the
+ *      boundary rule is meaningless for them. Auto-chain enforcement still applies — this gates
+ *      only the recycle.
+ *   3. **At a non-final phase boundary.** Work completed AND work remaining. A fresh WIP has
+ *      nothing to recycle at; a finished one is headed for ship, not a new session.
+ */
+function shouldRecycle(input: VerdictInput): boolean {
+  const wip = input.wip ?? null;
+  return (
+    isOverPressure(input.contextTokens ?? null) &&
+    isFeatureWorkflow(wip) &&
+    atNonFinalPhaseBoundary(wip)
+  );
 }

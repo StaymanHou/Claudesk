@@ -6,76 +6,13 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m15-wp3-break-detection-and-auto-fire — 2026-09-13
 
-**0 CRITICAL · 3 MAJOR · 5 MINOR.** ⚠️ **ONE MINOR (the wrong ship SHA) was FIXED IN PLACE** —
-the rest are open below. The three MAJORs share one shape, which is the useful way to read them:
-**a contract stated in PROSE where it could have been stated in a TYPE.** Each fix converts a
-comment into a compiler or a test. See the WIP's `## Code-Quality Review` for the full review.
-
-## SURFACE-2026-09-13-QUALITY-LEDGER-KEY-AND-VERDICT-READ-THE-TURN-TWICE
-
-- **Priority:** medium
-- **Source:** feature:review-quality (m15-wp3), MAJOR
-- **Location:** `src/state/supervisor/fanOut.ts:149-170`
-
-⚠️ **`readTurn` is called TWICE on the same input, and the two results are used for different
-purposes.** `fireOne` calls it to build the `FireLedger` key (`edgeId` + `verdictIndex`); then
-`decideSupervised` calls it AGAIN to produce the fire/withhold decision.
-
-They agree today only because `readTurn` is deterministic and the array is identical — and
-**nothing asserts that coupling**. A future change giving `readTurn` a parameter, a mode flag,
-or a short-circuit would silently desynchronize them.
-
-⚠️ **The failure direction is the bad one:** a key claimed for turn A while a fire is issued for
-turn B. Idempotency is defeated with **no error** — the supervisor would re-fire a turn it had
-already claimed.
-
-**Suggested action:** pass the already-computed `TurnReading` into `decideSupervised`, or add a
-test pinning that the two reads agree. The former is better — it removes the second read.
-- **Status:** pending
-
-## SURFACE-2026-09-13-QUALITY-INJECT-LABEL-IS-PROSE-NOT-A-PARAMETER
-
-- **Priority:** medium
-- **Source:** feature:review-quality (m15-wp3), MAJOR
-- **Location:** `src/state/supervisor/fanOut.ts:74-96`
-
-⚠️ **`SUPERVISOR_INJECT_LABEL` exists, but `FanOutDeps.inject` has NO label parameter** — its
-signature is `(ptySessionId, command) => Promise<void>`. The requirement to pass the label is
-enforced only by a doc comment plus a source-text test asserting the string `"MUST pass"`
-appears in the file. ⚠️ **As shipped, the guard is documentation checking documentation.**
-
-⚠️ **The cheap structural fix was available at build time and was not taken:** widen the dep to
-`(ptySessionId, command, label)` and have `fireOne` pass `SUPERVISOR_INJECT_LABEL` itself. The
-wiring site then *physically cannot* omit it.
-
-**Context:** the label exists because `injectCommand` defaults to `"auto-resume"`, so an
-unlabelled supervisor failure misattributes to M12's arm in the only diagnostic that path has —
-the exact defect that forced the `label` parameter to exist when M13's skill row hit it.
-
-**Suggested action:** widen the signature. This is owed BEFORE WP4 wires a production caller,
-not after.
-- **Status:** pending
-
-## SURFACE-2026-09-13-QUALITY-NO-STORED-MODE-OVERLOADS-POLICY-NOT-AUTO
-
-- **Priority:** medium
-- **Source:** feature:review-quality (m15-wp3), MAJOR
-- **Location:** `src/state/supervisor/verdict.ts:117-123`
-
-⚠️ **The "no stored drive mode" refusal returns `reason: "policy-not-auto"`** — a reason whose
-documented meaning is *"the policy says pause (or skip) in this mode"* — for a case where **no
-policy was consulted at all** (the function returns before `resolvePolicy`).
-
-The module's own header makes *"every refusal is named, not a bare false"* load-bearing, so that
-a non-fire is diagnosable. ⚠️ **Here the diagnostic actively misleads:** an operator debugging
-"why didn't my project fire?" reads `policy-not-auto` and goes looking at the policy table
-instead of at the unset `default_drive_mode`.
-
-⚠️ **The tell:** `fanOut.test.ts:97` asserts only `fired === false` for this case, not the
-reason — the one negative-arm test that does not check its reason.
-
-**Suggested action:** add a `not-supervised` arm to `WithholdReason` and assert it.
-- **Status:** pending
+**0 CRITICAL · 3 MAJOR · 5 MINOR as filed.** ⚠️ **ALL THREE MAJORs + the `assertPinnedModel`
+gap were RESOLVED 2026-09-14** by a `/feature-refactor` pass (see CHANGELOG) and are deleted from
+this file per delete-on-resolve; **3 MINORs remain open below.** The MAJORs shared one shape —
+*a contract stated in PROSE where it could have been stated in a TYPE* — and each fix converted a
+comment into a compiler or a test. ⚠️ **The label fix REPLACED a source-text guard** that asserted
+the requirement was *stated*; it now asserts the label is *passed*, and was mutation-proven by
+dropping the argument (the old guard survived that mutant; the new one kills it).
 
 ## SURFACE-2026-09-13-QUALITY-COMMENT-DUPLICATION-ACROSS-SUPERVISOR-MODULES
 
@@ -133,23 +70,6 @@ The DECISION is unaffected (both paths withhold), but ⚠️ **the one diagnosti
 for a failing `claude -p` is blank.**
 
 **Suggested action:** thread the captured stderr into the error.
-- **Status:** pending
-
-## SURFACE-2026-09-13-QUALITY-ASSERT-PINNED-MODEL-HAS-NO-RUNTIME-CALLER
-
-- **Priority:** low
-- **Source:** feature:review-quality (m15-wp3), MINOR
-- **Location:** `src/state/supervisor/adjudicator.ts` (`assertPinnedModel`)
-
-The whole supervisor has **zero production callers** — deliberate and disclosed (WP4 wires it).
-⚠️ **But it means `assertPinnedModel`, the SOLE enforcement of R-6 condition 1, is called by
-nobody and pins nothing at runtime.** It is currently a tested function, not a live guard.
-
-⚠️ Condition 3 (re-measure the margin) is already flagged as likely to lapse; this is the same
-hazard one condition over.
-
-**Suggested action:** name this explicitly in WP4's plan — the wiring must call
-`assertPinnedModel` at the point the adjudicator is configured, not merely import it.
 - **Status:** pending
 
 # m15-wp2-state-machine-as-code — 2026-09-12
@@ -875,7 +795,6 @@ scheduling items rather than polish.*
   keep the invariants. (2) record the rule either way in `arch.md`. (3)+(4) one-liners.
 - **Priority:** low (all four)
 - **Status:** pending
-
 
 # wp2-background-work-status-states — 2026-08-22
 

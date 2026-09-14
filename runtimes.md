@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-09-13
+updated: 2026-09-14
 ---
 
 # Runtime Registry
@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 33s (2026-09-13, M15 WP3 ALL 5 PHASES: WARM incremental cargo cache; frontend 2509 / Rust 887 ALL GREEN)
+- **Last:** 25s (2026-09-14, M15 WP4 Phase 1: WARM incremental cargo cache; frontend 2528 / Rust 907 ALL GREEN)
 - **Use timeout:** 216000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 38s — 2026-09-14 (M15 WP3 quality refactor; warm; frontend 2513 / Rust 887)
   - 33s — 2026-09-13 (M15 WP3 all 5 phases; warm cargo cache; frontend 2509 / Rust 887)
   - 32s — 2026-09-12 (warm cargo cache)
   - 93s — 2026-09-12

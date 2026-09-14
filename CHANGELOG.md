@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-14
+
+- **Backlog resolved:** SURFACE-2026-09-13-QUALITY-LEDGER-KEY-AND-VERDICT-READ-THE-TURN-TWICE — closed by threading the fan-out's already-computed `TurnReading` into the verdict, so the ledger key and the fire decision cannot describe different turns.
+- **Backlog resolved:** SURFACE-2026-09-13-QUALITY-INJECT-LABEL-IS-PROSE-NOT-A-PARAMETER — closed by widening `FanOutDeps.inject` to require a `label`, replacing the source-text guard that checked the requirement was stated with one that checks it is passed.
+- **Backlog resolved:** SURFACE-2026-09-13-QUALITY-NO-STORED-MODE-OVERLOADS-POLICY-NOT-AUTO — closed by giving the unsupervised-project refusal its own `not-supervised` reason, so the diagnostic points at the unset drive mode instead of at the policy table.
+- **Backlog resolved:** SURFACE-2026-09-13-QUALITY-ASSERT-PINNED-MODEL-HAS-NO-RUNTIME-CALLER — closed by calling `assertPinnedModel` inside `adjudicate` before the subprocess spawns, making condition 1 a live guard rather than a function awaiting a caller that might never come.
+- **Feature shipped:** M15 WP4 — above 400,000 tokens of context, at a feature-workflow phase boundary that is not the last phase, the supervisor now recycles the session (handoff → fresh Claude Code → restore) instead of chaining, so a long-running feature carries its workflow forward in a clean context rather than degrading; this is also the supervisor's first production caller.
+
 ## 2026-09-13
 
 - **Feature shipped:** M15 WP3 — the workflow supervisor now reads a Claude Code transcript at turn end, applies the absorbed policy graph mechanically, and injects the next command into **every open workspace** rather than only the focused one, so a wrongful stop is corrected without the operator noticing it happened.

@@ -39,6 +39,8 @@ import {
   type TurnKey,
 } from "./verdict";
 import { parseTranscript, readTurn, type TranscriptTail } from "./transcript";
+import { readContextTokens } from "./contextPressure";
+import type { ParsedWip } from "./wipPhases";
 import type { AdjudicatorDeps } from "./adjudicator";
 import type { DriveMode, PolicyContext } from "../workflowMachine/policy";
 
@@ -80,11 +82,30 @@ export interface FanOutDeps {
   /**
    * Inject a slash command into a PTY.
    *
-   * ⚠️ **The wiring site MUST pass {@link SUPERVISOR_INJECT_LABEL} as `injectCommand`'s
-   * `label`** — see that constant. A bare `injectCommand(pty, cmd)` here misattributes every
-   * supervisor failure to M12's auto-resume in the only diagnostic this path has.
+   * ⚠️ **`label` IS A REQUIRED PARAMETER, AND THAT IS THE WHOLE GUARD.** `fireOne` passes
+   * {@link SUPERVISOR_INJECT_LABEL} itself, so a wiring site that forwards its arguments to
+   * `injectCommand` cannot reach the `"auto-resume"` default — the misattribution described
+   * on that constant is now a type error rather than a doc comment.
+   *
+   * ⚠️ Forward the label THROUGH to `injectCommand`; do not accept it and drop it. That is the
+   * one way left to reintroduce the defect, and it is visible at the wiring site.
    */
-  readonly inject: (ptySessionId: string, command: string) => Promise<void>;
+  readonly inject: (
+    ptySessionId: string,
+    command: string,
+    label: string,
+  ) => Promise<void>;
+  /**
+   * M15 WP4 — read a workspace's active WIP file (the Rust `wip_read` command), parsed.
+   *
+   * ⚠️ **OPTIONAL, AND ITS ABSENCE DISABLES THE RECYCLE BRANCH ENTIRELY.** A caller that does not
+   * supply it keeps WP3's chain-only behavior unchanged, which is what lets every existing test
+   * and the replay harness stay untouched. The recycle is the destructive branch; it is opt-in
+   * by construction rather than by a flag someone can forget to set.
+   *
+   * ⚠️ Must not throw — a failure here returns `null` (no recycle), never rejects the sweep.
+   */
+  readonly readWip?: (w: SupervisedWorkspace) => Promise<ParsedWip | null>;
   /** The adjudicator's runner. */
   readonly adjudicator: AdjudicatorDeps;
   /** Shared across the sweep so a re-entrant sweep cannot double-fire. */
@@ -103,6 +124,26 @@ export interface FanOutOutcome {
   readonly command?: string;
   /** Why not, when it did not fire. */
   readonly reason?: string;
+  /**
+   * M15 WP4 — set when the verdict was `recycle` rather than `fire`.
+   *
+   * ⚠️ **`fired` IS FALSE FOR A RECYCLE, AND THAT IS DELIBERATE.** `fired` means "a slash command
+   * was injected into the PTY", which a recycle does not do — it hands off to
+   * `recycleSession()`, a multi-step operation the caller owns. A recycle reported as
+   * `fired: true` would make the two indistinguishable in a diagnostic, and the whole point of
+   * the branch is that they are different actions.
+   *
+   * ⚠️ **`fanOut` does NOT perform the recycle.** `recycleSession()` needs caller-owned React
+   * state (`relaunch`, `awaitFreshSessionId`) that this pure module has no access to — so the
+   * sweep REPORTS the decision and the component acts on it (wired in Phase 4). Do not "finish"
+   * this by importing `recycleSession` here; it cannot work.
+   */
+  readonly recycle?: {
+    readonly edgeId: string;
+    /** The skill that was deferred — what the fresh session will resume into. */
+    readonly skill: string;
+    readonly tokens: number;
+  };
 }
 
 /**
@@ -162,20 +203,60 @@ export async function fireOne(
   };
   if (!deps.ledger.claim(key)) return no("already-fired-for-this-turn");
 
+  // ⚠️ `reading` is passed in, NOT re-read. The ledger key above and this decision must
+  // describe the SAME turn; two independent `readTurn` calls agreed only by determinism, and
+  // nothing asserted it. See {@link VerdictInput.reading}.
+  // ⚠️ M15 WP4 — the recycle evidence. Read AFTER the ledger claim so a non-firing turn pays
+  // neither the WIP read nor the adjudication, and gathered here (not inside the verdict) because
+  // the verdict module is pure: only the caller can touch the filesystem.
+  //
+  // ⚠️ **A FAILED WIP READ IS `null`, NOT A THROW.** It degrades to "chain as usual" — the
+  // withholding direction. An unreadable WIP must never be the reason a session gets recycled.
+  let wip: ParsedWip | null = null;
+  if (deps.readWip) {
+    try {
+      wip = await deps.readWip(workspace);
+    } catch (e) {
+      warn(
+        `supervisor: could not read ${workspace.workspaceId}'s WIP file — ${String(e)}`,
+      );
+    }
+  }
+
   const verdict: SupervisedVerdict = await decideSupervised(
     {
       lines,
+      reading,
       storedMode: workspace.storedMode,
       context: deps.context,
       tail: tailTextOf(lines, reading.verdictIndex),
+      // ⚠️ Read off the SAME `lines` the verdict and ledger key describe — not a second read.
+      contextTokens: readContextTokens(lines),
+      wip,
     },
     deps.adjudicator,
   );
+  // ⚠️ The recycle arm is handled BEFORE the withhold check, because `verdict.kind !== "fire"`
+  // is true for BOTH — and a recycle reaching `no(verdict.reason)` would read `undefined` and
+  // report the workspace as an unexplained non-fire. The compiler caught exactly this when the
+  // arm was added, which is the argument for the closed union over a boolean on `fire`.
+  if (verdict.kind === "recycle") {
+    return {
+      workspaceId: workspace.workspaceId,
+      fired: false,
+      reason: "context-pressure-recycle",
+      recycle: {
+        edgeId: verdict.edgeId,
+        skill: verdict.skill,
+        tokens: verdict.tokens,
+      },
+    };
+  }
   if (verdict.kind !== "fire") return no(verdict.reason);
 
   const command = `/${verdict.skill}`;
   try {
-    await deps.inject(workspace.ptySessionId, command);
+    await deps.inject(workspace.ptySessionId, command, SUPERVISOR_INJECT_LABEL);
   } catch (e) {
     // ⚠️ `injectCommand` already swallows and warns; this catch exists so a DIFFERENT injector
     // (or a future change to that contract) cannot abort the sweep for other workspaces.

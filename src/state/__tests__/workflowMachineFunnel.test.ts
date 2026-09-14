@@ -140,6 +140,19 @@ const ALLOWED_IMPORTERS = [
   //     production-set pin); `wires graph to policy in exactly ONE module` PASSED, which is
   //     the mechanical evidence it is not hand-rolling the derivation.
   "state/supervisor/verdict.ts",
+  // ⚠️ M15 WP4 Phase 4 — the supervisor's HOST, and the THIRD production consumer. Added
+  // BECAUSE THIS GUARD FIRED. Review recorded, per this allowlist's own contract:
+  //
+  //   • ⚠️ It imports **exactly one symbol, and it is a TYPE**: `import type { DriveMode }
+  //     from "../workflowMachine/policy"`. `grep -cE "POLICY_ROWS|cellForMode|resolvePolicy"`
+  //     returns **0** — this module reads NO policy at all.
+  //   • It therefore owes no `resolvePolicy` call: it cannot bypass the funnel because it
+  //     never consults policy. It passes `storedMode` INTO `fireOne`, and `verdict.ts` (above)
+  //     owns every policy read in this subsystem — the verdict keeps exactly one home.
+  //   • ⚠️ Failure signature confirmed, same as the two entries above: exactly TWO tests
+  //     failed (this one and the production-set pin) and `wires graph to policy in exactly ONE
+  //     module` PASSED — the mechanical evidence it is not hand-rolling the derivation.
+  "state/supervisor/useSupervisor.ts",
   // ⚠️ The verdict's own test file. It imports `EDGES` + `isDispatchable` + `DRIVE_MODES` to
   // run a PROPERTY SWEEP — "no edge in the whole graph, in any mode, ever fires with a
   // non-skill target" — which is the structural backstop behind the sampled cases. Like the
@@ -332,6 +345,8 @@ describe("M15 WP2 Phase 4 — the importer population is pinned", () => {
     ).toEqual([
       "state/supervisor/fanOut.ts",
       "state/supervisor/transcript.ts",
+      // M15 WP4 Phase 4 — the host. Type-only import of `DriveMode`; reads no policy.
+      "state/supervisor/useSupervisor.ts",
       "state/supervisor/verdict.ts",
     ]);
   });

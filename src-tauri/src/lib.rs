@@ -105,6 +105,11 @@ mod workflow_install;
 // (deliberately NOT fullscreen: the operator's ask means maximized/green-button) and
 // which windows are in scope (the PiP NSPanel is denylisted, load-bearing not cosmetic).
 mod window_state;
+// M15 WP4: reading the active WIP file's TEXT for the supervisor's phase-boundary check.
+// ⚠️ File IO only — the phase parse, the feature-workflow gate, and the boundary decision are
+// all TypeScript-side per ruling R-4, next to the `resolvePolicy` funnel. Do not grow a
+// "does a later phase exist?" answer here.
+mod wip;
 
 use std::sync::Mutex;
 
@@ -469,6 +474,9 @@ pub fn run() {
             // is co-located with the `?` guaranteeing a failed spawn leaves no flag.
             session_state::commands::session_state_mark_clean,
             transcript::commands::transcript_tail,
+            // M15 WP4: the active WIP file's raw text, for the phase-boundary check. Returns
+            // TEXT, never a decision — the parse is TS-side (R-4).
+            wip::commands::wip_read,
             adjudicator::commands::supervisor_adjudicate,
             // M12 WP3: the batched auto-resume announcement. ONE call per picker open
             // returning every project's predicted action; gate-checked server-side, so an

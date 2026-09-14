@@ -27,12 +27,34 @@
 
 import { extractTransitionId } from "../workflowMachine/transitionToken";
 
+/**
+ * Token usage as Claude Code writes it onto an assistant line.
+ *
+ * ⚠️ **All three fields are optional and each defaults to 0 when absent, but the OBJECT's
+ * absence is NOT 0** — see `readContextTokens` in `contextPressure.ts`. A line with
+ * `usage: {}` genuinely used no tokens; a line with no `usage` at all is a line we cannot
+ * read, and collapsing the two would report an unreadable transcript as an empty context.
+ */
+export interface TranscriptUsage {
+  input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
 /** One parsed transcript line. Only the fields the supervisor reads are modelled. */
 export interface TranscriptLine {
   type?: string;
   message?: {
     role?: string;
     content?: unknown;
+    /**
+     * Present on assistant lines. The context-pressure read's only input.
+     *
+     * ⚠️ Verified live at WP4 plan time: 46 assistant lines in a 200-line window, **0 missing
+     * `usage`**. So the field is reliably present in practice — but it is typed optional
+     * because the reader must still degrade to "unknown" rather than to 0 when it is not.
+     */
+    usage?: TranscriptUsage;
   };
   /** Present on tool-result lines. Part of trap 2's discriminator. */
   toolUseResult?: unknown;

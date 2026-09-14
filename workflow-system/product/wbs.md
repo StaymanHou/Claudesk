@@ -283,6 +283,3 @@ Recorded so they are not re-derived, and because **a stale `arch/` doc outranks 
 | §4's rationale exempting the `claude -p` adjudicator from its own probe WP | `wbs.md` → Reordering / rule-deviation notes | ⚠️ **PARTIALLY INVERTED by R-5** — the adjudicator is now **load-bearing for correctness** on the Q2 slice, not merely off the dominant path. §4 says that inversion would need a probe. **Re-check at WP5.** |
 
 ⚠️ **These are corrected in `roadmap.md`/`arch.md` at WP5 (task 5.6/5.7), not now** — a WBS pass records findings; the durable-doc resync is the milestone's own exit step. **Do not leave them uncorrected at close.**
-
-## Session Handoff — 2026-09-13 12:05
-Handed off. See `workflow-system/state/.session.md` to restore.

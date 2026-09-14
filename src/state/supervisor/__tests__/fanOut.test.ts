@@ -15,8 +15,10 @@ import {
   type FanOutDeps,
   type SupervisedWorkspace,
 } from "../fanOut";
-import { FireLedger } from "../verdict";
-import type { TranscriptTail } from "../transcript";
+import { decideVerdict, FireLedger } from "../verdict";
+import { parseTranscript, type TranscriptTail } from "../transcript";
+import { RECYCLE_TOKEN_THRESHOLD } from "../contextPressure";
+import { parseWip } from "../wipPhases";
 
 /** A transcript tail for a turn that emitted `edgeId` and did not chain. */
 const tailFor = (edgeId: string, path = "/t/a.jsonl"): TranscriptTail => ({
@@ -41,18 +43,21 @@ const ws = (over: Partial<SupervisedWorkspace> = {}): SupervisedWorkspace => ({
 });
 
 interface Harness extends FanOutDeps {
-  injected: Array<{ pty: string; command: string }>;
+  injected: Array<{ pty: string; command: string; label: string }>;
 }
 
 const harness = (
   tail: (w: SupervisedWorkspace) => TranscriptTail | Promise<TranscriptTail>,
   answer = "PROCEED",
 ): Harness => {
-  const injected: Array<{ pty: string; command: string }> = [];
+  const injected: Array<{ pty: string; command: string; label: string }> = [];
   return {
     readTail: async (w) => tail(w),
-    inject: async (pty, command) => {
-      injected.push({ pty, command });
+    // ⚠️ Records the LABEL as well. `FanOutDeps.inject` requires it, but TypeScript accepts a
+    // stub that ignores trailing parameters — so the type alone does NOT prove `fireOne`
+    // passes one. Capturing it is what makes the requirement value-tested.
+    inject: async (pty, command, label) => {
+      injected.push({ pty, command, label });
     },
     adjudicator: { run: async () => answer, warn: () => {} },
     ledger: new FireLedger(),
@@ -69,7 +74,13 @@ describe("fireOne — the positive path", () => {
     expect(r.command).toBe("/feature-plan");
     // ⚠️ The leading slash matters: `injectCommand` appends the `\r`, but the COMMAND must
     // carry its own slash or CC receives bare prose.
-    expect(h.injected).toEqual([{ pty: "pty-1", command: "/feature-plan" }]);
+    expect(h.injected).toEqual([
+      {
+        pty: "pty-1",
+        command: "/feature-plan",
+        label: SUPERVISOR_INJECT_LABEL,
+      },
+    ]);
   });
 });
 
@@ -101,6 +112,12 @@ describe("⚠️ the NEGATIVE arm (task 3.8) — asserted as hard as the positiv
     const h = harness(() => tailFor("F5"));
     const r = await fireOne(ws({ storedMode: null }), h);
     expect(r.fired).toBe(false);
+    // ⚠️ THE REASON IS ASSERTED, AND IT IS NOT `policy-not-auto`. This arm returns before
+    // `resolvePolicy` is ever called, so reporting a policy verdict sent an operator asking
+    // "why didn't my project fire?" to the policy table instead of to the unset
+    // `default_drive_mode`. This was the one negative arm that checked only `fired`.
+    expect(r.reason).toBe("not-supervised");
+    expect(r.reason).not.toBe("policy-not-auto");
     expect(h.injected).toHaveLength(0);
   });
 
@@ -181,7 +198,13 @@ describe("fanOut — across ALL open workspaces", () => {
     );
     expect(out.map((o) => o.fired)).toEqual([false, true]);
     // The fire landed in ws-2's OWN pty — not the focused one, not a shared one.
-    expect(h.injected).toEqual([{ pty: "pty-2", command: "/feature-plan" }]);
+    expect(h.injected).toEqual([
+      {
+        pty: "pty-2",
+        command: "/feature-plan",
+        label: SUPERVISOR_INJECT_LABEL,
+      },
+    ]);
   });
 
   it("⚠️ survives a REJECTION from the per-workspace path — the allSettled guard", async () => {
@@ -241,7 +264,13 @@ describe("fanOut — across ALL open workspaces", () => {
     );
     expect(out[0].reason).toBe("sweep-threw");
     expect(out[1].fired).toBe(true);
-    expect(base.injected).toEqual([{ pty: "pty-2", command: "/feature-plan" }]);
+    expect(base.injected).toEqual([
+      {
+        pty: "pty-2",
+        command: "/feature-plan",
+        label: SUPERVISOR_INJECT_LABEL,
+      },
+    ]);
   });
 
   it("a failure INSIDE fireOne is caught locally and reported per workspace", async () => {
@@ -284,6 +313,61 @@ describe("fanOut — across ALL open workspaces", () => {
   });
 });
 
+describe("⚠️ the turn is read ONCE — the ledger key and the decision cannot diverge", () => {
+  it("USES the reading it is handed, rather than re-reading the lines", () => {
+    // ⚠️ WHY THIS DRIVES `decideVerdict` DIRECTLY AND FEEDS IT A READING THAT DISAGREES.
+    // The defect is that `fireOne` read the turn for its ledger key and the verdict read it
+    // AGAIN. Both reads agree today because `readTurn` is deterministic over an identical
+    // array — so ANY test that supplies a consistent transcript passes with or without the
+    // fix, and proves nothing. (Tried: a two-verdict transcript asserting the command and
+    // the ledger claim. It survived a mutant that restored the second read.)
+    //
+    // ⚠️ The only way to observe WHICH read won is to hand in a reading that differs from
+    // what re-reading would produce. The lines below emit `F5` (→ /feature-plan); the
+    // supplied reading names `F7` (→ /feature-build). If the reading is honored the verdict
+    // is `F7`; if the module re-reads, it is `F5`.
+    //
+    // ⚠️ This is NOT testing an impossible state for its own sake — it IS the desynchronized
+    // state the finding describes, made observable. In production the divergence would come
+    // from a future parameter or short-circuit, not from a hand-built argument.
+    const lines = parseTranscript([
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [{ type: "text", text: "Done.\n\nTRANSITION: F5" }],
+        },
+      }),
+    ]);
+
+    const asRead = decideVerdict({ lines, storedMode: "autopilot" });
+    expect(asRead.kind).toBe("fire");
+    if (asRead.kind === "fire") expect(asRead.edgeId).toBe("F5");
+
+    const handed = decideVerdict({
+      lines,
+      storedMode: "autopilot",
+      reading: {
+        edgeId: "F7",
+        verdictIndex: 0,
+        chainedTo: null,
+        alreadyChained: false,
+      },
+    });
+    expect(handed.kind).toBe("fire");
+    // ⚠️ `F7`, not `F5` — the handed reading decided, so `fireOne`'s ledger key (built from
+    // that same reading) and the fire it issues describe the SAME turn by construction.
+    if (handed.kind === "fire") {
+      expect(handed.edgeId).toBe("F7");
+      // ⚠️ And the SKILL differs too — /feature-build vs /feature-plan. That is the byte
+      // sequence that would reach the PTY, so a divergence here is a wrong command injected
+      // into a live session, not merely a mislabelled ledger entry.
+      expect(handed.skill).toBe("feature-build");
+    }
+    if (asRead.kind === "fire") expect(asRead.skill).toBe("feature-plan");
+    expect(handed).not.toEqual(asRead);
+  });
+});
+
 describe("⚠️ the injection LABEL — found by review at Phase 5 verify-self", () => {
   it("exports a distinct label that collides with no existing injectCommand caller", () => {
     // ⚠️ `injectCommand`'s label defaults to "auto-resume", and `console.warn` is the ONLY
@@ -296,20 +380,22 @@ describe("⚠️ the injection LABEL — found by review at Phase 5 verify-self"
     }
   });
 
-  it("⚠️ the wiring site is REQUIRED to pass it — asserted against the real source", () => {
-    // ⚠️ A constant nobody passes is documentation, not a guard. Until a production caller
-    // exists this asserts the contract is at least STATED where the wiring happens; once
-    // `FanOutDeps.inject` is wired (Phase 6 / WP4), extend this to assert the call site
-    // actually passes it.
-    const src = readFileSync(
-      resolve(__dirname, "../fanOut.ts"),
-      "utf8",
-    ).replace(/\s+/g, " ");
-    expect(
-      src,
-      "the inject dep must carry the label requirement where a wiring author will read it",
-    ).toContain("MUST pass");
-    expect(src).toContain("SUPERVISOR_INJECT_LABEL");
+  it("⚠️ `fireOne` PASSES the label — the real call, not the source text", async () => {
+    // ⚠️ THIS REPLACED A `?raw` SOURCE-TEXT GUARD that asserted the string "MUST pass"
+    // appeared in `fanOut.ts` — documentation checking documentation, which passed exactly
+    // when the requirement was stated and said nothing about whether it was HONORED.
+    //
+    // ⚠️ The type does not prove it either: `FanOutDeps.inject` now requires a third
+    // parameter, but TypeScript accepts a stub declaring only two, so a `fireOne` that
+    // dropped the argument would still compile. Only the captured VALUE proves the label
+    // reaches the injector.
+    const h = harness(() => tailFor("F5"));
+    const r = await fireOne(ws(), h);
+    expect(r.fired).toBe(true);
+    expect(h.injected[0].label).toBe(SUPERVISOR_INJECT_LABEL);
+    // ⚠️ And specifically NOT `injectCommand`'s default, which is the misattribution this
+    // whole constant exists to prevent.
+    expect(h.injected[0].label).not.toBe("auto-resume");
   });
 });
 
@@ -357,7 +443,13 @@ describe("⚠️ the WHOLE pipeline, against a REAL captured transcript", () => 
     const r = await fireOne(ws({ storedMode: "autopilot" }), h);
     expect(r.fired).toBe(true);
     expect(r.command).toBe("/feature-build");
-    expect(h.injected).toEqual([{ pty: "pty-1", command: "/feature-build" }]);
+    expect(h.injected).toEqual([
+      {
+        pty: "pty-1",
+        command: "/feature-build",
+        label: SUPERVISOR_INJECT_LABEL,
+      },
+    ]);
   });
 
   it("⚠️ the same real bytes withhold in a mode where that edge is PAUSE", async () => {
@@ -370,5 +462,125 @@ describe("⚠️ the WHOLE pipeline, against a REAL captured transcript", () => 
     expect(r.fired).toBe(false);
     expect(r.reason).toBe("policy-not-auto");
     expect(h.injected).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// M15 WP4 — THE RECYCLE ARM IN `fireOne`.
+//
+// ⚠️ **THIS BLOCK EXISTS BECAUSE A MUTANT SURVIVED ALL 150 TESTS.** Moving the
+// `kind !== "fire"` withhold check AHEAD of the recycle arm in `fireOne` was caught ONLY by
+// `tsc` — no behavioral test noticed, because `fanOut.test.ts` had no recycle case at all.
+// A type error is a real guard (and `tsc --noEmit` runs inside `pnpm verify:auto`), but it only
+// fires because `recycle` happens to lack a `reason` field; a future shape change that gave it
+// one would make the misordering compile AND silently report every recycle as an unexplained
+// non-fire. These tests guard the BEHAVIOR rather than the current field layout.
+describe("fireOne — the M15 WP4 recycle arm", () => {
+  /** A feature WIP at a non-final boundary — the shape that triggers a recycle. */
+  const featureAtBoundary = parseWip(
+    [
+      "**Workflow:** feature",
+      "- [x] Phase 1: done",
+      "- [ ] Phase 2: open",
+    ].join("\n"),
+  );
+
+  /** A tail whose last assistant line reports a context reading over the threshold. */
+  const overThresholdTail = (edgeId: string): TranscriptTail => ({
+    path: "/t/a.jsonl",
+    lines: [
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: `All done.\n\nTRANSITION: ${edgeId}` },
+          ],
+          usage: {
+            input_tokens: RECYCLE_TOKEN_THRESHOLD + 1,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        },
+      }),
+    ],
+  });
+
+  it("reports a recycle and injects NOTHING", async () => {
+    // ⚠️ The zero-injection assertion is the load-bearing half. A recycle that ALSO injected the
+    // skill command would run the next phase in the very session it was about to end.
+    const h = harness(() => overThresholdTail("F5"));
+    const r = await fireOne(ws(), {
+      ...h,
+      readWip: async () => featureAtBoundary,
+    });
+
+    expect(r.recycle).toBeDefined();
+    expect(r.recycle?.skill).toBe("feature-plan");
+    expect(r.recycle?.edgeId).toBe("F5");
+    expect(r.recycle?.tokens).toBe(RECYCLE_TOKEN_THRESHOLD + 1);
+    expect(h.injected).toEqual([]);
+  });
+
+  it("⚠️ reports `fired: false` for a recycle — it is not an injection", async () => {
+    // ⚠️ `fired` means "a slash command went into the PTY". A recycle hands off to
+    // `recycleSession()` instead, and reporting it as `fired: true` would make the two
+    // indistinguishable in a diagnostic.
+    const h = harness(() => overThresholdTail("F5"));
+    const r = await fireOne(ws(), {
+      ...h,
+      readWip: async () => featureAtBoundary,
+    });
+    expect(r.fired).toBe(false);
+    expect(r.reason).toBe("context-pressure-recycle");
+  });
+
+  it("⚠️ a genuine WITHHOLD still reports its own reason, not the recycle's", async () => {
+    // ⚠️ THE MUTANT-KILLER. If the `kind !== "fire"` check ran BEFORE the recycle arm, a recycle
+    // would fall through to `no(verdict.reason)` and report `undefined`. Conversely if the arms
+    // were swapped, a withhold could be mislabelled `context-pressure-recycle`. Asserting BOTH
+    // directions is what pins the ordering behaviorally rather than by field layout.
+    const h = harness(() => tailFor("F3"), "PROCEED");
+    const r = await fireOne(ws({ storedMode: "orchestrated" }), {
+      ...h,
+      readWip: async () => featureAtBoundary,
+    });
+    expect(r.fired).toBe(false);
+    expect(r.recycle).toBeUndefined();
+    expect(r.reason).toBe("policy-not-auto");
+    expect(h.injected).toEqual([]);
+  });
+
+  it("⚠️ omitting `readWip` disables the recycle entirely and the skill FIRES", async () => {
+    // The opt-in property: WP3's chain-only behavior is preserved for every caller that does not
+    // supply the dep, with no edits to those callers.
+    const h = harness(() => overThresholdTail("F5"));
+    const r = await fireOne(ws(), h);
+    expect(r.fired).toBe(true);
+    expect(r.recycle).toBeUndefined();
+    expect(h.injected).toHaveLength(1);
+  });
+
+  it("⚠️ a THROWING `readWip` degrades to chaining, never to a recycle or a dead sweep", async () => {
+    // ⚠️ The withholding direction: an unreadable WIP must never be the reason a session is
+    // ended, and must not abort the sweep either.
+    const h = harness(() => overThresholdTail("F5"));
+    const r = await fireOne(ws(), {
+      ...h,
+      readWip: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(r.fired).toBe(true);
+    expect(r.recycle).toBeUndefined();
+  });
+
+  it("⚠️ an UNDER-threshold turn at the same boundary chains instead of recycling", async () => {
+    const h = harness(() => tailFor("F5"));
+    const r = await fireOne(ws(), {
+      ...h,
+      readWip: async () => featureAtBoundary,
+    });
+    expect(r.fired).toBe(true);
+    expect(r.recycle).toBeUndefined();
   });
 });

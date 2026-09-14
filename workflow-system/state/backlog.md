@@ -1,10 +1,10 @@
 # Backlog
 
 ## Code-quality findings — m15-wp3-break-detection-and-auto-fire (2026-09-13)
-- **Pointer:** **3 MAJOR + 5 MINOR** (7 open; ⚠️ **one MINOR — a ship SHA recorded in the WIP that does not exist — was FIXED IN PLACE**). **0 CRITICAL — no refactor owed.** ⚠️ **The three MAJORs share ONE shape, and that is the useful way to read them: a contract stated in PROSE where it could have been stated in a TYPE.** (1) `readTurn` is called **twice** on the same input — once to build the `FireLedger` key, once to make the fire decision — and nothing asserts they agree; a future parameter or short-circuit desynchronizes the claimed key from the decided turn, **defeating idempotency with no error**. (2) `SUPERVISOR_INJECT_LABEL` exists but `FanOutDeps.inject` **has no label parameter**, so the requirement is enforced by a doc comment and a source-text test — *documentation checking documentation* — when widening the signature would make omission impossible; ⚠️ **owed BEFORE WP4 wires a caller, not after.** (3) the "no stored drive mode" refusal returns `policy-not-auto`, a reason documented as *"the policy says pause"*, for a case where **no policy was consulted at all** — sending an operator debugging "why didn't it fire?" to the policy table instead of the unset `default_drive_mode`. ⚠️ **One MINOR is a live-guard gap worth reading with the MAJORs:** the supervisor has zero production callers, so `assertPinnedModel` — the sole enforcement of R-6 condition 1 — **pins nothing at runtime** and must be called explicitly at WP4's wiring point. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
-- **Priority:** medium (the three MAJORs + the `assertPinnedModel` gap); low for comment-duplication, the re-implemented timeout test, and the discarded stderr
+- **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **3 MINORs remain open.** What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **Still zero production callers — WP4's opening move is unchanged.** Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
+- **Priority:** low (all three remaining)
 - **Status:** pending
-- **Pickup shape:** the two `fanOut.ts` MAJORs and the `verdict.ts` reason arm are each a small typed change — `/feature-refactor` handles all three in one pass, and doing so **before** WP4 wires a production caller is materially cheaper than after. The MINORs are independent polish.
+- **Pickup shape:** comment-duplication across the supervisor modules (fold into the standing comment-convention item, do NOT trim per-WP — that is measured as not converging), the Rust timeout test that re-implements the production wait/kill loop, and the discarded adjudicator stderr. Independent polish; none blocks WP4.
 
 ## Code-quality findings — m15-wp2-state-machine-as-code (2026-09-12)
 - **Pointer:** **2 MAJOR + 3 MINOR**, but ⚠️ **BOTH MAJORs and ONE MINOR were FIXED IN PLACE before finalize** — only 2 low-value MINORs remain open. **0 CRITICAL.** ⚠️ **The first MAJOR was a real latent defect in the module WP3 consumes:** `unmappedReason()` keyed on `workflow === "session-ops"` and returned `meta-op` for all 19, but only 12 actually are (6 are `cross-workflow`, 1 `terminal`, 2 dispatchable skills) — so a future session-ops edge with a real skill target and no policy row would have been silently labelled "no row owed", **hiding a genuine gap from the one report whose job is to surface them.** Fixed by keying on `dispatchTarget` with `terminal`/`cross-workflow` as their own reasons; ⚠️ this also **sharpened the gap report from 2 entries to 1** (`P13` is terminal — no row was ever owed; `I2` alone is the real gap). The second MAJOR: the `TRANSITION:` regex was exported from a **test file** — extracted to `src/state/workflowMachine/transitionToken.ts`, since shipping the parse half of the contract in `__tests__/` is this WP's own single-source thesis failing one layer up. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp2-state-machine-as-code — 2026-09-12`.
@@ -45,6 +45,61 @@
 - **Priority:** low (both remaining)
 - **Status:** pending
 - **Pickup shape:** read the two entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
+
+## SURFACE-2026-09-14-DOCSLINKHANDLING-FLAKE-EXITS-NONZERO-WITH-ZERO-FAILURES
+- **Source:** feature:verify-codify (M15 WP4 Phase 5)
+- **Target level:** product:arch
+- **Type:** bug (flaky test / unhandled async rejection)
+- **Summary:** `pnpm verify:auto` intermittently **exits 1 while reporting `2587 passed`, `0
+  failed`, `190 test files passed`**. The non-zero exit comes from `Errors  1 error` — an
+  unhandled rejection thrown from a `setTimeout` callback **after** the suite completes:
+  `scrollToFragmentWhenPresent` → `handleDocLinkClick.ts:160` → `Timeout._onTimeout`, attributed
+  to `docsLinkHandling.test.ts`.
+- **Context:** Observed once during M15 WP4 Phase 5; **not reproducible on demand** — the file
+  passes 14/14 in isolation (2 runs) and the full suite exits 0 (2 runs) immediately afterward.
+  M11 docs code; WP4 touched nothing in it. ⚠️ **The dangerous property is the SHAPE, not the
+  frequency:** a gate that exits non-zero while reporting zero failures teaches a future session
+  to "just re-run until green" — which is precisely how a REAL failure gets waved through. It also
+  cost one full-gate cycle to classify.
+- **Suggested action:** Make the timer cancellable — `scrollToFragmentWhenPresent`'s polling
+  timeout should be cleared on unmount/teardown so no callback can fire after the test that
+  scheduled it has finished. Alternatively give the test an explicit teardown that drains pending
+  timers. ⚠️ Do **not** "fix" it by loosening the runner's unhandled-error reporting: that
+  reporting is what surfaced it.
+- **Priority:** medium (intermittent; no product impact — but it degrades trust in the one gate
+  this project relies on, and the failure mode is self-concealing)
+- **Status:** pending
+
+## SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION
+- **Source:** feature:verify-human (M15 WP4 Phase 4)
+- **Target level:** product:wbs
+- **Type:** gap (verification debt, not a known defect)
+- **Summary:** M15 WP4 wires the workflow supervisor to its **first production caller**, but the
+  supervisor has **never been observed actually firing in a live CC session**. Five behavioral
+  checks were deferred at verify-human because the trigger cannot be reliably manufactured: (1) a
+  live AUTO-edge fire, (2) the gate-OFF invariant under a real turn, (3) the installed-`.app`
+  GUI-PATH smoke test, (4) an unattended context-pressure recycle at a real phase boundary, (5)
+  **Esc recovery for a chained one-step run**.
+- **Context:** Everything statically checkable IS verified — `pnpm verify:auto` green (2580
+  frontend / 919 Rust), the `"supervisor"` label chain intact end-to-end, the M10.9 gate checked
+  twice, `fanOut` provably unwired, four wiring mutants killed individually. ⚠️ **The wiring is
+  proven; the behavior is not.** Operator's reasoning (2026-09-14): *"It's hard to consistently
+  trigger these conditions without actually using it"* — and manufacturing a trigger would verify
+  the fixture rather than the feature (`[[verify-self-stub-cannot-cross-subprocess-boundary]]`).
+  ⚠️ **THE RISK:** the supervisor fires with **no human watching**, and `injectCommand` has **no
+  retry and no pre-send cancel window** — the only recovery from a wrong fire is CC's **Esc**,
+  which is itself deferred check (5). So a wrong fire on an unwatched workspace is unrecoverable
+  AND its recovery path is unconfirmed.
+- **Suggested action:** Operator-owned; trigger is the first real dogfooding after M15 ships.
+  Check (3) folds into the standing `/release`-gate practice
+  (`[[installed-build-verify-deferred-to-release]]`) and needs a build newer than v0.4.0/Sep-6 —
+  the installed app predates this code by 8 days and cannot exercise it. ⚠️ **WP5's exit verify
+  must read these as OPEN.** A future session finding `[x]` on the P4.verify-human leaves must read
+  their `DEFERRED-*` status tags, not the checkbox: the checkbox means the gate closed, not that
+  the behavior was observed.
+- **Priority:** high (it is the milestone's core behavior, unobserved, with an unrecoverable
+  failure mode and an unconfirmed recovery path)
+- **Status:** pending
 
 ## SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE
 

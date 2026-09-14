@@ -48,7 +48,6 @@ import {
 } from "./terminalFontZoom";
 // M12 WP3 Phase 5 — the third arm. Both surfaces are GATED (a workflow skill + a statement
 // about `workflow-system/` state), unlike Phase 3.5's ungated `--continue` announcement.
-import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 import { workspaceDriveModeReadout } from "../../cc/workspaceDriveMode";
 import {
   readyToRespawn,
@@ -87,6 +86,10 @@ import {
 // (two injections + a completion wait + a flag clear + a respawn), so it is a sibling in the
 // same row rather than a `SKILL_BUTTONS` member.
 import { recycleSession, waitForFreshSessionId } from "./recycleSession";
+// M15 WP4 — the workflow supervisor's per-workspace host. ⚠️ `fanOut` is deliberately NOT wired
+// here; see `useSupervisor`'s header for why the host must be per-workspace.
+import { useSupervisor } from "../../state/supervisor/useSupervisor";
+import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 // M13.5 WP3 — the nav state the prev/next controls render from. ⚠️ The old `inertAfter`
 // inert-state machine is DELETED: it existed to explain a dead click, and a correct `disabled`
 // state (driven by `canPrev`/`canNext`) makes a dead click impossible, so keeping both would be
@@ -591,6 +594,40 @@ export function Workspace({
         setRecycling(false);
       });
   };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // M15 WP4 P4.1/P4.2 — THE SUPERVISOR'S FIRST PRODUCTION CALLER.
+  //
+  // ⚠️ **THE RECYCLE REUSES `fireRecycle` — THERE IS NO SECOND RECYCLE CALL SITE.**
+  // `recycleSession`'s own header rule is "every caller enters here", and the standing local
+  // defect shape is *a mechanism correct in itself behind a caller that does not honor it*. A
+  // separate programmatic path would duplicate the `recycling` re-entrancy guard, the
+  // AbortController wiring, and the failure-arm surfacing — three chances to diverge.
+  //
+  // ⚠️ `fireRecycle` already no-ops when `recycling` is true or the session id is null, so the
+  // supervisor cannot start a second recycle on top of a running one.
+  // ⚠️ Reuses the app's existing gate hook rather than a second source of truth.
+  const workflowFeaturesEnabled = useWorkflowFeaturesEnabled();
+  useSupervisor({
+    workspaceId: workspace.id,
+    projectPath: workspace.project_path,
+    // ⚠️ The M10.9 gate. With it OFF the app must be byte-identical to one that never had the
+    // workflow features, so supervision is off entirely rather than merely quiet.
+    enabled: workflowFeaturesEnabled,
+    storedModeRef: storedDriveModeRef,
+    ccSessionIdRef,
+    onRecycle: (info) => {
+      // ⚠️ Announced BEFORE the recycle runs. The operation is unattended and takes up to 3
+      // minutes; without this line an operator returning to the pane sees a session that
+      // restarted for no visible reason. `console.warn` matches the row's established failure
+      // channel (an overlay over a working terminal would be worse — M13's decision).
+      console.warn(
+        `supervisor: recycling ${workspace.display_name} at ${info.tokens} tokens — ` +
+          `deferring /${info.skill} to the fresh session`,
+      );
+      fireRecycle();
+    },
+  });
 
   // QoL-WP3 — auto-focus the LEFT CC terminal on the false→true `visible` edge (and on
   // mount when already visible), since the always-active XtermPane's own focus never

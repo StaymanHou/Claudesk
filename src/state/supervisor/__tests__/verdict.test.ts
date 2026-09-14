@@ -16,6 +16,12 @@ import {
   type Verdict,
 } from "../verdict";
 import type { TranscriptLine } from "../transcript";
+import { RECYCLE_TOKEN_THRESHOLD } from "../contextPressure";
+import {
+  atNonFinalPhaseBoundary,
+  isFeatureWorkflow,
+  parseWip,
+} from "../wipPhases";
 import { EDGES } from "../../workflowMachine/edges";
 import { isDispatchable } from "../../workflowMachine/types";
 import { DRIVE_MODES } from "../../workflowMachine/policy";
@@ -367,5 +373,171 @@ describe("⚠️ decideSupervised — the HYBRID's ordering", () => {
     if (r.kind !== "withhold") return;
     expect(r.reason).toBe("adjudicator-says-awaiting");
     expect(r.detail).toContain("withheld-on-error");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// M15 WP4 Phase 3 — THE RECYCLE BRANCH.
+//
+// ⚠️ The three conditions are tested INDIVIDUALLY FALSIFIED, not just jointly satisfied. A
+// three-way `&&` passes a "all three true → recycle" test no matter which arms are actually
+// wired, so each test below turns exactly ONE condition off and asserts the verdict falls back
+// to `fire` — that is what proves each arm is load-bearing.
+describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
+  const tailDeps = (answer: string) => ({
+    run: async () => answer,
+    warn: () => {},
+  });
+
+  /** A feature WIP at a non-final boundary: one phase done, one open. */
+  const featureAtBoundary = parseWip(
+    [
+      "**Workflow:** feature",
+      "- [x] Phase 1: done",
+      "- [ ] Phase 2: open",
+    ].join("\n"),
+  );
+
+  /** The same shape, but every phase complete — the ship-bound case. */
+  const featureAllDone = parseWip(
+    [
+      "**Workflow:** feature",
+      "- [x] Phase 1: done",
+      "- [x] Phase 2: done",
+    ].join("\n"),
+  );
+
+  /** A task WIP — no phase structure, so the recycle must never apply. */
+  const taskWip = parseWip("**Workflow:** task\n\n## Plan\n- [ ] do it");
+
+  const OVER = RECYCLE_TOKEN_THRESHOLD + 1;
+  const UNDER = RECYCLE_TOKEN_THRESHOLD - 1;
+
+  const decide = (over: unknown) =>
+    decideSupervised(
+      {
+        lines: emitted("F5"),
+        storedMode: "autopilot",
+        tail: "Done.",
+        ...(over as object),
+      },
+      tailDeps("PROCEED"),
+    );
+
+  it("recycles when ALL THREE conditions hold", async () => {
+    const r = await decide({
+      contextTokens: OVER,
+      wip: featureAtBoundary,
+    });
+    expect(r.kind).toBe("recycle");
+    if (r.kind !== "recycle") return;
+    // ⚠️ The deferred skill is carried, not dropped: an unattended recycle must be explainable.
+    expect(r.skill).toBeTruthy();
+    expect(r.edgeId).toBe("F5");
+    expect(r.tokens).toBe(OVER);
+  });
+
+  it("⚠️ FIRES (does not recycle) when context is UNDER the threshold", async () => {
+    // Condition 1 falsified, other two held.
+    const r = await decide({ contextTokens: UNDER, wip: featureAtBoundary });
+    expect(r.kind).toBe("fire");
+  });
+
+  it("⚠️ FIRES when the context reading is NULL (unreadable)", async () => {
+    // ⚠️ The destructive-branch rule: no evidence must never mean "end the session".
+    const r = await decide({ contextTokens: null, wip: featureAtBoundary });
+    expect(r.kind).toBe("fire");
+  });
+
+  it("⚠️ FIRES when the workflow is NOT feature, even over threshold at a boundary", async () => {
+    // Condition 2 falsified. Task/incident/product have no phase structure; auto-chain
+    // enforcement still applies, which is why this FIRES rather than withholding.
+    const r = await decide({ contextTokens: OVER, wip: taskWip });
+    expect(r.kind).toBe("fire");
+  });
+
+  it("⚠️ FIRES for a TASK WIP that DOES carry phase lines — the feature gate's real job", async () => {
+    // ⚠️ **THIS TEST EXISTS BECAUSE A MUTANT SURVIVED WITHOUT IT.** Deleting `isFeatureWorkflow`
+    // from `shouldRecycle` left all 34 tests green, because the `taskWip` fixture above has NO
+    // phase lines — so `atNonFinalPhaseBoundary` already returned false and the feature gate
+    // was never the thing doing the work.
+    //
+    // ⚠️ The discriminating input is a NON-feature WIP that nonetheless parses to a non-final
+    // boundary: `boundary: true` + `isFeature: false`. Nothing in the schema prevents a task or
+    // incident WIP from containing `Phase N:` lines, and the gate exists precisely so we do not
+    // have to assume it never will.
+    const taskWithPhases = parseWip(
+      ["**Workflow:** task", "- [x] Phase 1: done", "- [ ] Phase 2: open"].join(
+        "\n",
+      ),
+    );
+    // Sanity: this fixture really does satisfy the OTHER two conditions.
+    expect(atNonFinalPhaseBoundary(taskWithPhases)).toBe(true);
+    expect(isFeatureWorkflow(taskWithPhases)).toBe(false);
+
+    const r = await decide({ contextTokens: OVER, wip: taskWithPhases });
+    expect(r.kind).toBe("fire");
+  });
+
+  it("⚠️ FIRES at the LAST phase — a completed feature is not recycled", async () => {
+    // Condition 3 falsified (no open phase). Recycling here would hand a fresh session a
+    // feature with no work left; the next step is ship, not a new session.
+    const r = await decide({ contextTokens: OVER, wip: featureAllDone });
+    expect(r.kind).toBe("fire");
+  });
+
+  it("⚠️ FIRES when no WIP evidence was supplied at all", async () => {
+    // The opt-in property: a caller that supplies no `wip` keeps WP3's chain-only behavior.
+    const r = await decide({ contextTokens: OVER });
+    expect(r.kind).toBe("fire");
+  });
+
+  it("⚠️ every existing caller is unaffected — no evidence fields at all still FIRES", async () => {
+    const r = await decide({});
+    expect(r.kind).toBe("fire");
+  });
+
+  it("⚠️ a mechanical WITHHOLD is NEVER promoted to a recycle", async () => {
+    // ⚠️ THE ORDERING PROPERTY, restated for the new branch. F3 is PAUSE in orchestrated mode;
+    // every reason not to CHAIN is equally a reason not to END THE SESSION. A recycle that
+    // could promote a withhold would be strictly worse than the fire it replaced.
+    const r = await decideSupervised(
+      {
+        lines: emitted("F3"),
+        storedMode: "orchestrated",
+        tail: "Done.",
+        contextTokens: OVER,
+        wip: featureAtBoundary,
+      },
+      tailDeps("PROCEED"),
+    );
+    expect(r.kind).toBe("withhold");
+  });
+
+  it("⚠️ an ADJUDICATOR VETO beats the recycle — an awaiting turn is not recycled", async () => {
+    // ⚠️ THE MOST DAMAGING ORDERING MISTAKE AVAILABLE HERE. If the recycle branch ran BEFORE the
+    // adjudicator, a turn that had asked the operator a question would be recycled — destroying
+    // the very question it was waiting on. Withhold must win.
+    const r = await decideSupervised(
+      {
+        lines: emitted("F5"),
+        storedMode: "autopilot",
+        tail: "Which option do you want?",
+        contextTokens: OVER,
+        wip: featureAtBoundary,
+      },
+      tailDeps("AWAITING"),
+    );
+    expect(r.kind).toBe("withhold");
+    if (r.kind !== "withhold") return;
+    expect(r.reason).toBe("adjudicator-says-awaiting");
+  });
+
+  it("does not recycle at exactly the threshold (strictly greater)", async () => {
+    const r = await decide({
+      contextTokens: RECYCLE_TOKEN_THRESHOLD,
+      wip: featureAtBoundary,
+    });
+    expect(r.kind).toBe("fire");
   });
 });
