@@ -1,7 +1,7 @@
 # Feature: M15 WP4 — Context-pressure recycle at phase boundaries
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete)
 **Created:** 2026-09-14
 **Milestone:** 15 (workflow supervisor)
 **Size:** M
@@ -202,8 +202,8 @@ when the webview is gone"), not a new one.
   - [x] verify-codify  <!-- status: DONE — no new tests owed; claim already pinned at Phase 2 -->
 
 ## Current Node
-- **Path:** Feature > ALL PHASES COMPLETE
-- **Active scope:** none — ready for `/feature-ship`. ⚠️ **5 behavioral checks DEFERRED to dogfooding — OPEN, not passed** (backlog SURFACE logged)
+- **Path:** Feature > ship (complete)
+- **Active scope:** none — shipped as `75ad76d`; ⚠️ **NOT PUSHED** (see the ship record). ⚠️ **5 behavioral checks DEFERRED to dogfooding — OPEN, not passed** (backlog SURFACE logged)
 - **Blocked:** none
 - **Unvisited:** (none — Phase 5 is the last)
 - **Open discoveries:** none
@@ -856,6 +856,30 @@ touched**. Re-ran the file in isolation twice (14/14, clean) and the full suite 
 both), which is §3b's definition of flaky. **Nothing was modified.** Logged to `backlog.md`
 because the SHAPE is corrosive: a gate that exits non-zero while reporting zero failures trains a
 future session to re-run until green — exactly how a real failure gets waved through.
+
+## Ship record (2026-09-14)
+
+**TWO COMMITS, deliberately split:**
+- `d28255c` — the WP3 quality refactor's **separable half** (the adjudicator's `assertPinnedModel`
+  call + its tests), carried uncommitted into this session from the previous one.
+- `75ad76d` — WP4 itself, 24 files, +3,248/−128.
+
+⚠️ **THE SPLIT IS PARTIAL, AND THE COMMIT MESSAGE SAYS SO.** `verdict.ts` and `fanOut.ts` carry
+BOTH the WP3 refactor and WP4's recycle arm interleaved in the same files. Splitting those cleanly
+would have meant hunk-level surgery risking a **broken intermediate commit** for little gain, so
+they ride with WP4 and the message states it plainly rather than implying a clean separation.
+
+**Final gate before commit:** `pnpm verify:auto` **EXIT=0, 24s, no errors** — frontend **2587**,
+Rust **919**. Cleanup scan clean: no TODO/FIXME/`console.log`/`debugger` in any new file, no probe
+or mutation residue (the surviving "MUTANT" strings are deliberate documentation), `tmp/scratch/`
+is gitignored and its contents are the project's standing workspaces, not this session's.
+
+⚠️ **NOT PUSHED — DELIBERATE, AND IT NEEDS AN OPERATOR DECISION.** `main` is **ahead 12, behind 1**
+and the divergence is **not a fast-forward**. The remote commit is `939f572` *"record the v0.4.0
+build measurement (131s)"* and ⚠️ **its one conflicting file is `runtimes.md`** — which this
+session also modified (the verify:auto timing entries). A rebase-or-merge decision is owed before
+any push. This was already flagged as an open blocker in the session handoff that opened this
+session and is **still unresolved**; shipping did not resolve it and must not paper over it.
 
 ## Test Triage — docsLinkHandling.test.ts (unhandled error, Phase 5 verify-codify)
 
