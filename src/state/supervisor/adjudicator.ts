@@ -151,6 +151,15 @@ export interface AdjudicatorDeps {
     prompt: string;
     timeoutMs: number;
   }) => Promise<string>;
+  /**
+   * The model to ask. Defaults to {@link ADJUDICATOR_MODEL}.
+   *
+   * ⚠️ **A value here is CHECKED, not honored.** {@link assertPinnedModel} runs on it before
+   * every adjudication, so this cannot be used to swap in a cheaper model — it exists so a
+   * wiring site that plumbs a model through from config gets a LOUD failure (condition 1)
+   * instead of a silent downgrade. Changing the pin is a re-measurement, not a config tweak.
+   */
+  readonly model?: string;
   /** Diagnostic sink. Defaults to `console.warn`. */
   readonly warn?: (message: string) => void;
 }
@@ -174,10 +183,22 @@ export async function adjudicate(
     return { answer: "AWAITING", basis, detail };
   };
 
+  // ⚠️ **CONDITION 1 IS ENFORCED HERE, AT THE ONE PLACE AN ADJUDICATION ACTUALLY RUNS.**
+  // `assertPinnedModel` used to be exported and called by nobody — a tested function, not a
+  // live guard, which is the same "mechanism correct behind a caller that does not honor it"
+  // shape this repo has been bitten by. Calling it from the runner means the pin holds for
+  // every caller that will ever exist, instead of for whichever one remembers to invoke it.
+  //
+  // ⚠️ It reads `deps.model` when the caller overrode it, so an override to `haiku` throws
+  // rather than silently regressing detection. Absent an override this is the constant
+  // checking itself — cheap, and it keeps ONE assertion site rather than two.
+  const model = deps.model ?? ADJUDICATOR_MODEL;
+  assertPinnedModel(model);
+
   let raw: string;
   try {
     raw = await deps.run({
-      model: ADJUDICATOR_MODEL,
+      model,
       prompt: adjudicationPrompt(tail),
       timeoutMs: ADJUDICATOR_TIMEOUT_MS,
     });

@@ -260,3 +260,58 @@ describe("⚠️ the Rust->TS error contract, driven end to end", () => {
     expect(r.basis).toBe("withheld-on-error");
   });
 });
+
+describe("⚠️ CONDITION 1 IS LIVE — the pin runs, it is not merely exported", () => {
+  // ⚠️ WHY THIS BLOCK EXISTS. `assertPinnedModel` shipped with ZERO callers: a tested
+  // function, not a guard — the "mechanism correct behind a caller that does not honor it"
+  // shape this repo has been bitten by four times. Calling it from `adjudicate` made it live;
+  // these tests are what keep it live, because deleting the call passes every other test in
+  // this file.
+
+  it("THROWS when a caller overrides the model — a downgrade cannot run silently", async () => {
+    const deps: AdjudicatorDeps = {
+      run: async () => "PROCEED",
+      model: "haiku",
+      warn: () => {},
+    };
+    // ⚠️ Throws rather than withholding, and that asymmetry is deliberate: condition 2 biases
+    // RUNTIME failures toward withholding, but a wrong pinned model is a CONFIGURATION error
+    // the operator must see, not a turn to skip quietly.
+    await expect(adjudicate("any tail", deps)).rejects.toThrow(
+      /model must be "sonnet"/,
+    );
+  });
+
+  it("⚠️ the run dep is NEVER reached on a bad model — asserted before the spawn", async () => {
+    // ⚠️ Order matters: asserting after the spawn would still bill the ~3s and could act on
+    // a downgraded model's answer before throwing.
+    let ran = false;
+    const deps: AdjudicatorDeps = {
+      run: async () => {
+        ran = true;
+        return "PROCEED";
+      },
+      model: "opus",
+      warn: () => {},
+    };
+    await expect(adjudicate("any tail", deps)).rejects.toThrow();
+    expect(
+      ran,
+      "the model must be checked BEFORE the subprocess is spawned",
+    ).toBe(false);
+  });
+
+  it("passes the pinned model through untouched when no override is given", async () => {
+    const seen: string[] = [];
+    const deps: AdjudicatorDeps = {
+      run: async (a) => {
+        seen.push(a.model);
+        return "PROCEED";
+      },
+      warn: () => {},
+    };
+    const r = await adjudicate("any tail", deps);
+    expect(r.answer).toBe("PROCEED");
+    expect(seen).toEqual([ADJUDICATOR_MODEL]);
+  });
+});
