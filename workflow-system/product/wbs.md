@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 cycle: milestone-15-workflow-supervisor
 milestone: 15
-updated: 2026-09-13
+updated: 2026-09-14
 ---
 
 # WBS — Milestone 15: Workflow supervisor
@@ -177,7 +177,7 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 
 ---
 
-### WP4: Context-pressure recycle at phase boundaries
+### WP4: Context-pressure recycle at phase boundaries ✅ SHIPPED 2026-09-14 (commit 75ad76d)
 **Description:** Above a context-pressure threshold, Claudesk still auto-chains as usual **except** at a **phase boundary that is not the last phase**, where it instead **recycles the session** (handoff → fresh CC → restore), carrying the workflow forward in a clean context.
 **Milestone:** 15
 **Dependencies:** WP3 (the turn-end trigger + transcript reader), WP1 **Q6** (the threshold's *value*)
@@ -196,13 +196,13 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 - ⚠️ **CROSS-REPO (mccc):** the **Work Tree format must be ENFORCED, not just documented** — mccc adds a `check-structure.sh` phase pinning the schema so Claudesk's parser is a **contract-reader**, not a guesser. Hand off **before** this WP is built.
 
 **Tasks:**
-- [ ] 4.1 Context-pressure read from the last assistant line (`input + cache_read + cache_creation`) — ⚠️ **LAST line only, never summed**.
-- [ ] 4.2 Absolute-token threshold at Q6's recommended value (R-2). ⚠️ **No window lookup, no model→window table.**
-- [ ] 4.3 WIP-file phase parser (contract-reader against mccc's pinned schema).
-- [ ] 4.4 The boundary rule: non-final phase boundary + over threshold → recycle; else chain.
-- [ ] 4.5 Gate to the **feature workflow only**.
-- [ ] 4.6 Wire `recycleSession()` as the second caller; verify the abort/flag asymmetry holds unattended.
-- [ ] 4.7 Cross-repo handoff to mccc for the Work Tree schema phase.
+- [x] 4.1 Context-pressure read from the last assistant line (`input + cache_read + cache_creation`) — ⚠️ **LAST line only, never summed**.
+- [x] 4.2 Absolute-token threshold at Q6's recommended value (R-2). ⚠️ **No window lookup, no model→window table.**
+- [x] 4.3 WIP-file phase parser (contract-reader against mccc's pinned schema).
+- [x] 4.4 The boundary rule: non-final phase boundary + over threshold → recycle; else chain.
+- [x] 4.5 Gate to the **feature workflow only**.
+- [x] 4.6 Wire `recycleSession()` as the second caller; verify the abort/flag asymmetry holds unattended.
+- [x] 4.7 Cross-repo handoff to mccc for the Work Tree schema phase.
 
 ---
 

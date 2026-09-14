@@ -4,6 +4,107 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# m15-wp4-context-pressure-recycle — 2026-09-14
+
+## SURFACE-2026-09-14-QUALITY-ANNOUNCED-RECYCLE-CAN-SILENTLY-NOT-HAPPEN
+- **Severity:** MAJOR
+- **Location:** `src/components/workspace/Workspace.tsx` (the supervisor's `onRecycle`) + `src/state/supervisor/fanOut.ts:204`
+- **Finding:** `onRecycle` `console.warn`s *"recycling X at N tokens — deferring /skill"* and then calls
+  `fireRecycle()`, which **returns without doing anything** when `recycling` is already true **or**
+  `workspace.cc_session_id` is null. ⚠️ **The `FireLedger` has ALREADY claimed the turn**
+  (`fanOut.ts:204`, before the recycle decision at :243), so the turn is **neither fired nor
+  recycled and will never be reconsidered** — a silent stall whose only diagnostic asserts the
+  opposite of what happened.
+- **Why it matters:** the withholding bias is inverted at exactly the least observable point. The
+  module comment frames `fireRecycle`'s no-op as purely protective ("cannot start a second recycle
+  on top of a running one") — true for the `recycling` arm, **incomplete for the null-session arm**.
+- **Suggested fix:** have `fireRecycle` report whether it actually started (return a boolean, or
+  accept an `onDeclined` callback), and log the declined case distinctly. Verified independently at
+  review time: `Workspace.tsx` `if (sessionId === null || recycling) return;`.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-14-QUALITY-A-SUCCESSFUL-SUPERVISOR-FIRE-IS-UNLOGGED
+- **Severity:** MAJOR
+- **Location:** `src/state/supervisor/useSupervisor.ts` (the `fireOne` outcome handling)
+- **Finding:** `outcome.fired === true` is **discarded** — `grep -c "outcome\.fired"` returns **0**.
+  Only throws, sweep failures and recycles are logged, and `injectCommand` logs only on IPC
+  *rejection*. So a supervisor that injects `/feature-build` into an unwatched workspace leaves
+  **no trace whatsoever** that it did so.
+- **Why it matters:** ⚠️ **The rarer branch got the mitigation the common one lacks.** The recycle
+  announcement exists precisely because "an operator returning to the pane sees a session that
+  restarted for no visible reason" — the identical argument applies to the far more frequent fire.
+  And this lands in a WP whose five behavioral checks are **deferred to dogfooding**, so a log line
+  is currently the ONLY evidence a fire would leave.
+- **Suggested fix:** one `console.warn`/`info` on `outcome.fired` naming the workspace and the
+  injected command, mirroring the recycle announcement's shape.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-14-QUALITY-WIP-READ-COLLAPSES-IO-ERROR-INTO-NO-WIP
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/wip/commands.rs` (`wip_read`)
+- **Finding:** `match super::read_head(&target) { Ok(Some(text)) => …, _ => empty }` collapses a
+  **genuine IO error** (permissions, mid-write truncation) into the same `empty` value as "this
+  project has no WIP file", with no warn on either side of the IPC.
+- **Why it matters:** ⚠️ **It diverges from the sibling module its own header claims to mirror.**
+  `transcript::read_tail` distinguishes `NotFound` (→ `Ok(vec![])`) from other errors (→ `Err(e)`),
+  and `wip/mod.rs`'s `read_head` **preserves that distinction correctly** — only the command throws
+  it away. An unreadable WIP is therefore indistinguishable from an absent one.
+- **Suggested fix:** match `Ok(None)` → `empty` and `Err(e)` → `empty` **plus** an `eprintln!`/log,
+  so the two cases stay distinguishable. (Returning `empty` on error remains right — the supervisor
+  must withhold — it is the *silence* that is wrong.)
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-14-QUALITY-RECYCLE-TOKENS-CAST-IS-A-PROSE-CONTRACT
+- **Severity:** MINOR
+- **Location:** `src/state/supervisor/verdict.ts` (the `recycle` arm's `tokens` field)
+- **Finding:** `tokens: input.contextTokens as number` rests on a comment ("Non-null by
+  construction: `shouldRecycle` returns false for a null reading") to justify a cast `tsc` cannot
+  check. ⚠️ **This is the same contract-in-prose-where-a-type-would-do shape the WP3 review flagged
+  three times** — the pattern this feature's predecessor paid down.
+- **Suggested fix:** have `shouldRecycle` return the number (or `null`) instead of a boolean; the
+  cast then disappears entirely.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-14-QUALITY-USECALLBACK-MEMOIZES-NOTHING
+- **Severity:** MINOR
+- **Location:** `src/state/supervisor/useSupervisor.ts` (`useCallback(onTurnEnd, [host])`)
+- **Finding:** `host` is a fresh object literal on every `Workspace` render, so the callback is
+  recreated each time and the `useCallback` guarantees nothing. Harmless today (`useTauriListen`
+  holds the handler in a latest-ref) but it **reads as an intentional stability guarantee that does
+  not exist**, which a future reader may rely on.
+- **Suggested fix:** either destructure `host`'s fields into the dep array, or drop the
+  `useCallback` and note why identity does not matter here.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-14-QUALITY-RUNTIMES-LAST-AND-HISTORY-DISAGREE
+- **Severity:** MINOR
+- **Location:** `runtimes.md` (`pnpm verify:auto` entry)
+- **Finding:** `**Last:**` records 25s (2026-09-14, WP4 Phase 1) while the newest `**History:**`
+  bullet is 38s on the **same date** (WP3 quality refactor) — the two disagree about which
+  observation is most recent, against the file's own "real chronology" note.
+- **Suggested fix:** add WP4's own history bullet at close (the file's rule is one bullet per WP),
+  which resolves the ordering.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-14-QUALITY-LASTINDEX-COMMENT-IS-THE-HEAVIEST-RATIO-IN-THE-DIFF
+- **Severity:** MINOR
+- **Location:** `src/state/supervisor/wipPhases.ts` (the `PHASE_LINE.lastIndex = 0` site)
+- **Finding:** ⚠️ **Keeping the line is the RIGHT call and the reviewer agreed** — a module-level
+  `/g` regex becomes a silent-wrong-answer hazard the moment a `break` is added. But **14 lines of
+  comment for one defensive statement** is the heaviest ratio in the diff, and the underlying
+  reasoning is a well-known JS footgun rather than a non-obvious local decision.
+- **Suggested fix:** compress to roughly one line (`// module-level /g regex: reset in case a future
+  early-exit leaves lastIndex non-zero`), keeping the equivalent-mutant fact but not the essay.
+  ⚠️ **Fold into the standing comment-convention item** rather than treating as standalone.
+- **Priority:** low
+- **Status:** pending
+
 # m15-wp3-break-detection-and-auto-fire — 2026-09-13
 
 **0 CRITICAL · 3 MAJOR · 5 MINOR as filed.** ⚠️ **ALL THREE MAJORs + the `assertPinnedModel`

@@ -202,8 +202,8 @@ when the webview is gone"), not a new one.
   - [x] verify-codify  <!-- status: DONE — no new tests owed; claim already pinned at Phase 2 -->
 
 ## Current Node
-- **Path:** Feature > ship (complete)
-- **Active scope:** none — shipped as `75ad76d`; ⚠️ **NOT PUSHED** (see the ship record). ⚠️ **5 behavioral checks DEFERRED to dogfooding — OPEN, not passed** (backlog SURFACE logged)
+- **Path:** Feature > review-quality (complete) > finalize
+- **Active scope:** none — shipped as `75ad76d`; ⚠️ **NOT PUSHED** (see the ship record). Review-quality: 0 CRITICAL / 3 MAJOR / 4 MINOR, all auto-backlogged. ⚠️ **5 behavioral checks DEFERRED to dogfooding — OPEN, not passed** (backlog SURFACE logged)
 - **Blocked:** none
 - **Unvisited:** (none — Phase 5 is the last)
 - **Open discoveries:** none
@@ -856,6 +856,126 @@ touched**. Re-ran the file in isolation twice (14/14, clean) and the full suite 
 both), which is §3b's definition of flaky. **Nothing was modified.** Logged to `backlog.md`
 because the SHAPE is corrosive: a gate that exits non-zero while reporting zero failures trains a
 future session to re-run until green — exactly how a real failure gets waved through.
+
+## Retrospect
+
+- **What changed in our understanding:**
+  ⚠️ **The plan's "host the supervisor per-workspace" instinct turned out to be structurally
+  forced, not stylistic.** `recycleSession()` needs `ccPaneRef`/`ccSessionIdRef`, which exist only
+  inside a mounted `Workspace` — so `fanOut`, the function that *looks* like the natural app-level
+  entry point, is unwireable there. It would compile and leave the recycle unable to act.
+  ⚠️ **Mutation testing found two real holes my own tests missed**, both because a fixture never
+  exercised the predicate under test: the phase regex's column-0 anchor (every child leaf in the
+  fixtures lacked the word "Phase", so the anchor was never load-bearing) and the feature-workflow
+  gate (the `taskWip` fixture had no phase lines, so the boundary check already returned false).
+  ⚠️ **A handoff to another repo is a verification surface, not just prose** — verify-self found a
+  BLOCKING factual error in mine (a fourth `**Workflow:**` value that occurs zero times), and the
+  fix then introduced its own COSMETIC error (a line count labelled as a file count).
+
+- **Assumptions that held:**
+  The `usage` read (`input + cache_creation + cache_read`, last assistant line only) was verified
+  live at plan time and never needed revisiting. The 512 KiB tail always contains the last
+  assistant line. The Work Tree phase shape is regular enough to parse as a contract. `R-4`'s
+  TS-side-verdict ruling held throughout — no new backend→frontend IPC direction was needed.
+  The 400k threshold is reachable in practice: one of five sampled real sessions read 789,888.
+
+- **Assumptions that were wrong:**
+  ⚠️ **"The tests I write while building are sufficient evidence" — twice falsified.** Two mutants
+  survived a green suite, and each time the cause was a fixture that couldn't discriminate rather
+  than a wrong implementation. ⚠️ **"A closed union is the tidier choice" understated it** — adding
+  the `recycle` arm broke `fanOut.ts` at compile time, catching an unhandled case that a boolean
+  flag would have let through silently. The type system did the work the plan only hoped for.
+
+- **Approach delta:**
+  Implementation matched the plan's five phases with **no re-planning and no back-loops** — every
+  phase went build → verify-auto → verify-self → verify-human → verify-codify once.
+  Three deltas worth recording: (1) P4.3 required **no code at all** — the abort/flag asymmetry was
+  already correct and already pinned by an M13 test, so it was discharged by verification, exactly
+  as the plan instructed; (2) codify twice wrote tests the plan had not specified, because
+  verify-self exposed coverage gaps (`fanOut`'s recycle arm, and the `Workspace.tsx ← useSupervisor`
+  wiring) — both were real, both were mutation-proven; (3) ⚠️ **verify-human was deferred, not
+  passed** — trigger-rarity made the five behavioral checks unmanufacturable without testing the
+  fixture instead of the feature, so they are logged as OPEN with the operator as owner.
+
+⚠️ **The single most important thing a future session should take from this WP:** the supervisor is
+**built and wired but never observed acting**. Its correctness rests entirely on static evidence.
+The three MAJOR review findings are all "it acts without leaving a trace" — which is precisely what
+would make the deferred behavioral checks undiagnosable. **Do the observability pass before
+dogfooding, not after.**
+
+## Communicate
+
+> **Feature complete:** M15 WP4 — context-pressure recycle at phase boundaries has shipped.
+> Above 400,000 tokens of context, at a feature-workflow phase boundary that is not the last phase,
+> Claudesk now recycles the CC session (handoff → fresh session → restore) instead of auto-chaining,
+> so a long-running feature carries its workflow forward in a clean context. This is also the
+> workflow supervisor's first production caller.
+> **To verify:** it cannot yet be verified by running it — five behavioral checks are deferred to
+> real dogfooding (`SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`).
+> Static evidence: `pnpm verify:auto` EXIT=0, frontend 2587 / Rust 919.
+
+**Requester = operator — closure notice for self-record.**
+
+## Code-Quality Review — m15-wp4-context-pressure-recycle
+
+Reviewed against the ship commit (`75ad76d^..a791c39`) by a fresh-context subagent, 2026-09-14.
+**0 CRITICAL · 3 MAJOR · 4 MINOR.** Per `drive_mode=autopilot` (Case B/C) all findings were
+**auto-backlogged**, not prompted: bodies in `backlog-quality-findings.md` under
+`# m15-wp4-context-pressure-recycle — 2026-09-14`, one pointer in `backlog.md`.
+
+### Strengths (reviewer's words, condensed)
+- The three recycle conditions are extracted into a named `shouldRecycle` and **each is
+  individually falsified** — a bare three-way `&&` would pass an all-true test regardless of which
+  arms were wired.
+- The anti-sum guard puts the correct and wrong answers on **opposite sides of the threshold**
+  (100,000 vs 850,100), and the real-fixture test's nested `iterations` array makes a double-count
+  produce exactly `145_737 × 2` — neither can pass by luck.
+- The WP3 MAJORs were genuinely paid down before a production caller existed, and the label fix
+  **replaced** the guard the old mutant survived rather than supplementing it.
+- The column-0 anchor is justified against a **real archived file in this repo**, with the measured
+  consequence stated.
+- The verify-human deferral **refuses the F11 skip path** and records five open checks with an owner
+  and trigger, rather than recording "never observed" as "verified".
+
+### Issues
+
+**CRITICAL** — none.
+
+**MAJOR** (all three verified independently by the orchestrator before backlogging)
+1. `Workspace.tsx` `onRecycle` — announces the recycle, then `fireRecycle()` **silently returns**
+   when `recycling` is true or `cc_session_id` is null. ⚠️ The ledger already claimed the turn
+   (`fanOut.ts:204` precedes the recycle decision at `:243`), so the turn is **neither fired nor
+   recycled and never reconsidered**. Confirmed: `if (sessionId === null || recycling) return;`.
+2. `useSupervisor.ts` — a **successful fire produces no diagnostic at all**. Confirmed:
+   `grep -c "outcome\.fired"` → **0**. The rarer recycle branch got the announcement the common
+   fire path lacks.
+3. `wip/commands.rs` — `_ => empty` collapses a real IO error into "no WIP file", **diverging from
+   the `transcript` module its own header claims to mirror** (`wip/mod.rs` preserves the
+   distinction; only the command discards it).
+
+**MINOR** — `tokens: … as number` is a prose contract where a return type would do (the exact shape
+WP3 paid down); `useCallback(…, [host])` memoizes nothing (`host` is a fresh literal each render);
+`runtimes.md` `Last:` and `History:` disagree on which observation is newest; the `lastIndex`
+comment is 14 lines for one statement (⚠️ the reviewer **endorsed keeping the line** — only the
+essay is the finding; fold into the standing comment-convention item).
+
+### Assessment (reviewer, verbatim conclusion)
+> Where the feature falls short is **observability of its own actions** — the two MAJORs above are
+> the same defect viewed twice: the fire path is silent and the recycle path announces an action
+> that `fireRecycle` may decline to perform, and both land in a phase whose five behavioral checks
+> were deferred precisely because the operator cannot watch it. … None of this is debt-accruing in
+> the structural sense — the seams are right and the tests are honest about what they do and do not
+> prove — but a future reader debugging "why did my session recycle / why didn't it fire" will find
+> less evidence in the log than this code's own comments promise.
+
+⚠️ **THE THREE MAJORs COMPOUND THE DEFERRED-CHECKS RISK AND SHOULD BE DONE BEFORE DOGFOODING.**
+A fire that leaves no trace, and a recycle that may not happen while claiming it did, are not
+merely untidy here — they are what would make the five deferred behavioral checks **undiagnosable**
+when the operator finally runs them.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` in this section before `feature-finalize`
+archives this file.
 
 ## Ship record (2026-09-14)
 
