@@ -270,7 +270,7 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
         block naming every chord. **Strip comments before asserting; assert the CALL shape
         `fn(`; `grep -c` first to confirm the substring is unique to its site.**
         <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: in-progress -->
+  - [x] verify-auto  <!-- status: PASS 2026-09-15 — tsc 0, scoped eslint 0, 12/12 chordRegistry (count-confirmed, not a filtered false-green), 4 label exports + 3 consumers intact; guard fail-probe confirmed -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
@@ -310,11 +310,11 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-auto
-- **Active scope:** Phase 1 verification (impl tasks P1.1–P1.7 all complete)
+- **Path:** Feature > Phase 1 > verify-self
+- **Active scope:** Phase 1 verify-self (impl + verify-auto complete)
 - **Blocked:** none
-- **Unvisited:** Phase 1 verify-self → verify-human → verify-codify; then Phase 2 (render the
-  list as a fifth Settings group)
+- **Unvisited:** Phase 1 verify-human → verify-codify; then Phase 2 (render the list as a fifth
+  Settings group)
 - **Open discoveries:** two, both resolved in-phase — see Discoveries
 
 ## Discoveries
