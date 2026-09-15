@@ -247,8 +247,20 @@ draft cleared on send, or kept as history? · does it interact with the voice-in
 is it agnostic to how text arrives? · does an unsent draft survive a **Recycle** (M13) or a
 context-pressure recycle (M15)?
 
-**Suggested action:** size as a **roadmap item** at the next roadmap pass. ⚠️ Resolve the
-multi-line-injection question **first** — it gates whether the obvious design is even buildable.
+**Suggested action:** size as a **roadmap item** at the next roadmap pass. ⚠️ **Open with a
+`/util-grill-me` pass** (booked by the operator 2026-09-15) — *before* a design exists, not after.
+- **Update 2026-09-15 — ⭐ THE MULTI-LINE GATE IS RESOLVED BY SCOPE (operator ruling).** The staged
+  content is **dictated prose**: no `\r`, no `\n`, no special characters, no slash commands. So no
+  bracketed paste and no multi-line injection strategy is needed — the single-`\r` shape
+  `slashCommandPayload` already uses is correct, because a dictated prompt is one logical line that
+  ends when the operator sends it. **F-a is therefore NOT blocked** and can be sized directly.
+  ⚠️ **This is a SCOPE decision, not a discovery that the hazard was imaginary.** In raw mode `\r`
+  still **is** Enter, so two things must survive into the design: (1) the staging surface must
+  **reject or normalize an embedded newline** rather than pass it through — a pasted multi-line
+  block would otherwise fire as **N truncated prompts**, the exact failure this ruling sidesteps
+  rather than fixes; and (2) **if a later iteration wants paste-in or multi-line editing, this
+  question RE-OPENS** and must be answered before that iteration ships. An assumption with a
+  tripwire, not a closed problem.
 - **Status:** pending
 
 ## SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET
@@ -371,6 +383,23 @@ machine-global) need to distinguish profiles? · does the M15 supervisor's trans
 
 **Suggested action:** size as a **roadmap milestone** at the next `/product-finalize` or roadmap
 pass — after M15 closes and M14's remainder. Start the design discussion then, with the operator.
+⚠️ **Open with a `/util-grill-me` pass** (booked by the operator 2026-09-15), and expect a real
+**spec** pass rather than a plan pass — the operator's words were "we will need to think it through
+and work on the spec well."
+- **Update 2026-09-15 — ⭐ SCOPE EXPANDED: absorb the boilerplate, do not just consume its output.**
+  Operator direction. Claudesk should own **profile creation**, folding in what
+  `~/Personal/projects/claude-code-wrapper-agent-boilerplate` does today, so provisioning a profile
+  is a Claudesk operation rather than a shell script run beforehand. ⚠️ **This changes the shape,
+  not just the size:** `create-env.sh`'s appending of a `claude-<name>()` function to `~/.zshrc` is
+  precisely the mechanism behind **blocker 1**, so owning creation lets Claudesk **stop generating
+  the shell-function indirection entirely** and spawn `claude` directly with `CLAUDE_CONFIG_DIR`
+  set. ⚠️ **Blocker 2 is NOT dissolved and gets HARDER** — owning creation means owning
+  **per-config-dir hook registration** as part of provisioning, plus teardown on profile deletion.
+  *A profile Claudesk created but cannot see the status of is worse than one it never created.*
+  ⭐ **And the boilerplate itself must be representable as a profile** — a self-hosting property and
+  a **design constraint, not a nice-to-have**: if the thing that creates profiles cannot itself be
+  one, the model has a special case at its center. Cheap to design for, expensive to retrofit —
+  check it early in the spec.
 - **Status:** pending
 
 ## SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE
@@ -1128,6 +1157,16 @@ script under `tooling/` so each phase does not re-derive it.
   where the answer landed, how far it scrolled).
 - **Priority:** medium (the navigation half is shipped, which lowers the felt friction; the
   answer-burial half remains real and recurring).
+- **Update 2026-09-15 — ⛔ DROPPED from Group F by the operator.** Briefly carried as **F-c** in
+  `roadmap.md`'s Group F (opened the same day) and **removed on operator review** of the three
+  operator-requested capabilities. ⚠️ **Dropped from the scheduled group, NOT deleted and NOT
+  resolved** — the entry stays because half of it genuinely shipped (M13.5 WP3's turn-boundary
+  markers + `↑ N/N ↓` jump) and the remaining answer-burial half is a real, articulated problem
+  with its history intact here. It is simply **not scheduled work**. ⚠️ **Do NOT re-promote it by
+  citing the product thesis** — it reads as a strong fit for *attention is the scarce resource*,
+  which is exactly why it keeps resurfacing; the operator has now weighed it against F-a/F-b and
+  chosen not to carry it. **Re-open only on a fresh operator ask.**
+- **Status:** pending — recorded, not scheduled (dropped from Group F 2026-09-15)
 
 ## SURFACE-2026-07-14-M9-CUSTOM-RANGE-NEEDS-MULTIDAY-TIMELINE
 - **Source:** feature:build (M9 WP6b-2 Phase 3 build-entry — the Custom-range render surfaced a `DayTimeline` constraint).
