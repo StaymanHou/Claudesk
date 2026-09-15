@@ -283,7 +283,11 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
         <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: PASS 2026-09-15 — tsc 0, scoped eslint 0, 12/12 chordRegistry (count-confirmed, not a filtered false-green), 4 label exports + 3 consumers intact; guard fail-probe confirmed -->
   - [x] verify-self  <!-- status: PASS 2026-09-15 (re-run after F9b) — 8/8 outcomes, 0 BLOCKING; completeness independently re-derived from source, duplication confirmed correct -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: in-progress — 4 leaves, all product judgment (no mechanical checks; verify-auto + verify-self already PASSED those) -->
+    - [ ] P1.verify-human.1 Registry CONTENT review — the 22 descriptions ship verbatim to users in Phase 2  <!-- status: NOT-STARTED -->
+    - [ ] P1.verify-human.2 Should the 6 CM6-owned rows be SHOWN at all? (product-surface call)  <!-- status: NOT-STARTED -->
+    - [ ] P1.verify-human.3 Is ⌘= / ⌘- / ⌘0 appearing TWICE acceptable to a reader?  <!-- status: NOT-STARTED -->
+    - [ ] P1.verify-human.4 Guard caveat — accept the backlog entry, or fix the selector now?  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [ ] Phase 2: Render the list as a fifth Settings group  <!-- status: NOT-STARTED; depends on Phase 1 -->

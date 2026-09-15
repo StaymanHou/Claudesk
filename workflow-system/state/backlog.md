@@ -82,6 +82,58 @@
 > forward across several cycles — `/util-backlog-paydown` is the instrument for it, and this is a
 > between-milestone boundary.
 
+## SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1
+- **Source:** operator dogfooding (v0.5.0, first real use of the M15 workflow supervisor)
+- **Target level:** product:wbs
+- **Type:** bug
+- **Summary:** First operator feedback from live supervisor use. ⚠️ **RECORDED, NOT TRIAGED —
+  the operator explicitly said "just record it" and expects to add more.** Do not act on these
+  without a triage pass; do not treat this entry as closed when one item is fixed.
+- **Context:** This is the first feedback of its kind. `SURFACE-2026-09-14-SUPERVISOR-NEVER-
+  OBSERVED-FIRING-IN-A-LIVE-SESSION` (high) has been open because the supervisor's live half had
+  never been observed acting. ⚠️ **Item 2 below is the first direct evidence that it FIRES in a
+  real session** — which partially satisfies that item's observation question while simultaneously
+  reporting the fire as unwanted. Both facts matter and neither cancels the other.
+
+  **Item 1 — "inference / transition check would freeze the UI."**
+  ⚠️ Matches a KNOWN and PREVIOUSLY-BURNED failure mode, which is why it is the highest-signal of
+  the three. `CLAUDE.md`: *"`#[command]` fns + `on_window_event` are main-thread — which cuts BOTH
+  ways: an AppKit call inside one is safe, but a `thread::sleep`/blocking poll, or a lock held
+  across a main-thread-marshaling call, FREEZES the UI. A sync `cc_kill` doing exactly this hung
+  the app (P1 2026-08-25; `sample` was the instrument that found it)."* The supervisor reads
+  transcripts and may shell out to a `claude -p` adjudicator; either on a main-thread path would
+  reproduce this shape. ⚠️ **`sample` is the instrument that found it last time** — use it again
+  rather than reasoning from the code.
+
+  **Item 2 — "I'm typing something midway, and the supervisor auto chained."**
+  ⚠️ **This is the recorded dissent arriving in reality.** M15's fire policy is *silently, always*,
+  chosen over announce-then-click and over a countdown veto. The dissent was recorded AND SIZED at
+  decomposition: ~2-in-19 confirmed breaks were question-shaped, and `injectCommand` has **no retry
+  and no pre-send cancel window** by design, so a wrong fire is unrecoverable except via **Esc**.
+  ⚠️ **Probe Q2 (can a question-shaped / answer-awaiting tail be detected?) was the gate on this
+  policy and it REMAINS OPEN** — `roadmap.md`'s own instruction was: if Q2 fails, revisit the fire
+  policy before building WP3, do not build it anyway. This report is evidence the un-gated case is
+  real. ⚠️ Note the operator was TYPING — which is a *different* signal from a question-shaped
+  tail, and may be cheaper to detect (local UI state, no transcript parse).
+
+  **Item 3 — the operator's question: "it's only working when workflow is enabled and a project
+  is using workflow, right?"** ✅ **ANSWERED FROM SOURCE, 2026-09-15 — YES, with two conditions,
+  not one.** `Workspace.tsx:620` passes `enabled: workflowFeaturesEnabled` (the M10.9 gate hook)
+  into `useSupervisor`, and `useSupervisor.ts:110` re-checks `if (!host.enabled) return` on every
+  turn — deliberately re-checked at fire time rather than only at subscribe time, so flipping the
+  gate mid-session takes effect immediately. **Second condition:** `useSupervisor.ts:115` returns
+  early when `storedMode === null`, so a project with no stored drive mode in `projects.json` is
+  never supervised either. So: gate ON **and** a stored drive mode. ⚠️ Ruling R-1 is what makes the
+  second condition bite — the STORED mode is the authority, so a project inherits supervision from
+  `projects.json` regardless of how the turn was entered.
+- **Suggested action:** Triage as a batch once the operator stops adding items — explicitly NOT
+  one-at-a-time. Item 1 wants `sample` against a frozen app (the P1 2026-08-25 playbook). Item 2
+  is a FIRE-POLICY decision, not a bug fix: it reopens the probe-Q2 question the milestone shipped
+  around, and "suppress while the operator is typing" is a candidate narrower than full Q2
+  detection. Item 3 needs no action — it is answered.
+- **Priority:** high
+- **Status:** open
+
 ## SURFACE-2026-09-15-CHORD-COMPLETENESS-GUARD-KEYS-ON-A-NAMING-CONVENTION
 - **Source:** feature:build (M14 WP3 Phase 1, raised by the verify-self auditor)
 - **Target level:** product:wbs
