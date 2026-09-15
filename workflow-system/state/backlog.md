@@ -169,6 +169,19 @@
   `verdictReplay.test.ts` (34/36 on the non-circular set), `verdict.test.ts`'s negative arm
   including the **verify-human GATE** (added at WP5 Phase 2), and the recycle conditions.
   **What remains is exactly and only the live behavior.**
+- **Update 2026-09-15 (b) — ⭐ THE STRUCTURAL BLOCKER IS CLEARED: `v0.5.0` IS CUT.** The installed
+  app was `v0.4.0` (2026-09-06) and predated every line of the supervisor, which made all six
+  checks *unsatisfiable* — the same trap M13.5 WP1 hit. `v0.5.0` (2026-09-15, 22 commits, the whole
+  of M15) contains them. ⚠️ **This does NOT close the item, and the release must not be read as
+  progress on it** — the checks are now **satisfiable but still unsatisfied.** Two operator
+  conditions gate the actual observation: the upgrade waits until **all mid-flight tasks reach a
+  clean boundary** (a `brew upgrade` deletes and re-quarantines the running app, killing every live
+  Claudesk session), and the supervisor then needs **at least one full week of real use** before
+  its behavior is worth judging. ⚠️ **Expect this item to stay open for weeks; that is the plan,
+  not a stall.** Check 6 (installed-`.app` GUI-PATH smoke) is satisfiable the moment the upgrade
+  lands; checks 1–5 need the week. Sequenced in `roadmap.md` → Revision 2026-09-15 as the
+  **dogfeedback** step, deliberately *after* M14's remainder because that work does not depend on
+  this clock.
 - **Status:** pending
 
 ## SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT
