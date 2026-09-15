@@ -17,69 +17,20 @@
 // stable (it's the React key + test handle) and `title` user-facing (it's what
 // the filter matches on).
 //
-// CHORD-OWNERSHIP MAP (so the downstream WPs land without collision — the
-// isPaletteChord exclusivity matrix in paletteCommands.test.ts codifies this;
-// the panel-select chords are codified in panelHost.test.ts):
-//   ⌘⇧P  → command palette        (WP3b — THIS module; opens the overlay)
-//   ⌘P   → fuzzy file finder       (WP6 — LIVE; bare meta, NO shift — distinct from
-//                                   ⌘⇧P; finder/finderChord.ts isFinderChord)
-//   ⌘⇧E  → Editor panel-select     (WP5; RightPanelHost — panelHost.panelForChord)
-//   ⌘⇧D  → Diff panel-select       (WP5; RightPanelHost)
-//   ⌘⇧T  → Terminal panel-select   (WP5 scheme; live binding lands with WP9)
-//   ⌘⇧K  → Docs panel-select       (M11 WP2; RightPanelHost — GATED behind the
-//                                   workflow-features seam, so the predicate returns
-//                                   null and the key passes through while it is off.
-//                                   Letter 'k' chosen over 'g', which would read as
-//                                   "git" beside the Diff panel.)
-//   ⌘⇧A  → GLOBAL time-analytics dashboard (M9 WP6a — App.tsx app-level chord, NOT a
-//                                   panel-select; toggles the full-window global view.
-//                                   dashboard/dashboardChord.ts isDashboardChord. Letter
-//                                   'a' for Analytics, disjoint from E/D/T/O/P/F.)
-//   ⌘⇧O  → FREED (WP8 deleted the Sublime-Text chord; both Sublime launchers are
-//                                   now click-only icon buttons in the panel tab row
-//                                   — see sublime/sublimeLaunch.ts + RightPanelHost)
-//   ⌘⇧F  → project-wide search     (WP7 — LIVE; opens the Find-in-Files overlay;
-//                                   search/searchChord.ts isSearchChord. Shift
-//                                   REQUIRED — distinct from CM6's bare ⌘F in-file
-//                                   find below)
-//   ⌘1..⌘9 → editor tab switch     (WP12 — LIVE; activate the Nth open-file tab in
-//                                   the FOCUSED pane, ⌘9 = last; editor/tabSwitchChord.ts
-//                                   tabSwitchIndex. Bare ⌘+DIGIT — disjoint from every
-//                                   ⌘⇧ chord and from bare ⌘P/F/R/S/D (those are letters).
-//                                   ⌘0 is NOT a tab chord — it stays the CM6 font-reset.)
-//   ⌘W   → close active editor tab (WP13 — LIVE; closes the FOCUSED pane's active tab
-//                                   via the WP12 requestClose dirty-guard, inert with no
-//                                   tab open; editor/closeTabChord.ts isCloseTabChord.
-//                                   Bare ⌘ + "w", Shift required-absent — disjoint from
-//                                   ⌘⇧ chords and from bare ⌘P/F/R/S/D/⌘1..9. Suppressed
-//                                   while the finder/search overlay is open; preventDefault
-//                                   pre-empts the OS close-window ⌘W. RightPanelHost.)
-//                                   M6 WP11 — ⌘W is OVERLOADED: when a right-panel TERMINAL
-//                                   holds focus, ⌘W closes that terminal instead (scoped via
-//                                   deriveRightSurface === "terminal"; closeTerminalChord.ts
-//                                   shouldCloseTerminalOnChord). The terminal branch is BEFORE
-//                                   the editor close-tab branch + swallows the event, so the
-//                                   two never both fire; inert on the last terminal
-//                                   (disallow-last). Editor-focused ⌘W is unchanged.
-//   ⌘T   → new right-panel terminal (M6 WP11 — LIVE; opens a terminal in the terminal
-//                                   panel, parity with the ＋ button; newTerminalChord.ts
-//                                   newTerminalChord. Bare ⌘ + "t", Shift required-absent —
-//                                   distinct from ⌘⇧T panel-select by the absent Shift, same
-//                                   as ⌘W vs the ⌘⇧ family. No-op at the cap. RightPanelHost.)
-//   ⌘⇧1..⌘⇧9 → workspace switch    (M4 WP3 — promote the Nth filmstrip tile to center
-//                                   stage. APP-level capture-phase listener in App.tsx;
-//                                   workspaceSwitchIndex predicate in
-//                                   workspace/workspaceSwitchChord.ts. Distinct from
-//                                   WP12's bare ⌘+digit tab switch by the required Shift.
-//                                   Was RESERVED for exactly this since 2026-06-21.)
-//   ⌘F ⌘R ⌘S ⌘D ⌘=/-/0            → CM6 editor chords (editorExtensions coreKeymap)
-// NOTE: ⌘⇧D (panel-select Diff) is APP-level + capture-phase, distinct from the
-// editor-internal bare ⌘D (Cmd-D select-next, CM6 keymap, no Shift) — the Shift
-// disambiguates, same as ⌘⇧P vs ⌘P. Likewise ⌘⇧F (project search, APP-level) is
-// distinct from bare ⌘F (CM6 in-file find) by the required Shift.
-// All APP-level chords (⌘⇧P, ⌘P, ⌘⇧E/D/T, ⌘⇧F) use the WP1-proven capture-phase
-// document listener; editor-internal chords use the Prec.highest CM6 keymap.
-// See workflow-system/state/archive/m2-wp1-cm6-probe.md → Objective (a).
+// CHORD-OWNERSHIP MAP — MOVED (M14 WP3, 2026-09-15).
+//
+// The ~60-line map that used to live here is now TYPED DATA at
+// components/workspace/chordRegistry.ts (CHORD_REGISTRY). It was moved because a comment
+// cannot be rendered to the user, cannot be tested against the code it describes, and had
+// ALREADY silently drifted — it omitted ⌘⇧N, ⌘, and ⌘N while claiming to be the collision
+// reference every downstream WP checked against.
+//
+// The registry is guarded by chordRegistry.test.ts, which asserts each entry's matcher is
+// actually CALLED by a registration host (comment-stripped, call-shape) — so an entry that
+// documents a chord wired to nothing now fails the suite instead of reading as true.
+//
+// The exclusivity matrices that codify the disjointness rules are unchanged and remain in
+// paletteCommands.test.ts and panelHost.test.ts.
 
 /** Human-facing label for the palette chord, shown in hints. */
 export const PALETTE_CHORD_LABEL = "⌘⇧P";

@@ -222,7 +222,7 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
 
 ## Work Tree
 
-- [ ] Phase 1: Extract the chord registry as typed data  <!-- status: NOT-STARTED -->
+- [ ] Phase 1: Extract the chord registry as typed data  <!-- status: in-progress; impl complete, verification pending -->
   **Observable outcomes:**
   - CLI: `./node_modules/.bin/tsc --noEmit` exits 0 with the new registry module present.
   - CLI: `pnpm vitest run src/components/workspace/__tests__/chordRegistry` exits 0; the
@@ -230,47 +230,47 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
   - CLI: `grep -c "PALETTE_CHORD_LABEL" src/components/workspace/editor/paletteCommands.ts`
     still returns ≥1 — the four existing label constants remain exported (re-export, not delete).
   - Console: no new lint or type errors (`pnpm lint` exits 0).
-  - [ ] P1.1 Define the registry types. ⚠️ **Predicate signatures VARY** — boolean
+  - [x] P1.1 Define the registry types. ⚠️ **Predicate signatures VARY** — boolean
         (`isSettingsChord`), `number | null` (`workspaceSwitchIndex`), `RightPanel | null`
         (`panelForChord`). **Do NOT model a uniform boolean predicate.** Model a `match`
         as an opaque `(e: ChordEvent) => unknown` whose truthiness is not the contract, or
         carry the predicate reference without calling it — decide which at build time and
         record why.  <!-- status: NOT-STARTED -->
-  - [ ] P1.2 Model **context-scoped outcomes**. ⚠️ `⌘W` is ONE chord with TWO outcomes, not
+  - [x] P1.2 Model **context-scoped outcomes**. ⚠️ `⌘W` is ONE chord with TWO outcomes, not
         two chords — `RightPanelHost.tsx:779` routes the SAME `isCloseTabChord` through
         `shouldCloseTerminalOnChord({ isCloseChord: … })`. A 1:1 predicate→entry keying
         misrepresents it. Same shape for `⌘T`.  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 ⚠️ Model the **workflow-gate dependency**. `panelForChord(e, enabled)` takes a
+  - [x] P1.3 ⚠️ Model the **workflow-gate dependency**. `panelForChord(e, enabled)` takes a
         SECOND arg and `⌘⇧K` (Docs) returns `null` while the gate is OFF — deliberately, so
         the keystroke passes through untouched rather than being swallowed. The registry must
         mark gate-dependent entries, or Phase 2 renders a dead affordance for a gate-off user
         (the exact thing `gate-substrate-dependent-feature-class-behind-default-off-opt-in`
         forbids).  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 Transcribe the ~15 entries from the `paletteCommands.ts:20–84` comment map,
+  - [x] P1.4 Transcribe the ~15 entries from the `paletteCommands.ts:20–84` comment map,
         **including the CM6-owned set** (`Mod-s`/`Mod-d`/`Mod-r`/`Mod-f`, verified present in
         `editorExtensions.ts` `coreKeymap()`) marked not-Claudesk-owned. Mark `⌘⇧`+digit as a
         RESERVED RANGE and `⌘⇧O` as FREE — **metadata only, no enforcement** (enforcement
         would be an unreachable guard).  <!-- status: NOT-STARTED -->
-  - [ ] P1.5 ⚠️ **Re-export** the four `*_CHORD_LABEL` constants from their current modules so
+  - [x] P1.5 ⚠️ **Re-export** the four `*_CHORD_LABEL` constants from their current modules so
         `ProjectSearch.tsx:142` / `FileFinder.tsx:131` / `CommandPalette.tsx:123` keep working
         unchanged, with the registry as the single source. **A deleted ES-module export is a
         RUNTIME failure, not just a `tsc` error** (M13.5 WP3: blank app, `verify:auto` AND
         `tsc` both green). **If build instead deletes them, the consumer migration MUST land in
         THIS phase plus a boot smoke-test.**  <!-- status: NOT-STARTED -->
-  - [ ] P1.6 ⚠️ **THE LOAD-BEARING TASK — the reachability guard.** Enumerating the registry
+  - [x] P1.6 ⚠️ **THE LOAD-BEARING TASK — the reachability guard.** Enumerating the registry
         proves the SET, not that each entry has a CALLER (the M12 dead-`/exit` + M13-registry
         trap; hit twice in M11 WP4, one a shipped CRITICAL). **Funnel registry reads through
         ONE accessor and guard THAT**, and assert each entry's predicate is actually invoked by
         `App.tsx`, `RightPanelHost.tsx`, or CM6. ⚠️ **Mutation-prove INDIVIDUALLY and confirm
         each mutant landed in EXECUTABLE code** — a landed mutation can survive as an
         equivalent mutant.  <!-- status: NOT-STARTED -->
-  - [ ] P1.7 ⚠️ Replace the `paletteCommands.ts` comment block with a pointer to the registry.
+  - [x] P1.7 ⚠️ Replace the `paletteCommands.ts` comment block with a pointer to the registry.
         **A `?raw` guard asserting a bare identifier can be satisfied by the module's OWN
         COMMENTS** — acutely dangerous here because the thing being replaced IS a comment
         block naming every chord. **Strip comments before asserting; assert the CALL shape
         `fn(`; `grep -c` first to confirm the substring is unique to its site.**
         <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: in-progress -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
@@ -310,11 +310,12 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 (define the registry types)
+- **Path:** Feature > Phase 1 > verify-auto
+- **Active scope:** Phase 1 verification (impl tasks P1.1–P1.7 all complete)
 - **Blocked:** none
-- **Unvisited:** Phase 2 (render the list as a fifth Settings group)
-- **Open discoveries:** none
+- **Unvisited:** Phase 1 verify-self → verify-human → verify-codify; then Phase 2 (render the
+  list as a fifth Settings group)
+- **Open discoveries:** two, both resolved in-phase — see Discoveries
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
@@ -330,3 +331,26 @@ deferred. No backlog entry — resolved within this feature.
 (backlog) covers deferred arrow-pan/zoom keys for the time-analytics day timeline. Those are
 **viewport gestures inside one dashboard widget, not app chords**, so they are deliberately NOT
 added to this registry. Recorded so a future reader does not read the omission as a gap.
+
+[SURFACED-2026-09-15] Phase 1 / P1.6 — ⚠️ **THE REACHABILITY GUARD FOUND A FOURTH REGISTRATION
+HOST ON ITS FIRST RUN.** The spec and plan both said three (`App.tsx`, `RightPanelHost.tsx`,
+CM6). The guard failed with *"command-palette: isPaletteChord is never CALLED in a registration
+host"* — `⌘⇧P` is registered in **`EditorPanel.tsx`**. The registry was right; the host list was
+wrong. A `grep -rln 'addEventListener("keydown"'` then showed **six** keydown hosts, of which
+four are app-chord hosts (the other two — `dashboard/ViewportContext.tsx`,
+`picker/PickerOverlay.tsx` — own view-local keys, deliberately out of registry scope; `probe/` is
+dev-only). **This is the guard doing exactly its job**: it refused an unproven reachability claim
+rather than passing. Resolved in-phase; no backlog entry.
+
+[SURFACED-2026-09-15] Phase 1 / P1.6 — **`offInvariantGuard.test.ts` needed two deliberate
+edits, and a mutation proved they did not disarm it.** (1) Its chord-module count went 15 → 16
+(the guard explicitly instructs a deliberate update; a SHRINK is what it forbids). (2) Its
+per-export "ungated workflow chord" arm flagged `ChordEntry` (an `interface`) and
+`CHORD_REGISTRY` (a data `const`) — both name `requiresWorkflowGate` and match `/chord/i`, but
+**neither can consume a gate value**, exactly the reasoning the guard's own comment already
+applies to `panelHost.ts`'s `RightPanel` / `AVAILABLE_PANELS`. Type-only and SCREAMING_CASE data
+exports are now excluded. ⚠️ **Verified non-disarming by planting a REAL ungated workflow chord
+in `panelHost.ts` — the arm still caught it.** Also fixed a genuine weakness this surfaced:
+`visibleChords` used `!entry.requiresWorkflowGate || enabled`, which the guard's
+`consumesGateValue` predicate does not accept as evidence; it is now an explicit
+`if (enabled) return …` branch, so the module passes on evidence rather than on an exemption.

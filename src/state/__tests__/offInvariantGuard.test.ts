@@ -301,6 +301,24 @@ function ungatedWorkflowExports(rawSrc: string): string[] {
           /chord/i.test(name ?? "") ||
           /\b(metaKey|shiftKey|altKey|ctrlKey)\b/.test(body),
       )
+      // ⚠️ A TYPE declaration is not a surface, and it CANNOT consume a gate value — an
+      // `interface`/`type` has no body to branch in. Leaving them in scope makes the arm
+      // unsatisfiable for any module that types its own gate-aware shape: M14 WP3's
+      // `ChordEntry` names `requiresWorkflowGate` (that IS the gate being honored, as data)
+      // and matches /chord/i, so it was flagged while the module's actual surface —
+      // `visibleChords(enabled)` — branches on the gate correctly. This is the same
+      // reasoning the `panelHost.ts` note above already applies to `RightPanel` and
+      // `AVAILABLE_PANELS`: data and types are not registrations. Runtime exports are
+      // unaffected, so the arm's real subject is untouched.
+      // ⚠️ Nor is a DATA constant. `AVAILABLE_PANELS` is the precedent the note above
+      // already states: a `const` table that names workflow terms registers nothing, so it
+      // cannot "honor" a gate and has no body to branch in. M14 WP3's `CHORD_REGISTRY` is
+      // the same shape one step larger — the chord map as data, whose `requiresWorkflowGate`
+      // field is the gate expressed AS data for `visibleChords` to act on. Functions are
+      // untouched, so the arm still reaches every module that actually registers a surface.
+      .filter(
+        ({ body }) => !/^(?:interface|type|const\s+[A-Z0-9_]+\s*:)/.test(body),
+      )
       .filter(({ body }) => namesWorkflowTerm(body) && !consumesGateValue(body))
       .map(({ body, name }) => name ?? body.split("\n")[0].trim().slice(0, 40))
   );
@@ -1017,8 +1035,13 @@ describe("the guard is not vacuous", () => {
       ).toContain(mustKeep);
     }
 
-    // ...and the set is a plausible size (15 at the time of writing: 12 + panelHost +
-    // paletteCommands + terminalFontZoom).
+    // ...and the set is a plausible size (16: 12 + panelHost + paletteCommands +
+    // terminalFontZoom + chordRegistry). ⚠️ 15 → 16 at M14 WP3 (2026-09-15), a deliberate
+    // GROWTH: chordRegistry.ts promoted the chord-ownership map from a comment block in
+    // paletteCommands.ts to typed data. It is in scope for this arm on purpose — it names
+    // the workflow gate (`requiresWorkflowGate`), so the ungated-workflow-chord arm above
+    // must see it, and `visibleChords(enabled)` branches on the gate value so that arm
+    // passes on evidence rather than on an exemption.
     //
     // ⚠️ The floor was `>= 13` while the test was named "does not shrink" — it tolerated
     // losing 2 of 15 modules (13%), i.e. precisely the shrinkage it claimed to forbid
@@ -1030,7 +1053,7 @@ describe("the guard is not vacuous", () => {
       selected.length,
       "the chord-module set changed size — if a selector widening added a module this is " +
         "expected, but update the count deliberately; a SHRINK silently disarms this arm",
-    ).toBe(15);
+    ).toBe(16);
   });
 
   it("the chord arm's offender predicate FIRES on an ungated workflow chord", () => {

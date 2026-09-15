@@ -1,0 +1,215 @@
+// M14 WP3 Phase 1 — the reachability guard for the chord registry.
+//
+// ⚠️ THIS IS THE LOAD-BEARING TEST OF THE WHOLE WP, and the reason is specific:
+// enumerating a registry as data proves the SET exists. It does NOT prove each entry has a
+// CALLER. That exact gap shipped a CRITICAL at M11 WP4 and the M12 dead-`/exit` before it,
+// and CLAUDE.md flags it twice ("extracting a pure state machine proves the MACHINE, not its
+// CALLER"). A registry of 20 chords that all render beautifully in Settings while three of
+// them are wired to nothing is the failure this file exists to catch.
+//
+// So the assertions below are deliberately NOT "the registry has 20 entries" or "every entry
+// has a label". They are:
+//   (1) every Claudesk-owned entry names a matcher module that EXISTS on disk;
+//   (2) that module is actually IMPORTED by a real registration host (see HOSTS below) —
+//       i.e. something can call it;
+//   (3) the host actually CALLS it — the imported symbol appears in call position, not just
+//       in the import line. An import with no call site is precisely the dead-registry shape.
+//
+// ⚠️ Assertion (3) reads host source with comments STRIPPED. That is not incidental: the
+// thing this WP replaced was a ~60-line COMMENT BLOCK naming every chord and every predicate
+// (`isFinderChord`, `panelForChord`, …). A guard that grepped raw source for a bare
+// identifier would be satisfied by the very comments being deleted, and would keep passing
+// after the code was gone — the documented `raw-guard-identifier-satisfied-by-own-comments`
+// trap, at its most dangerous here of all places. We strip comments, then assert the CALL
+// shape `fn(`.
+
+import { describe, it, expect } from "vitest";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { CHORD_REGISTRY, visibleChords, chordLabel } from "../chordRegistry";
+
+const SRC = resolve(__dirname, "../../..");
+
+/**
+ * The registration hosts a chord can be wired into.
+ *
+ * ⚠️ There are FOUR, not the two this guard was first written with — and the guard itself
+ * is what found that out. `⌘⇧P` (command palette) is registered in EditorPanel.tsx, not
+ * RightPanelHost.tsx, so the first run failed with "isPaletteChord is never CALLED in a
+ * registration host". The registry was right; the host list was wrong. That is the guard
+ * behaving exactly as intended: it refused an unproven reachability claim rather than
+ * quietly passing.
+ *
+ * Derived from `grep -rln 'addEventListener("keydown"' src/`, minus `probe/` (dev-only
+ * harness, not shippable UI) and minus `dashboard/ViewportContext.tsx` +
+ * `picker/PickerOverlay.tsx`, which own view-local keys (timeline viewport gestures, picker
+ * navigation) that are not app chords and are deliberately out of this registry's scope.
+ */
+const HOSTS = [
+  "App.tsx",
+  "components/workspace/RightPanelHost.tsx",
+  "components/workspace/editor/EditorPanel.tsx",
+  "components/workspace/Workspace.tsx",
+] as const;
+
+/**
+ * Strip line and block comments so an assertion cannot be satisfied by prose.
+ *
+ * ⚠️ Order matters: block comments first, then line comments. Doing it the other way
+ * mangles a line comment nested inside a block comment and can leave a dangling terminator.
+ */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+}
+
+function readHostSources(): string {
+  return HOSTS.map((h) =>
+    stripComments(readFileSync(resolve(SRC, h), "utf8")),
+  ).join("\n");
+}
+
+describe("chord registry — shape", () => {
+  it("every entry has a stable id, a label, and at least one outcome", () => {
+    for (const entry of CHORD_REGISTRY) {
+      expect(entry.id, "id must be non-empty").toBeTruthy();
+      expect(entry.label, `${entry.id}: label must be non-empty`).toBeTruthy();
+      expect(
+        entry.outcomes.length,
+        `${entry.id}: must have at least one outcome`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("ids are unique", () => {
+    const ids = CHORD_REGISTRY.map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("labels are unique — two chords rendering the same label is a data bug", () => {
+    const labels = CHORD_REGISTRY.map((e) => e.label);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  // ⌘W is the canary for the context-scoped model. If someone "simplifies" the outcome
+  // array to a single string, this fails — which is the point: RightPanelHost routes the
+  // SAME isCloseTabChord through shouldCloseTerminalOnChord by focus context, so ⌘W is one
+  // chord with two outcomes. Flattening it would make the Settings list state a falsehood.
+  it("⌘W is modelled as ONE chord with TWO context-scoped outcomes", () => {
+    const closeW = CHORD_REGISTRY.find((e) => e.id === "close-w");
+    expect(closeW).toBeDefined();
+    expect(closeW!.outcomes.length).toBe(2);
+    for (const outcome of closeW!.outcomes) {
+      expect(
+        outcome.whenFocused,
+        "a context-scoped outcome must say which context it applies in",
+      ).toBeTruthy();
+    }
+  });
+});
+
+describe("chord registry — reachability (the load-bearing guard)", () => {
+  it("every Claudesk-owned matcher module exists on disk", () => {
+    for (const entry of CHORD_REGISTRY) {
+      if (!entry.claudeskOwned || entry.matcher === null) continue;
+      const path = resolve(SRC, entry.matcher);
+      expect(
+        existsSync(path),
+        `${entry.id}: matcher not found at ${entry.matcher}`,
+      ).toBe(true);
+    }
+  });
+
+  it("every Claudesk-owned matcher is IMPORTED by a registration host", () => {
+    const hosts = readHostSources();
+    for (const entry of CHORD_REGISTRY) {
+      if (!entry.claudeskOwned || entry.matcher === null) continue;
+      // The module basename without extension, e.g. "finderChord".
+      const moduleName = entry.matcher
+        .split("/")
+        .pop()!
+        .replace(/\.tsx?$/, "");
+      expect(
+        hosts.includes(moduleName),
+        `${entry.id}: no registration host imports ${moduleName} — the entry would render ` +
+          `in Settings while being wired to nothing`,
+      ).toBe(true);
+    }
+  });
+
+  // ⚠️ The strongest of the three, and the one that survives the comment-block trap. An
+  // import with no call site still satisfies the assertion above; this one requires the
+  // symbol to appear in CALL position in comment-stripped host source.
+  it("every Claudesk-owned matcher is CALLED by a registration host, not merely imported", () => {
+    const hosts = readHostSources();
+
+    // Exported call symbols per matcher module. Signatures VARY deliberately — boolean,
+    // number|null, RightPanel|null, and panelForChord takes a second argument — which is
+    // why the registry stores a module path rather than pretending to a common function
+    // type. The call-shape assertion works regardless of return type.
+    const CALL_SYMBOLS: Record<string, string> = {
+      workspaceSwitchChord: "workspaceSwitchIndex",
+      newWorkspaceChord: "newWorkspaceChord",
+      dashboardChord: "isDashboardChord",
+      settingsChord: "isSettingsChord",
+      finderChord: "isFinderChord",
+      searchChord: "isSearchChord",
+      newFileChord: "isNewFileChord",
+      panelHost: "panelForChord",
+      tabSwitchChord: "tabSwitchIndex",
+      closeTabChord: "isCloseTabChord",
+      newTerminalChord: "newTerminalChord",
+      paletteCommands: "isPaletteChord",
+    };
+
+    for (const entry of CHORD_REGISTRY) {
+      if (!entry.claudeskOwned || entry.matcher === null) continue;
+      const moduleName = entry.matcher
+        .split("/")
+        .pop()!
+        .replace(/\.tsx?$/, "");
+      const symbol = CALL_SYMBOLS[moduleName];
+      expect(
+        symbol,
+        `${entry.id}: no call symbol mapped for ${moduleName}`,
+      ).toBeTruthy();
+      expect(
+        hosts.includes(`${symbol}(`),
+        `${entry.id}: ${symbol} is never CALLED in a registration host (imported-but-dead)`,
+      ).toBe(true);
+    }
+  });
+});
+
+describe("visibleChords — the single accessor", () => {
+  it("omits the gate-dependent chord when the gate is OFF", () => {
+    const off = visibleChords(false);
+    expect(off.some((e) => e.requiresWorkflowGate)).toBe(false);
+    // ⚠️ Omitted, not greyed: with the gate off the app must be byte-identical to one that
+    // never had the feature — a visible-but-inert row is the dead affordance the M10.9 prior
+    // forbids.
+    expect(off.some((e) => e.id === "panel-select-docs")).toBe(false);
+  });
+
+  it("includes the gate-dependent chord when the gate is ON", () => {
+    const on = visibleChords(true);
+    expect(on.some((e) => e.id === "panel-select-docs")).toBe(true);
+    expect(on.length).toBe(CHORD_REGISTRY.length);
+  });
+
+  it("the gate actually changes the result — off is a strict subset of on", () => {
+    const off = visibleChords(false);
+    const on = visibleChords(true);
+    expect(off.length).toBeLessThan(on.length);
+  });
+});
+
+describe("chordLabel", () => {
+  it("returns the label for a known id", () => {
+    expect(chordLabel("project-search")).toBe("⌘⇧F");
+    expect(chordLabel("file-finder")).toBe("⌘P");
+  });
+
+  it("throws on an unknown id rather than returning a blank label", () => {
+    expect(() => chordLabel("nope")).toThrow(/unknown chord id/);
+  });
+});
