@@ -154,3 +154,6 @@ It is otherwise small (Size S) and the shape is well understood.
       see criterion 4 — the spawn-time-placement prior does **not** govern here). Decide at spec.
 - [ ] **Does the toggle need to survive a Recycle?** Recycle tears down and respawns the CC session;
       the toggle is a per-workspace/project property, so it likely should — confirm at spec.
+
+## Session Handoff — 2026-09-15 16:07
+Handed off. See `workflow-system/state/.session.md` to restore.
