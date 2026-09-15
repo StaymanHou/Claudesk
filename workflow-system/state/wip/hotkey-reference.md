@@ -326,8 +326,13 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
 
 ## Current Node
 - **Path:** Feature > Phase 1 > verify-human
-- **Active scope:** Phase 1 verify-human (impl + verify-auto + verify-self all complete)
-- **Blocked:** none
+- **Active scope:** ⏸️ **PAUSED 2026-09-15 by operator** — WP3 is parked mid-verify-human to
+  prioritise the supervisor fixes + Apple signing. **Nothing is broken; nothing is half-built.**
+  Phase 1 impl is complete and committed (P1.1–P1.7), verify-auto PASS, verify-self PASS.
+  **To resume:** answer the 4 verify-human leaves (all product judgment, listed below) — the
+  registry table to review was rendered in-session and is reproducible from
+  `src/components/workspace/chordRegistry.ts`.
+- **Blocked:** not blocked — deliberately deprioritised
 - **Unvisited:** Phase 1 verify-codify; then Phase 2 (render the list as a fifth Settings group)
 - **Open discoveries:** two, both resolved in-phase — see Discoveries
 
