@@ -271,7 +271,7 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
         `fn(`; `grep -c` first to confirm the substring is unique to its site.**
         <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: PASS 2026-09-15 — tsc 0, scoped eslint 0, 12/12 chordRegistry (count-confirmed, not a filtered false-green), 4 label exports + 3 consumers intact; guard fail-probe confirmed -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: FAILED — outcome (e) completeness: TWO registered chords omitted; see Discoveries -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
@@ -310,9 +310,10 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-self
-- **Active scope:** Phase 1 verify-self (impl + verify-auto complete)
-- **Blocked:** none
+- **Path:** Feature > Phase 1 > P1.4 (back-loop from verify-self)
+- **Active scope:** P1.4 (add the two omitted chords) + P1.6 (extend the guard to catch the
+  omission DIRECTION — see Discoveries; the current guard cannot)
+- **Blocked:** verify-self BLOCKED on the two omissions
 - **Unvisited:** Phase 1 verify-human → verify-codify; then Phase 2 (render the list as a fifth
   Settings group)
 - **Open discoveries:** two, both resolved in-phase — see Discoveries
@@ -354,3 +355,42 @@ in `panelHost.ts` — the arm still caught it.** Also fixed a genuine weakness t
 `visibleChords` used `!entry.requiresWorkflowGate || enabled`, which the guard's
 `consumesGateValue` predicate does not accept as evidence; it is now an explicit
 `if (enabled) return …` branch, so the module passes on evidence rather than on an exemption.
+
+[SURFACED-2026-09-15] Phase 1 / verify-self — **No integration boundary.** The phase adds
+`chordRegistry.ts` (a new module nothing imports yet) plus its guard, and edits two test files.
+It touches `paletteCommands.ts` only by DELETING a comment block — `PALETTE_CHORD_LABEL` and
+`isPaletteChord` are untouched, so no consuming surface changes behavior. Recorded because the
+integration-boundary rule requires the determination to be stated, not assumed.
+
+[SURFACED-2026-09-15] Phase 1 / verify-self — ⚠️ **BLOCKING: TWO REGISTERED CHORDS ARE MISSING
+FROM THE REGISTRY.** Found by the verify-self fidelity audit, which checked completeness in the
+direction the 12 tests structurally cannot.
+
+1. ⚠️ **Terminal font zoom (`⌘=` / `⌘+` / `⌘-` / `⌘0`)** — `terminalZoomForChord` in
+   `components/workspace/terminalFontZoom.ts`, imported and CALLED at `Workspace.tsx:773` on a
+   capture-phase listener. It is Claudesk-owned and workspace-hosted, focus-routed to the CC
+   terminal or the right-panel terminal. **The registry currently carries only the CM6 entry
+   `cm6-font-zoom` (`claudeskOwned: false`), so Settings would tell a user those keys belong to
+   CodeMirror — when in a focused terminal they are Claudesk's own path.** That is the
+   lie-by-omission the CM6 entries were added to PREVENT, inverted.
+2. **`⌘\` toggle line wrap** — bound in `editorExtensions.ts` `coreKeymap`
+   (`{ key: "Mod-\\", run: (view) => applyWrap(view, !lineWrap) }`, M6 WP5). ⚠️ Its own source
+   comment claims it was *"confirmed disjoint from every chord in paletteCommands.ts's ownership
+   map"* — i.e. it was checked against the OLD COMMENT MAP and then never added to it. **Same
+   drift class that motivated this WP**, caught in the act.
+
+⚠️ **THE GUARD GAP IS THE REAL FINDING, and it is bigger than the two entries.** The reachability
+guard only walks **registry → code**. Both omissions are the **code → registry** direction, which
+it structurally cannot see: an entry-less chord is not an entry, so nothing iterates it.
+⚠️ `Workspace.tsx` is already in the test's `HOSTS` list, so this is NOT fixed by adding a host —
+**an unused host passes silently.** Fixing P1.4 without P1.6 would close these two instances and
+leave the class open for the next chord anyone adds.
+
+[SURFACED-2026-09-15] Phase 1 / P1.5 — **The "re-export" comment describes an intent the code
+does not implement.** `chordRegistry.ts` re-exports only `ChordEvent`; the four `*_CHORD_LABEL`
+constants remain exported from their ORIGINAL home modules with live consumers. The asserted
+outcome (`grep -c PALETTE_CHORD_LABEL` >= 1) and the no-runtime-breakage property both genuinely
+hold — nothing was deleted, so the ES-module runtime trap never applied — but the comment claims
+a single-source-of-truth the code does not establish. Fix the COMMENT to match the code (the
+labels are duplicated between the registry and the four constants); do not chase the stronger
+claim in this phase.
