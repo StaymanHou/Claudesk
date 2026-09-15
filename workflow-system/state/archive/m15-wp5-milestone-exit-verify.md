@@ -1,7 +1,7 @@
 # Feature: M15 WP5 — Milestone exit verify
 
 **Workflow:** feature
-**State:** SHIPPED 2026-09-15
+**State:** Completed 2026-09-15
 **Created:** 2026-09-14
 **Drive mode:** autopilot
 <!-- ⚠️ `drive_mode` IS recorded here deliberately, reversing WP4's omission (wbs.md carries none,
@@ -373,3 +373,48 @@ means "removed from this WP's scope", not "done". Same trap as WP4's `DEFERRED-*
 - ⚠️ **This WP's own Observable Outcomes were unsatisfiable as planned** (Phase 4's
   `grep … returns 0`, when a correction necessarily quotes what it retracts). Rewritten mid-phase
   and the defect recorded — a plan error, not a work error.
+
+
+---
+
+## Retrospect
+
+- **What changed in our understanding:**
+  ⚠️ **The WBS was not a trustworthy statement of what remained.** Task 5.2 was listed as open work
+  but had *already shipped* as a standing test (`verdictReplay.test.ts`), while task 5.3 was listed
+  as covered but hid a real gap — the only PAUSE-refusal test drove **F3 (spec→research)** while its
+  own comment claimed to cover "the case the supervisor must never fire on". **Both errors pointed
+  the same direction: the plan's confidence did not track the evidence.** Phase 1 existed to measure
+  that, and it was the highest-value phase in the WP despite writing no code.
+  Also learned: **a doc that outranks the code can contradict itself and still read as
+  authoritative.** §B of the new arch doc denied a Rust command that §D described, two sections
+  apart.
+
+- **Assumptions that held:**
+  The mechanical/live split was real and clean — everything not requiring a live CC session was
+  closable by an agent, and everything requiring one was not. The three mitigations that made the
+  5.3 gap a *gap* rather than a *defect* (the conditional cell's `pause` fallback, covered in three
+  places) all checked out under audit. The observability paydown done before this WP was the right
+  precondition: without those log lines Phase 3 would have had nothing to observe even if run.
+
+- **Assumptions that were wrong:**
+  ⚠️ **That Phase 4 depended on Phase 3.** The plan said so; it was ordering-only, and taking the
+  dependency literally would have stranded the `arch/` resync behind a phase that may never run —
+  while a stale `arch/` doc *outranks a correct record*.
+  ⚠️ **That `grep … returns 0` could express "the stale claim is gone".** A correction that explains
+  what it retracts necessarily quotes it, so Phase 4's Observable Outcomes were unsatisfiable as
+  written. A plan defect, caught mid-phase.
+  ⚠️ **That my own probes were more reliable than the artifacts they measured.** Twice they were
+  not: a fixture-count probe read a dict length and reported 4 where 2,284 was right; a guard regex
+  `[a-z-]+` dropped `n/a` and reported 5 arms where 6 was right. **Both times the instrument was
+  wrong and the artifact was right**, and trusting either would have degraded something correct.
+
+- **Approach delta:**
+  Planned as 4 sequential phases; **executed 1 → 2 → 4, with 3 moved to the backlog.** Phase 1
+  reshaped Phases 2–4 by finding what was already done (5.2) and what genuinely was not (5.3) —
+  so the WP delivered *less new work and more correction* than planned. Two unplanned artifacts
+  came out of verification rather than build: the `verify-human` GATE tests (from Phase 1's
+  finding) and `archDocEnumeration.test.ts` (codifying a falsehood this WP itself committed).
+  ⚠️ **The verify-self subagents earned their place three times** — they caught the BLOCKING doc
+  falsehood, independently re-proved mutations rather than trusting the report, and checked one
+  thing I had not (that a mutant landed on F13 and not its identical-valued sibling).

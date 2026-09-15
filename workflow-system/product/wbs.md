@@ -1,9 +1,9 @@
 ---
 stage: wbs
-state: in-progress
+state: complete
 cycle: milestone-15-workflow-supervisor
 milestone: 15
-updated: 2026-09-14
+updated: 2026-09-15
 ---
 
 # WBS — Milestone 15: Workflow supervisor
@@ -207,7 +207,24 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 
 ---
 
-### WP5: Milestone exit verify ✅ SHIPPED 2026-09-15
+### WP5: Milestone exit verify ✅ SHIPPED 2026-09-15 — ⚠️ **RE-SCOPED AT CLOSE: 5 of 7 tasks landed**
+
+⚠️ **TASKS 5.1 AND 5.4 ARE DELIBERATELY LEFT UNTICKED. THEY DID NOT LAND.** Both are
+**live-observation** checks and neither was performed. They moved to
+`SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**) on the
+operator's instruction (2026-09-15: *"move phase 3 to backlog or somewhere. ship now"*), because an
+agent cannot manufacture the trigger — an agent-launched CC emits no hook events
+(`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`).
+
+⚠️ **CONSEQUENCE: M15's EXIT CRITERION IS UNMET, AND THE MILESTONE CLOSES SAYING SO.** The
+criterion was *"a break is caught and corrected end-to-end … verified against the DECISION"*; the
+mechanical half is fully pinned by standing tests, but **the supervisor has never been observed
+firing in a live session**. This is recorded rather than hidden — in `arch/workflow-supervisor.md`
+§H, `CLAUDE.md`, the CHANGELOG, and the archived WIP's ship record.
+
+⚠️ **Do NOT tick 5.1/5.4 to tidy the WBS.** They are the honest surface for downstream planning:
+the finalize rule's own carve-out is that a task which did not land must be re-scoped explicitly
+rather than silently ticked. Tick them when dogfooding actually closes them.
 **Description:** Verify M15's exit criteria against the **decision**, not against a stored value; resync the `arch/` subsystem docs; confirm the gate posture.
 **Milestone:** 15
 **Dependencies:** WP2, WP3, WP4
