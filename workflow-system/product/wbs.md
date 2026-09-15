@@ -106,6 +106,72 @@ Two recorded priors bear on this decomposition.
 
 ## Work packages
 
+### WP0: Supervisor hotfix — per-workspace toggle + unsent-input suppression 🔥 URGENT
+**Description:** The M15 supervisor is firing unwanted commands in live use. Give it a
+per-workspace off switch and stop it firing when the operator has unsent input in the CC pane.
+**Milestone:** M14 (remainder) — ⚠️ **INSERTED 2026-09-15 out of the original decomposition**
+**Dependencies:** none — ⚠️ **preempts WP1/WP2/WP3**
+**Size:** S
+**Origin:** ⚠️ **NOT a planned work package.** Operator dogfeedback on `v0.5.0`
+(`SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1`, high) — *"it's making Claudesk a bit out of
+control and less useful."* ⚠️ **The supervisor fired six unwanted `/feature-build` invocations
+into this very session**, which is how the cause was identified. **9 of 20 projects carry a stored
+drive mode**, so the blast radius is ~half the operator's rotation, not one workspace.
+
+**Operator rulings taken 2026-09-15 (do not re-litigate):**
+- ⚠️ **Toggle default is ON, opt-out per workspace** — NOT default-off. Consistent with
+  `operator-helpful-friend-misfiring-as-offswitchable-setting`.
+- ⚠️ **"While typing" is NOT good enough — the predicate is UNSENT INPUT PRESENT, not
+  keystroke-recency.** Operator correction, and it is the load-bearing distinction: "typing" is a
+  race on keystroke timing; "there is a buffered line you walked away from" is a state. A fix that
+  only debounces recent keystrokes does not satisfy this ruling.
+- ⚠️ **Do NOT flip `workflow_features_enabled` off as a stopgap** (operator, explicit). The blunt
+  gate would also hide the Docs panel and the rest of the workflow surface. Fix it properly.
+- **Fire policy is reopened LATER, after this patch ships** — see the note under WP2.
+
+**Tasks:**
+- [ ] 0.1 Unsent-input watermark. Hook `term.onData` (`XtermPane.tsx:626` — the single chokepoint
+      for every keystroke Claudesk forwards INTO the pty). Track input-since-turn-end with no
+      `\r` since ⇒ unsent input present. ⚠️ **This reads what Claudesk sends IN, never PTY
+      output** — `CLAUDE.md`'s *"PTY byte-injection for input; hook channel for state. ⚠️ NEVER
+      from PTY output"* rule holds, and the `xterm-dom-reads-fake-a-blank-pane` false-verdict trap
+      is avoided by construction. ⚠️ **Scraping the xterm buffer was CONSIDERED AND REJECTED** for
+      exactly those two reasons.
+- [ ] 0.2 ⚠️ **Enumerate the input paths that BYPASS `term.onData` before trusting the watermark.**
+      Paste, programmatic writes, and `injectCommand` itself may not route through it. **A
+      suppression with an unknown blind spot is worse than none, because it will be trusted.**
+      Report what is and is not covered rather than assuming full coverage.
+- [ ] 0.3 Consult the watermark in `fireOne` (`src/state/supervisor/fanOut.ts`) and skip the fire
+      when unsent input is present. ⚠️ **`injectCommand` has no retry and no pre-send cancel
+      window** — suppression must happen BEFORE the call, not be undone after.
+- [ ] 0.4 Per-workspace supervisor toggle, **default ON**, persisted in `projects.json`.
+      ⚠️ **A malformed/absent value must read as ON, not crash the project list** — the
+      picker-row drive-mode precedent (a bad mode string fails serde and takes the whole list
+      down) applies.
+- [ ] 0.5 Surface the toggle where the operator can reach it *at the moment it misfires*.
+      ⚠️ **`set-a-spawn-time-choice-where-the-spawn-is-chosen` does NOT govern this** — the
+      supervisor is not read once at spawn; it acts every turn, so the control belongs where the
+      operator is when it acts, not only on the picker row. Decide at spec/plan time.
+- [ ] 0.6 Tests: watermark state machine (input → no `\r` → suppressed; input → `\r` → not
+      suppressed; turn-end resets), and toggle-gates-the-call. ⚠️ **Mutation-prove the suppression
+      INDIVIDUALLY** — a suppression that never suppresses and one that always suppresses both
+      look green against a test that only asserts "no fire happened".
+- [ ] 0.7 Ship as a patch release via `/release`.
+
+⚠️ **WHAT AN AGENT CANNOT VERIFY HERE, AND IT IS THE HALF THAT MATTERS.** An agent-launched CC
+emits no hook events (`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`), so
+the supervisor will not fire under agent testing. The predicate and the toggle wiring are unit-
+provable; **"does it actually stop interrupting the operator" is a dogfooding check only the
+operator can make.** Say which half is proven — do not present a green suite as evidence the
+interruption stopped.
+
+**WP0 → WP1 rationale:** WP0 preempts the signing chain because the supervisor is actively
+degrading daily use, and because the patch should ride with — or deliberately precede — the signed
+release the operator will install anyway. Installing means `brew upgrade`, which kills every
+running Claudesk, so the operator pays that cost once rather than twice.
+
+---
+
 ### WP1: Probe — Apple Developer enrollment, cert issuance, and the notarization toolchain
 **Type:** probe
 **Milestone:** M14 (remainder)
@@ -288,7 +354,13 @@ final install story — rather than written, then rewritten when the `xattr` ste
 
 ---
 
-### WP3: Hotkey configuration in the `⌘,` Settings panel
+### WP3: Hotkey configuration in the `⌘,` Settings panel ⏸️ PARKED 2026-09-15
+> ⏸️ **PARKED mid-verify-human by operator 2026-09-15** to prioritise WP0 (supervisor hotfix) and
+> the signing chain. **Nothing is half-built:** Phase 1 impl is complete and committed
+> (P1.1–P1.7 at `3db5994` + `ef0bb82`), verify-auto PASS, verify-self PASS on re-run (8/8, 0
+> BLOCKING). **To resume:** answer the 4 open verify-human leaves in
+> `workflow-system/state/wip/hotkey-reference.md` — all product judgment, no mechanical work
+> outstanding. Phase 2 (the Settings render) is unstarted.
 **Description:** Let the user see and rebind Claudesk's keyboard shortcuts, as a new group in the
 **existing** Settings panel.
 **Milestone:** M14 (remainder)
@@ -392,7 +464,9 @@ is being written anyway.
 ## Dependency map
 
 ```
-WP1 (probe: enroll + cert + toolchain)  ⚠️ OPERATOR-GATED, 24h published / 2-7+ wks reported
+WP0 (supervisor hotfix)  🔥 URGENT — preempts everything; operator dogfeedback
+
+WP1 (probe: enroll + cert + toolchain)  ⚠️ OPERATOR-GATED — ✅ ENROLLMENT APPROVED 2026-09-15
  └─> WP2 (sign + notarize + delete quarantine workaround)   [CRITICAL PATH]
       └─> WP4 (two-tier setup docs)
 
@@ -407,8 +481,13 @@ Apple's approval is 24h published but reportedly 2–7+ weeks in 2026, and no am
 to run while enrollment is pending. ⚠️ **Start task 1.1 (enrollment) FIRST regardless of what is
 built next** — it is the long pole, and it is the one task an agent cannot perform.
 
-**Suggested execution order:** kick off **1.1/1.2** (operator) → build **WP3** and **WP5** while
-approval is pending → **WP1** completes → **WP2** → **WP4**.
+**Suggested execution order — ⚠️ REVISED 2026-09-15 by operator:** **WP0** (supervisor hotfix,
+urgent) → **task 1.2** (operator creates the Developer ID cert; enrollment already approved) →
+**WP1** completes → **WP2** (sign + notarize) → **WP4** (setup docs). **WP3 is PARKED**
+mid-verify-human and resumes after the release. **WP5 is DONE.**
+⚠️ **The original ordering assumed enrollment was the long pole and WP3/WP5 were the parallel
+filler. Both premises expired the same day:** enrollment was approved in hours, and WP3 was parked
+by the operator. Do not restore the old order by citing the parallel-track rationale.
 
 ## Milestone exit criteria (from `roadmap.md`, unchanged)
 
