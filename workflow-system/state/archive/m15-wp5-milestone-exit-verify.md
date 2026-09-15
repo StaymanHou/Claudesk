@@ -1,7 +1,7 @@
 # Feature: M15 WP5 — Milestone exit verify
 
 **Workflow:** feature
-**State:** verify-codify (Phases 1, 2, 4 complete; Phase 3 deferred)
+**State:** SHIPPED 2026-09-15
 **Created:** 2026-09-14
 **Drive mode:** autopilot
 <!-- ⚠️ `drive_mode` IS recorded here deliberately, reversing WP4's omission (wbs.md carries none,
@@ -104,30 +104,18 @@ reads those exact log lines — without them it would have had nothing to observ
     - [x] P2.verify-human.3 ⚠️ Adjudicator exemption holds; R-6 condition 3 (larger labelled set) carried as EXPLICITLY OWED  <!-- status: PASS (operator, 2026-09-15) — backlogged as SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET -->
   - [x] verify-codify  <!-- status: DONE — no NEW tests written: P2.1's two tests WERE this phase's codified coverage (mutation-proved twice, once independently). P2.2/P2.3/P2.4 are recorded decisions, not behavior. ⚠️ Codify DID ask whether P2.2's reversing condition is mechanically backstopped and found it IS (the guard's allowlist is all of `src/**`, so a future supervisor surface trips arms 1-3 today) — see the addendum. Full suite: EXIT=0, 2591 frontend / 901 Rust, 0 failures. -->
 
-- [ ] Phase 3: Live observation — the exit criterion proper  <!-- status: NOT-STARTED; depends on Phase 2 — ⚠️ DEFERRED-TO-DOGFOODING (operator, 2026-09-15) -->
-  **Observable outcomes:**
-  - CLI: a Claudesk build newer than `7f303e6` is running, confirmed by comparing the running
-    build's commit to `git log -1 --format=%H` — ⚠️ WP4's installed-`.app` tier was unsatisfiable
-    because the build predated the feature by 8 days; do not repeat that.
-  - Console: in a real multi-workspace session, a turn ending where the policy says AUTO produces
-    the `supervisor: fired <command> into <workspaceId>` line **with no operator input** — the trace
-    added by the 2026-09-14 observability paydown, which is what makes this checkable at all.
-  - Console: a legitimate `verify-human` PAUSE, an `ESCALATE`, and a no-stored-mode project each
-    produce **no fire line at all** (the negative arm, asserted live).
-  - Console: at a non-final feature phase boundary above 400,000 tokens, the
-    `supervisor: recycling <name> at <n> tokens` line appears and a fresh session results.
-  - [ ] P3.1 Build/install a Claudesk newer than `7f303e6`; confirm the running build's commit.  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 Drive the positive arm (WBS 5.1) in a real multi-workspace session.  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 Drive the negative arm (WBS 5.3).  <!-- status: NOT-STARTED -->
-  - [ ] P3.4 Observe the context-pressure recycle (WBS 5.4).  <!-- status: NOT-STARTED -->
-  - [ ] P3.5 ⚠️ Confirm the recovery path: **Esc** actually interrupts a wrong fire. R-1's accepted
-        cost rests on it and it has never been confirmed.  <!-- status: NOT-STARTED -->
-  - [ ] P3.6 ⚠️ Gate OFF → the same turn fires nothing (the OFF-invariant, live). Added at P1.3 —
-        this is WP4's `P4.verify-human.2` and was missing from this plan as first written.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+- [x] Phase 3: Live observation — ⚠️ **MOVED TO BACKLOG, NOT PERFORMED**  <!-- status: MOVED-TO-BACKLOG 2026-09-15 (operator decision: "move phase 3 to backlog or somewhere. ship now") -->
+  ⚠️ **THIS PHASE WAS NEVER RUN. The `[x]` means "removed from this WP's scope", NOT "done".**
+  Its six checks are the milestone's exit criterion and remain **OPEN**, tracked in full at
+  `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**, Update
+  2026-09-15). They cannot be agent-driven — an agent-launched CC emits no hook events
+  (`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`) — so the trigger is
+  the operator's first real dogfooding.
+  ⚠️ **M15 THEREFORE SHIPS WITH ITS EXIT CRITERION EXPLICITLY UNMET.** That is recorded, not
+  hidden: `arch/workflow-supervisor.md` §H and `CLAUDE.md` both state it. Approved at
+  P1.verify-human.3 and P4.verify-human.3 (2026-09-15).
+  ⚠️ **Do NOT read this `[x]` as evidence the supervisor has been observed acting.** Nothing in
+  this WP observed it. The same checkbox-vs-status-tag trap that WP4's leaves carry applies here.
 
 - [x] Phase 4: Durable-doc resync + upstream corrections  <!-- status: COMPLETE 2026-09-15 — ⚠️ taken BEFORE Phase 3, deliberately -->
   <!-- ⚠️ **REORDERING, RECORDED 2026-09-15.** Phase 4 runs BEFORE Phase 3. Phase 3 (live
@@ -186,21 +174,18 @@ reads those exact log lines — without them it would have had nothing to observ
   - [x] verify-codify  <!-- status: DONE — ⚠️ NEW GUARD WRITTEN: `archDocEnumeration.test.ts` (10 tests) couples the arch doc's ENUMERATIONS to the code, because the BLOCKING falsehood verify-self found had no gate to catch it. Derives the command list from `useSupervisor.ts` rather than hardcoding, so a 4th invoke fails until the doc names it. 3 mutants proved INDIVIDUALLY (omit a command / one-sided arm count / re-assert the retracted phrase), each killed by its own arm; re-proved after a Prettier reflow. ⚠️ MY FIRST REGEX WAS WRONG (`[a-z-]+` dropped `n/a`, reported 5 arms) — fixing the PROBE was correct, not 'correcting' a doc that was right. Full suite: EXIT=0, 2601 frontend / 901 Rust. -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 (DEFERRED) — no agent-executable work remains
-- **Active scope:** ⚠️ **Phases 1, 2 and 4 are COMPLETE. Phase 3 is the ONLY open phase and it is
-  operator-approved DEFERRED-TO-DOGFOODING** (P1.verify-human.3 + P4.verify-human.3, both
-  approved 2026-09-15) — it cannot be agent-driven, since an agent-launched CC emits no hook
-  events. **WP5 may close with Phase 3 open**, per P4.verify-human.3.
-  ⚠️ **Phase 4 was taken BEFORE Phase 3** — Phase 3 (live observation) is operator-approved
-  DEFERRED-TO-DOGFOODING (P1.verify-human.3) and cannot be agent-driven; Phase 4's dependency on
-  it was ordering-only. See the note on the Phase 4 node.
+- **Path:** Feature > ship
+- **Active scope:** none — all four phases `[x]`. ⚠️ **Phase 3 is `[x]` because it was MOVED TO
+  BACKLOG, not because it was performed.** Its six checks are M15's exit criterion and remain
+  OPEN at `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`.
 - **Blocked:** none
-- **Unvisited:** Phase 2 (mechanical gaps — negative arm + gate posture), Phase 3 (live
-  observation — the exit criterion proper; ⚠️ **DEFERRED-TO-DOGFOODING by operator decision
-  2026-09-15** — see P1.verify-human.3), Phase 4 (durable-doc resync + upstream corrections)
-- **Open discoveries:** 1 — the PAUSE refusal test drives F3 (spec→research) rather than a
-  `verify-human` edge; actioned at Phase 2 / P2.1, logged as
-  `SURFACE-2026-09-14-PAUSE-REFUSAL-TEST-DRIVES-THE-WRONG-EDGE-CLASS` (medium)
+- **Unvisited:** none — ship next
+- **Open discoveries:** none outstanding — the PAUSE-refusal gap (F3 vs a `verify-human` edge)
+  was CLOSED at Phase 2 / P2.1 with two standing tests, both mutation-proved individually.
+  ⚠️ Three items were surfaced to the backlog rather than resolved here:
+  `SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET` (R-6 condition 3, owed),
+  `SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER` (cross-repo, mccc), and
+  the Phase 3 fold-out into `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`.
 
 ## Gate-posture decision (P2.2 / P2.3 / P2.4) — recorded 2026-09-15
 
@@ -335,3 +320,56 @@ conditional cell, `resolveCell` falls back to **`pause`** when unsatisfied (the 
 direction), and the conditional is covered structurally in three places. **Action at P2.1:** add a
 standing test that drives a real `verify-human`-keyed edge and asserts `withhold` with reason
 `policy-not-auto`, then mutation-prove it individually.
+
+
+---
+
+## Ship record — 2026-09-15
+
+**Gate:** `pnpm verify:auto` **EXIT=0** — frontend **2589 → 2601** (+12), Rust **901**.
+
+**Commits:** `9e14172` (plan + Phase 1) · `5675c52` (Phase 2) · `c55d5fa` (Phase 4) · this one
+(ship). ⚠️ **NOT PUSHED** — `main` is ahead of `origin/main`; pushing stays the operator's call.
+
+### ⚠️ What shipped, and what did NOT
+
+**Phases 1, 2 and 4 were performed. Phase 3 was NOT** — it was moved to the backlog on the
+operator's instruction ("move phase 3 to backlog or somewhere. ship now"). Its six checks are
+M15's **exit criterion**, and they remain OPEN at
+`SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**).
+
+⚠️ **THE SUPERVISOR HAS STILL NEVER BEEN OBSERVED FIRING IN A LIVE SESSION.** The milestone closes
+with its exit criterion **explicitly unmet rather than falsely ticked** — stated in
+`arch/workflow-supervisor.md` §H, in `CLAUDE.md`, in the CHANGELOG entry, and on the Phase 3 node.
+⚠️ **A future session must not read Phase 3's `[x]` as evidence of observation** — the checkbox
+means "removed from this WP's scope", not "done". Same trap as WP4's `DEFERRED-*` leaves.
+
+### What this WP actually changed
+
+1. **Found that WBS task 5.2 was already discharged** by `verdictReplay.test.ts` — the WBS listed
+   shipped work as open. No corpus replay was rebuilt.
+2. **Closed a real coverage gap (5.3).** The only PAUSE-refusal test drove **F3 (spec→research)**
+   while its comment claimed to cover "the case the supervisor must never fire on". The
+   `verify-human` gate — where a wrong fire is read by CC **as the operator's reply** — had no
+   edge-specific test. Two tests added over F11/F12/F13; mutation-proved individually, and the
+   fallback-flip mutant is killed by the new test **alone** (all 35 pre-existing tests stayed
+   green — that gap was real).
+3. **Decided the gate posture (5.5):** no seventh guard arm is owed (measured, not assumed);
+   `WORKFLOW_TERMS` not widened; the adjudicator exemption holds with R-6 condition 3 recorded as
+   **owed, not dropped**.
+4. **Resynced the durable docs (5.6/5.7)** — and **wrote a falsehood into the new authority doc**,
+   caught by audit, then **codified a guard for that exact failure**
+   (`archDocEnumeration.test.ts`, 10 tests, 3 mutants proved individually).
+
+### Method notes worth keeping
+
+- ⚠️ **Two instrument errors nearly produced wrong "corrections".** A fixture-count probe read a
+  dict length and reported 4 where the doc's 2,284 was right; a guard regex `[a-z-]+` dropped
+  `n/a` and reported 5 arms where 6 was right. **Both times the correct move was to fix the
+  probe** — trusting either would have degraded a correct artifact.
+- ⚠️ **A stale line citation had already been propagated.** `mod.rs:451` → `:502`, inherited from
+  `wbs.md` and written into two new docs before checking. Saved as
+  `[[cite-code-by-symbol-not-line]]`.
+- ⚠️ **This WP's own Observable Outcomes were unsatisfiable as planned** (Phase 4's
+  `grep … returns 0`, when a correction necessarily quotes what it retracts). Rewritten mid-phase
+  and the defect recorded — a plan error, not a work error.

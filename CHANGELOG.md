@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-15
+
+- **Feature shipped:** M15 WP5 — the milestone exit verify: established what was genuinely already verified versus what only looked verified, closed the one real coverage gap it found, recorded the gate-posture decisions, and resynced the durable `arch/` docs to the as-built supervisor.
+- **Backlog resolved:** SURFACE-2026-09-14-PAUSE-REFUSAL-TEST-DRIVES-THE-WRONG-EDGE-CLASS — closed by two standing tests over the `verify-human`-keyed edges F11/F12/F13, replacing a PAUSE test that drove `spec → research` while claiming to cover the gate where a wrong fire consumes the operator's answer.
+- **Milestone:** WP5 — Milestone exit verify (M15, the workflow supervisor). ⚠️ **Shipped with its exit criterion explicitly UNMET, not falsely ticked** — the supervisor has still never been observed firing in a live session; the six live checks moved to `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` for first dogfooding.
+
 ## 2026-09-14
 
 - **Backlog resolved:** SURFACE-2026-09-13-QUALITY-LEDGER-KEY-AND-VERDICT-READ-THE-TURN-TWICE — closed by threading the fan-out's already-computed `TurnReading` into the verdict, so the ledger key and the fire decision cannot describe different turns.

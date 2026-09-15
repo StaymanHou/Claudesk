@@ -207,7 +207,7 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 
 ---
 
-### WP5: Milestone exit verify
+### WP5: Milestone exit verify ✅ SHIPPED 2026-09-15
 **Description:** Verify M15's exit criteria against the **decision**, not against a stored value; resync the `arch/` subsystem docs; confirm the gate posture.
 **Milestone:** 15
 **Dependencies:** WP2, WP3, WP4
@@ -224,13 +224,13 @@ Four decisions taken at a `/util-grill-me` pass over this WBS. Each was expensiv
 ⚠️ **A stale `arch/` doc OUTRANKS a correct record** (M13.5 lesson #2) — `CLAUDE.md` declares the `arch/` set the authority, so a lagging doc is *live spec asserting a refuted model*. The resync is **mandatory, not conditional**.
 
 **Tasks:**
-- [ ] 5.1 Live multi-workspace run: a real AUTO-policy turn that stops is detected and fired **without operator input**.
-- [ ] 5.2 Corpus replay green against the WP1 fixture (all known breaks flagged, zero known-legitimate pauses).
-- [ ] 5.3 Negative arm live: legitimate `verify-human` PAUSE, `ESCALATE`, Mode-0 → **no fire**.
-- [ ] 5.4 Context-pressure recycle observed at a non-final phase boundary.
-- [ ] 5.5 Gate posture: decide whether a 6th arm is owed; if a surface ships, add and **individually** mutation-prove it. Consider widening `WORKFLOW_TERMS`.
-- [ ] 5.6 ⚠️ Resync `arch/` — new subsystem doc for the supervisor + edit the subsystems it changes (`session-resumption`, `status-channel-and-surfaces`, `workflow-gate`). **Do not add a milestone section to `arch.md`.**
-- [ ] 5.7 Update `CLAUDE.md` (the supervisor's load-bearing constraints) and the M-5/M-6 refutations so they are not re-derived.
+- [ ] 5.1 Live multi-workspace run: a real AUTO-policy turn that stops is detected and fired **without operator input**.  ⚠️ **NOT DONE — MOVED TO BACKLOG 2026-09-15** (`SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`). Cannot be agent-driven; operator's first dogfooding is the trigger.
+- [x] 5.2 Corpus replay green against the WP1 fixture.  ✅ **ALREADY DISCHARGED BY SHIPPED WORK** — `verdictReplay.test.ts` runs the real `decideVerdict` over the frozen 2,284-record fixture inside `verify:auto`: **34/36** on the non-circular operator-corroborated set, both misses pinned as correct, non-vacuity guard. ⚠️ Scoring the FULL fixture would be circular (its labels came from this same policy table).
+- [x] 5.3 Negative arm — mechanical half DONE; live half moved to backlog.  ✅ All three refusals pinned by standing tests in `verdict.test.ts`. ⚠️ **WP5 Phase 1 found the PAUSE test drove F3 (spec→research), NOT a `verify-human` edge** — the highest-stakes refusal had no edge-specific test. Closed at P2.1 with two tests over F11/F12/F13 (found by enumerating `EDGES`, all dispatchable) + an anti-vacuity guard. Mutation-proved: flipping `resolveCell`'s fallback to `auto` is killed by the new test ALONE.
+- [ ] 5.4 Context-pressure recycle observed at a non-final phase boundary.  ⚠️ **NOT DONE — MOVED TO BACKLOG 2026-09-15.** Mechanically covered by 11 tests in `verdict.test.ts`; the live observation is what remains.
+- [x] 5.5 Gate posture.  ✅ **DECIDED: no SEVENTH arm is owed** (the count was 6, not 5 — M-15). Measured: zero `.tsx`, zero JSX, no panel/menu-id/chord/row-cell/skill-row registration; the supervisor acts only through already-gated paths. Pin stays at `armSubjects.length === 8`. `WORKFLOW_TERMS` **not widened** — M15 adds no `recycle`/`session`-named UI registration. Reversing condition recorded in `arch/workflow-supervisor.md` §G.
+- [x] 5.6 ⚠️ Resync `arch/`.  ✅ `arch/workflow-supervisor.md` written + indexed; `session-resumption`, `status-channel-and-surfaces` (gained §A.5 — it had NEVER documented `is_turn_start` despite owning the supervisor's trigger) and `workflow-gate` all edited. No milestone section added to `arch.md`. ⚠️ **The doc shipped a FALSEHOOD on its first pass** (§B claimed Rust exposes 2 commands "and nothing else"; `supervisor_adjudicate` is a third) — caught by audit, fixed, and **codified**: `archDocEnumeration.test.ts` now couples the doc's enumerations to the code.
+- [x] 5.7 Update `CLAUDE.md` + the refutations.  ✅ Done, plus all six inherited upstream corrections applied. ⚠️ **Grepped each retracted claim repo-wide first** — most hits RECORD the refutation (left alone); only five were live assertions. Found a **second** stale claim not in the inherited list: Exit Criteria's "all 19 known breaks flagged", superseded by R-3.
 
 ---
 

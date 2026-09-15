@@ -111,6 +111,34 @@
   distinctly, and an unreadable WIP is distinguishable from an absent one. **This does not close
   this item** — the behavior is still unobserved — but a fire or recycle now leaves a trace, so
   when dogfooding does trigger one the five deferred checks have evidence to read.
+- **Update 2026-09-15 — ⚠️ M15 WP5's PHASE 3 IS FOLDED INTO THIS ITEM, AND WP5 SHIPPED WITHOUT
+  IT (operator decision).** WP5 planned a "Live observation" phase whose six checks are the same
+  behaviors listed above; it was never run, for the same reason they were deferred at WP4 — an
+  agent cannot manufacture the trigger (`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`:
+  an agent-launched CC emits no hook events). The operator approved shipping WP5 with it open
+  (P1.verify-human.3 and P4.verify-human.3, both 2026-09-15) rather than blocking the milestone.
+  ⚠️ **SO M15 CLOSED WITH ITS EXIT CRITERION EXPLICITLY UNMET — recorded, not hidden.**
+  `arch/workflow-supervisor.md` §H and `CLAUDE.md` both say so in terms.
+
+  **The six checks to run at first dogfooding** (WP5's list — note it has **one more** than WP4's,
+  the gate-OFF check having been missing from WP5's plan until Phase 1 caught it):
+  1. A real AUTO-policy turn that stops is detected and fired **without operator input**, across a
+     real multi-workspace session.
+  2. ⚠️ **Gate OFF → the same turn fires nothing** (the OFF-invariant, live).
+  3. The negative arm live: a legitimate `verify-human` PAUSE, an `ESCALATE`, and a no-stored-mode
+     project each produce **no fire at all**.
+  4. A context-pressure recycle observed at a **non-final** phase boundary above 400,000 tokens.
+  5. ⚠️ **Esc actually interrupts a wrong fire** — R-1's accepted cost rests on this and it has
+     never been confirmed.
+  6. Installed-`.app` smoke test (GUI-PATH) — ⚠️ needs a build newer than `c55d5fa`; folds into
+     the `/release` gate.
+
+  ✅ **What is now easier than it was at WP4:** every fire, recycle and declined-recycle leaves a
+  distinct log line (the 2026-09-14 observability paydown), so these checks have evidence to read
+  rather than silence to interpret. The mechanical half is also fully pinned by standing tests —
+  `verdictReplay.test.ts` (34/36 on the non-circular set), `verdict.test.ts`'s negative arm
+  including the **verify-human GATE** (added at WP5 Phase 2), and the recycle conditions.
+  **What remains is exactly and only the live behavior.**
 - **Status:** pending
 
 ## SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT
@@ -300,35 +328,6 @@ machine-global) need to distinguish profiles? · does the M15 supervisor's trans
 
 **Suggested action:** size as a **roadmap milestone** at the next `/product-finalize` or roadmap
 pass — after M15 closes and M14's remainder. Start the design discussion then, with the operator.
-- **Status:** pending
-
-## SURFACE-2026-09-14-PAUSE-REFUSAL-TEST-DRIVES-THE-WRONG-EDGE-CLASS
-
-- **Priority:** medium
-- **Surfaced by:** M15 WP5 Phase 1 (feature:build, verification-baseline audit)
-- **Target:** M15 WP5 Phase 2 / P2.1
-- **Type:** gap
-
-⚠️ **The only standing test for the supervisor's PAUSE refusal drives the wrong edge class.**
-`src/state/supervisor/__tests__/verdict.test.ts:76` ("withholds on a PAUSE policy — a legitimate
-stop, not a break") comments *"F3 is PAUSE in autopilot. This is the case the supervisor must
-never fire on."* — but **F3 is `spec → research`** (`workflowMachine/edges.ts:181`), not a
-`verify-human` edge.
-
-⚠️ **So WBS 5.3's highest-stakes refusal case has no edge-specific test.** Firing past the human
-gate is the one wrong fire that consumes the operator's answer slot: CC reads the injected slash
-command as the reply to its own question, and `injectCommand` has no retry and no pre-send cancel
-window.
-
-**Why this is a gap and not a live defect** — three independent mitigations already hold:
-`verify-human`'s policy row is the matrix's ONE conditional cell (`policy.ts:337`), `resolveCell`
-falls back to **`pause`** (the withholding direction) whenever the conditional is unsatisfied, and
-that conditional is covered structurally at `workflowMachinePolicy.test.ts:406`,
-`workflowMachineLookup.test.ts:299` and `workflowMachineFunnel.test.ts:249`. What is missing is the
-behavioral test that drives a real `verify-human`-keyed edge end-to-end through `decideVerdict`.
-
-**Suggested action:** at P2.1 add a standing test asserting `withhold` / `policy-not-auto` on a
-`verify-human`-keyed edge, and mutation-prove it individually.
 - **Status:** pending
 
 ## SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE
