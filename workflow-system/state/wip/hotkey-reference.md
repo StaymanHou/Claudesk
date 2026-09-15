@@ -1,7 +1,7 @@
 # Feature: Hotkey reference in the ⌘, Settings panel
 
 **Workflow:** feature
-**State:** spec
+**State:** plan (complete)
 **Created:** 2026-09-15
 **Entry:** spec (complex feature)
 **Milestone:** M14 (remainder) — WP3
@@ -219,3 +219,114 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
 - **The four `*_CHORD_LABEL` constants are re-exported from the registry** rather than deleted
   outright, keeping consumer call sites unchanged and sidestepping the ES-module-export runtime trap.
   ⚠️ If the plan instead deletes them, the consumer migration must land in the **same phase**.
+
+## Work Tree
+
+- [ ] Phase 1: Extract the chord registry as typed data  <!-- status: NOT-STARTED -->
+  **Observable outcomes:**
+  - CLI: `./node_modules/.bin/tsc --noEmit` exits 0 with the new registry module present.
+  - CLI: `pnpm vitest run src/components/workspace/__tests__/chordRegistry` exits 0; the
+    reachability spec fails if any registry entry's predicate is not invoked by a real host.
+  - CLI: `grep -c "PALETTE_CHORD_LABEL" src/components/workspace/editor/paletteCommands.ts`
+    still returns ≥1 — the four existing label constants remain exported (re-export, not delete).
+  - Console: no new lint or type errors (`pnpm lint` exits 0).
+  - [ ] P1.1 Define the registry types. ⚠️ **Predicate signatures VARY** — boolean
+        (`isSettingsChord`), `number | null` (`workspaceSwitchIndex`), `RightPanel | null`
+        (`panelForChord`). **Do NOT model a uniform boolean predicate.** Model a `match`
+        as an opaque `(e: ChordEvent) => unknown` whose truthiness is not the contract, or
+        carry the predicate reference without calling it — decide which at build time and
+        record why.  <!-- status: NOT-STARTED -->
+  - [ ] P1.2 Model **context-scoped outcomes**. ⚠️ `⌘W` is ONE chord with TWO outcomes, not
+        two chords — `RightPanelHost.tsx:779` routes the SAME `isCloseTabChord` through
+        `shouldCloseTerminalOnChord({ isCloseChord: … })`. A 1:1 predicate→entry keying
+        misrepresents it. Same shape for `⌘T`.  <!-- status: NOT-STARTED -->
+  - [ ] P1.3 ⚠️ Model the **workflow-gate dependency**. `panelForChord(e, enabled)` takes a
+        SECOND arg and `⌘⇧K` (Docs) returns `null` while the gate is OFF — deliberately, so
+        the keystroke passes through untouched rather than being swallowed. The registry must
+        mark gate-dependent entries, or Phase 2 renders a dead affordance for a gate-off user
+        (the exact thing `gate-substrate-dependent-feature-class-behind-default-off-opt-in`
+        forbids).  <!-- status: NOT-STARTED -->
+  - [ ] P1.4 Transcribe the ~15 entries from the `paletteCommands.ts:20–84` comment map,
+        **including the CM6-owned set** (`Mod-s`/`Mod-d`/`Mod-r`/`Mod-f`, verified present in
+        `editorExtensions.ts` `coreKeymap()`) marked not-Claudesk-owned. Mark `⌘⇧`+digit as a
+        RESERVED RANGE and `⌘⇧O` as FREE — **metadata only, no enforcement** (enforcement
+        would be an unreachable guard).  <!-- status: NOT-STARTED -->
+  - [ ] P1.5 ⚠️ **Re-export** the four `*_CHORD_LABEL` constants from their current modules so
+        `ProjectSearch.tsx:142` / `FileFinder.tsx:131` / `CommandPalette.tsx:123` keep working
+        unchanged, with the registry as the single source. **A deleted ES-module export is a
+        RUNTIME failure, not just a `tsc` error** (M13.5 WP3: blank app, `verify:auto` AND
+        `tsc` both green). **If build instead deletes them, the consumer migration MUST land in
+        THIS phase plus a boot smoke-test.**  <!-- status: NOT-STARTED -->
+  - [ ] P1.6 ⚠️ **THE LOAD-BEARING TASK — the reachability guard.** Enumerating the registry
+        proves the SET, not that each entry has a CALLER (the M12 dead-`/exit` + M13-registry
+        trap; hit twice in M11 WP4, one a shipped CRITICAL). **Funnel registry reads through
+        ONE accessor and guard THAT**, and assert each entry's predicate is actually invoked by
+        `App.tsx`, `RightPanelHost.tsx`, or CM6. ⚠️ **Mutation-prove INDIVIDUALLY and confirm
+        each mutant landed in EXECUTABLE code** — a landed mutation can survive as an
+        equivalent mutant.  <!-- status: NOT-STARTED -->
+  - [ ] P1.7 ⚠️ Replace the `paletteCommands.ts` comment block with a pointer to the registry.
+        **A `?raw` guard asserting a bare identifier can be satisfied by the module's OWN
+        COMMENTS** — acutely dangerous here because the thing being replaced IS a comment
+        block naming every chord. **Strip comments before asserting; assert the CALL shape
+        `fn(`; `grep -c` first to confirm the substring is unique to its site.**
+        <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: NOT-STARTED -->
+  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+
+- [ ] Phase 2: Render the list as a fifth Settings group  <!-- status: NOT-STARTED; depends on Phase 1 -->
+  **Observable outcomes:**
+  - Browser: with the app running, pressing `⌘,` opens Settings and a group with
+    `data-testid="settings-group-hotkeys"` is present in the DOM.
+  - Browser: that group's rendered text contains at least `⌘⇧F`, `⌘P`, `⌘⇧P`, `⌘N`, `⌘,`
+    and a CM6-owned entry, with every entry showing a label AND a description.
+  - Browser: the entry count rendered equals the registry's length (no silent truncation) —
+    assert `querySelectorAll('[data-testid^="hotkey-row-"]').length` equals the exported
+    registry length.
+  - Browser: with the workflow gate OFF, no gate-dependent chord (⌘⇧K Docs) is presented as
+    an active binding — ⚠️ **OFF must stay byte-identical to an app that never had the
+    feature** (no dead affordance).
+  - Console: no JS errors on opening Settings (⚠️ read via a self-tested tap + DOM-mount
+    evidence — `read_logs{source:"console"}` captures NOTHING for this app and an empty read
+    is a FALSE GREEN).
+  - CLI: `pnpm verify:auto` exits 0.
+  - [ ] P2.1 Add the group via the EXISTING `SettingsGroup` component (`SettingsPanel.tsx:118`
+        — takes `id`/`title`/`hint`/children, emits `data-testid="settings-group-<id>"`).
+        ⚠️ **EXTEND the M10.9 WP2 panel; do not rebuild it.**  <!-- status: NOT-STARTED -->
+  - [ ] P2.2 Render entries grouped by registration host (app-level · workspace · editor/CM6),
+        CM6 entries visually de-emphasized but PRESENT — omitting them makes the list lie by
+        omission about why `⌘F` behaves differently inside the editor.  <!-- status: NOT-STARTED -->
+  - [ ] P2.3 Honor the gate at render: consume `useWorkflowFeaturesEnabled()` (the established
+        hook — already used by `announceRow.ts` / `ProjectModelCell.tsx`) and hide or mark
+        gate-dependent entries when OFF, per P1.3.  <!-- status: NOT-STARTED -->
+  - [ ] P2.4 Guard the render against the registry: assert rendered row count equals registry
+        length, so a future entry cannot be added to data yet silently not displayed.
+        ⚠️ **Flatten whitespace before asserting any JSX prose** — Prettier's wrap point is not
+        a contract.  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: NOT-STARTED -->
+  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+
+## Current Node
+- **Path:** Feature > Phase 1 > P1.1
+- **Active scope:** P1.1 (define the registry types)
+- **Blocked:** none
+- **Unvisited:** Phase 2 (render the list as a fifth Settings group)
+- **Open discoveries:** none
+
+## Discoveries
+<!-- Format: [SURFACED-<date>] <target node> — <summary>
+     Each entry is also logged to workflow-system/state/backlog.md -->
+
+[SURFACED-2026-09-15] Phase 1 / P1.3 — `panelForChord` takes a SECOND argument
+(`enabled: WorkflowGateValue`) and `⌘⇧K` (Docs) returns `null` while the workflow gate is OFF.
+Found at plan time, NOT present in the spec's seam list. It means the registry has a
+gate-dependency axis the spec did not anticipate; handled in-scope at P1.3/P2.3 rather than
+deferred. No backlog entry — resolved within this feature.
+
+[SURFACED-2026-09-15] none-blocking — `SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED`
+(backlog) covers deferred arrow-pan/zoom keys for the time-analytics day timeline. Those are
+**viewport gestures inside one dashboard widget, not app chords**, so they are deliberately NOT
+added to this registry. Recorded so a future reader does not read the omission as a gap.
