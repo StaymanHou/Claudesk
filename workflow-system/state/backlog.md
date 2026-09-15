@@ -113,6 +113,121 @@
   when dogfooding does trigger one the five deferred checks have evidence to read.
 - **Status:** pending
 
+## SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER
+
+- **Priority:** low
+- **Surfaced by:** M15 WP5 Phase 1 (feature:verify-human, auto-skip gate evaluation)
+- **Target:** workflow-system (mccc) — `feature-verify-human` SKILL.md §2 auto-skip gate (a)
+- **Type:** gap
+
+⚠️ **The verify-human auto-skip gate can NEVER fire in this project, and the reason is a schema
+mismatch nobody declared.** Gate (a) says: read `drive_mode` from the WIP file's **YAML
+frontmatter**; *"If frontmatter has no `drive_mode` field, treat as Mode 2 (orchestrated) and do
+NOT auto-skip."* **No WIP file in this project has ever had a YAML frontmatter block** — they all
+carry bold-prose headers (`**Workflow:** feature`, `**State:** …`, `**Created:** …`). Checked
+against the M15 WP3 and WP4 archived WIPs; both use prose.
+
+**Consequence:** gate (a) fails unconditionally here, so every phase of every feature prompts at
+verify-human regardless of drive mode — which is exactly what the operator observed across all of
+WP4 ("this made the verify-human auto-skip gate (a) fail at every phase, so each one prompted").
+⚠️ **Adding a `**Drive mode:** autopilot` prose line does NOT fix it** — that was tried at WP5's
+plan step on the theory that WP4's omission was the cause, and Phase 1 disproved it. A
+self-authored prose line is not the frontmatter field the gate specifies, and treating it as one
+would let the agent authorize its own skip.
+
+**Not obviously a defect — it may be the safer posture.** Erring toward prompting is the
+withholding direction, and M15 WP5 independently hit the skill's *documented* decision-artifact
+false positive (a phase whose deliverable is an operator decision ACK with no integration
+boundary), where auto-skip is explicitly wrong. So this is filed as a **schema question**, not a
+bug: should WIP files adopt real YAML frontmatter, should the gate also accept the prose header,
+or should the gate stay conservative by design?
+
+⚠️ **Cross-repo:** the gate lives in **mccc** (`skills/feature-verify-human/SKILL.md`), while the
+WIP-file convention lives in this project. Fixing it in one repo alone will not close it.
+
+**Suggested action:** fold into the next mccc-rooted session alongside the two open handoffs
+(`HANDOFF-to-mccc-m15-wp2.md`, `HANDOFF-to-mccc-m15-wp4.md`).
+- **Status:** pending
+
+## SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES
+
+- **Priority:** medium
+- **Surfaced by:** operator request (session detour, 2026-09-14)
+- **Target:** product:roadmap (a milestone-sized capability, not a task)
+- **Type:** new-work
+
+⚠️ **DETAILS DELIBERATELY NOT SPECIFIED — the operator's explicit instruction was that the design
+is to be discussed when the work actually starts.** This entry records the ASK, the two hard
+blockers found while sizing it, and the one seam that already exists. It is **not** a design.
+
+**The ask.** The operator now runs several **isolated Claude Code environments** created by
+`~/Personal/projects/claude-code-wrapper-agent-boilerplate` — each a separate profile with its own
+`CLAUDE.md`, skills, subagents, MCP servers, memory, projects, history and state, rooted at
+`~/.config/claude-<name>/` via **`CLAUDE_CONFIG_DIR`**. These would ideally be managed by Claudesk
+and benefit from what is already built (picker, workspaces, PTY terminal, status surfaces,
+editor/diff, time analytics, the M15 supervisor).
+
+⚠️ **BLOCKER 1 — the profiles are SHELL FUNCTIONS, not binaries.** `create-env.sh` appends a
+block-delimited `claude-<name>()` function to `~/.zshrc` that sets `CLAUDE_CONFIG_DIR` and execs
+`claude`. Claudesk spawns a hardcoded `const CC_CMD: &str = "claude"`
+(`src-tauri/src/cc_session/mod.rs:42`) — so **a `claude-<name>` profile cannot be spawned by
+Claudesk at all today**, and it is not on `PATH` either (a zsh function is invisible to a direct
+exec). ⚠️ Note this interacts with the GUI-PATH work already done in `env_path/`: capturing the
+login-shell `PATH` does **not** capture shell *functions*.
+
+⚠️ **BLOCKER 2 — the status channel is single-rooted and would go DARK.** Claudesk registers its
+hook into `~/.claude/settings.json` only (`hook_install/`). An isolated profile reads
+`~/.config/claude-<name>/settings.json` instead, so a profile session would emit **no hook events**
+— no idle/running/awaiting-input dot in the filmstrip, PiP, or menu bar. ⚠️ **That is the product's
+core value proposition, not a nice-to-have**, so "just spawn it and see" is not a viable first
+step: it would look like it worked while silently losing the thing the app is for.
+
+✅ **The seam that already exists.** `cc_spawn_env()` (`cc_session/mod.rs:599`) already builds the
+PTY's environment and already carries the drive-mode + gate signals, so `CLAUDE_CONFIG_DIR` has an
+obvious insertion point. Spawning `claude` directly **with `CLAUDE_CONFIG_DIR` set** — rather than
+going through the shell wrapper — is the likely shape and would sidestep blocker 1 entirely;
+blocker 2 still needs a real answer (per-config-dir hook registration).
+
+**Open questions for the design discussion (NOT answered here):** is a profile a property of a
+*project* or a separate workspace kind? · does `projects.json` gain a `config_dir` field? · does
+hook installation become per-profile, and who owns teardown? · how does the M10.9 workflow gate
+interact with a profile whose skills live elsewhere? · does the time-analytics capture (already
+machine-global) need to distinguish profiles? · does the M15 supervisor's transcript reader follow
+`CLAUDE_CONFIG_DIR` for its slug computation (it currently assumes `~/.claude/projects/<slug>/`)?
+
+**Suggested action:** size as a **roadmap milestone** at the next `/product-finalize` or roadmap
+pass — after M15 closes and M14's remainder. Start the design discussion then, with the operator.
+- **Status:** pending
+
+## SURFACE-2026-09-14-PAUSE-REFUSAL-TEST-DRIVES-THE-WRONG-EDGE-CLASS
+
+- **Priority:** medium
+- **Surfaced by:** M15 WP5 Phase 1 (feature:build, verification-baseline audit)
+- **Target:** M15 WP5 Phase 2 / P2.1
+- **Type:** gap
+
+⚠️ **The only standing test for the supervisor's PAUSE refusal drives the wrong edge class.**
+`src/state/supervisor/__tests__/verdict.test.ts:76` ("withholds on a PAUSE policy — a legitimate
+stop, not a break") comments *"F3 is PAUSE in autopilot. This is the case the supervisor must
+never fire on."* — but **F3 is `spec → research`** (`workflowMachine/edges.ts:181`), not a
+`verify-human` edge.
+
+⚠️ **So WBS 5.3's highest-stakes refusal case has no edge-specific test.** Firing past the human
+gate is the one wrong fire that consumes the operator's answer slot: CC reads the injected slash
+command as the reply to its own question, and `injectCommand` has no retry and no pre-send cancel
+window.
+
+**Why this is a gap and not a live defect** — three independent mitigations already hold:
+`verify-human`'s policy row is the matrix's ONE conditional cell (`policy.ts:337`), `resolveCell`
+falls back to **`pause`** (the withholding direction) whenever the conditional is unsatisfied, and
+that conditional is covered structurally at `workflowMachinePolicy.test.ts:406`,
+`workflowMachineLookup.test.ts:299` and `workflowMachineFunnel.test.ts:249`. What is missing is the
+behavioral test that drives a real `verify-human`-keyed edge end-to-end through `decideVerdict`.
+
+**Suggested action:** at P2.1 add a standing test asserting `withhold` / `policy-not-auto` on a
+`verify-human`-keyed edge, and mutation-prove it individually.
+- **Status:** pending
+
 ## SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE
 
 - **Priority:** high
