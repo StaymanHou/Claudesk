@@ -10,7 +10,7 @@ Project CLAUDE.md generated at `CLAUDE.md` (project root).
 
 **Active milestone:** **Milestone 14 — the REMAINDER** (decomposed 2026-09-15 into 5 WPs at `workflow-system/product/wbs.md`). ⚠️ **M14 is SPLIT — do NOT decompose it as a whole**: its release half (MIT LICENSE + README correctness pass + release note) shipped as a single task in `v0.4.0`, deliberately skipping `/product-wbs`, and **2 of its 4 roadmap deliverables are already `[x]`.** What remains: signing + notarization, hotkey configuration, the two-tier setup docs, and repo metadata.
 
-**First work package:** **WP1 — Probe: Apple Developer enrollment, cert issuance, and the notarization toolchain.** ⚠️ **It is a hard gate on WP2**, and its first two tasks are **operator-only** (enrollment + cert generation; an agent cannot perform them). ⚠️ **The gate is CALENDAR-bound, not effort-bound** — Apple's approval runs 24–48h and no amount of agent work shortens it. Size S in agent effort.
+**First work package:** **WP1 — Probe: Apple Developer enrollment, cert issuance, and the notarization toolchain.** ⚠️ **It is a hard gate on WP2**, and its first two tasks are **operator-only** (enrollment + cert generation; an agent cannot perform them). ⚠️ **The gate is CALENDAR-bound, not effort-bound** — Apple's approval is **24h published but reportedly 2–7+ weeks in 2026** (researched at the WP1 pass), and no amount of agent work shortens it. Size S in agent effort.
 
 **Entry point:** WP1 is a probe, not a feature. ⚠️ **Start task 1.1 (enrollment) FIRST regardless of what is built next** — it is the long pole. **WP3 (hotkeys) and WP5 (repo metadata) are independent parallel tracks** with no dependency on the signing chain, and are the right work to run while approval is pending.
 

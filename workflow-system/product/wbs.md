@@ -42,10 +42,14 @@ that **"a future notarize-yes reversal (and its removal of the self-quarantine-c
 live at M14."** That reversal is now taken. M14's signing deliverable is therefore **an
 implementation WP, not a documentation WP** — the opposite of what the reconciliation assumed.
 
-- ⚠️ **The operator is NOT currently enrolled** in the Apple Developer Program. Enrollment (~$99/yr,
-  **24–48h approval latency**, payment + Apple ID + possibly D-U-N-S for an org) is an
-  **operator-gated prerequisite an agent cannot perform**. It is task 1.1 and it **gates WP2
-  entirely**.
+- ⚠️ **The operator is NOT currently enrolled** in the Apple Developer Program. Enrollment (~$99/yr)
+  is an **operator-gated prerequisite an agent cannot perform**. It is task 1.1 and it **gates WP2
+  entirely**. ⚠️ **CORRECTED 2026-09-15 by the WP1 research pass: the "24–48h" figure is APPLE'S
+  PUBLISHED LINE, NOT the observed one.** Apple says contact them if unconfirmed after 24h, but 2026
+  community reports describe individual enrollments **stuck 2–7+ weeks** with no communication.
+  **Plan for the long case.** Account type was ruled **Individual / Sole Proprietor**, so **no
+  D-U-N-S is involved** (that applies only to an Organization enrollment, which was declined).
+  Full runbook: the operator runbook under WP1's tasks.
 - ⚠️ **minisign STAYS. Notarization is ADDITIVE, not a replacement.** The two signing systems are
   independent: minisign (key `774E2E8429FDF78A`, free) verifies *updater artifact authenticity*;
   Apple notarization satisfies *Gatekeeper*. ⚠️ **The trust anchor must not change** — it has been
@@ -106,7 +110,8 @@ Two recorded priors bear on this decomposition.
 **Type:** probe
 **Milestone:** M14 (remainder)
 **Dependencies:** none — **this is the gate for WP2**
-**Size:** S (agent effort) — ⚠️ **but wall-clock-gated by Apple's 24–48h approval**
+**Size:** S (agent effort) — ⚠️ **but wall-clock-gated by Apple's approval, which is 24h published
+and reportedly 2–7+ weeks in practice (2026)**
 **Learning objective:** Can we actually sign and notarize, what exactly does the pipeline require,
 and does notarization interact with the shipped minisign updater in any way that breaks existing
 installs?
@@ -124,8 +129,9 @@ against assumed shapes — the exact 3rd-party-integration gap §4 of the WBS pr
 
 **Tasks:**
 - [ ] 1.1 ⚠️ **OPERATOR TASK — an agent cannot do this.** Enroll in the Apple Developer Program
-      ($99/yr). **Blocks everything in WP2.** Surface the ~24–48h approval latency to the operator
-      at the start, not when WP2 stalls.
+      ($99/yr). **Blocks everything in WP2.** Surface the approval latency to the operator at the
+      start, not when WP2 stalls. ⚠️ **24h is Apple's published line; 2026 reports describe 2–7+
+      weeks.** See the operator runbook below.
 - [ ] 1.2 ⚠️ **OPERATOR TASK.** Create a Developer ID Application certificate (CSR via Keychain
       Access → developer.apple.com → download → install to login keychain). ⚠️ **Developer ID
       Application is the correct type** — *not* "Mac App Distribution" (App Store only) and *not*
@@ -155,7 +161,65 @@ against assumed shapes — the exact 3rd-party-integration gap §4 of the WBS pr
       surprise. ⚠️ **If 1.6 finds hardened runtime breaks subprocess spawning, that is a NO-GO
       pending resolution — report it, do not proceed to WP2 anyway.**
 
-**WP1 → WP2 rationale:** Enrollment has a hard **24–48h calendar latency** and an **operator-only**
+#### Operator runbook for tasks 1.1–1.2 + 1.4 (researched 2026-09-15; primary sources)
+
+⚠️ **Toolchain is already ready** — full Xcode is installed and `notarytool` is present at
+`/Applications/Xcode.app/Contents/Developer/usr/bin/notarytool`. Nothing to install. Baseline at
+decomposition: `security find-identity -v -p codesigning` → **`0 valid identities found`**.
+
+**Account type ruled 2026-09-15: Individual / Sole Proprietor** (no D-U-N-S, signature reads as the
+operator's own name). Organization was considered and declined.
+
+**Step 0 — verify 2FA BEFORE paying.**  → System Settings → [name] → Sign-In & Security →
+Two-Factor Authentication must read **On**. ⚠️ **Apple states 2FA is a hard prerequisite** for
+enrollment ([developer.apple.com/help/account/membership/program-enrollment](https://developer.apple.com/help/account/membership/program-enrollment/)).
+
+**Step 1 — enroll** at [developer.apple.com/programs/enroll](https://developer.apple.com/programs/enroll/)
+→ Individual/Sole Proprietor → **$99 USD/yr**. ⚠️ **Legal name must match government ID exactly** —
+a formatting mismatch triggers a manual photo-ID review that adds days. ⚠️ **Pay with the
+operator's OWN credit card** — Apple states that an individual enrollment paid by someone else's
+card is delayed *and* triggers a government-photo-ID request.
+
+**Step 2 — wait.** ⚠️ **Apple's published line is "contact us if no confirmation within 24 hours",
+but 2026 community reports describe individual enrollments stuck 2–7+ weeks with no
+communication** (multiple Apple Developer Forums threads; non-US ~2 weeks). **Plan for the long
+case — this is exactly why WP3 and WP5 exist as parallel tracks.** If a week passes with no word,
+open a case at [developer.apple.com/contact](https://developer.apple.com/contact/); the forum
+threads suggest silent stalls do not self-resolve.
+
+**Step 3 — the certificate (task 1.2).** ⚠️ **A CSR from Keychain Access is STILL REQUIRED** — this
+cert type is not Xcode-managed. Keychain Access → Certificate Assistant → *Request a Certificate
+From a Certificate Authority* → email = Apple ID, Common Name = operator name, CA Email **blank**,
+**Saved to disk**. Then [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates)
+→ **+** → *Software* → **Developer ID** → **Developer ID Application** → upload CSR → Download →
+double-click to install. ⚠️ **Account Holder role only** may create Developer ID certs (a non-issue
+for a sole individual). ⚠️ **Limit 5 per account** — which is why the private-key backup below
+matters.
+
+⚠️ **BACK UP THE PRIVATE KEY IMMEDIATELY.** Keychain Access → My Certificates → right-click →
+Export as `.p12`, stored securely. **Losing the private key kills the certificate** and regenerating
+burns one of the five slots.
+
+**Step 4 — notarization credentials (task 1.4).** Generate an **app-specific password** at
+[account.apple.com](https://account.apple.com) → Sign-In and Security → App-Specific Passwords.
+⚠️ **NOT the Apple ID password**, and ⚠️ **it must never land in the repo.** Store it as a keychain
+profile:
+
+```
+xcrun notarytool store-credentials "claudesk-notary" \
+  --apple-id "<apple-id>" --team-id "<TEAMID>" --password "<app-specific-password>"
+```
+
+**Tauri v2 wiring (pre-answers part of task 1.5).** Config keys are `bundle.macOS.signingIdentity`
+/ `.entitlements` / `.hardenedRuntime`; `APPLE_SIGNING_IDENTITY` is the env-var alternative.
+Notarization takes **either** the App Store Connect API path (`APPLE_API_ISSUER` / `APPLE_API_KEY` /
+`APPLE_API_KEY_PATH`) **or** the Apple ID path (`APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID`),
+where `APPLE_PASSWORD` **must** be the app-specific password.
+⚠️ **Whether Tauri applies hardened runtime automatically was NOT resolved by the doc pass (LOW
+confidence) — task 1.6 must determine it empirically, not from the docs.**
+
+**WP1 → WP2 rationale:** Enrollment has a hard **calendar latency** (24h published; 2–7+ weeks
+reported in 2026) and an **operator-only**
 step, and `bundle.macOS` is empty today so every config shape is unknown. Building the signing
 pipeline before the cert exists would mean designing against assumed shapes; worse, task 1.6's
 hardened-runtime/subprocess risk could invalidate the approach entirely. **Resolve the riskiest
@@ -312,7 +376,7 @@ WP4 does not wait.
 ## Dependency map
 
 ```
-WP1 (probe: enroll + cert + toolchain)  ⚠️ OPERATOR-GATED, 24-48h calendar latency
+WP1 (probe: enroll + cert + toolchain)  ⚠️ OPERATOR-GATED, 24h published / 2-7+ wks reported
  └─> WP2 (sign + notarize + delete quarantine workaround)   [CRITICAL PATH]
       └─> WP4 (two-tier setup docs)
 
@@ -321,7 +385,7 @@ WP5 (repo description/topics) ── parallel track, no dependencies
 ```
 
 **Critical path:** WP1 → WP2 → WP4. ⚠️ **Its first link is calendar-bound, not effort-bound** —
-Apple's approval is 24–48h and no amount of agent work shortens it.
+Apple's approval is 24h published but reportedly 2–7+ weeks in 2026, and no amount of agent work shortens it.
 
 **Parallel tracks:** WP3 and WP5 have **no dependency on the signing chain** and are the right work
 to run while enrollment is pending. ⚠️ **Start task 1.1 (enrollment) FIRST regardless of what is
