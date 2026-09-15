@@ -1,42 +1,38 @@
 ---
 stage: context
 state: complete
-updated: 2026-09-07
+updated: 2026-09-15
 ---
 
 # Context
 
 Project CLAUDE.md generated at `CLAUDE.md` (project root).
 
-**Active milestone:** Milestone 15 — Workflow supervisor (decomposed 2026-09-07 into 5 WPs at `workflow-system/product/wbs.md`). Claudesk absorbs the workflow state machine as typed code and enforces auto-chaining mechanically, triggered by a measured 10x regression in auto-chain adherence (0.36 → 3.63 breaks per 100 `Skill` invocations). ⚠️ **Fully serial critical path — no parallel track**, a property of probe-gating rather than an oversight.
+**Active milestone:** **Milestone 14 — the REMAINDER** (decomposed 2026-09-15 into 5 WPs at `workflow-system/product/wbs.md`). ⚠️ **M14 is SPLIT — do NOT decompose it as a whole**: its release half (MIT LICENSE + README correctness pass + release note) shipped as a single task in `v0.4.0`, deliberately skipping `/product-wbs`, and **2 of its 4 roadmap deliverables are already `[x]`.** What remains: signing + notarization, hotkey configuration, the two-tier setup docs, and repo metadata.
 
-**First feature:** **WP1 — Probe** (six questions: detector precision · question-shaped tail · skill-frontmatter identity · Mode-0 detectability · idempotency · the absolute-token threshold value). ⚠️ **It gates WP2–WP5 absolutely — nothing else in the milestone may be built before it reports.** Size M, timeboxed to one session; a probe that answers 4 of 6 and says so is a success, one that guesses at the other 2 is a failure.
+**First work package:** **WP1 — Probe: Apple Developer enrollment, cert issuance, and the notarization toolchain.** ⚠️ **It is a hard gate on WP2**, and its first two tasks are **operator-only** (enrollment + cert generation; an agent cannot perform them). ⚠️ **The gate is CALENDAR-bound, not effort-bound** — Apple's approval runs 24–48h and no amount of agent work shortens it. Size S in agent effort.
 
-**Entry point:** WP1 is a probe, not a feature — it fails the small/simple criteria on "no architectural decisions required" (its answers reshape three downstream WPs), so it wants `/feature-spec` if run through the feature workflow. In practice a probe WP is usually driven directly.
+**Entry point:** WP1 is a probe, not a feature. ⚠️ **Start task 1.1 (enrollment) FIRST regardless of what is built next** — it is the long pole. **WP3 (hotkeys) and WP5 (repo metadata) are independent parallel tracks** with no dependency on the signing chain, and are the right work to run while approval is pending.
 
 ## What this pass changed
 
-- **`CLAUDE.md` → `## Current Milestone`** rewritten from "M14 next, M15 not decomposed" to the as-decomposed 5-WP reality. Now carries the **four operator rulings** (R-1 stored-mode authority · R-2 absolute-token threshold · R-3 rebuild the fixture fresh · R-4 verdict in TypeScript), each with its accepted cost, and the **two refuted design premises** (below).
-- **`CLAUDE.md` → the M14 status line corrected.** M14 is **SPLIT**: its release half shipped as v0.4.0; Settings UI, Developer-ID signing/notarization, two-tier setup docs and repo metadata are open and now scheduled **after** M15. ⚠️ Recorded explicitly that the 2026-08-26 "M14 → M15" reversal is **SPENT, not overturned** — its whole argument was ~40 undelivered commits ahead of `v0.3.4`, and v0.4.0 delivered them. That framing exists to stop a future session "restoring" the older order by citing the note.
-- **`CLAUDE.md` → `## Next Milestone` retitled `## Milestone 15 — the active cycle`** and given the measured size of what WP2 absorbs (113 transition rows · 89 pause-policy rows · ~356 cells · 5 cell values + Mode 0), plus a new **as-built seams** paragraph distinguishing what already exists (`is_turn_start`, `fs-change` over `.session.md`, `recycleSession()`, `injectCommand`) from what does not (transcript reader, slug computation, uuid↔workspace mapping, WIP-body parsing).
-- **`CLAUDE.md` → guard-arm count corrected** to **six arms / eight subjects**, with the note that a new gated surface owns the **seventh** — and that `arch.md`'s "arms 1–5 are TAKEN" line is **stale**.
-- **New `docs/lessons/closed-cycles-m13-m13-5.md` (5.8k)** — the eight M13/M13.5 "must NOT re-derive" properties **extracted, not dropped**, replaced in `CLAUDE.md` by a pointer that names the four still binding M15. Follows the established pointer-plus-lesson-file pattern.
+- **`CLAUDE.md` → `## Current Milestone`** rewritten from "M15 closed, M14's remainder is next" to the **as-decomposed** reality, carrying the **two operator rulings** taken at decomposition (below) with their consequences and risks. The M15 close status is retained beneath them, demoted from lead to context.
+- **`CLAUDE.md` → `## Milestone 15`** retitled from *"the active cycle"* to **CLOSED**, with a banner marking it **reference, not active work** — its constraints still bind anyone touching the supervisor, but the live half was never observed.
+- **`CLAUDE.md` → execution-order line** now points at the decomposition and names the critical path plus the two parallel tracks, so a future session does not re-derive the ordering.
+- **`roadmap.md` → the two open M14 deliverable lines** annotated in place with R-1 and R-2.
 
-## Two design premises refuted by measurement this pass
+## The two rulings (do not re-litigate)
 
-Both were live spec in `roadmap.md` and would have been built on:
+- **R-1 — signing REVERSES the recorded M10 decision.** `arch/build-update-release.md` records *"Unsigned + minisign, not notarized — $99 NOT purchased, a deliberate accepted cost"* and had reconciled M14's deliverable down to *"inherit and document that decision"* — while explicitly naming M14 as the home of *"a future notarize-yes reversal (and its removal of the self-quarantine-clear step)."* **That reversal is now taken**, which flips the deliverable from documentation to **implementation**. ⚠️ **minisign STAYS; notarization is ADDITIVE** — the trust anchor `774E2E8429FDF78A` must not change or existing installs are stranded (task 2.7 is that migration check). **Payoff:** deletes the self-quarantine-clear mechanism (Rust + frontend + 2 test files) and **six README `xattr` sites**. ⚠️ **Highest technical risk: hardened runtime is mandatory for notarization and may break subprocess spawning (`claude`, `subl`, PTY)** — probed at task 1.6; **a break there is a NO-GO that returns to planning**, not something WP2 works around. It would be invisible in `pnpm tauri:dev`.
+- **R-2 — Settings NARROWED to hotkey configuration only.** **Project-list management is DROPPED from M14** — dropped, *not* deferred; if wanted later it re-enters as new work, not as an unticked M14 leftover. ⚠️ **EXTEND the `⌘,` panel M10.9 WP2 built.** ⚠️ **11 `*Chord.ts` predicate modules already exist** sharing a `chordEvent.ts` type — WP3 **centralizes what exists**; it does not write keyboard handling from scratch, which is why it sized M rather than L.
 
-1. ⚠️ **`message.model` cannot determine the context window.** `claude-opus-5` observed at **833,567** tokens and `claude-opus-4-7` at **268,743**, with **no `[1m]` suffix anywhere in 238 transcripts** (a `<synthetic>` value also occurs). The roadmap's *"`message.model` is on the line so it is derivable"* is wrong. **R-2 removes the need for the map entirely.**
-2. ⚠️ **There is no skill scan or registry to piggyback on.** Probe Q3's premise (*"the same scan M13's registry already performs"*) is false — `skills_dir_exists()` answers one boolean and enumerates nothing; no YAML parser exists in either manifest. Adding one **reverses a recorded §4c anti-brittleness decision**, making Q3 partly a product question.
+## Design priors consulted
 
-Also measured, and recorded so it is not re-derived: a **naive** detector flags **289 of 2,281** transition-emitting turns (~15x over-flagging), so **the policy lookup, not the token parse, is the hard half**; and **policy rows key on STEP, not transition ID** (19 of 27 feature rows), so the edge→policy-row mapping is derivation work.
+- **[PRIOR: `explicit-selectable-mode-over-inferred-mode`] fired on WP3, rule 3, leaning LOW-SURFACE** — its risk-surface-vs-value clause (*prove the value at the low-surface version first*). A hotkey editor's value here is **operator-unproven** (the operator's own bindings already work; this is friend-facing), so WP3 ships a legible list + per-binding reset + cheap rebinding, and **explicitly excludes** record-any-chord capture, per-workspace scopes, and conflict-resolution UI. **Disclosed in `wbs.md` as overridable — flag if wrong.**
+- **[PRIOR: `gate-substrate-dependent-feature-class-behind-default-off-opt-in`] fired on WP4, rule 2 (agrees)** — the two-tier doc structure *is* this prior's shape. The docs must document the gate as a **first-class concept** (OFF is byte-identical; enabling the UI is strictly separate from installing the substrate), not bury the workflow features as undocumented extras.
+- **Over-infer guard applied:** neither prior governs signing (a release-infrastructure/cost tradeoff → `arch.md` territory per the capture contract's exclusions) nor repo metadata.
 
-## ⚠️ Carried forward — not resolved here
+## Booked corrections (carried into the WPs, not yet made)
 
-- **One M15 gate stays open: probe Q2** (question-shaped tail detection), which gates the silent-always fire policy. `injectCommand` has **no retry and no pre-send cancel window** by design, so a wrong silent fire on an unwatched workspace is unrecoverable except via CC's **Esc**. Per `roadmap.md`'s own instruction: if Q2 fails, revisit the fire policy **before** building WP3.
-- **`roadmap.md` and `arch.md` still carry four claims this pass refuted or superseded** — the model→window derivation, the "same scan" premise, the stale guard-arm count, and "above 50% context usage". ⚠️ **They are corrected at WP5 (tasks 5.6/5.7), not now** — a WBS pass records findings; the durable-doc resync is the milestone's exit step. The tracking table is in `wbs.md` → "Corrections this WBS pass makes to upstream docs". ⚠️ **A stale `arch/` doc OUTRANKS a correct record**, so leaving these uncorrected at close is the M13.5 lesson repeating.
-- **`CLAUDE.md` is 45,157 chars, over the 40k harness threshold** (42,412 at session start). Syncing a whole new milestone cost **+2.7k net** after extracting 5.8k to lessons. ⚠️ **`/util-prune-claude-md` was deliberately NOT run — the operator has declined a prune** (recorded in the 2026-09-06 handoff).
-- **`.gitignore` needed no change** — all nine canonical artifact-tracking-policy lines already present, no blanket `.claude/` ignore. No override section applies (Claudesk is not the learning-assets source repo).
-- **The project-memory symlink was already correct** — `~/.claude/projects/-Users-stayman-Personal-projects-claudesk/memory` → `<proj-dir>/.claude/memory` (realpath-resolved slug). Idempotent no-op; `ensure-memory-link.sh` not needed.
-- **No vision success metric covers M15.** Group C closed at M13 with all six met, so M15 is roadmap-and-evidence-driven. Whether a 7th metric is owed is an open operator call (`wbs.md` → Open items).
-- **Unrelated but still outstanding:** `main` is `[ahead 2, behind 1]` of `origin/main` (needs `git push --force-with-lease`), and the post-release `brew upgrade` has not run.
+- ⚠️ **`arch/build-update-release.md`'s "Unsigned + minisign, not notarized" bullet and its "M14 overlap — reconciled" bullet still state the SUPERSEDED decision** — rewritten at **task 2.6**. ⚠️ **`doc-correction-scope-list-is-a-floor`: grep the retracted claim repo-wide first**; the two named sites are a floor, not the scope.
+- ⚠️ **M14's "default CLI args for `claude`" line is stale** — M11.5 consumed most of it and it still misstates **PiP (shipped M5)** and **permission-mode (shipped M6)** as future work; the per-project `--model` override shipped **M11.5 on the picker row, not in Settings**. Corrected at **task 4.2**.
