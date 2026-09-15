@@ -128,7 +128,10 @@ shape here is currently unknown. Committing WP2's tasks before the cert exists w
 against assumed shapes — the exact 3rd-party-integration gap §4 of the WBS procedure forbids.
 
 **Tasks:**
-- [ ] 1.1 ⚠️ **OPERATOR TASK — an agent cannot do this.** Enroll in the Apple Developer Program
+- [x] 1.1 ✅ **DONE 2026-09-15 — payment submitted; enrollment PENDING with Apple** (the portal
+      states up to 48h). ⚠️ **Pending is not approved** — WP2 stays gated until
+      `security find-identity -v -p codesigning` lists a `Developer ID Application` identity
+      (task 1.3). ⚠️ **OPERATOR TASK — an agent cannot do this.** Enroll in the Apple Developer Program
       ($99/yr). **Blocks everything in WP2.** Surface the approval latency to the operator at the
       start, not when WP2 stalls. ⚠️ **24h is Apple's published line; 2026 reports describe 2–7+
       weeks.** See the operator runbook below.
@@ -359,17 +362,25 @@ WP4 does not wait.
 
 ---
 
-### WP5: Repo description + topics
+### WP5: Repo description + topics ✅ COMPLETE 2026-09-15
 **Description:** Set the GitHub repo's description and topic tags for discoverability.
 **Milestone:** M14 (remainder)
 **Dependencies:** none
 **Size:** XS
 **Tasks:**
-- [ ] 5.1 Set description + topics via `gh repo edit`. ⚠️ **Sized XS deliberately — do not inflate
-      this into a marketing-copy work package.** The description should match the README's existing
-      one-line framing rather than invent a new positioning statement.
-- [ ] 5.2 ⚠️ **Confirm with the operator before writing** — repo metadata is **outward-facing and
-      public**, and the description is the first thing a stranger reads. One line, not a paragraph.
+- [x] 5.1 ✅ **DONE 2026-09-15.** Description set to the README tagline + scope: *"Many Claude Code
+      projects. One window. Zero hunting. A lean, dark, macOS-native lite IDE for the power Claude
+      Code user."* — reuses the existing README h3 verbatim so the repo page and README agree rather
+      than inventing a second positioning statement. **10 topics** applied: `claude-code`, `claude`,
+      `anthropic`, `macos`, `tauri`, `rust`, `typescript`, `react`, `developer-tools`, `ide`.
+      Verified via `gh repo view --json description,repositoryTopics`.
+- [x] 5.2 ✅ **DONE 2026-09-15.** Both the description framing and the topic set were confirmed with
+      the operator before writing, per the outward-facing rule.
+
+⚠️ **Noted, NOT done — `homepageUrl` is empty.** Out of WP5's scope as written (description +
+topics only), so it was deliberately left rather than silently widened. Candidates if wanted: the
+GitHub Releases page or the Homebrew tap. **Decide at WP4** (setup docs), where the install story
+is being written anyway.
 
 ---
 
