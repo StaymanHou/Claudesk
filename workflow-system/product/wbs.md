@@ -128,10 +128,15 @@ shape here is currently unknown. Committing WP2's tasks before the cert exists w
 against assumed shapes — the exact 3rd-party-integration gap §4 of the WBS procedure forbids.
 
 **Tasks:**
-- [x] 1.1 ✅ **DONE 2026-09-15 — payment submitted; enrollment PENDING with Apple** (the portal
-      states up to 48h). ⚠️ **Pending is not approved** — WP2 stays gated until
-      `security find-identity -v -p codesigning` lists a `Developer ID Application` identity
-      (task 1.3). ⚠️ **OPERATOR TASK — an agent cannot do this.** Enroll in the Apple Developer Program
+- [x] 1.1 ✅ **DONE 2026-09-15 — ENROLLMENT APPROVED.** Payment submitted and the Apple Developer
+      account came back ready **the same day** — far inside the 24h published line and nowhere near
+      the 2–7 week figure 2026 community reports warned of. ⚠️ **The long pole turned out to be
+      short; do not read the earlier warning as having been wrong — it was the right planning
+      posture, and WP3/WP5 were correctly sequenced as parallel tracks against it.**
+      ⚠️ **Approved ≠ signable:** `security find-identity -v -p codesigning` still reports
+      **0 valid identities**, so **task 1.2 (create the Developer ID Application certificate) is
+      the live blocker** and WP2 stays gated until task 1.3 sees an identity.
+      ⚠️ **OPERATOR TASK — an agent cannot do this.** Enroll in the Apple Developer Program
       ($99/yr). **Blocks everything in WP2.** Surface the approval latency to the operator at the
       start, not when WP2 stalls. ⚠️ **24h is Apple's published line; 2026 reports describe 2–7+
       weeks.** See the operator runbook below.
