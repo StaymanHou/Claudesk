@@ -82,6 +82,32 @@
 > forward across several cycles — `/util-backlog-paydown` is the instrument for it, and this is a
 > between-milestone boundary.
 
+## SURFACE-2026-09-15-CHORD-COMPLETENESS-GUARD-KEYS-ON-A-NAMING-CONVENTION
+- **Source:** feature:build (M14 WP3 Phase 1, raised by the verify-self auditor)
+- **Target level:** product:wbs
+- **Type:** tech-debt
+- **Summary:** The chord-registry COMPLETENESS guard (`chordRegistry.test.ts`) walks code → registry
+  by regex-matching call sites on `/[Cc]hord/` plus two named `*Index` symbols. That selector is a
+  **naming convention, not a structural property** — a future chord matcher named outside both
+  conventions (e.g. `zoomForKey`) would be invisible to it.
+- **Context:** The guard exists because the reachability guard only walks registry → code and
+  therefore could not see two chords the app registered but the registry omitted (terminal font
+  zoom, ⌘\ toggle-wrap — both shipped in the comment map's blind spot before this WP). The
+  completeness guard closes that direction **for chords named by today's conventions**. It caught
+  everything present at the time of writing and an independent hand enumeration found no omission
+  it missed — but it is one rename away from the same class of hole it was built to close.
+  ⚠️ Note `terminalFontZoom.ts` — the module that was actually missed — does NOT match `*Chord*`;
+  it is caught only because its exported symbol `terminalZoomForChord` does. That is exactly how
+  narrow the margin is.
+- **Suggested action:** Make the selector structural rather than lexical — e.g. require every
+  capture-phase keydown handler in a registration host to route through a registry-aware helper, so
+  "is this chord known?" becomes a property of the call path instead of the callee's name. That is a
+  refactor of three working registration hosts (App.tsx, RightPanelHost.tsx, EditorPanel.tsx,
+  Workspace.tsx), so it wants its own change with its own verification — deliberately NOT bolted
+  onto a data-extraction phase.
+- **Priority:** medium
+- **Status:** open
+
 ## SURFACE-2026-09-14-DOCSLINKHANDLING-FLAKE-EXITS-NONZERO-WITH-ZERO-FAILURES
 - **Source:** feature:verify-codify (M15 WP4 Phase 5)
 - **Target level:** product:arch

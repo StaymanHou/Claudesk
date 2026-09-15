@@ -282,7 +282,7 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
         `fn(`; `grep -c` first to confirm the substring is unique to its site.**
         <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: PASS 2026-09-15 — tsc 0, scoped eslint 0, 12/12 chordRegistry (count-confirmed, not a filtered false-green), 4 label exports + 3 consumers intact; guard fail-probe confirmed -->
-  - [ ] verify-self  <!-- status: NOT-STARTED (re-verify gate PASSED after F9b fix; awaiting fresh verify-self) -->
+  - [x] verify-self  <!-- status: PASS 2026-09-15 (re-run after F9b) — 8/8 outcomes, 0 BLOCKING; completeness independently re-derived from source, duplication confirmed correct -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
@@ -321,11 +321,10 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-auto (F9b re-verify passed)
-- **Active scope:** none — P1.4 + P1.6 both fixed and re-verified
+- **Path:** Feature > Phase 1 > verify-human
+- **Active scope:** Phase 1 verify-human (impl + verify-auto + verify-self all complete)
 - **Blocked:** none
-- **Unvisited:** Phase 1 verify-human → verify-codify; then Phase 2 (render the list as a fifth
-  Settings group)
+- **Unvisited:** Phase 1 verify-codify; then Phase 2 (render the list as a fifth Settings group)
 - **Open discoveries:** two, both resolved in-phase — see Discoveries
 
 ## Discoveries
@@ -426,3 +425,25 @@ terminal) and CM6-owned (the editor's keymap), disambiguated by focus. **The dat
 the test was wrong.** Uniqueness is now on `(label, host)`, with a second arm asserting at most
 ONE `claudeskOwned` entry per label (two would mean Claudesk fights itself for the key). Weakening
 the assertion to "labels may repeat" would have re-opened the omission this back-loop just closed.
+
+[SURFACED-2026-09-15] Phase 1 / verify-self — ✅ **PASS on re-run, 8/8 outcomes, 0 BLOCKING.**
+The auditor re-derived completeness FROM SOURCE rather than re-running the project's own guard
+(a guard and the registry it guards can share a blind spot): 14 chord-matcher call symbols
+extracted from comment-stripped host source, all 14 claimed; 9 CM6 keymap bindings, all accounted
+for by the 6 `host: "editor"` entries. Both new entries survived label/host/outcome scrutiny.
+⚠️ **The ⌘= / ⌘- / ⌘0 duplication was explicitly adjudicated CORRECT**: `Workspace.tsx` calls
+`preventDefault` only on the left-half and right-panel-terminal branches, so with the editor
+focused the chord is NOT swallowed and reaches CM6's own keymap. Two owners selected by live DOM
+focus; collapsing them would make the surface lie.
+
+[SURFACED-2026-09-15] Phase 1 / P1.6 — ⚠️ **THE COMPLETENESS GUARD'S SELECTOR IS A NAMING
+CONVENTION, NOT A STRUCTURAL PROPERTY.** Raised by the verify-self auditor as context, not as a
+failing outcome. The guard filters call sites on `/[Cc]hord/` plus two named `*Index` symbols, so
+a future matcher named outside both conventions (the auditor's example: `zoomForKey`) would be
+invisible to it. It caught everything present today and the auditor's hand enumeration found no
+omission it missed — but the guard is one rename away from a blind spot, and the class it defends
+against is exactly "a chord exists that the registry does not know about."
+**Not fixed in this phase:** the honest fix is structural (e.g. requiring every capture-phase
+keydown handler in a host to route through a registry-aware helper), which is a refactor of three
+working registration hosts — out of scope for a data-extraction phase and squarely the kind of
+thing that belongs in its own change. **Logged to `backlog.md` rather than absorbed silently.**
