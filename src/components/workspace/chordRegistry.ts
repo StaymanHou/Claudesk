@@ -36,7 +36,9 @@ import type { ChordEvent } from "./chordEvent";
  * chords that look similar behave differently.
  *
  * - `app` — a capture-phase document listener in App.tsx. Fires regardless of focus.
- * - `workspace` — registered by RightPanelHost.tsx. Scoped to an open workspace.
+ * - `workspace` — registered by RightPanelHost.tsx, EditorPanel.tsx (⌘⇧P) or Workspace.tsx
+ *   (terminal font zoom). Scoped to an open workspace. ⚠️ THREE host files, not one — a
+ *   completeness guard that assumed a single file would miss two thirds of this set.
  * - `editor` — CodeMirror's own keymap (editorExtensions.ts `coreKeymap`). ⚠️ NOT Claudesk's
  *   to rebind; listed so the surface does not lie by omission about why ⌘F behaves
  *   differently inside the editor than the ⌘⇧F project search.
@@ -276,6 +278,31 @@ export const CHORD_REGISTRY: readonly ChordEntry[] = [
     requiresWorkflowGate: false,
   },
 
+  {
+    id: "terminal-font-zoom",
+    label: "⌘= / ⌘- / ⌘0",
+    host: "workspace",
+    // ⚠️ THREE context-scoped outcomes, and the third is "Claudesk does not handle it".
+    // Workspace.tsx routes by LIVE DOM focus: left half → the CC terminal; right half with
+    // the terminal panel focused → that terminal; anything else → the chord is NOT swallowed
+    // and CM6's own keymap handles it (see the `cm6-font-zoom` entry below). The same keys
+    // therefore belong to two DIFFERENT owners depending on focus, which is why both entries
+    // exist and neither may be deleted as a duplicate.
+    outcomes: [
+      {
+        description: "Grow / shrink / reset the Claude Code terminal font",
+        whenFocused: "the CC terminal (left half)",
+      },
+      {
+        description: "Grow / shrink / reset the right-panel terminal font",
+        whenFocused: "a right-panel terminal",
+      },
+    ],
+    matcher: "components/workspace/terminalFontZoom.ts",
+    claudeskOwned: true,
+    requiresWorkflowGate: false,
+  },
+
   // ---- editor-internal: CodeMirror's own keymap. NOT Claudesk's to rebind. ----
   // Listed because omitting them would make the surface lie by omission: a user who sees
   // ⌘⇧F "find in files" and presses ⌘F inside the editor gets something else entirely, and
@@ -319,6 +346,17 @@ export const CHORD_REGISTRY: readonly ChordEntry[] = [
     host: "editor",
     outcomes: [
       { description: "Select the next occurrence", whenFocused: "the editor" },
+    ],
+    matcher: null,
+    claudeskOwned: false,
+    requiresWorkflowGate: false,
+  },
+  {
+    id: "cm6-toggle-wrap",
+    label: "⌘\\",
+    host: "editor",
+    outcomes: [
+      { description: "Toggle line wrapping", whenFocused: "the editor" },
     ],
     matcher: null,
     claudeskOwned: false,
@@ -372,9 +410,16 @@ export function chordLabel(id: string): string {
   return entry.label;
 }
 
-// Re-exported so the four pre-existing label constants keep ONE source of truth without
-// touching their consumers (ProjectSearch.tsx, FileFinder.tsx, CommandPalette.tsx).
-// ⚠️ Deliberately re-exported rather than deleted: a removed ES-module export is a RUNTIME
-// failure, not a tsc error — M13.5 WP3 shipped a blank app with `verify:auto` AND `tsc` both
-// green because a deleted export's consumers were migrated in a later phase.
+// ⚠️ Only `ChordEvent` is re-exported here. The four pre-existing `*_CHORD_LABEL` constants
+// (PALETTE_/FINDER_/SEARCH_/NEW_FILE_) deliberately STAY in their original home modules with
+// their existing consumers (ProjectSearch.tsx, FileFinder.tsx, CommandPalette.tsx) untouched.
+//
+// ⚠️ So the label strings ARE duplicated between those constants and this registry — an
+// earlier version of this comment claimed a single source of truth the code does not
+// establish, which was caught at verify-self. The duplication is bounded (four labels) and
+// the honest tradeoff is deliberate: deleting an ES-module export is a RUNTIME failure, not a
+// tsc error (M13.5 WP3 shipped a blank app with `verify:auto` AND `tsc` both green because a
+// deleted export's consumers were migrated in a later phase). Collapsing the duplication means
+// migrating three consumers, which belongs in its own change with its own boot smoke-test —
+// not bolted onto a data-extraction phase.
 export type { ChordEvent };

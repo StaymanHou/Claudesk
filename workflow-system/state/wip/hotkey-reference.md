@@ -29,6 +29,17 @@ already authoritative-by-convention; WP3 promotes it from a comment to typed dat
 and one reachability guard. That is cheaper than writing a registry from scratch *and* it removes a
 live drift risk that exists today.
 
+**[Updated 2026-09-15: verify-self back-loop — the problem is BIDIRECTIONAL, which the original
+statement missed.]** The statement above framed the risk as *"a comment cannot be tested against the
+code it describes"* and the fix as *"promote it to typed data with one reachability guard."* That was
+half right. The reachability guard proves **registry → code** (every entry is real). verify-self
+found two chords the app registers that the registry omits — the **code → registry** direction, which
+that guard structurally cannot see, because an entry-less chord is not an entry and nothing iterates
+it. ⚠️ **The drift this WP exists to kill runs both ways, so it takes TWO guards, not one.** One of
+the two omissions (`⌘\` line wrap) documents its own check against the OLD comment map and was then
+never added to it — the same drift class, caught in the act, which is direct evidence the second
+direction is the one that actually bites in practice.
+
 ## User Stories
 
 - As a **stranger evaluating Claudesk**, I want to see every keyboard shortcut in one place, so I can
@@ -271,7 +282,7 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
         `fn(`; `grep -c` first to confirm the substring is unique to its site.**
         <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: PASS 2026-09-15 — tsc 0, scoped eslint 0, 12/12 chordRegistry (count-confirmed, not a filtered false-green), 4 label exports + 3 consumers intact; guard fail-probe confirmed -->
-  - [ ] verify-self  <!-- status: FAILED — outcome (e) completeness: TWO registered chords omitted; see Discoveries -->
+  - [ ] verify-self  <!-- status: NOT-STARTED (re-verify gate PASSED after F9b fix; awaiting fresh verify-self) -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
@@ -310,10 +321,9 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.4 (back-loop from verify-self)
-- **Active scope:** P1.4 (add the two omitted chords) + P1.6 (extend the guard to catch the
-  omission DIRECTION — see Discoveries; the current guard cannot)
-- **Blocked:** verify-self BLOCKED on the two omissions
+- **Path:** Feature > Phase 1 > verify-auto (F9b re-verify passed)
+- **Active scope:** none — P1.4 + P1.6 both fixed and re-verified
+- **Blocked:** none
 - **Unvisited:** Phase 1 verify-human → verify-codify; then Phase 2 (render the list as a fifth
   Settings group)
 - **Open discoveries:** two, both resolved in-phase — see Discoveries
@@ -394,3 +404,25 @@ hold — nothing was deleted, so the ES-module runtime trap never applied — bu
 a single-source-of-truth the code does not establish. Fix the COMMENT to match the code (the
 labels are duplicated between the registry and the four constants); do not chase the stronger
 claim in this phase.
+
+[SURFACED-2026-09-15] Phase 1 / P1.6 — **The completeness guard is built and MUTATION-PROVEN on
+both omissions individually.** It walks code → registry: collect every `*(`-shaped call in the
+four registration hosts (comment-stripped), filter to chord-shaped names, and assert each is
+claimed by a registry entry — plus a stale-row check so a renamed entry cannot leave a dangling
+mapping that hides a real omission, plus a separate arm asserting every `Mod-` binding in CM6's
+`coreKeymap` has a `host: "editor"` entry (the CM6 set is `matcher: null`, so the call-shape arm
+structurally cannot reach it — which is exactly why `⌘\` was missed).
+⚠️ **It cannot key on FILENAMES:** `terminalFontZoom.ts` — the module that was omitted — does not
+match `*Chord*`, and neither do `panelHost.ts` or `paletteCommands.ts`. A filename scan would have
+reported "complete" on the broken tree.
+**Mutations, run individually, each verified landed:** deleting `terminal-font-zoom` fired the
+call-shape arm AND the stale-row arm; deleting `cm6-toggle-wrap` fired the CM6-keymap arm. Restore
+confirmed by checksum.
+
+[SURFACED-2026-09-15] Phase 1 / P1.4 — **A test premise was wrong and was corrected, not
+worked around.** The original `labels are unique` assertion failed once terminal zoom was added:
+`⌘= / ⌘- / ⌘0` legitimately appears TWICE — Claudesk-owned (Workspace.tsx zooms the focused
+terminal) and CM6-owned (the editor's keymap), disambiguated by focus. **The data was right and
+the test was wrong.** Uniqueness is now on `(label, host)`, with a second arm asserting at most
+ONE `claudeskOwned` entry per label (two would mean Claudesk fights itself for the key). Weakening
+the assertion to "labels may repeat" would have re-opened the omission this back-loop just closed.

@@ -85,9 +85,29 @@ describe("chord registry — shape", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("labels are unique — two chords rendering the same label is a data bug", () => {
-    const labels = CHORD_REGISTRY.map((e) => e.label);
-    expect(new Set(labels).size).toBe(labels.length);
+  // ⚠️ Uniqueness is on (label, host), NOT on label alone. The first version of this test
+  // asserted bare-label uniqueness and had to be corrected when the terminal-zoom omission was
+  // fixed: `⌘= / ⌘- / ⌘0` legitimately appears TWICE — once Claudesk-owned (Workspace.tsx
+  // zooms the focused terminal) and once CM6-owned (the editor's own keymap). Same keys, two
+  // owners, disambiguated by focus. Collapsing them would re-introduce the very omission
+  // verify-self caught. A repeated label within ONE host is still a data bug.
+  it("(label, host) pairs are unique — a repeat within one host is a data bug", () => {
+    const pairs = CHORD_REGISTRY.map((e) => `${e.host}::${e.label}`);
+    expect(new Set(pairs).size).toBe(pairs.length);
+  });
+
+  it("a label shared across hosts is Claudesk-owned in at most one of them", () => {
+    // The shared-label case is only coherent if exactly one owner claims it; two
+    // claudeskOwned rows with the same label would mean Claudesk fights itself for the key.
+    const byLabel = new Map<string, number>();
+    for (const e of CHORD_REGISTRY.filter((x) => x.claudeskOwned)) {
+      byLabel.set(e.label, (byLabel.get(e.label) ?? 0) + 1);
+    }
+    const contested = [...byLabel].filter(([, n]) => n > 1).map(([l]) => l);
+    expect(
+      contested,
+      "two Claudesk-owned entries claim the same label",
+    ).toEqual([]);
   });
 
   // ⌘W is the canary for the context-scoped model. If someone "simplifies" the outcome
@@ -158,6 +178,7 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
       tabSwitchChord: "tabSwitchIndex",
       closeTabChord: "isCloseTabChord",
       newTerminalChord: "newTerminalChord",
+      terminalFontZoom: "terminalZoomForChord",
       paletteCommands: "isPaletteChord",
     };
 
@@ -175,6 +196,128 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
       expect(
         hosts.includes(`${symbol}(`),
         `${entry.id}: ${symbol} is never CALLED in a registration host (imported-but-dead)`,
+      ).toBe(true);
+    }
+  });
+});
+
+describe("chord registry — COMPLETENESS (the other direction)", () => {
+  // ⚠️ WHY THIS BLOCK EXISTS, and why the reachability block above is not enough.
+  //
+  // Reachability walks registry → code: for each ENTRY, is it real? That direction cannot
+  // see a chord the app registers but the registry omits, because an entry-less chord is not
+  // an entry and nothing iterates it. verify-self found exactly two such omissions on the
+  // first pass — terminal font zoom (Workspace.tsx) and ⌘\ toggle-wrap (CM6) — one of which
+  // documented its own check against the OLD comment map and was then never added to it.
+  //
+  // ⚠️ Adding a host to HOSTS does NOT fix this: Workspace.tsx was ALREADY in that list when
+  // the terminal-zoom omission shipped. An unused host passes silently. The guard has to walk
+  // the OTHER way — from what the hosts actually CALL, back to the registry.
+  //
+  // ⚠️ It also cannot key on filenames. `terminalFontZoom.ts` — the module that was missed —
+  // does not match `*Chord*`, and neither do `panelHost.ts` or `paletteCommands.ts`. A
+  // filename scan would have reported "complete" on the broken tree.
+
+  /** Call sites of the form `someName(` in comment-stripped host source. */
+  function calledSymbols(source: string): Set<string> {
+    const out = new Set<string>();
+    for (const m of source.matchAll(/\b([a-z][A-Za-z0-9_]*)\s*\(/g))
+      out.add(m[1]);
+    return out;
+  }
+
+  // Chord-matcher symbols the registry accounts for, mapped to the entry ids that claim them.
+  const ACCOUNTED: Record<string, string> = {
+    workspaceSwitchIndex: "workspace-switch",
+    newWorkspaceChord: "new-workspace",
+    isDashboardChord: "dashboard",
+    isSettingsChord: "settings",
+    isPaletteChord: "command-palette",
+    isFinderChord: "file-finder",
+    isSearchChord: "project-search",
+    isNewFileChord: "new-file",
+    panelForChord: "panel-select-editor",
+    tabSwitchIndex: "tab-switch",
+    isCloseTabChord: "close-w",
+    newTerminalChord: "new-terminal",
+    terminalZoomForChord: "terminal-font-zoom",
+    // Not a matcher: a ROUTER that consumes isCloseTabChord's result and decides, by focus,
+    // whether ⌘W closes a terminal or an editor tab. It owns no chord of its own — which is
+    // precisely why `close-w` is ONE entry with two outcomes rather than two entries.
+    shouldCloseTerminalOnChord: "close-w",
+  };
+
+  it("every chord-matcher symbol a host CALLS is accounted for by a registry entry", () => {
+    const called = calledSymbols(readHostSources());
+
+    // Chord-shaped call sites: the naming conventions this codebase actually uses for a
+    // chord matcher. Deliberately broader than `*Chord` — `terminalZoomForChord` matches
+    // here, but so must `panelForChord` / `tabSwitchIndex` / `workspaceSwitchIndex`, which a
+    // narrower pattern would miss.
+    const chordish = [...called].filter(
+      (n) => /[Cc]hord/.test(n) || /^(tabSwitch|workspaceSwitch)Index$/.test(n),
+    );
+
+    const ids = new Set(CHORD_REGISTRY.map((e) => e.id));
+    const unaccounted = chordish.filter(
+      (n) => !(n in ACCOUNTED) || !ids.has(ACCOUNTED[n]),
+    );
+
+    expect(
+      unaccounted,
+      `these chord matchers are CALLED by a registration host but no registry entry claims ` +
+        `them — Settings would omit a chord the app really has (the exact drift this WP ` +
+        `exists to kill)`,
+    ).toEqual([]);
+  });
+
+  it("the accounted-for map has no stale rows — every id it names still exists", () => {
+    // Keeps the map above honest in the other direction: renaming or deleting an entry must
+    // not leave ACCOUNTED silently pointing at nothing, which would let a real omission hide
+    // behind a dangling row.
+    const ids = new Set(CHORD_REGISTRY.map((e) => e.id));
+    const stale = Object.entries(ACCOUNTED).filter(([, id]) => !ids.has(id));
+    expect(stale, "ACCOUNTED names registry ids that no longer exist").toEqual(
+      [],
+    );
+  });
+
+  it("the CM6-owned set matches editorExtensions.ts coreKeymap", () => {
+    // The CM6 entries are `matcher: null`, so the call-shape guard above cannot reach them —
+    // they are bound declaratively inside CodeMirror's keymap, not called by a host. ⌘\
+    // toggle-wrap was omitted for exactly this reason: nothing pointed at it. Assert against
+    // the keymap source instead.
+    const src = stripComments(
+      readFileSync(
+        resolve(SRC, "components/workspace/editor/editorExtensions.ts"),
+        "utf8",
+      ),
+    );
+    const bound = new Set(
+      [...src.matchAll(/key:\s*"(Mod-[^"]+)"/g)].map((m) => m[1]),
+    );
+
+    // Mod-bindings the registry deliberately does NOT list as their own row, with the reason.
+    const NOT_LISTED = new Set([
+      "Mod-+", // same row as Mod-= (shift variant of the same key)
+      "Mod--", // same row as Mod-= (the "⌘= / ⌘- / ⌘0" label covers it)
+      "Mod-0", // same row as Mod-=
+    ]);
+
+    const cm6Labels = CHORD_REGISTRY.filter((e) => e.host === "editor").map(
+      (e) => e.label,
+    );
+    for (const key of bound) {
+      if (NOT_LISTED.has(key)) continue;
+      // ⚠️ The source text is `"Mod-\\"`, so the regex capture yields a DOUBLE backslash.
+      // Unescape it or the expectation is built against a string the label can never equal —
+      // a guard that fails for the wrong reason is as useless as one that passes for the
+      // wrong reason.
+      const letter = key.slice(4).replace(/\\\\/g, "\\"); // "Mod-s" -> "s"
+      const expected = letter === "=" ? "⌘=" : `⌘${letter.toUpperCase()}`;
+      expect(
+        cm6Labels.some((l) => l.includes(expected)),
+        `coreKeymap binds ${key} but no host: "editor" registry entry mentions ${expected}`,
       ).toBe(true);
     }
   });
