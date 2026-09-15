@@ -1,7 +1,7 @@
 # Feature: M15 WP5 — Milestone exit verify
 
 **Workflow:** feature
-**State:** verify-codify (Phase 2 complete)
+**State:** verify-codify (Phases 1, 2, 4 complete; Phase 3 deferred)
 **Created:** 2026-09-14
 **Drive mode:** autopilot
 <!-- ⚠️ `drive_mode` IS recorded here deliberately, reversing WP4's omission (wbs.md carries none,
@@ -129,45 +129,71 @@ reads those exact log lines — without them it would have had nothing to observ
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
-- [ ] Phase 4: Durable-doc resync + upstream corrections  <!-- status: NOT-STARTED; depends on Phase 3 -->
+- [x] Phase 4: Durable-doc resync + upstream corrections  <!-- status: COMPLETE 2026-09-15 — ⚠️ taken BEFORE Phase 3, deliberately -->
+  <!-- ⚠️ **REORDERING, RECORDED 2026-09-15.** Phase 4 runs BEFORE Phase 3. Phase 3 (live
+       observation) is operator-approved DEFERRED-TO-DOGFOODING (P1.verify-human.3) and cannot be
+       agent-driven — an agent-launched CC emits no hook events
+       (`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`). Phase 4's
+       `depends on Phase 3` was ORDERING-ONLY, not substantive: every correction here is a
+       documented-fact fix that does not depend on the supervisor having been observed firing.
+       ⚠️ Blocking Phase 4 on a deferred phase would strand the `arch/` resync — and a stale
+       `arch/` doc OUTRANKS a correct record (`CLAUDE.md` declares the `arch/` set the authority),
+       so leaving it unsynced is actively worse than the reorder. -->
   **Observable outcomes:**
   - CLI: `workflow-system/product/arch/workflow-supervisor.md` exists, is linked from `arch.md`'s
     index, and the index entry resolves to a real file.
-  - CLI: `grep -rn "arms 1–5 are TAKEN" workflow-system/product/` returns **0** — the stale
-    guard-arm claim is corrected to 6 arms / 8 subjects everywhere it appears.
-  - CLI: `grep -rn "above \*\*50% context usage\*\*" workflow-system/product/roadmap.md` returns
-    **0** — superseded by R-2/R-7's absolute 400,000-token count.
-  - CLI: `grep -n "same scan M13's registry already performs" workflow-system/product/roadmap.md`
-    returns **0** — refuted by R-7 (no registry, no scan, no YAML parser).
-  - CLI: `grep -n "is on the line so it is derivable" workflow-system/product/roadmap.md` returns
-    **0** — refuted by M-5 (`claude-opus-5` observed at 833,567 tokens, `claude-opus-4-7` at
-    268,743, no `[1m]` suffix anywhere in 238 transcripts).
+  - ⚠️ **OUTCOMES REWRITTEN AT BUILD (2026-09-15) — the original `grep … returns 0` form was
+    UNSATISFIABLE AS WRITTEN, and that is a defect in this plan, not in the work.** A correction
+    that says *"this previously read X, and X is wrong because …"* necessarily CONTAINS X, so a
+    bare `grep -c X` counts the correction's own quotation and can never reach 0. Deleting the
+    quotation to satisfy the grep would make the docs WORSE — a reader could no longer see what
+    was superseded or why. The property that actually matters is **the corrected claim leads and
+    the stale phrase survives only inside a marked quotation**, so that is what is asserted:
+  - CLI: `arch.md` line 70 leads with `owns a SEVENTH guard arm` + `arms 1–6 are TAKEN`, and the
+    phrase `arms 1–5 are TAKEN` appears ONLY inside a `previously read "…"` clause.
+  - CLI: `roadmap.md` deliverable 4 is ticked `[x]` and states the threshold as an **absolute
+    400,000 tokens**; the string `Above **50% context usage**` no longer appears as an assertion
+    (only inside the correction's own explanation).
+  - CLI: `roadmap.md` probe Q3 carries a `CORRECTED AT M15 WP5` clause stating the "same scan"
+    premise is FALSE and that R-7 DECLINED the coupling.
+  - CLI: `roadmap.md` line 525 carries a `CORRECTED AT M15 WP5` clause stating the window is NOT
+    derivable from `message.model` (M-5's measurements) and that R-2 deleted the need for it.
+  - CLI: `roadmap.md` Exit Criteria no longer asserts `all 19 known breaks flagged` as the
+    criterion — superseded by R-3's freshly-rebuilt fixture and the 34/36 standing replay.
   - CLI: `git log --oneline -1 -- workflow-system/product/arch/` shows the resync commit.
-  - [ ] P4.1 Write `arch/workflow-supervisor.md` — the as-built subsystem doc (detector, policy
+  - [x] P4.1 Write `arch/workflow-supervisor.md` — the as-built subsystem doc (detector, policy
         graph, adjudicator + its pinned model, fire + recycle paths, the ledger, the seven rulings
         and the two refutations). ⚠️ **Do NOT add a milestone section to `arch.md`** — edit the
-        subsystem the change belongs to and add the index entry.  <!-- status: NOT-STARTED -->
-  - [ ] P4.2 Edit the subsystems the supervisor changed: `session-resumption.md`,
-        `status-channel-and-surfaces.md`, `workflow-gate.md`.  <!-- status: NOT-STARTED -->
-  - [ ] P4.3 Apply all six inherited corrections from the WP1 probe report §P5.4 (WBS 5.6/5.7).
+        subsystem the change belongs to and add the index entry.  <!-- status: DONE — arch/workflow-supervisor.md written (9 sections: ownership boundary, pipeline, policy graph, detection, recycle, observability, gate, verification posture, existing seams) + arch.md index entry added and confirmed to resolve -->
+  - [x] P4.2 Edit the subsystems the supervisor changed: `session-resumption.md`,
+        `status-channel-and-surfaces.md`, `workflow-gate.md`.  <!-- status: DONE — status-channel-and-surfaces.md gained §A.5 documenting `is_turn_start` (it had ZERO supervisor mentions despite owning the trigger); workflow-gate.md's prediction that the supervisor would author a RECYCLE_SESSION menu id is RESOLVED as false; session-resumption.md cross-refs the new doc -->
+  - [x] P4.3 Apply all six inherited corrections from the WP1 probe report §P5.4 (WBS 5.6/5.7).
         ⚠️ **The enumerated site list is a FLOOR, not a ceiling** — grep each retracted CLAIM
         repo-wide before declaring it corrected. The unnamed sites are the dangerous ones, because
-        they hold a disproven design still standing as live spec.  <!-- status: NOT-STARTED -->
-  - [ ] P4.4 Update the root `CLAUDE.md` with the supervisor's load-bearing constraints and the
-        M-5/M-6 refutations so they are never re-derived.  <!-- status: NOT-STARTED -->
-  - [ ] P4.5 ⚠️ Correct the WBS's dead commit hash for WP4 — tagged `(75ad76d)`, which the
+        they hold a disproven design still standing as live spec.  <!-- status: DONE — 4 live corrections in roadmap.md (deliverable 4's 50%→400k + ticked, the model→window derivation, probe Q3's 'same scan', and Exit Criteria's TWO stale claims incl. 'all 19 known breaks') + 1 in arch.md (guard-arm count). ⚠️ Grepped each retracted CLAIM repo-wide first: most hits are RECORDS of the refutation (correct, left alone); only 5 were live assertions -->
+  - [x] P4.4 Update the root `CLAUDE.md` with the supervisor's load-bearing constraints and the
+        M-5/M-6 refutations so they are never re-derived.  <!-- status: DONE — CLAUDE.md gained the as-built pointer + 4 must-not-re-derive properties + the never-observed status with the DEFERRED-vs-[x] warning -->
+  - [x] P4.5 ⚠️ Correct the WBS's dead commit hash for WP4 — tagged `(75ad76d)`, which the
         2026-09-14 rebase rewrote to `79c67e5`. Check the other cycle docs for the same class of
-        stale hash while there.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+        stale hash while there.  <!-- status: DONE — wbs.md 75ad76d→79c67e5 (all 4 replacement hashes verified real via git log); backlog pointer corrected; archive annotated with the full mapping rather than rewritten, since it is a historical record -->
+  - [x] verify-auto  <!-- status: DONE — 6 scoped checks over the markdown (Phase 4 changed NO source): all 12 arch.md index links resolve incl. the new one; 5 cited code symbols exist; numeric claims checked against ground truth; 4 inbound cross-refs resolve; archive path exists; both cited SURFACE IDs are real. ⚠️ FOUND AND FIXED: `mod.rs:451` had drifted to `:502` and was wrong in THREE places (2 of them newly written by me, inherited from wbs.md). ⚠️ My own fixture-count probe was WRONG (read a dict length, not records) — the doc's 2,284 is correct: 96+472+1716. -->
+  - [x] verify-self  <!-- status: DONE — subagent audited the new as-built doc's 10 factual claims AGAINST THE CODE and found a BLOCKING falsehood I had written: §B said Rust exposes transcript_tail + wip_read 'and nothing else', but supervisor_adjudicate is a THIRD supervisor-owned command that SPAWNS A SUBPROCESS — and §D described it, so the doc contradicted itself. Also flagged §C's one-sided 'FIVE values' against policy.ts's explicit do-not-simplify-either-direction warning. BOTH fixed in place under the 3 gates; a FRESH subagent re-verified 5/5 PASS and swept for sibling over-confident enumerations (5 more absolutes spot-checked, all true). No integration boundary — markdown only. -->
+  - [x] verify-human  <!-- status: DONE — operator approved all 4 leaves 2026-09-15. NOT auto-skipped: gate (a) fails per SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER; and the phase's deliverable is a doc that becomes AUTHORITATIVE, which is a judgment call. -->
+    - [x] P4.verify-human.1 arch/workflow-supervisor.md accepted as the M15 authority (wrong once, fixed, independently re-audited, sibling-claim sweep clean)  <!-- status: PASS (operator, 2026-09-15) -->
+    - [x] P4.verify-human.2 roadmap.md deliverable 4 reads SHIPPED while M15's exit criterion stays explicitly open  <!-- status: PASS (operator, 2026-09-15) -->
+    - [x] P4.verify-human.3 ⚠️ Phase 4 before Phase 3 approved; WP5 MAY CLOSE WITH PHASE 3 OPEN rather than blocking  <!-- status: PASS (operator, 2026-09-15) -->
+    - [x] P4.verify-human.4 Cite code by SYMBOL, not line, for code that moves  <!-- status: PASS (operator, 2026-09-15) -->
+  - [x] verify-codify  <!-- status: DONE — ⚠️ NEW GUARD WRITTEN: `archDocEnumeration.test.ts` (10 tests) couples the arch doc's ENUMERATIONS to the code, because the BLOCKING falsehood verify-self found had no gate to catch it. Derives the command list from `useSupervisor.ts` rather than hardcoding, so a 4th invoke fails until the doc names it. 3 mutants proved INDIVIDUALLY (omit a command / one-sided arm count / re-assert the retracted phrase), each killed by its own arm; re-proved after a Prettier reflow. ⚠️ MY FIRST REGEX WAS WRONG (`[a-z-]+` dropped `n/a`, reported 5 arms) — fixing the PROBE was correct, not 'correcting' a doc that was right. Full suite: EXIT=0, 2601 frontend / 901 Rust. -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 > P3.1
-- **Active scope:** Phase 2 COMPLETE (4 impl tasks + all 4 verify nodes `[x]`). ⚠️ **Phase 3 is
-  DEFERRED-TO-DOGFOODING by operator decision (P1.verify-human.3, 2026-09-15)** — it cannot be
-  driven by an agent. The next mechanically-executable work is **Phase 4**.
+- **Path:** Feature > Phase 3 (DEFERRED) — no agent-executable work remains
+- **Active scope:** ⚠️ **Phases 1, 2 and 4 are COMPLETE. Phase 3 is the ONLY open phase and it is
+  operator-approved DEFERRED-TO-DOGFOODING** (P1.verify-human.3 + P4.verify-human.3, both
+  approved 2026-09-15) — it cannot be agent-driven, since an agent-launched CC emits no hook
+  events. **WP5 may close with Phase 3 open**, per P4.verify-human.3.
+  ⚠️ **Phase 4 was taken BEFORE Phase 3** — Phase 3 (live observation) is operator-approved
+  DEFERRED-TO-DOGFOODING (P1.verify-human.3) and cannot be agent-driven; Phase 4's dependency on
+  it was ordering-only. See the note on the Phase 4 node.
 - **Blocked:** none
 - **Unvisited:** Phase 2 (mechanical gaps — negative arm + gate posture), Phase 3 (live
   observation — the exit criterion proper; ⚠️ **DEFERRED-TO-DOGFOODING by operator decision
@@ -274,6 +300,21 @@ release-gated, not dogfooding-gated, and is tracked separately from the other fo
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+
+[SHORTCUT-2026-09-15] P4.1 — ⚠️ **verify-self's subagent found a BLOCKING FALSEHOOD in the
+as-built doc I had just written**, plus one incomplete claim. Both fixed in place under the three
+gates. (1) **BLOCKING:** §B said Rust exposes *"`transcript_tail` and `wip_read` and nothing else"*
+— but **`supervisor_adjudicate` is a THIRD supervisor-owned Rust command** (`lib.rs:480`,
+`adjudicator/commands.rs:19`, invoked from `useSupervisor.ts:150`), and it **spawns a subprocess**
+rather than doing file IO. ⚠️ **The doc contradicted itself**: §D describes the adjudicator spawn
+while §B denied it existed. R-4's substance held (the command is decision-free by construction), but
+the *enumeration* was wrong in a doc `CLAUDE.md` declares authoritative — a reader auditing "what
+crosses into Rust?" would have been told two when it is three. Fixed with an explicit three-row
+table + the pipeline diagram's third arrow. (2) **COSMETIC-as-reported, treated as sharper:** §C
+stated "FIVE values" without the **six-arm modeled union** (`confirm`, `policy.ts:137`) — and
+`policy.ts`'s own header explicitly warns *"Do not 'simplify' the count in either direction without
+reading both comments."* Since this doc **outranks** `policy.ts`, the one-sided count is exactly the
+simplification the code warns against. Both re-verified by a FRESH subagent.
 
 [SHORTCUT-2026-09-14] P1.4 — verify-self's subagent reported row 5.3's status cell as
 FAIL/COSMETIC: it read `MOSTLY DISCHARGED — one narrow gap`, outside the closed three-value

@@ -323,6 +323,8 @@ the guard was **extended, never narrowed**.
 
 ### ⚠️ The supervisor's language boundary (M15 WP3 — ruling R-4, DECIDED, not open)
 
+> ⚠️ **The supervisor's full as-built record now lives at [workflow-supervisor](workflow-supervisor.md)** (added M15 WP5). This section stays because R-4 is a *resumption-and-drive-mode* boundary decision; the detector, policy graph, adjudicator and recycle mechanics are documented there.
+
 **Rust does file IO only. TypeScript owns the verdict.** The supervisor reads a transcript, applies
 the workflow policy, and injects the next command — and the split between the two languages is a
 **settled ruling**, not an implementation accident. Re-opening it is the one change this section

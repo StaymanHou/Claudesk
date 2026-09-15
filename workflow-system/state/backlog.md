@@ -7,7 +7,7 @@
 - **Pickup shape:** ⚠️ **Do the 3 MAJORs together — they are one observability pass**, and doing them BEFORE the operator dogfoods is what makes the deferred behavioral checks diagnosable at all (a fire that leaves no trace cannot be confirmed or refuted by dogfooding). MINORs: the `as number` cast that should be a return type (the exact prose-contract shape WP3 paid down), a `useCallback` that memoizes nothing, a `runtimes.md` Last-vs-History ordering disagreement, and the `lastIndex` comment's 14:1 ratio — ⚠️ **fold that last one into the standing comment-convention item, do NOT trim per-WP** (measured as not converging). The reviewer explicitly endorsed KEEPING the `lastIndex` line itself; only the essay around it is the finding.
 
 ## Code-quality findings — m15-wp3-break-detection-and-auto-fire (2026-09-13)
-- **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **3 MINORs remain open.** What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **The "still zero production callers" note is now STALE — WP4 supplied the caller** (`useSupervisor`, shipped 2026-09-14, `75ad76d`), so these MINORs now sit behind live code rather than an unwired module. Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
+- **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **3 MINORs remain open.** What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **The "still zero production callers" note is now STALE — WP4 supplied the caller** (`useSupervisor`, shipped 2026-09-14, `79c67e5` — hash rewritten by the 2026-09-14 rebase; was `75ad76d`), so these MINORs now sit behind live code rather than an unwired module. Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
 - **Priority:** low (all three remaining)
 - **Status:** pending
 - **Pickup shape:** comment-duplication across the supervisor modules (fold into the standing comment-convention item, do NOT trim per-WP — that is measured as not converging), the Rust timeout test that re-implements the production wait/kill loop, and the discarded adjudicator stderr. Independent polish; none blocks WP4.
@@ -111,6 +111,73 @@
   distinctly, and an unreadable WIP is distinguishable from an absent one. **This does not close
   this item** — the behavior is still unobserved — but a fire or recycle now leaves a trace, so
   when dogfooding does trigger one the five deferred checks have evidence to read.
+- **Status:** pending
+
+## SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT
+
+- **Priority:** medium
+- **Surfaced by:** operator request (session, 2026-09-15)
+- **Target:** product:roadmap (a user-facing feature, not a task)
+- **Type:** new-work
+
+**The ask.** An **optional staging area for prompt input** — compose the prompt in a Claudesk-owned
+buffer first, then send it to CC, instead of typing directly into the CC pane. Explicitly an
+*option*, not a replacement for typing straight into the terminal.
+
+**The pain point (operator's own words, do not re-derive):** *"when I input a lot of stuff,
+sometimes it just got messed up midway, or lost if deleted by accident or unintended shutdown."*
+⚠️ **The motivating case is VOICE DICTATION** — long, single-take input where a mid-stream glitch
+costs the whole utterance. So the value is **durability + editability of in-progress text**, not a
+nicer text box.
+
+**Three distinct failure modes it must address** (worth separating at design time — they have
+different fixes):
+1. **Messed up midway** — dictation garbles partway; the operator wants to *fix before sending*.
+   Needs editability of the staged text.
+2. **Deleted by accident** — an errant keystroke wipes it. Needs undo, or at least non-destructive
+   history.
+3. **Unintended shutdown** — needs **persistence across app restarts**, which is the only one that
+   forces a storage decision.
+
+⚠️ **THE TERMINAL IS THE WRONG PLACE FOR THIS TODAY, AND THAT IS THE POINT.** Text typed into the
+CC pane lives only in the PTY's line buffer: Claudesk cannot read it back, cannot snapshot it, and
+it dies with the process. A staging area works precisely *because* the buffer would be
+Claudesk-owned rather than CC-owned.
+
+### Constraints found while sizing (not a design — a fence around one)
+
+⚠️ **`slashCommandPayload` CANNOT be reused unchanged for multi-line text.** It is
+`encodeUtf8Base64(trimmed + "\r")` (`src/components/workspace/autoResumeFire.ts:145`) — it strips
+trailing newlines and appends **one** `\r`. That is correct for a one-line slash command and
+**wrong for a staged multi-line prompt**.
+
+⚠️ **AND THE REASON IS LOAD-BEARING: in raw mode `\r` IS Enter** (`[[raw-mode-cr-is-enter]]`,
+`[[cc-tui-cr-not-lf]]`). So any newline embedded in staged text **submits the prompt at that
+point** rather than inserting a line break — a multi-line staged prompt sent naively would fire as
+N separate truncated prompts. **How multi-line text reaches CC intact is the first real design
+question**, and it is a CC-TUI behavior question, not a Claudesk one. Do not assume it is solvable
+by escaping alone; it may need bracketed paste, or a deliberate single-line normalization with the
+operator's consent.
+
+⚠️ **`injectCommand` is the single injection funnel** and already carries a `label` argument for
+attribution (M15 uses `"supervisor"`, M12 uses `"auto-resume"`). A staging feature should enter
+through it with its own label rather than opening a second path to `cc_input`.
+
+✅ **Persistence has an obvious home but a non-obvious scope.** `Project` in `projects.json`
+(`src-tauri/src/config_store/mod.rs:63`) already carries per-project settings with live read/write
+paths (`default_model` M11.5, `default_drive_mode` M12). A staged draft is **per-workspace**
+though, not per-project, and is high-churn text rather than a setting — so whether it belongs in
+`projects.json` at all is an open question, not a given.
+
+**Open questions for the design discussion (NOT answered here):** where does the staging surface
+live — right panel tab, an overlay, a strip above the CC pane? · is there one draft per workspace
+or a queue/history? · does it auto-save on every keystroke, on blur, or on an interval? · is the
+draft cleared on send, or kept as history? · does it interact with the voice-input path at all, or
+is it agnostic to how text arrives? · does an unsent draft survive a **Recycle** (M13) or a
+context-pressure recycle (M15)?
+
+**Suggested action:** size as a **roadmap item** at the next roadmap pass. ⚠️ Resolve the
+multi-line-injection question **first** — it gates whether the obvious design is even buildable.
 - **Status:** pending
 
 ## SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET

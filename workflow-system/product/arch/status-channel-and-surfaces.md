@@ -47,6 +47,31 @@ flowchart LR
 - **Failure mode.** If the socket is missing or the hook script can't connect, the workspace status defaults to `Unknown`. Claudesk does not infer state from PTY output; an unknown badge is honest, a guessed badge is not.
 - **Frontend close-the-loop (as-built M3 WP6, commit `b377a97`).** The main React webview `listen("workspace-status")`s and renders an honest dot+label indicator (Idle / Running / AwaitingInput / BackgroundWork / Unknown) in the workspace chrome header; the TS wire type mirrors the Rust serde field names verbatim (snake_case, no translation layer). Workspace open→`workspace_register` / close→`workspace_deregister` populate the cwd→workspace registry by list-diffing (N≤1 in M3, generalizes to M4 multi-workspace). Palette is deliberately distinct so two states never read alike: Running = Claude-brand orange `#d97757`, AwaitingInput = cool blue `#539bf5` (operator-chosen at verify-human). **BackgroundWork = purple `#a371f7`** (M13.5 WP2), threaded through all three surfaces — filmstrip · PiP · tray. ⚠️ **Teal shipped first and was operator-REJECTED**: it reads blue-adjacent, and blue means *"needs me now"*, so the two nearest-in-meaning states were the two nearest in appearance. Captured as the design prior [[semantic-distance-not-just-visual-distance-for-status-colour]] — a status colour's distance must track its **semantic** distance, not merely be visually distinguishable. This was M3's live verify surface — a real CC state transition observed in the UI purely from the hook channel, confirmed with terminal output scrolled away. The full multi-surface fan-out (M4 filmstrip / M5 PiP / M6 menu-bar) subscribes to this same event in later milestones. *(One backlogged MAJOR: the `last_output_snippet`→tooltip path is wired but unfed — `SURFACE-2026-06-22-QUALITY-WP6-SNIPPET-TOOLTIP-DEAD-PATH`; pick up via `/feature-refactor`.)*
 
+## A.5 `is_turn_start` — the sanctioned turn-boundary seam
+
+⚠️ **Added to this doc at M15 WP5 (2026-09-15): the seam existed since M13 but was undocumented
+here, and it now has a production consumer.**
+
+`event_is_turn_start()` (`status_broadcaster/mod.rs` — cite it by SYMBOL, not line: it was `:451` at M15 WP1 and is `:502` today) is `hook_event_name == "UserPromptSubmit"`,
+surfaced as `WorkspaceStatusUpdate.is_turn_start`. Consumers: `XtermPane` (since M13) and the
+**workflow supervisor** (M15) → [workflow-supervisor](workflow-supervisor.md) §B.
+
+⚠️ **READ IT OFF THE RAW EVENT STREAM, NEVER THE FOLDED `WorkspaceStatusMap`.** The map overwrites
+per workspace, so two consecutive events of the same kind are indistinguishable in it and a
+per-turn signal cannot survive the fold. The failure mode is a feature that **silently never
+fires**. The raw `workspace-status` Tauri event is emitted **once per hook event with no dedupe**,
+which is what makes the raw stream usable where the map is not.
+
+⚠️ **It is turn-START; the turn-END correlate is `Stop`** — which maps to **both** `Idle` and
+`BackgroundWork`, so a consumer needing "the turn ended" must match **every** state `Stop` can
+produce, not the nearest one. ⚠️ **A turn ending in `BackgroundWork` gets NO completion event** (a
+`BackgroundTasksIdle` request was closed as not planned); it self-heals on the next zero-count
+`Stop`. Do not wait for one, and do not add a PID-polling watchdog — probed and rejected.
+
+⚠️ **The hook's `session_id` arrives and is DROPPED before the DTO**, so there is no
+CC-uuid→workspace mapping. `WorkspaceRegistry` keys on **path alone and is 1:1**, which means two
+CC sessions in one tree are indistinguishable today.
+
 ## B. Three status surfaces (subscribers)
 
 **B.1 — Filmstrip + Center Stage (in-window).**

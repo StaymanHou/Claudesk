@@ -982,7 +982,7 @@ archives this file.
 **TWO COMMITS, deliberately split:**
 - `d28255c` — the WP3 quality refactor's **separable half** (the adjudicator's `assertPinnedModel`
   call + its tests), carried uncommitted into this session from the previous one.
-- `75ad76d` — WP4 itself, 24 files, +3,248/−128.
+- `75ad76d` — WP4 itself, 24 files, +3,248/−128.  <!-- ⚠️ Every hash in this archived record was rewritten by the 2026-09-14 rebase onto `origin/main` and NO LONGER RESOLVES. The mapping: d28255c→676c597, 75ad76d→79c67e5, a791c39→ad9069f, a23969f→13e5936. Left as-written because this is a historical record of what was true when it was written; the live spec (`wbs.md`) carries the current hash. -->
 
 ⚠️ **THE SPLIT IS PARTIAL, AND THE COMMIT MESSAGE SAYS SO.** `verdict.ts` and `fanOut.ts` carry
 BOTH the WP3 refactor and WP4's recycle arm interleaved in the same files. Splitting those cleanly
