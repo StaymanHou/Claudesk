@@ -52,6 +52,36 @@
 - **Status:** pending
 - **Pickup shape:** read the two entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
+> **M15 (Workflow supervisor) cycle-close — backlog sweep 2026-09-15 (`/product-finalize`).**
+> M15 complete — all 5 WPs shipped (WP1 probe → WP2 typed graph → WP3 detect+fire → WP4
+> context-pressure recycle → WP5 exit verify; WBS archived to
+> `workflow-system/product/archive/milestone-15-workflow-supervisor/`).
+>
+> **Sweep disposition: NOTHING NEWLY RESOLVED.** M15's resolvable items were closed incrementally at
+> each WP's own `feature-finalize` and deleted then, per delete-on-resolve — most recently
+> `SURFACE-2026-09-14-PAUSE-REFUSAL-TEST-DRIVES-THE-WRONG-EDGE-CLASS` (closed by WP5 Phase 2's two
+> `verify-human`-GATE tests, deleted at ship `9b6cc00`). Of the 21 pending items whose text mentions
+> M15, none was *resolved by* it; they are adjacent, not addressed.
+>
+> ⚠️ **THE CYCLE'S OWN EXIT CRITERION IS CARRIED FORWARD, NOT CLOSED.**
+> `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**) now holds all
+> **six** live checks — WBS tasks 5.1/5.4 among them — and **closing this cycle does not close it.**
+> The trigger is the operator's first real dogfooding; an agent cannot manufacture it.
+>
+> **Surfaced during this cycle, all carried forward:**
+> `SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET` (medium — R-6 condition 3,
+> owed before any tuning leans on the +1-record margin) · `SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT`
+> (medium — operator feature request; ⚠️ the multi-line-injection question gates it) ·
+> `SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES` (medium — operator request;
+> two hard blockers recorded) · `SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER`
+> (low — cross-repo, mccc) · `SURFACE-2026-09-14-DOCSLINKHANDLING-FLAKE-EXITS-NONZERO-WITH-ZERO-FAILURES`
+> (medium) · `SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE` (**high**).
+>
+> **Nothing escalated.** Open total at close: **52 items — 4 high, 3 medium-high, 20 medium, 3
+> low-medium, 19 low.** ⚠️ **Advisory:** the standing code-quality/refactor batch has now rolled
+> forward across several cycles — `/util-backlog-paydown` is the instrument for it, and this is a
+> between-milestone boundary.
+
 ## SURFACE-2026-09-14-DOCSLINKHANDLING-FLAKE-EXITS-NONZERO-WITH-ZERO-FAILURES
 - **Source:** feature:verify-codify (M15 WP4 Phase 5)
 - **Target level:** product:arch
