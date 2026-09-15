@@ -103,6 +103,58 @@ describe("decideVerdict — ⚠️ the negative arm, asserted as hard as the pos
     expect(v.reason).toBe("not-dispatchable");
   });
 
+  it("⚠️ withholds at the verify-human GATE — the fire that would eat the operator's answer", () => {
+    // ⚠️ THE HIGHEST-STAKES REFUSAL IN THE WHOLE MATRIX, and until M15 WP5 Phase 1 it had no
+    // edge-specific test. The sibling test above ("withholds on a PAUSE policy") drives F3
+    // (spec → research) — a real PAUSE, but NOT this class. See
+    // `SURFACE-2026-09-14-PAUSE-REFUSAL-TEST-DRIVES-THE-WRONG-EDGE-CLASS`.
+    //
+    // ⚠️ WHY THIS EDGE CLASS IS DIFFERENT FROM EVERY OTHER WITHHOLD: a turn parked at
+    // verify-human is *waiting for the operator to answer a question*. A fire here does not
+    // merely chain early — CC reads the injected slash command AS THE REPLY, consuming the
+    // answer slot. `injectCommand` has no retry and no pre-send cancel window, so the only
+    // recovery is Esc, which is itself an unconfirmed deferred check
+    // (`SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`).
+    //
+    // ⚠️ ALL THREE `verify-human`-keyed edges are asserted, not just one. They were found by
+    // ENUMERATING `EDGES` for `from === "verify-human"` and resolving each against the policy
+    // (the method this file's header mandates), and all three are DISPATCHABLE — so nothing
+    // else in the pipeline would stop a fire. The withhold has to come from the policy cell.
+    //
+    // ⚠️ AND THE CELL THEY RESOLVE TO IS THE MATRIX'S ONE CONDITIONAL: `auto-skip` with
+    // `requires: [no-integration-boundary, verify-self-all-pass]` and `fallback: "pause"`.
+    // The supervisor supplies no PolicyContext, so the conditional is unsatisfied and
+    // `resolveCell` falls back to `pause`. That fallback direction is the safety property —
+    // flip it to `auto` and this test is what catches it.
+    for (const edgeId of ["F11", "F12", "F13"]) {
+      const v = decide(emitted(edgeId));
+      expect(v.kind, `${edgeId} must not fire at the human gate`).toBe(
+        "withhold",
+      );
+      if (v.kind !== "withhold") return;
+      expect(
+        v.reason,
+        `${edgeId} withholds on policy, not on dispatchability`,
+      ).toBe("policy-not-auto");
+    }
+  });
+
+  it("⚠️ the verify-human gate edges are DISPATCHABLE — so the withhold is load-bearing", () => {
+    // ⚠️ THE ANTI-VACUITY GUARD for the test above. If these edges were non-dispatchable, they
+    // would withhold for a boring reason (`not-dispatchable`) and the assertion would pass
+    // while proving nothing about the policy. Pinning dispatchability here means the previous
+    // test can only stay green because the POLICY says pause.
+    for (const edgeId of ["F11", "F12", "F13"]) {
+      const edge = EDGES.find((e) => e.id === edgeId);
+      expect(edge, `${edgeId} must exist in the graph`).toBeDefined();
+      expect(
+        isDispatchable(edge!.dispatchTarget),
+        `${edgeId} must be dispatchable for the withhold to be meaningful`,
+      ).toBe(true);
+      expect(edge!.from).toBe("verify-human");
+    }
+  });
+
   it("⚠️ withholds on an UNMAPPED edge — never coerced to auto", () => {
     // I2 (report → triage) has NO governing policy row upstream and IS dispatchable — the
     // single most dangerous edge for an `?? "auto"` fallback. 31 edges are unmapped; a

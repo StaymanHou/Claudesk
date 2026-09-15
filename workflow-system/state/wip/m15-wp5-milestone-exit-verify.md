@@ -1,7 +1,7 @@
 # Feature: M15 WP5 — Milestone exit verify
 
 **Workflow:** feature
-**State:** verify-codify (Phase 1 complete)
+**State:** verify-codify (Phase 2 complete)
 **Created:** 2026-09-14
 **Drive mode:** autopilot
 <!-- ⚠️ `drive_mode` IS recorded here deliberately, reversing WP4's omission (wbs.md carries none,
@@ -70,7 +70,7 @@ reads those exact log lines — without them it would have had nothing to observ
     - [x] P1.verify-human.4 In-place shortcut handling accepted over a full F9b back-loop  <!-- status: PASS (operator, 2026-09-15) -->
   - [x] verify-codify  <!-- status: DONE — NO NEW TESTS WRITTEN, deliberately. Phase 1 changed zero source files and produced no behavior to regress; its outputs are a baseline table + 2 backlog entries. A test over its own prose would be the "passes while the behavior is broken" anti-pattern §2 warns against. The real coverage lands at P2.1, where the Discovery becomes a standing test. Full suite re-run to confirm no regression: EXIT=0, frontend 2589 / Rust 901+19+1, 0 failures. -->
 
-- [ ] Phase 2: Close the mechanical gaps — negative arm + gate posture  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: Close the mechanical gaps — negative arm + gate posture  <!-- status: COMPLETE 2026-09-15 -->
   **Observable outcomes:**
   - CLI: `pnpm verify:auto` exits 0 with a frontend test count strictly greater than Phase 1's.
   - CLI: each refusal case Phase 1 found assertion-only now has a standing test that FAILS when its
@@ -79,29 +79,32 @@ reads those exact log lines — without them it would have had nothing to observ
   - CLI: `./node_modules/.bin/vitest run src/state/__tests__/offInvariantGuard.test.ts` exits 0,
     and the gate-posture decision (7th arm owed or not owed) is written into this WIP with its
     reasoning.
-  - [ ] P2.1 Add standing tests for whichever negative-arm cases Phase 1 found uncovered
-        (WBS 5.3's mechanical half).  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 ⚠️ Decide the gate-arm question (WBS 5.5). The supervisor ships **no new UI surface** —
+  - [x] P2.1 Add standing tests for whichever negative-arm cases Phase 1 found uncovered
+        (WBS 5.3's mechanical half).  <!-- status: DONE — 2 tests added to verdict.test.ts (35→37): the verify-human GATE withhold (F11/F12/F13, found by ENUMERATING EDGES, all dispatchable, all resolving to the conditional's `pause` fallback) + an anti-vacuity guard pinning their dispatchability. BOTH mutation-proved INDIVIDUALLY. ⚠️ Mutant A (fallback pause→auto) was killed by the NEW test alone — all 35 pre-existing tests stayed green, which is precisely the gap. -->
+  - [x] P2.2 ⚠️ Decide the gate-arm question (WBS 5.5). The supervisor ships **no new UI surface** —
         it acts through `injectCommand` and `recycleSession`, both already-gated paths — so the
         likely answer is that NO seventh arm is owed. **Record the decision and its reasoning either
         way; do not leave it implicit.** If a surface is ever added, the arm-count pin
-        (`offInvariantGuard.test.ts`, `armSubjects.length === 8`) must bump in the same change.  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 ⚠️ Evaluate widening `WORKFLOW_TERMS` — currently
+        (`offInvariantGuard.test.ts`, `armSubjects.length === 8`) must bump in the same change.  <!-- status: DONE — NO 7th arm owed; measured: zero .tsx, zero JSX, no panel/menu/chord/row-cell/skill-row registration. Pin stays at 8. See "Gate-posture decision". -->
+  - [x] P2.3 ⚠️ Evaluate widening `WORKFLOW_TERMS` — currently
         `["workflow","docs","skill","drivemode","drive-mode"]`, containing neither `"recycle"` nor
         `"session"`, so a `RECYCLE_SESSION`-style menu id or panel registers **unseen** by arms 1–3
         (`SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION`). Widen, or record why
         not. ⚠️ If widened, diff the OLD and NEW candidate sets — a widened selector must be a
-        strict superset, or a module previously in scope is silently dropped.  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 ⚠️ Re-check §4's exemption of the `claude -p` adjudicator from its own probe WP. R-5
+        strict superset, or a module previously in scope is silently dropped.  <!-- status: DONE — NOT widened; M15 adds no recycle/session-named UI registration (only RECYCLE_TOKEN_THRESHOLD, a numeric constant). Left open against its existing SURFACE. -->
+  - [x] P2.4 ⚠️ Re-check §4's exemption of the `claude -p` adjudicator from its own probe WP. R-5
         partially inverted it — the adjudicator is now load-bearing for correctness on the Q2 slice,
         and §4's own text says that inversion would require a probe. Decide: does the exemption
-        still hold at close, or is a follow-up probe owed? Record the verdict.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+        still hold at close, or is a follow-up probe owed? Record the verdict.  <!-- status: DONE — exemption HOLDS; R-6's 3 conditions discharge what a probe would buy (pinned model + withholding failure direction both shipped & tested). ⚠️ The larger labelled set (condition 3) is recorded as OWED, not dropped. -->
+  - [x] verify-auto  <!-- status: DONE — 4 scoped checks on the one changed source file (verdict.test.ts): eslint clean, prettier clean (the build-step failure, now fixed), 37/37 targeted tests, tsc --noEmit exit 0. Full suite NOT re-run here per this skill's scoping rule — build already recorded EXIT=0 @ 2591. -->
+  - [x] verify-self  <!-- status: DONE — subagent: 3 PASS / 0 FAIL. It INDEPENDENTLY re-ran both mutants rather than trusting the report: A killed by the GATE test alone (1 failed/36 passed), B by the DISPATCHABLE test alone, both SHAs confirmed changed then restored, neither survived, neither over-killed. ⚠️ It also verified something I had NOT: mutant B hit F13 at edges.ts:290 and left the identical-valued sibling at :274 untouched. NO BLOCKING. No integration boundary — only a test file changed. -->
+  - [x] verify-human  <!-- status: DONE — operator approved all 3 leaves 2026-09-15. NOT auto-skipped: gate (a) fails per SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER, and 3 of this phase's 4 deliverables were DECISIONS rather than code. -->
+    - [x] P2.verify-human.1 No 7th guard arm owed; pin stays at 8  <!-- status: PASS (operator, 2026-09-15) — with the recorded reversing condition -->
+    - [x] P2.verify-human.2 WORKFLOW_TERMS not widened; stays open against SURFACE-2026-08-18  <!-- status: PASS (operator, 2026-09-15) -->
+    - [x] P2.verify-human.3 ⚠️ Adjudicator exemption holds; R-6 condition 3 (larger labelled set) carried as EXPLICITLY OWED  <!-- status: PASS (operator, 2026-09-15) — backlogged as SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET -->
+  - [x] verify-codify  <!-- status: DONE — no NEW tests written: P2.1's two tests WERE this phase's codified coverage (mutation-proved twice, once independently). P2.2/P2.3/P2.4 are recorded decisions, not behavior. ⚠️ Codify DID ask whether P2.2's reversing condition is mechanically backstopped and found it IS (the guard's allowlist is all of `src/**`, so a future supervisor surface trips arms 1-3 today) — see the addendum. Full suite: EXIT=0, 2591 frontend / 901 Rust, 0 failures. -->
 
-- [ ] Phase 3: Live observation — the exit criterion proper  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [ ] Phase 3: Live observation — the exit criterion proper  <!-- status: NOT-STARTED; depends on Phase 2 — ⚠️ DEFERRED-TO-DOGFOODING (operator, 2026-09-15) -->
   **Observable outcomes:**
   - CLI: a Claudesk build newer than `7f303e6` is running, confirmed by comparing the running
     build's commit to `git log -1 --format=%H` — ⚠️ WP4's installed-`.app` tier was unsatisfiable
@@ -161,9 +164,10 @@ reads those exact log lines — without them it would have had nothing to observ
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** Phase 1 COMPLETE (all 4 impl tasks + all 4 verify nodes `[x]`). Phase 2 next:
-  P2.1 closes the negative-arm gap Phase 1 found.
+- **Path:** Feature > Phase 3 > P3.1
+- **Active scope:** Phase 2 COMPLETE (4 impl tasks + all 4 verify nodes `[x]`). ⚠️ **Phase 3 is
+  DEFERRED-TO-DOGFOODING by operator decision (P1.verify-human.3, 2026-09-15)** — it cannot be
+  driven by an agent. The next mechanically-executable work is **Phase 4**.
 - **Blocked:** none
 - **Unvisited:** Phase 2 (mechanical gaps — negative arm + gate posture), Phase 3 (live
   observation — the exit criterion proper; ⚠️ **DEFERRED-TO-DOGFOODING by operator decision
@@ -171,6 +175,75 @@ reads those exact log lines — without them it would have had nothing to observ
 - **Open discoveries:** 1 — the PAUSE refusal test drives F3 (spec→research) rather than a
   `verify-human` edge; actioned at Phase 2 / P2.1, logged as
   `SURFACE-2026-09-14-PAUSE-REFUSAL-TEST-DRIVES-THE-WRONG-EDGE-CLASS` (medium)
+
+## Gate-posture decision (P2.2 / P2.3 / P2.4) — recorded 2026-09-15
+
+### P2.2 — Is a SEVENTH OFF-invariant guard arm owed? **NO.**
+
+⚠️ **Measured, not assumed.** The supervisor ships **no UI surface whatsoever**:
+`src/state/supervisor/` contains **zero `.tsx` files** and zero JSX (the only `<...>` matches are
+TypeScript generics such as `Promise<TranscriptTail>`). It registers **no** panel, menu id, chord
+predicate, row-cell, or skill-row — the five things arms 1-5 select on. It acts exclusively
+through **`injectCommand`** and **`recycleSession`**, and *both are already-gated paths*: the hook
+that drives it (`useSupervisor`) checks `host.enabled` twice — once via `useTurnEnd`'s `enabled`
+and again **inside** the callback, deliberately, because the gate can flip mid-turn.
+
+**Therefore the guard's current pin — 6 arms / 8 subjects
+(`src/state/__tests__/offInvariantGuard.test.ts:931`, `armSubjects.length === 8`) — stays correct
+and is NOT bumped.** Arm subjects confirmed present: `1 PANEL`, `3 CHORD`, `5 RECYCLE`,
+`5 SKILL-ROW`, `6 WORKSPACE-DRIVEMODE` (+ arm 4's two derivations and arm 5's second predicate).
+
+⚠️ **THE CONDITION THAT WOULD REVERSE THIS:** if any future change gives the supervisor an
+operator-visible surface — a status panel, a menu item, a chord, a filmstrip badge, a settings row
+— that surface owns the **SEVENTH** arm, and the `armSubjects.length === 8` pin must bump **in the
+same change**. This decision is about what the supervisor *is today* (headless), not a general
+exemption for supervisor-adjacent work.
+
+#### ⚠️ Addendum (verify-codify, 2026-09-15) — the reversing condition HAS a mechanical backstop
+
+Asked at codify whether P2.2's reversing condition rests only on a human remembering this note.
+**It does not.** The guard's file allowlist is **all of `src/**`** — stated as MEASURED, not
+assumed, at `offInvariantGuard.test.ts:93` — and `src/state/supervisor/` is inside it. So a future
+supervisor panel, menu id, or `*Chord*`-exporting module would be **scanned by arms 1-3 today**,
+tripping an existing arm rather than slipping past unpoliced.
+
+⚠️ **What is still NOT mechanically caught:** a surface shaped unlike any of the five registries
+arms 1-5 select on (i.e. genuinely needing a *seventh* arm) would not trip anything — the
+`armSubjects.length === 8` pin detects an arm being **removed**, not a surface being **added**
+without one. That residue is what the WIP note covers, and it is the same residue every
+not-yet-invented surface has had since arm 1. **No new test written for it:** the predicate would
+have to anticipate a surface shape nobody has designed, which is the "a better source-text
+predicate can only encode shapes you thought of" trap.
+
+### P2.3 — Widen `WORKFLOW_TERMS`? **NOT NOW — and the milestone does not force it.**
+
+`WORKFLOW_TERMS` is `["workflow","docs","skill","drivemode","drive-mode"]` and contains neither
+`"recycle"` nor `"session"` (`SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION`).
+⚠️ **The gap is real but is NOT triggered by M15.** The only `recycle`/`session`-named export the
+supervisor adds is `RECYCLE_TOKEN_THRESHOLD` — a **numeric constant**, not a UI registration, so
+arms 1-3 have nothing to miss. Widening the vocabulary here would be a change with **no failing
+case to justify it**, and per the widened-selector rule it would oblige diffing the old and new
+candidate sets to prove the new predicate is a strict superset — real work, no benefit today.
+**Left open against its existing SURFACE, to be paid when a surface actually named
+`recycle`/`session` ships.**
+
+### P2.4 — Does §4's exemption of the `claude -p` adjudicator from its own probe WP still hold?
+**YES at close, with the inversion recorded.**
+
+R-5 partially inverted §4's rationale: the adjudicator is no longer purely off the dominant path —
+it is **load-bearing for correctness on the Q2 slice**, and §4's own text says that inversion would
+require a probe. ⚠️ **The exemption nonetheless holds, because R-6's three conditions already
+discharge what a probe would have bought**, and all three are shipped and tested:
+(1) the model is **pinned** and `assertPinnedModel` runs inside `adjudicate` before every spawn, so
+a silent downgrade fails loudly (the pinned-model gap was paid down at WP3);
+(2) the failure direction is **withholding** — `verdict.test.ts:362` pins "withholds when the
+adjudicator fails — the failure direction, end to end";
+(3) re-measurement on a larger labelled set is owed **before relying on the margin**, which is a
+condition on *future tuning*, not on shipping.
+⚠️ **What a probe would still add is (3)'s larger labelled set. That is recorded as owed, not
+silently dropped** — the 0.80/0.80 threshold remains a CHOSEN bar, not a measured constant, and
+the +1-record margin (sonnet 25/29 against a >=24 bar) is the known-thin part of R-6.
+
 
 ## Verification baseline
 

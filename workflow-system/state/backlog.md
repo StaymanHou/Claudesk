@@ -113,6 +113,42 @@
   when dogfooding does trigger one the five deferred checks have evidence to read.
 - **Status:** pending
 
+## SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET
+
+- **Priority:** medium
+- **Surfaced by:** M15 WP5 Phase 2 / P2.4 (feature:verify-human — operator-approved as explicitly owed)
+- **Target:** M15 supervisor — the `claude -p` adjudicator (`src/state/supervisor/adjudicator.ts`)
+- **Type:** gap
+
+⚠️ **R-6's condition 3 is NOT discharged, and M15 closes without discharging it.** R-6 shipped WP3
+as GO-WITH-CONDITIONS with three binding conditions. Conditions 1 and 2 are shipped and tested —
+the adjudicator model is **pinned** and `assertPinnedModel` runs inside `adjudicate` before every
+spawn (so a silent downgrade fails loudly), and the failure direction is **withholding**, pinned by
+`verdict.test.ts:362` ("withholds when the adjudicator fails — the failure direction, end to end").
+**Condition 3 — re-measure on a larger labelled set BEFORE relying on the margin — is not.**
+
+⚠️ **Why it matters: the margin is thin and the bar is CHOSEN, not measured.** Q2 came back
+`SEPARABLE` on a **+1-record margin** (sonnet 25/29 against a ≥24 bar; haiku is NOT_SEPARABLE at
+23/29), with only **70 of 96** records scorable. The 0.80/0.80 threshold is *"accepted as-is but is
+a CHOSEN bar, not a measured constant"* (R-6, verbatim). So the adjudicator's accept/reject
+behavior rests on a number nobody has validated at scale — and R-5 made the adjudicator
+**load-bearing for correctness** on the Q2 slice, not merely a cleanup tail.
+
+⚠️ **This is the one thing a probe would still have bought.** WP5/P2.4 re-checked §4's exemption of
+the adjudicator from its own probe WP and concluded it HOLDS — but explicitly on the basis that
+conditions 1 and 2 discharge what the probe was for. Condition 3 is the residue. **It is recorded
+as owed rather than silently dropped**, per the operator's approval at WP5 Phase 2 verify-human
+(2026-09-15).
+
+**The one cheap mitigation already in place:** R-3 established the fixture is *rebuildable* from the
+corpus, and `wp1-break-fixture.json` (2,284 records) is checked in — so re-labelling a larger set
+does not start from zero.
+
+**Suggested action:** re-mine and label a larger set, re-score `sonnet` against it, and either
+confirm the 0.80/0.80 bar or move it to a measured value. ⚠️ **Do this BEFORE any tuning that
+leans on the current margin** — that is the trigger R-6 named, and it has not fired yet.
+- **Status:** pending
+
 ## SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER
 
 - **Priority:** low
