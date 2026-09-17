@@ -677,7 +677,8 @@ deferrable one** — but shipping Phase 1 WITHOUT Phase 3 means suppression is i
 the write-only defect D-5 exists to prevent. **Do not defer Phase 3 silently; it is a decision.**
 
 ## Current Node
-- **Path:** Feature > ship
+- **Path:** Feature > finalize (review-quality COMPLETE 2026-09-17 — 0 CRITICAL / 3 MAJOR /
+  4 MINOR, all auto-backlogged per Mode 3; see `## Code-Quality Review`)
 - **Active scope:** none — **ALL THREE PHASES COMPLETE.** Every phase ran the full
   build → verify-auto → verify-self → verify-human → verify-codify loop.
   (⚠️ Phase 1's 7 verify-human leaves carry `DEFERRED-TO-DOGFOODING` tags, not observed passes —
@@ -986,6 +987,82 @@ must measure**. Added one `else` arm: `supervisor: withheld in <id> — <reason>
 ⚠️ **The recycle arm is excluded** (`!outcome.recycle`) — a recycle also reports `fired: false`
 with a reason, and the caller already logs its started/DECLINED arms distinctly; logging here too
 would double-report the loudest branch and bury the ordinary withholds.
+
+## Code-Quality Review — supervisor-hotfix
+
+*Run 2026-09-17 against ship commit `a46ae89` (base `62baed0`). Mode 3 (autopilot): MAJOR
+auto-backlogged with chat surface; MINOR auto-backlogged. **0 CRITICAL.***
+
+⚠️ **All three MAJOR findings were INDEPENDENTLY VERIFIED by the orchestrator before backlogging**
+— the pin really does read `.toBe(9)` while both docs say 8; both reads really do sit behind
+`if (!workflowEnabled || !visible) return;`; `clear()` really has zero production callers (the
+`.clear()` greps that do hit are unrelated `Map`/`Set` calls).
+
+### Strengths
+- `unsentInput.ts` is the right abstraction at the right size: a pure byte-level reducer plus a
+  thin holder with a single-writer `set()` funnel, which makes "last clearing byte in the chunk
+  wins" a testable value — the `\rabc` vs `abc\r` case a `chunk.includes("\r")` implementation
+  gets wrong.
+- The suppression check's placement in `fireOne` (after the ledger claim, immediately before
+  `deps.inject`) is correct for the stated failure direction, and the reasoning is encoded in a
+  behavioral test rather than only in prose.
+- `ccInputRouting.ts` is a genuinely good extraction: the two properties that matter (watermark fed
+  *before* the session guard, and *raw* not base64) are unreachable by a source-text guard and are
+  asserted as values — including a positive control proving the encoded form would NOT clear.
+- The Rust field lands the upgrade path correctly and pins it: a named `supervisor_enabled_default()`
+  rather than `#[serde(default)]` (whose `bool::default()` is the silently-wrong direction), tested
+  against real pre-WP0 JSON bytes plus a round-trip so the default cannot mask a stored value.
+- Failure directions are deliberate and consistent across the IPC boundary: the getter degrades to
+  `true` everywhere, the setter errors rather than silently inserting, and the frontend mirrors it —
+  with the asymmetry against the drive-mode getter explained rather than left looking inconsistent.
+
+### Issues
+
+**CRITICAL**
+- (none)
+
+**MAJOR** — all three auto-backlogged to `backlog-quality-findings.md`
+- [`arch.md:71` + `CLAUDE.md`] The OFF-invariant arm-subject count went 8 → 9 in this commit, but
+  both authoritative docs still say **8 subjects**, and `arch.md` cites a line number now ~70 off.
+  → `SURFACE-2026-09-17-QUALITY-ARM-SUBJECT-COUNT-STALE-IN-TWO-AUTHORITIES`
+- [`Workspace.tsx`] The toggle is read **on reveal only**, but the supervisor **fires in unfocused
+  workspaces by design**, so a background workspace's ref holds whatever the last reveal fetched.
+  ⚠️ A DESIGN CALL, not a reflex fix — D-4's no-broadcast is settled and the default degrades to ON.
+  → `SURFACE-2026-09-17-QUALITY-TOGGLE-READ-ON-REVEAL-BUT-SUPERVISOR-FIRES-UNFOCUSED`
+- [`unsentInput.ts`] `UnsentInputWatermark.clear()` has **no production caller** while its doc
+  comment describes one ("used at a turn boundary") — the
+  `rustdoc-link-to-a-nonexistent-test-fails-no-gate` shape in TypeScript form.
+  → `SURFACE-2026-09-17-QUALITY-WATERMARK-CLEAR-HAS-NO-PRODUCTION-CALLER`
+
+**MINOR** — auto-backlogged
+- [`config_store/mod.rs`] A doc block changed owners: the new upgrade-path prose appended onto the
+  previous test's comment, leaving the drive-mode test undocumented.
+- [`supervisorToggleStyles.test.ts`] The `CLASSES` constant pins only **its own length** — nothing
+  couples it to the CSS scan or the emitted set, so a fourth unguarded class still passes.
+- [IPC boundary] No test pins the `path` / `enabled` argument names across the TS↔Rust binding —
+  ⚠️ the precedent exists in this feature's own neighbourhood (`useSupervisor.test.ts` does exactly
+  this for `supervisor_adjudicate` / `wip_read`) and was not applied.
+- [three `src/cc/` modules] The "do not merge us" defence is repeated four times across ~95 lines of
+  header prose for ~40 lines of code. A comment-budget observation, NOT an argument for merging.
+
+### Assessment
+Well-built work that clears the bar the milestone sets for itself. The core mechanism — a byte-level
+state (not a recency race) fed from a verified single chokepoint, read as a thunk at the last
+possible moment before an irreversible injection — is the right design for the reported defect, and
+the two hardest judgment calls (suppression after the ledger claim; watermark fed before the session
+guard) are both correct and pinned behaviorally rather than by prose. The Rust side is small, honest
+about its failure directions, and tests the one property that would have been catastrophic (absent
+key → ON) against real pre-upgrade bytes. Test weight is well-placed at the reducer and the
+caller-side wiring guards; the remaining thinness is at the IPC-name boundary, where this repo has
+been bitten before. The debt accrued is small and mostly documentary. The one design-shaped finding
+— the toggle's reveal-only read against a supervisor that fires in background workspaces — is worth
+a decision rather than a fix-by-reflex, since the settled no-broadcast ruling and the safe
+`null`-reads-as-ON default together bound the damage.
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`/feature-finalize` archives this WIP. A dismissed finding is skipped by the severity-tier matrix
+— ⚠️ but its entry in `backlog-quality-findings.md` must be deleted by hand in the same pass.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

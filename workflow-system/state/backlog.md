@@ -1458,6 +1458,21 @@ script under `tooling/` so each phase does not re-derive it.
 ## Code-quality findings — file-op-error-surface (2026-06-30)
 - **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
 
+## Code-quality findings — supervisor-hotfix (2026-09-17)
+- **Pointer:** 7 findings (3 MAJOR / 4 MINOR) in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-hotfix — 2026-09-17`. The three MAJOR: a **stale "8 subjects" OFF-invariant arm count in `arch.md` + `CLAUDE.md`** (the pin is now 9, and `CLAUDE.md` names `arch/` as the as-built authority, so it is a live wrong claim); the **toggle is read on reveal only while the supervisor fires in unfocused workspaces** (a design call, not a reflex fix — D-4's no-broadcast is settled and the default degrades safely to ON); and **`UnsentInputWatermark.clear()` has no production caller** while its doc comment describes one.
+- **Priority:** medium (3) / low (4)
+- **Status:** pending
+- **Pickup shape:** the arm-count finding is a **documentation correction** and the cheapest real win — ⚠️ grep the retracted claim repo-wide rather than trusting the two named sites (`doc-correction-scope-list-is-a-floor`). The reveal-only finding wants an operator decision between accept-and-document / re-read-on-turn-end / reverse D-4. The rest are `/feature-refactor` material.
+
+## SURFACE-2026-09-17-STALE-WORKFLOW-PATHS-SURVIVE-THE-LAYOUT-MIGRATION
+- **Target level:** task
+- **Type:** tech-debt
+- **Summary:** References to the pre-migration `workflow/` root (migrated to `workflow-system/` on 2026-07-28, `aacc687`) are still live in **`backlog.md` itself (15 occurrences)** plus `vision.md`, `roadmap.md`, and several archived cycle docs. Found while writing a code-quality pointer: the canonical pointer shape in this very file links `[`workflow/backlog-quality-findings.md`](backlog-quality-findings.md)` — the **link text** is stale while the relative target still resolves, so nothing breaks and nothing flags it.
+- **Context:** Low-impact but self-propagating: each new pointer entry is written by copying the canonical shape, so the stale path reproduces itself every feature close. That is the reason to fix the *template* even if the archive is left alone. ⚠️ **Archived cycle docs arguably SHOULD keep their era's paths** — they are a historical record, not live spec, so a blanket `sed` across `workflow-system/` would be wrong. The live set (`backlog.md`, `vision.md`, `roadmap.md`, `backlog-quality-findings.md`) is the real scope.
+- **Suggested action:** Fix the live docs only; leave `**/archive/**` alone. ⚠️ Separate string-matches from claim-assertions before rewriting — a path inside a quoted historical note may be correct as-written. The header line of `backlog-quality-findings.md` was already corrected 2026-09-17.
+- **Priority:** low
+- **Status:** pending
+
 ## Buried
 *Items moved out of active — low-impact + not worth carrying forward as active work. Not resolved (no CHANGELOG entry); revive only if the anchoring condition fires.*
 - **SURFACE-2026-06-24-QUALITY-APPMENU-LISTENER-NOT-EXTRACTED** (buried 2026-07-20, backlog-paydown sweep §Completion) — the `src/App.tsx` `menu` listener isn't extracted to a pure testable `dispatchMenuAction(action, effects)` seam. LOW-impact + med-effort + low-risk; explicitly "defer unless the listener grows"; consistent with the repo's "runtime-bound listeners aren't unit-tested" posture (the higher-value `menuBridge` mapping IS fully tested). **Revive only if** the App.tsx menu listener grows new branches. (Was: `# app-menu-bar` finding, now removed from `backlog-quality-findings.md`.)

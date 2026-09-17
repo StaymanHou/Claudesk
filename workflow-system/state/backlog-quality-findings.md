@@ -1,8 +1,74 @@
 # Backlog — Code-Quality Findings
 
-This file collects findings surfaced by `feature-review-quality` between ship and finalize. Each entry is grouped under a `# <feature-name> — <YYYY-MM-DD>` header. A single pointer per feature is added to `workflow/backlog.md`.
+This file collects findings surfaced by `feature-review-quality` between ship and finalize. Each entry is grouped under a `# <feature-name> — <YYYY-MM-DD>` header. A single pointer per feature is added to `workflow-system/state/backlog.md`.
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
+
+# supervisor-hotfix — 2026-09-17
+
+## SURFACE-2026-09-17-QUALITY-ARM-SUBJECT-COUNT-STALE-IN-TWO-AUTHORITIES
+- **Severity:** MAJOR
+- **Location:** `workflow-system/product/arch.md:71` and root `CLAUDE.md` (the "6 arms / 8 subjects" line, stated twice)
+- **Finding:** This feature added the **9th** OFF-invariant arm subject (the supervisor toggle) and moved the pin to `expect(armSubjects.length).toBe(9)`, but the two authoritative docs that cite the number were not updated in the same commit — both still read **"8 subjects"**. ⚠️ `arch.md` additionally cites `offInvariantGuard.test.ts:931`; the assertion now lives at **:1004**, ~70 lines off.
+- **Why it matters:** ⚠️ **`CLAUDE.md` names the `arch/` set as the as-built AUTHORITY**, so a stale number there is a *live wrong claim*, not a cosmetic lag — and `CLAUDE.md` itself restates "the OFF-invariant pin stays at 6 arms / 8 subjects" as a must-not-re-derive fact. The next person planning a gated surface reads 8, and either bumps the pin to a wrong value or concludes the guard already covers their case. The stale `file:line` is the exact `cite-code-by-symbol-not-line` drift shape (one stale `:451` previously propagated into three docs).
+- **Suggested fix:** update both docs to **6 arms / 9 subjects**, and replace the `:931` citation with the symbol (`armSubjects` in `offInvariantGuard.test.ts`) rather than a new line number. ⚠️ Grep the retracted claim repo-wide first — `doc-correction-scope-list-is-a-floor` records a 5-named/10-actual case.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-TOGGLE-READ-ON-REVEAL-BUT-SUPERVISOR-FIRES-UNFOCUSED
+- **Severity:** MAJOR
+- **Location:** `src/components/workspace/Workspace.tsx` (the `if (!workflowEnabled || !visible) return;` effect)
+- **Finding:** `supervisorEnabled` is fetched only inside an effect gated on `visible`, but `useSupervisor` is gated on the workflow flag alone and **fires in unfocused workspaces by design** (`fanOut.test.ts` pins "fires in an UNFOCUSED workspace"). With no broadcast (settled D-4), the ref can only ever hold what the last reveal fetched, so a value changed out-of-band is honored in the focused workspace and silently ignored in every background one.
+- **Why it matters:** `supervisorToggleIpc.ts`'s own header says the toggle is *"read PER TURN rather than at spawn"*, and the value is passed as a ref specifically so a mid-session flip takes effect — but the per-turn read observes a value that only refreshes on reveal. Out-of-band change is a **supported** configuration here: `CLAUDE.md` documents running dev and prod Claudesk **concurrently** for dogfooding. The divergence sits exactly where the feature's value is (background workspaces).
+- **Why it is NOT auto-fixed:** the failure direction is bounded (a failed/missing read degrades to ON, the ruled default) and the no-broadcast decision is **settled**, so closing this means either reversing D-4 or adding a re-read on turn-end — a design call, not a reflex fix.
+- **Suggested fix:** decide between (a) accept + document the reveal-only staleness in `supervisorToggleIpc.ts`'s header so the "per turn" phrasing stops over-promising; (b) re-read on turn-end inside the supervisor callback; (c) reverse D-4 and broadcast. (a) is the cheapest and may well be right.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-WATERMARK-CLEAR-HAS-NO-PRODUCTION-CALLER
+- **Severity:** MAJOR
+- **Location:** `src/state/supervisor/unsentInput.ts` (`UnsentInputWatermark.clear()`)
+- **Finding:** `clear()` has **no production caller** — verified by grep, it appears only in `unsentInput.test.ts`. Its doc comment nonetheless asserts a purpose it does not have: *"Reset — used at a turn boundary, never to fake a submit"* and *"Exists so a caller never has to synthesize a fake `\r` chunk"*.
+- **Why it matters:** ⚠️ This is the `rustdoc-link-to-a-nonexistent-test-fails-no-gate` shape in TypeScript form — a doc comment describing a caller that does not exist, which passes every gate and reads as **live design**. A future reader will cite it as precedent for a turn-boundary reset that was never built. It is also adjacent to a real open question: the accepted staleness cost of no-clear-on-backspace-to-empty.
+- **Suggested fix:** either wire it (a turn-boundary reset may genuinely be wanted — worth deciding alongside the reveal-only finding above), or restate the comment as "no production caller today; kept for X" so the prose stops describing an imagined wiring.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-RUST-DOC-BLOCK-CHANGED-OWNERS
+- **Severity:** MINOR
+- **Location:** `src-tauri/src/config_store/mod.rs` (~887-890)
+- **Finding:** The new `⚠️ THE UPGRADE PATH` doc block was appended directly onto the trailing lines of the pre-existing doc comment for `an_unknown_drive_mode_string_fails_the_whole_project_list`, with no separator. The combined block — including unrelated WP4b drive-mode-rename migration prose — now attaches to `an_absent_supervisor_enabled_key_reads_as_on`, and the drive-mode test is left with **no doc comment at all**.
+- **Why it matters:** two tests' documentation silently swapped owners.
+- **Suggested fix:** split the block; restore the drive-mode test's own doc comment.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-CLASSES-CONST-PINS-ONLY-ITS-OWN-LENGTH
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/__tests__/supervisorToggleStyles.test.ts` (the "names every class this feature adds" test)
+- **Finding:** The test asserts only `expect(CLASSES).toHaveLength(3)`. `CLASSES` is otherwise **unused** by any assertion in the file — the three `describe` blocks name their classes as inline literals.
+- **Why it matters:** ⚠️ The stated intent ("adding a third class without a guard fails here") is **not achieved**: a fourth class added without a guard passes, because nothing couples `CLASSES` to the CSS scan or the emitted set. It reads as a coverage pin but measures the length of a constant it alone reads — the `guard-predicate-completeness` shape.
+- **Suggested fix:** drive the direction-1 assertions from `CLASSES` (a `for` loop) so the constant is load-bearing, or delete it and drop the claim.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-NO-IPC-NAME-CONTRACT-TEST-FOR-THE-TOGGLE
+- **Severity:** MINOR
+- **Location:** `src/cc/supervisorToggleIpc.ts` ↔ `src-tauri/src/config_store/commands.rs`
+- **Finding:** No test asserts that the TS `getProjectSupervisorEnabled` / `setProjectSupervisorEnabled` argument names (`path`, `enabled`) match the Rust command's parameters.
+- **Why it matters:** ⚠️ `tauri-command-removal-needs-invoke-sweep` records that this binding is **stringly-typed and invisible to both unit gates** — a `path`/`projectPath` mismatch would compile, pass all 2711 tests, and fail only at runtime. ⚠️ **The precedent exists in this very feature's own neighbourhood and was not applied**: `useSupervisor.test.ts` pins exactly this shape for `supervisor_adjudicate` and `wip_read`.
+- **Suggested fix:** add the argument-name assertion mirroring the existing `supervisor_adjudicate` / `wip_read` tests.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-DO-NOT-MERGE-DEFENCE-REPEATED-FOUR-TIMES
+- **Severity:** MINOR
+- **Location:** `src/cc/supervisorToggleAction.ts`, `src/cc/supervisorToggleIpc.ts`, `src/cc/workspaceSupervisor.ts` (+ the Rust command's doc)
+- **Finding:** Three new modules totalling 134 lines carry ~95 lines of header prose to ~40 lines of code, and roughly half that prose is an anticipatory justification for *not merging* with the sibling drive-mode modules — repeated in three places plus the Rust command doc.
+- **Why it matters:** the split is right on its own terms (different storage key, different default, no staleness concept) and does not need defending four times; the repetition is maintenance surface that will drift out of sync with whichever decision changes first. ⚠️ A comment-budget observation (`docs/lessons/source-text-guards.md` holds the rule) — **not** an argument for merging.
+- **Suggested fix:** keep the fullest statement at one site; reduce the other three to a pointer.
+- **Priority:** low
+- **Status:** pending
 
 # m15-wp4-context-pressure-recycle — 2026-09-14
 
