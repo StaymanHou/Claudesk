@@ -85,10 +85,11 @@ real chronology.
 
 ## pnpm tauri build
 
-- **Last:** 105s (2026-09-15, /release v0.5.0: cargo clean removed 39937 files / 13.2 GiB + cold build, 1m19s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed — "Finished 1 updater signature" confirms the key was read as CONTENTS not a path)
+- **Last:** 105s (2026-09-17, /release v0.5.1: cargo clean removed 19973 files / 8.7 GiB + cold build, 1m18s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed — "Finished 1 updater signature" confirms the key was read as CONTENTS not a path)
 - **Prior:** 131s (2026-09-06, /release v0.4.0: cargo clean removed 116836 files / 38.7 GiB — largest yet + cold build, bundle triad, signed)
 - **Use timeout:** 600000
 - **History:**
+  - 105s — 2026-09-17 (/release v0.5.1: cargo clean 19973 files/8.7GiB, 1m18s rust + bundle, signed)
   - 105s — 2026-09-15 (/release v0.5.0: cargo clean 39937 files/13.2GiB, 1m19s rust + bundle, signed)
   - 131s — 2026-09-06 (/release v0.4.0: cargo clean 116836 files/38.7GiB — largest yet, 1m22s rust + bundle, signed)
   - 106s — 2026-08-19

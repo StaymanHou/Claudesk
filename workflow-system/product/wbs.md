@@ -107,13 +107,13 @@ Two recorded priors bear on this decomposition.
 ## Work packages
 
 ### WP0: Supervisor hotfix — per-workspace toggle + unsent-input suppression 🔥 URGENT ✅ SHIPPED 2026-09-17 (commit a46ae89)
-> ⚠️ **TASK 0.7 (`/release`) IS DELIBERATELY UNTICKED — the code shipped, the RELEASE did not.**
-> `/release` is MANUAL-ONLY and is never auto-invoked by `feature-finalize`. Latest tag is
-> `v0.5.0`; WP0's work sits in 23 unreleased commits on `main` (also unpushed). ⚠️ **Until a
-> release is cut and installed, the operator's own Claudesk is still running the UNFIXED
-> supervisor** — which is also what blocks the dogfooding that Phase 1's 7 deferred checks and
-> `SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1` are waiting on. **This WP is not fully
-> closed until 0.7 lands.**
+> ✅ **ALL 7 TASKS COMPLETE — `v0.5.1` released 2026-09-17** (the earlier "0.7 deliberately
+> unticked" note is discharged). ⚠️ **But the WP's own warning still stands one step further out:**
+> a cut release is not an *installed* one. Until the operator runs `brew upgrade` (Step 11 is
+> operator-run by design — `brew upgrade --cask` kills the running Claudesk, and `/release` is
+> driven from inside it), their app still runs the UNFIXED supervisor, and Phase 1's 7
+> `DEFERRED-TO-DOGFOODING` checks plus
+> `SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1` stay unsatisfiable.
 **Description:** The M15 supervisor is firing unwanted commands in live use. Give it a
 per-workspace off switch and stop it firing when the operator has unsent input in the CC pane.
 **Milestone:** M14 (remainder) — ⚠️ **INSERTED 2026-09-15 out of the original decomposition**
@@ -163,7 +163,7 @@ drive mode**, so the blast radius is ~half the operator's rotation, not one work
       suppressed; turn-end resets), and toggle-gates-the-call. ⚠️ **Mutation-prove the suppression
       INDIVIDUALLY** — a suppression that never suppresses and one that always suppresses both
       look green against a test that only asserts "no fire happened".
-- [ ] 0.7 Ship as a patch release via `/release`.
+- [x] 0.7 Ship as a patch release via `/release`. ✅ **`v0.5.1` cut 2026-09-17** — 25 commits since `v0.5.0`; four assets published and the updater endpoint confirmed resolving to 0.5.1; tap cask bumped (`298c3c5`). ⚠️ **The operator has NOT yet run `brew upgrade`** — until they do, their own Claudesk still runs the unfixed supervisor, so the 7 `DEFERRED-TO-DOGFOODING` checks remain unsatisfiable.
 
 ⚠️ **WHAT AN AGENT CANNOT VERIFY HERE, AND IT IS THE HALF THAT MATTERS.** An agent-launched CC
 emits no hook events (`SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`), so
