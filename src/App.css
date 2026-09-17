@@ -3937,6 +3937,71 @@ body,
   color: rgba(255, 255, 255, 0.85);
 }
 
+/* M14 WP3 — the hotkey reference group.
+   ⚠️ The parent `.settings-group-body` is `align-items: flex-start`, so each section must
+   `align-self: stretch` or it collapses to its content width and the chord column stops
+   lining up across sections. Same trap the WP3 invite block hit. */
+.settings-hotkey-section {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-hotkey-section + .settings-hotkey-section {
+  margin-top: 10px;
+}
+
+.settings-hotkey-section-title {
+  margin: 0 0 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.settings-hotkey-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+}
+
+/* CM6-owned rows are de-emphasized but PRESENT (P2.2) — omitting them would make the list
+   lie by omission about why ⌘F behaves differently inside the editor. */
+.settings-hotkey-row-foreign .settings-hotkey-chord,
+.settings-hotkey-row-foreign .settings-hotkey-description {
+  opacity: 0.68;
+}
+
+.settings-hotkey-chord {
+  flex: 0 0 auto;
+  min-width: 5.5rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.9);
+  background-color: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  text-align: center;
+}
+
+.settings-hotkey-outcomes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-hotkey-description {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.settings-hotkey-context {
+  color: rgba(255, 255, 255, 0.45);
+}
+
 .settings-row select {
   font-size: 0.85rem;
   padding: 0.25rem 0.4rem;

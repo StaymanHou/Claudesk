@@ -233,7 +233,7 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
 
 ## Work Tree
 
-- [ ] Phase 1: Extract the chord registry as typed data  <!-- status: in-progress; impl complete, verification pending -->
+- [x] Phase 1: Extract the chord registry as typed data  <!-- status: COMPLETE 2026-09-17 — impl P1.1-P1.7, verify-auto, verify-self, verify-human (4/4 approved) and verify-codify all [x] -->
   **Observable outcomes:**
   - CLI: `./node_modules/.bin/tsc --noEmit` exits 0 with the new registry module present.
   - CLI: `pnpm vitest run src/components/workspace/__tests__/chordRegistry` exits 0; the
@@ -283,14 +283,14 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
         <!-- status: NOT-STARTED -->
   - [x] verify-auto  <!-- status: PASS 2026-09-15 — tsc 0, scoped eslint 0, 12/12 chordRegistry (count-confirmed, not a filtered false-green), 4 label exports + 3 consumers intact; guard fail-probe confirmed -->
   - [x] verify-self  <!-- status: PASS 2026-09-15 (re-run after F9b) — 8/8 outcomes, 0 BLOCKING; completeness independently re-derived from source, duplication confirmed correct -->
-  - [ ] verify-human  <!-- status: in-progress — 4 leaves, all product judgment (no mechanical checks; verify-auto + verify-self already PASSED those) -->
-    - [ ] P1.verify-human.1 Registry CONTENT review — the 22 descriptions ship verbatim to users in Phase 2  <!-- status: NOT-STARTED -->
-    - [ ] P1.verify-human.2 Should the 6 CM6-owned rows be SHOWN at all? (product-surface call)  <!-- status: NOT-STARTED -->
-    - [ ] P1.verify-human.3 Is ⌘= / ⌘- / ⌘0 appearing TWICE acceptable to a reader?  <!-- status: NOT-STARTED -->
-    - [ ] P1.verify-human.4 Guard caveat — accept the backlog entry, or fix the selector now?  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-human  <!-- status: PASS 2026-09-17 — all 4 leaves approved by operator; presented rather than auto-skipped (decision-artifact carve-out: 22 descriptions ship verbatim at Phase 2) -->
+    - [x] P1.verify-human.1 Registry CONTENT review — the 22 descriptions ship verbatim to users in Phase 2  <!-- status: PASS 2026-09-17 — approved as-is; two non-blocking wording flags raised (⌘R "Open the search panel" reads near-synonymous with ⌘F; ⌘⇧A "global" may read as jargon) and deliberately NOT changed -->
+    - [x] P1.verify-human.2 Should the 6 CM6-owned rows be SHOWN at all? (product-surface call)  <!-- status: PASS 2026-09-17 — KEEP all 6. Upholds spec criterion 4: omitting them would make the list lie by omission about why ⌘F differs inside the editor. Phase 2 P2.2 (de-emphasized but PRESENT) stands unchanged. -->
+    - [x] P1.verify-human.3 Is ⌘= / ⌘- / ⌘0 appearing TWICE acceptable to a reader? <!-- status: PASS 2026-09-17 — ACCEPTABLE as two rows. Correctness was already adjudicated at verify-self (two genuine owners selected by live DOM focus; Workspace.tsx preventDefaults only on the left-half and right-panel-terminal branches). Operator confirms the legibility half too, so Phase 2 needs NO special presentation work for the duplicate — render it as two ordinary rows. -->
+    - [x] P1.verify-human.4 Guard caveat — accept the backlog entry, or fix the selector now? <!-- status: PASS 2026-09-17 — ACCEPT the backlog entry; do NOT pull the structural fix into this phase. The completeness guard (chordRegistry.test.ts:258) filters on /[Cc]hord/ plus two hardcoded *Index names — a naming convention, not a structural property. Stays logged in backlog.md as its own change. -->
+  - [x] verify-codify  <!-- status: PASS 2026-09-17 — 1 new test (font-zoom split canary), mutation-proven on 2 mutants INDIVIDUALLY, each confirmed landed in executable code and restored by checksum; pnpm verify:auto GREEN (frontend 198 files / 2712 tests, +1 = exactly this test, so it ran rather than being filtered; Rust all green, fmt + clippy -D warnings clean) -->
 
-- [ ] Phase 2: Render the list as a fifth Settings group  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [x] Phase 2: Render the list as a fifth Settings group  <!-- status: COMPLETE 2026-09-17 — impl P2.1-P2.4, verify-auto, verify-self (6/6), verify-human (5/5 approved) and verify-codify all [x] -->
   **Observable outcomes:**
   - Browser: with the app running, pressing `⌘,` opens Settings and a group with
     `data-testid="settings-group-hotkeys"` is present in the DOM.
@@ -306,35 +306,52 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
     evidence — `read_logs{source:"console"}` captures NOTHING for this app and an empty read
     is a FALSE GREEN).
   - CLI: `pnpm verify:auto` exits 0.
-  - [ ] P2.1 Add the group via the EXISTING `SettingsGroup` component (`SettingsPanel.tsx:118`
+  - [x] P2.1 Add the group via the EXISTING `SettingsGroup` component (`SettingsPanel.tsx:118`
         — takes `id`/`title`/`hint`/children, emits `data-testid="settings-group-<id>"`).
-        ⚠️ **EXTEND the M10.9 WP2 panel; do not rebuild it.**  <!-- status: NOT-STARTED -->
-  - [ ] P2.2 Render entries grouped by registration host (app-level · workspace · editor/CM6),
+        ⚠️ **EXTEND the M10.9 WP2 panel; do not rebuild it.**  <!-- status: DONE 2026-09-17 — used the existing SettingsGroup (id/title/hint); ⚠️ the plan's path `src/components/picker/SettingsPanel.tsx:118` was STALE, it lives at src/components/settings/ — re-resolved by symbol -->
+  - [x] P2.2 Render entries grouped by registration host (app-level · workspace · editor/CM6),
         CM6 entries visually de-emphasized but PRESENT — omitting them makes the list lie by
-        omission about why `⌘F` behaves differently inside the editor.  <!-- status: NOT-STARTED -->
-  - [ ] P2.3 Honor the gate at render: consume `useWorkflowFeaturesEnabled()` (the established
+        omission about why `⌘F` behaves differently inside the editor.  <!-- status: DONE 2026-09-17 — HOST_SECTIONS app/workspace/editor; CM6 rows PRESENT, de-emphasized via .settings-hotkey-row-foreign -->
+  - [x] P2.3 Honor the gate at render: consume `useWorkflowFeaturesEnabled()` (the established
         hook — already used by `announceRow.ts` / `ProjectModelCell.tsx`) and hide or mark
-        gate-dependent entries when OFF, per P1.3.  <!-- status: NOT-STARTED -->
-  - [ ] P2.4 Guard the render against the registry: assert rendered row count equals registry
+        gate-dependent entries when OFF, per P1.3.  <!-- status: DONE 2026-09-17 — ⚠️ DEVIATION: used workflowFeatures.value (this panel's own live control) NOT useWorkflowFeaturesEnabled(); the panel already holds the gate and a second source would lag its own switch. Omits via visibleChords(enabled), not greying. -->
+  - [x] P2.4 Guard the render against the registry: assert rendered row count equals registry
         length, so a future entry cannot be added to data yet silently not displayed.
         ⚠️ **Flatten whitespace before asserting any JSX prose** — Prettier's wrap point is not
-        a contract.  <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+        a contract.  <!-- status: DONE 2026-09-17 — hotkeyGroupRender.test.tsx: 5 render tests (renderToStaticMarkup + jsdom), row count asserted against the REGISTRY not a literal; 4 mutants caught INDIVIDUALLY, each confirmed landed -->
+  - [x] verify-auto  <!-- status: PASS 2026-09-17 — `pnpm verify:auto` EXIT=0, the project's mandated single-command gate (CLAUDE.md overrides the skill's generic scoped-check guidance). Per-step evidence, not just the exit code: eslint 0 errors (1 pre-existing XtermPane warning, untouched); prettier clean; tsc clean; vitest 199 files / 2717 tests; cargo fmt 0 diffs; clippy -D warnings 0 errors; cargo test 926 passed / 0 failed. ⚠️ Frontend delta 2712->2717 = exactly the 5 new render tests, i.e. evidence the new file RAN rather than being silently filtered. -->
+  - [x] verify-self  <!-- status: PASS 2026-09-17 — 6/6 outcomes, 0 BLOCKING, 0 cosmetic. Driven against a DEV build I launched (title 'Claudesk (dev)' confirmed — the operator's prod 0.5.1 PID 65019 was never touched). Subagent verified the CLI outcome independently (exit 0) and correctly declined the 5 browser outcomes rather than emitting bare-Vite false verdicts. -->
+  - [x] verify-human  <!-- status: PASS 2026-09-17 — all 5 leaves approved by operator ("all pass"). ⚠️ NOT auto-skippable: an integration boundary APPLIES (SettingsPanel.tsx is an existing UI surface with changed user-visible behavior), so the F11 skip path is forbidden in every drive mode including autopilot. -->
+    - [x] P2.verify-human.1 Group hint copy — new user-facing text Phase 1 never reviewed  <!-- status: PASS 2026-09-17 — approved as-is. "Every chord Claudesk responds to. Editor shortcuts belong to CodeMirror, not Claudesk — they are listed so it is clear why a key behaves differently inside the editor." The raised concern (does "every chord Claudesk responds to" overclaim given the editor rows are NOT Claudesk's?) was considered and accepted; the second sentence resolves it. -->
+    - [x] P2.verify-human.2 Section names APPLICATION / WORKSPACE / EDITOR  <!-- status: PASS 2026-09-17 — approved. ⚠️ These are RENDER-LAYER strings (HOST_SECTIONS in SettingsPanel.tsx), NOT registry data — the registry's host values are app/workspace/editor. Renaming a section touches only the render layer. -->
+    - [x] P2.verify-human.3 Group ordering — hotkeys renders LAST of five  <!-- status: PASS 2026-09-17 — approved. Rationale upheld: the first four groups are CONTROLS that change behavior, this is READ-ONLY reference, so it sits below them. The competing view (a reference list is what a new user most wants, so put it higher) was raised and rejected. ⚠️ Position is pinned by settingsPanelWiring.test.ts's exact ordered equality — moving it is a deliberate two-site edit. -->
+    - [x] P2.verify-human.4 The ⌘= / ⌘- / ⌘0 duplicate, now seen RENDERED  <!-- status: PASS 2026-09-17 — vh3's data-level ruling HOLDS at the visual level. Renders once under WORKSPACE (full opacity, two outcomes: Claude Code terminal font + right-panel terminal font) and once under EDITOR (opacity 0.68, editor font). No merged row, no special presentation. -->
+    - [x] P2.verify-human.5 Gate-OFF shape — silent omission, no gap or placeholder  <!-- status: PASS 2026-09-17 — approved. With the gate OFF the WORKSPACE section drops to 11 rows and ⌘⇧K vanishes with no visual trace; a gate-off user seeing 21 shortcuts is NOT left wondering what is missing. Upholds the OFF-invariant: byte-identical to an app that never had the feature. -->
+  - [x] verify-codify  <!-- status: PASS 2026-09-17 — ZERO new tests, deliberately: all 5 rulings are either already covered by tests written and mutation-proved earlier in this phase, or are free prose that must not be pinned. Coverage re-proved by a cross-section merge mutant (caught by 3 tests). pnpm verify:auto EXIT=0, 199 files / 2717 frontend / 926 Rust. -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-human
-- **Active scope:** ⏸️ **PAUSED 2026-09-15 by operator** — WP3 is parked mid-verify-human to
-  prioritise the supervisor fixes + Apple signing. **Nothing is broken; nothing is half-built.**
-  Phase 1 impl is complete and committed (P1.1–P1.7), verify-auto PASS, verify-self PASS.
-  **To resume:** answer the 4 verify-human leaves (all product judgment, listed below) — the
-  registry table to review was rendered in-session and is reproducible from
-  `src/components/workspace/chordRegistry.ts`.
-- **Blocked:** not blocked — deliberately deprioritised
-- **Unvisited:** Phase 1 verify-codify; then Phase 2 (render the list as a fifth Settings group)
-- **Open discoveries:** two, both resolved in-phase — see Discoveries
+- **Path:** Feature > ship
+- **Active scope:** ALL PHASES COMPLETE. Phase 1 (registry extraction) and Phase 2 (Settings render)
+  are both [x] with every verify node passed. The feature is ready to ship.
+- **Blocked:** not blocked
+- **Unvisited:** none — no phases remain
+- **Open discoveries:** one logged to backlog (P2.3 gate-seam deviation, low)
+
+## Test Triage
+
+## Test Triage — settingsPanelWiring.test.ts > "declares exactly the four groups WP1's verdict specified, in order"
+Classification: Obsolete test — the new feature intentionally supersedes what the test checked
+Confidence: high
+Evidence: The guard asserts the panel's `id=` list equals exactly `[claude-code, workflow-features,
+  analytics, updates]` (settingsPanelWiring.test.ts, "the panel shell renders its four labelled
+  groups"). WP3 acceptance criterion 2 requires a FIFTH group; the test's own comment says a
+  reshuffle "should be a deliberate edit, not an accident" — this is that deliberate edit.
+Action: Updated the expected list to include `hotkeys` in fifth position and renamed the describe
+  block from "four" to "five". ⚠️ The assertion was NOT weakened to a `.toContain` or a
+  length-check — it stays an exact ordered equality, which is the property that makes it a guard.
+  Its sibling test at the "ships WITHOUT a dimmed backdrop" block warns that "M14 extending this
+  panel" might wrongly 'fix' the missing scrim; that warning is about the BACKDROP and was left
+  untouched.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
@@ -457,5 +474,182 @@ keydown handler in a host to route through a registry-aware helper), which is a 
 working registration hosts — out of scope for a data-extraction phase and squarely the kind of
 thing that belongs in its own change. **Logged to `backlog.md` rather than absorbed silently.**
 
-## Session Handoff — 2026-09-17 16:34
-Handed off. See `workflow-system/state/.session.md` to restore.
+[SURFACED-2026-09-17] Phase 1 / verify-human — **PASS on all 4 leaves; the gate was PRESENTED,
+not auto-skipped, and the carve-out is the point.** drive_mode is `autopilot` and verify-self was
+all-PASS, so auto-skip gates (a) and (b) were clean and the boundary check confirmed no integration
+boundary (`chordRegistry.ts` is imported only by two test files plus `paletteCommands.ts`, whose
+exports were untouched — only a comment block was deleted). That is gates (a)-(d) nominally clean.
+⚠️ **It was still presented, under the skill's documented probe/decision-artifact false-positive
+carve-out:** this phase's load-bearing deliverable is a *human decision ACK* — 22 description
+strings that ship VERBATIM to users at Phase 2 — so auto-skipping would have silently adopted
+22 user-facing strings the operator never read. The affirmation block's read-time veto was
+exercised rather than relied on after the fact.
+
+**The four rulings (do not re-litigate at Phase 2):**
+1. **Content approved as-is.** Two wording flags were raised and deliberately NOT actioned:
+   `⌘R` "Open the search panel" reads near-synonymous with `⌘F` "Find within the open file" to a
+   stranger, and `⌘⇧A`'s "global" may read as jargon. Both stand.
+2. **KEEP all 6 CM6-owned rows.** Upholds spec criterion 4 (omitting them makes the list lie by
+   omission about why `⌘F` differs inside the editor). P2.2's "de-emphasized but PRESENT" is
+   confirmed, not merely assumed.
+3. **The `⌘= / ⌘- / ⌘0` duplication ships as TWO ORDINARY ROWS.** verify-self had already
+   adjudicated it technically correct; this leaf settles the *legibility* half, which correctness
+   did not answer. ⚠️ **Phase 2 therefore needs NO special presentation work for the duplicate** —
+   do not "improve" it into a single merged row with two context lines.
+4. **The completeness-guard selector caveat is ACCEPTED as a backlog entry**, not fixed here. The
+   guard filters call sites on `/[Cc]hord/` plus two hardcoded `*Index` names
+   (`chordRegistry.test.ts:258`) — a naming convention, not a structural property, so a future
+   matcher named outside both (e.g. `zoomForKey`) is invisible to it. The honest fix is structural
+   (route every capture-phase keydown handler through a registry-aware helper) and is a refactor of
+   three working registration hosts — its own change, out of scope for a data-extraction phase.
+
+[SURFACED-2026-09-17] Phase 1 / verify-codify — **ONE test written, not four; the other three
+rulings were deliberately NOT codified.** Coverage was checked per ruling before writing anything:
+- **vh1 (content approved)** — 22 free-text descriptions. A change here is a wording judgment, not
+  a defect, and pinning exact prose would make Prettier's wrap point and any copy edit a contract
+  violation (`raw-guard-jsx-prose-needs-flattened-haystack` + the comment-budget rule). Shape
+  (`description` non-empty) is already asserted. **No test by design.**
+- **vh2 (keep the 6 CM6 rows)** — already covered in the direction that bites: the CM6-keymap arm
+  drives off `coreKeymap`'s bindings, so deleting the `host: "editor"` rows fires it. Confirmed
+  incidentally when mutant 1 tripped BOTH that arm and the new one. **No new test needed.**
+- **vh4 (guard caveat accepted)** — a decision NOT to change code. Nothing to codify.
+- **vh3 (font-zoom ships as two rows)** — the one real gap. Both existing uniqueness arms PERMIT
+  the split (`(label, host)` unique; at most one `claudeskOwned` per label) but neither REQUIRES
+  it, so nothing failed if a future author merged the two rows into one — exactly the tidy-up a
+  Phase 2 renderer invites. Now pinned by `"the font-zoom label is carried by TWO rows, one per
+  owner — not merged"`, modelled on the ⌘W canary.
+⚠️ **Mutation-proven INDIVIDUALLY, each mutant confirmed landed in EXECUTABLE code:** (1) deleting
+the `cm6-font-zoom` row → new test fails with its intended message (and the CM6-keymap arm fires
+too); (2) flipping that row's `claudeskOwned` to `true` → the new test's ownership assertion fails
+(and the shared-label arm fires). `chordRegistry.ts` restored and **verified byte-identical by
+`shasum`** (`8ae0ef40…`) — `git checkout` was NOT used, per
+`git-checkout-no-ops-on-untracked-file`.
+⚠️ **Test-count delta was checked, not assumed:** 2711 -> 2712 across 198 files, i.e. exactly the
+one new test — evidence it actually RAN rather than being silently filtered (`ok. 0 passed` + exit
+0 is the trap). The single lint warning is **pre-existing** in `XtermPane.tsx:898` (spread element
+in a deps array), untouched by this phase; 0 errors.
+
+**No integration boundary** — the phase adds isolated new artifacts only, so the highest AVAILABLE
+test level is the data assertion: the registry has no consuming surface until Phase 2 renders it.
+That is a property of the phase, not a preference for unit tests.
+
+[SURFACED-2026-09-17] Phase 2 / P2.1 — **The plan's SettingsPanel path was STALE.** The plan cited
+`src/components/picker/SettingsPanel.tsx:118`; the file lives at
+`src/components/settings/SettingsPanel.tsx`. The LINE number (118, `function SettingsGroup`) was
+still right, which is what makes this the `cite-code-by-symbol-not-line` trap in its most
+misleading form — a citation can be half-correct and still send you to a nonexistent file.
+Re-resolved by symbol. No backlog entry (the plan is consumed at close).
+
+[SURFACED-2026-09-17] Phase 2 / P2.3 — ⚠️ **DEVIATION FROM THE PLAN, deliberate.** P2.3 said to
+consume `useWorkflowFeaturesEnabled()` (the hook used by `announceRow.ts` / `ProjectModelCell.tsx`).
+**Not used here.** `SettingsPanel` already holds the gate as a LIVE CONTROL
+(`workflowFeatures.value` via `useSettingControl`), and the checkbox that toggles it sits a few rows
+above this very group. Subscribing to the read-only hook alongside it would put two sources of truth
+in one component and make the hotkey list lag its own switch. The hook remains correct for the
+modules the plan cited — they have no local control. Gate-OFF omission itself is unchanged and is
+pinned by a render test.
+
+[SURFACED-2026-09-17] Phase 2 / P2.4 — **A pre-existing guard pinned the panel to EXACTLY FOUR
+groups and failed on the fifth — correctly.** `settingsPanelWiring.test.ts` asserts the ordered
+`id=` list equals `[claude-code, workflow-features, analytics, updates]`. Triaged as **obsolete
+test** (high confidence: WP3's acceptance criterion 2 requires a fifth group, and the test's own
+comment says a reshuffle "should be a deliberate edit, not an accident"). Updated to five with
+`hotkeys` LAST. ⚠️ **The assertion was NOT weakened** to a `toContain` or a length check — exact
+ordered equality is the entire guard — and the updated guard was **re-mutation-proven** (renaming
+the new id to `zzz-hotkeys` still fails it). Its sibling "ships WITHOUT a dimmed backdrop" test
+explicitly warns that "M14 extending this panel" might wrongly add a scrim; that warning concerns
+the BACKDROP and was left untouched.
+
+[SURFACED-2026-09-17] Phase 2 / P2.4 — ⚠️ **TWO OF FOUR MUTATION PROBES WERE INVALID ON FIRST RUN
+AND READ AS PASSES.** Probes M3 (drop the `-foreign` marker) and M4 (drop the editor section) used
+`perl -pi -e` patterns containing regex metacharacters (`?`, `{`, `"`); the substitutions silently
+no-opped and the follow-up `grep -c` returned 0, which I initially read as "mutation landed, class
+gone." Re-run through Python with an explicit `assert s.count(old)==1` and a post-mutation `sed -n
+'<line>p'` showing the mutated text, **both mutants were then caught.** ⚠️ This is
+`verify-the-mutation-landed` + `bsd-sed-lacks-word-boundary` in combination: an invalid probe and a
+real guard hole are indistinguishable from the result alone, and the damage here would have been
+INVERTED — concluding the render test had holes it did not have, and "strengthening" tests that were
+already correct. Recorded because the near-miss was in the direction that manufactures work rather
+than the one that hides bugs.
+
+[SURFACED-2026-09-17] Phase 2 / verify-self — ✅ **PASS, 6/6 outcomes, 0 BLOCKING.** Observed
+against a dev build launched for this purpose; ⚠️ **window title checked as `Claudesk (dev)` before
+trusting any reading** — the operator's production 0.5.1 (PID 65019) was running throughout and the
+dev/prod process-name collision is a recorded false-verdict source. It was never touched.
+**Instrument discipline applied before the readings, not after:**
+- **Positive control first** — `#root` present with children and 808 chars of text, so a later
+  "element not found" is a real absence rather than the blank-pane instrument error.
+- ⚠️ **The console tap SELF-TESTED before being trusted** (`__TAP_SELFTEST__` round-tripped), because
+  `read_logs{source:"console"}` captures NOTHING for this app and an empty read is a FALSE GREEN.
+  Paired with DOM-mount evidence (panel open, 22 rows, `#root` populated) so "no errors" cannot mean
+  "nothing rendered".
+- ⚠️ **The bridge does NOT await promises** — a `requestAnimationFrame`-wrapped read timed out. Reads
+  were taken synchronously on a later tool call instead, which satisfies the deferred-frame rule by
+  elapsed time rather than by a promise.
+⚠️ **OUTCOME 4 WAS PROVEN IN BOTH DIRECTIONS, not asserted from a fixture.** The dev profile had the
+gate **ON**, so the first reading showed 22 rows INCLUDING `⌘⇧K` — which is correct behavior, not a
+leak. Asserting the OFF-invariant in that state would have been a vacuous pass. The gate was toggled
+OFF live via the React fiber (`onChange` through `__reactProps`; a bare `.click()` does not reliably
+reach React's synthetic system), re-read at **21 rows with the Docs row ABSENT from the DOM** and the
+`⌘⇧K` label appearing nowhere in the group's text, then toggled back ON. The toggle is the
+discriminator.
+**Also confirmed visually (screenshots + computed style):** the group renders with correct section
+headings and chord-badge alignment, no overflow, and the CM6 de-emphasis is genuinely distinct —
+owned descriptions at `opacity: 1`, CM6 at `0.68`. Both multi-outcome chords (`⌘W`, terminal font
+zoom) render BOTH outcomes rather than truncating to the first.
+**Subagent note:** it verified the CLI outcome independently (exit 0; 199 files / 2717 frontend, 926
+Rust) and returned `UNVERIFIED` for all five browser outcomes, correctly refusing to judge them from
+bare Vite. That is the `mcp-bridge-tools-not-exposed-to-subagents` division of labour working as
+intended — the orchestrator drove the live half.
+
+[SURFACED-2026-09-17] Phase 2 / verify-human — **PASS on all 5 leaves; the gate was MANDATORY here,
+not a judgment call.** Unlike Phase 1 (where auto-skip gates (a)-(d) were nominally clean and the
+presentation was a discretionary decision-artifact carve-out), Phase 2 has a genuine **integration
+boundary** — `SettingsPanel.tsx` is a file backing an existing UI surface whose user-visible
+behavior changed (condition 2). Per the skill's own rule the F11 skip path is **forbidden** when a
+boundary applies, in every drive mode including autopilot. ⚠️ **Worth contrasting with Phase 1 so
+the distinction is not lost:** the two phases paused for entirely different reasons, and only
+Phase 2's was structural.
+**All mechanical checks were EXCLUDED from the checklist** per the verify-self pre-filter — group
+presence, required labels, row count vs registry length, gate-OFF removal, console cleanliness and
+the full `verify:auto` gate were all agent-confirmed PASS and were not re-asked. The five leaves
+were exclusively judgment on the RENDERED surface, which is the half Phase 1's gate could not see:
+Phase 1 judged the DATA (22 descriptions), Phase 2 judged how it READS.
+**The four rulings that bind future work:**
+1. **Group hint copy approved as-is.** The concern that *"Every chord Claudesk responds to"*
+   overclaims — given the EDITOR rows are explicitly not Claudesk's — was raised and accepted; the
+   hint's second sentence resolves it.
+2. **Section names APPLICATION / WORKSPACE / EDITOR approved.** ⚠️ These are RENDER-LAYER strings
+   (`HOST_SECTIONS`), not registry data; the registry's `host` values are `app`/`workspace`/`editor`.
+   A future rename touches one site, not the data.
+3. **The hotkey group stays LAST of five.** Controls-then-reference. The competing "a reference list
+   is what a new user most wants, put it higher" reading was raised and rejected. ⚠️ Pinned by
+   `settingsPanelWiring.test.ts`'s exact ordered equality — moving it is a deliberate two-site edit.
+4. ⚠️ **vh3's duplicate-row ruling HOLDS at the visual level.** vh3 could only judge `⌘= / ⌘- / ⌘0`
+   as data; seen rendered — once under WORKSPACE at full opacity with both terminal outcomes, once
+   under EDITOR dimmed — the operator confirmed it again. **Phase 2 needs no merged-row treatment;
+   do not "improve" it later.**
+5. **Gate-OFF silent omission approved.** No gap, no placeholder, no "unavailable" affordance.
+
+[SURFACED-2026-09-17] Phase 2 / verify-codify — **ZERO new tests, and that is the finding.** Each of
+the 5 verify-human rulings was checked against existing coverage before writing anything:
+- **vh.1 (group hint) / vh.2 (section titles)** — uncovered, and deliberately left so. Both are free
+  user-facing prose; pinning the sentences would make every copy edit a test failure. Same reasoning
+  that kept Phase 1's 22 descriptions untested. ⚠️ Note the section TITLES are render-layer strings
+  while the section TESTIDS are pinned — the structural half is guarded, the wording half is not, and
+  that split is intentional.
+- **vh.3 (group last of five)** — already pinned by `settingsPanelWiring.test.ts`'s exact ordered
+  equality, which was updated AND re-mutation-proved earlier this phase.
+- **vh.4 (duplicate stays two rows)** / **vh.5 (gate-OFF omission)** — covered by the render tests.
+⚠️ **A SECOND INVALID MUTATION PROBE FIRED HERE, and it nearly manufactured work.** The first attempt
+to prove vh.4's render-level coverage added a dedupe-by-label filter INSIDE the per-section map; all
+5 tests passed and it read as a real coverage hole. It was not: a per-section dedupe never merges the
+two font-zoom rows because they live in DIFFERENT sections — a row count taken under the mutant showed
+**21 rows with BOTH font-zoom ids still present**, i.e. nothing was merged. A corrected probe (dedupe
+across the whole registry, hoisted out of the section scope) produced **20 rows with `cm6-font-zoom`
+dropped** — a genuine merge — and **three tests caught it** (`no silent truncation`, `CM6 rows PRESENT
+but marked`, `groups rows under their host section`). ⚠️ **The coverage was never weak; the probe was.**
+Combined with the two invalid `perl` probes at P2.4, that is **three invalid probes in one phase**,
+all failing in the direction that INVENTS work rather than hiding bugs — the corollary worth carrying
+is `invalid-probe-and-real-hole-look-identical`: **always confirm the mutant changed the observable
+you care about (here, the rendered row set) before concluding a guard has a hole.**

@@ -151,15 +151,22 @@ describe("the picker offers a visible Settings entry point (discovery parity)", 
   });
 });
 
-describe("the panel shell renders its four labelled groups", () => {
+describe("the panel shell renders its five labelled groups", () => {
   it("has a stable testid for live verify-self", () => {
     expect(panelSrc).toContain('data-testid="settings-panel"');
     expect(panelSrc).toContain('data-testid="settings-panel-close"');
   });
 
-  it("declares exactly the four groups WP1's verdict specified, in order", () => {
+  it("declares exactly the five groups the panel is specified to have, in order", () => {
     // Order is part of the verdict (Claude Code · Workflow features · Analytics ·
     // Updates); a reshuffle should be a deliberate edit, not an accident.
+    //
+    // ⚠️ `hotkeys` was appended by M14 WP3 (the hotkey reference) — a DELIBERATE fifth group
+    // per that WP's acceptance criterion 2, not a drift. It goes LAST: the first four are
+    // controls that change app behavior, the fifth is a read-only reference, so it belongs
+    // below them. This assertion stays an exact ORDERED equality rather than being relaxed to
+    // a `toContain` or a length check — the exactness is the whole guard. Adding a sixth group
+    // should likewise be a one-line deliberate edit here.
     const ids = [...panelSrc.matchAll(/^\s+id="([a-z-]+)"$/gm)].map(
       (m) => m[1],
     );
@@ -168,6 +175,7 @@ describe("the panel shell renders its four labelled groups", () => {
       "workflow-features",
       "analytics",
       "updates",
+      "hotkeys",
     ]);
   });
 

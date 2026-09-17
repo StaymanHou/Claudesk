@@ -125,6 +125,34 @@ describe("chord registry — shape", () => {
       ).toBeTruthy();
     }
   });
+
+  // The font-zoom label is deliberately carried by TWO rows — Claudesk's (Workspace.tsx zooms
+  // the focused terminal) and CM6's (the editor's own keymap) — selected at runtime by live DOM
+  // focus. verify-self adjudicated the split technically correct: Workspace.tsx calls
+  // preventDefault only on the left-half and right-panel-terminal branches, so with the editor
+  // focused the chord is NOT swallowed and reaches CM6. verify-human then ruled (2026-09-17,
+  // P1.verify-human.3) that it also ships to users AS TWO ORDINARY ROWS — no merged row, no
+  // special presentation.
+  //
+  // Both uniqueness arms above PERMIT this split but neither REQUIRES it, so without this test
+  // nothing fails if a future author "tidies" the two rows into one merged entry — which is
+  // precisely the tidy-up a Phase 2 renderer invites. Collapsing them would make the surface
+  // lie: it would tell a user those keys belong to CodeMirror when in a focused terminal they
+  // are Claudesk's own path.
+  it("the font-zoom label is carried by TWO rows, one per owner — not merged", () => {
+    const FONT_ZOOM_LABEL = "⌘= / ⌘- / ⌘0";
+    const zoomRows = CHORD_REGISTRY.filter((e) => e.label === FONT_ZOOM_LABEL);
+
+    expect(
+      zoomRows.map((e) => e.id).sort(),
+      "font zoom must remain two separate rows (Claudesk-owned + CM6-owned); merging them " +
+        "would tell users the keys belong to CodeMirror even when a terminal has focus",
+    ).toEqual(["cm6-font-zoom", "terminal-font-zoom"]);
+
+    const byHost = new Map(zoomRows.map((e) => [e.host, e]));
+    expect(byHost.get("workspace")?.claudeskOwned).toBe(true);
+    expect(byHost.get("editor")?.claudeskOwned).toBe(false);
+  });
 });
 
 describe("chord registry — reachability (the load-bearing guard)", () => {

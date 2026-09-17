@@ -1546,3 +1546,26 @@ script under `tooling/` so each phase does not re-derive it.
   be described as a guard when the failure class includes module resolution.
 - **Priority:** high
 - **Status:** pending
+
+## SURFACE-2026-09-17-SETTINGS-PANEL-READS-THE-GATE-VIA-ITS-OWN-CONTROL-NOT-THE-HOOK
+- **Source:** feature:build (M14 WP3 Phase 2, P2.3)
+- **Target level:** product:arch
+- **Type:** tech-debt
+- **Summary:** The hotkey group in `SettingsPanel.tsx` reads the workflow-features gate from
+  `workflowFeatures.value` (the panel's own `useSettingControl`) rather than from
+  `useWorkflowFeaturesEnabled()`, which is the established seam every other gate consumer uses
+  (`announceRow.ts`, `ProjectModelCell.tsx`, `App.tsx`).
+- **Context:** The deviation is deliberate and, in this component, correct: `SettingsPanel` is the
+  surface that OWNS the gate toggle, so the control is the live value and the hook would lag the
+  checkbox sitting a few rows above the list. But it means there is now one gate consumer that does
+  not go through the common seam. ⚠️ A previous MAJOR in this same area went the other way — `App.tsx`
+  read the raw `getWorkflowFeaturesEnabled()` wrapper, never re-synced, and left the value stale for
+  the process lifetime (fixed at m10.9-wp3 review, and the OFF-invariant guard's blind spot closed
+  with it). The risk here is that a future reader sees two patterns and copies the wrong one into a
+  component that has NO local control.
+- **Suggested action:** Decide whether the seam contract should say "use the hook UNLESS the component
+  owns the control" explicitly (a one-paragraph note in `arch/` + the OFF-invariant guard's comment),
+  or whether `useSettingControl` should expose the gate in a way both callers share. ⚠️ Do NOT
+  "fix" this by switching the panel to the hook — that reintroduces the lag this avoided.
+- **Priority:** low
+- **Status:** pending

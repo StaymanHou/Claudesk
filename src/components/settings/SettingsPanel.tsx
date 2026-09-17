@@ -63,6 +63,11 @@ import {
   type UninstallTrigger,
 } from "./uninstallIntercept";
 import { UNINSTALL_BUTTON_LABEL } from "./workflowUninstallCopy";
+import {
+  visibleChords,
+  type ChordEntry,
+  type ChordHost,
+} from "../workspace/chordRegistry";
 import { getWorkflowSubstrateInstalled } from "../../state/workflowSubstrate";
 import {
   CC_PERMISSION_MODE_EVENT,
@@ -115,6 +120,61 @@ export interface SettingsPanelProps {
 /** One labelled settings group. The label + help line are the affordance a flat
  *  unlabelled strip could not offer — and the reason the gate has somewhere to explain
  *  its `~/.claude/` dependency. */
+// M14 WP3 — the hotkey reference.
+//
+// ## Why this group renders from the registry rather than a hand-written list
+// The chord map used to be a COMMENT BLOCK in editor/paletteCommands.ts. It could not be
+// rendered, could not be tested against the code it described, and drifted silently — WP3
+// Phase 1 promoted it to typed data (`chordRegistry.ts`) with two guards, one per drift
+// direction. This group is the payoff: the user-facing surface reads the same data the
+// guards check, so a chord cannot appear here without being wired, or be wired without
+// appearing here.
+//
+// ## The gate (P2.3)
+// Entries are read through `visibleChords(enabled)`, which OMITS gate-dependent chords when
+// the gate is off rather than greying them out. ⌘⇧K (Docs) genuinely does nothing while the
+// gate is off — `panelForChord` returns null so the keystroke passes through untouched — so
+// showing it disabled would be a DEAD AFFORDANCE. With the gate off this group must be
+// byte-identical to one in an app that never had the feature.
+//
+// ⚠️ The gate value comes from `workflowFeatures.value` (this panel's own live control), NOT
+// from `useWorkflowFeaturesEnabled()`. Both read the same backend, but the control is the one
+// that updates the instant the user toggles the checkbox a few rows above — subscribing to
+// the hook here would introduce a second source of truth in one component and make the list
+// lag its own switch.
+
+const HOST_SECTIONS: readonly { host: ChordHost; title: string }[] = [
+  { host: "app", title: "Application" },
+  { host: "workspace", title: "Workspace" },
+  { host: "editor", title: "Editor" },
+];
+
+function HotkeyRow({ entry }: { entry: ChordEntry }) {
+  return (
+    <div
+      className={`settings-hotkey-row${entry.claudeskOwned ? "" : " settings-hotkey-row-foreign"}`}
+      data-testid={`hotkey-row-${entry.id}`}
+    >
+      <kbd className="settings-hotkey-chord">{entry.label}</kbd>
+      <div className="settings-hotkey-outcomes">
+        {entry.outcomes.map((outcome, i) => (
+          <div key={i} className="settings-hotkey-outcome">
+            <span className="settings-hotkey-description">
+              {outcome.description}
+            </span>
+            {outcome.whenFocused !== undefined && (
+              <span className="settings-hotkey-context">
+                {" "}
+                — when {outcome.whenFocused} has focus
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SettingsGroup({
   id,
   title,
@@ -574,6 +634,31 @@ export default function SettingsPanel({
               Check for updates
             </button>
           )}
+        </SettingsGroup>
+
+        <SettingsGroup
+          id="hotkeys"
+          title="Keyboard shortcuts"
+          hint="Every chord Claudesk responds to. Editor shortcuts belong to CodeMirror, not Claudesk — they are listed so it is clear why a key behaves differently inside the editor."
+        >
+          {HOST_SECTIONS.map(({ host, title }) => {
+            const entries = visibleChords(workflowFeatures.value).filter(
+              (entry) => entry.host === host,
+            );
+            if (entries.length === 0) return null;
+            return (
+              <div
+                key={host}
+                className="settings-hotkey-section"
+                data-testid={`hotkey-section-${host}`}
+              >
+                <h4 className="settings-hotkey-section-title">{title}</h4>
+                {entries.map((entry) => (
+                  <HotkeyRow key={entry.id} entry={entry} />
+                ))}
+              </div>
+            );
+          })}
         </SettingsGroup>
       </div>
       {error !== null && (
