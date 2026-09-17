@@ -1,7 +1,9 @@
 # Feature: Supervisor hotfix — per-workspace toggle + unsent-input suppression
 
 **Workflow:** feature
-**State:** build — Phase 3 impl complete, awaiting verify-auto
+**State:** ship (complete) — committed as `a46ae89` on `main`, 2026-09-17. ⚠️ **NOT PUSHED**
+(the operator has not asked; `main` is 17 ahead of origin). All 3 phases ran the full
+build → verify-auto → verify-self → verify-human → verify-codify loop; gate green at 2711.
 **Created:** 2026-09-15
 **Spec'd:** 2026-09-17
 **Planned:** 2026-09-17
