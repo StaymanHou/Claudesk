@@ -456,3 +456,6 @@ against is exactly "a chord exists that the registry does not know about."
 keydown handler in a host to route through a registry-aware helper), which is a refactor of three
 working registration hosts — out of scope for a data-extraction phase and squarely the kind of
 thing that belongs in its own change. **Logged to `backlog.md` rather than absorbed silently.**
+
+## Session Handoff — 2026-09-17 16:34
+Handed off. See `workflow-system/state/.session.md` to restore.
