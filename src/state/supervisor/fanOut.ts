@@ -110,6 +110,21 @@ export interface FanOutDeps {
   readonly adjudicator: AdjudicatorDeps;
   /** Shared across the sweep so a re-entrant sweep cannot double-fire. */
   readonly ledger: FireLedger;
+  /**
+   * M14 WP0 — does this workspace have unsent input in its CC pane right now?
+   *
+   * ⚠️ **A FUNCTION, NOT A BOOLEAN, AND THAT IS THE WHOLE POINT.** The sweep is async and the
+   * adjudicator costs ~3s; a boolean captured when `deps` was built would answer *"was there
+   * unsent input when the turn ended?"* while the question that matters is *"is there unsent
+   * input NOW, at the moment before injecting?"* The operator starts typing precisely during
+   * that window — that is the reported defect.
+   *
+   * ⚠️ **OPTIONAL, AND ITS ABSENCE MEANS "NO SUPPRESSION".** A caller that omits it keeps the
+   * pre-WP0 behavior, which is what lets every existing test and the replay harness stay
+   * untouched. ⚠️ **That default is the UNSAFE direction**, unlike `readWip` — so the
+   * production caller MUST supply it, and a test pins that it does.
+   */
+  readonly hasUnsentInput?: (w: SupervisedWorkspace) => boolean;
   /** Evidence for the one conditional policy cell. */
   readonly context?: PolicyContext;
   /** Diagnostic sink. Defaults to `console.warn`. */
@@ -253,6 +268,28 @@ export async function fireOne(
     };
   }
   if (verdict.kind !== "fire") return no(verdict.reason);
+
+  // ⚠️ M14 WP0 — THE UNSENT-INPUT SUPPRESSION. READ THE PLACEMENT NOTES BEFORE MOVING THIS.
+  //
+  // ⚠️ **IT IS CHECKED AS LATE AS POSSIBLE, IMMEDIATELY BEFORE THE INJECT.** The operator
+  // starts typing *during* the sweep — the transcript read and the ~3s adjudication are exactly
+  // the window in which a half-typed line appears. A check at the top of `fireOne` would read
+  // the state from before that window and miss the reported defect entirely.
+  //
+  // ⚠️ **IT IS AFTER THE LEDGER CLAIM, NOT BEFORE — AND THAT IS DELIBERATE, THOUGH IT COSTS A
+  // WASTED ADJUDICATION.** The ledger key is `{workspace, transcript, edge, verdictIndex}`, so
+  // a claim is permanent for that turn. Suppressing BEFORE the claim would leave the turn
+  // unclaimed and re-adjudicated on every subsequent sweep; suppressing AFTER means this turn
+  // is now spent. ⚠️ **The spent claim is the POINT, not a bug:** the operator is mid-sentence,
+  // and what they type IS the next instruction. Re-firing the stale chain once they hit Enter
+  // would inject a command on top of the one they just sent — the exact two-commands-at-once
+  // collision this feature exists to stop.
+  //
+  // ⚠️ **AND IT IS BEFORE `injectCommand`, WHICH HAS NO RETRY AND NO PRE-SEND CANCEL WINDOW.**
+  // There is no "undo" arm to add later; suppression either happens here or not at all.
+  if (deps.hasUnsentInput?.(workspace) === true) {
+    return no("unsent-input-present");
+  }
 
   const command = `/${verdict.skill}`;
   try {

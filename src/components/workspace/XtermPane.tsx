@@ -48,6 +48,7 @@ import {
   registerTerminalSerializer,
   unregisterTerminalSerializer,
 } from "./terminalMirror";
+import { routeCcInput } from "./ccInputRouting";
 import { trimTrailingBlankRows } from "./mirrorTrim";
 import { loadTerminalFontSize } from "./terminalFontZoom";
 import { useTauriListen } from "../../useTauriListen";
@@ -165,6 +166,19 @@ interface XtermPaneProps {
   /** data-testid on the pane host (defaults to `xterm-pane`). */
   testId?: string;
   /**
+   * M14 WP0 — every chunk of input this pane forwards INTO the pty, raw.
+   *
+   * ⚠️ **THIS IS THE UNSENT-INPUT WATERMARK'S ONLY FEED, AND THE HANDLER BELOW IS THE ONLY
+   * CALLER.** The supervisor uses it to avoid firing a slash command over a half-typed line.
+   * ⚠️ **Called with the chunk BEFORE base64 encoding** — the watermark is byte-level and
+   * `encodeBase64` is the transport, not a decision point.
+   *
+   * ⚠️ **DO NOT call this from anywhere that is not genuine operator input.** `injectCommand`
+   * deliberately does not route through xterm, which is what keeps the machine's own writes
+   * from suppressing the machine (AC-7). A second caller here would silently break that.
+   */
+  onInputForwarded?: (chunk: string) => void;
+  /**
    * M6 WP11 — rendered as `data-session-id` on the pane host so the focus-scoped zoom
    * router (Workspace) can resolve WHICH terminal among N holds focus
    * (`activeElement.closest('[data-testid="term-pane"]').dataset.sessionId`). Optional;
@@ -250,6 +264,7 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       openIntent = "fire",
       markTurnStarts = false,
       onTurnStartRecorded,
+      onInputForwarded,
     },
     ref,
   ) {
@@ -469,6 +484,14 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       onSessionIdRef.current = onSessionId;
     }, [onSessionId]);
 
+    // M14 WP0 — same ref-mirroring reason as `onSessionIdRef` directly above: the `onData`
+    // handler is wired ONCE inside the terminal effect, so a prop read directly there would
+    // freeze at the identity it had on first mount. Workspace passes an inline arrow.
+    const onInputForwardedRef = useRef(onInputForwarded);
+    useEffect(() => {
+      onInputForwardedRef.current = onInputForwarded;
+    }, [onInputForwarded]);
+
     // Re-launch / Retry: kill any lingering backend session, then flip the bridge to
     // "spawning". The ended/failed run's listeners were already disposed by that run's
     // effect cleanup, so we only kill the backend here. We do NOT bump the nonce directly —
@@ -624,11 +647,25 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       // Keystrokes → cc_input (base64). The session id is read from the ref so this
       // handler, wired once, always targets the current session.
       const onDataDisposable = term.onData((data) => {
+        // M14 WP0 — the routing decision lives in `routeCcInput`, a pure function, so the
+        // ordering property it carries is a VALUE a test can assert rather than a shape a
+        // source-text guard can only approximate (`ccInputRouting.ts` explains which property
+        // and why `?raw` cannot express it).
+        //
+        // ⚠️ This is the ONLY caller that feeds the watermark. `injectCommand` writes to
+        // `cc_input` directly and never routes through xterm, which is what stops the
+        // supervisor suppressing itself (AC-7).
         const sid = sessionIdRef.current;
-        if (!sid) return;
+        const routing = routeCcInput(data, sid, encodeBase64);
+
+        // ⚠️ Fed unconditionally and FIRST — input typed at a pane whose session died is still
+        // unsent input the operator can see on screen.
+        onInputForwardedRef.current?.(routing.toWatermark);
+
+        if (routing.toPty === null) return;
         void invoke("cc_input", {
           sessionId: sid,
-          data: encodeBase64(data),
+          data: routing.toPty,
         }).catch(() => {
           // Input after the session died is benign — the exit event drives the UI.
         });

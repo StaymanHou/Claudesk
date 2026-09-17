@@ -13,7 +13,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::{
     add_or_touch, prune_missing, read_projects, remove as remove_project_inner,
-    set_default_drive_mode, set_default_model, DriveMode, Project, PROJECTS_FILE,
+    set_default_drive_mode, set_default_model, set_supervisor_enabled, DriveMode, Project,
+    PROJECTS_FILE,
 };
 
 /// Resolve `~/Library/Application Support/<identifier>/` and ensure it exists.
@@ -228,6 +229,29 @@ pub fn project_set_default_drive_mode(
     Ok(())
 }
 
+/// Set whether the workflow supervisor may act on this project (M14 WP0).
+///
+/// ⚠️ **NO BROADCAST EVENT, AND THAT IS A DECISION — NOT AN OVERSIGHT.** The drive-mode command
+/// directly above emits one because that value has **two** surfaces to keep in sync (the picker
+/// row and the workspace header), and its own doc records that the fan-out was added only once
+/// the second surface appeared. The supervisor toggle has **exactly one** surface — the workspace
+/// header (spec decision D-3) — so a broadcast would have a single consumer: the component that
+/// just called this. That is sync machinery paid forever for nothing, which is precisely the
+/// reasoning M12 used before the second surface existed.
+///
+/// ⚠️ **If a second surface is ever added (a picker-row cell, a PiP badge), the event comes WITH
+/// it.** Do not add one speculatively, and do not read this absence as an inconsistency with the
+/// sibling command.
+#[tauri::command]
+pub fn project_set_supervisor_enabled(
+    app: AppHandle,
+    path: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let dir = resolve_data_dir(&app)?;
+    set_supervisor_enabled(&dir, Path::new(&path), enabled).map_err(|e| e.to_string())
+}
+
 /// The Tauri event broadcast when a project's drive mode changes — the M13.5 WP4 P3.1 fan-out.
 ///
 /// ⚠️ **This is a DELIBERATE REVERSAL of M12's no-broadcast decision, and the condition it named
@@ -286,6 +310,23 @@ pub fn project_get_default_drive_mode(app: AppHandle, path: String) -> Option<Dr
     crate::config_store::read_default_drive_mode(&dir, Path::new(&path))
         .ok()
         .flatten()
+}
+
+/// Read whether the workflow supervisor may act on this project (M14 WP0).
+///
+/// ⚠️ **Degrades to `true`, NOT `false`, on every failure path** — an unresolvable data dir, an
+/// unreadable list, or a project with no record. The ruled default is ON, and a degraded read
+/// that answered `false` would silently unsupervise a project for reasons the operator can
+/// neither see nor fix. ⚠️ **This is the opposite posture from the drive-mode getter beside it**,
+/// and deliberately so: there, `None` means "pin no mode", which is the safe direction for a
+/// value consumed as an env var. Here, `false` is a *policy decision the operator made*, so it
+/// must never be manufactured by a failure.
+#[tauri::command]
+pub fn project_get_supervisor_enabled(app: AppHandle, path: String) -> bool {
+    let Ok(dir) = resolve_data_dir(&app) else {
+        return true;
+    };
+    crate::config_store::read_supervisor_enabled(&dir, Path::new(&path))
 }
 
 #[cfg(test)]

@@ -19,6 +19,7 @@ import { decideVerdict, FireLedger } from "../verdict";
 import { parseTranscript, type TranscriptTail } from "../transcript";
 import { RECYCLE_TOKEN_THRESHOLD } from "../contextPressure";
 import { parseWip } from "../wipPhases";
+import { UnsentInputWatermark } from "../unsentInput";
 
 /** A transcript tail for a turn that emitted `edgeId` and did not chain. */
 const tailFor = (edgeId: string, path = "/t/a.jsonl"): TranscriptTail => ({
@@ -582,5 +583,175 @@ describe("fireOne — the M15 WP4 recycle arm", () => {
     });
     expect(r.fired).toBe(true);
     expect(r.recycle).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// M14 WP0 — THE UNSENT-INPUT SUPPRESSION.
+//
+// ⚠️ The defect this arm exists to stop: the supervisor fired six unwanted `/feature-build`
+// invocations into a session whose operator was mid-sentence. `injectCommand` has no retry and
+// no pre-send cancel window, so a wrong fire is unrecoverable except via Esc.
+describe("fireOne — unsent-input suppression", () => {
+  it("does NOT inject when the workspace has unsent input", async () => {
+    const h = harness(() => tailFor("F5"));
+    const r = await fireOne(ws(), { ...h, hasUnsentInput: () => true });
+
+    expect(r.fired).toBe(false);
+    expect(r.reason).toBe("unsent-input-present");
+    // ⚠️ **ASSERT THE INJECTOR, NOT JUST `fired: false`.** Every withhold path in this module
+    // returns `fired: false` — `no-verdict`, `already-fired-for-this-turn`, the verify-human
+    // gate. So the return value alone does NOT prove the injection was skipped; only the empty
+    // spy does. This is the "assertion says X, measures Y" gap the repo has been bitten by.
+    expect(h.injected).toEqual([]);
+  });
+
+  it("fires normally when there is no unsent input", async () => {
+    const h = harness(() => tailFor("F5"));
+    const r = await fireOne(ws(), { ...h, hasUnsentInput: () => false });
+    expect(r.fired).toBe(true);
+    expect(h.injected).toHaveLength(1);
+  });
+
+  it("fires when no `hasUnsentInput` is supplied at all (pre-WP0 behavior)", async () => {
+    // ⚠️ The absent case is the UNSAFE direction, unlike `readWip`. It is kept only so existing
+    // hosts and the replay harness compile unchanged; the production caller MUST supply one,
+    // which `useSupervisor.test.ts` pins separately.
+    const h = harness(() => tailFor("F5"));
+    const r = await fireOne(ws(), h);
+    expect(r.fired).toBe(true);
+  });
+
+  it("⚠️ is read AT FIRE TIME, not when the deps were built", async () => {
+    // The operator starts typing DURING the sweep — the transcript read and the ~3s
+    // adjudication are exactly that window. A boolean captured up front would answer the wrong
+    // question, so the dep is a function and this proves it is actually called late: it reads
+    // false while the deps are assembled and true by the time the injection is due.
+    let typing = false;
+    const h = harness(() => {
+      typing = true; // the operator starts typing during the transcript read
+      return tailFor("F5");
+    });
+    const r = await fireOne(ws(), { ...h, hasUnsentInput: () => typing });
+
+    expect(r.fired).toBe(false);
+    expect(r.reason).toBe("unsent-input-present");
+    expect(h.injected).toEqual([]);
+  });
+
+  it("⚠️ a suppressed turn CONSUMES its ledger claim and is not reconsidered", async () => {
+    // ⚠️ THIS IS THE DESIGNED BEHAVIOR, NOT A LEAK. The suppression sits AFTER the claim, so
+    // the turn is spent. That is the point: the operator is mid-sentence and what they type IS
+    // the next instruction — re-firing the stale chain once they hit Enter would inject a
+    // command on top of the one they just sent, which is the collision this feature prevents.
+    const ledger = new FireLedger();
+    const h = { ...harness(() => tailFor("F5")), ledger };
+
+    const first = await fireOne(ws(), { ...h, hasUnsentInput: () => true });
+    expect(first.reason).toBe("unsent-input-present");
+
+    // The operator submits; the watermark clears. The SAME turn must still not fire.
+    const second = await fireOne(ws(), { ...h, hasUnsentInput: () => false });
+    expect(second.fired).toBe(false);
+    expect(second.reason).toBe("already-fired-for-this-turn");
+    expect(h.injected).toEqual([]);
+  });
+
+  it("⚠️ AC-7 — the supervisor's OWN injection does not suppress the next turn", async () => {
+    // ⚠️ **THIS TEST DRIVES A REAL `UnsentInputWatermark`, AND THE FIRST VERSION DID NOT — that
+    // is the whole difference between measuring AC-7 and measuring nothing.**
+    //
+    // The original used a hardcoded `{value: false}` stand-in for `hasUnsentInput`, so the
+    // second fire could not have been suppressed *no matter what `injectCommand` did*: the
+    // assertion said "the machine does not suppress itself" while measuring "two independent
+    // turns both fire." An equivalent mutant — it survives every mutation of the code it names.
+    // Found at verify-self by the verification subagent (SHORTCUT-2026-09-17).
+    //
+    // Here the watermark is REAL and the injector FEEDS IT: `inject` pushes the very bytes
+    // `injectCommand` would send into the same watermark the suppression reads. So if the
+    // production wiring ever routed the machine's own write back through `push()`, the second
+    // fire WOULD be suppressed and this test WOULD fail.
+    const watermark = new UnsentInputWatermark();
+    const wired = (h: Harness): FanOutDeps => ({
+      ...h,
+      // ⚠️ The injector deliberately feeds the watermark — modelling the FAILURE we are
+      // excluding, not the current design. `slashCommandPayload` ends in `\r`, so a naive
+      // "it clears anyway" reading is wrong: the command text precedes the CR, and a `\r`
+      // ALONE would clear. Push the command body first, exactly as a keystroke path would.
+      inject: async (pty, command, label) => {
+        watermark.push(command);
+        await h.inject(pty, command, label);
+      },
+      hasUnsentInput: () => watermark.unsentInput,
+    });
+
+    const h1 = harness(() => tailFor("F5", "/t/a.jsonl"));
+    const r1 = await fireOne(ws(), wired(h1));
+    expect(r1.fired).toBe(true);
+    // ⚠️ The positive control: the wiring above IS live, so the watermark really was written
+    // by the injection. Without this the next assertion could pass because nothing happened.
+    expect(
+      watermark.unsentInput,
+      "the test's own wiring must actually reach the watermark, or the next assertion is vacuous",
+    ).toBe(true);
+
+    // In production this second fire is NOT suppressed, because `injectCommand` never routes
+    // through `term.onData` and so never reaches `push()`. Assert that directly.
+    watermark.clear();
+    const h2 = harness(() => tailFor("F5", "/t/b.jsonl"));
+    const r2 = await fireOne(ws(), wired(h2));
+    expect(
+      r2.fired,
+      "the first injection must not have set the watermark",
+    ).toBe(true);
+    expect(h2.injected).toHaveLength(1);
+  });
+
+  // ⚠️ THE STRUCTURAL HALF OF AC-7, which the behavioral test above cannot reach.
+  //
+  // `fireOne` is pure and takes its injector as a dep, so no test at this seam can observe
+  // whether the PRODUCTION injector touches the watermark — that is a wiring fact about
+  // `Workspace.tsx`/`XtermPane.tsx`. Assert it where it lives: exactly one call site pushes
+  // into the watermark, and it is inside `term.onData`.
+  it("⚠️ AC-7 (structural) — the watermark is fed ONLY from term.onData, never from injectCommand", () => {
+    const strip = (s: string) =>
+      s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+    const workspace = strip(
+      readFileSync(
+        resolve(__dirname, "../../../components/workspace/Workspace.tsx"),
+        "utf8",
+      ),
+    );
+    const pane = strip(
+      readFileSync(
+        resolve(__dirname, "../../../components/workspace/XtermPane.tsx"),
+        "utf8",
+      ),
+    );
+    const autoResume = strip(
+      readFileSync(
+        resolve(__dirname, "../../../components/workspace/autoResumeFire.ts"),
+        "utf8",
+      ),
+    );
+
+    // Exactly ONE place pushes into the watermark, and it is the pane's input callback.
+    const pushes = [
+      ...workspace.matchAll(/unsentInputRef\.current\?\.push\(/g),
+    ];
+    expect(pushes).toHaveLength(1);
+    expect(workspace).toMatch(
+      /onInputForwarded=\{\(chunk\) => unsentInputRef\.current\?\.push\(chunk\)\}/,
+    );
+
+    // ...fed from `term.onData`, not from anywhere else in the pane.
+    expect(pane).toMatch(/term\.onData\(/);
+    const forwards = [...pane.matchAll(/onInputForwardedRef\.current\?\.\(/g)];
+    expect(forwards).toHaveLength(1);
+
+    // ...and the injection funnel invokes `cc_input` directly, bypassing xterm entirely.
+    expect(autoResume).toMatch(/invoke\("cc_input"/);
+    expect(autoResume).not.toMatch(/onInputForwarded|unsentInput/);
   });
 });

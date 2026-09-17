@@ -1,6 +1,6 @@
 ---
 name: git-checkout-no-ops-on-untracked-file
-description: "`git checkout -- <path>` on an UNTRACKED file does nothing and exits 0 — it left a mutation probe in place in a new module and reported success. For any mutation test, capture `shasum` before and verify after; for an untracked file `git diff`/`git checkout` are INAPPLICABLE, not merely weak evidence."
+description: "`git checkout -- <path>` is the wrong restore for a mutation probe in BOTH directions: on an UNTRACKED file it silently no-ops (mutant survives); on a TRACKED-but-DIRTY file it reverts to HEAD and DESTROYS uncommitted work. Back up with `cp` and verify the restore by `shasum` against a pre-captured baseline."
 metadata:
   type: project
 ---
@@ -36,9 +36,38 @@ independently flagged this half of the hazard at Phase 4 verify-self ("`git diff
 have shown a mutation there either way — the SHA comparison is the load-bearing restore evidence"),
 one phase before the `checkout` half actually bit.
 
+## ⚠️ The MIRROR-IMAGE hazard: tracked-but-DIRTY (2026-09-17, M14 WP0 verify-self)
+
+**`tracked ≠ committed`, and that is the whole trap.** The rule above ("don't use git to undo a
+change to a file git has never seen") reads as though *tracked* files are safe. They are not.
+
+**Observed:** a verification subagent restored a mutation probe in
+`src/components/workspace/Workspace.tsx` with `git checkout -- <path>`. The file was tracked but
+**`M`** — carrying uncommitted WP0 work. Checkout reverted it to **HEAD**, silently stripping the
+`UnsentInputWatermark` import, the ref, the `hasUnsentInput` dep and the `onInputForwarded` prop.
+The mutation probe was undone *and so was the feature*.
+
+⚠️ **The two failure modes are exact opposites, which is why one rule cannot be remembered as a
+special case of the other:**
+
+| File state | `git checkout -- <path>` does | Failure |
+|---|---|---|
+| Untracked (`??`) | **nothing** | the **mutant survives** |
+| Tracked + dirty (`M`) | reverts to **HEAD** | **uncommitted work is destroyed** |
+| Tracked + clean | the right thing | — |
+
+**So the safe procedure does not branch on tracked-ness at all:** `cp` the file aside before
+mutating, restore from that copy, and verify with `shasum` against the pre-captured baseline.
+⚠️ **The `shasum` check is what caught this within one step** — the restore *command* reported
+success in both cases.
+
+⚠️ **Do not tell a subagent "git checkout is a valid restore, the file is tracked."** That
+instruction was in the task brief and is what produced the destruction; the agent followed it
+correctly. Brief the `cp` + `shasum` procedure instead, unconditionally.
+
 **Distinct from the mutation-*landing* family.** [[verify-the-mutation-landed]] and
 [[bsd-sed-lacks-word-boundary]] cover whether the mutation **applied**; this covers whether the
-**restore** did. Both halves need verifying, and a whole WP's worth of new modules are untracked at
+**restore** did — in both of its opposite failure directions (see the table above). Both halves need verifying, and a whole WP's worth of new modules are untracked at
 exactly the moment they are most heavily mutation-tested.
 
 Filed as `SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE` (high) for a fold

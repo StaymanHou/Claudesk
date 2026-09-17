@@ -7,6 +7,7 @@ import { MENU_IDS } from "../../menu/menuBridge";
 import { cellLines } from "../../cc/driveMode";
 // ARM 6 (M13.5 WP4) — imported from production, not stubbed, same as the arms above.
 import { workspaceDriveModeReadout } from "../../cc/workspaceDriveMode";
+import { workspaceSupervisorReadout } from "../../cc/workspaceSupervisor";
 import { rowAffordances } from "../../components/picker/announceRow";
 // ARM 5 (M13 WP2) — the skill-button row. Imported from production, not stubbed; the
 // not-vacuous section below pins that.
@@ -744,6 +745,50 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // ARM 6, SECOND SUBJECT (M14 WP0 P2.6) — the per-workspace SUPERVISOR toggle.
+  //
+  // ⚠️ **NOT a seventh arm.** The toggle is another derivation of the same registry this arm
+  // already polices (the workspace header), registers no panel / menu id / chord / row-cell /
+  // skill-row, and is gated by the same `useWorkflowFeaturesEnabled` seam. It therefore earns a
+  // SUBJECT on arm 6, not an arm of its own — the shape `arch.md` records for arm 4 (two
+  // derivations) and arm 5 (two predicates).
+  //
+  // ⚠️ `WORKFLOW_TERMS` contains neither "supervisor" nor "supervise", so arms 1–3 are blind to
+  // this span — exactly as they were to the drive-mode readout. The vocabulary is not widened
+  // (the WP2 precedent: assert the predicate in the surface's OWN arm instead).
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  it("renders no supervisor toggle on the workspace header while the gate is OFF", () => {
+    // ⚠️ Over BOTH values of the toggle, because the gate must win regardless. A version that
+    // only checked the enabled=true corner would pass while an explicitly-disabled project
+    // leaked the control through — and OFF is the state an operator deliberately set, so it is
+    // the one most likely to be rendered from a stale value.
+    for (const enabled of [false, true]) {
+      expect(
+        workspaceSupervisorReadout(enabled, false, "Some Project"),
+        `the supervisor toggle must not exist while the gate is OFF (enabled=${enabled}) — ` +
+          `the supervisor is a companion-workflow concept, so OFF must be byte-identical to a ` +
+          `build that never had the feature`,
+      ).toBeNull();
+    }
+  });
+
+  it("the supervisor toggle is genuinely gate-DERIVED, not a constant that ignores the gate", () => {
+    // ⚠️ ANTI-VACUITY, same reasoning as the drive-mode pair above: a derivation returning null
+    // for every input would satisfy the OFF assertion while the feature was simply broken.
+    const on = workspaceSupervisorReadout(true, true, "Some Project");
+    expect(
+      on,
+      "gate ON must produce a readout — otherwise the OFF assertion is vacuous",
+    ).not.toBeNull();
+    // ...and it must actually DISTINGUISH the two states, or the control is decorative.
+    const off = workspaceSupervisorReadout(false, true, "Some Project");
+    expect(off?.text).not.toBe(on?.text);
+    expect(on?.enabled).toBe(true);
+    expect(off?.enabled).toBe(false);
+  });
+
   it("the drive-mode readout is genuinely gate-DERIVED, not a constant that ignores the gate", () => {
     // ⚠️ ANTI-VACUITY. The assertion above is "returns null"; a derivation that returned null
     // for EVERY input would satisfy it while the feature was simply broken — the same shape the
@@ -939,17 +984,24 @@ describe("the guard is not vacuous", () => {
         "6 WORKSPACE-DRIVEMODE",
         () => workspaceDriveModeReadout(null, null, false, false),
       ],
+      // M14 WP0 P2.6 — arm 6's SECOND subject. See the block above the toggle's OFF assertion
+      // for why this is a subject rather than a seventh arm.
+      [
+        "6 WORKSPACE-SUPERVISOR",
+        () => workspaceSupervisorReadout(false, false, "x"),
+      ],
     ];
 
-    // ⚠️ EIGHT subjects, not six: arm 4 owns TWO derivations and arm 5 owns TWO predicates
+    // ⚠️ NINE subjects, not six: arm 4 owns TWO derivations, arm 5 owns TWO predicates
     // (`showSkillButtons` and `showRecycleButton` are separate functions with identical
     // bodies — a mutation to one does not exercise the other, which is the "the set is not
-    // the caller" shape arm 5 was written to catch). Arm 6 (M13.5 WP4) owns one.
+    // the caller" shape arm 5 was written to catch). Arm 6 owns TWO — the drive-mode
+    // readout (M13.5 WP4) and the supervisor toggle (M14 WP0).
     expect(
       armSubjects.length,
       "an OFF-state arm subject was removed — every registry this app surfaces UI through " +
         "must stay policed; see the registry table at the top of this file",
-    ).toBe(8);
+    ).toBe(9);
 
     // Each subject must be really callable and really defined — a subject that threw or
     // resolved to undefined would make its arm's assertions vacuous rather than absent.

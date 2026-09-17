@@ -114,6 +114,45 @@ describe("⚠️ wiring guards (source-level)", () => {
     expect(code).toMatch(/readWip:\s*async/);
   });
 
+  it("⚠️ M14 WP0 — supplies hasUnsentInput; without it suppression is silently dead", () => {
+    // ⚠️ **THE CALLER-SIDE GUARD (P1.5). Extracting the watermark as a pure state machine
+    // proves the MACHINE, not its CALLER** — the standing local defect shape, hit four times
+    // here with one shipped CRITICAL. `FanOutDeps.hasUnsentInput` is OPTIONAL so existing
+    // hosts and the replay harness compile unchanged, and that optionality is precisely the
+    // hole: omitting it here restores the six-unwanted-fires defect while every watermark test
+    // and every fan-out test stays green.
+    //
+    // ⚠️ Asserts the ARGUMENT SHAPE, not a bare identifier — a guard satisfied by the module's
+    // own prose passes exactly when the code it names is deleted.
+    expect(code).toMatch(/hasUnsentInput:\s*host\.hasUnsentInput/);
+  });
+
+  it("⚠️ M14 WP0 — forwards it as a THUNK, not a captured boolean", () => {
+    // ⚠️ The sweep is async and the adjudicator costs ~3s. The operator starts typing INSIDE
+    // that window — that is the reported defect — so a value read when the deps were built
+    // answers the wrong question. `tsc` cannot tell a `boolean` field from a `() => boolean`
+    // field once both are optional and the call site is an arrow, so this is source-level.
+    expect(code).toMatch(/hasUnsentInput\?\.\(\)\s*===\s*true/);
+  });
+
+  it("⚠️ M14 WP0 — checks the supervisor toggle INSIDE the callback, per turn", () => {
+    // ⚠️ THE THIRD CONDITION. The operator flips this toggle precisely BECAUSE the supervisor is
+    // misbehaving, so a value read at subscribe time would keep firing for the rest of the
+    // session — the exact complaint WP0 exists to answer. Checked beside the other two per-turn
+    // conditions, and asserted on the `.current` READ so a refactor to a captured value fails.
+    expect(code).toMatch(
+      /if\s*\(host\.supervisorEnabledRef\.current\s*===\s*false\)\s*return;/,
+    );
+  });
+
+  it("⚠️ M14 WP0 — only an explicit `false` suppresses; not-yet-loaded reads as ON", () => {
+    // ⚠️ `null` means "projects.json not read yet", and the ruled default is ON. A truthiness
+    // check (`if (!host.supervisorEnabledRef.current) return`) would treat that window as OFF
+    // and make the supervisor silently dead on every workspace open — indistinguishable from a
+    // broken feature. The `=== false` above is what excludes it; this names why.
+    expect(code).not.toMatch(/if\s*\(!host\.supervisorEnabledRef\.current\)/);
+  });
+
   it("⚠️ checks the gate INSIDE the callback, not only via `enabled`", () => {
     // The gate can flip while a turn is in flight, and the fire is the irreversible half.
     expect(code).toMatch(/if\s*\(!host\.enabled\)\s*return;/);

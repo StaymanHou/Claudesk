@@ -599,6 +599,60 @@ body,
 
    Deliberately quieter than `.workspace-header-nextopen` (grey, not the #6ea8ff accent): that
    one is a per-open PREDICTION worth noticing, this is standing state. */
+/* M14 WP0 P2.4 — the per-workspace SUPERVISOR toggle.
+
+   Sits immediately beside the drive-mode readout and deliberately shares its metrics, so the two
+   per-workspace policy controls read as one group rather than two unrelated badges.
+
+   ⚠️ **THE COLOURED STATE IS *ON*, NOT OFF — operator correction at Phase 2 verify-human
+   (2026-09-17), and the first implementation had it INVERTED.** The reasoning that produced the
+   inversion was "OFF is the deliberate choice, so highlight it" — plausible, and wrong, because
+   it ignores the palette this app already teaches. The status dot means ACTIVE with the Claude
+   brand orange (`.status-dot-running`, #d97757) and QUIET with grey (`.status-dot-idle`,
+   #6e7681). A workspace the supervisor may act on is the active case; one it may not is the
+   quiet case. Reusing those exact two values makes the toggle legible by a rule the operator has
+   already learned everywhere else in the UI, instead of introducing a third private convention.
+
+   ⚠️ **The hues are COPIED from the status-dot palette, not approximated.** An earlier draft used
+   #e0a853 ("amber"), which is in no other part of this stylesheet — a near-miss hue is worse than
+   a wrong one, because it reads as *almost* the status colour and quietly erodes the mapping
+   (`semantic-distance-not-just-visual-distance-for-status-colour`). If the dot palette ever
+   changes, change these with it.
+
+   ⚠️ Still NOT the alarm-blue #539bf5 (AwaitingInput) and NOT the purple #a371f7 (BackgroundWork
+   / stale drive mode) — those carry their own meanings and must not be borrowed. */
+.workspace-header-supervisor {
+  flex-shrink: 0;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  background-color: rgba(217, 119, 87, 0.14);
+  color: #d97757;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* M14 WP0 Phase 3 (D-5) — the SUPPRESSED marker: supervision is ON but held back by unsent input.
+
+   ⚠️ **AMBIENT, NOT AN ALARM.** Suppression means the supervisor is working correctly — it is
+   deliberately not typing over the operator's half-written line. So this must NOT borrow
+   #539bf5 (AwaitingInput, "needs you now") or #a371f7 (BackgroundWork), per
+   `semantic-distance-not-just-visual-distance-for-status-colour`.
+
+   ⚠️ It inherits the parent badge's ORANGE and only dims — deliberately, and per
+   `reuse-the-established-status-palette-before-inventing-a-hue`: this is a sub-state of
+   "supervised", not a fourth independent state, so a NEW hue would imply an independence it does
+   not have. Opacity is the right axis because it reads as "the same thing, momentarily muted". */
+.workspace-header-supervisor-suppressed {
+  opacity: 0.75;
+}
+
+/* Unsupervised — the same calm grey `.status-dot-idle` uses. */
+.workspace-header-supervisor.is-off {
+  background-color: rgba(128, 128, 128, 0.12);
+  color: #6e7681;
+}
+
 .workspace-header-drivemode {
   flex-shrink: 0;
   padding: 0.05rem 0.35rem;

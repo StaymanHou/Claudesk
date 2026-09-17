@@ -1,7 +1,7 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-08-22
+updated: 2026-09-17
 ---
 
 # Design Priors — Claudesk
@@ -126,6 +126,24 @@ There is a second, sharper reason for the destructive half specifically: a user 
 **Why (⚠️ INFERRED — pending operator sharpening; captured propose-never-auto-write, directional + overridable):** The CC model override is applied as `--model` at spawn and is fixed for that process's life. Built first on the workspace header, it sat on the *running* session — the one place it could no longer affect anything — and was visible only for the centre-stage workspace, so across 20+ rotating projects you would have to open a project to learn which model it uses. On the picker row it is read at the moment of choosing, and every project's model reads as a column, so the exceptions stand out. This also matches the feature's own origin: the problem being solved was *"you forget to switch models back"* — a forgetting problem, which a scannable column addresses directly and a per-instance control does not. *(Operator: sharpen the why + the boundary if this generalizes — the inferred cut is "immutable-after-creation settings belong on the creation surface"; the untested edge is a setting read at creation that is ALSO live-reconfigurable later, which may want both.)*
 
 **Origin:** M11.5 WP1 Phase 2 verify-human (2026-07-31). The control shipped on the workspace header and the operator rejected it outright — *"I don't like the UI/UX. Can the selection be here? share the same row of each workspace title and align to the right side?"* — with a picker screenshot. Clarified to **picker row only** (explicitly not both surfaces: two homes for one per-project value would need a sync path, and there is deliberately no broadcast event for it) and **compact label, click to edit** (an input on every row judged too noisy at 20+ projects). Related: [[explicit-selectable-mode-over-inferred-mode]] (the corollary above bounds how it applies to a list surface — visible *state*, click-to-reach *editor*), [[primary-surface-is-zero-ceremony-not-a-mode]] (same attention thesis; that prior governs *whether a mode should exist* on a primary surface, this one governs *which surface a control belongs on*), [[new-surface-must-earn-its-place-against-existing-ones]] (its "two overlapping surfaces must always agree — sync code paid forever" cost is exactly why this was scoped to ONE surface rather than both).
+
+---
+
+## reuse-the-established-status-palette-before-inventing-a-hue
+
+**Axis:** ambient-attention design (palette coherence / learned vocabulary)
+
+**Lean:** When a new control expresses a state the app's **existing status vocabulary already encodes** (active vs. quiet, needs-you vs. ignorable), reuse that palette's **exact values** rather than picking a new hue — and map the **coloured** state to the **ACTIVE** case, not to whichever state the user deliberately chose. A near-miss hue is worse than an obviously different one: it reads as *almost* the status colour and quietly erodes the mapping the operator has already learned everywhere else.
+
+**Decision rule:** ask **"does this app already have a colour for what this state MEANS?"**
+- **Yes** → reuse it **verbatim** (copy the hex, or better, read it from the existing rule so the two cannot drift). Do not adjust it for taste, and do not pick a "similar" colour — similarity is the failure mode, not the goal.
+- **No, and the new state is OPPOSED to an existing one** → this is [[semantic-distance-not-just-visual-distance-for-status-colour]]'s case: pick a different hue *family*, preferring one absent from the stylesheet.
+- **No, and the new state is genuinely novel** → ordinary distinguishability is enough.
+- **Which state gets colour:** the one that is **active/consequential**, not the one the user explicitly set. "The deliberate choice deserves emphasis" is an appealing intuition and it loses to the app's own palette — the user reads the new control with the vocabulary the rest of the UI taught them, not with the designer's rationale.
+
+**Why (⚠️ INFERRED — pending operator sharpening; captured propose-never-auto-write, directional + overridable):** The supervisor toggle shipped with OFF coloured amber `#e0a853` and ON grey, on the reasoning *"OFF is the state the operator deliberately chose, so highlight it."* Both halves were wrong, and independently so. **(1) The mapping was inverted:** Claudesk's status dot already means ACTIVE with Claude brand orange (`.status-dot-running` `#d97757`) and QUIET with grey (`.status-dot-idle` `#6e7681`); a supervised workspace is the active case, so a user reading the badge with the dot's vocabulary read it backwards. **(2) The hue was a near-miss:** `#e0a853` appears nowhere else in the stylesheet, so it sat close enough to the dot orange to look like the status colour while not being it — the same erosion mechanism [[semantic-distance-not-just-visual-distance-for-status-colour]] identifies, arriving from the opposite direction (that prior warns against borrowing a *neighbouring* meaning; this one warns against *failing to borrow* an identical one). The deeper point is that a palette is a **learned vocabulary**: its value comes from being applied consistently, so every private variation costs a little of the whole system's legibility, not just that one control's. *(Operator: sharpen the why + the boundary when you next touch this file — the inferred cut is "reuse beats invention when the MEANING already has a colour"; the untested edge is a state that is *partly* like an existing one, where reuse might mislead more than a fresh hue.)*
+
+**Origin:** M14 WP0 Phase 2 verify-human (2026-09-17). The operator's correction was *"use amber for on and grey for off, which would be consistent with our status dot indicator"* — naming the consistency requirement, not just the preference. Implementing it revealed the second error (the invented `#e0a853` vs the real `#d97757`), so the fix reads the dot's values **out of the stylesheet** and a mutation-proven guard now fails if the two are ever swapped or diverge. Related: [[semantic-distance-not-just-visual-distance-for-status-colour]] (the same axis, opposite direction — that one governs how OPPOSED states must differ, this one when a new state must REUSE), [[explicit-selectable-mode-over-inferred-mode]] (its "make the state visible" thesis; here the state was visible but spoke the wrong dialect).
 
 ---
 

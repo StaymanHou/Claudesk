@@ -465,6 +465,8 @@ pub fn run() {
             // M11.5 WP1: per-project CC model override (read at spawn → `--model`).
             config_store::commands::project_set_default_model,
             config_store::commands::project_set_default_drive_mode,
+            config_store::commands::project_set_supervisor_enabled,
+            config_store::commands::project_get_supervisor_enabled,
             // M13.5 WP4 P2.1: the STORED mode for one project (what the next spawn will use).
             // ⚠️ Pairs with `cc_drive_mode`, which reports what the RUNNING session actually
             // spawned under — the two disagree after a mid-session change, which is the point.

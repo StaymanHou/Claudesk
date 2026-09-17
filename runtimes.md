@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-09-15
+updated: 2026-09-17
 ---
 
 # Runtime Registry
@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 103s (2026-09-15, M14 WP3 Phase 1: COLD-ish cargo cache after the registry add; frontend 2613 / Rust ALL GREEN)
+- **Last:** 32s (2026-09-17, M14 WP0 Phase 3 verify-codify: WARM cargo cache, frontend + Rust fmt touch; frontend 2711 / Rust ALL GREEN)
 - **Use timeout:** 216000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 32s — 2026-09-17 (M14 WP0 supervisor-hotfix, all 3 phases; warm cache; frontend 2711 / Rust ALL GREEN)
   - 103s — 2026-09-15
   - 33s — 2026-09-14 (pre-WP5 observability paydown; warm; frontend 2589 / Rust 901)
   - 38s — 2026-09-14 (M15 WP3 quality refactor; warm; frontend 2513 / Rust 887)

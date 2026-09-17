@@ -110,6 +110,45 @@ pub struct Project {
     /// see the WP4b WIP's task 4b.7 for why that mechanism was rejected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_drive_mode: Option<DriveMode>,
+    /// M14 WP0 — whether the workflow **supervisor** may act on this project.
+    ///
+    /// ⚠️ **DEFAULTS TO `true`, AND THAT IS AN OPERATOR RULING, NOT A CONVENIENCE.** The
+    /// supervisor ships ON and is opted OUT per project — consistent with the design prior
+    /// `operator-helpful-friend-misfiring-as-offswitchable-setting` (default to the operator's
+    /// benefit, off-switchable). A default-OFF would silently un-supervise the 9 of 20 projects
+    /// that already carry a `default_drive_mode`, which is the opposite of the intent.
+    ///
+    /// ⚠️ **A `bool`, NOT an `Option<bool>` — deliberate.** `None`-means-ON would make "unset"
+    /// and "explicitly on" indistinguishable on disk for no gain, and every read site would
+    /// have to remember the polarity. With `#[serde(default = ...)]` an **absent key** and an
+    /// **existing `projects.json` written before this shipped** both deserialize to `true`, so
+    /// the upgrade is invisible.
+    ///
+    /// ⚠️ **The drive-mode blast-radius concern does NOT transfer here.** That value is an open
+    /// string whose bad value fails serde and takes the *whole project list* down; this is a
+    /// closed two-valued type, so a malformed entry cannot widen past this field. The failure
+    /// direction still had to be pinned, and it is: absent → ON.
+    ///
+    /// ⚠️ **This is a THIRD, INDEPENDENT condition — it does not replace either existing one.**
+    /// Supervision already requires the M10.9 gate ON **and** a stored `default_drive_mode`;
+    /// this narrows further. Turning it off must never be confused with clearing the drive mode,
+    /// which also disables the auto-resume announcement and the picker readout.
+    ///
+    /// ⚠️ Serialized **unconditionally** (no `skip_serializing_if`): the two values are equally
+    /// meaningful, and omitting `true` would make a deliberate re-enable indistinguishable from
+    /// a never-touched project when reading the file by hand.
+    #[serde(default = "supervisor_enabled_default")]
+    pub supervisor_enabled: bool,
+}
+
+/// The `supervisor_enabled` default: **ON**.
+///
+/// ⚠️ A named fn rather than `#[serde(default)]`, because `bool`'s `Default` is `false` — the
+/// wrong direction, and silently so: every pre-WP0 `projects.json` would deserialize to
+/// "supervisor off" and the operator's whole rotation would stop being supervised with no UI
+/// change to explain it. Pinned by `an_absent_supervisor_enabled_key_reads_as_on`.
+fn supervisor_enabled_default() -> bool {
+    true
 }
 
 /// The four workflow drive modes, serializing to **the exact vocabulary the workflow
@@ -278,6 +317,10 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
                 last_opened_at: now_ms,
                 default_model: None,
                 default_drive_mode: None,
+                // ⚠️ A NEWLY ADDED project is supervised, matching the absent-key default. Written
+                // as the fn call rather than a bare `true` so the two can never drift apart —
+                // this is the one place a literal would silently diverge from serde's default.
+                supervisor_enabled: supervisor_enabled_default(),
             };
             projects.push(project.clone());
             project
@@ -417,6 +460,49 @@ pub fn set_default_drive_mode(
     })
 }
 
+/// Set whether the workflow supervisor may act on `project_path` (M14 WP0).
+///
+/// ⚠️ Mirrors [`set_default_drive_mode`] exactly, including the **not-found is an error**
+/// behavior: silently creating a record here would let a typo'd path write a setting that no
+/// UI ever reads back, and the operator would see a toggle that appears to do nothing.
+pub fn set_supervisor_enabled(
+    data_dir: &Path,
+    project_path: &Path,
+    enabled: bool,
+) -> Result<(), ConfigError> {
+    update_projects(data_dir, |projects| {
+        let target = projects
+            .iter_mut()
+            .find(|p| p.path == project_path)
+            .ok_or_else(|| {
+                ConfigError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("no project record for {}", project_path.display()),
+                ))
+            })?;
+        target.supervisor_enabled = enabled;
+        Ok(())
+    })
+}
+
+/// Read whether the supervisor may act on `project_path`.
+///
+/// ⚠️ **An unknown project reads as `true`, not `false`.** A project the store has never seen
+/// is not an opted-out project — it is one the operator has not expressed a preference about,
+/// and the ruled default is ON. Returning `false` here would make a missing record silently
+/// disable supervision, which is the failure direction this whole field exists to avoid.
+pub fn read_supervisor_enabled(data_dir: &Path, project_path: &Path) -> bool {
+    read_projects(data_dir)
+        .ok()
+        .and_then(|projects| {
+            projects
+                .into_iter()
+                .find(|p| p.path == project_path)
+                .map(|p| p.supervisor_enabled)
+        })
+        .unwrap_or_else(supervisor_enabled_default)
+}
+
 /// Trim a model override, mapping blank to `None` (= inherit CC's default).
 ///
 /// Pure so the blank-is-unset rule is unit-testable on its own and is guaranteed to be
@@ -496,6 +582,8 @@ mod tests {
             ),
             default_model: None,
             default_drive_mode: None,
+            // The ruled default, so every pre-existing test keeps its original semantics.
+            supervisor_enabled: supervisor_enabled_default(),
         }
     }
 
@@ -615,6 +703,7 @@ mod tests {
             display_name: Some("m".into()),
             default_model: None,
             default_drive_mode: Some(DriveMode::Autopilot),
+            supervisor_enabled: supervisor_enabled_default(),
         }];
         write_projects(dir.path(), &with_mode).unwrap();
         let read = read_projects(dir.path()).unwrap();
@@ -798,6 +887,97 @@ mod tests {
     /// **before** the field has real users: the moment modes are actually being persisted,
     /// any future vocabulary change is a breaking migration and needs a lenient reader or
     /// a version bump, not another rename.
+    /// ⚠️ **THE UPGRADE PATH — the single most important property of this field.**
+    ///
+    /// Every `projects.json` on the operator's machine predates WP0, so none carries the key.
+    /// If an absent key deserialized to `bool`'s natural `Default` (**`false`**), the whole
+    /// rotation would silently stop being supervised on first launch after the upgrade, with no
+    /// UI change to explain it — the supervisor would simply appear dead. That is why
+    /// `supervisor_enabled_default()` exists instead of `#[serde(default)]`.
+    #[test]
+    fn an_absent_supervisor_enabled_key_reads_as_on() {
+        let dir = TempDir::new().unwrap();
+        // Byte-for-byte the shape a pre-WP0 build writes: no `supervisor_enabled` anywhere.
+        std::fs::write(
+            dir.path().join(PROJECTS_FILE),
+            br#"[{"project_path":"/a","last_opened_at":1},
+                {"project_path":"/b","last_opened_at":2,"default_drive_mode":"autopilot"}]"#,
+        )
+        .unwrap();
+
+        let projects = read_projects(dir.path()).expect("a pre-WP0 file must still parse");
+        assert_eq!(projects.len(), 2);
+        for p in &projects {
+            assert!(
+                p.supervisor_enabled,
+                "{} deserialized to supervisor_enabled=false; a pre-WP0 file must read as ON",
+                p.path.display()
+            );
+        }
+    }
+
+    /// The explicit values round-trip — so `false` on disk is honored, not overwritten by the
+    /// default. (Without this, a default that ignored the stored value would pass the test
+    /// above while making the toggle unusable.)
+    #[test]
+    fn an_explicit_supervisor_enabled_value_is_honored_in_both_directions() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(PROJECTS_FILE),
+            br#"[{"project_path":"/off","last_opened_at":1,"supervisor_enabled":false},
+                {"project_path":"/on","last_opened_at":2,"supervisor_enabled":true}]"#,
+        )
+        .unwrap();
+
+        let projects = read_projects(dir.path()).unwrap();
+        let off = projects
+            .iter()
+            .find(|p| p.path == Path::new("/off"))
+            .unwrap();
+        let on = projects
+            .iter()
+            .find(|p| p.path == Path::new("/on"))
+            .unwrap();
+        assert!(!off.supervisor_enabled, "an explicit false must be honored");
+        assert!(on.supervisor_enabled);
+    }
+
+    /// The setter writes, and the value survives a read-back.
+    #[test]
+    fn set_supervisor_enabled_persists_and_round_trips() {
+        let dir = TempDir::new().unwrap();
+        add_or_touch(dir.path(), PathBuf::from("/p"), 1).unwrap();
+        // A NEWLY ADDED project starts supervised — the absent-key default, via the same fn.
+        assert!(read_supervisor_enabled(dir.path(), Path::new("/p")));
+
+        set_supervisor_enabled(dir.path(), Path::new("/p"), false).unwrap();
+        assert!(!read_supervisor_enabled(dir.path(), Path::new("/p")));
+
+        set_supervisor_enabled(dir.path(), Path::new("/p"), true).unwrap();
+        assert!(read_supervisor_enabled(dir.path(), Path::new("/p")));
+    }
+
+    /// ⚠️ An UNKNOWN project reads as ON, never OFF. A project the store has never seen is not
+    /// an opted-out project — treating it as OFF would silently disable supervision for any
+    /// path the picker had not yet recorded.
+    #[test]
+    fn an_unknown_project_reads_as_supervised() {
+        let dir = TempDir::new().unwrap();
+        assert!(read_supervisor_enabled(
+            dir.path(),
+            Path::new("/never-seen")
+        ));
+    }
+
+    /// Setting on a path with no record is an ERROR, not a silent insert — a typo'd path must
+    /// not write a setting no UI will ever read back.
+    #[test]
+    fn set_supervisor_enabled_on_an_unknown_project_errors() {
+        let dir = TempDir::new().unwrap();
+        let err = set_supervisor_enabled(dir.path(), Path::new("/nope"), false).unwrap_err();
+        assert!(matches!(err, ConfigError::Io(_)), "got {err:?}");
+    }
+
     #[test]
     fn an_unknown_drive_mode_string_fails_the_whole_project_list() {
         let dir = TempDir::new().unwrap();

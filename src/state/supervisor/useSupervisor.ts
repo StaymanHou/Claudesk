@@ -57,8 +57,34 @@ export interface SupervisorHost {
   readonly enabled: boolean;
   /** The project's STORED drive mode (R-1's authority). `null` → not supervised. */
   readonly storedModeRef: React.RefObject<DriveMode | null>;
+  /**
+   * M14 WP0 — the project's per-workspace supervisor toggle, mirrored into a ref.
+   *
+   * ⚠️ **A REF, NOT A VALUE, for the same reason as `storedModeRef`:** the turn-end callback is
+   * registered once and would otherwise close over whatever this was at mount. The operator
+   * flips this *while* the supervisor is misbehaving, so a frozen snapshot would keep firing
+   * for the remainder of the session — the exact complaint WP0 exists to answer.
+   *
+   * ⚠️ **Only an explicit `false` suppresses.** `null`/`undefined` means "not loaded yet", which
+   * must read as ON: the ruled default is ON, and treating an unloaded value as OFF would make
+   * the supervisor silently dead during the window before `projects.json` is read.
+   */
+  readonly supervisorEnabledRef: React.RefObject<boolean | null>;
   /** The live PTY/CC session id, mirrored into a ref. */
   readonly ccSessionIdRef: React.RefObject<string | null>;
+  /**
+   * M14 WP0 — does this workspace's CC pane hold unsent operator input right now?
+   *
+   * ⚠️ **A FUNCTION CALLED AT FIRE TIME, NOT A CAPTURED BOOLEAN.** The sweep is async and the
+   * adjudicator costs ~3s; the operator starts typing *inside* that window, which is the exact
+   * reported defect. A value read when this host object was built would answer the wrong
+   * question. (Same reasoning as the refs above, which is why this is a callback rather than
+   * `unsentInputRef` — the caller owns the watermark's type.)
+   *
+   * ⚠️ Optional so existing tests and hosts compile unchanged, but the production caller
+   * supplies it and a test pins that it does — the absent case is the UNSAFE direction.
+   */
+  readonly hasUnsentInput?: () => boolean;
   /**
    * Perform the context-pressure recycle for this workspace.
    *
@@ -109,6 +135,13 @@ export function useSupervisor(host: SupervisorHost): void {
     // turn is in flight, and the fire is the irreversible half.
     if (!host.enabled) return;
 
+    // ⚠️ M14 WP0 — THE THIRD CONDITION, re-read PER TURN for the same reason as the gate above:
+    // the operator flips this toggle precisely *because* the supervisor is misbehaving, and a
+    // value captured at subscribe time would keep firing for the rest of the session. The fire
+    // is the irreversible half (`injectCommand` has no retry and no pre-send cancel window), so
+    // every condition guarding it is re-read at the last possible moment.
+    if (host.supervisorEnabledRef.current === false) return;
+
     const storedMode = host.storedModeRef.current;
     // ⚠️ A project with no stored mode is not supervised (R-1, opt-in). `decideVerdict` also
     // refuses it — this is the cheap early exit, not the guard.
@@ -155,6 +188,11 @@ export function useSupervisor(host: SupervisorHost): void {
           warn,
         },
         ledger: ledgerRef.current as FireLedger,
+        // ⚠️ M14 WP0 — forwarded as a THUNK so `fireOne` reads it immediately before injecting,
+        // not when these deps were built a transcript-read and an adjudication ago.
+        hasUnsentInput: host.hasUnsentInput
+          ? () => host.hasUnsentInput?.() === true
+          : undefined,
       });
     } catch (e) {
       // ⚠️ `fireOne` already isolates its own failures; this catch exists so a throw from the
@@ -174,6 +212,23 @@ export function useSupervisor(host: SupervisorHost): void {
       warn(
         `supervisor: fired ${outcome.command ?? "(unknown command)"} into ${host.workspaceId}`,
       );
+    } else if (outcome.reason && !outcome.recycle) {
+      // ⚠️ **M14 WP0 — THE WITHHOLD REASON WAS COMPUTED AND THEN THROWN AWAY.** `fireOne` returns
+      // a precise reason for every non-fire (`policy-not-auto`, `not-dispatchable`,
+      // `not-supervised`, `adjudicator-says-awaiting`, `already-fired-for-this-turn`,
+      // `transcript-unreadable`, `no-verdict`, `unsent-input-present`) and nothing read it, so
+      // "why did it not chain there?" had no answer short of reasoning about the code.
+      //
+      // ⚠️ **This is the tuning channel, and it ships WITH the suppression it measures.** WP0
+      // adds `unsent-input-present`, whose false-positive rate is unknown and is exactly what
+      // dogfooding must establish — the watermark has no timeout by design and does not clear on
+      // backspace-to-empty, so an over-suppressing workspace is silent without this line.
+      //
+      // ⚠️ **The recycle arm is EXCLUDED** (`!outcome.recycle`): a recycle also reports
+      // `fired: false` with a reason, but the caller already logs both its started and DECLINED
+      // arms distinctly. Logging here too would double-report the loudest branch and bury the
+      // ordinary withholds this line exists to surface.
+      warn(`supervisor: withheld in ${host.workspaceId} — ${outcome.reason}`);
     }
 
     // ⚠️ The recycle is handed to the CALLER. This hook never calls `recycleSession` itself —

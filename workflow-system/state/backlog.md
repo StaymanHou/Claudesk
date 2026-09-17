@@ -82,6 +82,71 @@
 > forward across several cycles — `/util-backlog-paydown` is the instrument for it, and this is a
 > between-milestone boundary.
 
+## SURFACE-2026-09-17-F10B-STOPPED-BEFORE-VERIFY-HUMAN-INSTEAD-OF-CHAINING-INTO-IT
+- **Source:** operator correction (M14 WP0, observed twice in one session)
+- **Target level:** product:wbs
+- **Type:** bug
+- **Summary:** On `TRANSITION: F10b` in autopilot the agent **returned control to the operator
+  before invoking `feature-verify-human`**, instead of chaining into it and letting the skill take
+  its own pause at the checklist. Cost one operator turn per phase, twice in one session
+  (Phase 1 and Phase 2).
+- **Context:** ⚠️ **The pause-policy table already says the right thing** — `feature-verify-self`'s
+  F10b row reads *"AUTO (chain into verify-human, which itself PAUSEs)"*, and
+  `feature-verify-human`'s own table marks **skill invocation (entry)** as the PAUSE point. So the
+  pause is supposed to live INSIDE verify-human, at the moment the checklist is presented.
+  ⚠️ **The failure is subtle because the OUTCOME looks identical** — either way the operator ends
+  up being asked to verify. What differs is that stopping early costs a turn AND skips everything
+  verify-human does *before* its checklist: the §2 integration-boundary assessment, the §2
+  auto-skip gate evaluation, and the §3 pre-filter that EXCLUDES outcomes verify-self already
+  confirmed. An operator who says "proceed" gets those; an operator who is asked first does not
+  get them until they answer.
+  ⚠️ **Plausible cause worth checking before designing a fix:** the AUTO-exit hard rule is stated
+  in terms of *"do not return control to the user"*, and a chain whose NEXT skill is itself a
+  pause gate reads like an exception to an agent applying that rule literally. It is not — the
+  rule's own parenthetical says so — but the phrasing invites the misread. The two other
+  PAUSE-at-entry skills (`feature-spec`, `feature-plan`) have the same shape and the same risk.
+- **Suggested action:** Operator's framing: fix in **mccc** (sharpen the rule so "the next skill
+  is itself a pause gate" is named as explicitly NOT an exception — a chain-into-a-pause is still
+  a chain) **or** in **Claudesk** (the M15 supervisor could enforce it mechanically: F10b in
+  autopilot is an AUTO cell, so a turn that ends on it without a `Skill` call is exactly the
+  "wrongful stop" class the supervisor was built to detect). ⚠️ **Claudesk's supervisor would
+  have caught this one** — it is a textbook AUTO-cell break, which makes it a useful real-world
+  test case for the dogfooding pass. Scheduled as QoL work immediately AFTER the WP0 hotfix ships
+  (operator, 2026-09-17).
+- **Priority:** medium
+- **Status:** open
+
+## SURFACE-2026-09-17-OBSERVABLE-OUTCOME-WRITTEN-FOR-A-SURFACE-A-LATER-PHASE-BUILDS
+- **Source:** feature:verify-self (M14 WP0 Phase 1)
+- **Target level:** product:arch
+- **Type:** gap
+- **Summary:** A phase's Observable Outcome named a browser-observable check for state that has
+  **no observable surface until a LATER phase builds one**. Phase 1 stores the unsent-input
+  watermark in a `useRef` inside a component closure (no DOM node, no store, no `window` handle);
+  the outcome said to observe it "via the pure module's exported state", which does not exist —
+  the module exports a class and a reducer, and the live instance is private. The satisfiable
+  form of the same check already existed in **Phase 3**, which builds the marker that IS the
+  surface.
+- **Context:** ⚠️ **The failure mode is a verify-self that cannot be satisfied without building a
+  later phase's UI early** — and the tempting workarounds are all worse than the gap: React-fiber
+  traversal to read the ref (proves the fiber can be walked, not that the wiring works), or
+  exporting module-level mutable state purely for the test (changes the design to suit the
+  instrument). ⚠️ **Both would have produced a GREEN verify-self that demonstrated nothing**,
+  which is the shape `arch.md` already warns about: *"an observation is only decisive when a
+  broken implementation would give a DIFFERENT answer."*
+  ⚠️ This is distinct from the known `SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT`
+  limitation (the agent cannot TRIGGER the supervisor). Here the agent cannot **observe the state**
+  either — two independent blockers, and only the first was anticipated at plan time.
+- **Suggested action:** At `feature-plan`, when writing a Browser/DOM Observable Outcome, check
+  that the **surface it names already exists or is built by THAT phase** — not by a later one. A
+  one-line test: *"which `data-testid` or URL does this outcome assert on, and which leaf creates
+  it?"* If the answer names a leaf in a later phase, the outcome belongs to that phase. Consider
+  pinning it in `feature-plan`'s Observable-outcomes rules alongside the existing
+  "mechanically verifiable" requirement, which this outcome technically satisfied while still
+  being unsatisfiable.
+- **Priority:** medium
+- **Status:** open
+
 ## SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1
 - **Source:** operator dogfooding (v0.5.0, first real use of the M15 workflow supervisor)
 - **Target level:** product:wbs
@@ -126,6 +191,28 @@
   never supervised either. So: gate ON **and** a stored drive mode. ⚠️ Ruling R-1 is what makes the
   second condition bite — the STORED mode is the authority, so a project inherits supervision from
   `projects.json` regardless of how the turn was entered.
+- **Update 2026-09-17 — ⚠️ WP0 PHASE 1 SHIPS WITH ITS HANDS-ON CHECKS DEFERRED, and they must
+  ride the release.** The unsent-input suppression is built and mechanically proven (watermark
+  state machine, suppression placement, ledger-claim semantics, AC-7 both behaviorally and
+  structurally, caller wiring — all mutation-proven). ⚠️ **But "does it actually stop interrupting
+  the operator" was NOT observed** — an agent-launched CC emits no hook events, so the supervisor
+  never fires under agent testing, and the operator approved on the mechanical evidence while
+  explicitly stating no hands-on test was performed. **Seven checks are carried as
+  `DEFERRED-TO-DOGFOODING` on `P1.verify-human.1-7`** in `wip/supervisor-hotfix.md`:
+  1. Unsent line present at turn end → NO fire, text intact. *(the reported defect)*
+  2. ⚠️ A line walked away from for minutes → STILL no fire. **The ruling's load-bearing case —
+     a debounce-on-recent-keystrokes implementation would fire here and pass check 1.**
+  3. Esc, then turn end → fires normally.
+  4. Ctrl+C and Ctrl+U → fire normally.
+  5. Enter/submit → fires normally.
+  6. After a suppressed turn, subsequent turns resume chaining (the suppressed turn itself stays
+     spent **by design**).
+  7. Esc-dismissing a CC *menu* clears the watermark early — the **recorded accepted cost** of the
+     D-2 decay ruling. Confirm it is tolerable in practice.
+  ⚠️ **Checks 1-2 and 6 are markedly easier to judge AFTER WP0 Phase 3 ships the suppressed-state
+  marker** — until then suppression is invisible and must be inferred from the absence of an
+  unwanted fire, which is exactly the write-only problem Phase 3 exists to fix. ⚠️ **Read the
+  `DEFERRED-*` tags on those leaves, not their `[x]` checkboxes** (the M15 WP4/WP5 convention).
 - **Suggested action:** Triage as a batch once the operator stops adding items — explicitly NOT
   one-at-a-time. Item 1 wants `sample` against a frozen app (the P1 2026-08-25 playbook). Item 2
   is a FIRE-POLICY decision, not a bug fix: it reopens the probe-Q2 question the milestone shipped

@@ -89,6 +89,16 @@ import { recycleSession, waitForFreshSessionId } from "./recycleSession";
 // M15 WP4 — the workflow supervisor's per-workspace host. ⚠️ `fanOut` is deliberately NOT wired
 // here; see `useSupervisor`'s header for why the host must be per-workspace.
 import { useSupervisor } from "../../state/supervisor/useSupervisor";
+import { UnsentInputWatermark } from "../../state/supervisor/unsentInput";
+import {
+  SUPERVISOR_SUPPRESSED_GLYPH,
+  workspaceSupervisorReadout,
+} from "../../cc/workspaceSupervisor";
+import {
+  getProjectSupervisorEnabled,
+  setProjectSupervisorEnabled,
+} from "../../cc/supervisorToggleIpc";
+import { supervisorToggleAction } from "../../cc/supervisorToggleAction";
 import { useWorkflowFeaturesEnabled } from "../../state/useWorkflowFeaturesEnabled";
 // M13.5 WP3 — the nav state the prev/next controls render from. ⚠️ The old `inertAfter`
 // inert-state machine is DELETED: it existed to explain a dead click, and a correct `disabled`
@@ -173,11 +183,45 @@ export function Workspace({
   const [runningDriveMode, setRunningDriveMode] = useState<DriveMode | null>(
     null,
   );
+  // ── M14 WP0 Phase 2 — the per-workspace supervisor toggle ────────────────────────
+  //
+  // ⚠️ `null` = NOT LOADED YET, and it is a distinct state from `false`. The ruled default is ON,
+  // so the supervisor treats anything that is not an explicit `false` as enabled — a `false`
+  // initial value would silently suppress every fire during the window before `projects.json` is
+  // read, which is the "feature silently never fires" shape this milestone keeps hitting.
+  const [supervisorEnabled, setSupervisorEnabled] = useState<boolean | null>(
+    null,
+  );
   // ⚠️ DERIVED AT RENDER, same rule as `nextOpen` above and for the same two reasons — the
   // gate-off branch must not be a `setState` (eslint `react-hooks` rejects the cascading render
   // as an ERROR), and a gated surface must never render for even one frame after the gate
   // closes. `workspaceDriveModeReadout` returns `null` when the gate is off, so the gate
   // decision lives in ONE place and this render simply follows the data.
+  // M14 WP0 — same derive-at-render rule as `driveModeReadout` below, and the same gate argument,
+  // so the toggle and the mode readout appear and disappear together.
+  // ⚠️ `?? true` collapses the not-yet-loaded `null` to the ruled default so the control never
+  // renders a third, meaningless state while the read is in flight.
+  // M14 WP0 Phase 3 (D-5) — the SUPPRESSED state must reach render, so it is mirrored into
+  // state beside the ref.
+  //
+  // ⚠️ **THE REF STAYS THE AUTHORITY FOR `fireOne`; THIS IS ONLY A RENDER SIGNAL.** React state
+  // can be one commit stale at the moment the irreversible injection happens, so the supervisor
+  // keeps reading the live ref (`hasUnsentInput` below). The two are deliberately not merged.
+  //
+  // ⚠️ **The callback fires on TRANSITIONS ONLY** — `push()` runs on every keystroke, and a
+  // `setState` there would re-render a component hosting a live xterm on every character. The
+  // watermark's own `set()` compares before notifying, so characters 2..n cost nothing.
+  const [unsentInput, setUnsentInput] = useState(false);
+  const unsentInputRef = useRef<UnsentInputWatermark | null>(null);
+  if (unsentInputRef.current === null)
+    unsentInputRef.current = new UnsentInputWatermark(setUnsentInput);
+
+  const supervisorReadout = workspaceSupervisorReadout(
+    supervisorEnabled ?? true,
+    workflowEnabled && visible,
+    workspace.display_name,
+    unsentInput,
+  );
   const driveModeReadout = workspaceDriveModeReadout(
     storedDriveMode,
     runningDriveMode,
@@ -203,6 +247,18 @@ export function Workspace({
       .catch((e) => {
         console.warn("drive-mode readout: stored read failed", e);
         if (!cancelled) setStoredDriveMode(null);
+      });
+    // M14 WP0 — the supervisor toggle rides the SAME effect: one read per workspace reveal, same
+    // refresh-on-reveal reasoning. ⚠️ The failure arm sets `true`, NOT `null`: a failed read must
+    // not leave the toggle looking unloaded forever, and the ruled default is ON. The helper
+    // already degrades to `true`, so this `.catch` is the belt to its braces.
+    void getProjectSupervisorEnabled(workspace.project_path)
+      .then((on) => {
+        if (!cancelled) setSupervisorEnabled(on);
+      })
+      .catch((e) => {
+        console.warn("supervisor toggle: read failed, defaulting to ON", e);
+        if (!cancelled) setSupervisorEnabled(true);
       });
     // ⚠️ NO `setState` on the no-session branch — the effect only FETCHES, and declines to
     // when there is nothing to fetch. `sessionLive` already collapses that case at the
@@ -241,6 +297,14 @@ export function Workspace({
   useEffect(() => {
     storedDriveModeRef.current = storedDriveMode;
   }, [storedDriveMode]);
+
+  // M14 WP0 — same ref-mirroring reason: `useSupervisor`'s turn-end callback is registered once,
+  // and the operator flips this toggle precisely WHILE the supervisor is misbehaving. A captured
+  // value would keep firing for the rest of the session.
+  const supervisorEnabledRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    supervisorEnabledRef.current = supervisorEnabled;
+  }, [supervisorEnabled]);
 
   // Focus the select on entering edit mode, so it is immediately usable.
   useEffect(() => {
@@ -617,13 +681,54 @@ export function Workspace({
   // purely protective; that reading is what let an announced-but-never-started recycle look fine.)
   // ⚠️ Reuses the app's existing gate hook rather than a second source of truth.
   const workflowFeaturesEnabled = useWorkflowFeaturesEnabled();
+  // M14 WP0 Phase 2 — flip the supervisor toggle for this project.
+  //
+  // ⚠️ **OPTIMISTIC, WITH AN EXPLICIT REVERT — not fire-and-forget.** The write can genuinely
+  // reject (the backend errors when no project record exists rather than silently inserting), and
+  // a toggle that stayed flipped after a failed write would tell the operator supervision is off
+  // while it is still firing. That is the worst possible direction for this particular control.
+  // ⚠️ `console.warn` matches the established failure channel for this header (M13's decision —
+  // an overlay over a working terminal is worse than a log line).
+  const toggleSupervisor = useCallback(() => {
+    // ⚠️ The flip + revert-target decision lives in `supervisorToggleAction` so a test can drive
+    // it; `ccInputRouting.ts` carries the same rationale for the pane's input handler. The
+    // load-bearing part is `revertTo`, which is `previous` and NOT `!next` — they differ when the
+    // value had not loaded yet (see that module's header).
+    const { next, revertTo: previous } = supervisorToggleAction(
+      supervisorEnabledRef.current,
+    );
+    setSupervisorEnabled(next);
+    void setProjectSupervisorEnabled(workspace.project_path, next).catch(
+      (e) => {
+        console.warn(
+          `supervisor toggle: could not persist ${next ? "ON" : "OFF"} for ` +
+            `${workspace.display_name} — reverting`,
+          e,
+        );
+        setSupervisorEnabled(previous);
+      },
+    );
+  }, [workspace.project_path, workspace.display_name]);
+
+  // M14 WP0 — the unsent-input watermark for THIS workspace's CC pane.
+  //
+  // ⚠️ **A REF, FOR THE SAME REASON `FireLedger` IS ONE.** The turn-end callback is registered
+  // once and closes over what it captured; a watermark recreated per render would read `false`
+  // on every turn and suppress nothing — a feature that silently never fires, which is the
+  // failure shape this milestone keeps hitting. ⚠️ Lives here rather than inside `XtermPane`
+  // because `useSupervisor` is hosted here and must read it at fire time.
   useSupervisor({
     workspaceId: workspace.id,
     projectPath: workspace.project_path,
+    // ⚠️ Read at FIRE time, not captured — the operator starts typing during the sweep's
+    // ~3s adjudication window, which is precisely the reported defect.
+    hasUnsentInput: () => unsentInputRef.current?.unsentInput === true,
     // ⚠️ The M10.9 gate. With it OFF the app must be byte-identical to one that never had the
     // workflow features, so supervision is off entirely rather than merely quiet.
     enabled: workflowFeaturesEnabled,
     storedModeRef: storedDriveModeRef,
+    // ⚠️ M14 WP0 — the third per-turn condition. A REF, not a value: see the host's doc.
+    supervisorEnabledRef,
     ccSessionIdRef,
     onRecycle: (info) => {
       // ⚠️ **THE ANNOUNCEMENT IS GATED ON THE RECYCLE ACTUALLY STARTING.** It used to precede
@@ -885,6 +990,62 @@ export function Workspace({
             title={`On next open, this workspace ${nextOpen}`}
           >
             ↻ {nextOpen}
+          </span>
+        )}
+        {/* M14 WP0 P2.4 — the per-workspace SUPERVISOR toggle. ⚠️ GATED the same way as the
+            drive-mode readout beside it: `workspaceSupervisorReadout` returns null when the gate
+            is off, so with workflow features disabled this element does not exist in the DOM at
+            all — not hidden, not disabled, not an empty reserved slot.
+            ⚠️ THE HIT-REGION DEFENCES ARE COPIED FROM `CellValueLine`, NOT decoration: this
+            header now carries several adjacent clickable affordances, and M12 hit exactly this
+            in the picker cell — a click meant for one control routing into another "presents as
+            'the control does nothing' and no unit test can see it". stopPropagation on BOTH
+            pointerdown and click, plus an explicit Enter/Space mirror (a <span role="button">
+            has no implicit keyboard activation) and tabIndex.
+            ⚠️ A SPAN, NOT A <select>: the picker-row drive-mode cell uses a native <select>
+            because its four values are a closed set whose bad string fails serde. This is a
+            BOOLEAN — there is nothing to mistype — so the closed-set argument does not transfer
+            and a two-state click target is the lighter surface. */}
+        {supervisorReadout && (
+          <span
+            role="button"
+            tabIndex={0}
+            className={`workspace-header-supervisor${supervisorReadout.enabled ? "" : " is-off"}`}
+            data-testid="workspace-header-supervisor"
+            aria-label={supervisorReadout.label}
+            aria-pressed={supervisorReadout.enabled}
+            title={supervisorReadout.title}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSupervisor();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleSupervisor();
+              }
+            }}
+          >
+            ⚙ {supervisorReadout.text}
+            {/* M14 WP0 Phase 3 (D-5) — the SUPPRESSED marker. ⚠️ A passive, READ-ONLY badge: it
+                reflects the operator's own unsent input and clears when they submit or abandon
+                the line. It has NO click handler of its own — the parent span's toggle is the
+                only action here, and a click-to-clear affordance was considered and declined at
+                spec review (a second control whose effect is invisible until the next turn end).
+                ⚠️ Mirrors the drive-mode readout's ⚠-stale / ⏳-pending marker shape, which is
+                the established precedent for a derived badge in this exact element. */}
+            {supervisorReadout.suppressed && (
+              <span
+                className="workspace-header-supervisor-suppressed"
+                data-testid="workspace-header-supervisor-suppressed"
+                title={supervisorReadout.title}
+              >
+                {" "}
+                {SUPERVISOR_SUPPRESSED_GLYPH}
+              </span>
+            )}
           </span>
         )}
         {/* M13.5 WP4 P2 — the drive-mode readout. ⚠️ GATED: `workspaceDriveModeReadout` returns
@@ -1181,6 +1342,12 @@ export function Workspace({
           workspaceId={workspace.id}
           projectPath={workspace.project_path}
           onSessionId={(sid) => onSessionId?.(workspace.id, sid)}
+          // M14 WP0 — feed the unsent-input watermark. ⚠️ ONLY the CC pane opts in: the
+          // right-panel `TerminalPane` mounts this same component for a login SHELL, which the
+          // supervisor never fires into, so a watermark fed from it would suppress CC's chain
+          // because the operator typed in a different terminal. Same exclusion reasoning as
+          // `markTurnStarts` and `pendingAction` below.
+          onInputForwarded={(chunk) => unsentInputRef.current?.push(chunk)}
           // M13.5 WP3 P3.3 — only the CC pane records turn-start markers. Same exclusion
           // reasoning as `pendingAction` below: `TerminalPane` mounts this component for a
           // login SHELL, which has no turns, so it never opts in (the prop defaults false).
