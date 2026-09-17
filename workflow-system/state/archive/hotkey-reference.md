@@ -1,7 +1,7 @@
 # Feature: Hotkey reference in the ⌘, Settings panel
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** COMPLETED 2026-09-17
 **Created:** 2026-09-15
 **Entry:** spec (complex feature)
 **Milestone:** M14 (remainder) — WP3
@@ -330,14 +330,133 @@ None blocking. Two decisions deliberately deferred to plan time as cheap-to-reve
   - [x] verify-codify  <!-- status: PASS 2026-09-17 — ZERO new tests, deliberately: all 5 rulings are either already covered by tests written and mutation-proved earlier in this phase, or are free prose that must not be pinned. Coverage re-proved by a cross-section merge mutant (caught by 3 tests). pnpm verify:auto EXIT=0, 199 files / 2717 frontend / 926 Rust. -->
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ALL PHASES COMPLETE. Phase 1 (registry extraction) and Phase 2 (Settings render)
-  are both [x] with every verify node passed. The feature is ready to ship.
-- **Blocked:** not blocked
-- **Unvisited:** none — no phases remain
-- **Open discoveries:** one logged to backlog (P2.3 gate-seam deviation, low)
+- **Path:** Feature > finalize (COMPLETE) — archived
+- **Active scope:** none. Feature COMPLETED 2026-09-17, shipped `5e3ecd9`. Both phases [x], every
+  verify node passed, review-quality done (0 CRITICAL / 3 MAJOR / 3 MINOR, all backlogged).
+- **Blocked:** none
+- **Unvisited:** none
+- **Open discoveries:** three carried to backlog — the P2.3 gate-seam deviation (low), the
+  review-quality diff-window gap on a parked feature (medium), and the 6 quality findings (pointer).
+  ⚠️ `SURFACE-2026-09-15-CHORD-COMPLETENESS-GUARD-KEYS-ON-A-NAMING-CONVENTION` stays OPEN by
+  operator ruling at verify-human (accept the entry, do not fix the selector now).
 
-## Test Triage
+## Retrospect
+
+- **What changed in our understanding:** The feature was framed as an EXTRACTION — promote a comment
+  map to typed data, guard it, render it. That framing was half right, and the missing half was the
+  whole lesson. ⚠️ **The drift this WP exists to kill runs in TWO directions, so it takes TWO
+  guards.** The planned reachability guard proves registry → code (every entry has a real caller).
+  It cannot see code → registry: an entry-less chord is not an entry, so nothing iterates it. The
+  verify-self fidelity audit found **two chords the app registers that the map never listed** — and
+  one of them (`⌘\` toggle wrap) carried a source comment claiming it had been "confirmed disjoint
+  from every chord in paletteCommands.ts's ownership map," i.e. it was checked against the comment
+  map and then never added to it. **The exact drift class this WP exists to fix, caught in the act,
+  in the artifact being replaced.** That is direct evidence the second direction is the one that
+  bites in practice.
+- **Assumptions that held:** The `SettingsGroup` component absorbed a fifth group with no changes.
+  Predicate signatures did vary as the plan warned, and modelling `matcher` as a string path rather
+  than a fake uniform `(e) => boolean` was the right call. `⌘W` really is one chord with two
+  context-scoped outcomes, not two chords. The registry made the render trivial — Phase 2 was ~85
+  lines because Phase 1 did the hard part.
+- **Assumptions that were wrong:**
+  1. **"The registry has ~15 entries."** It has **22** — the comment map was already incomplete when
+     it was written.
+  2. **"Three registration hosts."** There are **four**; the reachability guard failed on its first
+     run because `⌘⇧P` registers in `EditorPanel.tsx`. ⚠️ **The registry was right and the host list
+     was wrong** — the guard refused an unproven claim rather than passing, which is the guard doing
+     its job on day one.
+  3. **"Re-export the four `*_CHORD_LABEL` constants."** The code does not; they stay in their home
+     modules and the labels are DUPLICATED. The property that mattered (nothing deleted, so no
+     ES-module runtime break) holds, but the plan's comment claimed a single-source-of-truth the
+     code never established.
+  4. **The plan's `SettingsPanel.tsx` path was stale** (`picker/`, actually `settings/`) while its
+     LINE number was still correct — a citation can be half-right and still send you nowhere.
+- **Approach delta:** Phase 1 took an F9b back-loop it was not planned to take (the two omitted
+  chords), and that back-loop added a guard the plan never called for — the completeness guard is
+  net-new scope, adopted because closing the two instances without it would have left the class
+  open. Phase 2's P2.3 deviated deliberately: the plan said consume `useWorkflowFeaturesEnabled()`,
+  but `SettingsPanel` OWNS the gate toggle, so the hook would lag its own checkbox; it reads
+  `workflowFeatures.value` instead and the deviation is backlogged rather than buried.
+  ⚠️ **Method note worth carrying:** THREE mutation probes across this feature were INVALID and each
+  initially read as a pass — two `perl` patterns that no-opped on regex metacharacters, and one
+  dedupe probe scoped per-section that never merged the rows it claimed to. All three failed in the
+  direction that **manufactures work** (concluding a guard has a hole it does not have), which is the
+  under-discussed half of `invalid-probe-and-real-hole-look-identical`. **Confirm the mutant changed
+  the observable you care about — not merely that the command ran.**
+
+## Code-Quality Review — hotkey-reference (M14 WP3)
+
+Reviewed against ship `5e3ecd9`. Diff window hand-scoped to WP3's three commits (`3db5994`,
+`ef0bb82`, `5e3ecd9`) — the naive `BASE^..SHIP` range swept in the entire WP0 supervisor hotfix +
+v0.5.1 release (5,844 insertions vs WP3's ~1,175) because WP3 was parked across them. See
+`SURFACE-2026-09-17-REVIEW-QUALITY-DIFF-WINDOW-BREAKS-ON-A-PARKED-FEATURE`.
+
+### Strengths
+- The bidirectional guards earn their place: reachability (registry -> code) plus completeness
+  (code -> registry) answer the repo's own "a registry proves the SET, not that each entry has a
+  CALLER" lesson, and the completeness arm caught two real omissions rather than being ceremonial.
+- `ChordOutcome[]` modelling of `WCmd` and terminal font zoom matches how
+  `shouldCloseTerminalOnChord` and `Workspace.tsx` focus routing actually behave; a 1:1
+  predicate->entry keying would have shipped a list that lies.
+- `matcher: string | null` as a module path rather than a function reference is a defended honesty
+  call — the JSDoc names the three divergent signatures that make a common type a lie.
+- `hotkeyGroupRender.test.tsx` counts rows against `EXPECTED.length` rather than a literal, and
+  states its own reachability ceiling (only the gate-OFF shape is observable under
+  `renderToStaticMarkup`) instead of implying broader coverage.
+- The `offInvariantGuard.test.ts` widening was proved non-disarming by planting a real ungated
+  workflow chord, and that exercise surfaced a genuine weakness (`|| enabled` not counting as gate
+  evidence) that was fixed rather than exempted.
+
+### Issues
+
+**CRITICAL**
+- (none)
+
+**MAJOR** — all three VERIFIED against source by the orchestrator before backlogging
+- [`SettingsPanel.tsx:161` + `App.css:3991`] `.settings-hotkey-outcome` (SINGULAR) is rendered on
+  every outcome div and is the selector `hotkeyGroupRender.test.tsx:145` queries, but ONLY the
+  PLURAL `.settings-hotkey-outcomes` has a CSS rule — the singular is styled nowhere. VERIFIED:
+  a grep for both rule heads returns only line 3991 (plural). A future author tidying "unused CSS
+  classes" out of the markup silently kills the only assertion that the second outcome of a
+  context-scoped chord renders. Style it, or comment it as a test-handle-only class.
+- [`chordRegistry.test.ts:317-352`] The CM6 completeness arm reads only literal `key: "Mod-X"`
+  entries from `editorExtensions.ts`, but the editor Find chord comes from `...searchKeymap`
+  (line 180), which the regex cannot see. VERIFIED: the regex captures 8 bindings and `Mod-f` is
+  NOT among them. So `cm6-find` has ZERO guard coverage in either direction — and it is the exact
+  entry the group's own hint text names as the reason the EDITOR section exists. The arm passes
+  while not checking the one thing its prose cites.
+- [`SettingsPanel.tsx:146-150`] `HOST_SECTIONS` is a hand-maintained parallel list to the
+  `ChordHost` union (`chordRegistry.ts:46`) with NO exhaustiveness check — a fourth host added to
+  the union compiles clean and its entries render nowhere. The render test iterates the same
+  hardcoded array, so it SHARES the blind spot. This is the WP's own drift class reintroduced one
+  layer up. One-line fix: assert `new Set(HOST_SECTIONS.map(s => s.host))` covers every
+  `entry.host` in `CHORD_REGISTRY`.
+
+**MINOR**
+- [`chordRegistry.ts:407`] `chordLabel()` has ZERO non-test consumers (VERIFIED by grep: only its
+  own definition). An exported, documented, unit-tested accessor with no caller, in a module whose
+  header warns against unreachable guards.
+- [`SettingsPanel.tsx:645`] `visibleChords(workflowFeatures.value)` is called once per host section
+  (3x), recomputing the same filtered array. Harmless at 22 entries; hoisting it would make the
+  one-accessor-one-read discipline visible at the call site.
+- [`chordRegistry.ts:1-30` + `SettingsPanel.tsx:122-144`] The same ~20-line rationale is stated
+  near-verbatim in three places (registry header, panel block comment, commit message). The WP's
+  own comment-budget lesson applies — three copies drift the way the original comment map did.
+
+### Assessment
+Well-built work whose strongest part is not the feature but its guards: promoting a comment to data
+buys nothing unless something proves the data matches the code, and the guard was built in BOTH
+directions with the second direction finding two real omissions. The data model is honest where
+honesty cost something. The render layer is thinner and slightly less careful than the registry
+beneath it — an unstyled class carrying a test assertion, a parallel `HOST_SECTIONS` with no tie to
+the union, and a CM6 arm that misses the one binding its prose names as its reason for existing.
+None is a correctness defect today; all three are drift vectors of exactly the kind this WP was
+built to eliminate, reappearing one layer above where the discipline was applied. The three MAJORs
+are cheap to close and are better backlog items than refactor scope.
+
+### If you disagree
+Dismiss any finding by marking its line `[DISMISSED]` in this section before `feature-finalize`
+archives this WIP.
 
 ## Test Triage — settingsPanelWiring.test.ts > "declares exactly the four groups WP1's verdict specified, in order"
 Classification: Obsolete test — the new feature intentionally supersedes what the test checked

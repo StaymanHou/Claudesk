@@ -273,6 +273,43 @@ generalized rule covering both: **a source-text predicate must name the value th
 not the function that can be MISSING.**
 
 
+## 13. A one-directional guard cannot see OMISSIONS
+
+Entry 7 says enumerating a SET does not prove each member has a CALLER. This is its **converse**,
+and it is the direction that actually bites: a guard walking **registry → code** (every entry is
+real) is structurally incapable of seeing **code → registry** (every real thing has an entry).
+An entry-less item is not an entry, so nothing iterates it. **Extracting a documented-but-drifting
+artifact into typed data therefore needs TWO guards, one per direction — not one.**
+
+**The instance (M14 WP3, 2026-09-17).** The chord-ownership map was promoted from a comment block
+to `chordRegistry.ts` with a reachability guard proving every entry has a real caller. It passed.
+The verify-self fidelity audit then found **two chords the app registers that the registry never
+listed** — terminal font zoom and `⌘\` toggle-wrap. Both were reverse-direction omissions the
+reachability guard could not have caught at any strength.
+
+⚠️ **The second omission is the argument in miniature:** `⌘\`'s own source comment claimed it had
+been *"confirmed disjoint from every chord in paletteCommands.ts's ownership map"* — i.e. it was
+checked against the map and then never added to it. The exact drift class the extraction existed
+to kill, found inside the artifact being replaced.
+
+**What does NOT fix it:**
+- Adding a host to the forward guard's host list. `Workspace.tsx` was already listed — an unused
+  host passes silently.
+- Keying on filenames. `terminalFontZoom.ts` (the omitted module) does not match `*Chord*`, and
+  neither do `panelHost.ts` or `paletteCommands.ts`. A filename scan reports "complete" on a
+  broken tree.
+
+**What does:** collect the call sites in the registration hosts (comment-stripped), filter to the
+shape being catalogued, and assert each is *claimed* by an entry — plus a stale-row check so a
+renamed entry cannot leave a dangling mapping that hides a real omission. Fixing the instances
+without this arm closes two bugs and leaves the class open for the next one added.
+
+⚠️ See also entry 13's own blind spot, which is real and was accepted deliberately: the completeness
+guard's selector is a **naming convention** (`/[Cc]hord/` plus two named `*Index` symbols), not a
+structural property, so a matcher named outside both conventions is invisible to it
+(`SURFACE-2026-09-15-CHORD-COMPLETENESS-GUARD-KEYS-ON-A-NAMING-CONVENTION`). Two guards are
+strictly better than one; neither is a proof.
+
 ## Comment budget — what belongs at the code, and what does not
 
 Comment density has been flagged in **four consecutive reviews** of the same file, and each

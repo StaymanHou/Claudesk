@@ -361,20 +361,21 @@ final install story — rather than written, then rewritten when the `xattr` ste
 
 ---
 
-### WP3: Hotkey configuration in the `⌘,` Settings panel ⏸️ PARKED 2026-09-15
-> ⏸️ **PARKED mid-verify-human by operator 2026-09-15** to prioritise WP0 (supervisor hotfix) and
-> the signing chain. **Nothing is half-built:** Phase 1 impl is complete and committed
-> (P1.1–P1.7 at `3db5994` + `ef0bb82`), verify-auto PASS, verify-self PASS on re-run (8/8, 0
-> BLOCKING). **To resume:** answer the 4 open verify-human leaves in
-> `workflow-system/state/wip/hotkey-reference.md` — all product judgment, no mechanical work
-> outstanding. Phase 2 (the Settings render) is unstarted.
+### WP3: Hotkey configuration in the `⌘,` Settings panel ✅ SHIPPED 2026-09-17 (commit `5e3ecd9`)
+> ✅ **SHIPPED 2026-09-17.** Resumed from its 2026-09-15 park, the 4 open verify-human leaves
+> answered, then Phase 2 built and verified end-to-end. Commits: `3db5994` (registry) + `ef0bb82`
+> (two omitted chords + the completeness guard) + `5e3ecd9` (the Settings render).
+> ⚠️ **SHIPPED AS A READ-ONLY REFERENCE LIST, NOT A REBINDING UI** — the WP title says
+> "configuration" and that is now misleading. Rebinding, persistence and reset-to-default were
+> ruled out of scope at spec-open (operator-confirmed twice), so **task 3.4 is VOID** and 3.2/3.5
+> shipped narrowed. See the per-task notes below; nothing is silently ticked.
 **Description:** Let the user see and rebind Claudesk's keyboard shortcuts, as a new group in the
 **existing** Settings panel.
 **Milestone:** M14 (remainder)
 **Dependencies:** none (parallel-safe with WP1/WP2)
 **Size:** M
 **Tasks:**
-- [ ] 3.1 Build the **hotkey registry** — one place naming every binding, its default chord, its
+- [x] 3.1 Build the **hotkey registry** — one place naming every binding, its default chord, its
       scope, and whether it is rebindable. ⚠️ **11 `*Chord.ts` predicate modules already exist**
       (`settingsChord`, `workspaceSwitchChord`, `newWorkspaceChord`, `newTerminalChord`,
       `closeTerminalChord`, `dashboardChord`, `searchChord`, `finderChord`, `newFileChord`,
@@ -384,12 +385,14 @@ final install story — rather than written, then rewritten when the `xattr` ste
       the M12 dead-`/exit` / M13-registry trap, flagged twice in `CLAUDE.md`. **Funnel every chord
       read through ONE function and guard THAT**, and assert each registry entry is reachable from
       a real handler.
-- [ ] 3.2 Encode the **collision model**. ⚠️ **`⌘⇧`+digit is RESERVED for workspace/filmstrip
+- [x] 3.2 Encode the **collision model** — ⚠️ **shipped DESCRIPTIVE, not enforced** (rebinding is
+      out of scope, so there is nothing to enforce against; the reserved range and the free chord
+      are registry METADATA). Enforcement would have been an unreachable guard. ⚠️ **`⌘⇧`+digit is RESERVED for workspace/filmstrip
       switching** (memory `cmd-shift-digit-reserved-for-filmstrip`) — it is a *range*, not one
       binding, and must be unassignable. ⚠️ **`⌘⇧O` is FREE** (the in-app Sublime hotkey was deleted
       as redundant with the button). `⌘⇧E` is the Sublime Text pop. Reserve the macOS system chords
       the app must not shadow.
-- [ ] 3.3 Add the Settings group. ⚠️ **EXTEND the M10.9 WP2 panel** — match its existing four
+- [x] 3.3 Add the Settings group. ⚠️ **EXTEND the M10.9 WP2 panel** — match its existing four
       labelled groups' idiom; do not rebuild the panel.
       ⚠️ **[PRIOR: `explicit-selectable-mode-over-inferred-mode`] leaning LOW-SURFACE — flag if
       wrong.** Ship **a legible read-only list of every binding + a per-binding reset-to-default**,
@@ -398,13 +401,15 @@ final install story — rather than written, then rewritten when the `xattr` ste
       the prior's risk-surface-vs-value rule — the operator's own bindings already work, so the
       value here is friend-facing and unproven, while the rich version drags in capture-mode,
       normalization, and conflict-UI bug surface. **Prove the value first; escalate on real demand.**
-- [ ] 3.4 Persist overrides in `settings.json` via the existing `config_store` seam.
+- [~] 3.4 **VOID for v1 — NOT SHIPPED, and deliberately so.** Persist overrides in `settings.json` via the existing `config_store` seam.
       ⚠️ **A malformed chord string must not take the settings file down** — the picker-row
       drive-mode precedent (`arch/session-resumption.md`) chose a closed `<select>` for exactly this
       reason. **Validate on read and fall back to the default binding**, never propagate a parse
       error.
-- [ ] 3.5 Tests: registry↔handler reachability (3.1), reserved-range enforcement (3.2), and
-      malformed-persistence fallback (3.4). ⚠️ **Mutation-prove each guard INDIVIDUALLY and confirm
+- [x] 3.5 Tests: registry↔handler reachability (3.1) — ⚠️ **shipped BIDIRECTIONAL: a second
+      code→registry completeness guard was added at the verify-self back-loop after it found two
+      chords the registry omitted.** Reserved-range enforcement (3.2) and malformed-persistence
+      fallback (3.4) are **N/A** — both depend on rebinding/persistence, which v1 does not have. ⚠️ **Mutation-prove each guard INDIVIDUALLY and confirm
       each mutant landed in executable code** (`docs/lessons/source-text-guards.md`) — an invalid
       probe and a real hole look identical.
 

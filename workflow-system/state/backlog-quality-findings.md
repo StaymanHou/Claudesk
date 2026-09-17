@@ -4,6 +4,101 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# hotkey-reference — 2026-09-17
+
+## SURFACE-2026-09-17-QUALITY-TEST-SELECTOR-PINNED-TO-AN-UNSTYLED-CLASS
+- **Severity:** MAJOR
+- **Location:** `src/components/settings/SettingsPanel.tsx:161` + `src/App.css:3991`
+- **Finding:** `.settings-hotkey-outcome` (SINGULAR) is rendered on every outcome div and is the
+  selector `hotkeyGroupRender.test.tsx:145` queries to assert multi-outcome rendering — but only the
+  PLURAL `.settings-hotkey-outcomes` has a CSS rule. The singular class is styled nowhere. ⚠️
+  VERIFIED by the orchestrator: grepping both rule heads returns only line 3991 (plural). Every
+  other class in that CSS block has a matching rule, which is what makes this one read as an
+  oversight rather than a choice.
+- **Why it matters:** A load-bearing test selector is pinned to a class with no styling contract. A
+  future author removing "unused CSS classes" from the markup — an ordinary cleanup, since nothing
+  styles it — **silently kills the only assertion that a context-scoped chord's SECOND outcome
+  renders** (the ⌘W / terminal-font-zoom canary). The test would still pass with zero outcomes
+  asserted if the class vanished from only some rows.
+- **Suggested action:** Either give the singular class a real rule, or add a one-line comment at the
+  markup site declaring it a test-handle-only class so a cleanup pass leaves it alone.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-CM6-GUARD-BLIND-TO-SPREAD-KEYMAPS
+- **Severity:** MAJOR
+- **Location:** `src/components/workspace/__tests__/chordRegistry.test.ts:317-352`
+- **Finding:** The CM6 completeness arm extracts bindings with `/key:\s*"(Mod-[^"]+)"/g` against
+  `editorExtensions.ts` — literal object entries only. The editor Find chord (`⌘F`, registry entry
+  `cm6-find`) is NOT a literal entry: it arrives via `...searchKeymap` at `editorExtensions.ts:180`.
+  ⚠️ VERIFIED by the orchestrator: the regex captures exactly 8 bindings (`Mod--`, `Mod-\`,
+  `Mod-+`, `Mod-=`, `Mod-0`, `Mod-d`, `Mod-r`, `Mod-s`) and **`Mod-f` is not among them**.
+- **Why it matters:** `cm6-find` therefore has **ZERO guard coverage in either direction** — the
+  call-shape arm cannot reach it (CM6 entries are `matcher: null`) and the keymap arm cannot see it
+  (spread, not literal). ⚠️ It is the single entry the feature's own user-facing hint names as the
+  reason the EDITOR section exists at all ("so it is clear why a key behaves differently inside the
+  editor"). The arm passes while not checking the one binding its prose cites — the
+  guard-reports-green-while-checking-nothing shape, scoped to one entry.
+- **Suggested action:** Resolve the spread rather than widening the regex — import `searchKeymap`
+  in the test and enumerate its `key` values, or assert against the composed keymap array. ⚠️ A
+  regex that also matches `...searchKeymap` textually would NOT fix this: it would prove the spread
+  is present, not which bindings it contributes.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-HOST-SECTIONS-PARALLEL-TO-THE-UNION
+- **Severity:** MAJOR
+- **Location:** `src/components/settings/SettingsPanel.tsx:146-150` vs `chordRegistry.ts:46`
+- **Finding:** `HOST_SECTIONS` is a hand-maintained list of `{host, title}` parallel to the
+  `ChordHost` union (`"app" | "workspace" | "editor"`) with no exhaustiveness check. Adding a fourth
+  host to the union compiles clean and its registry entries render **nowhere**. ⚠️ The render test
+  iterates the same hardcoded `["app","workspace","editor"]` array, so it **shares the blind spot**
+  and would also pass.
+- **Why it matters:** This is precisely the drift class the whole WP exists to eliminate — data and
+  its description diverging silently — reintroduced one layer above where the discipline was
+  applied. The registry is guarded in both directions; the thing that RENDERS it is not.
+- **Suggested action:** One line: assert `new Set(HOST_SECTIONS.map((s) => s.host))` covers every
+  distinct `entry.host` in `CHORD_REGISTRY`. That closes the render-layer direction without touching
+  the component.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-CHORDLABEL-HAS-NO-CONSUMER
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/chordRegistry.ts:407`
+- **Finding:** `chordLabel()` is exported, documented and unit-tested but has **zero non-test
+  consumers** (⚠️ VERIFIED by grep across `src/`: only its own definition). The module's own header
+  warns against unreachable guards (the M12 dead-`/exit` shape).
+- **Suggested action:** Either wire it — the four `*_CHORD_LABEL` consumers are the obvious target,
+  which would also retire the label duplication the WIP already records — or drop it until a caller
+  exists.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-VISIBLECHORDS-RECOMPUTED-PER-SECTION
+- **Severity:** MINOR
+- **Location:** `src/components/settings/SettingsPanel.tsx:645`
+- **Finding:** `visibleChords(workflowFeatures.value)` is called once per host section (3x per
+  render), recomputing the same filtered array each time. Harmless at 22 entries.
+- **Suggested action:** Hoist it above the `.map`. The value is not performance but legibility — it
+  makes the one-accessor-one-read funnel discipline the registry's JSDoc argues for visible at the
+  call site.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-17-QUALITY-RATIONALE-STATED-THREE-TIMES
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/chordRegistry.ts:1-30` + `SettingsPanel.tsx:122-144`
+- **Finding:** The same ~20-line rationale (why the comment map moved, the gate-omission reasoning,
+  the dead-affordance argument) appears near-verbatim in three places: the registry header, the
+  panel block comment, and the commit message.
+- **Why it matters:** The WP's own comment-budget lesson applies — three copies of a rationale drift
+  the way the original comment map did, which is the failure this feature exists to fix.
+- **Suggested action:** Keep one canonical statement in `chordRegistry.ts`; reduce the panel comment
+  to a one-line pointer.
+- **Priority:** low
+- **Status:** pending
+
 # supervisor-hotfix — 2026-09-17
 
 ## SURFACE-2026-09-17-QUALITY-ARM-SUBJECT-COUNT-STALE-IN-TWO-AUTHORITIES

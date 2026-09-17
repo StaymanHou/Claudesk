@@ -1569,3 +1569,34 @@ script under `tooling/` so each phase does not re-derive it.
   "fix" this by switching the panel to the hook — that reintroduces the lag this avoided.
 - **Priority:** low
 - **Status:** pending
+
+## SURFACE-2026-09-17-REVIEW-QUALITY-DIFF-WINDOW-BREAKS-ON-A-PARKED-FEATURE
+- **Source:** feature:review-quality (M14 WP3)
+- **Target level:** product:arch
+- **Type:** gap
+- **Summary:** `feature-review-quality` §1 computes its diff window as `BASE_SHA^..SHIP_SHA`, where
+  `BASE_SHA` is the earliest commit touching the feature's WIP file. That assumes the feature's
+  commits are **contiguous**. When a feature is PARKED mid-flight and unrelated work ships in the
+  interval, the window silently swallows all of it.
+- **Context:** Hit on M14 WP3. WP3 was parked at verify-human on 2026-09-15; the WP0 supervisor
+  hotfix was then specced, built, shipped, quality-reviewed (`cf8d2a1`) and released as v0.5.1
+  before WP3 resumed. The naive window spanned **42 files / ~5,844 insertions**, of which only
+  **5 source files** belong to WP3 — the rest was WP0's ALREADY-REVIEWED-AND-CLOSED work plus the
+  release. ⚠️ The failure is silent and bidirectional: the reviewer would (a) re-litigate findings
+  already dispositioned at `cf8d2a1`, and (b) bury WP3's real diff in 40x its volume, which is the
+  more likely way a genuine finding gets missed. Worked around this run by hand-selecting WP3's
+  three commits (`3db5994`, `ef0bb82`, `5e3ecd9`) and telling the reviewer explicitly which paths
+  were out of scope.
+- **Suggested action:** Make the window commit-set-based rather than range-based — e.g. derive the
+  feature's commits by `git log --format=%h --all -- <wip-path>` intersected with commits that also
+  touch source, or record the feature's own SHAs in the WIP as each phase ships (the WIP already
+  records ship SHAs in its phase statuses). ⚠️ A `git log --first-parent` or date-bounded window
+  does NOT fix this — the interleaving is temporal, not topological.
+- **Priority:** medium
+- **Status:** pending
+
+## Code-quality findings — hotkey-reference (2026-09-17)
+- **Pointer:** **3 MAJOR + 3 MINOR** (0 CRITICAL) from `feature-review-quality` against ship baseline `5e3ecd9`. ⚠️ **All three MAJORs were independently VERIFIED against source before backlogging** (not taken on the reviewer's assertion), and all three are the same shape: *the WP's own anti-drift discipline, not applied one layer up at the render/guard boundary.* (1) **`TEST-SELECTOR-PINNED-TO-AN-UNSTYLED-CLASS`** — `.settings-hotkey-outcome` (singular) carries the multi-outcome assertion but only the PLURAL has a CSS rule, so an ordinary "remove unused classes" cleanup silently kills the ⌘W canary. (2) **`CM6-GUARD-BLIND-TO-SPREAD-KEYMAPS`** — the CM6 arm's regex reads literal `key:` entries only, so `⌘F` (via `...searchKeymap`) has **ZERO coverage in either direction**, and it is the one entry the group's hint text names as the reason the EDITOR section exists. (3) **`HOST-SECTIONS-PARALLEL-TO-THE-UNION`** — `HOST_SECTIONS` has no exhaustiveness tie to `ChordHost`, and the render test iterates the same hardcoded array so it **shares the blind spot**. The 3 MINOR: `chordLabel()` has no non-test consumer; `visibleChords` recomputed 3x per render; the same rationale stated verbatim in three places. Reviewer verdict: *"the three MAJORs are cheap to close and are better backlog items than refactor scope."* See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# hotkey-reference — 2026-09-17`.
+- **Priority:** medium (3 MAJOR) / low (3 MINOR)
+- **Status:** pending
+- **Pickup shape:** a single `/feature-refactor` pass closes all six cheaply — MAJOR-2 and MAJOR-3 are each ~1–5 lines of test, MAJOR-1 is a CSS rule or a comment. ⚠️ MAJOR-2's fix must **resolve the spread** (import `searchKeymap` and enumerate its keys); widening the regex to match `...searchKeymap` textually would prove the spread is present, not which bindings it contributes — a guard that looks fixed and is not.
