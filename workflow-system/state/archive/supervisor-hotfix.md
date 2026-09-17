@@ -1,9 +1,11 @@
 # Feature: Supervisor hotfix — per-workspace toggle + unsent-input suppression
 
 **Workflow:** feature
-**State:** ship (complete) — committed as `a46ae89` on `main`, 2026-09-17. ⚠️ **NOT PUSHED**
-(the operator has not asked; `main` is 17 ahead of origin). All 3 phases ran the full
-build → verify-auto → verify-self → verify-human → verify-codify loop; gate green at 2711.
+**State:** COMPLETED 2026-09-17 — feature closed. Code shipped at `a46ae89`; review at `cf8d2a1`.
+⚠️ **The RELEASE (WP0 task 0.7) is NOT cut** — `/release` is manual-only. Until it lands the
+operator runs the unfixed supervisor, which blocks the 7 deferred dogfooding checks.
+All 3 phases ran the full build → verify-auto → verify-self → verify-human → verify-codify loop;
+gate green at 2711. ⚠️ **Not pushed** — the operator has not asked; `main` runs ahead of origin.
 **Created:** 2026-09-15
 **Spec'd:** 2026-09-17
 **Planned:** 2026-09-17
@@ -987,6 +989,63 @@ must measure**. Added one `else` arm: `supervisor: withheld in <id> — <reason>
 ⚠️ **The recycle arm is excluded** (`!outcome.recycle`) — a recycle also reports `fired: false`
 with a reason, and the caller already logs its started/DECLINED arms distinctly; logging here too
 would double-report the loudest branch and bury the ordinary withholds.
+
+## Retrospect
+
+- **What changed in our understanding:**
+  - ⚠️ **The paste blind spot the WIP was built to work around DOES NOT EXIST.** The pre-spec text
+    framed the watermark as *"an INFERENCE with a known blind spot… paste, programmatic writes"*.
+    Task 0.2's enumeration refuted that from xterm 6.0's own typings: `onData` fires for paste, and
+    `term.input()` explicitly routes through it (with zero callers in this codebase). The WIP was
+    **right to demand the enumeration and wrong about what it would find** — the watermark is a
+    genuine chokepoint on human input, not an approximation.
+  - **A green suite says nothing about a PERFORMANCE contract.** Two separate mutants proved this,
+    one per phase: dropping the transition guard (a re-render per keystroke on a live-xterm host)
+    survived all 24 tests, and at verify-codify a render-site mutant survived all **2709**.
+  - ⚠️ **A purpose-built behavioral test can be structurally incapable of reaching the property it
+    was written for.** The jsdom render test written at verify-codify could not catch its own
+    target mutant: under a closed gate the derivation returns `null`, so the badge subtree is never
+    evaluated — and `useWorkflowFeaturesEnabled` seeds async, so server rendering only ever reaches
+    the gate-OFF shape. **The one arm the mutant breaks is the one arm the test cannot reach.**
+    This is the strongest local argument yet for why the source-text guard idiom exists here at all.
+
+- **Assumptions that held:**
+  - `fireOne` was the right single place for the guard (its own header had already claimed this).
+  - The status-dot palette was the right source for the toggle's colours — confirmed hands-on at
+    verify-human, and the near-miss hue (`#e0a853`) drafted first was correctly rejected.
+  - Test weight belonged at the byte reducer. Both surviving mutants were found within a file's
+    reach of where the weight was placed.
+
+- **Assumptions that were wrong:**
+  - ⚠️ **The plan's P3.1 premise — "extend the Phase 2 derivation to carry the suppressed state" —
+    silently assumed the value would reach render. It would not have.** The watermark lives in a
+    `useRef`, and refs do not re-render; the marker would have painted only when something else
+    happened to re-render the workspace. **Caught by reading the holder before implementing, not by
+    a failing test — nothing would have failed.**
+  - The plan's stated placement for the suppression check ("before the ledger claim? NO — after"
+    reasoning that a suppressed turn must not consume its claim) was **reversed at build**: a
+    suppressed turn DOES consume it, because the operator is mid-sentence and re-firing the stale
+    chain on Enter would collide with the command they just sent.
+  - Phase 1's browser Observable Outcome was **written one phase too early** and had to be
+    withdrawn at verify-self as unsatisfiable — there was nothing to observe (a private ref) and
+    nothing to trigger (agent-launched CC emits no hook events). Phase 3's marker is the surface
+    that outcome needed.
+
+- **Approach delta:**
+  - Three phases as planned, in the planned order, with **no back-loops** (every `verify-auto` and
+    `verify-self` passed first time).
+  - **Scope grew twice, both at operator request or operator correction:** supervisor withhold
+    logging was added mid-Phase-3 (`fireOne` had always computed a `reason` and thrown it away —
+    it is the tuning channel for measuring `unsent-input-present` false positives), and Phase 2's
+    labels + colour mapping were corrected at verify-human.
+  - ⚠️ **The verification split was non-standard and deliberate at Phase 3 verify-self:** the CLI
+    outcomes ran in the subagent while the ORCHESTRATOR drove the browser outcome, because
+    `mcp__tauri__*` is not exposed to subagents and a subagent would have silently fallen back to
+    bare Vite — a known false-verdict source. The subagent was told this and reported
+    `SKIPPED-BY-DESIGN` rather than guessing.
+  - ⚠️ **What did NOT change: the release.** Task 0.7 (`/release`) is untouched — `/release` is
+    manual-only. Until it lands, the operator's own Claudesk still runs the unfixed supervisor,
+    which is also what gates the 7 deferred dogfooding checks.
 
 ## Code-Quality Review — supervisor-hotfix
 

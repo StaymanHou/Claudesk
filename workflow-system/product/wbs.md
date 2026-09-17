@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 milestone: M14 (remainder)
 created: 2026-09-15
-updated: 2026-09-15
+updated: 2026-09-17
 ---
 
 # WBS — Milestone 14 (remainder): Polish & Open-Source Release
@@ -106,7 +106,14 @@ Two recorded priors bear on this decomposition.
 
 ## Work packages
 
-### WP0: Supervisor hotfix — per-workspace toggle + unsent-input suppression 🔥 URGENT
+### WP0: Supervisor hotfix — per-workspace toggle + unsent-input suppression 🔥 URGENT ✅ SHIPPED 2026-09-17 (commit a46ae89)
+> ⚠️ **TASK 0.7 (`/release`) IS DELIBERATELY UNTICKED — the code shipped, the RELEASE did not.**
+> `/release` is MANUAL-ONLY and is never auto-invoked by `feature-finalize`. Latest tag is
+> `v0.5.0`; WP0's work sits in 23 unreleased commits on `main` (also unpushed). ⚠️ **Until a
+> release is cut and installed, the operator's own Claudesk is still running the UNFIXED
+> supervisor** — which is also what blocks the dogfooding that Phase 1's 7 deferred checks and
+> `SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1` are waiting on. **This WP is not fully
+> closed until 0.7 lands.**
 **Description:** The M15 supervisor is firing unwanted commands in live use. Give it a
 per-workspace off switch and stop it firing when the operator has unsent input in the CC pane.
 **Milestone:** M14 (remainder) — ⚠️ **INSERTED 2026-09-15 out of the original decomposition**
@@ -130,29 +137,29 @@ drive mode**, so the blast radius is ~half the operator's rotation, not one work
 - **Fire policy is reopened LATER, after this patch ships** — see the note under WP2.
 
 **Tasks:**
-- [ ] 0.1 Unsent-input watermark. Hook `term.onData` (`XtermPane.tsx:626` — the single chokepoint
+- [x] 0.1 Unsent-input watermark. Hook `term.onData` (`XtermPane.tsx:626` — the single chokepoint
       for every keystroke Claudesk forwards INTO the pty). Track input-since-turn-end with no
       `\r` since ⇒ unsent input present. ⚠️ **This reads what Claudesk sends IN, never PTY
       output** — `CLAUDE.md`'s *"PTY byte-injection for input; hook channel for state. ⚠️ NEVER
       from PTY output"* rule holds, and the `xterm-dom-reads-fake-a-blank-pane` false-verdict trap
       is avoided by construction. ⚠️ **Scraping the xterm buffer was CONSIDERED AND REJECTED** for
       exactly those two reasons.
-- [ ] 0.2 ⚠️ **Enumerate the input paths that BYPASS `term.onData` before trusting the watermark.**
+- [x] 0.2 ⚠️ **Enumerate the input paths that BYPASS `term.onData` before trusting the watermark.**
       Paste, programmatic writes, and `injectCommand` itself may not route through it. **A
       suppression with an unknown blind spot is worse than none, because it will be trusted.**
       Report what is and is not covered rather than assuming full coverage.
-- [ ] 0.3 Consult the watermark in `fireOne` (`src/state/supervisor/fanOut.ts`) and skip the fire
+- [x] 0.3 Consult the watermark in `fireOne` (`src/state/supervisor/fanOut.ts`) and skip the fire
       when unsent input is present. ⚠️ **`injectCommand` has no retry and no pre-send cancel
       window** — suppression must happen BEFORE the call, not be undone after.
-- [ ] 0.4 Per-workspace supervisor toggle, **default ON**, persisted in `projects.json`.
+- [x] 0.4 Per-workspace supervisor toggle, **default ON**, persisted in `projects.json`.
       ⚠️ **A malformed/absent value must read as ON, not crash the project list** — the
       picker-row drive-mode precedent (a bad mode string fails serde and takes the whole list
       down) applies.
-- [ ] 0.5 Surface the toggle where the operator can reach it *at the moment it misfires*.
+- [x] 0.5 Surface the toggle where the operator can reach it *at the moment it misfires*.
       ⚠️ **`set-a-spawn-time-choice-where-the-spawn-is-chosen` does NOT govern this** — the
       supervisor is not read once at spawn; it acts every turn, so the control belongs where the
       operator is when it acts, not only on the picker row. Decide at spec/plan time.
-- [ ] 0.6 Tests: watermark state machine (input → no `\r` → suppressed; input → `\r` → not
+- [x] 0.6 Tests: watermark state machine (input → no `\r` → suppressed; input → `\r` → not
       suppressed; turn-end resets), and toggle-gates-the-call. ⚠️ **Mutation-prove the suppression
       INDIVIDUALLY** — a suppression that never suppresses and one that always suppresses both
       look green against a test that only asserts "no fire happened".

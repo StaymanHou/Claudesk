@@ -213,11 +213,24 @@
   marker** — until then suppression is invisible and must be inferred from the absence of an
   unwanted fire, which is exactly the write-only problem Phase 3 exists to fix. ⚠️ **Read the
   `DEFERRED-*` tags on those leaves, not their `[x]` checkboxes** (the M15 WP4/WP5 convention).
-- **Suggested action:** Triage as a batch once the operator stops adding items — explicitly NOT
-  one-at-a-time. Item 1 wants `sample` against a frozen app (the P1 2026-08-25 playbook). Item 2
-  is a FIRE-POLICY decision, not a bug fix: it reopens the probe-Q2 question the milestone shipped
-  around, and "suppress while the operator is typing" is a candidate narrower than full Q2
-  detection. Item 3 needs no action — it is answered.
+- **Update 2026-09-17 (WP0 close) — ⚠️ PARTIALLY RESOLVED; the entry SURVIVES, slimmer.**
+  **Item 2 is ADDRESSED IN CODE** by WP0 (`a46ae89`): unsent-input suppression + a per-workspace
+  toggle + a suppressed-state marker, all mechanically proven and mutation-tested. ⚠️ **But it is
+  NOT closed**, for two independent reasons, and the entry is deliberately not deleted:
+  (a) the seven hands-on checks below are `DEFERRED-TO-DOGFOODING`, so the fix is *built and
+  unobserved* — "does it actually stop interrupting the operator" has never been witnessed; and
+  (b) ⚠️ **no release has been cut** (task 0.7 open; latest tag `v0.5.0`), so the operator's own
+  Claudesk is **still running the UNFIXED supervisor** — which is itself what blocks (a).
+  ⚠️ **Item 2's FIRE-POLICY question also remains open and is NOT what WP0 answered.** WP0
+  implements the narrower "suppress when unsent input is present" candidate; the probe-Q2 question
+  (can a question-shaped / answer-awaiting tail be detected?) that gates the *silently-always* fire
+  policy is untouched. **Item 1 (UI freeze) is explicitly out of WP0's scope and wholly untouched.**
+  **Item 3 needs no action — answered 2026-09-15.**
+- **Suggested action (remaining open work):** ⚠️ **Item 1** — still the highest-signal item, and
+  now the only one with no work against it: `sample` against a frozen app (the P1 2026-08-25
+  playbook), NOT reasoning from the code. ⚠️ **Item 2's residue** — after a release lands, run the
+  seven deferred checks; then decide the fire policy proper (probe Q2), which WP0 deliberately did
+  not settle. Triage what remains as a batch, not one-at-a-time.
 - **Priority:** high
 - **Status:** open
 
