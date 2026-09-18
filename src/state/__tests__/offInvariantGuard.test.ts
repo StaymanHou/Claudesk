@@ -49,7 +49,7 @@ import type { AnnounceMap } from "../predictAction";
 //         below are the only ways this app surfaces UI today, and adding another one
 //         should extend this guard as part of that work.
 //
-// ── THE FIVE REGISTRIES (the fifth added at M13 WP2) ──────────────────────────
+// ── THE SIX REGISTRIES (the fifth added at M13 WP2; the sixth at M13.5 WP4) ───
 //   1. PANEL      — `availablePanels(false)`, the right-panel tab set
 //   2. MENU ID    — `MENU_IDS`, the native app menu
 //   3. CHORD      — modules exporting a `*Chord*` identifier
@@ -61,8 +61,12 @@ import type { AnnounceMap } from "../predictAction";
 //   5. SKILL-ROW  — the workspace header's skill-button row: `showSkillButtons(…, false)`
 //                   plus `SKILL_BUTTONS`, AND `showRecycleButton(…, false)` as its own second
 //                   subject (M13 WP3's Recycle extension — a SEPARATE predicate, not a member of
-//                   the array). ⚠️ So arms 4 and 5 each own TWO subjects, which is why the
-//                   arm-count pin below reconciles SEVEN subjects against FIVE registries.
+//                   the array). ⚠️ So arms 4, 5 AND 6 each own TWO subjects, which is why the
+//                   arm-count pin below reconciles NINE subjects against SIX registries.
+//                   ⚠️ CORRECTED 2026-09-18 (M14 WP4): this header said "SEVEN subjects against
+//                   FIVE registries" — true only before arm 6 landed (M13.5 WP4) and gained its
+//                   second subject (M14 WP0). The CODE was always right; only this prose lied,
+//                   and every doc that cites this file as the authority inherited the error.
 //                   Added at M13 WP2 for the same reason arm 4 was:
 //                   a button row in the workspace header is none of the first four.
 //                   ⚠️ Unlike arm 4 this row has NO ungated half (every member is a
@@ -594,7 +598,7 @@ describe("OFF-invariant: no workflow surface is registered while the gate is off
    * installed it. The predicate was wrong, not the set.
    *
    * ⚠️ The tempting fix was to add "util" to `WORKFLOW_TERMS`. That would have been WRONG in a
-   * way worth recording: `WORKFLOW_TERMS` is shared by all five arms, and "util" is a generic
+   * way worth recording: `WORKFLOW_TERMS` is shared by arms 1–3, and "util" is a generic
    * word that would have started flagging unrelated panels, menu ids, and chord modules — a
    * guard that cries wolf gets deleted by the next person who trips it (this file's own header
    * says so, having already been narrowed once after a substring match on "docs" fired on

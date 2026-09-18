@@ -101,15 +101,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # supervisor-hotfix — 2026-09-17
 
-## SURFACE-2026-09-17-QUALITY-ARM-SUBJECT-COUNT-STALE-IN-TWO-AUTHORITIES
-- **Severity:** MAJOR
-- **Location:** `workflow-system/product/arch.md:71` and root `CLAUDE.md` (the "6 arms / 8 subjects" line, stated twice)
-- **Finding:** This feature added the **9th** OFF-invariant arm subject (the supervisor toggle) and moved the pin to `expect(armSubjects.length).toBe(9)`, but the two authoritative docs that cite the number were not updated in the same commit — both still read **"8 subjects"**. ⚠️ `arch.md` additionally cites `offInvariantGuard.test.ts:931`; the assertion now lives at **:1004**, ~70 lines off.
-- **Why it matters:** ⚠️ **`CLAUDE.md` names the `arch/` set as the as-built AUTHORITY**, so a stale number there is a *live wrong claim*, not a cosmetic lag — and `CLAUDE.md` itself restates "the OFF-invariant pin stays at 6 arms / 8 subjects" as a must-not-re-derive fact. The next person planning a gated surface reads 8, and either bumps the pin to a wrong value or concludes the guard already covers their case. The stale `file:line` is the exact `cite-code-by-symbol-not-line` drift shape (one stale `:451` previously propagated into three docs).
-- **Suggested fix:** update both docs to **6 arms / 9 subjects**, and replace the `:931` citation with the symbol (`armSubjects` in `offInvariantGuard.test.ts`) rather than a new line number. ⚠️ Grep the retracted claim repo-wide first — `doc-correction-scope-list-is-a-floor` records a 5-named/10-actual case.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-09-17-QUALITY-TOGGLE-READ-ON-REVEAL-BUT-SUPERVISOR-FIRES-UNFOCUSED
 - **Severity:** MAJOR
 - **Location:** `src/components/workspace/Workspace.tsx` (the `if (!workflowEnabled || !visible) return;` effect)

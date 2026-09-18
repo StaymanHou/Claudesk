@@ -231,8 +231,9 @@ paths. `useSupervisor` checks `host.enabled` **twice**: via `useTurnEnd`'s `enab
 fire is the irreversible half.
 
 ⚠️ **The reversing condition:** if a future change gives the supervisor an operator-visible surface,
-that surface owns the **SEVENTH** arm and the `armSubjects.length === 8` pin
-(`offInvariantGuard.test.ts:931`) must bump **in the same change**. The backstop is real but
+that surface owns the **SEVENTH** arm and the `armSubjects` pin
+(`offInvariantGuard.test.ts` → `it("still polices all six registries")`, currently **9** subjects)
+must bump **in the same change**. The backstop is real but
 partial: the guard's allowlist is **all of `src/**`**, so a supervisor panel/menu-id/chord *of a
 shape arms 1–3 already select on* trips today — a genuinely novel shape would not.
 
@@ -245,7 +246,7 @@ shape arms 1–3 already select on* trips today — a genuinely novel shape woul
 | Detector vs. the real corpus | `verdictReplay.test.ts` — the real `decideVerdict` over the frozen 2,284-record fixture, **34/36** on the non-circular set, both misses pinned as correct, non-vacuity guard |
 | Negative arm | `verdict.test.ts` — PAUSE, `ESCALATE`, unmapped edge, no-stored-mode, already-chained, and the **verify-human GATE** |
 | Recycle conditions | `verdict.test.ts` — all three FIRE-not-recycle arms + strictly-greater threshold |
-| Gate OFF | `offInvariantGuard.test.ts` (6 arms / 8 subjects) + Rust-side fail-closed `resolve_gate_enabled` |
+| Gate OFF | `offInvariantGuard.test.ts` (6 arms / 9 subjects) + Rust-side fail-closed `resolve_gate_enabled` |
 
 ⚠️ **SCORING AGAINST THE FULL FIXTURE WOULD BE CIRCULAR** — its 2,284 labels were produced by the
 **same policy table** the detector uses, so a 1.000 there is an arithmetic identity, not evidence.

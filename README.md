@@ -51,10 +51,12 @@ rotating projects.
 > workflow-docs viewer; smart auto-resume; skill buttons; and in-app auto-update.
 > Installable via a [Homebrew tap](#install).
 >
+> Since then: a `⌘,` settings panel with a full keyboard-shortcut reference, Developer-ID
+> signing + Apple notarization (so there's no Gatekeeper workaround), and a workflow
+> supervisor that enforces drive-mode chaining mechanically.
+>
 > For what shipped when, see [`CHANGELOG.md`](CHANGELOG.md) and the
-> [releases](https://github.com/StaymanHou/Claudesk/releases). Still ahead: a settings UI
-> for project-list management and hotkeys, Developer-ID signing + notarization, and a
-> workflow supervisor that enforces drive-mode chaining mechanically.
+> [releases](https://github.com/StaymanHou/Claudesk/releases).
 
 ## Install
 
@@ -240,6 +242,9 @@ and anti-goals.
 
 - **macOS on Apple Silicon** (this project is macOS-only; the release is `aarch64`)
 - **Claude Code CLI** (`claude`) installed, on your `PATH`, and authenticated before launching Claudesk
+
+**Optional** (Claudesk runs fine without them — they back the one-click launcher buttons):
+
 - **Sublime Text** with `subl` on `PATH` (or the app installed for the `open -a` fallback)
 - **Sublime Merge** — for the in-app "open in Merge" launcher button
 
@@ -251,6 +256,102 @@ and anti-goals.
 
 See [`CLAUDE.md`](CLAUDE.md) → "Getting Started" for the full setup notes and ecosystem
 gotchas (pnpm v11 `pnpm-workspace.yaml`, ESLint v9 pin, etc.).
+
+## Setup
+
+Claudesk ships in two tiers. **Tier 1 is the whole app for most people** — it needs
+nothing but the Claude Code CLI, and it is what you get the moment you install.
+**Tier 2** is an optional layer for people who also run the companion workflow
+system; it is **off by default**, and if you never turn it on, Claudesk behaves
+exactly as if it had never been built.
+
+### Tier 1 — the lite IDE (no extra setup)
+
+This is the default experience. It works for **any** Claude Code user, out of the box,
+with zero configuration.
+
+**What you need:**
+
+- **macOS on Apple Silicon** + [Claude Code CLI](https://docs.claude.com/claude-code)
+  (`claude`) installed, on your `PATH`, and authenticated.
+- That's the requirement. *(Sublime Text / Sublime Merge are **optional** — they power
+  the one-click launcher buttons. Claudesk runs fine without them; those buttons just
+  won't have anything to open.)*
+
+**Getting going:**
+
+1. Install via the [Homebrew tap](#install) and launch Claudesk.
+2. Click **`+`** in the project picker and choose a project directory.
+3. Click the project. A workspace opens with a live Claude Code session already
+   `cd`'d into that directory.
+4. Repeat for as many projects as you want — each becomes its own workspace, and the
+   filmstrip across the top shows them all with live status.
+
+**What you get:**
+
+| | |
+|---|---|
+| **Project picker** | Every project one click from a live session. Per-project `--model` override on the row. |
+| **Workspaces + filmstrip** | N projects open at once; click a tile to promote it to center stage. Collapsible to status-only tiles. |
+| **PTY terminal** | The real interactive Claude Code TUI, not a re-implementation. Yolo mode by default. |
+| **Editor · Diff · Terminal** | The right half of each workspace — a CodeMirror editor, an inline git-diff viewer, and a second terminal. File tree and fuzzy finder (`⌘P`) included. |
+| **Status surfaces** | idle / running / awaiting-input / working-in-background, driven by Claude Code's own hook channel — on the filmstrip, in a menu-bar item, and in an always-on-top picture-in-picture panel. |
+| **Time analytics** | A local-only dashboard (`⌘⇧A`) of where the hours actually went. |
+| **Sublime launchers** | One-click pop to Sublime Text / Sublime Merge / Finder when you want the heavier tool. |
+| **In-app updates** | Claudesk checks, downloads, verifies and installs its own updates. |
+| **Settings** | `⌘,` — permission mode, analytics, updates, and a full keyboard-shortcut reference. |
+
+That is the complete tier-1 product. Nothing above is degraded or partial, and none of
+it asks you to install anything beyond the Claude Code CLI.
+
+### Tier 2 — the opt-in workflow layer (default OFF)
+
+Claudesk can also drive a companion **workflow system** — a set of Claude Code skills and
+orchestrator agents that run projects through explicit state machines (product → feature →
+task → incident). If you run that system, Claudesk surfaces it as buttons and status
+instead of typed slash commands. If you don't, **none of it exists for you.**
+
+**The gate is a first-class concept, not a hidden preference.**
+
+- **It is OFF by default.** Nothing here is on until you turn it on.
+- **With it OFF, Claudesk is byte-identical to a build that never had these features.**
+  Not greyed out, not disabled-with-a-tooltip — *absent*. No empty tabs, no dead menu
+  items, no live chords. This is enforced mechanically by a standing test
+  (`src/state/__tests__/offInvariantGuard.test.ts`), not by convention.
+- **Enabling the UI is strictly separate from installing the substrate.** The toggle
+  writes one field in Claudesk's own settings and touches nothing in `~/.claude/`.
+  Installing the workflow system is a different, explicitly-consented action. Neither
+  implies the other: you can enable the toggle without the system installed, and
+  installing the system does not flip the toggle.
+
+**To turn it on:** `⌘,` → **Workflow features** → *Enable workflow features*.
+
+If you don't have the workflow system yet, Claudesk offers an install wizard that clones
+the companion repo and runs its own `install.sh`, after showing you every side effect it
+will have — including the ones that surprise people, like the block it injects into your
+`~/.claude/settings.json`. You choose where it goes, and you can decline.
+
+**What switching it on adds:**
+
+| | |
+|---|---|
+| **Docs panel** (`⌘⇧K`) | A fourth right-panel tab rendering this project's workflow docs — and it becomes the tab a workspace *opens* on, because "where is this project?" is the question you open a workspace with. |
+| **Skill buttons** | Five one-click commands in the workspace header: `/session-start`, `/session-restore`, `/session-capture`, `/util-prune-claude-md`, `/util-backlog-paydown`. |
+| **Recycle Session** | Restart a session in place when its context is spent. |
+| **Drive mode** | A per-project selector (`stepping` / `orchestrated` / `autopilot` / `fsd`) on the picker row, plus a readout in the workspace header. |
+| **Workflow supervisor** | Enforces drive-mode chaining mechanically, with a per-workspace toggle. |
+| **Smart auto-resume** | On open, a workspace that has a handoff pointer offers to inject `/session-restore`. |
+
+⚠️ **One deliberate exception, worth knowing.** Auto-resume is gated *per arm*, not
+wholesale. Resuming an **uncleanly-exited** session (Claudesk spawns `claude --continue`)
+reads only Claudesk's own state, so it works for **everyone** — gate or no gate. Only the
+`/session-restore` arm, which reads the workflow system's files, is gated. A crash-recovery
+feature that serves every Claude Code user is not withheld behind a workflow toggle.
+
+The companion system lives at
+[`stayman-claude-code-customization`](https://github.com/StaymanHou/stayman-claude-code-customization).
+It is a personal workflow, shared as-is — Claudesk does not require it, and tier 1 does
+not degrade without it.
 
 ## Develop / contribute
 
@@ -284,15 +385,21 @@ server alone — but note it has no Tauri IPC, so anything calling the backend w
 pnpm dev            # Vite only, http://localhost:1420 — UI iteration, no backend
 ```
 
-**Checks** — run these before opening a PR (they're the same gates CI would enforce):
+**Checks** — run this one command before opening a PR:
 
 ```bash
-pnpm test                       # frontend unit tests (Vitest)
-cd src-tauri && cargo test      # backend tests (Rust); then `cd -`
-pnpm lint                       # ESLint (TypeScript strict)
-pnpm format:check               # Prettier (use `pnpm format` to auto-fix)
-cd src-tauri && cargo clippy -- -D warnings && cargo fmt --check
+pnpm verify:auto
 ```
+
+It chains the whole gate and stops at the first failure:
+`lint` → `format:check` → `tsc --noEmit` → `vitest` → `cargo fmt --check` →
+`cargo clippy --all-targets -D warnings` → `cargo test`.
+
+There is **no CI and no git hook** on this repo, so `pnpm verify:auto` *is* the gate —
+run it rather than a remembered subset. Two of its steps are easy to drop by hand and are
+deliberately included: `tsc --noEmit` (type errors are invisible to lint and tests alike)
+and `--all-targets` on clippy (plain `cargo clippy` skips the test target). Use
+`pnpm format` to auto-fix formatting.
 
 See [`CLAUDE.md`](CLAUDE.md) → "Development Conventions" for code style, the workflow
 system, and ecosystem gotchas (pnpm v11 `pnpm-workspace.yaml`, the ESLint v9 pin,

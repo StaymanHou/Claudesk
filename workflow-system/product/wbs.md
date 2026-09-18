@@ -73,9 +73,11 @@ groups, and the `workflow_features_enabled` toggle. This adds a group to an exis
 
 ### Correction booked into this milestone (from `roadmap.md`)
 
-- ⚠️ **M14's "default CLI args for `claude`" Settings line is STALE and must be corrected when
-  touched** — M11.5 consumed most of it, and it still misstates **PiP (shipped M5)** and
-  **permission-mode (shipped M6)** as future work. Task 4.2.
+- ✅ **RESOLVED 2026-09-18 (WP4 Phase 1).** ~~M14's "default CLI args for `claude`" Settings line is
+  STALE and must be corrected when touched — M11.5 consumed most of it, and it still misstates
+  **PiP (shipped M5)** and **permission-mode (shipped M6)** as future work.~~ Corrected at task 4.2
+  across all **6** live sites (`roadmap.md` ×4, this file ×2, `CLAUDE.md`, `context.md`).
+  ⚠️ **The task named 2 sites; a grep found 6** — the fourth undercount this milestone.
 - ⚠️ **`arch/build-update-release.md`'s "Unsigned + minisign" decision + its "M14 overlap —
   reconciled" bullet must be rewritten** to record the R-1 reversal. Task 2.6. **Leaving them
   stating the superseded decision is the `doc-correction-scope-list-is-a-floor` failure mode.**
@@ -508,26 +510,60 @@ partial.
 **Dependencies:** **WP2** (the install story must be final before it is documented)
 **Size:** M
 **Tasks:**
-- [ ] 4.1 Write **tier 1 — the lite-IDE core**: picker, workspaces, PTY terminal, editor/diff,
+- [x] 4.1 ✅ **DONE 2026-09-18.** Write **tier 1 — the lite-IDE core**: picker, workspaces, PTY terminal, editor/diff,
       file tree, search, hook-driven status surfaces, PiP, menu-bar alarm, time analytics. ⚠️ **This
       tier must read as complete on its own** — a stranger who never installs the workflow system is
       a first-class user, not a degraded one.
-- [ ] 4.2 Write **tier 2 — the opt-in workflow layer**: what `workflow_features_enabled` turns on,
+- [x] 4.2 ✅ **DONE 2026-09-18.** Write **tier 2 — the opt-in workflow layer**: what `workflow_features_enabled` turns on,
       how to enable it, and a pointer to the companion workflow system.
       ⚠️ **[PRIOR: `gate-substrate-dependent-feature-class-behind-default-off-opt-in`] — document
       the gate as a first-class concept**, including that OFF is byte-identical and that enabling
       the UI is **strictly separate** from installing the substrate.
-      ⚠️ **Correct the stale "default CLI args for `claude`" claim here and in `roadmap.md`** —
+      ✅ **The stale "default CLI args for `claude`" claim is CORRECTED (2026-09-18, WP4 Phase 1).**
       **PiP shipped M5**, **permission-mode shipped M6**, and the per-project `--model` override
-      shipped **M11.5 on the picker row, not in Settings**.
-- [ ] 4.3 ⚠️ **Remove every `xattr -dr com.apple.quarantine` instruction** — **six known README
-      sites** (lines ~73, 83–86, 93, 307, 319, 325) plus the line at ~332 that forward-references
-      this milestone as *"still deferred to a later polish milestone."* ⚠️ **Gated on WP2 actually
-      landing** — if signing slips, these stay and tier-1 documents the Gatekeeper step instead.
-      ⚠️ **Grep, don't trust this list: it is a FLOOR, not the scope.**
-- [ ] 4.4 Verify every setup instruction by **following it literally** from a clean state. ⚠️ **Dead
+      shipped **M11.5 on the picker row, not in Settings**. ⚠️ **This sub-task named 2 sites
+      ("here and in `roadmap.md`"); a repo-wide grep found 6** — `roadmap.md` ×4, `wbs.md` ×2,
+      `CLAUDE.md`, `context.md`. Fourth undercount this milestone.
+- [x] 4.3 ✅ **DISCHARGED BY WP2 — verified 2026-09-18, not re-done.** ~~Remove every
+      `xattr -dr com.apple.quarantine` instruction — six known README sites.~~ WP2's repo-wide sweep
+      already removed them from the README install path, the `/release` release-notes template +
+      Step 11 block, and the Homebrew cask's `caveats`. ⚠️ **The 5 surviving README `xattr` sites
+      are CORRECT and must NOT be deleted** — line 86 (historical: releases before v0.5.2 needed
+      it), 314 + 326 (**build-from-source**, where a contributor's local `pnpm tauri build` genuinely
+      *is* unsigned — only released builds are signed), 332 + 343 (explaining the change). Deleting
+      them would make the README **wrong**; the verify target is `grep -c xattr README.md` → **5**,
+      not 0.
+- [x] 4.4 ✅ **DONE 2026-09-18.** Verify every setup instruction by **following it literally** from a clean state. ⚠️ **Dead
       links and stale commands are what the 2026-09-06 pass already had to fix once** — re-check,
       don't assume.
+
+
+**WP4 close note (2026-09-18) — what the audit actually found.** Verified against the REAL
+installed artifact, not just the source tree: `/Applications/Claudesk.app` is **v0.5.2**,
+Developer ID signed (Team `C8RJH77B47`), hardened runtime, and `spctl` reports
+**`accepted` / `source=Notarized Developer ID`** — so the README's "no Gatekeeper workaround
+needed" is confirmed end-to-end. ⚠️ **`brew` metadata is STALE BY DESIGN** (Caskroom records
+`0.2.7`, tap offers `0.5.1`) because the in-app updater replaces the `.app` without touching
+brew's records — do not read `brew list --versions` as the installed version.
+
+⚠️ **Three defects the task text did not name, found by following instructions literally:**
+1. **The "Checks" block was NOT the real gate** — it omitted `tsc --noEmit` entirely and used
+   `cargo clippy -- -D warnings` **without `--all-targets`** (which skips the test target,
+   the exact trap `CLAUDE.md` calls out), while claiming to be "the same gates CI would
+   enforce" — but this repo has **no CI and no git hook**. Replaced with `pnpm verify:auto`.
+2. **`roadmap.md`'s `wp4-thumbnail-probe-outcome.md` link** had been dead since M1 was
+   cycle-archived; re-anchored to `archive/phase-1-bare-shell-poc/`.
+3. **The OFF-invariant guard's subject count was stale in FOUR live docs** (`CLAUDE.md` ×2,
+   `arch.md` frontmatter, `arch/workflow-supervisor.md`) — all said **8 subjects**; the guard
+   asserts **`.toBe(9)`**. ⚠️ The backlog entry named only the 2 `CLAUDE.md` sites, and
+   `arch.md`'s frontmatter recorded the number as having been *"corrected"* at M15 close —
+   corrected to the wrong value. Arms = 6 is right; subjects = 9 (arms 4, 5, 6 each own two).
+
+⚠️ **UNDERCOUNT TALLY FOR THE MILESTONE RETROSPECTIVE — this is now the fifth and sixth.**
+Spawn surface 9 not 5 · `UpdaterError` 3 variants not 2 · doc-correction scope 8 live files
+not 2 · WP4 task 4.2's "2 sites" → **6** · backlog's "2 sites" for the subject count → **4**
+· and one agent-side instance: a regex parsed **20** of 22 chord entries before an exhaustive
+recount. **Every enumerated count in this milestone that was not re-grepped was wrong.**
 
 **WP3 ∥ WP4 note:** WP3 and WP4 are **independent** and may run in either order or in parallel.
 WP4's *dependency is on WP2*, not on WP3 — hotkeys are a Settings feature the docs mention in
@@ -606,6 +642,3 @@ question — the arch doc already anticipated this exact reversal and named M14 
 ⚠️ **One risk is flagged as a probe task rather than an arch gap** (WP1 task 1.6): hardened runtime
 is mandatory for notarization and could break subprocess spawning or the PTY. If the probe finds it
 does, **that is a NO-GO that returns here**, not something WP2 works around silently.
-
-## Session Handoff — 2026-09-18 11:04
-Handed off. See `workflow-system/state/.session.md` to restore.

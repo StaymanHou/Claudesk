@@ -31,7 +31,7 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 22s (2026-09-17, M14 WP3 Phase 2 verify-auto: WARM cargo cache, frontend-only change; frontend 2717 / Rust 926 ALL GREEN)
+- **Last:** 31s (2026-09-18, M14 WP4 Phase 1 verify-auto: WARM cargo cache, docs-only change; frontend 2716 / Rust ALL GREEN, EXIT=0)
 - **Use timeout:** 216000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
