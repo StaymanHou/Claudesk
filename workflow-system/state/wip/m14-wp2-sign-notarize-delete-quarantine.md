@@ -1,7 +1,7 @@
 # Feature: M14 WP2 — Sign + notarize the release pipeline, and delete the quarantine workaround
 
 **Workflow:** feature
-**State:** build (Phase 1 impl complete)
+**State:** build (Phase 1 COMPLETE; Phase 2 in progress)
 **Created:** 2026-09-18
 **WBS:** M14 (remainder) WP2 — tasks 2.1–2.8
 **Depends on:** WP1 ✅ COMPLETE — VERDICT GO (commit `481b4bb`)
@@ -47,7 +47,7 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
 
 ## Work Tree
 
-- [ ] Phase 1: Release pipeline — notarize + staple, fail loudly  <!-- status: in-progress -->
+- [x] Phase 1: Release pipeline — notarize + staple, fail loudly  <!-- status: DONE 2026-09-18 -->
   **Observable outcomes:**
   - CLI: `pnpm tauri build` with `APPLE_SIGNING_IDENTITY` + the notarization env triad set
     produces `Claudesk.app` where `codesign -dv` reports `flags=0x10000(runtime)` and
@@ -85,8 +85,10 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         drop the `xattr` remedy it points at. <!-- status: DONE -->
   - [x] verify-auto  <!-- status: DONE — 4 scoped checks + 5 observable outcomes, all PASS -->
   - [x] verify-self  <!-- status: DONE — subagent 6/6 PASS, 0 BLOCKING, 0 COSMETIC -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-human  <!-- status: DONE — operator reviewed the /release rewrite 2026-09-18: "all good" -->
+  - [x] verify-codify  <!-- status: DONE — no code changed (procedure doc only); the executable
+        properties are already pinned by verify-auto's bash -n sweep + the observable-outcome
+        greps, which re-run on demand. No permanent test is owed for a markdown runbook. -->
 
 - [ ] Phase 2: Delete the quarantine workaround (code)  <!-- status: NOT-STARTED; depends on Phase 1 -->
   **Observable outcomes:**
@@ -194,10 +196,10 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-human
-- **Active scope:** Phase 1 verify-self PASSED (6/6); verify-human next
+- **Path:** Feature > Phase 2 > P2.1
+- **Active scope:** P2.1 (delete the Rust quarantine surface)
 - **Blocked:** none
-- **Unvisited:** Phase 2 (delete the code) → Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
+- **Unvisited:** Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
 - **Open discoveries:** 1 — the staple/re-tar ordering trap (P1.2/P1.3), resolved in-phase
 
 ## Discoveries
