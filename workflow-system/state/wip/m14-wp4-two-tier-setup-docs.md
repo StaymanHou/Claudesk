@@ -1,7 +1,7 @@
 # Feature: M14 WP4 — Two-tier setup documentation
 
 **Workflow:** feature
-**State:** ship (complete) — commit 9f5d1d5, NOT pushed (operator's call)
+**State:** review-quality (complete) — commit 9acae28 + review fixes, NOT pushed (operator's call)
 **Created:** 2026-09-18
 
 ## Problem Statement
@@ -235,7 +235,7 @@ probe required.
 
 ## Current Node
 - **Path:** Feature > ship (complete)
-- **Active scope:** none — shipped as 9f5d1d5; ready for /feature-review-quality
+- **Active scope:** none — shipped as 9acae28; review-quality complete (2 MAJOR fixed); ready for /feature-finalize
 - **Not pushed:** deliberate — the project rule is commit on completion, push only when the operator asks
 - **Blocked:** none
 - **Unvisited:** then Phase 2 (tier 1 — lite-IDE core), Phase 3 (tier 2 — opt-in workflow layer), Phase 4 (follow every instruction literally)
@@ -599,6 +599,71 @@ agrees with its own code, and citations point at a SYMBOL rather than a drifting
 which is what made the number re-derivable in the first place. A `SURFACE` is filed for a
 mechanism that could work (a single generated line, or a `<!-- count -->` marker the docs
 include and a test regenerates) — a **generator**, not a detector.
+
+## Code-Quality Review — m14-wp4-two-tier-setup-docs
+
+**Reviewed:** ship commit `9acae28` (single-commit feature). **Verdict: 0 CRITICAL / 2 MAJOR / 3 MINOR.**
+
+### Both MAJORs were FIXED, not backlogged (autopilot would have auto-backlogged them)
+
+**MAJOR 1 — `sectionWindow` failed OPEN. [FIXED]** The reviewer mutation-tested the guard
+independently and found that inserting a `### Also in tier 1` subsection naming the gated
+`⌘⇧K` left the suite **10/10 GREEN**. ⚠️ **I reproduced it before acting** — confirmed
+EXIT=0 with the leak present. The window STOPPED at the sibling heading and simply excluded
+content a reader plainly reads as tier 1; a leak outside the window is invisible to every
+assertion over it. ⚠️ **The reviewer's diagnosis is sharper than the finding**: this is the
+SAME window-boundary defect fixed at Phase 3, recurring one heading level down, because that
+fix patched the SYMPTOM (`##`→`#{2,3}`) instead of the SHAPE. Now bounded by its PEERS (the
+next tier heading or the next `## `), so descendant subsections stay INSIDE the window.
+⚠️ **Note the asymmetry that made this dangerous**: the Phase 3 version failed CLOSED (false
+alarm, visible); this one failed OPEN (false green, silent).
+
+**MAJOR 2 — two tests were the same assertion. [FIXED]** `visibleChords(true) \
+visibleChords(false)` is **provably identical** to `CHORD_REGISTRY.filter(requiresWorkflowGate)`
+— verified by reading `visibleChords`: it returns `CHORD_REGISTRY` when enabled and filters
+exactly `requiresWorkflowGate` when not. The second test could never fail when the first
+passed: zero mutation coverage, presented as independent protection. **Re-aimed at the PANEL
+registry** via `availablePanels()` — a genuinely different derivation that was unguarded on
+the tier-1 side.
+
+⚠️ **The re-aimed test FIRED on its first run — entry 12 a second time in one file.**
+`\bdocs\b` matched inside the tier-1 URL `https://docs.claude.com`. A word boundary is no
+defence when the token is a whole word inside a URL. Anchored to the panel-tab row, the same
+remedy its sibling already used.
+
+### Mutation re-proof after the fixes (each run individually)
+
+| # | Mutant | Result |
+|---|---|---|
+| R1 | **the reviewer's mutant** — `###` sibling in tier 1 naming `⌘⇧K` | **NOW CAUGHT** (was 10/10 green) |
+| R2 | gate `⌘P` — reverse direction | **CAUGHT** |
+| R3 | panel baseline drift (`docs` into `AVAILABLE_PANELS`) | **CAUGHT** |
+| R4 | tier-1 heading renamed — vacuity control | **CAUGHT** |
+
+`pnpm verify:auto` EXIT=0 (201 files / 2726 tests). All mutated files restored and
+`shasum`-verified.
+
+### MINOR findings — auto-backlogged per drive_mode=autopilot
+
+1. **Unanchored label matching** (`w.includes(e.label)` on `⌘P`/`⌘T`/`⌘N`) — harmless today
+   since the only gated label is `⌘⇧K`, but not as rigorous as the backtick-anchored
+   slash-command test in the same file.
+2. **Stale `Current Node`** — `Unvisited:` still listed closed phases and cited commit
+   `9f5d1d5` (pre-amend; the shipped SHA is `9acae28`). ⚠️ **Fixed inline** — Current Node is
+   authoritative and the reviewer correctly called it the costliest small defect in the file.
+3. **File location** — the guard lives under `settings/__tests__/` but imports nothing from
+   `settings/`; `state/__tests__/` beside the OFF-invariant guard it mirrors would be easier
+   to find.
+
+### Assessment (reviewer's, verbatim summary)
+
+"Well-built work… the new guard is a genuine, non-vacuous, bidirectional check driven from
+typed production data… Declining to ship the doc-count guard after it caught 1 of 4 mutants
+is the single best judgment call in the diff… Net: this advances the codebase and accrues no
+meaningful debt beyond the one window-boundary gap."
+
+### If you disagree
+Mark any finding `[DISMISSED]` in this section before `/feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

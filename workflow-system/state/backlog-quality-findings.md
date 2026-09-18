@@ -1033,3 +1033,23 @@ scheduling items rather than polish.*
   test (e.g. assert `updateConfirmSpec` IS present) so an empty/failed read cannot pass.
 - **Priority:** low
 - **Status:** pending
+
+# m14-wp4-two-tier-setup-docs — 2026-09-18
+
+## SURFACE-2026-09-18-QUALITY-UNANCHORED-CHORD-LABEL-MATCH
+- **Severity:** MINOR
+- **Location:** `src/components/settings/__tests__/readmeTierOneHonesty.test.ts` — the leak/omission filters using `w.includes(e.label)`
+- **Finding:** Chord-label detection is substring-based and unanchored (`⌘P`, `⌘T`, `⌘N`). Harmless today because the only gated label is `⌘⇧K`, but if a future milestone gates `⌘P`, the tier-2 completeness test could be satisfied by an incidental `⌘P` in adjacent prose.
+- **Why it matters:** The slash-command test in the SAME file already does this correctly with a backtick-anchored match (`` `(/[a-z][a-z-]*)` ``). The inconsistency is the tell — one half of the file is rigorous about anchoring and the other is not.
+- **Suggested fix:** Anchor the label match the same way (backticks or a word boundary appropriate to the glyph set).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-18-QUALITY-GUARD-FILE-IN-UNRELATED-DIRECTORY
+- **Severity:** MINOR
+- **Location:** `src/components/settings/__tests__/readmeTierOneHonesty.test.ts`
+- **Finding:** The file lives under `src/components/settings/__tests__/` but its subject is `README.md` plus the workspace registries — it imports nothing from `settings/`.
+- **Why it matters:** Discoverability for the person who trips it. `src/state/__tests__/` (beside the OFF-invariant guard it repeatedly cites and mirrors) would be the natural home.
+- **Suggested fix:** Move to `src/state/__tests__/` and update the relative imports. ⚠️ Low value on its own; ride it on the next touch of this file rather than a standalone move commit.
+- **Priority:** low
+- **Status:** pending

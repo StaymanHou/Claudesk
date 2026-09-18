@@ -1626,3 +1626,9 @@ script under `tooling/` so each phase does not re-derive it.
 - **Suggested action:** If this drifts again, invert the mechanism: make the count a **generated artifact** rather than something to detect. Options: (a) a single source-of-truth line emitted by a script that docs `include`, (b) an HTML-comment marker (`<!-- guard-count -->…<!-- /guard-count -->`) whose content a test REGENERATES from `armSubjects` and fails on diff — a generator's output is unambiguous where prose intent is not. ⚠️ **Do not re-attempt the detector shape** without reading why it failed first.
 - **Priority:** low
 - **Status:** pending
+
+## Code-quality findings — m14-wp4-two-tier-setup-docs (2026-09-18)
+- **Pointer:** 2 MINOR in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m14-wp4-two-tier-setup-docs — 2026-09-18`. Both concern the new `readmeTierOneHonesty.test.ts` guard: unanchored chord-label matching (the same file's slash-command test already anchors correctly), and the file living under `settings/__tests__/` while importing nothing from `settings/`. ⚠️ **The review's 2 MAJOR findings were FIXED at review time, not backlogged** — a `sectionWindow` that failed OPEN (reproduced: a `###` subsection naming the gated `⌘⇧K` passed 10/10) and two tests that were provably the same assertion; see the WIP's `## Code-Quality Review`.
+- **Priority:** low (both)
+- **Status:** pending
+- **Pickup shape:** both ride the next touch of `readmeTierOneHonesty.test.ts` — neither justifies a standalone commit.

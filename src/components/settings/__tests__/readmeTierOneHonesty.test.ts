@@ -5,8 +5,8 @@ import { join } from "node:path";
 // Imported from PRODUCTION, not stubbed — the whole point is that this guard reads the
 // same typed data the app does. A re-implementation would share the blind spot
 // (`extract-for-import-when-a-raw-guard-cant-express-the-property`).
-import { CHORD_REGISTRY, visibleChords } from "../../workspace/chordRegistry";
-import { AVAILABLE_PANELS } from "../../workspace/panelHost";
+import { CHORD_REGISTRY } from "../../workspace/chordRegistry";
+import { AVAILABLE_PANELS, availablePanels } from "../../workspace/panelHost";
 // M14 WP4 Phase 3 — the tier-2 half needs the skill row, same production-import rule.
 import { SKILL_BUTTONS } from "../../workspace/skillButtons";
 
@@ -48,21 +48,44 @@ const REPO_ROOT = join(
  * has bitten this repo before (`vitest-raw-import-css-returns-processed-not-text`), and
  * `node:fs` is what the sibling OFF-invariant guard uses.
  *
- * ⚠️ THE TERMINATOR MUST MATCH `###` TOO, NOT JUST `##`. Written at Phase 2 as `/\n## /`,
- * which was true only while tier 1 was the last `###` before a `##`. Phase 3 added
- * `### Tier 2 …` one phase later and the window silently ran past the end of tier 1,
- * swallowing tier 2's GATED surfaces — so the guard reported `⌘⇧K` inside "tier 1". The
- * assertion was right and the window was wrong; a section-bounding regex must be anchored
- * to the section's real end, not to the heading level that happened to follow it that week.
+ * ⚠️ THE TERMINATOR HAS BEEN WRONG TWICE, IN OPPOSITE DIRECTIONS. Both are recorded
+ * because the second fix was a patch to the symptom and the shape bit again:
+ *
+ *   Phase 2 wrote `/\n## /` — true only while tier 1 was the last `###` before a `##`.
+ *   Phase 3 added `### Tier 2 …` and the window ran PAST the end of tier 1, swallowing
+ *   tier 2's gated surfaces. The guard reported `⌘⇧K` "inside tier 1". Failed CLOSED
+ *   (false alarm) — visible, and fixed by widening the terminator to `/\n#{2,3} /`.
+ *
+ *   That fix then failed OPEN, which is the dangerous direction and is why the shape,
+ *   not the level, is the thing to get right. Code review mutation-tested it: adding a
+ *   `### Also in tier 1` subsection naming `⌘⇧K` left the suite 10/10 GREEN, because
+ *   the window now STOPS at that sibling and simply excludes content a reader plainly
+ *   reads as tier 1. A leak outside the window is invisible to every assertion over it.
+ *
+ * The shape: a tier section owns everything up to the next TIER or the next `## `. It is
+ * bounded by its PEERS, not by "whatever heading level appears next" — descendant
+ * subsections belong INSIDE it. Anchoring on the peers is what makes the window mean
+ * "the tier", which is what every assertion below actually claims to be checking.
  */
+const TIER_HEADINGS = [
+  "### Tier 1 — the lite IDE",
+  "### Tier 2 — the opt-in workflow layer",
+] as const;
+
 function sectionWindow(heading: string): string {
   const readme = readFileSync(join(REPO_ROOT, "README.md"), "utf8");
   const start = readme.indexOf(heading);
   if (start === -1) return "";
-  // End at the next heading of any level — `## ` or `### ` — whichever comes first.
-  const rest = readme.slice(start);
-  const end = rest.search(/\n#{2,3} /);
-  return end === -1 ? rest : rest.slice(0, end);
+  const rest = readme.slice(start + heading.length);
+  // The section ends at the next PEER tier heading or the next `## ` — never at a
+  // descendant `### `/`#### `, which is part of this tier and must stay in the window.
+  const ends = [
+    ...TIER_HEADINGS.filter((h) => h !== heading).map((h) => rest.indexOf(h)),
+    rest.search(/\n## /),
+  ].filter((i) => i >= 0);
+  return ends.length === 0
+    ? heading + rest
+    : heading + rest.slice(0, Math.min(...ends));
 }
 
 const tierOneWindow = (): string => sectionWindow("### Tier 1 — the lite IDE");
@@ -101,15 +124,40 @@ describe("README tier-1 section is honest about the workflow gate", () => {
     ).toEqual([]);
   });
 
-  it("names no right-panel tab that is unavailable while the gate is OFF", () => {
+  it("names no right-panel PANEL that is unavailable while the gate is OFF", () => {
+    // ⚠️ RE-AIMED at code review. This test previously computed
+    // `visibleChords(true) \ visibleChords(false)` and called it "the gated delta" — but
+    // `visibleChords(true)` IS `CHORD_REGISTRY` and `visibleChords(false)` filters out
+    // exactly `requiresWorkflowGate`, so that difference is PROVABLY IDENTICAL to the
+    // filter in the test above. It could not fail when its sibling passed: zero mutation
+    // coverage, presented as independent protection.
+    //
+    // Re-aimed at the PANEL registry, which is a genuinely different derivation (panels,
+    // not chords) and was unguarded on the tier-1 side. Goes through `availablePanels`,
+    // the seam the app itself calls, rather than the unexported ON-state array.
     const w = tierOneWindow();
-    // `visibleChords(true)` minus `visibleChords(false)` is the gated delta, derived
-    // from production rather than hardcoded, so it tracks the registry automatically.
-    const gatedOnly = visibleChords(true).filter(
-      (on) => !visibleChords(false).some((off) => off.id === on.id),
+    const on = availablePanels(true);
+    const off = availablePanels(false);
+    const gatedOnly = on.filter((p) => !off.includes(p));
+    // Non-vacuity: if the gate ever stops adding a panel this test silently checks
+    // nothing, so pin that the delta is non-empty rather than trusting it.
+    expect(gatedOnly.length).toBeGreaterThan(0);
+    // ⚠️ ANCHORED TO THE PANEL ROW, not the window — entry 12 AGAIN, and it fired on the
+    // very first run of this re-aimed test: `\bdocs\b` matched inside the tier-1 URL
+    // `https://docs.claude.com`, flagging a leak that does not exist. A word boundary is
+    // no defence when the token is a whole word inside a URL. Same remedy the sibling
+    // panel test already uses: the haystack is the one row enumerating panel tabs.
+    const row =
+      w
+        .split("\n")
+        .find((l) => l.includes("The right half of each workspace")) ?? "";
+    const leaked = gatedOnly.filter((p) =>
+      new RegExp(`\\b${p}\\b`, "i").test(row),
     );
-    const leaked = gatedOnly.filter((e) => w.includes(e.label));
-    expect(leaked.map((e) => e.id)).toEqual([]);
+    expect(
+      leaked,
+      "tier-1 README names a right-panel tab that only exists with the gate ON",
+    ).toEqual([]);
   });
 
   it("the Editor/Diff/Terminal row matches the ungated panel baseline", () => {
