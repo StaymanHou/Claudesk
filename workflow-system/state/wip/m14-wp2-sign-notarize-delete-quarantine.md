@@ -168,7 +168,7 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         `.dmg` and Homebrew install now pass Gatekeeper unaided. <!-- status: NOT-STARTED -->
   - [x] P3.4 Update `roadmap.md` (4) + `context.md` (1) + this cycle's `wbs.md` (6) where they
         assert the unsigned posture as current. <!-- status: NOT-STARTED -->
-  - [ ] P3.5 Check the Homebrew tap cask (task 2.8) for any stanza or caveat that assumed an
+  - [x] P3.5 Check the Homebrew tap cask (task 2.8) for any stanza or caveat that assumed an
         unsigned artifact. ⚠️ **The cask lives in a DIFFERENT repo** — if a change is owed,
         surface it as a cross-repo handoff, do not edit silently. <!-- status: NOT-STARTED -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
@@ -206,8 +206,8 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 > P3.5
-- **Active scope:** P3.1–P3.4 done; P3.5 (Homebrew cask check) is the last impl leaf
+- **Path:** Feature > Phase 3 > verify-auto
+- **Active scope:** Phase 3 impl complete (P3.1–P3.5 `[x]`); verification group next
 - **Blocked:** none
 - **Unvisited:** Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
 - **Open discoveries:** 1 — the staple/re-tar ordering trap (P1.2/P1.3), resolved in-phase
@@ -215,6 +215,16 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+
+[SURFACED-2026-09-18] Phase 3 / P3.5 — **The Homebrew cask's `caveats` block was the most
+user-visible stale claim of all** — it printed "Claudesk is an UNSIGNED build … clear the
+quarantine flag once: xattr -dr …" to EVERY installing user, and it lives in a SEPARATE repo
+(`homebrew-claudesk/`) that the WBS's task-2.8 wording ("if notarization changes anything it
+asserts") framed as a maybe. It did. Rewritten: the unsigned comment block now records the
+signed+notarized posture, and `caveats` drops the xattr instruction entirely. ⚠️ **Left
+UNCOMMITTED in the tap repo on purpose** — it is a different git repo and `/release` step 8
+bumps `version`/`sha256` there during the Phase 4 cut, so the two edits should land in one
+commit rather than leaving the tap dirty across a release.
 
 [SURFACED-2026-09-18] Phase 1 / P1.3 — **Stapling the `.app` AFTER the build leaves the
 updater payload unstapled.** Tauri creates `Claudesk.app.tar.gz` *during* `tauri build`,
