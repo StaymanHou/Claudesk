@@ -61,4 +61,39 @@ claim's nouns, not a known-wrong number.
 
 ---
 
+## Resynced at the M14-remainder cycle close (2026-09-18)
+
+Two things landed in that cycle that this doc — the designated authority for the gate, the
+OFF-invariant guard and Settings — did not describe. Recorded here rather than left to drift.
+
+**1. The tier boundary now has a SECOND mechanical enforcement, on the DOCS side.**
+`src/components/settings/__tests__/readmeTierOneHonesty.test.ts` (M14 WP4, 10 tests) pins that
+README's tier-1 section names **no** gated surface and its tier-2 section names **every** one.
+It reads the same production registries the OFF-invariant guard does (`CHORD_REGISTRY`,
+`availablePanels`, `SKILL_BUTTONS`) rather than re-implementing them.
+
+⚠️ **The two guards are complements, not duplicates, and the distinction is worth keeping
+straight.** The OFF-invariant guard asserts the *app* surfaces nothing gated while OFF; this one
+asserts the *documentation* promises nothing gated to a tier-1 reader. A gated surface can be
+correctly hidden by the app and still be wrongly advertised in the README — that is the gap it
+closes, and it is a real one: the README advertises to a stranger deciding whether to install.
+
+⚠️ **It is driven from the REGISTRY side deliberately.** The failure worth catching is not an
+edit to the README; it is **a future milestone gating a new chord**, after which tier 1 silently
+starts overclaiming. Nobody editing `chordRegistry.ts` re-reads the docs. A new gated chord
+fails that test on the day it is added, which is the only day the fix is cheap.
+
+⚠️ **Its section-window helper failed in BOTH directions before settling**, which is why the
+window is bounded by its **peers** (the next tier heading or the next `## `) rather than by
+whatever heading level happens to follow: an earlier terminator ran PAST the section (false
+alarm, visible), and its patched successor STOPPED at a `###` subsection and excluded content a
+reader plainly reads as tier 1 (**false green, silent** — caught only by code-review mutation
+testing). Patching the level is not fixing the shape.
+
+**2. The Settings panel gained a fifth group — `Keyboard shortcuts` (M14 WP3).** It renders from
+the typed `chordRegistry.ts` rather than a hand-written list, and it is **itself gate-aware**:
+entries are read through `visibleChords(enabled)`, which **OMITS** gate-dependent chords when the
+gate is OFF rather than greying them out. ⚠️ That is the no-dead-affordance rule applied to the
+hotkey list — `⌘⇧K` genuinely does nothing while the gate is off (`panelForChord` returns null),
+so showing it disabled would be exactly the dead affordance the gate exists to prevent.
 

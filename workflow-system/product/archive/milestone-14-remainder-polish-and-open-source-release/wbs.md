@@ -387,7 +387,14 @@ then **remove** the self-quarantine-clear mechanism that existed only because th
 - [x] 2.2 ✅ **DONE 2026-09-18** — v0.5.2 built signed, notarized (submission `0ccba0a7-707e-421e-a40a-db920327c431` → Accepted) and stapled. All three checks pass, **plus a fourth** (see 2.4). ⚠️ Verified against the **DOWNLOADED** artifacts, not the local build. Produce a **signed, notarized, stapled** `.app` + `.dmg` locally. Verify with
       `codesign --verify --deep --strict --verbose=2`, `spctl -a -vvv -t install`, and
       `stapler validate`. ⚠️ **All three must pass** — `codesign` alone does not prove notarization.
-- [ ] 2.3 ⏸️ **OPERATOR-GATED — v0.5.2 is published; the observation is the operator's to take, at their own moment.** ⚠️ **`brew upgrade` must NOT be used for this** — it deletes and rewrites the running bundle, killing every live Claudesk session. The in-app updater (Check for updates → Install) is the path, and **nothing may kill a running Claudesk** to satisfy a checkbox. What remains unobserved: `claude`/`subl`/`smerge` spawning from a notarized installed build (WP1 proved `zsh`+`perl` directly; the rest is inference). ⚠️ **INSTALLED-BUILD SMOKE TEST — mandatory, and `pnpm tauri:dev` CANNOT substitute.**
+- [ ] 2.3 ⏸️ **OPERATOR-GATED — PARTIALLY CONFIRMED 2026-09-18 at cycle close; the runtime half remains the operator's to observe.**
+      ✅ **Mechanically verified on the installed `/Applications/Claudesk.app`:** version **0.5.2**, `spctl` → **accepted /
+      source=Notarized Developer ID**, hardened runtime (`flags=0x10000`), and **no `com.apple.quarantine` xattr present** —
+      so the "no Gatekeeper prompt, no `xattr` step" half of this task is CONFIRMED, not assumed.
+      ⏸️ **Still unobserved (needs the app running):** `cc_spawn` finding `claude` under the hardened-runtime + GUI-PATH
+      interaction, PTY behaviour, and the Sublime launchers. Claudesk was not running at cycle close, and an agent must not
+      launch or touch the operator's app to manufacture the observation.
+      **Original task text:** ⚠️ **`brew upgrade` must NOT be used for this** — it deletes and rewrites the running bundle, killing every live Claudesk session. The in-app updater (Check for updates → Install) is the path, and **nothing may kill a running Claudesk** to satisfy a checkbox. What remains unobserved: `claude`/`subl`/`smerge` spawning from a notarized installed build (WP1 proved `zsh`+`perl` directly; the rest is inference). ⚠️ **INSTALLED-BUILD SMOKE TEST — mandatory, and `pnpm tauri:dev` CANNOT substitute.**
       Launch the notarized `.app` **from Finder** and confirm: no Gatekeeper prompt, **no `xattr`
       step needed**, `cc_spawn` still finds `claude` (the hardened-runtime + GUI-PATH interaction),
       PTY works, Sublime launchers work. Per `docs/lessons/verify-self-tiers.md`, anything touching

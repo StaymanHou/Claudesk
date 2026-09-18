@@ -1,7 +1,7 @@
 ---
 stage: arch
 state: complete
-updated: 2026-09-15  # M15 (workflow supervisor) cycle-closed: index gained arch/workflow-supervisor.md; the guard-arm line corrected to 6 arms / 9 subjects (the M15-close edit said 8; corrected 2026-09-18 at M14 WP4 — the guard asserts `.toBe(9)`). SPLIT into arch/<subsystem>.md at 2026-08-18 — this file is the index + the warning set.
+updated: 2026-09-18  # M14-remainder cycle closed (6/6 WPs). arch/workflow-gate.md resynced: the README tier guard + the gate-aware Keyboard-shortcuts Settings group.
 shape: index
 archive-root: workflow-system/product/archive/
 ---
