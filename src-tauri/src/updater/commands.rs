@@ -7,11 +7,13 @@
 //!   "up to date"). Cheap, no side effects — the pre-flight the UI shows before asking
 //!   the user to confirm. Minisign is NOT exercised here (that happens in `download()`).
 //! - [`updater_apply`] — the full flow: `check → download (minisign-verified) →
-//!   install → clear_own_quarantine → relaunch`. Returns only on failure (a successful
-//!   relaunch replaces the process).
+//!   install → relaunch`. Returns only on failure (a successful relaunch replaces
+//!   the process).
 //!
-//! The self-clear sits between `install()` and `relaunch()` per the macOS-install()-
-//! returns seam documented in `super` — see that module's header. `download()` verifies
+//! ⚠️ **No quarantine self-clear step** — deleted at M14 WP2 (2026-09-18) when the app
+//! became notarized; a stapled ticket means Gatekeeper admits the new bundle directly.
+//! `install()` still returns without relaunching on macOS per the seam documented in
+//! `super` — see that module's header. `download()` verifies
 //! the minisign signature internally, so a tampered/wrong-key artifact fails there,
 //! before any install (the cancel-safe boundary).
 //!
@@ -96,20 +98,18 @@ pub async fn updater_check(app: AppHandle) -> Result<UpdateCheckResult, String> 
     }
 }
 
-/// Drive the FULL update flow: check → download → install → self-clear → relaunch.
+/// Drive the FULL update flow: check → download → install → relaunch.
 ///
 /// - `download()` verifies the minisign signature over the downloaded bytes vs the
 ///   configured pubkey (verification is inside `download`). A tampered or wrong-key
 ///   artifact fails HERE, before any install — the cancel-safe boundary.
 /// - `install()` extracts + replaces the bundle in place and (on macOS) RETURNS
-///   without relaunching, leaving the seam for the self-clear.
-/// - [`clear_own_quarantine`](super::clear_own_quarantine) runs `xattr -dr
-///   com.apple.quarantine <own bundle>` — the GO-path unsigned-relaunch mechanism.
+///   without relaunching.
 /// - `relaunch()` (tauri-plugin-process via `app.restart()`) replaces the process;
 ///   on success this function does not return.
 ///
 /// Returns `Err(String)` on any failure so the UI sees WHERE it broke (no update /
-/// download+verify / install / self-clear). A clean relaunch is the success path.
+/// download+verify / install). A clean relaunch is the success path.
 #[tauri::command]
 pub async fn updater_apply(app: AppHandle) -> Result<String, String> {
     // One self-update path for every install (M10 WP6 Phase B1) — no install-source gate.
@@ -172,20 +172,9 @@ pub async fn updater_apply(app: AppHandle) -> Result<String, String> {
         .install(&bytes)
         .map_err(|e| format!("install: {e}"))?;
 
-    // Clear quarantine on our own freshly-installed bundle before relaunch so the
-    // unsigned bundle opens clean past Gatekeeper.
-    let current_exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
-    match super::clear_own_quarantine(&current_exe) {
-        Ok(bundle) => {
-            eprintln!("[updater] cleared quarantine on {}", bundle.display());
-        }
-        Err(super::UpdaterError::BundleUnresolved(p)) => {
-            // Dev build (not inside a .app) — nothing to clear. In the installed build
-            // this branch should never hit.
-            eprintln!("[updater] not inside a .app ({p}); skipping self-clear (dev build?)");
-        }
-        Err(e) => return Err(format!("self-clear quarantine failed: {e}")),
-    }
+    // No quarantine handling here: the installed bundle is notarized with a stapled
+    // ticket (M14 WP2), so Gatekeeper admits it directly. The self-clear step that used
+    // to sit between install() and restart() is deleted — see the module doc.
 
     // relaunch — replaces the process with the newly-installed bundle. Does not return
     // on success. `restart()` diverges (-> !), so nothing after it runs.

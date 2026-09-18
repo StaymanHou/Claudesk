@@ -72,10 +72,10 @@ mod time_store;
 // `aggregate_alarm` fold lives in tray/mod.rs; the tray-icon ops in tray/commands.rs.
 mod transcript;
 mod tray;
-// M10 (in-app auto-updater): the production update flow. The pure core lives in
-// updater/mod.rs — self-clear (bundle-path resolution + `xattr -dr com.apple.quarantine`
-// on the own bundle). The flow commands (updater_check + updater_apply — the full
-// check→download→install→self-clear→relaunch) live in updater/commands.rs. There is ONE
+// M10 (in-app auto-updater): the production update flow. The flow commands
+// (updater_check + updater_apply — the full check→download→install→relaunch) live in
+// updater/commands.rs. The self-quarantine-clear core was DELETED at M14 WP2 when the
+// app became notarized (a stapled ticket means Gatekeeper needs no xattr). There is ONE
 // self-update path for every install: the brew detect-and-defer gate was removed at M10
 // WP6 (decision reversed — brew installs self-update too; SURFACE-2026-07-17-M10-BREW-
 // DECISION-REVERSED-TO-SELF-UPDATE).
@@ -629,9 +629,10 @@ pub fn run() {
             time_store::commands::time_set_tracking_enabled,
             // M10 (in-app auto-updater): the production update flow. `updater_check`
             // reports current→available versions; `updater_apply` executes the full
-            // check→download(minisign-verified)→install→self-`xattr`-clear→relaunch. One
-            // self-update path for every install — the brew detect-and-defer gate was
-            // removed at M10 WP6 (decision reversed). See docs/product/wbs.md → M10 WP2/WP6.
+            // check→download(minisign-verified)→install→relaunch (no quarantine clear —
+            // the bundle is notarized as of M14 WP2). One self-update path for every
+            // install — the brew detect-and-defer gate was removed at M10 WP6 (decision
+            // reversed). See workflow-system/product/arch/build-update-release.md.
             updater::commands::updater_check,
             updater::commands::updater_apply,
             // M10 WP4 (user-control prefs): the notification toggle (default ON) + the

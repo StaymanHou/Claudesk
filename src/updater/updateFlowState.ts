@@ -59,36 +59,6 @@ export function progressPercent(p: DownloadProgress): number | null {
   return Math.max(0, Math.min(100, Math.round(pct)));
 }
 
-/**
- * The WP1-FALLBACK quarantine dialog spec — shown ONLY if the self-`xattr`-clear proves
- * insufficient (WP1's live verdict, deferred to WP6). Default is the GO path (self-clear,
- * as WP2's updater_apply does); this dialog is the instruct-the-user escape hatch. A
- * single OK acknowledges. `bundlePath` is the installed bundle the user must clear.
- */
-export type QuarantineAck = "ok";
-
-export function quarantineFallbackSpec(
-  bundlePath: string,
-): ConfirmSpec<QuarantineAck> {
-  return {
-    title: "One more step to finish updating",
-    message:
-      `macOS quarantined the updated app. Run this in Terminal, then reopen Claudesk:\n\n` +
-      `xattr -dr com.apple.quarantine "${bundlePath}"`,
-    buttons: [{ id: "ok", label: "Got it", value: "ok", variant: "primary" }],
-    escValue: "ok",
-  };
-}
-
-/**
- * WP1 fallback flag — whether the instruct-user quarantine dialog path is active. Default
- * `false` = the GO path (updater_apply self-clears, as shipped in WP2). WP6 flips this to
- * `true` with a one-line change if the live Gatekeeper verdict requires the fallback (the
- * self-clear proved insufficient). Kept as a single named const so WP6's flip is greppable
- * and the seam is built now (operator decision, Q4).
- */
-export const QUARANTINE_FALLBACK_ACTIVE = false;
-
 /** A transient info/error note surfaced to the App-level updater status row (WP6 P1.4). */
 export interface UpdaterStatusNote {
   kind: "info" | "error";

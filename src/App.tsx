@@ -60,16 +60,14 @@ import { openFinder } from "./finder/finderLaunch";
 import { usePipFanout } from "./pip/usePipFanout";
 import { useMirrorTicker } from "./components/workspace/useMirrorTicker";
 // M10 WP4 — the polished in-app updater UX: an App-level hook driving a top-of-window
-// non-modal notify banner + confirm/progress/cancel flow + the WP1-fallback quarantine
-// dialog. Replaces WP2's throwaway corner UpdaterTrigger (now deleted). Mounted ONCE at
+// non-modal notify banner + confirm/progress/cancel flow. (The WP1-fallback quarantine
+// dialog was deleted at M14 WP2 — the bundle is notarized, so nothing needs clearing.)
+// Replaces WP2's throwaway corner UpdaterTrigger (now deleted). Mounted ONCE at
 // App level so the banner reads over BOTH the picker and an open-workspace scene.
 import { useUpdater } from "./updater/useUpdater";
 import { UpdaterStatusRow } from "./updater/UpdaterStatusRow";
 import { UpdateNotifyBanner } from "./updater/UpdateNotifyBanner";
-import {
-  updateConfirmSpec,
-  quarantineFallbackSpec,
-} from "./updater/updateFlowState";
+import { updateConfirmSpec } from "./updater/updateFlowState";
 
 // M9 WP6a — the GLOBAL time-analytics dashboard is a top-level view, mounted ONCE,
 // overlaying the center stage (the PickerOverlay pattern). LAZY: its chunk (the
@@ -456,7 +454,7 @@ function App() {
   );
 
   // M10 WP4 — the in-app updater. One App-level hook drives the notify banner, the
-  // confirm/progress/cancel flow, skip-this-version, and the WP1-fallback dialog. The
+  // confirm/progress/cancel flow and skip-this-version. The
   // Phase 5 menu item + picker button call `updater.checkNow()` (a manual check that
   // ignores skip/disable); auto-check-on-launch is internal to the hook (gated by the
   // notifications pref + skip-list).
@@ -958,24 +956,18 @@ function App() {
           onDismiss={() => resolveInvite("dismissed")}
         />
       )}
-      {/* M10 WP4 — the confirm + WP1-fallback dialogs are modal OVERLAYS (they SHOULD
-          cover the scene while active), unlike the notify banner (an in-flow row, hoisted
-          to the top of the app-shell above). Update… opens this confirm; confirm drives
-          download (progress bar in the banner) → install → self-clear → relaunch. The
-          fallback quarantine dialog shows only if the self-clear proves insufficient
-          (default GO path leaves fallbackBundlePath null). */}
+      {/* M10 WP4 — the confirm dialog is a modal OVERLAY (it SHOULD cover the scene
+          while active), unlike the notify banner (an in-flow row, hoisted to the top of
+          the app-shell above). Update… opens this confirm; confirm drives download
+          (progress bar in the banner) → install → relaunch. The WP1-fallback quarantine
+          dialog was DELETED at M14 WP2 — the bundle is notarized, so there is nothing
+          for the user to clear. */}
       {updater.phase === "confirming" && updater.banner?.available_version && (
         <ConfirmModal
           spec={updateConfirmSpec(updater.banner.available_version)}
           onChoose={(v) =>
             v === "update" ? updater.confirmUpdate() : updater.cancelUpdate()
           }
-        />
-      )}
-      {updater.fallbackBundlePath && (
-        <ConfirmModal
-          spec={quarantineFallbackSpec(updater.fallbackBundlePath)}
-          onChoose={() => updater.dismissFallback()}
         />
       )}
       {/* M10.5-WP2 — app-quit-while-active confirm. App-shell level (NOT inside the

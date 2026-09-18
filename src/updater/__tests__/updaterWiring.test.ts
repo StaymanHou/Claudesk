@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 // banner/flow DOM behavior is verify-self-covered via the MCP bridge, not re-asserted
 // here — the project has no jsdom/testing-library, so component DOM is driven live).
 import appTsx from "../../App.tsx?raw";
-import useUpdaterSrc from "../useUpdater.ts?raw";
 import bannerSrc from "../UpdateNotifyBanner.tsx?raw";
 // App.css is read via fs (Vite's CSS plugin intercepts `?raw` on .css and doesn't return
 // the plain file text, so we read the source file directly for the layout-invariant guard).
@@ -20,9 +19,17 @@ describe("App.tsx updater wiring (M10 WP4 Phase 4)", () => {
     expect(appTsx).toContain("UpdateNotifyBanner");
   });
 
-  it("wires the confirm dialog via updateConfirmSpec and the WP1 fallback via quarantineFallbackSpec", () => {
+  it("wires the confirm dialog via updateConfirmSpec", () => {
     expect(appTsx).toContain("updateConfirmSpec");
-    expect(appTsx).toContain("quarantineFallbackSpec");
+  });
+
+  // M14 WP2 — the WP1-fallback quarantine dialog was DELETED (the bundle is notarized,
+  // so there is nothing for the user to clear). Guard the deletion so it cannot silently
+  // come back: App.tsx must not reference the spec or the hook's fallback surface.
+  it("no longer wires the deleted WP1-fallback quarantine dialog", () => {
+    expect(appTsx).not.toContain("quarantineFallbackSpec");
+    expect(appTsx).not.toContain("fallbackBundlePath");
+    expect(appTsx).not.toContain("dismissFallback");
   });
 
   it("no longer imports or mounts the deleted throwaway UpdaterTrigger", () => {
@@ -83,31 +90,6 @@ describe("App.tsx error-surface wiring (WP6 P1.1)", () => {
 
   it(".update-banner-error variant exists in the CSS", () => {
     expect(appCss).toContain(".update-banner-error");
-  });
-});
-
-// WP6 P1.3 — the single-post-install-surface invariant
-// (SURFACE-2026-07-17-QUALITY-WP4-FALLBACK-VS-ERROR-RACE): when QUARANTINE_FALLBACK_ACTIVE
-// the quarantine dialog is the SOLE surface — confirmUpdate must NOT also set phase="error"
-// on that path (it returns early). Guarded structurally on the hook source.
-describe("useUpdater fallback-vs-error reconciliation (WP6 P1.3)", () => {
-  it("returns early on the QUARANTINE_FALLBACK_ACTIVE branch (no double post-install surface)", () => {
-    // Isolate the confirmUpdate fallback branch and assert the early-return precedes any
-    // setPhase("error") that follows it in the same try block.
-    const branchIdx = useUpdaterSrc.indexOf("if (QUARANTINE_FALLBACK_ACTIVE)");
-    expect(branchIdx).toBeGreaterThan(-1);
-    const afterBranch = useUpdaterSrc.slice(branchIdx);
-    // The fallback branch sets the dialog path then returns BEFORE the error-phase set.
-    const returnIdx = afterBranch.indexOf("return;");
-    const errorPhaseIdx = afterBranch.indexOf('setPhase("error")');
-    expect(returnIdx).toBeGreaterThan(-1);
-    expect(errorPhaseIdx).toBeGreaterThan(-1);
-    expect(returnIdx).toBeLessThan(errorPhaseIdx); // return happens first → no double surface
-  });
-
-  it("the menu-check path routes its outcome to a status note (WP6 P1.4, no longer discarded)", () => {
-    expect(useUpdaterSrc).toContain("statusNoteForOutcome");
-    expect(useUpdaterSrc).toContain("statusNoteForCheckError");
   });
 });
 

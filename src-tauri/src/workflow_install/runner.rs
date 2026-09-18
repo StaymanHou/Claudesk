@@ -9,12 +9,13 @@
 //! diverging definition of "installed" — and the companion repo owns that definition.
 //!
 //! ## Why command-building is separate from spawning
-//! [`clone_command`] and [`install_command`] are pure `(program, args)` builders, following
-//! `updater::quarantine_clear_command`. That split means the *shape* of what will be executed
-//! is unit-testable without running anything — which matters more here than in the updater,
-//! because these commands carry user-chosen paths into a subprocess. A test can assert the
-//! destination path is passed as a single argument (never shell-interpolated) without any
-//! filesystem or network.
+//! [`clone_command`] and [`install_command`] are pure `(program, args)` builders. That split
+//! means the *shape* of what will be executed is unit-testable without running anything —
+//! which matters here because these commands carry user-chosen paths into a subprocess. A
+//! test can assert the destination path is passed as a single argument (never
+//! shell-interpolated) without any filesystem or network.
+//! (This pattern was borrowed from `updater::quarantine_clear_command`, which was deleted
+//! at M14 WP2 when the app became notarized — the pattern outlived its first instance.)
 //!
 //! ## Ordering: the provenance write happens LAST
 //! [`run_install`] writes the provenance record only after `install.sh` exits zero. That

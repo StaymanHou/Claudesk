@@ -26,7 +26,6 @@ import {
 import { shouldAutoNotify, manualCheckOutcome } from "./updateNotifyState";
 import {
   progressPercent,
-  QUARANTINE_FALLBACK_ACTIVE,
   statusNoteForOutcome,
   statusNoteForCheckError,
   type UpdateFlowPhase,
@@ -57,9 +56,6 @@ export interface UseUpdater {
    *  native-menu manual-check "up to date" / "could not check" outcome that previously had
    *  no App-side surface. `null` = no note. */
   statusNote: UpdaterStatusNote | null;
-  /** WP1-fallback: the bundle path to show in the quarantine dialog, or null when the
-   *  fallback isn't active/triggered. (Default GO path leaves this null.) */
-  fallbackBundlePath: string | null;
   /** Banner action: open the confirm dialog. */
   requestUpdate: () => void;
   /** Confirm-dialog outcome. */
@@ -73,8 +69,6 @@ export interface UseUpdater {
   dismissError: () => void;
   /** Status-note action: clear the transient status note (WP6 P1.4). */
   dismissStatusNote: () => void;
-  /** Dismiss the WP1-fallback quarantine dialog. */
-  dismissFallback: () => void;
   /** Manual check (menu item / picker button) — ignores skip + disable; returns the
    *  classified outcome for the caller to surface, and shows the banner if applicable.
    *  ALSO sets `statusNote` for the up-to-date outcome so the native-menu path (which
@@ -88,9 +82,6 @@ export function useUpdater(): UseUpdater {
   const [applyingPercent, setApplyingPercent] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<UpdaterStatusNote | null>(null);
-  const [fallbackBundlePath, setFallbackBundlePath] = useState<string | null>(
-    null,
-  );
 
   // Check-on-launch: gated by the notifications pref + skip-list (frontend filter). Runs
   // once on mount. A failed check is swallowed (no update surface on a network error — a
@@ -157,17 +148,8 @@ export function useUpdater(): UseUpdater {
         // so the success path never returns here. Any resolution/rejection = a failure
         // stage (no update / download+verify / install / self-clear).
         const msg = await applyUpdate();
-        // Single-post-install-surface invariant (WP6 P1.3, reconciles
-        // SURFACE-2026-07-17-QUALITY-WP4-FALLBACK-VS-ERROR-RACE): the fallback quarantine
-        // dialog and the error affordance must NOT both fire on this same resolution. When
-        // the WP1 fallback is active the self-clear is the suspected culprit → the
-        // instruct-user quarantine dialog is the SOLE surface; return before setting the
-        // error phase. Default GO path (const false) falls through to the error surface.
-        if (QUARANTINE_FALLBACK_ACTIVE) {
-          setFallbackBundlePath("/Applications/Claudesk.app");
-          setPhase("idle"); // leave the fallback dialog as the only post-install surface
-          return;
-        }
+        // The updated bundle is notarized (M14 WP2), so there is no quarantine
+        // fallback path any more — an install that does not relaunch is simply an error.
         setErrorMessage(`Update did not relaunch: ${msg}`);
         setPhase("error");
       } catch (e) {
@@ -198,8 +180,6 @@ export function useUpdater(): UseUpdater {
 
   const dismissStatusNote = useCallback(() => setStatusNote(null), []);
 
-  const dismissFallback = useCallback(() => setFallbackBundlePath(null), []);
-
   const checkNow = useCallback(async (): Promise<ManualCheckReport | null> => {
     // Manual check: IGNORE skip + disable (the user explicitly asked). Surface the truth.
     setStatusNote(null); // clear any prior note before the new check
@@ -229,7 +209,6 @@ export function useUpdater(): UseUpdater {
     applyingPercent,
     errorMessage,
     statusNote,
-    fallbackBundlePath,
     requestUpdate,
     confirmUpdate,
     cancelUpdate,
@@ -237,7 +216,6 @@ export function useUpdater(): UseUpdater {
     dismissBanner,
     dismissError,
     dismissStatusNote,
-    dismissFallback,
     checkNow,
   };
 }

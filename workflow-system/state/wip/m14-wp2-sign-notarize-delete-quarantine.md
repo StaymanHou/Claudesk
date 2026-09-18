@@ -90,7 +90,7 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         properties are already pinned by verify-auto's bash -n sweep + the observable-outcome
         greps, which re-run on demand. No permanent test is owed for a markdown runbook. -->
 
-- [ ] Phase 2: Delete the quarantine workaround (code)  <!-- status: NOT-STARTED; depends on Phase 1 -->
+- [ ] Phase 2: Delete the quarantine workaround (code)  <!-- status: in-progress -->
   **Observable outcomes:**
   - CLI: `grep -rn "quarantine\|QUARANTINE\|resolve_bundle_path" src-tauri/src src/ --include='*.rs' --include='*.ts' --include='*.tsx'`
     returns **0 matches** (excluding archive dirs).
@@ -104,7 +104,7 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
     prove the app boots.**
   - Console: no JS errors on load (verified via a self-tested tap, not `read_logs{console}`,
     which captures nothing for this app).
-  - [ ] P2.1 Delete Rust: `clear_own_quarantine`, `quarantine_clear_command`,
+  - [x] P2.1 Delete Rust: `clear_own_quarantine`, `quarantine_clear_command`,
         `resolve_bundle_path`, `QUARANTINE_ATTR`, the quarantine `UpdaterError` variants, and
         the `lib.rs:76` comment. Update the `updater/mod.rs` module doc (it currently opens with
         "Claudesk is unsigned/un-notarized (locked decision…)" — now false).
@@ -115,18 +115,18 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         or its single call site (commands.rs:182). With the fn gone the enum has no remaining
         constructor or consumer, so leaving it would be dead code that `clippy` flags.
         <!-- status: NOT-STARTED -->
-  - [ ] P2.2 Delete the call sites in `updater/commands.rs` (`updater_apply`'s self-clear step)
+  - [x] P2.2 Delete the call sites in `updater/commands.rs` (`updater_apply`'s self-clear step)
         and the `workflow_install/runner.rs` mention. ⚠️ **Same phase as P2.1 by design** — do
         NOT split a deletion from its consumer migration. <!-- status: NOT-STARTED -->
-  - [ ] P2.3 Delete frontend: `QUARANTINE_FALLBACK_ACTIVE` (`updateFlowState.ts`), its branch in
+  - [x] P2.3 Delete frontend: `QUARANTINE_FALLBACK_ACTIVE` (`updateFlowState.ts`), its branch in
         `useUpdater.ts:166`, and the fallback dialog + wiring in `App.tsx`.
         <!-- status: NOT-STARTED -->
-  - [ ] P2.4 Update the two test files: delete the `QUARANTINE_FALLBACK_ACTIVE` default-value
+  - [x] P2.4 Update the two test files: delete the `QUARANTINE_FALLBACK_ACTIVE` default-value
         test (`updateFlowState.test.ts:67-71`) and the `?raw` branch guard
         (`updaterWiring.test.ts:90-97`). ⚠️ **Deleting a guard is only correct because the thing
         it guarded is gone** — confirm no *other* behavior rides on those tests before removing.
         <!-- status: NOT-STARTED -->
-  - [ ] P2.5 Run the boot smoke test **in this phase**, before handing off. A built-and-launched
+  - [x] P2.5 Run the boot smoke test **in this phase**, before handing off. A built-and-launched
         `.app` with a populated `#root`. <!-- status: NOT-STARTED -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
@@ -196,8 +196,8 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > P2.1
-- **Active scope:** P2.1 (delete the Rust quarantine surface)
+- **Path:** Feature > Phase 2 > verify-auto
+- **Active scope:** Phase 2 impl complete (P2.1–P2.5 `[x]`); verification group next
 - **Blocked:** none
 - **Unvisited:** Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
 - **Open discoveries:** 1 — the staple/re-tar ordering trap (P1.2/P1.3), resolved in-phase
