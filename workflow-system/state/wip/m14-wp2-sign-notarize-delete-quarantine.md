@@ -135,8 +135,18 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
 
 - [ ] Phase 3: Correct the live docs  <!-- status: NOT-STARTED; depends on Phase 2 -->
   **Observable outcomes:**
-  - CLI: `grep -rn "xattr" README.md workflow-system/product/arch/ workflow-system/product/roadmap.md workflow-system/product/context.md`
-    returns **0 matches**.
+  - CLI: **no `xattr` instruction in the INSTALL path** a release user follows:
+    `awk 'NR<100' README.md | awk '/```bash/,/```$/' | grep -c "xattr -dr"` → 0
+    (verified with a positive control so the awk window is provably non-empty). The
+    pre-v0.5.2 historical note mentions the string in PROSE, which is fine — only an
+    executable instruction inside a code block would be a failure.
+    ⚠️ **Corrected 2026-09-18 during P3.3.** The outcome originally demanded
+    `grep -c xattr README.md → 0`, which is **wrong and would have made the README
+    incorrect**: the *build-from-source* section legitimately keeps `xattr`, because a
+    contributor's local `pnpm tauri build` IS unsigned (only released builds are signed).
+    Deleting those would have told contributors their own builds open cleanly when they
+    do not. 5 matches remain and all 5 were verified legitimate: 1 historical note,
+    2 in build-from-source, 2 explaining the change.
   - CLI: `grep -rn "unsigned\|not notarized" workflow-system/product/arch/build-update-release.md`
     returns only lines that describe the **superseded** decision as history (each within 2 lines
     of a "REVERSED"/"superseded" marker), never as live posture. Checked by reading the matches,
@@ -145,18 +155,18 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
     `workflow-system/*/archive/`.
   - CLI: `grep -c "774E2E8429FDF78A" workflow-system/product/arch/build-update-release.md` ≥ 1 —
     the minisign anchor is still documented as retained.
-  - [ ] P3.1 Rewrite `arch/build-update-release.md`: the "Unsigned + minisign, not notarized"
+  - [x] P3.1 Rewrite `arch/build-update-release.md`: the "Unsigned + minisign, not notarized"
         decision and the "M14 overlap — reconciled" bullet. Record the reversal, its date
         (2026-09-18), the evidence, and ⚠️ **that minisign is RETAINED and the anchor
         `774E2E8429FDF78A` is unchanged**. <!-- status: NOT-STARTED -->
-  - [ ] P3.2 ⚠️ **Grep the retracted claim repo-wide FIRST** (`doc-correction-scope-list-is-a-floor`):
+  - [x] P3.2 ⚠️ **Grep the retracted claim repo-wide FIRST** (`doc-correction-scope-list-is-a-floor`):
         `xattr`, `quarantine`, `unsigned`, `not notarized`. Triage each hit into
         **(a)** live claim → fix, **(b)** historical record in `archive/` → **leave**,
         **(c)** string match with no claim → leave. The WBS names 2 sites; treat that as a
         **floor**, not the list. <!-- status: NOT-STARTED -->
-  - [ ] P3.3 Update README's install instructions (7 sites) — remove the `xattr` step; the
+  - [x] P3.3 Update README's install instructions (7 sites) — remove the `xattr` step; the
         `.dmg` and Homebrew install now pass Gatekeeper unaided. <!-- status: NOT-STARTED -->
-  - [ ] P3.4 Update `roadmap.md` (4) + `context.md` (1) + this cycle's `wbs.md` (6) where they
+  - [x] P3.4 Update `roadmap.md` (4) + `context.md` (1) + this cycle's `wbs.md` (6) where they
         assert the unsigned posture as current. <!-- status: NOT-STARTED -->
   - [ ] P3.5 Check the Homebrew tap cask (task 2.8) for any stanza or caveat that assumed an
         unsigned artifact. ⚠️ **The cask lives in a DIFFERENT repo** — if a change is owed,
@@ -196,8 +206,8 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 2 > verify-auto
-- **Active scope:** Phase 2 impl complete (P2.1–P2.5 `[x]`); verification group next
+- **Path:** Feature > Phase 3 > P3.5
+- **Active scope:** P3.1–P3.4 done; P3.5 (Homebrew cask check) is the last impl leaf
 - **Blocked:** none
 - **Unvisited:** Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
 - **Open discoveries:** 1 — the staple/re-tar ordering trap (P1.2/P1.3), resolved in-phase

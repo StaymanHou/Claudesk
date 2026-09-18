@@ -70,7 +70,6 @@ Claudesk is distributed through a personal **Homebrew tap**:
 brew tap StaymanHou/claudesk
 brew trust --cask StaymanHou/claudesk/claudesk
 brew install --cask claudesk
-xattr -dr com.apple.quarantine /Applications/Claudesk.app
 ```
 
 Why each step:
@@ -80,18 +79,21 @@ Why each step:
   per tap.
 - **`brew install --cask claudesk`** — downloads the `.dmg`, checks its SHA-256, and
   installs `Claudesk.app` to `/Applications`.
-- **`xattr -dr com.apple.quarantine …`** — Claudesk is **unsigned**, so macOS
-  quarantines it and Gatekeeper blocks it at launch (*"Apple cannot check it for
-  malicious software"*). This clears the flag once. (Homebrew 6.x removed the old
-  `--no-quarantine` install flag, so this manual step is the reliable path.)
+
+That's the whole install — **no Gatekeeper workaround needed.** Claudesk is
+Developer-ID signed and notarized by Apple, so it opens normally on first launch.
+(Releases before **v0.5.2** were unsigned and needed a manual
+`xattr -dr com.apple.quarantine` step; that is no longer required.)
 
 **Updating:**
 
 ```bash
 brew update
 brew upgrade --cask claudesk
-xattr -dr com.apple.quarantine /Applications/Claudesk.app   # re-attaches on each new build
 ```
+
+Or just use the built-in updater — Claudesk checks for updates on launch and can
+download, verify, install and relaunch itself in one click.
 
 Your state — remembered projects, Claude Code hook registration, etc. under
 `~/Library/Application Support/com.claudesk.app/` — carries across updates automatically.
@@ -298,8 +300,13 @@ dark-mode-only UI, the `CcSession` seam, etc.).
 
 ## Build from source
 
-For development, or to install your own build instead of the Homebrew cask. Claudesk
-is a self-built, **unsigned** macOS app — building produces both a `.app` and a `.dmg`:
+For development, or to install your own build instead of the Homebrew cask. Building
+produces both a `.app` and a `.dmg`.
+
+⚠️ **A local build is unsigned** unless you have a Developer ID certificate — released
+builds are signed and notarized, but `pnpm tauri build` on your machine is not. So the
+Gatekeeper step below still applies to *your own* builds, even though it no longer
+applies to an installed release.
 
 ```bash
 pnpm tauri build
@@ -322,14 +329,18 @@ xattr -dr com.apple.quarantine /Applications/Claudesk.app
 The production bundle id (`com.claudesk.app`) is stable across updates, so your state
 (`projects.json`, the Claude Code hook registration, etc. under
 `~/Library/Application Support/com.claudesk.app/`) carries over automatically. The
-Gatekeeper `xattr` step reappears on each replaced unsigned build.
+Gatekeeper `xattr` step reappears on each replaced **unsigned local** build.
+
+⚠️ Note `cp -R` **strips a notarization ticket** (extended attributes do not survive a
+plain copy) — irrelevant for an unsigned local build, but if you ever copy a *released*
+`.app` by hand, use `ditto` instead or it will be rejected as unnotarized.
 
 > **Cutting a release** (maintainer): the build → tag → GitHub release → tap-cask bump
 > flow is driven by the project-local `/release` skill — see
 > [`.claude/skills/release/SKILL.md`](.claude/skills/release/SKILL.md). In-app
 > auto-update has shipped: an installed build checks for new versions and updates
-> itself. Proper Developer-ID signing + notarization — which is what would remove the
-> `xattr` step entirely — is still deferred to a later polish milestone.
+> itself. Developer-ID signing + Apple notarization shipped in **v0.5.2**, which is what
+> removed the `xattr` step for installed releases.
 
 ## More
 

@@ -47,7 +47,7 @@ them divergent views of one directory in a feature whose whole model is "only to
   uncanonicalized prefix compare reports a contained path as an escape.
 - **`provenance.rs`** — the record. Path-arg'd read/write; no ambient root.
 - **`runner.rs`** — the two spawns. Pure `(program, args)` builders (following
-  `updater::quarantine_clear_command`) + thin spawners. **The provenance write is sequenced LAST**,
+  `updater::quarantine_clear_command`, deleted at M14 WP2 — the pattern outlived it) + thin spawners. **The provenance write is sequenced LAST**,
   after `install.sh` exits zero, so "a failed install leaves no record" is structural rather than a
   cleanup step. `OutputSink` keeps the whole run testable without a running app.
 - **`terminal.rs`** — a **pure reducer**: what does an outcome *mean* (gate action / cleanup /

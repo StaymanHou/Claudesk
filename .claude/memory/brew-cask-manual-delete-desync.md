@@ -14,6 +14,6 @@ If you delete `/Applications/Claudesk.app` **manually** (Finder/trash/`rm`), the
 **Fix / correct habits:**
 - Remove a cask app via `brew uninstall --cask claudesk` (keeps the receipt in sync), NOT Finder-delete.
 - To recover from a desync: `brew uninstall --cask claudesk` (clears the stale receipt) → then reinstall.
-- The full reinstall sequence is `brew trust --cask StaymanHou/claudesk/claudesk` → `brew install --cask claudesk` → `xattr -dr com.apple.quarantine /Applications/Claudesk.app`. The `brew trust` step is mandatory before install (recent Homebrew refuses untrusted third-party taps) and can get dropped during uninstall — re-run it if `install` errors *"Refusing to load cask … from untrusted tap"*.
+- The full reinstall sequence is `brew trust --cask StaymanHou/claudesk/claudesk` → `brew install --cask claudesk`. ⚠️ **As of v0.5.2 there is NO `xattr` step** — the app is Developer-ID signed + notarized, so Gatekeeper admits it unaided (M14 WP2, 2026-09-18). Older notes end this sequence with `xattr -dr com.apple.quarantine /Applications/Claudesk.app`; that is obsolete. The `brew trust` step is mandatory before install (recent Homebrew refuses untrusted third-party taps) and can get dropped during uninstall — re-run it if `install` errors *"Refusing to load cask … from untrusted tap"*.
 
 Observed 2026-06-24 right after the v0.1.0 tap release. See the install docs in `README.md` → Install and `.claude/skills/release/SKILL.md`.

@@ -34,5 +34,5 @@ Project CLAUDE.md generated at `CLAUDE.md` (project root).
 
 ## Booked corrections (carried into the WPs, not yet made)
 
-- ⚠️ **`arch/build-update-release.md`'s "Unsigned + minisign, not notarized" bullet and its "M14 overlap — reconciled" bullet still state the SUPERSEDED decision** — rewritten at **task 2.6**. ⚠️ **`doc-correction-scope-list-is-a-floor`: grep the retracted claim repo-wide first**; the two named sites are a floor, not the scope.
+- ✅ **RESOLVED 2026-09-18 (M14 WP2 Phase 3):** `arch/build-update-release.md`'s "Unsigned + minisign, not notarized" bullet and its "M14 overlap — reconciled" bullet have been rewritten — both are now struck-and-superseded with the reversal recorded, alongside 4 further sites the original scope list did not name. ~~still state the SUPERSEDED decision~~ — rewritten at **task 2.6**. ⚠️ **`doc-correction-scope-list-is-a-floor`: grep the retracted claim repo-wide first**; the two named sites are a floor, not the scope.
 - ⚠️ **M14's "default CLI args for `claude`" line is stale** — M11.5 consumed most of it and it still misstates **PiP (shipped M5)** and **permission-mode (shipped M6)** as future work; the per-project `--model` override shipped **M11.5 on the picker row, not in Settings**. Corrected at **task 4.2**.
