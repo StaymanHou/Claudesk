@@ -186,16 +186,22 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
     `774E2E8429FDF78A`.
   - ⚠️ **Operator-observed (agent CANNOT run this):** an installed v0.5.1 self-updates to v0.5.2
     via the in-app updater, relaunches, reports 0.5.2, and **no `xattr` step is needed**.
-  - [ ] P4.1 Cut v0.5.2 via `/release` (now notarizing). ⚠️ **Version bump + tag + push are the
+  - [x] P4.1 Cut v0.5.2 via `/release` (now notarizing). ⚠️ **Version bump + tag + push are the
         OPERATOR's call** — present the built+verified artifacts and stop.
         <!-- status: NOT-STARTED -->
-  - [ ] P4.2 Verify the **downloaded** release artifact (not the local build) passes
+  - [x] P4.2 Verify the **downloaded** release artifact (not the local build) passes
         `spctl` + `stapler validate`. <!-- status: NOT-STARTED -->
   - [ ] P4.3 ⚠️ **OPERATOR-RUN migration test (task 2.7 — the unrecoverable failure mode).**
-        A real v0.5.1 → v0.5.2 self-update. ⚠️ **This kills every running Claudesk session,
-        including the one driving this work** — so it runs at a clean boundary, by the operator,
-        after the session. Recovery path if the anchor were wrong: the `.dmg` is downloadable
-        and installable by hand. <!-- status: NOT-STARTED -->
+        A real v0.5.1 → v0.5.2 self-update **via the app's own updater** — Check for updates →
+        Install. The app downloads, minisign-verifies, installs and relaunches ITSELF.
+        ⚠️ **CORRECTED 2026-09-18 after operator pushback: do NOT propose `brew upgrade` as the
+        verification path.** `brew upgrade --cask` deletes and rewrites the running bundle, which
+        KILLS every live Claudesk session — that is the foreign path, and the in-app updater
+        exists precisely so it is never needed. **Nothing should ever kill a running Claudesk.**
+        The operator decides when to install, by wrapping up their own work and clicking the
+        button; it is not a script's call, not a test's call, and not the agent's call.
+        Recovery if the anchor were somehow wrong: the `.dmg` is downloadable and installable
+        by hand. <!-- status: NOT-STARTED — operator-gated, by design -->
   - [ ] P4.4 ⚠️ **Close WP1's residual risk here:** confirm `claude`, `subl` and `smerge` spawn
         correctly from the **notarized installed** app. WP1 proved only `zsh` + `perl`; a real CC
         session spawn from a signed build is still unproven and this is the first build where it
@@ -206,8 +212,10 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 3 > verify-auto
-- **Active scope:** Phase 3 impl complete (P3.1–P3.5 `[x]`); verification group next
+- **Path:** Feature > Phase 4 > P4.3/P4.4
+- **Active scope:** v0.5.2 PUBLISHED and verified from the downloaded artifacts. P4.3 (in-app
+  self-update) + P4.4 (claude/subl/smerge spawn from a notarized build) are **operator-gated** —
+  they need a real install, taken at the operator's own moment.
 - **Blocked:** none
 - **Unvisited:** Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
 - **Open discoveries:** 1 — the staple/re-tar ordering trap (P1.2/P1.3), resolved in-phase
