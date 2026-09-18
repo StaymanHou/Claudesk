@@ -274,18 +274,44 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
 
    ⚠️ **`does not have a ticket stapled to it` means you skipped or mis-ordered 3c.**
 
-3d. **Verify the release artifacts — all three checks, all required.**
+3d. **Verify the release artifacts — all four checks, all required.** ⚠️ **Run this
+   LAST, after every step that writes or moves a bundle.** A notarization ticket is
+   carried in extended attributes, and several ordinary file operations silently drop
+   them (see the `cp -R` warning below), so a verification that runs before the final
+   file movement proves nothing about what ships.
 
    ```bash
+   # 1-2. the .app: signed, and NOTARIZED (not merely signed)
    codesign --verify --deep --strict --verbose=2 src-tauri/target/release/bundle/macos/Claudesk.app
    spctl -a -t exec -vvv src-tauri/target/release/bundle/macos/Claudesk.app
+   # 3. the .dmg (first-install / Homebrew path)
    xcrun stapler validate src-tauri/target/release/bundle/dmg/Claudesk_${VER}_aarch64.dmg
+   # 4. ⚠️ THE UPDATER PAYLOAD — what self-updating users actually receive.
+   #    Checks 1-3 all pass while this one fails if 3c was skipped or mis-ordered.
+   rm -rf /tmp/payloadcheck && mkdir -p /tmp/payloadcheck
+   tar -xzf src-tauri/target/release/bundle/macos/Claudesk.app.tar.gz -C /tmp/payloadcheck
+   xcrun stapler validate /tmp/payloadcheck/Claudesk.app
+   spctl -a -t exec -vvv /tmp/payloadcheck/Claudesk.app
+   rm -rf /tmp/payloadcheck
    ```
 
    ⚠️ **`codesign` alone does not prove notarization.** The decisive line is `spctl`
-   printing **`source=Notarized Developer ID`** — if it says `source=Developer ID`
-   (no "Notarized"), the ticket is missing and users will hit Gatekeeper. STOP and
-   redo 3b–3c rather than publishing.
+   printing **`source=Notarized Developer ID`** — if it says `source=Developer ID` or
+   **`source=Unnotarized Developer ID`**, the ticket is missing and users will hit
+   Gatekeeper. STOP and redo 3b–3c rather than publishing.
+
+   ⚠️ **Check 4 is the one that catches a broken updater path.** The `.app` and `.dmg`
+   can both verify clean while the tarball carries an unstapled bundle — that is exactly
+   the 3c failure mode, and it is invisible to checks 1–3 because they read a *different
+   artifact*. The tarball is the only one a self-updating user ever sees.
+
+   ⚠️ **`cp -R` STRIPS THE NOTARIZATION TICKET.** Verified 2026-09-18: copying a stapled
+   `.app` with `cp -R` yields `spctl → rejected, source=Unnotarized Developer ID`. Extended
+   attributes do not survive a plain copy. If you ever need to move a stapled bundle, use
+   `ditto` (which preserves xattrs) or re-staple afterwards — and re-run this step. The
+   updater's own install path is safe: `tauri-plugin-updater` extracts via
+   `tar::Archive::unpack` + `rename`, and tar *does* restore xattrs (which is why 3c's
+   re-tar works).
 
 4. **Compute the SHA-256** (the cask needs it; keep the hash):
 
