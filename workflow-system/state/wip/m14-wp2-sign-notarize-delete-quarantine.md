@@ -84,7 +84,7 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         Keep the Homebrew 6.x `--no-quarantine` warning (still true: the flag was removed) but
         drop the `xattr` remedy it points at. <!-- status: DONE -->
   - [x] verify-auto  <!-- status: DONE — 4 scoped checks + 5 observable outcomes, all PASS -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [x] verify-self  <!-- status: DONE — subagent 6/6 PASS, 0 BLOCKING, 0 COSMETIC -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
@@ -103,9 +103,15 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - Console: no JS errors on load (verified via a self-tested tap, not `read_logs{console}`,
     which captures nothing for this app).
   - [ ] P2.1 Delete Rust: `clear_own_quarantine`, `quarantine_clear_command`,
-        `resolve_bundle_path`, `QUARANTINE_ATTR`, the two quarantine `UpdaterError` variants, and
+        `resolve_bundle_path`, `QUARANTINE_ATTR`, the quarantine `UpdaterError` variants, and
         the `lib.rs:76` comment. Update the `updater/mod.rs` module doc (it currently opens with
         "Claudesk is unsigned/un-notarized (locked decision…)" — now false).
+        ⚠️ **SCOPE CORRECTION (2026-09-18, pre-build): the WHOLE `UpdaterError` enum dies, not
+        "the two variants" the WBS names.** It has **three** variants — `BundleUnresolved`,
+        `Xattr`, `XattrNonZero` — and **all three are quarantine-only**. Verified: every
+        `UpdaterError` reference in the tree is inside `clear_own_quarantine` (mod.rs:132-141)
+        or its single call site (commands.rs:182). With the fn gone the enum has no remaining
+        constructor or consumer, so leaving it would be dead code that `clippy` flags.
         <!-- status: NOT-STARTED -->
   - [ ] P2.2 Delete the call sites in `updater/commands.rs` (`updater_apply`'s self-clear step)
         and the `workflow_install/runner.rs` mention. ⚠️ **Same phase as P2.1 by design** — do
@@ -188,8 +194,8 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-self
-- **Active scope:** Phase 1 verify-auto PASSED; verify-self next
+- **Path:** Feature > Phase 1 > verify-human
+- **Active scope:** Phase 1 verify-self PASSED (6/6); verify-human next
 - **Blocked:** none
 - **Unvisited:** Phase 2 (delete the code) → Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
 - **Open discoveries:** 1 — the staple/re-tar ordering trap (P1.2/P1.3), resolved in-phase
