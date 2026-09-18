@@ -83,7 +83,7 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         template; replace the quit→upgrade→xattr→reopen block with quit→upgrade→reopen.
         Keep the Homebrew 6.x `--no-quarantine` warning (still true: the flag was removed) but
         drop the `xattr` remedy it points at. <!-- status: DONE -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: DONE — 4 scoped checks + 5 observable outcomes, all PASS -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
@@ -188,8 +188,8 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > verify-auto
-- **Active scope:** Phase 1 impl complete (P1.1–P1.4 all `[x]`); verification group next
+- **Path:** Feature > Phase 1 > verify-self
+- **Active scope:** Phase 1 verify-auto PASSED; verify-self next
 - **Blocked:** none
 - **Unvisited:** Phase 2 (delete the code) → Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
 - **Open discoveries:** 1 — the staple/re-tar ordering trap (P1.2/P1.3), resolved in-phase
