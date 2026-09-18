@@ -179,7 +179,7 @@ running Claudesk, so the operator pays that cost once rather than twice.
 
 ---
 
-### WP1: Probe — Apple Developer enrollment, cert issuance, and the notarization toolchain
+### WP1: Probe — Apple Developer enrollment, cert issuance, and the notarization toolchain ✅ **COMPLETE 2026-09-18 — VERDICT: GO**
 **Type:** probe
 **Milestone:** M14 (remainder)
 **Dependencies:** none — **this is the gate for WP2**
@@ -213,34 +213,97 @@ against assumed shapes — the exact 3rd-party-integration gap §4 of the WBS pr
       ($99/yr). **Blocks everything in WP2.** Surface the approval latency to the operator at the
       start, not when WP2 stalls. ⚠️ **24h is Apple's published line; 2026 reports describe 2–7+
       weeks.** See the operator runbook below.
-- [ ] 1.2 ⚠️ **OPERATOR TASK.** Create a Developer ID Application certificate (CSR via Keychain
+- [x] 1.2 ✅ **DONE 2026-09-18.** Developer ID Application cert created (G2 Sub-CA) and installed
+      to the login keychain by the operator. ⚠️ **OPERATOR TASK.** Create a Developer ID Application certificate (CSR via Keychain
       Access → developer.apple.com → download → install to login keychain). ⚠️ **Developer ID
       Application is the correct type** — *not* "Mac App Distribution" (App Store only) and *not*
       "Developer ID Installer" (`.pkg` only). The wrong cert type signs but fails notarization.
-- [ ] 1.3 Verify the identity is visible to the toolchain: `security find-identity -v -p
-      codesigning` must list exactly one `Developer ID Application: …` entry; record its hash.
-- [ ] 1.4 Document the `notarytool` credential path. ⚠️ **Prefer an app-specific password +
+- [x] 1.3 ✅ **DONE 2026-09-18.** Identity `06668AEBC6FB91019064E09A09938EA8F9302CC6` =
+      `Developer ID Application: Yuechen Hou (C8RJH77B47)`, Team ID `C8RJH77B47`, issuer OU=G2,
+      EKU=Code Signing (critical), expires 2031-09-17.
+      ⚠️ **GOTCHA — the `.cer` download does NOT install Apple's G2 intermediate.** Symptom:
+      Keychain Access shows red *"certificate is not trusted"*; `security find-identity -p
+      codesigning` LISTS the identity but `-v` reports **0 valid identities**; `codesign` fails with
+      `unable to build chain to self-signed root` → `errSecInternalComponent`.
+      ⚠️ **`codesign` EXITED 0 on that failure** — the exit code lies; a failed sign leaves the
+      ORIGINAL signature in place, so check the `Authority=` lines, not `$?`.
+      ⚠️ **`security verify-cert -p codeSign` reported "verification successful" while `codesign`
+      could not build the chain** — it uses a different trust evaluation and gives a FALSE
+      ALL-CLEAR. Never validate a signing identity with it; test-sign a throwaway binary instead.
+      Fix (idempotent, no sudo, login keychain only):
+      `curl -fsSL -o DeveloperIDG2CA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer`
+      then `security import DeveloperIDG2CA.cer -k ~/Library/Keychains/login.keychain-db`.
+- [x] 1.4 ✅ **DONE 2026-09-18.** Keychain profile `claudesk-notary` stored by the operator via
+      `notarytool store-credentials` (app-specific password, NOT the Apple ID password); Apple
+      validated it at store time and a read-only `notarytool history` round-trip confirmed it.
+      **No credential in the repo.** Document the `notarytool` credential path. ⚠️ **Prefer an app-specific password +
       `notarytool store-credentials` keychain profile** over inlining an Apple ID password anywhere.
       ⚠️ **No credential may land in the repo** — record the mechanism, never the secret.
-- [ ] 1.5 Determine the exact `tauri.conf.json` `bundle.macOS` keys Tauri 2.9 requires
-      (`signingIdentity`, `entitlements`, `hardenedRuntime` posture) and which env vars the Tauri
-      CLI reads (`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`).
-      ⚠️ **Read Tauri's own docs for the installed 2.9.x line** — do not carry a v1 recipe over.
-- [ ] 1.6 Determine the entitlements the app actually needs. ⚠️ **Hardened runtime is mandatory for
-      notarization and it BREAKS THINGS** — Claudesk spawns subprocesses (`claude`, `subl`,
-      `smerge`, login shell for PATH capture) and runs a PTY. Identify whether
-      `com.apple.security.cs.allow-unsigned-executable-memory`,
-      `…disable-library-validation`, or `…allow-jit` are required. ⚠️ **This is the highest
-      technical risk in the milestone** — a hardened-runtime regression that kills `cc_spawn` would
-      be invisible in `pnpm tauri:dev` and only appear in an installed build.
-- [ ] 1.7 Confirm notarization does **not** invalidate the minisign updater flow: the `.app.tar.gz`
-      is signed by minisign *after* the `.app` is built, so a notarized+stapled `.app` produces a
-      different tarball but the **trust anchor `774E2E8429FDF78A` is unchanged**. ⚠️ **Reason it
-      through against the shipped `v0.5.0` path and write the conclusion down** — an existing
-      install self-updating into the first signed build is the migration case that must not break.
-- [ ] 1.8 Write the probe report: GO/NO-GO, the exact pipeline shape, the entitlements set, and any
-      surprise. ⚠️ **If 1.6 finds hardened runtime breaks subprocess spawning, that is a NO-GO
-      pending resolution — report it, do not proceed to WP2 anyway.**
+- [x] 1.5 ✅ **DONE 2026-09-18 — resolved from crate SOURCE, not the docs** (the docs pass was
+      silent on the decisive default). `tauri-utils-2.9.2/src/config.rs` → `MacConfig`:
+      `signingIdentity`, `hardenedRuntime`, `entitlements`, `providerShortName`, `infoPlist`,
+      `minimumSystemVersion` (default "10.13"), `dmg`.
+      ⚠️ **VERSION CORRECTION: the installed line is `tauri` + `tauri-cli` 2.11.2**, not 2.9.x —
+      2.9.2 is the `tauri-utils` config crate, which is likely where the WBS's "2.9" came from.
+      Env vars: `APPLE_SIGNING_IDENTITY`, `APPLE_CERTIFICATE`(+`_PASSWORD`, CI only); notarization
+      via EITHER `APPLE_API_ISSUER`/`APPLE_API_KEY`/`APPLE_API_KEY_PATH` OR
+      `APPLE_ID`/`APPLE_PASSWORD`/`APPLE_TEAM_ID`.
+- [x] 1.6 ✅ **GO — 2026-09-18. No hardened-runtime regression found.**
+      ⚠️ **KEY FINDING: `hardened_runtime` DEFAULTS TO `true`** (confirmed in both the serde
+      `default = "default_true"` and `impl Default for MacConfig`). So the risk is **live the moment
+      a signing identity is set** — it is not opt-in, and the Tauri docs never say so.
+      Entitlements written to `src-tauri/Entitlements.plist` (4 keys): `allow-jit` +
+      `allow-unsigned-executable-memory` (WKWebView JavaScriptCore), `disable-library-validation`
+      (third-party CLIs we cannot sign), `allow-dyld-environment-variables` (env inheritance to
+      children).
+      **Evidence:** signed build → `flags=0x10000(runtime)`, chain leaf→Developer ID CA→Apple Root,
+      `--verify --deep --strict` passes, all 4 entitlements confirmed via `codesign -d
+      --entitlements`. Notarization submission `e582b857-7182-4fbd-a217-21aca518ef5f` → **Accepted**;
+      stapled + `stapler validate` on BOTH `.dmg` and `.app`; `spctl -a` → **accepted,
+      source=Notarized Developer ID** (this is what obsoletes the quarantine workaround).
+      Installed `.app` launched via `open -n` (launchd minimal PATH, **not** `tauri:dev`) ran stable,
+      zero crash reports, and spawned `/bin/zsh` children (env_path PATH capture) ⇒ fork/exec works.
+      ⚠️ **PTY proven DIRECTLY:** a C harness signed with hardened runtime + Claudesk's exact
+      entitlements ran `forkpty()` + `execlp(perl)` and read back `PTY_CHILD_OK`.
+      **Why it passed:** hardened runtime restricts the SIGNED process (JIT / dylib loading), not its
+      ability to fork/exec separately-signed or system binaries; the entitlements cover both places
+      it does bite.
+      ⚠️ **RESIDUAL RISK — carried to task 2.3, NOT covered by this GO:** `claude`, `subl` and
+      `smerge` were **not** exercised end-to-end from the signed app (only `zsh` + `perl` were). A
+      real CC session spawn from a signed installed build remains **unproven** — inference, not
+      observation.
+- [x] 1.7 ✅ **CONFIRMED INDEPENDENT — 2026-09-18.** The two signing systems touch different
+      artifacts at different times and share no state:
+      • **minisign** verifies the `.app.tar.gz` **inside `download()`**, over the downloaded buffer
+        vs the configured `pubkey` (`updater/mod.rs`) — it is a **Tauri-plugin-level** check.
+      • **Apple notarization** is a **Gatekeeper-level** check on the `.app`/`.dmg`, evaluated by
+        the OS at launch/install, and is consumed via the **stapled ticket** — never by the updater.
+      Notarizing changes the `.app`'s contents (signature + stapled ticket), so the tarball bytes
+      differ and its minisign signature is recomputed at build time — but the **key that verifies it
+      does not change**.
+      ⚠️ **Verified empirically, not assumed:** the `pubkey` value is **byte-identical across
+      `v0.2.9`, `v0.4.0`, `v0.5.0`, `v0.5.1` and the working tree** (1 unique value over all five).
+      Anchor `774E2E8429FDF78A` intact ⇒ **no installed base is stranded**; a `v0.5.x` install
+      verifies the first signed build with the key it already trusts.
+      ⚠️ Still to be confirmed **live** at task 2.7 — this is the reasoning, not the migration run.
+- [x] 1.8 ✅ **PROBE REPORT — VERDICT: GO (2026-09-18).**
+      **Pipeline shape (proven end-to-end):** `pnpm tauri build` with `APPLE_SIGNING_IDENTITY` set →
+      signed `.app` + `.dmg` → `notarytool submit --keychain-profile claudesk-notary --wait` →
+      `stapler staple` both artifacts → `spctl -a` reports **`source=Notarized Developer ID`**.
+      **Entitlements set:** the 4 keys in `src-tauri/Entitlements.plist` (see 1.6).
+      **Config:** `bundle.macOS = { hardenedRuntime: true, entitlements: "Entitlements.plist" }`.
+      ⚠️ **`signingIdentity` deliberately NOT in the tracked config** — passed via
+      `APPLE_SIGNING_IDENTITY` so the repo stays machine-independent and `pnpm tauri:dev` keeps
+      working for anyone without the cert (pre-answers task 2.1's dev-overlay question).
+      **Surprises, all carried into WP2:**
+      1. ⚠️ **Tauri SILENTLY SKIPS notarization** unless `APPLE_ID`+`APPLE_PASSWORD`+`APPLE_TEAM_ID`
+         (or the API-key triad) are in env — it prints `Warn skipping app notarization`, **not an
+         error**. A build can look successful and ship **un-notarized**. Task 2.4 must make this
+         impossible to get wrong (fail loudly, or notarize as an explicit post-build step).
+      2. `pnpm tauri build` **exits 1** without `TAURI_SIGNING_PRIVATE_KEY` — *after* bundling, so
+         artifacts exist despite the failure.
+      3. The G2-intermediate trust gotcha + the two false-instrument traps (see 1.3).
+      4. Version correction: the installed line is **2.11.2**, not 2.9.x (see 1.5).
 
 #### Operator runbook for tasks 1.1–1.2 + 1.4 (researched 2026-09-15; primary sources)
 
