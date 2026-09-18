@@ -1,7 +1,7 @@
 # Feature: M14 WP4 — Two-tier setup documentation
 
 **Workflow:** feature
-**State:** review-quality (complete) — commit 9acae28 + review fixes, NOT pushed (operator's call)
+**State:** COMPLETE 2026-09-18 — shipped 9acae28, review fixes b5e1267; NOT pushed (operator's call)
 **Created:** 2026-09-18
 
 ## Problem Statement
@@ -664,6 +664,49 @@ meaningful debt beyond the one window-boundary gap."
 
 ### If you disagree
 Mark any finding `[DISMISSED]` in this section before `/feature-finalize` archives the WIP.
+
+## Retrospect
+
+- **What changed in our understanding:** That a *documentation* work package can carry the same
+  verification difficulty as code, and for a reason that generalizes: **correcting a claim stated
+  as prose in N places is a search problem, and every search predicate has a blind spot.** This WP
+  hit five distinct ones in sequence, each fix exposing the next — phrasing-blind (grepped a word
+  order) → value-blind (searched only the wrong number I knew about) → file-type-blind (swept
+  `*.md` while the authority was a `.ts` header) → cross-reference-blind (my own fix falsified a
+  claim in doc B *about* doc A) → tracking-blind (every sweep enumerated tracked files; the stale
+  claim sat in the untracked WIP). None was a repeat; each was structurally invisible to the one
+  before. The transferable rule: **sweep by the claim's NOUNS with the number left free, across
+  every file type, tracked or not — and after correcting file A, search for claims ABOUT file A.**
+
+- **Assumptions that held:** The plan's phase split (retract → tier 1 → tier 2 → audit) was right,
+  and Phase 4's "follow every instruction literally" earned its place — it found three defects the
+  task text never named, including a "Checks" block that was not the real gate. The decision to
+  verify the install story against the **real installed artifact** (v0.5.2, `spctl` → notarized)
+  rather than the source tree was the strongest evidence produced all WP.
+
+- **Assumptions that were wrong:**
+  1. ⚠️ **That a guard is always the right answer to drift.** I proposed, and the operator approved,
+     a doc-count guard. Built and mutation-tested, it caught **1 of 4** mutants — missing both
+     real-world defect shapes. Its exempt list needs a milestone-reference token to skip historical
+     records, and that token exempts **21 of 117** candidate lines (17%), including one carrying a
+     live stale claim. The discriminator is authorial intent; a source-text predicate cannot express
+     it. **Not shipping it was the right call, and finding that out cost less than shipping it
+     would have.**
+  2. ⚠️ **That fixing a boundary bug once fixes its shape.** Phase 3 fixed `sectionWindow`'s
+     terminator `##`→`#{2,3}` and I recorded the lesson in the file's own comment. Code review then
+     mutation-tested it and found the SAME defect one heading level down — and this time it failed
+     **OPEN** (10/10 green with a gated chord leaked into tier 1) where the first had failed
+     **closed** (visible false alarm). A patch to the symptom is not a fix to the shape.
+  3. **That "8 subjects" was the only stale value.** It was stale at *seven* in one authority doc —
+     an older value than the one I was correcting away from.
+
+- **Approach delta:** Four F9b back-loops on a single leaf (P4.3), plus one in-place fix under the
+  verify-self shortcut, plus two MAJORs fixed at code review rather than auto-backlogged. The plan
+  anticipated none of this — it budgeted Phase 4 as a link-and-command audit. The overrun was
+  entirely the count correction, and it was worth it: the count is load-bearing (`CLAUDE.md` tells
+  a future session "a new surface owns the seventh arm", a rule computed off it). ⚠️ **Every
+  verification pass that found something was a FRESH subagent invocation** — my own re-reads never
+  found the next site. That is the single most reusable process observation here.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

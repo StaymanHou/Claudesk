@@ -3,7 +3,7 @@ stage: wbs
 state: in-progress
 milestone: M14 (remainder)
 created: 2026-09-15
-updated: 2026-09-17
+updated: 2026-09-18
 ---
 
 # WBS — Milestone 14 (remainder): Polish & Open-Source Release
@@ -502,7 +502,7 @@ final install story — rather than written, then rewritten when the `xattr` ste
 
 ---
 
-### WP4: Two-tier setup documentation
+### WP4: Two-tier setup documentation ✅ SHIPPED 2026-09-18 (commit `9acae28`, review fixes `b5e1267`)
 **Description:** The full two-tier setup-doc buildout — the workflow-independent lite-IDE core, and
 the opt-in gated workflow layer — completing the deliverable the 2026-09-06 correctness pass left
 partial.
