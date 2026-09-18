@@ -310,6 +310,54 @@ structural property, so a matcher named outside both conventions is invisible to
 (`SURFACE-2026-09-15-CHORD-COMPLETENESS-GUARD-KEYS-ON-A-NAMING-CONVENTION`). Two guards are
 strictly better than one; neither is a proof.
 
+## 14. The match is REAL but its POLARITY is inverted — an instruction vs. a prohibition against it
+
+Entries 12 and 13 ask *is the substring anchored to the site?* and *can the guard see an omission?*
+This is a third, independent way the same `grep -c` lies: **the string is genuinely there, at the
+right site, and means the OPPOSITE of what the assertion assumes.**
+
+Hit twice in one phase (M14 WP2, 2026-09-18), both while deleting a user-facing instruction. The
+outcomes were written as:
+
+```
+grep -c "xattr -dr" .claude/skills/release/SKILL.md   → expect 0
+grep -c "xattr" README.md                             → expect 0
+```
+
+Both **failed while the work was correct**, because the deletion deliberately left prose *forbidding*
+the thing:
+
+> **Do not re-add an `xattr -dr com.apple.quarantine` line to release notes** — it would instruct
+> users to work around a problem that no longer exists.
+
+A count cannot tell that apart from the instruction it forbids. ⚠️ **And the second one was worse
+than a false alarm: satisfying it literally would have made the README WRONG.** The
+build-from-source section still needs `xattr`, because a contributor's local `pnpm tauri build`
+*is* unsigned — only released builds are signed. "Delete every match" would have told contributors
+their own builds open cleanly when they do not.
+
+**The fix — assert over the region where the thing being forbidden would actually LIVE.** An
+executable instruction lives in a fenced code block; a prohibition lives in prose. So scope the
+window, and **prove the window is non-empty with a positive control** (an empty `awk` range makes
+any `grep -c` return 0 — the vacuous-pass trap of entry 9, arriving through a different door):
+
+```bash
+# the assertion
+awk '/```bash/,/```$/' <file> | grep -c "xattr -dr"      # → 0
+# the positive control, REQUIRED — proves the awk window captured anything at all
+awk '/```bash/,/```$/' <file> | grep -c "brew upgrade"   # → >= 1
+```
+
+**The question to ask before writing a "→ 0" outcome:** *could this string legitimately appear, at
+this exact site, meaning the opposite of what I am asserting?* Removal work is where this bites,
+because good removal work **leaves a note saying not to bring it back** — the guard and the
+documentation of the guard's own intent collide.
+
+⚠️ **Corollary for plan-time outcomes.** Both of these were written at *plan* time, by the same
+agent that later had to satisfy them, and both survived into the build before failing. A "→ 0"
+observable outcome is a claim about a *whole file's* future contents; prefer scoping it to a region
+at the moment you write it, not after it fires.
+
 ## Comment budget — what belongs at the code, and what does not
 
 Comment density has been flagged in **four consecutive reviews** of the same file, and each

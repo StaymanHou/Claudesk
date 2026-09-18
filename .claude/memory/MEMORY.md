@@ -94,6 +94,7 @@
 - [feedback_read_help_before_cli_matrix.md](feedback_read_help_before_cli_matrix.md) — Five seconds of `--help` collapses redundant matrix rows and surfaces native flags upstream research missed.
 
 - [never-propose-brew-upgrade-to-verify-a-release.md](never-propose-brew-upgrade-to-verify-a-release.md) — ⚠️ Nothing should EVER kill a running Claudesk. Never propose `brew upgrade` to verify a release (it rewrites the running bundle, killing live sessions); verify the DOWNLOADED artifacts, then stop — the in-app updater is the path and WHEN to install is the operator's call alone.
+- [release-is-three-artifacts-verify-each.md](release-is-three-artifacts-verify-each.md) — A release is THREE artifacts (.app / .dmg / .app.tar.gz payload) derived at different stages; verifying two proves nothing about the third, and the PAYLOAD is what self-updating users receive. Hit for real on v0.5.2: three checks green, payload unstapled.
 
 ## Dev-time side effects (macOS focus)
 

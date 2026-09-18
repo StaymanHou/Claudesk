@@ -1,7 +1,9 @@
 # Feature: M14 WP2 — Sign + notarize the release pipeline, and delete the quarantine workaround
 
 **Workflow:** feature
-**State:** ship (complete) — Phases 1-3 CLOSED; Phase 4 shipped as v0.5.2, one operator-gated leaf open
+**State:** COMPLETED 2026-09-18
+**Shipped as:** `v0.5.2` (published, tagged, tap-bumped)
+**Review-quality:** 0 CRITICAL, 0 MAJOR, 2 MINOR (1 fixed at review time, 1 backlogged)
 **Created:** 2026-09-18
 **WBS:** M14 (remainder) WP2 — tasks 2.1–2.8
 **Depends on:** WP1 ✅ COMPLETE — VERDICT GO (commit `481b4bb`)
@@ -336,3 +338,59 @@ accruing it."
 Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
 `feature-finalize` archives this WIP.
 
+## Retrospect
+
+- **What changed in our understanding:**
+  1. ⚠️ **Hardened runtime is Tauri's DEFAULT, not an opt-in.** `hardened_runtime: true` sits in
+     both the serde default and `impl Default for MacConfig` — so the milestone's "highest technical
+     risk" went live the moment a signing identity was set, and the Tauri docs never say so. It was
+     found by reading the crate source after the docs pass came back silent.
+  2. **A notarization ticket lives in extended attributes**, which means ordinary file operations
+     silently destroy it. `cp -R` de-notarizes a bundle (`spctl` → `rejected,
+     source=Unnotarized Developer ID`); `tar` and `ditto` preserve it. That single fact explains
+     both the step-3c trap and why the updater's install path happens to be safe.
+  3. **The `.app`, the `.dmg` and the updater payload are three different artifacts**, and verifying
+     two of them says nothing about the third. The original gate read the two that are easy to
+     reach and missed the only one users receive.
+
+- **Assumptions that held:**
+  - The minisign/notarization independence reasoning (task 1.7) was correct — the anchor never
+    needed to change, verified byte-identical across five reads.
+  - `QUARANTINE_FALLBACK_ACTIVE` being hardcoded `false` made the frontend deletion a dead-code
+    removal, exactly as scoped at plan time.
+  - The M13.5 lesson earned its place: a boot smoke test in the same phase as the deletion.
+
+- **Assumptions that were wrong:**
+  1. ⚠️ **The WBS undercounted three times, and each was caught by reading code rather than the task
+     text:** the spawn surface was 9 processes (5 named); `UpdaterError` had 3 quarantine-only
+     variants ("the two"); the doc-correction scope named 2 sites in 1 file where a repo-wide grep
+     found **8 live files**. The `doc-correction-scope-list-is-a-floor` lesson applied to the code
+     inventory too, not just to docs.
+  2. ⚠️ **TWO of my own planned observable outcomes were wrong as written, in the same direction —
+     a bare string count cannot tell an INSTRUCTION from a PROHIBITION against it.**
+     `grep -c "xattr -dr" SKILL.md → 0` would have failed on two deliberate "do not re-add this"
+     lines; `grep -c xattr README.md → 0` would have **made the README incorrect** by deleting
+     build-from-source instructions that are still true (a contributor's local build *is* unsigned).
+     Both were rewritten to look inside fenced code blocks, each with a positive control.
+  3. **`/release` is project-local, not a symlink into mccc** — the WBS's cross-repo hazard warning
+     did not apply. Checked rather than assumed.
+  4. **The calendar long pole evaporated:** enrollment was planned for 2–7+ weeks and came back the
+     same day, which is why WP3/WP5 had been sequenced as parallel tracks.
+
+- **Approach delta:**
+  - **Phase 1 grew a step that was not in the plan.** Step 3c (re-tar + re-sign) exists because the
+    artifacts were inspected instead of trusted — and it **fired on the real v0.5.2 cut**, where the
+    payload reported "does not have a ticket stapled to it" while the `.app` and `.dmg` both
+    validated clean. Without it this release ships broken for every self-updating user.
+  - **A guard was replaced rather than deleted.** The old wiring test asserted App.tsx *contains*
+    `quarantineFallbackSpec` — one-directional and blind to omission. It became a reverse guard
+    asserting absence, so the deletion cannot silently regress.
+  - **Two verification instruments produced false readings and were corrected, not trusted:** a
+    `--help`-based CLI probe reported tools "MISSING" that had just been used successfully, and a
+    `jq -r` signature comparison reported a mismatch that was only a trailing newline.
+  - ⚠️ **One operator correction changed the shape of the close:** proposing `brew upgrade` as the
+    migration-test path was wrong — it deletes and rewrites the running bundle, killing every live
+    Claudesk session. **Nothing may kill a running Claudesk.** The in-app updater exists precisely
+    so that is never needed, and WHEN to install is the operator's call, not a test's. Captured as
+    `.claude/memory/never-propose-brew-upgrade-to-verify-a-release.md`; tasks 2.3/2.7 are recorded
+    **operator-gated**, not chased.
