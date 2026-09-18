@@ -93,6 +93,8 @@
 - [tauri-scaffold-recipe.md](tauri-scaffold-recipe.md) — The non-interactive scaffold command + merge pattern that doesn't destroy strategic docs.
 - [feedback_read_help_before_cli_matrix.md](feedback_read_help_before_cli_matrix.md) — Five seconds of `--help` collapses redundant matrix rows and surfaces native flags upstream research missed.
 
+- [never-propose-brew-upgrade-to-verify-a-release.md](never-propose-brew-upgrade-to-verify-a-release.md) — ⚠️ Nothing should EVER kill a running Claudesk. Never propose `brew upgrade` to verify a release (it rewrites the running bundle, killing live sessions); verify the DOWNLOADED artifacts, then stop — the in-app updater is the path and WHEN to install is the operator's call alone.
+
 ## Dev-time side effects (macOS focus)
 
 - [feedback_osascript_activate_side_effects.md](feedback_osascript_activate_side_effects.md) — Activating any app via osascript/`open -a`/`subl` gathers its windows onto the current Desktop — treat as a WRITE during probes.
