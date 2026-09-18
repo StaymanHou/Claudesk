@@ -606,3 +606,6 @@ question — the arch doc already anticipated this exact reversal and named M14 
 ⚠️ **One risk is flagged as a probe task rather than an arch gap** (WP1 task 1.6): hardened runtime
 is mandatory for notarization and could break subprocess spawning or the PTY. If the probe finds it
 does, **that is a NO-GO that returns here**, not something WP2 works around silently.
+
+## Session Handoff — 2026-09-18 11:04
+Handed off. See `workflow-system/state/.session.md` to restore.
