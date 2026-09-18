@@ -1,7 +1,7 @@
 # Feature: M14 WP2 — Sign + notarize the release pipeline, and delete the quarantine workaround
 
 **Workflow:** feature
-**State:** build (Phase 1 COMPLETE; Phase 2 in progress)
+**State:** ship (complete) — Phases 1-3 CLOSED; Phase 4 shipped as v0.5.2, one operator-gated leaf open
 **Created:** 2026-09-18
 **WBS:** M14 (remainder) WP2 — tasks 2.1–2.8
 **Depends on:** WP1 ✅ COMPLETE — VERDICT GO (commit `481b4bb`)
@@ -90,7 +90,7 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         properties are already pinned by verify-auto's bash -n sweep + the observable-outcome
         greps, which re-run on demand. No permanent test is owed for a markdown runbook. -->
 
-- [ ] Phase 2: Delete the quarantine workaround (code)  <!-- status: in-progress -->
+- [x] Phase 2: Delete the quarantine workaround (code)  <!-- status: DONE 2026-09-18 -->
   **Observable outcomes:**
   - CLI: `grep -rn "quarantine\|QUARANTINE\|resolve_bundle_path" src-tauri/src src/ --include='*.rs' --include='*.ts' --include='*.tsx'`
     returns **0 matches** (excluding archive dirs).
@@ -128,12 +128,29 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         <!-- status: NOT-STARTED -->
   - [x] P2.5 Run the boot smoke test **in this phase**, before handing off. A built-and-launched
         `.app` with a populated `#root`. <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: DONE — `pnpm verify:auto` EXIT=0 (200 files / 2716 frontend,
+        900 Rust, clippy -D warnings clean). Caught 2 real regressions from the deletion before
+        it passed: a dead `useUpdaterSrc` import and 3 unformatted files. -->
+  - [x] verify-self  <!-- status: DONE — all 5 observable outcomes checked by the orchestrator:
+        0 live code refs (the 2 survivors are a JSX comment + the reverse-guard's test name),
+        verify:auto EXIT=0, release build EXIT=0, and the boot smoke test.
+        ⚠️ **PARTIAL on the Browser outcome — stated plainly:** the built `.app` launched and ran
+        stable (353MB RSS, live WebKit processes, window titled "Claudesk", zero crash reports),
+        but the webview DOM was **NOT read** — `screencapture` was blocked and the MCP bridge
+        needs a driver session an installed build does not expose. "`#root` has ≥1 child and the
+        picker is in the DOM" is therefore proven at the MODULE-GRAPH level (mutation-proven
+        `moduleGraphBoot.test.ts`), not observed on screen. The module-graph test is the stronger
+        check for THIS deletion (it targets the M13.5 failure mode exactly), but it is not the
+        visual confirmation the outcome literally asked for. -->
+  - [x] verify-human  <!-- status: DONE — operator approved the phase chain 2026-09-18 ("ship then
+        finalize") after reviewing the deletion scope at plan time. -->
+  - [x] verify-codify  <!-- status: DONE — `moduleGraphBoot.test.ts` added and MUTATION-PROVEN
+        (un-exporting `progressPercent` makes it fail; the mutation was confirmed landed at the
+        source line before the result was trusted). The one-directional wiring guard was REPLACED
+        with a reverse guard asserting App.tsx does NOT contain quarantineFallbackSpec /
+        fallbackBundlePath / dismissFallback, so the deletion cannot silently regress. -->
 
-- [ ] Phase 3: Correct the live docs  <!-- status: NOT-STARTED; depends on Phase 2 -->
+- [x] Phase 3: Correct the live docs  <!-- status: DONE 2026-09-18 -->
   **Observable outcomes:**
   - CLI: **no `xattr` instruction in the INSTALL path** a release user follows:
     `awk 'NR<100' README.md | awk '/```bash/,/```$/' | grep -c "xattr -dr"` → 0
@@ -171,12 +188,22 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [x] P3.5 Check the Homebrew tap cask (task 2.8) for any stanza or caveat that assumed an
         unsigned artifact. ⚠️ **The cask lives in a DIFFERENT repo** — if a change is owed,
         surface it as a cross-repo handoff, do not edit silently. <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: DONE — `pnpm verify:auto` EXIT=0 (200/2716) + prettier clean
+        repo-wide + `ruby -c` on the cask. -->
+  - [x] verify-self  <!-- status: DONE — all 4 observable outcomes checked, each with a positive
+        control where the assertion was a zero: no `xattr -dr` inside any bash block in README's
+        install path (control: `brew install` = 1), both arch claims struck/superseded,
+        **0 archive files touched** (`git diff --name-only | grep archive/`), anchor still
+        documented (4 refs). -->
+  - [x] verify-human  <!-- status: DONE — operator approved 2026-09-18 ("ship then finalize"). -->
+  - [x] verify-codify  <!-- status: DONE — no test is owed for prose corrections; the durable
+        artifact is the arch doc's struck-and-superseded record, which is itself the guard against
+        the claim being re-asserted. -->
 
-- [ ] Phase 4: Ship v0.5.2 + prove the migration  <!-- status: NOT-STARTED; depends on Phase 3 -->
+- [ ] Phase 4: Ship v0.5.2 + prove the migration  <!-- status: SHIPPED-AND-VERIFIED; one child
+      OPERATOR-GATED, so the parent box stays UNTICKED per the parent-completion invariant. The
+      release IS published and artifact-verified; only the in-app install observation is pending,
+      and it is the operator's call when (or whether) to take it. -->
   **Observable outcomes:**
   - CLI: `gh release view v0.5.2` lists the `.dmg`, `.app.tar.gz`, `.sig`, and `latest.json`.
   - CLI: the published `.dmg`, downloaded fresh, reports `spctl -a → source=Notarized Developer
@@ -206,13 +233,25 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
         correctly from the **notarized installed** app. WP1 proved only `zsh` + `perl`; a real CC
         session spawn from a signed build is still unproven and this is the first build where it
         can be observed. <!-- status: NOT-STARTED -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: DONE — clean `cargo clean` + `pnpm tauri build` EXIT=0 (116s),
+        all 4 artifacts produced, both signing systems fired. -->
+  - [x] verify-self  <!-- status: DONE — verified against the DOWNLOADED artifacts, not the local
+        build: the published updater payload extracts to a stapled `.app` reporting
+        `source=Notarized Developer ID`; the published `.dmg` matches its sha256, staples and
+        notarizes; `latest.json` resolves to 0.5.2 with a signature byte-identical to the `.sig`.
+        ⚠️ **The step-3c trap FIRED on this real cut** — pre-re-tar the payload reported "does not
+        have a ticket stapled to it", i.e. without Phase 1's fix this release ships broken. -->
+  - [ ] verify-human  <!-- status: OPERATOR-GATED — the in-app self-update (P4.3) and the
+        claude/subl/smerge spawn check (P4.4) need a real install, taken at the operator's own
+        moment. ⚠️ **NOT a blocker on closing WP2** and NOT to be chased: nothing may kill a
+        running Claudesk to satisfy it. -->
+  - [x] verify-codify  <!-- status: DONE — the durable guard is `/release` step 3d check 4 (extract
+        the tarball, validate the payload), which is what makes the 3c trap non-recurring. It was
+        exercised on this cut and caught the unstapled payload. -->
 
 ## Current Node
-- **Path:** Feature > Phase 4 > P4.3/P4.4
+- **Path:** Feature > ship
+- **Prior path:** Feature > Phase 4 > P4.3/P4.4
 - **Active scope:** v0.5.2 PUBLISHED and verified from the downloaded artifacts. P4.3 (in-app
   self-update) + P4.4 (claude/subl/smerge spawn from a notarized build) are **operator-gated** —
   they need a real install, taken at the operator's own moment.
