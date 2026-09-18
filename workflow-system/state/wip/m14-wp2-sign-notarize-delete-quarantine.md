@@ -1,7 +1,7 @@
 # Feature: M14 WP2 — Sign + notarize the release pipeline, and delete the quarantine workaround
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** build (Phase 1 impl complete)
 **Created:** 2026-09-18
 **WBS:** M14 (remainder) WP2 — tasks 2.1–2.8
 **Depends on:** WP1 ✅ COMPLETE — VERDICT GO (commit `481b4bb`)
@@ -47,7 +47,7 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
 
 ## Work Tree
 
-- [ ] Phase 1: Release pipeline — notarize + staple, fail loudly  <!-- status: NOT-STARTED -->
+- [ ] Phase 1: Release pipeline — notarize + staple, fail loudly  <!-- status: in-progress -->
   **Observable outcomes:**
   - CLI: `pnpm tauri build` with `APPLE_SIGNING_IDENTITY` + the notarization env triad set
     produces `Claudesk.app` where `codesign -dv` reports `flags=0x10000(runtime)` and
@@ -56,27 +56,33 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - CLI: `xcrun stapler validate` exits 0 on **both** the `.dmg` and the `.app`.
   - CLI: `grep -c "notarytool\|APPLE_TEAM_ID" .claude/skills/release/SKILL.md` ≥ 1 — the skill
     documents the notarization step rather than leaving it implicit.
-  - CLI: the release skill contains **no** instruction to run `xattr -dr com.apple.quarantine`
-    (`grep -c "xattr -dr" .claude/skills/release/SKILL.md` → 0).
-  - [ ] P1.1 Add a preflight to `/release`: assert the signing identity resolves AND the
+  - CLI: the release skill contains **no executable instruction** to run `xattr -dr` —
+    i.e. no `xattr -dr` line inside a ```bash fenced block:
+    `awk '/^   ```bash/,/^   ```/' .claude/skills/release/SKILL.md | grep -c "xattr -dr"` → 0.
+    ⚠️ **Corrected 2026-09-18 during P1.4.** The outcome originally read
+    `grep -c "xattr -dr" … → 0`, which is **wrong**: a bare string count cannot tell an
+    *instruction* from a *prohibition against re-adding it* ("Do not re-add an `xattr -dr`
+    line…"). Two such prohibitions are deliberately present and should stay. The check must
+    look at **code blocks**, where an instruction would actually live.
+  - [x] P1.1 Add a preflight to `/release`: assert the signing identity resolves AND the
         notarization credential triad (or keychain profile) is present **before** building.
         ⚠️ **This is the guard against WP1's surprise #1** — Tauri prints
         `Warn skipping app notarization` and **still exits 0**, so an un-notarized build looks
         successful. The preflight must make that state unreachable, not merely documented.
-        <!-- status: NOT-STARTED -->
-  - [ ] P1.2 Add the notarize + staple steps to the `/release` pipeline (submit the `.dmg` with
+        <!-- status: DONE -->
+  - [x] P1.2 Add the notarize + staple steps to the `/release` pipeline (submit the `.dmg` with
         `--keychain-profile claudesk-notary --wait`, then `stapler staple` the `.dmg` **and** the
         `.app`). Record the credential mechanism (profile name), **never the secret**.
-        <!-- status: NOT-STARTED -->
-  - [ ] P1.3 Add a post-build verification gate to `/release`: `codesign --verify --deep --strict`
+        <!-- status: DONE -->
+  - [x] P1.3 Add a post-build verification gate to `/release`: `codesign --verify --deep --strict`
         + `spctl -a` + `stapler validate`, all three required. ⚠️ **`codesign` alone does not
         prove notarization** (WBS task 2.2), and `codesign` **exits 0 on a failed sign** (WP1
         finding) — so assert on the `Authority=`/`source=` output, not on `$?`.
-        <!-- status: NOT-STARTED -->
-  - [ ] P1.4 Remove the `xattr` instructions from `/release` Step 11 and the release-notes
+        <!-- status: DONE -->
+  - [x] P1.4 Remove the `xattr` instructions from `/release` Step 11 and the release-notes
         template; replace the quit→upgrade→xattr→reopen block with quit→upgrade→reopen.
         Keep the Homebrew 6.x `--no-quarantine` warning (still true: the flag was removed) but
-        drop the `xattr` remedy it points at. <!-- status: NOT-STARTED -->
+        drop the `xattr` remedy it points at. <!-- status: DONE -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
@@ -182,12 +188,24 @@ mechanism, and entitlements all documented in `wbs.md` tasks 1.3–1.8. Not a kn
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** Feature > Phase 1 > P1.1
-- **Active scope:** P1.1 (release-skill preflight)
+- **Path:** Feature > Phase 1 > verify-auto
+- **Active scope:** Phase 1 impl complete (P1.1–P1.4 all `[x]`); verification group next
 - **Blocked:** none
 - **Unvisited:** Phase 2 (delete the code) → Phase 3 (correct live docs) → Phase 4 (ship v0.5.2 + migration)
-- **Open discoveries:** none
+- **Open discoveries:** 1 — the staple/re-tar ordering trap (P1.2/P1.3), resolved in-phase
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+
+[SURFACED-2026-09-18] Phase 1 / P1.3 — **Stapling the `.app` AFTER the build leaves the
+updater payload unstapled.** Tauri creates `Claudesk.app.tar.gz` *during* `tauri build`,
+i.e. before `stapler staple` runs, so the tarball contains an app with **no ticket** and
+its `.sig` is over the stale bytes. Verified empirically: extracting the as-built tarball
+and running `stapler validate` reports *"does not have a ticket stapled to it"*, while the
+`.app` on disk validates fine. Shipping that payload would make every self-updating user's
+Gatekeeper check require the **network** (ticket fetched online), failing offline — quietly
+re-introducing the friction this milestone deletes. **Fix (now step 3c): staple → re-tar →
+re-sign**, in that order; re-tarring invalidates the `.sig`, so the re-sign is mandatory.
+Confirmed a re-tar of the stapled `.app` preserves the ticket. **Not in the WBS's task list
+— found only because the artifacts were inspected rather than assumed.**

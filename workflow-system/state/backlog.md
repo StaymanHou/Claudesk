@@ -1600,3 +1600,24 @@ script under `tooling/` so each phase does not re-derive it.
 - **Priority:** medium (3 MAJOR) / low (3 MINOR)
 - **Status:** pending
 - **Pickup shape:** a single `/feature-refactor` pass closes all six cheaply — MAJOR-2 and MAJOR-3 are each ~1–5 lines of test, MAJOR-1 is a CSS rule or a comment. ⚠️ MAJOR-2's fix must **resolve the spread** (import `searchKeymap` and enumerate its keys); widening the regex to match `...searchKeymap` textually would prove the spread is present, not which bindings it contributes — a guard that looks fixed and is not.
+
+## SURFACE-2026-09-18-STAPLE-AFTER-BUILD-LEAVES-UPDATER-PAYLOAD-UNSTAPLED
+- **Source:** feature:build (M14 WP2 Phase 1)
+- **Target level:** product:arch
+- **Type:** gap
+- **Summary:** Tauri creates `Claudesk.app.tar.gz` **during** `tauri build`, i.e. before any
+  post-build `stapler staple` runs — so the updater payload ships an **unstapled** `.app` and its
+  minisign `.sig` is computed over those stale bytes.
+- **Context:** Verified empirically: extracting the as-built tarball and running `stapler validate`
+  reports *"does not have a ticket stapled to it"*, while the `.app` on disk validates fine. A
+  self-updating user would receive an app whose Gatekeeper check must fetch the ticket **online**,
+  which fails offline — quietly re-introducing the first-launch friction M14 WP2 exists to delete.
+  ⚠️ **Not in the WBS's task list** — found only because the artifacts were inspected rather than
+  assumed. A release that skipped this check would look completely successful.
+- **Suggested action:** RESOLVED in-phase as `/release` step 3c — **staple → re-tar → re-sign**, in
+  that order (re-tarring invalidates the `.sig`, so the re-sign is mandatory), plus an extract-and-
+  `stapler validate` confirmation. Confirmed a re-tar of the stapled `.app` preserves the ticket.
+  Kept here because the ordering constraint is architectural and easy to lose in a future pipeline
+  edit.
+- **Priority:** medium
+- **Status:** pending

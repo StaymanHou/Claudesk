@@ -74,6 +74,36 @@ stop: that's the failure mode this constraint exists to prevent.
   — if genuinely lost — mint a new one (`pnpm exec tauri signer generate -w ~/.claudesk-release-keys/claudesk-release.key`),
   swap the new `.pub` into `tauri.conf.json`, and accept that this becomes a key rotation.
 
+- **Apple Developer ID signing identity + notarization credential present** (M14 WP2,
+  2026-09-18). Claudesk is **signed and notarized** as of v0.5.2 — these are hard
+  preconditions, not optional extras.
+
+  ```bash
+  security find-identity -v -p codesigning | grep "Developer ID Application"
+  xcrun notarytool history --keychain-profile "claudesk-notary" >/dev/null && echo "notary OK"
+  ```
+
+  ⚠️ **Both must succeed before you start.** The first must print exactly one
+  `Developer ID Application: …` line; the second is a real authenticated round-trip to
+  Apple (it prints submission history, or "No submission history" on a fresh account —
+  both are success; an auth failure is not).
+
+  ⚠️ **`security find-identity -v` reporting `0 valid identities` while the cert IS in
+  Keychain Access means Apple's G2 intermediate is missing**, not that the cert is bad.
+  Symptom chain: red "certificate is not trusted" in Keychain Access → `codesign` fails
+  with `unable to build chain to self-signed root` → `errSecInternalComponent`. Fix
+  (idempotent, no sudo, login keychain only):
+
+  ```bash
+  curl -fsSL -o /tmp/DeveloperIDG2CA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+  security import /tmp/DeveloperIDG2CA.cer -k ~/Library/Keychains/login.keychain-db
+  ```
+
+  ⚠️ **Do NOT validate the identity with `security verify-cert`** — it uses a different
+  trust evaluation and returns "verification successful" in exactly the state where
+  `codesign` cannot build the chain. A false all-clear. Test-sign a throwaway binary
+  instead, or just trust `find-identity -v`.
+
 ## Inputs
 
 - **Version** — e.g. `0.1.1`. Ask the operator if not given. Throughout these steps,
@@ -132,11 +162,25 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    ```bash
    export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.claudesk-release-keys/claudesk-release.key)"
    export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(cat ~/.claudesk-release-keys/claudesk-release.key.pass)"
+   export APPLE_SIGNING_IDENTITY="Developer ID Application: Yuechen Hou (C8RJH77B47)"
    ```
 
    (The private key + its password live in `~/.claudesk-release-keys/` — see "Updater
    signing key" in Preconditions. Both are read as file CONTENTS via `$(cat …)`; never
    echo either value, never paste it into a committed file.)
+
+   ⚠️ **`APPLE_SIGNING_IDENTITY` is deliberately an env var, not `tauri.conf.json`.**
+   The tracked config carries only `bundle.macOS.hardenedRuntime` + `.entitlements`, so
+   the repo stays machine-independent and `pnpm tauri:dev` keeps working for anyone
+   without the cert. Setting `signingIdentity` in the config would break a contributor's
+   dev build.
+
+   ⚠️ **Notarization is a SEPARATE step (5c), deliberately not wired into the build.**
+   Tauri *can* notarize during `tauri build` if `APPLE_ID` + `APPLE_PASSWORD` +
+   `APPLE_TEAM_ID` are exported — but when they are **absent it prints
+   `Warn skipping app notarization` and STILL EXITS 0**. That failure mode ships an
+   un-notarized build that looks like a successful release. This skill therefore
+   notarizes explicitly in step 5c and *verifies* in step 5d, where a miss is loud.
 
    Then a full cold rebuild guarantees no stale-cache artifact ships:
 
@@ -166,6 +210,83 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    unsigned updater artifact (the app would reject the update at verify time). Re-export
    `TAURI_SIGNING_PRIVATE_KEY` (contents, not path) + the password and rebuild.
 
+   **Confirm the build was Apple-signed** (this is separate from minisign):
+
+   ```bash
+   codesign -dv --verbose=2 src-tauri/target/release/bundle/macos/Claudesk.app 2>&1 \
+     | grep -E "flags=|Authority=Developer ID Application"
+   ```
+
+   ⚠️ Expect `flags=0x10000(runtime)` **and** an `Authority=Developer ID Application: …`
+   line. ⚠️ **Do NOT check `$?` here** — `codesign` **exits 0 even when signing failed**,
+   leaving the previous signature in place. The `Authority=` lines are the evidence.
+   If they are absent, `APPLE_SIGNING_IDENTITY` was not exported into the build's shell.
+
+3b. **Notarize the `.dmg` and staple both artifacts.** ⚠️ **This step is why the release
+   no longer needs an `xattr` workaround** — `spctl` only reports
+   `source=Notarized Developer ID` once the ticket is stapled.
+
+   ```bash
+   xcrun notarytool submit src-tauri/target/release/bundle/dmg/Claudesk_${VER}_aarch64.dmg \
+     --keychain-profile "claudesk-notary" --wait
+   ```
+
+   This uploads to Apple and blocks until a verdict (typically 1–5 min; it has taken
+   longer). Pass an explicit Bash `timeout` of 600000 ms. The final line must read
+   `status: Accepted`.
+
+   ⚠️ **If the status is `Invalid`**, get the reason before changing anything —
+   `xcrun notarytool log <submission-id> --keychain-profile "claudesk-notary"`. The
+   usual causes are a missing hardened runtime or an unsigned nested binary, both of
+   which are build-config problems, not notarization problems.
+
+   Then staple the ticket to **both** artifacts:
+
+   ```bash
+   xcrun stapler staple src-tauri/target/release/bundle/dmg/Claudesk_${VER}_aarch64.dmg
+   xcrun stapler staple src-tauri/target/release/bundle/macos/Claudesk.app
+   ```
+
+3c. **⚠️ RE-TAR AND RE-SIGN THE UPDATER PAYLOAD — do not skip this.** Tauri builds
+   `Claudesk.app.tar.gz` **during** the build, i.e. **before** step 3b stapled the
+   `.app`. The tarball on disk therefore contains an **unstapled** app, and its `.sig`
+   was computed over those stale bytes. Shipping it means every self-updating user
+   receives an app whose Gatekeeper check must go **online** to fetch the ticket — which
+   fails offline and re-introduces exactly the first-launch friction this milestone
+   deleted.
+
+   ```bash
+   (cd src-tauri/target/release/bundle/macos && tar -czf Claudesk.app.tar.gz Claudesk.app)
+   ./node_modules/.bin/tauri signer sign \
+     -k "$TAURI_SIGNING_PRIVATE_KEY" -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+     src-tauri/target/release/bundle/macos/Claudesk.app.tar.gz
+   ```
+
+   ⚠️ **Order is load-bearing: staple → re-tar → re-sign.** Re-tarring invalidates the
+   original `.sig` (different bytes), so the re-sign is mandatory, not optional. Verify
+   the payload actually carries the ticket:
+
+   ```bash
+   rm -rf /tmp/tarcheck && mkdir -p /tmp/tarcheck
+   tar -xzf src-tauri/target/release/bundle/macos/Claudesk.app.tar.gz -C /tmp/tarcheck
+   xcrun stapler validate /tmp/tarcheck/Claudesk.app && rm -rf /tmp/tarcheck
+   ```
+
+   ⚠️ **`does not have a ticket stapled to it` means you skipped or mis-ordered 3c.**
+
+3d. **Verify the release artifacts — all three checks, all required.**
+
+   ```bash
+   codesign --verify --deep --strict --verbose=2 src-tauri/target/release/bundle/macos/Claudesk.app
+   spctl -a -t exec -vvv src-tauri/target/release/bundle/macos/Claudesk.app
+   xcrun stapler validate src-tauri/target/release/bundle/dmg/Claudesk_${VER}_aarch64.dmg
+   ```
+
+   ⚠️ **`codesign` alone does not prove notarization.** The decisive line is `spctl`
+   printing **`source=Notarized Developer ID`** — if it says `source=Developer ID`
+   (no "Notarized"), the ticket is missing and users will hit Gatekeeper. STOP and
+   redo 3b–3c rather than publishing.
+
 4. **Compute the SHA-256** (the cask needs it; keep the hash):
 
    ```bash
@@ -176,15 +297,17 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    the entries added since the previous release tag (`git tag --sort=-v:refname` →
    the tag before `vVER`; `git log <prevtag>..HEAD` to see what landed). Draft a
    short release-notes body summarizing those entries, and **always append the
-   standard unsigned-install caveat block**:
+   standard install block**:
 
    ```
-   **Unsigned build.** macOS Gatekeeper blocks it on first launch. After install:
-
-       xattr -dr com.apple.quarantine /Applications/Claudesk.app
-
    Install via the tap: `brew tap StaymanHou/claudesk && brew trust --cask StaymanHou/claudesk/claudesk && brew install --cask claudesk`
    ```
+
+   ⚠️ **The unsigned-build caveat is GONE as of v0.5.2** (M14 WP2). Builds are
+   Developer-ID signed and Apple-notarized, so Gatekeeper admits them unaided.
+   **Do not re-add an `xattr -dr com.apple.quarantine` line to release notes** — it
+   would instruct users to work around a problem that no longer exists, and it teaches
+   a habit that weakens Gatekeeper for unrelated software.
 
 5b. **Generate the updater manifest `latest.json`.** This is the file the running app
    polls (`plugins.updater.endpoints` in `tauri.conf.json` →
@@ -326,19 +449,21 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
     # Run in Terminal.app, not inside Claudesk. Quit Claudesk (Cmd-Q) first.
     brew update
     brew upgrade --cask claudesk        # or `brew reinstall --cask claudesk` if already at VER
-    xattr -dr com.apple.quarantine /Applications/Claudesk.app   # MUST precede any relaunch
     # verify, then reopen:
     brew list --cask --versions claudesk   # must read: claudesk VER
     /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Claudesk.app/Contents/Info.plist  # VER
-    xattr /Applications/Claudesk.app | grep -i quarantine && echo "STILL QUARANTINED — re-run xattr" || echo "clear"
+    spctl -a -t exec -vvv /Applications/Claudesk.app 2>&1 | grep source=   # want: source=Notarized Developer ID
     open -a /Applications/Claudesk.app
     ```
 
-    Order matters: **quit → upgrade → clear quarantine → THEN reopen.** Clearing the
-    xattr before relaunch avoids the Gatekeeper block (a second apparent "crash"). If
-    a pre-publish manual `cp` of the build into `/Applications` happened, brew's
-    receipt lags the bundle until this upgrade re-syncs it — that mismatch alone is
-    not an error.
+    Order is now simply **quit → upgrade → reopen** (M14 WP2). ⚠️ **The `xattr -dr`
+    step is GONE** — the build is notarized, so Gatekeeper admits it without a manual
+    quarantine clear. The `spctl` line replaces it as the check: it should print
+    `source=Notarized Developer ID`. If it prints anything else, the published artifact
+    was not stapled — investigate before telling users to install it, and **do not
+    reach for `xattr` as a remedy**. If a pre-publish manual `cp` of the build into
+    `/Applications` happened, brew's receipt lags the bundle until this upgrade
+    re-syncs it — that mismatch alone is not an error.
 
     **Why operator-run, not agent-run:** the release's correctness is already proven by
     the clean build (Step 3), the resolving asset URL (Step 7), and the clean
@@ -363,12 +488,13 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
 
 ## Notes & gotchas (learned 2026-06-24 on the v0.1.0 cut)
 
-- **Step 11 is operator-run, never agent-run (SOP, 2026-06-27 v0.2.1 cut).** `brew upgrade --cask` removes the live `/Applications/Claudesk.app` and writes a fresh, re-quarantined bundle — so any open Claudesk dies mid-upgrade. Because `/release` is almost always driven from a Claude Code session running *inside* Claudesk, the agent running the upgrade would kill its own session. **So the agent does NOT run it** — it prints the quit→upgrade→xattr→reopen block (Step 11) and the operator runs it by hand in Terminal.app after the session. The release's correctness is already proven by the clean build + resolving asset URL + clean audit/style (none touch the running app); the local upgrade only re-confirms the operator's own install and is unsafe in-session. (Earlier cuts had the agent run it with a "quit Claudesk yourself" warning — superseded: the kill is unavoidable and takes the session with it, so hand it off instead.) Also: a pre-publish manual `cp` of the build into `/Applications` leaves brew's receipt lagging the bundle until the operator's upgrade re-syncs it — that mismatch alone is not an error.
+- **Step 11 is operator-run, never agent-run (SOP, 2026-06-27 v0.2.1 cut).** `brew upgrade --cask` removes the live `/Applications/Claudesk.app` and writes a fresh, re-quarantined bundle — so any open Claudesk dies mid-upgrade. Because `/release` is almost always driven from a Claude Code session running *inside* Claudesk, the agent running the upgrade would kill its own session. **So the agent does NOT run it** — it prints the quit→upgrade→reopen block (Step 11) and the operator runs it by hand in Terminal.app after the session. The release's correctness is already proven by the clean build + resolving asset URL + clean audit/style (none touch the running app); the local upgrade only re-confirms the operator's own install and is unsafe in-session. (Earlier cuts had the agent run it with a "quit Claudesk yourself" warning — superseded: the kill is unavoidable and takes the session with it, so hand it off instead.) Also: a pre-publish manual `cp` of the build into `/Applications` leaves brew's receipt lagging the bundle until the operator's upgrade re-syncs it — that mismatch alone is not an error.
 - **Homebrew 6.x removed `--no-quarantine`.** Do NOT put
   `brew install --cask --no-quarantine claudesk` in release notes or the README — it
-  errors with _"invalid option: --no-quarantine"_. The reliable path is plain
-  `brew install --cask claudesk` then
-  `xattr -dr com.apple.quarantine /Applications/Claudesk.app`. (Signing + notarization
+  errors with _"invalid option: --no-quarantine"_. ⚠️ **The flag is still gone, but the
+  reason it mattered is not:** as of v0.5.2 the build is notarized, so plain
+  `brew install --cask claudesk` just works with **no follow-up command at all**.
+  (Signing + notarization
   will remove this step entirely — a deferred M9 upgrade.)
 - **Third-party-tap trust gate.** Recent Homebrew refuses casks from untrusted
   taps. Friends run `brew trust --cask StaymanHou/claudesk/claudesk` once. Keep
@@ -384,12 +510,19 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
   the cask bump goes to `StaymanHou/homebrew-claudesk` via `git -C homebrew-claudesk`.
   They are independent repos nested on disk (the tap is gitignored by claudesk) — a
   push to one never touches the other.
-- **Unsigned, Apple-Silicon-only.** Still no Apple code-signing / notarization
-  (LOCKED at M10: stay unsigned + minisign — see `workflow-system/product/arch/build-update-release.md`).
-  The Gatekeeper `xattr` step therefore stays for `.dmg`/Homebrew first-installs. In-app
-  self-updates (below) clear their own quarantine post-install (M10 WP1/WP2); the
-  self-clear's live verdict lands at M10 WP6. *(Supersedes the earlier "No `tauri-plugin-updater`
-  yet — friends re-`brew upgrade`" note — the updater shipped at M10 WP2.)*
+- **⚠️ SIGNED + NOTARIZED as of v0.5.2 — this REVERSES the M10 decision (M14 WP2,
+  2026-09-18).** Builds are Developer-ID signed with the hardened runtime and
+  Apple-notarized, so `spctl` reports `source=Notarized Developer ID` and Gatekeeper
+  admits them unaided. **The `xattr` step is deleted everywhere** — from release notes,
+  the README, and the Step 11 upgrade block — and the updater's post-install
+  self-quarantine-clear was removed with it. ⚠️ **minisign is RETAINED, not replaced:**
+  the two systems are independent (minisign verifies the *updater payload* inside
+  `download()`; notarization satisfies *Gatekeeper* via a stapled ticket), and the trust
+  anchor `774E2E8429FDF78A` is **unchanged** — changing it would strand every existing
+  install. Apple-Silicon-only is unchanged. See
+  `workflow-system/product/arch/build-update-release.md`.
+  *(Supersedes both the earlier "No `tauri-plugin-updater` yet — friends re-`brew upgrade`"
+  note (the updater shipped at M10 WP2) and the M10 "stay unsigned + minisign" lock.)*
 - **Updater signing (M10 WP5) — two gotchas that silently break updates if missed.**
   1. **`TAURI_SIGNING_PRIVATE_KEY` is the key CONTENTS (a string), NOT a path.** The build's
      integrated sign step reads `TAURI_SIGNING_PRIVATE_KEY` (+ `..._PASSWORD`). If you set
