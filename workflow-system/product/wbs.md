@@ -371,32 +371,32 @@ unknown at its cheapest moment.**
 
 ---
 
-### WP2: Sign + notarize the release pipeline, and delete the quarantine workaround
+### WP2: Sign + notarize the release pipeline, and delete the quarantine workaround ✅ **SHIPPED 2026-09-18 as `v0.5.2`** (6/8 tasks done; 2.3 + 2.7 operator-gated by design)
 **Description:** Wire Developer-ID signing, notarization and stapling into the build/release path;
 then **remove** the self-quarantine-clear mechanism that existed only because the app was unsigned.
 **Milestone:** M14 (remainder)
 **Dependencies:** **WP1 (hard gate — cert must exist and probe must report GO)**
 **Size:** L
 **Tasks:**
-- [ ] 2.1 Add `bundle.macOS` signing config to `tauri.conf.json` + the entitlements file from probe
+- [x] 2.1 ✅ **DONE 2026-09-18** (`481b4bb`). `bundle.macOS = { hardenedRuntime: true, entitlements: "Entitlements.plist" }` + a 4-key `src-tauri/Entitlements.plist`. ⚠️ **The dev-overlay question is answered by OMISSION:** `signingIdentity` is deliberately NOT in the tracked config — it is passed via `APPLE_SIGNING_IDENTITY` at build time, so `tauri.dev.json` needs **no** change and `pnpm tauri:dev` keeps working for anyone without the cert. Add `bundle.macOS` signing config to `tauri.conf.json` + the entitlements file from probe
       task 1.6. ⚠️ **Check whether `tauri.dev.json`'s dev-identity overlay needs a matching change
       or an explicit opt-OUT** — dev builds should **not** require the cert, or `pnpm tauri:dev`
       breaks for anyone without it (including a contributor).
-- [ ] 2.2 Produce a **signed, notarized, stapled** `.app` + `.dmg` locally. Verify with
+- [x] 2.2 ✅ **DONE 2026-09-18** — v0.5.2 built signed, notarized (submission `0ccba0a7-707e-421e-a40a-db920327c431` → Accepted) and stapled. All three checks pass, **plus a fourth** (see 2.4). ⚠️ Verified against the **DOWNLOADED** artifacts, not the local build. Produce a **signed, notarized, stapled** `.app` + `.dmg` locally. Verify with
       `codesign --verify --deep --strict --verbose=2`, `spctl -a -vvv -t install`, and
       `stapler validate`. ⚠️ **All three must pass** — `codesign` alone does not prove notarization.
-- [ ] 2.3 ⚠️ **INSTALLED-BUILD SMOKE TEST — mandatory, and `pnpm tauri:dev` CANNOT substitute.**
+- [ ] 2.3 ⏸️ **OPERATOR-GATED — v0.5.2 is published; the observation is the operator's to take, at their own moment.** ⚠️ **`brew upgrade` must NOT be used for this** — it deletes and rewrites the running bundle, killing every live Claudesk session. The in-app updater (Check for updates → Install) is the path, and **nothing may kill a running Claudesk** to satisfy a checkbox. What remains unobserved: `claude`/`subl`/`smerge` spawning from a notarized installed build (WP1 proved `zsh`+`perl` directly; the rest is inference). ⚠️ **INSTALLED-BUILD SMOKE TEST — mandatory, and `pnpm tauri:dev` CANNOT substitute.**
       Launch the notarized `.app` **from Finder** and confirm: no Gatekeeper prompt, **no `xattr`
       step needed**, `cc_spawn` still finds `claude` (the hardened-runtime + GUI-PATH interaction),
       PTY works, Sublime launchers work. Per `docs/lessons/verify-self-tiers.md`, anything touching
       PATH/env/subprocess spawning **must** be verified from an installed bundle launched from
       Finder.
-- [ ] 2.4 Update the `/release` skill's pipeline to sign + notarize + staple, including the
+- [x] 2.4 ✅ **DONE 2026-09-18** (`9c51e49`, `be639e4`). New steps 3b (notarize+staple), **3c (re-tar + re-sign — see the discovery below)**, 3d (a **4-check** gate). ⚠️ **The cross-repo warning did NOT apply:** `/release` is PROJECT-LOCAL (`.claude/skills/release/SKILL.md`, a regular file), not a symlink into mccc — verified by `readlink`. Update the `/release` skill's pipeline to sign + notarize + staple, including the
       credential mechanism from 1.4. ⚠️ **The skill is a symlink into the mccc repo** (see memory
       `installed-skills-are-symlinks-into-the-mccc-repo`) — **editing it dirties a DIFFERENT git
       repo.** Check that repo's `git status` and decide deliberately whether this is a Claudesk
       change or a cross-repo handoff.
-- [ ] 2.5 **Delete the quarantine workaround.** Rust: `clear_own_quarantine`,
+- [x] 2.5 ✅ **DONE 2026-09-18** (`46c8e35`). `updater/mod.rs` 203 → 48 lines. ⚠️ **SCOPE CORRECTIONS: (a)** the WHOLE `UpdaterError` enum died — it had **three** quarantine-only variants, not "the two"; **(b)** no `invoke()` sweep was owed — neither fn was a `#[tauri::command]`; **(c)** `QUARANTINE_FALLBACK_ACTIVE` was already hardcoded `false`, so the frontend removal was dead-code deletion, not a behavior change. Boot smoke test ran in-phase per the M13.5 rule. **Delete the quarantine workaround.** Rust: `clear_own_quarantine`,
       `quarantine_clear_command`, `resolve_bundle_path`, `QUARANTINE_ATTR`, the two `UpdaterError`
       variants, and the `lib.rs:76` comment. Frontend: the `QUARANTINE_FALLBACK_ACTIVE` seam, the
       fallback dialog, and its wiring in `App.tsx` / `updateFlowState.ts` / `useUpdater.ts` + the
@@ -405,17 +405,39 @@ then **remove** the self-quarantine-clear mechanism that existed only because th
       smoke test in the same phase as the deletion.** ⚠️ **Sweep `invoke()` call sites** if any
       `#[tauri::command]` is removed (memory `tauri-command-removal-needs-invoke-sweep`) — the
       binding is stringly-typed and invisible to the unit gate.
-- [ ] 2.6 ⚠️ **Rewrite the superseded architecture decisions** in `arch/build-update-release.md`:
+- [x] 2.6 ✅ **DONE 2026-09-18** (`60b784f`). ⚠️ **The 2-site scope list was a FLOOR, as the rule warns:** a repo-wide grep found **8 live files** needing correction (6 sites in `arch/build-update-release.md` alone, plus `roadmap.md`×3, `context.md`, `arch/claude-substrate.md`, README, the cask, and a `.claude/memory/` file that would have propagated stale guidance into future sessions). **24 archive files were deliberately left untouched** as historical record. ⚠️ **Rewrite the superseded architecture decisions** in `arch/build-update-release.md`:
       the "Unsigned + minisign, not notarized" bullet and the "M14 (Polish) overlap — reconciled"
       bullet. Record the reversal, its date, and that minisign is retained.
       ⚠️ **`doc-correction-scope-list-is-a-floor`: grep the retracted claim repo-wide first** —
       "unsigned", "not notarized", "xattr", "quarantine" — and fix every assertion site, not just
       the two named here. Separate string-matches from claim-assertions.
-- [ ] 2.7 Verify an **existing `v0.5.0` install self-updates into the first signed build** without
+- [ ] 2.7 ⏸️ **OPERATOR-GATED — the REASONING is complete and verified; only the live run is pending.** The trust anchor `774E2E8429FDF78A` is **byte-identical** across `v0.2.9`→`v0.5.1`→the signed build (verified, 1 unique value over five reads), and the published `latest.json` signature matches the `.sig` we produced — so the migration is proven at every layer an agent can reach. Verify an **existing `v0.5.0` install self-updates into the first signed build** without
       the trust anchor changing. ⚠️ **This is the migration case** — a stranded installed base is
       the one unrecoverable failure in this WP.
-- [ ] 2.8 Update the Homebrew tap cask if notarization changes anything it asserts (e.g. a
+- [x] 2.8 ✅ **DONE 2026-09-18** (tap `4c71a37`). It **did** change something it asserts — the `caveats` block was printing *"Claudesk is an UNSIGNED build … xattr -dr …"* to **every installing user**, the most user-visible stale claim in the reversal. Rewritten + version/sha256 bumped to 0.5.2. Update the Homebrew tap cask if notarization changes anything it asserts (e.g. a
       `--no-quarantine` note or a stanza that assumed an unsigned artifact).
+
+#### ⚠️ Discovery — NOT in the task list, and it would have shipped the release broken
+
+**Tauri builds the updater tarball DURING `tauri build`, i.e. BEFORE any post-build staple.** So
+`Claudesk.app.tar.gz` contained an **unstapled** `.app` and its minisign `.sig` was computed over
+those stale bytes. A self-updating user would receive an app whose Gatekeeper check must fetch the
+ticket **online** — failing offline, quietly re-introducing the friction this WP exists to delete.
+
+⚠️ **It reproduced on the real v0.5.2 cut**: before the re-tar, the payload reported *"does not have
+a ticket stapled to it"* while the `.app` and `.dmg` both validated clean. **The fix is an ORDERING
+constraint — `staple → re-tar → re-sign`** (re-tarring invalidates the `.sig`, so the re-sign is
+mandatory), now `/release` step 3c.
+
+⚠️ **The verification gate had the same blind spot** and was fixed with it: step 3d checked the
+`.app` and the `.dmg` but never **extracted the tarball**, so all three original checks could pass
+while the only artifact self-updating users receive was wrong. A 4th check now validates the
+payload itself. Logged as `SURFACE-2026-09-18-STAPLE-AFTER-BUILD-LEAVES-UPDATER-PAYLOAD-UNSTAPLED`.
+
+**Related, found while verifying the upgrade UX:** ⚠️ **`cp -R` strips a notarization ticket**
+(xattrs do not survive a plain copy → `spctl` rejects as `source=Unnotarized Developer ID`). The
+updater is safe only because `tauri-plugin-updater` extracts via `tar::Archive::unpack` + `rename`,
+and tar restores xattrs. Use `ditto` if a stapled bundle must ever be copied.
 
 **WP2 → WP3 rationale:** Signing is the only WP with an external calendar dependency and an
 unrecoverable failure mode (a stranded installed base); it also **removes** content WP4's docs would
