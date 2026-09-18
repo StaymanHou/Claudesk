@@ -1024,3 +1024,21 @@ scheduling items rather than polish.*
 - **Why it matters:** not a bug today, but two near-identical state vocabularies differing only in casing is a standing trap for the next person adding a state — they may extend the wrong one and see nothing break. ⚠️ Note this WP already demonstrated the cost of a sweep keyed on the wrong predicate (the CRITICAL), and this is the same hazard one layer over.
 - **Suggested action:** confirm it is genuinely dead, then delete it. If something does depend on it, the fix is to migrate that consumer to `WireWorkspaceState` rather than to maintain two vocabularies.
 - **Priority:** low
+
+# m14-wp2-sign-notarize-delete-quarantine — 2026-09-18
+
+## SURFACE-2026-09-18-QUALITY-REVERSE-GUARD-HAS-NO-POSITIVE-ANCHOR
+- **Source:** feature:review-quality (M14 WP2)
+- **Type:** tech-debt
+- **Summary:** `updaterWiring.test.ts`'s new "no longer wires the deleted WP1-fallback quarantine
+  dialog" test is a pure reverse guard (`expect(appTsx).not.toContain(...)` ×3). It would pass if
+  `App.tsx` were emptied entirely.
+- **Context:** Defensible **as currently placed** — it sits in a file whose other tests assert
+  positive content from the same `appTsx` source, so an emptied `App.tsx` would fail those. The risk
+  is purely future: if this guard is ever moved into its own file, or the surrounding positive
+  assertions are removed, it silently becomes vacuous. Same failure family as
+  `[[raw-guard-identifier-satisfied-by-own-comments]]`.
+- **Suggested action:** If the guard is ever isolated, pair it with a positive anchor in the same
+  test (e.g. assert `updateConfirmSpec` IS present) so an empty/failed read cannot pass.
+- **Priority:** low
+- **Status:** pending

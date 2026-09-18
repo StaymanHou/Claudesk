@@ -284,3 +284,55 @@ re-introducing the friction this milestone deletes. **Fix (now step 3c): staple 
 re-sign**, in that order; re-tarring invalidates the `.sig`, so the re-sign is mandatory.
 Confirmed a re-tar of the stapled `.app` preserves the ticket. **Not in the WBS's task list
 — found only because the artifacts were inspected rather than assumed.**
+
+## Code-Quality Review — m14-wp2-sign-notarize-delete-quarantine
+
+Reviewed 2026-09-18 against ship commit `3e50eb7` (base `481b4bb`). **0 CRITICAL, 0 MAJOR, 2 MINOR.**
+
+### Strengths
+- The deletion is atomic and complete: `updater/mod.rs` (203→48), the `UpdaterError` enum, the
+  frontend `QUARANTINE_FALLBACK_ACTIVE` seam, and every user-facing `xattr` instruction removed
+  together — and cross-references to the deleted fn (`workflow_install/runner.rs`'s comment citing
+  `quarantine_clear_command`) were caught and rewritten rather than left dangling.
+- `arch/build-update-release.md` follows the strikethrough-and-supersede convention meticulously;
+  Decision 2's reversal preserves the history next to the new call rather than overwriting it.
+- `/release` steps 3b–3d encode the staple→re-tar→re-sign ordering with an explicit *why*, paired
+  with a gate (check 4) that reads the **actual updater payload** — a runbook that prevents its own
+  failure mode from recurring, evidenced by the trap firing on the real v0.5.2 cut.
+- `moduleGraphBoot.test.ts` targets the M13.5 incident class with a genuinely different technique
+  (runtime import) rather than duplicating `tsc`, and the mutation was confirmed landed at the
+  source line before being trusted.
+- The WIP is unusually honest about partial verification — Phase 2's verify-self states the Browser
+  DOM read was NOT achieved and substitutes the module-graph test rather than claiming coverage.
+
+### Issues
+**CRITICAL** — (none)
+
+**MAJOR** — (none)
+
+**MINOR**
+- [`workflow-system/state/backlog.md`] `SURFACE-2026-09-18-STAPLE-AFTER-BUILD…` said "**Suggested
+  action:** RESOLVED in-phase" while carrying `**Status:** pending` — resolved in substance but
+  formally open, which reads as contradictory to a future reader sweeping the backlog.
+  ✅ **FIXED at review time, not backlogged** (the delete-on-resolve rule applies): a
+  `**Backlog resolved:**` bullet was added to CHANGELOG and the entry deleted **in the same commit**.
+  The architectural constraint it was preserving is durable in three other places
+  (`arch/build-update-release.md`, `/release` step 3c, the WP2 discovery note), so the entry was
+  pure duplication.
+- [`src/updater/__tests__/updaterWiring.test.ts`] The new "no longer wires…" test is a pure reverse
+  (`not.toContain`) guard. Defensible here because it sits beside positive-content assertions in the
+  same file, but it would still pass if `App.tsx` were emptied entirely. → **BACKLOGGED** (low): if
+  that guard is ever isolated into its own file, it needs a positive anchor.
+
+### Assessment
+"a well-executed, mostly-deletion feature that handles the hard part of a deletion-heavy change
+correctly: every consumer of the removed quarantine mechanism … was swept in the same phase rather
+than left to drift, and the one real trap the team found (the updater tarball being built before
+stapling) was caught by inspecting the actual artifact rather than trusting the pipeline steps, then
+fixed and durably guarded. … Net: this advances the codebase by paying down debt cleanly rather than
+accruing it."
+
+### If you disagree
+Dismiss any finding by editing this section and marking the line `[DISMISSED]` before
+`feature-finalize` archives this WIP.
+
