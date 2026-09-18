@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-09-17
+updated: 2026-09-18
 ---
 
 # Runtime Registry
@@ -87,7 +87,8 @@ real chronology.
 
 ## pnpm tauri build
 
-- **Last:** 105s (2026-09-17, /release v0.5.1: cargo clean removed 19973 files / 8.7 GiB + cold build, 1m18s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed — "Finished 1 updater signature" confirms the key was read as CONTENTS not a path)
+- **Last:** 116s (2026-09-18, /release v0.5.2: cargo clean removed 19752 files / 8.4 GiB + cold build, Apple-signed [Developer ID + hardened runtime] AND minisign-signed; notarization is a SEPARATE ~3min notarytool round-trip, not counted here)
+- **Prior:** 105s (2026-09-17, /release v0.5.1: cargo clean removed 19973 files / 8.7 GiB + cold build, 1m18s rust + bundle triad [.dmg/.app.tar.gz/.sig], signed — "Finished 1 updater signature" confirms the key was read as CONTENTS not a path)
 - **Prior:** 131s (2026-09-06, /release v0.4.0: cargo clean removed 116836 files / 38.7 GiB — largest yet + cold build, bundle triad, signed)
 - **Use timeout:** 600000
 - **History:**
