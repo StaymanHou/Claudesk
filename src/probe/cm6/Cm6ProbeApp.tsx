@@ -1,7 +1,9 @@
-// WP1 probe entry — routes to the hotkey or n-mount harness.
-// THROWAWAY probe code. Mounted via ?cm6probe&mode=<hotkey|nmount>.
+// CM6 probe entry — routes to the hotkey, n-mount or dictation harness.
+// (`hotkey`/`nmount` are M2 WP1; `dictation` is F-a WP1 — two different WP1s.)
+// THROWAWAY probe code. Mounted via ?cm6probe&mode=<hotkey|nmount|dictation>.
 import { useEffect } from "react";
 import { startFrameCollector } from "../frameStats";
+import DictationProbe from "./DictationProbe";
 import HotkeyProbe from "./HotkeyProbe";
 import NMountProbe from "./NMountProbe";
 
@@ -21,15 +23,18 @@ export default function Cm6ProbeApp() {
       <h3
         style={{ margin: 0, padding: "8px 12px", font: "600 14px system-ui" }}
       >
-        WP1 CM6 probe — mode={mode}
+        CM6 probe — mode={mode}
       </h3>
       {mode === "hotkey" ? (
         <HotkeyProbe />
       ) : mode === "nmount" ? (
         <NMountProbe />
+      ) : mode === "dictation" ? (
+        <DictationProbe />
       ) : (
         <p style={{ padding: 16 }}>
-          unknown mode &quot;{mode}&quot; — use mode=hotkey or mode=nmount
+          unknown mode &quot;{mode}&quot; — use mode=hotkey, mode=nmount or
+          mode=dictation
         </p>
       )}
     </div>

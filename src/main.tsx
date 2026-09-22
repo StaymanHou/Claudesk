@@ -7,7 +7,8 @@ import App from "./App";
 // pulled into the normal app bundle. THROWAWAY probe path. Distinct flags avoid
 // the same-key collision URLSearchParams would have on ?probe&probe=cm6.
 //   ?probe      → WP4 thumbnail probe
-//   ?cm6probe   → WP1 CodeMirror 6 integration probe (&mode=hotkey|nmount)
+//   ?cm6probe   → CodeMirror 6 probes (&mode=hotkey|nmount = M2 WP1;
+//                 &mode=dictation = F-a WP1 macOS-dictation/wrap probe)
 //   ?nwsprobe   → M4 WP1 N-workspace mount-cost probe (&n=8&visible=1&term=cc|shell)
 const probeParams = new URLSearchParams(window.location.search);
 const isProbe = probeParams.has("probe");
