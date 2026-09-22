@@ -358,6 +358,70 @@ agent that later had to satisfy them, and both survived into the build before fa
 observable outcome is a claim about a *whole file's* future contents; prefer scoping it to a region
 at the moment you write it, not after it fires.
 
+## 15. A LENGTH-only assertion standing in for an IDENTITY assertion
+
+⚠️ **This one produced THREE of four holes in a single work package** (F-a WP2 Phase 3,
+2026-09-21), each on a different axis, and the third slipped through *the fix for the second*.
+It is the highest-frequency shape in this catalogue.
+
+The pattern: the property you care about is **which elements / what value**, and the assertion
+checks **how many / that it did not throw**. Both pass on correct code, so the test looks fine —
+and both also pass on a specific wrong implementation.
+
+The three instances, all in one 400-line test file:
+
+| Assertion written | Property meant | Mutant that survived |
+|---|---|---|
+| `expect(ring).toHaveLength(HISTORY_CAP)` | the newest N survive | `.slice(-CAP)` → returns the **OLDEST** ten |
+| `expect(() => save(big)).not.toThrow()` | it returns `[]` on quota failure | `return ["BOGUS"]` |
+| `expect(returned).toEqual([])` | it returns the **intact ring** | `return []` on a different arm |
+
+⚠️ **The third is the instructive one, because the assertion was WRITTEN TO CLOSE this exact
+class and still fell to it.** It asserted `toEqual([])` against a stub whose `getItem` returned
+`null` — so `[]` was *also* what the correct implementation produced. **The assertion could not
+distinguish the two, and it pinned the wrong one.** The fix was not a stronger matcher; it was
+**seeding real data into the stub first**, so the two answers differ at all.
+
+**The questions to ask:**
+
+1. *Could a wrong implementation produce a value with the same length / the same non-throwing
+   behavior?* If yes, assert the value.
+2. ⚠️ *Does my FIXTURE make the correct and incorrect answers identical?* An empty store, a
+   `null` getter, a one-element collection, a two-element run — these collapse distinctions.
+   (A two-send duplicate test cannot tell "never collapses" from "collapses runs longer than
+   two"; a four-send run can. Measured, same phase.)
+
+**Relationship to the rest of this catalogue:** entry 9 is a count that is *zero*; this is a count
+that is *right*. Entry 12 asks whether the match is anchored; this asks whether the **matcher is
+strong enough to fail**. The remedy is the same family as entry 13's two-directional guard —
+assert the thing, not a shadow of it.
+
+## 16. A fix applied to the arm a hunt SURFACED is not a fix
+
+⚠️ **Found by a code-quality reviewer after FOUR rounds of adversarial mutation hunting had
+each found and fixed a hole** (F-a WP2, 2026-09-21) — i.e. the method that was working is the
+method that missed this.
+
+`appendToHistory` had three non-append exits. A mutation hunt surfaced a wrong return on **one**
+of them (the blank-entry arm); it was fixed there. The identical defect on the **quota** and
+**no-storage** arms shipped, because the hunt had not been aimed at them — and the new test
+written for the fix *pinned* the unfixed arm's behavior as correct (see entry 15).
+
+The harm was real: a throwing `setItem` leaves storage **intact**, so the caller pattern the
+module documents — `setRing(appendToHistory(p, t))` — would blank a populated UI ring against
+live data.
+
+**The rule: when a hunt surfaces a defect, ask what OTHER code paths reach the same caller
+through the same contract, and sweep the fix across all of them before re-verifying.** A mutation
+hunt finds *an* instance; it does not enumerate the class. Concretely, before closing:
+
+- list every `return` / exit point of the function the defect was found in;
+- check each against the contract in the doc comment, not against the test that just passed;
+- if the fix changed a return value, re-read every *other* return of the same type.
+
+⚠️ **Corollary: the hunt's own success is the trap.** Four rounds each ending in a genuine find
+builds confidence that the axis is now covered. What was actually covered was one arm of one axis.
+
 ## Comment budget — what belongs at the code, and what does not
 
 Comment density has been flagged in **four consecutive reviews** of the same file, and each

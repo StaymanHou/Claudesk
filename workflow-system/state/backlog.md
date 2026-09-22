@@ -82,6 +82,162 @@
 > forward across several cycles — `/util-backlog-paydown` is the instrument for it, and this is a
 > between-milestone boundary.
 
+## SURFACE-2026-09-21-UNCHUNKED-BASE64-ENCODER-OVERFLOWS-ON-LARGE-INPUT
+
+- **Priority:** low-medium
+- **Source:** feature:build — F-a WP2 Phase 1 (2026-09-21)
+- **Target level:** product:arch (a duplicated primitive, one copy of which has a size ceiling)
+- **Type:** tech-debt
+- **Status:** pending
+
+**Two copies of "UTF-8 string → base64 for `cc_input`" exist, and one of them throws on large
+input.** `autoResumeFire.ts`'s module-private `encodeUtf8Base64` builds its binary string by
+spreading the entire byte array into a single `String.fromCharCode(...bytes)` call.
+⚠️ **Measured 2026-09-21: it throws `RangeError: Maximum call stack size exceeded` at ~200k
+characters.** `src/cc/bridge.ts`'s `encodeBase64` — whose own header calls it *"the single
+frontend chokepoint for that encoding"* — does the same job with a **chunked** spread
+(`CHUNK = 0x8000`) and is unaffected.
+
+**Why it has not bitten:** the private twin's only callers are slash commands (`/session-restore`,
+skill-row commands, supervisor fires), which are short by construction and cannot approach the
+limit. The ceiling is real but currently unreachable **from those callers**.
+
+**Why it is still worth recording:** F-a WP2 hit this while choosing an encoder for staged prompt
+text, where a long single-take dictation is *exactly* the input that reaches 200k. That WP routed
+around it (the staging path imports the chunked `encodeBase64`, pinned by a 200k regression test
+in `stagedPayload.test.ts`) rather than fixing it — so **the trap is still armed for the next
+caller who reaches for the nearer copy.** ⚠️ The duplicate also contradicts its own header, which
+says *"Kept in this module (rather than imported) only because the encode is two lines; if a third
+caller appears, hoist it."* A third caller has now appeared and deliberately did not use it.
+
+- **Suggested action:** delete `autoResumeFire.ts`'s private `encodeUtf8Base64` and import
+  `encodeBase64` from `cc/bridge` instead. ⚠️ **`slashCommandPayload`'s output bytes must not
+  change** — it is pinned against a Rust twin and shared by M12 auto-resume, M13's skill row and
+  M15's supervisor. The two encoders agree on all ASCII and multi-byte input; the only difference
+  is the chunking, so the swap should be byte-neutral — but the existing byte pins in
+  `autoResumeFire.test.ts` plus the wbs-2.4 guard in `stagedPayload.test.ts` are what prove it.
+  Good `/feature-refactor` or backlog-paydown material; not urgent on its own.
+
+## Code-quality findings — fa-wp2-draft-store-history-payload (2026-09-21)
+- **Pointer:** **3 findings — 0 CRITICAL, 0 MAJOR, 3 MINOR.** ⚠️ **Both MAJORs were FIXED at review time, not backlogged**, and the first is worth knowing about: `appendToHistory` returned the intact ring on its blank-entry arm but a bare `[]` on the no-storage and quota arms — and **a throwing `setItem` leaves storage INTACT**, so `setRing(appendToHistory(p, t))` in WP3/WP4 would have blanked a populated UI ring against live data. ⚠️ **The round-4 test PINNED the bug**: it asserted `toEqual([])` against a stub whose `getItem` returned `null`, so `[]` was also what correct behavior produced — the assertion could not tell them apart. Both the code and that test are fixed and mutation-proved. The second MAJOR was comment density (measured 73%/58%/56% of physical lines) plus a rationale triplicated across three sites; trimmed to the comment budget's keep-list (measurements, rejected alternatives, what-to-do-when-this-fails) with zero provenance markers left in the implementation files, verified by grep. The 3 remaining MINOR: a `.filter()` that collects elements where it reads as collecting indices; a `loadHistory` read that precedes the storage guard it would short-circuit; and a `typeof`-guard comment overstating a production risk that only the test double can produce. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# fa-wp2-draft-store-history-payload — 2026-09-21`.
+- **Priority:** low (all 3)
+- **Status:** pending
+- **Pickup shape:** All three are one-liners and independent — no ordering constraint. ⚠️ **Do NOT "fix" the blank-check ordering by returning `[]` from that arm** — that reintroduces the MAJOR this WP just closed; only the guard *ordering* is the finding. ⚠️ **Fold the `typeof`-comment reword into the standing comment-convention item rather than doing a per-WP trim pass** — per-WP trimming has been measured as not converging (four consecutive reviews of the same file).
+
+## SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE
+
+- **Priority:** high
+- **Surfaced by:** operator request (2026-09-21, during F-a WP2 restore — a detour, not F-a work)
+- **Target level:** product:roadmap (a new feature ask, not a defect in shipped code)
+- **Type:** gap (missing capability)
+- **Status:** pending
+
+**The ask — TWO requirements, and the second was added 2026-09-21 after the first draft:**
+
+1. **A retained activity record** answering, per workspace and across all of them — **was the
+   supervisor triggered? when? how many times? with what input, and what output?** Today there is
+   no way for the operator to tell whether the supervisor is working as designed, misfiring, or
+   silently doing nothing at all.
+2. ⚠️ **NON-INTRUSIVE IN-PLACE ATTRIBUTION — the operator must be able to look at a turn and tell
+   whether the supervisor fired it or they typed it themselves** (operator, 2026-09-21). This is
+   **not** a restatement of (1): (1) is a place you deliberately visit, (2) is a property of the
+   turn as you encounter it in the normal course of work. ⚠️ **"Non-intrusive" is an operator-stated
+   constraint, not a nicety** — the supervisor's value is that it does not demand attention, so an
+   attribution marker that interrupts, steals focus, or adds noise defeats the feature it is
+   reporting on.
+
+⚠️ **THE HARD FACT FOR REQUIREMENT (2): a fired turn and a typed turn are INDISTINGUISHABLE
+DOWNSTREAM, by construction.** `injectCommand` (`components/workspace/autoResumeFire.ts`) takes a
+`label` — `"supervisor"` for every supervisor injection, enforced as a required parameter in
+`fanOut.ts` — but **the label is consumed ONLY on the failure path** (the `catch`, for the warn
+line and the `onIpcError` message). On success it is discarded, and the call is a bare
+`invoke("cc_input", { sessionId, data: slashCommandPayload(command) })` — **byte-identical to what
+the operator's own keystrokes produce.** CC receives no provenance, the transcript records none,
+and the PTY cannot be read back. ⚠️ So requirement (2) cannot be satisfied by reading anything
+downstream of the injection; the attribution must be **retained Claudesk-side at fire time** and
+rendered from there. ⚠️ **Do not propose parsing the terminal to recover it** — `arch.md` forbids
+reading CC's output as a state source, and it would not work anyway.
+
+⚠️ **The gap is STRUCTURAL, not an oversight — the supervisor's design creates it.** Its whole
+purpose is to silently type the next step on the operator's behalf, and it is deliberately
+**headless** (`arch/workflow-supervisor.md` §G: zero `.tsx`, zero JSX, no panel / menu-id / chord /
+row-cell / skill-row registration — a *recorded* decision). Compounding it, the operator's
+attention is by construction on the workspaces **awaiting input**, not the ones quietly
+self-driving — so the supervisor acts precisely where nobody is looking. **Success and total
+inactivity are observationally identical.**
+
+**What exists today, and why it does not close this.** §F ("Observability — what a fire leaves
+behind", added `7f303e6` 2026-09-14 as a dogfooding precondition) gives every branch a distinct
+trace — a successful fire, a started recycle, a **declined** recycle, an unreadable WIP, and
+(M14 WP0) a per-non-fire **`withheld … — <reason>`** line drawn from a precise closed vocabulary
+(`policy-not-auto`, `not-dispatchable`, `not-supervised`, `adjudicator-says-awaiting`,
+`already-fired-for-this-turn`, `transcript-unreadable`, `no-verdict`, `unsent-input-present`).
+⚠️ **But every one of them is a `console.warn` into the WKWebView console**
+(`useSupervisor.ts`, `fanOut.ts`, `adjudicator.ts` all default `warn` to `console.warn`), which in
+a shipped build the operator cannot open. ⚠️ And per
+`[[read-logs-console-captures-nothing]]`, `read_logs{source:"console"}` captures nothing for this
+app either — **so the traces are unreachable to the operator AND to an agent.** The data is
+computed, correctly and completely, and then discarded to a sink nobody reads.
+
+⚠️ **So this item is mostly a SURFACING problem, not an instrumentation one.** The expensive half
+— deciding what to record and recording it at every branch — is already built and pinned by tests.
+What is missing is a destination: a retained, readable, per-workspace history. Do **not** re-derive
+the event vocabulary; read §F and the `withheld` reason list above.
+
+⚠️ **This is the REVERSING CONDITION named in `arch/workflow-supervisor.md` §G, and it fires the
+moment this item is built.** Giving the supervisor an operator-visible surface makes that surface
+own the **SEVENTH** guard arm, and the `armSubjects` pin (`offInvariantGuard.test.ts` →
+`it("still polices all six registries")`, currently **9** subjects) **must bump in the same
+change**. The guard's backstop is real but partial — its allowlist is all of `src/**`, so a
+panel/menu-id/chord *of a shape arms 1–3 already select on* trips today, while a genuinely novel
+shape would not. ⚠️ Also: the surface must itself be gated **OFF** with the supervisor
+(`workflow_features_enabled` / `host.enabled`), or the OFF-invariant acquires a dead affordance —
+the exact thing M10.9's two-tier gate exists to prevent.
+
+**Relationship to `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (high):**
+adjacent, **not** a duplicate, and they compound. That item is *verification debt* — six specific
+behavioral checks deferred to dogfooding because an agent cannot manufacture the trigger. This item
+is the *instrument* those checks would read. ⚠️ **Sequencing consequence worth weighing:** three of
+those six checks (a live AUTO fire, the live gate-OFF invariant, the negative arm producing no fire)
+are checks the operator must currently confirm **by watching a terminal at the right moment** —
+with a retained activity log they become an after-the-fact read. Building this **before** or
+**early into** dogfooding plausibly makes the dogfooding itself cheaper and more conclusive. That is
+an argument for sequencing, not a decision.
+
+**Open design questions (for `/util-grill-me` at the item's start — do not pre-decide here):**
+1. **Surface shape** — right-panel tab, a section in an existing panel, filmstrip/tile affordance,
+   or a menu-bar popover section? ⚠️ Note the operator's stated context: attention is elsewhere, so
+   a surface requiring a deliberate visit may under-serve the "is it working at all?" question that
+   motivated the ask, while anything ambient competes with the status dot.
+2. **Retention + scope** — per-workspace only, or a cross-workspace roll-up? In-memory for the
+   session, or durable across relaunch? ⚠️ If durable, the persistence-substrate question is live
+   and **F-a WP2 decision 1 is the nearest precedent** (`localStorage` keyed by canonicalized
+   `project_path`, explicitly **not** `projects.json`, because unbounded growth read through serde
+   at startup can take the whole project list down).
+3. **Granularity** — fires only, or fires + withholds? The `withheld` reason line is described in
+   `useSupervisor.ts` as *"the tuning channel"* and is the signal that would distinguish
+   "not working" from "correctly declining" — which is the operator's actual question. It is also
+   far higher-volume than fires.
+4. **"Inputs and outputs"** — how much of the decision to show. The natural candidates are the
+   detected transition/step, the resolved policy cell, the adjudicator verdict when one was
+   consulted, and the injected command. ⚠️ The transcript itself must **not** be surfaced
+   wholesale — it is unbounded and the arch forbids reading CC's output as a state source.
+5. ⚠️ **Where attribution (requirement 2) lives, and what carries it.** The label is retained at
+   fire time Claudesk-side — but rendered where? Candidates: a marker in the terminal pane keyed to
+   the fired turn, a per-workspace "last turn: supervisor / you" readout, a filmstrip-tile
+   affordance, or a distinct transient status. ⚠️ The "non-intrusive" constraint and the
+   `display: none` multi-workspace shell both bear on this, and any in-pane marker must not be
+   written INTO the PTY (that would corrupt the buffer and be indistinguishable from CC output).
+6. **Is a passive log enough, or is a notification wanted** when a fire happens on an unwatched
+   workspace? ⚠️ Bears directly on the recorded risk that `injectCommand` has **no retry and no
+   pre-send cancel window**, so a wrong fire's only recovery is CC's **Esc** — and check (5) of the
+   dogfooding list, whether Esc actually interrupts a wrong fire, is itself still unconfirmed.
+
+- **Suggested action:** carry into the next roadmap pass as a candidate alongside Group F. ⚠️ It is
+  **not** F-a work and must not be folded into the running F-a WBS. Per the standing Group F
+  practice, open it with its own `/util-grill-me` pass — questions 1–5 above are that grill's
+  agenda, and the sequencing-against-dogfooding point is the first thing to settle.
+
 ## SURFACE-2026-09-17-F10B-STOPPED-BEFORE-VERIFY-HUMAN-INSTEAD-OF-CHAINING-INTO-IT
 - **Source:** operator correction (M14 WP0, observed twice in one session)
 - **Target level:** product:wbs
@@ -362,6 +518,44 @@
   this clock.
 - **Status:** pending
 
+## SURFACE-2026-09-21-MACOS-TEXT-INPUT-SERVICES-DEAD-UNDER-TAURI-DEV
+
+- **Priority:** medium
+- **Surfaced by:** feature:build — F-a WP1 Phase 2 verify-human (2026-09-21)
+- **Target level:** product:arch (a verification-capability constraint, not a bug)
+- **Type:** gap
+- **Status:** pending
+
+**macOS dictation does not engage AT ALL under `pnpm tauri:dev`, but works in the installed
+prod app.** Observed while running the F-a WP1 dictation probe: dictation refused to start in
+all three probe arms **including a plain `<textarea>`**, and equally in the **dev app's own code
+editor** — the same CM6 code the operator confirmed working **concurrently** in the installed
+prod app.
+
+**Likely mechanism (direct evidence, not isolated):** `tauri:dev` runs a **bare adhoc-signed
+Mach-O** (`codesign`: `Identifier=claudesk-<hash>`, `Signature=adhoc`, no `TeamIdentifier`, no
+hardened runtime) with **no `.app` bundle** under `target/debug/`. Prod is a Developer-ID bundle
+(`com.claudesk.app`, Team `C8RJH77B47`, hardened runtime). macOS dictation is a system
+text-input service that attaches to an app with a real bundle identity. ⚠️ Per-app TCC was NOT
+inspected — it needs Full Disk Access, deliberately not granted.
+
+⚠️ **Why this matters beyond the probe:** it is a **standing limit on what `tauri:dev` can
+verify.** Any feature depending on macOS text-input services — dictation, and plausibly
+autocorrect, the emoji picker, the character palette — **cannot be verified in a dev build** and
+needs an installed `.app`. This is a sibling of the known **GUI-PATH** constraint (a
+Finder-launched `.app` inherits a minimal PATH, which `tauri:dev` never reproduces): both are
+cases where the dev build is not a faithful stand-in, and the verify-self tier list should say so.
+
+⚠️ **Hypotheses already killed — do not re-propose:** a CM6/contenteditable problem (the
+`<textarea>` failed too); a WKWebView/Tauri limitation (prod is both, and works); a missing
+entitlement (prod has the stricter posture); `spellcheck="false"` (the working prod editor
+carries the identical attributes).
+
+- **Suggested action:** add the constraint to `docs/lessons/verify-self-tiers.md` beside the
+  installed-build/GUI-PATH tier, so the next feature touching text-input services does not
+  rediscover it. Fold in whatever the F-a WP1 Phase 3 run settles about *how* to run a probe on
+  an installed build without shipping dev-only scaffolding or killing a running Claudesk.
+
 ## SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT
 
 - **Priority:** medium
@@ -396,17 +590,21 @@ Claudesk-owned rather than CC-owned.
 ### Constraints found while sizing (not a design — a fence around one)
 
 ⚠️ **`slashCommandPayload` CANNOT be reused unchanged for multi-line text.** It is
-`encodeUtf8Base64(trimmed + "\r")` (`src/components/workspace/autoResumeFire.ts:145`) — it strips
-trailing newlines and appends **one** `\r`. That is correct for a one-line slash command and
-**wrong for a staged multi-line prompt**.
+`encodeUtf8Base64(trimmed + "\r")` (`slashCommandPayload` in
+`src/components/workspace/autoResumeFire.ts`) — it strips trailing newlines and appends **one**
+`\r`. Correct for a one-line slash command, **wrong for a staged multi-line prompt**. ✅ **ANSWERED
+2026-09-21: a NEW builder sits alongside it** (this one is not modified, so M12/M13/M15 callers
+stay byte-identical).
 
-⚠️ **AND THE REASON IS LOAD-BEARING: in raw mode `\r` IS Enter** (`[[raw-mode-cr-is-enter]]`,
-`[[cc-tui-cr-not-lf]]`). So any newline embedded in staged text **submits the prompt at that
-point** rather than inserting a line break — a multi-line staged prompt sent naively would fire as
-N separate truncated prompts. **How multi-line text reaches CC intact is the first real design
-question**, and it is a CC-TUI behavior question, not a Claudesk one. Do not assume it is solvable
-by escaping alone; it may need bracketed paste, or a deliberate single-line normalization with the
-operator's consent.
+⚠️ **The reason is load-bearing: in raw mode `\r` IS Enter** (`[[raw-mode-cr-is-enter]]`,
+`[[cc-tui-cr-not-lf]]`), so a naively-sent multi-line prompt fires as N truncated prompts.
+✅ **RESOLVED BY MEASUREMENT 2026-09-21 — the answer is BRACKETED PASTE.** This block used to say
+"do not assume it is solvable by escaping alone; it may need bracketed paste, or a deliberate
+single-line normalization with the operator's consent." **It needs bracketed paste, and no
+normalization.** Measured: xterm's paste path is `\r?\n → \r` **then** wraps in
+`ESC[200~`…`ESC[201~`; a live PTY probe shows `claude` emits `ESC[?2004h` at startup and **never**
+`ESC[?2004l`. ⚠️ The envelope **inserts literal text and does not submit** — the trailing `\r` is a
+**separate byte**, and it is the only difference between the two send modes.
 
 ⚠️ **`injectCommand` is the single injection funnel** and already carries a `label` argument for
 attribution (M15 uses `"supervisor"`, M12 uses `"auto-resume"`). A staging feature should enter
@@ -416,29 +614,39 @@ through it with its own label rather than opening a second path to `cc_input`.
 (`src-tauri/src/config_store/mod.rs:63`) already carries per-project settings with live read/write
 paths (`default_model` M11.5, `default_drive_mode` M12). A staged draft is **per-workspace**
 though, not per-project, and is high-churn text rather than a setting — so whether it belongs in
-`projects.json` at all is an open question, not a given.
+`projects.json` at all is an open question, not a given. ✅ **ANSWERED 2026-09-21: NOT
+`projects.json` — `localStorage`, keyed by canonicalized `project_path`.** That file is read at
+startup through serde, where unbounded operator prose risks taking the whole project list down.
+⚠️ **And "per-workspace" is a distinction without a difference here:** `nextWorkspaceId()` is an
+in-memory `ws-${++counter}` reset every launch (no durable workspace identity), while
+`openWorkspace` dedups on the canonical path — so **workspace↔project is bijective** and the path
+IS the per-workspace key.
 
-**Open questions for the design discussion (NOT answered here):** where does the staging surface
-live — right panel tab, an overlay, a strip above the CC pane? · is there one draft per workspace
-or a queue/history? · does it auto-save on every keystroke, on blur, or on an interval? · is the
-draft cleared on send, or kept as history? · does it interact with the voice-input path at all, or
-is it agnostic to how text arrives? · does an unsent draft survive a **Recycle** (M13) or a
-context-pressure recycle (M15)?
+**Open questions for the design discussion —** ✅ **ALL ANSWERED by the `/util-grill-me` pass
+2026-09-21.** Authoritative record: `workflow-system/product/roadmap.md` → Group F → F-a →
+"F-a decisions". In brief: **right-panel tab** (full panel height for a long dictation) ·
+**one draft per project**, no queue and no second slot · **debounced auto-save** ·
+**cleared on send but kept as a ~10-entry history ring** · **agnostic to how text arrives**
+(macOS dictation targets the focused field) · **survives a Recycle by default** — `recycleSession()`
+replaces the CC session but does **not** unmount the workspace, so the question inverts from "can we
+keep it?" to "should we clear it?" (answer: no).
 
 **Suggested action:** size as a **roadmap item** at the next roadmap pass. ⚠️ **Open with a
 `/util-grill-me` pass** (booked by the operator 2026-09-15) — *before* a design exists, not after.
-- **Update 2026-09-15 — ⭐ THE MULTI-LINE GATE IS RESOLVED BY SCOPE (operator ruling).** The staged
-  content is **dictated prose**: no `\r`, no `\n`, no special characters, no slash commands. So no
-  bracketed paste and no multi-line injection strategy is needed — the single-`\r` shape
-  `slashCommandPayload` already uses is correct, because a dictated prompt is one logical line that
-  ends when the operator sends it. **F-a is therefore NOT blocked** and can be sized directly.
-  ⚠️ **This is a SCOPE decision, not a discovery that the hazard was imaginary.** In raw mode `\r`
-  still **is** Enter, so two things must survive into the design: (1) the staging surface must
-  **reject or normalize an embedded newline** rather than pass it through — a pasted multi-line
-  block would otherwise fire as **N truncated prompts**, the exact failure this ruling sidesteps
-  rather than fixes; and (2) **if a later iteration wants paste-in or multi-line editing, this
-  question RE-OPENS** and must be answered before that iteration ships. An assumption with a
-  tripwire, not a closed problem.
+- **Update 2026-09-15 — the multi-line gate was ruled "RESOLVED BY SCOPE".** ⚠️ **SUPERSEDED
+  2026-09-21 — see the next bullet. Do not act on this one.** It held that staged content is
+  newline-free dictated prose, that bracketed paste was not needed, and that the surface must
+  reject or normalize an embedded newline. Retained only so the reversal is legible.
+- **Update 2026-09-21 — ⭐ THE GATE IS DISSOLVED BY MEASUREMENT (`/util-grill-me`).** Triggered by
+  operator counter-evidence: multi-line paste into CC has always worked, in vanilla Terminal **and**
+  in Claudesk. Probed rather than argued — xterm wraps pastes in `ESC[200~`…`ESC[201~` after
+  `\r?\n → \r`, and `claude` enables bracketed paste (`ESC[?2004h`) for the session's whole life.
+  ⚠️ **So newlines are PRESERVED, never normalized**, F-a is **not** restricted to dictated prose,
+  and the "re-opens if paste-in is ever wanted" tripwire is **discharged, not carried**.
+  ⚠️ **Shape: a WBS, not a single feature** — a gating probe (macOS dictation into CM6; **word wrap
+  is a REQUIREMENT**, the probe finds *how*, not *whether*) feeds the build, which a lone
+  `/feature-spec` → `/feature-plan` cannot express. **All decisions are in `roadmap.md` → Group F →
+  F-a**; that is the authoritative record, not this entry.
 - **Status:** pending
 
 ## SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET

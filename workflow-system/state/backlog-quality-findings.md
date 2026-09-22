@@ -4,6 +4,42 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# fa-wp2-draft-store-history-payload — 2026-09-21
+
+## SURFACE-2026-09-21-QUALITY-TERMINATOR-COUNT-FILTERS-ELEMENTS-NOT-INDICES
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/__tests__/stagedPayload.test.ts` — the
+  "strips a literal ESC[201~" test
+- **Finding:** the terminator count uses `out.filter((_b, i) => END.every((e, j) => out[i+j] === e)
+  && out[i] === ESC)`, which collects matched **elements** (`0x1b`) rather than indices. The
+  `&& out[i] === ESC` term is also redundant, since `END[0]` is already `ESC`. It computes the
+  right count today but reads as if it collects positions — confusing beside the correct
+  index-loop form used in the same file's verify-codify block.
+- **Suggested action:** replace with the index-loop form already present a few tests below.
+- **Priority:** low
+
+## SURFACE-2026-09-21-QUALITY-BLANK-CHECK-READS-BEFORE-THE-STORAGE-GUARD
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/draftHistory.ts` — `appendToHistory`'s blank-entry check
+- **Finding:** the blank-entry branch calls `loadHistory(projectPath)` before `safeStorage()`, so a
+  blank send performs a storage read the immediately-following no-storage guard would have
+  short-circuited. Harmless; the ordering is incidental rather than intentional.
+- ⚠️ **Do NOT "fix" this by returning `[]` from the blank arm** — that is the MAJOR this WP just
+  fixed (every non-append path returns the ring as it stands). Only the *ordering* is the finding.
+- **Suggested action:** hoist the `safeStorage()` guard above the blank check, or leave it.
+- **Priority:** low
+
+## SURFACE-2026-09-21-QUALITY-TYPEOF-GUARD-COMMENT-OVERSTATES-PRODUCTION-RISK
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/draftStore.ts` — `loadDraft`'s `typeof raw === "string"`
+  guard comment
+- **Finding:** the comment says the guard defends against "a shimmed or corrupted storage", and the
+  test stubs exactly that. Real `localStorage` cannot return a non-string, so the guard largely
+  defends the **test double**. Fine to keep the guard; the comment overstates the production risk.
+- **Suggested action:** reword to say it guards the test-double/shim case specifically. ⚠️ Fold
+  into the standing comment-convention item rather than doing a per-WP trim pass.
+- **Priority:** low
+
 # hotkey-reference — 2026-09-17
 
 ## SURFACE-2026-09-17-QUALITY-TEST-SELECTOR-PINNED-TO-AN-UNSTYLED-CLASS

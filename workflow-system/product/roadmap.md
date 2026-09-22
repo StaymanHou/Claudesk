@@ -641,25 +641,86 @@ editability of in-progress text**, not a nicer text box. Three distinct failure 
 different fixes: garbled midway (needs editability), deleted by accident (needs undo/history),
 lost to unintended shutdown (needs persistence — the only one forcing a storage decision).
 
-⚠️ **THE MULTI-LINE GATE IS RESOLVED BY SCOPE — operator ruling 2026-09-15.** The staged content
-is **dictated prose**: no `\r`, no `\n`, no special characters, no slash commands. So the feature
-does **not** need bracketed paste and does **not** need a multi-line injection strategy — the
-single-`\r` shape `slashCommandPayload` already uses is correct, because a dictated prompt is one
-logical line that ends when the operator sends it. ⚠️ **This is a SCOPE decision, not a discovery
-that the hazard was imaginary** — in raw mode `\r` still *is* Enter, so the constraint reappears
-the moment staged text can contain a newline. **Two consequences that must survive into the
-design:** (1) the staging surface must either reject or normalize an embedded newline rather than
-pass it through — a pasted multi-line block would otherwise fire as **N truncated prompts**, the
-exact failure this ruling sidesteps rather than fixes; and (2) if a later iteration wants
-paste-in or multi-line editing, **this question re-opens and must be answered before that
-iteration ships.** Record it as an assumption with a tripwire, not as a closed problem.
+⚠️ **THE MULTI-LINE GATE IS DISSOLVED BY MEASUREMENT — grill 2026-09-21. The earlier
+"RESOLVED BY SCOPE" ruling (2026-09-15) is SUPERSEDED; do not restore it.** That ruling held
+that staged content must be newline-free dictated prose, that the feature "does **not** need
+bracketed paste", and that the surface must **reject or normalize** an embedded newline. ⚠️ **All
+three are wrong**, and the reasoning that produced them was sound but incomplete — it correctly
+noted that raw-mode `\r` *is* Enter, and did not account for **bracketed paste**, which is
+precisely the mechanism that neutralizes that hazard.
 
-**What the gate's removal changes:** F-a is no longer blocked on a CC-TUI behavior question, so it
-can be sized directly at its next roadmap pass. The real design questions are now the ones the
-backlog entry already lists — where the surface lives, one draft per workspace or a queue, when it
-auto-saves, whether a draft survives a Recycle — plus the storage decision forced by failure mode
-3 (persistence across app restarts). ⚠️ `injectCommand` remains the single injection funnel; the
-feature enters through it with **its own `label`**, not a second path to `cc_input`.
+**What was measured** (operator counter-evidence: multi-line paste into CC has always worked, in
+both vanilla Terminal and Claudesk):
+- `node_modules/@xterm/xterm/lib/xterm.js` — xterm's own paste path is `\r?\n → \r`, **then**
+  wraps the result in `ESC[200~`…`ESC[201~` when `decPrivateModes.bracketedPasteMode` is set.
+- **Live PTY probe of `claude`** — emits `ESC[?2004h` at startup and **never** `ESC[?2004l`.
+  Bracketed paste is ON for the session's whole life, so the envelope will be honored.
+
+⚠️ **Consequences for the design — newlines are PRESERVED, never normalized.** F-a emits the
+bracketed-paste envelope with interior newlines as `\r` (matching xterm's own transform), and
+the **trailing `\r` is a SEPARATE byte**: the envelope inserts *literal text* and does **not**
+submit. That single byte is the only difference between the two send modes. ⚠️ **`slashCommandPayload`
+is NOT modified** — a new builder sits alongside it, so M12/M13/M15 callers stay byte-identical.
+⚠️ The tripwire is **discharged, not carried**: F-a is no longer restricted to dictated prose, and
+paste-in of multi-line text is a supported case rather than a deferred question.
+
+### F-a decisions — `/util-grill-me`, 2026-09-21 (settled; do not re-litigate)
+
+1. **Persistence** — `localStorage`, keyed by canonicalized `project_path`, **one draft per
+   project**, debounced. ⚠️ **Deliberately NOT `projects.json`**: a draft is unbounded operator
+   prose, and that file is read at startup through serde where a bad value takes the whole project
+   list down (the same hazard that forced the drive-mode cell to a closed `<select>`).
+   ⚠️ **Workspace identity is NOT durable** — `nextWorkspaceId()` is an in-memory `ws-${++counter}`
+   reset every launch — so `project_path` is the only durable key. It is a *valid* per-workspace
+   key because `openWorkspace` dedups on the canonical path: **workspace↔project is bijective**.
+2. **Lifecycle at send** — **clear on send, keep the last ~10 sent drafts per project** as
+   recoverable history. Clearing and discarding are separable; sending is itself destructive to
+   the draft, and re-dictating is the expensive thing F-a exists to avoid.
+3. **Surface** — a **right-panel tab**, joining `docs`/`editor`/`diff`/`terminal` via the existing
+   `selectPanel` seam. Chosen for **full panel height** on a long dictation. (A strip under the CC
+   pane and a floating panel were both considered and declined. ⚠️ The only overlay precedent in
+   the tree is a **modal** — `FileFinder`/`CommandPalette`, backdrop + `role="dialog"` +
+   Escape-dismiss — which is actively wrong for a buffer holding a long dictation.)
+   ⚠️ **NOT gated on `workflow_features_enabled`** — F-a is lite-IDE core, not workflow orchestration.
+4. **Two send modes, both offered** — **auto-submit** (`⌘↵`) and **stage-only** (`⇧⌘↵`), differing
+   by the one trailing `\r`. Not a hedge: one payload builder, one boolean. Stage-only restores a
+   pre-send look that `injectCommand` structurally lacks. ⚠️ **Accepted cost:** stage-only's success
+   is unverifiable by Claudesk (no retry, no readback, and parsing CC's output is forbidden) — the
+   terminal is the evidence, which is acceptable because the operator is looking at it next.
+   Both enter through `injectCommand` with `label: "staging"`.
+5. **Editor substrate** — CM6 (already bundled), **but `editorExtensions.ts` is NOT reused.**
+   ⚠️ `basicSetup` brings line numbers + the code keymap as a bundle; this is a **prose** surface.
+   Compose deliberately: history (**undo AND redo** — CM6 ships them as a pair), search-within-draft,
+   dark theme, persisted font zoom. Exclude line numbers, syntax highlighting, bracket matching,
+   autocompletion.
+6. **One draft per project — no tabs, no queue, no second "preamble" slot in v1.** The history ring
+   covers the multi-draft case retroactively; promoting history entries to named slots is additive,
+   whereas retrofitting single-draft semantics onto a queue is not.
+
+⚠️ **WORD WRAP IS A REQUIREMENT, NOT A PROBE OUTCOME (operator, 2026-09-21).** The probe below
+finds **how to make wrap work**, not *whether* to wrap. Only an outright infeasibility finding
+would reopen the default, and that is the unlikely branch.
+
+⭐ **GATING PROBE — macOS dictation into CM6.** ⚠️ **Cannot be agent-verified**: dictation is
+physical operator input, not agent-triggerable or agent-observable. **Unknown:** whether dictation
+composes cleanly into a CM6 `contenteditable`, and specifically whether **line wrapping** interacts
+badly with composition-event insertion (dictation inserts via IME/composition, not keystrokes; a
+wrapping view reflows mid-composition). ⚠️ **`grep` confirms ZERO IME/composition handling exists
+anywhere in the codebase** — no prior art to reason from. ⚠️ **The operator's "dictation doesn't
+work well in the CC input area" is a CONTROL, not a precedent** — that is xterm.js, a terminal grid
+with no text-field semantics, so it does **not** predict CM6 behavior. **Home:** a third mode on the
+existing probe entry point — `?cm6probe&mode=dictation`, alongside `hotkey` and `nmount`. Throwaway
+harness, mounted in the real app (not bare Vite — a WKWebView is the actual target). Instrumented by
+the agent, **run by the operator**. **Decides:** the composition-handling approach wrap needs — cheap
+if known before build, expensive to retrofit into a shipped surface.
+
+⚠️ **Shape: this is a WBS, not a single feature (operator, 2026-09-21)** — because a gating probe
+whose outcome feeds the build is a dependency a single `/feature-spec` → `/feature-plan` cannot
+express. **Simpler than M15's**, whose WP1 gated *every* downstream decision; F-a's probe gates
+**one mechanism** inside an otherwise settled build.
+
+⚠️ `injectCommand` remains the single injection funnel; the feature enters through it with **its
+own `label`**, not a second path to `cc_input`.
 
 ### F-b: Isolated CC profiles as Claudesk workspaces *(`SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES`, medium)*
 
@@ -992,6 +1053,3 @@ Decompose M8 at its `/product-wbs` pass; WP1 (the capture/render pipeline probe 
 
 > 2026-06-15: Major rewrite driven by the vision pivot (multi-window → single-window tabbed workspaces + filmstrip + PiP + menu-bar) and research resolving the open design questions. Phase 1 gained the tab-shell substrate + a gating thumbnail-rendering probe; xterm.js settled on DOM-renderer-only (WebGL ~16-context cap); the prior "cross-window CC status indicator" milestone was replaced by three status surfaces (filmstrip / menu-bar / PiP) fed by a single Rust broadcaster over a Unix-socket hook channel (resolving the old "WP9b probe").
 > 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone; added a drive-mode selector + indicator milestone. Both additive to the stateful-controller phase.
-
-## Session Handoff — 2026-09-18 15:10
-Handed off. See `workflow-system/state/.session.md` to restore. Next: `/util-grill-me` on **Group F item F-a** (staging area for prompt input) — the grill is the ENTRY step, not a review step.
