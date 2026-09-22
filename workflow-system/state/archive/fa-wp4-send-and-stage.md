@@ -1,6 +1,6 @@
 ---
 workflow: feature
-state: ship (complete)
+state: COMPLETED 2026-09-22
 created: 2026-09-22
 drive_mode: autopilot
 wbs: workflow-system/product/wbs.md → WP4
@@ -567,6 +567,49 @@ three was a guard I wrote, believed, and documented as stronger than it was.**
 
 Dismiss any finding by marking its line `[DISMISSED]` in this section before `feature-finalize`
 archives the WIP.
+
+## Retrospect
+
+- **What changed in our understanding:** ⭐ **The recurring defect class in this WP was not bugs —
+  it was GUARDS THAT PASSED WHILE CHECKING NOTHING.** Three separate instances, each found by a
+  different mechanism: (a) 309 pre-existing tests passed against a mutant that made M12/recycle/the
+  supervisor wrap every slash command in bracketed paste — found by mutating at codify; (b) the
+  Phase 3 confirm dialog could be bypassed entirely with all 130 tests green — found by my own
+  mutation sweep; (c) the chord-registry `string | string[]` widening had ZERO array entries, so
+  deleting ⇧⌘↵'s branch left 17 assertions green — found by the code reviewer, not by me. ⚠️ The
+  reviewer's phrasing is the durable form: *"guards whose STATED coverage exceeds their ACTUAL
+  coverage."* All three were guards I wrote, believed, and documented as stronger than they were.
+- **Assumptions that held:** the `injectCommand` widening kept every existing caller byte-identical
+  (pinned, mutation-proved); `stagedPayload`/`appendToHistory` from WP2 needed no changes, exactly
+  as the WBS predicted; ⌘↵/⇧⌘↵ were genuinely free and the pre-check cost minutes.
+- **Assumptions that were wrong:**
+  - ⚠️ **APPEND-ON-RECOVER.** I weighed a modal as friction and chose append; the operator reversed
+    it. **Their reading was better:** append's merged document is a cleanup the operator pays on
+    EVERY recover-over-text, while the confirm's cost lands only when something would actually be
+    lost. I under-weighted a recurring cost against a one-time one.
+  - **CSS custom properties.** I wrote `var(--bg-elevated)` etc. by analogy; this project has NO
+    token layer (one `--` declaration in ~3000 lines of `App.css`) and those would have silently
+    resolved to nothing.
+  - **"The checklist is cheap."** VH2 failed because I pointed the operator at `scratch-b`, which
+    had no ring — the verify-self subagent had cleaned up its own fixture. A wasted operator round
+    trip caused by MY instruction, not by the code.
+- **Approach delta:** three deviations from plan, all additive. (1) `injectCommand` had to be
+  WIDENED — the plan assumed "enter through the funnel" was free, but the funnel hardcoded
+  `slashCommandPayload`; the optional-builder shape was decided at plan time once the tension was
+  visible. (2) P2.0 (`cc_session_id` threading) did NOT exist in the plan — found while surveying,
+  recorded before building rather than hit mid-build. (3) Two modules were EXTRACTED at codify
+  (`promptSendRouting`, `discardConfirmSpec`) purely so tests could reach decisions that were
+  otherwise inline in a 900-line component — both immediately caught things.
+
+## Closure notice
+
+> **Feature complete:** F-a WP4 (send and stage) has shipped. The Prompt panel can now send its
+> draft to Claude Code in two modes — ⌘↵ submits, ⇧⌘↵ stages the text in CC's input without
+> submitting — clearing the draft and archiving it to a per-project history ring that can be
+> recovered later (with a discard confirmation if the buffer is not empty). To see it: open a
+> workspace, press ⌘⇧O for the Prompt panel, type, and use the Send/Stage buttons or the hotkeys.
+
+**Requester = operator — closure notice for self-record.**
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

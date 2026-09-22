@@ -579,104 +579,37 @@ carries the identical attributes).
 
 - **Priority:** medium
 - **Surfaced by:** operator request (session, 2026-09-15)
-- **Target:** product:roadmap (a user-facing feature, not a task)
+- **Target:** product:roadmap
 - **Type:** new-work
+- **Status:** ⚠️ **PARTIALLY RESOLVED 2026-09-22 — REWRITTEN to the remaining open work.** F-a's
+  four WPs all shipped (WP1 probe, WP2 store/ring/payload, WP3 the panel, WP4 send+stage). ⚠️ NOT
+  deleted, because the operator's MOTIVATING CASE is still unverified — see below.
 
-**The ask.** An **optional staging area for prompt input** — compose the prompt in a Claudesk-owned
-buffer first, then send it to CC, instead of typing directly into the CC pane. Explicitly an
-*option*, not a replacement for typing straight into the terminal.
+### What shipped (all three named failure modes addressed)
 
-**The pain point (operator's own words, do not re-derive):** *"when I input a lot of stuff,
-sometimes it just got messed up midway, or lost if deleted by accident or unintended shutdown."*
-⚠️ **The motivating case is VOICE DICTATION** — long, single-take input where a mid-stream glitch
-costs the whole utterance. So the value is **durability + editability of in-progress text**, not a
-nicer text box.
+1. **"Messed up midway"** → an editable CM6 prose buffer with undo AND redo.
+2. **"Deleted by accident"** → undo, plus a non-destructive per-project ring of the last ~10 sent
+   drafts, recoverable from the panel (with a discard confirmation over a non-empty buffer).
+3. **"Unintended shutdown"** → per-project `localStorage`, debounce-saved, reseeded on open;
+   survives panel switch, workspace switch, reload and restart.
 
-**Three distinct failure modes it must address** (worth separating at design time — they have
-different fixes):
-1. **Messed up midway** — dictation garbles partway; the operator wants to *fix before sending*.
-   Needs editability of the staged text.
-2. **Deleted by accident** — an errant keystroke wipes it. Needs undo, or at least non-destructive
-   history.
-3. **Unintended shutdown** — needs **persistence across app restarts**, which is the only one that
-   forces a storage decision.
+Sending works in both modes (⌘↵ submits, ⇧⌘↵ stages without submitting), through `injectCommand`
+with `label: "staging"`. See CHANGELOG 2026-09-22.
 
-⚠️ **THE TERMINAL IS THE WRONG PLACE FOR THIS TODAY, AND THAT IS THE POINT.** Text typed into the
-CC pane lives only in the PTY's line buffer: Claudesk cannot read it back, cannot snapshot it, and
-it dies with the process. A staging area works precisely *because* the buffer would be
-Claudesk-owned rather than CC-owned.
+### ⚠️ THE ONE THING STILL OPEN — and it is the reason the ask was made
 
-### Constraints found while sizing (not a design — a fence around one)
+**VOICE DICTATION IS ASSUMED WORKING, NOT VERIFIED.** The operator's words were *"when I input a
+lot of stuff, sometimes it just got messed up midway"*, and the motivating case is **long
+single-take voice dictation**. macOS text-input services **do not engage under `pnpm tauri:dev`
+at all**, so neither agent nor operator can exercise dictation in a dev build — WP1's probe closed
+ASSUMED-PASS with its question unanswered (task 1.4 never ran, and is deliberately left unticked).
 
-⚠️ **`slashCommandPayload` CANNOT be reused unchanged for multi-line text.** It is
-`encodeUtf8Base64(trimmed + "\r")` (`slashCommandPayload` in
-`src/components/workspace/autoResumeFire.ts`) — it strips trailing newlines and appends **one**
-`\r`. Correct for a one-line slash command, **wrong for a staged multi-line prompt**. ✅ **ANSWERED
-2026-09-21: a NEW builder sits alongside it** (this one is not modified, so M12/M13/M15 callers
-stay byte-identical).
+⚠️ **The reopening condition is NARROW and OPERATOR-OWNED (ruling 2026-09-22):** raise this only
+if the operator reports a dictation issue **after a release** that includes F-a. Do not re-probe,
+do not re-raise at planning time, and do not treat the shipped mechanism as closing it.
 
-⚠️ **The reason is load-bearing: in raw mode `\r` IS Enter** (`[[raw-mode-cr-is-enter]]`,
-`[[cc-tui-cr-not-lf]]`), so a naively-sent multi-line prompt fires as N truncated prompts.
-✅ **RESOLVED BY MEASUREMENT 2026-09-21 — the answer is BRACKETED PASTE.** This block used to say
-"do not assume it is solvable by escaping alone; it may need bracketed paste, or a deliberate
-single-line normalization with the operator's consent." **It needs bracketed paste, and no
-normalization.** Measured: xterm's paste path is `\r?\n → \r` **then** wraps in
-`ESC[200~`…`ESC[201~`; a live PTY probe shows `claude` emits `ESC[?2004h` at startup and **never**
-`ESC[?2004l`. ⚠️ The envelope **inserts literal text and does not submit** — the trailing `\r` is a
-**separate byte**, and it is the only difference between the two send modes.
-
-⚠️ **`injectCommand` is the single injection funnel** and already carries a `label` argument for
-attribution (M15 uses `"supervisor"`, M12 uses `"auto-resume"`). A staging feature should enter
-through it with its own label rather than opening a second path to `cc_input`.
-
-✅ **Persistence has an obvious home but a non-obvious scope.** `Project` in `projects.json`
-(`src-tauri/src/config_store/mod.rs:63`) already carries per-project settings with live read/write
-paths (`default_model` M11.5, `default_drive_mode` M12). A staged draft is **per-workspace**
-though, not per-project, and is high-churn text rather than a setting — so whether it belongs in
-`projects.json` at all is an open question, not a given. ✅ **ANSWERED 2026-09-21: NOT
-`projects.json` — `localStorage`, keyed by canonicalized `project_path`.** That file is read at
-startup through serde, where unbounded operator prose risks taking the whole project list down.
-⚠️ **And "per-workspace" is a distinction without a difference here:** `nextWorkspaceId()` is an
-in-memory `ws-${++counter}` reset every launch (no durable workspace identity), while
-`openWorkspace` dedups on the canonical path — so **workspace↔project is bijective** and the path
-IS the per-workspace key.
-
-**Open questions for the design discussion —** ✅ **ALL ANSWERED by the `/util-grill-me` pass
-2026-09-21.** Authoritative record: `workflow-system/product/roadmap.md` → Group F → F-a →
-"F-a decisions". In brief: **right-panel tab** (full panel height for a long dictation) ·
-**one draft per project**, no queue and no second slot · **debounced auto-save** ·
-**cleared on send but kept as a ~10-entry history ring** · **agnostic to how text arrives**
-(macOS dictation targets the focused field) · **survives a Recycle by default** — `recycleSession()`
-replaces the CC session but does **not** unmount the workspace, so the question inverts from "can we
-keep it?" to "should we clear it?" (answer: no).
-
-**Suggested action:** size as a **roadmap item** at the next roadmap pass. ⚠️ **Open with a
-`/util-grill-me` pass** (booked by the operator 2026-09-15) — *before* a design exists, not after.
-
-⚠️ **PARTIALLY DELIVERED as of 2026-09-22 — NOT resolved, so this entry stays open.** Three of
-F-a's four WPs have shipped: WP1 (probe, closed assumed-pass), WP2 (draft store + history ring +
-bracketed-paste payload, `c26a9bd`) and WP3 (the Prompt panel — a CM6 prose buffer in the right
-panel, per-project, seeded and debounce-saved, `ec7490c`). **What the operator asked for is not
-yet usable: WP4 (send + stage, the two `⌘↵` / `⇧⌘↵` modes) is still open**, so text can be
-composed and survives a restart but cannot yet be sent from the panel. ⚠️ **Do not close this
-entry when WP4 ships without re-reading the ask above** — the durability half is what the pain
-point was actually about, and it is worth confirming against the operator's own words rather
-than against the WBS being ticked.
-- **Update 2026-09-15 — the multi-line gate was ruled "RESOLVED BY SCOPE".** ⚠️ **SUPERSEDED
-  2026-09-21 — see the next bullet. Do not act on this one.** It held that staged content is
-  newline-free dictated prose, that bracketed paste was not needed, and that the surface must
-  reject or normalize an embedded newline. Retained only so the reversal is legible.
-- **Update 2026-09-21 — ⭐ THE GATE IS DISSOLVED BY MEASUREMENT (`/util-grill-me`).** Triggered by
-  operator counter-evidence: multi-line paste into CC has always worked, in vanilla Terminal **and**
-  in Claudesk. Probed rather than argued — xterm wraps pastes in `ESC[200~`…`ESC[201~` after
-  `\r?\n → \r`, and `claude` enables bracketed paste (`ESC[?2004h`) for the session's whole life.
-  ⚠️ **So newlines are PRESERVED, never normalized**, F-a is **not** restricted to dictated prose,
-  and the "re-opens if paste-in is ever wanted" tripwire is **discharged, not carried**.
-  ⚠️ **Shape: a WBS, not a single feature** — a gating probe (macOS dictation into CM6; **word wrap
-  is a REQUIREMENT**, the probe finds *how*, not *whether*) feeds the build, which a lone
-  `/feature-spec` → `/feature-plan` cannot express. **All decisions are in `roadmap.md` → Group F →
-  F-a**; that is the authoritative record, not this entry.
-- **Status:** pending
+**Delete this entry when** a released build has had dictation exercised into the Prompt panel and
+the durability half holds — that is what the pain point was about, not the WBS being ticked.
 
 ## SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET
 

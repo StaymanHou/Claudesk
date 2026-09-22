@@ -188,7 +188,7 @@ send failure ambiguous between the buffer and the payload.
 
 ---
 
-### WP4: Send and stage — injection integration
+### WP4: Send and stage — injection integration ✅ SHIPPED 2026-09-22 (commit 5af55f6)
 
 **Description:** Both send modes, their hotkeys, and the clear-and-archive-to-history behavior.
 **Milestone:** Group F / F-a
@@ -208,14 +208,14 @@ terminal is the evidence, which is acceptable precisely because the operator is 
 **Do not build machinery to close this.**
 
 **Tasks:**
-- [ ] 4.1 Send buttons in the panel for both modes.
-- [ ] 4.2 Hotkeys `⌘↵` / `⇧⌘↵` as a `*Chord.ts` predicate module sharing `chordEvent.ts`, matching
+- [x] 4.1 Send buttons in the panel for both modes.
+- [x] 4.2 Hotkeys `⌘↵` / `⇧⌘↵` as a `*Chord.ts` predicate module sharing `chordEvent.ts`, matching
       the 11 existing ones. ⚠️ Verify both are free against the existing chords first;
       ⌘⇧+digit is reserved for filmstrip switching.
-- [ ] 4.3 On send (either mode): clear the draft **and** append it to the history ring.
-- [ ] 4.4 Recover-from-history affordance (minimal — the ring is the load-bearing part; a richer
+- [x] 4.3 On send (either mode): clear the draft **and** append it to the history ring.
+- [x] 4.4 Recover-from-history affordance (minimal — the ring is the load-bearing part; a richer
       browser is additive later).
-- [ ] 4.5 Tests: both payload shapes reach `injectCommand` with `label: "staging"`; clear+archive
+- [x] 4.5 Tests: both payload shapes reach `injectCommand` with `label: "staging"`; clear+archive
       fires on both modes. ⚠️ Per `[[ts-arity-flexible-assignability-hides-a-widened-param]]`,
       **capture the argument VALUE** in the test double — a green suite does not prove the label
       or the trailing byte was passed.
