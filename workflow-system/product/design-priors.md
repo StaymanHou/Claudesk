@@ -1,12 +1,49 @@
 ---
 stage: design-priors
 state: active
-updated: 2026-09-17
+updated: 2026-09-22
 ---
 
 # Design Priors — Claudesk
 
 Terse, transferable statements of how the operator resolves recurring **product-design** tradeoffs, each paired with its *why*. Directional and overridable, never decisive. See `~/.claude/CLAUDE.md` → "Design priors (GLOBAL)" for the consult/capture contract and `arch.md` → "File Schema: Design Priors Format" for the schema.
+
+---
+
+## group-surfaces-by-the-question-they-answer
+
+**Axis:** information architecture (ordering / grouping of sibling surfaces)
+
+**Lean:** Order sibling surfaces — tabs, panels, menu items — by **which question the user is
+asking when they reach for them**, not by feature similarity, not by implementation kinship, and
+not by raw frequency of use. Surfaces that answer *orientation* questions ("where am I?", "what am
+I trying to do?") lead; surfaces that answer *execution* questions ("how do I change this?")
+follow.
+
+**Decision rule:** For each surface, finish the sentence *"I open this when I want to know ___"*.
+Group by the answer, then order the groups orientation-first. ⚠️ When two surfaces are
+technically similar but answer different questions, the question wins — and when two are
+technically unrelated but answer the same question, they belong together.
+
+**Why:** The user arrives at a tab row with a question already formed, not with a feature in mind.
+An ordering that groups by *what a surface is built from* asks them to translate their question
+into the implementation's vocabulary before they can find anything — a tax paid on every glance,
+which is exactly the cost Claudesk's "attention is the scarce resource" thesis exists to avoid.
+The failure is quiet: a similarity-grouped row is never *wrong*, it just makes the common case one
+beat slower forever.
+
+**Origin:** F-a WP3 verify-human (2026-09-22) — the operator moved the new **Prompt** panel to
+**second** position, directly after Docs, rather than beside Terminal (its technical sibling: both
+talk to Claude Code) or beside Editor (the higher-frequency neighbour). The resulting row groups by
+question: **Docs** = *where is this project?* and **Prompt** = *what am I asking for?* both
+precede **Editor / Diff / Terminal** = *how do I change it?*. ⚠️ **Inferred at the time and
+deliberately left UNWRITTEN through WP3 and WP4** — the reposition was made without a stated
+principle, and the capture contract is propose-never-auto-write, so the gap between the agent's
+inferred why and the operator's actual why was preserved rather than closed by guesswork. Raised
+again at the WP4 close with the inferred why stated explicitly and the alternative ("it was just
+placement, drop it") offered; **the operator ratified the why as written** (2026-09-22). Related:
+[[new-surface-must-earn-its-place-against-existing-ones]] — that prior decides *whether* a surface
+exists, this one decides *where it sits* once it has earned its place.
 
 ---
 
