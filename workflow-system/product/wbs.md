@@ -1,7 +1,7 @@
 ---
 stage: wbs
 state: complete
-updated: 2026-09-21
+updated: 2026-09-22
 cycle: group-f-a-prompt-staging-area
 ---
 
@@ -34,7 +34,7 @@ record, the record wins and the task is wrong.
 
 ## Work Packages
 
-### WP1: Probe — macOS dictation into a CM6 prose view ✅ CLOSED 2026-09-21 (ASSUMED-PASS)
+### WP1: Probe — macOS dictation into a CM6 prose view ✅ CLOSED 2026-09-21 (ASSUMED-PASS — commit 58aab90)
 
 ⚠️ **Closed WITHOUT the measurement being taken — see "Probe outcomes" at the foot of this file
 before treating anything here as answered.**
@@ -76,17 +76,17 @@ not a two-word test) survives intact. ⚠️ **Per `[[measurement-input-must-be-
 probe input MUST be a long dictated passage** — a short phrase measures the harness, not the system.
 
 **Tasks:**
-- [ ] 1.1 Add `mode=dictation` to the existing `?cm6probe` entry point (`src/probe/cm6/Cm6ProbeApp.tsx`),
+- [x] 1.1 Add `mode=dictation` to the existing `?cm6probe` entry point (`src/probe/cm6/Cm6ProbeApp.tsx`),
       alongside `hotkey` and `nmount`. Lazy-mounted and throwaway, per the established pattern —
       never in the normal app bundle.
-- [ ] 1.2 Build the harness: two CM6 views side by side, **wrap ON** and **wrap OFF**, each
+- [x] 1.2 Build the harness: two CM6 views side by side, **wrap ON** and **wrap OFF**, each
       instrumented to log `compositionstart`/`compositionupdate`/`compositionend`, insert positions,
       and the resulting document text.
-- [ ] 1.3 Add a visible transcript readout so the operator can see divergence without a devtools
+- [x] 1.3 Add a visible transcript readout so the operator can see divergence without a devtools
       console (the run happens in the WKWebView, not bare Vite).
-- [ ] 1.4 **OPERATOR-GATED:** operator dictates a long passage into each view and reports what
+- [ ] 1.4 ⚠️ **NEVER RAN — the one task that would have answered the probe.** **OPERATOR-GATED:** operator dictates a long passage into each view and reports what
       happened. ⚠️ Agent does **not** fabricate or simulate this step.
-- [ ] 1.5 Record the finding in this file under "Probe outcomes" and, if it changes a design input,
+- [x] 1.5 Record the finding in this file under "Probe outcomes" and, if it changes a design input,
       in `roadmap.md` → F-a.
 
 **WP1 → WP2 rationale:** none needed — they are **parallel**, not sequential. WP2 touches no view
@@ -94,7 +94,7 @@ layer and therefore cannot be invalidated by the probe's outcome; starting it co
 
 ---
 
-### WP2: Draft store, history ring, and the bracketed-paste payload ✅ SHIPPED 2026-09-21 (UNCOMMITTED — see below)
+### WP2: Draft store, history ring, and the bracketed-paste payload ✅ SHIPPED 2026-09-21 (commit c26a9bd)
 
 **Description:** The pure, headless core: persistence, the history ring, and the byte payload. No
 React, no CM6, no UI. This is the part the probe cannot invalidate.
@@ -142,7 +142,7 @@ draft ring, 29). ⚠️ `autoResumeFire.ts` is **byte-unchanged**, so M12/M13/M1
 ⚠️ **The WP1 dependency note above is unchanged and still correct** — WP2 was parallel to WP1 and
 unaffected by its dictation blocker.
 
-### WP3: The staging surface — right-panel tab
+### WP3: The prompt surface — right-panel tab ✅ SHIPPED 2026-09-22 (commit ec7490c)
 
 **Description:** The CM6 prose view and its right-panel tab wiring.
 **Milestone:** Group F / F-a
@@ -164,16 +164,23 @@ code keymap as a bundle; this is a **prose** surface. Compose deliberately.
 ⚠️ **NOT gated on `workflow_features_enabled`** — see the priors consult above.
 
 **Tasks:**
-- [ ] 3.1 Add the tab to the `RightPanelHost` tab row and to `selectPanel`/`availablePanels`
+- [x] 3.1 Add the tab to the `RightPanelHost` tab row and to `selectPanel`/`availablePanels`
       (`panelHost.ts`). ⚠️ The panel slot must be **mounted** whenever selectable — the
       `SURFACE-2026-06-20-QUALITY-WP5-TERMINAL-SEAM-UNTESTED` blank-slot failure mode.
-- [ ] 3.2 The CM6 prose view: **wrap per WP1's finding**, history (**undo AND redo** — CM6 ships
+- [x] 3.2 The CM6 prose view: **wrap per WP1's finding**, history (**undo AND redo** — CM6 ships
       them as a pair via `history()` + `historyKeymap`), search-within-draft, dark theme, persisted
       font zoom. **Exclude** line numbers, syntax highlighting, bracket matching, autocompletion.
-- [ ] 3.3 Apply WP1's composition handling, if the probe found any is needed.
-- [ ] 3.4 Wire to WP2's store: seed on mount from the project's draft, debounced save on change.
-- [ ] 3.5 Tab indicator when an unsent draft exists for the focused project.
-- [ ] 3.6 Component tests for the non-trivial state logic (seed, debounce, project switch).
+- [x] 3.3 Apply WP1's composition handling, if the probe found any is needed.
+      ⚠️ **VACUOUSLY SATISFIED — no handling was applied, because WP1 produced NO FINDING.**
+      Its conditional ("if the probe found any is needed") is what makes the tick honest, but
+      the tick alone would read as "composition handling was implemented", which it was not.
+      The panel ships wrap-ON with zero IME/composition handling, **by default rather than by
+      measurement**. Standing risk, carried knowingly; dictation is assumed-working by operator
+      ruling (2026-09-22) with a narrow reopening condition — an issue observed after a release
+      with F-a complete.
+- [x] 3.4 Wire to WP2's store: seed on mount from the project's draft, debounced save on change.
+- [x] 3.5 Tab indicator when an unsent draft exists for the focused project.
+- [x] 3.6 Component tests for the non-trivial state logic (seed, debounce, project switch).
 
 **WP3 → WP4 rationale:** the surface must hold and persist text correctly before anything is
 allowed to *send* it. Wiring injection into a surface whose buffer is still unproven would make a

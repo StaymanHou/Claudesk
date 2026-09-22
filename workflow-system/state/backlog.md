@@ -633,6 +633,16 @@ keep it?" to "should we clear it?" (answer: no).
 
 **Suggested action:** size as a **roadmap item** at the next roadmap pass. ⚠️ **Open with a
 `/util-grill-me` pass** (booked by the operator 2026-09-15) — *before* a design exists, not after.
+
+⚠️ **PARTIALLY DELIVERED as of 2026-09-22 — NOT resolved, so this entry stays open.** Three of
+F-a's four WPs have shipped: WP1 (probe, closed assumed-pass), WP2 (draft store + history ring +
+bracketed-paste payload, `c26a9bd`) and WP3 (the Prompt panel — a CM6 prose buffer in the right
+panel, per-project, seeded and debounce-saved, `ec7490c`). **What the operator asked for is not
+yet usable: WP4 (send + stage, the two `⌘↵` / `⇧⌘↵` modes) is still open**, so text can be
+composed and survives a restart but cannot yet be sent from the panel. ⚠️ **Do not close this
+entry when WP4 ships without re-reading the ask above** — the durability half is what the pain
+point was actually about, and it is worth confirming against the operator's own words rather
+than against the WBS being ticked.
 - **Update 2026-09-15 — the multi-line gate was ruled "RESOLVED BY SCOPE".** ⚠️ **SUPERSEDED
   2026-09-21 — see the next bullet. Do not act on this one.** It held that staged content is
   newline-free dictated prose, that bracketed paste was not needed, and that the surface must
@@ -1795,12 +1805,27 @@ script under `tooling/` so each phase does not re-derive it.
   more likely way a genuine finding gets missed. Worked around this run by hand-selecting WP3's
   three commits (`3db5994`, `ef0bb82`, `5e3ecd9`) and telling the reviewer explicitly which paths
   were out of scope.
+- ⚠️ **SECOND, DISTINCT FAILURE MODE OF THE SAME COMPUTATION — observed 2026-09-22 (F-a WP3).**
+  The item above is "the window is too WIDE". This one is "the window is EMPTY", and it is the
+  more dangerous of the two. `BASE_SHA` is derived from the earliest commit touching the WIP file
+  — but **this project commits WIP files at FINALIZE, not at ship**, so during review-quality the
+  WIP is still untracked and the lookup returns nothing. `git diff ^..<ship>` on an empty base
+  yields an empty range, and a reviewer handed an empty diff reports **"no findings"** having
+  examined **nothing** — indistinguishable in the output from a genuinely clean feature.
+  ⚠️ It already bit once: WP2's review ran against a working tree only because the operator
+  noticed. Worked around again on WP3 by anchoring the window by hand (`3e32d53..6c50140`) and
+  **confirming it was non-empty (5,018 lines) before spawning the reviewer**.
 - **Suggested action:** Make the window commit-set-based rather than range-based — e.g. derive the
   feature's commits by `git log --format=%h --all -- <wip-path>` intersected with commits that also
   touch source, or record the feature's own SHAs in the WIP as each phase ships (the WIP already
   records ship SHAs in its phase statuses). ⚠️ A `git log --first-parent` or date-bounded window
   does NOT fix this — the interleaving is temporal, not topological.
-- **Priority:** medium
+  ⚠️ **AND, for the empty-window mode: the skill must FAIL LOUDLY on an empty diff rather than
+  proceed.** Whatever the window computation becomes, a non-emptiness assertion before the spawn
+  is the cheap half of the fix and catches both modes' worst outcome. A reviewer must never be
+  handed nothing and asked what it thinks.
+- **Priority:** medium-high *(raised from medium 2026-09-22 — two independent failure modes now
+  observed, and the empty-window one produces a FALSE CLEAN review rather than a noisy one)*
 - **Status:** pending
 
 ## Code-quality findings — hotkey-reference (2026-09-17)
