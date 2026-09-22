@@ -6,6 +6,7 @@ import { language } from "@codemirror/language";
 import { javascript } from "@codemirror/lang-javascript";
 import { promptExtensions } from "../promptExtensions";
 import { DEFAULT_PROMPT_FONT_PX } from "../promptFontZoom";
+import { stripComments } from "./stripComments";
 // Vite ?raw imports for the theme-prop regression guard at the foot of this file — the
 // repo convention for source-text assertions (same trick as terminalSlotGuard.test.ts).
 import panelSource from "../PromptPanel.tsx?raw";
@@ -26,14 +27,19 @@ import extensionsSource from "../promptExtensions.ts?raw";
 // established by probe before these were written. So the code under test is simply RUN
 // (`[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`).
 //
-// ⚠️ SCOPE LIMIT, STATED HONESTLY. This project configures no DOM environment, so
-// `new EditorView(...)` throws `document is not defined`. Every property below is
-// therefore asserted at the STATE level. The purely RENDER-level exclusions — that no
-// `.cm-gutters` / `.cm-lineNumbers` element is produced — cannot be observed here and are
-// NOT faked with a proxy signal: an extension-count comparison would be exactly the
-// count-not-identity assertion this header rejects. Those live in Phase 2's verify-self
-// Browser outcomes, against the real WKWebView. Do not "strengthen" this file by adding a
-// count-based gutter check.
+// ⚠️ SCOPE LIMIT. This file asserts at the `EditorState` level and does not mount a view.
+// That is a deliberate fit, not a limitation of the repo: `jsdom` IS available per-file
+// (`// @vitest-environment jsdom`, as `promptTabIndicatorRender.test.tsx` uses), but a
+// mounted CM6 view measures layout through APIs jsdom does not implement, so the render-level
+// exclusions — that no `.cm-gutters` / `.cm-lineNumbers` element is produced — are verified
+// against the real WKWebView in Phase 2's verify-self instead.
+//
+// ⚠️ An earlier version of this note claimed "this project configures no DOM environment",
+// which is the half-truth `docs/lessons/source-text-guards.md` corrects; it was wrong and is
+// corrected here. What is true is narrower: CM6 needs a LAYOUT engine, not merely a DOM.
+//
+// Do NOT "strengthen" this file with a count-based gutter check — an extension-count
+// comparison is exactly the count-not-identity assertion this header rejects.
 
 function makeState(doc = ""): EditorState {
   return EditorState.create({
@@ -171,27 +177,24 @@ describe("promptExtensions — identity, not count", () => {
 // Phase 2 verify-self REGRESSION GUARD — the dark theme must reach CodeMirror via its
 // `theme` PROP, not through `extensions`.
 //
-// The defect this pins actually shipped into the running app and was caught by reading
-// computed styles: the panel rendered with a WHITE background (`rgb(255,255,255)`) while
-// the Editor panel beside it was `rgb(30,30,30)`. Cause: `@uiw/react-codemirror` defaults
-// `theme` to `"light"` when the prop is omitted and wraps the view in `.cm-theme-light`,
-// whose rules beat an equivalent dark theme passed through `extensions`.
+// The defect this pins actually shipped into the running app and was caught at verify-self by
+// reading computed styles. Cause and full reasoning: see the `theme` prop in `PromptPanel.tsx`
+// — stated once there rather than restated here.
 //
-// ⚠️ Why a SOURCE-TEXT guard here rather than a behavioural one: the bug lives in JSX
-// props, and this project configures no DOM environment, so the component cannot be
-// rendered under vitest. The live assertion (computed background === the editor's) is a
-// Phase 2 verify-self Browser outcome; this guard exists so the prop cannot be quietly
-// deleted between verify runs.
+// ⚠️ Why a SOURCE-TEXT guard here rather than a rendered one: the property is "which
+// CHANNEL the theme travels through", which is a fact about the source, not about resting
+// markup — a rendered `.cm-editor` would carry the theme's generated class either way, since
+// the defect was a precedence conflict resolved at style-application time, not a missing
+// element. The observable difference (computed background colour) needs a real layout engine
+// and is asserted in Phase 2's verify-self against the WKWebView. This guard exists so the
+// prop cannot be quietly deleted between those runs.
 describe("PromptPanel wires the dark theme through the `theme` prop", () => {
   it("passes `theme={editorDarkTheme}` to CodeMirror", () => {
     // Comments stripped first: this file's own prose and the panel's explanatory comment
     // both name `editorDarkTheme`, and an unstripped haystack would match those instead —
     // the guard would then pass exactly when the prop was deleted
     // (`[[raw-guard-identifier-satisfied-by-own-comments]]`).
-    const src = panelSource
-      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+    const src = stripComments(panelSource);
 
     expect(
       src,
@@ -201,9 +204,7 @@ describe("PromptPanel wires the dark theme through the `theme` prop", () => {
   });
 
   it("does NOT also put the theme in the extension set (it would apply twice)", () => {
-    const extSrc = extensionsSource
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+    const extSrc = stripComments(extensionsSource);
     expect(extSrc).not.toContain("editorDarkTheme");
   });
 });
@@ -227,10 +228,7 @@ describe("PromptPanel opts out of basicSetup (F-a decision 5)", () => {
     // Comments stripped: this file's prose and the panel's own explanatory comment both
     // name `basicSetup`, so an unstripped haystack would match those and pass exactly
     // when the prop was deleted (`[[raw-guard-identifier-satisfied-by-own-comments]]`).
-    const src = panelSource
-      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+    const src = stripComments(panelSource);
 
     expect(
       src,

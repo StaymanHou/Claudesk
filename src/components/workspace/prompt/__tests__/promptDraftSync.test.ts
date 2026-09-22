@@ -9,7 +9,8 @@ import {
 } from "../promptDraftSync";
 // ?raw imports for the funnel guard at the foot of this file.
 import panelSource from "../PromptPanel.tsx?raw";
-import hostSource from "../../RightPanelHost.tsx?raw";
+import { stripComments } from "./stripComments";
+import syncSource from "../promptDraftSync.ts?raw";
 
 const pending = (projectPath: string, text: string): PendingWrite => ({
   projectPath,
@@ -109,29 +110,30 @@ describe("planProjectSwitch — flush the OUTGOING project at its own path", () 
 });
 
 describe("planPanelChange — leaving the Prompt tab flushes", () => {
-  it("flushes when moving to another panel", () => {
+  it("flushes when the panel is no longer front", () => {
     const p = pending("/a", "draft");
-    expect(planPanelChange(p, "editor").write).toBe(p);
+    expect(planPanelChange(p, false).write).toBe(p);
   });
 
-  it("does NOT flush while staying on the prompt panel", () => {
+  it("does NOT flush while the panel is still front", () => {
     const p = pending("/a", "draft");
-    const plan = planPanelChange(p, "prompt");
+    const plan = planPanelChange(p, true);
     expect(plan.write).toBeNull();
     expect(plan.pending).toBe(p);
   });
 
-  it("flushes to EVERY non-prompt panel, not just the editor", () => {
-    // ⚠️ A mutation hunt finds AN instance, never the class (source-text-guards entry 16).
-    // Enumerating the siblings here means a future `nextPanel === "editor"` shortcut fails
-    // rather than passing on the one arm someone happened to test.
-    const p = pending("/a", "draft");
-    for (const panel of ["editor", "diff", "terminal", "docs"] as const) {
-      expect(
-        planPanelChange(p, panel).write,
-        `leaving prompt for "${panel}" must flush`,
-      ).toBe(p);
-    }
+  it("flushes at the SAME path the text was typed in", () => {
+    // The panel-change flush is a flush like any other, so it inherits the
+    // project-capture property — asserted here too rather than assumed, because this is a
+    // separate entry point into the machine.
+    expect(
+      planPanelChange(pending("/typed-in", "t"), false).write?.projectPath,
+    ).toBe("/typed-in");
+  });
+
+  it("is a safe no-op when nothing is pending", () => {
+    expect(planPanelChange(null, false).write).toBeNull();
+    expect(planPanelChange(null, true).pending).toBeNull();
   });
 });
 
@@ -150,13 +152,6 @@ describe("the debounce window is a shared constant", () => {
 // notice a component that ignored those decisions and called `saveDraft` itself. That
 // exact shape has already shipped a CRITICAL in this project (M11 WP4, twice), so the
 // funnel is asserted structurally.
-function stripComments(src: string): string {
-  return src
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
-}
-
 describe("PromptPanel funnels every write through one call site", () => {
   it("calls saveDraft exactly ONCE in the whole component", () => {
     // ⚠️ Counted, not merely "contains". `toContain("saveDraft(")` passes for a component
@@ -192,49 +187,69 @@ describe("PromptPanel funnels every write through one call site", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// P3.4 verify-codify — the tab-indicator wiring, which SPANS TWO FILES.
+// P3.4 — the indicator chain is covered by a PARSED RENDER, not by source text.
 //
-// ⚠️ Why this needs a guard at all: the indicator is a three-link chain — PromptPanel
-// reports presence from inside its write funnel → RightPanelHost holds it in state → the
-// Prompt tab renders `data-has-draft`. Break ANY link and the dot silently stops appearing,
-// which is a failure the operator only notices by its absence. Nothing else in the suite
-// crosses that boundary: the panel's own tests never render, and the host's ?raw guards
-// never look at the panel.
+// ⚠️ A `?raw` three-link guard used to live here and was DELETED at code review. It grepped
+// PromptPanel and RightPanelHost for the literal expressions wiring the indicator, justifying
+// that choice with "this project configures no DOM environment" — a premise
+// `docs/lessons/source-text-guards.md` explicitly corrects ("HALF TRUE, and the discouraging
+// half has been steering work toward the guard style that failed the nine ways above").
 //
-// ⚠️ This is a structural guard because the behaviour is React-render-level and this project
-// has no DOM environment. The LIVE assertion — three tabs, two states, one render, with the
-// `::after` dot's computed content checked — is the Phase 3 verify-self outcome. This exists
-// so a link cannot be quietly cut between verify runs.
-describe("the draft-presence indicator is wired end to end", () => {
-  it("PromptPanel reports presence from INSIDE the write funnel", () => {
-    const src = stripComments(panelSource);
-    // The report must sit in `runPlan` next to the `saveDraft` call, not in a render path:
-    // reporting from render would describe the BUFFER, while the indicator's contract is
-    // about STORAGE (it must be correct for a panel nobody is looking at).
-    expect(src).toContain('presenceRef.current?.(plan.write.text !== "")');
-  });
+// It is replaced by `promptTabIndicatorRender.test.tsx`, which renders `RightPanelHost` and
+// asserts the tab's resting DOM. That is strictly stronger, and not merely tidier: the render
+// test FAILED ON ITS FIRST RUN and exposed a real defect the grep could never see — `hasDraft`
+// started at `false`, so the first paint of a workspace with unsent work showed no dot. The
+// source guard was green throughout, because every literal it matched was present and correct.
+//
+// The rule, from the lesson: when the question is "what does the DOM look like at rest",
+// render it; when it is "what does the source say", guard the source. The two guards ABOVE
+// are genuinely source questions — "is there exactly one `saveDraft` call site" and "is the
+// WP4 send seam absent" are statements about the code, not about its output.
 
-  it("PromptPanel also reports the SEEDED presence, not only on edit", () => {
-    // Without a mount-time report the dot would stay dark for a project that already has a
-    // stored draft until the operator typed — wrong in exactly the case it exists for
-    // (returning to unsent work). Two sites: mount, and the project-switch effect.
+describe("every plan function has a live caller", () => {
+  // ⚠️ THIS SUITE EXISTS BECAUSE A MUTANT SURVIVED, AND BECAUSE THE DEFECT SHIPPED ONCE.
+  //
+  // `planPanelChange` was exported, documented and tested from the start — and called by
+  // NOTHING, so this module promised a flush-on-tab-away that the panel never performed. Code
+  // review caught it. After wiring it, deleting the call site again was mutation-tested: all
+  // 44 tests still passed. The pure-function tests cannot see an unwired plan, by
+  // construction — they call it themselves.
+  //
+  // ⚠️ A source guard is the honest instrument here, NOT a render test: a server render cannot
+  // transition `panelFront`, so "does leaving the tab flush?" is unreachable in jsdom. The
+  // question this asserts is genuinely about the source ("is the function invoked?"), which is
+  // the side of `source-text-guards.md`'s rule that guards belong on.
+  const PLAN_FUNCTIONS = [
+    "planEdit",
+    "planFlush",
+    "planProjectSwitch",
+    "planPanelChange",
+  ] as const;
+
+  it.each(PLAN_FUNCTIONS)("%s is invoked by PromptPanel", (fn) => {
+    // Comment-stripped, and matched as a CALL (`name(`) rather than a bare identifier — an
+    // import line or a prose mention would otherwise satisfy this exactly when the call was
+    // deleted (`[[raw-guard-identifier-satisfied-by-own-comments]]`).
     const src = stripComments(panelSource);
-    const reports = src.match(/presenceRef\.current\?\.\(/g) ?? [];
     expect(
-      reports.length,
-      "expected three presence reports: the funnel, the mount seed, and the project switch",
-    ).toBe(3);
+      src,
+      `${fn} is exported and tested but never called — either wire it into PromptPanel or ` +
+        `delete it; an unwired plan function makes the funnel look more complete than it is`,
+    ).toContain(`${fn}(`);
   });
 
-  it("RightPanelHost consumes the callback and renders the attribute", () => {
-    const host = stripComments(hostSource);
-    // Link 2: the host passes its setter in…
-    expect(host).toContain("onDraftPresenceChange={setHasDraft}");
-    // …and link 3: the tab renders the state as a testable attribute, not only a class.
-    expect(host).toContain("data-has-draft=");
-    // ⚠️ Asserted as a TEMPLATE over the state, not a bare literal — `data-has-draft="true"`
-    // hardcoded would satisfy a substring check while making the indicator a constant,
-    // which is precisely the bug the live negative control was built to catch.
-    expect(host).toContain('data-has-draft={hasDraft ? "true" : "false"}');
+  it("the list above covers every plan function the module exports", () => {
+    // ⚠️ Non-vacuity + the entry-16 sweep: a guard over a hardcoded list silently stops
+    // covering the NEXT plan function someone adds, which is precisely how the first one went
+    // unwired. Derived from the module's own source so adding an unlisted `plan*` export fails
+    // here rather than passing unnoticed.
+    const exported = [
+      ...stripComments(syncSource).matchAll(/export function (plan\w+)/g),
+    ].map((m) => m[1]);
+
+    expect(exported.length, "no plan functions found — guard is vacuous").toBe(
+      PLAN_FUNCTIONS.length,
+    );
+    expect([...exported].sort()).toEqual([...PLAN_FUNCTIONS].sort());
   });
 });

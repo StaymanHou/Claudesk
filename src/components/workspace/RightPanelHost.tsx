@@ -31,6 +31,7 @@ import { isCloseTabChord } from "./editor/closeTabChord";
 import { newTerminalChord } from "./newTerminalChord";
 import { shouldCloseTerminalOnChord } from "./closeTerminalChord";
 import { deriveRightSurface } from "./rightSurface";
+import { loadDraft } from "./draftStore";
 // M9 WP6a Phase 4 — DiffPanel + ProjectSearch (below) are the other two CodeMirror-bearing
 // surfaces; lazy-loading them alongside the editor (PaneTabs) lets Rollup hoist all
 // @codemirror/@uiw code into ONE shared async chunk that leaves `main`. Neither has a
@@ -222,9 +223,17 @@ export function RightPanelHost({
   const pipMode = usePipMode();
 
   // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.
-  // F-a WP3 P3.4 — whether this project has a non-empty unsent draft, reported by
-  // PromptPanel from inside its write funnel. Drives the Prompt tab indicator.
-  const [hasDraft, setHasDraft] = useState(false);
+  // F-a WP3 P3.4 — whether this project has a non-empty unsent draft. Drives the Prompt tab
+  // indicator. Updated by PromptPanel from inside its write funnel, so the value can never
+  // disagree with what was actually persisted.
+  //
+  // ⚠️ SEEDED FROM STORAGE, not `false`. Starting at `false` made the indicator correct only
+  // AFTER the child's effect had run — so the very first paint of a workspace with unsent
+  // work showed no dot, which is exactly the case the indicator exists for. It also made the
+  // tab unassertable in a server render (effects do not run), which is how the gap surfaced:
+  // a parsed-DOM test replaced a source-text guard at code review and immediately failed.
+  // The lazy initializer reads the same key `PromptPanel` seeds its buffer from.
+  const [hasDraft, setHasDraft] = useState(() => loadDraft(projectPath) !== "");
   const [finderOpen, setFinderOpen] = useState(false);
 
   // WP7 — the match to scroll-to + highlight in the editor after a search-result

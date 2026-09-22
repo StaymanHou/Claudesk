@@ -87,12 +87,9 @@ export function promptExtensions(options: PromptExtensionOptions): Extension[] {
     // draft's search box does not sit under the fold.
     search({ top: true }),
 
-    // ⚠️ `editorDarkTheme` is NOT here — it is passed via CodeMirror's `theme` PROP in
-    // PromptPanel.tsx. Found at Phase 2 verify-self: @uiw/react-codemirror defaults that
-    // prop to "light" when omitted and wraps the view in `.cm-theme-light`, whose rules
-    // beat a dark theme supplied through `extensions`; the panel rendered WHITE. Putting
-    // it back here would re-break it while looking more consistent with the editor's
-    // builder (which ALSO passes it as the prop — `EditorPanel.tsx`). Do not "tidy" this.
+    // ⚠️ `editorDarkTheme` is NOT here — it goes through CodeMirror's `theme` PROP, and
+    // moving it back into this array re-breaks the panel. The full reason is stated once,
+    // at that prop in `PromptPanel.tsx`. Do not "tidy" this into the array.
     fontSizeCompartment.of(fontSizeTheme(fontSize)),
 
     // ⚠️ `Prec.highest` so these win over CM6's own bindings AND the browser default.

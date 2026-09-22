@@ -24,6 +24,7 @@ import {
   DRAFT_DEBOUNCE_MS,
   planEdit,
   planFlush,
+  planPanelChange,
   planProjectSwitch,
   type PendingWrite,
   type WritePlan,
@@ -67,11 +68,7 @@ export function PromptPanel({
   // value. `projectPath` alone cannot tell us what we are switching *from*.
   const shownPathRef = useRef(projectPath);
 
-  /**
-   * Execute a plan from `promptDraftSync`. ⚠️ THE ONLY PLACE `saveDraft` IS CALLED.
-   * Guarding this one function is what makes the machine's guarantees real for every
-   * caller, rather than only for the machine.
-   */
+  /** Execute a plan from `promptDraftSync`. ⚠️ THE ONLY PLACE `saveDraft` IS CALLED. */
   // The presence callback, held in a ref so `runPlan` does not have to depend on it (a
   // changing prop identity would otherwise rebuild the funnel on every parent render).
   // ⚠️ Written in an EFFECT, not during render — `react-hooks/refs` rejects the latter,
@@ -139,18 +136,36 @@ export function PromptPanel({
   // for a project that already has a stored draft until the operator typed — i.e. it would
   // be wrong in exactly the case it exists for (returning to unsent work).
   useEffect(() => {
-    presenceRef.current?.(loadDraft(projectPath) !== "");
+    // Reads the already-seeded `doc` rather than hitting storage a second time — the lazy
+    // initializer above did that read once, which is the ground it was chosen on.
+    presenceRef.current?.(doc !== "");
     // Mount-only: the switch effect above owns every later project change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Flush when the operator tabs AWAY from the Prompt panel.
+  //
+  // ⚠️ This closes a real window, and it was MISSING until code review caught it: panels
+  // stay mounted (CLAUDE.md), so leaving the tab neither unmounts the panel nor cancels the
+  // debounce timer — but an operator who tabs to Editor and quits inside the 400ms window
+  // loses that text. `planPanelChange` existed and was tested from the start; nothing
+  // called it, so the module documented a guarantee the panel never actually provided.
+  //
+  // `panelFront` is the panel's view of the host's selection, so "no longer front" is the
+  // signal available here. The plan is computed by the same machine as every other write.
+  const wasFrontRef = useRef(panelFront);
+  useEffect(() => {
+    const wasFront = wasFrontRef.current;
+    wasFrontRef.current = panelFront;
+    // Only the front → not-front EDGE is a flush point. Firing on every render while
+    // backgrounded would defeat the debounce for a panel nobody is even looking at.
+    if (wasFront && !panelFront) {
+      runPlanRef.current(planPanelChange(pendingRef.current, panelFront));
+    }
+  }, [panelFront]);
+
   // Flush whatever is pending when the panel goes away, so the window between the last
   // keystroke and the debounce timer is not a hole.
-  //
-  // ⚠️ Goes through `runPlan(planFlush(...))` like every other write — NOT a direct
-  // `saveDraft` call. A first draft of this cleanup called `saveDraft` inline, which is
-  // precisely the second-caller shape this module's funnel exists to prevent: the machine
-  // would have stayed fully guarded while one of its three write moments bypassed it.
   useEffect(() => {
     return () => {
       runPlanRef.current(planFlush(pendingRef.current));

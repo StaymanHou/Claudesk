@@ -3,24 +3,29 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // ⚠️ ONE FUNNEL, AND THE GUARD GOES ON THE FUNNEL (P3.3).
 //
-// There are three moments that write a draft to storage — a debounce timer firing, a
-// project switch flushing the OUTGOING project, and an unmount flushing whatever is
-// pending. The obvious implementation gives each its own `saveDraft` call, and that is the
+// There are FOUR moments that write a draft to storage — a debounce timer firing, a project
+// switch flushing the OUTGOING project, the operator tabbing AWAY from the panel, and an
+// unmount flushing whatever is pending. The obvious implementation gives each its own
+// `saveDraft` call, and that is the
 // shape that has already burned this project twice in M11 WP4 (one of them a shipped
 // CRITICAL): extracting a pure state machine proves the MACHINE, not its CALLERS, so three
 // call sites mean two of them can drift unguarded while the tests stay green.
 //
-// So every write decision is made HERE, by `planWrite`, and the React layer's only job is
-// to execute the plan it is handed. A new write moment is a new input to this function,
-// not a new `saveDraft` call somewhere else.
+// So every write decision is made HERE, as a `plan*` function, and the React layer's only
+// job is to execute the plan it is handed. A new write moment is a new function here, NOT a
+// new `saveDraft` call somewhere else.
+//
+// ⚠️ A `plan*` function with no caller is worse than no function at all: `planPanelChange`
+// shipped exported, documented and tested but UNWIRED, so this module promised a
+// flush-on-tab-away that the panel never performed — the guarantee read as kept while the
+// data-loss window it names stayed open. Caught at code review. If you add a plan function,
+// wire it in the same change.
 //
 // ⚠️ THE PROJECT PATH IS PART OF THE PENDING STATE, NOT READ AT FLUSH TIME. This is the
 // project-switch correctness property in one sentence: if the pending write remembered only
 // the TEXT, a flush that ran after `projectPath` had already changed would write project
 // A's draft into project B's key — silently, and only for operators who switch workspaces
 // mid-typing, which is the entire target audience of this feature.
-
-import type { RightPanel } from "../panelHost";
 
 /** A write that has been decided on but not yet performed. */
 export interface PendingWrite {
@@ -89,16 +94,22 @@ export function planProjectSwitch(
 }
 
 /**
- * Whether a panel becoming non-front should flush.
+ * Decide what to do when the Prompt panel's front/background state changes.
  *
  * Switching away from the Prompt tab does NOT unmount it (every panel stays mounted —
  * CLAUDE.md), so the pending timer survives and would fire normally. But an operator who
  * tabs away and then quits loses the window between the last keystroke and the timer, so
  * leaving the panel is treated as a flush point.
+ *
+ * ⚠️ TAKES A BOOLEAN, NOT THE INCOMING PANEL NAME. An earlier signature took the
+ * `RightPanel` being switched TO and compared it against `"prompt"` — but the Prompt panel
+ * has no idea which sibling the host selected; it only knows whether it is still front. The
+ * old shape forced its one caller to invent a plausible-looking argument to satisfy the
+ * type, which is a signature lying about what the caller knows.
  */
 export function planPanelChange(
   pending: PendingWrite | null,
-  nextPanel: RightPanel,
+  stillFront: boolean,
 ): WritePlan {
-  return nextPanel === "prompt" ? { write: null, pending } : planFlush(pending);
+  return stillFront ? { write: null, pending } : planFlush(pending);
 }
