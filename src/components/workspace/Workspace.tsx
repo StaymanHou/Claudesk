@@ -1392,6 +1392,12 @@ export function Workspace({
         workspaceId={workspace.id}
         projectPath={workspace.project_path}
         visible={visible}
+        /* F-a WP4 — the LIVE session id for the Prompt panel's send path. Read straight off
+           `workspace` on every render (the same source the skill-button row uses) rather than
+           from `ccSessionIdRef`: a ref would not re-render the panel, so its send buttons would
+           stay disabled after a session first appears. A recycle updates `workspace`, so this
+           value tracks it. */
+        ccSessionId={workspace.cc_session_id}
         collapsed={rightCollapsed}
         registerDirtyProbe={registerDirtyProbe}
         terminalPaneRef={termPaneRef}

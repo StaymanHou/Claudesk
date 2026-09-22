@@ -1745,6 +1745,114 @@ body,
   min-height: 0;
 }
 
+/* F-a WP4 Phase 3 — the recover-from-history strip, between the buffer and the send row.
+   ⚠️ `flex: 0 0 auto` for the same reason as `.prompt-actions`: `.prompt-panel .cm-theme` takes
+   `flex: 1`, so a sibling without an explicit basis is squeezed to nothing.
+   ⚠️ Literal hex, matching `.panel-tab` — this project has NO CSS custom-property layer (App.css
+   declares exactly one, `--diff-commits-h`), so `var(--token)` would resolve to nothing. */
+.prompt-recover {
+  flex: 0 0 auto;
+  border-top: 1px solid #3c3c3c;
+  background-color: #1a1a1a;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+.prompt-recover-toggle {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.6rem;
+  color: #9b9b9b;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.prompt-recover-toggle:hover {
+  color: #d4d4d4;
+}
+
+.prompt-recover-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.3rem;
+}
+
+/* ⚠️ ONE ROW PER ENTRY, TRUNCATED. A recovered dictation can be kilobytes; letting entries wrap
+   would push the send buttons off-screen and bury the buffer this panel exists for. The full
+   text is in the `title` tooltip, and clicking restores all of it regardless of what is shown. */
+.prompt-recover-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 0.25rem 0.6rem;
+  color: #9b9b9b;
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-recover-item:hover {
+  color: #d4d4d4;
+  background-color: #252525;
+}
+
+/* F-a WP4 — the send action row, pinned BELOW the prose buffer.
+   ⚠️ `flex: 0 0 auto` is load-bearing: `.prompt-panel .cm-theme` above takes `flex: 1`, so a
+   sibling without an explicit basis gets squeezed to nothing at small panel heights — the row
+   would vanish rather than shrink, and the buttons are the panel's only visible send path.
+   ⚠️ Colors are LITERAL HEX, matching `.panel-tab` and the rest of this file. This project
+   defines no `--bg-*`/`--accent` custom properties (the only one in App.css is
+   `--diff-commits-h`), so a token-style rule here would silently resolve to nothing and ship an
+   unstyled row. Claudesk is dark-only — no light-theme variants (CLAUDE.md). */
+.prompt-actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-top: 1px solid #3c3c3c;
+  background-color: #1a1a1a;
+}
+
+.prompt-send {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.25rem 0.8rem;
+  color: #9b9b9b;
+  background-color: #1a1a1a;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.prompt-send:hover:not(:disabled) {
+  color: #d4d4d4;
+}
+
+/* The submitting mode is the affirmative one, so it carries the accent border the active
+   panel-tab uses. Stage-only stays neutral — the two must not read as interchangeable at a
+   glance, because one of them submits a half-finished dictation and the other does not. */
+.prompt-send--submit {
+  color: #d4d4d4;
+  border-color: #6ea8ff;
+}
+
+/* ⚠️ Disabled must be VISIBLY inert, not merely non-clickable: the row is disabled whenever the
+   draft is blank or no CC session is live, and a button that looks alive but does nothing is
+   the failure this state exists to prevent. */
+.prompt-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* Suspense fallback while the shared CM6 chunk resolves — deliberately blank, matching
    `.editor-loading` / `.diff-loading`: CM6 loads in ms off local disk, so a spinner would
    flash and read as jank. */

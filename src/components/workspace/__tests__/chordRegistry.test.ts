@@ -194,7 +194,7 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
     // number|null, RightPanel|null, and panelForChord takes a second argument — which is
     // why the registry stores a module path rather than pretending to a common function
     // type. The call-shape assertion works regardless of return type.
-    const CALL_SYMBOLS: Record<string, string> = {
+    const CALL_SYMBOLS: Record<string, string | string[]> = {
       workspaceSwitchChord: "workspaceSwitchIndex",
       newWorkspaceChord: "newWorkspaceChord",
       dashboardChord: "isDashboardChord",
@@ -208,6 +208,16 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
       newTerminalChord: "newTerminalChord",
       terminalFontZoom: "terminalZoomForChord",
       paletteCommands: "isPaletteChord",
+      // ⚠️ THE MATCHER IS THE ROUTER, NOT THE PREDICATES — and that is a real distinction, not
+      // bookkeeping. At verify-codify the two send predicates were wrapped in
+      // `promptSendRouting.sendModeForChord` so the FOUR-input routing decision (panel front ·
+      // handler registered · which chord) could be tested; the host now calls the router and no
+      // longer imports the predicates. This guard caught that indirection in all three
+      // directions, which is exactly its job: the registry must name the module a registration
+      // host actually calls, or the entry describes a wiring that no longer exists.
+      // ⚠️ The predicates themselves stay covered by `promptSendChord.test.ts` and, through the
+      // router, by `promptSendRouting.test.ts`.
+      promptSendRouting: "sendModeForChord",
     };
 
     for (const entry of CHORD_REGISTRY) {
@@ -216,15 +226,18 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
         .split("/")
         .pop()!
         .replace(/\.tsx?$/, "");
-      const symbol = CALL_SYMBOLS[moduleName];
+      const mapped = CALL_SYMBOLS[moduleName];
       expect(
-        symbol,
+        mapped,
         `${entry.id}: no call symbol mapped for ${moduleName}`,
       ).toBeTruthy();
-      expect(
-        hosts.includes(`${symbol}(`),
-        `${entry.id}: ${symbol} is never CALLED in a registration host (imported-but-dead)`,
-      ).toBe(true);
+      // ⚠️ EVERY mapped symbol must be called, not just the first. See the map's note.
+      for (const symbol of Array.isArray(mapped) ? mapped : [mapped]) {
+        expect(
+          hosts.includes(`${symbol}(`),
+          `${entry.id}: ${symbol} is never CALLED in a registration host (imported-but-dead)`,
+        ).toBe(true);
+      }
     }
   });
 });
@@ -269,6 +282,15 @@ describe("chord registry — COMPLETENESS (the other direction)", () => {
     isCloseTabChord: "close-w",
     newTerminalChord: "new-terminal",
     terminalZoomForChord: "terminal-font-zoom",
+    // F-a WP4 — ONE router symbol, TWO registry entries (`prompt-send-submit` /
+    // `prompt-send-stage`). `sendModeForChord` returns WHICH of the two modes fired, so a single
+    // call site legitimately backs both. This map is called-symbol → *an* entry id and never
+    // requires every entry to appear, so naming one is correct here; `prompt-send-stage`'s own
+    // reachability is carried by the forward guard above (matcher path exists · imported ·
+    // called). ⚠️ The two really are distinct chords — ⌘↵ submits, ⇧⌘↵ does not, differing by a
+    // single byte in the payload — which is why they are two entries and not one with two
+    // outcomes (contrast `close-w`).
+    sendModeForChord: "prompt-send-submit",
     // Not a matcher: a ROUTER that consumes isCloseTabChord's result and decides, by focus,
     // whether ⌘W closes a terminal or an editor tab. It owns no chord of its own — which is
     // precisely why `close-w` is ONE entry with two outcomes rather than two entries.

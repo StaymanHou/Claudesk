@@ -1,9 +1,18 @@
 // F-a WP3 — the Prompt panel: a CM6 prose buffer for composing a message before it reaches
 // Claude Code, persisted per project.
 //
-// SCOPE as of Phase 3: the view + draft persistence. SENDING is WP4 — nothing here imports
-// `stagedPayload`, `injectCommand`, `appendToHistory` or `cc_input`, and a guard asserts
-// that (P3.6). Wiring a send seam nothing consumes is the discipline `DocsPanel` follows.
+// SCOPE: the view, draft persistence (WP3) and SENDING (WP4 Phase 2).
+//
+// ⚠️ WP3's header said "SENDING is WP4 — nothing here imports `injectCommand`", and a guard in
+// `promptDraftSync.test.ts` enforced that. WP4 Phase 2 OPENED that seam deliberately, and the
+// guard was INVERTED in the same change rather than deleted — it now asserts the send path is
+// present AND that there is exactly ONE `injectCommand` call site here. Deleting it would have
+// traded a real invariant for nothing.
+//
+// ⚠️ THE SEND HAS ONE IMPLEMENTATION AND FOUR TRIGGERS (two buttons, two hotkeys). All four
+// route through `send(mode)`, whose only decision-making lives in `sendStagedDraft.planSend`.
+// The keyboard triggers arrive from `RightPanelHost` via `onRegisterSend` because the HOST owns
+// the capture-phase keydown router while the PANEL owns the buffer.
 //
 // ⚠️ The extension set is built by a SIBLING module, not inherited from the editor's —
 // see `promptExtensions.ts` for why a second builder exists rather than a reuse.
@@ -19,7 +28,12 @@ import CodeMirror from "@uiw/react-codemirror";
 import { editorDarkTheme } from "../editor/theme";
 import { promptExtensions } from "./promptExtensions";
 import { loadPromptFontSize, savePromptFontSize } from "./promptFontZoom";
-import { loadDraft, saveDraft } from "../draftStore";
+import { clearDraft, loadDraft, saveDraft } from "../draftStore";
+import { appendToHistory, loadHistory } from "../draftHistory";
+import { planRecover, discardConfirmSpec } from "./promptRecover";
+import { ConfirmModal } from "../editor/ConfirmModal";
+import { injectCommand } from "../autoResumeFire";
+import { planSend, type SendMode } from "./sendStagedDraft";
 import {
   DRAFT_DEBOUNCE_MS,
   planEdit,
@@ -47,6 +61,28 @@ interface PromptPanelProps {
    * project?", which is a fact about storage.
    */
   onDraftPresenceChange?: (hasDraft: boolean) => void;
+  /**
+   * F-a WP4 — the CC session this workspace's prompt is sent to, or `null` when no session is
+   * live (the send controls disable).
+   *
+   * ⚠️ **PASSED AS A LIVE VALUE ON EVERY RENDER, NOT CAPTURED ONCE.** A recycle replaces the
+   * session id, and `Workspace.tsx` keeps a `ccSessionIdRef` for exactly this reason — a value
+   * captured at mount would address a PTY that no longer exists, and the send would vanish into
+   * `injectCommand`'s `.catch` with only a `console.warn` to show for it.
+   */
+  ccSessionId?: string | null;
+  /**
+   * F-a WP4 — registers this panel's send handler with the host.
+   *
+   * ⚠️ THE HOST OWNS THE KEYBOARD, THE PANEL OWNS THE SEND. `RightPanelHost` holds the
+   * capture-phase keydown router (and is one of the four files `chordRegistry.test.ts` accepts
+   * as a registration host), but only this panel knows the buffer's contents. Rather than lift
+   * the draft into the host or duplicate the send there, the panel hands its one send function
+   * up and the host calls it on a chord match. ⚠️ The alternative — a second `planSend` call
+   * site in the host — is precisely the multi-call-site shape `sendStagedDraft.ts`'s header
+   * warns about.
+   */
+  onRegisterSend?: (send: ((mode: SendMode) => void) | null) => void;
 }
 
 export function PromptPanel({
@@ -54,10 +90,32 @@ export function PromptPanel({
   visible,
   panelFront,
   onDraftPresenceChange,
+  ccSessionId,
+  onRegisterSend,
 }: PromptPanelProps) {
   // Seeded from the project's persisted draft (P3.1). Lazy initializer so the read happens
   // once at mount rather than on every render.
   const [doc, setDoc] = useState(() => loadDraft(projectPath));
+
+  // F-a WP4 Phase 3 — the sent-draft ring, for the recover affordance.
+  //
+  // ⚠️ Phase 2 deliberately did NOT hold this in state: nothing read it, and an unread value is
+  // a `tsc` error rather than harmless. It becomes legitimate state HERE, where the recover
+  // control renders from it.
+  const [history, setHistory] = useState<string[]>(() =>
+    loadHistory(projectPath),
+  );
+  // Whether the recover list is expanded. Collapsed by default — the panel's job is composing,
+  // and a permanently-open history list would crowd the buffer it exists to protect.
+  const [recoverOpen, setRecoverOpen] = useState(false);
+
+  // F-a WP4 — the entry awaiting a discard confirmation, or `null` when no prompt is open.
+  //
+  // ⚠️ HOLDS THE TEXT, not a boolean. `planRecover` carries the entry on its `confirm` arm
+  // precisely so the caller does not re-read the buffer after the dialog closes: the operator
+  // could have edited it while the prompt was open, and recovering against a document they were
+  // never warned about is the defect this shape prevents.
+  const [pendingRecover, setPendingRecover] = useState<string | null>(null);
 
   // The single pending write. A ref, not state: it must be readable by the unmount cleanup
   // WITHOUT that cleanup depending on it, or the effect would tear down and re-register on
@@ -130,6 +188,11 @@ export function PromptPanel({
     const seeded = loadDraft(projectPath);
     setDoc(seeded);
     presenceRef.current?.(seeded !== "");
+    // ⚠️ The RING is per-project too. Without this the recover list would offer project A's sent
+    // drafts while the operator is looking at project B — and recovering one would paste the
+    // wrong project's text into this buffer.
+    setHistory(loadHistory(projectPath));
+    setRecoverOpen(false);
   }, [projectPath, runPlan]);
 
   // Report the SEEDED presence once at mount. Without this the indicator would stay dark
@@ -171,6 +234,132 @@ export function PromptPanel({
       runPlanRef.current(planFlush(pendingRef.current));
     };
   }, []);
+
+  // ── F-a WP4: the send path ────────────────────────────────────────────────────────────────
+  //
+  // ⚠️ ONE SEND FUNCTION, AND BOTH ENTRY POINTS GO THROUGH IT. The two buttons and the two
+  // hotkeys are FOUR triggers for two modes; giving any of them its own `planSend` call would
+  // be the multi-call-site shape that shipped a CRITICAL in M11 WP4 twice. The mode is the only
+  // thing that varies, so it is the only parameter.
+
+  // Latest-refs so `send` can stay `useCallback`-stable while still reading current values. A
+  // `send` that changed identity on every keystroke would re-register with the host constantly
+  // (and the host's keydown listener is registered once, so it would capture a stale one).
+  const docRef = useRef(doc);
+  useEffect(() => {
+    docRef.current = doc;
+  }, [doc]);
+  const projectPathRef = useRef(projectPath);
+  useEffect(() => {
+    projectPathRef.current = projectPath;
+  }, [projectPath]);
+  const ccSessionIdRef = useRef(ccSessionId);
+  useEffect(() => {
+    ccSessionIdRef.current = ccSessionId;
+  }, [ccSessionId]);
+
+  const send = useCallback(
+    (mode: SendMode) => {
+      const body = docRef.current;
+      const path = projectPathRef.current;
+
+      // ⚠️ The blank check lives in `planSend`, not here — see its header. A blank body returns
+      // null and nothing happens: no inject, no clear, no archive.
+      const plan = planSend(body, mode);
+      if (!plan) return;
+
+      // ⚠️ Read the session id THROUGH THE REF, at send time. A recycle swaps it, and a value
+      // closed over at mount would address a dead PTY.
+      const sessionId = ccSessionIdRef.current;
+      if (!sessionId) return;
+
+      // ⚠️ THE ONE CALL TO `injectCommand` IN THIS COMPONENT — the single injection funnel, with
+      // the staging label and the staged payload builder. NOT `invoke("cc_input", …)`: opening a
+      // second path is forbidden by F-a decision 2.
+      void injectCommand(
+        sessionId,
+        plan.command,
+        undefined,
+        plan.label,
+        plan.buildPayload,
+      );
+
+      // ⚠️ ARCHIVE BEFORE CLEAR, and the order is load-bearing rather than stylistic.
+      // `appendToHistory` refuses a blank entry, so clearing first would hand it an empty string
+      // and silently archive NOTHING — destroying the only copy of text that has just left the
+      // panel.
+      //
+      // ⚠️ Phase 3: the return value is now CONSUMED. `appendToHistory` returns the new ring, so
+      // the recover list updates without a re-read — which also means the just-sent text is
+      // recoverable immediately, not only after a remount. (Phase 2 discarded it because nothing
+      // rendered it yet.)
+      setHistory(appendToHistory(path, body));
+
+      // ⚠️ Clear through the SAME funnel every other write uses. `runPlan(planEdit(path, ""))`
+      // would merely schedule a debounced write; the draft must be gone NOW because the text is
+      // already on its way to the PTY. So the store is cleared directly and the pending timer is
+      // cancelled by running an empty flush through the funnel — which also reports presence.
+      clearDraft(path);
+      setDoc("");
+      pendingRef.current = null;
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      presenceRef.current?.(false);
+    },
+    // Every value read inside comes from a ref, so this is genuinely stable.
+    [],
+  );
+
+  /**
+   * F-a WP4 Phase 3 — put a sent draft back in the buffer.
+   *
+   * ⚠️ OVERWRITES — the decision of whether a confirmation was owed FIRST lives in
+   * `planRecover`, not here, so "does this destroy unsent work?" is testable without a render.
+   * See that module for the operator ruling (2026-09-22) that replaced an earlier append.
+   *
+   * ⚠️ Goes through `runPlan`/`planEdit` like any other edit rather than calling `saveDraft`
+   * directly. That is the funnel rule this component has carried since WP3: every write decision
+   * belongs to `promptDraftSync`, and a second `saveDraft` call site here is precisely the shape
+   * that shipped a CRITICAL twice in M11 WP4.
+   */
+  /** Apply a recovered entry to the buffer, unconditionally. ⚠️ OVERWRITES — callers decide
+   *  whether a confirmation was owed first. */
+  const applyRecover = useCallback(
+    (text: string) => {
+      setDoc(text);
+      runPlan(planEdit(projectPathRef.current, text));
+      // Collapse after recovering: the operator's attention belongs back in the buffer, and a
+      // list left open over the text they just restored is in the way.
+      setRecoverOpen(false);
+      setPendingRecover(null);
+    },
+    [runPlan],
+  );
+
+  const recover = useCallback(
+    (entry: string) => {
+      // ⚠️ The DECISION lives in `planRecover`, not here — so "does this destroy unsent work?"
+      // is testable without a render. `replace` means there was nothing to lose.
+      const action = planRecover(docRef.current, entry);
+      if (action.kind === "replace") {
+        applyRecover(action.text);
+        return;
+      }
+      // `confirm` — hold the entry and let the dialog decide. ⚠️ The buffer is NOT touched here;
+      // Cancel must leave it exactly as it was.
+      setPendingRecover(action.text);
+    },
+    [applyRecover],
+  );
+
+  // ⚠️ Hand the send up to the host, which owns the keydown router. Unregister on unmount so a
+  // torn-down panel's send can never be invoked (it would write into a stale project's ring).
+  useEffect(() => {
+    onRegisterSend?.(send);
+    return () => onRegisterSend?.(null);
+  }, [onRegisterSend, send]);
 
   // Seeded from storage so the view mounts at the persisted zoom rather than flashing the
   // default. Lazy initializer — a localStorage read per render would be wasteful and
@@ -219,6 +408,92 @@ export function PromptPanel({
         autoFocus={visible && panelFront}
         data-testid="prompt-editor"
       />
+      {/* F-a WP4 Phase 3 — recover a sent draft. ⚠️ MINIMAL BY MANDATE (WBS task 4.4: "the ring
+          is the load-bearing part; a richer browser is additive later"). Show the ring, pick one,
+          restore it. No search, no preview pane, no pinning, no delete. */}
+      {history.length > 0 && (
+        <div className="prompt-recover">
+          <button
+            type="button"
+            className="prompt-recover-toggle"
+            onClick={() => setRecoverOpen((v) => !v)}
+            aria-expanded={recoverOpen}
+            title="Put a previously sent prompt back in the buffer"
+            data-testid="prompt-recover-toggle"
+          >
+            {recoverOpen ? "▾" : "▸"} Recent ({history.length})
+          </button>
+          {recoverOpen && (
+            <ul
+              className="prompt-recover-list"
+              data-testid="prompt-recover-list"
+            >
+              {history.map((entry, i) => (
+                <li key={`${i}-${entry.slice(0, 32)}`}>
+                  <button
+                    type="button"
+                    className="prompt-recover-item"
+                    onClick={() => recover(entry)}
+                    /* ⚠️ The FULL entry in the tooltip — the visible label is truncated by CSS,
+                       and a dictated passage is exactly the case where the first line does not
+                       identify it. */
+                    title={entry}
+                    data-testid={`prompt-recover-item-${i}`}
+                  >
+                    {/* Newlines collapsed to spaces so a multi-line entry stays one row. */}
+                    {entry.replace(/\s+/g, " ").trim()}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {/* F-a WP4 — the discard confirmation (operator ruling 2026-09-22). ⚠️ Reuses the editor's
+          `ConfirmModal` rather than adding a second confirm surface: it already handles focus,
+          Esc and backdrop-click, and `escValue: "cancel"` makes BOTH of those resolve to the
+          safe arm. ⚠️ "Discard" carries `variant: "danger"` and Cancel is `primary`, so the
+          focused default is the NON-destructive choice — Enter must not destroy the buffer. */}
+      {pendingRecover !== null && (
+        <ConfirmModal
+          spec={discardConfirmSpec()}
+          onChoose={(value) => {
+            if (value === "discard") {
+              applyRecover(pendingRecover);
+              return;
+            }
+            // ⚠️ Cancel leaves the buffer UNTOUCHED — only the pending entry is dropped.
+            setPendingRecover(null);
+          }}
+        />
+      )}
+      <div className="prompt-actions">
+        {/* ⚠️ DISABLED WHEN THERE IS NOTHING TO SEND — `planSend` would return null and the
+            click would be a silent no-op, which reads as a broken button. The predicate
+            mirrors `planSend`'s own blank rule (trim), so the two cannot disagree about what
+            "empty" means. Also disabled with no live CC session: `injectCommand` would warn
+            into the console and the operator would see nothing at all. */}
+        <button
+          type="button"
+          className="prompt-send prompt-send--stage"
+          onClick={() => send("stage-only")}
+          disabled={doc.trim() === "" || !ccSessionId}
+          title="Put this text in Claude Code's prompt without submitting it (⇧⌘↵)"
+          data-testid="prompt-send-stage"
+        >
+          Stage
+        </button>
+        <button
+          type="button"
+          className="prompt-send prompt-send--submit"
+          onClick={() => send("auto-submit")}
+          disabled={doc.trim() === "" || !ccSessionId}
+          title="Send this text to Claude Code and submit it (⌘↵)"
+          data-testid="prompt-send-submit"
+        >
+          Send
+        </button>
+      </div>
     </div>
   );
 }

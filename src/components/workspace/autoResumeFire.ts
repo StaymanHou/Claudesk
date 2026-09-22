@@ -168,17 +168,33 @@ export function slashCommandPayload(command: string): string {
  * `console.warn` is the only failure channel this path has (no overlay, by operator decision),
  * a misattributed prefix points the one available diagnostic at the wrong feature. Defaults to
  * the original strings, so M12's callers are byte-identical to before.
+ *
+ * ⚠️ `buildPayload` EXISTS SO F-a's STAGED PROSE CAN USE THIS FUNNEL RATHER THAN A SECOND PATH
+ * TO `cc_input` (F-a WP4, decision 2). Staged text needs a bracketed-paste envelope and an
+ * OPTIONAL trailing `\r` — bytes `slashCommandPayload` cannot produce, since it unconditionally
+ * strips trailing newlines and appends exactly one `\r`. The three alternatives were each worse:
+ * calling `invoke("cc_input", …)` from the panel is the second path the decision forbids;
+ * pre-encoding into `command` would double-encode here AND print a base64 blob in the one
+ * diagnostic this path has; widening `slashCommandPayload` itself would change M12/M13/M15 bytes.
+ *
+ * ⚠️ **THE DEFAULT IS WHAT KEEPS EVERY EXISTING CALLER BYTE-IDENTICAL.** Omitting this argument
+ * reproduces the pre-WP4 behaviour exactly, which is why no M12/M13/M15 call site was touched.
+ * A caller that DOES pass a builder owns its own byte contract — this funnel no longer asserts
+ * one — so that builder must be pinned byte-for-byte by its own test, the way `stagedPayload`
+ * is. ⚠️ `command` stays the human-readable text either way: it is what `console.warn` prints,
+ * and it must remain readable for the diagnostic to be worth anything.
  */
 export async function injectCommand(
   sessionId: string,
   command: string,
   onIpcError?: (message: string) => void,
   label = "auto-resume",
+  buildPayload: (command: string) => string = slashCommandPayload,
 ): Promise<void> {
   try {
     await invoke("cc_input", {
       sessionId,
-      data: slashCommandPayload(command),
+      data: buildPayload(command),
     });
   } catch (e) {
     console.warn(`${label}: injecting ${command} into ${sessionId} failed`, e);

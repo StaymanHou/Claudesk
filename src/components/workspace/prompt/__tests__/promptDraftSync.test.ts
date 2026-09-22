@@ -167,22 +167,67 @@ describe("PromptPanel funnels every write through one call site", () => {
     ).toBe(1);
   });
 
-  it("does NOT open the WP4 send seam (P3.6)", () => {
-    // Sending is WP4's. An untested seam nothing consumes is the thing this check forbids,
-    // and it also keeps "the draft did not send" unambiguous between the buffer and the
-    // payload if WP4 later misbehaves.
+  // ⚠️ INVERTED AT F-a WP4 PHASE 2 — DELIBERATELY, NOT INCIDENTALLY.
+  //
+  // WP3 shipped a guard here named "does NOT open the WP4 send seam (P3.6)" asserting that
+  // `stagedPayload` / `injectCommand` / `appendToHistory` / `cc_input` were ABSENT from the
+  // panel. That was correct then: an untested seam nothing consumes is the thing it forbade.
+  // WP4 opened the seam, so the guard had to change — and the choice was between DELETING it
+  // and INVERTING it. Deleting would have traded a real invariant for nothing.
+  //
+  // ⚠️ The polarity trap this file now sits on: a `grep -c "injectCommand" → 0` outcome cannot
+  // distinguish "the send is wired" from "a comment says do not wire it"
+  // (`docs/lessons/source-text-guards.md`, entry 14). Comments are stripped before every
+  // assertion below for exactly that reason, and the panel's own header DOES discuss the seam.
+  it("DOES open the send seam, through the sanctioned modules (was P3.6, inverted at WP4)", () => {
     const src = stripComments(panelSource);
-    for (const forbidden of [
-      "stagedPayload",
-      "injectCommand",
-      "appendToHistory",
-      "cc_input",
-    ]) {
+    for (const required of ["planSend", "injectCommand", "appendToHistory"]) {
       expect(
         src,
-        `${forbidden} belongs to WP4 — Phase 3 must not wire the send path`,
-      ).not.toContain(forbidden);
+        `${required} is the WP4 send path — the panel must wire it`,
+      ).toContain(required);
     }
+  });
+
+  it("reaches cc_input ONLY through injectCommand — no second path (F-a decision 2)", () => {
+    // ⚠️ The decision this pins by name: "enters through `injectCommand` with `label:
+    // \"staging\"` — do NOT open a second path to `cc_input`." A direct `invoke("cc_input")`
+    // here would bypass the funnel's `.catch` and its label, re-opening the misattribution
+    // defect M13 hit.
+    const src = stripComments(panelSource);
+    expect(src).not.toContain("cc_input");
+    expect(src).not.toContain('invoke("');
+  });
+
+  it("calls injectCommand EXACTLY ONCE in the whole component", () => {
+    // ⚠️ Counted, not merely "contains" — the same reasoning as the `saveDraft` funnel guard
+    // above (`[[raw-guard-substring-must-be-unique-to-its-site]]`). FOUR triggers (two buttons,
+    // two hotkeys) feed this send; the regression being guarded is one of them growing its own
+    // injection rather than routing through `send(mode)`.
+    const src = stripComments(panelSource);
+    const calls = src.match(/\binjectCommand\(/g) ?? [];
+    expect(
+      calls.length,
+      "every send must route through the single `send(mode)` funnel — add a mode, not a " +
+        "second injectCommand call",
+    ).toBe(1);
+  });
+
+  it("archives to the history ring BEFORE clearing the draft", () => {
+    // ⚠️ AN ORDER ASSERTION, and it guards a real data-loss path rather than a style
+    // preference: `appendToHistory` REFUSES a blank entry, so clearing first would hand it an
+    // empty string and silently archive nothing — destroying the only copy of text that has
+    // just left the panel. Positions are compared in comment-stripped source so the prose
+    // above (which names both, in the other order) cannot satisfy it.
+    const src = stripComments(panelSource);
+    const append = src.indexOf("appendToHistory(");
+    const clear = src.indexOf("clearDraft(");
+    expect(append, "appendToHistory( not found").toBeGreaterThan(-1);
+    expect(clear, "clearDraft( not found").toBeGreaterThan(-1);
+    expect(
+      append,
+      "the archive must happen before the clear — appendToHistory refuses a blank entry",
+    ).toBeLessThan(clear);
   });
 });
 

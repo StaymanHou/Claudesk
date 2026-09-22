@@ -301,9 +301,3 @@ WP3 builds the real staging surface, and its dictation behavior is subject to th
 blocker: it **cannot be verified under `pnpm tauri:dev`**. Plan WP3's verify-human to either run
 on an installed build or to explicitly defer the dictation check — **do not** let a green dev-build
 verify-self imply dictation works.
-
-## Session Handoff — 2026-09-22 11:40
-Handed off. See `workflow-system/state/.session.md` to restore. Next: **WBS WP4** (send and stage)
-— WP3 is complete and archived. ⚠️ WP4 must remove or invert the `promptDraftSync.test.ts` guard
-that currently asserts the send seam is CLOSED, and its review-quality run needs the diff window
-anchored by hand (this project commits WIP files at finalize, so `BASE_SHA` resolves to nothing).

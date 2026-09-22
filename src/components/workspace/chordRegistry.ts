@@ -228,6 +228,38 @@ export const CHORD_REGISTRY: readonly ChordEntry[] = [
     requiresWorkflowGate: false,
   },
   {
+    id: "prompt-send-submit",
+    label: "⌘↵",
+    host: "workspace",
+    outcomes: [
+      {
+        description: "Send the staged prompt to Claude Code and submit it",
+        whenFocused: "the Prompt panel is front",
+      },
+    ],
+    matcher: "components/workspace/prompt/promptSendRouting.ts",
+    claudeskOwned: true,
+    // F-a WP4 — ungated, for the same reason as ⌘⇧O (panel-select-prompt): the Prompt panel
+    // functions on a bare install with no `~/.claude/` substrate, so this is a live affordance
+    // with the workflow gate off.
+    requiresWorkflowGate: false,
+  },
+  {
+    id: "prompt-send-stage",
+    label: "⇧⌘↵",
+    host: "workspace",
+    outcomes: [
+      {
+        description:
+          "Put the staged prompt in Claude Code's input WITHOUT submitting it",
+        whenFocused: "the Prompt panel is front",
+      },
+    ],
+    matcher: "components/workspace/prompt/promptSendRouting.ts",
+    claudeskOwned: true,
+    requiresWorkflowGate: false,
+  },
+  {
     id: "panel-select-terminal",
     label: "⌘⇧T",
     host: "workspace",

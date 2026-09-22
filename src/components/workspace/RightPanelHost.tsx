@@ -29,6 +29,8 @@ import type { XtermPaneHandle } from "./XtermPane";
 import { tabSwitchIndex } from "./editor/tabSwitchChord";
 import { isCloseTabChord } from "./editor/closeTabChord";
 import { newTerminalChord } from "./newTerminalChord";
+import { sendModeForChord } from "./prompt/promptSendRouting";
+import type { SendMode } from "./prompt/sendStagedDraft";
 import { shouldCloseTerminalOnChord } from "./closeTerminalChord";
 import { deriveRightSurface } from "./rightSurface";
 import { loadDraft } from "./draftStore";
@@ -156,12 +158,24 @@ interface RightPanelHostProps {
    * both terminal handles sit beside the keydown router. Optional (tests/old callers omit).
    */
   terminalPaneRef?: Ref<XtermPaneHandle>;
+  /**
+   * F-a WP4 — the workspace's CC session id, forwarded to the Prompt panel's send path.
+   *
+   * ⚠️ **NOT AVAILABLE IN THIS COMPONENT BEFORE WP4 — it had to be threaded down.** The only
+   * other `sessionId` here is a TERMINAL TAB's (`sessionId={t.id}`), which addresses a login
+   * shell, not the CC session. Injecting a prompt into that would type the operator's text into
+   * a bash prompt. Optional so existing callers/tests that don't wire it still work.
+   *
+   * ⚠️ Passed straight through on every render rather than captured — a recycle replaces the id.
+   */
+  ccSessionId?: string | null;
 }
 
 export function RightPanelHost({
   workspaceId,
   projectPath,
   visible,
+  ccSessionId,
   collapsed = false,
   registerDirtyProbe,
   terminalPaneRef,
@@ -484,6 +498,28 @@ export function RightPanelHost({
   const [terminals, setTerminals] = useState(() =>
     initialTerminalList(workspaceId),
   );
+  // F-a WP4 — the Prompt panel's send handler, handed up via `onRegisterSend`.
+  //
+  // ⚠️ A REF, NOT STATE, and the registrar is `useCallback`-stable with no deps. The keydown
+  // listener below is registered once on `[visible]`; if this were state, every registration
+  // would re-run the whole listener effect, and if the registrar's identity changed the panel's
+  // registering effect would re-fire on every parent render.
+  const promptSendRef = useRef<((mode: SendMode) => void) | null>(null);
+  const registerPromptSend = useCallback(
+    (send: ((mode: SendMode) => void) | null) => {
+      promptSendRef.current = send;
+    },
+    [],
+  );
+
+  // ⚠️ Mirror the front-panel into a ref for the SAME reason: the send chords must fire ONLY
+  // when the Prompt panel is the front panel. Without this scoping, ⌘↵ anywhere in the right
+  // half would fire a send the operator cannot see — and `injectCommand` has no undo.
+  const panelRef = useRef(panel);
+  useEffect(() => {
+    panelRef.current = panel;
+  }, [panel]);
+
   // M6 WP11 — mirror the terminal list into a ref so the capture-phase keydown listener
   // (registered once on [visible]) can read the CURRENT list (for the scoped-⌘W can-close
   // decision) without re-registering on every list change. Same pattern as overlayOpenRef.
@@ -775,6 +811,29 @@ export function RightPanelHost({
         // Shared with the ＋ button (one impl). `addTerminal` is useCallback-stable, so
         // listing it in this listener's deps causes no re-registration churn.
         addTerminal();
+        return;
+      }
+      // F-a WP4 (task 4.2) — ⌘↵ / ⇧⌘↵ send the staged prompt.
+      //
+      // ⚠️ SCOPED TO THE PROMPT PANEL BEING FRONT. These chords are inert everywhere else, and
+      // that is a safety property rather than tidiness: `injectCommand` has no retry and no
+      // pre-send cancel window, so a send fired while the operator is looking at the editor
+      // would be an unrecoverable write into a live conversation. Recovery would be CC's Esc.
+      //
+      // ⚠️ Placed BEFORE the panel-select branch but it cannot shadow anything: Enter is not a
+      // letter or a digit, so it is disjoint from every other chord in this router by key alone.
+      //
+      // ⚠️ The DECISION lives in `sendModeForChord` (pure, tested); this branch only executes
+      // it. `null` means "not a send" and MUST fall through untouched — preventDefault-ing on a
+      // non-match would make Enter dead across the app.
+      const sendMode = sendModeForChord({
+        frontPanel: panelRef.current,
+        hasSendHandler: promptSendRef.current !== null,
+        event: e,
+      });
+      if (sendMode !== null) {
+        e.preventDefault();
+        promptSendRef.current?.(sendMode);
         return;
       }
       // WP12 — ⌘1..⌘9 activates the Nth open-file tab (n past the end → last tab).
@@ -1203,6 +1262,8 @@ export function RightPanelHost({
               visible={visible}
               panelFront={panel === "prompt"}
               onDraftPresenceChange={setHasDraft}
+              ccSessionId={ccSessionId}
+              onRegisterSend={registerPromptSend}
             />
           </Suspense>
         </div>
