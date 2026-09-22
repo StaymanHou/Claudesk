@@ -1,7 +1,17 @@
 <!-- Part of the Claudesk architecture set. Index + load-bearing constraints: ../arch.md -->
 # Right-panel surfaces
 
-The per-workspace right half: **Editor · Diff · Terminal · Docs (gated)**.
+The per-workspace right half: **Docs (gated) · Prompt · Editor · Diff · Terminal**.
+
+> ⚠️ **FIVE panels, and the order is not incidental** (updated at the F-a close, 2026-09-22).
+> F-a added a **Prompt** panel — a Claudesk-owned prose buffer that composes a message and sends
+> it to Claude Code. ⚠️ **It is UNGATED**: unlike Docs it depends on no `~/.claude/` substrate and
+> works on a bare install, so it is live with `workflow_features_enabled` off.
+> ⚠️ **The tab ORDER is a recorded design decision, not a default** — surfaces are grouped by the
+> question the user is asking (`design-priors.md` → `[[group-surfaces-by-the-question-they-answer]]`):
+> Docs (*where is this project?*) and Prompt (*what am I asking for?*) are orientation surfaces and
+> lead; Editor/Diff/Terminal (*how do I change it?*) follow. Re-ordering by feature similarity or
+> frequency would reverse a ratified operator decision.
 
 ## Editor, Diff & Terminal (as-built)
 
@@ -13,7 +23,7 @@ The per-workspace right half: **Editor · Diff · Terminal · Docs (gated)**.
 
 The Milestone 1 "right-half placeholder" inside each workspace becomes a **`RightPanelHost`** — a per-workspace React component that owns the right half and swaps between panels: **Editor** (CodeMirror 6, with a multi-file tab strip + split panes + a left file-tree rail), **Diff** (backend `git2` hunks rendered as styled +/- lines — NOT `@codemirror/merge`, as-built WP4), and **Terminal** — *N* login-shell `PtyCcSession`s per workspace via `term_spawn` (M6 WP11 made it multiple; reuses the WP7/`CcSession` seam). One host instance per workspace; each workspace keeps its own panel state (which panel is active, open files, scroll), mirroring the "all workspaces stay mounted" rule from Milestone 1.
 
-> **⚠️ Updated at the M11 close (2026-08-03): the panel set is FOUR, and it is no longer a static list.** Milestone 11 added a **Docs** panel (read-only `workflow-system/` markdown viewer), and because that surface is gated behind M10.9's `workflow_features_enabled`, the registry became **gate-derived**: `availablePanels(enabled)` / `defaultPanel(enabled)` / `selectPanel(current, target, enabled)` / `reconcilePanel(current, enabled)` in `panelHost.ts`, with the static `AVAILABLE_PANELS` retained as the literal **OFF-state** value the OFF-invariant guard checks against. With the gate **off** the three-panel description above is exact and Editor is still first/default; with it **on**, Docs is prepended and becomes the default. See "The Docs panel" below.
+> **⚠️ Updated at the M11 close (2026-08-03): the panel set grew past three, and it is no longer a static list.** *(Superseded in count at the F-a close 2026-09-22 — it is now FIVE; see the header note. The gate-derivation mechanism this paragraph describes is unchanged.)* Milestone 11 added a **Docs** panel (read-only `workflow-system/` markdown viewer), and because that surface is gated behind M10.9's `workflow_features_enabled`, the registry became **gate-derived**: `availablePanels(enabled)` / `defaultPanel(enabled)` / `selectPanel(current, target, enabled)` / `reconcilePanel(current, enabled)` in `panelHost.ts`, with the static `AVAILABLE_PANELS` retained as the literal **OFF-state** value the OFF-invariant guard checks against. With the gate **off** the three-panel description above is exact and Editor is still first/default; with it **on**, Docs is prepended and becomes the default. See "The Docs panel" below.
 
 | Component | Layer | Responsibility |
 |-----------|-------|---------------|

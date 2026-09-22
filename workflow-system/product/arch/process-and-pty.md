@@ -56,8 +56,15 @@ multi-byte glyphs (emoji, accented characters, arrows) reached CC as `�`.
 
 ## ⚠️ Slash-command injection — `slash_command_bytes`
 
-**All programmatic slash-command injection goes through `slash_command_bytes`** (`cc_session/mod.rs`):
+**All programmatic SLASH-COMMAND injection goes through `slash_command_bytes`** (`cc_session/mod.rs`):
 it trims trailing CR/LF and appends **exactly one `\r`**.
+
+> ⚠️ **"SLASH-COMMAND" IS NOW LOAD-BEARING IN THAT SENTENCE** (F-a, 2026-09-22). It is no longer
+> true that *all* programmatic injection follows this rule: F-a's **Prompt panel** sends operator
+> PROSE, which is a different byte contract and deliberately does not obey it. See
+> "Staged prose — the second payload shape" below. A reader who applies the one-`\r` rule to
+> multi-line prose will fire it as N truncated prompts, which is the exact defect the second
+> builder exists to prevent.
 
 ⚠️ **CR (0x0d), not `\n`.** Raw mode disables CR→NL translation, so an input line must end in `\r`; a
 bare `\n` only triggers CC's autocomplete typeahead instead of executing the command. This applies to
@@ -70,6 +77,35 @@ a `#[tauri::command]`, and its one production caller is the shutdown `/exit`. A 
 `autoResumeFire.test.ts`. ⚠️ **Two implementations of one rule is intended — keep them in step, do not
 "unify" them.** (Corrected 2026-08-14: an earlier revision called `slash_command_bytes` "the
 PTY-injection primitive", which would send a button implementer to a function no button can call.)
+
+### Staged prose — the second payload shape (F-a, 2026-09-22)
+
+⚠️ **There are TWO payload builders, and that is intended.** `slashCommandPayload` (one-line slash
+command, trailing `\r`) and **`stagedPayload`** (`prompt/…/stagedPayload.ts`) for the Prompt panel's
+multi-line operator prose. `slashCommandPayload` was **NOT modified** — M12 auto-resume, M13's skill
+row, recycle and M15's supervisor stay byte-identical.
+
+**The staged envelope is BRACKETED PASTE, and it was measured rather than assumed:** `ESC[200~` +
+body (interior newlines as `\r`, matching xterm's own paste transform) + `ESC[201~`. A live PTY
+probe showed `claude` emits `ESC[?2004h` at startup and **never** `ESC[?2004l`, so bracketed paste is
+on for the session's life. ⚠️ **Inside the envelope a `\r` inserts a literal newline instead of
+submitting** — which is why interior newlines are PRESERVED, never normalized.
+
+⚠️ **The trailing `\r` is a SEPARATE byte OUTSIDE the envelope, and it is the ONLY difference between
+the two send modes:** `⌘↵` auto-submit appends it; `⇧⌘↵` stage-only does not, leaving the text in
+CC's prompt for the operator. Getting this wrong in the stage-only direction silently submits a
+half-finished dictation.
+
+⚠️ **STILL ONE FUNNEL.** Staged prose does NOT open a second path to `cc_input`: `injectCommand`
+took an optional `buildPayload` parameter (defaulting to `slashCommandPayload`) so the Prompt panel
+enters through the same function, with `label: "staging"` for attribution. ⚠️ **A caller that passes
+a builder owns its own byte contract** — the funnel no longer asserts one, so any new builder must
+be pinned byte-for-byte by its own test the way `stagedPayload` is.
+
+⚠️ **The send's success is UNVERIFIABLE by Claudesk, by decision.** `injectCommand` has no retry and
+no readback, and parsing CC's output is forbidden (see the anti-pattern rule above). The terminal is
+the evidence — acceptable because the operator is looking at it next. **Do not build machinery to
+close this.**
 
 ⚠️ **Claudesk composing input on its own initiative is a DISTINCT ACT from relaying the user.** The
 "byte-injection is legitimate because Claudesk *is* the terminal" argument is about **relaying

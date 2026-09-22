@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-09-18  # M14 WP4 shipped — the two-tier setup docs land, completing the M14 remainder: ALL 6 WPs are now [x].
+updated: 2026-09-22
 ---
 
 # Roadmap
@@ -632,7 +632,27 @@ that are theirs and expensive to reverse (F-a: persistence scope, draft lifecycl
 F-b: profile-vs-project modelling, hook-registration ownership, the self-hosting property) *before*
 a spec exists to anchor on. Running it after a plan is written inverts its purpose.
 
-### F-a: Staging area for prompt input *(`SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT`, medium)*
+### F-a: Staging area for prompt input ✅ **SHIPPED 2026-09-22** *(`SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT`, medium)*
+
+> **✅ CYCLE CLOSED 2026-09-22 — all 4 WPs shipped.** WP1 probe (`58aab90`, ASSUMED-PASS), WP2
+> store/ring/payload (`c26a9bd`), WP3 the prompt surface (`ec7490c`), WP4 send and stage
+> (`5af55f6`). WBS archived at `archive/group-f-a-prompt-staging-area/wbs.md`.
+>
+> ⚠️ **THE EXIT CRITERION IS NOT FULLY MET, AND THAT IS RECORDED RATHER THAN PAPERED OVER.** All
+> three named failure modes are addressed in mechanism — *messed up midway* (editable CM6 buffer
+> with undo/redo), *deleted by accident* (undo + a non-destructive sent-draft ring), *unintended
+> shutdown* (per-project `localStorage`, debounce-saved, reseeded on open). But **the motivating
+> case — voice dictation — is ASSUMED WORKING, NOT VERIFIED**: macOS text-input services do not
+> engage under `pnpm tauri:dev`, so it cannot be exercised in a dev build, and WP1's probe closed
+> with its question unanswered (task 1.4 never ran, deliberately left unticked). The backlog entry
+> is therefore **rewritten to that one open question, not deleted**. Reopening is narrow and
+> operator-owned: only on a dictation issue reported **after a release** containing F-a.
+>
+> **Two operator rulings landed mid-cycle and both improved the result:** the rename
+> Staging → Prompt with a move to 2nd position (WP3), which also yielded the ratified design prior
+> `[[group-surfaces-by-the-question-they-answer]]`; and the reversal of append-on-recover to
+> **confirm-then-overwrite** (WP4), because a merged document is a cost paid on every recover while
+> a confirm is paid only when something would actually be lost.
 
 An **optional** Claudesk-owned buffer to compose a prompt in before sending it to CC — not a
 replacement for typing into the terminal. ⚠️ **The motivating case is VOICE DICTATION**: long,
