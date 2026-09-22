@@ -1,6 +1,6 @@
 ---
 workflow: feature
-state: plan (complete)
+state: ship (complete)
 created: 2026-09-22
 drive_mode: autopilot
 wbs: workflow-system/product/wbs.md → WP4
@@ -9,7 +9,7 @@ wbs: workflow-system/product/wbs.md → WP4
 # Feature: F-a WP4 — Send and stage (injection integration)
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** ship (complete) — commit `5af55f6`
 **Created:** 2026-09-22
 
 ## Problem Statement
@@ -413,8 +413,12 @@ assert the resulting bytes — not merely that `injectCommand` was called.
     guards assert the confirm arm reaches the dialog rather than the buffer.
 
 ## Current Node
-- **Path:** Feature > ship
-- **Active scope:** ⭐ **ALL THREE PHASES COMPLETE** — WP4 is ready to ship. Prior scope,
+- **Path:** Feature > review-quality
+- **Active scope:** ⭐ **SHIPPED as `5af55f6`** (25 files). All three phases complete.
+  ⚠️ **NOT PUSHED** — 13 commits now sit unpushed, and 5 of them are INHERITED from before this
+  session, so a push publishes those too. The operator has not authorized one.
+  ⚠️ **review-quality's diff window WILL break here** — anchor it by hand to `5af55f6` and
+  confirm non-empty before spawning (see the carried warnings). Prior scope,
   retained: Phase 3 verify-codify. impl `[x]`, verify-auto `[x]` (RE-RUN post-back-loop,
   EXIT=0, 218 files / 2952 tests), verify-self `[x]`, verify-human `[x]` — **both leaves resolved
   after the F12 back-loop: the operator's confirm-then-overwrite ruling is implemented and was
@@ -502,6 +506,67 @@ structurally cannot see it.
 legitimately occurs on the `replace` arm and in the dialog handler, so a `toContain` would pass on
 the mutant, per `[[raw-guard-substring-must-be-unique-to-its-site]]`). Re-running the mutant now
 kills both.
+
+## Code-Quality Review — fa-wp4-send-and-stage (2026-09-22)
+
+**0 CRITICAL · 3 MAJOR · 4 MINOR.** Diff window HAND-ANCHORED to `9264a6f..5af55f6` (25 files,
+2981 insertions) — ⚠️ both documented BASE_SHA derivations failed: `main..HEAD` is empty (work is
+on main) and the WIP-file fallback resolved to the SHIP COMMIT ITSELF. It happened to be correct
+only because WP4 landed as one commit; across two it would have reviewed half the feature.
+
+### Reviewer's verdict on the three MAJORs — ALL CONFIRMED BY MUTATION, ALL FIXED
+
+- ⭐ **MAJOR-1 — `CALL_SYMBOLS`'s `string | string[]` widening was DEAD CAPABILITY.** Zero
+  array-valued entries; both send chords resolve to the one `sendModeForChord` symbol, so the gap
+  my own Discoveries entry claimed was "fixed IN PLACE" was **still open**. ⚠️ **Mutation-confirmed
+  by me before accepting:** deleting `sendModeForChord`'s `isStageOnlyChord` branch — which kills
+  ⇧⌘↵ outright — left all 17 registry assertions GREEN. **Fixed:** widening removed (it described
+  a coverage it never had), limit documented at the map, and a new
+  `both send predicates are reachable from the router` block added that derives its expectation
+  FROM THE REGISTRY (a third send chord makes it fail until wired). The mutant now dies to all 3.
+- **MAJOR-2 — the count justification did not add up.** Header said "17" while enumerating 16
+  items and asserting 18; growth notes were out of chronological order; and my 16→17 paragraph
+  spliced MID-SENTENCE into the pre-existing chordRegistry note, so "It is in scope for this arm
+  on purpose" attached to the wrong module. ⚠️ The whole value of that guard is making the next
+  maintainer reason deliberately — I made it harder than no comment. **Fixed:** rewritten as an
+  oldest-first growth log with an enumeration that sums to 18.
+- **MAJOR-3 — `promptSendWiring.test.tsx` re-implements the sequence rather than driving it.**
+  The reviewer is right that pairing it with source-order guards does NOT close the loop, and
+  that two arms (`blank send`, `no live CC session`) asserted pure test-local logic
+  (`if (!sessionId) return false`) — nothing about shipped code. **Partially fixed:** both dead
+  arms DELETED (13 → 11 tests) rather than left reading as coverage, and the disclosure sharpened
+  to say plainly what the file does and does not prove. ⚠️ The component-level version is
+  reachable via `onRegisterSend` and is **backlogged, not silently accepted**. Those two behaviours
+  remain covered where it counts: `planSend`'s blank rule in `sendStagedDraft.test.ts`, and the
+  no-session case by the disabled-button render test.
+
+### MINORs
+
+- **Duplicated doc comment on `applyRecover`** (two stacked blocks, leftover from the
+  append→overwrite reversal) — **FIXED**, collapsed to one.
+- **Comment DUPLICATION across six files** (the M11-WP4 four-call-sites rationale restated 4×, the
+  live-caller provenance 6×, "no retry and no pre-send cancel window" 4×) — ⚠️ **NOT fixed here,
+  BACKLOGGED.** The finding is correct and it is the expensive half of the budget rule, but the
+  canonical-home-plus-pointers collapse spans files this WP did not author. Doing it inside a
+  ship-commit cleanup would widen the diff past what was reviewed.
+- **`planRecover` is 2 lines under 58 lines of header** — acknowledged, NOT changed. The reviewer
+  itself calls the decomposition "otherwise defensible"; the module earns its place as the seam
+  the caller-order guards attach to, which is what caught the real defect.
+- **React key mixed index and content** — **FIXED**: keyed on content with the index as a
+  trailing tiebreak, so a prepend no longer re-keys every row.
+
+### Assessment (reviewer, verbatim summary)
+
+*"Careful, well-built work that advances the codebase rather than accruing debt… The three MAJOR
+findings share one root: guards whose STATED coverage exceeds their ACTUAL coverage… None is a
+shipped defect, but each weakens a tripwire that future work will lean on."* ⚠️ That root-cause
+reading is the most useful thing in this review and is worth carrying forward: **every one of the
+three was a guard I wrote, believed, and documented as stronger than it was.**
+
+### If you disagree
+
+Dismiss any finding by marking its line `[DISMISSED]` in this section before `feature-finalize`
+archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

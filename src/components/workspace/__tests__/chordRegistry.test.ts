@@ -194,7 +194,7 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
     // number|null, RightPanel|null, and panelForChord takes a second argument — which is
     // why the registry stores a module path rather than pretending to a common function
     // type. The call-shape assertion works regardless of return type.
-    const CALL_SYMBOLS: Record<string, string | string[]> = {
+    const CALL_SYMBOLS: Record<string, string> = {
       workspaceSwitchChord: "workspaceSwitchIndex",
       newWorkspaceChord: "newWorkspaceChord",
       dashboardChord: "isDashboardChord",
@@ -208,15 +208,19 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
       newTerminalChord: "newTerminalChord",
       terminalFontZoom: "terminalZoomForChord",
       paletteCommands: "isPaletteChord",
-      // ⚠️ THE MATCHER IS THE ROUTER, NOT THE PREDICATES — and that is a real distinction, not
-      // bookkeeping. At verify-codify the two send predicates were wrapped in
-      // `promptSendRouting.sendModeForChord` so the FOUR-input routing decision (panel front ·
-      // handler registered · which chord) could be tested; the host now calls the router and no
-      // longer imports the predicates. This guard caught that indirection in all three
-      // directions, which is exactly its job: the registry must name the module a registration
-      // host actually calls, or the entry describes a wiring that no longer exists.
-      // ⚠️ The predicates themselves stay covered by `promptSendChord.test.ts` and, through the
-      // router, by `promptSendRouting.test.ts`.
+      // ⚠️ THE MATCHER IS THE ROUTER, NOT THE PREDICATES. At verify-codify the two send
+      // predicates were wrapped in `promptSendRouting.sendModeForChord` so the FOUR-input
+      // routing decision could be tested; the host calls the router and no longer imports the
+      // predicates. This guard caught that indirection in all three directions.
+      //
+      // ⚠️ **THIS MAP CANNOT DISTINGUISH THE TWO SEND CHORDS, AND THAT LIMIT IS WHY THE
+      // `both send predicates are reachable` TEST BELOW EXISTS.** `prompt-send-submit` and
+      // `prompt-send-stage` both resolve to this ONE symbol, so deleting the `isStageOnlyChord`
+      // branch from `sendModeForChord` would leave every assertion in this describe-block green
+      // — MUTATION-CONFIRMED at F-a WP4 code review. An earlier `string | string[]` widening
+      // was written to close this and did NOT: it shipped with zero array-valued entries, so it
+      // was dead capability describing a gap it never covered. Removed; the real check is the
+      // predicate-reachability test below.
       promptSendRouting: "sendModeForChord",
     };
 
@@ -226,19 +230,61 @@ describe("chord registry — reachability (the load-bearing guard)", () => {
         .split("/")
         .pop()!
         .replace(/\.tsx?$/, "");
-      const mapped = CALL_SYMBOLS[moduleName];
+      const symbol = CALL_SYMBOLS[moduleName];
       expect(
-        mapped,
+        symbol,
         `${entry.id}: no call symbol mapped for ${moduleName}`,
       ).toBeTruthy();
-      // ⚠️ EVERY mapped symbol must be called, not just the first. See the map's note.
-      for (const symbol of Array.isArray(mapped) ? mapped : [mapped]) {
-        expect(
-          hosts.includes(`${symbol}(`),
-          `${entry.id}: ${symbol} is never CALLED in a registration host (imported-but-dead)`,
-        ).toBe(true);
-      }
+      expect(
+        hosts.includes(`${symbol}(`),
+        `${entry.id}: ${symbol} is never CALLED in a registration host (imported-but-dead)`,
+      ).toBe(true);
     }
+  });
+});
+
+describe("both send predicates are reachable from the router", () => {
+  // ⚠️ THIS TEST EXISTS BECAUSE A MUTANT SURVIVED EVERY OTHER GUARD IN THIS FILE.
+  // Deleting `sendModeForChord`'s `isStageOnlyChord` branch — which kills ⇧⌘↵ stage-only
+  // outright — left all 17 assertions green (mutation-confirmed, F-a WP4 code review). The
+  // reachability guards walk registry → matcher MODULE, and both send entries name the same
+  // module, so a chord can lose its wiring while the module it points at still exists and is
+  // still called.
+  //
+  // ⚠️ The registry is the SOURCE of the expectation, not a hardcoded list: adding a third send
+  // chord makes this fail until its predicate is wired, which a literal `["⌘↵","⇧⌘↵"]` would not.
+  const routerSource = stripComments(
+    readFileSync(
+      resolve(SRC, "components/workspace/prompt/promptSendRouting.ts"),
+      "utf8",
+    ),
+  );
+
+  it("the router calls ONE predicate per registry entry naming it", () => {
+    const entries = CHORD_REGISTRY.filter(
+      (e) => e.matcher === "components/workspace/prompt/promptSendRouting.ts",
+    );
+    expect(entries.length, "no entry names the send router").toBeGreaterThan(0);
+    const calls = routerSource.match(/\bis[A-Z][A-Za-z]*Chord\(/g) ?? [];
+    expect(
+      new Set(calls).size,
+      `${entries.length} registry entries name the send router, but it calls ` +
+        `${new Set(calls).size} distinct predicates — each chord needs its own`,
+    ).toBe(entries.length);
+  });
+
+  it("names BOTH send predicates in call position", () => {
+    // Stated explicitly as well as by count: the count test above would also pass if someone
+    // called `isAutoSubmitChord` twice.
+    expect(routerSource).toContain("isAutoSubmitChord(");
+    expect(routerSource).toContain("isStageOnlyChord(");
+  });
+
+  it("returns a DISTINCT mode per predicate", () => {
+    // ⚠️ The completing half: both predicates could be called and map to the same mode, which
+    // would make ⇧⌘↵ submit — the exact failure F-a exists to prevent.
+    expect(routerSource).toContain('"auto-submit"');
+    expect(routerSource).toContain('"stage-only"');
   });
 });
 

@@ -1091,27 +1091,32 @@ describe("the guard is not vacuous", () => {
       ).toContain(mustKeep);
     }
 
-    // ...and the set is a plausible size (17: 12 + panelHost + paletteCommands +
-    // terminalFontZoom + chordRegistry + promptSendChord). ⚠️ 15 → 16 at M14 WP3
-    // (2026-09-15), a deliberate GROWTH: chordRegistry.ts promoted the chord-ownership map
-    // from a comment block in paletteCommands.ts to typed data.
+    // ...and the set is a plausible size. ⚠️ **18 = 12 (the basename-selector originals)
+    // + panelHost + paletteCommands + terminalFontZoom + chordRegistry + promptSendChord
+    // + promptSendRouting.** Count the addends before changing the number; an enumeration that
+    // does not sum to the assertion is worse than no comment, because the next maintainer
+    // reasons from it. (It did not sum for one commit — caught at F-a WP4 code review.)
     //
-    // ⚠️ 17 → 18 at F-a WP4 verify-codify (2026-09-22), a deliberate GROWTH:
-    // `prompt/promptSendRouting.ts` — the send chords' ROUTING decision, extracted out of
-    // `RightPanelHost`'s inline keydown branch so its four-input scoping property (panel front ·
-    // handler registered · which chord) could be driven by a real test. Ungated for the same
-    // reason as the module below. Substantive arms re-confirmed against it BEFORE this count was
-    // touched; only the size assertion needed the edit. Triage recorded in the WIP file.
+    // Growth log, OLDEST FIRST:
     //
-    // ⚠️ 16 → 17 at F-a WP4 (2026-09-22), also a deliberate GROWTH: `prompt/promptSendChord.ts`
-    // adds the ⌘↵ / ⇧⌘↵ send predicates. It is correctly IN SCOPE and correctly UNGATED — the
-    // Prompt panel depends on no `~/.claude/` substrate and functions on a bare install, so it
-    // is a live affordance with the workflow gate off (the same reasoning as ⌘⇧O
-    // `panel-select-prompt`). The substantive arms of this guard were confirmed to pass against
-    // the new module BEFORE this count was touched; only the size assertion needed the edit. It is in scope for this arm on purpose — it names
-    // the workflow gate (`requiresWorkflowGate`), so the ungated-workflow-chord arm above
-    // must see it, and `visibleChords(enabled)` branches on the gate value so that arm
-    // passes on evidence rather than on an exemption.
+    //   15 → 16  M14 WP3 (2026-09-15) — `chordRegistry.ts` promoted the chord-ownership map
+    //            from a comment block in `paletteCommands.ts` to typed data. ⚠️ It is in scope
+    //            for this arm on purpose: it names the workflow gate (`requiresWorkflowGate`),
+    //            so the ungated-workflow-chord arm above must see it, and `visibleChords(enabled)`
+    //            branches on the gate value so that arm passes on evidence, not an exemption.
+    //
+    //   16 → 17  F-a WP4 (2026-09-22) — `prompt/promptSendChord.ts`, the ⌘↵ / ⇧⌘↵ predicates.
+    //            Correctly IN SCOPE and correctly UNGATED: the Prompt panel depends on no
+    //            `~/.claude/` substrate and works on a bare install, so it is a live affordance
+    //            with the workflow gate off (same reasoning as ⌘⇧O `panel-select-prompt`).
+    //
+    //   17 → 18  F-a WP4 verify-codify (2026-09-22) — `prompt/promptSendRouting.ts`, the send
+    //            chords' ROUTING decision, extracted from `RightPanelHost`'s inline keydown
+    //            branch so its four-input scoping property could be driven by a real test.
+    //            Ungated for the same reason.
+    //
+    // ⚠️ For BOTH WP4 bumps the substantive arms of this guard were re-confirmed against the new
+    // module BEFORE the count was touched; only the size assertion needed the edit.
     //
     // ⚠️ The floor was `>= 13` while the test was named "does not shrink" — it tolerated
     // losing 2 of 15 modules (13%), i.e. precisely the shrinkage it claimed to forbid

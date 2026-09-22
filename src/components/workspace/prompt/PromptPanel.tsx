@@ -313,19 +313,12 @@ export function PromptPanel({
   );
 
   /**
-   * F-a WP4 Phase 3 — put a sent draft back in the buffer.
+   * Put a recovered entry in the buffer. ⚠️ OVERWRITES unconditionally — whether a confirmation
+   * was owed first is `planRecover`'s decision, not this function's.
    *
-   * ⚠️ OVERWRITES — the decision of whether a confirmation was owed FIRST lives in
-   * `planRecover`, not here, so "does this destroy unsent work?" is testable without a render.
-   * See that module for the operator ruling (2026-09-22) that replaced an earlier append.
-   *
-   * ⚠️ Goes through `runPlan`/`planEdit` like any other edit rather than calling `saveDraft`
-   * directly. That is the funnel rule this component has carried since WP3: every write decision
-   * belongs to `promptDraftSync`, and a second `saveDraft` call site here is precisely the shape
-   * that shipped a CRITICAL twice in M11 WP4.
+   * Writes through `runPlan`/`planEdit`, never `saveDraft` directly — see this file's header for
+   * the funnel rule.
    */
-  /** Apply a recovered entry to the buffer, unconditionally. ⚠️ OVERWRITES — callers decide
-   *  whether a confirmation was owed first. */
   const applyRecover = useCallback(
     (text: string) => {
       setDoc(text);
@@ -429,7 +422,12 @@ export function PromptPanel({
               data-testid="prompt-recover-list"
             >
               {history.map((entry, i) => (
-                <li key={`${i}-${entry.slice(0, 32)}`}>
+                /* ⚠️ Keyed on CONTENT, not index: the ring is PREPENDED to, so an
+                   index-bearing key re-keys every row on each send. Duplicate entries are
+                   possible (consecutive duplicates are deliberately not collapsed — see
+                   draftHistory.ts), so the index is the tiebreak, appended AFTER the content
+                   so it does not dominate. */
+                <li key={`${entry.slice(0, 64)}::${i}`}>
                   <button
                     type="button"
                     className="prompt-recover-item"

@@ -1,5 +1,24 @@
 # Backlog
 
+## Code-quality findings — fa-wp4-send-and-stage (2026-09-22)
+
+- **Pointer:** **1 MAJOR (partially fixed) + 1 MINOR** from `feature-review-quality` against ship
+  baseline `9264a6f..5af55f6`. ⚠️ **The review's other 2 MAJOR and 3 MINOR were FIXED AT REVIEW
+  TIME, not backlogged** — including MAJOR-1, a guard that was mutation-confirmed to be checking
+  nothing (deleting `sendModeForChord`'s `isStageOnlyChord` branch, which kills ⇧⌘↵ outright, left
+  all 17 chord-registry assertions green). Details:
+  [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
+  `# fa-wp4-send-and-stage — 2026-09-22`.
+- **Priority:** medium (the wiring-test item) / low (the comment-duplication item)
+- **Status:** pending
+- **Pickup shape:** the MAJOR wants a jsdom render capturing the panel's real send closure via
+  `onRegisterSend`; the MINOR is a canonical-home-plus-pointers comment collapse spanning files
+  WP4 did not author. ⚠️ Neither is a shipped defect — both are tripwires weaker than their prose
+  claims, which is the review's own root-cause reading.
+- **Reviewer's root cause, worth carrying:** *"guards whose STATED coverage exceeds their ACTUAL
+  coverage"* — all three MAJORs were guards the agent wrote, believed, and documented as stronger
+  than they were.
+
 ## Code-quality findings — m15-wp4-context-pressure-recycle (2026-09-14)
 - **Pointer:** **4 findings remain — 0 CRITICAL, 0 MAJOR, 4 MINOR** *(was 7 — all **3 MAJORs** were RESOLVED on 2026-09-14 by the pre-WP5 observability paydown and deleted per delete-on-resolve; see CHANGELOG)*. ⚠️ **The three MAJORs were one defect — *the supervisor is not observable to the operator it acts for* — and were paid down together, before dogfooding, precisely because they would have made `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`'s five deferred behavioral checks undiagnosable:** `fireRecycle` now reports whether it started and the announcement is gated on it (with a distinct DECLINED log for the turn the ledger consumed for nothing); a successful fire is announced; and `wip_read` matches `Ok(None)` and `Err(e)` as separate arms with the error logged. ⚠️ **One mutation-testing finding worth keeping:** the behavioral Rust test for the last of these **cannot** discriminate — both arms return the same value by design and the only difference is an `eprintln!` that is not capturable in-process — so it is pinned by a source guard instead, and BOTH were mutation-proved individually. The 4 remaining MINOR: the `tokens` cast resting on a prose contract; a `useCallback` that memoizes nothing; `runtimes.md`'s `Last:`/`History:` disagreement; and an over-weight `lastIndex` comment. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp4-context-pressure-recycle — 2026-09-14`.
 - **Priority:** medium (the 3 MAJORs) / low (the 4 MINORs)

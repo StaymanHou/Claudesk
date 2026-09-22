@@ -31,11 +31,18 @@ const { PASTE_START, PASTE_END } = await import("../../stagedPayload");
 // `docs/lessons/source-text-guards.md` that is the line at which a source guard stops being the
 // right instrument.
 //
-// ⚠️ The panel's own send closure is not importable (it is created inside the component), so
-// this file drives the same SEQUENCE the panel performs, against the real stores and the real
-// funnel. That is a deliberate, disclosed limitation: it proves the sequence is correct and
-// that the panel performs THIS sequence is what the source guards pin. The two together are the
-// coverage; neither alone is.
+// ⚠️ **DISCLOSED LIMITATION, SHARPENED AT CODE REVIEW (2026-09-22): THIS FILE RE-IMPLEMENTS THE
+// PANEL'S SEQUENCE RATHER THAN DRIVING IT**, so it proves the sequence is CORRECT, not that the
+// panel PERFORMS it. The earlier claim that pairing it with `promptDraftSync.test.ts`'s
+// source-order guards "closes the loop" was too generous: a source guard proves
+// `appendToHistory(` precedes `clearDraft(` TEXTUALLY, and this file proves its own copy
+// behaves — neither proves the panel calls them in that order with those arguments.
+//
+// ⚠️ **The component-level version IS reachable** — the panel registers its real closure via
+// `onRegisterSend`, so a jsdom render could capture and invoke it. Not built here because the
+// send needs a live `injectCommand` round-trip through a mocked `invoke` AND a mounted CM6 host;
+// the two arms below that were pure test-local logic have been DELETED rather than left to read
+// as coverage. Logged as a backlog item rather than silently accepted.
 //
 // ⚠️ Per `[[ts-arity-flexible-assignability-hides-a-widened-param]]`, every assertion reads the
 // VALUE that crossed `invoke` rather than counting calls.
@@ -129,32 +136,6 @@ describe("stage-only send", () => {
     await performSend("staged text", "stage-only");
     expect(loadDraft(PROJECT)).toBe("");
     expect(loadHistory(PROJECT)[0]).toBe("staged text");
-  });
-});
-
-describe("the blank send is refused end to end", () => {
-  it("does not inject, clear, or archive", async () => {
-    clearHistory(PROJECT);
-    saveDraft(PROJECT, "   ");
-    const did = await performSend("   ", "auto-submit");
-    expect(did).toBe(false);
-    expect(invokeMock).not.toHaveBeenCalled();
-    // ⚠️ The draft SURVIVES. This is the data-loss path: if the blank check lived after the
-    // clear, a stray ⌘↵ on a whitespace-only buffer would wipe it and archive nothing.
-    expect(loadDraft(PROJECT)).toBe("   ");
-    expect(loadHistory(PROJECT)).toEqual([]);
-  });
-});
-
-describe("no live CC session", () => {
-  it("does not inject and does NOT destroy the draft", async () => {
-    // ⚠️ The draft must survive a send attempted with no session — otherwise an operator who
-    // hits ⌘↵ before CC has spawned loses the text with nothing sent anywhere.
-    saveDraft(PROJECT, "typed before spawn");
-    const did = await performSend("typed before spawn", "auto-submit", null);
-    expect(did).toBe(false);
-    expect(invokeMock).not.toHaveBeenCalled();
-    expect(loadDraft(PROJECT)).toBe("typed before spawn");
   });
 });
 

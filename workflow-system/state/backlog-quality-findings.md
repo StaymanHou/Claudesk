@@ -1089,3 +1089,49 @@ scheduling items rather than polish.*
 - **Suggested fix:** Move to `src/state/__tests__/` and update the relative imports. ⚠️ Low value on its own; ride it on the next touch of this file rather than a standalone move commit.
 - **Priority:** low
 - **Status:** pending
+
+# fa-wp4-send-and-stage — 2026-09-22
+
+## SURFACE-2026-09-22-QUALITY-WP4-WIRING-TEST-REIMPLEMENTS-SEQUENCE
+
+- **Priority:** medium
+- **Source:** feature-review-quality (F-a WP4), MAJOR-3 — partially fixed at review time
+- **Status:** pending
+
+**The finding.** `promptSendWiring.test.tsx` RE-IMPLEMENTS the panel's send sequence (plan →
+guard → inject → append → clear) in a local `performSend` helper rather than driving the panel's
+real closure. It therefore proves the SEQUENCE is correct, not that the PANEL performs it.
+
+⚠️ **What was already done at review time:** the two arms asserting pure test-local logic
+(`blank send`, `no live CC session` — both hinging on `if (!sessionId) return false`) were
+DELETED (13 → 11 tests) rather than left reading as coverage, and the file's disclosure was
+sharpened to state plainly what it does and does not prove.
+
+**What remains.** The component-level version is reachable and was not built: the panel registers
+its real send closure via `onRegisterSend`, so a jsdom render could capture and invoke it. That
+needs a mounted CM6 host plus a live `injectCommand` round-trip through a mocked `invoke`.
+
+⚠️ **Residual risk is bounded, not zero.** The panel's call ORDER is pinned by source-order guards
+in `promptDraftSync.test.ts` (archive-before-clear, one `injectCommand` call site, the confirm-arm
+ordering), and those were mutation-proved. What is unpinned is that the panel passes the same
+ARGUMENTS the re-implementation uses.
+
+## SURFACE-2026-09-22-QUALITY-WP4-COMMENT-DUPLICATION-ACROSS-PROMPT-MODULES
+
+- **Priority:** low
+- **Source:** feature-review-quality (F-a WP4), MINOR
+- **Status:** pending
+
+**The finding.** Four rationales are restated across six files instead of stated once with
+pointers: the M11-WP4 "four call sites shipped a CRITICAL twice" reasoning (4 sites), the
+`planPanelChange` live-caller provenance (6 sites), "`injectCommand` has no retry and no pre-send
+cancel window" (4 sites), and the WP3→WP4 seam narrative (2 sites).
+
+⚠️ **Why it was NOT fixed inside the ship commit:** the canonical-home-plus-pointers collapse spans
+files WP4 did not author (`autoResumeFire.ts`, `promptDraftSync.ts`, `draftHistory.ts`), and
+widening a post-ship cleanup past the reviewed diff is its own risk.
+
+**Suggested action.** Pick ONE canonical home per rationale — `sendStagedDraft.ts`'s header for the
+funnel argument, `promptDraftSync.ts`'s for the live-caller one — and reduce the rest to pointers.
+⚠️ Per `docs/lessons/source-text-guards.md`, "how did we get here" narratives belong in the
+WIP/archive, not in module headers.
