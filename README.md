@@ -294,7 +294,7 @@ with zero configuration.
 | **Project picker** | Every project one click from a live session. Per-project `--model` override on the row. |
 | **Workspaces + filmstrip** | N projects open at once; click a tile to promote it to center stage. Collapsible to status-only tiles. |
 | **PTY terminal** | The real interactive Claude Code TUI, not a re-implementation. Yolo mode by default. |
-| **Editor · Diff · Terminal** | The right half of each workspace — a CodeMirror editor, an inline git-diff viewer, and a second terminal. File tree and fuzzy finder (`⌘P`) included. |
+| **Editor · Diff · Prompt · Terminal** | The right half of each workspace — a CodeMirror editor, an inline git-diff viewer, a prompt area for composing a message before sending it to Claude Code, and a second terminal. File tree and fuzzy finder (`⌘P`) included. |
 | **Status surfaces** | idle / running / awaiting-input / working-in-background, driven by Claude Code's own hook channel — on the filmstrip, in a menu-bar item, and in an always-on-top picture-in-picture panel. |
 | **Time analytics** | A local-only dashboard (`⌘⇧A`) of where the hours actually went. |
 | **Sublime launchers** | One-click pop to Sublime Text / Sublime Merge / Finder when you want the heavier tool. |

@@ -217,6 +217,17 @@ export const CHORD_REGISTRY: readonly ChordEntry[] = [
     requiresWorkflowGate: false,
   },
   {
+    id: "panel-select-prompt",
+    label: "⌘⇧O",
+    host: "workspace",
+    outcomes: [{ description: "Show the Prompt panel" }],
+    matcher: "components/workspace/panelHost.ts",
+    claudeskOwned: true,
+    // F-a WP3 — ungated. Unlike ⌘⇧K/Docs this chord functions on a bare install, so it is
+    // a live affordance with the workflow gate off and belongs in Settings' rendered list.
+    requiresWorkflowGate: false,
+  },
+  {
     id: "panel-select-terminal",
     label: "⌘⇧T",
     host: "workspace",

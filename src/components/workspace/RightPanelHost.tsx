@@ -70,6 +70,13 @@ import { usePipMode, setPipModeOptimistic } from "../../state/usePipMode";
 const DocsPanel = lazy(() =>
   import("./docs/DocsPanel").then((m) => ({ default: m.DocsPanel })),
 );
+// F-a WP3 — lazy for the same reason as its CodeMirror-bearing siblings above: it lets
+// Rollup hoist all @codemirror/@uiw code into ONE shared async chunk that leaves `main`
+// (SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD). It has no synchronous ref contract from
+// here, so lazy is safe.
+const PromptPanel = lazy(() =>
+  import("./prompt/PromptPanel").then((m) => ({ default: m.PromptPanel })),
+);
 import { FileFinder } from "./finder/FileFinder";
 import { isFinderChord } from "./finder/finderChord";
 import { FileTree, type FileTreeHandle } from "./filetree/FileTree";
@@ -215,6 +222,9 @@ export function RightPanelHost({
   const pipMode = usePipMode();
 
   // WP6 — whether the Cmd+P fuzzy file-finder overlay is open.
+  // F-a WP3 P3.4 — whether this project has a non-empty unsent draft, reported by
+  // PromptPanel from inside its write funnel. Drives the Prompt tab indicator.
+  const [hasDraft, setHasDraft] = useState(false);
   const [finderOpen, setFinderOpen] = useState(false);
 
   // WP7 — the match to scroll-to + highlight in the editor after a search-result
@@ -966,6 +976,39 @@ export function RightPanelHost({
             </button>
           )}
 
+          {/* F-a WP3 — the PROMPT tab. ⚠️ UNGATED, deliberately: unlike the Docs tab
+                above there is no `workflowFeaturesEnabled &&` wrapper, because F-a is
+                lite-IDE core that works on a bare install.
+
+                ⚠️ SECOND, right after Docs (operator, 2026-09-22 verify-human) — it
+                shipped between Diff and Terminal and was moved here. Docs ("where is
+                this project?") and Prompt ("what am I asking for?") are both asked
+                before any editing question, so the two orientation surfaces lead and
+                the three editing surfaces follow. With the gate off the Docs block
+                above does not render and Prompt is simply first. ⚠️ This JSX order and
+                `AVAILABLE_PANELS` must agree — the array is what the guards iterate,
+                this is what the user sees; they are two places and neither implies the
+                other. */}
+          <button
+            type="button"
+            role="tab"
+            id={`paneltab-prompt-${workspaceId}`}
+            aria-selected={panel === "prompt"}
+            aria-controls={`panel-prompt-${workspaceId}`}
+            className={`panel-tab${panel === "prompt" ? " is-active" : ""}${
+              hasDraft ? " has-draft" : ""
+            }`}
+            data-testid="panel-tab-prompt"
+            // P3.4 — an ATTRIBUTE, not only a class, so the state is assertable without
+            // depending on a styling detail. Reflects STORED draft presence, so it is
+            // correct for a Prompt panel the operator is not currently looking at.
+            data-has-draft={hasDraft ? "true" : "false"}
+            onClick={() => setPanel((cur) => selectPanel(cur, "prompt"))}
+            title="Prompt (⌘⇧O)"
+          >
+            Prompt
+          </button>
+
           <button
             type="button"
             role="tab"
@@ -1125,6 +1168,32 @@ export function RightPanelHost({
               // "Open" always opens the live working-tree file (by design — see
               // DiffPanel onOpenInEditor doc). Same seam as the finder + tree.
               onOpenInEditor={openFile}
+            />
+          </Suspense>
+        </div>
+
+        {/* F-a WP3 — the PROMPT panel: a Claudesk-owned prose buffer for composing a
+              prompt before it reaches CC. UNCONDITIONALLY MOUNTED and display-toggled
+              like its Editor/Diff/Terminal siblings — NOT the Docs slot's conditional
+              mount, which is conditional only because Docs is gated. `selectPanel` can
+              return "prompt" for every user, so this slot must never be absent (the
+              SURFACE-2026-06-20-QUALITY-WP5-TERMINAL-SEAM-UNTESTED blank-slot guard).
+
+              Phase 1 ships the seam with placeholder content; the CM6 prose view lands
+              in Phase 2 and the draft wiring in Phase 3. */}
+        <div
+          className="right-panel-slot right-panel-slot--prompt"
+          id={`panel-prompt-${workspaceId}`}
+          role="tabpanel"
+          aria-labelledby={`paneltab-prompt-${workspaceId}`}
+          style={{ display: panel === "prompt" ? "flex" : "none" }}
+        >
+          <Suspense fallback={<div className="prompt-loading" />}>
+            <PromptPanel
+              projectPath={projectPath}
+              visible={visible}
+              panelFront={panel === "prompt"}
+              onDraftPresenceChange={setHasDraft}
             />
           </Suspense>
         </div>

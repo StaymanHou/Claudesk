@@ -5,13 +5,17 @@
 // the workspace's project path and SURFACES a rejection (console.error) rather
 // than dead-clicking — the WP6 picker lesson.
 //
-// ⚠️ BUTTON-ONLY, BY DECISION — and `⌘⇧O` IS FREE. These launchers are reached from the panel
-// tab row, not a keybinding. The launch went OS-global first (`tauri-plugin-global-shortcut` +
-// a macOS Accessibility flow, rejected at verify-human 2026-06-19 — see `src-tauri/src/sublime/`),
+// ⚠️ BUTTON-ONLY, BY DECISION. These launchers are reached from the panel tab row, not a
+// keybinding. The launch went OS-global first (`tauri-plugin-global-shortcut` + a macOS
+// Accessibility flow, rejected at verify-human 2026-06-19 — see `src-tauri/src/sublime/`),
 // was then rebuilt as an in-app `⌘⇧E`→`⌘⇧O` keydown hotkey, and at WP8's 2026-06-20 redefinition
-// the `⌘⇧O` half was DELETED as redundant with the button. So `⌘⇧O` is unclaimed and available to
-// a future feature; do not assume it is taken. (`⌘⇧`+digit is NOT — that is reserved for
-// filmstrip/workspace switching.)
+// the `⌘⇧O` half was DELETED as redundant with the button.
+//
+// ⚠️ `⌘⇧O` IS NO LONGER FREE — superseded 2026-09-22. This header used to end "so `⌘⇧O` is
+// unclaimed and available to a future feature". F-a WP3 IS that future feature: ⌘⇧O now selects
+// the Prompt panel (`components/workspace/panelHost.ts`, pinned in `paletteCommands.test.ts`).
+// The Sublime launchers remain button-only and are unaffected — nothing here regressed; only
+// the vacancy note went stale. (`⌘⇧`+digit is still reserved for filmstrip/workspace switching.)
 //
 // The Tauri `invoke` is injected (defaulting to the real one) so the two helpers
 // are unit-testable without mocking the module — matching this codebase's

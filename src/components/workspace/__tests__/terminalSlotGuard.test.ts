@@ -50,6 +50,87 @@ describe("RightPanelHost mounts a slot + tab for every available panel", () => {
     // never wired to a real pane. Assert the TerminalPane is mounted.
     expect(hostSource).toContain("<TerminalPane");
   });
+
+  it("renders the prompt panel component (not a placeholder)", () => {
+    // F-a WP3 Phase 2 — the same "slot wired to a real component" invariant as the
+    // terminal case above. Phase 1 shipped this slot with a literal placeholder div, so
+    // "the slot exists and is display-gated" was TRUE for a whole phase while the panel
+    // did nothing. The tab/slot suites above would still pass against that placeholder;
+    // only naming the component catches a revert.
+    const src = stripComments(hostSource);
+    expect(src).toContain("<PromptPanel");
+    // …and the Phase-1 placeholder must be gone, not merely hidden behind it.
+    expect(
+      src,
+      "the Phase 1 placeholder should have been REPLACED by PromptPanel, not left in place",
+    ).not.toContain("prompt-placeholder");
+  });
+
+  // F-a WP3 verify-codify — the RENDERED tab ORDER, which nothing pinned before.
+  //
+  // ⚠️ THE ARRAY ORDER AND THE JSX ORDER ARE INDEPENDENT. The suites above prove each
+  // panel HAS a tab; `panelHost.test.ts` proves `AVAILABLE_PANELS` is in the intended
+  // sequence. Neither one looks at the order the buttons are WRITTEN IN — and that is
+  // what the user actually sees, because the tab row is hand-authored JSX rather than a
+  // `.map()` over the array. Reordering `AVAILABLE_PANELS` alone would leave the visible
+  // row unchanged and every existing test green.
+  //
+  // This matters because the row's order is twice an operator decision, not a default:
+  // Docs leads (M11 WP3, 2026-08-02) and Prompt sits second (F-a WP3, 2026-09-22 — moved
+  // there from between Diff and Terminal). A silent reorder would quietly undo either.
+  //
+  // Derived from `availablePanels(true)` rather than a hardcoded list so the two sources
+  // are asserted to AGREE — a hardcoded copy here would just be a third order to drift.
+  it("renders the tab buttons in the same order as the panel registry", () => {
+    const expected = [...availablePanels(true)];
+
+    // Position of each tab's testid in the source text = its order in the rendered row.
+    // Comments are stripped first: this file's own prose names several testids, and an
+    // unstripped haystack would match those instead (the `stripComments` helper above
+    // exists for exactly this class of false match).
+    const src = stripComments(hostSource);
+    const positions = expected.map((panel) => ({
+      panel,
+      at: src.indexOf(`data-testid="panel-tab-${panel}"`),
+    }));
+
+    // Non-vacuity: every tab must actually be found, or `indexOf` returning -1 for all
+    // of them would produce a trivially "sorted" list of -1s and pass.
+    for (const { panel, at } of positions) {
+      expect(at, `no tab button found for panel "${panel}"`).toBeGreaterThan(
+        -1,
+      );
+    }
+
+    const renderedOrder = [...positions]
+      .sort((a, b) => a.at - b.at)
+      .map((p) => p.panel);
+
+    expect(
+      renderedOrder,
+      "the JSX tab order drifted from the panel registry — the row the user sees is " +
+        "hand-authored, so reordering AVAILABLE_PANELS does NOT move the buttons",
+    ).toEqual(expected);
+  });
+
+  it("puts Docs first and Prompt second in the rendered row (operator decisions)", () => {
+    // The two positions above are explicit operator choices, so they are pinned by NAME
+    // and not merely by agreement with the registry. The test above would still pass if
+    // both the array and the JSX were reordered together; this one would not.
+    const src = stripComments(hostSource);
+    const at = (p: string) => src.indexOf(`data-testid="panel-tab-${p}"`);
+
+    expect(at("docs")).toBeGreaterThan(-1);
+    expect(
+      at("prompt"),
+      "Prompt must render after Docs (operator, 2026-09-22)",
+    ).toBeGreaterThan(at("docs"));
+    expect(
+      at("editor"),
+      "Prompt must render before Editor — the two orientation surfaces lead, the " +
+        "editing surfaces follow (operator, 2026-09-22)",
+    ).toBeGreaterThan(at("prompt"));
+  });
 });
 
 // Theme E (WP6) — the panel-tab row is a WAI-ARIA tablist; each tab must point at its

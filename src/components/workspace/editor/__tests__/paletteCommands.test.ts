@@ -85,7 +85,7 @@ describe("isPaletteChord", () => {
         e: { metaKey: true, shiftKey: true, key: "t" },
       },
       {
-        name: "Cmd+Shift+O (Sublime Text pop)",
+        name: "Cmd+Shift+O (F-a WP3 Prompt panel)",
         e: { metaKey: true, shiftKey: true, key: "o" },
       },
       {
@@ -106,16 +106,17 @@ describe("isPaletteChord", () => {
 });
 
 // WP5/WP8 — cross-predicate exclusivity: the app-level ⌘⇧ chords (palette + the
-// three panel-select chords) must partition cleanly — no single keydown is claimed
+// ungated panel-select chords) must partition cleanly — no single keydown is claimed
 // by more than one predicate. This is the codified contract that the RightPanelHost
 // capture-phase listener and the palette listener never double-fire on the same
 // event. WP8 deleted the Sublime-Text ⌘⇧O chord (both Sublime launchers are now
-// click-only buttons), so ⌘⇧O is FREED — claimed by no predicate.
+// click-only buttons), and F-a WP3 CLAIMED the freed letter for the Prompt panel.
 describe("app-level ⌘⇧ chord exclusivity (WP5/WP8)", () => {
   const chords = [
     { name: "⌘⇧P palette", e: { metaKey: true, shiftKey: true, key: "p" } },
     { name: "⌘⇧E Editor", e: { metaKey: true, shiftKey: true, key: "e" } },
     { name: "⌘⇧D Diff", e: { metaKey: true, shiftKey: true, key: "d" } },
+    { name: "⌘⇧O Prompt", e: { metaKey: true, shiftKey: true, key: "o" } },
     { name: "⌘⇧T Terminal", e: { metaKey: true, shiftKey: true, key: "t" } },
   ];
 
@@ -128,12 +129,24 @@ describe("app-level ⌘⇧ chord exclusivity (WP5/WP8)", () => {
     });
   }
 
-  it("⌘⇧O is freed (no predicate claims it after WP8 deleted the Sublime chord)", () => {
+  it("⌘⇧O now resolves to the Prompt panel (F-a WP3 claimed the letter WP8 freed)", () => {
+    // ⚠️ THIS ASSERTION WAS INVERTED, not deleted. It previously read "⌘⇧O is freed —
+    // claimed by no predicate", pinning the post-WP8 vacancy. A freed chord staying free
+    // forever was never the invariant; "exactly one predicate claims it" is, and a vacancy
+    // is just the zero case of that. F-a WP3 fills it, so the same property is now
+    // asserted with a count of 1 and an explicit owner.
+    //
+    // Naming the owner (not merely counting) is what makes this bite: a future chord that
+    // stole ⌘⇧O from the Prompt panel would keep the count at 1 and slip through a
+    // count-only check.
     const e = { metaKey: true, shiftKey: true, key: "o" };
     const claims = [isPaletteChord(e), panelForChord(e) !== null].filter(
       Boolean,
     ).length;
-    expect(claims, "⌘⇧O must be unclaimed after WP8").toBe(0);
+    expect(claims, "⌘⇧O must be owned by exactly one handler").toBe(1);
+    expect(panelForChord(e), "⌘⇧O must resolve to the Prompt panel").toBe(
+      "prompt",
+    );
   });
 });
 
@@ -178,9 +191,34 @@ describe("⌘1..⌘9 tab-switch chord exclusivity (WP12)", () => {
       { metaKey: true, shiftKey: false, key: "p" }, // finder
       { metaKey: true, shiftKey: true, key: "p" }, // palette
       { metaKey: true, shiftKey: true, key: "e" }, // editor panel
+      { metaKey: true, shiftKey: true, key: "o" }, // prompt panel
       { metaKey: true, shiftKey: true, key: "f" }, // search
     ];
     for (const e of letters) expect(tabSwitchIndex(e)).toBeNull();
+  });
+
+  // F-a WP3 — ⌘⇧O against the FULL predicate set, not just the two-predicate matrix
+  // above. The narrower block proves prompt does not collide with the palette; this
+  // proves it does not collide with the finder, the project search, or tab-switch
+  // either. Worth its own assertion because ⌘⇧O is a REUSED letter (WP8 freed it), and
+  // a reused chord is likelier to have a forgotten second claimant than a virgin one.
+  it("⌘⇧O (prompt) is claimed by exactly one handler across every app predicate", () => {
+    const e = { metaKey: true, shiftKey: true, key: "o" };
+    expect(panelForChord(e)).toBe("prompt");
+    expect(claimCount(e), "⌘⇧O must be owned by exactly one handler").toBe(1);
+  });
+
+  it("bare ⌘O is untouched by the prompt chord", () => {
+    // The Shift requirement is what keeps the chord off the unshifted letter — the same
+    // separation that keeps ⌘⇧E off bare ⌘E. Pinned explicitly because `panelForChord`
+    // matches `key` case-insensitively, so only the `metaKey && shiftKey` guard stands
+    // between this chord and every bare-⌘ binding on the same letter.
+    const e = { metaKey: true, shiftKey: false, key: "o" };
+    expect(panelForChord(e)).toBeNull();
+    expect(
+      claimCount(e),
+      "bare ⌘O must be claimed by no app-level predicate",
+    ).toBe(0);
   });
 });
 

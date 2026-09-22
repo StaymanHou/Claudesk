@@ -1622,6 +1622,24 @@ body,
   background-color: #252526;
 }
 
+/* F-a WP3 P3.4 — the Prompt tab carries a dot when that project has unsent draft text.
+   A pseudo-element rather than an extra DOM node, so the indicator cannot be mistaken for
+   a focusable control inside a `role="tab"`.
+
+   ⚠️ Deliberately NOT a color change on the tab itself: `.is-active` already owns color
+   and border, and overloading those would make "front panel" and "has unsent text" fight
+   for the same signal — they are independent and frequently both true. */
+.panel-tab.has-draft::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+  border-radius: 50%;
+  background-color: #6ea8ff;
+}
+
 /* WP8 — external-app launchers (Sublime Text / Sublime Merge) live at the right
    edge of the tab row. The spacer pushes them past a divider so they read as
    ACTIONS, distinct from the left-aligned Editor/Diff selectable tabs. */
@@ -1687,6 +1705,52 @@ body,
 .right-panel-slot--docs {
   flex-direction: column;
   overflow: hidden;
+}
+
+/* F-a WP3 — the Prompt slot: a column holding the prose buffer. Dark tokens only,
+   matching the sibling slots — Claudesk never follows the OS theme. Phase 1 ships the
+   seam with a placeholder; Phase 2 replaces it with the CM6 prose view. */
+.right-panel-slot--prompt {
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.prompt-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ⚠️ THE SAME `.cm-theme` FIX THE EDITOR NEEDED — see the long note above
+   `.editor-pane .cm-theme`. @uiw/react-codemirror nests its EditorView inside a
+   `.cm-theme` wrapper div, which defaults to `flex: 0 1 auto / min-height: auto` and so
+   grows to the full CONTENT height; the editor inside is then never bounded, `.cm-scroller`
+   never overflows, and a long draft simply has no vertical scrollbar. The wrapper must be
+   the flex-fill column and `.cm-editor` must fill it.
+
+   ⚠️ Neither element may carry `height: 100%` — it fights `flex: 1`. That was found the
+   hard way at WP3a verify-human (2026-06-20); this panel inherits the conclusion rather
+   than rediscovering it. Unlike the editor, wrap is always ON here, so `.cm-scroller`
+   only ever scrolls vertically. */
+.prompt-panel .cm-theme {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-panel .cm-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Suspense fallback while the shared CM6 chunk resolves — deliberately blank, matching
+   `.editor-loading` / `.diff-loading`: CM6 loads in ms off local disk, so a spinner would
+   flash and read as jank. */
+.prompt-loading {
+  flex: 1;
+  background: var(--bg, #1e1e1e);
 }
 
 .docs-panel {

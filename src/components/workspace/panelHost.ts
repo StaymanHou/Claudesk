@@ -1,7 +1,8 @@
 // WP5 — pure core for the RightPanelHost panel-select logic.
 //
-// The right half of a workspace shows exactly one of three panels: the CM6 editor,
-// the git diff viewer, or the WP9 second terminal. WP5 replaces the WP4 stopgap
+// The right half of a workspace shows exactly one panel at a time: the CM6 editor, the
+// git diff viewer, the F-a prompt area, the WP9 second terminal, or — while the
+// workflow gate is on — the M11 docs view. WP5 replaces the WP4 stopgap
 // segmented toggle with DIRECT-SELECT — each panel has its own ⌘⇧+mnemonic chord
 // AND a clickable tab; both route through `selectPanel`. NOT cycling: pressing a
 // panel's chord goes straight to it and is idempotent (pressing it again is a no-op).
@@ -15,8 +16,10 @@
 //   - `panelForChord` (maps a ⌘⇧+mnemonic keydown to the panel it selects).
 //
 // CHORD-OWNERSHIP (see paletteCommands.ts for the full app-wide matrix):
-//   ⌘⇧E → Editor   ⌘⇧D → Diff   ⌘⇧T → Terminal (WP9)   ⌘⇧K → Docs (M11, GATED)
-//   ⌘⇧O → Sublime Text pop (transitional)   ⌘⇧P → palette
+//   ⌘⇧E → Editor   ⌘⇧D → Diff   ⌘⇧O → Prompt (F-a WP3)   ⌘⇧T → Terminal (WP9)
+//   ⌘⇧K → Docs (M11, GATED)   ⌘⇧P → palette
+//   ⚠️ ⌘⇧O was the Sublime Text pop until WP8 deleted that hotkey; F-a WP3 claims the
+//      freed letter. `sublime/sublimeLaunch.ts`'s "⌘⇧O IS FREE" note is superseded.
 //   ⌘P → finder (WP6 — LIVE; bare meta, no shift; finder/finderChord.ts)
 //   ⌘⇧A → GLOBAL time-analytics dashboard (M9 WP6a) — NOT a panel; an app-level
 //         chord in App.tsx (dashboard/dashboardChord.ts). Listed here only so the
@@ -49,7 +52,7 @@ type WorkflowGateValue = ReturnType<typeof useWorkflowFeaturesEnabled>;
  * that the value can exist, NOT that it is available — availability is decided at runtime
  * by [`availablePanels`], and every transition routes through [`selectPanel`].
  */
-export type RightPanel = "editor" | "diff" | "terminal" | "docs";
+export type RightPanel = "editor" | "diff" | "prompt" | "terminal" | "docs";
 
 /** The panels available while the workflow gate is OFF — the ungated baseline.
  *
@@ -59,6 +62,28 @@ export type RightPanel = "editor" | "diff" | "terminal" | "docs";
  * blocklist.
  */
 export const AVAILABLE_PANELS: readonly RightPanel[] = [
+  // F-a WP3 — the prompt area, FIRST in the ungated baseline.
+  //
+  // ⚠️ UNGATED, and that is a decision, not an oversight (roadmap → "F-a decisions" 3):
+  // F-a is lite-IDE core, depends on no `~/.claude/` substrate, and functions on a bare
+  // install — so the `gate-substrate-dependent-feature-class-behind-default-off-opt-in`
+  // prior does not fire. It therefore belongs in this OFF-state baseline rather than in
+  // the gated set, and the OFF-invariant guard's `availablePanels(false)` assertion
+  // legitimately includes it.
+  //
+  // ⚠️ POSITION IS AN OPERATOR DECISION (2026-09-22 verify-human), not a default. It
+  // shipped between Diff and Terminal and was MOVED to the head: "I'd place it between
+  // Docs and Editor". The reasoning matches the one that put Docs first — Docs answers
+  // "where is this project?" and Prompt answers "what am I asking for?", and BOTH are
+  // asked before any editing question. Grouping the two orientation surfaces ahead of
+  // the three editing surfaces (Editor/Diff/Terminal) is the ordering principle; putting
+  // Prompt after Diff split that pair with an editing surface.
+  //
+  // ⚠️ Because AVAILABLE_PANELS_WITH_WORKFLOW spreads this array after "docs", the head
+  // position here yields BOTH intended orders from one edit:
+  //   gate ON  → Docs, Prompt, Editor, Diff, Terminal   (literally "between Docs and Editor")
+  //   gate OFF → Prompt, Editor, Diff, Terminal         (Docs absent, so Prompt leads)
+  "prompt",
   "editor",
   "diff",
   "terminal",
@@ -92,6 +117,13 @@ const AVAILABLE_PANELS_WITH_WORKFLOW: readonly RightPanel[] = [
  * otherwise. This is also the fallback [`reconcilePanel`] evicts to, so a gate flip that
  * invalidates the front panel lands on the right default for the new gate state rather
  * than always on Editor.
+ *
+ * ⚠️ DELIBERATELY NOT `availablePanels(enabled)[0]`. As of F-a WP3 the first TAB is
+ * `"prompt"` (gate off) or `"docs"` (gate on), so deriving the default from the order
+ * would silently have made every ungated workspace open on the Prompt panel — a
+ * behaviour change nobody asked for, smuggled in by a tab-ORDER decision. Tab order and
+ * opening panel are separate decisions here and each is its own literal; the M11 WP3
+ * operator decision that put Docs first changed BOTH explicitly, in two places.
  */
 export function defaultPanel(enabled: WorkflowGateValue): RightPanel {
   return enabled ? "docs" : "editor";
@@ -124,8 +156,8 @@ export function availablePanels(
  *
  * Returns the panel to make front. Idempotent (selecting the current panel returns it
  * unchanged). A target not in [`AVAILABLE_PANELS`] is a graceful no-op — we keep the
- * current panel rather than flip to an unmounted (blank) slot. As of WP9 all three
- * panels are available, so the no-op branch is dormant; it's kept as the structural
+ * current panel rather than flip to an unmounted (blank) slot. Every ungated panel is
+ * available, so the no-op branch is dormant; it's kept as the structural
  * guard against ever selecting a panel that has no mounted JSX slot (the
  * SURFACE-2026-06-20-QUALITY-WP5-TERMINAL-SEAM-UNTESTED failure mode).
  */
@@ -182,9 +214,9 @@ export interface PanelChordEvent {
 
 /**
  * Map a ⌘⇧+mnemonic keydown to the panel it selects, or `null` if it isn't a
- * panel chord. E→editor, D→diff, T→terminal. Requires BOTH Cmd and Shift (the
+ * panel chord. E→editor, D→diff, O→prompt, T→terminal. Requires BOTH Cmd and Shift (the
  * ⌘⇧ family); `key` is matched case-insensitively because Shift uppercases it.
- * Distinct from ⌘⇧P (palette) and ⌘⇧O (Sublime) by letter, and from bare ⌘P
+ * Distinct from ⌘⇧P (palette) by letter, and from bare ⌘P
  * (finder) by the required Shift — so no two predicates fire on one event.
  * NOTE (M9 WP6a): ⌘⇧A is the GLOBAL dashboard chord, handled app-level in App.tsx
  * (dashboard/dashboardChord.ts) — NOT a panel, so it is deliberately absent here.
@@ -201,6 +233,21 @@ export function panelForChord(
       return "diff";
     case "t":
       return "terminal";
+    // F-a WP3 — ⌘⇧O → Prompt. UNGATED, so there is deliberately no `enabled` term here
+    // (contrast the "k"/docs arm below).
+    //
+    // ⚠️ `O` IS THE LETTER WP8 FREED, and claiming it is the point: WP8 deleted the
+    // in-app Sublime-Text pop hotkey as redundant with its button and left ⌘⇧O
+    // deliberately unassigned (`sublime/sublimeLaunch.ts` records this). An assertion in
+    // `paletteCommands.test.ts` pinned it as unclaimed; that test is now INVERTED to pin
+    // this owner instead — a freed chord staying free forever is not the invariant, "no
+    // two predicates claim it" is.
+    //
+    // ⚠️ NOT `S`: this panel was briefly named "Staging" with ⌘⇧S, renamed at verify-human
+    // because "staging" reads as git's staging area — actively misleading beside a Diff
+    // tab. Do not restore either the name or that letter.
+    case "o":
+      return "prompt";
     // M11 — ⌘⇧K → Docs. GATED: returns null while the workflow gate is off, so the
     // listener never calls preventDefault and the keystroke passes through untouched.
     // A chord that matched-then-no-opped would still SWALLOW the key, which the M10.9

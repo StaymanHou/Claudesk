@@ -36,14 +36,15 @@ describe("selectPanel (direct-select, not cycling)", () => {
     expect(selectPanel("terminal", "terminal")).toBe("terminal"); // idempotent
   });
 
-  it("AVAILABLE_PANELS includes all three live panels", () => {
+  it("AVAILABLE_PANELS includes every ungated live panel", () => {
     expect(AVAILABLE_PANELS).toContain("editor");
     expect(AVAILABLE_PANELS).toContain("diff");
+    expect(AVAILABLE_PANELS).toContain("prompt");
     expect(AVAILABLE_PANELS).toContain("terminal");
   });
 
   it("still no-ops a target that is not available (structural guard)", () => {
-    // The guard branch is dormant (all three panels are live) but must stay intact:
+    // The guard branch is dormant (every ungated panel is live) but must stay intact:
     // an unknown/absent panel must never flip the host to an unmounted slot.
     // @ts-expect-error — deliberately passing an off-union value to exercise the guard.
     expect(selectPanel("editor", "nonexistent")).toBe("editor");
@@ -51,8 +52,17 @@ describe("selectPanel (direct-select, not cycling)", () => {
 });
 
 describe("M11 gate-derived panel registry", () => {
-  it("availablePanels(false) is the three ungated panels — no docs", () => {
-    expect(availablePanels(false)).toEqual(["editor", "diff", "terminal"]);
+  it("availablePanels(false) is the four ungated panels — no docs", () => {
+    // F-a WP3 added "prompt" to the OFF-state baseline. That is a legitimate change,
+    // not a gate leak: prompt depends on no `~/.claude/` substrate and works on a bare
+    // install, so it is lite-IDE core rather than workflow orchestration. Docs remains
+    // the only gated member, which is what the second assertion pins.
+    expect(availablePanels(false)).toEqual([
+      "prompt",
+      "editor",
+      "diff",
+      "terminal",
+    ]);
     expect(availablePanels(false)).not.toContain("docs");
   });
 
@@ -101,7 +111,11 @@ describe("reconcilePanel (the front-panel hazard — D3)", () => {
   });
 
   it("never disturbs an ungated panel, in either gate state", () => {
-    for (const panel of ["editor", "diff", "terminal"] as const) {
+    // Derived from `availablePanels(false)` rather than a hardcoded list: a hardcoded
+    // one silently stops covering each new ungated panel (it did — F-a WP3's "prompt"
+    // was added to the baseline while this loop still named only three), so the panel
+    // that most needs the check is the one it would skip.
+    for (const panel of availablePanels(false)) {
       expect(reconcilePanel(panel, true)).toBe(panel);
       expect(reconcilePanel(panel, false)).toBe(panel);
     }
@@ -172,6 +186,15 @@ describe("panelForChord (⌘⇧+mnemonic → panel)", () => {
     );
   });
 
+  it("maps ⌘⇧O → prompt (F-a WP3)", () => {
+    expect(panelForChord({ metaKey: true, shiftKey: true, key: "o" })).toBe(
+      "prompt",
+    );
+    expect(panelForChord({ metaKey: true, shiftKey: true, key: "O" })).toBe(
+      "prompt",
+    );
+  });
+
   it("returns null for ⌘⇧A — the global-dashboard chord is app-level, NOT a panel (M9 WP6a)", () => {
     // ⌘⇧A toggles the global time-analytics view (App.tsx / dashboardChord.ts); it must
     // NOT resolve to a right-panel here, or a panel switch would fire alongside it.
@@ -221,6 +244,10 @@ describe("panelForChord (⌘⇧+mnemonic → panel)", () => {
     for (const [key, panel] of [
       ["e", "editor"],
       ["d", "diff"],
+      // F-a WP3 — prompt is ungated by decision, so it belongs in this loop. Its
+      // presence here is the assertion that the gate cannot suppress it: a future change
+      // that threaded `enabled` into the "s" arm would fail on the `false` leg.
+      ["o", "prompt"],
       ["t", "terminal"],
     ] as const) {
       expect(panelForChord({ metaKey: true, shiftKey: true, key }, false)).toBe(
@@ -232,14 +259,19 @@ describe("panelForChord (⌘⇧+mnemonic → panel)", () => {
     }
   });
 
-  it("returns null for non-panel letters (P palette, O sublime, F search)", () => {
+  it("returns null for non-panel letters (P palette, F search)", () => {
     // Exclusivity guard: the ⌘⇧ chords owned by OTHER subsystems must NOT resolve to a
-    // panel. A (dashboard), E/D/T (editor/diff/terminal) are the only panel letters.
+    // panel. E/D/O/T (editor/diff/prompt/terminal) plus gated K (docs) are the only
+    // panel letters; A is the app-level dashboard, asserted separately above.
+    //
+    // ⚠️ `O` USED TO BE IN THIS LIST and was REMOVED, not overlooked. It was here as
+    // "O sublime" — a stale label even before F-a: WP8 deleted the Sublime-Text hotkey
+    // in 2026-06, leaving O unassigned, and this assertion kept passing for a reason its
+    // own comment no longer described. F-a WP3 claims O for the Prompt panel, so the
+    // correct assertion is now the positive one above ("maps ⌘⇧O → prompt"). Asserting
+    // both would be a contradiction, which is how this was caught.
     expect(
       panelForChord({ metaKey: true, shiftKey: true, key: "p" }),
-    ).toBeNull();
-    expect(
-      panelForChord({ metaKey: true, shiftKey: true, key: "o" }),
     ).toBeNull();
     expect(
       panelForChord({ metaKey: true, shiftKey: true, key: "f" }),
@@ -264,22 +296,60 @@ describe("Docs-first ordering + default panel (gate ON only)", () => {
     expect(availablePanels(true)[0]).toBe("docs");
     expect([...availablePanels(true)]).toEqual([
       "docs",
+      "prompt",
       "editor",
       "diff",
       "terminal",
     ]);
   });
 
-  it("leaves the gate-OFF order completely untouched (M10.9 byte-identical contract)", () => {
-    // The whole point of gating: a non-workflow user must see exactly the previous app.
-    expect([...availablePanels(false)]).toEqual(["editor", "diff", "terminal"]);
-    expect(availablePanels(false)[0]).toBe("editor");
-    expect([...AVAILABLE_PANELS]).toEqual(["editor", "diff", "terminal"]);
+  it("leaves the gate-OFF order untouched BY THE GATE (M10.9 byte-identical contract)", () => {
+    // The whole point of gating: a non-workflow user must see exactly the app they would
+    // have seen if the workflow features had never been built.
+    //
+    // ⚠️ This assertion's subject is the GATE's effect, not the panel list's permanence.
+    // F-a WP3 added "prompt" here, and that does NOT weaken the contract: an ungated
+    // panel is part of the app every user gets, so it belongs in the OFF baseline by
+    // definition. What would break the contract is a member appearing here BECAUSE the
+    // workflow features exist — which the "no docs" assertion above and the
+    // OFF-invariant guard's `namesWorkflowTerm` arm are the checks for.
+    expect([...availablePanels(false)]).toEqual([
+      "prompt",
+      "editor",
+      "diff",
+      "terminal",
+    ]);
+    // ⚠️ "prompt", not "editor" — the head of the OFF row changed at F-a WP3 verify-human
+    // (operator moved Prompt to sit beside Docs). This is a TAB-ORDER fact only; the panel
+    // a fresh ungated workspace OPENS on is still `defaultPanel(false) === "editor"`,
+    // asserted separately below, because the two are deliberately separate literals.
+    expect(availablePanels(false)[0]).toBe("prompt");
+    expect([...AVAILABLE_PANELS]).toEqual([
+      "prompt",
+      "editor",
+      "diff",
+      "terminal",
+    ]);
   });
 
   it("defaults to docs when the gate is on, editor when off", () => {
     expect(defaultPanel(true)).toBe("docs");
     expect(defaultPanel(false)).toBe("editor");
+  });
+
+  it("the opening panel is INDEPENDENT of tab order — not `availablePanels(g)[0]`", () => {
+    // F-a WP3 made these two diverge for the first time, and that divergence is the whole
+    // point of this guard. With the gate OFF the first TAB is now "prompt" while the panel
+    // a workspace OPENS on is still "editor". If anyone ever "simplifies" defaultPanel to
+    // `availablePanels(enabled)[0]`, the gate-on arm would keep passing (docs is both) and
+    // only the gate-off arm would catch it — so the off case is asserted as a NON-equality,
+    // which is the direction that actually bites.
+    expect(defaultPanel(false)).not.toBe(availablePanels(false)[0]);
+    expect(
+      defaultPanel(false),
+      "a fresh ungated workspace must still open on the Editor, not on whichever panel " +
+        "happens to lead the tab row",
+    ).toBe("editor");
   });
 
   it("resolves an UNCHOSEN panel (null) to the gate default, not a hardcoded editor", () => {
