@@ -474,6 +474,23 @@ cannot reduce what production does. Drive via `/feature-plan`.
 - ⚠️ For each replaced guard, **confirm the new one kills the mutant the old one claimed to kill**
   before deleting the old one.
 
+**✅ WP7 CLOSED 2026-09-23** (feature `paydown-wp7-render-instead-of-raw`, archived; ship `a26b514`).
+- All five items were resolved, and each names the mutants that now die. Where the old test could
+  be re-run, it PASSED them: AH1 5/5 and both H4 regex-shaped edits. The per-mutant tables are in
+  the archived WIP's `## Phase N build evidence` sections.
+- **What changed in the approach:**
+  - H4 was resolved by a LIVE `Workspace` mount, not by extracting `shouldApplyBroadcast`, so no
+    source guard remains.
+  - AA1 goes through the real `App`.
+  - E2 gained an argv pin (`adjudicator_command`).
+  - The render-harness lesson's "no interaction" half was corrected: `act` + `createRoot` under
+    jsdom, and still no RTL.
+- **New open work from this WP:**
+  - `SURFACE-2026-09-23-SUPERVISOR-ADJUDICATE-BLOCKS-THE-MAIN-THREAD` → WP9, named there.
+  - A 1 MAJOR + 5 MINOR code-quality pointer (`# paydown-wp7-render-instead-of-raw`). Most notably,
+    the harness lifecycle is forked by `closeWiring` and its `pane` stub is single-instance. The
+    `run_command` pipe-drain MINOR travels with E3 (WP8) and WP9.
+
 ## WP8 — Small live defects and dead code  `[impact: Med-High · effort: S · risk: Low-Med]`
 
 Behavior changes, so they come after the guard WPs have strengthened the suite. **Run the WP3

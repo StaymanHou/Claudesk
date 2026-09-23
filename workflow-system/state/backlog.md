@@ -8,19 +8,18 @@
 
 ## Code-quality findings — fa-wp4-send-and-stage (2026-09-22)
 
-- **Pointer:** **1 MAJOR (partially fixed) + 1 MINOR** from `feature-review-quality` against ship
-  baseline `9264a6f..5af55f6`. ⚠️ **The review's other 2 MAJOR and 3 MINOR were FIXED AT REVIEW
+- **Pointer:** **1 MINOR remains** from `feature-review-quality` against ship
+  baseline `9264a6f..5af55f6`. The wiring-test MAJOR was resolved at paydown-2026-09-23 WP7
+  (`promptSendWiring.test.tsx` now drives the panel's registered `send` on a live CM6 mount). ⚠️ **The review's other 2 MAJOR and 3 MINOR were FIXED AT REVIEW
   TIME, not backlogged** — including MAJOR-1, a guard that was mutation-confirmed to be checking
   nothing (deleting `sendModeForChord`'s `isStageOnlyChord` branch, which kills ⇧⌘↵ outright, left
   all 17 chord-registry assertions green). Details:
   [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
   `# fa-wp4-send-and-stage — 2026-09-22`.
-- **Priority:** medium (the wiring-test item) / low (the comment-duplication item)
+- **Priority:** low (the comment-duplication item)
 - **Status:** pending
-- **Pickup shape:** the MAJOR wants a jsdom render capturing the panel's real send closure via
-  `onRegisterSend`; the MINOR is a canonical-home-plus-pointers comment collapse spanning files
-  WP4 did not author. ⚠️ Neither is a shipped defect — both are tripwires weaker than their prose
-  claims, which is the review's own root-cause reading.
+- **Pickup shape:** the MINOR is a canonical-home-plus-pointers comment collapse spanning files
+  WP4 did not author. ⚠️ It is not a shipped defect.
 - **Reviewer's root cause, worth carrying:** *"guards whose STATED coverage exceeds their ACTUAL
   coverage"* — all three MAJORs were guards the agent wrote, believed, and documented as stronger
   than they were.
@@ -31,10 +30,10 @@
 - **Status:** pending — routed to `workflow-system/product/backlog-paydown-wbs.md` (WP8) + the comment-convention pass
 
 ## Code-quality findings — m15-wp3-break-detection-and-auto-fire (2026-09-13)
-- **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **3 MINORs remain open.** What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **The "still zero production callers" note is now STALE — WP4 supplied the caller** (`useSupervisor`, shipped 2026-09-14, `79c67e5` — hash rewritten by the 2026-09-14 rebase; was `75ad76d`), so these MINORs now sit behind live code rather than an unwired module. Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
-- **Priority:** low (all three remaining)
+- **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **2 MINORs remain open** (the Rust timeout test that re-implemented the wait/kill loop was resolved at paydown-2026-09-23 WP7). What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **The "still zero production callers" note is now STALE — WP4 supplied the caller** (`useSupervisor`, shipped 2026-09-14, `79c67e5` — hash rewritten by the 2026-09-14 rebase; was `75ad76d`), so these MINORs now sit behind live code rather than an unwired module. Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
+- **Priority:** low (both remaining)
 - **Status:** pending
-- **Pickup shape:** comment-duplication across the supervisor modules (fold into the standing comment-convention item, do NOT trim per-WP — that is measured as not converging), the Rust timeout test that re-implements the production wait/kill loop, and the discarded adjudicator stderr. Independent polish; none blocks WP4.
+- **Pickup shape:** comment-duplication across the supervisor modules (fold into the standing comment-convention item, do NOT trim per-WP — that is measured as not converging), and the discarded adjudicator stderr (E3 → paydown WP8; now testable through the WP7 `run_command` seam). Independent polish; none blocks WP4.
 
 ## Code-quality findings — m15-wp1-supervisor-probe (2026-09-12)
 - **Pointer:** **1 MINOR remains** (0 CRITICAL). The naive-baseline MAJOR was resolved at paydown-2026-09-23 WP4. At WP6: the decisive-bar MAJOR (`scoreArm` now uses the bar parsed from `_meta.threshold`, and each arm's margin uses its own positives), the near-tautological assertions (deleted) and the access-style nits. Remaining: the test file's comment density, a third copy of the WIP's attempt history. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp1-supervisor-probe — 2026-09-12`.
@@ -42,13 +41,13 @@
 - **Status:** pending — routed to the comment-convention pass (G5)
 
 ## Code-quality findings — drive-mode-on-the-workspace-surface (2026-08-26)
-- **Pointer:** **3 findings remain** (rewritten 2026-09-23). The borrowed-credibility MAJOR and MINOR-polish (a)/(b) were resolved at paydown-2026-09-23 WP4. Remaining: (1) the re-entrancy defect, where a second Apply during a queued apply is silently discarded, is **ruled R1 Option A ('disable while queued') → paydown WP8**; (2) the `RESPAWN_INTENT_HOLD_MS` scheduler-timing sleep (H2) and (4) the source guards where extraction was available, which share the `useDriveModeApply` hook extraction R1 DEFERS to the next drive-mode touch; plus the MINOR-polish residue: (c) a duplicated CSS rule (H5c → paydown WP8) and (d) the same extraction. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# drive-mode-on-the-workspace-surface — 2026-08-26`.
+- **Pointer:** **2 findings remain** (rewritten 2026-09-23). The borrowed-credibility MAJOR and MINOR-polish (a)/(b) were resolved at paydown-2026-09-23 WP4, and the source guards where extraction was available (H4) at paydown WP7, by a live `Workspace` mount rather than the hook. Remaining: (1) the re-entrancy defect, where a second Apply during a queued apply is silently discarded, is **ruled R1 Option A ('disable while queued') → paydown WP8**; (2) the `RESPAWN_INTENT_HOLD_MS` scheduler-timing sleep (H2), which is tied to the `useDriveModeApply` hook extraction R1 DEFERS to the next drive-mode touch; plus the MINOR-polish residue: (c) a duplicated CSS rule (H5c → paydown WP8) and (d) the same extraction. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# drive-mode-on-the-workspace-surface — 2026-08-26`.
 - **Priority:** medium (the re-entrancy defect); low for the rest
 - **Status:** pending
 
 ## Code-quality findings — turn-output-reorientation (2026-08-25)
-- **Pointer:** **1 MAJOR + 2 MINOR remain** (rewritten 2026-09-23). The export-guard MAJOR was resolved at paydown WP3; the push-not-poll contract-drift MAJOR and the dead `TURN_MARKER_COLOR` comment at paydown WP4 (prose narrowed at every layer; the returned `nav` is now documented as unused by the shipped caller, not threaded through). Remaining: (1) MAJOR: `turnNavControls.test.ts` `?raw`-greps for **DOM-at-rest** questions, which `docs/lessons/source-text-guards.md` routes to a render test (**render it**; → paydown WP7); (2) the 58% comment-density MINOR, an instance of `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (⚠️ the retraction blocks are load-bearing and must NOT be swept); (3) `aria-live="polite"` on a conditionally-mounted span, so the **first** turn is never announced. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# turn-output-reorientation — 2026-08-25`.
-- **Priority:** medium (the MAJOR) + low (2 MINOR)
+- **Pointer:** **2 MINOR remain** (rewritten 2026-09-23). The export-guard MAJOR was resolved at paydown WP3; the push-not-poll contract-drift MAJOR and the dead `TURN_MARKER_COLOR` comment at paydown WP4 (prose narrowed at every layer; the returned `nav` is now documented as unused by the shipped caller, not threaded through); and the `?raw`-on-a-DOM-question MAJOR at paydown WP7 (`turnNavControls.test.tsx` now drives a live `Workspace` mount). Remaining: (2) the 58% comment-density MINOR, an instance of `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (⚠️ the retraction blocks are load-bearing and must NOT be swept); (3) `aria-live="polite"` on a conditionally-mounted span, so the **first** turn is never announced. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# turn-output-reorientation — 2026-08-25`.
+- **Priority:** low (2 MINOR)
 - **Status:** pending
 
 ## Code-quality findings — window-geometry-persistence (2026-08-21)
@@ -977,12 +976,6 @@ and work on the spec well."
 - **Priority:** low (post-WP6b-1 nicety; add if a real need surfaces)
 - **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)* (deferred at plan) — **deferred, carry to next cycle** *(M10.9 close, 2026-07-31)*
 
-## Code-quality findings — qol-wp1-close-workspace (2026-06-25)
-- **Pointer:** 1 MINOR remaining (originally 3 MINOR / 0 CRITICAL / 0 MAJOR; the filmstrip-× over-narrating comment MINOR and the forward-referencing `docsRef` comment MINOR both RESOLVED) from `feature-review-quality` on ship commit `c01a3f9`. The remaining MINOR — **`WP1-APP-WIRING-UNTESTED`**: the App-level close wiring (`requestClose`/`resolveClose`/dirty-probe registry) + the × routing are untested by automation (accepted per the manual-host-UI convention + live 9/9 verification). Reviewer: well-built, idiomatic, closes a latent WP7 lifecycle gap. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp1-close-workspace — 2026-06-25`.
-- **Priority:** low (1 MINOR)
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** a test-harness gap that only matters once the project adopts RTL/E2E (deferred per Phase-1 convention). Dismiss via the WIP's `## Code-Quality Review` section.
-
 ## SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE
 - **Source:** feature:build (WP7 Phase 3 relevance gate — operator decision 2026-06-21)
 - **Target level:** product:wbs (a WP7 follow-on, or a small standalone feature)
@@ -1101,6 +1094,12 @@ and work on the spec well."
 - **Pointer:** **1 MINOR remaining** (rewritten 2026-09-23, paydown WP5). The three MAJORs and two of the MINORs were resolved by paydown WP5 and are recorded in CHANGELOG: the unstyled outcome selector, the CM6 guard blind to the `searchKeymap` spread, the host sections with no tie to the `ChordHost` union, `chordLabel` with no consumer, and `visibleChords` recomputed per section. Remaining: **`RATIONALE-STATED-THREE-TIMES`**, the same ~20-line rationale in `chordRegistry.ts`'s header and `SettingsPanel.tsx`'s hotkey block comment. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# hotkey-reference — 2026-09-17`.
 - **Priority:** low
 - **Status:** pending — routed to the comment-convention pass (`SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, ruling R2)
+
+## Code-quality findings — paydown-wp7-render-instead-of-raw (2026-09-23)
+- **Pointer:** **1 MAJOR + 5 MINOR** from review of ship commit `a26b514`. MAJOR: the WP7 live-mount harness's lifecycle is forked by `closeWiring`, and its `pane` stub is single-instance while two `Workspace`s mount. MINORs: dead harness options; the Submit button not driven; a warn spy that leaks on failure; the gate-OFF proof lacks a positive control; `run_command` doesn't drain its pipes (pre-existing, routed with E3/WP9). Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp7-render-instead-of-raw — 2026-09-23`.
+- **Priority:** medium (MAJOR) / low (MINORs)
+- **Status:** pending
+- **Pickup shape:** one small test-only task. Consolidate the harness (the MAJOR plus the dead options), then add the three one-assertion tests. Route the `run_command` item with paydown WP8's E3 and WP9.
 
 ## SURFACE-2026-09-18-DOC-COUNT-NEEDS-A-GENERATOR-NOT-A-DETECTOR
 - **Source:** feature:verify-codify (M14 WP4 Phase 4)

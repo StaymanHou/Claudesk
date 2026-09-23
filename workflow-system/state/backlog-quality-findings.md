@@ -4,6 +4,59 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# paydown-wp7-render-instead-of-raw — 2026-09-23
+
+*(feature-review-quality on ship commit `a26b514`; 0 CRITICAL / 1 MAJOR / 6 MINOR; MINOR-6 was fixed in the WIP before archive.)*
+
+## SURFACE-2026-09-23-QUALITY-LIVE-HARNESS-LIFECYCLE-FORKED-AND-SINGLE-PANE
+- **Severity:** MAJOR
+- **Location:** `src/__tests__/closeWiring.test.tsx` (its own IPC log, `uncaught` tap, `settle`/`click`, mockIPC boot, teardown); `src/components/workspace/__tests__/liveWorkspace.tsx` (the module-level `pane`)
+- **Finding:** `closeWiring` is the first App-level user of the WP7 live-mount harness, and it re-implements the harness lifecycle instead of reusing it. That includes the settle-before-`clearMocks` teardown order found in the P3.1 spike. It also gets `IS_REACT_ACT_ENVIRONMENT` only as a side effect of a `vi.mock` factory importing `liveWorkspace.tsx`. And it mounts two `Workspace`s against a stub whose `pane` is ONE module-level object, so `pane.props` belongs to whichever pane rendered last.
+- **Why it matters:** the harness is what the next render-instead-of-`?raw` test will copy, and two copies of the teardown rule will drift. A future App-level test calling `pushTurnStart` would silently reach an arbitrary workspace.
+- **Suggested action:** export a `bootIpc(handler)` / `teardownIpc()` pair from `liveWorkspace.tsx`, and a per-workspace pane registry keyed by `workspaceId` (the stub receives it as a prop). Move `closeWiring` onto both, and set `IS_REACT_ACT_ENVIRONMENT` explicitly in each file.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-LIVE-HARNESS-DEAD-OPTIONS
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/__tests__/liveWorkspace.tsx` (`MountOptions`, `rerender`, `mountWorkspace`)
+- **Finding:** `MountOptions.statusState` and `projectPath` have no caller, and the module-level `rerender` closure is never exported. They suggest a re-render API that doesn't exist. `mountWorkspace` doesn't guard against a still-mounted previous root.
+- **Suggested action:** delete the unused options (or export `rerender` if a test needs it), and throw if `root` is non-null on entry. Fold this into the MAJOR above.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-SUBMIT-BUTTON-NOT-DRIVEN
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/prompt/__tests__/promptSendWiring.test.tsx` (the "Stage BUTTON reaches the same send" test)
+- **Finding:** only the Stage button is clicked. A mutant wiring the Send (submit) button to `send("stage-only")`, or to nothing, passes the file.
+- **Suggested action:** add the mirror test: click `prompt-send-submit` and assert the envelope WITH the trailing `\r`. This is the paired-affordances prior applied to tests.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-WARN-SPY-LEAKS-ON-FAILURE
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/prompt/__tests__/promptSendWiring.test.tsx` (the two failure-diagnostic tests)
+- **Finding:** `warn.mockRestore()` runs after the assertions, so a failing assertion leaves the `console.warn` spy installed and hides later tests' diagnostics.
+- **Suggested action:** add `afterEach(() => vi.restoreAllMocks())`, or use try/finally.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-GATE-OFF-PROOF-HAS-NO-POSITIVE-CONTROL
+- **Severity:** MINOR
+- **Location:** `src/components/workspace/__tests__/turnNavControls.test.tsx` (the AC-10 gate-OFF test)
+- **Finding:** the test proves the gate is OFF by the ABSENCE of `workspace-skill-row`. No test in the file shows the row is PRESENT with `gate: true`, so a renamed testid would make the proof vacuous.
+- **Suggested action:** add `expect(q(el, "workspace-skill-row")).not.toBeNull()` to a `gate: true` test in the same file.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-RUN-COMMAND-PIPES-NOT-DRAINED
+- **Severity:** MINOR (pre-existing; newly nameable)
+- **Location:** `src-tauri/src/adjudicator/mod.rs` → `run_command`
+- **Finding:** stdout and stderr are piped but not drained while `try_wait` polls, and `stdin.write_all` blocks before the deadline starts. A child that writes more than a pipe buffer before exiting, or never reads stdin, hangs past the timeout or forever. `Failed.stderr` is always `String::new()`. That is latent today, because `claude -p` reads all of stdin before writing.
+- **Suggested action:** handle this with E3 (paydown WP8, pass stderr through) and the WP9 `supervisor_adjudicate` async move. Drain both pipes on reader threads and start the deadline before the write. The WP7 `sh -c` seam makes each testable, e.g. `sh -c 'head -c 200000 /dev/zero; exit 0'` and `sh -c 'sleep 30'` with a large prompt.
+- **Priority:** low
+- **Status:** pending
+
 # paydown-wp3-boot-smoke-test — 2026-09-23
 
 ## SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X
@@ -117,25 +170,6 @@ pointers; keep the invariants and the ⚠️-what-to-do-on-failure paragraphs. T
 `arch/session-resumption.md` section added in this same commit is the natural home for several.
 - **Status:** pending
 
-## SURFACE-2026-09-13-QUALITY-TIMEOUT-TEST-REIMPLEMENTS-THE-PRODUCTION-LOOP
-
-- **Priority:** low
-- **Source:** feature:review-quality (m15-wp3), MINOR
-- **Location:** `src-tauri/src/adjudicator/mod.rs:214-240` (and `:177`)
-
-⚠️ `run_program_with_timeout` in the test module is a **hand-copied re-implementation** of the
-production wait/kill loop (`run_adjudicator`, lines 102-130). So
-`a_slow_child_times_out_and_is_reaped` proves **the copy** kills its child — not that
-`run_adjudicator` does. `run_adjudicator_with_program` (line 177) is the same pattern for the
-`NotFound` arm.
-
-This is exactly `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`: a test that
-re-implements the code shares its blind spot.
-
-**Suggested action:** extract the wait/kill loop to take a pre-spawned `Child`, so the test
-drives the real thing.
-- **Status:** pending
-
 ## SURFACE-2026-09-13-QUALITY-ADJUDICATOR-DISCARDS-CAPTURED-STDERR
 
 - **Priority:** low
@@ -170,9 +204,11 @@ Applying its test — *would a reader who has never seen the WIP make a worse de
 
 # drive-mode-on-the-workspace-surface — 2026-08-26
 
-⚠️ **Findings 1, 2 and 4 share a root cause and ONE fix** — extracting the apply operation into a
-`useDriveModeApply` hook gates the affordance, exposes the intent latch as a ref, and makes both
-source-guarded properties value-testable. Treat them as one item, not four.
+⚠️ **Findings 1 and 2 share a root cause and ONE fix**: extracting the apply operation into a
+`useDriveModeApply` hook, which gates the affordance and exposes the intent latch as a ref. The
+source-guard finding (formerly #4, H4) was resolved at paydown-2026-09-23 WP7 WITHOUT that
+extraction. A live `Workspace` mount (`workspaceDriveModeLive.test.tsx`) now drives both properties,
+so the hook is no longer needed for testability. Treat 1 + 2 as one item.
 
 ## SURFACE-2026-08-26-QUALITY-DRIVEMODE-REENTRANCY-DISCARDS-A-SECOND-APPLY
 - **Source:** feature:review-quality (drive-mode-on-the-workspace-surface, ship `efa7798`)
@@ -209,20 +245,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
 - **Priority:** medium
 - **Status:** pending
 
-## SURFACE-2026-08-26-QUALITY-SOURCE-GUARDS-WHERE-EXTRACTION-WAS-AVAILABLE
-- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
-- **Type:** tech-debt (guard shape)
-- **Summary:** Two source-text guards (`workspaceDriveModeRender.test.tsx:136-205`) assert that
-  `Workspace.tsx` destructures `persist` and compares `e.payload.path`. Labelled "floor, not proof"
-  — honest, but the conclusion does not follow.
-- **Context:** ⚠️ `arch.md`'s "a `?raw` guard cannot express a behavioural property" is an argument
-  **FOR EXTRACTION**, which this same feature applied twice (`driveModeWriteFor`, `readyToRespawn`).
-  The path filter is equally extractable (`shouldApplyBroadcast(payloadPath, myPath)`). The current
-  regex breaks on any rename or reorder, while a semantically-equivalent-but-wrong comparison passes.
-- **Suggested action:** Extract both predicates and replace the regexes with value tests.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-08-26-QUALITY-DRIVEMODE-MINOR-POLISH
 - **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
 - **Type:** tech-debt (2 MINOR findings remain, grouped)
@@ -232,14 +254,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
 - **Status:** pending
 
 # turn-output-reorientation — 2026-08-25
-
-## SURFACE-2026-08-25-QUALITY-WP3-RAW-GUARD-ON-A-DOM-QUESTION
-- **Source:** feature-review-quality (M13.5 WP3, MAJOR)
-- **Type:** tech-debt (guard shape)
-- **Summary:** `src/components/workspace/__tests__/turnNavControls.test.ts` (161 lines, 10 tests) is entirely `?raw` source-grepping for questions that are **DOM-at-rest** questions — `disabled` bound to the right flag, the readout hidden at `total === 0`, the controls positioned outside the gated row.
-- **Context:** ⚠️ **This contradicts a rule the repo wrote down for itself.** `docs/lessons/source-text-guards.md` says: *"when the question is what does the DOM look like at rest, render it… Reaching for `?raw` on a DOM question is how this repo accumulated its nine failure forms"* — and names **two working precedents needing no new dependency** (`docsRender.test.tsx`, `projectModelCellRender.test.tsx`). The WIP never mentions `renderToStaticMarkup`. Concretely brittle: `disabled=\{!turnNav\.canPrev\}` breaks on a Prettier reflow or any trivially-equivalent refactor, and the `[\s\S]{0,200}?` proximity windows are order-dependent. ⚠️ **It also cannot see the rendered attribute at all**, so it cannot cover the gate-OFF case a parsed DOM would get for free. Not a correctness defect today — the 10 arms were each mutation-proven — but it is a guard that will rot in the catalogued ways.
-- **Suggested action:** Port to a render test (`renderToStaticMarkup` + a parsed DOM), following the two named precedents. Assert the same three properties off the rendered output, and add the gate-OFF case the grep cannot reach. ⚠️ Expect the port to **delete** most of the regex machinery rather than translate it.
-- **Priority:** medium
 
 ## SURFACE-2026-08-25-QUALITY-WP3-COMMENT-DENSITY-58-PERCENT
 - **Source:** feature-review-quality (M13.5 WP3, MINOR)
@@ -448,18 +462,6 @@ scheduling items rather than polish.*
 - **Priority:** low
 - **Pickup shape:** small — add a `log`/`eprintln` (or a distinct return) on the `ReapLeader` `Ok(false)` branch; rides any future kill-path touch.
 
-# qol-wp1-close-workspace — 2026-06-25
-
-3 MINOR findings (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship commit `c01a3f9`. Reviewer rated the feature well-built and idiomatic — the standout being the per-pane `cc_kill`-on-unmount that reaps both PTY panes generically and closes a latent WP7 lifecycle gap. All findings are low-risk: two over-narrated comments + one accepted test-boundary gap. Auto-backlogged per drive_mode=autopilot.
-
-## SURFACE-2026-06-25-QUALITY-WP1-APP-WIRING-UNTESTED
-- **Files:** `src/components/workspace/Filmstrip.tsx`, `src/App.tsx` (requestClose / resolveClose / dirty-probe registry)
-- **Priority:** low
-- **Status:** pending
-- **Type:** test-coverage gap
-- **Finding:** Only the pure layer (reducer, `dirtyDocCount`, `closeWorkspaceSpec`) is unit-covered. No component test for the × (stopPropagation routing, keyboard Enter/Space) and no App-level test for the probe-registry / focus-repick wiring. Accepted boundary per the project's manual-host-UI convention + the live 9/9 operator verification — but the App wiring (`requestClose` reading the `workspaces` closure, `resolveClose` clearing `pendingClose`) is the part most likely to regress silently.
-- **Pickup shape:** if/when the project adopts a component-test harness (RTL) or E2E (deferred per Phase-1 convention), add a Filmstrip-×-routing test + an App close-handler test. Low value until then; dismiss if the manual-verification posture holds.
-
 # file-op-error-surface (Deferred — net-new UX) — 2026-06-30
 
 ## SURFACE-2026-06-30-FILE-OP-ERROR-SURFACE
@@ -513,30 +515,6 @@ scheduling items rather than polish.*
 - **Priority:** low
 
 # fa-wp4-send-and-stage — 2026-09-22
-
-## SURFACE-2026-09-22-QUALITY-WP4-WIRING-TEST-REIMPLEMENTS-SEQUENCE
-
-- **Priority:** medium
-- **Source:** feature-review-quality (F-a WP4), MAJOR-3 — partially fixed at review time
-- **Status:** pending
-
-**The finding.** `promptSendWiring.test.tsx` RE-IMPLEMENTS the panel's send sequence (plan →
-guard → inject → append → clear) in a local `performSend` helper rather than driving the panel's
-real closure. It therefore proves the SEQUENCE is correct, not that the PANEL performs it.
-
-⚠️ **What was already done at review time:** the two arms asserting pure test-local logic
-(`blank send`, `no live CC session` — both hinging on `if (!sessionId) return false`) were
-DELETED (13 → 11 tests) rather than left reading as coverage, and the file's disclosure was
-sharpened to state plainly what it does and does not prove.
-
-**What remains.** The component-level version is reachable and was not built: the panel registers
-its real send closure via `onRegisterSend`, so a jsdom render could capture and invoke it. That
-needs a mounted CM6 host plus a live `injectCommand` round-trip through a mocked `invoke`.
-
-⚠️ **Residual risk is bounded, not zero.** The panel's call ORDER is pinned by source-order guards
-in `promptDraftSync.test.ts` (archive-before-clear, one `injectCommand` call site, the confirm-arm
-ordering), and those were mutation-proved. What is unpinned is that the panel passes the same
-ARGUMENTS the re-implementation uses.
 
 ## SURFACE-2026-09-22-QUALITY-WP4-COMMENT-DUPLICATION-ACROSS-PROMPT-MODULES
 

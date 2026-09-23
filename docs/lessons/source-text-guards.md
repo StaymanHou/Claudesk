@@ -562,8 +562,28 @@ every line was true when written.
 steering work toward the guard style that failed the nine ways above.** Stated once here because
 **29 files** cite the original note; they are pointers, and this is the text.
 
-**What is true:** `@testing-library/react` is not a dependency, so there is no harness for
-*interaction* — no click dispatch, no state transition, no `act()`.
+**What is true:** `@testing-library/react` is not a dependency.
+
+⚠️ **CORRECTED 2026-09-23 (paydown WP7): that does NOT mean "no interaction".** The note used to
+continue *"so there is no harness for interaction — no click dispatch, no state transition, no
+`act()`"*, and that half was false too. React's own `act` (from `react`) plus `createRoot` (from
+`react-dom/client`) under a per-file jsdom environment mounts a component LIVE: effects run, state
+transitions, a real `.click()` reaches React's handler, and with
+`@tauri-apps/api/mocks` → `mockIPC(…, { shouldMockEvents: true })` a real (mocked) Tauri event
+reaches a `listen` subscriber. No new dependency is needed. Precedents:
+`src/components/workspace/__tests__/liveWorkspace.tsx` (the shared harness for a live `Workspace`
+mount, which stubs exactly `XtermPane`, `RightPanelHost` and the gate seam),
+`turnNavControls.test.tsx`, `workspaceDriveModeLive.test.tsx`, `promptSendWiring.test.tsx` (real
+CM6 host), `src/__tests__/closeWiring.test.tsx` (the real `App`, workspaces opened through the DEV
+`window.__seedWorkspace` seam), and the older `dictationProbeArms.test.tsx`.
+  - ⚠️ Set `globalThis.IS_REACT_ACT_ENVIRONMENT = true` explicitly in the test file.
+  - ⚠️ Tap `window` `error`: a throw inside a DOM listener is swallowed under Vitest jsdom
+    (`[[jsdom-listener-throw-is-silent-in-vitest]]`).
+  - ⚠️ Teardown order: settle a tick after `unmount` BEFORE `clearMocks()`. The unlisten runs on
+    a resolved promise and throws on the cleared event-plugin internals otherwise.
+  - ⚠️ Stub the gate through the `useWorkflowFeaturesEnabled` SEAM. Never answer the raw gate
+    command in a mock: the OFF-invariant guard allows exactly one door to that setting and fails
+    any other file that names it.
 
 **What is ALSO true, and was under-claimed:** `renderToStaticMarkup` ships with the installed
 `react-dom` and `jsdom` is already a devDependency, so a component's markup can be **rendered and
@@ -589,7 +609,11 @@ repo accumulated its nine failure forms.
 is **not** adopted. The accepted posture is **pure-core + resting-DOM render + live verify**:
 behavior is extracted into pure modules and driven by tests, resting DOM is rendered with
 `renderToStaticMarkup` + per-file jsdom, and interaction sequences go to live MCP-bridge
-verification. Stop treating interaction-level coverage as an open gap each feature must re-argue;
+verification. **Added 2026-09-23 (paydown WP7), without reopening the ruling:** a fourth leg,
+the jsdom LIVE mount above (`act` + `createRoot`, still no RTL). Reach for it when a caller-side
+property needs an event or a state transition, e.g. "Cancel writes nothing" or "a foreign-path
+broadcast is ignored". Those are exactly the properties a pure extraction cannot see
+(`[[extracted-machine-needs-a-live-caller-guard]]`). Stop treating interaction-level coverage as an open gap each feature must re-argue;
 it is a known boundary of the accepted harness. Reopen only if a specific interaction defect ships
 that a pure extraction could not have reached. That record is what the retired
 `SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` asked for.
