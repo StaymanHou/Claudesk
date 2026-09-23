@@ -122,6 +122,7 @@
 - **Backlog resolved:** SURFACE-2026-08-25-SYNC-TAURI-COMMANDS-MAY-BLOCK-THE-MAIN-THREAD — the guard enforces the property crate-wide and is mutation-proven against the incident's own shape; the inventory's two real offenders were fixed.
 - **Backlog resolved:** SURFACE-2026-09-23-SUPERVISOR-ADJUDICATE-BLOCKS-THE-MAIN-THREAD — confirmed real by `sample` (the command sat on the main thread in 2327 of 2327 samples), and gone after the fix (0 samples; the call now runs on a `spawn_blocking` worker).
 - **Backlog resolved:** SURFACE-2026-09-23-QUALITY-RUN-COMMAND-PIPES-NOT-DRAINED — `run_command` drains both pipes on reader threads from spawn, and its deadline starts before the stdin write.
+- **Task closed:** Backlog-paydown 2026-09-23 WP10, mark a staged prompt as dictated. The Prompt panel now wraps every staged send in `[Dictated via speech recognition — may contain transcription errors.]` … `[End dictated section.]` inside the bracketed-paste envelope, behind a persisted Dictated checkbox that defaults on, while the draft and recover history keep the raw text.
 
 ## 2026-09-22
 

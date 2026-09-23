@@ -14,7 +14,12 @@ vi.mock("@tauri-apps/api/core", () => ({
 const { planSend, STAGING_INJECT_LABEL } = await import("../sendStagedDraft");
 const { injectCommand, slashCommandPayload } =
   await import("../../autoResumeFire");
-const { PASTE_START, PASTE_END } = await import("../../stagedPayload");
+const { PASTE_START, PASTE_END, DICTATED_OPEN, DICTATED_CLOSE } =
+  await import("../../stagedPayload");
+
+// Paydown WP10: the pre-existing cases pin the UNWRAPPED envelope, so they pass the wrap OFF.
+// The wrap's own cases are in the `dictated` block at the bottom.
+const OFF = { dictated: false } as const;
 
 // F-a WP4 Phase 1 — the send seam.
 //
@@ -44,7 +49,7 @@ beforeEach(() => {
 
 describe("planSend — the blank check, which is load-bearing", () => {
   it("refuses an empty body", () => {
-    expect(planSend("", "auto-submit")).toBeNull();
+    expect(planSend("", "auto-submit", OFF)).toBeNull();
   });
 
   it("refuses a whitespace-only body, in either mode", () => {
@@ -53,7 +58,7 @@ describe("planSend — the blank check, which is load-bearing", () => {
     // behaviour under which clear-and-archive stays consistent.
     for (const mode of ["auto-submit", "stage-only"] as const) {
       expect(
-        planSend("   \n\t  ", mode),
+        planSend("   \n\t  ", mode, OFF),
         `${mode} accepted a blank body`,
       ).toBeNull();
     }
@@ -62,7 +67,7 @@ describe("planSend — the blank check, which is load-bearing", () => {
   it("sends a body that is only MEANINGFULLY blank-adjacent", () => {
     // A single character surrounded by whitespace is real text. The blank test trims; the body
     // does not.
-    const plan = planSend("  hi  ", "auto-submit");
+    const plan = planSend("  hi  ", "auto-submit", OFF);
     expect(plan).not.toBeNull();
     // ⚠️ VERBATIM — the surrounding spaces survive. The operator's text is not tidied.
     expect(plan?.body).toBe("  hi  ");
@@ -79,14 +84,14 @@ describe("planSend — the label", () => {
     // `injectCommand`'s `"auto-resume"` default, so every button failure read as an
     // auto-resume failure in the one diagnostic this path has.
     for (const mode of ["auto-submit", "stage-only"] as const) {
-      expect(planSend("body", mode)?.label).toBe("staging");
+      expect(planSend("body", mode, OFF)?.label).toBe("staging");
     }
   });
 });
 
 describe("the two modes differ by EXACTLY the trailing CR", () => {
   it("auto-submit wraps in bracketed paste and appends one \\r OUTSIDE the envelope", () => {
-    const plan = planSend("hello world", "auto-submit");
+    const plan = planSend("hello world", "auto-submit", OFF);
     const bytes = plan!.buildPayload();
     const binary = atob(bytes);
     const text = new TextDecoder().decode(
@@ -96,7 +101,7 @@ describe("the two modes differ by EXACTLY the trailing CR", () => {
   });
 
   it("stage-only wraps in the same envelope with NO trailing \\r", () => {
-    const plan = planSend("hello world", "stage-only");
+    const plan = planSend("hello world", "stage-only", OFF);
     const binary = atob(plan!.buildPayload());
     const text = new TextDecoder().decode(
       Uint8Array.from(binary, (c) => c.charCodeAt(0)),
@@ -108,8 +113,8 @@ describe("the two modes differ by EXACTLY the trailing CR", () => {
     // ⚠️ Asserted as a DIFFERENCE rather than as two independent literals. Two separate
     // equality checks both pass if the envelope silently changes in both modes at once; this
     // one pins the relationship that decision 1 is actually about.
-    const auto = atob(planSend("x", "auto-submit")!.buildPayload());
-    const stage = atob(planSend("x", "stage-only")!.buildPayload());
+    const auto = atob(planSend("x", "auto-submit", OFF)!.buildPayload());
+    const stage = atob(planSend("x", "stage-only", OFF)!.buildPayload());
     const autoBytes = Uint8Array.from(auto, (c) => c.charCodeAt(0));
     const stageBytes = Uint8Array.from(stage, (c) => c.charCodeAt(0));
 
@@ -127,7 +132,7 @@ describe("the two modes differ by EXACTLY the trailing CR", () => {
     // `\r` is inserted as a literal newline rather than submitting. A multi-line dictation must
     // therefore arrive as ONE prompt with its line breaks intact, not as N truncated ones.
     const binary = atob(
-      planSend("one\ntwo\nthree", "stage-only")!.buildPayload(),
+      planSend("one\ntwo\nthree", "stage-only", OFF)!.buildPayload(),
     );
     const text = new TextDecoder().decode(
       Uint8Array.from(binary, (c) => c.charCodeAt(0)),
@@ -143,7 +148,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
   // read what crossed the `invoke` boundary.
 
   it("auto-submit's bytes arrive at cc_input intact", async () => {
-    const plan = planSend("compose me", "auto-submit")!;
+    const plan = planSend("compose me", "auto-submit", OFF)!;
     await injectCommand(
       "sess-1",
       plan.command,
@@ -165,7 +170,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
   });
 
   it("stage-only's bytes arrive WITHOUT the submitting CR", async () => {
-    const plan = planSend("compose me", "stage-only")!;
+    const plan = planSend("compose me", "stage-only", OFF)!;
     await injectCommand(
       "sess-1",
       plan.command,
@@ -183,7 +188,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
     // multi-line dictation fires as N truncated prompts. Asserting inequality against the
     // default is what makes the omission visible.
     const body = "line one\nline two";
-    const plan = planSend(body, "stage-only")!;
+    const plan = planSend(body, "stage-only", OFF)!;
     await injectCommand(
       "sess-1",
       plan.command,
@@ -210,7 +215,7 @@ describe("the plan reaches the REAL funnel with the values it carries", () => {
     invokeMock.mockRejectedValue(new Error("pty gone"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const plan = planSend("body", "auto-submit")!;
+    const plan = planSend("body", "auto-submit", OFF)!;
     await injectCommand(
       "sess-1",
       plan.command,
@@ -250,5 +255,39 @@ describe("the widening left every existing caller byte-identical", () => {
     await injectCommand("sess-1", "/session-start");
     expect(sentText()).not.toContain(PASTE_START);
     expect(sentText()).not.toContain(PASTE_END);
+  });
+});
+
+describe("planSend — the dictated wrap (paydown WP10)", () => {
+  // UTF-8 decode, not bare `atob`: the open note carries an em dash.
+  const decode = (b64: string): string =>
+    new TextDecoder().decode(
+      Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)),
+    );
+
+  it("wraps the PAYLOAD when on, byte-for-byte, in both modes", () => {
+    const wrapped = `${PASTE_START}${DICTATED_OPEN}\ra\rb\r${DICTATED_CLOSE}${PASTE_END}`;
+    expect(
+      decode(
+        planSend("a\nb", "stage-only", { dictated: true })!.buildPayload(),
+      ),
+    ).toBe(wrapped);
+    expect(
+      decode(
+        planSend("a\nb", "auto-submit", { dictated: true })!.buildPayload(),
+      ),
+    ).toBe(`${wrapped}\r`);
+  });
+
+  it("does NOT wrap when off", () => {
+    expect(decode(planSend("a\nb", "stage-only", OFF)!.buildPayload())).toBe(
+      `${PASTE_START}a\rb${PASTE_END}`,
+    );
+  });
+
+  it("keeps `body` RAW either way — it is what gets archived, so a resend must not double-wrap", () => {
+    for (const dictated of [true, false]) {
+      expect(planSend("a\nb", "auto-submit", { dictated })!.body).toBe("a\nb");
+    }
   });
 });

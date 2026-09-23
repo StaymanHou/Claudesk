@@ -1838,6 +1838,26 @@ body,
   background-color: #1a1a1a;
 }
 
+/* Paydown WP10 — the "mark as dictated" toggle. `margin-right: auto` pushes it to the LEFT
+   edge while the send buttons stay right-aligned (`justify-content: flex-end` on the row), so it
+   cannot be mistaken for a third send button. Literal hex, same reason as the row above. */
+.prompt-dictated {
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: #9b9b9b;
+  cursor: pointer;
+  user-select: none;
+}
+
+.prompt-dictated input {
+  margin: 0;
+  accent-color: #6ea8ff;
+  cursor: pointer;
+}
+
 .prompt-send {
   font: inherit;
   font-size: 0.78rem;

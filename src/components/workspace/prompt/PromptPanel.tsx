@@ -34,6 +34,7 @@ import { planRecover, discardConfirmSpec } from "./promptRecover";
 import { ConfirmModal } from "../editor/ConfirmModal";
 import { injectCommand } from "../autoResumeFire";
 import { planSend, type SendMode } from "./sendStagedDraft";
+import { loadDictatedWrap, saveDictatedWrap } from "./promptDictatedWrap";
 import {
   DRAFT_DEBOUNCE_MS,
   planEdit,
@@ -258,6 +259,14 @@ export function PromptPanel({
     ccSessionIdRef.current = ccSessionId;
   }, [ccSessionId]);
 
+  // Paydown WP10 — the "mark as dictated" toggle. Seeded from storage (lazy, read once) and read
+  // by `send` THROUGH A REF, for the same stable-identity reason as the refs above.
+  const [dictated, setDictated] = useState(() => loadDictatedWrap());
+  const dictatedRef = useRef(dictated);
+  useEffect(() => {
+    dictatedRef.current = dictated;
+  }, [dictated]);
+
   const send = useCallback(
     (mode: SendMode) => {
       const body = docRef.current;
@@ -265,7 +274,7 @@ export function PromptPanel({
 
       // ⚠️ The blank check lives in `planSend`, not here — see its header. A blank body returns
       // null and nothing happens: no inject, no clear, no archive.
-      const plan = planSend(body, mode);
+      const plan = planSend(body, mode, { dictated: dictatedRef.current });
       if (!plan) return;
 
       // ⚠️ Read the session id THROUGH THE REF, at send time. A recycle swaps it, and a value
@@ -466,6 +475,23 @@ export function PromptPanel({
         />
       )}
       <div className="prompt-actions">
+        {/* Paydown WP10 — wraps the SENT text in the dictated notes; the draft and the recover
+            history keep the raw body, so the wrap is applied once, at send time. */}
+        <label
+          className="prompt-dictated"
+          title="Wrap the sent text in notes telling Claude it was dictated and may contain speech-recognition errors"
+        >
+          <input
+            type="checkbox"
+            checked={dictated}
+            onChange={(e) => {
+              setDictated(e.target.checked);
+              saveDictatedWrap(e.target.checked);
+            }}
+            data-testid="prompt-dictated-toggle"
+          />
+          Dictated
+        </label>
         {/* ⚠️ DISABLED WHEN THERE IS NOTHING TO SEND — `planSend` would return null and the
             click would be a silent no-op, which reads as a broken button. The predicate
             mirrors `planSend`'s own blank rule (trim), so the two cannot disagree about what

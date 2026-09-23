@@ -20,7 +20,13 @@ const { PromptPanel } = await import("../PromptPanel");
 const { saveDraft, loadDraft, DRAFT_KEY_PREFIX } =
   await import("../../draftStore");
 const { loadHistory, clearHistory } = await import("../../draftHistory");
-const { PASTE_START, PASTE_END } = await import("../../stagedPayload");
+const { PASTE_START, PASTE_END, DICTATED_OPEN, DICTATED_CLOSE } =
+  await import("../../stagedPayload");
+const { PROMPT_DICTATED_WRAP_KEY } = await import("../promptDictatedWrap");
+
+/** Paydown WP10: the dictated wrap is ON by default, so a default send carries the notes. */
+const wrapped = (body: string) =>
+  `${PASTE_START}${DICTATED_OPEN}\r${body}\r${DICTATED_CLOSE}${PASTE_END}`;
 type SendMode = import("../sendStagedDraft").SendMode;
 
 // F-a WP4 Phase 2 (task 4.5), rebuilt at paydown 2026-09-23 WP7 (AH1) — the send's BEHAVIOUR:
@@ -140,7 +146,7 @@ describe("auto-submit send", () => {
     await send("auto-submit");
     const sent = lastInvoke();
     expect(sent.command).toBe("cc_input");
-    expect(sent.text).toBe(`${PASTE_START}write the thing${PASTE_END}\r`);
+    expect(sent.text).toBe(`${wrapped("write the thing")}\r`);
   });
 
   it("clears the persisted draft AND the rendered buffer", async () => {
@@ -165,7 +171,7 @@ describe("stage-only send", () => {
   it("sends the same envelope WITHOUT the submitting CR", async () => {
     mount("half a thought");
     await send("stage-only");
-    expect(lastInvoke().text).toBe(`${PASTE_START}half a thought${PASTE_END}`);
+    expect(lastInvoke().text).toBe(wrapped("half a thought"));
   });
 
   it("ALSO clears and archives — both modes do", async () => {
@@ -185,7 +191,50 @@ describe("stage-only send", () => {
         '[data-testid="prompt-send-stage"]',
       )!.click();
     });
-    expect(lastInvoke().text).toBe(`${PASTE_START}clicked${PASTE_END}`);
+    expect(lastInvoke().text).toBe(wrapped("clicked"));
+  });
+});
+
+describe("the dictated toggle reaches the send (paydown WP10)", () => {
+  // ⚠️ The pure builder's tests prove the MACHINE; this block proves the panel's CALLER threads
+  // the toggle through. A send closure that ignored it (hardcoded ON) would pass every
+  // `stagedPayload` test and fail the OFF case here.
+  const toggle = (el: HTMLElement) =>
+    el.querySelector<HTMLInputElement>(
+      '[data-testid="prompt-dictated-toggle"]',
+    )!;
+
+  it("renders checked by default", () => {
+    const el = mount("x");
+    expect(toggle(el).checked).toBe(true);
+  });
+
+  it("unticked, the send goes out UNWRAPPED, and the choice is persisted", async () => {
+    const el = mount("typed not dictated");
+    await act(async () => {
+      toggle(el).click();
+    });
+    expect(toggle(el).checked).toBe(false);
+    expect(localStorage.getItem(PROMPT_DICTATED_WRAP_KEY)).toBe("false");
+    await send("auto-submit");
+    expect(lastInvoke().text).toBe(
+      `${PASTE_START}typed not dictated${PASTE_END}\r`,
+    );
+  });
+
+  it("a persisted OFF is read at mount", async () => {
+    localStorage.setItem(PROMPT_DICTATED_WRAP_KEY, "false");
+    const el = mount("again");
+    expect(toggle(el).checked).toBe(false);
+    await send("stage-only");
+    expect(lastInvoke().text).toBe(`${PASTE_START}again${PASTE_END}`);
+  });
+
+  it("archives the RAW body when wrapped, so a recover-and-resend cannot double-wrap", async () => {
+    mount("dictated words");
+    await send("auto-submit");
+    expect(lastInvoke().text).toBe(`${wrapped("dictated words")}\r`);
+    expect(loadHistory(PROJECT)[0]).toBe("dictated words");
   });
 });
 

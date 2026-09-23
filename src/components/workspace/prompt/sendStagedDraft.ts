@@ -78,7 +78,11 @@ export interface SendPlan {
  * passage's leading indentation or trailing newline is the operator's text, and this feature
  * exists to preserve what they composed, not to tidy it.
  */
-export function planSend(body: string, mode: SendMode): SendPlan | null {
+export function planSend(
+  body: string,
+  mode: SendMode,
+  options: { readonly dictated: boolean },
+): SendPlan | null {
   if (body.trim() === "") return null;
 
   // ⚠️ The ONE difference between the two modes, and the whole of decision 1: a single trailing
@@ -94,6 +98,9 @@ export function planSend(body: string, mode: SendMode): SendPlan | null {
     // which of the two send buttons failed.
     command: `staged prompt (${mode})`,
     label: STAGING_INJECT_LABEL,
-    buildPayload: () => stagedPayload(body, { submit }),
+    // ⚠️ The dictated wrap happens HERE, inside the payload, and never in `body` above: `body`
+    // is what gets archived, so a recovered-and-resent entry would otherwise be wrapped twice.
+    buildPayload: () =>
+      stagedPayload(body, { submit, dictated: options.dictated }),
   };
 }

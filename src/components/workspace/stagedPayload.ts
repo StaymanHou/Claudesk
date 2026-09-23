@@ -31,6 +31,19 @@ export const PASTE_START = "\x1b[200~";
 /** Bracketed-paste end — `ESC [ 2 0 1 ~`. */
 export const PASTE_END = "\x1b[201~";
 
+/**
+ * Paydown WP10 — the notes bounding a DICTATED body, so CC reads an ASR mishearing as a
+ * transcription slip rather than as the operator's intent. Wording is an operator ruling
+ * (2026-09-23), verbatim.
+ *
+ * ⚠️ Kept out of any `TRANSITION:` / slash-command shape, so a note can never be read as a
+ * workflow token. ⚠️ An OPEN and a CLOSE note, not one leading sentence: the close bounds the
+ * span, so text typed into CC's own prompt after a stage-only send is not covered by the caveat.
+ */
+export const DICTATED_OPEN =
+  "[Dictated via speech recognition — may contain transcription errors.]";
+export const DICTATED_CLOSE = "[End dictated section.]";
+
 export interface StagedPayloadOptions {
   /**
    * Append the trailing `\r` that submits the prompt.
@@ -39,6 +52,13 @@ export interface StagedPayloadOptions {
    * prompt for the operator to review and send themselves.
    */
   readonly submit: boolean;
+  /**
+   * Wrap the body in {@link DICTATED_OPEN} … {@link DICTATED_CLOSE}.
+   *
+   * ⚠️ REQUIRED, not optional-with-a-default: a default would let a caller that forgot to thread
+   * the panel's toggle through compile cleanly and silently ignore it.
+   */
+  readonly dictated: boolean;
 }
 
 /**
@@ -58,9 +78,16 @@ export function stagedPayload(
   body: string,
   options: StagedPayloadOptions,
 ): string {
+  // ⚠️ Wrap FIRST, so the notes' own line breaks go through the same normalization below and the
+  // `ESC[201~` neutralization covers the whole wrapped text, not just the body. Wrapping after
+  // would put a raw `\n` on the wire, which in raw mode is autocomplete typeahead, not a newline.
+  const text = options.dictated
+    ? `${DICTATED_OPEN}\n${body}\n${DICTATED_CLOSE}`
+    : body;
+
   // Interior newlines → `\r`, matching xterm's own paste transform. `\r\n` collapses to a
   // single `\r` (not two) so a CRLF-authored body does not gain blank lines.
-  const normalized = body.replace(/\r\n|\n/g, "\r");
+  const normalized = text.replace(/\r\n|\n/g, "\r");
 
   // ⚠️ A literal `ESC[201~` inside the body would END the envelope early, and everything
   // after it would be interpreted as keystrokes rather than pasted text — control sequences

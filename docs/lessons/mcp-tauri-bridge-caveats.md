@@ -202,6 +202,12 @@ not write", which is the standing *instrument-that-cannot-observe-reports-absenc
    exactly; see `source-text-guards.md` entry 11.
 3. If you must observe IPC live, use `ipc_monitor` / `ipc_get_captured` — the bridge's own capture,
    which sits at the transport rather than at a JS property.
+   ⚠️ **But it did NOT work here either (measured 2026-09-23, paydown WP10 verify).**
+   `ipc_get_captured` returned `[]`, both filtered on `cc_input` and unfiltered, across **three**
+   Prompt-panel `cc_input` sends. All three demonstrably landed in the live `claude` prompt (read back
+   from the xterm buffer). So treat it like any other tap: an empty capture means nothing until a
+   positive control shows it can see a known call. The instrument that worked was reading the
+   effect in the PTY (item 1, caveat (i)).
 
 ⚠️ **Do not conclude "no IPC happened" from a JS-level tap under any circumstances.** Confirm the
 tap can see a *known-positive* call first — a positive control — or use a different instrument.
@@ -228,6 +234,34 @@ under `#[cfg(debug_assertions)]` and so structurally cannot reach prod: `manage_
 geometry, `ipc_emit_event` for app events. **Working quit trigger:**
 `ipc_emit_event('quit-requested')` exercises the real `prevent_close` → `quit_now` → `app.exit(0)`
 path (proven 3×).
+
+### (n) ⚠️ The agent-launched dev window runs HIDDEN — throttled timers fake defects (paydown WP10, 2026-09-23)
+
+A `pnpm tauri:dev` window launched by the agent reports `document.visibilityState === "hidden"` and
+`document.hasFocus() === false`. So WKWebView **throttles `setInterval` and pauses
+`requestAnimationFrame`**. That produced three false alarms in one verify:
+
+- **The xterm pane screenshot lags the buffer by seconds.** A staged send read as "nothing arrived"
+  while the buffer already held it. Read the buffer (caveat (i)), not a screenshot.
+- **The Prompt editor appears not to clear after a send.** `@uiw/react-codemirror` 4.25.10 defers a
+  controlled `value` update while a **typing latch** is live: 200 ticks of a 1 ms `setInterval`
+  (`TYPING_TIMOUT` in `useCodeMirror.js`), re-armed by every edit. Throttled, the deferred `""`
+  lands seconds later. React state (`Stage` disabled) was already correct. Recheck after a pause
+  before calling it a defect.
+- **`ipc_monitor` showed nothing.** That one is not throttling; see (l) item 3.
+
+**Instruments that work in that state:**
+
+- **Drive CM6 through its view, never `execCommand('insertText')`.** The latter mutates the DOM and
+  desyncs CM6's state from React. Use
+  `document.querySelector('.cm-content').cmTile.root.view.dispatch({ changes: … })` (CM6 here exposes
+  `cmTile`, not `cmView`).
+- **Reach the xterm `Terminal` via the React fiber**, since no global is exposed. From `.xterm`, find
+  the element's `__reactFiber$*` key and walk `.return`. On each fiber, scan the `memoizedState` hook
+  chain (`.next`) for a value, or a ref's `.current`, that has `buffer.active`. Then
+  `getLine(y).translateToString(true)` per row.
+- **Promise-returning scripts time out the eval**, `setTimeout` included. Fire in one call and read in
+  the next (caveat (d)).
 
 ## Related
 

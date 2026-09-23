@@ -587,10 +587,25 @@ notes sit **inside** the bracketed-paste envelope, and the `ESC[201~` neutraliza
    transcription errors; read for intent.]` … `[End dictated section.]`. Keep it out of any
    `TRANSITION:`/slash-command shape, so it can never look like a workflow token.
 
+**Rulings (operator, 2026-09-23, at restore):** Q1 **wrap** (open + close note). Q2 **per-panel
+toggle, default ON**. Q3 the proposed wording **minus "read for intent"**, exactly:
+`[Dictated via speech recognition — may contain transcription errors.]` … `[End dictated section.]`
+
 **Done when:** a value test asserts the exact decoded payload for wrap ON, for OFF, and for both
 submit modes, **identity, not length** (source-text-guards entry 15). It is mutation-proven by
 (a) dropping the close note and (b) wrapping after normalization. A render or wiring test proves
 the toggle reaches `buildPayload`, because a pure builder proves the machine, not its caller.
+
+**✅ WP10 CLOSED 2026-09-23** (task `paydown-wp10-dictated-prompt-wrap`, archived).
+- **What was built:**
+  - A **required** `dictated` option on `stagedPayload` and `planSend`. It wraps the body before normalization, so the notes sit inside the envelope, and `plan.body` stays raw.
+  - A persisted **Dictated** checkbox in the panel's action row, default ON.
+- **Proof:**
+  - Value tests pin the exact bytes for ON/OFF × submit/stage.
+  - Three mutants were killed, each individually: close note dropped (7 fail), wrap after normalization (8 fail), panel ignores toggle (2 fail).
+  - Verified live against a real `claude` prompt: the wrapped and raw arms both landed, unsubmitted.
+- **Default taken:** the toggle is ONE global key (`claudesk.prompt.dictatedWrap`), not per-workspace.
+- ⚠️ **Real dictation into the panel is still unexercised.** macOS dictation does not engage under `pnpm tauri:dev`, so that stays with the backlog's dictation entry (needs a released build).
 
 ---
 
@@ -648,6 +663,3 @@ SURFACEs listed in WP1 §5. The R4 rulings (40, 46, 32) are deleted in WP2 once 
 3. Carry any surviving obligation back into `backlog.md` as its own SURFACE, so it outlives this
    file (the 2026-08-19 sweep did this for the comment-convention pass).
 4. **Delete this file** in a commit that says so.
-
-## Session Handoff — 2026-09-23 14:30
-Handed off. See `workflow-system/state/.session.md` to restore. WP1–WP9 CLOSED; next is WP10 (dictated-prompt wrap) — 3 operator rulings first.

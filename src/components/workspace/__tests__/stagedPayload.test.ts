@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { PASTE_END, PASTE_START, stagedPayload } from "../stagedPayload";
+import {
+  DICTATED_CLOSE,
+  DICTATED_OPEN,
+  PASTE_END,
+  PASTE_START,
+  stagedPayload,
+} from "../stagedPayload";
 import { slashCommandPayload } from "../autoResumeFire";
 
 // F-a WP2 Phase 1 — the staged (multi-line) payload, pinned BYTE-FOR-BYTE.
@@ -28,7 +34,9 @@ describe("stagedPayload — the bracketed-paste envelope", () => {
   it("wraps the body in ESC[200~ … ESC[201~ with interior newline as CR, and does NOT submit", () => {
     // The whole-payload literal. Spelled out as explicit byte values so a change to any
     // part of the envelope — not merely its length — fails loudly.
-    expect(bytes(stagedPayload("a\nb", { submit: false }))).toEqual([
+    expect(
+      bytes(stagedPayload("a\nb", { submit: false, dictated: false })),
+    ).toEqual([
       ...START,
       0x61, // a
       CR, // the interior newline, as CR — inside the envelope this INSERTS, not submits
@@ -41,8 +49,12 @@ describe("stagedPayload — the bracketed-paste envelope", () => {
     // ⚠️ This is the load-bearing property of the whole builder: stage-only must not
     // submit. Asserting the relationship (not just each shape) is what catches a change
     // that alters both modes in the same direction.
-    const staged = bytes(stagedPayload("a\nb", { submit: false }));
-    const submitted = bytes(stagedPayload("a\nb", { submit: true }));
+    const staged = bytes(
+      stagedPayload("a\nb", { submit: false, dictated: false }),
+    );
+    const submitted = bytes(
+      stagedPayload("a\nb", { submit: true, dictated: false }),
+    );
 
     expect(submitted).toEqual([...staged, CR]);
     expect(staged.at(-1)).not.toBe(CR);
@@ -52,43 +64,38 @@ describe("stagedPayload — the bracketed-paste envelope", () => {
   it("never emits LF anywhere, in either mode", () => {
     // `\n` in raw mode only triggers autocomplete typeahead; it must never reach the PTY.
     for (const submit of [true, false]) {
-      const out = bytes(stagedPayload("one\ntwo\r\nthree\n", { submit }));
+      const out = bytes(
+        stagedPayload("one\ntwo\r\nthree\n", { submit, dictated: false }),
+      );
       expect(out, `submit=${submit}`).not.toContain(LF);
     }
   });
 
   it("collapses CRLF to a single CR rather than emitting two line breaks", () => {
-    const crlf = bytes(stagedPayload("a\r\nb", { submit: false }));
-    const lf = bytes(stagedPayload("a\nb", { submit: false }));
+    const crlf = bytes(
+      stagedPayload("a\r\nb", { submit: false, dictated: false }),
+    );
+    const lf = bytes(stagedPayload("a\nb", { submit: false, dictated: false }));
     expect(crlf).toEqual(lf);
   });
 
   it("preserves a body that already contains a bare CR", () => {
-    expect(bytes(stagedPayload("a\rb", { submit: false }))).toEqual([
-      ...START,
-      0x61,
-      CR,
-      0x62,
-      ...END,
-    ]);
+    expect(
+      bytes(stagedPayload("a\rb", { submit: false, dictated: false })),
+    ).toEqual([...START, 0x61, CR, 0x62, ...END]);
   });
 
   it("preserves interior blank lines (consecutive newlines are not coalesced)", () => {
     // A dictated passage with paragraph breaks must keep them.
-    expect(bytes(stagedPayload("a\n\nb", { submit: false }))).toEqual([
-      ...START,
-      0x61,
-      CR,
-      CR,
-      0x62,
-      ...END,
-    ]);
+    expect(
+      bytes(stagedPayload("a\n\nb", { submit: false, dictated: false })),
+    ).toEqual([...START, 0x61, CR, CR, 0x62, ...END]);
   });
 
   it("encodes UTF-8, not truncated char codes", () => {
     // ⚠️ M10.5 WP4 shipped input mojibake because the old path truncated each char to
     // `& 0xff`. Dictated prose is exactly where curly quotes, em-dashes and accents appear.
-    const out = bytes(stagedPayload("é—", { submit: false }));
+    const out = bytes(stagedPayload("é—", { submit: false, dictated: false }));
     expect(out).toContain(0xc3); // é = U+00E9 → C3 A9
     expect(out).toContain(0xa9);
     expect(out).toContain(0xe2); // — = U+2014 → E2 80 94
@@ -97,21 +104,20 @@ describe("stagedPayload — the bracketed-paste envelope", () => {
   });
 
   it("handles an empty body — an envelope with nothing in it", () => {
-    expect(bytes(stagedPayload("", { submit: false }))).toEqual([
-      ...START,
-      ...END,
-    ]);
-    expect(bytes(stagedPayload("", { submit: true }))).toEqual([
-      ...START,
-      ...END,
-      CR,
-    ]);
+    expect(
+      bytes(stagedPayload("", { submit: false, dictated: false })),
+    ).toEqual([...START, ...END]);
+    expect(bytes(stagedPayload("", { submit: true, dictated: false }))).toEqual(
+      [...START, ...END, CR],
+    );
   });
 
   it("strips a literal ESC[201~ from the body so it cannot end the envelope early", () => {
     // ⚠️ The one injection-shaped hole in the envelope. An embedded terminator would close
     // the paste, and everything after it would be read as KEYSTROKES rather than text.
-    const out = bytes(stagedPayload(`a${PASTE_END}b`, { submit: false }));
+    const out = bytes(
+      stagedPayload(`a${PASTE_END}b`, { submit: false, dictated: false }),
+    );
     expect(out).toEqual([...START, 0x61, 0x62, ...END]);
 
     // Exactly one terminator survives — the envelope's own, at the very end. Counted over
@@ -124,7 +130,9 @@ describe("stagedPayload — the bracketed-paste envelope", () => {
   });
 
   it("leaves a literal ESC[200~ in the body alone — it is inert inside an open envelope", () => {
-    const out = bytes(stagedPayload(`a${PASTE_START}b`, { submit: false }));
+    const out = bytes(
+      stagedPayload(`a${PASTE_START}b`, { submit: false, dictated: false }),
+    );
     expect(out).toEqual([...START, 0x61, ...START, 0x62, ...END]);
   });
 
@@ -134,10 +142,12 @@ describe("stagedPayload — the bracketed-paste envelope", () => {
     // RangeError at this size. A long single-take dictation is the realistic input that gets
     // here. (It is a size + length check; the envelope's bytes are pinned by the tests above.)
     const big = "x".repeat(200_000);
-    expect(() => stagedPayload(big, { submit: false })).not.toThrow();
-    expect(bytes(stagedPayload(big, { submit: false }))).toHaveLength(
-      START.length + 200_000 + END.length,
-    );
+    expect(() =>
+      stagedPayload(big, { submit: false, dictated: false }),
+    ).not.toThrow();
+    expect(
+      bytes(stagedPayload(big, { submit: false, dictated: false })),
+    ).toHaveLength(START.length + 200_000 + END.length);
   });
 });
 
@@ -173,7 +183,9 @@ describe("verify-codify — the approved properties, asserted as INVARIANTS", ()
     // likely to break it: a body ending in `\n` becomes a CR, and only the fact that it
     // lands INSIDE the envelope keeps the payload from ending in one.
     for (const body of BODIES) {
-      const out = bytes(stagedPayload(body, { submit: false }));
+      const out = bytes(
+        stagedPayload(body, { submit: false, dictated: false }),
+      );
       expect(out.at(-1), JSON.stringify(body.slice(0, 40))).not.toBe(CR);
       // Stronger: it ends with the envelope terminator, so nothing trails the envelope.
       expect(out.slice(-END.length), JSON.stringify(body.slice(0, 40))).toEqual(
@@ -184,8 +196,12 @@ describe("verify-codify — the approved properties, asserted as INVARIANTS", ()
 
   it("the two modes differ by EXACTLY one trailing CR — for every body", () => {
     for (const body of BODIES) {
-      const staged = bytes(stagedPayload(body, { submit: false }));
-      const submitted = bytes(stagedPayload(body, { submit: true }));
+      const staged = bytes(
+        stagedPayload(body, { submit: false, dictated: false }),
+      );
+      const submitted = bytes(
+        stagedPayload(body, { submit: true, dictated: false }),
+      );
       expect(submitted, JSON.stringify(body.slice(0, 40))).toEqual([
         ...staged,
         CR,
@@ -199,7 +215,7 @@ describe("verify-codify — the approved properties, asserted as INVARIANTS", ()
     // terminator must not be able to add a second one.
     for (const body of BODIES) {
       for (const submit of [true, false]) {
-        const out = bytes(stagedPayload(body, { submit }));
+        const out = bytes(stagedPayload(body, { submit, dictated: false }));
         expect(out, JSON.stringify(body.slice(0, 40))).not.toContain(LF);
 
         let terminators = 0;
@@ -214,7 +230,7 @@ describe("verify-codify — the approved properties, asserted as INVARIANTS", ()
   it("always opens with the envelope starter", () => {
     for (const body of BODIES) {
       for (const submit of [true, false]) {
-        const out = bytes(stagedPayload(body, { submit }));
+        const out = bytes(stagedPayload(body, { submit, dictated: false }));
         expect(
           out.slice(0, START.length),
           JSON.stringify(body.slice(0, 40)),
@@ -250,5 +266,55 @@ describe("the existing slash-command builder is UNCHANGED by this WP (wbs 2.4)",
     ]) {
       expect(bytes(slashCommandPayload(variant)), variant).toEqual(expected);
     }
+  });
+});
+
+// Paydown WP10 — the dictated wrap. ⚠️ IDENTITY, not length (source-text-guards entry 15): every
+// case compares the whole decoded payload, so a dropped note, a moved note or a note outside the
+// envelope all fail rather than merely changing a count.
+describe("stagedPayload — the dictated wrap", () => {
+  /** Decode to text: the notes contain an em dash, so compare as UTF-8 text, not code units. */
+  const text = (b64: string): string =>
+    new TextDecoder().decode(
+      Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)),
+    );
+
+  it("uses the operator's ruled wording verbatim", () => {
+    // Spelled out literally, NOT via the constants, so a wording drift fails here.
+    expect(DICTATED_OPEN).toBe(
+      "[Dictated via speech recognition — may contain transcription errors.]",
+    );
+    expect(DICTATED_CLOSE).toBe("[End dictated section.]");
+  });
+
+  it("wraps INSIDE the envelope, each note on its own line, for all four combinations", () => {
+    const on = `\x1b[200~${DICTATED_OPEN}\rone\rtwo\r${DICTATED_CLOSE}\x1b[201~`;
+    const off = "\x1b[200~one\rtwo\x1b[201~";
+    expect(
+      text(stagedPayload("one\ntwo", { submit: false, dictated: true })),
+    ).toBe(on);
+    expect(
+      text(stagedPayload("one\ntwo", { submit: true, dictated: true })),
+    ).toBe(`${on}\r`);
+    expect(
+      text(stagedPayload("one\ntwo", { submit: false, dictated: false })),
+    ).toBe(off);
+    expect(
+      text(stagedPayload("one\ntwo", { submit: true, dictated: false })),
+    ).toBe(`${off}\r`);
+  });
+
+  it("wraps BEFORE normalization — the notes' own line breaks are CR, never LF", () => {
+    // Wrapping after normalization would leave the two joining `\n`s raw on the wire.
+    for (const submit of [true, false]) {
+      const out = bytes(stagedPayload("x", { submit, dictated: true }));
+      expect(out, `submit=${submit}`).not.toContain(LF);
+    }
+  });
+
+  it("still neutralizes an embedded ESC[201~ in a wrapped body, so the close note stays inside", () => {
+    expect(
+      text(stagedPayload(`a${PASTE_END}b`, { submit: false, dictated: true })),
+    ).toBe(`${PASTE_START}${DICTATED_OPEN}\rab\r${DICTATED_CLOSE}${PASTE_END}`);
   });
 });
