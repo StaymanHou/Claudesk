@@ -542,6 +542,17 @@ a behavior change the suite may not see. Drive via `/feature-plan`.
   precedent). The UI-freeze half is verified live with `sample`
   (`docs/lessons/pip-nspanel-main-thread.md`).
 
+**✅ WP9 CLOSED 2026-09-23** (feature `paydown-wp9-sync-command-blocking-guard`, archived; ship `17f90e5`).
+- **The guard:** `src-tauri/tests/sync_commands_do_not_block.rs`. It follows calls transitively, parsed with `syn`, over all **78** commands. It is mutation-proven against the **pre-fix `cc_kill`**, which fails with `cc_kill → kill → poll_reaped → sleep`, and has 10 fixture self-tests.
+- **The inventory found 7 flagged commands:**
+  - **2 real, fixed:**
+    - `supervisor_adjudicate` → `async` + `spawn_blocking`. The freeze was confirmed live by `sample`: 2327/2327 samples on the main thread before, 0 after.
+    - `workflow_uninstall_dry_run` → `(async)`.
+  - **1 accepted:** `quit_now`.
+  - **4 false positives:** `git_*`, where `.status()` is git2's accessor.
+- **`run_command`** took 3 back-loops, 1 shortcut and 5 fresh adversarial verify rounds before its exits held. It now has continuous drains, a 4 MiB cap with `OutputTooLarge`, and a group kill on timeout.
+- ⚠️ **The review found the dry-run fix INCOMPLETE:** `(async)` still pins a runtime worker. That is backlogged, with 3 other MAJORs and 5 MINORs, under `# paydown-wp9-sync-command-blocking-guard`.
+
 ## WP10 — Mark a staged prompt as dictated  `[impact: Med · effort: S · risk: Low]`  *(operator-added 2026-09-23, mid-WP4)*
 
 ⚠️ **New behavior, not paydown.** This is an operator ask, not an inventory finding. It lives here

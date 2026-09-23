@@ -118,6 +118,10 @@
 - **Backlog resolved:** SURFACE-2026-09-14-QUALITY-RECYCLE-TOKENS-CAST-IS-A-PROSE-CONTRACT — `shouldRecycle(): boolean` became `recycleTokens(): number | null`, so the `as number` cast is gone and the type enforces the null case.
 - **Backlog resolved:** SURFACE-2026-09-21-QUALITY-BLANK-CHECK-READS-BEFORE-THE-STORAGE-GUARD — refuted: both `appendToHistory` arms call `loadHistory`, which runs its own `safeStorage()` guard first, so reordering would remove no read; no edit made.
 - **Backlog resolved:** SURFACE-2026-08-18-QUALITY-WP4-WIP-PHASE-SECTIONS-INTERLEAVED — the two pre-read sections of the archived M13 WP4 WIP were moved into phase order, verified by an identical line multiset.
+- **Feature shipped:** Backlog-paydown 2026-09-23 WP9: no synchronous Tauri command may block the main thread. A transitive `syn`-based guard (`tests/sync_commands_do_not_block.rs`, which fails on the pre-fix `cc_kill`) covers all 78 commands. `supervisor_adjudicate` and `workflow_uninstall_dry_run` were moved off the main thread, and the adjudicator's `run_command` was hardened: continuous pipe drains, a 4 MiB cap that errors rather than truncates, and a process-group kill on timeout.
+- **Backlog resolved:** SURFACE-2026-08-25-SYNC-TAURI-COMMANDS-MAY-BLOCK-THE-MAIN-THREAD — the guard enforces the property crate-wide and is mutation-proven against the incident's own shape; the inventory's two real offenders were fixed.
+- **Backlog resolved:** SURFACE-2026-09-23-SUPERVISOR-ADJUDICATE-BLOCKS-THE-MAIN-THREAD — confirmed real by `sample` (the command sat on the main thread in 2327 of 2327 samples), and gone after the fix (0 samples; the call now runs on a `spawn_blocking` worker).
+- **Backlog resolved:** SURFACE-2026-09-23-QUALITY-RUN-COMMAND-PIPES-NOT-DRAINED — `run_command` drains both pipes on reader threads from spawn, and its deadline starts before the stdin write.
 
 ## 2026-09-22
 

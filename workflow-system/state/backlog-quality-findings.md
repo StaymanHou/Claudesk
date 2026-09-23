@@ -4,6 +4,53 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# paydown-wp9-sync-command-blocking-guard — 2026-09-23
+
+*(feature-review-quality on ship commit `17f90e5`; drive_mode=autopilot. 0 CRITICAL, 4 MAJOR, 5 MINOR, all auto-backlogged. The reviewer found no dead code, stale branches or superseded helpers left over from `run_command`'s three rebuilds. The leftover scaffolding is almost entirely comment provenance.)*
+
+## SURFACE-2026-09-23-QUALITY-DRY-RUN-ASYNC-ATTR-STILL-BLOCKS-A-RUNTIME-WORKER
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/workflow_install/commands.rs`, `workflow_uninstall_dry_run` (`#[tauri::command(async)]`)
+- **Finding:** Tauri's `(async)` form wraps the sync body in an `async move` on the async runtime, so a hung `uninstall.sh` now permanently occupies a runtime WORKER instead of the main thread. The command's own doc says there is no timeout on the wait. This contradicts the rule the same commit wrote down twice: `adjudicator/commands.rs` says "`spawn_blocking` rather than a bare `async fn` body, because the wait is long enough to starve an async-runtime worker", and the lesson doc says "`spawn_blocking` for long waits, `(async)` for short ones". A hang also leaves `control.running` set, which locks out every later install and uninstall.
+- **Suggested action:** move the body into `tauri::async_runtime::spawn_blocking`, cloning the `Arc<InstallControl>` out of `State`. ⚠️ Keep the `pub fn workflow_uninstall_dry_run` text anchor that `every_substrate_touching_command_takes_the_single_run_lock` greps, or update that guard in the same change. Consider a timeout on `run_dry_run` too, so the single-run lock cannot stick.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-GUARD-EXEMPTS-EVERY-ASYNC-COMMAND-UNLISTED
+- **Severity:** MAJOR
+- **Location:** `src-tauri/tests/sync_commands_do_not_block.rs`, the async exemption in `Crate::add_items`
+- **Finding:** every `async fn` / `(async)` command is exempt whatever its body does. An `async fn` command that calls `thread::sleep` or `child.wait()` directly on a runtime worker, or an `(async)` sync body (the finding above), passes. The gap is missing from the module doc's "does NOT cover" list and from the lesson doc, and it is exactly why the finding above went green.
+- **Suggested action:** at minimum, list it in both docs. Better: flag an `async` command whose body reaches a seed OUTSIDE a `spawn_blocking` closure (a second, weaker rule), or require `(async)` commands to appear in a small allowlist with a reason.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-GUARD-CFG-TEST-MATCH-DROPS-NOT-TEST-ITEMS
+- **Severity:** MAJOR
+- **Location:** `src-tauri/tests/sync_commands_do_not_block.rs`, `is_cfg_test`
+- **Finding:** an item counts as test-only if ANY whitespace token of its `cfg(...)` is `test`. So `#[cfg(not(test))]` and `#[cfg(any(test, feature = ".."))]` production items are dropped from the call graph. The anti-vacuity check counts only commands, so a dropped helper containing a seed would go unnoticed. There are no instances in `src/` today, so this is latent.
+- **Suggested action:** parse the cfg meta and treat an item as test-only only when its predicate is exactly `test` (optionally `all(test, …)`). Add a fixture test with a `cfg(not(test))` blocking helper that must flag.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-WP9-COMMENTS-CARRY-WIP-PROVENANCE-LABELS
+- **Severity:** MAJOR
+- **Location:** `src-tauri/src/adjudicator/mod.rs` (about 12 sites: "re-verify 3/4", "probe P4/P7/A/B", "mutant R1/R3", "the bounded-channel version passed it by 4.8 KB"); `tests/sync_commands_do_not_block.rs` (the `run_on_main_thread` fixture comment and others)
+- **Finding:** these labels point into the WIP and will not resolve once it is archived. The comment budget in `docs/lessons/source-text-guards.md` routes "what a previous version did, which review caught what" to the archive.
+- **Suggested action:** keep the content (the rejected-backpressure rationale at `Drain`'s doc, and the fixture-size reasoning) and delete the labels and the iteration narrative. ⚠️ This belongs with `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (R2 of the paydown: do not trim per-WP), so route it there unless it is picked up with the first finding above.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-WP9-MINOR-BATCH
+- **Severity:** MINOR ×5
+- **Location / findings:**
+  1. `docs/lessons/pip-nspanel-main-thread.md`: the main-thread rationale and the cc_kill chain are restated across the lesson, the guard doc, both command docs and CLAUDE.md. The lesson lists only 2 of the guard's 5 limits. Make the guard doc canonical and the lesson a pointer.
+  2. The guard: nested `fn` items inside impl methods and trait default bodies are never registered (`visit_item_fn` suppresses them, and `add_nested` runs for free fns only), so a call to one resolves to nothing.
+  3. The guard: `SPAWN_BOUNDARIES` skips ALL arguments of any call named `spawn`, including the crate-local `Drain::spawn(pipe, &stop)` and non-closure arguments evaluated on the caller. Restrict the cut to `Expr::Closure` / `Expr::Async` arguments, as the doc says.
+  4. `adjudicator/commands.rs`: `the_async_command_resolves_to_a_rejection_through_its_worker` forks the real `claude` whenever it is on `PATH`, and accepts either of two outcomes. It is environment-dependent and pins neither branch.
+  5. `adjudicator/mod.rs`: the OutputTooLarge Display comment says "Must not contain 'timed out'", but the TS classifier `/timed? ?out/i` also matches "time out" and "timedout". The test re-implements a subset of that regex.
+- **Priority:** low
+- **Status:** pending
+
 # paydown-wp7-render-instead-of-raw — 2026-09-23
 
 *(feature-review-quality on ship commit `a26b514`; 0 CRITICAL / 1 MAJOR / 6 MINOR; MINOR-6 was fixed in the WIP before archive.)*
@@ -46,14 +93,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** `src/components/workspace/__tests__/turnNavControls.test.tsx` (the AC-10 gate-OFF test)
 - **Finding:** the test proves the gate is OFF by the ABSENCE of `workspace-skill-row`. No test in the file shows the row is PRESENT with `gate: true`, so a renamed testid would make the proof vacuous.
 - **Suggested action:** add `expect(q(el, "workspace-skill-row")).not.toBeNull()` to a `gate: true` test in the same file.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-RUN-COMMAND-PIPES-NOT-DRAINED
-- **Severity:** MINOR (pre-existing; newly nameable)
-- **Location:** `src-tauri/src/adjudicator/mod.rs` → `run_command`
-- **Finding:** stdout and stderr are piped but not drained while `try_wait` polls, and `stdin.write_all` blocks before the deadline starts. A child that writes more than a pipe buffer before exiting, or never reads stdin, hangs past the timeout or forever. That is latent today, because `claude -p` reads all of stdin before writing.
-- **Suggested action:** handle this with the WP9 `supervisor_adjudicate` async move. (E3, which passes the captured stderr through, landed at paydown WP8; a child that overfills the stderr pipe still hangs.) Drain both pipes on reader threads and start the deadline before the write. The WP7 `sh -c` seam makes each testable, e.g. `sh -c 'head -c 200000 /dev/zero; exit 0'` and `sh -c 'sleep 30'` with a large prompt.
 - **Priority:** low
 - **Status:** pending
 

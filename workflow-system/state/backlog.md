@@ -57,16 +57,6 @@
 - **Status:** pending
 - **Pickup shape:** read the three entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
-## SURFACE-2026-09-23-SUPERVISOR-ADJUDICATE-BLOCKS-THE-MAIN-THREAD
-- **Source:** feature:verify-self (paydown WP7 Phase 1)
-- **Target level:** product:arch
-- **Type:** bug (suspected; not yet observed live)
-- **Summary:** `supervisor_adjudicate` (`src-tauri/src/adjudicator/commands.rs`) is a sync `#[tauri::command]`. Tauri 2 runs sync commands on the main thread, and its body (`adjudicator::run_command`) sleep-polls a `claude -p` child for up to `timeout_ms`. So each adjudication likely freezes the UI for as long as `claude` runs.
-- **Context:** This is the same class as the P1 2026-08-25 `cc_kill` hang (`docs/lessons/pip-nspanel-main-thread.md`). The supervisor's live half has never been observed firing (`SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`), which would explain why nobody has seen the freeze.
-- **Suggested action:** Handle it in paydown WP9 (named there as a known hit). Make it `#[tauri::command(async)]` or move the wait to a worker, then confirm the freeze is gone with `sample` during a live adjudication. ⚠️ The MCP bridge cannot answer this: its `webview_execute_js` returns "Script execution timeout" for ANY script that calls `invoke`, even `list_projects` (checked 2026-09-23), so a bridge timeout is not a freeze signal. A live call through the webview took 4.2s to return `claude -p` output.
-- **Priority:** medium-high
-- **Status:** pending
-
 ## SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE
 
 - **Priority:** high
@@ -640,16 +630,6 @@ and work on the spec well."
 - **Priority:** medium-high (the cost was three build/verify rounds + one escalation; the fix is a few lines of skill prose, and the failure recurs wherever a familiar dependency is used in an unfamiliar mode).
 - **Status:** pending — cross-repo (`my-claude-code-customization`); fold into the handoff already owed to mccc. — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §A.4; stays OPEN until mccc applies it
 
-## SURFACE-2026-08-25-SYNC-TAURI-COMMANDS-MAY-BLOCK-THE-MAIN-THREAD
-- **Source:** incident:codify (P1 workspace-close hang, 2026-08-25) — an adjacent gap found while writing that incident's regression coverage, deliberately NOT built then (codify's speed-aware "minimum viable coverage" rule).
-- **Target level:** task:plan (a guard + a sweep; feature:spec only if the sweep finds many offenders).
-- **Type:** tech-debt / latent-defect class (missing systemic guard).
-- **Summary:** A synchronous `#[tauri::command]` body is dispatched by Tauri on the **main thread**, so ANY blocking work inside one freezes the UI. The 2026-08-25 P1 was exactly this (`cc_kill` → `poll_reaped` → `thread::sleep` on the main thread) and is now fixed, **but the property is repo-wide and nothing enforces it.** `cc_session/commands.rs` alone has **8 sync commands**; the codebase has many more across `config_store`, `editor_fs`, `fs_index`, `git_diff`, `git_status`, `time_store`, etc.
-- **Context:** ⚠️ **The incident's two regression tests do NOT cover this** — by design. They pin the two specific call sites that broke; neither would notice a *new* blocking call in a *different* sync command. ⚠️ Also note the codebase already *documented* the main-thread fact benignly (`status_broadcaster/commands.rs`: "This command body runs on the main thread, so the AppKit hide inside is safe") — the same property that makes an AppKit call safe makes a sleep or a lock-across-marshal catastrophic, and only the benign reading was written down. Two shapes are dangerous: (a) sleeping/polling (`thread::sleep`, `poll_*`, blocking IO, `.join()`), and (b) taking a lock and then calling something that marshals to the main thread (the `tray::reconcile` deadlock, the second defect in that same incident).
-- **Suggested action:** Inventory every `#[tauri::command]` that is NOT `async`, and triage each for blocking work. Then add a guard — a source-level scan is plausible (`production_code` + "no `thread::sleep`/`.join()`/blocking-IO between `#[tauri::command]` and the closing brace of a non-async fn"), though the lock-across-marshal shape is harder to express mechanically and may only be catchable by convention + review. ⚠️ Whatever the guard, **mutation-prove it against the real 2026-08-25 violation** (`git show` the pre-fix `cc_kill`) — a guard that would not have caught the incident that motivated it is not coverage. Cheapest first step may simply be making the blocking-capable commands `async` by default.
-- **Priority:** medium-high (the class already produced one P1 that escaped as could-not-reproduce for two release cycles; each instance is invisible until a slow path makes it visible).
-- **Status:** pending
-
 ## SURFACE-2026-08-25-REFUTATION-FROM-TYPINGS-NOT-RUNTIME
 - **Source:** feature:research (M13.5 WP3 task 3.1 probe, 2026-08-25) — the probe that **overturned** the refutation this WP was escalated on.
 - **Target level:** workflow-system (verification method / `arch.md` decisiveness rule) — a **process** defect, not a Claudesk one. Sibling to `SURFACE-2026-08-25-PROBE-CHECK-EXEMPTS-ALREADY-INSTALLED-DEPENDENCIES`, but a distinct failure: that one is about skipping a probe *before* building; this one is about skipping one *when closing work*.
@@ -1068,10 +1048,23 @@ and work on the spec well."
 - **Status:** pending — routed to the comment-convention pass (`SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, ruling R2)
 
 ## Code-quality findings — paydown-wp7-render-instead-of-raw (2026-09-23)
-- **Pointer:** **1 MAJOR + 5 MINOR** from review of ship commit `a26b514`. MAJOR: the WP7 live-mount harness's lifecycle is forked by `closeWiring`, and its `pane` stub is single-instance while two `Workspace`s mount. MINORs: dead harness options; the Submit button not driven; a warn spy that leaks on failure; the gate-OFF proof lacks a positive control; `run_command` doesn't drain its pipes (pre-existing, routed to WP9). Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp7-render-instead-of-raw — 2026-09-23`.
+- **Pointer:** **1 MAJOR + 4 MINOR** from review of ship commit `a26b514` (the pipe-draining MINOR was resolved at paydown WP9). MAJOR: the WP7 live-mount harness's lifecycle is forked by `closeWiring`, and its `pane` stub is single-instance while two `Workspace`s mount. MINORs: dead harness options; the Submit button not driven; a warn spy that leaks on failure; the gate-OFF proof lacks a positive control. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp7-render-instead-of-raw — 2026-09-23`.
 - **Priority:** medium (MAJOR) / low (MINORs)
 - **Status:** pending
-- **Pickup shape:** one small test-only task. Consolidate the harness (the MAJOR plus the dead options), then add the three one-assertion tests. Route the `run_command` item with paydown WP8's E3 and WP9.
+- **Pickup shape:** one small test-only task. Consolidate the harness (the MAJOR plus the dead options), then add the three one-assertion tests.
+
+## Code-quality findings — paydown-wp9-sync-command-blocking-guard (2026-09-23)
+- **Pointer:** **4 MAJOR + 5 MINOR** from review of ship commit `17f90e5`.
+  - MAJOR:
+    1. `workflow_uninstall_dry_run`'s `(async)` form still pins an async-runtime WORKER on a hung `uninstall.sh` and can leave the single-run lock set. The commit's own rule says `spawn_blocking`.
+    2. The guard exempts every async command, and that gap is undocumented.
+    3. `is_cfg_test` drops `cfg(not(test))` production items (latent).
+    4. WIP-provenance labels in comments; route to the comment-convention pass.
+  - MINORs: a duplicated rationale in the lesson doc; nested fns in impls are not registered; the spawn cut is wider than closures; the command test forks the real `claude`; a Display comment is looser than the TS regex.
+  - Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp9-sync-command-blocking-guard — 2026-09-23`.
+- **Priority:** medium (MAJORs 1–3) / low (the rest)
+- **Status:** pending
+- **Pickup shape:** one small task. Do `spawn_blocking` for the dry run, keeping the lock-guard anchor, together with the guard's async-exemption rule and the `cfg` predicate fix, each with a fixture test and a mutant. The provenance labels go to the T1/T2 comment pass.
 
 ## SURFACE-2026-09-18-DOC-COUNT-NEEDS-A-GENERATOR-NOT-A-DETECTOR
 - **Source:** feature:verify-codify (M14 WP4 Phase 4)
