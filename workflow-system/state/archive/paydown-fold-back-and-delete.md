@@ -1,6 +1,7 @@
 ---
 workflow: task
-state: act (complete)
+state: close (complete)
+completed: 2026-09-23
 created: 2026-09-23
 docs-only: true
 drive_mode: autopilot
@@ -9,7 +10,7 @@ drive_mode: autopilot
 # Task: Paydown fold-back — reconcile, carry surviving obligations, delete the WBS
 
 **Workflow:** task
-**State:** act (complete)
+**State:** Completed 2026-09-23
 **Created:** 2026-09-23
 
 ## Problem Statement
@@ -89,10 +90,10 @@ They must be reconciled and carried into `backlog.md` before the file is deleted
   - No `pnpm verify:auto` is needed: this is docs-only, and `.prettierignore` covers `workflow-system/`.
 
 ## Current Node
-- **Path:** Task > (all complete)
-- **Active scope:** all complete
+- **Path:** Task > closed
+- **Active scope:** none (completed 2026-09-23)
 - **Blocked:** none
-- **Unvisited:** task-verify (docs-only auto-skip) → task-close
+- **Unvisited:** none
 - **Open discoveries:** none
 
 ## Reconciliation
@@ -141,6 +142,18 @@ They must be reconciled and carried into `backlog.md` before the file is deleted
 
 **T4.** Rewrote the one stranded reference (`backlog-quality-findings.md`, `…-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X` Location: 7 live sites). After the delete, `git grep backlog-paydown-wbs` outside archives and CHANGELOG returns only the 2026-08-19 provenance line.
 
+## Verification
+
+Verification skipped: docs-only declared at plan time. No runtime surface to verify.
+
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
      Each entry is also logged to workflow-system/state/backlog.md -->
+
+## Retrospect
+- **What changed in our understanding:** The fold-back turned out to be almost entirely confirmation. The sweep's own WPs had already homed nearly everything: 36 surviving finding bodies all mapped to routed IDs, and 0 resolved bodies leaked. That is the opposite of the 2026-08-18/19 paydown, which left 22 resolved-but-undeleted bodies behind. What the WBS alone held was a small set of **decision context**: the B′ sizing, R2's sequencing, and the anchor for two deferrals. None of it was work items. It is the kind of thing a delete loses silently, because no grep for open work finds it.
+- **Assumptions that held:** WP3, WP7 and WP9 were already homed as review stubs. The only live reference to the WBS was the one found at plan time.
+- **Assumptions that were wrong:**
+  - Two §Scope deferrals did not name their anchor, which plan time had not predicted. `GUARD-VOCABULARY` still pointed at M15 as the author of the next surface, but M15 closed headless and owns no guard arm.
+  - The comment-convention roster could not be carried by letter ID, because the Finding-ID key dies with the WBS. It had to be re-keyed to SURFACE IDs to stay resolvable.
+- **Approach delta:** T3.7 carried nothing new beyond the two T2 re-anchors. One scripted edit missed its anchor text. It was written validate-all-then-write, so nothing partial landed.
