@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: F-b — Isolated CC profiles as Claudesk workspaces
 
 **Workflow:** feature
-**State:** spec
+**State:** plan (complete)
 **Created:** 2026-09-23
 **Entry:** spec (complex feature)
 **Source:** `roadmap.md` → Group F → F-b + "F-b decisions — `/util-grill-me`, 2026-09-23" (4 rulings,
@@ -271,14 +271,235 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
 - **Profile management lives in the `⌘,` Settings panel** as a Profiles group, with "New profile…"
   also in the picker cell.
 
+## Plan notes (feature-plan, 2026-09-23)
+
+- **No live `wbs.md`.** M14's remainder is archived, and F-b is a single feature, not a WBS
+  (ruling). Nothing to align phasing against.
+- **Backlog:** no `high` item conflicts. Adjacent, and not to act on:
+  `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`. F.29 changes the
+  supervisor's transcript path input, so Phase 3 must leave the default-profile path
+  byte-identical. ⚠️ The deleted-export lesson (`SURFACE-2026-08-25-A-DELETED-EXPORT-…`, high)
+  binds every phase that renames a TS export: **never split an export deletion from its consumer
+  migration across phases, and boot-smoke before trusting a live read.**
+- **Why this phase order:**
+  - The **workflow-off funnel (Phase 2) lands BEFORE any UI can open a profile workspace**
+    (Phase 4). So there is never a build in which the supervisor can fire into a profile.
+  - **Hooks (Phase 3) land before the picker UI**, so the first time the operator opens a profile
+    from the picker, the dot is already lit. That avoids the "looks like it worked, silently dark"
+    failure the roadmap names.
+- **No 3rd-party dependency** beyond the `claude` CLI (probed at CC 2.1.280/281).
+
 ## Work Tree
-<!-- written by /feature-plan -->
+
+- [ ] Phase 1: Profile store + spawn under a profile (backend) + first-run probes  <!-- status: NOT-STARTED -->
+  **Observable outcomes:**
+  - CLI: `cargo test --manifest-path src-tauri/Cargo.toml profile` → exit 0. The tests cover:
+    - a `projects.json` with no `profile` key round-trips byte-identical
+    - an unknown profile reference degrades that ONE row, and the list read still succeeds
+    - `cc_spawn_env` yields `CLAUDE_CONFIG_DIR=<dir>` for a profile row, and yields a **removal**
+      for a default row
+  - CLI: under `pnpm tauri:dev` launched with `CLAUDE_CONFIG_DIR=/tmp/…/bogus` exported, opening a
+    **default** row → `ps eww -p <claude child pid>` output does **not** contain `CLAUDE_CONFIG_DIR`
+    (A.8).
+  - CLI: a row pointed (via IPC) at a scratch adopted profile → `ps eww` of the child contains
+    `CLAUDE_CONFIG_DIR=<scratch dir>`, and the child argv is exactly today's (no wrapper, `claude`
+    first) (B.7).
+  - CLI: a row pointed at a profile id absent from the list → the spawn IPC returns an error naming
+    the profile, and `pgrep -P <app pid> claude` finds no new child (A.6).
+  - CLI: setting a row's profile when its unclean-exit flag is set → `session-state.json` no longer
+    carries that project's key (B.11).
+  - CLI: the probe notes file `tmp/scratch/f-b-probes.md` exists and answers the three spec Open
+    Questions, each with the command run and the output observed.
+  - [ ] P1.1 **Probes (spec Open Questions 1–3)** — scratch config dirs in the session scratchpad
+    only, never a real profile. Each answer is recorded in the WIP file's Discoveries and in the
+    probe notes.  <!-- status: NOT-STARTED -->
+    - **(1) Fresh-dir first run in a PTY:** what shows before and after login. Test whether
+      pre-seeded `.claude.json` (`copyOnSelect: false`, `theme`) survives the first run. Test whether
+      `theme` is honored from `settings.json` or `.claude.json`. Read the files back after the run.
+      ⚠️ Login is operator-only, so the post-login half becomes a verify-human check.
+    - **(2)** `claude --continue` in a config dir with no conversation for the cwd: does it error,
+      exit, or start fresh?
+    - **(3) Trash mechanism:** pick the crate or API. It must work from a Finder-launched build
+      without a TCC grant.
+  - [ ] P1.2 **Profile list store.** Add a `Profile { id, name, config_dir, provenance:
+    Created|Adopted }` list to `AppSettings`, per identity. Read degrades per entry: a malformed
+    entry is dropped with a log line and never fails the whole settings read.  <!-- status: NOT-STARTED -->
+  - [ ] P1.3 **`Project.profile: Option<String>`** (serde default, `skip_serializing_if`). It follows
+    the `default_model` precedent, and `Project`'s field-docs guard stays green. ⚠️ An unresolvable
+    reference must NOT fail serde; resolve it after reading.  <!-- status: NOT-STARTED -->
+  - [ ] P1.4 **Spawn.** Extend `resolve_cc_spawn_env` / `cc_spawn_env` with a resolved config
+    dir, set `CLAUDE_CONFIG_DIR`, and add env **removal** to `spawn_argv`'s `CommandBuilder` for
+    the default profile (`env_remove`). A missing profile → a typed `CcError` before any PTY opens.
+    `spawn_shell` (the terminal panel) is **unchanged**: it is a login shell, not CC.  <!-- status: NOT-STARTED -->
+  - [ ] P1.5 **Commands.** `profiles_list`, `profile_adopt(dir)` (store-only in this phase; hooks
+    arrive in Phase 3), and `set_project_profile(path, id|null)`. The last one clears the row's
+    unclean-exit flag through `key_for()`. Register them in `lib.rs`. ⚠️
+    `sync_commands_do_not_block.rs` must stay green.  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: NOT-STARTED -->
+    - [ ] Operator logs in once under a scratch profile. Agent reads back `.claude.json` /
+      `settings.json` to close probe (1)'s post-login half.  <!-- status: NOT-STARTED -->
+  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+
+- [ ] Phase 2: Workflow-layer applicability funnel — ALWAYS off for non-default profiles  <!-- status: NOT-STARTED; depends on Phase 1 -->
+  **Observable outcomes:**
+  - CLI: `pnpm vitest run workflowApplicable` → exit 0. The test drives each consumer (supervisor,
+    skill row, `/session-restore` inject arm, drive-mode cell, drive-mode readout) with a
+    non-default-profile workspace and gate ON, and asserts each is **absent**. It asserts **by
+    consumer identity, not by count** (lesson entry 15). Each consumer is mutation-proven
+    **individually**: bypass the funnel in one consumer and that test fails.
+  - CLI: `cargo test workflow_applicable` → exit 0. With gate ON and a non-default profile,
+    `resolve_cc_spawn_env(...).env` contains **no** `CLAUDESK_DRIVE_MODE`, and `drive_mode` is
+    `None`. The backend `arm_available` matches the frontend `armAvailable` for the inject arm.
+  - CLI: `pnpm vitest run offInvariantGuard` → still reports 6 arms / 9 subjects, green.
+  - Browser (MCP bridge, gate ON): a workspace opened on a row set to a scratch profile →
+    `document.querySelector('[data-testid^="skill-row"]') === null`, and the drive-mode readout is
+    absent. The same query on a default workspace → present (positive control).
+  - CLI: `ps eww` of that profile workspace's `claude` child → no `CLAUDESK_DRIVE_MODE`. The default
+    workspace's child → present when a mode is stored (positive control).
+  - [ ] P2.1 **One predicate, both sides.**
+    - TS: `isWorkflowApplicable(gateOn, profileId)` is the single export, composed with
+      `useWorkflowFeaturesEnabled` (not a bypass of it).
+    - Rust: the mirror sits in the spawn-env resolver and in `announce::arm_available`.
+    - Both key on "profile is default", never on a label or path.  <!-- status: NOT-STARTED -->
+  - [ ] P2.2 **Route every consumer through it:**
+    - `workspaceSupervisor.ts`
+    - `skillButtons.ts` / Workspace skill row
+    - `announceRow.ts` `armAvailable` (inject arm only — ⚠️ the **argv `--continue` arm stays
+      ungated**, per "THE GATE APPLIES PER ARM")
+    - `workspaceDriveMode.ts` + the picker drive-mode cell
+    - `panelHost.ts` / `RightPanelHost.tsx` for the gated docs panel
+    - Grep every `useWorkflowFeaturesEnabled` consumer (15 today) and classify each one:
+      per-workspace, or app-wide (Settings / the invite stay app-wide).  <!-- status: NOT-STARTED -->
+  - [ ] P2.3 **Caller-side guard.** Every per-workspace gate consumer must call the funnel, with
+    the consumer list derived from source (a reverse guard — lesson entry 13: a one-directional
+    guard cannot see an omission).  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: NOT-STARTED -->
+  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+
+- [ ] Phase 3: Per-profile hook registration + config-dir-aware transcript reader  <!-- status: NOT-STARTED; depends on Phase 1 -->
+  **Observable outcomes:**
+  - CLI: after a launch with a scratch profile listed →
+    `jq '.hooks | to_entries[] | .value[].hooks[].command' <scratch>/settings.json` contains
+    exactly one Claudesk marker entry per registered event. Also
+    `jq 'del(.hooks)' <scratch>/settings.json` is byte-identical to the pre-launch copy when a
+    fixture carries a deny fence, an allow-list and a foreign hook (C.13).
+  - CLI: a second launch → `shasum <scratch>/settings.json` is unchanged (idempotent).
+  - CLI: hand-delete Claudesk's entry, relaunch → the entry is back (self-healing).
+  - CLI: `profile_remove(id)` → the marker entry is gone, the foreign hook is still present, and
+    the file otherwise matches its pre-registration copy (C/D.23).
+  - CLI: `shasum ~/.claude/settings.json` taken around each profile add/remove **toggle** (not
+    around a relaunch — `arch.md`) → unchanged (C.16).
+  - Browser (MCP bridge): in a profile workspace, send a prompt → the filmstrip tile's status
+    class goes to `running`, then `idle` after the turn (C.14). Positive control: the same flow on a
+    default workspace.
+  - CLI: `CLAUDE_CONFIG_DIR=<scratch> claude -p "say ok"` from a bare shell in an open
+    workspace's dir → the Claudesk status log records the event for that workspace, and a
+    time-analytics row exists for that session (C.15).
+  - CLI: `cargo test transcript` → exit 0. With config dir `None`, `transcript_dir_for` resolves
+    the path byte-identical to today's; with `Some(dir)` it resolves `dir/projects/<slug>` (F.29).
+  - [ ] P3.1 **Generalize `hook_install`.** Replace `user_settings_path()` with a list of targets
+    (`~/.claude/settings.json` plus each profile's `settings.json`). `install_on_launch` iterates
+    them. A failure on one profile is reported and does **not** abort the others or the
+    `~/.claude` install. ⚠️ **Provenance:** remove only Claudesk's marker, never a foreign hook.
+    Keep the drift fixture.  <!-- status: NOT-STARTED -->
+  - [ ] P3.2 **`profile_adopt` registers; `profile_remove` unregisters, then drops the entry.** If
+    the dir is gone, remove still drops the entry and just logs the skipped unregister.  <!-- status: NOT-STARTED -->
+  - [ ] P3.3 **`transcript_dir_for(config_root, project_path)`.** The root is `~/.claude` for
+    default and the profile dir otherwise. Thread the workspace's profile through
+    `transcript/commands.rs` and the supervisor's callers. The default path must stay
+    byte-identical.  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: NOT-STARTED -->
+    - [ ] Operator opens a workspace under a real adopted profile (e.g. `claude-original`) and
+      confirms the dot tracks idle / running / awaiting-input.  <!-- status: NOT-STARTED -->
+  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+
+- [ ] Phase 4: Picker profile cell + Settings "Profiles" group (adopt / remove / missing state)  <!-- status: NOT-STARTED; depends on Phases 2, 3 -->
+  **Observable outcomes:**
+  - Browser (MCP bridge): every picker row has `[data-testid="project-profile-cell"]` next to the
+    model and drive-mode cells. Its options are "default" plus each listed profile plus
+    "New profile…". The picker container is widened, and no cell text is truncated (checked by
+    `scrollWidth <= clientWidth` on each cell).
+  - Browser: with the gate **OFF**, the profile cell is present and the drive-mode cell is absent
+    (A.5).
+  - Browser: selecting a profile on a row, then reopening the picker, shows the value persisted;
+    `jq '.projects[] | select(.project_path==…) .profile' projects.json` equals the id.
+  - Browser: a row whose profile id is not in the list renders a `missing-profile` state naming the
+    profile. Clicking the row shows a refusal message and **no** workspace opens (A.6).
+  - Browser: in `⌘,` Settings, `[data-testid="settings-group-profiles"]` lists the profiles, each
+    with a Remove button, plus "Add existing config dir…". The add dialog suggests the
+    `~/.config/claude-*` dirs not yet listed.
+  - CLI: `jq` shows the profile list in the app-data settings file updated after an add or remove.
+  - [ ] P4.1 **`ProjectProfileCell`.** A closed-set native `<select>`, per the drive-mode
+    precedent (not the open-string model cell). Commit through `commitCellValue`. Widen the picker
+    container. ⚠️ **No `var(--token)`** — there is no token layer; copy the hex values from the
+    sibling cells. ⚠️ CSS↔component coupling is guarded in both directions for picker cells; extend
+    it to this cell.  <!-- status: NOT-STARTED -->
+  - [ ] P4.2 **Missing-profile row state + open refusal** (frontend reflects the Phase 1 backend
+    error).  <!-- status: NOT-STARTED -->
+  - [ ] P4.3 **Settings "Profiles" group:** list, Remove (for every non-default profile), and
+    "Add existing config dir…" (suggestions plus a folder picker via `tauri-plugin-dialog`). Delete
+    and New arrive in Phase 5.  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: NOT-STARTED -->
+    - [ ] Operator adopts 2+ real profiles, sets them on rows, opens them, and judges the widened
+      picker layout.  <!-- status: NOT-STARTED -->
+  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+
+- [ ] Phase 5: New-profile wizard + Delete-to-Trash  <!-- status: NOT-STARTED; depends on Phase 4 -->
+  **Observable outcomes:**
+  - Browser: "New profile…" (from the picker cell AND from Settings) opens the wizard.
+    - Steps in order: name → dir (pre-filled `~/.config/claude-<name>`) → permission mode (the
+      step always renders; a value is pre-selected) → retention (`99999`) → model (optional) →
+      theme + status line (pre-filled from `~/.claude` at open time) → mouse tracking + copy-on-select
+      (both pre-set OFF) → confirm.
+    - The status-line step shows the copied command text.
+  - CLI: after finishing the wizard with defaults, `settings.json` holds:
+    - `permissions.defaultMode`
+    - `cleanupPeriodDays == 99999`
+    - `statusLine` deep-equal to `~/.claude/settings.json`'s
+    - `env.CLAUDE_CODE_DISABLE_MOUSE == "1"`
+    - Claudesk's hook marker
+
+    Also `<dir>/.claude.json` has `copyOnSelect == false` and `theme` (in whichever file probe (1)
+    showed CC reads). `<dir>/CLAUDE.md` contains the guard text.
+    `grep -c "claude-<name>" ~/.zshrc` is unchanged, compared before and after.
+  - CLI: the wizard pointed at an existing non-empty dir → a refusal with an "adopt instead" offer,
+    and the dir is unchanged (`shasum -r` before and after). A name colliding with a listed profile
+    is rejected (D.19).
+  - CLI: Delete on a `Created` profile → after the confirm, the dir is gone from `~/.config` and
+    present in `~/.Trash`, and the profile is gone from the list. For an `Adopted` profile, there is
+    **no** Delete control in the DOM (D.24).
+  - Browser: the first spawn under a freshly created profile shows CC's login screen in the pane
+    (xterm **buffer** read, not the DOM — lesson (i)).
+  - [ ] P5.1 **Wizard component** (steps above; a modal fits here because it is a setup surface,
+    not a primary one — `primary-surface-is-zero-ceremony` does not fire).  <!-- status: NOT-STARTED -->
+  - [ ] P5.2 **`profile_create` backend.** Refuse a non-empty dir. Write the files via a temp file
+    plus rename. Snapshot the defaults from `~/.claude` at call time. Register the hook. Add the
+    profile with `provenance: Created`. ⚠️ No `~/.zshrc` access in code at all.  <!-- status: NOT-STARTED -->
+  - [ ] P5.3 **`profile_delete` (Created only).** Move to Trash via the probe (3) mechanism, then
+    drop the entry. The confirm dialog names the dir, and states that history and memory go with
+    it. Run it off the main thread.  <!-- status: NOT-STARTED -->
+  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: NOT-STARTED -->
+    - [ ] Operator creates a real profile end-to-end, logs in, confirms theme + status line + no
+      mouse capture + no copy-on-select, then deletes it and finds it in the Trash.  <!-- status: NOT-STARTED -->
+    - [ ] Installed-`.app` Finder-launch smoke (profile spawn + dot) — **deferred to the
+      `/release` gate** per the operator's standing preference (G.30).  <!-- status: NOT-STARTED -->
+  - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > spec
-- **Active scope:** spec review
+- **Path:** F-b > Phase 1 > P1.1
+- **Active scope:** P1.1 (first-run / `--continue` / Trash probes)
 - **Blocked:** none
-- **Unvisited:** plan → build/verify phases → ship → review-quality → finalize
+- **Unvisited:** Phase 2 → Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none
 
 ## Discoveries
