@@ -422,6 +422,45 @@ hunt finds *an* instance; it does not enumerate the class. Concretely, before cl
 ⚠️ **Corollary: the hunt's own success is the trap.** Four rounds each ending in a genuine find
 builds confidence that the axis is now covered. What was actually covered was one arm of one axis.
 
+## 17, 18. (Not yet written; see `SURFACE-2026-09-23-SOURCE-TEXT-GUARDS-ENTRIES-17-18-CITED-BUT-ABSENT`)
+
+`CLAUDE.md` cites entry 17 (a widening shipped with zero instances of the widened form) and entry 18
+(a presence guard cannot see that one arm fails to reach the collaborator). Both were added to
+`CLAUDE.md` at the F-a finalize (`1e3a09d`), but never here. Their source material is in
+`workflow-system/state/archive/fa-wp4-send-and-stage.md`. The numbers are reserved so the citations
+stay stable.
+
+## 19. A Vitest import cannot fail on a missing named export
+
+**Found at paydown 2026-09-23 WP3 plan, and it refuted the WBS's own "Done" criterion.** The WBS asked
+for a jsdom test that "loads the real app entry graph and fails on a missing-export `SyntaxError`".
+Under Vitest that test cannot exist. The module runner rewrites `import { x } from "./y"` into a
+property read on the module object, so a missing `x` is silently **`undefined`**:
+
+```
+// consumer.ts:  import { present, missing } from "./lib";  export const out = [present, missing];
+await import("./consumer")   // → { out: [1, null] }, no error
+```
+
+In the webview the same import is `SyntaxError: Importing binding name 'missing' is not found`, and
+module evaluation aborts before React mounts. That is the M13.5 WP3 blank app. So **any Vitest test
+whose claim is "the graph imports, therefore no export is missing" checks nothing**, whether it
+imports or renders, and with jsdom or without. Two tests in this repo carried that claim
+(`moduleGraphBoot.test.ts`, `turnNavExportContract.test.ts`); both headers are now narrowed.
+
+The updater test's mutation proof *did* work, and that is the trap. It killed its mutant because it
+asserted `typeof m.progressPercent` **on the exporting module**, not because the import failed. A
+passing mutation proof on the exporter says nothing about a consumer's import.
+
+**What does see it: a real ESM linker.** `pnpm check:link` runs rollup (`write: false`) over both
+webview entries and fails with `"x" is not exported by "a.ts", imported by "b.tsx"`. It is
+mutation-proven on each entry, with a polarity control: a missing name used only as a type passes,
+because it is erased at runtime too. Details and its blind spots: [`verify-auto-gate.md`](verify-auto-gate.md).
+
+**The general form: ask which layer actually raises the error you are guarding against.** A test
+environment that re-implements a runtime mechanism (module linking, here) can be more lenient than
+the runtime, and a guard that relies on the failure *propagating* inherits that leniency.
+
 ## Comment budget — what belongs at the code, and what does not
 
 Comment density has been flagged in **four consecutive reviews** of the same file, and each

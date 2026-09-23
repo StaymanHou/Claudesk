@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify:auto": "pnpm lint && pnpm format:check && ./node_modules/.bin/tsc --noEmit && pnpm test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
+    "check:link": "node tooling/link-check/linkCheck.mjs",
+    "verify:auto": "pnpm lint && pnpm format:check && ./node_modules/.bin/tsc --noEmit && pnpm check:link && pnpm test && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -28,6 +28,13 @@ import paneSource from "../XtermPane.tsx?raw";
 //
 // ⚠️ This asserts the property `tsc` asserts, by a DIFFERENT mechanism — deliberate redundancy on
 // a failure mode whose blast radius is "the app does not start".
+//
+// ⚠️ SCOPE: this covers ONE module's edges, `./turnMarkers` → `XtermPane.tsx` / `Workspace.tsx`,
+// and nothing else. It does not protect app start in general. The app-wide check for this failure
+// class is `pnpm check:link` (rollup over both webview entries, a `verify:auto` step). A Vitest
+// import cannot do it, because the module runner reads a missing binding as `undefined` rather than
+// throwing. That is why this file compares parsed source against the module object instead of
+// relying on the import failing.
 
 /**
  * The **value** imports each consumer takes from `./turnMarkers` — the only ones that can fail at

@@ -43,6 +43,7 @@
 - [verify-self-dev-vs-prod-process-name-collision.md](verify-self-dev-vs-prod-process-name-collision.md) — osascript "process whose name is claudesk" hits the PROD app during dev verify-self; title/bundle-id targeting ALSO hits prod (un-bundled dev binary) — drive dev ONLY via the MCP bridge. Teardown must be PID-scoped — never blanket pkill (killed the operator's live app 2026-07-13).
 - [lsof-ti-tcp-misses-ipv6-vite.md](lsof-ti-tcp-misses-ipv6-vite.md) — `lsof -ti tcp:1420` misses Vite's IPv6-only listener (use `lsof -nP -iTCP:`). Real lesson: never kill a `target/debug/claudesk` you didn't launch — "port in use" usually means the OPERATOR has it open.
 - [installed-build-verify-deferred-to-release.md](installed-build-verify-deferred-to-release.md) — The operator defers installed-`.app` / native-window manual verification to the `/release` gate, not per-feature verify-human.
+- [verify-human-agent-runs-cli-captures.md](verify-human-agent-runs-cli-captures.md) — At verify-human, RUN the boundary-required CLI/curl capture yourself and show the output; ask the operator only for judgment calls or what the agent can't observe.
 - [macos-tcc-permissions-granted.md](macos-tcc-permissions-granted.md) — Terminal.app has Accessibility + Screen Recording; the agent can screenshot native windows and run osascript GUI queries.
 - [wp4-macos-perf-measurement.md](wp4-macos-perf-measurement.md) — How to measure CPU/RAM/frame-time of the Tauri WKWebView on macOS.
 

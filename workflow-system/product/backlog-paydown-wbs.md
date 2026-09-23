@@ -41,7 +41,8 @@ claimed-closed fix turned out to be half-closed** (L1 below). So, for every WP:
 - **A finding closed by this sweep must name the mutant that now dies.** "Tests added" is not
   closure; that phrasing is how L1 passed as closed in August.
 - **Any WP that deletes an export runs the boot smoke test (WP3) before a live observation is
-  trusted.**
+  trusted.** As built, that is **`pnpm check:link`** (a `verify:auto` step). A Vitest import or render
+  CANNOT see a missing export, because the module runner reads it as `undefined` (probed at WP3 plan).
 - **Re-anchor every finding by SYMBOL.** 17 line numbers have drifted.
 - Gate: `pnpm verify:auto` (timeout **216000**, per `runtimes.md`).
 

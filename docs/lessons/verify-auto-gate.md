@@ -6,7 +6,7 @@ command, not a remembered list.** This doc holds the *why*, which is empirical o
 ## The gate, in order
 
 ```
-lint → format:check → tsc --noEmit → vitest → cargo fmt --check → cargo clippy --all-targets -D warnings → cargo test
+lint → format:check → tsc --noEmit → check:link → vitest → cargo fmt --check → cargo clippy --all-targets -D warnings → cargo test
 ```
 
 Proven to exit non-zero on **both** a Prettier violation and a `cargo fmt` violation — i.e. the two
@@ -40,6 +40,30 @@ became one command.
   `assertions_on_constants` in test code go unreported while still failing `-D warnings` at a later
   full sweep. Running `--all-targets` per phase surfaces them early rather than at a final sweep
   (M9 WP6.5, 2026-07-08).
+
+## `check:link` — the only step that can see a deleted export at runtime
+
+Added 2026-09-23 (paydown 2026-09-23 WP3). `tooling/link-check/linkCheck.mjs` runs the real
+production build (rollup, `write: false`, ~2s) over **both** webview entries (`index.html` +
+`pip.html`) and fails if any static import cannot be bound.
+
+**Why it is not a Vitest test:** under Vitest, importing a module whose consumer names a missing
+export **does not throw**. The module runner reads the binding as a property, so it is silently
+`undefined` (probed: a consumer of `{ present, missing }` evaluated to `[1, null]`, no error). In the
+webview the same import is `SyntaxError: Importing binding name … is not found`, and it aborts
+`main.tsx` before React mounts. That is the M13.5 WP3 blank app. No Vitest import or render can see
+this class, so the gate needs a real linker. `tsc` also catches it, but a plan can accept a red `tsc`
+(M13.5 did), and `pnpm exec tsc` is a false green here.
+
+**Mutation-proven 2026-09-23, each mutant run individually, each restored via `cp` + `shasum`:**
+un-exporting `newWorkspaceChord` (main entry) and `computePanelSize` (PiP-only) each fail it, naming
+the binding. **Polarity control:** a missing name imported unqualified but used only as a **type**
+passes. It is erased, exactly as it is at runtime. The same name used as a **value** fails.
+
+**Blind to:** destructured *dynamic* imports (`const { X } = await import("./y")` is a property read;
+`main.tsx`'s dev-only probe harnesses use it), and CJS-interop differences for node_modules
+dependencies between the bundled build and the unbundled dev server. It renders nothing, so
+evaluation-time and mount-time throws belong to the boot render smoke (`src/__tests__/appBoot.test.tsx`).
 
 ## Standing style rules (the short version — these live in `CLAUDE.md`)
 

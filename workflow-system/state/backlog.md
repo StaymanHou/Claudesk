@@ -69,6 +69,16 @@
 - **Status:** pending
 - **Pickup shape:** read the two entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
+## SURFACE-2026-09-23-SOURCE-TEXT-GUARDS-ENTRIES-17-18-CITED-BUT-ABSENT
+- **Source:** feature:build (paydown-2026-09-23 WP3 Phase 1)
+- **Target level:** task
+- **Type:** gap (docs)
+- **Summary:** Root `CLAUDE.md`'s source-text-guards bullet cites **entry 17** (a widening shipped with zero instances of the widened form: `CALL_SYMBOLS`'s `string | string[]`) and **entry 18** (a presence guard cannot see that one arm bypasses the collaborator: `ConfirmModal`/`planRecover`). Neither entry exists in `docs/lessons/source-text-guards.md`, whose catalogue stopped at 16. Both references were added at the F-a finalize (`1e3a09d`); the lesson file was not updated with them. WP3 reserved the numbers with a placeholder heading and wrote its own finding as entry 19.
+- **Context:** CLAUDE.md sends readers to the lesson file for the full text, and the full text is missing. The source material is in `workflow-system/state/archive/fa-wp4-send-and-stage.md` (MAJOR-1 and the confirm-arm finding).
+- **Suggested action:** Write entries 17 and 18 from the archive, near-verbatim (`[[grep-addressed-doc-loses-value-to-prose-rewrite]]`), and replace the placeholder heading. It fits paydown WP4 (comments and docs narrowing) or any later docs pass.
+- **Priority:** low
+- **Status:** pending
+
 ## SURFACE-2026-09-21-UNCHUNKED-BASE64-ENCODER-OVERFLOWS-ON-LARGE-INPUT
 
 - **Priority:** low-medium

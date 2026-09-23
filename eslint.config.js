@@ -55,6 +55,15 @@ export default tseslint.config(
     },
   },
   {
+    // Paydown WP3 link check — a Node script that runs the production build.
+    files: ["tooling/link-check/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.node },
+    },
+  },
+  {
     // M8 demo tooling — the .mjs scripts are Node (build/capture/render/extract +
     // the `node --test` nodetests). They drive Playwright, so a `page.evaluate`
     // body legitimately references window/document — allow both env globals.
