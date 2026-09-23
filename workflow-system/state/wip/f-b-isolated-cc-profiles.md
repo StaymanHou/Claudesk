@@ -343,9 +343,9 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [x] B.11 `set_project_profile` change → the row's `session-state.json` key is gone  <!-- status: PASS -->
     - [x] A.6 row → removed profile → `cc_spawn` returns "…profile \"scratch\", which is no longer in Claudesk's profile list…"; child count unchanged (2); the refused spawn set no unclean flag  <!-- status: PASS -->
     - [x] Probe notes `tmp/scratch/f-b-probes.md` answer all three questions  <!-- status: PASS -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-    - [ ] Operator logs in once under a scratch profile. Agent reads back `.claude.json` /
-      `settings.json` to close probe (1)'s post-login half.  <!-- status: NOT-STARTED -->
+  - [ ] verify-human  <!-- status: in-progress — boundary: modifies the existing `cc_spawn` path; capture = verify-self's live `ps eww` evidence -->
+    - [x] P1.verify-human.1 Operator ruling: `--permission-mode` argv vs a profile's `defaultMode` → **RULED 2026-09-23: omit `--permission-mode` for non-default profiles; the profile's `settings.json` governs. Default profile keeps the app-global flag.** Build work lands with the spawn change (not yet implemented).  <!-- status: done -->
+    - [ ] P1.verify-human.2 Operator logs in once under a scratch profile; agent reads back `.claude.json` / `settings.json` (probe (1) post-login half). **DEFERRED by operator 2026-09-23 to Phase 5 verify-human** (end-to-end create + login).  <!-- status: done (deferred) -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [ ] Phase 2: Workflow-layer applicability funnel — ALWAYS off for non-default profiles  <!-- status: NOT-STARTED; depends on Phase 1 -->
@@ -503,7 +503,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
 
 ## Current Node
 - **Path:** F-b > Phase 1 > verify-human
-- **Active scope:** Phase 1 verify-human (operator /login under a scratch profile; the permission-mode finding below needs a ruling)
+- **Active scope:** Phase 1 verify-human answered; NEXT = implement the permission-mode ruling (omit `--permission-mode` for non-default profiles) then verify-codify. Paused at operator request (turn-level).
 - **Blocked:** none
 - **Unvisited:** Phase 2 → Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** `--permission-mode` argv overrides a profile's `defaultMode` (spec B.10 / D.18 contradiction — ruling needed)
