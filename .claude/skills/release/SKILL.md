@@ -142,6 +142,8 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
 
    ```bash
    (cd src-tauri && cargo update -p claudesk)   # rewrites the claudesk version in Cargo.lock; no network
+   ./node_modules/.bin/prettier --write src-tauri/tauri.conf.json
+   ./node_modules/.bin/prettier --check src-tauri/tauri.conf.json   # must exit 0 before committing
    git add src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
    git commit -m "Release vVER"
    git push origin main
@@ -152,6 +154,11 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    any reason `Cargo.lock` still shows the old version, the clean build in step 3
    will rewrite it; re-stage and amend if so. The release must point at a pushed
    commit.)
+
+   ⚠️ **The Prettier pass is not optional.** Editing the version with a JSON tool (or a
+   re-serializing editor) reflows `tauri.conf.json` — v0.6.0's release commit expanded the
+   one-line `resources` array, which failed `format:check` and turned `pnpm verify:auto` red on
+   `main` for every later WP. Only the version line should change in this file's diff.
 
 3. **Export the updater-signing env vars, then clean build.** The build's integrated
    sign step produces the updater artifact **and its `.sig`** — but ONLY if the private

@@ -1,6 +1,6 @@
 ---
 shape: runtime-registry
-updated: 2026-09-22
+updated: 2026-09-23
 ---
 
 # Runtime Registry
@@ -31,13 +31,14 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 27s (2026-09-22, F-a WP4 COMPLETE (P3 verify-codify): WARM cargo cache; frontend 218 files / 2959 tests, Rust ALL GREEN, EXIT=0)
+- **Last:** 38s (2026-09-23, paydown WP3 step 0: gate restored to green, EXIT=0)
 - **Use timeout:** 216000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 38s — 2026-09-23 (paydown WP3 step 0; first green gate since v0.6.0)
   - 27s — 2026-09-22 (F-a WP4 COMPLETE; warm; frontend 218 files / 2959 tests)
   - 25s — 2026-09-22 (F-a WP4 P1 close; warm; frontend 211 files / 2884 tests)
   - 24s — 2026-09-22

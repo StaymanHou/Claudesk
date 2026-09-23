@@ -245,6 +245,8 @@ Documentary only. Drive via `/task-plan`.
 fails at step 2). Run `prettier --write src-tauri/tauri.conf.json`, confirm the gate exits 0, and add a
 format check to `.claude/skills/release/SKILL.md` step 2 before its commit
 (`SURFACE-2026-09-23-VERIFY-AUTO-RED-ON-MAIN-SINCE-THE-V0.6.0-RELEASE-COMMIT`).
+✅ **Step 0 DONE 2026-09-23:** config reformatted, gate exits 0, and release skill step 2 now runs
+`prettier --write` + `--check` on `tauri.conf.json` before its commit. SURFACE deleted with its CHANGELOG line.
 
 Additive, so it lowers the risk of every later WP that deletes something (WP5's `chordLabel`,
 WP8's legacy `WorkspaceStatus`). Drive via `/feature-plan` (it may need phases).
@@ -496,6 +498,3 @@ SURFACEs listed in WP1 §5. The R4 rulings (40, 46, 32) are deleted in WP2 once 
 3. Carry any surviving obligation back into `backlog.md` as its own SURFACE, so it outlives this
    file (the 2026-08-19 sweep did this for the comment-convention pass).
 4. **Delete this file** in a commit that says so.
-
-## Session Handoff — 2026-09-23 09:27
-Handed off. See `workflow-system/state/.session.md` to restore. WP1 + WP2 CLOSED; next is WP3 **step 0** (restore the red `verify:auto` gate), then the whole-app boot smoke test.

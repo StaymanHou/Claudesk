@@ -1,15 +1,5 @@
 # Backlog
 
-## SURFACE-2026-09-23-VERIFY-AUTO-RED-ON-MAIN-SINCE-THE-V0.6.0-RELEASE-COMMIT
-- **Source:** task:verify (paydown-2026-09-23 WP2)
-- **Target level:** task
-- **Type:** bug (a broken gate, not a product defect)
-- **Summary:** ⚠️ **`pnpm verify:auto` has exited 1 on `main` since `08f2db5` (Release v0.6.0).** `prettier --check` fails on `src-tauri/tauri.conf.json`: the release commit's version bump also reflowed `"resources": ["resources/claudesk-hook.pl"]` onto three lines, which is not Prettier's shape. Every later step (tsc, vitest, cargo fmt/clippy/test) is green. The gate stops at step 2, so **every WP since the release would read a red gate for a reason unrelated to its change**. The v0.5.2 release commit (`7083805`) did NOT reflow it, so this is a one-off from how v0.6.0's version was edited, not a systematic tool rewrite.
-- **Context:** there is no CI and no git hook (`docs/lessons/verify-auto-gate.md`), so nothing noticed. The `/release` skill's step 2 edits `tauri.conf.json` and commits it without running any format check.
-- **Suggested action:** (1) `prettier --write src-tauri/tauri.conf.json` (restores the one-line array; no semantic change) and confirm `pnpm verify:auto` exits 0. (2) Durable half: add a `pnpm format:check` (or `prettier --check src-tauri/tauri.conf.json`) line to `.claude/skills/release/SKILL.md` step 2, before its commit.
-- **Priority:** high (the per-phase gate is red for every future WP until fixed; cheap to fix)
-- **Status:** pending — scheduled as the first step of paydown-2026-09-23 WP3 (whose verification needs a green gate)
-
 ## Code-quality findings — fa-wp4-send-and-stage (2026-09-22)
 
 - **Pointer:** **1 MAJOR (partially fixed) + 1 MINOR** from `feature-review-quality` against ship

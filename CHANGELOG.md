@@ -44,6 +44,8 @@
 - **Backlog resolved:** SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET — ruled by the operator: a typed `/exit` is not a clean exit and the flag resolves at the next close; recorded in `arch/session-resumption.md`.
 - **Backlog resolved:** SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS — ruled by the operator: `@testing-library/react` is not adopted and the pure-core + resting-DOM render + live-verify posture is formally accepted, recorded in `source-text-guards.md`'s render-harness note.
 - **Backlog resolved:** SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES — ruled by the operator: the dev profile is not auto-seeded from prod; the divergence is a check-the-pane-footer-first item in `verify-self-tiers.md` §5(c).
+- **Task closed:** Backlog-paydown 2026-09-23 WP3 step 0: `pnpm verify:auto` is green on `main` again, after `src-tauri/tauri.conf.json` was restored to Prettier's shape, and the `/release` skill now runs a Prettier write and check on that file before committing a version bump.
+- **Backlog resolved:** SURFACE-2026-09-23-VERIFY-AUTO-RED-ON-MAIN-SINCE-THE-V0.6.0-RELEASE-COMMIT — `tauri.conf.json` is reformatted and the release skill's step 2 now fails before committing a reflowed config.
 
 ## 2026-09-22
 
