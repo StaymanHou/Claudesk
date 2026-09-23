@@ -329,8 +329,123 @@ pub fn project_get_supervisor_enabled(app: AppHandle, path: String) -> bool {
     crate::config_store::read_supervisor_enabled(&dir, Path::new(&path))
 }
 
+// ---------------------------------------------------------------------------
+// F-b — profiles (named `CLAUDE_CONFIG_DIR`s)
+// ---------------------------------------------------------------------------
+
+/// The listed profiles, in list order. The built-in `"default"` is never included — the
+/// frontend renders it itself. A malformed `profiles.json` is an error (never read as empty,
+/// which would let the next write wipe it).
+#[tauri::command]
+pub fn profiles_list(app: AppHandle) -> Result<Vec<super::profiles::Profile>, String> {
+    let dir = resolve_data_dir(&app)?;
+    super::profiles::read_profiles(&dir).map_err(|e| e.to_string())
+}
+
+/// Adopt an existing directory as a profile. `name: None` derives one from the basename
+/// (`claude-neo` → `neo`). Writes nothing into the directory in this phase.
+#[tauri::command]
+pub fn profile_adopt(
+    app: AppHandle,
+    config_dir: String,
+    name: Option<String>,
+) -> Result<super::profiles::Profile, String> {
+    let dir = resolve_data_dir(&app)?;
+    super::profiles::adopt(&dir, Path::new(&config_dir), name.as_deref()).map_err(|e| e.to_string())
+}
+
+/// Remove a profile from the list, leaving its directory untouched ("remove from Claudesk").
+/// Rows that reference it degrade to the missing-profile state (spawn refused, A.6).
+/// ⚠️ Phase 3 adds the hook UNREGISTER from the dir's `settings.json` here, before the drop.
+#[tauri::command]
+pub fn profile_remove(app: AppHandle, name: String) -> Result<(), String> {
+    let dir = resolve_data_dir(&app)?;
+    super::profiles::remove_entry(&dir, &name)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Set (`Some(name)`) or clear (`None` / `"default"`) the profile a project spawns under.
+///
+/// ⚠️ **Refuses a name that is not listed** — the store would keep it, but a row pointed at an
+/// unlisted profile from the UI is a bug, not a state to create on purpose.
+///
+/// ⚠️ **F-b A.11 — a CHANGE clears the row's unclean-exit flag** (through `session_state`'s
+/// `key_for`, like every other flag access). Otherwise the next open would fire `--continue`
+/// into a profile with no conversation for this directory, which CC answers by exiting
+/// (probe P1.1 (2)). Setting the same value again leaves the flag alone.
+#[tauri::command]
+pub fn set_project_profile(
+    app: AppHandle,
+    path: String,
+    profile: Option<String>,
+) -> Result<(), String> {
+    let dir = resolve_data_dir(&app)?;
+    apply_project_profile(&dir, &path, profile)
+}
+
+/// The testable body of [`set_project_profile`].
+pub(crate) fn apply_project_profile(
+    data_dir: &Path,
+    path: &str,
+    profile: Option<String>,
+) -> Result<(), String> {
+    use super::profiles::{resolve, ResolvedProfile};
+    let list = super::profiles::read_profiles(data_dir).map_err(|e| e.to_string())?;
+    let next = match resolve(&list, profile.as_deref()) {
+        ResolvedProfile::Default => None,
+        ResolvedProfile::Listed(p) => Some(p.name),
+        ResolvedProfile::Missing(n) => return Err(format!("no profile named \"{n}\"")),
+    };
+    let before =
+        super::read_project_profile(data_dir, Path::new(path)).map_err(|e| e.to_string())?;
+    super::set_project_profile(data_dir, Path::new(path), next.clone())
+        .map_err(|e| e.to_string())?;
+    if before != next {
+        crate::session_state::clear_and_persist(data_dir, path);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn profile_apply_refuses_unlisted_and_clears_the_flag_only_on_change() {
+        let data = tempfile::TempDir::new().unwrap();
+        let cfg = tempfile::TempDir::new().unwrap();
+        let prof = cfg.path().join("claude-neo");
+        std::fs::create_dir(&prof).unwrap();
+        crate::config_store::profiles::adopt(data.path(), &prof, None).unwrap();
+        crate::config_store::add_or_touch(data.path(), PathBuf::from("/proj"), 1).unwrap();
+
+        assert!(apply_project_profile(data.path(), "/proj", Some("gone".into())).is_err());
+
+        // A change clears the flag.
+        crate::session_state::set_and_persist(data.path(), "/proj");
+        apply_project_profile(data.path(), "/proj", Some("neo".into())).unwrap();
+        assert!(!crate::session_state::is_unclean_keyed(
+            &crate::session_state::read(data.path()),
+            "/proj"
+        ));
+        // Re-setting the same value does not.
+        crate::session_state::set_and_persist(data.path(), "/proj");
+        apply_project_profile(data.path(), "/proj", Some("neo".into())).unwrap();
+        assert!(crate::session_state::is_unclean_keyed(
+            &crate::session_state::read(data.path()),
+            "/proj"
+        ));
+        // Back to default: a change again.
+        apply_project_profile(data.path(), "/proj", Some("default".into())).unwrap();
+        assert_eq!(
+            crate::config_store::read_project_profile(data.path(), Path::new("/proj")).unwrap(),
+            None
+        );
+        assert!(!crate::session_state::is_unclean_keyed(
+            &crate::session_state::read(data.path()),
+            "/proj"
+        ));
+    }
     use super::*;
     use tempfile::TempDir;
 

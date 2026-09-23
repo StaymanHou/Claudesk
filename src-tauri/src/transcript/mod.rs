@@ -63,15 +63,33 @@ pub fn slug_for(project_path: &Path) -> String {
         .collect()
 }
 
-/// The directory Claude Code writes this project's transcripts into.
+/// The directory Claude Code writes this project's transcripts into, under a given **config
+/// root** — `~/.claude` for the default profile ([`default_config_root`]), or a profile's
+/// `CLAUDE_CONFIG_DIR` (F-b F.29: CC writes transcripts to `$CLAUDE_CONFIG_DIR/projects/`,
+/// probed at CC 2.1.280). ⚠️ Never assume `~/.claude` here — a profile session's transcripts are
+/// not there, and a wrong root fails by finding *nothing*, not by erroring.
 ///
-/// `home` is injected rather than read from the environment so the whole module is testable
+/// The root is injected rather than read from the environment so the whole module is testable
 /// without touching the operator's real `~` (see `docs/lessons/sandboxed-home-verification.md`
 /// — the sandboxed-`$HOME` discipline this repo already follows).
-pub fn transcript_dir_for(home: &Path, project_path: &Path) -> PathBuf {
+pub fn transcript_dir_for(config_root: &Path, project_path: &Path) -> PathBuf {
+    config_root.join("projects").join(slug_for(project_path))
+}
+
+/// The default profile's config root: `<home>/.claude`.
+pub fn default_config_root(home: &Path) -> PathBuf {
     home.join(".claude")
-        .join("projects")
-        .join(slug_for(project_path))
+}
+
+/// Whether `dir` holds at least one `*.jsonl` transcript. A missing or unreadable dir is
+/// `false`. F-b: gates the `--continue` argv arm, which CC answers with an exit when there is
+/// nothing to continue.
+pub fn has_any_transcript(dir: &Path) -> bool {
+    std::fs::read_dir(dir).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == "jsonl"))
+    })
 }
 
 /// Read the last [`TAIL_BYTES`] of a transcript, returned as whole lines.
@@ -195,8 +213,28 @@ mod tests {
 
     #[test]
     fn transcript_dir_is_under_dot_claude_projects() {
-        let d = transcript_dir_for(Path::new("/home/u"), Path::new("/p/q"));
+        let d = transcript_dir_for(
+            &default_config_root(Path::new("/home/u")),
+            Path::new("/p/q"),
+        );
         assert_eq!(d, PathBuf::from("/home/u/.claude/projects/-p-q"));
+    }
+
+    #[test]
+    fn transcript_dir_under_a_profile_root_is_that_root_projects() {
+        let d = transcript_dir_for(Path::new("/u/.config/claude-neo"), Path::new("/p/q"));
+        assert_eq!(d, PathBuf::from("/u/.config/claude-neo/projects/-p-q"));
+    }
+
+    #[test]
+    fn has_any_transcript_needs_a_jsonl_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        assert!(!has_any_transcript(&dir.path().join("absent")));
+        assert!(!has_any_transcript(dir.path()));
+        std::fs::write(dir.path().join("notes.txt"), b"x").unwrap();
+        assert!(!has_any_transcript(dir.path()));
+        std::fs::write(dir.path().join("a.jsonl"), b"{}").unwrap();
+        assert!(has_any_transcript(dir.path()));
     }
 
     #[test]

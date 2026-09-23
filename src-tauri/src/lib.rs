@@ -476,6 +476,11 @@ pub fn run() {
             // ⚠️ Pairs with `cc_drive_mode`, which reports what the RUNNING session actually
             // spawned under — the two disagree after a mid-session change, which is the point.
             config_store::commands::project_get_default_drive_mode,
+            // F-b Phase 1: profiles (named CLAUDE_CONFIG_DIRs) + the per-project reference.
+            config_store::commands::profiles_list,
+            config_store::commands::profile_adopt,
+            config_store::commands::profile_remove,
+            config_store::commands::set_project_profile,
             // M12 WP2: clear the unclean-exit flag on a CLEAN close. There is deliberately
             // no `mark_unclean` counterpart — setting is owned by the spawn path, where it
             // is co-located with the `?` guaranteeing a failed spawn leaves no flag.

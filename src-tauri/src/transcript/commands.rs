@@ -76,7 +76,10 @@ pub fn transcript_tail(
     let Some(home) = home_dir(&app) else {
         return empty;
     };
-    let dir = super::transcript_dir_for(&home, std::path::Path::new(&project_path));
+    let dir = super::transcript_dir_for(
+        &super::default_config_root(&home),
+        std::path::Path::new(&project_path),
+    );
     let Some(target) = select_transcript(&dir, session_id.as_deref()) else {
         return empty;
     };

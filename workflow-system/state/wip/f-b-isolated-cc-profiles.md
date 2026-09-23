@@ -118,8 +118,10 @@ despite the shared keychain. Transcripts land under `$CLAUDE_CONFIG_DIR/projects
         in `<dir>/.claude.json`, not `settings.json`. OFF = `copyOnSelect: false`.
       - **Theme** → a global-config key (built-in default `"dark"`). The default profile sets none,
         so it resolves to `"dark"`. The wizard writes the **resolved** value explicitly rather than
-        leaving it unset. ⚠️ The existing profiles put `theme` in `settings.json`, while the binary's
-        default lives in global config. Which file CC reads is Open Question 1.
+        leaving it unset. ✅ **RESOLVED by probe P1.1 (1): `theme` goes in `settings.json`.** A
+        `theme` in `.claude.json` is **stripped at startup**. ⚠️ **Do NOT seed
+        `hasCompletedOnboarding`**: it also skips CC's own login step (D.21). The cost is one Enter on
+        CC's theme picker, which is already on Dark.
     - ⚠️ **"Default to the default profile" is a snapshot at creation, not a live link.** Changing
       `~/.claude` later does not propagate to profiles that already exist.
     - ⚠️ A copied status-line command that references a `~/.claude/…` path would point back into
@@ -228,17 +230,17 @@ despite the shared keychain. Transcripts land under `$CLAUDE_CONFIG_DIR/projects
 
 Small and build-time. None of these gates the spec; each is a Phase-1 probe task in the plan.
 
-- [ ] **Fresh-config-dir first run in a PTY.** Beyond login, what does interactive `claude` show in a
+- [x] **Fresh-config-dir first run in a PTY.** Beyond login, what does interactive `claude` show in a
       new config dir: theme picker, folder-trust dialog, `bypassPermissions` warning? Does seeding
       `theme` / `skipDangerousModePermissionPrompt` in the wizard suppress any of them? Also: does a
       **pre-seeded `<dir>/.claude.json`** (holding only `copyOnSelect` + `theme`) survive CC's first
       run, with CC merging its defaults in rather than overwriting? And is `theme` honored from
       `settings.json` (where the existing profiles put it) or only from `.claude.json`? Verify both by
       reading the files back after a first run, not by trusting the write.
-- [ ] **`claude --continue` when the config dir has no conversation for the cwd.** Does it error,
+- [x] **`claude --continue` when the config dir has no conversation for the cwd.** Does it error,
       exit, or start fresh? A.11's flag-clear makes this rare, but the spawn must not hard-fail if
       it happens.
-- [ ] **Trash mechanism.** Pick the crate or API. Confirm it does not require an Accessibility/TCC
+- [x] **Trash mechanism.** Pick the crate or API. Confirm it does not require an Accessibility/TCC
       grant from an installed build.
 
 ## Asked / Assumed
@@ -310,9 +312,9 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     carries that project's key (B.11).
   - CLI: the probe notes file `tmp/scratch/f-b-probes.md` exists and answers the three spec Open
     Questions, each with the command run and the output observed.
-  - [ ] P1.1 **Probes (spec Open Questions 1–3)** — scratch config dirs in the session scratchpad
+  - [x] P1.1 **Probes (spec Open Questions 1–3)** — ✅ answered, see Discoveries + `tmp/scratch/f-b-probes.md`. — scratch config dirs in the session scratchpad
     only, never a real profile. Each answer is recorded in the WIP file's Discoveries and in the
-    probe notes.  <!-- status: NOT-STARTED -->
+    probe notes.  <!-- status: done -->
     - **(1) Fresh-dir first run in a PTY:** what shows before and after login. Test whether
       pre-seeded `.claude.json` (`copyOnSelect: false`, `theme`) survives the first run. Test whether
       `theme` is honored from `settings.json` or `.claude.json`. Read the files back after the run.
@@ -321,20 +323,19 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
       exit, or start fresh?
     - **(3) Trash mechanism:** pick the crate or API. It must work from a Finder-launched build
       without a TCC grant.
-  - [ ] P1.2 **Profile list store.** Add a `Profile { id, name, config_dir, provenance:
-    Created|Adopted }` list to `AppSettings`, per identity. Read degrades per entry: a malformed
-    entry is dropped with a log line and never fails the whole settings read.  <!-- status: NOT-STARTED -->
-  - [ ] P1.3 **`Project.profile: Option<String>`** (serde default, `skip_serializing_if`). It follows
+  - [x] P1.2 **Profile list store.** ⚠️ **As built: its own `profiles.json`, NOT a field of `AppSettings`** (deviation from this line's original text). `AppSettings` deserializes in one shot, so one bad entry there would fail every setting; `config_store/profiles.rs` parses per entry. `Profile { name, config_dir, provenance }` — `name` IS the id. Per identity. Read degrades per entry: a malformed
+    entry is dropped with a log line and never fails the whole settings read.  <!-- status: done -->
+  - [x] P1.3 **`Project.profile: Option<String>`** (serde default, `skip_serializing_if`). It follows
     the `default_model` precedent, and `Project`'s field-docs guard stays green. ⚠️ An unresolvable
-    reference must NOT fail serde; resolve it after reading.  <!-- status: NOT-STARTED -->
-  - [ ] P1.4 **Spawn.** Extend `resolve_cc_spawn_env` / `cc_spawn_env` with a resolved config
+    reference must NOT fail serde; resolve it after reading.  <!-- status: done -->
+  - [x] P1.4 **Spawn.** (+ probe (2): the argv `--continue` arm degrades to a fresh spawn when `<config_root>/projects/<slug>/` holds no `*.jsonl` — CC otherwise prints "No conversation found to continue" and EXITS.) Extend `resolve_cc_spawn_env` / `cc_spawn_env` with a resolved config
     dir, set `CLAUDE_CONFIG_DIR`, and add env **removal** to `spawn_argv`'s `CommandBuilder` for
     the default profile (`env_remove`). A missing profile → a typed `CcError` before any PTY opens.
-    `spawn_shell` (the terminal panel) is **unchanged**: it is a login shell, not CC.  <!-- status: NOT-STARTED -->
-  - [ ] P1.5 **Commands.** `profiles_list`, `profile_adopt(dir)` (store-only in this phase; hooks
+    `spawn_shell` (the terminal panel) is **unchanged**: it is a login shell, not CC.  <!-- status: done -->
+  - [x] P1.5 **Commands.** `profiles_list`, `profile_adopt(dir)` (store-only in this phase; hooks
     arrive in Phase 3), and `set_project_profile(path, id|null)`. The last one clears the row's
     unclean-exit flag through `key_for()`. Register them in `lib.rs`. ⚠️
-    `sync_commands_do_not_block.rs` must stay green.  <!-- status: NOT-STARTED -->
+    `sync_commands_do_not_block.rs` must stay green.  <!-- status: done -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
@@ -496,10 +497,13 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 1 > P1.1
-- **Active scope:** P1.1 (first-run / `--continue` / Trash probes)
+- **Path:** F-b > Phase 1 > verify-auto
+- **Active scope:** Phase 1 verify-auto (P1.1–P1.5 built; `profile_remove` pulled forward from Phase 3 as `remove_entry`'s consumer — list-only until P3.2 adds the unregister)
 - **Blocked:** none
 - **Unvisited:** Phase 2 → Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none
 
 ## Discoveries
+[SURFACED-2026-09-23] Phase 1 > P1.1 — probe (1): `theme` lives in `settings.json` (a `.claude.json` `theme` is stripped at startup); `copyOnSelect` lives in `.claude.json` and survives first run; seeding `hasCompletedOnboarding` skips CC's login step, so it is NOT seeded. Spec D.18 is corrected in place.
+[SURFACED-2026-09-23] Phase 1 > P1.1 — probe (2): `claude --continue` with no conversation for the cwd prints "No conversation found to continue" and EXITS. P1.4 gains a transcript-exists guard on the argv arm.
+[SURFACED-2026-09-23] Phase 1 > P1.1 — probe (3): reuse the existing `trash = "5"` dependency (`editor_fs::…` already calls `trash::delete` on directories, and it has shipped). No new dependency.

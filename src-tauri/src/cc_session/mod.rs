@@ -27,7 +27,7 @@ pub mod commands;
 
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -228,6 +228,12 @@ pub enum CcError {
     /// The registry mutex was poisoned (a holder panicked).
     #[error("session registry lock poisoned")]
     Lock,
+    /// F-b A.6 — the project names a profile that cannot be used: not listed, its directory is
+    /// gone, or the profile list is unreadable. ⚠️ Refused BEFORE any PTY opens and before the
+    /// unclean-exit flag is consumed; never degraded to the default profile. Carries the
+    /// user-facing message verbatim.
+    #[error("{0}")]
+    Profile(String),
 }
 
 /// Map a raw spawn-failure string to the right [`CcError`].
@@ -526,6 +532,91 @@ fn resolve_resume_arm(intent: OpenIntent, consume: impl FnOnce() -> bool) -> Res
         ResumeArm::Continue
     } else {
         ResumeArm::Fresh
+    }
+}
+
+/// F-b — resolve the config dir a CC spawn runs under: `Ok(None)` = the default profile
+/// (`~/.claude`), `Ok(Some(dir))` = a listed profile, `Err` = refuse the spawn.
+///
+/// ⚠️ **The asymmetry with [`resolve_spawn_model`] is deliberate.** A degraded model read costs
+/// "CC's default model" — a mild surprise. A degraded *profile* read would cost the wrong
+/// `CLAUDE.md`, permissions, memory and history, silently. So:
+/// - no data dir, or an unreadable `projects.json` → default (nothing names a profile we can
+///   see; a broken `projects.json` already shows the operator an empty picker);
+/// - a row that NAMES a profile, when the list is unreadable, the name is unlisted, or the dir
+///   is gone → **refuse**, with a message naming the profile.
+fn resolve_spawn_profile(
+    reads: Option<(
+        Result<Option<String>, crate::config_store::ConfigError>,
+        impl FnOnce() -> Result<
+            Vec<crate::config_store::profiles::Profile>,
+            crate::config_store::ConfigError,
+        >,
+    )>,
+) -> Result<Option<PathBuf>, CcError> {
+    use crate::config_store::profiles::{resolve, ResolvedProfile};
+    let Some((reference, read_list)) = reads else {
+        return Ok(None);
+    };
+    let Ok(reference) = reference else {
+        return Ok(None);
+    };
+    let Some(name) = reference else {
+        return Ok(None);
+    };
+    let list = read_list().map_err(|e| {
+        CcError::Profile(format!(
+            "This project runs under the profile \"{name}\", but the profile list could not be \
+             read ({e}). Nothing was started."
+        ))
+    })?;
+    match resolve(&list, Some(&name)) {
+        ResolvedProfile::Default => Ok(None),
+        ResolvedProfile::Missing(n) => Err(CcError::Profile(format!(
+            "This project runs under the profile \"{n}\", which is no longer in Claudesk's \
+             profile list. Pick a profile for it in the project picker. Nothing was started."
+        ))),
+        ResolvedProfile::Listed(p) if !p.config_dir.is_dir() => Err(CcError::Profile(format!(
+            "The profile \"{}\" points at {}, which no longer exists. Nothing was started.",
+            p.name,
+            p.config_dir.display()
+        ))),
+        ResolvedProfile::Listed(p) => Ok(Some(p.config_dir)),
+    }
+}
+
+/// F-b — the CC spawn env for a resolved profile: the existing gate/mode resolution, plus
+/// `CLAUDE_CONFIG_DIR` when the spawn runs under a listed profile. The default profile adds
+/// nothing here; the INHERITED value is stripped at the `CommandBuilder` (A.8).
+fn resolve_profile_spawn_env(
+    gate_read: Option<Result<bool, crate::config_store::ConfigError>>,
+    mode_read: Option<
+        Result<Option<crate::config_store::DriveMode>, crate::config_store::ConfigError>,
+    >,
+    profile_dir: Option<&Path>,
+) -> ResolvedCcSpawnEnv {
+    let mut resolved = resolve_cc_spawn_env(gate_read, mode_read);
+    if let Some(dir) = profile_dir {
+        resolved.env.push((
+            crate::config_store::profiles::CONFIG_DIR_ENV.to_string(),
+            dir.to_string_lossy().into_owned(),
+        ));
+    }
+    resolved
+}
+
+/// F-b probe P1.1 (2) — `claude --continue` in a config dir holding no conversation for the cwd
+/// prints "No conversation found to continue" and **exits**, killing the pane. So the argv arm
+/// only survives when the config root actually has a transcript for this project; otherwise the
+/// open degrades to a fresh session. `has_transcript` is injected so the rule is testable.
+fn guard_continue_against_transcripts(
+    resume: ResumeArm,
+    has_transcript: impl FnOnce() -> bool,
+) -> ResumeArm {
+    if resume == ResumeArm::Continue && !has_transcript() {
+        ResumeArm::Fresh
+    } else {
+        resume
     }
 }
 
@@ -926,6 +1017,11 @@ impl PtyCcSession {
             project_path,
             &borrow_env(env),
             "/exit",
+            // F-b A.8 — a CC spawn never INHERITS a config dir. A profile sets it explicitly in
+            // `env`; the default profile must reach CC's own `~/.claude` even when Claudesk was
+            // itself launched with `CLAUDE_CONFIG_DIR` exported (e.g. `pnpm tauri:dev` from a
+            // profile's terminal). Removal runs before `env` is applied, so a profile's value wins.
+            &[crate::config_store::profiles::CONFIG_DIR_ENV],
         )
     }
 
@@ -948,7 +1044,15 @@ impl PtyCcSession {
     /// `workflow-system/state/` in the 2026-07-28 layout migration, breaking this pointer.)
     fn spawn_shell(app: AppHandle, id: String, project_path: &str) -> Result<Self, CcError> {
         let argv = resolve_shell_argv(std::env::var("SHELL").ok());
-        Self::spawn_argv(app, id, &argv, project_path, &shell_spawn_env(), "exit")
+        Self::spawn_argv(
+            app,
+            id,
+            &argv,
+            project_path,
+            &shell_spawn_env(),
+            "exit",
+            &[],
+        )
     }
 
     /// Generic PTY-process spawn core: open a pty, launch `argv` with `cwd` + `env`,
@@ -966,6 +1070,7 @@ impl PtyCcSession {
         cwd: &str,
         env: &[(&str, &str)],
         exit_command: &'static str,
+        env_remove: &[&str],
     ) -> Result<Self, CcError> {
         let (program, args) = argv
             .split_first()
@@ -986,6 +1091,9 @@ impl PtyCcSession {
             cmd.arg(arg);
         }
         cmd.cwd(cwd);
+        for k in env_remove {
+            cmd.env_remove(k);
+        }
         for (k, v) in env {
             cmd.env(k, v);
         }
@@ -1268,6 +1376,16 @@ impl SessionRegistry {
         intent: OpenIntent,
     ) -> Result<String, CcError> {
         let data_dir = app.path().app_data_dir().ok();
+        // F-b — THE PROFILE, resolved FIRST. ⚠️ Before the unclean-exit consume below and before
+        // any PTY opens: a refused spawn (unlisted profile, dir gone, unreadable list) must leave
+        // the crash signal exactly as it found it and start nothing. See `resolve_spawn_profile`
+        // for why this degrades differently from the model read.
+        let profile_dir = resolve_spawn_profile(data_dir.as_deref().map(|dir| {
+            (
+                crate::config_store::read_project_profile(dir, Path::new(project_path)),
+                move || crate::config_store::profiles::read_profiles(dir),
+            )
+        }))?;
         let mode = data_dir
             .as_deref()
             .and_then(|dir| crate::config_store::settings::read_cc_permission_mode(dir).ok())
@@ -1287,13 +1405,14 @@ impl SessionRegistry {
         // into the workflow layer is the failure that matters. Drive mode is on the GATED side
         // of WP3's per-arm split — `--continue` is a stock CC flag and stays ungated, but this
         // arm names a companion-workflow concept.
-        let resolved_env = resolve_cc_spawn_env(
+        let resolved_env = resolve_profile_spawn_env(
             data_dir
                 .as_deref()
                 .map(crate::config_store::settings::read_workflow_features_enabled),
             data_dir.as_deref().map(|dir| {
                 crate::config_store::read_default_drive_mode(dir, Path::new(project_path))
             }),
+            profile_dir.as_deref(),
         );
         // M13.5 WP4 P1.2 — retain the EFFECTIVE mode this session is about to spawn under, so
         // a workspace-side readout can answer "stored ≠ running" truthfully. Read back via
@@ -1338,6 +1457,22 @@ impl SessionRegistry {
             data_dir
                 .as_deref()
                 .is_some_and(|dir| crate::session_state::consume_and_persist(dir, project_path))
+        });
+        // F-b probe P1.1 (2): `--continue` with nothing to continue EXITS CC. Checked against the
+        // profile's own config root — a profile's transcripts are not under `~/.claude`.
+        let resume = guard_continue_against_transcripts(resume, || {
+            let root = match profile_dir.as_deref() {
+                Some(dir) => dir.to_path_buf(),
+                None => match app.path().home_dir() {
+                    Ok(home) => crate::transcript::default_config_root(&home),
+                    // No home → cannot look; keep the arm rather than second-guess it.
+                    Err(_) => return true,
+                },
+            };
+            crate::transcript::has_any_transcript(&crate::transcript::transcript_dir_for(
+                &root,
+                Path::new(project_path),
+            ))
         });
 
         let id = self.mint_id();
@@ -2090,6 +2225,119 @@ mod tests {
             shell.len(),
             "CC and the login shell must not receive identical envs when a drive mode is set"
         );
+    }
+
+    // --- F-b: profile resolution at spawn (pure) ---
+
+    fn listed_profile(name: &str, dir: &Path) -> crate::config_store::profiles::Profile {
+        crate::config_store::profiles::Profile {
+            name: name.to_string(),
+            config_dir: dir.to_path_buf(),
+            provenance: crate::config_store::profiles::Provenance::Adopted,
+        }
+    }
+
+    type ProfileReads =
+        Result<Vec<crate::config_store::profiles::Profile>, crate::config_store::ConfigError>;
+
+    #[test]
+    fn profile_spawn_default_when_nothing_names_a_profile() {
+        let never = || -> ProfileReads { panic!("the list must not be read for a default row") };
+        assert_eq!(
+            resolve_spawn_profile(None::<(_, fn() -> ProfileReads)>).unwrap(),
+            None
+        );
+        assert_eq!(
+            resolve_spawn_profile(Some((Ok(None), never))).unwrap(),
+            None
+        );
+        let io = crate::config_store::ConfigError::Io(std::io::Error::other("unreadable"));
+        assert_eq!(resolve_spawn_profile(Some((Err(io), never))).unwrap(), None);
+    }
+
+    #[test]
+    fn profile_spawn_listed_profile_yields_its_dir() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let list = vec![listed_profile("neo", dir.path())];
+        let got = resolve_spawn_profile(Some((Ok(Some("neo".to_string())), move || Ok(list))));
+        assert_eq!(got.unwrap(), Some(dir.path().to_path_buf()));
+    }
+
+    #[test]
+    fn profile_spawn_refuses_unlisted_gone_or_unreadable_never_default() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let gone = dir.path().join("deleted");
+        for (name, reads) in [
+            ("unlisted", Ok(vec![listed_profile("neo", dir.path())])),
+            ("neo", Ok(vec![listed_profile("neo", &gone)])),
+            (
+                "neo",
+                Err(crate::config_store::ConfigError::Io(std::io::Error::other(
+                    "bad",
+                ))),
+            ),
+        ] {
+            let err = resolve_spawn_profile(Some((Ok(Some(name.to_string())), move || reads)))
+                .expect_err("a named-but-unusable profile must refuse, not fall back");
+            match err {
+                CcError::Profile(msg) => assert!(msg.contains(name), "{msg}"),
+                other => panic!("wrong error variant: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn profile_spawn_env_carries_config_dir_only_for_a_profile() {
+        let key = crate::config_store::profiles::CONFIG_DIR_ENV;
+        let default = resolve_profile_spawn_env(Some(Ok(false)), Some(Ok(None)), None);
+        assert!(
+            !default.env.iter().any(|(k, _)| k == key),
+            "{:?}",
+            default.env
+        );
+        let dir = Path::new("/u/.config/claude-neo");
+        let profile = resolve_profile_spawn_env(Some(Ok(false)), Some(Ok(None)), Some(dir));
+        assert!(
+            profile
+                .env
+                .iter()
+                .any(|(k, v)| k == key && v == "/u/.config/claude-neo"),
+            "{:?}",
+            profile.env
+        );
+    }
+
+    #[test]
+    fn profile_spawn_continue_degrades_to_fresh_without_a_transcript() {
+        assert_eq!(
+            guard_continue_against_transcripts(ResumeArm::Continue, || false),
+            ResumeArm::Fresh
+        );
+        assert_eq!(
+            guard_continue_against_transcripts(ResumeArm::Continue, || true),
+            ResumeArm::Continue
+        );
+        let not_asked = || -> bool { panic!("a fresh arm must not probe the filesystem") };
+        assert_eq!(
+            guard_continue_against_transcripts(ResumeArm::Fresh, not_asked),
+            ResumeArm::Fresh
+        );
+    }
+
+    #[test]
+    fn profile_spawn_strips_an_inherited_config_dir_from_the_cc_call_site_only() {
+        // Source-level: `CommandBuilder` is not observable from a unit test. The CC spawn must
+        // pass CONFIG_DIR_ENV as the removal list; the shell spawn must pass an empty one.
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let flat = production.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(
+            flat.contains("\"/exit\", // F-b A.8"),
+            "the CC spawn_argv call no longer carries its env_remove argument"
+        );
+        assert!(flat.contains("&[crate::config_store::profiles::CONFIG_DIR_ENV], )"));
+        assert!(flat.contains("&shell_spawn_env(), \"exit\", &[])"));
+        assert!(flat.contains("for k in env_remove { cmd.env_remove(k); }"));
     }
 
     // --- build_cc_argv: permission-mode mapping (pure) ---

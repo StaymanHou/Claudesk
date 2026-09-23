@@ -40,6 +40,7 @@
 //! A future placeholder field in this module should re-open the ledger in this shape.
 
 pub mod commands;
+pub mod profiles;
 pub mod settings;
 
 use std::path::{Path, PathBuf};
@@ -139,6 +140,17 @@ pub struct Project {
     /// a never-touched project when reading the file by hand.
     #[serde(default = "supervisor_enabled_default")]
     pub supervisor_enabled: bool,
+    /// F-b — the name of the **profile** (a `CLAUDE_CONFIG_DIR`) this project spawns under.
+    /// `None` = the built-in `"default"` profile (CC's own `~/.claude`), and the key is omitted
+    /// from disk, so existing `projects.json` files are byte-for-byte unaffected — the
+    /// [`Self::default_model`] storage precedent.
+    ///
+    /// ⚠️ **Stored as an unvalidated string, resolved AFTER the read** (by
+    /// [`profiles::resolve`]). A name that no longer matches a listed profile must degrade THIS
+    /// row to "missing" and refuse its spawn — it must never fail serde, which would take the
+    /// whole project list down (the drive-mode blast radius).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
 }
 
 /// The `supervisor_enabled` default: **ON**.
@@ -321,6 +333,7 @@ pub fn add_or_touch(data_dir: &Path, path: PathBuf, now_ms: i64) -> Result<Proje
                 // as the fn call rather than a bare `true` so the two can never drift apart —
                 // this is the one place a literal would silently diverge from serde's default.
                 supervisor_enabled: supervisor_enabled_default(),
+                profile: None,
             };
             projects.push(project.clone());
             project
@@ -503,6 +516,46 @@ pub fn read_supervisor_enabled(data_dir: &Path, project_path: &Path) -> bool {
         .unwrap_or_else(supervisor_enabled_default)
 }
 
+/// F-b — one project's stored profile reference (`None` = the default profile, or no record).
+/// Unresolved: pair with [`profiles::resolve`]. Errors propagate so the spawn can refuse on an
+/// unreadable list rather than guess.
+pub fn read_project_profile(
+    data_dir: &Path,
+    project_path: &Path,
+) -> Result<Option<String>, ConfigError> {
+    Ok(read_projects(data_dir)?
+        .into_iter()
+        .find(|p| p.path == project_path)
+        .and_then(|p| p.profile))
+}
+
+/// F-b — set (or clear, with `None` / blank / `"default"`) one project's profile reference.
+/// Clearing omits the key from disk. An unknown project path is an error (the
+/// [`set_default_model`] rule). Whether the name is *listed* is the caller's check — the store
+/// keeps whatever it is given, and resolution degrades an unlisted name per row.
+pub fn set_project_profile(
+    data_dir: &Path,
+    project_path: &Path,
+    profile: Option<String>,
+) -> Result<(), ConfigError> {
+    let normalized = profile
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s != profiles::DEFAULT_PROFILE);
+    update_projects(data_dir, |projects| {
+        let target = projects
+            .iter_mut()
+            .find(|p| p.path == project_path)
+            .ok_or_else(|| {
+                ConfigError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("no project record for {}", project_path.display()),
+                ))
+            })?;
+        target.profile = normalized;
+        Ok(())
+    })
+}
+
 /// Trim a model override, mapping blank to `None` (= inherit CC's default).
 ///
 /// Pure so the blank-is-unset rule is unit-testable on its own and is guaranteed to be
@@ -584,6 +637,7 @@ mod tests {
             default_drive_mode: None,
             // The ruled default, so every pre-existing test keeps its original semantics.
             supervisor_enabled: supervisor_enabled_default(),
+            profile: None,
         }
     }
 
@@ -695,6 +749,71 @@ mod tests {
     }
 
     #[test]
+    fn profile_absent_key_round_trips_byte_identical() {
+        let dir = TempDir::new().unwrap();
+        // A pre-F-b file: no `profile` key anywhere.
+        let before = br#"[
+  {
+    "project_path": "/a",
+    "last_opened_at": 2,
+    "display_name": "a",
+    "supervisor_enabled": true
+  }
+]"#;
+        std::fs::write(dir.path().join(PROJECTS_FILE), before).unwrap();
+        let read = read_projects(dir.path()).unwrap();
+        assert_eq!(read[0].profile, None);
+        write_projects(dir.path(), &read).unwrap();
+        assert_eq!(
+            std::fs::read(dir.path().join(PROJECTS_FILE)).unwrap(),
+            before.to_vec()
+        );
+    }
+
+    #[test]
+    fn profile_an_unlisted_reference_does_not_fail_the_list_read() {
+        let dir = TempDir::new().unwrap();
+        std::fs::write(
+            dir.path().join(PROJECTS_FILE),
+            br#"[{"project_path":"/a","last_opened_at":1,"profile":"gone"},
+                 {"project_path":"/b","last_opened_at":2}]"#,
+        )
+        .unwrap();
+        let read = read_projects(dir.path()).unwrap();
+        assert_eq!(read.len(), 2);
+        assert_eq!(
+            read_project_profile(dir.path(), Path::new("/a")).unwrap(),
+            Some("gone".to_string())
+        );
+        assert_eq!(
+            read_project_profile(dir.path(), Path::new("/b")).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn profile_set_normalizes_default_and_blank_to_absent() {
+        let dir = TempDir::new().unwrap();
+        write_projects(dir.path(), &[p("/a", 1)]).unwrap();
+        set_project_profile(dir.path(), Path::new("/a"), Some("neo".into())).unwrap();
+        assert_eq!(
+            read_project_profile(dir.path(), Path::new("/a")).unwrap(),
+            Some("neo".into())
+        );
+        for clear in [None, Some("".to_string()), Some(" default ".to_string())] {
+            set_project_profile(dir.path(), Path::new("/a"), Some("neo".into())).unwrap();
+            set_project_profile(dir.path(), Path::new("/a"), clear.clone()).unwrap();
+            let raw =
+                String::from_utf8(std::fs::read(dir.path().join(PROJECTS_FILE)).unwrap()).unwrap();
+            assert!(
+                !raw.contains("\"profile\""),
+                "{clear:?} left the key on disk"
+            );
+        }
+        assert!(set_project_profile(dir.path(), Path::new("/nope"), Some("neo".into())).is_err());
+    }
+
+    #[test]
     fn drive_mode_field_is_reserved_and_round_trips() {
         let dir = TempDir::new().unwrap();
         let with_mode = vec![Project {
@@ -704,6 +823,7 @@ mod tests {
             default_model: None,
             default_drive_mode: Some(DriveMode::Autopilot),
             supervisor_enabled: supervisor_enabled_default(),
+            profile: None,
         }];
         write_projects(dir.path(), &with_mode).unwrap();
         let read = read_projects(dir.path()).unwrap();
