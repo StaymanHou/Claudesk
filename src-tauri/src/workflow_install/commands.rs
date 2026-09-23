@@ -341,9 +341,16 @@ pub fn workflow_install_cancel(control: State<'_, Arc<InstallControl>>) {
 /// output — the 3-intent dialog's removal preview (operator decision, script finding 2:
 /// preview and action share one source of truth and cannot drift).
 ///
-/// Synchronous: the dry run spawns the script but touches nothing and finishes in well under
-/// a second (it iterates symlinks and prints). Refusals surface as the guard's own
-/// user-facing explanation.
+/// The dry run spawns the script but touches nothing, and normally finishes in well under a
+/// second (it iterates symlinks and prints). Refusals surface as the guard's own user-facing
+/// explanation.
+///
+/// ⚠️ **`(async)`, so it runs OFF the main thread.** "Well under a second" describes a script
+/// that lives in another repo, not a bound Claudesk can enforce. There is no timeout on the
+/// wait, so as a sync command a hung `uninstall.sh` froze the UI for good (paydown
+/// 2026-09-23 WP9, `tests/sync_commands_do_not_block.rs`). The attribute form keeps the
+/// signature `pub fn …`, which `every_substrate_touching_command_takes_the_single_run_lock`
+/// anchors on.
 ///
 /// ## Refuses while a real run is in flight — exclusion, not just latency
 /// This takes the same single-run lock as the two mutating commands, even though it only
@@ -355,7 +362,7 @@ pub fn workflow_install_cancel(control: State<'_, Arc<InstallControl>>) {
 ///
 /// Held for the duration rather than released early: the lock's meaning is "one thing is
 /// touching the substrate", and a read racing a delete is exactly what it exists to prevent.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn workflow_uninstall_dry_run(
     control: State<'_, Arc<InstallControl>>,
 ) -> Result<String, String> {

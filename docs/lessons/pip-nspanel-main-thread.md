@@ -27,6 +27,30 @@ stack, no error, and nothing in the logs to grep for.
 Tauri `#[command]` fns **and** the `on_window_event` closure already run on the main thread. So
 command-driven paths (`pip_set_mode`, the focus handler's synchronous hide) are safe as written.
 
+## ⚠️ The same fact cuts the other way: a sync command must never BLOCK
+
+A synchronous `#[tauri::command]` runs on the main thread, so anything it waits on (a
+`thread::sleep`, a `join`, a child process's `wait`/`output`) freezes the whole UI for that long.
+This is not hypothetical:
+- The P1 of 2026-08-25 was `cc_kill` → `PtyCcSession::kill` → `poll_reaped` → `thread::sleep`, three
+  calls below a body that looked harmless.
+- Paydown 2026-09-23 WP9 found two more: `supervisor_adjudicate`, which waited on `claude -p`, and
+  `workflow_uninstall_dry_run`, which waited on `uninstall.sh` with no timeout.
+
+**The guard is `src-tauri/tests/sync_commands_do_not_block.rs`.** It parses the crate with `syn`
+and follows calls transitively, so it fails on the pre-fix `cc_kill`. A flagged command has two
+fixes:
+- move the wait to a worker (`SessionRegistry::take` + `thread::spawn`), or
+- make the command `async` (`async fn` + `tauri::async_runtime::spawn_blocking` for long waits, or
+  `#[tauri::command(async)]` for short ones).
+
+The guard's `LEDGER` holds the accepted exceptions, each with a reason. ⚠️ **What it cannot see:**
+- **a lock held across a main-thread marshal** (the incident's other fault, `tray::reconcile`);
+- calls inside macros, and fns passed as values.
+
+Those still need review. ⚠️ `run_on_main_thread` from a sync command is NOT an escape hatch: the
+closure runs on the main thread too, and the guard walks it.
+
 ## What bites
 
 **Only code that hops onto a background thread.** The auto-summon debounce is the canonical example:
