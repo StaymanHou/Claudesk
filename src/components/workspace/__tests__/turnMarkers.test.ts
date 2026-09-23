@@ -293,7 +293,7 @@ describe("stepTurn — bidirectional, position-based (AC-1)", () => {
     });
   });
 
-  it("carries the nav state so the caller needs no second call", () => {
+  it("carries the nav state for the new position", () => {
     const { nav } = stepTurn(markers, { index: 1 }, "prev");
     expect(nav).toEqual({
       canPrev: false,

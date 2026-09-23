@@ -232,8 +232,8 @@ export function Workspace({
     // Fetch-only, like the indicator effect below. Re-read on every `visible` edge: workspaces
     // stay mounted forever (the standing invariant), so a mount-only read would go stale for
     // the app's whole life — and the picker can change this value while the workspace is open.
-    // ⚠️ Phase 3 adds the broadcast that makes the two surfaces re-sync on a write; until then
-    // this refresh-on-reveal is the only re-read, which is why it is not mount-only.
+    // ⚠️ The drive mode ALSO re-syncs on its broadcast (the P3.2 effect below); the supervisor
+    // toggle has no broadcast, so for it this refresh-on-reveal is the only re-read from disk.
     if (!workflowEnabled || !visible) return;
     let cancelled = false;
     const sid = workspace.cc_session_id;
@@ -249,7 +249,10 @@ export function Workspace({
         if (!cancelled) setStoredDriveMode(null);
       });
     // M14 WP0 — the supervisor toggle rides the SAME effect: one read per workspace reveal, same
-    // refresh-on-reveal reasoning. ⚠️ The failure arm sets `true`, NOT `null`: a failed read must
+    // refresh-on-reveal reasoning. ⚠️ This reveal read and the toggle's own write are the ONLY
+    // refreshes the value gets — the supervisor reads the ref every turn, but the ref is only as
+    // fresh as this. Complete today because the toggle has no other writer; see
+    // `supervisorToggleIpc.ts`. ⚠️ The failure arm sets `true`, NOT `null`: a failed read must
     // not leave the toggle looking unloaded forever, and the ruled default is ON. The helper
     // already degrades to `true`, so this `.catch` is the belt to its braces.
     void getProjectSupervisorEnabled(workspace.project_path)
@@ -300,7 +303,8 @@ export function Workspace({
 
   // M14 WP0 — same ref-mirroring reason: `useSupervisor`'s turn-end callback is registered once,
   // and the operator flips this toggle precisely WHILE the supervisor is misbehaving. A captured
-  // value would keep firing for the rest of the session.
+  // value would keep firing for the rest of the session. The ref is refilled from the reveal read
+  // and the toggle's own write above, nothing else.
   const supervisorEnabledRef = useRef<boolean | null>(null);
   useEffect(() => {
     supervisorEnabledRef.current = supervisorEnabled;
@@ -413,8 +417,9 @@ export function Workspace({
         // (kill → clear the spawn-once latch → nonce bump → spawn effect). `openIntent` is NOT in
         // that effect's dep list — it is read from the closure at nonce-bump time — so clearing
         // the latch immediately would let the spawn read the ORIGINAL door and consume the
-        // unclean-exit flag. One settle beat past the nonce bump is enough, and matches the
-        // `INJECT_SETTLE_MS` idiom the auto-resume arm already uses for the same reason.
+        // unclean-exit flag. The latch only has to outlive the commit that bumps the nonce.
+        // ⚠️ `RESPAWN_INTENT_HOLD_MS` is UNMEASURED — unlike `INJECT_SETTLE_MS`, it has no sample
+        // and no test; see its doc.
         await new Promise((r) => setTimeout(r, RESPAWN_INTENT_HOLD_MS));
         setSpawnAsTurnRespawn(false);
         setRespawnWanted(false);
@@ -423,7 +428,6 @@ export function Workspace({
     [workspace.project_path],
   );
 
-  /** Cancel: ⚠️ a TRUE no-op. Nothing persisted, nothing queued, nothing respawned. */
   /**
    * Close the confirm with an outcome. ⚠️ **BOTH Cancel and Apply route through here**, so the
    * write decision is taken in ONE place from `driveModeWriteFor` rather than being implicit in
@@ -443,15 +447,6 @@ export function Workspace({
     },
     [pendingDriveMode, respawnWanted, startApply],
   );
-
-  // Apply: persist, then respawn — immediately if the agent is idle, otherwise as soon as it is.
-  //
-  // ⚠️ **ONE ASYNC OPERATION IN A HANDLER, not an effect-driven state machine.** Three attempts
-  // at the latter were each rejected by eslint's `react-hooks` rule (setState-in-effect /
-  // refs-during-render), and the rule was right: sequencing an imperative multi-step operation
-  // is not what effects are for. `recycleSession` — the app's other multi-step operation — has
-  // exactly this shape (an async function in an event handler, polling `waitForFreshSessionId`
-  // for a genuinely NEW id), so this follows that precedent instead of inventing a second one.
 
   // M13.5 WP4 P3.2 — re-sync on the broadcast, from EITHER surface.
   //
@@ -575,8 +570,9 @@ export function Workspace({
   // XtermPane, so this component cannot know the count until it asks". That reasoning produced an
   // affordance that could only learn it was wrong AFTER a dead click — and then lied until the
   // next successful one. `XtermPane` now PUSHES the nav state on every turn-start
-  // (`onTurnStartRecorded`) and every step returns it, so the count is known BEFORE the click and
-  // the controls can be honestly `disabled` instead of dimmed-after-the-fact.
+  // (`onTurnStartRecorded`), and each click handler re-reads it (`turnNavState()`) right after its
+  // step, so the count is known BEFORE the click and the controls can be honestly `disabled`
+  // instead of dimmed-after-the-fact.
   const [turnNav, setTurnNav] = useState<TurnNavState>({
     canPrev: false,
     canNext: false,
@@ -1245,8 +1241,9 @@ export function Workspace({
             aria-label={`Go to the previous turn start in ${workspace.display_name}`}
             title="Previous turn start"
             onClick={() => {
-              // The pane owns the position; it returns the fresh nav state so this component
-              // never has to poll or re-derive it (the two could then disagree — AC-5).
+              // The pane owns the position; this re-reads the nav state from the pane right
+              // after the step rather than re-deriving it here (the two could then disagree —
+              // AC-5).
               ccPaneRef.current?.stepTurn("prev");
               const next = ccPaneRef.current?.turnNavState();
               if (next) setTurnNav(next);

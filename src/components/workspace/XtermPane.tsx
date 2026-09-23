@@ -70,14 +70,6 @@ import {
   type TurnPosition,
 } from "./turnMarkers";
 
-// M13.5 WP3 — a `TURN_MARKER_COLOR = "#6e7681"` constant lived here for the overview-ruler tick.
-// Removed with the decoration call (the tick is not the chosen affordance — see the marker site
-// below). ⚠️ KEEP ITS REASONING for whatever the re-spec's affordance turns out to be: a neutral
-// GREY, never a status hue. `[PRIOR: semantic-distance-not-just-visual-distance-for-status-colour]`
-// fires — the status palette is spoken for (orange `#d97757` Running, blue `#539bf5`
-// AwaitingInput, purple `#a371f7` BackgroundWork), and M13.5 WP2 rejected teal for reading
-// blue-adjacent. A turn landmark is NAVIGATION, not state, so it must borrow no status meaning.
-
 /**
  * Imperative handle exposed via `ref` (QoL-WP3). The parent `Workspace` calls
  * `focus()` on the false→true `visible` edge so promoting a workspace to center stage
@@ -893,6 +885,11 @@ export const XtermPane = forwardRef<XtermPaneHandle, XtermPaneProps>(
       // `[active]`-keyed trigger effect below, which bumps `spawnNonce` once via
       // `shouldSpawnOnActive`. `fitAndResize` is a stable useCallback appended only to
       // satisfy exhaustive-deps; it is not a re-spawn trigger.
+      // `pendingAction` is ALSO EXCLUDED: the reducer never clears it, and re-fire is governed
+      // by the consume-once latch (`shouldScheduleFire` + `hasFiredRef`), not by this list.
+      // `openIntent` is ALSO EXCLUDED, and it is NOT immutable: a drive-mode apply flips it to
+      // `turn-respawn` (M13.5 WP4). Excluding it means that flip ALONE never re-spawns; the
+      // value is read when a nonce bump re-runs this effect (the apply's `relaunch()`).
       // eslint-disable-next-line react-hooks/exhaustive-deps -- deps come from spawnTriggerDeps (the unit-tested contract) + the stable fitAndResize callback
     }, [
       ...spawnTriggerDeps({ spawnNonce, projectPath, spawnCommand }),

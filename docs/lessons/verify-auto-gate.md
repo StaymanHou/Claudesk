@@ -44,8 +44,11 @@ became one command.
 ## `check:link` — the only step that can see a deleted export at runtime
 
 Added 2026-09-23 (paydown 2026-09-23 WP3). `tooling/link-check/linkCheck.mjs` runs the real
-production build (rollup, `write: false`, ~2s) over **both** webview entries (`index.html` +
-`pip.html`) and fails if any static import cannot be bound.
+production build (rollup, `write: false`, ~2s) over whatever inputs the resolved `vite.config.ts`
+names (today **both** webview entries, `index.html` + `pip.html`) and fails if the build fails,
+which is how a static import that cannot be bound surfaces. ⚠️ **That both entries are built is
+not asserted**: narrowing `rollupOptions.input` leaves it green
+(`SURFACE-2026-09-23-QUALITY-LINK-CHECK-BOTH-ENTRIES-CLAIM-IS-UNPINNED`).
 
 **Why it is not a Vitest test:** under Vitest, importing a module whose consumer names a missing
 export **does not throw**. The module runner reads the binding as a property, so it is silently
@@ -61,7 +64,7 @@ the binding. **Polarity control:** a missing name imported unqualified but used 
 passes. It is erased, exactly as it is at runtime. The same name used as a **value** fails.
 
 **Blind to:** destructured *dynamic* imports (`const { X } = await import("./y")` is a property read;
-`main.tsx`'s dev-only probe harnesses use it), and CJS-interop differences for node_modules
+`main.tsx`'s probe harnesses use it — URL-flag-gated lazy chunks that DO ship in the bundle; rollup links their own static imports, and only the names destructured at the `import()` site go unchecked), and CJS-interop differences for node_modules
 dependencies between the bundled build and the unbundled dev server. It renders nothing, so
 evaluation-time and mount-time throws belong to the boot render smoke (`src/__tests__/appBoot.test.tsx`).
 

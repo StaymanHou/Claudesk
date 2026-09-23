@@ -3,8 +3,16 @@
 // ⚠️ **A SEPARATE MODULE FROM `driveModeIpc.ts`, not a pair of functions bolted onto it.** That
 // module's header carries a specific caution about per-ROW reads (M11.5's repair (B) removed
 // them), and its two getters answer *stored vs running* — a distinction this value does not have,
-// because the toggle is read PER TURN rather than at spawn. Merging them would invite a reader to
-// assume this value has a "running" counterpart it must reconcile. It does not.
+// because the supervisor consults it at fire time rather than baking it into the spawn. Merging
+// them would invite a reader to assume this value has a "running" counterpart it must reconcile.
+// It does not.
+//
+// ⚠️ **"At fire time" is the READ, not the FRESHNESS.** The supervisor reads a ref on every turn
+// end, but `Workspace.tsx` refills that ref from disk only on a `visible` edge and on this
+// workspace's own toggle write. That is complete today because the workspace toggle is the ONLY
+// writer (one surface, no broadcast — below) and `WorkspaceRegistry` is 1:1 by path, so no
+// background workspace can hold a value that differs from disk. A second writer, or two
+// workspaces on one tree (F-b), breaks that — then re-read on turn end or broadcast.
 //
 // ⚠️ **THERE IS NO BROADCAST EVENT, AND THAT IS DELIBERATE.** `driveModeIpc` has one because the
 // drive mode has TWO surfaces to keep in sync (picker row + workspace header). This value has

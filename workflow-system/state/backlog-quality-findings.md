@@ -9,9 +9,9 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-09-23-QUALITY-LINK-CHECK-BOTH-ENTRIES-CLAIM-IS-UNPINNED
 - **Severity:** MAJOR
 - **Location:** `tooling/link-check/linkCheck.mjs` (header + the `build()` call); `tooling/link-check/linkCheck.test.ts`
-- **Finding:** the header claims the check runs "over BOTH webview entries (`index.html` + `pip.html`, from vite.config.ts)", but nothing enforces it. The script builds whatever config resolves in `root`. The fixture runs load no `vite.config.ts` at all (a single `index.html`, no react plugin), so the durable test proves the catch/exit path and nothing about the repo's two-entry config or rollup's missing-export error staying on. Mutant B (the PiP-only `computePanelSize`) was proven once by hand and never codified. Narrowing `rollupOptions.input`, or adding an `onwarn` / `shimMissingExports`, would leave `check:link` and its test green while coverage shrank.
+- **Finding:** ⚠️ **Prose half RESOLVED 2026-09-23 (paydown WP4):** `linkCheck.mjs`'s header and `verify-auto-gate.md` now say the two-entry property is NOT asserted and name this entry. The code half below is open. Originally, the header claimed the check runs "over BOTH webview entries (`index.html` + `pip.html`, from vite.config.ts)", but nothing enforces it. The script builds whatever config resolves in `root`. The fixture runs load no `vite.config.ts` at all (a single `index.html`, no react plugin), so the durable test proves the catch/exit path and nothing about the repo's two-entry config or rollup's missing-export error staying on. Mutant B (the PiP-only `computePanelSize`) was proven once by hand and never codified. Narrowing `rollupOptions.input`, or adding an `onwarn` / `shimMissingExports`, would leave `check:link` and its test green while coverage shrank.
 - **Suggested action:** the `build()` return is a RollupOutput. Assert that both the `main` and `pip` entry chunks are present, and exit 1 if either is missing. Codify mutant B too: a repo-root run against a temp copy is too heavy, so a fixture with a `vite.config` naming two inputs, one broken only in the second, may be enough. Mutation-prove by narrowing `input` to `main` only.
-- **Priority:** medium
+- **Priority:** medium — routed to paydown-2026-09-23 WP6
 - **Status:** pending
 
 ## SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X
@@ -19,38 +19,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** `linkCheck.mjs` header; `docs/lessons/verify-auto-gate.md` §check:link; `source-text-guards.md` §19; `appBoot.test.tsx` header; `moduleGraphBoot.test.ts` header; `turnNavExportContract.test.ts` SCOPE note; `CLAUDE.md` gate-order line; `backlog-paydown-wbs.md` checklist
 - **Finding:** "Vitest reads a missing binding as `undefined`" is stated in about 8 places, and the "Blind to" list exists in full in both `linkCheck.mjs` and `verify-auto-gate.md`. That goes against the lesson file's own §"Comment budget" (state it once, point to it elsewhere). `moduleGraphBoot.test.ts` also carries history ("first written as one", "probed 2026-09-23") that belongs in the archive.
 - **Suggested action:** make `source-text-guards.md` §19 (or `verify-auto-gate.md`) the canonical home. Leave each code site with only its invariant, what to do when it fails, and a pointer. Diff the token set before and after (`[[grep-addressed-doc-loses-value-to-prose-rewrite]]`). This fits paydown WP4 (narrowing over-claiming comments).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-RELEASE-PRETTIER-CHECK-AFTER-WRITE-CANNOT-FAIL
-- **Severity:** MINOR
-- **Location:** `.claude/skills/release/SKILL.md` step 2; `CHANGELOG.md` 2026-09-23 step-0 lines
-- **Finding:** `prettier --check` right after `--write` on the same file can only fail on a parse error, yet the comment says "must exit 0 before committing". The CHANGELOG says step 2 "now fails before committing a reflowed config", when in fact it auto-fixes the reflow.
-- **Suggested action:** drop the redundant `--check`, or relabel it a parse sanity check. The CHANGELOG is append-only, so correct the claim in the skill, not the log.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-PROBE-HARNESSES-CALLED-DEV-ONLY
-- **Severity:** MINOR
-- **Location:** `tooling/link-check/linkCheck.mjs` "What it does NOT prove"; `docs/lessons/verify-auto-gate.md` "Blind to"
-- **Finding:** these call `main.tsx`'s probe harnesses "dev-only", but they are URL-flag-gated lazy chunks that ship in the production bundle. Rollup does link their internal static imports; only the names destructured at the dynamic-import site go unchecked.
-- **Suggested action:** reword to "flag-gated lazy chunks; only the destructured names at the `import()` site are unchecked".
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-LINK-CHECK-FAILURE-MESSAGE-NAMES-ONE-CAUSE
-- **Severity:** MINOR
-- **Location:** `tooling/link-check/linkCheck.mjs` catch block
-- **Finding:** it prints "FAILED: an import cannot be bound" for any build error (a CSS parse error, a plugin throw, a missing HTML file), so it names the wrong cause first.
-- **Suggested action:** print "build failed" and let the rollup message beneath it say why.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-APPBOOT-PER-TEST-ISOLATION-OVERSTATED
-- **Severity:** MINOR
-- **Location:** `src/__tests__/appBoot.test.tsx`: the `beforeEach` comment, and the `calls` array
-- **Finding:** "Each entry is judged on its OWN errors" claims more isolation than exists. The main tree is never unmounted, so its effects keep running during the PiP test and a late error from them would be charged to PiP. `calls` is never reset either, so PiP's `toContain("pip_get_layout")` would pass on a call main made (today only `Pip.tsx` issues that command, so there is no false pass yet).
-- **Suggested action:** reset `calls` in `beforeEach`, and keep a handle to each root and unmount it after its test. Or narrow the comment.
 - **Priority:** low
 - **Status:** pending
 
@@ -93,17 +61,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - ⚠️ **Do NOT "fix" this by returning `[]` from the blank arm** — that is the MAJOR this WP just
   fixed (every non-append path returns the ring as it stands). Only the *ordering* is the finding.
 - **Suggested action:** hoist the `safeStorage()` guard above the blank check, or leave it.
-- **Priority:** low
-
-## SURFACE-2026-09-21-QUALITY-TYPEOF-GUARD-COMMENT-OVERSTATES-PRODUCTION-RISK
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/draftStore.ts` — `loadDraft`'s `typeof raw === "string"`
-  guard comment
-- **Finding:** the comment says the guard defends against "a shimmed or corrupted storage", and the
-  test stubs exactly that. Real `localStorage` cannot return a non-string, so the guard largely
-  defends the **test double**. Fine to keep the guard; the comment overstates the production risk.
-- **Suggested action:** reword to say it guards the test-double/shim case specifically. ⚠️ Fold
-  into the standing comment-convention item rather than doing a per-WP trim pass.
 - **Priority:** low
 
 # hotkey-reference — 2026-09-17
@@ -203,34 +160,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # supervisor-hotfix — 2026-09-17
 
-## SURFACE-2026-09-17-QUALITY-TOGGLE-READ-ON-REVEAL-BUT-SUPERVISOR-FIRES-UNFOCUSED
-- **Severity:** MAJOR
-- **Location:** `src/components/workspace/Workspace.tsx` (the `if (!workflowEnabled || !visible) return;` effect)
-- **Finding:** `supervisorEnabled` is fetched only inside an effect gated on `visible`, but `useSupervisor` is gated on the workflow flag alone and **fires in unfocused workspaces by design** (`fanOut.test.ts` pins "fires in an UNFOCUSED workspace"). With no broadcast (settled D-4), the ref can only ever hold what the last reveal fetched, so a value changed out-of-band is honored in the focused workspace and silently ignored in every background one.
-- **Why it matters:** `supervisorToggleIpc.ts`'s own header says the toggle is *"read PER TURN rather than at spawn"*, and the value is passed as a ref specifically so a mid-session flip takes effect — but the per-turn read observes a value that only refreshes on reveal. Out-of-band change is a **supported** configuration here: `CLAUDE.md` documents running dev and prod Claudesk **concurrently** for dogfooding. The divergence sits exactly where the feature's value is (background workspaces).
-- **Why it is NOT auto-fixed:** the failure direction is bounded (a failed/missing read degrades to ON, the ruled default) and the no-broadcast decision is **settled**, so closing this means either reversing D-4 or adding a re-read on turn-end — a design call, not a reflex fix.
-- **Suggested fix:** decide between (a) accept + document the reveal-only staleness in `supervisorToggleIpc.ts`'s header so the "per turn" phrasing stops over-promising; (b) re-read on turn-end inside the supervisor callback; (c) reverse D-4 and broadcast. (a) is the cheapest and may well be right.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-09-17-QUALITY-WATERMARK-CLEAR-HAS-NO-PRODUCTION-CALLER
-- **Severity:** MAJOR
-- **Location:** `src/state/supervisor/unsentInput.ts` (`UnsentInputWatermark.clear()`)
-- **Finding:** `clear()` has **no production caller** — verified by grep, it appears only in `unsentInput.test.ts`. Its doc comment nonetheless asserts a purpose it does not have: *"Reset — used at a turn boundary, never to fake a submit"* and *"Exists so a caller never has to synthesize a fake `\r` chunk"*.
-- **Why it matters:** ⚠️ This is the `rustdoc-link-to-a-nonexistent-test-fails-no-gate` shape in TypeScript form — a doc comment describing a caller that does not exist, which passes every gate and reads as **live design**. A future reader will cite it as precedent for a turn-boundary reset that was never built. It is also adjacent to a real open question: the accepted staleness cost of no-clear-on-backspace-to-empty.
-- **Suggested fix:** either wire it (a turn-boundary reset may genuinely be wanted — worth deciding alongside the reveal-only finding above), or restate the comment as "no production caller today; kept for X" so the prose stops describing an imagined wiring.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-09-17-QUALITY-RUST-DOC-BLOCK-CHANGED-OWNERS
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/config_store/mod.rs` (~887-890)
-- **Finding:** The new `⚠️ THE UPGRADE PATH` doc block was appended directly onto the trailing lines of the pre-existing doc comment for `an_unknown_drive_mode_string_fails_the_whole_project_list`, with no separator. The combined block — including unrelated WP4b drive-mode-rename migration prose — now attaches to `an_absent_supervisor_enabled_key_reads_as_on`, and the drive-mode test is left with **no doc comment at all**.
-- **Why it matters:** two tests' documentation silently swapped owners.
-- **Suggested fix:** split the block; restore the drive-mode test's own doc comment.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-09-17-QUALITY-CLASSES-CONST-PINS-ONLY-ITS-OWN-LENGTH
 - **Severity:** MINOR
 - **Location:** `src/components/workspace/__tests__/supervisorToggleStyles.test.ts` (the "names every class this feature adds" test)
@@ -265,18 +194,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
   three times** — the pattern this feature's predecessor paid down.
 - **Suggested fix:** have `shouldRecycle` return the number (or `null`) instead of a boolean; the
   cast then disappears entirely.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-14-QUALITY-USECALLBACK-MEMOIZES-NOTHING
-- **Severity:** MINOR
-- **Location:** `src/state/supervisor/useSupervisor.ts` (`useCallback(onTurnEnd, [host])`)
-- **Finding:** `host` is a fresh object literal on every `Workspace` render, so the callback is
-  recreated each time and the `useCallback` guarantees nothing. Harmless today (`useTauriListen`
-  holds the handler in a latest-ref) but it **reads as an intentional stability guarantee that does
-  not exist**, which a future reader may rely on.
-- **Suggested fix:** either destructure `host`'s fields into the dep array, or drop the
-  `useCallback` and note why identity does not matter here.
 - **Priority:** low
 - **Status:** pending
 
@@ -400,19 +317,6 @@ The discrimination block re-declares `wiresGraphToPolicy` and `importsMachine` a
 
 **Fix shape:** read the bar from `_meta` (or cross-check code against it), and derive each arm's `minTpForBar` from its own positives.
 
-## SURFACE-2026-09-12-QUALITY-THE-NAIVE-BASELINE-COMMENT-OVERSTATES-ITS-SCOPE
-
-- **Severity:** MAJOR · **Priority:** medium · **Status:** pending
-- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:228-229, 238-241`
-
-The comment says the naive predicate "consults no policy table at all" — but the computation runs over `fire + no_fire` only, **excluding the 472 `undecided` records**, and that exclusion *is* a policy-table decision.
-
-⚠️ **VERIFIED AT SOURCE:** 119 in-scope + **115 undecided-with-no-chain** = **234**. A genuinely policy-table-free predicate would flag **234, not 119**.
-
-The 119/23 figure is defensible as a measurement — "naive *within the population the discriminating predicate already decided*" — but the comment describes something stronger. ⚠️ **This is the headline number in the ship commit message, the probe report (Q1), and the circularity backlog entry**, so a reader trusting the current framing will **mis-size WP3's expected improvement**.
-
-**Fix shape:** correct the comment's claim (not the number) in the test, the probe report's Q1 evidence line, and the commit-message framing if it is ever restated.
-
 ## SURFACE-2026-09-12-QUALITY-NEAR-TAUTOLOGICAL-ASSERTIONS-INFLATE-THE-TEST-COUNT
 
 - **Severity:** MINOR · **Priority:** low · **Status:** pending
@@ -481,21 +385,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
 - **Priority:** medium
 - **Status:** pending
 
-## SURFACE-2026-08-26-QUALITY-CONSTANT-BORROWS-A-MEASURED-SIBLINGS-CREDIBILITY
-- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
-- **Type:** tech-debt (comment correctness)
-- **Summary:** `applyDriveMode.ts:161-164` justifies `RESPAWN_INTENT_HOLD_MS` by claiming it
-  "matches the `INJECT_SETTLE_MS` idiom … for the same reason." It does not: `INJECT_SETTLE_MS` is
-  empirically measured, documents its sample, and is pinned by a test asserting both the value and a
-  floor. This one has no measurement, no test, and one call site.
-- **Context:** ⚠️ *"Borrowing a measured constant's credibility for an unmeasured one is the kind of
-  comment that stops a future reader from questioning the number."* A generalizable comment
-  anti-pattern worth naming beyond this instance.
-- **Suggested action:** Either measure and pin it, or delete the comparison and state plainly that
-  the value is unmeasured. Moot if the ref fix above lands.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-08-26-QUALITY-SOURCE-GUARDS-WHERE-EXTRACTION-WAS-AVAILABLE
 - **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
 - **Type:** tech-debt (guard shape)
@@ -512,17 +401,9 @@ source-guarded properties value-testable. Treat them as one item, not four.
 
 ## SURFACE-2026-08-26-QUALITY-DRIVEMODE-MINOR-POLISH
 - **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
-- **Type:** tech-debt (4 MINOR findings, grouped)
-- **Summary:** (a) `Workspace.tsx:380-387` — orphaned 8-line comment describing `startApply`, now
-  ~90 lines away, pointing at the wrong function. (b) `Workspace.tsx:359-366` — a leftover
-  `/** Cancel: a TRUE no-op */` doc comment mislabels `resolveDriveMode`, which handles BOTH
-  outcomes. (c) `App.css:602-625, 642-660` — `.workspace-header-drivemode` declared twice, split by
-  an unrelated rule. (d) `Workspace.tsx:229-357` — ~130 inline lines of drive-mode state in a
-  component past 1170 lines.
-- **Context:** (a)–(c) are phase-accretion artifacts from the Phase 3→4 re-plan; ⚠️ two of them make
-  a reader hit a comment describing the WRONG function, which is worse than no comment. (d) is the
-  hook extraction that also fixes findings 1, 2 and 4.
-- **Suggested action:** Sweep (a)–(c) in any refactor pass; (d) is the shared fix above.
+- **Type:** tech-debt (2 MINOR findings remain, grouped)
+- **Summary:** ⚠️ **Rewritten 2026-09-23 (paydown WP4).** (a) the orphaned duplicate `startApply` comment and (b) the `/** Cancel: a TRUE no-op */` doc mislabeling `resolveDriveMode` were DELETED at paydown WP4. Remaining: (c) `App.css`: `.workspace-header-drivemode` is declared twice, split by an unrelated rule. (d) `Workspace.tsx`: about 130 inline lines of drive-mode state in a component past 1170 lines.
+- **Suggested action:** (c) merge the two declarations (H5c, routed to paydown-2026-09-23 WP8). (d) is the `useDriveModeApply` hook extraction that R1 (paydown 2026-09-23) DEFERS to the next time drive-mode apply is touched.
 - **Priority:** low
 - **Status:** pending
 
@@ -535,22 +416,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
 - **Context:** ⚠️ **This contradicts a rule the repo wrote down for itself.** `docs/lessons/source-text-guards.md` says: *"when the question is what does the DOM look like at rest, render it… Reaching for `?raw` on a DOM question is how this repo accumulated its nine failure forms"* — and names **two working precedents needing no new dependency** (`docsRender.test.tsx`, `projectModelCellRender.test.tsx`). The WIP never mentions `renderToStaticMarkup`. Concretely brittle: `disabled=\{!turnNav\.canPrev\}` breaks on a Prettier reflow or any trivially-equivalent refactor, and the `[\s\S]{0,200}?` proximity windows are order-dependent. ⚠️ **It also cannot see the rendered attribute at all**, so it cannot cover the gate-OFF case a parsed DOM would get for free. Not a correctness defect today — the 10 arms were each mutation-proven — but it is a guard that will rot in the catalogued ways.
 - **Suggested action:** Port to a render test (`renderToStaticMarkup` + a parsed DOM), following the two named precedents. Assert the same three properties off the rendered output, and add the gate-OFF case the grep cannot reach. ⚠️ Expect the port to **delete** most of the regex machinery rather than translate it.
 - **Priority:** medium
-
-## SURFACE-2026-08-25-QUALITY-WP3-PUSH-NOT-POLL-CONTRACT-DRIFT
-- **Source:** feature-review-quality (M13.5 WP3, MAJOR)
-- **Type:** tech-debt (contract drift)
-- **Summary:** A **three-layer drift** on the "returns it so the caller never polls" claim. `turnMarkers.ts:224-243`'s `stepTurn` returns `{position, nav}` and its docstring says the caller *"never has to make a second call"* — but `XtermPane.tsx:416-441` **discards `stepped.nav`** and recomputes via `navState`; the handle's `stepTurn` then returns a **`boolean`** which `Workspace.tsx:622-626` **discards entirely** in favour of a follow-up `turnNavState()` call.
-- **Context:** ⚠️ **Two places assert push-not-poll in PROSE while the code polls** — `Workspace.tsx:222-230` and `turnNavControls.test.ts:96`. The returned `nav` is **dead weight at two of three layers**, and a future maintainer reading *"every step returns it"* will hunt for a consumer that does not exist. ⚠️ The boolean's **own docstring already concedes it is not the honest signal** ("`true` does NOT promise the viewport pixel-moved… the honest signal for the UI is `turnNavState`"), which is the smell that it should not be the return type.
-- **Suggested action:** Pick one and make all three layers agree: **either** thread `nav` through (`stepTurn(dir): TurnNavState | null`) and drop the boolean, **or** drop the returned `nav` and state plainly that the surface re-reads. ⚠️ **Fix the comments in the same change** — the prose is the part actively misleading readers.
-- **Priority:** medium
-
-## SURFACE-2026-08-25-QUALITY-WP3-DEAD-CONSTANT-COMMENT
-- **Source:** feature-review-quality (M13.5 WP3, MINOR)
-- **Type:** tech-debt (documentary)
-- **Summary:** `XtermPane.tsx:72-78` — a 7-line comment documenting a `TURN_MARKER_COLOR` constant **that no longer exists**, for the overview-ruler affordance the re-spec rejected, including its full palette rationale.
-- **Context:** The clearest single instance in this WP of *retracted reasoning promoted to permanent code prose*. A reader hunting for the marker colour finds a constant that is not there. By the comment-budget test — *would a reader who has never seen the WIP make a **worse decision** without this sentence?* — this is provenance and belongs in the archived WIP.
-- **Suggested action:** Delete. The rationale is already in the WIP and the ship commit history.
-- **Priority:** low
 
 ## SURFACE-2026-08-25-QUALITY-WP3-COMMENT-DENSITY-58-PERCENT
 - **Source:** feature-review-quality (M13.5 WP3, MINOR)
@@ -687,20 +552,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
 - **Priority:** low (readability only; no drift observed, no correctness impact)
 - **Status:** pending
 
-## SURFACE-2026-08-18-QUALITY-WP3-THREE-MINOR
-- **Source:** feature-review-quality (M13 WP3, 3 MINOR)
-- **Type:** tech-debt
-- **Summary:** ⚠️ **Rewritten 2026-09-23 (paydown-2026-09-23 WP1) to the one remaining residue.**
-  (b) the render-phase ref-write rule conflict and (c) `waitForFreshSessionId` defined after use
-  were RESOLVED by the 2026-08-18 paydown (WP3 / WP1). (a) `showRecycleButton`'s doc was
-  corrected at paydown WP2 to say the row gate **strictly dominates**, but the corrected sentence
-  cites the block as opened at **`:489`**. That line number has drifted (the `showSkillButtons(...) &&`
-  block is now ~`Workspace.tsx:1174`).
-- **Suggested action:** cite the site by symbol (`showSkillButtons`), not by line. Routed to
-  paydown-2026-09-23 WP4.
-- **Priority:** low
-- **Status:** pending — routed to paydown-2026-09-23 WP4
-
 # m12-wp4b-drive-mode-signal — 2026-08-07
 
 ## SURFACE-2026-08-07-QUALITY-WP4B-FOUR-MINOR-FINDINGS
@@ -719,22 +570,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
   paydown-2026-09-23 WP8.
 - **Priority:** low
 - **Status:** pending — routed to paydown-2026-09-23 WP8
-
-# m12-wp3-autofire-and-announce — 2026-08-05
-
-## SURFACE-2026-08-05-QUALITY-WP3-THREE-MINOR-POLISH-ITEMS
-- **Source:** feature-review-quality (M12 WP3, 3× MINOR)
-- **Type:** tech-debt (polish)
-- **Summary:** ⚠️ **Rewritten 2026-09-23 (paydown-2026-09-23 WP1) to the 1 remaining item.** (a)
-  `session_state::is_unclean` is now `pub(crate)`, and (c) the stale `⏵` glyph references in
-  `pickerRowOrder.ts` and the gutter test are gone. Both were RESOLVED at the 2026-08-18 paydown.
-  Remaining: (b) the spawn effect's `exhaustive-deps` suppression comment in `XtermPane.tsx`
-  enumerates every intentional exclusion by name but **omits two captured props**
-  (`pendingAction`, `openIntent`). That is safe today because both are immutable after mint, but
-  the list is the mechanism protecting the effect.
-- **Suggested action:** add the two names with the reason. Routed to paydown-2026-09-23 WP4.
-- **Priority:** low
-- **Status:** pending — routed to paydown-2026-09-23 WP4
 
 # m12-wp1-probe-flag-store-and-announce — 2026-08-03
 
@@ -788,19 +623,6 @@ scheduling items rather than polish.*
   little from each site — that is the recorded failure mode.
 - **Priority:** low
 - **Status:** pending — 2 of 4 sub-items remain; routed to the T1/T2 convention pass
-
-# m10.9-wp3-invite-settings-substrate — 2026-07-29
-
-*(feature-review-quality against ship baseline `6193615^..5bc88f3`; Mode 3 autopilot. 0 CRITICAL / 2 MAJOR / 5 MINOR. **MAJOR #1 (gate-seam bypass in App.tsx) was FIXED IN PLACE, not backlogged** — it was a live staleness defect and the fix was a 3-line import swap; the OFF-invariant guard's blind spot that hid it was closed in the same pass. Only MAJOR #2 and the 5 MINOR are listed here. Reviewer: "high-quality, unusually disciplined work — the strongest parts are the persistence model and the consistent instinct to extract a pure function whenever a decision has a truth table.")*
-
-## SURFACE-2026-07-29-QUALITY-WP3-DETACHED-SUBSTRATE-COMMENT
-- **Severity:** MINOR
-- **Location:** `src/components/settings/SettingsPanel.tsx:190-199`
-- **Finding:** The 10-line substrate-presence comment block is separated from the code it documents — the highlight state + effect were inserted between it and `const [substratePresent, …]`. A reader arriving at :190 reads nine lines about a filesystem probe, then meets an unrelated highlight comment.
-- **Why it matters:** the reasoning is load-bearing (why this is NOT a `useSettingControl`) but as placed it reads as documentation for the highlight.
-- **Suggested action:** move the block down to sit directly above `const [substratePresent, …]`.
-- **Priority:** low
-- **Status:** pending
 
 # editor-fs-backend-hardening — 2026-07-20
 

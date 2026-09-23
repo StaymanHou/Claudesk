@@ -87,7 +87,7 @@ describe("turn-nav controls — the surface the operator touches", () => {
     const stores = code.match(/if \(next\) setTurnNav\(next\)/g) ?? [];
     expect(
       stores.length,
-      "both prev and next handlers must store the returned nav state",
+      "both prev and next handlers must store the re-read nav state",
     ).toBe(2);
     for (const dir of ["prev", "next"]) {
       expect(code).toMatch(

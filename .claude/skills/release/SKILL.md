@@ -143,7 +143,7 @@ Run from the project root (`/Users/stayman/Personal/projects/claudesk`).
    ```bash
    (cd src-tauri && cargo update -p claudesk)   # rewrites the claudesk version in Cargo.lock; no network
    ./node_modules/.bin/prettier --write src-tauri/tauri.conf.json
-   ./node_modules/.bin/prettier --check src-tauri/tauri.conf.json   # must exit 0 before committing
+   ./node_modules/.bin/prettier --check src-tauri/tauri.conf.json   # parse sanity only: right after --write it cannot catch a reflow
    git add src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
    git commit -m "Release vVER"
    git push origin main

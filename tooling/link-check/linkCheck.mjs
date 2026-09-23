@@ -1,6 +1,9 @@
-// Link check: run the real production build (rollup) over BOTH webview entries
-// (`index.html` + `pip.html`, from vite.config.ts) and fail if any static
-// import cannot be bound. Writes nothing (`write: false`).
+// Link check: run the real production build (rollup) over whatever inputs the
+// resolved vite.config.ts names (today both webview entries, `index.html` +
+// `pip.html`) and fail if the build fails, e.g. a static import that cannot be
+// bound. Writes nothing (`write: false`). ⚠️ That BOTH entries are built is not
+// asserted: narrowing `rollupOptions.input` would leave this green
+// (SURFACE-2026-09-23-QUALITY-LINK-CHECK-BOTH-ENTRIES-CLAIM-IS-UNPINNED).
 //
 // Why a build and not a test: under Vitest, importing a module whose consumer
 // names a deleted export does NOT throw. The module runner reads the binding as
@@ -13,7 +16,9 @@
 // What it does NOT prove:
 //   - A destructured DYNAMIC import (`const { X } = await import("./y")`) is a
 //     property read at runtime, so a missing `X` is `undefined`, not an error.
-//     main.tsx's dev-only probe harnesses use this shape.
+//     main.tsx's probe harnesses use this shape: URL-flag-gated lazy chunks that
+//     DO ship in the bundle. Rollup links their own static imports; only the
+//     names destructured at the `import()` site go unchecked.
 //   - Dependency (node_modules) CJS interop differs between this bundled build
 //     and the unbundled dev server; a missing export from a CJS dependency may
 //     pass here.
@@ -36,7 +41,9 @@ try {
   });
   console.log("check:link — every entry linked cleanly");
 } catch (err) {
-  console.error("check:link — FAILED: an import cannot be bound");
+  console.error(
+    "check:link — FAILED: the build failed (rollup's reason follows)",
+  );
   console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 }

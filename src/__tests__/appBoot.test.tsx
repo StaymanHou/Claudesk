@@ -58,7 +58,10 @@ async function waitFor<T>(probe: () => T | null, what: string): Promise<T> {
 }
 
 describe("boot render smoke — each real webview entry mounts its surface", () => {
-  // Each entry is judged on its OWN errors: a throw from one boot must not fail the other.
+  // `uncaught` is reset per test, so each test asserts only errors raised during its own run.
+  // ⚠️ That is NOT full isolation: the main tree is never unmounted, so a late error from its
+  // effects during the PiP test is charged to PiP; and `calls` accumulates across both tests
+  // (no false pass today — only `Pip.tsx` issues `pip_get_layout`).
   beforeEach(() => {
     uncaught.length = 0;
   });

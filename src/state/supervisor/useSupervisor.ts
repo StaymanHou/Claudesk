@@ -135,11 +135,13 @@ export function useSupervisor(host: SupervisorHost): void {
     // turn is in flight, and the fire is the irreversible half.
     if (!host.enabled) return;
 
-    // ⚠️ M14 WP0 — THE THIRD CONDITION, re-read PER TURN for the same reason as the gate above:
-    // the operator flips this toggle precisely *because* the supervisor is misbehaving, and a
-    // value captured at subscribe time would keep firing for the rest of the session. The fire
-    // is the irreversible half (`injectCommand` has no retry and no pre-send cancel window), so
-    // every condition guarding it is re-read at the last possible moment.
+    // ⚠️ M14 WP0 — THE THIRD CONDITION, its ref read PER TURN for the same reason as the gate
+    // above: the operator flips this toggle precisely *because* the supervisor is misbehaving,
+    // and a value captured at subscribe time would keep firing for the rest of the session. The
+    // fire is the irreversible half (`injectCommand` has no retry and no pre-send cancel window),
+    // so every condition guarding it is read at the last possible moment. ⚠️ Reading the ref late
+    // does not make its VALUE fresh — the host refills it only on reveal and on its own toggle
+    // write (`supervisorToggleIpc.ts` says why that suffices today).
     if (host.supervisorEnabledRef.current === false) return;
 
     const storedMode = host.storedModeRef.current;
@@ -234,6 +236,9 @@ export function useSupervisor(host: SupervisorHost): void {
     // ⚠️ The recycle is handed to the CALLER. This hook never calls `recycleSession` itself —
     // see the module header for why that is structural, not stylistic.
     if (outcome.recycle) host.onRecycle(outcome.recycle);
+    // ⚠️ NOT a stable identity: `host` is a fresh object literal on every `Workspace` render, so
+    // this callback is recreated each render. Nothing depends on its identity — `useTurnEnd`
+    // receives an inline arrow below, and `useTauriListen` holds the handler in a latest-ref.
   }, [host]);
 
   useTurnEnd({

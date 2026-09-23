@@ -422,13 +422,51 @@ hunt finds *an* instance; it does not enumerate the class. Concretely, before cl
 ⚠️ **Corollary: the hunt's own success is the trap.** Four rounds each ending in a genuine find
 builds confidence that the axis is now covered. What was actually covered was one arm of one axis.
 
-## 17, 18. (Not yet written; see `SURFACE-2026-09-23-SOURCE-TEXT-GUARDS-ENTRIES-17-18-CITED-BUT-ABSENT`)
+## 17. A WIDENING can ship with ZERO INSTANCES of what it widened for
 
-`CLAUDE.md` cites entry 17 (a widening shipped with zero instances of the widened form) and entry 18
-(a presence guard cannot see that one arm fails to reach the collaborator). Both were added to
-`CLAUDE.md` at the F-a finalize (`1e3a09d`), but never here. Their source material is in
-`workflow-system/state/archive/fa-wp4-send-and-stage.md`. The numbers are reserved so the citations
-stay stable.
+⚠️ **Found by the code reviewer, not by the agent that wrote it** (F-a WP4, 2026-09-22).
+
+`chordRegistry.test.ts`'s `CALL_SYMBOLS` map assumed ONE predicate per matcher module.
+`promptSendChord.ts` exports two (`isAutoSubmitChord`, `isStageOnlyChord`), so the forward guard
+could only prove one was called — a host wiring auto-submit but not stage-only would have passed.
+The WP's own Discoveries entry recorded it as "Fixed IN PLACE": the map's value type widened to
+`string | string[]` and the assertion loops over all mapped symbols.
+
+The widening was **DEAD CAPABILITY. Zero array-valued entries**; both send chords resolve to the
+one `sendModeForChord` symbol, so the gap the Discoveries entry claimed was fixed was **still
+open**. Mutation-confirmed before accepting: deleting `sendModeForChord`'s `isStageOnlyChord`
+branch — which kills ⇧⌘↵ outright — left all 17 registry assertions GREEN.
+
+**Fixed:** the widening was removed (it described a coverage it never had), the limit was
+documented at the map, and a new `both send predicates are reachable from the router` block was
+added that derives its expectation FROM THE REGISTRY (a third send chord makes it fail until
+wired). The mutant now dies to all 3.
+
+**The rule: after widening a type or signature to close a gap, grep for an actual USE of the
+widened form.** A declaration is not a use. If no value anywhere exercises the new shape, the gap
+the widening documents as closed is still open, and the mutant it was written for still survives.
+
+## 18. A guard asserting a collaborator is PRESENT cannot see that one ARM fails to reach it
+
+⚠️ **Found by the agent's own mutation sweep** (F-a WP4 Phase 3, 2026-09-22).
+
+Replacing the Prompt panel's `setPendingRecover(action.text)` with `applyRecover(action.text)` —
+i.e. applying the recovered text WITHOUT ever showing the dialog — **passed ALL 130 tests.** Every
+guard asserted that `planRecover` and `ConfirmModal` were PRESENT; none asserted the confirm arm
+actually REACHES the dialog. That is the proven-machine-with-an-unguarded-caller shape this
+project has shipped a CRITICAL from twice (M11 WP4), and a decision module's own tests
+structurally cannot see it.
+
+**Closed by two new guards asserting the arm→action ORDER, not mere presence.** `applyRecover(`
+legitimately occurs on the `replace` arm and in the dialog handler, so a `toContain` would pass on
+the mutant (`[[raw-guard-substring-must-be-unique-to-its-site]]`). Re-running the mutant now kills
+both.
+
+**The rule: presence is not routing.** When a guard exists to prove that an arm goes THROUGH a
+collaborator (a confirm dialog, a funnel, a single writer), assert the ORDERING — index-of the arm
+< index-of the collaborator call < index-of the action — scoped to that arm. A bare `toContain` on
+the collaborator passes on the bypass mutant whenever the symbol legitimately occurs on ANOTHER
+arm, which is exactly when the bypass is tempting.
 
 ## 19. A Vitest import cannot fail on a missing named export
 

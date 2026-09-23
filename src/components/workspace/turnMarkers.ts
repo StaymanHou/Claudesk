@@ -218,8 +218,9 @@ export function clampPosition(
  * `canNext` disabled state (AC-4) an end-step is unreachable through the UI anyway — the
  * clamp is the belt to that braces.
  *
- * Returns the new position plus the nav state that goes with it, so a caller never has to
- * make a second call to find out whether the controls should now be disabled.
+ * Returns the new position plus the nav state that goes with it, for a caller that wants both
+ * in one value. ⚠️ The shipped caller does NOT use `nav`: `XtermPane`'s handle stores the
+ * position and the surface re-reads through `turnNavState()` after each step.
  */
 export function stepTurn(
   markers: readonly TurnMarker[],

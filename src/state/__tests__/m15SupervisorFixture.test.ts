@@ -226,8 +226,13 @@ describe("M15 WP1 — the ground-truth break signal", () => {
 
 describe("M15 WP1 Phase 2 — naive-vs-discriminating attribution", () => {
   // The naive predicate is "a verdict token with no following Skill call is a
-  // break" -- it consults no policy table at all. Re-derived here from the
-  // fixture rather than trusting the script's printout.
+  // break", applied ONLY to the records the policy table decided (`fire` +
+  // `no_fire`). ⚠️ That population is itself a policy-table output: the 472
+  // `undecided` records are excluded, and 115 of them also have no following
+  // Skill call, so a genuinely policy-free predicate flags 234, not 119. The
+  // 119/23 is "naive within the decided population" — do not size the
+  // discriminating predicate's gain against a baseline it never faced.
+  // Re-derived here from the fixture rather than trusting the script's printout.
   const naiveFlagged = [...fixture.fire, ...fixture.no_fire].filter(
     (r) => !r.next_skill_called,
   );

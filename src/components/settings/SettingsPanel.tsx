@@ -262,16 +262,6 @@ export default function SettingsPanel({
     onError,
   });
 
-  // M10.9 WP3 — substrate presence. Deliberately NOT a `useSettingControl`: that hook's
-  // contract is seed → listen to a broadcast → optimistic set → revert, and three of those
-  // four don't apply. This is a READ-ONLY probe of the filesystem with no setter, and there
-  // is no Claudesk-side event for "a directory appeared" — inventing one (or polling) would
-  // add a mechanism to watch something that changes about once in a user's lifetime.
-  //
-  // `null` until resolved, so the surface renders nothing rather than guessing (see the
-  // component header). A rejection also lands as `null`: the backend is contracted never to
-  // error, so a rejection here means something unexpected, and silently claiming
-  // "not installed" would be worse than showing nothing.
   // M10.9 WP3 — the routed-from-invite highlight, self-clearing after HIGHLIGHT_MS.
   //
   // Seeded from the prop rather than read directly at render time so it FADES: a bare
@@ -296,6 +286,16 @@ export default function SettingsPanel({
     return () => clearTimeout(t);
   }, [highlightGroup]);
 
+  // M10.9 WP3 — substrate presence. Deliberately NOT a `useSettingControl`: that hook's
+  // contract is seed → listen to a broadcast → optimistic set → revert, and three of those
+  // four don't apply. This is a READ-ONLY probe of the filesystem with no setter, and there
+  // is no Claudesk-side event for "a directory appeared" — inventing one (or polling) would
+  // add a mechanism to watch something that changes about once in a user's lifetime.
+  //
+  // `null` until resolved, so the surface renders nothing rather than guessing (see the
+  // component header). A rejection also lands as `null`: the backend is contracted never to
+  // error, so a rejection here means something unexpected, and silently claiming
+  // "not installed" would be worse than showing nothing.
   const [substratePresent, setSubstratePresent] =
     useState<SubstratePresence>(null);
   // Extracted so the install wizard can re-run it on success — see `onFinished` below. WP3

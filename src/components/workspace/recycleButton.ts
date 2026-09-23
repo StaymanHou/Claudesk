@@ -32,9 +32,10 @@ export const RECYCLE_TESTID = "workspace-recycle";
  * would silently change the skill row too).
  *
  * ⚠️ **But the divergence is NOT reachable at today's render site, and this doc used to imply it
- * was.** The button renders at `Workspace.tsx:514`, *inside* the `showSkillButtons(…) &&` block
- * opened at `:489` — so the row's gate **strictly dominates** this predicate, and since both are
- * byte-identical one-liners, relaxing this one alone changes nothing observable. The separation
+ * was.** The button renders in `Workspace.tsx` *inside* the `showSkillButtons(…) &&` block
+ * (find it by that symbol — line cites here drifted twice) — so the row's gate **strictly
+ * dominates** this predicate, and since both are byte-identical one-liners, relaxing this one
+ * alone changes nothing observable. The separation
  * above is therefore **forward-looking insurance, not a live behavioral difference.** ⚠️ Do NOT
  * "fix" the nesting by un-nesting the button: sharing the row's container is correct (same row,
  * same look), and a diverging Recycle precondition would be expressed by hoisting the render out

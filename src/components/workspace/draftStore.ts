@@ -64,8 +64,10 @@ export function loadDraft(projectPath: string): string {
     if (!storage) return "";
     const raw = storage.getItem(draftKey(projectPath));
     // ⚠️ A draft is stored as a RAW STRING, not JSON. Operator prose round-trips exactly,
-    // and there is no parse step to fail on a stray quote or brace. The `typeof` guard
-    // still matters: a non-string can come back from a shimmed or corrupted storage.
+    // and there is no parse step to fail on a stray quote or brace. The `typeof` guard maps
+    // `getItem`'s `null` (no draft for this key — the real production case) to "". It also
+    // rejects a non-string, which only a test double or shim can return; real `localStorage`
+    // cannot.
     return typeof raw === "string" ? raw : "";
   } catch {
     return "";

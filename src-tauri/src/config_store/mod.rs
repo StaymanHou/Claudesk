@@ -870,23 +870,6 @@ mod tests {
         );
     }
 
-    /// Documents the **blast radius of an unparseable `default_drive_mode`**, which is
-    /// wider than it looks and was measured (not assumed) during the M12 WP4b rename.
-    ///
-    /// `read_projects` deserializes the whole file in one `from_slice`, so a single
-    /// unknown mode string fails the **entire project list** with [`ConfigError::Parse`] —
-    /// it is not scoped to the offending record, and the picker would present as empty
-    /// rather than as "one project lost its mode".
-    ///
-    /// **Why the WP4b rename was nonetheless migration-free:** the field had never been
-    /// written by any code path (its own doc comment said "never read or written", and
-    /// both the real `com.claudesk.app` and `com.claudesk.app.dev` stores were checked at
-    /// rename time — **0 occurrences of `default_drive_mode` in either**). So no on-disk
-    /// value could exist in the old vocabulary. This test exists so that fact is recorded
-    /// as a *measurement* rather than an assumption, and so the failure mode is pinned
-    /// **before** the field has real users: the moment modes are actually being persisted,
-    /// any future vocabulary change is a breaking migration and needs a lenient reader or
-    /// a version bump, not another rename.
     /// ⚠️ **THE UPGRADE PATH — the single most important property of this field.**
     ///
     /// Every `projects.json` on the operator's machine predates WP0, so none carries the key.
@@ -978,6 +961,23 @@ mod tests {
         assert!(matches!(err, ConfigError::Io(_)), "got {err:?}");
     }
 
+    /// Documents the **blast radius of an unparseable `default_drive_mode`**, which is
+    /// wider than it looks and was measured (not assumed) during the M12 WP4b rename.
+    ///
+    /// `read_projects` deserializes the whole file in one `from_slice`, so a single
+    /// unknown mode string fails the **entire project list** with [`ConfigError::Parse`] —
+    /// it is not scoped to the offending record, and the picker would present as empty
+    /// rather than as "one project lost its mode".
+    ///
+    /// **Why the WP4b rename was nonetheless migration-free:** the field had never been
+    /// written by any code path (its own doc comment said "never read or written", and
+    /// both the real `com.claudesk.app` and `com.claudesk.app.dev` stores were checked at
+    /// rename time — **0 occurrences of `default_drive_mode` in either**). So no on-disk
+    /// value could exist in the old vocabulary. This test exists so that fact is recorded
+    /// as a *measurement* rather than an assumption, and so the failure mode is pinned
+    /// **before** the field has real users: the moment modes are actually being persisted,
+    /// any future vocabulary change is a breaking migration and needs a lenient reader or
+    /// a version bump, not another rename.
     #[test]
     fn an_unknown_drive_mode_string_fails_the_whole_project_list() {
         let dir = TempDir::new().unwrap();

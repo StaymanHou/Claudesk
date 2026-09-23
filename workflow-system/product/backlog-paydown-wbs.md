@@ -323,6 +323,17 @@ comment that asserts something false. Drive via `/task-plan`.
   *(The m12-wp3 "whole-feature gate" comments WP1 was to check are RESOLVED: the only surviving
   mentions describe the change FROM that gate.)*
 
+**✅ WP4 CLOSED 2026-09-23.**
+- Every item above was narrowed; code files changed in comments only, proven by a
+  comment-stripped token-stream diff with a positive control.
+- Six WP3 prose findings were folded in, and entries 17 and 18 were written in
+  `source-text-guards.md`.
+- Three WP3 residues went to WP6.
+- `SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X` is T1 rationale
+  duplication, so it goes to the **R2 comment-convention pass**, not here.
+- ⚠️ N1b's own premise was stale: `openIntent` is NOT immutable after mint. The comment
+  records why it is excluded anyway.
+
 ## WP5 — Chord registry + Settings panel: guards that can't see what they claim  `[impact: High · effort: S · risk: Low]`
 
 Co-located (`chordRegistry*`, `SettingsPanel.tsx`, `editorExtensions.ts`). **This is the surface
@@ -399,6 +410,18 @@ via `/task-plan`, or split in two if it runs long.
   into a later declaration, so brace-count the slice. Mutation: move `default_model?` out of the
   interface into a following one; the guard must fail. *(The m12-wp4b `shell_spawn_env` item is
   RESOLVED: the test now asserts the `spawn_shell` call site.)*
+- **WP3 review residue (routed here at WP4, 2026-09-23):**
+  - **`SURFACE-2026-09-23-QUALITY-LINK-CHECK-BOTH-ENTRIES-CLAIM-IS-UNPINNED` — the code half.**
+    WP4 narrowed the prose in `linkCheck.mjs` and `verify-auto-gate.md` so it no longer claims
+    the property. Now pin it: assert that both the `main` and `pip` entry chunks are in the
+    RollupOutput, and exit 1 if either is missing. Codify mutant B (PiP-only `computePanelSize`)
+    with a two-input fixture. **Mutant that must die:** narrowing `rollupOptions.input` to
+    `main` only. Then update the two narrowed sentences back to a claim.
+  - **`…APPBOOT-UNCAUGHT-ASSERTION-UNPROVEN`.** Add a positive control, a throw inside a
+    `setTimeout` on the boot path where the picker still renders, and confirm it goes red on
+    `expect(uncaught).toEqual([])` **alone**. Otherwise delete the assertion.
+  - **`…LINKCHECK-TEST-OUTSIDE-TSC-INCLUDE`.** Rename it to `.test.mjs`, or add
+    `tooling/link-check` to a tsconfig `include`.
 
 ## WP7 — Render instead of `?raw`; tests that re-implement production  `[impact: High · effort: M · risk: Low]`
 
@@ -460,6 +483,45 @@ a behavior change the suite may not see. Drive via `/feature-plan`.
   precedent). The UI-freeze half is verified live with `sample`
   (`docs/lessons/pip-nspanel-main-thread.md`).
 
+## WP10 — Mark a staged prompt as dictated  `[impact: Med · effort: S · risk: Low]`  *(operator-added 2026-09-23, mid-WP4)*
+
+⚠️ **New behavior, not paydown.** This is an operator ask, not an inventory finding. It lives here
+because the operator put it on this list; it changes no execution order. Drive via `/task-plan`,
+or `/feature-plan` if the open questions below do not settle in one line each.
+
+**The ask** (operator's words): the prompt staging area should *"prepare or inject a sentence
+saying that, or maybe not just prepared but wrap the prompt between notes saying that this
+section is dictated, which may contain speech detection or recognition errors."* The goal: CC
+reads a dictated body charitably. A misheard word gets read as an ASR slip, not as the
+operator's intent.
+
+**Where it goes (as-built seam):** `stagedPayload(body, { submit })` in
+`src/components/workspace/stagedPayload.ts`. Its only production caller is
+`prompt/sendStagedDraft.ts`'s `buildPayload`. Wrap the **body** before normalization, so the
+notes sit **inside** the bracketed-paste envelope, and the `ESC[201~` neutralization plus the
+`\r` normalization still apply to the whole thing.
+- ⚠️ **Do NOT touch `slashCommandPayload`** (the F-a ruling; M12/M13/M15 callers stay
+  byte-identical).
+- ⚠️ **Wrap at SEND time only.** The draft store and history keep the raw body, so a
+  recover/re-send does not double-wrap.
+
+**Open questions — the operator's to settle at plan time** (recommendation first):
+1. *Wrap (open + close note) or a single leading sentence?* → **Wrap.** It bounds the dictated
+   span, so text the operator appends in CC's own prompt after a stage-only (`⇧⌘↵`) send is not
+   covered by the caveat.
+2. *Always, or only when the body was actually dictated?* → The panel accepts typed text too, and
+   macOS dictation leaves no reliable DOM signal (it arrives as ordinary input events). So the
+   honest choices are **always**, or an **operator-controlled toggle** in the panel. The
+   recommendation is a per-panel toggle, **default ON**, since the panel exists for dictation.
+3. *Wording.* → Short and literal, e.g. `[Dictated via speech recognition — may contain
+   transcription errors; read for intent.]` … `[End dictated section.]`. Keep it out of any
+   `TRANSITION:`/slash-command shape, so it can never look like a workflow token.
+
+**Done when:** a value test asserts the exact decoded payload for wrap ON, for OFF, and for both
+submit modes, **identity, not length** (source-text-guards entry 15). It is mutation-proven by
+(a) dropping the close note and (b) wrapping after normalization. A render or wiring test proves
+the toggle reaches `buildPayload`, because a pure builder proves the machine, not its caller.
+
 ---
 
 ## Scope — what's NOT swept (anchors intact)
@@ -516,6 +578,3 @@ SURFACEs listed in WP1 §5. The R4 rulings (40, 46, 32) are deleted in WP2 once 
 3. Carry any surviving obligation back into `backlog.md` as its own SURFACE, so it outlives this
    file (the 2026-08-19 sweep did this for the comment-convention pass).
 4. **Delete this file** in a commit that says so.
-
-## Session Handoff — 2026-09-23 10:05
-Handed off. See `workflow-system/state/.session.md` to restore. WP1–WP3 CLOSED; next is WP4 (narrow over-claiming comments) via `/task-plan`.

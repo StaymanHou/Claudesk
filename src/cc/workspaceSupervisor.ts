@@ -4,7 +4,8 @@
 // That module answers *"what mode will this session run under, and does it still match?"*. This
 // one answers *"may the supervisor act on this workspace at all?"* — a different question with a
 // different storage key, a different default, and no staleness concept (the toggle takes effect
-// without a respawn, because it is read per turn rather than at spawn).
+// without a respawn, because the supervisor reads it at fire time rather than at spawn — see
+// `supervisorToggleIpc.ts` for how fresh that read is).
 //
 // ⚠️ **They are NOT merged, and they must not be.** Sharing a derivation would tie the toggle's
 // fate to `default_drive_mode`, and clearing the drive mode ALSO disables the auto-resume

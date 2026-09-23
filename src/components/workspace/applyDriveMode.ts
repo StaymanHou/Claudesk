@@ -161,6 +161,10 @@ export async function waitForIdle(
  * synchronously after `relaunch()` would let the spawn read the workspace's ORIGINAL door, which
  * for a `fire` open would CONSUME the unclean-exit flag and silently disable auto-resume on the
  * next real open.
+ *
+ * ⚠️ **The 400 ms is UNMEASURED.** It is a margin chosen to comfortably outlast one React commit,
+ * not a sampled figure: no measurement, no test pinning it, one call site. Do not read it as a
+ * sibling of `INJECT_SETTLE_MS`, which IS measured and pinned — question this number freely.
  */
 export const RESPAWN_INTENT_HOLD_MS = 400;
 

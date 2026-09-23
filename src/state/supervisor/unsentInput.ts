@@ -110,9 +110,15 @@ export function foldInput(
 }
 
 /**
- * Clear the watermark outright — the turn boundary.
+ * Clear the watermark outright.
  *
- * ⚠️ Exists so a caller never has to synthesize a fake `"\r"` chunk to reset the state, which
+ * ⚠️ **NO PRODUCTION CALLER — reserved, by design.** Nothing clears the watermark at a turn
+ * boundary: it deliberately persists until a clearing byte is typed, and its false-positive rate
+ * is what dogfooding is measuring (`useSupervisor.ts`'s withheld log). Do NOT wire a turn-boundary
+ * clear while that measurement runs — it would change the behavior under observation and discard
+ * input that is really on screen. Only tests call this today.
+ *
+ * If a caller is ever added, this is the way to reset: synthesizing a fake `"\r"` chunk instead
  * would read as "the operator pressed Enter" in any diagnostic built on this module later.
  */
 export function clearUnsentInput(): UnsentInputState {
@@ -164,7 +170,7 @@ export class UnsentInputWatermark {
     return this.state.unsentInput;
   }
 
-  /** Reset — used at a turn boundary, never to fake a submit. */
+  /** Reset. ⚠️ No production caller — reserved; see `clearUnsentInput`. */
   clear(): void {
     this.set(clearUnsentInput());
   }
