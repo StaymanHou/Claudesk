@@ -578,6 +578,13 @@ and work on the spec well."
   a **design constraint, not a nice-to-have**: if the thing that creates profiles cannot itself be
   one, the model has a special case at its center. Cheap to design for, expensive to retrofit —
   check it early in the spec.
+- **Update 2026-09-23 — GRILLED; the open questions above are ANSWERED.** Four rulings in
+  `roadmap.md` → "F-b decisions — `/util-grill-me`, 2026-09-23": profile = a `CLAUDE_CONFIG_DIR`
+  chosen by a picker-row cell · creation is a native wizard and **the boilerplate repo is OUT OF
+  SCOPE** (it becomes an ordinary row — the self-hosting constraint above is satisfied trivially) ·
+  hook registration is **persistent per profile** with register-on-launch + unregister-on-remove ·
+  the **workflow layer is always OFF for non-default profiles**. Next: `/feature-spec` (single
+  spec, not a WBS).
 - **Status:** pending
 
 ## SURFACE-2026-09-12-ONE-TRANSITION-HAS-NO-PAUSE-POLICY-ROW-UPSTREAM

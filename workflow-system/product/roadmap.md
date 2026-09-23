@@ -782,6 +782,58 @@ cheap to design for and expensive to retrofit.
 pushes it further from "size it and build it." It wants a real spec pass, not a plan pass — the
 operator said so explicitly ("we will need to think it through and work on the spec well").
 
+### F-b decisions — `/util-grill-me`, 2026-09-23 (settled; do not re-litigate)
+
+**Measured before asking** (so these are facts, not rulings): 6 config dirs exist under
+`~/.config/claude-*` (4 with a `~/.zshrc` wrapper: `tube`/`original`/`eos`/`neo`); 4 are bound to
+one directory, `presentation` to 3 related ones, and `original` — a deliberately near-empty
+"vanilla" profile with **no workflow system** — spans 9 unrelated dirs. ⚠️ **4 directories already
+run under TWO profiles** (boilerplate repo, `friday-pres`, `Downloads`, `Tmp`). ⚠️ **A fresh
+config dir starts "Not logged in"** despite the shared keychain — creation implies one `/login`.
+⚠️ **Transcripts land under `$CLAUDE_CONFIG_DIR/projects/`** — probed with `claude -p` under a
+scratch config dir (CC 2.1.280), which also showed `--settings '<json>'` hooks DO fire per-spawn
+(considered for registration and **declined** — ruling 3).
+
+1. **A profile IS a `CLAUDE_CONFIG_DIR` — a per-row picker cell, not a workspace kind.** It sits
+   beside the model and drive-mode cells on the picker row; ⚠️ **the picker container may widen**
+   to fit (operator). `~/.claude` is the profile "default" — not a special case in the model.
+   ⚠️ **One row = one directory = one profile at a time**: running the same dir under two profiles
+   *concurrently* is **not** a v1 case, so `WorkspaceRegistry` stays path-keyed; the 4 dual-use
+   dirs just switch the cell. A row's "inherit" model means inherit **the profile's** default
+   (`presentation` sets `sonnet`).
+2. **Creation is a NATIVE WIZARD; the boilerplate repo is OUT OF SCOPE.** ⚠️ The earlier
+   "the boilerplate must itself be representable as a profile" constraint is **satisfied
+   trivially, not designed for**: when an agent is needed to reshape a config dir (deny fences,
+   skills, MCP — `neo`'s 8-rule fence came from a conversation, not a form), the operator opens the
+   boilerplate repo as an **ordinary picker row**. The wizard steps through options with good
+   defaults: `cleanupPeriodDays` (default `99999` — every real profile uses it), permission mode
+   (⚠️ **the step is ALWAYS shown**, pre-selected — preserves the boilerplate's "silence is not a
+   gate" rule), the seeded `CLAUDE.md` guard (never touch `~/.claude`). **Writes NO `~/.zshrc`
+   function** — and never edits the existing ones, which remain the bare-terminal floor. First
+   spawn shows CC's own `/login` in the PTY. Existing dirs are **adopted** via an explicit
+   "Add existing config dir…" (suggesting `~/.config/claude-*`), **not auto-imported** —
+   `m7-sandbox` is a harness artifact. Delete = **move the config dir to Trash** behind a confirm,
+   never `rm -rf` (history + memory are unrecoverable).
+3. **Hook registration is PERSISTENT — written into each profile's `settings.json`, mirroring M3
+   exactly.** ⚠️ Per-spawn `--settings` injection was offered (no teardown at all) and **declined**:
+   a profile session launched from a bare terminal must stay visible + time-tracked, as default
+   sessions are today. **Cleanup is exactly three triggers, and only one is new work:**
+   **register-on-launch** for every listed profile (idempotent, self-healing); **unregister only on
+   "remove from Claudesk (keep dir)"**; nothing on delete (the registration goes with the dir) and
+   nothing on uninstall (no code runs — same as `~/.claude` today, harmless because the hook script
+   exits 0 unconditionally). ⚠️ **A hooks off-switch stays OUT OF SCOPE** — `hook_uninstall` has
+   no frontend caller today either. The existing `~/.claude` registration is **untouched**.
+4. ⚠️ **The workflow layer is ALWAYS OFF for non-default profiles** (operator, hardened from an
+   assumption to a rule). Supervisor, skill row, `/session-restore` auto-inject and the drive-mode
+   signal all presume the workflow skills exist; `original` states it has none, so a fire there
+   types a slash command into a session that cannot run it. **Not "off in v1" — off.**
+
+⚠️ **Requirement, not a ruling:** every slug-path computation — the M15 supervisor's transcript
+reader first — must follow `CLAUDE_CONFIG_DIR`, not assume `~/.claude/projects/<slug>/`. Time
+analytics captures profile sessions (the hook fires) but gets **no per-profile dimension** in v1.
+
+⚠️ **Shape: a single `/feature-spec`, NOT a WBS** — unlike F-a, no probe outcome feeds the build.
+
 ### ~~F-c: Turn-output re-orientation~~ — ⛔ **DROPPED from Group F (operator, 2026-09-15)**
 
 ⚠️ **Not deferred, not parked — dropped from the group.** The operator removed it on review of the
@@ -1073,6 +1125,3 @@ Decompose M8 at its `/product-wbs` pass; WP1 (the capture/render pipeline probe 
 
 > 2026-06-15: Major rewrite driven by the vision pivot (multi-window → single-window tabbed workspaces + filmstrip + PiP + menu-bar) and research resolving the open design questions. Phase 1 gained the tab-shell substrate + a gating thumbnail-rendering probe; xterm.js settled on DOM-renderer-only (WebGL ~16-context cap); the prior "cross-window CC status indicator" milestone was replaced by three status surfaces (filmstrip / menu-bar / PiP) fed by a single Rust broadcaster over a Unix-socket hook channel (resolving the old "WP9b probe").
 > 2026-05-22: Replaced the single auto-resume bullet with a three-branch Smart auto-resume milestone; added a drive-mode selector + indicator milestone. Both additive to the stateful-controller phase.
-
-## Session Handoff — 2026-09-23 15:06
-Handed off. See `workflow-system/state/.session.md` to restore.
