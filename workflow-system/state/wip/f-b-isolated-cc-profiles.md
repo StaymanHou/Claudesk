@@ -336,7 +336,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     arrive in Phase 3), and `set_project_profile(path, id|null)`. The last one clears the row's
     unclean-exit flag through `key_for()`. Register them in `lib.rs`. ⚠️
     `sync_commands_do_not_block.rs` must stay green.  <!-- status: done -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: done — `pnpm verify:auto` EXIT=0 (39s; 3000 FE / 943 Rust lib). First run caught my own source guard broken by a `cargo fmt` trailing-comma reflow; fixed by normalizing `, )`. The env_remove guard was mutation-proven 3/3 (drop the loop / shell gets the removal / CC passes empty), with each mutant confirmed landed -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
     - [ ] Operator logs in once under a scratch profile. Agent reads back `.claude.json` /
@@ -497,8 +497,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 1 > verify-auto
-- **Active scope:** Phase 1 verify-auto (P1.1–P1.5 built; `profile_remove` pulled forward from Phase 3 as `remove_entry`'s consumer — list-only until P3.2 adds the unregister)
+- **Path:** F-b > Phase 1 > verify-self
+- **Active scope:** Phase 1 verify-self (live: `ps eww` on the CC child under default + profile rows; missing-profile refusal; flag clear)
 - **Blocked:** none
 - **Unvisited:** Phase 2 → Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none

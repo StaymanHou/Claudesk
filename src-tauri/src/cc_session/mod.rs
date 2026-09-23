@@ -2330,12 +2330,19 @@ mod tests {
         // pass CONFIG_DIR_ENV as the removal list; the shell spawn must pass an empty one.
         let src = include_str!("mod.rs");
         let production = src.split("mod tests").next().unwrap_or(src);
-        let flat = production.split_whitespace().collect::<Vec<_>>().join(" ");
+        // Trailing commas are normalized away: rustfmt adds or drops one when it reflows a call
+        // between one line and many, and a guard that depends on which it chose breaks silently
+        // on the next `cargo fmt` (it did, once, in this very test).
+        let flat = production
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .replace(", )", ")");
         assert!(
             flat.contains("\"/exit\", // F-b A.8"),
             "the CC spawn_argv call no longer carries its env_remove argument"
         );
-        assert!(flat.contains("&[crate::config_store::profiles::CONFIG_DIR_ENV], )"));
+        assert!(flat.contains("&[crate::config_store::profiles::CONFIG_DIR_ENV])"));
         assert!(flat.contains("&shell_spawn_env(), \"exit\", &[])"));
         assert!(flat.contains("for k in env_remove { cmd.env_remove(k); }"));
     }
