@@ -25,15 +25,15 @@
   than they were.
 
 ## Code-quality findings — m15-wp4-context-pressure-recycle (2026-09-14)
-- **Pointer:** **2 MINOR remain** (0 CRITICAL, 0 MAJOR). The `useCallback` finding was resolved at paydown-2026-09-23 WP4. Remaining: the `tokens` `as number` cast resting on a prose contract (→ paydown-2026-09-23 WP8), and the over-weight `lastIndex` comment (→ the T1/T2 comment-convention pass; ⚠️ keep the `lastIndex` line itself, only the essay around it is the finding). Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp4-context-pressure-recycle — 2026-09-14`.
-- **Priority:** low (both)
-- **Status:** pending — routed to `workflow-system/product/backlog-paydown-wbs.md` (WP8) + the comment-convention pass
+- **Pointer:** **1 MINOR remains** (0 CRITICAL, 0 MAJOR). The `useCallback` finding was resolved at paydown-2026-09-23 WP4 and the `tokens` `as number` cast at WP8. Remaining: the over-weight `lastIndex` comment (→ the T1/T2 comment-convention pass; ⚠️ keep the `lastIndex` line itself, only the essay around it is the finding). Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp4-context-pressure-recycle — 2026-09-14`.
+- **Priority:** low
+- **Status:** pending — routed to the comment-convention pass
 
 ## Code-quality findings — m15-wp3-break-detection-and-auto-fire (2026-09-13)
-- **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **2 MINORs remain open** (the Rust timeout test that re-implemented the wait/kill loop was resolved at paydown-2026-09-23 WP7). What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **The "still zero production callers" note is now STALE — WP4 supplied the caller** (`useSupervisor`, shipped 2026-09-14, `79c67e5` — hash rewritten by the 2026-09-14 rebase; was `75ad76d`), so these MINORs now sit behind live code rather than an unwired module. Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
-- **Priority:** low (both remaining)
+- **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **1 MINOR remains open** (the Rust timeout test that re-implemented the wait/kill loop was resolved at paydown-2026-09-23 WP7, and the discarded adjudicator stderr at WP8). What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **The "still zero production callers" note is now STALE — WP4 supplied the caller** (`useSupervisor`, shipped 2026-09-14, `79c67e5` — hash rewritten by the 2026-09-14 rebase; was `75ad76d`), so these MINORs now sit behind live code rather than an unwired module. Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** comment-duplication across the supervisor modules (fold into the standing comment-convention item, do NOT trim per-WP — that is measured as not converging), and the discarded adjudicator stderr (E3 → paydown WP8; now testable through the WP7 `run_command` seam). Independent polish; none blocks WP4.
+- **Pickup shape:** comment-duplication across the supervisor modules (fold into the standing comment-convention item, do NOT trim per-WP — that is measured as not converging).
 
 ## Code-quality findings — m15-wp1-supervisor-probe (2026-09-12)
 - **Pointer:** **1 MINOR remains** (0 CRITICAL). The naive-baseline MAJOR was resolved at paydown-2026-09-23 WP4. At WP6: the decisive-bar MAJOR (`scoreArm` now uses the bar parsed from `_meta.threshold`, and each arm's margin uses its own positives), the near-tautological assertions (deleted) and the access-style nits. Remaining: the test file's comment density, a third copy of the WIP's attempt history. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp1-supervisor-probe — 2026-09-12`.
@@ -41,13 +41,13 @@
 - **Status:** pending — routed to the comment-convention pass (G5)
 
 ## Code-quality findings — drive-mode-on-the-workspace-surface (2026-08-26)
-- **Pointer:** **2 findings remain** (rewritten 2026-09-23). The borrowed-credibility MAJOR and MINOR-polish (a)/(b) were resolved at paydown-2026-09-23 WP4, and the source guards where extraction was available (H4) at paydown WP7, by a live `Workspace` mount rather than the hook. Remaining: (1) the re-entrancy defect, where a second Apply during a queued apply is silently discarded, is **ruled R1 Option A ('disable while queued') → paydown WP8**; (2) the `RESPAWN_INTENT_HOLD_MS` scheduler-timing sleep (H2), which is tied to the `useDriveModeApply` hook extraction R1 DEFERS to the next drive-mode touch; plus the MINOR-polish residue: (c) a duplicated CSS rule (H5c → paydown WP8) and (d) the same extraction. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# drive-mode-on-the-workspace-surface — 2026-08-26`.
-- **Priority:** medium (the re-entrancy defect); low for the rest
+- **Pointer:** **2 findings remain** (rewritten 2026-09-23, paydown WP8). The borrowed-credibility MAJOR and MINOR-polish (a)/(b) were resolved at paydown-2026-09-23 WP4, and the source guards (H4) at WP7 by a live `Workspace` mount. At WP8 the re-entrancy defect was resolved by R1 Option A (the readout is disabled while an apply is queued), and the duplicated CSS rule (c) was merged. Remaining: the `RESPAWN_INTENT_HOLD_MS` scheduler-timing sleep (H2) and MINOR-polish (d). Both are the `useDriveModeApply` hook extraction that R1 DEFERS to the next drive-mode touch. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# drive-mode-on-the-workspace-surface — 2026-08-26`.
+- **Priority:** medium (the scheduler-timing sleep); low for (d)
 - **Status:** pending
 
 ## Code-quality findings — turn-output-reorientation (2026-08-25)
-- **Pointer:** **2 MINOR remain** (rewritten 2026-09-23). The export-guard MAJOR was resolved at paydown WP3; the push-not-poll contract-drift MAJOR and the dead `TURN_MARKER_COLOR` comment at paydown WP4 (prose narrowed at every layer; the returned `nav` is now documented as unused by the shipped caller, not threaded through); and the `?raw`-on-a-DOM-question MAJOR at paydown WP7 (`turnNavControls.test.tsx` now drives a live `Workspace` mount). Remaining: (2) the 58% comment-density MINOR, an instance of `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (⚠️ the retraction blocks are load-bearing and must NOT be swept); (3) `aria-live="polite"` on a conditionally-mounted span, so the **first** turn is never announced. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# turn-output-reorientation — 2026-08-25`.
-- **Priority:** low (2 MINOR)
+- **Pointer:** **1 MINOR remains** (rewritten 2026-09-23). The export-guard MAJOR was resolved at paydown WP3; the push-not-poll contract-drift MAJOR and the dead `TURN_MARKER_COLOR` comment at paydown WP4 (prose narrowed at every layer; the returned `nav` is now documented as unused by the shipped caller, not threaded through); and the `?raw`-on-a-DOM-question MAJOR at paydown WP7 (`turnNavControls.test.tsx` now drives a live `Workspace` mount). Remaining: (2) the 58% comment-density MINOR, an instance of `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (⚠️ the retraction blocks are load-bearing and must NOT be swept). The conditionally-mounted `aria-live` span was resolved at paydown WP8. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# turn-output-reorientation — 2026-08-25`.
+- **Priority:** low
 - **Status:** pending
 
 ## Code-quality findings — window-geometry-persistence (2026-08-21)
@@ -56,18 +56,6 @@
 - **Priority:** medium (2 MAJOR — documentary/drift risk, no correctness impact)
 - **Status:** pending
 - **Pickup shape:** read the three entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
-
-## Code-quality findings — wp2-background-work-status-states (2026-08-22)
-- **Pointer:** **1 CRITICAL + 2 MAJOR — all three FIXED IN PLACE before finalize, not backlogged** (see the archived WIP's `## Code-Quality Review`). ⚠️ The CRITICAL was a **real shipped regression**: `recycleSession.ts` derived "a `Stop` arrived" from `state === "idle"` only, so WP2's new `background_work` mapping made a `Stop` with outstanding background work invisible — hanging Recycle to its 180s timeout in the *likely* case (Recycle runs `/session-handoff`, which may well have a job outstanding). Root method cause: the consumer sweep grepped `awaiting_input` consumers, a predicate structurally blind to a site keyed on `"idle"`. **1 MINOR remains open** (the CSS regex guards' shape-blindness was resolved at paydown-2026-09-23 WP6 — their failure messages now name the shapes they cannot read), body in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# wp2-background-work-status-states — 2026-08-22`: the dead hyphenated `WorkspaceStatus` legacy type that is a casing-trap for the next person adding a state.
-- **Priority:** low
-- **Status:** pending
-- **Pickup shape:** read the entry in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
-
-## Code-quality findings — fa-wp2-draft-store-history-payload (2026-09-21)
-- **Pointer:** **1 finding remains — 0 CRITICAL, 0 MAJOR, 1 MINOR** (the `typeof`-guard comment MINOR was resolved at paydown-2026-09-23 WP4, and the terminator-count `.filter()` at WP6). ⚠️ **Both MAJORs were FIXED at review time, not backlogged**, and the first is worth knowing about: `appendToHistory` returned the intact ring on its blank-entry arm but a bare `[]` on the no-storage and quota arms — and **a throwing `setItem` leaves storage INTACT**, so `setRing(appendToHistory(p, t))` in WP3/WP4 would have blanked a populated UI ring against live data. ⚠️ **The round-4 test PINNED the bug**: it asserted `toEqual([])` against a stub whose `getItem` returned `null`, so `[]` was also what correct behavior produced — the assertion could not tell them apart. Both the code and that test are fixed and mutation-proved. The second MAJOR was comment density (measured 73%/58%/56% of physical lines) plus a rationale triplicated across three sites; trimmed to the comment budget's keep-list (measurements, rejected alternatives, what-to-do-when-this-fails) with zero provenance markers left in the implementation files, verified by grep. The remaining MINOR: a `loadHistory` read that precedes the storage guard it would short-circuit. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# fa-wp2-draft-store-history-payload — 2026-09-21`.
-- **Priority:** low
-- **Status:** pending
-- **Pickup shape:** A one-liner. ⚠️ **Do NOT "fix" the blank-check ordering by returning `[]` from that arm** — that reintroduces the MAJOR this WP just closed; only the guard *ordering* is the finding.
 
 ## SURFACE-2026-09-23-SUPERVISOR-ADJUDICATE-BLOCKS-THE-MAIN-THREAD
 - **Source:** feature:verify-self (paydown WP7 Phase 1)
@@ -728,9 +716,9 @@ and work on the spec well."
 - **Status:** open — deferred by decision, shape recorded
 
 ## Code-quality findings — m13-wp4-milestone-exit-verify (2026-08-18)
-- **Pointer:** **2 MINOR** (documentary only) from WP4's code-quality review — the WIP file's phase
-  sections interleave out of execution order, and `arch/workflow-gate.md` mirrors
-  `offInvariantGuard.test.ts`'s header in three prose paragraphs. Full bodies:
+- **Pointer:** **1 MINOR remains** (documentary only) from WP4's code-quality review:
+  `arch/workflow-gate.md` mirrors `offInvariantGuard.test.ts`'s header in three prose paragraphs.
+  (The interleaved WIP phase sections were moved into order at paydown-2026-09-23 WP8.) Full bodies:
   [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under
   `# m13-wp4-milestone-exit-verify — 2026-08-18`.
 - **⚠️ The review's 2 MAJORs are NOT here — both were FIXED in the WP**, because each was a defect in
@@ -738,7 +726,7 @@ and work on the spec well."
   suite stayed green at 33/33; now derived from the file's own source and regression-proven), and the
   one-authority guard asserted more than its non-test-`src/` scope enforces (boundary now disclosed at
   both the guard and the authority).
-- **Priority:** low (both MINOR; readability of documentation, no correctness impact)
+- **Priority:** low (readability of documentation, no correctness impact)
 - **Status:** deferred — carry to next cycle (M13 close 2026-08-18); prior note: 2 MINOR documentary only — the `arch/` duplication one is the more valuable
 - **Pickup shape:** the `arch/` one is the more valuable — it is this project's standing
   rationale-duplication finding one level up, and the right fix is *"pick one authority and point at
@@ -797,11 +785,6 @@ and work on the spec well."
 - **Pointer:** **1 MAJOR remaining.** The uncancellable-across-unmount MAJOR was resolved 2026-08-19, and all three MINORs are resolved (the last, `showRecycleButton`'s stale `:489` cite, at paydown-2026-09-23 WP4). The late-subscription disposal MAJOR is now FULLY closed (paydown-2026-09-23 WP6): the `WORKSPACE_STATUS` arm has its own deferred-unlisten test, and each arm is mutation-proved on its own. Remaining, the documentary MAJOR: **52–71% comment density, with the "Recycle is not a skill-button member" rationale in five files.** Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m13-wp3-recycle-session — 2026-08-18`.
 - **Priority:** low
 - **Status:** pending — routed to the comment-convention pass
-
-## Code-quality findings — m12-wp4b-drive-mode-signal (2026-08-07)
-- **Pointer:** **2 MINOR remaining** (rewritten 2026-09-23). The descendant-inheritance MAJOR was resolved at the 2026-08-18 paydown: `cc_spawn_env` now states the inheritance is intended. ⚠️ Still **do NOT reach for `env_clear()`**, which strips PATH/LANG/TERM. The `shell_spawn_env` MAJOR (a test asserting the primitive, not the caller) is resolved: the test now asserts the `spawn_shell` call site passes `&shell_spawn_env(), "exit"`. The readability MAJOR (incident narrative recorded three times) is comment density and goes to the T1/T2 convention pass. Remaining: `%KNOWN` rebuilt per call in `claudesk-hook.pl`, and a silently dropped can't-happen serde failure in `cc_spawn_env`. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp4b-drive-mode-signal — 2026-08-07`.
-- **Priority:** low
-- **Status:** pending — routed to paydown-2026-09-23 WP8
 
 ## Code-quality findings — m12-wp1-probe-flag-store-and-announce (2026-08-03)
 - **Pointer:** **2 open items** (rewritten 2026-09-23; the lazy `RecentProject` regex item was resolved at paydown WP6 — a brace-counted `interfaceBody` slice). The two-live-`Verdict (b)` MINOR is resolved: `App.tsx` now names each milestone's verdict. The measurement-scripts convention question was Buried 2026-09-23. Remaining: (1) whether a phase observable must be amended when a verdict *reverses* the assumption it encoded (a workflow-system convention → the mccc handoff); (2) one redundant paragraph on the Rust hazard test's doc comment (⚠️ **not** its reopening-condition paragraph). Bodies for (1): [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp1-probe-flag-store-and-announce — 2026-08-03`; (2) lives only here.
@@ -882,17 +865,6 @@ and work on the spec well."
 - **Pointer:** **1 MINOR + 1 density item remaining** (rewritten 2026-09-23, paydown WP5). Resolved and recorded: `WP2-CHORD-ARM-MISSES-PANELHOST` (M11.5 WP4), `WP2-RAW-GUARDS-STILL-LOAD-BEARING`, the Escape-branch `return`, the `ALLOWED_SAMPLE` duplicate, and (paydown WP5) the MAJOR `WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL`. Remaining: MINOR, `SettingsPanel.tsx` near doing too much (its own trigger fired when M14 extended it); and the milestone rationale restated in about 6 places. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m10.9-wp2-workflow-features-gate — 2026-07-28`.
 - **Priority:** low
 - **Status:** pending — the size MINOR → deferred to the next Settings feature; the rationale restatement → the comment-convention pass
-
-## Code-quality findings — editor-fs-backend-hardening (2026-07-20)
-- **Pointer:** **2 MINOR remaining** (rewritten 2026-09-23): a distinct `UnknownRoot` error variant in place of `OutsideWorkspace { root: "<no known project>" }`, and a one-line non-issue note on `resolve_within`'s `exists()` → `canonicalize()`. `WP7-STALE-COMPILE-GAP-TEST-COMMENT` is resolved (in CHANGELOG). The per-call `projects.json` re-read MINOR was Buried 2026-09-23 as an efficiency nit. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# editor-fs-backend-hardening — 2026-07-20`.
-- **Priority:** low
-- **Status:** pending — routed to paydown-2026-09-23 WP8
-
-## Code-quality findings — m10.5-wp3-cc-terminal-clean-kill (2026-07-19)
-- **Pointer:** 1 MINOR remaining (originally 0 CRITICAL / 0 MAJOR / 3 MINOR; the "3s" `kill_all` doc-drift MINOR and the `None`-pgid fallback comment MINOR both RESOLVED) from `feature-review-quality` on the WP3 SIGHUP-first process-group kill (`cc_session/mod.rs`). The remaining MINOR — **`WP3-REAPLEADER-SILENT-NONREAP`**: `ReapLeader` discards `poll_reaped()`'s result (`let _ =`) → a residual non-reap (AC-4 wedged-workspace case) degrades silently; add a debug log / distinct signal on `Ok(false)`. Reviewer verdict: "a well-built, unusually disciplined bug fix… No refactor is warranted." No refactor auto-invoked (0 CRITICAL). See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.5-wp3-cc-terminal-clean-kill — 2026-07-19`.
-- **Priority:** low (1 MINOR).
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** a one-line `cc_session/mod.rs` observability touch-up (a `log`/return on the `ReapLeader` `Ok(false)` branch) — rides any future kill-path touch. Dismiss via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-08-28-SUPERSEDED-TEXT-IN-DURABLE-DOCS-HAS-NO-CONVENTION
 - **Source:** cross-project global learning, ported 2026-08-28 from `knowledge_base` (CMC ad-ops).
@@ -1096,7 +1068,7 @@ and work on the spec well."
 - **Status:** pending — routed to the comment-convention pass (`SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, ruling R2)
 
 ## Code-quality findings — paydown-wp7-render-instead-of-raw (2026-09-23)
-- **Pointer:** **1 MAJOR + 5 MINOR** from review of ship commit `a26b514`. MAJOR: the WP7 live-mount harness's lifecycle is forked by `closeWiring`, and its `pane` stub is single-instance while two `Workspace`s mount. MINORs: dead harness options; the Submit button not driven; a warn spy that leaks on failure; the gate-OFF proof lacks a positive control; `run_command` doesn't drain its pipes (pre-existing, routed with E3/WP9). Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp7-render-instead-of-raw — 2026-09-23`.
+- **Pointer:** **1 MAJOR + 5 MINOR** from review of ship commit `a26b514`. MAJOR: the WP7 live-mount harness's lifecycle is forked by `closeWiring`, and its `pane` stub is single-instance while two `Workspace`s mount. MINORs: dead harness options; the Submit button not driven; a warn spy that leaks on failure; the gate-OFF proof lacks a positive control; `run_command` doesn't drain its pipes (pre-existing, routed to WP9). Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp7-render-instead-of-raw — 2026-09-23`.
 - **Priority:** medium (MAJOR) / low (MINORs)
 - **Status:** pending
 - **Pickup shape:** one small test-only task. Consolidate the harness (the MAJOR plus the dead options), then add the three one-assertion tests. Route the `run_command` item with paydown WP8's E3 and WP9.

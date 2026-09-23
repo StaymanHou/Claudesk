@@ -73,6 +73,10 @@ pub enum EditorFsError {
     NotUtf8(String),
     #[error("path {requested} is outside the workspace root {root}")]
     OutsideWorkspace { requested: String, root: String },
+    /// The frontend-supplied `root` is neither a known project nor a descendant of one. Distinct
+    /// from [`Self::OutsideWorkspace`], which is a path escaping a root that IS valid.
+    #[error("root {0} is not a known project")]
+    UnknownRoot(String),
     #[error("path {0} is a directory; recursive directory delete is not supported")]
     IsDirectory(String),
     #[error("could not move {path} to Trash: {source}")]
@@ -138,6 +142,9 @@ fn resolve_within(root: &Path, requested: &Path) -> Result<PathBuf, EditorFsErro
     // symlink to its ultimate target) and re-assert containment. A not-yet-existing
     // target (the write path for a new file) is left as-is: it cannot be a symlink, and
     // its parent is already confirmed inside `root` above.
+    // The `exists()` → `canonicalize()` gap is not a TOCTOU hole: a swap to a symlink in between
+    // is re-checked by `canonicalize` + `starts_with` below, and a dangling one falls to the
+    // not-yet-existing path, whose parent is already confirmed inside `root`.
     if resolved.exists() {
         let target_canon = resolved.canonicalize().map_err(|e| {
             EditorFsError::Io(std::io::Error::new(
@@ -164,7 +171,7 @@ fn resolve_within(root: &Path, requested: &Path) -> Result<PathBuf, EditorFsErro
 /// project list (the backend's server-side source of truth — [`crate::config_store`]),
 /// so a malformed or hostile `root` can't widen the guard to arbitrary disk. Returns
 /// the canonicalized `root` on success (so the caller confines against the resolved
-/// form), or [`EditorFsError::OutsideWorkspace`] if it matches no known project.
+/// form), or [`EditorFsError::UnknownRoot`] if it matches no known project.
 ///
 /// A descendant of a known project is accepted (the editor may open a file via a
 /// nested workspace dir under a recorded project). Both sides are canonicalized before
@@ -194,10 +201,9 @@ pub fn validate_root(
     if is_known {
         Ok(requested_canon)
     } else {
-        Err(EditorFsError::OutsideWorkspace {
-            requested: requested_root.display().to_string(),
-            root: "<no known project>".to_string(),
-        })
+        Err(EditorFsError::UnknownRoot(
+            requested_root.display().to_string(),
+        ))
     }
 }
 
@@ -549,7 +555,7 @@ mod tests {
         // ...an unknown root is rejected.
         let result = validate_root(std::slice::from_ref(&known_root), hostile.path());
         assert!(
-            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            matches!(result, Err(EditorFsError::UnknownRoot(_))),
             "a root not among the known projects must be rejected, got {result:?}"
         );
     }
@@ -577,7 +583,7 @@ mod tests {
         // The stale record must not authorize a hostile root...
         let result = validate_root(&[stale], hostile.path());
         assert!(
-            matches!(result, Err(EditorFsError::OutsideWorkspace { .. })),
+            matches!(result, Err(EditorFsError::UnknownRoot(_))),
             "a stale known record must not authorize anything, got {result:?}"
         );
         // ...while a live known record still works.

@@ -518,6 +518,14 @@ boot test after each deletion.** Drive via `/task-plan`.
 - **K1** (Rule 1). The archived `m13-wp4-milestone-exit-verify.md` has phase sections out of
   order → **move** them into order; do not rewrite.
 
+**✅ WP8 CLOSED 2026-09-23** (task `paydown-wp8-small-live-defects-and-dead-code`, archived).
+- All 11 items are closed. Each behavior change names the mutants that now die (H1 ×2, I6, D1 ×2, E3, T2), and the per-item table is in the archived WIP's `## Build evidence`.
+- **What differed from this list:**
+  - **A2 was REFUTED, not fixed.** Both `appendToHistory` arms call `loadHistory`, which runs its own `safeStorage()` guard first, so reordering would remove zero reads. Nothing was edited.
+  - **M2.1 was NOT hoisted.** The hook is one process per event, so the hash is already built at most once per process. A file-scope hoist would build it for all 10 events instead of 1. A comment now answers the question instead.
+  - **M2.2 logs rather than `expect`s**, because a panic in the spawn path would be worse than a dropped var.
+  - `SURFACE-2026-09-23-QUALITY-RUN-COMMAND-PIPES-NOT-DRAINED` stays with WP9 (the same restructure as the async move).
+
 ## WP9 — Guard against blocking work in sync Tauri commands  `[impact: High · effort: M · risk: Med]`
 
 `SURFACE-2026-08-25-SYNC-TAURI-COMMANDS-MAY-BLOCK-THE-MAIN-THREAD`. The riskiest item, so it runs
@@ -629,6 +637,3 @@ SURFACEs listed in WP1 §5. The R4 rulings (40, 46, 32) are deleted in WP2 once 
 3. Carry any surviving obligation back into `backlog.md` as its own SURFACE, so it outlives this
    file (the 2026-08-19 sweep did this for the comment-convention pass).
 4. **Delete this file** in a commit that says so.
-
-## Session Handoff — 2026-09-23 11:55
-Handed off. See `workflow-system/state/.session.md` to restore. WP1–WP7 CLOSED; next is WP8 (small live defects and dead code) via `/task-plan`.

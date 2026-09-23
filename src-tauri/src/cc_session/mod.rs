@@ -613,11 +613,17 @@ fn cc_spawn_env(
             // what the hook's allowlist accepts (M12 WP4b Phase 1 pinned those strings against
             // `transitions.md`). ⚠️ A hand-written match here would be a second vocabulary to
             // keep in sync — exactly the class of bug Phase 1 existed to remove.
-            if let Ok(wire) = serde_json::to_string(&mode) {
-                env.push((
+            match serde_json::to_string(&mode) {
+                Ok(wire) => env.push((
                     DRIVE_MODE_ENV.to_string(),
                     wire.trim_matches('"').to_string(),
-                ));
+                )),
+                // Cannot happen for a fieldless enum. If it ever does, the var is dropped and the
+                // session runs with no drive-mode signal, so say so rather than drop it silently
+                // (paydown WP8, M2.2). Not `expect`: a panic here would take down the spawn.
+                Err(e) => {
+                    eprintln!("[claudesk] cc spawn: drive mode {mode:?} did not serialize: {e}")
+                }
             }
         }
     }
@@ -1142,7 +1148,15 @@ impl CcSession for PtyCcSession {
                 // 4) Reap the leader so the reader thread hits EOF (→ `cc-exit-<id>`) and no
                 //    zombie lingers. Bounded; SIGKILL makes it quick.
                 KillStep::ReapLeader => {
-                    let _ = self.poll_reaped(DEFAULT_KILL_TIMING.hup_grace)?;
+                    // Still `Ok`: the wait is bounded and the kill is best-effort. But a survivor
+                    // of SIGKILL + the grace window may mean `cc-exit-<id>` never fires (the
+                    // wedged-workspace case), so it must not degrade SILENTLY (paydown WP8, U1).
+                    if !self.poll_reaped(DEFAULT_KILL_TIMING.hup_grace)? {
+                        eprintln!(
+                            "[claudesk] cc kill: leader not reaped within {:?} of SIGKILL",
+                            DEFAULT_KILL_TIMING.hup_grace
+                        );
+                    }
                 }
             }
         }

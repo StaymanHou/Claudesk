@@ -107,6 +107,15 @@ export const APPLY_CONFIRM_CANCEL = "Cancel";
 /** Label shown on the readout while an apply is queued behind a busy agent. */
 export const APPLY_PENDING_LABEL = "applying when idle";
 
+/**
+ * The readout's tooltip while an apply is queued (R1, paydown 2026-09-23). It names the queued
+ * mode and says why the readout will not open, because a disabled control that gives no reason
+ * reads as broken.
+ */
+export function queuedDriveModeTitle(queued: string): string {
+  return `Drive mode: ${queued} — ${APPLY_PENDING_LABEL}. It can be changed again once it applies.`;
+}
+
 /** How long to wait for a busy agent to go idle before abandoning a queued apply. */
 export const IDLE_WAIT_MS = 10 * 60 * 1000;
 

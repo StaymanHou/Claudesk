@@ -250,11 +250,14 @@ re-derive: `OpenIntent::TurnRespawn` resumes **without** consuming the unclean-e
 reintroduces a silent auto-resume killer); and `readyToRespawn` is **`idle` ONLY** (do not copy
 `recycleSession`'s `idle || background_work`, which answers a different question).
 
-⚠️ **Known open defect (filed, not fixed):** during a **queued** apply the readout stays clickable and
-a **second Apply is silently discarded** while the readout shows the new value — the very
-"readout claims a mode the session is not obeying" state the confirm exists to prevent, reached by
-another door. Reachable only behind a busy agent, which is why every live verification missed it.
-`SURFACE-2026-08-26-QUALITY-DRIVEMODE-REENTRANCY-DISCARDS-A-SECOND-APPLY`.
+⚠️ **The readout is DISABLED while an apply is queued** (ruling R1 Option A, fixed at paydown
+2026-09-23 WP8). While `respawnWanted`, it is `aria-disabled` with `.is-queued`, click and Enter open
+nothing, and its tooltip names the queued mode. Before the fix, a **second Apply was silently
+discarded** at `resolveDriveMode`'s `respawnWanted` early return while the readout showed the new
+value, reachable only behind a busy agent. ⚠️ **Do not "improve" this to latest-wins without
+reading R1 in the paydown record**: a supersede (B′) is small, because the respawn reads the stored
+mode at spawn time, but it was deliberately NOT built until the operator actually wants to change
+modes mid-queue. `workspaceDriveModeLive.test.tsx` pins it.
 
 ⚠️ **The OFF-invariant guard's SIXTH arm** covers this surface (the fifth is M13's skill row). Arm 6
 asserts `workspaceDriveModeReadout` returns `null` when the gate is off — which **is** DOM absence,

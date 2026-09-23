@@ -11,14 +11,11 @@ import type { AutoResumeAction, OpenIntent } from "./predictAction";
 // Pure data + reducer logic only — no React, no IPC. The picker and the real
 // config store / PtyCcSession (WP6/WP7) drive these actions.
 
-export type WorkspaceStatus = "idle" | "running" | "awaiting-input" | "unknown";
-
 export interface Workspace {
   id: string;
   project_path: string;
   /** Set by WP7 when a real CC PTY session is spawned. Null in the WP5 mock. */
   cc_session_id: string | null;
-  status: WorkspaceStatus;
   display_name: string;
   /**
    * M12 WP3 — the auto-resume action to apply when this workspace's CC session spawns,
@@ -116,7 +113,6 @@ export function makeWorkspace(
     id: nextWorkspaceId(),
     project_path: projectPath,
     cc_session_id: null,
-    status: "idle",
     display_name: deriveDisplayName(projectPath),
     // Default: fire nothing. Every existing caller (the dev seam, tests, the mock) keeps
     // its current behavior without change, and only the picker's fire door opts in.

@@ -122,6 +122,8 @@ if ($event eq 'UserPromptSubmit') {
     # garbage (including shell metacharacters) straight into the model's context.
     # These four literals are the `transitions.md:165` vocabulary; they must stay in
     # sync with Rust's DriveMode serde renames (config_store::DriveMode).
+    # Built here, not hoisted: this script is one process per event, so the hash is built at
+    # most once per process either way, and only on the one event that needs it.
     my %KNOWN = map { $_ => 1 } qw(stepping orchestrated autopilot fsd);
     if ($KNOWN{$mode}) {
         # ⚠️ `additionalContext` MUST nest under `hookSpecificOutput` alongside

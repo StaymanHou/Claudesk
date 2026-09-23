@@ -56,7 +56,6 @@ function workspaceFixture(
     id: "ws-1",
     project_path: "/tmp/scratch/scratch-a",
     cc_session_id: "cc-1",
-    status: "idle",
     display_name: "scratch-a",
     pending_action: null,
     open_intent: "fire",

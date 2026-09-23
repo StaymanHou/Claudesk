@@ -116,14 +116,16 @@ fn run_command(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let out = child
+                let (out, err) = child
                     .wait_with_output()
-                    .map(|o| o.stdout)
+                    .map(|o| (o.stdout, o.stderr))
                     .unwrap_or_default();
                 if !status.success() {
+                    // The one diagnostic an operator gets for a failing `claude -p` — it was
+                    // captured here and discarded until paydown WP8 (E3).
                     return Err(AdjudicateError::Failed {
                         code: status.code(),
-                        stderr: String::new(),
+                        stderr: String::from_utf8_lossy(&err).into_owned(),
                     });
                 }
                 return Ok(String::from_utf8_lossy(&out).into_owned());
@@ -212,6 +214,22 @@ mod tests {
             matches!(err, AdjudicateError::Failed { code: Some(3), .. }),
             "got {err:?}"
         );
+    }
+
+    #[test]
+    fn a_non_zero_exit_carries_the_captured_stderr() {
+        // The stderr is what the `Display` impl renders; an empty one prints `()` and tells the
+        // operator nothing about why `claude -p` failed.
+        let err =
+            run_command(sh("echo boom >&2; exit 3"), "", 5_000).expect_err("exit 3 must be an Err");
+        match &err {
+            AdjudicateError::Failed { code, stderr } => {
+                assert_eq!(*code, Some(3));
+                assert_eq!(stderr.trim(), "boom");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+        assert!(err.to_string().contains("boom"), "Display: {err}");
     }
 
     #[test]

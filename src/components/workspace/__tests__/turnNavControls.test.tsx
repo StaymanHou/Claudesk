@@ -72,12 +72,26 @@ describe("turn-nav controls — the surface the operator touches", () => {
     }
   });
 
-  it("⚠️ at rest (zero turns): both disabled, and NO readout rather than 0/0 (AC-5)", async () => {
+  it("⚠️ at rest (zero turns): both disabled, and an EMPTY readout rather than 0/0 (AC-5)", async () => {
     const el = await mountWorkspace({ gate: true });
     expect(q(el, "workspace-turn-prev")!.disabled).toBe(true);
     expect(q(el, "workspace-turn-next")!.disabled).toBe(true);
-    expect(q(el, "workspace-turn-readout")).toBeNull();
+    expect(q(el, "workspace-turn-readout")?.textContent).toBe("");
+    expect(q(el, "workspace-turn-readout")?.hasAttribute("title")).toBe(false);
     expect(el.textContent).not.toContain("0/0");
+  });
+
+  it("⚠️ the FIRST turn is announced: the live region exists before its first value (I6)", async () => {
+    // A screen reader announces CHANGES to a live region that is already in the tree. A region that
+    // mounts together with its first value is not a change, so the first turn went unannounced.
+    // Identity is the property: the node at rest must be the SAME node that later holds "1/1".
+    const el = await mountWorkspace({ gate: true });
+    const atRest = q(el, "workspace-turn-readout");
+    expect(atRest?.getAttribute("aria-live")).toBe("polite");
+    await pushTurnStart(nav(false, false, 1, 1));
+    const after = q(el, "workspace-turn-readout");
+    expect(after?.textContent).toBe("1/1");
+    expect(after).toBe(atRest);
   });
 
   it("⚠️ disabled tracks EACH flag — the correct flag on each control", async () => {

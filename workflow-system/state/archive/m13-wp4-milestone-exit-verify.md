@@ -287,28 +287,6 @@ asserting arm 5's provenance by **command prefix** instead. Deciding that belong
 not inside an exit verify.
 
 
-## Phase 2 — pre-read: the live query surface (recorded before observing)
-
-Every M13 affordance carries a stable `data-testid`, so Phase 2's live queries are id-addressed, not
-class-name-fragile (`Workspace.tsx:483-530`):
-
-- Row container: `data-testid="workspace-skill-row"`
-- Each skill button: `data-testid="workspace-skill-<command-without-slash>"` (e.g. `workspace-skill-session-start`)
-- Recycle: `data-testid={RECYCLE_TESTID}`, class `workspace-skill-btn workspace-recycle-btn`
-- Shared class on all six: `workspace-skill-btn`
-
-`SKILL_BUTTONS` members confirmed at source (`skillButtons.ts:106-130`): `/session-start`,
-`/session-restore`, `/session-capture`, `/util-prune-claude-md`, `/util-backlog-paydown` — matching
-the plan's expected set exactly, so the "exactly 6" outcome is 5 mapped + 1 sibling.
-
-⚠️ **Read this before interpreting a zero in Phase 2: the Recycle button renders INSIDE the
-`showSkillButtons(...) &&` block.** Phase 1 proved the two *predicates* are independently guarded
-(the 5a mutant left Recycle's assertions green and vice versa), but at the **render site** the row
-gate strictly dominates — so a live OFF-state zero for Recycle is explained by *either* predicate and
-does not by itself discriminate between them. This is WP3's review MINOR (a) observed as-wired, not a
-new finding; it is recorded here so Phase 2 does not over-claim what a live zero proves.
-
-
 ## Phase 1 — verify-self result (independent reproduction)
 
 **All five outcomes PASS.** A one-shot subagent re-ran all seven mutation probes plus two
@@ -379,6 +357,28 @@ predicates independent but nothing **pinned** it; this does.
 attributable to this phase's two added tests, no regressions. Rust untouched (`git status src-tauri/`
 empty), so the 828 lib baseline is unchanged and was not re-run. `tsc --noEmit`, `eslint`, and
 `prettier --check` all clean.
+
+
+## Phase 2 — pre-read: the live query surface (recorded before observing)
+
+Every M13 affordance carries a stable `data-testid`, so Phase 2's live queries are id-addressed, not
+class-name-fragile (`Workspace.tsx:483-530`):
+
+- Row container: `data-testid="workspace-skill-row"`
+- Each skill button: `data-testid="workspace-skill-<command-without-slash>"` (e.g. `workspace-skill-session-start`)
+- Recycle: `data-testid={RECYCLE_TESTID}`, class `workspace-skill-btn workspace-recycle-btn`
+- Shared class on all six: `workspace-skill-btn`
+
+`SKILL_BUTTONS` members confirmed at source (`skillButtons.ts:106-130`): `/session-start`,
+`/session-restore`, `/session-capture`, `/util-prune-claude-md`, `/util-backlog-paydown` — matching
+the plan's expected set exactly, so the "exactly 6" outcome is 5 mapped + 1 sibling.
+
+⚠️ **Read this before interpreting a zero in Phase 2: the Recycle button renders INSIDE the
+`showSkillButtons(...) &&` block.** Phase 1 proved the two *predicates* are independently guarded
+(the 5a mutant left Recycle's assertions green and vice versa), but at the **render site** the row
+gate strictly dominates — so a live OFF-state zero for Recycle is explained by *either* predicate and
+does not by itself discriminate between them. This is WP3's review MINOR (a) observed as-wired, not a
+new finding; it is recorded here so Phase 2 does not over-claim what a live zero proves.
 
 
 ## Phase 2 — live observation results (P2.1–P2.6)
@@ -720,36 +720,6 @@ outside the band, the constant would have been the finding, not the run.)
 authority, now with a measurement to anchor it.
 
 
-## Phase 4 — pre-read: the exact resync targets (recorded before editing)
-
-⚠️ **`arch.md` is an INDEX (a subsystem table, lines 19-29) — Phase 4 adds no row and no milestone
-section.** All edits land in the three subsystem files.
-
-**P4.1 → `arch/session-resumption.md`.** The precise stale claim is the bullet **"⚠️ THREE routes
-shipped, not four"** (in *"The unclean-exit flag: its own store, keyed canonically"*). As of WP3,
-`CleanExitRoute::RecycleSession` **has a production caller**, so the count is now **four**. ⚠️ The
-bullet's *lesson* (enumerating routes made the SET testable but nothing proved each member had a
-CALLER) must SURVIVE the edit — it is the generalizable half and M13 WP1 re-confirmed it. The
-`/exit` dead-variant history stays too.
-
-**P4.2 → `arch/process-and-pty.md`.** Existing section *"⚠️ Slash-command injection —
-`slash_command_bytes`"* (line 57). Recycle's injection belongs here, plus the as-built correction the
-roadmap still gets wrong: teardown reuses the pane's existing `handleRelaunch` (**not Ctrl+D**), so no
-second respawn route exists.
-
-**P4.3 → `arch/workflow-gate.md`.** ⚠️ **A concrete factual error, not just an omission:** line 12
-says the guard *"asserts absence across the **three** registries"*. There are **five** (arm 4 at M12
-WP5, arm 5 at M13 WP2, plus the Recycle extension) — and **line 18 of the same file already says
-"all five arms"**, so the file contradicts itself today. Fix the count and add arm 5, noting it
-asserts companion-skill provenance **by command prefix** rather than by widening the shared
-`WORKFLOW_TERMS`.
-
-**P4.4 → the one latency authority.** Confirmed sites: `recycleButton.ts:50`, `App.css:631`,
-`Workspace.tsx:203` all say *"28–52s"*; `recycleSession.ts:76-77` says *51.9s* (write at 39.7s);
-`recycleMachine.ts:119,242` says the *9–12s tail*. ⚠️ Phase 3's live run adds a **fourth** figure
-(38s click→write), which is why picking ONE authority now matters more than before.
-
-
 ## Phase 3 — verify-self result
 
 **All six verifiable outcomes PASS** (independent subagent, source + persisted + bookkeeping claims).
@@ -847,6 +817,36 @@ ordering backend-side.
 (`[[bash-cargo-env]]` — subshells do not inherit `~/.cargo/env`). The dev app was still running, but
 it is a *running binary*, not a concurrent `cargo` invocation, so there was no `target/` lock
 contention (Long-running-commands Rule 2 does not fire).
+
+
+## Phase 4 — pre-read: the exact resync targets (recorded before editing)
+
+⚠️ **`arch.md` is an INDEX (a subsystem table, lines 19-29) — Phase 4 adds no row and no milestone
+section.** All edits land in the three subsystem files.
+
+**P4.1 → `arch/session-resumption.md`.** The precise stale claim is the bullet **"⚠️ THREE routes
+shipped, not four"** (in *"The unclean-exit flag: its own store, keyed canonically"*). As of WP3,
+`CleanExitRoute::RecycleSession` **has a production caller**, so the count is now **four**. ⚠️ The
+bullet's *lesson* (enumerating routes made the SET testable but nothing proved each member had a
+CALLER) must SURVIVE the edit — it is the generalizable half and M13 WP1 re-confirmed it. The
+`/exit` dead-variant history stays too.
+
+**P4.2 → `arch/process-and-pty.md`.** Existing section *"⚠️ Slash-command injection —
+`slash_command_bytes`"* (line 57). Recycle's injection belongs here, plus the as-built correction the
+roadmap still gets wrong: teardown reuses the pane's existing `handleRelaunch` (**not Ctrl+D**), so no
+second respawn route exists.
+
+**P4.3 → `arch/workflow-gate.md`.** ⚠️ **A concrete factual error, not just an omission:** line 12
+says the guard *"asserts absence across the **three** registries"*. There are **five** (arm 4 at M12
+WP5, arm 5 at M13 WP2, plus the Recycle extension) — and **line 18 of the same file already says
+"all five arms"**, so the file contradicts itself today. Fix the count and add arm 5, noting it
+asserts companion-skill provenance **by command prefix** rather than by widening the shared
+`WORKFLOW_TERMS`.
+
+**P4.4 → the one latency authority.** Confirmed sites: `recycleButton.ts:50`, `App.css:631`,
+`Workspace.tsx:203` all say *"28–52s"*; `recycleSession.ts:76-77` says *51.9s* (write at 39.7s);
+`recycleMachine.ts:119,242` says the *9–12s tail*. ⚠️ Phase 3's live run adds a **fourth** figure
+(38s click→write), which is why picking ONE authority now matters more than before.
 
 
 ## Phase 4 — doc resync, as executed

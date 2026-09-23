@@ -120,3 +120,44 @@ describe("the confirm's write decision is honored by its CALLER", () => {
     expect(readout(el)?.textContent).toContain("fsd");
   });
 });
+
+describe("R1 — the readout is disabled while an apply is queued (paydown WP8, H1)", () => {
+  it("a queued apply cannot reopen the editor, by click OR keyboard", async () => {
+    // ⚠️ The defect: during a queued apply, a second pick → confirm → Apply was silently dropped
+    // at `resolveDriveMode`'s `respawnWanted` early return, while the readout showed the new
+    // value. `running` keeps `waitForIdle` polling, so the apply stays queued for the whole test.
+    const el = await mountWorkspace({
+      gate: true,
+      storedDriveMode: "autopilot",
+      statusState: "running",
+    });
+    // Positive control: `choose` itself proves the editor OPENS before anything is queued.
+    await choose(el, "fsd");
+    await click(el.querySelector('[data-testid="drivemode-confirm-apply"]'));
+    expect(
+      el.querySelector('[data-testid="workspace-header-drivemode-pending"]'),
+      "the apply must be QUEUED for this test to mean anything",
+    ).not.toBeNull();
+
+    const r = readout(el)!;
+    expect(r.getAttribute("aria-disabled")).toBe("true");
+    expect(r.classList.contains("is-queued")).toBe(true);
+    expect(r.getAttribute("title")).toContain("fsd");
+
+    await click(r);
+    expect(
+      el.querySelector('[data-testid="workspace-header-drivemode-select"]'),
+    ).toBeNull();
+
+    await act(async () => {
+      r.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+    await settle();
+    expect(
+      el.querySelector('[data-testid="workspace-header-drivemode-select"]'),
+    ).toBeNull();
+    expect(writes().map((c) => c.args)).toEqual([{ path: OWN, mode: "fsd" }]);
+  });
+});

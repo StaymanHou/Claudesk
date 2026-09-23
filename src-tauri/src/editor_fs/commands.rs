@@ -12,7 +12,7 @@
 //! command resolves the known project list server-side ([`crate::config_store`], keyed
 //! off the real `app_data_dir()`) and calls [`super::validate_root`] before honoring
 //! `root`. A `root` that is neither a known project nor a descendant of one is rejected
-//! with [`super::EditorFsError::OutsideWorkspace`] — so a malformed or hostile `root`
+//! with [`super::EditorFsError::UnknownRoot`] — so a malformed or hostile `root`
 //! can't widen the guard to arbitrary disk. This mirrors `config_store`'s server-side-
 //! derivation posture. `AppHandle` is injected by Tauri (never passed from JS), so the
 //! frontend `invoke` shape is unchanged (`{ root, path[, contents] }`).

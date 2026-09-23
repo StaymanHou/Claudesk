@@ -452,21 +452,24 @@ export async function decideSupervised(
   //     more than it may be chained — recycling it would destroy the very question the operator
   //     was about to answer. Placing this check BEFORE the adjudicator would do exactly that,
   //     and it is the single most damaging ordering mistake available in this function.
-  if (shouldRecycle(input)) {
+  const tokens = recycleTokens(input);
+  if (tokens !== null) {
     return {
       kind: "recycle",
       edgeId: mechanical.edgeId,
       skill: mechanical.skill,
       mode: mechanical.mode,
-      // Non-null by construction: `shouldRecycle` returns false for a null reading.
-      tokens: input.contextTokens as number,
+      tokens,
     };
   }
   return mechanical;
 }
 
 /**
- * Should this would-be fire recycle the session instead of chaining?
+ * Should this would-be fire recycle the session instead of chaining? Returns the context reading
+ * that justifies the recycle, or `null` for no recycle. Returning the NUMBER rather than a boolean
+ * is what lets the caller build the `recycle` verdict without a cast: `null` has to be handled
+ * because the type requires it, not because a comment says so (paydown WP8, D1).
  *
  * ⚠️ **ALL THREE CONDITIONS, AND EACH IS SEPARATELY NECESSARY.** Extracted as a named predicate
  * rather than inlined as a three-way `&&` so a test can drive each condition's falsification
@@ -482,11 +485,13 @@ export async function decideSupervised(
  *   3. **At a non-final phase boundary.** Work completed AND work remaining. A fresh WIP has
  *      nothing to recycle at; a finished one is headed for ship, not a new session.
  */
-function shouldRecycle(input: VerdictInput): boolean {
+function recycleTokens(input: VerdictInput): number | null {
+  const tokens = input.contextTokens ?? null;
   const wip = input.wip ?? null;
-  return (
-    isOverPressure(input.contextTokens ?? null) &&
+  if (tokens === null) return null;
+  return isOverPressure(tokens) &&
     isFeatureWorkflow(wip) &&
     atNonFinalPhaseBoundary(wip)
-  );
+    ? tokens
+    : null;
 }

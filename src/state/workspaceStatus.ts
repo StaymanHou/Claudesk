@@ -14,9 +14,9 @@
 
 /**
  * The CC lifecycle state as the backend emits it. snake_case `awaiting_input`
- * mirrors `WorkspaceState`'s serde rendering verbatim (NOT the kebab
- * `awaiting-input` of the legacy `WorkspaceStatus` model type — different type,
- * different layer; see `state/workspace.ts`).
+ * mirrors `WorkspaceState`'s serde rendering verbatim. This is the ONLY status
+ * vocabulary: the kebab-case `WorkspaceStatus` on the `Workspace` model was written
+ * and never read, and was deleted (paydown 2026-09-23 WP8, AE2).
  */
 export type WireWorkspaceState =
   | "idle"

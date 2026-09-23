@@ -510,7 +510,7 @@ describe("⚠️ decideSupervised — the M15 WP4 recycle branch", () => {
 
   it("⚠️ FIRES for a TASK WIP that DOES carry phase lines — the feature gate's real job", async () => {
     // ⚠️ **THIS TEST EXISTS BECAUSE A MUTANT SURVIVED WITHOUT IT.** Deleting `isFeatureWorkflow`
-    // from `shouldRecycle` left all 34 tests green, because the `taskWip` fixture above has NO
+    // from `shouldRecycle` (now `recycleTokens`) left all 34 tests green, because the `taskWip` fixture above has NO
     // phase lines — so `atNonFinalPhaseBoundary` already returned false and the feature gate
     // was never the thing doing the work.
     //

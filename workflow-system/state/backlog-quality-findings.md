@@ -52,8 +52,8 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 ## SURFACE-2026-09-23-QUALITY-RUN-COMMAND-PIPES-NOT-DRAINED
 - **Severity:** MINOR (pre-existing; newly nameable)
 - **Location:** `src-tauri/src/adjudicator/mod.rs` → `run_command`
-- **Finding:** stdout and stderr are piped but not drained while `try_wait` polls, and `stdin.write_all` blocks before the deadline starts. A child that writes more than a pipe buffer before exiting, or never reads stdin, hangs past the timeout or forever. `Failed.stderr` is always `String::new()`. That is latent today, because `claude -p` reads all of stdin before writing.
-- **Suggested action:** handle this with E3 (paydown WP8, pass stderr through) and the WP9 `supervisor_adjudicate` async move. Drain both pipes on reader threads and start the deadline before the write. The WP7 `sh -c` seam makes each testable, e.g. `sh -c 'head -c 200000 /dev/zero; exit 0'` and `sh -c 'sleep 30'` with a large prompt.
+- **Finding:** stdout and stderr are piped but not drained while `try_wait` polls, and `stdin.write_all` blocks before the deadline starts. A child that writes more than a pipe buffer before exiting, or never reads stdin, hangs past the timeout or forever. That is latent today, because `claude -p` reads all of stdin before writing.
+- **Suggested action:** handle this with the WP9 `supervisor_adjudicate` async move. (E3, which passes the captured stderr through, landed at paydown WP8; a child that overfills the stderr pipe still hangs.) Drain both pipes on reader threads and start the deadline before the write. The WP7 `sh -c` seam makes each testable, e.g. `sh -c 'head -c 200000 /dev/zero; exit 0'` and `sh -c 'sleep 30'` with a large prompt.
 - **Priority:** low
 - **Status:** pending
 
@@ -66,19 +66,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Suggested action:** make `source-text-guards.md` §19 (or `verify-auto-gate.md`) the canonical home. Leave each code site with only its invariant, what to do when it fails, and a pointer. Diff the token set before and after (`[[grep-addressed-doc-loses-value-to-prose-rewrite]]`). This fits paydown WP4 (narrowing over-claiming comments).
 - **Priority:** low
 - **Status:** pending
-
-# fa-wp2-draft-store-history-payload — 2026-09-21
-
-## SURFACE-2026-09-21-QUALITY-BLANK-CHECK-READS-BEFORE-THE-STORAGE-GUARD
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/draftHistory.ts` — `appendToHistory`'s blank-entry check
-- **Finding:** the blank-entry branch calls `loadHistory(projectPath)` before `safeStorage()`, so a
-  blank send performs a storage read the immediately-following no-storage guard would have
-  short-circuited. Harmless; the ordering is incidental rather than intentional.
-- ⚠️ **Do NOT "fix" this by returning `[]` from the blank arm** — that is the MAJOR this WP just
-  fixed (every non-append path returns the ring as it stands). Only the *ordering* is the finding.
-- **Suggested action:** hoist the `safeStorage()` guard above the blank check, or leave it.
-- **Priority:** low
 
 # hotkey-reference — 2026-09-17
 
@@ -113,18 +100,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # m15-wp4-context-pressure-recycle — 2026-09-14
 
-## SURFACE-2026-09-14-QUALITY-RECYCLE-TOKENS-CAST-IS-A-PROSE-CONTRACT
-- **Severity:** MINOR
-- **Location:** `src/state/supervisor/verdict.ts` (the `recycle` arm's `tokens` field)
-- **Finding:** `tokens: input.contextTokens as number` rests on a comment ("Non-null by
-  construction: `shouldRecycle` returns false for a null reading") to justify a cast `tsc` cannot
-  check. ⚠️ **This is the same contract-in-prose-where-a-type-would-do shape the WP3 review flagged
-  three times** — the pattern this feature's predecessor paid down.
-- **Suggested fix:** have `shouldRecycle` return the number (or `null`) instead of a boolean; the
-  cast then disappears entirely.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-09-14-QUALITY-LASTINDEX-COMMENT-IS-THE-HEAVIEST-RATIO-IN-THE-DIFF
 - **Severity:** MINOR
 - **Location:** `src/state/supervisor/wipPhases.ts` (the `PHASE_LINE.lastIndex = 0` site)
@@ -142,7 +117,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 **0 CRITICAL · 3 MAJOR · 5 MINOR as filed.** ⚠️ **ALL THREE MAJORs + the `assertPinnedModel`
 gap were RESOLVED 2026-09-14** by a `/feature-refactor` pass (see CHANGELOG) and are deleted from
-this file per delete-on-resolve; **3 MINORs remain open below.** The MAJORs shared one shape —
+this file per delete-on-resolve; **1 MINOR remains open below** (the discarded adjudicator stderr was resolved at paydown-2026-09-23 WP8). The MAJORs shared one shape —
 *a contract stated in PROSE where it could have been stated in a TYPE* — and each fix converted a
 comment into a compiler or a test. ⚠️ **The label fix REPLACED a source-text guard** that asserted
 the requirement was *stated*; it now asserts the label is *passed*, and was mutation-proven by
@@ -170,23 +145,6 @@ pointers; keep the invariants and the ⚠️-what-to-do-on-failure paragraphs. T
 `arch/session-resumption.md` section added in this same commit is the natural home for several.
 - **Status:** pending
 
-## SURFACE-2026-09-13-QUALITY-ADJUDICATOR-DISCARDS-CAPTURED-STDERR
-
-- **Priority:** low
-- **Source:** feature:review-quality (m15-wp3), MINOR
-- **Location:** `src-tauri/src/adjudicator/mod.rs:110-115`
-
-On a non-zero exit, `AdjudicateError::Failed` is built with `stderr: String::new()` — **throwing
-away the stderr that was captured**. The child is spawned with `stderr(Stdio::piped())` and
-`wait_with_output()` has it in hand. The `Display` impl renders `stderr.trim()`, so it always
-prints an empty parenthetical.
-
-The DECISION is unaffected (both paths withhold), but ⚠️ **the one diagnostic an operator gets
-for a failing `claude -p` is blank.**
-
-**Suggested action:** thread the captured stderr into the error.
-- **Status:** pending
-
 # m15-wp1-supervisor-probe — 2026-09-12
 
 ⚠️ **One finding remains** (comment density → the R2 comment-convention pass). The decisive-bar drift, the tautological assertions and the access-style nits were resolved at paydown-2026-09-23 WP6; the other findings under this heading were closed earlier in the same sweep.
@@ -204,30 +162,10 @@ Applying its test — *would a reader who has never seen the WIP make a worse de
 
 # drive-mode-on-the-workspace-surface — 2026-08-26
 
-⚠️ **Findings 1 and 2 share a root cause and ONE fix**: extracting the apply operation into a
-`useDriveModeApply` hook, which gates the affordance and exposes the intent latch as a ref. The
-source-guard finding (formerly #4, H4) was resolved at paydown-2026-09-23 WP7 WITHOUT that
-extraction. A live `Workspace` mount (`workspaceDriveModeLive.test.tsx`) now drives both properties,
-so the hook is no longer needed for testability. Treat 1 + 2 as one item.
-
-## SURFACE-2026-08-26-QUALITY-DRIVEMODE-REENTRANCY-DISCARDS-A-SECOND-APPLY
-- **Source:** feature:review-quality (drive-mode-on-the-workspace-surface, ship `efa7798`)
-- **Type:** bug (live, user-facing)
-- **Summary:** ⚠️ **A LIVE DEFECT, verified at source before filing.** `respawnWanted` gates the
-  HANDLER (`Workspace.tsx:374`) but nothing gates the AFFORDANCE. During a queued apply the readout
-  stays clickable, the `<select>` stays reachable, and `storedDriveMode` was already optimistically
-  written — so a second mode change → confirm → **Apply is silently discarded** while the readout
-  shows the new value.
-- **Context:** This is the *"readout claims a mode the session is not obeying"* state that AC-5 and
-  `applyDriveMode.ts`'s own header exist to prevent, reached through a different door. Confirmed: no
-  `disabled` and no click guard on the readout; `Workspace.tsx:917` renders only the ⏳ indicator.
-  Reachable only while an apply is queued behind a busy agent, which is why live verification missed
-  it — every verified apply ran against an idle session.
-- **Suggested action:** Disable the readout/selector while `respawnWanted`, **or** let a second
-  apply supersede the queued one. ⚠️ Decide which deliberately: superseding is friendlier but needs
-  the first queued apply cancelled, not merely overwritten.
-- **Priority:** medium
-- **Status:** pending
+⚠️ **The re-entrancy defect (formerly finding 1) was resolved at paydown-2026-09-23 WP8** by R1
+Option A: the readout is disabled while an apply is queued. That was done WITHOUT the
+`useDriveModeApply` hook extraction, which R1 defers to the next time drive-mode apply is touched.
+The scheduler-timing sleep below is the extraction's remaining payoff.
 
 ## SURFACE-2026-08-26-QUALITY-RESPAWN-INTENT-HOLD-IS-SCHEDULER-TIMING
 - **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
@@ -248,8 +186,8 @@ so the hook is no longer needed for testability. Treat 1 + 2 as one item.
 ## SURFACE-2026-08-26-QUALITY-DRIVEMODE-MINOR-POLISH
 - **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
 - **Type:** tech-debt (2 MINOR findings remain, grouped)
-- **Summary:** ⚠️ **Rewritten 2026-09-23 (paydown WP4).** (a) the orphaned duplicate `startApply` comment and (b) the `/** Cancel: a TRUE no-op */` doc mislabeling `resolveDriveMode` were DELETED at paydown WP4. Remaining: (c) `App.css`: `.workspace-header-drivemode` is declared twice, split by an unrelated rule. (d) `Workspace.tsx`: about 130 inline lines of drive-mode state in a component past 1170 lines.
-- **Suggested action:** (c) merge the two declarations (H5c, routed to paydown-2026-09-23 WP8). (d) is the `useDriveModeApply` hook extraction that R1 (paydown 2026-09-23) DEFERS to the next time drive-mode apply is touched.
+- **Summary:** ⚠️ **Rewritten 2026-09-23 (paydown WP8).** (a) and (b) were deleted at paydown WP4, and (c), the duplicated `.workspace-header-drivemode` CSS declaration, was merged at paydown WP8. Remaining: (d) `Workspace.tsx` has about 130 inline lines of drive-mode state in a component past 1170 lines.
+- **Suggested action:** (d) is the `useDriveModeApply` hook extraction that R1 (paydown 2026-09-23) DEFERS to the next time drive-mode apply is touched.
 - **Priority:** low
 - **Status:** pending
 
@@ -261,14 +199,6 @@ so the hook is no longer needed for testability. Treat 1 + 2 as one item.
 - **Summary:** ⚠️ **Comment density DID get materially worse in this WP** (the orchestrator asked the reviewer to judge exactly this): **58% of newly added production lines are comments — 388 of 673**. `XtermPane.tsx` moved **51% → 55%** while growing **714 → 944** lines. The `.workspace-jump-turn-btn` deletion rationale is stated in **four places** (`App.css:687-694`, `Workspace.tsx:66-70`, plus two test headers).
 - **Context:** ⚠️ **The keep/cut split is clean and should be respected.** The individual *retraction* blocks (`XtermPane.tsx:361-372` alternate-buffer, `:451-458` premise-invalidated) **ARE load-bearing** — each prevents a specific re-derivation that already cost real work, and both are anchored to the code they warn about. The **duplicated deletion rationale** is the "same rationale in N places" pattern the lesson doc names as the expensive half. ⚠️ **No comment was found stale or contradicting the code**, so this is polish, not correctness.
 - **Suggested action:** ⚠️ **FOLD INTO `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`; do NOT pay down separately.** That standing finding records that **per-WP trimming was measured as NOT converging** (four consecutive reviews of one file), and its own resolution shape is *"one authority per rule + a pointer at every other site + a GUARD"* — which is exactly what the four-copy deletion rationale needs. This entry is a concrete instance of that finding, and the **second** WP in M13.5 to produce one (see `# window-geometry-persistence — 2026-08-21`), which is itself evidence for the standing item's thesis.
-- **Priority:** low
-
-## SURFACE-2026-08-25-QUALITY-WP3-ARIA-LIVE-ON-A-CONDITIONAL-NODE
-- **Source:** feature-review-quality (M13.5 WP3, MINOR)
-- **Type:** bug (a11y, minor)
-- **Summary:** `Workspace.tsx:636-641` — `aria-live="polite"` sits on the readout `<span>`, but that span is conditionally **mounted** on `turnNav.total > 0`. ⚠️ **A live region that does not exist when the value first appears will not announce it** — so the *first* turn is silent and only subsequent ordinal changes are announced.
-- **Context:** Real but small: it degrades the AC-5 announcement rather than breaking navigation, and the surface is unannounced by any test either way. ⚠️ Note the interaction with the AC-5 decision to hide the readout at zero turns — the fix must preserve that visual behaviour, so it is *render the region unconditionally and empty its TEXT*, not *drop the conditional*.
-- **Suggested action:** Render the `<span>` unconditionally with `aria-live="polite"`; gate only its text content on `turnNav.total > 0`. Verify with a screen reader or an `aria-live` assertion that the first turn announces.
 - **Priority:** low
 
 # window-geometry-persistence — 2026-08-21
@@ -292,24 +222,6 @@ so the hook is no longer needed for testability. Treat 1 + 2 as one item.
 - **Status:** pending
 
 # m13-wp4-milestone-exit-verify — 2026-08-18
-
-## SURFACE-2026-08-18-QUALITY-WP4-WIP-PHASE-SECTIONS-INTERLEAVED
-- **Source:** feature-review-quality (M13 WP4, MINOR)
-- **Type:** tech-debt (documentary)
-- **Summary:** The WP4 WIP file's phase sections are **interleaved out of execution order** — "Phase 2
-  — pre-read" sits between two Phase 1 sections, and "Phase 4 — pre-read" sits between Phase 3's
-  verify-auto and verify-self. Cause: pre-reads were appended in **wall-clock** order into a document
-  otherwise organized **by phase**.
-- **Context:** The pre-reads being recorded *before* observation is the whole point of them (it is
-  what makes "recorded before observing" a real claim rather than a post-hoc one), so the ordering
-  itself is correct — it is the **placement** that costs a reader. At 1023 lines the file is the
-  archive record for the milestone-closing WP, so navigability has real value.
-- **Suggested action:** Group by phase and keep a `⚠️ recorded before observing` marker on each
-  pre-read, which preserves the ordering claim without the interleave. ⚠️ Cheap only if done as a
-  **move**, not a rewrite — this repo has a logged case of a prose rewrite silently dropping 259
-  identifiers while preserving every warning (`[[grep-addressed-doc-loses-value-to-prose-rewrite]]`).
-- **Priority:** low (readability of an archived record; no correctness impact)
-- **Status:** pending
 
 ## SURFACE-2026-08-18-QUALITY-WP4-ARCH-DOC-MIRRORS-TEST-FILE-HEADER
 - **Source:** feature-review-quality (M13 WP4, MINOR)
@@ -358,25 +270,6 @@ so the hook is no longer needed for testability. Treat 1 + 2 as one item.
   half; a paydown without one silently re-accumulates.
 - **Priority:** low (readability only; no drift observed, no correctness impact)
 - **Status:** pending
-
-# m12-wp4b-drive-mode-signal — 2026-08-07
-
-## SURFACE-2026-08-07-QUALITY-WP4B-FOUR-MINOR-FINDINGS
-- **Source:** feature-review-quality (M12 WP4b, MINOR ×4)
-- **Type:** tech-debt (polish)
-- **Summary:** ⚠️ **Rewritten 2026-09-23 (paydown-2026-09-23 WP1) to the 2 remaining items.** (3)
-  `expected_context()`'s duplicated literal was REFUTED at the 2026-08-18 paydown (the duplication
-  is deliberate independent transcription, now documented at the fn), and (4) the "vice versa"
-  half is now asserted. Remaining: (1) `claudesk-hook.pl` rebuilds the 4-element `%KNOWN` hash on
-  every `UserPromptSubmit`. That is negligible against Perl's ~15 ms cold start, but the surrounding
-  comments advertise per-call cost as a design constraint and leave the question they invite
-  unanswered. (2) `cc_spawn_env` (`cc_session/mod.rs`) reaches the wire value via
-  `serde_json::to_string(&mode).trim_matches('"')`, and its `if let Ok(wire)` arm silently drops
-  the var on a serialization failure that cannot occur for a fieldless enum.
-- **Suggested action:** (1) hoist the hash; (2) make the can't-happen arm loud. Routed to
-  paydown-2026-09-23 WP8.
-- **Priority:** low
-- **Status:** pending — routed to paydown-2026-09-23 WP8
 
 # m12-wp1-probe-flag-store-and-announce — 2026-08-03
 
@@ -431,37 +324,6 @@ scheduling items rather than polish.*
 - **Priority:** low
 - **Status:** pending — 2 of 4 sub-items remain; routed to the T1/T2 convention pass
 
-# editor-fs-backend-hardening — 2026-07-20
-
-*(feature-review-quality on the uncommitted working-tree WP7 diff, HEAD `6f514d0`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 4 MINOR — all polish/observability notes, none blocking. Reviewer: "well-built, disciplined hardening pass… all flagged edge cases resolve correctly under the design; none rise to a finding." Backlog-paydown sweep WP7 — the last WP.)*
-
-## SURFACE-2026-07-20-QUALITY-WP7-UNKNOWN-ROOT-ERROR-VARIANT
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/editor_fs/mod.rs:199` (`validate_root` → `OutsideWorkspace { root: "<no known project>" }`)
-- **Finding:** `validate_root` reuses `OutsideWorkspace` with a sentinel `root` string `"<no known project>"`; the `Display` reads `path <X> is outside the workspace root <no known project>`, which is slightly odd (the requested root *is* the rejected thing, not a path outside some other root).
-- **Why it matters:** Reusing the variant blurs "root not a known project" vs. "file path escaped a valid root" — a UI that wanted to distinguish them can't.
-- **Suggested action:** A distinct `EditorFsError::UnknownRoot` variant would read cleanly and let the UI branch. Minimal-choice reuse is reasonable for now.
-- **Priority:** low
-
-## SURFACE-2026-07-20-QUALITY-WP7-RESOLVE-WITHIN-TOCTOU-NOTE
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/editor_fs/mod.rs:141` (`resolve_within` `exists()`-then-`canonicalize()`)
-- **Finding:** A benign, non-exploitable TOCTOU window exists between `exists()` and `canonicalize()`. A swap-to-symlink race is still re-validated by `canonicalize` + `starts_with`; a broken symlink (`exists()` false) falls to the safe not-yet-existing path whose parent is confirmed inside root.
-- **Why it matters:** Not a defect — recorded only because the review flagged the pattern, so a future reader doesn't re-raise it.
-- **Suggested action:** None (documentation-of-non-issue). Optionally a one-line code comment noting the window is re-validated.
-- **Priority:** low
-
-# m10.5-wp3-cc-terminal-clean-kill — 2026-07-19
-
-*(feature-review-quality on the uncommitted working-tree diff, HEAD `92cb0cc`; Mode 3 autopilot. 0 CRITICAL / 0 MAJOR / 3 MINOR — all one-line doc/observability touch-ups. Reviewer: "well-built, unusually disciplined bug fix… No refactor is warranted." None blocks; refactor-optional. All 3 sit in `src-tauri/src/cc_session/mod.rs`.)*
-
-## SURFACE-2026-07-19-QUALITY-WP3-REAPLEADER-SILENT-NONREAP
-- **Severity:** MINOR
-- **Location:** `src-tauri/src/cc_session/mod.rs:641-644` (`KillStep::ReapLeader`)
-- **Finding:** `ReapLeader` discards `poll_reaped()`'s result (`let _ =`). If a process survives both `killpg(SIGKILL)` and the 300ms window (uninterruptible-sleep descendant, or a `None`-pgid path where a group child lingers holding the slave fd), `kill()` still returns `Ok` and `cc-exit-<id>` EOF may never fire — the AC-4 "wedged never-closed workspace" case — silently. The bounded wait is sound (can't hang); the concern is that a non-reap degrades invisibly. A debug-level log or distinct signal on `Ok(false)` would make the residual case observable.
-- **Priority:** low
-- **Pickup shape:** small — add a `log`/`eprintln` (or a distinct return) on the `ReapLeader` `Ok(false)` branch; rides any future kill-path touch.
-
 # file-op-error-surface (Deferred — net-new UX) — 2026-06-30
 
 ## SURFACE-2026-06-30-FILE-OP-ERROR-SURFACE
@@ -503,16 +365,6 @@ scheduling items rather than polish.*
   + a guard).
 - **Priority:** low
 - **Status:** pending — routed to the T1/T2 comment-convention pass
-
-# wp2-background-work-status-states — 2026-08-22
-
-## SURFACE-2026-08-22-QUALITY-DEAD-LEGACY-WORKSPACESTATUS-TYPE
-- **Severity:** MINOR
-- **Location:** `src/state/workspace.ts:14`
-- **Finding:** A legacy `WorkspaceStatus = "idle" | "running" | "awaiting-input" | "unknown"` type still sits alongside the live `WireWorkspaceState`, differing in **casing** (hyphenated `awaiting-input` vs snake_case `awaiting_input`). It was not extended with `background_work` — correctly, because it appears unused for status rendering (only a literal `status: "idle"` at line 119).
-- **Why it matters:** not a bug today, but two near-identical state vocabularies differing only in casing is a standing trap for the next person adding a state — they may extend the wrong one and see nothing break. ⚠️ Note this WP already demonstrated the cost of a sweep keyed on the wrong predicate (the CRITICAL), and this is the same hazard one layer over.
-- **Suggested action:** confirm it is genuinely dead, then delete it. If something does depend on it, the fix is to migrate that consumer to `WireWorkspaceState` rather than to maintain two vocabularies.
-- **Priority:** low
 
 # fa-wp4-send-and-stage — 2026-09-22
 

@@ -12,7 +12,6 @@ import {
 describe("makeWorkspace", () => {
   it("applies the documented Phase 1 defaults", () => {
     const ws = makeWorkspace("/Users/me/projects/claudesk");
-    expect(ws.status).toBe("idle");
     expect(ws.cc_session_id).toBeNull();
     expect(ws.project_path).toBe("/Users/me/projects/claudesk");
     expect(ws.display_name).toBe("claudesk");
@@ -26,8 +25,11 @@ describe("makeWorkspace", () => {
   });
 
   it("honours overrides", () => {
-    const ws = makeWorkspace("/x", { status: "running", display_name: "X" });
-    expect(ws.status).toBe("running");
+    const ws = makeWorkspace("/x", {
+      cc_session_id: "cc-9",
+      display_name: "X",
+    });
+    expect(ws.cc_session_id).toBe("cc-9");
     expect(ws.display_name).toBe("X");
   });
 });

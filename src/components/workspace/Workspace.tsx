@@ -55,6 +55,7 @@ import {
   driveModeWriteFor,
   type DriveModeOutcome,
   APPLY_PENDING_LABEL,
+  queuedDriveModeTitle,
   RESPAWN_INTENT_HOLD_MS,
 } from "./applyDriveMode";
 import { DriveModeConfirm } from "./DriveModeConfirm";
@@ -1098,23 +1099,35 @@ export function Workspace({
                Every defence is copied from `CellValueLine`, which solved it: stopPropagation on
                BOTH pointerdown and click, plus an explicit Enter/Space mirror (a
                <span role="button"> has no implicit keyboard activation) and tabIndex. */
+            /* ⚠️ R1 (paydown 2026-09-23, Option A) — DISABLED while an apply is queued. A second
+               Apply during the wait is dropped at `resolveDriveMode`'s `respawnWanted` early
+               return, so an editor that opened here would accept a pick that never applies. */
             <span
               role="button"
               tabIndex={0}
-              className={`workspace-header-drivemode${driveModeReadout.isStale ? " is-stale" : ""}`}
+              className={`workspace-header-drivemode${driveModeReadout.isStale ? " is-stale" : ""}${respawnWanted ? " is-queued" : ""}`}
               data-testid="workspace-header-drivemode"
-              aria-label={`Workflow drive mode for ${workspace.display_name}: ${driveModeReadout.text}. Click to change.`}
-              title={driveModeReadout.title}
+              aria-disabled={respawnWanted || undefined}
+              aria-label={
+                respawnWanted
+                  ? `Workflow drive mode for ${workspace.display_name}: ${driveModeReadout.text}, ${APPLY_PENDING_LABEL}.`
+                  : `Workflow drive mode for ${workspace.display_name}: ${driveModeReadout.text}. Click to change.`
+              }
+              title={
+                respawnWanted
+                  ? queuedDriveModeTitle(driveModeReadout.text)
+                  : driveModeReadout.title
+              }
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                setEditingDriveMode(true);
+                if (!respawnWanted) setEditingDriveMode(true);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   e.stopPropagation();
-                  setEditingDriveMode(true);
+                  if (!respawnWanted) setEditingDriveMode(true);
                 }
               }}
             >
@@ -1251,18 +1264,22 @@ export function Workspace({
           >
             ↑
           </button>
-          {/* AC-5 — the position readout. Hidden at zero turns: two disabled arrows are
-              self-explanatory, and "0/0" is noise. */}
-          {turnNav.total > 0 && (
-            <span
-              className="workspace-turn-nav-readout"
-              data-testid="workspace-turn-readout"
-              aria-live="polite"
-              title={`Turn ${turnNav.ordinal} of ${turnNav.total}`}
-            >
-              {turnNav.ordinal}/{turnNav.total}
-            </span>
-          )}
+          {/* AC-5 — the position readout. EMPTY at zero turns: two disabled arrows are
+              self-explanatory, and "0/0" is noise. ⚠️ The node is mounted UNCONDITIONALLY and only
+              its text is gated: a live region that mounts together with its first value is never
+              announced, so a conditional mount left the first turn silent (paydown WP8, I6). */}
+          <span
+            className="workspace-turn-nav-readout"
+            data-testid="workspace-turn-readout"
+            aria-live="polite"
+            title={
+              turnNav.total > 0
+                ? `Turn ${turnNav.ordinal} of ${turnNav.total}`
+                : undefined
+            }
+          >
+            {turnNav.total > 0 ? `${turnNav.ordinal}/${turnNav.total}` : ""}
+          </span>
           <button
             type="button"
             className="workspace-turn-nav-btn"

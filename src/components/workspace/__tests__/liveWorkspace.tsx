@@ -122,7 +122,6 @@ export async function mountWorkspace(opts: MountOptions) {
     id: "ws-1",
     project_path: projectPath,
     cc_session_id: "cc-1",
-    status: "idle",
     display_name: "scratch-a",
     pending_action: null,
     open_intent: "fire",
