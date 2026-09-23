@@ -60,7 +60,13 @@ dev/prod isolation comes free.
 - **⚠️ THREE routes shipped, not four.** `/exit` was a **dead variant** — declared in the Rust enum,
   the TS union, and round-tripping in two suites, called by nothing — and was removed at review. A
   typed `/exit` leaves the workspace OPEN with a "Session ended" overlay, so there is no close to
-  clear on (`SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). **The generalizable lesson:
+  clear on. ⚠️ **RULED 2026-09-23 (operator, paydown R4): a typed `/exit` is NOT a clean exit,
+  and that is the intended behavior, not a gap.** The flag is not yet decidable at that moment: the
+  workspace stays open, and Relaunch starts a new session. It resolves correctly at whatever close
+  follows (× clears it; a quit or crash leaves it set, and the next open offers `--continue`). **Do
+  not wire an `ended`-transition clear** without reopening this ruling. The two rejected
+  alternatives were clear-on-`ended`, and clear-on-`ended` plus re-set-on-Relaunch (the retired
+  `SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET`). **The generalizable lesson:
   enumerating routes as data made the SET exhaustive and testable, but nothing tested that each
   member had a CALLER — and the exhaustiveness test's green read as coverage.**
 - **⚠️ M13 WP3 closed the one remaining caller-less variant — the count did NOT change.**

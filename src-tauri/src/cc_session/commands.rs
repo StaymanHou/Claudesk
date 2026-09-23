@@ -163,6 +163,11 @@ pub fn cc_input(
 /// receive output. Flushes the pre-subscription backlog + switches the session to live
 /// streaming — closes the shell-prompt race (a shell's one-shot prompt is buffered until
 /// this call instead of being emitted before any listener exists). Idempotent.
+///
+/// ⚠️ **NOT a CC-readiness signal.** It names FRONTEND readiness: it fires right after
+/// `cc_spawn` resolves and says nothing about CC's TUI accepting input. Two readers built
+/// injection timing on the name and were wrong (M12 WP3). See
+/// `workflow-system/product/arch/process-and-pty.md`.
 #[tauri::command]
 pub fn cc_ready(registry: State<'_, Registry>, session_id: String) -> Result<(), String> {
     // ACCEPTED TRADEOFF (m2-wp9 MINOR #2): `reg.ready` → `mark_ready` flushes the backlog

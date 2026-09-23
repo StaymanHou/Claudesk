@@ -206,6 +206,29 @@ not write", which is the standing *instrument-that-cannot-observe-reports-absenc
 ⚠️ **Do not conclude "no IPC happened" from a JS-level tap under any circumstances.** Confirm the
 tap can see a *known-positive* call first — a positive control — or use a different instrument.
 
+### (m) ⚠️ osascript / System Events cannot safely address the dev build — drive it ONLY through the bridge
+
+The dev binary is `target/debug/claudesk` launched by `cargo run`, **not a bundled `.app`**. So
+System Events reports `bundle identifier = missing value` for it, and early in a launch it reports
+**no windows at all**. With a prod Claudesk running, every OS-level targeting scheme degrades
+**silently to the prod app** instead of failing loudly (M13.5 WP1, 2026-08-21):
+
+- `set frontmost of <process whose unix id is DEV>` plus `keystroke "q"`: the activation did not
+  take (no bundle id), `keystroke` went to whatever was really frontmost, and **the ⌘Q quit the
+  operator's prod app.**
+- `every window of (first process whose unix id is DEV)` **returned the prod app's windows**. This
+  was caught only because the bridge concurrently reported the true dev geometry. The instrument
+  disagreement was the only tell.
+
+So the older "target by window title or bundle id" advice
+(`[[verify-self-dev-vs-prod-process-name-collision]]`) does **not** cover the un-bundled dev binary.
+**Rule:** never send a global `keystroke`, `set frontmost`, or a System Events window enumeration
+to the dev app while a same-named prod app runs. Use the bridge, which is bound to `127.0.0.1:9223`
+under `#[cfg(debug_assertions)]` and so structurally cannot reach prod: `manage_window` for
+geometry, `ipc_emit_event` for app events. **Working quit trigger:**
+`ipc_emit_event('quit-requested')` exercises the real `prevent_close` → `quit_now` → `app.exit(0)`
+path (proven 3×).
+
 ## Related
 
 - [`verify-self-tiers.md`](verify-self-tiers.md) — what the agent can and cannot observe, and when

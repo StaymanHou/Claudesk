@@ -502,3 +502,12 @@ mis-attribute a correct render as a bug:
 **The rule:** when the question is *"what does the DOM look like at rest"*, render it. When it is
 *"what does the source say"*, guard the source. Reaching for `?raw` on a DOM question is how this
 repo accumulated its nine failure forms.
+
+**⚠️ The posture is RULED, not open (operator, 2026-09-23, paydown R4).** `@testing-library/react`
+is **not** adopted. The accepted posture is **pure-core + resting-DOM render + live verify**:
+behavior is extracted into pure modules and driven by tests, resting DOM is rendered with
+`renderToStaticMarkup` + per-file jsdom, and interaction sequences go to live MCP-bridge
+verification. Stop treating interaction-level coverage as an open gap each feature must re-argue;
+it is a known boundary of the accepted harness. Reopen only if a specific interaction defect ships
+that a pure extraction could not have reached. That record is what the retired
+`SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS` asked for.

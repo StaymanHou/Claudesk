@@ -1,7 +1,7 @@
 # verify-self tiers — what the agent can prove, and what the operator must
 
-Four interlocking rules about *where* verification evidence can legitimately come from in this
-project. They evolved across M5–M11 and are easiest to read together.
+Five interlocking rules about *where* verification evidence can legitimately come from in this
+project. They evolved across M5–M15 and are easiest to read together.
 
 ## 1. Installed-build smoke test (dev-vs-installed parity)
 
@@ -84,6 +84,56 @@ at each call site — then guard *that* single writer.
 
 **Corollary for planning:** when a verify step names *"does the caller honor the contract?"* as the
 risk, extracting the contract does not answer it. Only a caller-side guard does.
+
+## 5. ⚠️ Where `tauri:dev` is NOT a faithful stand-in — check these BEFORE reading a failure
+
+Rule 1's GUI-PATH gap is one member of a class: the dev build differs from the shipped app in ways
+that make a **working feature read as broken**. Each gap below has produced a false FAIL (or a
+misdiagnosis) at least once. When a live check fails, rule these out before believing the result.
+
+**(a) macOS text-input services do not engage at all.** Dictation refused to start under
+`pnpm tauri:dev` in every probe arm, **including a plain `<textarea>`**, and in the dev app's own
+code editor, while the same CM6 code worked concurrently in the installed app (F-a WP1, 2026-09-21).
+Likely mechanism: `tauri:dev` runs a bare adhoc-signed Mach-O under `target/debug/` with **no
+`.app` bundle identity**, and text-input services attach to a real bundle. Treat dictation, and
+plausibly autocorrect, the emoji picker and the character palette, as **installed-build-only**
+outcomes; carry them to the `/release` gate (rule 1's scheduling note). ⚠️ Killed hypotheses, do
+not re-propose: a CM6/contenteditable problem, a WKWebView/Tauri limit, a missing entitlement,
+`spellcheck="false"`. The F-a probe harness is kept dev-only (`?cm6probe&mode=dictation`) so the
+measurement can still be taken on an installed build. That build must come through the in-app
+updater, **never `brew upgrade`**, which kills running sessions.
+
+**(b) A CC session spawned by an agent-launched Claudesk emits NO hook events.** The child inherits
+`CLAUDE_CODE_CHILD_SESSION`, which turns transcript saving off (the pane prints the warning), and
+the hook chain never fires. A full live turn left the status label at `Unknown` (M15 WP3,
+2026-09-13), so a naive read is a **false FAIL**. This extends
+`[[agent-launched-app-cannot-verify-continue]]` from `--continue` to the whole hook channel.
+**Working technique:** write hook JSON straight to the dev app's socket,
+`~/Library/Application Support/com.claudesk.app.dev/hook.sock`, one JSON object per line in the
+shape the hook script sends. That replaces only the CC process: the real `hook_socket` →
+`status_broadcaster` → `workspace-status` → webview path runs (`status-channel.log` shows
+`outcome=emitted`). No helper script exists yet (`tooling/autofire-timing/probe.py` only *mentions*
+the socket). The third time this is hand-rolled, write one under `tooling/`. To **observe** the
+event in the webview, register the listener
+through the app's own bundled module: `await import("/node_modules/@tauri-apps/api/event.js")`
+inside an injected `<script type="module">`. A bare `@tauri-apps/api/event` specifier does not
+resolve, and there is no `window.__TAURI__`. ⚠️ The
+`__internal_unstable_listeners_object_id__` registry reads **EMPTY while events are flowing**, so a
+tap on it is an invalid probe, not a negative result (bridge caveat (l) is the same trap).
+
+**(c) The dev profile's settings can drift from prod, and one of them decides whether skills can
+write.** The dev profile (`com.claudesk.app.dev`) once sat at `cc_permission_mode: "dontAsk"`
+while prod ran `bypassPermissions`. `dontAsk` stops the prompting **without granting the write**,
+so a CC session composes a correct `/session-handoff` and is then silently denied (M13 WP4,
+2026-08-18). The failure was first misattributed to the fixture, and a richer fixture would have
+failed the same way. ⚠️ **Before any live check that needs a workflow skill to WRITE, read the
+pane footer:** `⏵⏵ bypass permissions on` is the faithful state; `⏵⏵ don't ask on` means the
+check cannot pass. The mode is read at **spawn**, so a change needs a respawn. *(Ruled 2026-09-23:
+the dev profile is NOT auto-seeded from prod. The divergence is a check-first item, not code.)*
+
+**(d) osascript cannot safely address the dev build while prod runs.** See bridge caveat (m) in
+[`mcp-tauri-bridge-caveats.md`](mcp-tauri-bridge-caveats.md): drive the dev build **only** through
+the MCP bridge.
 
 ## Related
 

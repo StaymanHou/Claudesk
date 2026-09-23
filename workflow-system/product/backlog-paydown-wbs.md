@@ -200,6 +200,11 @@ invariant). Drive via `/task-plan`.
 
 ## WP2 — Local docs, lessons, rulings, and the mccc handoff  `[impact: Med · effort: S · risk: Low]`
 
+> ✅ **CLOSED 2026-09-23** (task `paydown-wp2-docs-rulings-handoff`, archived). 10 entries resolved and deleted.
+> The handoff consolidates **12** backlog entries + O2, not "13 + O2": F10B was excluded because it was already fixed
+> upstream. Correction found while writing: `tooling/autofire-timing/probe.py` does NOT speak to the hook socket
+> (the inventory said it did). No helper exists yet.
+
 Documentary only. Drive via `/task-plan`.
 
 - **Lessons / tiers:**
@@ -234,6 +239,12 @@ Documentary only. Drive via `/task-plan`.
     the handoff.**
 
 ## WP3 — A whole-app boot smoke test  `[impact: High · effort: M · risk: Low]`
+
+⚠️ **STEP 0, added at WP2 verify: restore the green gate first.** `pnpm verify:auto` has been RED on
+`main` since `08f2db5` (Release v0.6.0 reflowed `tauri.conf.json`'s `resources` array; `prettier --check`
+fails at step 2). Run `prettier --write src-tauri/tauri.conf.json`, confirm the gate exits 0, and add a
+format check to `.claude/skills/release/SKILL.md` step 2 before its commit
+(`SURFACE-2026-09-23-VERIFY-AUTO-RED-ON-MAIN-SINCE-THE-V0.6.0-RELEASE-COMMIT`).
 
 Additive, so it lowers the risk of every later WP that deletes something (WP5's `chordLabel`,
 WP8's legacy `WorkspaceStatus`). Drive via `/feature-plan` (it may need phases).

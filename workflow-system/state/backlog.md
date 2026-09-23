@@ -1,5 +1,15 @@
 # Backlog
 
+## SURFACE-2026-09-23-VERIFY-AUTO-RED-ON-MAIN-SINCE-THE-V0.6.0-RELEASE-COMMIT
+- **Source:** task:verify (paydown-2026-09-23 WP2)
+- **Target level:** task
+- **Type:** bug (a broken gate, not a product defect)
+- **Summary:** ⚠️ **`pnpm verify:auto` has exited 1 on `main` since `08f2db5` (Release v0.6.0).** `prettier --check` fails on `src-tauri/tauri.conf.json`: the release commit's version bump also reflowed `"resources": ["resources/claudesk-hook.pl"]` onto three lines, which is not Prettier's shape. Every later step (tsc, vitest, cargo fmt/clippy/test) is green. The gate stops at step 2, so **every WP since the release would read a red gate for a reason unrelated to its change**. The v0.5.2 release commit (`7083805`) did NOT reflow it, so this is a one-off from how v0.6.0's version was edited, not a systematic tool rewrite.
+- **Context:** there is no CI and no git hook (`docs/lessons/verify-auto-gate.md`), so nothing noticed. The `/release` skill's step 2 edits `tauri.conf.json` and commits it without running any format check.
+- **Suggested action:** (1) `prettier --write src-tauri/tauri.conf.json` (restores the one-line array; no semantic change) and confirm `pnpm verify:auto` exits 0. (2) Durable half: add a `pnpm format:check` (or `prettier --check src-tauri/tauri.conf.json`) line to `.claude/skills/release/SKILL.md` step 2, before its commit.
+- **Priority:** high (the per-phase gate is red for every future WP until fixed; cheap to fix)
+- **Status:** pending — scheduled as the first step of paydown-2026-09-23 WP3 (whose verification needs a green gate)
+
 ## Code-quality findings — fa-wp4-send-and-stage (2026-09-22)
 
 - **Pointer:** **1 MAJOR (partially fixed) + 1 MINOR** from `feature-review-quality` against ship
@@ -289,7 +299,7 @@ an argument for sequencing, not a decision.
   "mechanically verifiable" requirement, which this outcome technically satisfied while still
   being unsatisfiable.
 - **Priority:** medium
-- **Status:** open
+- **Status:** open — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §A.1; stays OPEN until mccc applies it
 
 ## SURFACE-2026-09-15-SUPERVISOR-DOGFEEDBACK-BATCH-1
 - **Source:** operator dogfooding (v0.5.0, first real use of the M15 workflow supervisor)
@@ -507,44 +517,6 @@ an argument for sequencing, not a decision.
   this clock.
 - **Status:** pending
 
-## SURFACE-2026-09-21-MACOS-TEXT-INPUT-SERVICES-DEAD-UNDER-TAURI-DEV
-
-- **Priority:** medium
-- **Surfaced by:** feature:build — F-a WP1 Phase 2 verify-human (2026-09-21)
-- **Target level:** product:arch (a verification-capability constraint, not a bug)
-- **Type:** gap
-- **Status:** pending
-
-**macOS dictation does not engage AT ALL under `pnpm tauri:dev`, but works in the installed
-prod app.** Observed while running the F-a WP1 dictation probe: dictation refused to start in
-all three probe arms **including a plain `<textarea>`**, and equally in the **dev app's own code
-editor** — the same CM6 code the operator confirmed working **concurrently** in the installed
-prod app.
-
-**Likely mechanism (direct evidence, not isolated):** `tauri:dev` runs a **bare adhoc-signed
-Mach-O** (`codesign`: `Identifier=claudesk-<hash>`, `Signature=adhoc`, no `TeamIdentifier`, no
-hardened runtime) with **no `.app` bundle** under `target/debug/`. Prod is a Developer-ID bundle
-(`com.claudesk.app`, Team `C8RJH77B47`, hardened runtime). macOS dictation is a system
-text-input service that attaches to an app with a real bundle identity. ⚠️ Per-app TCC was NOT
-inspected — it needs Full Disk Access, deliberately not granted.
-
-⚠️ **Why this matters beyond the probe:** it is a **standing limit on what `tauri:dev` can
-verify.** Any feature depending on macOS text-input services — dictation, and plausibly
-autocorrect, the emoji picker, the character palette — **cannot be verified in a dev build** and
-needs an installed `.app`. This is a sibling of the known **GUI-PATH** constraint (a
-Finder-launched `.app` inherits a minimal PATH, which `tauri:dev` never reproduces): both are
-cases where the dev build is not a faithful stand-in, and the verify-self tier list should say so.
-
-⚠️ **Hypotheses already killed — do not re-propose:** a CM6/contenteditable problem (the
-`<textarea>` failed too); a WKWebView/Tauri limitation (prod is both, and works); a missing
-entitlement (prod has the stricter posture); `spellcheck="false"` (the working prod editor
-carries the identical attributes).
-
-- **Suggested action:** add the constraint to `docs/lessons/verify-self-tiers.md` beside the
-  installed-build/GUI-PATH tier, so the next feature touching text-input services does not
-  rediscover it. Fold in whatever the F-a WP1 Phase 3 run settles about *how* to run a probe on
-  an installed build without shipping dev-only scaffolding or killing a running Claudesk.
-
 ## SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT
 
 - **Priority:** medium
@@ -653,7 +625,7 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 
 **Suggested action:** fold into the next mccc-rooted session alongside the two open handoffs
 (`HANDOFF-to-mccc-m15-wp2.md`, `HANDOFF-to-mccc-m15-wp4.md`).
-- **Status:** pending
+- **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §D.8; stays OPEN until mccc applies it
 
 ## SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES
 
@@ -722,42 +694,6 @@ and work on the spec well."
   check it early in the spec.
 - **Status:** pending
 
-## SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT
-
-- **Priority:** high
-- **Surfaced by:** M15 WP3 Phase 1 (feature:verify-self)
-- **Target:** M15 WP3 Phases 2-5 (every phase whose outcomes need a real turn-end)
-- **Type:** gap
-
-⚠️ **A CC session spawned by an agent-launched Claudesk produces NO hook events, so no
-turn-end can be observed the obvious way.** The child inherits `CLAUDE_CODE_CHILD_SESSION`,
-which turns transcript saving OFF (the pane itself prints the warning) and the hook chain
-never fires. Measured: a full live CC turn in `scratch-a` left the status label at `Unknown`
-and appended nothing to the session's transcript — `grep -c` for the typed prompt returned 0
-against a file whose mtime was one minute old.
-
-⚠️ **This makes the naive verify-self read a FALSE FAIL** — the feature works, the instrument
-cannot drive it. It extends `[[agent-launched-app-cannot-verify-continue]]` from `--continue`
-to the whole hook channel.
-
-**The working technique (used to verify Phase 1):** write hook JSON directly to the dev app's
-Unix socket at `~/Library/Application Support/com.claudesk.app.dev/hook.sock` — one JSON
-object per line, same shape the hook script sends. This drives the REAL backend path
-(`hook_socket` -> `status_broadcaster::to_update` -> `workspace-status` emit -> the webview),
-so it is not a stub: only the CC process is replaced, not any Claudesk code. Confirmed by
-`status-channel.log` showing `outcome=emitted` and by a live `listen` tap receiving the payload.
-
-⚠️ **Also needed to see the payload at all:** register the listener through the app's own
-bundled module (`await import("/node_modules/@tauri-apps/api/event.js")` inside an injected
-`<script type="module">`). A bare `@tauri-apps/api/event` specifier does not resolve, there is
-no `window.__TAURI__` global, `__TAURI_INTERNALS__` exposes only `plugins` (no `invoke`), and
-the `__internal_unstable_listeners_object_id__` registry reads EMPTY even while events are
-demonstrably flowing — ⚠️ a tap on it is an INVALID PROBE, not a negative result.
-
-**Suggested action:** use socket injection for WP3's remaining phases; consider a small helper
-script under `tooling/` so each phase does not re-derive it.
-- **Status:** pending
-
 ## SURFACE-2026-09-12-ONE-TRANSITION-HAS-NO-PAUSE-POLICY-ROW-UPSTREAM
 
 ⚠️ **NARROWED 2026-09-12 at code-quality review — was "TWO TRANSITIONS".** `P13` (product-finalize → EXIT) is **terminal**, so no pause-policy row is owed and its absence was never a gap. The over-broad claim came from a gap classifier that keyed on an edge's *workflow* rather than its *target*; fixed, and the report now names exactly the dispatchable edge that is genuinely missing a row. **`I2` alone stands.**
@@ -806,7 +742,7 @@ script under `tooling/` so each phase does not re-derive it.
 - **Context:** ⚠️ **The inference "already a dependency → no probe" is the bug.** A probe answers *"does this API behave as needed in OUR conditions?"*, which is orthogonal to provenance. `tsc` passed, 42 tests passed, the types were read correctly — and every one of those observations was **identical whether or not the alt buffer was active**, which is `arch.md`'s own decisiveness rule going unapplied. ⚠️ Aggravating detail: **WP2 of the same bucket was literally titled *"Probe — … can it get one?"***, so the probe-first pattern was already present in the immediate context and simply was not applied to a sibling WP. ⚠️ **And the lesson is STRONGER than first filed:** the failure was not exotic runtime conditions at all, but two options spelled out in the typings that were read — so "read the types more carefully" is *not* the fix; **running the API is.**
 - **Suggested action:** widen the probe trigger in `feature-spec` §2 / `feature-plan` §3 from *"3rd-party / external"* to something like: **"a probe is required when the feature depends on runtime BEHAVIOUR of any API — including an already-installed one — that no existing code in this repo exercises under the same conditions."** ⚠️ A cheap, mechanical form of the test: *"does any shipped code already call this API in this context?"* — for WP3 the answer was **no** (`grep` found zero prior uses of `registerMarker`/`registerDecoration`/`overviewRulerOptions`), which would have fired the gate immediately. Consider also a standing checklist line for terminal work: **which xterm buffer is active — read it, do not infer it?** ⚠️ And for any *proposed/experimental* API surface: **does it need an opt-in flag, and does the call throw rather than return falsy when the flag is missing?** (`registerDecoration` throws; the original code's `if (!marker) return` guard shape assumed a falsy return, so the throw escaped un-caught.)
 - **Priority:** medium-high (the cost was three build/verify rounds + one escalation; the fix is a few lines of skill prose, and the failure recurs wherever a familiar dependency is used in an unfamiliar mode).
-- **Status:** pending — cross-repo (`my-claude-code-customization`); fold into the handoff already owed to mccc.
+- **Status:** pending — cross-repo (`my-claude-code-customization`); fold into the handoff already owed to mccc. — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §A.4; stays OPEN until mccc applies it
 
 ## SURFACE-2026-08-25-SYNC-TAURI-COMMANDS-MAY-BLOCK-THE-MAIN-THREAD
 - **Source:** incident:codify (P1 workspace-close hang, 2026-08-25) — an adjacent gap found while writing that incident's regression coverage, deliberately NOT built then (codify's speed-aware "minimum viable coverage" rule).
@@ -826,7 +762,7 @@ script under `tooling/` so each phase does not re-derive it.
 - **Context:** ⚠️ **A refutation is a hypothesis, and this one was never tested.** It was internally coherent, cited the vendor's own typings, and explained every observed symptom — which is exactly why it earned three rounds of trust. The asymmetry that makes this worth filing: **a false claim gets caught by the next test; a false refutation CLOSES the work and is never tested again.** Costs incurred: one WP escalated out of its bucket, ~175 lines of sound code marked refuted, one correct decision marked as a mistake, and a re-spec queued that was not needed. ⚠️ Note the instrument chain was *already* suspect — the handoff records **three instrument traps in a row** (stale binary ×2, then HMR masking a stale Rust half) and its own note that *"a repeated 'the instrument was wrong' verdict is itself the signal to go read the platform contract."* The contract *was* then read — but read, not **run**, and that was the last mile that failed.
 - **Suggested action:** add a rule to the verification-method lessons (and consider `feature-verify-human` / `feature-research` prose): **before a refutation is allowed to close, escalate, or delete work, at least one RUNTIME observation must contradict the working hypothesis.** Reading a type, a doc comment, or a spec is *evidence for* a refutation, never sufficient *on its own*. Cheap mechanical form: *"which single value, if I read it live, would prove this refutation wrong? Go read it."* For WP3 that value was one property access. ⚠️ Pair with the existing `[[verify-the-mutation-landed]]` / `[[invalid-probe-and-real-hole-look-identical]]` family — same shape: **a green/negative result is under-determined until you prove the instrument could have said otherwise.**
 - **Priority:** medium-high (cheap prose fix; the failure mode silently destroys correct work and is self-concealing — nothing re-tests a closed item).
-- **Status:** pending — cross-repo (`my-claude-code-customization`); fold into the handoff already owed to mccc, alongside its sibling.
+- **Status:** pending — cross-repo (`my-claude-code-customization`); fold into the handoff already owed to mccc, alongside its sibling. — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §B.5; stays OPEN until mccc applies it
 
 ## SURFACE-2026-08-21-STATUS-PATH-KEYS-ON-CWD-ALONE-COLLAPSING-SESSIONS
 - **Source:** feature:build (M13.5 WP2 Phase 1 — a rejected root-cause hypothesis that turned out to be a real, separate defect)
@@ -858,17 +794,6 @@ script under `tooling/` so each phase does not re-derive it.
 - **Context:** The race is **intrinsic to what the test exercises**: it drops the receiver so `accept_loop` returns and closes the connection: when the server wins that race, the client's later `shutdown` has nothing connected. Observed once in ~4 full-suite runs on 2026-08-21; passed 3/3 in isolation and the next full run was green. **Not caused by the WP1 change** (that diff is a dependency, two `lib.rs` lines, and a new module — nothing touching sockets or threads). ⚠️ Per the workflow's own triage rule, no code or test was modified to make it quiet.
 - **Suggested action:** Treat `shutdown` as best-effort in this test — `let _ = client.shutdown(..)` (the assertion that matters is the `handle.join()` below it, i.e. the loop returns rather than hanging or panicking). ⚠️ Do **not** "fix" it by adding a sleep: the race is the point of the test, and a sleep would make the pass timing-dependent in the other direction. Confirm the `join()` assertion still fails if `accept_loop` is mutated to hang.
 - **Priority:** low (no product defect; cost is one spurious red full-suite run and the re-diagnosis it invites)
-- **Status:** pending
-
-## SURFACE-2026-08-21-OSASCRIPT-CANNOT-SAFELY-ADDRESS-THE-DEV-BUILD
-- **Source:** feature:build (M13.5 WP1, window geometry persistence)
-- **Target level:** product:arch (verify-self method) — or a `docs/lessons/` addition
-- **Type:** gap (a verification-method hazard with a live blast radius)
-- **Summary:** `osascript`/System Events **cannot safely address the `pnpm tauri:dev` build while a prod Claudesk is running**, and its failures are silent and *misdirected* rather than erroring. The dev binary is `target/debug/claudesk` launched by `cargo run` — **not a bundled `.app`** — so System Events reports `bundle identifier = missing value` for it and, early in a launch, **no windows at all**.
-- **Context:** ⚠️ **Two distinct misfires in one session, and one of them quit the operator's live app.** (a) `set frontmost of <process whose unix id is DEV>` + `keystroke "q"`: the activation silently did not take (no bundle id), and `keystroke` delivers to whatever is *actually* frontmost — so **the ⌘Q hit the operator's prod app (PID 18806) and quit it**; it relaunched as a new PID. (b) `first process whose unix id is DEV` then `every window of` it **returned the PROD app's windows** (`Claudesk` / `Tauri App`, 1280×800) while nominally addressing the dev PID — detected **only** because the MCP bridge concurrently reported the true dev geometry (1111×733); the **instrument disagreement was the tell**. Trusting that enumeration would have sent a maximize gesture to the operator's window.
-- **⚠️ Why the existing memory is insufficient:** `[[verify-self-dev-vs-prod-process-name-collision]]` prescribes "target by window title or bundle id, not process name." Here **both of those degrade to the prod app** — the dev binary has no bundle id, and its windows are invisible to System Events for a while after launch — so title/bundle-id targeting *silently resolves to the wrong process* instead of failing loudly. The prescribed mitigation does not cover the un-bundled dev-binary case.
-- **Suggested action:** Record the stronger rule: **drive the dev build through the MCP bridge only** (`127.0.0.1:9223`, registered under `#[cfg(debug_assertions)]`, so it structurally cannot reach a prod install — `manage_window`, `ipc_emit_event`). **Never** use a global `keystroke`, `set frontmost`, or a System Events window enumeration for the dev app while a same-named prod app runs. Note the working quit trigger found here: `ipc_emit_event('quit-requested')` exercises the real `prevent_close` → `quit_now` → `app.exit(0)` path (proven 3×). Fold into `docs/lessons/verify-self-tiers.md` (or the MCP-bridge caveats doc) and consider amending the memory above.
-- **Priority:** medium (no product defect; it is a verification-method hazard whose realized cost was quitting the operator's live app mid-session, and the silent-misdirection shape means the next session repeats it)
 - **Status:** pending
 
 ## SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED
@@ -922,35 +847,6 @@ script under `tooling/` so each phase does not re-derive it.
   rationale-duplication finding one level up, and the right fix is *"pick one authority and point at
   it"*, ⚠️ **not** trimming a little from each site.
 
-## SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES
-- **Source:** feature:build (M13 WP4 Phase 3 — live Recycle runs)
-- **Target level:** product:arch
-- **Type:** gap (dev-environment configuration, with a documentation consequence)
-- **Summary:** The **dev** profile (`com.claudesk.app.dev`) had drifted to
-  `cc_permission_mode: "dontAsk"` while **prod** runs `bypassPermissions` (the yolo default the
-  vision specifies). Per `cc_session/mod.rs:97`, `dontAsk` *"just stops the prompting"* — it does
-  **not** grant the write. A CC session spawned under it composes a correct `/session-handoff` and is
-  then **silently denied** at the write, with no prompt to accept. CC's own words in the pane:
-  *"the block is the permission mode, not anything about the skill or the content… the content is
-  composed and ready."*
-- **Context:** ⚠️ **This corrected a recorded diagnosis.** WP3 concluded the Recycle success path was
-  **fixture-blocked** (*"CC correctly refuses to hand off from an empty scratch repo"*). True for
-  `scratch-b` — but on `~/Tmp/yitang-copy`, a fixture with a 19.7 KB incident WIP, a real backlog and
-  real git history, the handoff **still failed**, for a reason no fixture work could fix. ⚠️ **Anyone
-  retrying on a richer fixture without checking the permission mode would fail again and
-  mis-attribute it to the fixture a second time.** The mode is read at **spawn** time, so changing it
-  requires a respawn — the pane's footer is the tell (`⏵⏵ don't ask on` vs `⏵⏵ bypass permissions on`).
-- **Suggested action:** Two parts, and the second is the durable one. (1) Already applied: dev set to
-  `bypassPermissions` via the real `⌘,` Settings select (prod untouched). (2) **Decide whether the dev
-  profile should seed its permission mode from prod** the way `projects.json` already seeds on first
-  launch — today a dev profile can silently diverge from prod on a setting that changes whether
-  workflow skills can write at all, which makes dev an unfaithful rehearsal of the shipped app. If
-  seeding is rejected, record the divergence in `docs/lessons/verify-self-tiers.md` as a
-  check-this-first item for any live workflow verification.
-- **Priority:** medium (no production defect — prod is correctly `bypassPermissions`; the cost is
-  dev-time misdiagnosis, which has already happened once and consumed a WP's accepted-gap slot)
-- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); prior note: part (1) APPLIED (dev now `bypassPermissions`, verified 2026-08-18 — prod unchanged). ⚠️ **Part (2) — the durable half — is OPEN:** decide whether the dev profile seeds its permission mode from prod, or else record the divergence in `docs/lessons/verify-self-tiers.md` as a check-this-first item. The trap that cost a WP's accepted-gap slot is still unguarded
-
 ## SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION
 - **Source:** feature:build (M13 WP4 Phase 1 — individual guard-arm probes)
 - **Target level:** product:arch
@@ -980,16 +876,6 @@ script under `tooling/` so each phase does not re-derive it.
   surface, most likely M15's)
 - **Status:** deferred — carry to next cycle (M13 close 2026-08-18); ⚠️ **M15 is the likely author of the first exposed surface** (a Recycle menu item) — decide (a) vs (b) *before* building it, not after. Standing precedent is (b)
 
-## SURFACE-2026-08-14-SESSION-RESTORE-USAGE-FIGURE-SPANS-TWO-COMMAND-NAMES
-- **Source:** feature:plan (M13 WP2 — the measurement mandated by `SURFACE-2026-08-14-SESSION-RESTORE-HAS-NO-MANUAL-DOOR`)
-- **Target level:** method / any future usage-frequency claim about this skill
-- **Type:** trap (a measurement predicate that silently under-counts)
-- **Summary:** The `/session-restore` usage figure **requires counting two command names**, because the M9 WP5 rename split one skill's history: **`/session-resume` = 390** invocations (2026-05-29 → 2026-07-21) and **`/session-restore` = 142** (2026-07-21 → 2026-08-14), raw family **532**. ⚠️ A re-measurement grepping only `/session-restore` finds **142** — a 73% under-count — and would wrongly conclude the earlier "531" was inflated.
-- **Context:** Also measured: **9 of the raw 532 were `ScheduleWakeup` self-fires**, not operator input (one overnight-training transcript, hourly). They are cleanly separable — the only family invocations carrying a `<command-args>` block matching a `ScheduleWakeup` prompt in the same file — giving **523 operator-typed**. ⚠️ A second trap in the same measurement: bucketing *every* user line mentioning the command gives **1,869**, of which only ~155 are real invocations; the rest are `tool_result` skill-listing output, skill-body text, and prose. The predicate must match `<command-name>` in **string/text content only**, never `tool_result` bodies.
-- **Suggested action:** None standing — this is a note for the next person who measures skill usage. ⚠️ Applies to any renamed skill, not just this one: `session-handoff`/`session-pause` and `session-capture`/`session-store-learning` have the same split.
-- **Priority:** low (no defect; prevents a wrong conclusion from a plausible-looking grep)
-- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); no action standing — a method note for the next person who measures skill usage. ⚠️ Applies to every renamed skill, not just this one
-
 ## SURFACE-2026-08-06-SESSION-RESTORE-CONTRADICTS-ITSELF-ON-THE-DEFAULT-DRIVE-MODE
 - **Source:** feature:build (M12 WP4a Phase 2)
 - **Target level:** external — the **companion workflow-system repo** (`my-claude-code-customization`), not Claudesk code
@@ -998,7 +884,7 @@ script under `tooling/` so each phase does not re-derive it.
 - **Context:** Found while settling M12 WP4a's P2.2 (what an unset drive mode should mean on the wire). It **strengthened** that verdict rather than blocking it: since there is no coherent upstream default even within a single skill, Claudesk emitting any default would be inventing workflow policy — so absence correctly emits **nothing**. ⚠️ Note the WBS's Finding F describes this as a disagreement *between* `session-start` and `session-restore`; the sharper truth is that `session-restore` disagrees with **itself**. Claudesk is unaffected either way (it defers entirely).
 - **Suggested action:** Not Claudesk's to fix — the companion repo owns it. Worth mentioning in the next cross-repo handoff: pick one default and make `:42` and `:59` agree. (Menu-labels-Mode-3 vs step-4-says-Mode-2; the 29-file archive sample suggests `autopilot` is what actually gets used, 28/29.) **Do NOT "fix" this from Claudesk** — hard constraint: zero companion-repo change in M12.
 - **Priority:** low (documentation clarity in an external repo; no Claudesk impact, and M12's design deliberately defers to whatever the skill decides)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
+- **Status:** deferred — carry to next cycle (M12 close 2026-08-12) — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §E.9; stays OPEN until mccc applies it
 
 ## SURFACE-2026-08-06-MANUAL-SESSION-START-MODE-MENU-INTERRUPTS-BEFORE-INTENT
 - **Source:** product:wbs (M12 WP4 re-decomposition, 2026-08-06) — deferred by operator decision during the same session that measured it
@@ -1024,26 +910,6 @@ script under `tooling/` so each phase does not re-derive it.
 - **Pointer:** **1 MINOR remaining** (rewritten 2026-09-23). The inject-arm re-fire MAJOR was resolved 2026-08-05 (`051d707`). ⚠️ The asymmetry it left is documented at the field: a future reader who "restores symmetry" re-breaks the feature. The 3 stale "whole-feature gate" doc comments are resolved: the only surviving mentions (`announce/mod.rs`, `announce/commands.rs`) describe the change *from* that gate. The `actionFromAnnounced` bypass is resolved: `Workspace.tsx` maps through the seam. Two of the three MINORs were resolved at the 2026-08-18 paydown. Remaining: the `XtermPane.tsx` spawn effect's `exhaustive-deps` exclusion list omits `pendingAction`/`openIntent`. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp3-autofire-and-announce — 2026-08-05`.
 - **Priority:** low
 - **Status:** pending — routed to paydown-2026-09-23 WP4
-
-## SURFACE-2026-08-04-CC-READY-NAME-INVITES-MISREADING-AS-CC-READINESS
-- **Source:** feature:spec (M12 WP3 reconciliation)
-- **Target level:** product:arch (or a one-line doc fix at the command)
-- **Type:** gap (naming / doc clarity with a correctness consequence)
-- **Summary:** `cc_ready` reads as *"CC is ready to accept input"* and actually means *"the frontend has attached its `cc-output-<sid>` listener."* It is fired immediately after `invoke(cc_spawn)` resolves (`XtermPane.tsx:429`) and flushes **Claudesk's own** output backlog (`cc_session/commands.rs:112`) — it carries no information about CC's TUI being interactive.
-- **Context:** **Two independent readers took it the wrong way.** The M12 WP3 draft spec (written 2026-08-03 with rich context) built its whole injection-timing answer on *"fire on `cc_ready`, a terminal buffers stdin"* — a false premise twice over, since `cc_ready` is not a CC signal AND CC is a raw-mode TUI rather than a line-buffered shell, so the stdin-buffering intuition does not transfer (`[[raw-mode-cr-is-enter]]`). Caught at WP3 spec reconciliation (2026-08-04) by reading the command body rather than trusting the name; WP3's Phase 1 is now a live timing probe instead of a build on the assumption.
-- **Suggested action:** Either (a) rename to something that states what it means (`cc_output_listener_attached` / `cc_frontend_ready`) — a Tauri command rename needs the invoke-caller sweep + runtime smoke per `[[tauri-command-removal-needs-invoke-sweep]]`, or (b) cheaper: add a one-line "⚠️ NOT a CC-readiness signal — see WP3" note to the command's doc comment and to `arch.md`'s load-bearing index. **Do (b) at minimum before M13**, whose skill-buttons face the identical injection-timing question and will reach for the same name.
-- **Priority:** medium (no live defect — nothing fires on it today; the cost is that the next injection feature repeats the same misread, and WP3 already paid for it once)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
-
-## SURFACE-2026-08-03-TYPED-EXIT-LEAVES-THE-UNCLEAN-FLAG-SET
-- **Source:** feature:refactor (M12 WP2, from the code-review CRITICAL)
-- **Target level:** product:wbs (M12 — WP3 or later)
-- **Type:** new-work (product decision, then possibly a small wiring change)
-- **Summary:** Typing `/exit` in the CC pane does **not** clear the unclean-exit flag. `/exit` ends the CC process; the frontend responds by showing the "Session ended" overlay with a Relaunch button (`XtermPane.tsx`, bridge phase `ended`) and **the workspace stays open**. There is no close for a clean-exit clear to hang off. Net effect: after a typed `/exit`, closing the workspace with × clears normally, but if the app is quit or the workspace is left open, the flag stays `true` and the next open offers `/resume`.
-- **Context:** Found at code review — the `CleanExitRoute::CcExitCommand` variant existed in the Rust enum, the TS union, and round-tripped in two test suites, but **no caller ever sent it**. The variant was **REMOVED** in refactor rather than wired, because wiring it is new functionality gated on a product question, and a dead enum member reads as a covered case (it is precisely what made the gap invisible — the exhaustiveness test proves the *set*, never that each member has a caller). ⚠️ The WP2 verify-self log wrongly asserted `/exit` "shares the clearing path proven above"; that sentence has been corrected in the WIP.
-- **Suggested action:** Decide the product question first: **is a typed `/exit` a clean exit?** It is genuinely ambiguous — the user deliberately ended the session (argues clean), but the workspace remains open and Relaunch starts a NEW session that should itself be flagged unclean (argues the flag is simply not yet decidable at that moment). Three viable answers: (a) treat `/exit` as clean and clear on the `ended` transition; (b) leave as-is — the flag resolves correctly on whatever close follows; (c) clear on `ended` but re-set on Relaunch. **(b) is the current behavior and is defensible**, which is why this is not a bug fix.
-- **Priority:** medium (no data loss; worst case is one unasked-for `/resume` offer, which WP3's announce makes visible before it fires)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
 
 ## Code-quality findings — m12-wp1-probe-flag-store-and-announce (2026-08-03)
 - **Pointer:** **3 open items** (rewritten 2026-09-23). The two-live-`Verdict (b)` MINOR is resolved: `App.tsx` now names each milestone's verdict. The measurement-scripts convention question was Buried 2026-09-23. Remaining: (1) whether a phase observable must be amended when a verdict *reverses* the assumption it encoded (a workflow-system convention → the mccc handoff); (2) ⚠️ the lazy `interface RecentProject[\s\S]*?default_model\?` regex in `listProjectsConsumers.test.ts` can match past the interface's closing brace, so it wants a brace-counted slice; (3) one redundant paragraph on the Rust hazard test's doc comment (⚠️ **not** its reopening-condition paragraph). Bodies for (1): [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp1-probe-flag-store-and-announce — 2026-08-03`; (2) and (3) live only here.
@@ -1103,16 +969,6 @@ script under `tooling/` so each phase does not re-derive it.
 - **Suggested action:** **recently-used derivation** is the recommended option — zero dependencies, no network, no credentials, and it surfaces the models this operator actually uses (it is also what the roadmap's own constraint text suggested: "free-text / recently-used / derived"). Union it with the three static aliases so a fresh install still gets suggestions. **Two alternatives considered and not recommended:** scraping CC's own config/state (brittle coupling to an undocumented internal shape — the same anti-brittleness argument as M10.9 §4c), and querying the Anthropic API's models endpoint (authoritative and even entitlement-aware, but adds a network call, credentials Claudesk does not hold, and an offline-failure path to a feature that currently has none — a large surface for autocomplete convenience).
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*
-
-## SURFACE-2026-07-31-NO-REACT-COMPONENT-RENDER-HARNESS
-- **Source:** feature:verify-codify (M11.5 WP1 Phase 2)
-- **Target level:** product:arch
-- **Type:** gap
-- **Summary:** ⚠️ **PARTIALLY RESOLVED — the factual claim below was REFUTED and is corrected 2026-08-18 (paydown WP5); only the DECISION remains open.** The original text read *"not one of the 123 test files renders a component"*, which was true when written and is not now: **`renderToStaticMarkup` + jsdom renders components today with no new dependency** (`docsRender.test.tsx`, `projectModelCellRender.test.tsx`), proven on a component with hooks AND IPC. ⚠️ **Do NOT cite this entry for "components cannot be render-tested here"** — the authority is `docs/lessons/source-text-guards.md` → "The render-harness note, corrected", which states both halves plus the boundary. What remains genuinely open: **`@testing-library/react` is still not a dependency**, so there is no harness for INTERACTION — event dispatch, state transitions, `act()`, or the StrictMode double-invoke class. Every frontend test is a pure-function test, a source-text guard, or a resting-DOM render.
-- **Context:** Surfaced when codifying the picker-row model control (M11.5 WP1 Phase 2). Two verify-human-verified behaviors were **honestly un-pinnable**: (1) click-to-edit yielding exactly one `<input>` + N-1 labels across a list, and (2) a commit reverting the visible value on IPC rejection. Both need a real render with state transitions. The gap has been *worked around* repeatedly rather than named: pure-function extraction (`decideCommit`, `escDismissTarget`, `PICKER_ROW_CELLS`) is the standing mitigation and is genuinely good practice — but it cannot reach render-output or interaction-sequence properties, so those currently rely on live MCP-bridge verification, which is operator/agent-driven and not a regression gate. Note this is *also* what made M10.9 WP2's StrictMode double-write invisible to tests (the tests there modelled `set` with a plain closure, which has no React semantics to double-invoke).
-- **Suggested action:** decide deliberately whether to adopt a render harness (`@testing-library/react` + `jsdom`; Vitest already present) or to **formally accept** the "pure-core + live-verify" posture and stop treating render-level coverage as a gap. Either is defensible — the cost of the current implicit position is that each feature re-discovers the limit and re-argues it. If adopted, the first targets are the two behaviors above plus the StrictMode-double-invoke class.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle; **rewritten at paydown WP5 (2026-08-18)** to the remaining open decision (adopt an INTERACTION harness or formally accept pure-core + live-verify). The resting-DOM half is no longer a gap.
 
 ## SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE
 - **Source:** operator report (2026-07-31, during the M11.5 bucket-scoping discussion)
@@ -1195,7 +1051,7 @@ script under `tooling/` so each phase does not re-derive it.
   must replace the old body in place *is* the delete-side instance of this same convention).
 - **Priority:** medium (cheap prose fix; no live defect, but the failure mode is self-concealing —
   an inconsistent marker hides a contradiction and nothing re-reads a closed doc).
-- **Status:** pending — cross-repo (`my-claude-code-customization`).
+- **Status:** pending — cross-repo (`my-claude-code-customization`). — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §F.10; stays OPEN until mccc applies it
 
 ## SURFACE-2026-08-26-DELETE-ON-RESOLVE-REWRITE-PATH-SKIPS-THE-DELETE
 - **Source:** feature:plan (M13.5 WP5 exit verify — found while reading the TURN-OUTPUT entry)
@@ -1223,7 +1079,7 @@ script under `tooling/` so each phase does not re-derive it.
 - **Priority:** medium (cheap prose fix + a cheap guard; the failure silently contradicts a shipped
   record and nothing re-reads a closed item).
 - **Evidence 2026-09-23 (paydown-2026-09-23 WP1) — the class at SCALE:** 22 of 100 code-quality finding bodies were resolved-but-undeleted, most by the 2026-08-18/19 paydown, whose CHANGELOG lines claimed them while the bodies stayed. So were 10 of 34 pointer stubs, whose counts no longer matched their bodies, and one claimed closure was only HALF true (`SURFACE-2026-08-18-QUALITY-WP3-LATE-SUBSCRIPTION-DISPOSAL-UNTESTED`: one arm of two). A sweep that resolves SUB-ITEMS of a grouped entry is where this happens, because no heading disappears, so nothing prompts the delete.
-- **Status:** pending
+- **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §F.11 (upstream half; a local duplicate-heading guard is optional); stays OPEN until mccc applies it
 
 ## SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED
 - **Source:** feature:plan (M9 WP6b-1, Q4 resolution)
@@ -1257,15 +1113,6 @@ script under `tooling/` so each phase does not re-derive it.
 - **Priority:** medium (the two MAJORs, documentary) / low (the rest)
 - **Status:** pending — routed to paydown-2026-09-23 WP4 (1, 2, 3) / WP6 (4) + the comment-convention pass (5)
 
-## SURFACE-2026-09-17-STALE-WORKFLOW-PATHS-SURVIVE-THE-LAYOUT-MIGRATION
-- **Target level:** task
-- **Type:** tech-debt
-- **Summary:** ⚠️ **PARTIALLY RESOLVED at the M14-remainder cycle close (2026-09-18) — REWRITTEN to the remaining open work.** The originally-named scope is **clean**: `backlog.md` (was 15 occurrences), `vision.md`, and `roadmap.md` all now measure **0** live `workflow/state|product/` references. **Still open: 5 files under `.claude/memory/`** (`widened-selector-must-be-strict-superset`, `feedback_surfaced_in_discoveries_not_worktree`, `m7-docs-viewer-intent` ×2, `observable-outcomes-execution-evidence`) carrying `workflow/archive`, `workflow/backlog`, `workflow/wip`.
-- **Context:** The self-propagating half of the original finding is closed — new pointer entries are now copied from a canonical shape that uses `workflow-system/`, so the stale path no longer reproduces itself each feature close. What remains is inert: memory files are read by a future session as guidance, so a stale path there misdirects a reader but propagates nowhere. ⚠️ **CHANGELOG hits are CORRECT and must NOT be "fixed"** — they are historical narrative recording what the paths were at the time, the same rule that keeps `**/archive/**` untouched.
-- **Suggested action:** Fix the 5 `.claude/memory/` files on the next touch of any of them; not worth a standalone commit. ⚠️ Separate string-matches from claim-assertions first — a path inside a quoted historical note is correct as-is.
-- **Priority:** low
-- **Status:** pending (remaining scope only)
-
 ## SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS
 - **Source:** feature:verify-self (M13.5 WP3 Phase 1)
 - **Target level:** product:wbs
@@ -1292,7 +1139,7 @@ script under `tooling/` so each phase does not re-derive it.
   `feature-verify-auto` treat "outcome asserts a green gate that the phase's own plan says it
   breaks" as a plan-defect signal rather than a test failure.
 - **Priority:** medium
-- **Status:** pending
+- **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §A.2; stays OPEN until mccc applies it
 
 ## SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC
 - **Source:** feature:build (M13.5 WP3 Phase 3, found by the OPERATOR — the dev app was blank)
@@ -1320,30 +1167,7 @@ script under `tooling/` so each phase does not re-derive it.
   live-observation outcome. `tsc` passing is not the same property, and `tsc` *failing* must never
   be described as a guard when the failure class includes module resolution.
 - **Priority:** high
-- **Status:** pending
-
-## SURFACE-2026-09-17-SETTINGS-PANEL-READS-THE-GATE-VIA-ITS-OWN-CONTROL-NOT-THE-HOOK
-- **Source:** feature:build (M14 WP3 Phase 2, P2.3)
-- **Target level:** product:arch
-- **Type:** tech-debt
-- **Summary:** The hotkey group in `SettingsPanel.tsx` reads the workflow-features gate from
-  `workflowFeatures.value` (the panel's own `useSettingControl`) rather than from
-  `useWorkflowFeaturesEnabled()`, which is the established seam every other gate consumer uses
-  (`announceRow.ts`, `ProjectModelCell.tsx`, `App.tsx`).
-- **Context:** The deviation is deliberate and, in this component, correct: `SettingsPanel` is the
-  surface that OWNS the gate toggle, so the control is the live value and the hook would lag the
-  checkbox sitting a few rows above the list. But it means there is now one gate consumer that does
-  not go through the common seam. ⚠️ A previous MAJOR in this same area went the other way — `App.tsx`
-  read the raw `getWorkflowFeaturesEnabled()` wrapper, never re-synced, and left the value stale for
-  the process lifetime (fixed at m10.9-wp3 review, and the OFF-invariant guard's blind spot closed
-  with it). The risk here is that a future reader sees two patterns and copies the wrong one into a
-  component that has NO local control.
-- **Suggested action:** Decide whether the seam contract should say "use the hook UNLESS the component
-  owns the control" explicitly (a one-paragraph note in `arch/` + the OFF-invariant guard's comment),
-  or whether `useSettingControl` should expose the gate in a way both callers share. ⚠️ Do NOT
-  "fix" this by switching the panel to the hook — that reintroduces the lag this avoided.
-- **Priority:** low
-- **Status:** pending
+- **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §A.3 (upstream half; the local whole-app boot test is paydown-2026-09-23 WP3); stays OPEN until mccc applies it
 
 ## SURFACE-2026-09-17-REVIEW-QUALITY-DIFF-WINDOW-BREAKS-ON-A-PARKED-FEATURE
 - **Source:** feature:review-quality (M14 WP3)
@@ -1383,7 +1207,7 @@ script under `tooling/` so each phase does not re-derive it.
   handed nothing and asked what it thinks.
 - **Priority:** medium-high *(raised from medium 2026-09-22 — two independent failure modes now
   observed, and the empty-window one produces a FALSE CLEAN review rather than a noisy one)*
-- **Status:** pending
+- **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §C.7; stays OPEN until mccc applies it
 
 ## Code-quality findings — hotkey-reference (2026-09-17)
 - **Pointer:** **3 MAJOR + 3 MINOR** (0 CRITICAL) from `feature-review-quality` against ship baseline `5e3ecd9`. ⚠️ **All three MAJORs were independently VERIFIED against source before backlogging** (not taken on the reviewer's assertion), and all three are the same shape: *the WP's own anti-drift discipline, not applied one layer up at the render/guard boundary.* (1) **`TEST-SELECTOR-PINNED-TO-AN-UNSTYLED-CLASS`** — `.settings-hotkey-outcome` (singular) carries the multi-outcome assertion but only the PLURAL has a CSS rule, so an ordinary "remove unused classes" cleanup silently kills the ⌘W canary. (2) **`CM6-GUARD-BLIND-TO-SPREAD-KEYMAPS`** — the CM6 arm's regex reads literal `key:` entries only, so `⌘F` (via `...searchKeymap`) has **ZERO coverage in either direction**, and it is the one entry the group's hint text names as the reason the EDITOR section exists. (3) **`HOST-SECTIONS-PARALLEL-TO-THE-UNION`** — `HOST_SECTIONS` has no exhaustiveness tie to `ChordHost`, and the render test iterates the same hardcoded array so it **shares the blind spot**. The 3 MINOR: `chordLabel()` has no non-test consumer; `visibleChords` recomputed 3x per render; the same rationale stated verbatim in three places. Reviewer verdict: *"the three MAJORs are cheap to close and are better backlog items than refactor scope."* See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# hotkey-reference — 2026-09-17`.

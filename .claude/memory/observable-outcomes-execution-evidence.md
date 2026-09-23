@@ -24,4 +24,4 @@ CLI: <command-invocation> → within Ns of injection, the captured output contai
 
 **Applies to:** every Claudesk feature-plan that exercises a CC slash-command, a CLI invocation, a UI action with a side-effect, or any "input → command runs → effect" flow.
 
-**Reference incident:** WP2 P1.4 (corrected by follow-up probe and revised in `workflow/archive/wp2-cc-pty-probe.md` § Findings — revised).
+**Reference incident:** WP2 P1.4 (corrected by follow-up probe and revised in `workflow-system/state/archive/wp2-cc-pty-probe.md` § Findings — revised).

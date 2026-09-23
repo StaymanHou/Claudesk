@@ -18,7 +18,7 @@ Mixing them — i.e., adding `- [ ] SURFACED — …` as an unchecked leaf in th
 
 **How to apply:**
 
-- When something is discovered mid-work that does not require further action right now: add an entry to `## Discoveries` (and to `workflow/backlog.md` if a backlog item is warranted). Do NOT add a Work Tree leaf.
+- When something is discovered mid-work that does not require further action right now: add an entry to `## Discoveries` (and to `workflow-system/state/backlog.md` if a backlog item is warranted). Do NOT add a Work Tree leaf.
 - When something is discovered mid-work that DOES require further action right now (typically a missing impl task the plan didn't anticipate): add a real Work Tree leaf with a clear "what to do" statement. Do NOT prefix it with `SURFACED —`; just describe the work.
 - The `SURFACED:` status tag in the Work Tree schema (per the global Work Tree format) is reserved for cases where a leaf was _started_, then surfaced into a higher-level concern that pauses it — not for "newly noticed" items.
 - When unsure: a leaf has work attached → Work Tree; a leaf has no work attached → `## Discoveries`.

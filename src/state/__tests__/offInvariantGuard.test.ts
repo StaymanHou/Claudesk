@@ -864,6 +864,8 @@ describe("OFF-invariant: the seam is the only door", () => {
       // The Settings panel's control genuinely owns a read+write pair through
       // `useSettingControl`, which does its own seed+listen — so it is a mirror surface,
       // not a bypass. It re-syncs on the broadcast like the hook does.
+      // ⚠️ The exemption is "this component OWNS the toggle", NOT "this component reads the
+      // value". A component with no local control must use the hook (arch/workflow-gate.md).
       "src/components/settings/SettingsPanel.tsx",
     ];
     // Comments STRIPPED before matching (shared helper, hoisted at M11.5 WP4 when the

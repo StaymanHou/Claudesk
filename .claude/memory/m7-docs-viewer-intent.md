@@ -7,7 +7,7 @@ metadata:
   originSessionId: 681f9cb7-8c95-4e89-b6a0-7c5e1aed6540
 ---
 
-Claudesk **Milestone 7 (workflow-docs markdown viewer)** — a read-only `Docs` right-panel tab rendering `docs/product/*.md` (incl. glob `*wbs*.md`), `workflow/wip/*.md`, `workflow/backlog.md`, `workflow/.session.md` — is an **attention-routing / re-orientation feature wearing a "viewer" costume**, like the filmstrip and status dots. The scarce resource in Claudesk's model is operator attention across 20+ rotating projects (see [[claudesk-philosophy]]).
+Claudesk **Milestone 7 (workflow-docs markdown viewer)** — a read-only `Docs` right-panel tab rendering `workflow-system/product/*.md` (incl. glob `*wbs*.md`), `workflow-system/state/wip/*.md`, `workflow-system/state/backlog.md`, `workflow-system/state/.session.md` — is an **attention-routing / re-orientation feature wearing a "viewer" costume**, like the filmstrip and status dots. The scarce resource in Claudesk's model is operator attention across 20+ rotating projects (see [[claudesk-philosophy]]).
 
 **Why:** When the operator context-switches *into* a cold project, the first question isn't "what's the code" — it's **"where was I in the workflow, and what's next?"** That answer lives in `roadmap → wbs → wip → backlog → .session.md`. M7 makes re-orientation a single glance in the right half, per-workspace, instead of popping Sublime or reading raw markdown in the editor.
 
