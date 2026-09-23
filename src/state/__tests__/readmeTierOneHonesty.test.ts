@@ -5,10 +5,13 @@ import { join } from "node:path";
 // Imported from PRODUCTION, not stubbed — the whole point is that this guard reads the
 // same typed data the app does. A re-implementation would share the blind spot
 // (`extract-for-import-when-a-raw-guard-cant-express-the-property`).
-import { CHORD_REGISTRY } from "../../workspace/chordRegistry";
-import { AVAILABLE_PANELS, availablePanels } from "../../workspace/panelHost";
+import { CHORD_REGISTRY } from "../../components/workspace/chordRegistry";
+import {
+  AVAILABLE_PANELS,
+  availablePanels,
+} from "../../components/workspace/panelHost";
 // M14 WP4 Phase 3 — the tier-2 half needs the skill row, same production-import rule.
-import { SKILL_BUTTONS } from "../../workspace/skillButtons";
+import { SKILL_BUTTONS } from "../../components/workspace/skillButtons";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // M14 WP4 Phase 2 — THE TIER-1 README HONESTY GUARD.
@@ -39,7 +42,7 @@ import { SKILL_BUTTONS } from "../../workspace/skillButtons";
 
 const REPO_ROOT = join(
   fileURLToPath(new URL(".", import.meta.url)),
-  "../../../..",
+  "../../..",
 );
 
 /** The tier-1 section's text, bounded by its own heading and the next heading of ANY level.
@@ -212,7 +215,11 @@ describe("README tier-2 section is complete about what the gate turns on", () =>
     // here, a gated chord MISSING is the failure.
     const w = tierTwoWindow();
     const gated = CHORD_REGISTRY.filter((e) => e.requiresWorkflowGate);
-    const unmentioned = gated.filter((e) => !w.includes(e.label));
+    // ⚠️ ANCHORED on backticks (as the slash-command test below anchors on its own). A bare
+    // substring could be satisfied by an incidental mention in adjacent prose. The tier-1 LEAK
+    // arm above deliberately stays UNANCHORED: there a looser match fails closed, and
+    // anchoring it would let an un-backticked gated chord in tier-1 prose slip through.
+    const unmentioned = gated.filter((e) => !w.includes(`\`${e.label}\``));
     expect(
       unmentioned.map((e) => `${e.id} (${e.label})`),
       "a chord is gated behind the workflow feature but tier-2 README never mentions it",

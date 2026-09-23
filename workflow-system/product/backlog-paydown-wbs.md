@@ -360,6 +360,17 @@ where F-a's third guard hole was found.** Drive via `/task-plan`.
 - **AG1.** An unanchored `w.includes(e.label)` → anchor it. **AG2.**
   `readmeTierOneHonesty.test.ts` is in the wrong directory → move it.
 
+**✅ WP5 CLOSED 2026-09-23** (task `paydown-wp5-chord-registry-settings-guards`, archived).
+- Every item was closed with a named mutant that now dies. Where the old guard could be
+  re-run, it was shown to PASS the same mutant (B2, Row 6, B3, AG1), so each hole was real.
+  B4, B5 and AG2 are a deletion, a hoist and a move.
+- B2: resolving the spread surfaced 3 more uncatalogued CM6 bindings (⌘G, ⌘⇧L, ⌘⌥G). They are
+  in `NOT_LISTED` with reasons, not new Settings rows. ⚠️ ⌘⌥G go-to-line is a product call if
+  wanted.
+- Row 6 was done test-side (TypeScript AST, unioned with the name-based arm); no host was
+  refactored. Residual: a matcher fed an event-*derived* local is still invisible.
+- B6 stays with R2.
+
 ## WP6 — Guards and tests that cannot fail  `[impact: High · effort: S · risk: Low]`
 
 The central class, outside the chord surface. Each item names the mutant that must now die. Drive
@@ -578,6 +589,3 @@ SURFACEs listed in WP1 §5. The R4 rulings (40, 46, 32) are deleted in WP2 once 
 3. Carry any surviving obligation back into `backlog.md` as its own SURFACE, so it outlives this
    file (the 2026-08-19 sweep did this for the comment-convention pass).
 4. **Delete this file** in a commit that says so.
-
-## Session Handoff — 2026-09-23 10:17
-Handed off. See `workflow-system/state/.session.md` to restore. WP1–WP4 CLOSED; next is WP5 (chord registry + Settings panel guards) via `/task-plan`.

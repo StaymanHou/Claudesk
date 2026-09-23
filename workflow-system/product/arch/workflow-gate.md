@@ -69,7 +69,7 @@ Two things landed in that cycle that this doc — the designated authority for t
 OFF-invariant guard and Settings — did not describe. Recorded here rather than left to drift.
 
 **1. The tier boundary now has a SECOND mechanical enforcement, on the DOCS side.**
-`src/components/settings/__tests__/readmeTierOneHonesty.test.ts` (M14 WP4, 10 tests) pins that
+`src/state/__tests__/readmeTierOneHonesty.test.ts` (M14 WP4, 10 tests) pins that
 README's tier-1 section names **no** gated surface and its tier-2 section names **every** one.
 It reads the same production registries the OFF-invariant guard does (`CHORD_REGISTRY`,
 `availablePanels`, `SKILL_BUTTONS`) rather than re-implementing them.

@@ -446,13 +446,6 @@ export function visibleChords(enabled: boolean): readonly ChordEntry[] {
   return CHORD_REGISTRY.filter((entry) => !entry.requiresWorkflowGate);
 }
 
-/** Label lookup by id. Throws on an unknown id — a typo'd id is a bug, not a blank label. */
-export function chordLabel(id: string): string {
-  const entry = CHORD_REGISTRY.find((e) => e.id === id);
-  if (!entry) throw new Error(`chordLabel: unknown chord id "${id}"`);
-  return entry.label;
-}
-
 // ⚠️ Only `ChordEvent` is re-exported here. The four pre-existing `*_CHORD_LABEL` constants
 // (PALETTE_/FINDER_/SEARCH_/NEW_FILE_) deliberately STAY in their original home modules with
 // their existing consumers (ProjectSearch.tsx, FileFinder.tsx, CommandPalette.tsx) untouched.

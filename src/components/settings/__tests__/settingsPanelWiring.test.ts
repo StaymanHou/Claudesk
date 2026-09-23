@@ -137,10 +137,10 @@ describe("the picker offers a visible Settings entry point (discovery parity)", 
     // The button opens the panel; it is not a walk-back of the migration. Guard the
     // distinction that made the migration worth doing — no control may return here.
     for (const testid of [
-      "picker-permission-mode",
-      "picker-time-tracking",
-      "picker-update-notifications",
-      "picker-check-updates",
+      "settings-permission-mode",
+      "settings-time-tracking",
+      "settings-update-notifications",
+      "settings-check-updates",
       "settings-workflow-features",
     ]) {
       expect(

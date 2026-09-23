@@ -304,11 +304,16 @@ shape being catalogued, and assert each is *claimed* by an entry — plus a stal
 renamed entry cannot leave a dangling mapping that hides a real omission. Fixing the instances
 without this arm closes two bugs and leaves the class open for the next one added.
 
-⚠️ See also entry 13's own blind spot, which is real and was accepted deliberately: the completeness
-guard's selector is a **naming convention** (`/[Cc]hord/` plus two named `*Index` symbols), not a
-structural property, so a matcher named outside both conventions is invisible to it
-(`SURFACE-2026-09-15-CHORD-COMPLETENESS-GUARD-KEYS-ON-A-NAMING-CONVENTION`). Two guards are
-strictly better than one; neither is a proof.
+⚠️ See also entry 13's own blind spot. As first shipped, the completeness guard's selector was a
+**naming convention** (`/[Cc]hord/` plus two named `*Index` symbols), so a matcher named outside
+both conventions was invisible to it. **Closed at paydown WP5 (2026-09-23)**: a TypeScript-AST
+arm now also selects every call that is handed the keydown event (`e`, `e.<prop>`, or an object
+literal carrying `e`). It is UNIONED with the name-based arm rather than replacing it, so the
+candidate set can only grow (`widened-selector-must-be-strict-superset`), and it carries a
+positive control that fails if the AST walk stops reaching the known matchers. Proof: an added
+`zoomForKey(e)` call passes the old guard and fails the new one. **Residual:** a matcher fed
+something *derived* from the event in a separate statement (`const k = e.key; zoomForKey(k)`) is
+still invisible. Two guards are strictly better than one; neither is a proof.
 
 ## 14. The match is REAL but its POLARITY is inverted — an instruction vs. a prohibition against it
 

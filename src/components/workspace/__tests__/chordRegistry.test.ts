@@ -26,7 +26,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { CHORD_REGISTRY, visibleChords, chordLabel } from "../chordRegistry";
+import * as ts from "typescript";
+import { EditorState } from "@codemirror/state";
+import { keymap } from "@codemirror/view";
+import { CHORD_REGISTRY, visibleChords } from "../chordRegistry";
+import { buildEditorExtensions } from "../editor/editorExtensions";
 
 const SRC = resolve(__dirname, "../../..");
 
@@ -343,16 +347,104 @@ describe("chord registry — COMPLETENESS (the other direction)", () => {
     shouldCloseTerminalOnChord: "close-w",
   };
 
+  /**
+   * Symbols a host calls WITH THE KEYDOWN EVENT — the structural definition of a chord
+   * matcher, independent of what it is named.
+   *
+   * A call counts when it sits inside a function whose parameter is annotated
+   * `KeyboardEvent` (or an arrow passed straight to `addEventListener("keydown", …)`) and one
+   * of its arguments is that parameter, a property of it (`e.key`), or an object literal
+   * carrying it (`sendModeForChord({ event: e, … })`).
+   *
+   * ⚠️ Why this exists alongside the lexical filter below: the lexical one selects by NAME
+   * (`/[Cc]hord/`), so a matcher called `zoomForKey(e)` was invisible to it — and
+   * `terminalFontZoom.ts`, the module this block was written to catch, matched only because
+   * its exported symbol happened to end in `Chord`.
+   */
+  function eventConsumers(): Set<string> {
+    const out = new Set<string>();
+    for (const h of HOSTS) {
+      const sf = ts.createSourceFile(
+        h,
+        readFileSync(resolve(SRC, h), "utf8"),
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+      );
+      const isKeydownListenerArg = (fn: ts.Node): boolean => {
+        const call = fn.parent;
+        return (
+          ts.isCallExpression(call) &&
+          call.arguments[1] === fn &&
+          ts.isPropertyAccessExpression(call.expression) &&
+          call.expression.name.text === "addEventListener" &&
+          ts.isStringLiteral(call.arguments[0]) &&
+          call.arguments[0].text === "keydown"
+        );
+      };
+      const visit = (node: ts.Node, events: ReadonlySet<string>): void => {
+        let scope = events;
+        if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+          const names = node.parameters
+            .filter(
+              (p) =>
+                ts.isIdentifier(p.name) &&
+                (p.type?.getText(sf) === "KeyboardEvent" ||
+                  isKeydownListenerArg(node)),
+            )
+            .map((p) => (p.name as ts.Identifier).text);
+          if (names.length > 0) scope = new Set([...events, ...names]);
+        }
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+          const isEvent = (a: ts.Node) =>
+            ts.isIdentifier(a) && scope.has(a.text);
+          const carriesEvent = (a: ts.Expression) =>
+            isEvent(a) ||
+            (ts.isPropertyAccessExpression(a) && isEvent(a.expression)) ||
+            (ts.isObjectLiteralExpression(a) &&
+              a.properties.some(
+                (p) =>
+                  (ts.isPropertyAssignment(p) && isEvent(p.initializer)) ||
+                  (ts.isShorthandPropertyAssignment(p) &&
+                    scope.has(p.name.text)),
+              ));
+          if (node.arguments.some(carriesEvent)) out.add(node.expression.text);
+        }
+        ts.forEachChild(node, (c) => visit(c, scope));
+      };
+      visit(sf, new Set());
+    }
+    return out;
+  }
+
+  // Not a matcher: consumes isCloseTabChord's RESULT, never the event, so the structural
+  // selector correctly does not reach it. The lexical filter keeps it in scope.
+  const ROUTERS = new Set(["shouldCloseTerminalOnChord"]);
+
+  it("the structural selector reaches every accounted matcher (it is not vacuous)", () => {
+    // Positive control: if the AST walk silently found nothing (a host rewritten to an
+    // untyped handler, a parse that stopped matching), the union below would quietly fall
+    // back to the name-based filter alone and the guard would look unchanged.
+    const structural = eventConsumers();
+    const missing = Object.keys(ACCOUNTED).filter(
+      (s) => !ROUTERS.has(s) && !structural.has(s),
+    );
+    expect(missing, "matchers the structural selector cannot see").toEqual([]);
+  });
+
   it("every chord-matcher symbol a host CALLS is accounted for by a registry entry", () => {
     const called = calledSymbols(readHostSources());
 
-    // Chord-shaped call sites: the naming conventions this codebase actually uses for a
-    // chord matcher. Deliberately broader than `*Chord` — `terminalZoomForChord` matches
-    // here, but so must `panelForChord` / `tabSwitchIndex` / `workspaceSwitchIndex`, which a
-    // narrower pattern would miss.
-    const chordish = [...called].filter(
+    // Chord-shaped call sites, by NAME: the conventions this codebase uses for a matcher.
+    // Broader than `*Chord` — `panelForChord` / `tabSwitchIndex` / `workspaceSwitchIndex`
+    // must match too.
+    const lexical = [...called].filter(
       (n) => /[Cc]hord/.test(n) || /^(tabSwitch|workspaceSwitch)Index$/.test(n),
     );
+    // ⚠️ UNION, not replacement — so the candidate set can only grow
+    // (`widened-selector-must-be-strict-superset`). As measured at paydown WP5: structural
+    // finds 14, lexical 15, and the only lexical-only symbol is the router in ROUTERS.
+    const chordish = [...new Set([...lexical, ...eventConsumers()])];
 
     const ids = new Set(CHORD_REGISTRY.map((e) => e.id));
     const unaccounted = chordish.filter(
@@ -378,44 +470,99 @@ describe("chord registry — COMPLETENESS (the other direction)", () => {
     );
   });
 
-  it("the CM6-owned set matches editorExtensions.ts coreKeymap", () => {
+  describe("the CM6-owned set matches the editor's COMPOSED keymap", () => {
     // The CM6 entries are `matcher: null`, so the call-shape guard above cannot reach them —
     // they are bound declaratively inside CodeMirror's keymap, not called by a host. ⌘\
-    // toggle-wrap was omitted for exactly this reason: nothing pointed at it. Assert against
-    // the keymap source instead.
-    const src = stripComments(
-      readFileSync(
-        resolve(SRC, "components/workspace/editor/editorExtensions.ts"),
-        "utf8",
-      ),
-    );
+    // toggle-wrap was omitted for exactly this reason: nothing pointed at it.
+    //
+    // ⚠️ The bindings are read from the BUILT keymap facet, not from editorExtensions.ts
+    // source text. An earlier version regexed literal `key: "Mod-…"` entries and so could not
+    // see `...searchKeymap` — ⌘F, the one chord the Settings hint names as the reason the
+    // Editor section exists, had ZERO coverage (`source-guard-blind-to-spread-bindings`). A
+    // regex that also matched the spread would only prove it is present, not what it binds.
     const bound = new Set(
-      [...src.matchAll(/key:\s*"(Mod-[^"]+)"/g)].map((m) => m[1]),
+      EditorState.create({
+        extensions: buildEditorExtensions({
+          openPath: "main.ts",
+          onSave: () => {},
+          fontSize: 13,
+          onFontSizeChange: () => {},
+          languageOverrideId: null,
+          lineWrap: false,
+          onWrapChange: () => {},
+        }),
+      })
+        .facet(keymap)
+        .flat()
+        .map((b) => b.key)
+        .filter((k): k is string => k !== undefined && k.startsWith("Mod-")),
     );
+
+    /** CM6 key notation → the registry's glyph label, e.g. "Mod-Shift-l" → "⌘⇧L". */
+    function labelFor(key: string): string {
+      const parts = key.split("-");
+      // "Mod--" splits to ["Mod", "", ""]: the key itself is "-".
+      const last = key.endsWith("--") ? "-" : parts[parts.length - 1];
+      const mods = parts.slice(0, key.endsWith("--") ? -2 : -1);
+      const glyph: Record<string, string> = { Mod: "⌘", Shift: "⇧", Alt: "⌥" };
+      return (
+        mods.map((m) => glyph[m] ?? `?${m}`).join("") +
+        (last.length === 1 ? last.toUpperCase() : last)
+      );
+    }
 
     // Mod-bindings the registry deliberately does NOT list as their own row, with the reason.
-    const NOT_LISTED = new Set([
-      "Mod-+", // same row as Mod-= (shift variant of the same key)
-      "Mod--", // same row as Mod-= (the "⌘= / ⌘- / ⌘0" label covers it)
-      "Mod-0", // same row as Mod-=
-    ]);
+    const NOT_LISTED: Record<string, string> = {
+      "Mod-+": "same row as Mod-= (shift variant of the same key)",
+      "Mod--": 'same row as Mod-= (the "⌘= / ⌘- / ⌘0" label covers it)',
+      "Mod-0": "same row as Mod-=",
+      // From `searchKeymap`, visible only since the spread is resolved. Not rows because
+      // Settings is a reference for the chords whose behavior needs explaining, not a CM6
+      // manual. ⚠️ ⌘⌥G (go to line) is the one plausible future row — a product call.
+      "Mod-g": "find next — search-panel navigation, reached from the ⌘F row",
+      "Mod-Shift-l": "select all matches — search-panel companion to ⌘F / ⌘D",
+      "Mod-Alt-g": "go to line — CM6 built-in, not listed (see note above)",
+    };
 
-    const cm6Labels = CHORD_REGISTRY.filter((e) => e.host === "editor").map(
-      (e) => e.label,
-    );
-    for (const key of bound) {
-      if (NOT_LISTED.has(key)) continue;
-      // ⚠️ The source text is `"Mod-\\"`, so the regex capture yields a DOUBLE backslash.
-      // Unescape it or the expectation is built against a string the label can never equal —
-      // a guard that fails for the wrong reason is as useless as one that passes for the
-      // wrong reason.
-      const letter = key.slice(4).replace(/\\\\/g, "\\"); // "Mod-s" -> "s"
-      const expected = letter === "=" ? "⌘=" : `⌘${letter.toUpperCase()}`;
-      expect(
-        cm6Labels.some((l) => l.includes(expected)),
-        `coreKeymap binds ${key} but no host: "editor" registry entry mentions ${expected}`,
-      ).toBe(true);
-    }
+    const editorRows = CHORD_REGISTRY.filter((e) => e.host === "editor");
+
+    it("resolves the searchKeymap spread (positive control)", () => {
+      // Without this, a build that silently dropped the spread would make the arm below
+      // pass by checking fewer keys.
+      expect(bound.has("Mod-f"), "the composed keymap must bind Mod-f").toBe(
+        true,
+      );
+    });
+
+    it("every bound Mod- key has an editor row (or a NOT_LISTED reason)", () => {
+      for (const key of bound) {
+        if (key in NOT_LISTED) continue;
+        const expected = labelFor(key);
+        expect(
+          editorRows.some((e) => e.label.includes(expected)),
+          `the editor keymap binds ${key} but no host: "editor" registry entry mentions ${expected}`,
+        ).toBe(true);
+      }
+    });
+
+    it("every editor row is backed by a bound key (the omission direction)", () => {
+      // The reverse walk (source-text-guards entry 13): a row whose binding was removed from
+      // the keymap would otherwise keep rendering in Settings for a key that does nothing.
+      const produced = [...bound].map(labelFor);
+      for (const row of editorRows) {
+        expect(
+          produced.some((l) => row.label.includes(l)),
+          `${row.id} (${row.label}) is listed in Settings but no editor keybinding produces it`,
+        ).toBe(true);
+      }
+    });
+
+    it("NOT_LISTED has no stale rows — every key it names is still bound", () => {
+      const stale = Object.keys(NOT_LISTED).filter((k) => !bound.has(k));
+      expect(stale, "NOT_LISTED names keys the editor no longer binds").toEqual(
+        [],
+      );
+    });
   });
 });
 
@@ -439,16 +586,5 @@ describe("visibleChords — the single accessor", () => {
     const off = visibleChords(false);
     const on = visibleChords(true);
     expect(off.length).toBeLessThan(on.length);
-  });
-});
-
-describe("chordLabel", () => {
-  it("returns the label for a known id", () => {
-    expect(chordLabel("project-search")).toBe("⌘⇧F");
-    expect(chordLabel("file-finder")).toBe("⌘P");
-  });
-
-  it("throws on an unknown id rather than returning a blank label", () => {
-    expect(() => chordLabel("nope")).toThrow(/unknown chord id/);
   });
 });

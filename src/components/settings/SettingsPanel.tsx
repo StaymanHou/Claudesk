@@ -143,11 +143,16 @@ export interface SettingsPanelProps {
 // the hook here would introduce a second source of truth in one component and make the list
 // lag its own switch.
 
-const HOST_SECTIONS: readonly { host: ChordHost; title: string }[] = [
-  { host: "app", title: "Application" },
-  { host: "workspace", title: "Workspace" },
-  { host: "editor", title: "Editor" },
-];
+// ⚠️ `satisfies Record<ChordHost, …>` is the exhaustiveness tie: a host added to the union
+// without a section title fails `tsc` here instead of its entries rendering nowhere. Render
+// order is this object's key order.
+const HOST_TITLES = {
+  app: "Application",
+  workspace: "Workspace",
+  editor: "Editor",
+} as const satisfies Record<ChordHost, string>;
+
+const HOST_ORDER = Object.keys(HOST_TITLES) as ChordHost[];
 
 function HotkeyRow({ entry }: { entry: ChordEntry }) {
   return (
@@ -158,7 +163,7 @@ function HotkeyRow({ entry }: { entry: ChordEntry }) {
       <kbd className="settings-hotkey-chord">{entry.label}</kbd>
       <div className="settings-hotkey-outcomes">
         {entry.outcomes.map((outcome, i) => (
-          <div key={i} className="settings-hotkey-outcome">
+          <div key={i} data-testid="hotkey-outcome">
             <span className="settings-hotkey-description">
               {outcome.description}
             </span>
@@ -261,6 +266,8 @@ export default function SettingsPanel({
     errorLabel: "update workflow features",
     onError,
   });
+  // Read ONCE per render and shared by every host section below.
+  const chords = visibleChords(workflowFeatures.value);
 
   // M10.9 WP3 — the routed-from-invite highlight, self-clearing after HIGHLIGHT_MS.
   //
@@ -440,7 +447,7 @@ export default function SettingsPanel({
           <label className="settings-row">
             <span className="settings-row-label">Permission mode</span>
             <select
-              data-testid="picker-permission-mode"
+              data-testid="settings-permission-mode"
               aria-label="Permission mode"
               value={permissionMode.value}
               onChange={(e) =>
@@ -602,7 +609,7 @@ export default function SettingsPanel({
           <label className="settings-row settings-row-check">
             <input
               type="checkbox"
-              data-testid="picker-time-tracking"
+              data-testid="settings-time-tracking"
               checked={timeTracking.value}
               onChange={(e) => timeTracking.set(e.target.checked)}
             />
@@ -618,7 +625,7 @@ export default function SettingsPanel({
           <label className="settings-row settings-row-check">
             <input
               type="checkbox"
-              data-testid="picker-update-notifications"
+              data-testid="settings-update-notifications"
               checked={updateNotifications.value}
               onChange={(e) => updateNotifications.set(e.target.checked)}
             />
@@ -628,7 +635,7 @@ export default function SettingsPanel({
             <button
               type="button"
               className="settings-check-updates"
-              data-testid="picker-check-updates"
+              data-testid="settings-check-updates"
               onClick={onCheckForUpdates}
             >
               Check for updates
@@ -641,10 +648,8 @@ export default function SettingsPanel({
           title="Keyboard shortcuts"
           hint="Every chord Claudesk responds to. Editor shortcuts belong to CodeMirror, not Claudesk — they are listed so it is clear why a key behaves differently inside the editor."
         >
-          {HOST_SECTIONS.map(({ host, title }) => {
-            const entries = visibleChords(workflowFeatures.value).filter(
-              (entry) => entry.host === host,
-            );
+          {HOST_ORDER.map((host) => {
+            const entries = chords.filter((entry) => entry.host === host);
             if (entries.length === 0) return null;
             return (
               <div
@@ -652,7 +657,9 @@ export default function SettingsPanel({
                 className="settings-hotkey-section"
                 data-testid={`hotkey-section-${host}`}
               >
-                <h4 className="settings-hotkey-section-title">{title}</h4>
+                <h4 className="settings-hotkey-section-title">
+                  {HOST_TITLES[host]}
+                </h4>
                 {entries.map((entry) => (
                   <HotkeyRow key={entry.id} entry={entry} />
                 ))}

@@ -26,7 +26,7 @@ describe("Settings update-notification toggle wires to the notifications source 
   });
 
   it("renders the toggle checkbox with a stable testid for live verify-self", () => {
-    expect(panelSrc).toContain('data-testid="picker-update-notifications"');
+    expect(panelSrc).toContain('data-testid="settings-update-notifications"');
   });
 
   it("reverts optimistically + surfaces an error toast on a rejected set", () => {
@@ -36,7 +36,7 @@ describe("Settings update-notification toggle wires to the notifications source 
 
 describe("picker manual 'Check for updates' button wires to App's checkNow", () => {
   it("renders the check button (only when onCheckForUpdates is provided) with a stable testid", () => {
-    expect(panelSrc).toContain('data-testid="picker-check-updates"');
+    expect(panelSrc).toContain('data-testid="settings-check-updates"');
     expect(panelSrc).toContain("onCheckForUpdates &&");
   });
 

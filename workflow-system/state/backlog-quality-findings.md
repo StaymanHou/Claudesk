@@ -65,86 +65,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # hotkey-reference — 2026-09-17
 
-## SURFACE-2026-09-17-QUALITY-TEST-SELECTOR-PINNED-TO-AN-UNSTYLED-CLASS
-- **Severity:** MAJOR
-- **Location:** `src/components/settings/SettingsPanel.tsx:161` + `src/App.css:3991`
-- **Finding:** `.settings-hotkey-outcome` (SINGULAR) is rendered on every outcome div and is the
-  selector `hotkeyGroupRender.test.tsx:145` queries to assert multi-outcome rendering — but only the
-  PLURAL `.settings-hotkey-outcomes` has a CSS rule. The singular class is styled nowhere. ⚠️
-  VERIFIED by the orchestrator: grepping both rule heads returns only line 3991 (plural). Every
-  other class in that CSS block has a matching rule, which is what makes this one read as an
-  oversight rather than a choice.
-- **Why it matters:** A load-bearing test selector is pinned to a class with no styling contract. A
-  future author removing "unused CSS classes" from the markup — an ordinary cleanup, since nothing
-  styles it — **silently kills the only assertion that a context-scoped chord's SECOND outcome
-  renders** (the ⌘W / terminal-font-zoom canary). The test would still pass with zero outcomes
-  asserted if the class vanished from only some rows.
-- **Suggested action:** Either give the singular class a real rule, or add a one-line comment at the
-  markup site declaring it a test-handle-only class so a cleanup pass leaves it alone.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-09-17-QUALITY-CM6-GUARD-BLIND-TO-SPREAD-KEYMAPS
-- **Severity:** MAJOR
-- **Location:** `src/components/workspace/__tests__/chordRegistry.test.ts:317-352`
-- **Finding:** The CM6 completeness arm extracts bindings with `/key:\s*"(Mod-[^"]+)"/g` against
-  `editorExtensions.ts` — literal object entries only. The editor Find chord (`⌘F`, registry entry
-  `cm6-find`) is NOT a literal entry: it arrives via `...searchKeymap` at `editorExtensions.ts:180`.
-  ⚠️ VERIFIED by the orchestrator: the regex captures exactly 8 bindings (`Mod--`, `Mod-\`,
-  `Mod-+`, `Mod-=`, `Mod-0`, `Mod-d`, `Mod-r`, `Mod-s`) and **`Mod-f` is not among them**.
-- **Why it matters:** `cm6-find` therefore has **ZERO guard coverage in either direction** — the
-  call-shape arm cannot reach it (CM6 entries are `matcher: null`) and the keymap arm cannot see it
-  (spread, not literal). ⚠️ It is the single entry the feature's own user-facing hint names as the
-  reason the EDITOR section exists at all ("so it is clear why a key behaves differently inside the
-  editor"). The arm passes while not checking the one binding its prose cites — the
-  guard-reports-green-while-checking-nothing shape, scoped to one entry.
-- **Suggested action:** Resolve the spread rather than widening the regex — import `searchKeymap`
-  in the test and enumerate its `key` values, or assert against the composed keymap array. ⚠️ A
-  regex that also matches `...searchKeymap` textually would NOT fix this: it would prove the spread
-  is present, not which bindings it contributes.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-09-17-QUALITY-HOST-SECTIONS-PARALLEL-TO-THE-UNION
-- **Severity:** MAJOR
-- **Location:** `src/components/settings/SettingsPanel.tsx:146-150` vs `chordRegistry.ts:46`
-- **Finding:** `HOST_SECTIONS` is a hand-maintained list of `{host, title}` parallel to the
-  `ChordHost` union (`"app" | "workspace" | "editor"`) with no exhaustiveness check. Adding a fourth
-  host to the union compiles clean and its registry entries render **nowhere**. ⚠️ The render test
-  iterates the same hardcoded `["app","workspace","editor"]` array, so it **shares the blind spot**
-  and would also pass.
-- **Why it matters:** This is precisely the drift class the whole WP exists to eliminate — data and
-  its description diverging silently — reintroduced one layer above where the discipline was
-  applied. The registry is guarded in both directions; the thing that RENDERS it is not.
-- **Suggested action:** One line: assert `new Set(HOST_SECTIONS.map((s) => s.host))` covers every
-  distinct `entry.host` in `CHORD_REGISTRY`. That closes the render-layer direction without touching
-  the component.
-- **Priority:** medium
-- **Status:** pending
-
-## SURFACE-2026-09-17-QUALITY-CHORDLABEL-HAS-NO-CONSUMER
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/chordRegistry.ts:407`
-- **Finding:** `chordLabel()` is exported, documented and unit-tested but has **zero non-test
-  consumers** (⚠️ VERIFIED by grep across `src/`: only its own definition). The module's own header
-  warns against unreachable guards (the M12 dead-`/exit` shape).
-- **Suggested action:** Either wire it — the four `*_CHORD_LABEL` consumers are the obvious target,
-  which would also retire the label duplication the WIP already records — or drop it until a caller
-  exists.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-17-QUALITY-VISIBLECHORDS-RECOMPUTED-PER-SECTION
-- **Severity:** MINOR
-- **Location:** `src/components/settings/SettingsPanel.tsx:645`
-- **Finding:** `visibleChords(workflowFeatures.value)` is called once per host section (3x per
-  render), recomputing the same filtered array each time. Harmless at 22 entries.
-- **Suggested action:** Hoist it above the `.map`. The value is not performance but legibility — it
-  makes the one-accessor-one-read funnel discipline the registry's JSDoc argues for visible at the
-  call site.
-- **Priority:** low
-- **Status:** pending
-
 ## SURFACE-2026-09-17-QUALITY-RATIONALE-STATED-THREE-TIMES
 - **Severity:** MINOR
 - **Location:** `src/components/workspace/chordRegistry.ts:1-30` + `SettingsPanel.tsx:122-144`
@@ -680,15 +600,6 @@ scheduling items rather than polish.*
 
 *(feature-review-quality against ship commit `467593f`; Mode 3 autopilot. 0 CRITICAL / 4 MAJOR / 4 MINOR. **One MAJOR is NOT listed here — it was a live StrictMode double-write defect in `useSettingControl` and was fixed immediately rather than backlogged; see the WIP's `## Code-Quality Review`.** Reviewer: "well-built work that clears the bar the milestone set… the debt is concentrated in two places: the `?raw` idiom still doing load-bearing work despite this feature paying twice to learn it can't, and the (now-fixed) side-effect-in-updater.")*
 
-## SURFACE-2026-07-28-QUALITY-WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL
-- **Severity:** MAJOR
-- **Location:** `src/components/settings/SettingsPanel.tsx:184,233,249,259`
-- **Finding:** The three migrated controls kept their `picker-*` `data-testid`s (`picker-permission-mode`, `picker-time-tracking`, `picker-update-notifications`, `picker-check-updates`) inside a component whose entire purpose is that they are no longer in the picker.
-- **Why it matters:** Knowingly permitted by the WBS ("consider renaming… only if it doesn't inflate the diff"), and keeping them is what let the three migrated wiring tests keep asserting without churn. But it leaves a durable lie in the selector namespace, and `settingsPanelWiring.test.ts` now asserts these `picker-`-prefixed ids are ABSENT from the picker — which reads as contradictory at a glance.
-- **Suggested action:** mechanical rename to `settings-*` across ~8 sites (component + the 3 wiring tests + the parity guard). Do it as its own commit so the rename is reviewable in isolation.
-- **Priority:** medium
-- **Status:** pending
-
 ## SURFACE-2026-07-28-QUALITY-WP2-SETTINGSPANEL-NEAR-DOING-TOO-MUCH
 - **Severity:** MINOR
 - **Location:** `src/components/settings/SettingsPanel.tsx`
@@ -751,26 +662,6 @@ scheduling items rather than polish.*
   `[[raw-guard-identifier-satisfied-by-own-comments]]`.
 - **Suggested action:** If the guard is ever isolated, pair it with a positive anchor in the same
   test (e.g. assert `updateConfirmSpec` IS present) so an empty/failed read cannot pass.
-- **Priority:** low
-- **Status:** pending
-
-# m14-wp4-two-tier-setup-docs — 2026-09-18
-
-## SURFACE-2026-09-18-QUALITY-UNANCHORED-CHORD-LABEL-MATCH
-- **Severity:** MINOR
-- **Location:** `src/components/settings/__tests__/readmeTierOneHonesty.test.ts` — the leak/omission filters using `w.includes(e.label)`
-- **Finding:** Chord-label detection is substring-based and unanchored (`⌘P`, `⌘T`, `⌘N`). Harmless today because the only gated label is `⌘⇧K`, but if a future milestone gates `⌘P`, the tier-2 completeness test could be satisfied by an incidental `⌘P` in adjacent prose.
-- **Why it matters:** The slash-command test in the SAME file already does this correctly with a backtick-anchored match (`` `(/[a-z][a-z-]*)` ``). The inconsistency is the tell — one half of the file is rigorous about anchoring and the other is not.
-- **Suggested fix:** Anchor the label match the same way (backticks or a word boundary appropriate to the glyph set).
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-18-QUALITY-GUARD-FILE-IN-UNRELATED-DIRECTORY
-- **Severity:** MINOR
-- **Location:** `src/components/settings/__tests__/readmeTierOneHonesty.test.ts`
-- **Finding:** The file lives under `src/components/settings/__tests__/` but its subject is `README.md` plus the workspace registries — it imports nothing from `settings/`.
-- **Why it matters:** Discoverability for the person who trips it. `src/state/__tests__/` (beside the OFF-invariant guard it repeatedly cites and mirrors) would be the natural home.
-- **Suggested fix:** Move to `src/state/__tests__/` and update the relative imports. ⚠️ Low value on its own; ride it on the next touch of this file rather than a standalone move commit.
 - **Priority:** low
 - **Status:** pending
 

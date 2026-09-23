@@ -113,7 +113,11 @@ describe("hotkey group — rendered DOM", () => {
   it("groups rows under their host section, in registry order", async () => {
     const doc = await renderPanel();
 
-    for (const host of ["app", "workspace", "editor"]) {
+    // Hosts come from the DATA, not a literal list — a literal would share the component's
+    // own blind spot if a host were added to both the registry and nowhere else.
+    const hosts = [...new Set(EXPECTED.map((e) => e.host))];
+    expect(hosts.length, "fixture check: hosts must exist").toBeGreaterThan(0);
+    for (const host of hosts) {
       const section = doc.querySelector(
         `[data-testid="hotkey-section-${host}"]`,
       );
@@ -142,7 +146,7 @@ describe("hotkey group — rendered DOM", () => {
 
     for (const entry of multi) {
       const row = doc.querySelector(`[data-testid="hotkey-row-${entry.id}"]`)!;
-      const rendered = row.querySelectorAll(".settings-hotkey-outcome");
+      const rendered = row.querySelectorAll('[data-testid="hotkey-outcome"]');
       expect(
         rendered.length,
         `${entry.id} has ${entry.outcomes.length} context-scoped outcomes and must render all of them`,

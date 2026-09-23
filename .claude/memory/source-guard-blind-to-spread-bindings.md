@@ -23,6 +23,8 @@ enumerate its `key` values, or assert against the composed keymap array. ⚠️ 
 matches `...searchKeymap` textually would prove **the spread is present**, not **which bindings it
 contributes** — a guard that looks fixed and is not.
 
+**Resolved (paydown WP5, 2026-09-23).** The arm now builds the real keymap in the node env: `EditorState.create({ extensions: buildEditorExtensions(stub) }).facet(keymap).flat()`, the same pattern `editorExtensions.test.ts` already used. No new export was needed. Resolving the spread surfaced **three more** CM6 bindings nobody had catalogued (`Mod-g`, `Mod-Shift-l`, `Mod-Alt-g`), which is the tell above paying out. They are recorded in `NOT_LISTED` with reasons. The arm gained a reverse direction (every editor row is produced by some bound key) and a positive control (`Mod-f` is bound).
+
 **The generalization:** before trusting a literal-syntax extractor, ask *how else can a member of
 this set get here?* Spreads, `Object.assign`, array `concat`, decorators, and codegen all produce
 members no literal-syntax regex will ever see. Count what the extractor captured and compare it to

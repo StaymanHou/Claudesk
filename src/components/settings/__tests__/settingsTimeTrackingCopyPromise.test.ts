@@ -80,7 +80,7 @@ describe("M11.5 WP3 — the dashboard's advertised route is actually true", () =
       analyticsStart,
       nextGroup === -1 ? undefined : nextGroup,
     );
-    expect(analyticsBlock).toContain('data-testid="picker-time-tracking"');
+    expect(analyticsBlock).toContain('data-testid="settings-time-tracking"');
     expect(analyticsBlock).toContain(ADVERTISED_CONTROL_LABEL);
   });
 

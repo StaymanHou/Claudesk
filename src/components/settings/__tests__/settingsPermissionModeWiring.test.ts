@@ -30,7 +30,7 @@ describe("Settings permission-mode dropdown wires to the cc-permission-mode sour
   });
 
   it("renders a <select> with a stable testid for live verify-self", () => {
-    expect(panelSrc).toContain('data-testid="picker-permission-mode"');
+    expect(panelSrc).toContain('data-testid="settings-permission-mode"');
     expect(panelSrc).toContain("<select");
   });
 

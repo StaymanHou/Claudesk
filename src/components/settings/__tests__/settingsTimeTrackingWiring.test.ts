@@ -28,7 +28,7 @@ describe("Settings time-tracking toggle wires to the time-tracking source of tru
   });
 
   it("renders a checkbox with a stable testid for live verify-self", () => {
-    expect(panelSrc).toContain('data-testid="picker-time-tracking"');
+    expect(panelSrc).toContain('data-testid="settings-time-tracking"');
     expect(panelSrc).toContain('type="checkbox"');
   });
 

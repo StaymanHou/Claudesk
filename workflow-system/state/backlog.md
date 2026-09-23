@@ -380,32 +380,6 @@ an argument for sequencing, not a decision.
 - **Priority:** high
 - **Status:** open
 
-## SURFACE-2026-09-15-CHORD-COMPLETENESS-GUARD-KEYS-ON-A-NAMING-CONVENTION
-- **Source:** feature:build (M14 WP3 Phase 1, raised by the verify-self auditor)
-- **Target level:** product:wbs
-- **Type:** tech-debt
-- **Summary:** The chord-registry COMPLETENESS guard (`chordRegistry.test.ts`) walks code → registry
-  by regex-matching call sites on `/[Cc]hord/` plus two named `*Index` symbols. That selector is a
-  **naming convention, not a structural property** — a future chord matcher named outside both
-  conventions (e.g. `zoomForKey`) would be invisible to it.
-- **Context:** The guard exists because the reachability guard only walks registry → code and
-  therefore could not see two chords the app registered but the registry omitted (terminal font
-  zoom, ⌘\ toggle-wrap — both shipped in the comment map's blind spot before this WP). The
-  completeness guard closes that direction **for chords named by today's conventions**. It caught
-  everything present at the time of writing and an independent hand enumeration found no omission
-  it missed — but it is one rename away from the same class of hole it was built to close.
-  ⚠️ Note `terminalFontZoom.ts` — the module that was actually missed — does NOT match `*Chord*`;
-  it is caught only because its exported symbol `terminalZoomForChord` does. That is exactly how
-  narrow the margin is.
-- **Suggested action:** Make the selector structural rather than lexical — e.g. require every
-  capture-phase keydown handler in a registration host to route through a registry-aware helper, so
-  "is this chord known?" becomes a property of the call path instead of the callee's name. That is a
-  refactor of three working registration hosts (App.tsx, RightPanelHost.tsx, EditorPanel.tsx,
-  Workspace.tsx), so it wants its own change with its own verification — deliberately NOT bolted
-  onto a data-extraction phase.
-- **Priority:** medium
-- **Status:** open
-
 ## SURFACE-2026-09-14-DOCSLINKHANDLING-FLAKE-EXITS-NONZERO-WITH-ZERO-FAILURES
 - **Source:** feature:verify-codify (M15 WP4 Phase 5)
 - **Target level:** product:arch
@@ -974,9 +948,9 @@ and work on the spec well."
 - **Status:** **DEFERRED to backlog 2026-08-01 (operator decision) — REMOVED from Milestone 11.5.** Was M11.5 WP2; re-scoped out after the attempt above proved it is feature-sized rather than papercut-sized, and the bucket's stated value is that it stays tight. **M11.5 continues at WP3.** Revive as its own feature item when the `drawLine` rewrite is worth funding.
 
 ## Code-quality findings — m10.9-wp2-workflow-features-gate (2026-07-28)
-- **Pointer:** **1 MAJOR + 1 MINOR + 1 density item remaining** (rewritten 2026-09-23). Resolved and recorded: `WP2-CHORD-ARM-MISSES-PANELHOST` (M11.5 WP4), `WP2-RAW-GUARDS-STILL-LOAD-BEARING`, the Escape-branch `return`, and (2026-09-23) the `ALLOWED_SAMPLE` duplicate, since `offInvariantGuard.test.ts` no longer builds its own copy. Remaining: MAJOR, the `picker-*` data-testids used inside the Settings panel; MINOR, `SettingsPanel.tsx` near doing too much (its own trigger fired when M14 extended it); and the milestone rationale restated in about 6 places. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m10.9-wp2-workflow-features-gate — 2026-07-28`.
-- **Priority:** medium (the MAJOR) / low
-- **Status:** pending — testids → paydown-2026-09-23 WP5; the size MINOR → deferred to the next Settings feature; the rationale restatement → the comment-convention pass
+- **Pointer:** **1 MINOR + 1 density item remaining** (rewritten 2026-09-23, paydown WP5). Resolved and recorded: `WP2-CHORD-ARM-MISSES-PANELHOST` (M11.5 WP4), `WP2-RAW-GUARDS-STILL-LOAD-BEARING`, the Escape-branch `return`, the `ALLOWED_SAMPLE` duplicate, and (paydown WP5) the MAJOR `WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL`. Remaining: MINOR, `SettingsPanel.tsx` near doing too much (its own trigger fired when M14 extended it); and the milestone rationale restated in about 6 places. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m10.9-wp2-workflow-features-gate — 2026-07-28`.
+- **Priority:** low
+- **Status:** pending — the size MINOR → deferred to the next Settings feature; the rationale restatement → the comment-convention pass
 
 ## Code-quality findings — editor-fs-backend-hardening (2026-07-20)
 - **Pointer:** **2 MINOR remaining** (rewritten 2026-09-23): a distinct `UnknownRoot` error variant in place of `OutsideWorkspace { root: "<no known project>" }`, and a one-line non-issue note on `resolve_within`'s `exists()` → `canonicalize()`. `WP7-STALE-COMPILE-GAP-TEST-COMMENT` is resolved (in CHANGELOG). The per-call `projects.json` re-read MINOR was Buried 2026-09-23 as an efficiency nit. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# editor-fs-backend-hardening — 2026-07-20`.
@@ -1192,10 +1166,9 @@ and work on the spec well."
 - **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §C.7; stays OPEN until mccc applies it
 
 ## Code-quality findings — hotkey-reference (2026-09-17)
-- **Pointer:** **3 MAJOR + 3 MINOR** (0 CRITICAL) from `feature-review-quality` against ship baseline `5e3ecd9`. ⚠️ **All three MAJORs were independently VERIFIED against source before backlogging** (not taken on the reviewer's assertion), and all three are the same shape: *the WP's own anti-drift discipline, not applied one layer up at the render/guard boundary.* (1) **`TEST-SELECTOR-PINNED-TO-AN-UNSTYLED-CLASS`** — `.settings-hotkey-outcome` (singular) carries the multi-outcome assertion but only the PLURAL has a CSS rule, so an ordinary "remove unused classes" cleanup silently kills the ⌘W canary. (2) **`CM6-GUARD-BLIND-TO-SPREAD-KEYMAPS`** — the CM6 arm's regex reads literal `key:` entries only, so `⌘F` (via `...searchKeymap`) has **ZERO coverage in either direction**, and it is the one entry the group's hint text names as the reason the EDITOR section exists. (3) **`HOST-SECTIONS-PARALLEL-TO-THE-UNION`** — `HOST_SECTIONS` has no exhaustiveness tie to `ChordHost`, and the render test iterates the same hardcoded array so it **shares the blind spot**. The 3 MINOR: `chordLabel()` has no non-test consumer; `visibleChords` recomputed 3x per render; the same rationale stated verbatim in three places. Reviewer verdict: *"the three MAJORs are cheap to close and are better backlog items than refactor scope."* See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# hotkey-reference — 2026-09-17`.
-- **Priority:** medium (3 MAJOR) / low (3 MINOR)
-- **Status:** pending
-- **Pickup shape:** a single `/feature-refactor` pass closes all six cheaply — MAJOR-2 and MAJOR-3 are each ~1–5 lines of test, MAJOR-1 is a CSS rule or a comment. ⚠️ MAJOR-2's fix must **resolve the spread** (import `searchKeymap` and enumerate its keys); widening the regex to match `...searchKeymap` textually would prove the spread is present, not which bindings it contributes — a guard that looks fixed and is not.
+- **Pointer:** **1 MINOR remaining** (rewritten 2026-09-23, paydown WP5). The three MAJORs and two of the MINORs were resolved by paydown WP5 and are recorded in CHANGELOG: the unstyled outcome selector, the CM6 guard blind to the `searchKeymap` spread, the host sections with no tie to the `ChordHost` union, `chordLabel` with no consumer, and `visibleChords` recomputed per section. Remaining: **`RATIONALE-STATED-THREE-TIMES`**, the same ~20-line rationale in `chordRegistry.ts`'s header and `SettingsPanel.tsx`'s hotkey block comment. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# hotkey-reference — 2026-09-17`.
+- **Priority:** low
+- **Status:** pending — routed to the comment-convention pass (`SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, ruling R2)
 
 ## Code-quality findings — m14-wp2-sign-notarize-delete-quarantine (2026-09-18)
 - **Pointer:** **1 MINOR** remaining (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship
@@ -1221,9 +1194,3 @@ and work on the spec well."
 - **Suggested action:** If this drifts again, invert the mechanism: make the count a **generated artifact** rather than something to detect. Options: (a) a single source-of-truth line emitted by a script that docs `include`, (b) an HTML-comment marker (`<!-- guard-count -->…<!-- /guard-count -->`) whose content a test REGENERATES from `armSubjects` and fails on diff — a generator's output is unambiguous where prose intent is not. ⚠️ **Do not re-attempt the detector shape** without reading why it failed first.
 - **Priority:** low
 - **Status:** pending
-
-## Code-quality findings — m14-wp4-two-tier-setup-docs (2026-09-18)
-- **Pointer:** 2 MINOR in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m14-wp4-two-tier-setup-docs — 2026-09-18`. Both concern the new `readmeTierOneHonesty.test.ts` guard: unanchored chord-label matching (the same file's slash-command test already anchors correctly), and the file living under `settings/__tests__/` while importing nothing from `settings/`. ⚠️ **The review's 2 MAJOR findings were FIXED at review time, not backlogged** — a `sectionWindow` that failed OPEN (reproduced: a `###` subsection naming the gated `⌘⇧K` passed 10/10) and two tests that were provably the same assertion; see the WIP's `## Code-Quality Review`.
-- **Priority:** low (both)
-- **Status:** pending
-- **Pickup shape:** both ride the next touch of `readmeTierOneHonesty.test.ts` — neither justifies a standalone commit.
