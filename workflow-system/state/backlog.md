@@ -70,6 +70,16 @@
 - **Status:** pending
 - **Pickup shape:** A one-liner. ⚠️ **Do NOT "fix" the blank-check ordering by returning `[]` from that arm** — that reintroduces the MAJOR this WP just closed; only the guard *ordering* is the finding.
 
+## SURFACE-2026-09-23-SUPERVISOR-ADJUDICATE-BLOCKS-THE-MAIN-THREAD
+- **Source:** feature:verify-self (paydown WP7 Phase 1)
+- **Target level:** product:arch
+- **Type:** bug (suspected; not yet observed live)
+- **Summary:** `supervisor_adjudicate` (`src-tauri/src/adjudicator/commands.rs`) is a sync `#[tauri::command]`. Tauri 2 runs sync commands on the main thread, and its body (`adjudicator::run_command`) sleep-polls a `claude -p` child for up to `timeout_ms`. So each adjudication likely freezes the UI for as long as `claude` runs.
+- **Context:** This is the same class as the P1 2026-08-25 `cc_kill` hang (`docs/lessons/pip-nspanel-main-thread.md`). The supervisor's live half has never been observed firing (`SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`), which would explain why nobody has seen the freeze.
+- **Suggested action:** Handle it in paydown WP9 (named there as a known hit). Make it `#[tauri::command(async)]` or move the wait to a worker, then confirm the freeze is gone with `sample` during a live adjudication. ⚠️ The MCP bridge cannot answer this: its `webview_execute_js` returns "Script execution timeout" for ANY script that calls `invoke`, even `list_projects` (checked 2026-09-23), so a bridge timeout is not a freeze signal. A live call through the webview took 4.2s to return `claude -p` output.
+- **Priority:** medium-high
+- **Status:** pending
+
 ## SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE
 
 - **Priority:** high

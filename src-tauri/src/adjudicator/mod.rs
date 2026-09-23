@@ -74,10 +74,23 @@ pub fn run_adjudicator(
     prompt: &str,
     timeout_ms: u64,
 ) -> Result<String, AdjudicateError> {
-    let mut child = match Command::new("claude")
-        .arg("-p")
-        .arg("--model")
-        .arg(model)
+    run_command(adjudicator_command(model), prompt, timeout_ms)
+}
+
+/// The `claude -p --model <model>` invocation. Its own function so a test can pin the argv
+/// without spawning `claude`.
+fn adjudicator_command(model: &str) -> Command {
+    let mut cmd = Command::new("claude");
+    cmd.arg("-p").arg("--model").arg(model);
+    cmd
+}
+
+/// Spawn `cmd`, write `prompt` to its stdin, and wait up to `timeout_ms` for its stdout.
+///
+/// Split from `run_adjudicator` so the tests drive this exact spawn/wait/kill loop with a
+/// program other than `claude`; `run_adjudicator` only chooses the program and its args.
+fn run_command(mut cmd: Command, prompt: &str, timeout_ms: u64) -> Result<String, AdjudicateError> {
+    let mut child = match cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -164,78 +177,65 @@ mod tests {
     }
 
     #[test]
+    fn the_adjudicator_invokes_claude_print_mode_with_the_pinned_model() {
+        // `run_adjudicator` is `run_command(adjudicator_command(model), …)`, and `run_command` is
+        // covered below, so this argv is the only part of the `supervisor_adjudicate` path left
+        // to pin. Without `-p`, `claude` opens its interactive TUI and never exits on its own.
+        let cmd = adjudicator_command("claude-haiku-4-5");
+        assert_eq!(cmd.get_program(), "claude");
+        let args: Vec<_> = cmd.get_args().collect();
+        assert_eq!(args, ["-p", "--model", "claude-haiku-4-5"]);
+    }
+
+    // The tests below drive `run_command` — the SAME spawn/stdin/wait/kill code
+    // `run_adjudicator` runs — with `sh -c <script>` standing in for `claude`. They replaced two
+    // hand-copied helpers that re-implemented the loop and so proved only the copies (paydown
+    // 2026-09-23 WP7, E2).
+    fn sh(script: &str) -> Command {
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg(script);
+        cmd
+    }
+
+    #[test]
+    fn the_prompt_reaches_stdin_and_stdout_comes_back() {
+        // `cat` echoes stdin, so the Ok value is the prompt only if it was written AND the pipe
+        // was closed (otherwise `cat` never exits and this times out instead).
+        let out = run_command(sh("cat"), "judge this turn", 5_000).expect("cat must succeed");
+        assert_eq!(out, "judge this turn");
+    }
+
+    #[test]
+    fn a_non_zero_exit_is_failed_with_its_code() {
+        let err = run_command(sh("exit 3"), "", 5_000).expect_err("exit 3 must be an Err");
+        assert!(
+            matches!(err, AdjudicateError::Failed { code: Some(3), .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
     fn a_missing_binary_errors_rather_than_returning_empty_output() {
         // ⚠️ THE CONTRACT THIS PINS: a failure must be an `Err`, never `Ok("")`. An empty Ok
         // would reach the TS parser as an unparseable answer and withhold by ACCIDENT rather
         // than by the documented rule. Uses a name that cannot exist on PATH.
-        let err = run_adjudicator_with_program("claudesk-no-such-binary-xyzzy", 1_000)
+        let err = run_command(Command::new("claudesk-no-such-binary-xyzzy"), "", 1_000)
             .expect_err("a missing binary must be an Err");
         assert!(matches!(err, AdjudicateError::NotFound(_)), "got {err:?}");
     }
 
-    /// Test seam: same spawn shape, arbitrary program name.
-    fn run_adjudicator_with_program(
-        program: &str,
-        timeout_ms: u64,
-    ) -> Result<String, AdjudicateError> {
-        match Command::new(program)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-        {
-            Ok(mut c) => {
-                let _ = c.kill();
-                let _ = c.wait();
-                let _ = timeout_ms;
-                Ok(String::new())
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(AdjudicateError::NotFound(
-                std::env::var("PATH").unwrap_or_default(),
-            )),
-            Err(e) => Err(AdjudicateError::Spawn(e.to_string())),
-        }
-    }
-
     #[test]
     fn a_slow_child_times_out_and_is_reaped() {
-        // ⚠️ Drives the REAL loop against a real subprocess, because the property that matters
-        // (the child is killed, not merely abandoned) is invisible to a pure unit test. Uses
-        // `sleep`, which exists on every macOS/Linux host this builds on.
+        // ⚠️ `exec` so the killed pid IS the sleeper; a plain `sh -c 'sleep 30'` would leave the
+        // sleep orphaned after its shell died. Without the kill, the reaping `wait()` blocks for
+        // the full 30s, which the elapsed bound catches.
         let start = Instant::now();
-        let err = run_program_with_timeout("sleep", &["30"], 300)
+        let err = run_command(sh("exec sleep 30"), "", 300)
             .expect_err("a 30s child under a 300ms timeout must time out");
         assert!(matches!(err, AdjudicateError::TimedOut(300)), "got {err:?}");
         assert!(
             start.elapsed() < Duration::from_secs(5),
-            "the timeout must actually cut the wait short, not run to completion"
+            "the timeout must kill the child, not wait for it to finish"
         );
-    }
-
-    /// The production wait/kill loop, parameterized for the test above.
-    fn run_program_with_timeout(
-        program: &str,
-        args: &[&str],
-        timeout_ms: u64,
-    ) -> Result<String, AdjudicateError> {
-        let mut child = Command::new(program)
-            .args(args)
-            .stdout(Stdio::piped())
-            .spawn()
-            .map_err(|e| AdjudicateError::Spawn(e.to_string()))?;
-        let deadline = Instant::now() + Duration::from_millis(timeout_ms);
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => return Ok(String::new()),
-                Ok(None) => {
-                    if Instant::now() >= deadline {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        return Err(AdjudicateError::TimedOut(timeout_ms));
-                    }
-                    std::thread::sleep(Duration::from_millis(POLL_MS));
-                }
-                Err(e) => return Err(AdjudicateError::Spawn(e.to_string())),
-            }
-        }
     }
 }

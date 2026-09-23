@@ -5,8 +5,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { Workspace } from "../Workspace";
 import type { Workspace as WorkspaceModel } from "../../../state/workspace";
 
@@ -174,73 +172,6 @@ describe("Workspace header — the drive-mode readout's render site", () => {
   });
 });
 
-describe("the confirm's write decision is honored by its CALLER", () => {
-  it("resolveDriveMode gates on driveModeWriteFor's persist, not on the outcome directly", () => {
-    // ⚠️ A NARROW SOURCE GUARD, and the narrowness is deliberate — read before widening it.
-    //
-    // At verify-codify two mutants were probed. The first (Cancel persisting) is now killed by a
-    // VALUE test on `driveModeWriteFor`. The second — the CALLER ignoring that decision and
-    // persisting regardless — still passed all 2258 tests, because the handler is an inline
-    // `useCallback` whose write behavior nothing can observe: server rendering reaches only the
-    // gate-OFF shape, so the dialog and its buttons never mount in a test.
-    //
-    // ⚠️ This is the standing limitation, not a shortcut: `arch.md` says a `?raw` guard cannot
-    // express a BEHAVIORAL property. What it CAN express is a STRUCTURAL coupling — that the
-    // caller reads the decision at all — and that is exactly the mutant's shape. It would still
-    // pass if `persist` were used wrongly, so it is a floor, not a proof. The real proof is the
-    // operator's live verify-human run, recorded in the WIP.
-    const src = readFileSync(
-      join(process.cwd(), "src", "components", "workspace", "Workspace.tsx"),
-      "utf8",
-    );
-    // Strip comments — this file's own prose names the identifiers, and a comment must not
-    // satisfy the assertion on the code's behalf
-    // (`[[raw-guard-identifier-satisfied-by-own-comments]]`, hit 3x in this repo).
-    const code = src
-      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
-
-    expect(
-      code,
-      "Workspace.tsx must destructure `persist` from driveModeWriteFor — if the caller stops " +
-        "reading the decision, Cancel can persist while every value test on the table stays green",
-    ).toMatch(/const \{ persist \} = driveModeWriteFor\(/);
-    expect(
-      code,
-      "the persist flag must GATE the write — a destructure that is never used is the same " +
-        "bypass with extra steps",
-    ).toMatch(/!persist/);
-  });
-});
-
-describe("the broadcast subscriber filters by project path", () => {
-  it("Workspace.tsx compares the payload path before applying a broadcast mode", () => {
-    // ⚠️ REGRESSION GUARD for a gap found at Phase 4's verify-codify (Phase 3's own verify-codify
-    // never ran — the F12 back-loop diverted to plan first). Dropping the path check passes 2259
-    // tests, and the defect it admits is silent CROSS-PROJECT CORRUPTION: `PROJECT_DRIVE_MODE_EVENT`
-    // is per-project (unlike the permission mode's app-global bare enum), so an unfiltered
-    // subscriber makes ONE project's change rewrite EVERY open workspace's readout.
-    //
-    // ⚠️ Source-shaped for the same reason as the guard above: the subscriber is an inline effect
-    // whose behaviour needs a mounted workspace plus a live Tauri event, neither of which server
-    // rendering provides. Structural coupling is expressible; the behaviour is not. Floor, not
-    // proof — the operator's live run (recorded in the WIP: scratch-b/scratch-c stayed `None`
-    // while scratch-a changed) is the real evidence.
-    const src = readFileSync(
-      join(process.cwd(), "src", "components", "workspace", "Workspace.tsx"),
-      "utf8",
-    );
-    const code = src
-      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
-
-    expect(
-      code,
-      "the PROJECT_DRIVE_MODE_EVENT subscriber must compare `e.payload.path` against this " +
-        "workspace's project_path — without it, one project's mode change rewrites every open " +
-        "workspace's readout",
-    ).toMatch(/e\.payload\.path !== workspace\.project_path/);
-  });
-});
+// The two BEHAVIOURAL properties that used to be source guards here — the broadcast path filter
+// and Cancel writing nothing — are now driven on a live mount in `workspaceDriveModeLive.test.tsx`
+// (paydown 2026-09-23 WP7, H4).

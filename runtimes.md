@@ -31,13 +31,15 @@ real chronology.
 
 ## pnpm verify:auto
 
-- **Last:** 25s (2026-09-23, paydown WP6 verify-auto, 2nd of two runs; warm; frontend 220 files / 2973 tests, Rust 921, EXIT=0)
+- **Last:** 33s (2026-09-23, paydown WP7 P1 verify-codify; Rust rebuild after src-tauri edits; frontend 220 files / 2973 tests, Rust 924, EXIT=0)
 - **Use timeout:** 216000
   <!-- ⚠️ Deliberately NOT recomputed from the 32s observation. That run had a warm
        incremental cargo cache; a cold one is the realistic worst case and the history
        below shows 93-104s. Recomputing from the warm figure would set a timeout that
        kills the next cold run. -->
 - **History:**
+  - 33s — 2026-09-23 (paydown WP7 P1 verify-codify; Rust rebuild)
+  - 37s — 2026-09-23 (paydown WP7 P1 verify-auto; Rust rebuild)
   - 25s — 2026-09-23 (paydown WP6 run 2; 220 files / 2973 tests)
   - 35s — 2026-09-23 (paydown WP6 run 1; Rust rebuild after src-tauri edits)
   - 28s — 2026-09-23 (paydown WP5; 220 files / 2968 tests)
