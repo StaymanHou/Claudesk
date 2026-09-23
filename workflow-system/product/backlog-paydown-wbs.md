@@ -648,3 +648,6 @@ SURFACEs listed in WP1 §5. The R4 rulings (40, 46, 32) are deleted in WP2 once 
 3. Carry any surviving obligation back into `backlog.md` as its own SURFACE, so it outlives this
    file (the 2026-08-19 sweep did this for the comment-convention pass).
 4. **Delete this file** in a commit that says so.
+
+## Session Handoff — 2026-09-23 14:30
+Handed off. See `workflow-system/state/.session.md` to restore. WP1–WP9 CLOSED; next is WP10 (dictated-prompt wrap) — 3 operator rulings first.
