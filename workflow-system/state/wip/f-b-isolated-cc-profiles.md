@@ -337,7 +337,12 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     unclean-exit flag through `key_for()`. Register them in `lib.rs`. ⚠️
     `sync_commands_do_not_block.rs` must stay green.  <!-- status: done -->
   - [x] verify-auto  <!-- status: done — `pnpm verify:auto` EXIT=0 (39s; 3000 FE / 943 Rust lib). First run caught my own source guard broken by a `cargo fmt` trailing-comma reflow; fixed by normalizing `, )`. The env_remove guard was mutation-proven 3/3 (drop the loop / shell gets the removal / CC passes empty), with each mutant confirmed landed -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [x] verify-self  <!-- status: done — live, `pnpm tauri:dev` launched with a bogus CLAUDE_CONFIG_DIR exported (app PID carried it: positive control) -->
+    - [x] A.8 default row → CC child `ps eww` has NO `CLAUDE_CONFIG_DIR` (it shows `CLAUDESK_DRIVE_MODE`, so env is visible — not an instrument gap)  <!-- status: PASS -->
+    - [x] B.7 profile row (adopted scratch dir) → child has `CLAUDE_CONFIG_DIR=<scratch dir>`; argv identical to the default row's (`claude --permission-mode bypassPermissions`)  <!-- status: PASS -->
+    - [x] B.11 `set_project_profile` change → the row's `session-state.json` key is gone  <!-- status: PASS -->
+    - [x] A.6 row → removed profile → `cc_spawn` returns "…profile \"scratch\", which is no longer in Claudesk's profile list…"; child count unchanged (2); the refused spawn set no unclean flag  <!-- status: PASS -->
+    - [x] Probe notes `tmp/scratch/f-b-probes.md` answer all three questions  <!-- status: PASS -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
     - [ ] Operator logs in once under a scratch profile. Agent reads back `.claude.json` /
       `settings.json` to close probe (1)'s post-login half.  <!-- status: NOT-STARTED -->
@@ -497,13 +502,15 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 1 > verify-self
-- **Active scope:** Phase 1 verify-self (live: `ps eww` on the CC child under default + profile rows; missing-profile refusal; flag clear)
+- **Path:** F-b > Phase 1 > verify-human
+- **Active scope:** Phase 1 verify-human (operator /login under a scratch profile; the permission-mode finding below needs a ruling)
 - **Blocked:** none
 - **Unvisited:** Phase 2 → Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
-- **Open discoveries:** none
+- **Open discoveries:** `--permission-mode` argv overrides a profile's `defaultMode` (spec B.10 / D.18 contradiction — ruling needed)
 
 ## Discoveries
 [SURFACED-2026-09-23] Phase 1 > P1.1 — probe (1): `theme` lives in `settings.json` (a `.claude.json` `theme` is stripped at startup); `copyOnSelect` lives in `.claude.json` and survives first run; seeding `hasCompletedOnboarding` skips CC's login step, so it is NOT seeded. Spec D.18 is corrected in place.
 [SURFACED-2026-09-23] Phase 1 > P1.1 — probe (2): `claude --continue` with no conversation for the cwd prints "No conversation found to continue" and EXITS. P1.4 gains a transcript-exists guard on the argv arm.
 [SURFACED-2026-09-23] Phase 1 > P1.1 — probe (3): reuse the existing `trash = "5"` dependency (`editor_fs::…` already calls `trash::delete` on directories, and it has shipped). No new dependency.
+[SURFACED-2026-09-23] Phase 1 > verify-self — ran by the orchestrator, NOT the `feature-verify-self-runner` subagent: `mcp__tauri__*` bridge tools do not reach subagents (memory `mcp-bridge-tools-not-exposed-to-subagents`), and every Phase 1 outcome needs the bridge. Deviation from the SKILL's unconditional-spawn rule, taken for tool reachability.
+[SURFACED-2026-09-23] Phase 1 > verify-self — ⚠️ **SPEC CONTRADICTION: `build_cc_argv` ALWAYS passes `--permission-mode <Claudesk's app-global mode>`, which overrides a profile's `permissions.defaultMode`.** So B.10 ("footer shows the profile's permission mode") cannot hold, and the wizard's always-shown permission-mode step (D.18) would have no effect inside Claudesk — only in a bare terminal. Observed live: the scratch profile's `defaultMode: "plan"` child still got `--permission-mode bypassPermissions`. Needs an operator ruling before Phase 5; logged to backlog.

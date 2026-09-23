@@ -1117,3 +1117,13 @@ and work on the spec well."
 - **Suggested action:** The operator reads the three lists and either ratifies them (delete this entry with a CHANGELOG line) or names the one to overturn, which becomes its own task.
 - **Priority:** low (the WP10 item alone is low-medium)
 - **Status:** pending — operator's call
+
+## SURFACE-2026-09-23-F-B-PERMISSION-MODE-ARGV-OVERRIDES-PROFILE-DEFAULTMODE
+- **Source:** feature:verify-self (F-b Phase 1)
+- **Target level:** feature (F-b spec B.10 / D.18)
+- **Type:** gap
+- **Summary:** Claudesk always spawns `claude --permission-mode <app-global cc_permission_mode>`, which overrides a profile's own `permissions.defaultMode`, so the profile's chosen posture never applies inside Claudesk.
+- **Context:** Spec B.10 expects the pane footer to show the profile's mode, and the wizard makes the permission-mode step mandatory (the boilerplate's "silence is not a gate"). Both are dead as built. Observed live 2026-09-23: a `defaultMode: "plan"` profile spawned with `--permission-mode bypassPermissions`.
+- **Suggested action:** Operator ruling. Recommended: omit `--permission-mode` for non-default profiles so the profile's `settings.json` governs; keep the app-global flag for the default profile only.
+- **Priority:** medium
+- **Status:** pending
