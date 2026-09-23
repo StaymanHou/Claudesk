@@ -648,7 +648,7 @@ and work on the spec well."
 - **Context:** ⚠️ **This was investigated as the cause of the stale-blue defect (`SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT` — since RESOLVED and deleted from this file; see CHANGELOG 2026-08-22) and REJECTED** — that defect was `agent_completed` falling through the notification-type fallback (fixed M13.5 WP2). Filed separately so the rejection is not mistaken for "not real": it **is** real, just not that. ⚠️ **Measured as rare: only 1 of 1,673** post-`Stop` notifications is cross-session, which is why it was deliberately NOT fixed inside a one-line classification fix. Affects any second CC session on the same repo — a bare terminal, a `bg` job, or two Claudesk workspaces on one project. ⚠️ Note it is *not* obviously a pure win to fix: per-session attribution needs a fold decision ("any session awaiting -> blue" keeps a stale blue if a session dies silently; "newest wins" can hide a genuine prompt) and a bound on the per-session map, since a session that dies without `SessionEnd` would leak an entry forever.
 - **Suggested action:** Only if the frequency rises. If taken: attribute per `(cwd, session_id)`, fold explicitly (present both folds to the operator — this is a product decision, not a mechanical one), expire on `SessionEnd` (already registered; 51 events in the corpus), and bound the map for sessions that never emit one. ⚠️ Per `[[workspace-status-map-collapses-consecutive-events]]` this needs the **raw event stream**, not the status map. ⚠️ Also re-check `tray::aggregate_alarm` and PiP ordering — both fold the same broadcast, so changing one workspace's input set changes their shape.
 - **Priority:** low (1 observed instance in the entire corpus; no data impact — it degrades the ambient dot, the same surface M7 exists for. **Re-raise if the operator starts routinely running two sessions per repo.**)
-- **Status:** pending
+- **Status:** pending — deferred to **F-b** (isolated CC profiles as workspaces), the first work that could put two workspaces on one tree. It travels with options (b)/(c) of the supervisor-hotfix "per turn" toggle-freshness finding, which is harmless for the same 1:1 reason (paydown-2026-09-23 fold-back).
 
 ## SURFACE-2026-08-21-NOTIFICATION-TYPE-FALLBACK-IS-WRONG-FOR-COMPLETION-TYPES
 - **Source:** feature:build (M13.5 WP2 Phase 1 — the generalization of the defect just fixed)
@@ -693,7 +693,10 @@ and work on the spec well."
   the deletion is verified rather than trusted.
 - **Priority:** low-medium (documentary; no correctness impact, but it is this project's most
   persistently re-flagged finding)
-- **Status:** open — deferred by decision, shape recorded
+- **Roster carried out of the 2026-09-23 paydown (fold-back).** That sweep's ruling R2 kept this pass separate and sequenced it **immediately after the sweep, guard first**. It routed these items here, and none were trimmed per-WP:
+  - Bodies in `backlog-quality-findings.md`: `SURFACE-2026-09-17-QUALITY-RATIONALE-STATED-THREE-TIMES`, `SURFACE-2026-09-17-QUALITY-DO-NOT-MERGE-DEFENCE-REPEATED-FOUR-TIMES`, `SURFACE-2026-09-14-QUALITY-LASTINDEX-COMMENT-IS-THE-HEAVIEST-RATIO-IN-THE-DIFF`, `SURFACE-2026-09-13-QUALITY-COMMENT-DUPLICATION-ACROSS-SUPERVISOR-MODULES`, `SURFACE-2026-09-12-QUALITY-COMMENT-DENSITY-IS-A-THIRD-COPY-OF-THE-WIP`, `SURFACE-2026-08-25-QUALITY-WP3-COMMENT-DENSITY-58-PERCENT`, `SURFACE-2026-08-21-QUALITY-WP1-COMMENT-DENSITY-117-LINES-FOR-14`, `SURFACE-2026-08-21-QUALITY-WP1-PIP-RATIONALE-AT-FOUR-SITES`, `SURFACE-2026-08-18-QUALITY-WP4-ARCH-DOC-MIRRORS-TEST-FILE-HEADER`, `SURFACE-2026-08-18-QUALITY-WP3-COMMENT-DENSITY-AND-RATIONALE-DUPLICATION`, `SURFACE-2026-08-01-QUALITY-WP2-MINOR-BATCH`, `SURFACE-2026-08-02-QUALITY-WP4-MINOR-BATCH`, `SURFACE-2026-09-22-QUALITY-WP4-COMMENT-DUPLICATION-ACROSS-PROMPT-MODULES`, `SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X`, `SURFACE-2026-09-23-QUALITY-WP9-COMMENTS-CARRY-WIP-PROVENANCE-LABELS`, and item 1 of `SURFACE-2026-09-23-QUALITY-WP9-MINOR-BATCH`.
+  - Stub-only (they live only in `backlog.md`): the density items of the `m11-wp3-docs-render-and-navigation`, `time-tracking-offline-local-only-copy` and `m10.9-wp2-workflow-features-gate` stubs, and item (2) of the `m12-wp1-probe-flag-store-and-announce` stub.
+- **Status:** open — deferred by decision, shape recorded. ⚠️ **Sequenced NEXT after the 2026-09-23 paydown** (its ruling R2), ahead of F-b unless the operator reorders.
 
 ## Code-quality findings — m13-wp4-milestone-exit-verify (2026-08-18)
 - **Pointer:** **1 MINOR remains** (documentary only) from WP4's code-quality review:
@@ -739,7 +742,7 @@ and work on the spec well."
   standing precedent and (a) reverses it.
 - **Priority:** medium (no live exposure; the arm's assertion is sound — the risk is the next
   surface, most likely M15's)
-- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); ⚠️ **M15 is the likely author of the first exposed surface** (a Recycle menu item) — decide (a) vs (b) *before* building it, not after. Standing precedent is (b)
+- **Status:** deferred — carry to next cycle (M13 close 2026-08-18); ⚠️ **M15 is the likely author of the first exposed surface** (a Recycle menu item) — decide (a) vs (b) *before* building it, not after. Standing precedent is (b). ⚠️ **Re-anchored 2026-09-23 (paydown fold-back):** M15 closed with a **headless** supervisor that owns NO guard arm, so it never authored the exposed surface. The anchor is now `SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE`, which owns the **seventh** arm, so decide (a) vs (b) at that entry's grill.
 
 ## SURFACE-2026-08-06-SESSION-RESTORE-CONTRADICTS-ITSELF-ON-THE-DEFAULT-DRIVE-MODE
 - **Source:** feature:build (M12 WP4a Phase 2)
@@ -1062,7 +1065,7 @@ and work on the spec well."
     4. WIP-provenance labels in comments; route to the comment-convention pass.
   - MINORs: a duplicated rationale in the lesson doc; nested fns in impls are not registered; the spawn cut is wider than closures; the command test forks the real `claude`; a Display comment is looser than the TS regex.
   - Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# paydown-wp9-sync-command-blocking-guard — 2026-09-23`.
-- **Priority:** medium (MAJORs 1–3) / low (the rest)
+- **Priority:** medium-high (MAJOR 1, a real defect that can leave the single-run lock stuck) / medium (MAJORs 2–3) / low (the rest)
 - **Status:** pending
 - **Pickup shape:** one small task. Do `spawn_blocking` for the dry run, keeping the lock-guard anchor, together with the guard's async-exemption rule and the `cfg` predicate fix, each with a fixture test and a mutant. The provenance labels go to the T1/T2 comment pass.
 
@@ -1075,3 +1078,35 @@ and work on the spec well."
 - **Suggested action:** If this drifts again, invert the mechanism: make the count a **generated artifact** rather than something to detect. Options: (a) a single source-of-truth line emitted by a script that docs `include`, (b) an HTML-comment marker (`<!-- guard-count -->…<!-- /guard-count -->`) whose content a test REGENERATES from `armSubjects` and fails on diff — a generator's output is unambiguous where prose intent is not. ⚠️ **Do not re-attempt the detector shape** without reading why it failed first.
 - **Priority:** low
 - **Status:** pending
+
+## SURFACE-2026-09-23-CM6-GO-TO-LINE-HAS-NO-SETTINGS-HOTKEY-ROW
+- **Source:** task:act (paydown-2026-09-23 fold-back; carried out of the paydown WBS, WP5's closure note)
+- **Target level:** feature:spec (feature backlog, a product call)
+- **Type:** new-work
+- **Summary:** WP5 resolved the `...searchKeymap` spread in the CM6-owned-set guard and surfaced three CM6 bindings that nobody had catalogued: `Mod-g` (find next), `Mod-Shift-l` (select all matches) and `Mod-Alt-g` (**⌘⌥G, go to line**). All three went into `NOT_LISTED` with reasons, and none got a Settings hotkey row, because adding user-facing rows is a product change outside a paydown.
+- **Context:** ⌘⌥G go-to-line is the one a user is likely to look for in the hotkey reference. The guard now resolves the spread, so a row added later is covered automatically.
+- **Suggested action:** Decide whether ⌘⌥G (and possibly ⌘G / ⌘⇧L) gets a row in the `⌘,` hotkey reference. If so, move it from `NOT_LISTED` into the chord registry with a label. The guard's completeness arm will then hold it.
+- **Priority:** low
+- **Status:** pending — operator's call
+
+## SURFACE-2026-09-23-PAYDOWN-TASK-PATH-WPS-GOT-NO-CODE-QUALITY-REVIEW
+- **Source:** task:act (paydown-2026-09-23 fold-back)
+- **Target level:** feature:spec (a review pass, not a fix)
+- **Type:** gap
+- **Summary:** Paydown **WP8** (`4a21cbf`, small live defects and dead code, 26 files) and **WP10** (`37b12a2`, the dictated-prompt wrap, 14 files) changed runtime behavior but ran on the **task** path. The task path has no `feature-review-quality` state, so neither diff was ever reviewed. WP3, WP7 and WP9 ran on the feature path, and each review found at least one MAJOR, including WP9's "the fix is incomplete" finding on the very defect it had just fixed.
+- **Context:** Each WP was mutation-tested per item, so the untested risk is the class a reviewer catches and a per-item mutant does not: dead leftovers, a rationale restated across files, a fix that is right at the site and incomplete at the class. WP8 includes behavior changes (the drive-mode readout gate, the unconditional `aria-live` mount, the `WorkspaceStatus` export deletion, stderr pass-through, the `UnknownRoot` variant).
+- **Suggested action:** Optional. Run a one-shot `code-quality-reviewer` over `4a21cbf` and `37b12a2` (each against its parent), and auto-backlog its findings as usual. If it is skipped, delete this entry with a note saying so.
+- **Priority:** low-medium
+- **Status:** pending — optional; operator's call
+
+## SURFACE-2026-09-23-PAYDOWN-AUTOPILOT-DEFAULTS-AWAIT-RATIFICATION
+- **Source:** task:act (paydown-2026-09-23 fold-back)
+- **Target level:** task (a read-and-rule, no build unless one is overturned)
+- **Type:** gap
+- **Summary:** The 2026-09-23 paydown ran in autopilot, and three WPs took defaults they disclosed as "flag if wrong". The operator has not ruled on them. They are recorded under each archive's "Decisions taken at the autopilot default" / "Defaults taken" heading:
+  - **WP5** (`archive/paydown-wp5-chord-registry-settings-guards.md`): three CM6 bindings went into `NOT_LISTED` (⌘⌥G is carried separately, see `SURFACE-2026-09-23-CM6-GO-TO-LINE-HAS-NO-SETTINGS-HOTKEY-ROW`). Row 6 used a test-side AST selector with no host refactor. `chordLabel` was deleted, not wired. AG1 anchored only the completeness arm.
+  - **WP6** (`archive/paydown-wp6-guards-that-cannot-fail.md`): Row 7 uses an `AbortSignal` in `DocLinkClickDeps`. Row 28 is a partial resolution. `MAIN_WINDOW_LABEL` is a `pub(crate)` const. J3.2 got a positive exactly-one assertion. `tooling/link-check` went into tsconfig `include`. appBoot's `uncaught` assertion was decided by probe. G6 took its sibling nit.
+  - ⚠️ **WP10** (`archive/paydown-wp10-dictated-prompt-wrap.md`): **the ruling said "per-panel toggle", and the build took ONE global localStorage key** (`claudesk.prompt.dictatedWrap`). "Per-panel" was read as "lives in the panel, not in Settings", because a per-workspace value would mean re-disabling it in every project. This is the one default that could contradict what the operator meant.
+- **Suggested action:** The operator reads the three lists and either ratifies them (delete this entry with a CHANGELOG line) or names the one to overturn, which becomes its own task.
+- **Priority:** low (the WP10 item alone is low-medium)
+- **Status:** pending — operator's call

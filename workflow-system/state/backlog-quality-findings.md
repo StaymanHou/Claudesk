@@ -13,7 +13,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Location:** `src-tauri/src/workflow_install/commands.rs`, `workflow_uninstall_dry_run` (`#[tauri::command(async)]`)
 - **Finding:** Tauri's `(async)` form wraps the sync body in an `async move` on the async runtime, so a hung `uninstall.sh` now permanently occupies a runtime WORKER instead of the main thread. The command's own doc says there is no timeout on the wait. This contradicts the rule the same commit wrote down twice: `adjudicator/commands.rs` says "`spawn_blocking` rather than a bare `async fn` body, because the wait is long enough to starve an async-runtime worker", and the lesson doc says "`spawn_blocking` for long waits, `(async)` for short ones". A hang also leaves `control.running` set, which locks out every later install and uninstall.
 - **Suggested action:** move the body into `tauri::async_runtime::spawn_blocking`, cloning the `Arc<InstallControl>` out of `State`. ⚠️ Keep the `pub fn workflow_uninstall_dry_run` text anchor that `every_substrate_touching_command_takes_the_single_run_lock` greps, or update that guard in the same change. Consider a timeout on `run_dry_run` too, so the single-run lock cannot stick.
-- **Priority:** medium
+- **Priority:** medium-high *(raised 2026-09-23 at the paydown fold-back: it is a real, shipped defect, not a nit. A hung `uninstall.sh` leaves the single-run lock set, which blocks every later install/uninstall until relaunch. It is also task-sized.)*
 - **Status:** pending
 
 ## SURFACE-2026-09-23-QUALITY-GUARD-EXEMPTS-EVERY-ASYNC-COMMAND-UNLISTED
@@ -100,7 +100,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 ## SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X
 - **Severity:** MAJOR
-- **Location:** `linkCheck.mjs` header; `docs/lessons/verify-auto-gate.md` §check:link; `source-text-guards.md` §19; `appBoot.test.tsx` header; `moduleGraphBoot.test.ts` header; `turnNavExportContract.test.ts` SCOPE note; `CLAUDE.md` gate-order line; `backlog-paydown-wbs.md` checklist
+- **Location:** `linkCheck.mjs` header; `docs/lessons/verify-auto-gate.md` §check:link; `source-text-guards.md` §19; `appBoot.test.tsx` header; `moduleGraphBoot.test.ts` header; `turnNavExportContract.test.ts` SCOPE note; `CLAUDE.md` gate-order line. *(The eighth site, the paydown WBS's checklist, was removed when that file was deleted at the 2026-09-23 fold-back, so **7 live sites** remain. The ID keeps its `8X`.)*
 - **Finding:** "Vitest reads a missing binding as `undefined`" is stated in about 8 places, and the "Blind to" list exists in full in both `linkCheck.mjs` and `verify-auto-gate.md`. That goes against the lesson file's own §"Comment budget" (state it once, point to it elsewhere). `moduleGraphBoot.test.ts` also carries history ("first written as one", "probed 2026-09-23") that belongs in the archive.
 - **Suggested action:** make `source-text-guards.md` §19 (or `verify-auto-gate.md`) the canonical home. Leave each code site with only its invariant, what to do when it fails, and a pointer. Diff the token set before and after (`[[grep-addressed-doc-loses-value-to-prose-rewrite]]`). This fits paydown WP4 (narrowing over-claiming comments).
 - **Priority:** low
@@ -205,6 +205,8 @@ Applying its test — *would a reader who has never seen the WIP make a worse de
 Option A: the readout is disabled while an apply is queued. That was done WITHOUT the
 `useDriveModeApply` hook extraction, which R1 defers to the next time drive-mode apply is touched.
 The scheduler-timing sleep below is the extraction's remaining payoff.
+
+⚠️ **Escalation note, carried out of the 2026-09-23 paydown WBS (its ruling R1) so it is not re-derived.** A "latest wins" supersede (B′: a second Apply while ⏳ is queued replaces the first) was sized as **small**. The respawn reads the stored mode from `projects.json` **at spawn time** (`resolve_cc_spawn_env`), not the value captured at the click, so a second Apply only needs to persist, and the one queued respawn picks it up. In the race where the respawn reads before the write lands, the header's existing `is-stale` marker shows the mismatch, so the failure is not silent. **Escalate from "disable while queued" to B′ only if the operator actually hits "I want to change it while ⏳ is showing."** The lower-bug-surface option was chosen under `[PRIOR: explicit-selectable-mode-over-inferred-mode]`.
 
 ## SURFACE-2026-08-26-QUALITY-RESPAWN-INTENT-HOLD-IS-SCHEDULER-TIMING
 - **Source:** feature:review-quality (drive-mode-on-the-workspace-surface)
