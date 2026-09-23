@@ -496,3 +496,6 @@ SURFACEs listed in WP1 §5. The R4 rulings (40, 46, 32) are deleted in WP2 once 
 3. Carry any surviving obligation back into `backlog.md` as its own SURFACE, so it outlives this
    file (the 2026-08-19 sweep did this for the comment-convention pass).
 4. **Delete this file** in a commit that says so.
+
+## Session Handoff — 2026-09-23 09:27
+Handed off. See `workflow-system/state/.session.md` to restore. WP1 + WP2 CLOSED; next is WP3 **step 0** (restore the red `verify:auto` gate), then the whole-app boot smoke test.
