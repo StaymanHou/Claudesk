@@ -97,6 +97,7 @@ A staged prompt sent from the Prompt panel reaches CC with nothing saying it was
 1. **The editor appeared not to clear after a send.** `@uiw/react-codemirror` 4.25.10 defers an external `value` update for 200 ticks of a 1 ms `setInterval` after any edit (its typing latch). The agent-launched window was `visibilityState: hidden`, so WKWebView throttled that interval, and the clear landed seconds later (confirmed: view doc `""` afterwards).
 2. **The CC pane looked empty or stale.** A hidden window pauses xterm's rAF paint, but the buffer was correct. Also, `ipc_monitor` captured nothing: the bridge cannot hook `invoke` (caveat (l)). It is not evidence of no IPC.
 - Teardown: the dev instance was killed by its own PID (34561). The dev profile's `claudesk.prompt.dictatedWrap` was removed, back to default.
+- **Operator confirmed 2026-09-23** in a fresh `pnpm tauri:dev` instance: "looking all good". (Real macOS dictation is still unexercised; it needs a released build.)
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>
