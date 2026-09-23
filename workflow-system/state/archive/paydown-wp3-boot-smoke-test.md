@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: Paydown WP3 — whole-app boot smoke test
 
 **Workflow:** feature
-**State:** ship (complete)
+**State:** Completed 2026-09-23
 **Created:** 2026-09-23
 **Parent:** `workflow-system/product/backlog-paydown-wbs.md` §WP3 (step 0 done in `7c91d30`)
 
@@ -152,12 +152,58 @@ Flag if wrong.
   - [x] verify-codify  <!-- no new tests: the phase deliverable IS appBoot.test.tsx, mutation-proven by build + a fresh verify-self (C, D, D2, identity, F each red only on its own test). Full gate: the verify-self runner's post-restore verify:auto EXIT=0 on this exact tree (220/2966). Recorded gap: `expect(uncaught).toEqual([])` is a secondary signal that has NOT been proven to fail by itself (under mutant C it filled, but waitFor failed first); the header does not claim it. -->
 
 ## Current Node
-- **Path:** Feature > review-quality
-- **Active scope:** review-quality against the ship commit
+- **Path:** Feature > (completed)
+- **Active scope:** none
 - **Blocked:** none
-- **Unvisited:** ship → finalize (WBS §WP3 closure note, backlog
+- **Unvisited:** none (was: ship → finalize — WBS §WP3 closure note, backlog
   `SURFACE-2026-08-25-…` local-half status update)
 - **Open discoveries:** 2 (see Discoveries: the entries-17/18 SURFACE; the turnNav finding to resolve at finalize)
+
+## Retrospect
+- **What changed in our understanding:** Vitest's module runner is more lenient than a real ESM linker. A consumer's missing named export is read as `undefined` and never throws, so no Vitest import or render can see the deleted-export class, jsdom or not. The existing updater "boot smoke" test's mutation proof only worked because it asserted on the exporter. Its claim was wrong even though its proof passed.
+- **Assumptions that held:** the real `App` mounts cheaply under jsdom (the plan-time probe held, and the official `mockIPC` did the job). The PiP entry boots under the same mocks, so it was claimed rather than deferred. Rollup is a faithful enough linker, since type-only erasure matches runtime.
+- **Assumptions that were wrong:** the WBS's own "Done" mechanism (a jsdom test that fails on a missing-export `SyntaxError`). We caught it only because the plan step probed the premise before building on it. Also, CLAUDE.md cited catalogue entries 17/18 that were never written.
+- **Approach delta:** one jsdom test became two checks, a rollup `verify:auto` step and a jsdom boot render, each mutation-proven against its own class. The link check gained a `[root]` arg so its test drives the real script on fixtures. The review then found that the durable test can't pin the "both entries / repo config" claim (MAJOR-1, backlogged): a claim larger than its coverage, in the very WP written to remove those.
+
+## Closure
+> **Feature complete:** Paydown WP3, whole-app boot checks, has shipped. `pnpm verify:auto` now fails when any static import on either webview entry names a deleted export (`check:link`), and when either entry throws during module evaluation or first mount (`appBoot.test.tsx`). To see it, run `pnpm check:link`, or un-export any function `App.tsx` imports and watch it fail with the binding named.
+
+Requester = operator — closure notice for self-record.
+
+## Code-Quality Review
+
+Reviewer: `code-quality-reviewer` subagent, window `7c91d30^..374e7a4`, 2026-09-23. **0 CRITICAL · 2 MAJOR ·
+6 MINOR**, all auto-backlogged per `drive_mode: autopilot` →
+`backlog-quality-findings.md` → `# paydown-wp3-boot-smoke-test — 2026-09-23`.
+
+### Strengths
+- `linkCheck.test.ts` runs the real script through `spawnSync` against matched fixtures (broken / clean / type-only polarity), with identity assertions (exit code + named binding).
+- The `verify:auto` wiring test checks step order by position, not just that the step is present (entry 18).
+- `appBoot.test.tsx` checks identity: the project seeded through IPC must render, so it proves the IPC→DOM path (mutant E).
+- Two headers that over-claimed were narrowed and the updater test names corrected. Entry 19 generalizes the lesson.
+- Step 0 fixes the cause: the release skill now normalizes `tauri.conf.json` before committing.
+
+### Issues
+**CRITICAL**
+- (none)
+
+**MAJOR**
+- [`tooling/link-check/linkCheck.mjs` header + `build()`] The "BOTH webview entries, from vite.config.ts" claim is not pinned. Fixture runs load no repo config, and mutant B was never codified, so narrowing `input` or adding `onwarn`/`shimMissingExports` would leave both green. → `SURFACE-2026-09-23-QUALITY-LINK-CHECK-BOTH-ENTRIES-CLAIM-IS-UNPINNED`
+- [~8 sites] The "Vitest reads a missing binding as `undefined`" rationale and the "Blind to" list are duplicated, against the comment-budget rule. → `SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X`
+
+**MINOR**
+- [release SKILL.md step 2; CHANGELOG] `--check` after `--write` cannot fail except on a parse error; the CHANGELOG claims a failing gate. → `…-RELEASE-PRETTIER-CHECK-AFTER-WRITE-CANNOT-FAIL`
+- [linkCheck.mjs; verify-auto-gate.md] The probe harnesses are called "dev-only", but they are flag-gated lazy chunks that ship in the bundle. → `…-PROBE-HARNESSES-CALLED-DEV-ONLY`
+- [linkCheck.mjs catch] "an import cannot be bound" is printed for any build error. → `…-LINK-CHECK-FAILURE-MESSAGE-NAMES-ONE-CAUSE`
+- [appBoot.test.tsx] Per-test isolation is overstated: main is never unmounted and `calls` is never reset. → `…-APPBOOT-PER-TEST-ISOLATION-OVERSTATED`
+- [appBoot.test.tsx] `expect(uncaught).toEqual([])` has not been shown to fail on its own. → `…-APPBOOT-UNCAUGHT-ASSERTION-UNPROVEN`
+- [linkCheck.test.ts] It is outside `tsconfig` `include`, so it is never type-checked. → `…-LINKCHECK-TEST-OUTSIDE-TSC-INCLUDE`
+
+### Assessment
+The implementation is sound and makes the codebase better. It treats the WBS's jsdom mechanism as refuted by measurement instead of shipping a test that could not fail, splits the goal into two checks that are each mutation-proven against their own failure class, and narrows two headers that over-claimed. The main latent debt is that the link check's "both entries, repo config" claim rests on one manual mutation run, and the fixture harness structurally cannot load the repo's `vite.config.ts`; a few lines asserting both entry chunks would close that. The second cost is prose repeated about 8 times against the repo's own comment-budget rule. Neither calls for a refactor pass; both suit the backlog.
+
+### If you disagree
+Mark any finding `[DISMISSED]` in this section before `feature-finalize` archives the WIP.
 
 ## Discoveries
 <!-- Format: [SURFACED-<date>] <target node> — <summary>

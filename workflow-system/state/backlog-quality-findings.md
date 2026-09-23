@@ -4,6 +4,72 @@ This file collects findings surfaced by `feature-review-quality` between ship an
 
 To pick up: read the entries below, then run `/feature-refactor` to address them. To dismiss: edit the originating WIP file's `## Code-Quality Review` section and mark the line `[DISMISSED]`.
 
+# paydown-wp3-boot-smoke-test — 2026-09-23
+
+## SURFACE-2026-09-23-QUALITY-LINK-CHECK-BOTH-ENTRIES-CLAIM-IS-UNPINNED
+- **Severity:** MAJOR
+- **Location:** `tooling/link-check/linkCheck.mjs` (header + the `build()` call); `tooling/link-check/linkCheck.test.ts`
+- **Finding:** the header claims the check runs "over BOTH webview entries (`index.html` + `pip.html`, from vite.config.ts)", but nothing enforces it. The script builds whatever config resolves in `root`. The fixture runs load no `vite.config.ts` at all (a single `index.html`, no react plugin), so the durable test proves the catch/exit path and nothing about the repo's two-entry config or rollup's missing-export error staying on. Mutant B (the PiP-only `computePanelSize`) was proven once by hand and never codified. Narrowing `rollupOptions.input`, or adding an `onwarn` / `shimMissingExports`, would leave `check:link` and its test green while coverage shrank.
+- **Suggested action:** the `build()` return is a RollupOutput. Assert that both the `main` and `pip` entry chunks are present, and exit 1 if either is missing. Codify mutant B too: a repo-root run against a temp copy is too heavy, so a fixture with a `vite.config` naming two inputs, one broken only in the second, may be enough. Mutation-prove by narrowing `input` to `main` only.
+- **Priority:** medium
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X
+- **Severity:** MAJOR
+- **Location:** `linkCheck.mjs` header; `docs/lessons/verify-auto-gate.md` §check:link; `source-text-guards.md` §19; `appBoot.test.tsx` header; `moduleGraphBoot.test.ts` header; `turnNavExportContract.test.ts` SCOPE note; `CLAUDE.md` gate-order line; `backlog-paydown-wbs.md` checklist
+- **Finding:** "Vitest reads a missing binding as `undefined`" is stated in about 8 places, and the "Blind to" list exists in full in both `linkCheck.mjs` and `verify-auto-gate.md`. That goes against the lesson file's own §"Comment budget" (state it once, point to it elsewhere). `moduleGraphBoot.test.ts` also carries history ("first written as one", "probed 2026-09-23") that belongs in the archive.
+- **Suggested action:** make `source-text-guards.md` §19 (or `verify-auto-gate.md`) the canonical home. Leave each code site with only its invariant, what to do when it fails, and a pointer. Diff the token set before and after (`[[grep-addressed-doc-loses-value-to-prose-rewrite]]`). This fits paydown WP4 (narrowing over-claiming comments).
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-RELEASE-PRETTIER-CHECK-AFTER-WRITE-CANNOT-FAIL
+- **Severity:** MINOR
+- **Location:** `.claude/skills/release/SKILL.md` step 2; `CHANGELOG.md` 2026-09-23 step-0 lines
+- **Finding:** `prettier --check` right after `--write` on the same file can only fail on a parse error, yet the comment says "must exit 0 before committing". The CHANGELOG says step 2 "now fails before committing a reflowed config", when in fact it auto-fixes the reflow.
+- **Suggested action:** drop the redundant `--check`, or relabel it a parse sanity check. The CHANGELOG is append-only, so correct the claim in the skill, not the log.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-PROBE-HARNESSES-CALLED-DEV-ONLY
+- **Severity:** MINOR
+- **Location:** `tooling/link-check/linkCheck.mjs` "What it does NOT prove"; `docs/lessons/verify-auto-gate.md` "Blind to"
+- **Finding:** these call `main.tsx`'s probe harnesses "dev-only", but they are URL-flag-gated lazy chunks that ship in the production bundle. Rollup does link their internal static imports; only the names destructured at the dynamic-import site go unchecked.
+- **Suggested action:** reword to "flag-gated lazy chunks; only the destructured names at the `import()` site are unchecked".
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-LINK-CHECK-FAILURE-MESSAGE-NAMES-ONE-CAUSE
+- **Severity:** MINOR
+- **Location:** `tooling/link-check/linkCheck.mjs` catch block
+- **Finding:** it prints "FAILED: an import cannot be bound" for any build error (a CSS parse error, a plugin throw, a missing HTML file), so it names the wrong cause first.
+- **Suggested action:** print "build failed" and let the rollup message beneath it say why.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-APPBOOT-PER-TEST-ISOLATION-OVERSTATED
+- **Severity:** MINOR
+- **Location:** `src/__tests__/appBoot.test.tsx`: the `beforeEach` comment, and the `calls` array
+- **Finding:** "Each entry is judged on its OWN errors" claims more isolation than exists. The main tree is never unmounted, so its effects keep running during the PiP test and a late error from them would be charged to PiP. `calls` is never reset either, so PiP's `toContain("pip_get_layout")` would pass on a call main made (today only `Pip.tsx` issues that command, so there is no false pass yet).
+- **Suggested action:** reset `calls` in `beforeEach`, and keep a handle to each root and unmount it after its test. Or narrow the comment.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-APPBOOT-UNCAUGHT-ASSERTION-UNPROVEN
+- **Severity:** MINOR
+- **Location:** `src/__tests__/appBoot.test.tsx`, `expect(uncaught).toEqual([])` (both tests)
+- **Finding:** it has never been shown to fail on its own; under mutant C, `waitFor` failed first. It is not claimed in the header, and the WIP records the gap. Its unique coverage (exceptions in jsdom timer or listener callbacks) is plausible but unproven, so it looks like coverage without being proven coverage.
+- **Suggested action:** add one positive control (a throw inside a `setTimeout` on the boot path, where the picker still renders) and confirm it goes red on this assertion alone. Otherwise, delete it.
+- **Priority:** low
+- **Status:** pending
+
+## SURFACE-2026-09-23-QUALITY-LINKCHECK-TEST-OUTSIDE-TSC-INCLUDE
+- **Severity:** MINOR
+- **Location:** `tooling/link-check/linkCheck.test.ts`; `tsconfig.json` `include: ["src"]`
+- **Finding:** the gate never type-checks this `.ts` test; Vitest strips its types without checking them.
+- **Suggested action:** rename it to `.test.mjs`, or add `tooling/link-check` to a tsconfig `include`.
+- **Priority:** low
+- **Status:** pending
+
 # fa-wp2-draft-store-history-payload — 2026-09-21
 
 ## SURFACE-2026-09-21-QUALITY-TERMINATOR-COUNT-FILTERS-ELEMENTS-NOT-INDICES
@@ -468,14 +534,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
 - **Summary:** `src/components/workspace/__tests__/turnNavControls.test.ts` (161 lines, 10 tests) is entirely `?raw` source-grepping for questions that are **DOM-at-rest** questions — `disabled` bound to the right flag, the readout hidden at `total === 0`, the controls positioned outside the gated row.
 - **Context:** ⚠️ **This contradicts a rule the repo wrote down for itself.** `docs/lessons/source-text-guards.md` says: *"when the question is what does the DOM look like at rest, render it… Reaching for `?raw` on a DOM question is how this repo accumulated its nine failure forms"* — and names **two working precedents needing no new dependency** (`docsRender.test.tsx`, `projectModelCellRender.test.tsx`). The WIP never mentions `renderToStaticMarkup`. Concretely brittle: `disabled=\{!turnNav\.canPrev\}` breaks on a Prettier reflow or any trivially-equivalent refactor, and the `[\s\S]{0,200}?` proximity windows are order-dependent. ⚠️ **It also cannot see the rendered attribute at all**, so it cannot cover the gate-OFF case a parsed DOM would get for free. Not a correctness defect today — the 10 arms were each mutation-proven — but it is a guard that will rot in the catalogued ways.
 - **Suggested action:** Port to a render test (`renderToStaticMarkup` + a parsed DOM), following the two named precedents. Assert the same three properties off the rendered output, and add the gate-OFF case the grep cannot reach. ⚠️ Expect the port to **delete** most of the regex machinery rather than translate it.
-- **Priority:** medium
-
-## SURFACE-2026-08-25-QUALITY-WP3-EXPORT-GUARD-IS-A-ONE-MODULE-PATCH
-- **Source:** feature-review-quality (M13.5 WP3, MAJOR)
-- **Type:** gap
-- **Summary:** `turnNavExportContract.test.ts` — the guard for this WP's blank-app defect — is scoped to **one import edge** (`./turnMarkers`, two named consumers) and re-implements an ESM export check by regex-parsing import statements. ⚠️ **The reviewer answered the orchestrator's own question in the negative: it is a point patch, not the structural fix.**
-- **Context:** The SURFACE it cites (`SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC`) **proposes the general remedy itself** — a boot smoke-test asserting `#root` has children after any deletion phase — and that was **filed rather than built**. So the next module to lose an export strands its consumer exactly as before; `src/components/workspace/` alone has **4 sibling import edges** with no such guard. ⚠️ **The guard's own header overclaims:** it says *"deliberate redundancy on a failure mode whose blast radius is 'the app does not start'"* while covering one module. The failure class is repo-wide; the mitigation is one-module-wide.
-- **Suggested action:** Build the boot smoke-test as a real gate (it would **subsume** this guard, cover every import edge at once, and let the regex-parsed import-list machinery be deleted). ⚠️ Until then, at minimum **correct the header's claim** so it does not read as broader coverage than it has. Filing the general fix while shipping the narrow one is defensible sequencing — the overclaim is not.
 - **Priority:** medium
 
 ## SURFACE-2026-08-25-QUALITY-WP3-PUSH-NOT-POLL-CONTRACT-DRIFT

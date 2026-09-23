@@ -124,7 +124,7 @@ its `## Code-quality findings — <name>` pointer stub in `backlog.md`:
 | P | m11-wp3-docs-render-and-navigation | AG | m14-wp4-two-tier-setup-docs |
 | Q | m11-wp2-docs-panel-plumbing | AH | fa-wp4-send-and-stage |
 
-The number inside each ID follows the order the entries appear under that heading. Anything that
+The number inside each ID follows the order the entries appear under that heading. ⚠️ **IDs are fixed as of the 2026-09-23 inventory.** Deleting a resolved entry does NOT renumber its siblings (after I2's deletion at WP3, I3 and I4 still mean what they meant). Anything that
 starts with `SURFACE-` is a backlog.md entry and is referenced by its full ID.
 
 ---
@@ -240,6 +240,23 @@ Documentary only. Drive via `/task-plan`.
     the handoff.**
 
 ## WP3 — A whole-app boot smoke test  `[impact: High · effort: M · risk: Low]`
+
+> ✅ **CLOSED 2026-09-23** (feature `paydown-wp3-boot-smoke-test`, archived; `7c91d30` step 0 + `374e7a4`).
+> ⚠️ **The "Done" mechanism below was REFUTED at plan time and replaced (operator-approved at P1 verify-human).**
+> Under Vitest a consumer's missing named export never throws (the module runner reads it as `undefined`), so
+> no jsdom import or render can fail on it. The goal split into two checks, each mutation-proven against its
+> own class:
+> - **`pnpm check:link`** (rollup, `write: false`, a `verify:auto` step between tsc and vitest) catches the
+>   deleted-export class. Mutants that die: un-exporting `newWorkspaceChord` (main) or `computePanelSize`
+>   (PiP-only); `linkCheck.test.ts` kills catch-swallow, a dropped `root`, always-fail, the unwired step, and
+>   the reordered step.
+> - **`src/__tests__/appBoot.test.tsx`** boots the real `main.tsx` + `pip/main.tsx` under jsdom and catches
+>   evaluation- and mount-time throws. Mutants that die: a render throw in `ProjectPicker`, top-level throws in
+>   `cleanExit.ts` / `pipPanelSize.ts`, `setRecents([])` (identity), and `main.tsx` not rendering. The PiP half
+>   is claimed, not deferred.
+> - I2 resolved (the gate is built and the header narrowed). Row 60's **local** half is resolved; its upstream
+>   half stays open for mccc. The review found 2 MAJOR + 6 MINOR, auto-backlogged: MAJOR-1 is that `check:link`'s
+>   "both entries" claim is not pinned by a durable test.
 
 ⚠️ **STEP 0, added at WP2 verify: restore the green gate first.** `pnpm verify:auto` has been RED on
 `main` since `08f2db5` (Release v0.6.0 reflowed `tauri.conf.json`'s `resources` array; `prettier --check`

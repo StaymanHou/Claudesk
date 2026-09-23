@@ -46,6 +46,9 @@
 - **Backlog resolved:** SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES — ruled by the operator: the dev profile is not auto-seeded from prod; the divergence is a check-the-pane-footer-first item in `verify-self-tiers.md` §5(c).
 - **Task closed:** Backlog-paydown 2026-09-23 WP3 step 0: `pnpm verify:auto` is green on `main` again, after `src-tauri/tauri.conf.json` was restored to Prettier's shape, and the `/release` skill now runs a Prettier write and check on that file before committing a version bump.
 - **Backlog resolved:** SURFACE-2026-09-23-VERIFY-AUTO-RED-ON-MAIN-SINCE-THE-V0.6.0-RELEASE-COMMIT — `tauri.conf.json` is reformatted and the release skill's step 2 now fails before committing a reflowed config.
+- **Feature shipped:** Backlog-paydown 2026-09-23 WP3, whole-app boot checks: `pnpm check:link` (a rollup link step in `verify:auto`) now fails when any static import on either webview entry names a deleted export, the class Vitest cannot see because it reads a missing binding as `undefined`, and `appBoot.test.tsx` boots the real `main.tsx` and PiP entries under jsdom to catch evaluation- and mount-time throws.
+- **Backlog resolved:** SURFACE-2026-08-25-QUALITY-WP3-EXPORT-GUARD-IS-A-ONE-MODULE-PATCH — the repo-wide gate it asked for is `pnpm check:link`, and `turnNavExportContract.test.ts`'s header now states its one-module scope.
+- **Backlog resolved:** SURFACE-2026-08-25-A-DELETED-EXPORT-BREAKS-THE-APP-AT-RUNTIME-NOT-JUST-TSC (local half) — Claudesk now has a mechanical deleted-export gate (`check:link`) and a boot render smoke; the upstream feature-plan rule stays open for mccc.
 
 ## 2026-09-22
 
