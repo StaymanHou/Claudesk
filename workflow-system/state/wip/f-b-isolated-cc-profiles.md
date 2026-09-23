@@ -102,10 +102,29 @@ despite the shared keychain. Transcripts land under `$CLAUDE_CONFIG_DIR/projects
     boilerplate's convention, so a hand-written `~/.zshrc` function would still line up) →
     **permission mode, a step that is ALWAYS shown** with a pre-selected default (preserves the
     boilerplate's "silence is not a gate" rule) → log retention (`cleanupPeriodDays`, default
-    `99999`) → optional default model → confirm. It writes the dir, a `settings.json` with those
-    values, and the seeded `CLAUDE.md` guard (never read/write `~/.claude`; check
-    `$CLAUDE_CONFIG_DIR` before any config edit). It then adds the profile to the list and registers
-    the hook.
+    `99999`) → optional default model → **theme** and **status line**, both pre-filled from the
+    **default profile's current values, read at wizard time** (operator, spec review 2026-09-23)
+    → **mouse tracking** and **copy-on-select**, both **pre-set to OFF** (operator) → confirm. It
+    writes the dir, the config files holding those values, and the seeded `CLAUDE.md` guard (never
+    read/write `~/.claude`; check `$CLAUDE_CONFIG_DIR` before any config edit). It then adds the
+    profile to the list and registers the hook.
+    - **Where each value lives (measured in the CC 2.1.281 binary, 2026-09-23):**
+      - **Status line** → `settings.json` `statusLine`, copied **verbatim** from
+        `~/.claude/settings.json` (today `{"type":"command","command":"npx -y ccstatusline@latest"}`).
+      - **Mouse tracking** has no settings key. It is the env var `CLAUDE_CODE_DISABLE_MOUSE`, so
+        OFF = `settings.json` `env.CLAUDE_CODE_DISABLE_MOUSE = "1"`. That keeps it inside the
+        profile, not in Claudesk's spawn env, so it also holds in a bare terminal.
+      - **Copy-on-select** → the **global-config** key `copyOnSelect` (default `true`), which lives
+        in `<dir>/.claude.json`, not `settings.json`. OFF = `copyOnSelect: false`.
+      - **Theme** → a global-config key (built-in default `"dark"`). The default profile sets none,
+        so it resolves to `"dark"`. The wizard writes the **resolved** value explicitly rather than
+        leaving it unset. ⚠️ The existing profiles put `theme` in `settings.json`, while the binary's
+        default lives in global config. Which file CC reads is Open Question 1.
+    - ⚠️ **"Default to the default profile" is a snapshot at creation, not a live link.** Changing
+      `~/.claude` later does not propagate to profiles that already exist.
+    - ⚠️ A copied status-line command that references a `~/.claude/…` path would point back into
+      the default profile. The wizard shows the copied command so the operator can see it. Today's
+      value (`npx ccstatusline`) is path-free.
 19. The wizard **refuses** to create over an existing non-empty dir (it offers "adopt instead") and
     rejects a name that collides with a listed profile.
 20. The wizard **writes nothing to `~/.zshrc`** and never edits the existing wrapper functions.
@@ -211,8 +230,11 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
 
 - [ ] **Fresh-config-dir first run in a PTY.** Beyond login, what does interactive `claude` show in a
       new config dir: theme picker, folder-trust dialog, `bypassPermissions` warning? Does seeding
-      `theme` / `skipDangerousModePermissionPrompt` in the wizard suppress any of them? This decides
-      which wizard defaults are worth seeding.
+      `theme` / `skipDangerousModePermissionPrompt` in the wizard suppress any of them? Also: does a
+      **pre-seeded `<dir>/.claude.json`** (holding only `copyOnSelect` + `theme`) survive CC's first
+      run, with CC merging its defaults in rather than overwriting? And is `theme` honored from
+      `settings.json` (where the existing profiles put it) or only from `.claude.json`? Verify both by
+      reading the files back after a first run, not by trusting the write.
 - [ ] **`claude --continue` when the config dir has no conversation for the cwd.** Does it error,
       exit, or start fresh? A.11's flag-clear makes this rare, but the spawn must not hard-fail if
       it happens.
@@ -240,9 +262,12 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
 - **Changing a row's profile clears its unclean-exit flag** (A.11).
 - **The default profile explicitly unsets `CLAUDE_CONFIG_DIR`** in the child env (A.8).
 - **The wizard's default config dir follows the boilerplate convention** `~/.config/claude-<name>`.
-- **The wizard's option set** is name, dir, permission mode, retention, and optional model. Theme,
-  TUI and statusline are left to a later CC session, unless the first-run probe shows seeding one
-  suppresses a first-run prompt.
+- ~~The wizard's option set excludes theme and status line.~~ **Corrected at spec review
+  (operator):** the wizard includes theme + status line (pre-filled from the default profile) and
+  mouse tracking + copy-on-select (default OFF). **`tui` is still NOT a wizard step.** CC's own
+  default applies, and the operator can set it in a session. (The default profile has
+  `tui: "default"`, and 4 of the 5 existing profiles use `"fullscreen"`, so there's no single value
+  worth assuming.)
 - **Profile management lives in the `⌘,` Settings panel** as a Profiles group, with "New profile…"
   also in the picker cell.
 
