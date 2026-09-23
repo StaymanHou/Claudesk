@@ -57,6 +57,10 @@ export interface DocLinkClickDeps {
   setChosen: (relPath: string) => void;
   /** Open an external URL outside the webview. Injected for testability. */
   openExternal?: (url: string) => Promise<void>;
+  /** Aborted when the owner goes away (the panel unmounts, a test ends). A cross-doc
+   *  fragment's scroll is a short poll on a timer; aborting clears the pending timer so no
+   *  callback can run after its owner is gone. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -137,8 +141,12 @@ export function makeDocLinkClickHandler(
     // only schedules the switch, and its content arrives after an async `docs_read`. A
     // single rAF is not enough, so this polls briefly and gives up quietly — a missed
     // scroll is a minor annoyance, a hang is not.
-    if (resolved.fragment !== null) {
-      scrollToFragmentWhenPresent(deps.containerRef, `#${resolved.fragment}`);
+    if (resolved.fragment !== null && !deps.signal?.aborted) {
+      scrollToFragmentWhenPresent(
+        deps.containerRef,
+        `#${resolved.fragment}`,
+        deps.signal,
+      );
     }
   };
 }
@@ -155,6 +163,7 @@ function scrollToFragment(container: HTMLElement | null, href: string): void {
 function scrollToFragmentWhenPresent(
   containerRef: { current: HTMLElement | null },
   href: string,
+  signal: AbortSignal | undefined,
   attemptsLeft = 20,
 ): void {
   const el = containerRef.current?.querySelector(anchorSelector(href));
@@ -163,8 +172,13 @@ function scrollToFragmentWhenPresent(
     return;
   }
   if (attemptsLeft <= 0) return; // Bounded — never spins if the heading does not exist.
-  setTimeout(
-    () => scrollToFragmentWhenPresent(containerRef, href, attemptsLeft - 1),
-    25,
-  );
+  // ⚠️ Cancellable: an un-cleared timer outlives its owner. In the suite, a poll still pending
+  // when jsdom was torn down threw from this callback AFTER the run, so `verify:auto` exited 1
+  // while reporting 0 failures. Aborting clears the one pending timer, which ends the chain.
+  const cancel = () => clearTimeout(timer);
+  const timer = setTimeout(() => {
+    signal?.removeEventListener("abort", cancel);
+    scrollToFragmentWhenPresent(containerRef, href, signal, attemptsLeft - 1);
+  }, 25);
+  signal?.addEventListener("abort", cancel, { once: true });
 }

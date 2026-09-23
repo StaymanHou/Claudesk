@@ -573,6 +573,15 @@ export function DocsPanel({
     setLinkNote(null);
   }, []);
 
+  // The link handler's fragment scroll polls on a timer; aborting on unmount clears any
+  // pending poll so no callback runs against a panel that no longer exists.
+  const linkAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    linkAbortRef.current = controller;
+    return () => controller.abort();
+  }, []);
+
   const onContentClick = useCallback(
     (e: DocLinkClickEvent) =>
       makeDocLinkClickHandler({
@@ -581,6 +590,7 @@ export function DocsPanel({
         containerRef: contentRef,
         setLinkNote,
         setChosen: chooseDoc,
+        signal: linkAbortRef.current?.signal,
       })(e),
     [selected, docs, chooseDoc],
   );

@@ -72,6 +72,13 @@ describe("statusPresentation", () => {
       );
     const appCss = read("App.css");
     const pipCss = read("pip/pip.css");
+    // This guard reads ONE CSS shape: a flat `.cls { … background-color: <value>; … }`. It
+    // cannot see a colour expressed any other way, so a failure can mean "unreadable here",
+    // not "missing" — the messages below say so rather than implying the colour is gone.
+    const SHAPES =
+      "(this guard reads only a flat `.cls { background-color: …; }` rule — it does NOT " +
+      "understand nested rules, `var(--…)` custom properties, or shorthand `background:`; " +
+      "if you used one, the colour may be present but unreadable here)";
 
     for (const state of [
       "running",
@@ -93,11 +100,11 @@ describe("statusPresentation", () => {
       );
       expect(
         appCss,
-        `App.css must define a background-color for .${cls}`,
+        `App.css must define a background-color for .${cls} ${SHAPES}`,
       ).toMatch(colourRule);
       expect(
         pipCss,
-        `pip.css must define a background-color for .${cls}`,
+        `pip.css must define a background-color for .${cls} ${SHAPES}`,
       ).toMatch(colourRule);
 
       // ⚠️ The two files must agree on the SAME hex. pip.css keeps a verbatim copy by
@@ -113,9 +120,10 @@ describe("statusPresentation", () => {
           )?.[1]
           .trim()
           .toLowerCase();
-      expect(hexOf(pipCss), `pip.css and App.css must agree on .${cls}`).toBe(
-        hexOf(appCss),
-      );
+      expect(
+        hexOf(pipCss),
+        `pip.css and App.css must agree on .${cls} ${SHAPES}`,
+      ).toBe(hexOf(appCss));
     }
   });
 
@@ -148,7 +156,10 @@ describe("statusPresentation", () => {
     )?.[1];
     expect(
       hex,
-      "background_work must have a hex background-color",
+      "background_work must have a hex background-color (this guard reads only a flat " +
+        "`.status-dot-background { background-color: #rrggbb; }` rule — not nested rules, " +
+        "`var(--…)`, shorthand `background:`, or a non-6-digit colour; one of those may be " +
+        "present but unreadable here)",
     ).toBeTruthy();
     const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex!.slice(i, i + 2), 16));
     expect(

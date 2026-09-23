@@ -48,13 +48,11 @@ export interface StagedPayloadOptions {
  * `data` is base64 (a `Vec<u8>` over IPC would be a heavy JSON number array). Returning raw
  * text here would not arrive.
  *
- * ⚠️ **Uses `encodeBase64` from `cc/bridge` — the documented single frontend chokepoint for
- * this encoding — NOT `autoResumeFire`'s module-private twin.** The two differ in a way that
- * matters exactly here: `bridge`'s builds its binary string with a CHUNKED
- * `String.fromCharCode` spread, while the private copy spreads in one call. Measured: the
- * unchunked form throws `RangeError: Maximum call stack size exceeded` at ~200k characters.
- * A long single-take dictation is the input most likely to reach that size, so the chunked
- * encoder is the correct one for this path and the choice must not be "simplified" back.
+ * ⚠️ **Uses `encodeBase64` from `cc/bridge` — the single frontend chokepoint for this
+ * encoding.** Its binary string is built with a CHUNKED `String.fromCharCode` spread; a single
+ * spread over the whole byte array would overflow the call-argument limit on a large body, and
+ * a long single-take dictation is the input most likely to be large. The 200k-body test in
+ * `stagedPayload.test.ts` fails if that chunking is removed.
  */
 export function stagedPayload(
   body: string,

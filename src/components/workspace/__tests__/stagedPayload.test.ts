@@ -114,11 +114,13 @@ describe("stagedPayload — the bracketed-paste envelope", () => {
     const out = bytes(stagedPayload(`a${PASTE_END}b`, { submit: false }));
     expect(out).toEqual([...START, 0x61, 0x62, ...END]);
 
-    // Exactly one terminator survives — the envelope's own, at the very end.
-    const terminators = out.filter(
-      (_b, i) => END.every((e, j) => out[i + j] === e) && out[i] === ESC,
-    );
-    expect(terminators).toHaveLength(1);
+    // Exactly one terminator survives — the envelope's own, at the very end. Counted over
+    // start INDICES (the same form as the verify-codify invariant below).
+    let terminators = 0;
+    for (let i = 0; i + END.length <= out.length; i++) {
+      if (END.every((e, j) => out[i + j] === e)) terminators++;
+    }
+    expect(terminators).toBe(1);
   });
 
   it("leaves a literal ESC[200~ in the body alone — it is inert inside an open envelope", () => {
@@ -126,13 +128,11 @@ describe("stagedPayload — the bracketed-paste envelope", () => {
     expect(out).toEqual([...START, 0x61, ...START, 0x62, ...END]);
   });
 
-  it("encodes a body large enough to overflow an unchunked spread", () => {
-    // ⚠️ REGRESSION GUARD, not a size test. `autoResumeFire`'s module-private encoder
-    // spreads the whole byte array into one `String.fromCharCode` call, which throws
-    // `RangeError: Maximum call stack size exceeded` at ~200k chars (measured). A long
-    // single-take dictation is the realistic input that reaches that size, which is why
-    // this path uses `cc/bridge`'s CHUNKED `encodeBase64`. If someone "simplifies" the
-    // import back to the private twin, this test is what fails.
+  it("encodes a 200k body — the size a single un-chunked spread cannot take", () => {
+    // Guards the CHUNKING inside `cc/bridge`'s `encodeBase64`: replacing its chunked
+    // `String.fromCharCode(...slice)` loop with one spread over the whole byte array throws a
+    // RangeError at this size. A long single-take dictation is the realistic input that gets
+    // here. (It is a size + length check; the envelope's bytes are pinned by the tests above.)
     const big = "x".repeat(200_000);
     expect(() => stagedPayload(big, { submit: false })).not.toThrow();
     expect(bytes(stagedPayload(big, { submit: false }))).toHaveLength(

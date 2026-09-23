@@ -586,7 +586,10 @@ mod tests {
         client
             .write_all(b"{\"hook_event_name\":\"Stop\",\"session_id\":\"s\",\"cwd\":\"/p\"}\n")
             .unwrap();
-        client.shutdown(std::net::Shutdown::Both).unwrap();
+        // Best-effort: the server may already have closed the connection (that is the race
+        // this test exercises), so `shutdown` can fail with NotConnected. The assertion that
+        // matters is the `join` below. No sleep — it would only move the race.
+        let _ = client.shutdown(std::net::Shutdown::Both);
 
         // The loop should return (the send fails on the dropped receiver) rather
         // than hang or panic — join completes.

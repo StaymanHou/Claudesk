@@ -368,9 +368,8 @@ mod tests {
         ] {
             client.write_all(line.as_bytes()).unwrap();
         }
-        // Best-effort: the listener may already have closed its side (see
-        // SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY). The assertions below
-        // are what matter, not the shutdown.
+        // Best-effort: the listener may already have closed its side, so `shutdown` can
+        // fail with NotConnected. The assertions below are what matter, not the shutdown.
         let _ = client.shutdown(std::net::Shutdown::Both);
 
         // All 4 lines parse and arrive; the transform decides which produce updates.
@@ -444,7 +443,7 @@ mod tests {
         ] {
             client.write_all(line.as_bytes()).unwrap();
         }
-        // Best-effort per SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY.
+        // Best-effort: the listener may already have closed its side (NotConnected).
         let _ = client.shutdown(std::net::Shutdown::Both);
 
         let mut emitted = Vec::new();
@@ -513,7 +512,7 @@ mod tests {
         ] {
             client.write_all(line.as_bytes()).unwrap();
         }
-        // Best-effort per SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY.
+        // Best-effort: the listener may already have closed its side (NotConnected).
         let _ = client.shutdown(std::net::Shutdown::Both);
 
         let mut emitted = Vec::new();

@@ -44,11 +44,14 @@ became one command.
 ## `check:link` — the only step that can see a deleted export at runtime
 
 Added 2026-09-23 (paydown 2026-09-23 WP3). `tooling/link-check/linkCheck.mjs` runs the real
-production build (rollup, `write: false`, ~2s) over whatever inputs the resolved `vite.config.ts`
-names (today **both** webview entries, `index.html` + `pip.html`) and fails if the build fails,
-which is how a static import that cannot be bound surfaces. ⚠️ **That both entries are built is
-not asserted**: narrowing `rollupOptions.input` leaves it green
-(`SURFACE-2026-09-23-QUALITY-LINK-CHECK-BOTH-ENTRIES-CLAIM-IS-UNPINNED`).
+production build (rollup, `write: false`, ~2s) over **both** webview entries (`main` =
+`index.html`, `pip` = `pip.html`, from `vite.config.ts`) and fails if the build fails, which is how
+a static import that cannot be bound surfaces. ⚠️ **Both entries are asserted, not assumed**
+(paydown WP6): the build output's entry chunks must include `main` and `pip`, so narrowing
+`rollupOptions.input` to one entry exits 1 naming the missing one. The fixtures
+`two-entry-broken` (a missing export in the SECOND entry only) and `two-entry-narrowed` pin both
+halves in `linkCheck.test.ts`. If a third webview entry is ever added, add its name to the
+script's default `--entries` set, or it is built but its presence is not checked.
 
 **Why it is not a Vitest test:** under Vitest, importing a module whose consumer names a missing
 export **does not throw**. The module runner reads the binding as a property, so it is silently

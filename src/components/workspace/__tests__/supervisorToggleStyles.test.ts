@@ -23,35 +23,53 @@ const emitted = component
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/^\s*\/\/.*$/gm, "");
 
-const CLASSES = [
-  "workspace-header-supervisor",
-  "is-off",
-  "workspace-header-supervisor-suppressed",
-] as const;
+/** Every class the toggle emits → the CSS selector that must style it. Load-bearing: direction 1
+ *  iterates it, and the reverse test below fails on an emitted toggle class missing from it. */
+const CLASSES = {
+  "workspace-header-supervisor": ".workspace-header-supervisor {",
+  // ⚠️ The COMPOSED selector, not the bare `is-off` token: `is-off` is a generic modifier name
+  // that could well exist elsewhere in the stylesheet, so matching it alone would pass while
+  // THIS component's modifier was unstyled (`raw-guard-substring-must-be-unique-to-its-site`).
+  "is-off": ".workspace-header-supervisor.is-off {",
+  "workspace-header-supervisor-suppressed":
+    ".workspace-header-supervisor-suppressed {",
+} as const;
+
+/** The class tokens inside the toggle's `className` attributes — literal and template forms. */
+function toggleClassTokens(src: string): string[] {
+  const tokens: string[] = [];
+  for (const m of src.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+    // In a template, replace each `${…}` with the string literals inside it (` is-off`).
+    const text = (m[1] ?? m[2]).replace(/\$\{([^}]*)\}/g, (_x, expr: string) =>
+      [...expr.matchAll(/"([^"]*)"/g)].map((q) => ` ${q[1]} `).join(""),
+    );
+    tokens.push(...text.split(/\s+/).filter(Boolean));
+  }
+  return tokens;
+}
 
 describe("direction 1 — every class the component EMITS is styled", () => {
-  it("the base class has a CSS rule", () => {
-    expect(emitted, "the component must emit the class").toContain(
-      "workspace-header-supervisor",
-    );
-    expect(css, "…and App.css must define it").toContain(
-      ".workspace-header-supervisor {",
-    );
-  });
+  for (const [cls, selector] of Object.entries(CLASSES)) {
+    it(`.${cls} is emitted and has a CSS rule`, () => {
+      expect(emitted, `the component must emit ${cls}`).toContain(cls);
+      expect(css, `…and App.css must define ${selector}`).toContain(selector);
+    });
+  }
 
-  it("the SUPPRESSED marker class has a CSS rule", () => {
-    expect(emitted, "the component must emit the suppressed marker").toContain(
-      "workspace-header-supervisor-suppressed",
+  it("every toggle class the component emits is listed in CLASSES", () => {
+    // The reverse half, and what makes CLASSES a coverage pin rather than a list only this file
+    // reads: a new toggle class added without a CLASSES entry (and therefore without a CSS
+    // check) fails here.
+    const emittedToggle = toggleClassTokens(emitted).filter(
+      (t) => t.startsWith("workspace-header-supervisor") || t === "is-off",
     );
-    expect(css).toContain(".workspace-header-supervisor-suppressed {");
-  });
-
-  it("the OFF modifier has a CSS rule", () => {
-    // ⚠️ Asserted as the COMPOSED selector, not the bare `is-off` token: `is-off` is a generic
-    // modifier name that could well exist elsewhere in the stylesheet, so matching it alone
-    // would pass while THIS component's modifier was unstyled
-    // (`raw-guard-substring-must-be-unique-to-its-site`).
-    expect(css).toContain(".workspace-header-supervisor.is-off {");
+    // Set EQUALITY, not just ⊆: it also fails if the className scan stops seeing a class it
+    // should (e.g. the template-literal `is-off`), so the scan cannot go quietly blind.
+    expect(
+      [...new Set(emittedToggle)].sort(),
+      "Workspace.tsx's toggle classes must be exactly CLASSES — a new class needs an entry " +
+        "(with its selector); a missing one means the className scan went blind",
+    ).toEqual(Object.keys(CLASSES).sort());
   });
 });
 
@@ -240,11 +258,5 @@ describe("the guard is not vacuous", () => {
     expect(emitted.length).toBeGreaterThan(1000);
     // Sanity: the strip did not eat the source.
     expect(emitted).toContain("workspace-header");
-  });
-
-  it("names every class this feature adds", () => {
-    // A guard that silently stopped covering one of the two classes would still pass its own
-    // assertions above; pin the SET so adding a third class without a guard fails here.
-    expect(CLASSES).toHaveLength(3);
   });
 });

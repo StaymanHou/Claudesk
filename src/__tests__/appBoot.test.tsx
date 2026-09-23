@@ -16,6 +16,12 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 // is `pnpm check:link`'s job, and this test must not be cited for it.
 
 const calls: string[] = [];
+// `uncaught` catches what jsdom reports as a window `error` event: a throw inside a DOM event
+// listener. Positive control (paydown WP6): a throwing listener dispatched on main.tsx's boot path
+// turned `expect(uncaught).toEqual([])` red on its own, with the picker still rendered and Vitest
+// reporting NO unhandled error, so without this assertion that throw goes unseen. A throw in a
+// `setTimeout` callback does NOT land here (it runs on Node's timers); Vitest's own
+// unhandled-error report catches that one and fails the run.
 const uncaught: unknown[] = [];
 const onError = (e: ErrorEvent) => uncaught.push(e.error ?? e.message);
 window.addEventListener("error", onError);

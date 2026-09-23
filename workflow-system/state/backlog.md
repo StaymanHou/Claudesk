@@ -2,9 +2,9 @@
 
 ## Code-quality findings — paydown-wp3-boot-smoke-test (2026-09-23)
 
-- **Pointer:** **2 MAJOR + 2 MINOR remain** (rewritten 2026-09-23 at paydown WP4, which resolved 4 comment MINORs and the prose half of MAJOR-1). MAJOR-1's code half: `check:link`'s two-entry property is not pinned, and the prose no longer claims it is. MAJOR-2: the Vitest-reads-`undefined` rationale is duplicated about 8 times. MINORs: `appBoot`'s `uncaught` assertion has never been shown to fail on its own, and `linkCheck.test.ts` sits outside the tsc `include`. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-wp3-boot-smoke-test — 2026-09-23`.
-- **Priority:** medium (MAJOR-1) / low (the rest)
-- **Status:** pending — MAJOR-1 + both MINORs routed to paydown-2026-09-23 WP6; MAJOR-2 (T1 rationale duplication) routed to the R2 comment-convention pass, not the sweep
+- **Pointer:** **1 MAJOR remains** (rewritten 2026-09-23 at paydown WP6). MAJOR-1's code half (`check:link` now asserts both entry chunks, pinned by two-entry fixtures) and both MINORs (`appBoot`'s `uncaught` assertion — proven by a positive control and kept — and `linkCheck.test.ts`, now in the tsc `include`) were resolved at WP6; the comment MINORs and MAJOR-1's prose half at WP4. Remaining, MAJOR-2: the Vitest-reads-`undefined` rationale is duplicated about 8 times. Details: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# paydown-wp3-boot-smoke-test — 2026-09-23`.
+- **Priority:** low
+- **Status:** pending — MAJOR-2 (T1 rationale duplication) routed to the R2 comment-convention pass, not the sweep
 
 ## Code-quality findings — fa-wp4-send-and-stage (2026-09-22)
 
@@ -36,16 +36,10 @@
 - **Status:** pending
 - **Pickup shape:** comment-duplication across the supervisor modules (fold into the standing comment-convention item, do NOT trim per-WP — that is measured as not converging), the Rust timeout test that re-implements the production wait/kill loop, and the discarded adjudicator stderr. Independent polish; none blocks WP4.
 
-## Code-quality findings — m15-wp2-state-machine-as-code (2026-09-12)
-- **Pointer:** **2 MAJOR + 3 MINOR**, but ⚠️ **BOTH MAJORs and ONE MINOR were FIXED IN PLACE before finalize** — only 2 low-value MINORs remain open. **0 CRITICAL.** ⚠️ **The first MAJOR was a real latent defect in the module WP3 consumes:** `unmappedReason()` keyed on `workflow === "session-ops"` and returned `meta-op` for all 19, but only 12 actually are (6 are `cross-workflow`, 1 `terminal`, 2 dispatchable skills) — so a future session-ops edge with a real skill target and no policy row would have been silently labelled "no row owed", **hiding a genuine gap from the one report whose job is to surface them.** Fixed by keying on `dispatchTarget` with `terminal`/`cross-workflow` as their own reasons; ⚠️ this also **sharpened the gap report from 2 entries to 1** (`P13` is terminal — no row was ever owed; `I2` alone is the real gap). The second MAJOR: the `TRANSITION:` regex was exported from a **test file** — extracted to `src/state/workflowMachine/transitionToken.ts`, since shipping the parse half of the contract in `__tests__/` is this WP's own single-source thesis failing one layer up. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp2-state-machine-as-code — 2026-09-12`.
-- **Priority:** low (both remaining)
-- **Status:** pending
-- **Pickup shape:** both are test-file polish — collapse the arithmetic-derived count expectations, and extract the two funnel predicates to module scope. `/feature-refactor` handles them together in one pass.
-
 ## Code-quality findings — m15-wp1-supervisor-probe (2026-09-12)
-- **Pointer:** **1 MAJOR + 3 MINOR** (0 CRITICAL). The naive-baseline MAJOR was resolved at paydown-2026-09-23 WP4: the comment and the probe report's Q1 line now say 119 is naive within the decided population, and a policy-free predicate flags 234. ⚠️ The remaining MAJOR changes what a reader BELIEVES: the decisive `0.8` bar is stated **twice** (hardcoded in `scoreArm` and as prose in `_meta.threshold`), and **haiku's margin is computed against SONNET's `minTpForBar`**, correct only because both arms happen to share 29 positives. MINORs: near-tautological assertions, comment history that is a third copy of the WIP, and `Record_`/insertion-order nits. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp1-supervisor-probe — 2026-09-12`.
-- **Priority:** medium (the MAJOR) / low (the MINORs)
-- **Status:** pending — routed to paydown-2026-09-23 WP6 (G2, G4, G6) + the comment-convention pass (G5)
+- **Pointer:** **1 MINOR remains** (0 CRITICAL). The naive-baseline MAJOR was resolved at paydown-2026-09-23 WP4. At WP6: the decisive-bar MAJOR (`scoreArm` now uses the bar parsed from `_meta.threshold`, and each arm's margin uses its own positives), the near-tautological assertions (deleted) and the access-style nits. Remaining: the test file's comment density, a third copy of the WIP's attempt history. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp1-supervisor-probe — 2026-09-12`.
+- **Priority:** low
+- **Status:** pending — routed to the comment-convention pass (G5)
 
 ## Code-quality findings — drive-mode-on-the-workspace-surface (2026-08-26)
 - **Pointer:** **3 findings remain** (rewritten 2026-09-23). The borrowed-credibility MAJOR and MINOR-polish (a)/(b) were resolved at paydown-2026-09-23 WP4. Remaining: (1) the re-entrancy defect, where a second Apply during a queued apply is silently discarded, is **ruled R1 Option A ('disable while queued') → paydown WP8**; (2) the `RESPAWN_INTENT_HOLD_MS` scheduler-timing sleep (H2) and (4) the source guards where extraction was available, which share the `useDriveModeApply` hook extraction R1 DEFERS to the next drive-mode touch; plus the MINOR-polish residue: (c) a duplicated CSS rule (H5c → paydown WP8) and (d) the same extraction. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# drive-mode-on-the-workspace-surface — 2026-08-26`.
@@ -58,60 +52,23 @@
 - **Status:** pending
 
 ## Code-quality findings — window-geometry-persistence (2026-08-21)
-- **Pointer:** **2 MAJOR + 4 MINOR** (grouped as 3 entries), auto-backlogged per `drive_mode: autopilot`. ⚠️ **Both MAJORs are about PROSE, not code** — the review found 0 CRITICAL and explicitly states "nothing here needs a refactor pass to be safe." (1) `window_state/mod.rs` carries **117 comment lines for 14 lines of executable code**, with a clean keep/move split — the four plugin-source properties and two flag-omission rationales stay; the provenance (display size, "verified live at P1.3", the `1280×800` history, the mutant-E narrative) is **already verbatim in commit `25a68bc`**, so it is deletion not relocation. (2) The **PiP-denylist rationale is stated at four sites** (`mod.rs` ×2, `lib.rs` ×2 regions, `Cargo.toml`) — the asymmetric-drift shape this repo has measured before. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# window-geometry-persistence — 2026-08-21`.
+- **Pointer:** **2 MAJOR remain; all 4 MINORs are resolved** (the vacuity-guard doc's mutant-E history at paydown-2026-09-23 WP1–WP4; the bare `"main"` literal → a shared `MAIN_WINDOW_LABEL`, the over-broad `!code.contains('"')` guard → an exactly-one `.with_denylist(denylist())` assertion, and the fixed-size `denylist()` array → a slice, at WP6). ⚠️ **Both MAJORs are about PROSE, not code** — the review found 0 CRITICAL and explicitly states "nothing here needs a refactor pass to be safe." (1) `window_state/mod.rs` carries **117 comment lines for 14 lines of executable code**, with a clean keep/move split — the four plugin-source properties and two flag-omission rationales stay; the provenance (display size, "verified live at P1.3", the `1280×800` history, the mutant-E narrative) is **already verbatim in commit `25a68bc`**, so it is deletion not relocation. (2) The **PiP-denylist rationale is stated at four sites** (`mod.rs` ×2, `lib.rs` ×2 regions, `Cargo.toml`) — the asymmetric-drift shape this repo has measured before. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# window-geometry-persistence — 2026-08-21`.
 - **⚠️ Both MAJORs are instances of an already-open standing finding, not new work:** `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, whose own resolution shape is **"one authority per rule + a pointer at every other site + a GUARD"** and which records that **per-WP trimming was measured as NOT converging** (four consecutive reviews of one file). **Fold these into it rather than paying them down separately** — a fifth per-file trim is the thing that finding exists to stop.
-- **The 4 MINORs:** a bare `"main"` literal in a test that argues the opposite principle elsewhere; ⚠️ the vacuity guard's `!code.contains('"')` assertion being **broader than the property it names** (it would also reject a legitimate `.with_filename(..)`, and an over-broad guard is how guards get deleted rather than narrowed); `denylist()`'s fixed-size array baking the count into the signature; and the guard's doc comment restating commit-message history.
-- **Priority:** medium (2 MAJOR — documentary/drift risk, no correctness impact) + low (4 MINOR)
+- **Priority:** medium (2 MAJOR — documentary/drift risk, no correctness impact)
 - **Status:** pending
 - **Pickup shape:** read the three entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — wp2-background-work-status-states (2026-08-22)
-- **Pointer:** **1 CRITICAL + 2 MAJOR — all three FIXED IN PLACE before finalize, not backlogged** (see the archived WIP's `## Code-Quality Review`). ⚠️ The CRITICAL was a **real shipped regression**: `recycleSession.ts` derived "a `Stop` arrived" from `state === "idle"` only, so WP2's new `background_work` mapping made a `Stop` with outstanding background work invisible — hanging Recycle to its 180s timeout in the *likely* case (Recycle runs `/session-handoff`, which may well have a job outstanding). Root method cause: the consumer sweep grepped `awaiting_input` consumers, a predicate structurally blind to a site keyed on `"idle"`. **2 MINOR remain open**, bodies in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# wp2-background-work-status-states — 2026-08-22`: the CSS regex guard's shape-blindness (it will false-fail opaquely on a nested rule / custom property / shorthand), and the dead hyphenated `WorkspaceStatus` legacy type that is a casing-trap for the next person adding a state.
-- **Priority:** low (both remaining)
+- **Pointer:** **1 CRITICAL + 2 MAJOR — all three FIXED IN PLACE before finalize, not backlogged** (see the archived WIP's `## Code-Quality Review`). ⚠️ The CRITICAL was a **real shipped regression**: `recycleSession.ts` derived "a `Stop` arrived" from `state === "idle"` only, so WP2's new `background_work` mapping made a `Stop` with outstanding background work invisible — hanging Recycle to its 180s timeout in the *likely* case (Recycle runs `/session-handoff`, which may well have a job outstanding). Root method cause: the consumer sweep grepped `awaiting_input` consumers, a predicate structurally blind to a site keyed on `"idle"`. **1 MINOR remains open** (the CSS regex guards' shape-blindness was resolved at paydown-2026-09-23 WP6 — their failure messages now name the shapes they cannot read), body in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# wp2-background-work-status-states — 2026-08-22`: the dead hyphenated `WorkspaceStatus` legacy type that is a casing-trap for the next person adding a state.
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** read the two entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
-
-## SURFACE-2026-09-21-UNCHUNKED-BASE64-ENCODER-OVERFLOWS-ON-LARGE-INPUT
-
-- **Priority:** low-medium
-- **Source:** feature:build — F-a WP2 Phase 1 (2026-09-21)
-- **Target level:** product:arch (a duplicated primitive, one copy of which has a size ceiling)
-- **Type:** tech-debt
-- **Status:** pending
-
-**Two copies of "UTF-8 string → base64 for `cc_input`" exist, and one of them throws on large
-input.** `autoResumeFire.ts`'s module-private `encodeUtf8Base64` builds its binary string by
-spreading the entire byte array into a single `String.fromCharCode(...bytes)` call.
-⚠️ **Measured 2026-09-21: it throws `RangeError: Maximum call stack size exceeded` at ~200k
-characters.** `src/cc/bridge.ts`'s `encodeBase64` — whose own header calls it *"the single
-frontend chokepoint for that encoding"* — does the same job with a **chunked** spread
-(`CHUNK = 0x8000`) and is unaffected.
-
-**Why it has not bitten:** the private twin's only callers are slash commands (`/session-restore`,
-skill-row commands, supervisor fires), which are short by construction and cannot approach the
-limit. The ceiling is real but currently unreachable **from those callers**.
-
-**Why it is still worth recording:** F-a WP2 hit this while choosing an encoder for staged prompt
-text, where a long single-take dictation is *exactly* the input that reaches 200k. That WP routed
-around it (the staging path imports the chunked `encodeBase64`, pinned by a 200k regression test
-in `stagedPayload.test.ts`) rather than fixing it — so **the trap is still armed for the next
-caller who reaches for the nearer copy.** ⚠️ The duplicate also contradicts its own header, which
-says *"Kept in this module (rather than imported) only because the encode is two lines; if a third
-caller appears, hoist it."* A third caller has now appeared and deliberately did not use it.
-
-- **Suggested action:** delete `autoResumeFire.ts`'s private `encodeUtf8Base64` and import
-  `encodeBase64` from `cc/bridge` instead. ⚠️ **`slashCommandPayload`'s output bytes must not
-  change** — it is pinned against a Rust twin and shared by M12 auto-resume, M13's skill row and
-  M15's supervisor. The two encoders agree on all ASCII and multi-byte input; the only difference
-  is the chunking, so the swap should be byte-neutral — but the existing byte pins in
-  `autoResumeFire.test.ts` plus the wbs-2.4 guard in `stagedPayload.test.ts` are what prove it.
-  Good `/feature-refactor` or backlog-paydown material; not urgent on its own.
+- **Pickup shape:** read the entry in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
 
 ## Code-quality findings — fa-wp2-draft-store-history-payload (2026-09-21)
-- **Pointer:** **2 findings remain — 0 CRITICAL, 0 MAJOR, 2 MINOR** (the `typeof`-guard comment MINOR was resolved at paydown-2026-09-23 WP4). ⚠️ **Both MAJORs were FIXED at review time, not backlogged**, and the first is worth knowing about: `appendToHistory` returned the intact ring on its blank-entry arm but a bare `[]` on the no-storage and quota arms — and **a throwing `setItem` leaves storage INTACT**, so `setRing(appendToHistory(p, t))` in WP3/WP4 would have blanked a populated UI ring against live data. ⚠️ **The round-4 test PINNED the bug**: it asserted `toEqual([])` against a stub whose `getItem` returned `null`, so `[]` was also what correct behavior produced — the assertion could not tell them apart. Both the code and that test are fixed and mutation-proved. The second MAJOR was comment density (measured 73%/58%/56% of physical lines) plus a rationale triplicated across three sites; trimmed to the comment budget's keep-list (measurements, rejected alternatives, what-to-do-when-this-fails) with zero provenance markers left in the implementation files, verified by grep. The 2 remaining MINOR: a `.filter()` that collects elements where it reads as collecting indices (A1 → paydown WP6); and a `loadHistory` read that precedes the storage guard it would short-circuit. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# fa-wp2-draft-store-history-payload — 2026-09-21`.
-- **Priority:** low (both)
+- **Pointer:** **1 finding remains — 0 CRITICAL, 0 MAJOR, 1 MINOR** (the `typeof`-guard comment MINOR was resolved at paydown-2026-09-23 WP4, and the terminator-count `.filter()` at WP6). ⚠️ **Both MAJORs were FIXED at review time, not backlogged**, and the first is worth knowing about: `appendToHistory` returned the intact ring on its blank-entry arm but a bare `[]` on the no-storage and quota arms — and **a throwing `setItem` leaves storage INTACT**, so `setRing(appendToHistory(p, t))` in WP3/WP4 would have blanked a populated UI ring against live data. ⚠️ **The round-4 test PINNED the bug**: it asserted `toEqual([])` against a stub whose `getItem` returned `null`, so `[]` was also what correct behavior produced — the assertion could not tell them apart. Both the code and that test are fixed and mutation-proved. The second MAJOR was comment density (measured 73%/58%/56% of physical lines) plus a rationale triplicated across three sites; trimmed to the comment budget's keep-list (measurements, rejected alternatives, what-to-do-when-this-fails) with zero provenance markers left in the implementation files, verified by grep. The remaining MINOR: a `loadHistory` read that precedes the storage guard it would short-circuit. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# fa-wp2-draft-store-history-payload — 2026-09-21`.
+- **Priority:** low
 - **Status:** pending
-- **Pickup shape:** Both are one-liners and independent — no ordering constraint. ⚠️ **Do NOT "fix" the blank-check ordering by returning `[]` from that arm** — that reintroduces the MAJOR this WP just closed; only the guard *ordering* is the finding.
+- **Pickup shape:** A one-liner. ⚠️ **Do NOT "fix" the blank-check ordering by returning `[]` from that arm** — that reintroduces the MAJOR this WP just closed; only the guard *ordering* is the finding.
 
 ## SURFACE-2026-09-21-SUPERVISOR-HAS-NO-OPERATOR-VISIBLE-ACTIVITY-SURFACE
 
@@ -379,30 +336,6 @@ an argument for sequencing, not a decision.
   not settle. Triage what remains as a batch, not one-at-a-time.
 - **Priority:** high
 - **Status:** open
-
-## SURFACE-2026-09-14-DOCSLINKHANDLING-FLAKE-EXITS-NONZERO-WITH-ZERO-FAILURES
-- **Source:** feature:verify-codify (M15 WP4 Phase 5)
-- **Target level:** product:arch
-- **Type:** bug (flaky test / unhandled async rejection)
-- **Summary:** `pnpm verify:auto` intermittently **exits 1 while reporting `2587 passed`, `0
-  failed`, `190 test files passed`**. The non-zero exit comes from `Errors  1 error` — an
-  unhandled rejection thrown from a `setTimeout` callback **after** the suite completes:
-  `scrollToFragmentWhenPresent` → `handleDocLinkClick.ts:160` → `Timeout._onTimeout`, attributed
-  to `docsLinkHandling.test.ts`.
-- **Context:** Observed once during M15 WP4 Phase 5; **not reproducible on demand** — the file
-  passes 14/14 in isolation (2 runs) and the full suite exits 0 (2 runs) immediately afterward.
-  M11 docs code; WP4 touched nothing in it. ⚠️ **The dangerous property is the SHAPE, not the
-  frequency:** a gate that exits non-zero while reporting zero failures teaches a future session
-  to "just re-run until green" — which is precisely how a REAL failure gets waved through. It also
-  cost one full-gate cycle to classify.
-- **Suggested action:** Make the timer cancellable — `scrollToFragmentWhenPresent`'s polling
-  timeout should be cleared on unmount/teardown so no callback can fire after the test that
-  scheduled it has finished. Alternatively give the test an explicit teardown that drains pending
-  timers. ⚠️ Do **not** "fix" it by loosening the runner's unhandled-error reporting: that
-  reporting is what surfaced it.
-- **Priority:** medium (intermittent; no product impact — but it degrades trust in the one gate
-  this project relies on, and the failure mode is self-concealing)
-- **Status:** pending
 
 ## SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION
 - **Source:** feature:verify-human (M15 WP4 Phase 4)
@@ -694,7 +627,7 @@ and work on the spec well."
 
 ⚠️ **`transitions.md` and `agents/feature-workflow/AGENTS.md` record DIFFERENT feature graphs.** `F10` targets `verify-self` in the authority and `verify-human` in the copy; `F9b`/`F10b`/`F30` are absent from the copy entirely, whose state table has 12 rows and omits `verify-self`.
 
-✅ **CLAUDESK IS NO LONGER EXPOSED.** The typed graph was transcribed from `transitions.md` **only**, and a live drift test (`agrees with upstream on the F10 target`) reads the authority file and fails if anyone "fixes" the absorbed value toward the stale copy. ⚠️ It is `_ref/`-gated, so it **skips** on a fresh checkout — reported as skipped, never silently passed.
+✅ **CLAUDESK IS NO LONGER EXPOSED.** The typed graph was transcribed from `transitions.md` **only**, and a live drift test (`agrees with upstream on the F10 target`) reads the authority file and fails if anyone "fixes" the absorbed value toward the stale copy. ⚠️ It is `_ref/`-gated, so it **skips** on a fresh checkout — reported as skipped, never silently passed. ✅ **Verified 2026-09-23 (paydown WP6): no change needed.** A throwaway copy with the gate forced absent reported `17 passed | 2 skipped`, with both drift tests listed as `↓` skipped.
 
 ⚠️ **WHAT REMAINS IS UPSTREAM'S:** the four `AGENTS.md` copies are still wrong, and mccc's `check-structure.sh` Phase 9 — which exists to keep them in sync — is **not catching it**. The hand-off note (`HANDOFF-to-mccc-m15-wp2.md`) asks for Phase 9's deletion and carries the evidence. **Blocked on a session rooted in the mccc repo** (editing from Claudesk would silently dirty a different git repository).
 
@@ -742,24 +675,13 @@ and work on the spec well."
 
 ## SURFACE-2026-08-21-NOTIFICATION-TYPE-FALLBACK-IS-WRONG-FOR-COMPLETION-TYPES
 - **Source:** feature:build (M13.5 WP2 Phase 1 — the generalization of the defect just fixed)
-- **Target level:** product:arch (a standing classification hazard, not a current defect)
+- **Target level:** operational (a periodic check, not a code change)
 - **Type:** trap (a conservative default that is right in one direction and wrong in the other)
-- **Summary:** `notification_awaits_input`'s unknown-type fallback maps **any unrecognized `notification_type` to AwaitingInput**. That is the right conservative choice for a future *input-needed* type (never silently swallow a real prompt) and the **wrong** one for a *completion/informational* type — and Claudesk cannot tell which a new type is. `agent_completed` was one instance and lit the dot blue for ~150s; the next new type is a coin flip.
-- **Context:** ⚠️ **The fallback should NOT be inverted** — it is load-bearing in the input-needed direction and pinned by `notification_unknown_type_falls_back_to_awaiting`. The gap is that nothing *notices* a new type has appeared. ⚠️ A second, subtler shape found by mutation probe while fixing `agent_completed`: because the fallback yields the same answer as an explicit entry, a **behavioral** test cannot distinguish "classified deliberately" from "classified by accident" — deleting `agent_needs_input` from the explicit list left every behavioral test green. Closed for that one type by asserting list *membership*; the general form is unguarded. ⚠️ Also recorded: the three `elicitation_*` types in the code have **never been observed** in either corpus (harmless — each classifies the way the fallback would — but do not cite them as evidence of CC behavior).
-- **⚠️ Added 2026-08-22 from the docs pass — `elicitation_url_dialog` is a SIXTH documented type Claudesk does not classify.** The official hooks doc lists `permission_prompt`, `idle_prompt`, `auth_success`, `elicitation_dialog`, **`elicitation_url_dialog`**, `elicitation_complete`, `elicitation_response`, `agent_needs_input`, `agent_completed`. Claudesk knows all but `elicitation_url_dialog`, which therefore rides the unknown-type fallback to `AwaitingInput`. ⚠️ That is **probably correct** (it is a dialog awaiting the user) — but it is correct *by accident*, which is exactly the shape of the `agent_completed` defect. It appears in **neither corpus**, so the measured-vocabulary sweep could not see it; only the docs list it. **Cheap fix: add it to `INPUT_NEEDED_NOTIFICATION_TYPES` explicitly.** ⚠️ Note the docs are now a second source for this vocabulary alongside the corpus — check **both**, since each misses what the other has.
-- **⚠️ Added 2026-08-21 at verify-human — `agent_completed` is NOT emitted by the in-turn `Agent` tool.** A real backgrounded `Agent`-tool task was run to completion during verification (`SubagentStart` → `SubagentStop` both present in `status-channel.log`); its only `Notification` was **`idle_prompt`**. All 3 corpus instances of `agent_completed` came from sessions where the likely emitter is a **background CC session** (`~/.claude/jobs`, `template: "bg"`), not a subagent spawned inside a turn. ⚠️ **Consequence: the fixed defect could not be reproduced on demand**, so the fix is verified by socket injection + unit/mutation tests, NOT by a live CC-emitted event. ⚠️ **Do not read a passing "background agent finished and the dot stayed gray" test as exercising this code path** — `idle_prompt` produces the identical `mapped=none, dropped` signature and was already correct before the fix. If a future session needs to reproduce it, drive a **background CC session**, not an in-turn agent.
-- **Suggested action:** A cheap periodic check, not a code change: `SELECT DISTINCT json_extract(meta,'$.notification_type') FROM events` over `time-analytics.sqlite` and classify anything new. The measured vocabulary as of 2026-08-21 is exactly **5** types (`idle_prompt` 1723 · `permission_prompt` 392 · `agent_completed` 3 · `auth_success` 2 · `agent_needs_input` 1). ⚠️ This would have caught the `agent_completed` defect the day it first fired. Consider whether it belongs in a test that reads the live DB (probably not — it would be environment-dependent) or in a `/release`-time checklist item.
-- **Priority:** low (no live defect — the vocabulary is fully classified as of today; this is about the NEXT type CC adds)
-- **Status:** pending
-
-## SURFACE-2026-08-21-HOOK-SOCKET-SHUTDOWN-RACE-IS-FLAKY
-- **Source:** feature:ship (M13.5 WP1 final verification — unrelated to that feature)
-- **Target level:** task (a small test-hygiene fix)
-- **Type:** tech-debt (flaky test)
-- **Summary:** `hook_socket::tests::loop_exits_cleanly_when_receiver_is_dropped` fails intermittently at `src-tauri/src/hook_socket/mod.rs:568` with `Os { code: 57, kind: NotConnected }` from `client.shutdown(..).unwrap()`.
-- **Context:** The race is **intrinsic to what the test exercises**: it drops the receiver so `accept_loop` returns and closes the connection: when the server wins that race, the client's later `shutdown` has nothing connected. Observed once in ~4 full-suite runs on 2026-08-21; passed 3/3 in isolation and the next full run was green. **Not caused by the WP1 change** (that diff is a dependency, two `lib.rs` lines, and a new module — nothing touching sockets or threads). ⚠️ Per the workflow's own triage rule, no code or test was modified to make it quiet.
-- **Suggested action:** Treat `shutdown` as best-effort in this test — `let _ = client.shutdown(..)` (the assertion that matters is the `handle.join()` below it, i.e. the loop returns rather than hanging or panicking). ⚠️ Do **not** "fix" it by adding a sleep: the race is the point of the test, and a sleep would make the pass timing-dependent in the other direction. Confirm the `join()` assertion still fails if `accept_loop` is mutated to hang.
-- **Priority:** low (no product defect; cost is one spurious red full-suite run and the re-diagnosis it invites)
+- ⚠️ **Rewritten 2026-09-23 (paydown WP6) down to the remaining open work.** The code half is DONE: `elicitation_url_dialog` is classified explicitly, the informational set is an enumerable list, and `every_documented_notification_type_is_classified_deliberately` pins the two lists as disjoint, with their union exactly the official hooks doc's 9 types. So a newly DOCUMENTED type now fails a test instead of riding the fallback.
+- **Summary (what remains):** `notification_awaits_input`'s unknown-type fallback maps any unrecognized `notification_type` to AwaitingInput. That is right for a future *input-needed* type and wrong for a *completion* one (`agent_completed` lit the dot blue for ~150s). ⚠️ **The fallback must NOT be inverted**; it is pinned by `notification_unknown_type_falls_back_to_awaiting`. The vocabulary test covers what the docs list, but **a type CC emits WITHOUT documenting it** (which is how `agent_completed` first appeared) is still caught only by looking at the corpus.
+- **Context kept:** `agent_completed` is NOT emitted by the in-turn `Agent` tool: a real backgrounded `Agent` task produced only `idle_prompt` (verify-human 2026-08-21). The likely emitter is a **background CC session** (`~/.claude/jobs`). Do not read "a background agent finished and the dot stayed gray" as exercising this path, because `idle_prompt` gives the identical signature. The four `elicitation_*` types have never been observed in either corpus.
+- **Suggested action:** a cheap periodic check, e.g. a `/release`-time checklist item: `SELECT DISTINCT json_extract(meta,'$.notification_type') FROM events` over `time-analytics.sqlite`, then classify anything outside the documented 9. Measured vocabulary as of 2026-08-21: `idle_prompt` 1723 · `permission_prompt` 392 · `agent_completed` 3 · `auth_success` 2 · `agent_needs_input` 1. A test reading the live DB is probably wrong (environment-dependent).
+- **Priority:** low (no live defect)
 - **Status:** pending
 
 ## SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED
@@ -863,9 +785,9 @@ and work on the spec well."
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: **deferred by operator decision 2026-08-06** (*"session-start can be a later item in the backlog. much lower priority than session-restore, but not nothing"*)
 
 ## Code-quality findings — m13-wp3-recycle-session (2026-08-18)
-- **Pointer:** **2 MAJOR remaining.** The uncancellable-across-unmount MAJOR was resolved 2026-08-19, and all three MINORs are resolved (the last, `showRecycleButton`'s stale `:489` cite, at paydown-2026-09-23 WP4). ⚠️ **(1) The late-subscription disposal MAJOR is HALF-closed, not closed** (re-read 2026-09-23): the test added at paydown WP4 covers the **`fs-change`** arm only, and the **`WORKSPACE_STATUS`** arm is still unreachable because its mock resolves synchronously. (2) The documentary MAJOR: **52–71% comment density, with the "Recycle is not a skill-button member" rationale in five files.** Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m13-wp3-recycle-session — 2026-08-18`.
-- **Priority:** medium (1) / low (2)
-- **Status:** pending — routed to paydown-2026-09-23 WP6 (1) + the comment-convention pass (2)
+- **Pointer:** **1 MAJOR remaining.** The uncancellable-across-unmount MAJOR was resolved 2026-08-19, and all three MINORs are resolved (the last, `showRecycleButton`'s stale `:489` cite, at paydown-2026-09-23 WP4). The late-subscription disposal MAJOR is now FULLY closed (paydown-2026-09-23 WP6): the `WORKSPACE_STATUS` arm has its own deferred-unlisten test, and each arm is mutation-proved on its own. Remaining, the documentary MAJOR: **52–71% comment density, with the "Recycle is not a skill-button member" rationale in five files.** Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m13-wp3-recycle-session — 2026-08-18`.
+- **Priority:** low
+- **Status:** pending — routed to the comment-convention pass
 
 ## Code-quality findings — m12-wp4b-drive-mode-signal (2026-08-07)
 - **Pointer:** **2 MINOR remaining** (rewritten 2026-09-23). The descendant-inheritance MAJOR was resolved at the 2026-08-18 paydown: `cc_spawn_env` now states the inheritance is intended. ⚠️ Still **do NOT reach for `env_clear()`**, which strips PATH/LANG/TERM. The `shell_spawn_env` MAJOR (a test asserting the primitive, not the caller) is resolved: the test now asserts the `spawn_shell` call site passes `&shell_spawn_env(), "exit"`. The readability MAJOR (incident narrative recorded three times) is comment density and goes to the T1/T2 convention pass. Remaining: `%KNOWN` rebuilt per call in `claudesk-hook.pl`, and a silently dropped can't-happen serde failure in `cc_spawn_env`. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp4b-drive-mode-signal — 2026-08-07`.
@@ -873,9 +795,9 @@ and work on the spec well."
 - **Status:** pending — routed to paydown-2026-09-23 WP8
 
 ## Code-quality findings — m12-wp1-probe-flag-store-and-announce (2026-08-03)
-- **Pointer:** **3 open items** (rewritten 2026-09-23). The two-live-`Verdict (b)` MINOR is resolved: `App.tsx` now names each milestone's verdict. The measurement-scripts convention question was Buried 2026-09-23. Remaining: (1) whether a phase observable must be amended when a verdict *reverses* the assumption it encoded (a workflow-system convention → the mccc handoff); (2) ⚠️ the lazy `interface RecentProject[\s\S]*?default_model\?` regex in `listProjectsConsumers.test.ts` can match past the interface's closing brace, so it wants a brace-counted slice; (3) one redundant paragraph on the Rust hazard test's doc comment (⚠️ **not** its reopening-condition paragraph). Bodies for (1): [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp1-probe-flag-store-and-announce — 2026-08-03`; (2) and (3) live only here.
+- **Pointer:** **2 open items** (rewritten 2026-09-23; the lazy `RecentProject` regex item was resolved at paydown WP6 — a brace-counted `interfaceBody` slice). The two-live-`Verdict (b)` MINOR is resolved: `App.tsx` now names each milestone's verdict. The measurement-scripts convention question was Buried 2026-09-23. Remaining: (1) whether a phase observable must be amended when a verdict *reverses* the assumption it encoded (a workflow-system convention → the mccc handoff); (2) one redundant paragraph on the Rust hazard test's doc comment (⚠️ **not** its reopening-condition paragraph). Bodies for (1): [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp1-probe-flag-store-and-announce — 2026-08-03`; (2) lives only here.
 - **Priority:** low
-- **Status:** pending — (1) → `HANDOFF-to-mccc-2026-09-23-paydown.md`; (2) → paydown-2026-09-23 WP6; (3) → the comment-convention pass
+- **Status:** pending — (1) → `HANDOFF-to-mccc-2026-09-23-paydown.md`; (2) → the comment-convention pass
 
 ## Code-quality findings — m11-wp4-docs-live-reload (2026-08-02)
 - **Pointer:** **1 MAJOR + 4 MINOR** remaining (was 1 CRITICAL + 4 MAJOR + 4 MINOR) from
@@ -1065,9 +987,9 @@ and work on the spec well."
 - **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
 
 ## Code-quality findings — supervisor-hotfix (2026-09-17)
-- **Pointer:** **2 MINOR remain** (rewritten 2026-09-23). Both MAJORs (the "per turn" toggle freshness claim, narrowed to option (a) with (b)/(c) deferred to F-b; and the unwired `UnsentInputWatermark.clear()` doc, restated as reserved) and the merged Rust doc block were resolved at paydown-2026-09-23 WP4. Remaining: `CLASSES` pinning only its own length, and the "do not merge" defence at 2 sites. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-hotfix — 2026-09-17`.
+- **Pointer:** **1 MINOR remains** (rewritten 2026-09-23). Both MAJORs (the "per turn" toggle freshness claim, narrowed to option (a) with (b)/(c) deferred to F-b; and the unwired `UnsentInputWatermark.clear()` doc, restated as reserved) and the merged Rust doc block were resolved at paydown-2026-09-23 WP4. `CLASSES` pinning only its own length was resolved at WP6 (it now drives the CSS checks and must equal the emitted toggle classes). Remaining: the "do not merge" defence at 2 sites. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-hotfix — 2026-09-17`.
 - **Priority:** low
-- **Status:** pending — routed to paydown-2026-09-23 WP6 (C4) + the comment-convention pass (C5)
+- **Status:** pending — routed to the comment-convention pass
 
 ## SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS
 - **Source:** feature:verify-self (M13.5 WP3 Phase 1)
@@ -1169,21 +1091,6 @@ and work on the spec well."
 - **Pointer:** **1 MINOR remaining** (rewritten 2026-09-23, paydown WP5). The three MAJORs and two of the MINORs were resolved by paydown WP5 and are recorded in CHANGELOG: the unstyled outcome selector, the CM6 guard blind to the `searchKeymap` spread, the host sections with no tie to the `ChordHost` union, `chordLabel` with no consumer, and `visibleChords` recomputed per section. Remaining: **`RATIONALE-STATED-THREE-TIMES`**, the same ~20-line rationale in `chordRegistry.ts`'s header and `SettingsPanel.tsx`'s hotkey block comment. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# hotkey-reference — 2026-09-17`.
 - **Priority:** low
 - **Status:** pending — routed to the comment-convention pass (`SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`, ruling R2)
-
-## Code-quality findings — m14-wp2-sign-notarize-delete-quarantine (2026-09-18)
-- **Pointer:** **1 MINOR** remaining (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship
-  commit `3e50eb7`. A reverse-only source guard (`updaterWiring.test.ts`'s "no longer wires the
-  deleted quarantine dialog") has no positive anchor — safe where it sits, a vacuity risk if ever
-  isolated. **A second MINOR was FIXED at review time rather than backlogged** (a backlog entry
-  marked "RESOLVED in-phase" while still `Status: pending`; closed via delete-on-resolve with a
-  `**Backlog resolved:**` CHANGELOG bullet in the same commit). See
-  [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
-  `# m14-wp2-sign-notarize-delete-quarantine — 2026-09-18`.
-- **Priority:** low
-- **Status:** pending
-- **Pickup shape:** one-line addition — add a positive assertion beside the reverse guard. Rides any
-  future touch of `src/updater/__tests__/updaterWiring.test.ts`. Dismiss via the WIP's
-  `## Code-Quality Review` section.
 
 ## SURFACE-2026-09-18-DOC-COUNT-NEEDS-A-GENERATOR-NOT-A-DETECTOR
 - **Source:** feature:verify-codify (M14 WP4 Phase 4)

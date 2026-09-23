@@ -431,6 +431,14 @@ describe("link navigation — wiring, now that the handler is its own module", (
     expect(panel).not.toContain("classifyHref(");
   });
 
+  it("hands the handler an abort signal that the panel aborts on unmount", () => {
+    // The handler's fragment scroll polls on a timer; the panel owns its lifetime.
+    // Behavior (abort stops the poll) is proven in docsLinkHandling.test.ts against the real
+    // handler — this pins only that the component supplies the signal and aborts it.
+    expect(panel).toContain("signal: linkAbortRef.current?.signal");
+    expect(panel).toMatch(/return \(\) => controller\.abort\(\)/);
+  });
+
   it("matches links by delegation from the container", () => {
     expect(linkHandler).toContain('closest?.("a[href]")');
   });

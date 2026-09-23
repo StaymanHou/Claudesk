@@ -642,13 +642,14 @@ describe("signal filtering and subscription hygiene", () => {
     expect(unlistenCalls).toBe(2);
   });
 
-  it("disposes a LATE-arriving subscription — the `settled ? un()` arm (paydown WP4)", async () => {
+  it("disposes a LATE-arriving fs-change subscription — the first `settled ? un()` arm (paydown WP4)", async () => {
     // ⚠️ **This arm was UNREACHABLE by the suite, and its absence is a real leak.** The default
     // mock returns `Promise.resolve(un)`, a microtask that always wins the race against any
     // `feed`, so `settled` is invariably `false` by the time `.then` runs and both sibling tests
-    // above only ever exercise `unlisteners.push(un)`. Mutation-proven 2026-08-18: replacing both
-    // `(un) => (settled ? un() : unlisteners.push(un))` with a bare `unlisteners.push(un)` leaks
-    // one `fs-change` listener per Recycle and the ENTIRE suite stayed green (2119 pass).
+    // above only ever exercise `unlisteners.push(un)`. There are TWO such arms (fs-change and
+    // WORKSPACE_STATUS); THIS test kills the fs-change one only, and the next test kills the
+    // other. Each arm is mutated on its own: a fix applied to one arm is not a fix for its twin
+    // (`docs/lessons/source-text-guards.md` entry 16).
     //
     // The fix is to make the subscription land AFTER the operation settles, which is the real
     // ordering whenever `listen()`'s IPC round-trip is slower than the completion signal — and
@@ -685,6 +686,42 @@ describe("signal filtering and subscription hygiene", () => {
 
     // Now the late subscription arrives, post-settlement. The `settled ? un()` arm must fire.
     releaseFsUnlisten?.();
+    await tick();
+    expect(unlistenCalls).toBe(2);
+  });
+
+  it("disposes a LATE-arriving WORKSPACE_STATUS subscription — the second `settled ? un()` arm", async () => {
+    // The twin of the test above, with the roles swapped: fs-change resolves at once and the
+    // STATUS unlisten is held back. The status HANDLER is still registered synchronously, so the
+    // `Stop` that settles the operation arrives through it while its own `listen()` promise is
+    // pending — the real ordering when that IPC round-trip is the slow one.
+    let releaseStatusUnlisten: (() => void) | undefined;
+    listenMock.mockImplementation((name: string, handler: Handler) => {
+      if (name === WORKSPACE_STATUS_EVENT) {
+        statusHandlers.push(handler);
+        return new Promise<() => void>((resolve) => {
+          releaseStatusUnlisten = () =>
+            resolve(() => {
+              unlistenCalls += 1;
+            });
+        });
+      }
+      fsHandlers.push(handler);
+      return Promise.resolve(() => {
+        unlistenCalls += 1;
+      });
+    });
+
+    const promise = recycleSession(baseInputs());
+    await tick();
+    emitStop();
+    await promise;
+
+    // Precondition: only the fs unlisten has run. A 2 here means the status subscription
+    // resolved early and the late path is not being exercised.
+    expect(unlistenCalls).toBe(1);
+
+    releaseStatusUnlisten?.();
     await tick();
     expect(unlistenCalls).toBe(2);
   });

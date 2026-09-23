@@ -21,7 +21,8 @@
 //!   stuck `AwaitingInput`)
 //! - `Notification`     → [`WorkspaceState::AwaitingInput`] **gated on
 //!   `notification_type`**: a genuine input-needed type (`permission_prompt`,
-//!   `agent_needs_input`, `elicitation_dialog`) or an unknown/absent type →
+//!   `agent_needs_input`, `elicitation_dialog`, `elicitation_url_dialog`) or an
+//!   unknown/absent type →
 //!   AwaitingInput; a known non-input type (`idle_prompt`, `auth_success`,
 //!   `agent_completed`, …) → no-op (`None`), so the dot doesn't flip blue on an idle
 //!   nudge or on a background agent *finishing* (M13.5 WP2 — the latter was the
@@ -130,13 +131,16 @@ pub enum WorkspaceState {
 /// (see [`is_known_informational_notification`]), so relying on it for a type we have
 /// actually observed is exactly the gap that produced the stale-blue defect.
 ///
-/// ⚠️ **`elicitation_dialog` has NEVER been observed** in either corpus — it is a
-/// speculative entry retained from QoL-WP2. Harmless (its classification matches the
-/// fallback), but do not cite it as evidence of CC's behavior.
-const INPUT_NEEDED_NOTIFICATION_TYPES: [&str; 3] = [
+/// ⚠️ **`elicitation_dialog` and `elicitation_url_dialog` have NEVER been observed** in either
+/// corpus — both are listed because CC's official hooks doc names them as dialogs awaiting
+/// the user. Their classification matches the fallback, but a type the docs name is
+/// classified DELIBERATELY, never left to it (the `agent_completed` lesson). Do not cite
+/// either as evidence of CC's behavior.
+const INPUT_NEEDED_NOTIFICATION_TYPES: [&str; 4] = [
     "permission_prompt",
     "agent_needs_input",
     "elicitation_dialog",
+    "elicitation_url_dialog",
 ];
 
 /// Whether a `Notification`'s `notification_type` means "awaiting genuine user input."
@@ -177,15 +181,18 @@ pub(crate) fn notification_awaits_input(notification_type: Option<&str>) -> bool
 /// json_extract(meta,'$.notification_type') FROM events` over `time-analytics.sqlite` is
 /// the check; it would have caught this one the day it first fired.
 fn is_known_informational_notification(t: &str) -> bool {
-    matches!(
-        t,
-        "idle_prompt"
-            | "auth_success"
-            | "agent_completed"
-            | "elicitation_complete"
-            | "elicitation_response"
-    )
+    INFORMATIONAL_NOTIFICATION_TYPES.contains(&t)
 }
+
+/// The informational `notification_type`s, as a list so the vocabulary test can enumerate
+/// it (see [`is_known_informational_notification`] for why each is here).
+const INFORMATIONAL_NOTIFICATION_TYPES: [&str; 5] = [
+    "idle_prompt",
+    "auth_success",
+    "agent_completed",
+    "elicitation_complete",
+    "elicitation_response",
+];
 
 /// Normalize a [`HookEvent`] to a [`WorkspaceState`]. Returns `None` for any event
 /// that is not a mapped lifecycle event, OR for a `Notification` whose
@@ -739,6 +746,48 @@ mod tests {
         assert_eq!(
             event_to_state(&notif(Some("agent_needs_input"), "/p")),
             Some(WorkspaceState::AwaitingInput)
+        );
+    }
+
+    /// ⚠️ **Every documented `notification_type` is classified DELIBERATELY.** A behavioral
+    /// test cannot see this: an unlisted input-needed type still maps to AwaitingInput via the
+    /// fallback, so deleting its entry leaves every behavioral assertion green. The property is
+    /// list MEMBERSHIP — the two lists are disjoint and together are exactly the documented set.
+    ///
+    /// `DOCUMENTED` is the official hooks doc's list (checked 2026-08-22). When CC documents a
+    /// new type, add it here AND to one of the two lists; this test failing is the prompt to
+    /// decide which, rather than letting the fallback decide by accident.
+    #[test]
+    fn every_documented_notification_type_is_classified_deliberately() {
+        const DOCUMENTED: [&str; 9] = [
+            "permission_prompt",
+            "idle_prompt",
+            "auth_success",
+            "elicitation_dialog",
+            "elicitation_url_dialog",
+            "elicitation_complete",
+            "elicitation_response",
+            "agent_needs_input",
+            "agent_completed",
+        ];
+        for t in INPUT_NEEDED_NOTIFICATION_TYPES {
+            assert!(
+                !INFORMATIONAL_NOTIFICATION_TYPES.contains(&t),
+                "{t} is in BOTH lists — a type is input-needed or informational, not both"
+            );
+        }
+        let mut classified: Vec<&str> = INPUT_NEEDED_NOTIFICATION_TYPES
+            .iter()
+            .chain(INFORMATIONAL_NOTIFICATION_TYPES.iter())
+            .copied()
+            .collect();
+        classified.sort_unstable();
+        let mut documented = DOCUMENTED.to_vec();
+        documented.sort_unstable();
+        assert_eq!(
+            classified, documented,
+            "the classified notification types must be exactly the documented set — a \
+             documented type missing here is being classified by the fallback, by accident"
         );
     }
 

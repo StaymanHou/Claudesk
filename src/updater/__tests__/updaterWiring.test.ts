@@ -30,6 +30,9 @@ describe("App.tsx updater wiring (M10 WP4 Phase 4)", () => {
     expect(appTsx).not.toContain("quarantineFallbackSpec");
     expect(appTsx).not.toContain("fallbackBundlePath");
     expect(appTsx).not.toContain("dismissFallback");
+    // Positive anchor, in THIS test: three `not.toContain`s alone pass on an empty or failed
+    // read, so the test must also see what App.tsx DOES wire (`source-text-guards.md` entry 13).
+    expect(appTsx).toContain("updateConfirmSpec");
   });
 
   it("no longer imports or mounts the deleted throwaway UpdaterTrigger", () => {

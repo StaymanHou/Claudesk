@@ -37,9 +37,7 @@ use tauri::{AppHandle, Listener, Manager};
 use super::{aggregate_alarm, is_tray_menu_id, menu_ids, toggle_pip_mode, AlarmState};
 use crate::status_broadcaster::commands::STATUS_EVENT;
 use crate::status_broadcaster::{WorkspaceState, WorkspaceStatusUpdate};
-
-/// The main Claudesk window label (matches the `WindowEvent` scoping in `lib.rs`).
-const MAIN_WINDOW_LABEL: &str = "main";
+use crate::MAIN_WINDOW_LABEL;
 
 /// The bundled template glyphs, embedded in the binary (no install-path file IO — robust
 /// for the launchd-launched prod `.app`). Both are black-on-transparent PNGs used as macOS

@@ -98,8 +98,8 @@ pub fn state_flags() -> StateFlags {
 ///
 /// The label is taken from the PiP module's own constant rather than re-spelled here,
 /// so a rename cannot silently drop the panel back into scope.
-pub fn denylist() -> [&'static str; 1] {
-    [crate::pip::commands::PANEL_LABEL]
+pub fn denylist() -> &'static [&'static str] {
+    &[crate::pip::commands::PANEL_LABEL]
 }
 
 /// Build the configured `tauri-plugin-window-state` plugin for `lib.rs`'s builder chain.
@@ -110,7 +110,7 @@ pub fn denylist() -> [&'static str; 1] {
 pub fn register<R: Runtime>() -> TauriPlugin<R> {
     Builder::new()
         .with_state_flags(state_flags())
-        .with_denylist(&denylist())
+        .with_denylist(denylist())
         .build()
 }
 
@@ -154,9 +154,16 @@ mod tests {
             "register() must CALL state_flags() — if it inlines a StateFlags literal, all four \
              flag/denylist tests here become vacuous while still passing. Body was:\n{code}"
         );
+        // Exactly one denylist, and its argument IS `denylist()` — so no label literal can
+        // reach the plugin through a second `.with_denylist(…)` or an inlined array.
+        assert_eq!(
+            code.matches(".with_denylist(").count(),
+            1,
+            "register() must configure the denylist exactly once. Body was:\n{code}"
+        );
         assert!(
-            code.contains("denylist()"),
-            "register() must CALL denylist() — see above; an inlined literal makes \
+            code.contains(".with_denylist(denylist())"),
+            "register() must pass denylist() itself to with_denylist — an inlined literal makes \
              denylists_the_pip_panel_by_its_own_constant vacuous. Body was:\n{code}"
         );
         // The inverse half: catch a literal being introduced ALONGSIDE the calls (e.g. a
@@ -166,11 +173,6 @@ mod tests {
             !code.contains("StateFlags::"),
             "register() must not name StateFlags directly — the flag set belongs to \
              state_flags() alone, so there is exactly one home for it. Body was:\n{code}"
-        );
-        assert!(
-            !code.contains('"'),
-            "register() must not contain a string literal — window labels belong to denylist() \
-             (which sources them from pip::commands::PANEL_LABEL). Body was:\n{code}"
         );
     }
 
@@ -232,7 +234,7 @@ mod tests {
     fn does_not_denylist_the_main_window() {
         let deny = denylist();
         assert!(
-            !deny.contains(&"main"),
+            !deny.contains(&crate::MAIN_WINDOW_LABEL),
             "the main window is the whole point of this feature — it must be tracked"
         );
     }

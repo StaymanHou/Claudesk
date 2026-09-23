@@ -434,6 +434,28 @@ via `/task-plan`, or split in two if it runs long.
   - **`…LINKCHECK-TEST-OUTSIDE-TSC-INCLUDE`.** Rename it to `.test.mjs`, or add
     `tooling/link-check` to a tsconfig `include`.
 
+
+**✅ WP6 CLOSED 2026-09-23** (task `paydown-wp6-guards-that-cannot-fail`, archived).
+- Every guard change names a mutant that now dies. Where the old guard could be re-run, it
+  PASSED the same mutant: L1, C4, F2, G2, AF1, RecentProject ×2, the link check, and
+  linkCheck-in-tsc. So those holes were real. The per-ID table is in the archived WIP's
+  `## Closure evidence`.
+- **Not claimed as kills:**
+  - G4 is a deletion (33 → 31 tests).
+  - G6 and J3.1/J3.3 are refactors.
+  - G2's per-arm-positives half is an equivalent mutant on this data (both arms have 29).
+  - AE1 is a message change, shown by a mutant tripping the new message.
+- **Row 17 needed no change**, and the evidence is recorded on its SURFACE.
+- **appBoot `uncaught` was KEPT.** A throwing DOM listener turns it red on its own, with
+  Vitest reporting nothing. A timer throw does not reach it; Vitest's own unhandled-error
+  report catches that one.
+- **Row 1's premise was refuted.** The deleted encoder never overflowed. The 200k test now
+  guards the chunking inside `encodeBase64`.
+- **Row 28 was rewritten, not deleted.** What remains is the periodic corpus check for an
+  UNDOCUMENTED type.
+- Plus Row 7, whose one extra defect was caught by running it: the caller's pre-aborted check
+  was untested, and now has a test.
+
 ## WP7 — Render instead of `?raw`; tests that re-implement production  `[impact: High · effort: M · risk: Low]`
 
 The "prove a copy, not the code" class. Each change **replaces** a test with a stronger one, so it
@@ -589,6 +611,3 @@ SURFACEs listed in WP1 §5. The R4 rulings (40, 46, 32) are deleted in WP2 once 
 3. Carry any surviving obligation back into `backlog.md` as its own SURFACE, so it outlives this
    file (the 2026-08-19 sweep did this for the comment-convention pass).
 4. **Delete this file** in a commit that says so.
-
-## Session Handoff — 2026-09-23 10:32
-Handed off. See `workflow-system/state/.session.md` to restore. WP1–WP5 CLOSED; next is WP6 (guards and tests that cannot fail) via `/task-plan`.

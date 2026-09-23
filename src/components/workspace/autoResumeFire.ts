@@ -40,6 +40,7 @@
 // READINESS`). Firing on it was measured NOT-EXECUTED 5/5.
 
 import { invoke } from "@tauri-apps/api/core";
+import { encodeBase64 } from "../../cc/bridge";
 import {
   INJECT_SETTLE_MS,
   requiresInjection,
@@ -120,21 +121,6 @@ export function shouldScheduleFire(inputs: ScheduleInputs): boolean {
 export const FIRE_DELAY_MS = INJECT_SETTLE_MS;
 
 /**
- * Base64-encode `text` as UTF-8 bytes for `cc_input`.
- *
- * ⚠️ **`btoa` alone is WRONG here** and shipped a real bug once: M10.5 WP4 found input
- * mojibake because the old path truncated each char to `& 0xff`. `TextEncoder` produces real
- * UTF-8 bytes, which is what the PTY needs. Kept in this module (rather than imported) only
- * because the encode is two lines; if a third caller appears, hoist it.
- */
-function encodeUtf8Base64(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary);
-}
-
-/**
  * The exact byte payload for a slash command — **mirrors Rust's `slash_command_bytes`.**
  *
  * ⚠️ Trailing CR/LF is stripped and exactly one `\r` appended. `\r` (0x0d), never `\n`: CC's
@@ -144,7 +130,9 @@ function encodeUtf8Base64(text: string): string {
  */
 export function slashCommandPayload(command: string): string {
   const trimmed = command.replace(/[\r\n]+$/, "");
-  return encodeUtf8Base64(`${trimmed}\r`);
+  // UTF-8 bytes → base64 via `cc/bridge`, the single frontend chokepoint for `cc_input`'s
+  // encoding (a bare `btoa` truncates multi-byte input — the M10.5 WP4 mojibake).
+  return encodeBase64(`${trimmed}\r`);
 }
 
 /**

@@ -323,12 +323,12 @@ describe("M15 WP2 Phase 1 — the absorbed totals (codified 2026-09-12)", () => 
     });
   });
 
-  it("classifies 67 edges dispatchable and 44 not", () => {
+  it("classifies 67 edges dispatchable (the other 111 − 67 = 44 are not)", () => {
     // The dispatchable/non-dispatchable balance is the probe's 223→127 correction made
-    // standing. A regression here is WP3 firing into terminal states.
+    // standing. A regression here is WP3 firing into terminal states. The non-dispatchable
+    // count is arithmetic of this pin and the 111 above, so it is not asserted a second time.
     const yes = EDGES.filter((e) => isDispatchable(e.dispatchTarget));
     expect(yes.length).toBe(67);
-    expect(EDGES.length - yes.length).toBe(44);
   });
 });
 

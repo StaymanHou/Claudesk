@@ -6,14 +6,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 
 # paydown-wp3-boot-smoke-test — 2026-09-23
 
-## SURFACE-2026-09-23-QUALITY-LINK-CHECK-BOTH-ENTRIES-CLAIM-IS-UNPINNED
-- **Severity:** MAJOR
-- **Location:** `tooling/link-check/linkCheck.mjs` (header + the `build()` call); `tooling/link-check/linkCheck.test.ts`
-- **Finding:** ⚠️ **Prose half RESOLVED 2026-09-23 (paydown WP4):** `linkCheck.mjs`'s header and `verify-auto-gate.md` now say the two-entry property is NOT asserted and name this entry. The code half below is open. Originally, the header claimed the check runs "over BOTH webview entries (`index.html` + `pip.html`, from vite.config.ts)", but nothing enforces it. The script builds whatever config resolves in `root`. The fixture runs load no `vite.config.ts` at all (a single `index.html`, no react plugin), so the durable test proves the catch/exit path and nothing about the repo's two-entry config or rollup's missing-export error staying on. Mutant B (the PiP-only `computePanelSize`) was proven once by hand and never codified. Narrowing `rollupOptions.input`, or adding an `onwarn` / `shimMissingExports`, would leave `check:link` and its test green while coverage shrank.
-- **Suggested action:** the `build()` return is a RollupOutput. Assert that both the `main` and `pip` entry chunks are present, and exit 1 if either is missing. Codify mutant B too: a repo-root run against a temp copy is too heavy, so a fixture with a `vite.config` naming two inputs, one broken only in the second, may be enough. Mutation-prove by narrowing `input` to `main` only.
-- **Priority:** medium — routed to paydown-2026-09-23 WP6
-- **Status:** pending
-
 ## SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X
 - **Severity:** MAJOR
 - **Location:** `linkCheck.mjs` header; `docs/lessons/verify-auto-gate.md` §check:link; `source-text-guards.md` §19; `appBoot.test.tsx` header; `moduleGraphBoot.test.ts` header; `turnNavExportContract.test.ts` SCOPE note; `CLAUDE.md` gate-order line; `backlog-paydown-wbs.md` checklist
@@ -22,35 +14,7 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Priority:** low
 - **Status:** pending
 
-## SURFACE-2026-09-23-QUALITY-APPBOOT-UNCAUGHT-ASSERTION-UNPROVEN
-- **Severity:** MINOR
-- **Location:** `src/__tests__/appBoot.test.tsx`, `expect(uncaught).toEqual([])` (both tests)
-- **Finding:** it has never been shown to fail on its own; under mutant C, `waitFor` failed first. It is not claimed in the header, and the WIP records the gap. Its unique coverage (exceptions in jsdom timer or listener callbacks) is plausible but unproven, so it looks like coverage without being proven coverage.
-- **Suggested action:** add one positive control (a throw inside a `setTimeout` on the boot path, where the picker still renders) and confirm it goes red on this assertion alone. Otherwise, delete it.
-- **Priority:** low
-- **Status:** pending
-
-## SURFACE-2026-09-23-QUALITY-LINKCHECK-TEST-OUTSIDE-TSC-INCLUDE
-- **Severity:** MINOR
-- **Location:** `tooling/link-check/linkCheck.test.ts`; `tsconfig.json` `include: ["src"]`
-- **Finding:** the gate never type-checks this `.ts` test; Vitest strips its types without checking them.
-- **Suggested action:** rename it to `.test.mjs`, or add `tooling/link-check` to a tsconfig `include`.
-- **Priority:** low
-- **Status:** pending
-
 # fa-wp2-draft-store-history-payload — 2026-09-21
-
-## SURFACE-2026-09-21-QUALITY-TERMINATOR-COUNT-FILTERS-ELEMENTS-NOT-INDICES
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/__tests__/stagedPayload.test.ts` — the
-  "strips a literal ESC[201~" test
-- **Finding:** the terminator count uses `out.filter((_b, i) => END.every((e, j) => out[i+j] === e)
-  && out[i] === ESC)`, which collects matched **elements** (`0x1b`) rather than indices. The
-  `&& out[i] === ESC` term is also redundant, since `END[0]` is already `ESC`. It computes the
-  right count today but reads as if it collects positions — confusing beside the correct
-  index-loop form used in the same file's verify-codify block.
-- **Suggested action:** replace with the index-loop form already present a few tests below.
-- **Priority:** low
 
 ## SURFACE-2026-09-21-QUALITY-BLANK-CHECK-READS-BEFORE-THE-STORAGE-GUARD
 - **Severity:** MINOR
@@ -79,15 +43,6 @@ To pick up: read the entries below, then run `/feature-refactor` to address them
 - **Status:** pending
 
 # supervisor-hotfix — 2026-09-17
-
-## SURFACE-2026-09-17-QUALITY-CLASSES-CONST-PINS-ONLY-ITS-OWN-LENGTH
-- **Severity:** MINOR
-- **Location:** `src/components/workspace/__tests__/supervisorToggleStyles.test.ts` (the "names every class this feature adds" test)
-- **Finding:** The test asserts only `expect(CLASSES).toHaveLength(3)`. `CLASSES` is otherwise **unused** by any assertion in the file — the three `describe` blocks name their classes as inline literals.
-- **Why it matters:** ⚠️ The stated intent ("adding a third class without a guard fails here") is **not achieved**: a fourth class added without a guard passes, because nothing couples `CLASSES` to the CSS scan or the emitted set. It reads as a coverage pin but measures the length of a constant it alone reads — the `guard-predicate-completeness` shape.
-- **Suggested fix:** drive the direction-1 assertions from `CLASSES` (a `for` loop) so the constant is load-bearing, or delete it and drop the claim.
-- **Priority:** low
-- **Status:** pending
 
 ## SURFACE-2026-09-17-QUALITY-DO-NOT-MERGE-DEFENCE-REPEATED-FOUR-TIMES
 - **Severity:** MINOR
@@ -198,51 +153,9 @@ for a failing `claude -p` is blank.**
 **Suggested action:** thread the captured stderr into the error.
 - **Status:** pending
 
-# m15-wp2-state-machine-as-code — 2026-09-12
-
-⚠️ **0 CRITICAL · 2 MAJOR · 3 MINOR — but BOTH MAJORs and ONE MINOR were FIXED IN PLACE before finalize, not backlogged.** Only the two low-value MINORs below remain open. See the WIP's `## Code-Quality Review` for the full review and the fix record.
-
-## SURFACE-2026-09-12-QUALITY-DERIVED-COUNTS-DUPLICATED-ACROSS-TESTS
-
-- **Priority:** low
-- **Source:** feature:review-quality (m15-wp2), MINOR
-- **Location:** `src/state/__tests__/workflowMachineLookup.test.ts`, `workflowMachine.test.ts`, `workflowMachinePolicy.test.ts`
-
-The five test files pin ~27 hardcoded measured counts (111 edges, 58 rows, 67/44 dispatchable, 156/153/7/4 cells, 232 cells, …). Each carries its `measured 2026-09-12` provenance and each is a deliberate regression sentinel — **but several are ARITHMETICALLY DERIVED from each other** (`232 = 58 × 4`; `44 = 111 − 67`). A single upstream edge addition therefore breaks five or six assertions that all say the same thing once.
-
-**Not a correctness risk** — a maintenance tax at WP3's first upstream resync. **Suggested action:** collapse the arithmetic-derived expectations to one computed expression each, keeping the independently-measured ones (111, 58, 67, the histograms) as literals.
-
-## SURFACE-2026-09-12-QUALITY-FUNNEL-PREDICATES-DECLARED-TWICE
-
-- **Priority:** low
-- **Source:** feature:review-quality (m15-wp2), MINOR
-- **Location:** `src/state/__tests__/workflowMachineFunnel.test.ts` — the discrimination block
-
-The discrimination block re-declares `wiresGraphToPolicy` and `importsMachine` as local copies of the live guard's **inline** regexes, then closes the gap with `uses the SAME predicates the live guard uses`. ⚠️ That reconciliation test does real work — **it drove out the dead-allowlist finding** — but the two regexes still exist twice in one file and could drift in a direction the reconciliation does not cover.
-
-**Suggested action:** extract both predicates to module scope so the guard and the discrimination block call the same functions, removing the copy entirely. That is what `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]` actually prescribes.
-
 # m15-wp1-supervisor-probe — 2026-09-12
 
-⚠️ **Findings 2 and 3 are the ones that change what a reader BELIEVES**, not just how the code looks: one lets the decisive `0.8` bar drift silently, the other overstates what the headline `119` baseline measures. Both were verified at source before filing.
-
-## SURFACE-2026-09-12-QUALITY-THE-DECISIVE-BAR-IS-STATED-TWICE-AND-CAN-DRIFT
-
-- **Severity:** MAJOR · **Priority:** medium · **Status:** pending
-- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:402-406, 476, 490`
-
-`scoreArm` hardcodes the `0.8 / 0.8` bar inline, while the same threshold is carried in `q2._meta.threshold` as **unparsed prose** and asserted only via `toContain("CHOSEN")`. The number that actually decides SEPARABLE/NOT_SEPARABLE lives in code; the artifact's record of it lives in a string. ⚠️ **Change one and the other keeps asserting the old bar with equal confidence** — the asymmetric-drift shape `docs/lessons/source-text-guards.md` warns about.
-
-⚠️ **Compounding (verified at source):** line 476 computes **haiku's** margin against **sonnet's** `minTpForBar` (`const positives = sonnet.tp + sonnet.fn`). It is arithmetically correct **only because both arms happen to share 29 positives**, and that coincidence is **never asserted** — `haiku.tp + haiku.fn` appears nowhere in the file. If the arms ever diverge, the haiku margin assertion silently measures the wrong thing.
-
-**Fix shape:** read the bar from `_meta` (or cross-check code against it), and derive each arm's `minTpForBar` from its own positives.
-
-## SURFACE-2026-09-12-QUALITY-NEAR-TAUTOLOGICAL-ASSERTIONS-INFLATE-THE-TEST-COUNT
-
-- **Severity:** MINOR · **Priority:** low · **Status:** pending
-- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:74-76, 196-210`
-
-Several assertions are near-tautological given how the fixture is serialized: `expected_verdict` is 1:1 with arm membership (`fire[]` is 96/96 `FIRE`), so "labels every record" can only fail if the serializer omitted a field it never omits; likewise `confidence === "n/a"` outside `fire[]`, and `groundTruth + ruleOnly === fire.length` over a two-valued enum. They **guard a serializer that no longer exists** and pass the "could this fail if the named code were deleted?" test only weakly.
+⚠️ **One finding remains** (comment density → the R2 comment-convention pass). The decisive-bar drift, the tautological assertions and the access-style nits were resolved at paydown-2026-09-23 WP6; the other findings under this heading were closed earlier in the same sweep.
 
 ## SURFACE-2026-09-12-QUALITY-COMMENT-DENSITY-IS-A-THIRD-COPY-OF-THE-WIP
 
@@ -254,15 +167,6 @@ Several assertions are near-tautological given how the fixture is serialized: `e
 Applying its test — *would a reader who has never seen the WIP make a worse decision without this sentence?* — the **failure-direction and what-to-do-when-this-fails** paragraphs earn their place (keep). The **attempt-history narrative** does not: the WIP and backlog already carry it verbatim, making the test file a **third copy that will drift**.
 
 **Fix shape:** pointer-to-canonical-home, not shorter sentences — trimming treats the symptom.
-
-## SURFACE-2026-09-12-QUALITY-TYPE-ALIAS-AND-ACCESS-STYLE-NITS
-
-- **Severity:** MINOR · **Priority:** low · **Status:** pending
-- **Site:** `src/state/__tests__/m15SupervisorFixture.test.ts:35, 429, 442-443`
-
-(a) `Record_` uses a trailing underscore to dodge the `Record` builtin; `FixtureRecord` reads better and needs no explanation. (b) `Object.values(q2.arms)` relies on **insertion order** for `[a, b]` destructuring while lines 442-443 correctly index by name (`q2.arms.sonnet`) — harmonize to the named form.
-
----
 
 # drive-mode-on-the-workspace-surface — 2026-08-26
 
@@ -373,16 +277,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
 - **Priority:** medium (no live defect; four copies are four things to update, and the copy someone edits becomes right while the others keep asserting the old thing with equal confidence)
 - **Status:** pending
 
-## SURFACE-2026-08-21-QUALITY-WP1-MINOR-SET
-- **Source:** feature-review-quality (M13.5 WP1, 4 MINOR grouped; item 4 RESOLVED — vacuity-guard doc no longer restates the mutant-E history, removed 2026-09-23)
-- **Type:** tech-debt (consistency + guard precision)
-- **Summary + suggested action, one per finding:**
-  1. **`mod.rs`:235 — bare `"main"` literal in a test** that argues the opposite principle three other places (`denylist()` avoids re-spelling labels; the guard at :171 forbids string literals in `register()` for that reason). `tray/commands.rs:42` already holds a **private** `const MAIN_WINDOW_LABEL`. → Promote that const, or add one line noting this literal is the **framework default**, not a Claudesk-owned label. Defensible as-is; the asymmetry is the cost.
-  2. ⚠️ **`mod.rs`:171-175 — the `!code.contains('"')` assertion is BROADER than the property it names.** It reads as "no window labels inline" but also rejects `.with_filename("…")`, a legitimate builder option (plugin source :346) a future dev/prod-isolation change might want. → Narrow it (or widen the failure message to say what it really forbids). *An over-broad guard that fires on a legitimate change is how guards get **deleted** rather than narrowed.*
-  3. **`mod.rs`:102 — `denylist() -> [&'static str; 1]`** bakes the count into the signature, so a second excluded label is a type change rippling to both call sites. → `&'static [&'static str]` costs nothing. Not a correctness issue; `with_denylist` takes `&[&str]` either way.
-- **Priority:** low (all three remaining)
-- **Status:** pending
-
 # m13-wp4-milestone-exit-verify — 2026-08-18
 
 ## SURFACE-2026-08-18-QUALITY-WP4-WIP-PHASE-SECTIONS-INTERLEAVED
@@ -424,27 +318,6 @@ source-guarded properties value-testable. Treat them as one item, not four.
 - **Status:** pending
 
 # m13-wp3-recycle-session — 2026-08-18
-
-## SURFACE-2026-08-18-QUALITY-WP3-LATE-SUBSCRIPTION-DISPOSAL-UNTESTED
-- **Source:** feature-review-quality (M13 WP3, MAJOR), verified independently at review
-- **Type:** gap (real code with no reachable test)
-- **Summary:** ⚠️ **Rewritten 2026-09-23 (paydown-2026-09-23 WP1). HALF-CLOSED, not closed. The
-  2026-08-18 paydown's closure claim covered only one of the two arms.** `recycleSession.ts`
-  `awaitCompletion` has **two** `(un) => (settled ? un() : unlisteners.push(un))` arms: one for
-  the `fs-change` subscription and one for `WORKSPACE_STATUS`. Each disposes a subscription whose
-  `listen()` resolved **after** the operation settled. `recycleSession.test.ts` now covers the
-  **`fs-change`** arm with a deferred unlisten. ⚠️ **The `WORKSPACE_STATUS` arm is still
-  unreachable**, because its mock resolves synchronously, so mutating that arm to a bare
-  `unlisteners.push(un)` survives the suite. The test's comment also describes mutating "both"
-  while the test kills only one.
-- **Context:** a future simplification of the second arm would leak one listener per Recycle for
-  the app's lifetime and stay green. This is the "fix applied to the arm the hunt surfaced"
-  shape (`docs/lessons/source-text-guards.md` entry 16).
-- **Suggested action:** defer the `WORKSPACE_STATUS` mock's unlisten the same way, mutate **that
-  arm alone** to prove the test kills it, and correct the test comment. Routed to
-  paydown-2026-09-23 WP6.
-- **Priority:** medium (no live defect; the risk is entirely in the next edit)
-- **Status:** pending — routed to paydown-2026-09-23 WP6
 
 ## SURFACE-2026-08-18-QUALITY-WP3-COMMENT-DENSITY-AND-RATIONALE-DUPLICATION
 - **Source:** feature-review-quality (M13 WP3, MAJOR — readability)
@@ -631,14 +504,6 @@ scheduling items rather than polish.*
 
 # wp2-background-work-status-states — 2026-08-22
 
-## SURFACE-2026-08-22-QUALITY-CSS-REGEX-GUARD-SHAPE-BLINDNESS
-- **Severity:** MINOR
-- **Location:** `src/state/__tests__/workspaceStatus.test.ts` (the two CSS guards)
-- **Finding:** The guards read `App.css`/`pip.css` as text and regex-match rule bodies, so they only understand the CSS shapes I happened to write: a flat `.status-dot-x { background-color: #hex; }`. They will **false-fail** on an ordinary refactor — a nested rule, a `var(--token)` custom property, or a shorthand `background:` — and the failure message will be opaque to whoever trips it (it will read as "pip.css must define a background-color", implying the colour is missing when it is merely expressed differently).
-- **Why it matters:** the instrument itself is defensible and was kept for a real reason — `pip.css` holds a **deliberate verbatim copy** of the dot palette, that duplication has no other guard, and a silent main-vs-PiP colour divergence is precisely the "all three surfaces agree" invariant breaking. The predicate shape is also mutation-justified (a weaker rule-presence form was proven green-while-broken). So this is not "delete the guard" — it is that a guard whose failure mode is a **confusing false alarm** trains people to delete it.
-- **Suggested action:** add one line to each guard naming the shapes it does NOT understand (nested rules, custom properties, shorthand `background:`), so a tripped guard tells its own story. Cheap; no logic change.
-- **Priority:** low
-
 ## SURFACE-2026-08-22-QUALITY-DEAD-LEGACY-WORKSPACESTATUS-TYPE
 - **Severity:** MINOR
 - **Location:** `src/state/workspace.ts:14`
@@ -646,24 +511,6 @@ scheduling items rather than polish.*
 - **Why it matters:** not a bug today, but two near-identical state vocabularies differing only in casing is a standing trap for the next person adding a state — they may extend the wrong one and see nothing break. ⚠️ Note this WP already demonstrated the cost of a sweep keyed on the wrong predicate (the CRITICAL), and this is the same hazard one layer over.
 - **Suggested action:** confirm it is genuinely dead, then delete it. If something does depend on it, the fix is to migrate that consumer to `WireWorkspaceState` rather than to maintain two vocabularies.
 - **Priority:** low
-
-# m14-wp2-sign-notarize-delete-quarantine — 2026-09-18
-
-## SURFACE-2026-09-18-QUALITY-REVERSE-GUARD-HAS-NO-POSITIVE-ANCHOR
-- **Source:** feature:review-quality (M14 WP2)
-- **Type:** tech-debt
-- **Summary:** `updaterWiring.test.ts`'s new "no longer wires the deleted WP1-fallback quarantine
-  dialog" test is a pure reverse guard (`expect(appTsx).not.toContain(...)` ×3). It would pass if
-  `App.tsx` were emptied entirely.
-- **Context:** Defensible **as currently placed** — it sits in a file whose other tests assert
-  positive content from the same `appTsx` source, so an emptied `App.tsx` would fail those. The risk
-  is purely future: if this guard is ever moved into its own file, or the surrounding positive
-  assertions are removed, it silently becomes vacuous. Same failure family as
-  `[[raw-guard-identifier-satisfied-by-own-comments]]`.
-- **Suggested action:** If the guard is ever isolated, pair it with a positive anchor in the same
-  test (e.g. assert `updateConfirmSpec` IS present) so an empty/failed read cannot pass.
-- **Priority:** low
-- **Status:** pending
 
 # fa-wp4-send-and-stage — 2026-09-22
 

@@ -307,10 +307,19 @@ describe("M15 WP2 Phase 3 — resolvePolicy is TOTAL over the whole matrix", () 
         }
       }
     }
-    // The measured totals (2026-09-12). 111 × 4 = 444.
-    expect(resolved + unmapped + malformed).toBe(444);
-    expect(resolved).toBe(320);
-    expect(unmapped).toBe(124);
+    // Totality over the whole matrix, DERIVED rather than restated (the 444 / 320 / 124
+    // literals this replaced were 111×4, 80×4 and 31×4, each a second copy of a pin held
+    // elsewhere). What is new here is MODE-INVARIANCE: every mode resolves exactly the edges
+    // `orchestrated` resolves, so the per-edge counts (80 resolved, 31 unmapped — pinned in
+    // their own tests above) scale by the mode count and by nothing else.
+    const resolvedInOneMode = EDGES.filter(
+      (e) => resolvePolicy(e.id, "orchestrated").outcome === "resolved",
+    ).length;
+    expect(resolvedInOneMode).toBeGreaterThan(0);
+    expect(resolved + unmapped + malformed).toBe(
+      EDGES.length * DRIVE_MODES.length,
+    );
+    expect(resolved).toBe(resolvedInOneMode * DRIVE_MODES.length);
     expect(malformed).toBe(0);
     // ⚠️ The funnel applies `resolveCell`, so a conditional cell can never escape as a
     // verdict. A caller must never have to remember to resolve it.

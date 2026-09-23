@@ -63,6 +63,24 @@ function stripComments(src: string): string {
     .replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
+/**
+ * The body of `interface <name> { … }`, brace-counted so it ends at the interface's OWN
+ * closing brace: a lazy `[\s\S]*?` either runs past it into a later declaration (so a field
+ * moved OUT of the interface still matched) or stops at a nested `}`. Returns "" if absent,
+ * so callers must assert non-empty before any `not.toMatch`.
+ */
+function interfaceBody(src: string, name: string): string {
+  const head = new RegExp(`interface ${name}\\s*\\{`).exec(src);
+  if (!head) return "";
+  const open = head.index + head[0].length - 1;
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(open, i + 1);
+  }
+  return "";
+}
+
 /** Every `invoke(...)("list_projects")` call site, comments excluded. */
 function listProjectsCallSites(src: string): string[] {
   return (
@@ -191,8 +209,8 @@ describe("Verdict (b) premise: list_projects' consumer set", () => {
     // This is what made widening free for M11.5: the field was ALREADY read and parsed, so
     // typing it cost nothing. The announce needs a filesystem stat, which is new work — the
     // distinction the verdict turns on.
-    expect(pickerCode).toMatch(
-      /interface RecentProject[\s\S]*?default_model\?/,
+    expect(interfaceBody(pickerCode, "RecentProject")).toMatch(
+      /\bdefault_model\?/,
     );
   });
 
@@ -200,8 +218,9 @@ describe("Verdict (b) premise: list_projects' consumer set", () => {
     // Verdict (b) says the announce arrives via `picker_announce_actions`, NOT by widening
     // `RecentProject`. If someone widens it after all, this fails and the verdict must be
     // amended rather than silently contradicted.
-    const iface =
-      pickerCode.match(/interface RecentProject\s*\{[\s\S]*?\}/)?.[0] ?? "";
+    const iface = interfaceBody(pickerCode, "RecentProject");
+    // Non-empty first: a failed match must not let the `not.toMatch` below pass vacuously.
+    expect(iface).toContain("project_path");
     expect(iface).not.toMatch(/unclean|session_md|announce|predicted/i);
   });
 });
@@ -274,12 +293,9 @@ describe("the guard is calibrated — each assertion can actually fail", () => {
   });
 
   it("widening RecentProject with an announce field would be caught", () => {
-    const iface =
-      stripComments(pickerSource).match(
-        /interface RecentProject\s*\{[\s\S]*?\}/,
-      )?.[0] ?? "";
+    const iface = interfaceBody(stripComments(pickerSource), "RecentProject");
     expect(iface).not.toBe("");
-    const widened = iface.replace("}", "  unclean_exit?: boolean;\n}");
+    const widened = iface.replace(/\}$/, "  unclean_exit?: boolean;\n}");
     expect(widened).toMatch(/unclean/i);
   });
 });

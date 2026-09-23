@@ -111,6 +111,11 @@ mod window_state;
 // "does a later phase exist?" answer here.
 mod wip;
 
+/// The main window's label. `tauri.conf.json` declares its one window without a `label`, so
+/// Tauri assigns the framework default `"main"`. Every Rust site that addresses or scopes to the
+/// main window uses this constant rather than re-spelling the string.
+pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
+
 use std::sync::Mutex;
 
 use tauri::{Emitter, Listener, Manager, WindowEvent};
@@ -673,7 +678,7 @@ pub fn run() {
             // non-activating PiP show/hide does NOT itself emit a Focused event — so no
             // suppression guard is needed). Scoped to "main": the PiP panel is a separate
             // window whose events must not be read as main-window focus.
-            if window.label() == "main" {
+            if window.label() == MAIN_WINDOW_LABEL {
                 if let WindowEvent::Focused(focused) = event {
                     // Quiet probe trail (was a temporary eprintln! in Phase 1; kept as a
                     // low-noise breadcrumb for live focus debugging).

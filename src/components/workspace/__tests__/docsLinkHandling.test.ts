@@ -19,7 +19,7 @@
 // to `handleDocLinkClick.ts` and is imported here. A mutation to production code now fails
 // these tests, which is the only thing that makes them worth running.
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { classifyHref } from "../docs/classifyHref";
 import { makeDocLinkClickHandler } from "../docs/handleDocLinkClick";
 import type { DocEntry } from "../docsOrder";
@@ -33,10 +33,20 @@ const DOCS: DocEntry[] = [
   },
 ];
 
+/** Every handler's abort controller, aborted after each test. A cross-doc fragment click
+ *  leaves a short timer poll running; without this, one still pending when the environment
+ *  tears down throws after the run (the "exits 1 with 0 failures" flake). */
+const controllers: AbortController[] = [];
+afterEach(() => {
+  for (const c of controllers.splice(0)) c.abort();
+});
+
 /** The real handler, with inert deps — external opens are stubbed, never dispatched. */
 function realHandler(
   over: Partial<Parameters<typeof makeDocLinkClickHandler>[0]> = {},
 ) {
+  const controller = new AbortController();
+  controllers.push(controller);
   return makeDocLinkClickHandler({
     selected: "workflow-system/product/vision.md",
     docs: DOCS,
@@ -44,6 +54,7 @@ function realHandler(
     setLinkNote: () => {},
     setChosen: () => {},
     openExternal: () => Promise.resolve(),
+    signal: controller.signal,
     ...over,
   });
 }
@@ -202,6 +213,71 @@ describe("cross-doc fragments are USED, not dropped (code-review finding)", () =
     await new Promise((r) => setTimeout(r, 120));
     container.remove();
     expect(scrolled).toEqual(["probe-outcomes"]);
+  });
+
+  it("stops polling once aborted — no scroll, no callback after the owner is gone", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const scrolled: string[] = [];
+    const controller = new AbortController();
+
+    const a = document.createElement("a");
+    a.setAttribute("href", "wbs.md#probe-outcomes");
+    container.append(a);
+    container.addEventListener(
+      "click",
+      realHandler({
+        containerRef: { current: container },
+        signal: controller.signal,
+      }) as EventListener,
+    );
+    a.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+
+    // The owner goes away while the poll is pending…
+    controller.abort();
+    // …and THEN the target renders. A live poll would find it within one 25ms interval.
+    const h = document.createElement("h2");
+    h.id = "probe-outcomes";
+    h.scrollIntoView = () => scrolled.push("probe-outcomes");
+    container.append(h);
+
+    await new Promise((r) => setTimeout(r, 120));
+    container.remove();
+    expect(scrolled).toEqual([]);
+  });
+
+  it("does not start a poll at all when the signal is already aborted", async () => {
+    // An aborted signal never fires `abort` again, so a poll started under one could not be
+    // cancelled — the caller must not start it.
+    const container = document.createElement("div");
+    document.body.append(container);
+    const scrolled: string[] = [];
+    const controller = new AbortController();
+    controller.abort();
+
+    const a = document.createElement("a");
+    a.setAttribute("href", "wbs.md#probe-outcomes");
+    container.append(a);
+    container.addEventListener(
+      "click",
+      realHandler({
+        containerRef: { current: container },
+        signal: controller.signal,
+      }) as EventListener,
+    );
+    a.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    const h = document.createElement("h2");
+    h.id = "probe-outcomes";
+    h.scrollIntoView = () => scrolled.push("probe-outcomes");
+    container.append(h);
+
+    await new Promise((r) => setTimeout(r, 120));
+    container.remove();
+    expect(scrolled).toEqual([]);
   });
 
   it("gives up quietly when the fragment never appears — no hang", () => {

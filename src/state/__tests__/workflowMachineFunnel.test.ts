@@ -54,15 +54,29 @@ function sourceFiles(dir: string = srcRoot()): string[] {
 
 const rel = (abs: string): string => abs.slice(srcRoot().length + 1);
 
+// ⚠️ The guard's two predicates are declared ONCE, here, and both the live guards below and
+// the discrimination block at the end of the file call these same functions. They used to
+// be inline in the live guards with a copy in the discrimination block, so a weakened live
+// regex (e.g. one matching only `"./edges"`) stayed green on both sides.
+
+/** The wiring predicate: the module imports BOTH `edges` and `policy`. */
+function wiresGraphToPolicy(source: string): boolean {
+  return (
+    /from\s+"[^"]*\/edges"/.test(source) &&
+    /from\s+"[^"]*\/policy"/.test(source)
+  );
+}
+
+/** The importer predicate: an import whose SPECIFIER mentions `workflowMachine/` — not a
+ *  mention in a comment. Anchored on `from "…workflowMachine/…"`. */
+function importsMachine(source: string): boolean {
+  return /from\s+"[^"]*workflowMachine\/[^"]*"/.test(source);
+}
+
 /** Files importing anything from `workflowMachine/`, as src-relative paths. */
 function importersOfMachine(): string[] {
   return sourceFiles()
-    .filter((f) => {
-      const src = readFileSync(f, "utf8");
-      // Match an import whose SPECIFIER mentions workflowMachine — not a mention in a
-      // comment. Anchored on `from "…workflowMachine/…"`.
-      return /from\s+"[^"]*workflowMachine\/[^"]*"/.test(src);
-    })
+    .filter((f) => importsMachine(readFileSync(f, "utf8")))
     .map(rel)
     .sort();
 }
@@ -206,13 +220,7 @@ describe("M15 WP2 Phase 4 — the funnel is unique and complete", () => {
     // by design.
     const wirers = sourceFiles()
       .filter((f) => !rel(f).includes("__tests__"))
-      .filter((f) => {
-        const src = readFileSync(f, "utf8");
-        return (
-          /from\s+"[^"]*\/edges"/.test(src) &&
-          /from\s+"[^"]*\/policy"/.test(src)
-        );
-      })
+      .filter((f) => wiresGraphToPolicy(readFileSync(f, "utf8")))
       .map(rel);
     expect(wirers).toEqual(["state/workflowMachine/lookup.ts"]);
   });
@@ -372,8 +380,11 @@ describe("M15 WP2 Phase 4 — exhaustiveness over (state × mode)", () => {
         cells++;
       }
     }
-    // 58 rows × 4 modes. Degenerate-pass guard on the loop above.
-    expect(cells).toBe(232);
+    // Degenerate-pass guard on the loop above, DERIVED rather than a second literal: the row
+    // count is pinned exactly once (58, in workflowMachinePolicy.test.ts), so a legitimate row
+    // change fails that one pin instead of this line repeating it.
+    expect(POLICY_ROWS.length).toBeGreaterThan(0);
+    expect(cells).toBe(POLICY_ROWS.length * modes.length);
   });
 
   it("reaches every FROM-state of every workflow through some row or an explicit reason", () => {
@@ -498,19 +509,6 @@ describe("M15 WP2 Phase 4 — drift against upstream transitions.md", () => {
 // like a real finding. Extracting the predicates keeps the property testable without
 // that hazard, per `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`.
 
-/** The wiring predicate, as the guard applies it: imports BOTH edges and policy. */
-function wiresGraphToPolicy(source: string): boolean {
-  return (
-    /from\s+"[^"]*\/edges"/.test(source) &&
-    /from\s+"[^"]*\/policy"/.test(source)
-  );
-}
-
-/** The importer predicate, as the guard applies it. */
-function importsMachine(source: string): boolean {
-  return /from\s+"[^"]*workflowMachine\/[^"]*"/.test(source);
-}
-
 describe("M15 WP2 Phase 4 — the guard discriminates bypass from ordinary consumer", () => {
   // Source text matching the two consumers both hand-proofs actually used.
   const BYPASSING = `
@@ -554,15 +552,11 @@ export const nothing = 1;`;
     expect(wiresGraphToPolicy(UNRELATED)).toBe(false);
   });
 
-  it("uses the SAME predicates the live guard uses", () => {
-    // ⚠️ The failure mode this test block could otherwise have: re-implementing the
-    // predicates here, testing the copy, and proving nothing about the real guard —
-    // `[[extract-for-import-when-a-raw-guard-cant-express-the-property]]`'s warning that
-    // a test which RE-IMPLEMENTS the code shares its blind spot.
-    //
-    // Asserted by driving both predicates over the guard's real subjects and requiring
-    // agreement with the live results: lookup.ts wires (and is the only one), and every
-    // real importer is detected.
+  it("classifies the machine's real files correctly with the SHARED predicates", () => {
+    // The live guards and this block call the same two functions (declared once, at the top
+    // of the file), so there is no copy to drift. What this adds is the predicates' verdict
+    // on the guard's real subjects: lookup.ts wires, and neither internal counts as an
+    // outside importer.
     const lookupSrc = readFileSync(
       resolve(srcRoot(), "state/workflowMachine/lookup.ts"),
       "utf8",
@@ -581,12 +575,5 @@ export const nothing = 1;`;
     );
     // policy.ts imports only ./types — it does not wire graph to policy.
     expect(wiresGraphToPolicy(policySrc)).toBe(false);
-
-    // And the live population agrees with the predicate applied file-by-file.
-    const byPredicate = sourceFiles()
-      .filter((f) => importsMachine(readFileSync(f, "utf8")))
-      .map(rel)
-      .sort();
-    expect(byPredicate).toEqual(importersOfMachine());
   });
 });

@@ -284,8 +284,9 @@ describe("M15 WP2 Phase 5 — extractTransitionId round-trips the WHOLE graph", 
       if (captured !== edge.id) lost.push(`${edge.id} → ${captured}`);
     }
     expect(lost).toEqual([]);
-    // Degenerate-pass guard: an empty graph makes the loop vacuous.
-    expect(EDGES.length).toBe(111);
+    // Degenerate-pass guard: an empty graph makes the loop vacuous. The exact count (111) is
+    // pinned once, in workflowMachine.test.ts — not repeated here.
+    expect(EDGES.length).toBeGreaterThan(0);
   });
 
   it("captures them under markdown decoration and an arrow suffix too", () => {
