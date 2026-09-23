@@ -18,4 +18,4 @@ metadata:
 
 ⚠️ **Not a duplicate of the project `CLAUDE.md` note**, which documents the `_ref/claude-customization/` symlink for **reading**. Different path, different failure mode (read vs write).
 
-Relevant to any skill-frontmatter experiment — **M15 WP2** is the likeliest to try one. Evidence: `backlog.md` → `SURFACE-2026-09-11-EVERY-INSTALLED-SKILL-IS-A-SYMLINK-INTO-THE-MCCC-SOURCE-REPO`.
+Relevant to any skill-frontmatter experiment — **M15 WP2** is the likeliest to try one. Evidence: `SURFACE-2026-09-11-EVERY-INSTALLED-SKILL-IS-A-SYMLINK-INTO-THE-MCCC-SOURCE-REPO` — deleted from `backlog.md` 2026-09-23 as captured by THIS memory (see `CHANGELOG.md` 2026-09-23; full text in git history before that commit).

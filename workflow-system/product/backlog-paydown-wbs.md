@@ -2,7 +2,7 @@
 shape: temporary-wbs
 cycle: backlog-paydown-2026-09-23
 created: 2026-09-23
-status: not-started
+status: in-progress
 parent-backlog: workflow-system/state/backlog.md (+ workflow-system/state/backlog-quality-findings.md)
 ---
 
@@ -129,6 +129,10 @@ starts with `SURFACE-` is a backlog.md entry and is referenced by its full ID.
 ---
 
 ## WP1 — Backlog bookkeeping: delete, bury, restructure  `[impact: Med · effort: S · risk: Lowest]`
+
+> ✅ **CLOSED 2026-09-23** (task `paydown-wp1-backlog-bookkeeping`, archived). backlog.md 98 → 73 sections;
+> 30 `**Backlog resolved:**` lines. Routing changes it made to later WPs: C3 added to WP4; row 17 in WP6
+> is now verify-first; the `RecentProject` regex in WP6 is confirmed LIVE.
 
 Pure subtraction and reorganization, so it runs first: it can only shrink surface. **Every delete
 lands in the same commit as its `**Backlog resolved:**` CHANGELOG line** (delete-on-resolve

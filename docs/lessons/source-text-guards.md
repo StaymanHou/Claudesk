@@ -464,6 +464,10 @@ every line was true when written.
   fine.
 - **An invalid probe and a real hole are indistinguishable from the result alone.** Verify the
   probe's premises before concluding the guard is broken (see §2's modifier-sibling trap).
+- **Restore a mutated file from a `cp` backup, verified by `shasum` — never `git checkout`.** On
+  an UNTRACKED file it silently no-ops (the mutant survives into the next run); on a tracked-but-
+  DIRTY file it reverts to HEAD and destroys uncommitted work. Detail:
+  `[[git-checkout-no-ops-on-untracked-file]]` (`.claude/memory/`).
 - **When widening a selector, diff the OLD and NEW candidate sets.** "Does it catch the new
   target?" passes while silently dropping a module that was previously in scope.
 - **Prefer extract-for-import for BEHAVIORAL properties.** A better source-text predicate can only

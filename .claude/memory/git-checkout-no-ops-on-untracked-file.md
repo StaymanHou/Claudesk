@@ -71,4 +71,5 @@ correctly. Brief the `cp` + `shasum` procedure instead, unconditionally.
 exactly the moment they are most heavily mutation-tested.
 
 Filed as `SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE` (high) for a fold
-into `docs/lessons/source-text-guards.md` as a mutation-testing precondition.
+into `docs/lessons/source-text-guards.md` as a mutation-testing precondition — **folded 2026-09-23**
+(a pointer bullet in its mutation-proving list) and the backlog entry deleted; this memory is the detail.

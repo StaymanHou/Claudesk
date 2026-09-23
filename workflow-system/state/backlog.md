@@ -20,10 +20,9 @@
   than they were.
 
 ## Code-quality findings — m15-wp4-context-pressure-recycle (2026-09-14)
-- **Pointer:** **4 findings remain — 0 CRITICAL, 0 MAJOR, 4 MINOR** *(was 7 — all **3 MAJORs** were RESOLVED on 2026-09-14 by the pre-WP5 observability paydown and deleted per delete-on-resolve; see CHANGELOG)*. ⚠️ **The three MAJORs were one defect — *the supervisor is not observable to the operator it acts for* — and were paid down together, before dogfooding, precisely because they would have made `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION`'s five deferred behavioral checks undiagnosable:** `fireRecycle` now reports whether it started and the announcement is gated on it (with a distinct DECLINED log for the turn the ledger consumed for nothing); a successful fire is announced; and `wip_read` matches `Ok(None)` and `Err(e)` as separate arms with the error logged. ⚠️ **One mutation-testing finding worth keeping:** the behavioral Rust test for the last of these **cannot** discriminate — both arms return the same value by design and the only difference is an `eprintln!` that is not capturable in-process — so it is pinned by a source guard instead, and BOTH were mutation-proved individually. The 4 remaining MINOR: the `tokens` cast resting on a prose contract; a `useCallback` that memoizes nothing; `runtimes.md`'s `Last:`/`History:` disagreement; and an over-weight `lastIndex` comment. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp4-context-pressure-recycle — 2026-09-14`.
-- **Priority:** medium (the 3 MAJORs) / low (the 4 MINORs)
-- **Status:** pending
-- **Pickup shape:** ⚠️ **Do the 3 MAJORs together — they are one observability pass**, and doing them BEFORE the operator dogfoods is what makes the deferred behavioral checks diagnosable at all (a fire that leaves no trace cannot be confirmed or refuted by dogfooding). MINORs: the `as number` cast that should be a return type (the exact prose-contract shape WP3 paid down), a `useCallback` that memoizes nothing, a `runtimes.md` Last-vs-History ordering disagreement, and the `lastIndex` comment's 14:1 ratio — ⚠️ **fold that last one into the standing comment-convention item, do NOT trim per-WP** (measured as not converging). The reviewer explicitly endorsed KEEPING the `lastIndex` line itself; only the essay around it is the finding.
+- **Pointer:** **3 MINOR remain** (0 CRITICAL, 0 MAJOR). The 3 MAJORs were resolved 2026-09-14 by the pre-WP5 observability paydown. `runtimes.md`'s `Last:`/`History:` disagreement was resolved by the time of the 2026-09-23 paydown WP1. Remaining: the `tokens` `as number` cast resting on a prose contract (→ paydown-2026-09-23 WP8), a `useCallback` that memoizes nothing (→ WP4), and the over-weight `lastIndex` comment (→ the T1/T2 comment-convention pass; ⚠️ keep the `lastIndex` line itself, only the essay around it is the finding). Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp4-context-pressure-recycle — 2026-09-14`.
+- **Priority:** low (all three)
+- **Status:** pending — routed to `workflow-system/product/backlog-paydown-wbs.md` (WP4 / WP8) + the comment-convention pass
 
 ## Code-quality findings — m15-wp3-break-detection-and-auto-fire (2026-09-13)
 - **Pointer:** ⚠️ **ALL 3 MAJORs + the `assertPinnedModel` live-guard gap were RESOLVED 2026-09-14** (`/feature-refactor`; see CHANGELOG 2026-09-14). **3 MINORs remain open.** What landed: the fan-out's `TurnReading` is now threaded into the verdict (one read, so the ledger key and the fire decision cannot describe different turns); `FanOutDeps.inject` requires a `label` and `fireOne` passes `SUPERVISOR_INJECT_LABEL` itself; the unsupervised-project refusal has its own `not-supervised` reason; and `assertPinnedModel` is called inside `adjudicate` **before the spawn**, so R-6 condition 1 is live rather than awaiting WP4's wiring. ⚠️ **The label's source-text guard was REPLACED, not supplemented** — it asserted the requirement was *stated* and survived a mutant that dropped the argument; the behavioral test kills that mutant. ⚠️ **The "still zero production callers" note is now STALE — WP4 supplied the caller** (`useSupervisor`, shipped 2026-09-14, `79c67e5` — hash rewritten by the 2026-09-14 rebase; was `75ad76d`), so these MINORs now sit behind live code rather than an unwired module. Remaining MINOR bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp3-break-detection-and-auto-fire — 2026-09-13`.
@@ -38,10 +37,9 @@
 - **Pickup shape:** both are test-file polish — collapse the arithmetic-derived count expectations, and extract the two funnel predicates to module scope. `/feature-refactor` handles them together in one pass.
 
 ## Code-quality findings — m15-wp1-supervisor-probe (2026-09-12)
-- **Pointer:** **3 MAJOR + 3 MINOR** (6 entries), auto-backlogged per `drive_mode: autopilot`. **0 CRITICAL — no refactor owed.** ⚠️ **Two change what a reader BELIEVES, not just how the code looks, and both were verified at source before filing:** (1) the decisive `0.8` bar is stated **twice** — hardcoded in `scoreArm` and as unparsed prose in `_meta.threshold` — so the two can drift while each keeps asserting confidently; compounding it, **haiku's margin is computed against SONNET's `minTpForBar`**, correct only because both arms happen to share 29 positives, a coincidence never asserted. (2) the comment calls the naive baseline "consults no policy table at all", but it **excludes the 472 `undecided` records** — measured, a genuinely policy-free predicate flags **234, not 119**, and 119 is the headline figure in the ship commit, the probe report's Q1, and the circularity backlog entry. The third MAJOR is structural: both fixtures are read from a **cycle-archive directory `/product-finalize` owns and may relocate**, putting a 33-test break under the control of the skill whose job is to move those files. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp1-supervisor-probe — 2026-09-12`.
-- **Priority:** medium (the three MAJORs); low for the tautology/comment-density/naming polish
-- **Status:** pending
-- **Pickup shape:** the two comment-accuracy fixes (bar-from-`_meta`, naive-baseline framing) are small and should ride with **WP3**, which consumes both numbers; the fixture-path move is independent and is cheapest **before `/product-finalize` closes the M15 cycle**.
+- **Pointer:** **2 MAJOR + 3 MINOR** (0 CRITICAL). The fixture-path MAJOR was deleted 2026-09-23: its premise lapsed once M15 closed and the archive directory became permanent. ⚠️ The two remaining MAJORs change what a reader BELIEVES: (1) the decisive `0.8` bar is stated **twice** (hardcoded in `scoreArm` and as prose in `_meta.threshold`), and **haiku's margin is computed against SONNET's `minTpForBar`**, correct only because both arms happen to share 29 positives; (2) the naive-baseline comment says it "consults no policy table at all" but it **excludes the 472 undecided records**. MINORs: near-tautological assertions, comment history that is a third copy of the WIP, and `Record_`/insertion-order nits. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m15-wp1-supervisor-probe — 2026-09-12`.
+- **Priority:** medium (the two MAJORs) / low (the MINORs)
+- **Status:** pending — routed to paydown-2026-09-23 WP4 (G3) / WP6 (G2, G4, G6) + the comment-convention pass (G5)
 
 ## Code-quality findings — drive-mode-on-the-workspace-surface (2026-08-26)
 - **Pointer:** **4 MAJOR + 4 MINOR** (grouped as 5 entries), auto-backlogged per `drive_mode: autopilot`. **0 CRITICAL — no refactor owed.** ⚠️ **One is a LIVE user-facing defect, verified at source before filing:** during a queued apply the readout stays clickable and a second Apply is **silently discarded** while the readout shows the new value — the "readout claims a mode the session is not obeying" state AC-5 exists to prevent, reached by a different door (reachable only behind a busy agent, which is why every live verification missed it — they all ran against an idle session). ⚠️ **Findings 1, 2 and 4 share ONE fix**: extracting the apply operation into a `useDriveModeApply` hook gates the affordance, replaces a scheduler-timing sleep with a ref, and makes both source-guarded properties value-testable — pick them up as one item, not four. Full bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# drive-mode-on-the-workspace-surface — 2026-08-26`.
@@ -70,36 +68,6 @@
 - **Priority:** low (both remaining)
 - **Status:** pending
 - **Pickup shape:** read the two entries in `backlog-quality-findings.md`, then `/feature-refactor`. To dismiss, edit the `## Code-Quality Review` section in the archived WIP and mark the line `[DISMISSED]`.
-
-> **M15 (Workflow supervisor) cycle-close — backlog sweep 2026-09-15 (`/product-finalize`).**
-> M15 complete — all 5 WPs shipped (WP1 probe → WP2 typed graph → WP3 detect+fire → WP4
-> context-pressure recycle → WP5 exit verify; WBS archived to
-> `workflow-system/product/archive/milestone-15-workflow-supervisor/`).
->
-> **Sweep disposition: NOTHING NEWLY RESOLVED.** M15's resolvable items were closed incrementally at
-> each WP's own `feature-finalize` and deleted then, per delete-on-resolve — most recently
-> `SURFACE-2026-09-14-PAUSE-REFUSAL-TEST-DRIVES-THE-WRONG-EDGE-CLASS` (closed by WP5 Phase 2's two
-> `verify-human`-GATE tests, deleted at ship `9b6cc00`). Of the 21 pending items whose text mentions
-> M15, none was *resolved by* it; they are adjacent, not addressed.
->
-> ⚠️ **THE CYCLE'S OWN EXIT CRITERION IS CARRIED FORWARD, NOT CLOSED.**
-> `SURFACE-2026-09-14-SUPERVISOR-NEVER-OBSERVED-FIRING-IN-A-LIVE-SESSION` (**high**) now holds all
-> **six** live checks — WBS tasks 5.1/5.4 among them — and **closing this cycle does not close it.**
-> The trigger is the operator's first real dogfooding; an agent cannot manufacture it.
->
-> **Surfaced during this cycle, all carried forward:**
-> `SURFACE-2026-09-15-ADJUDICATOR-MARGIN-NEEDS-A-LARGER-LABELLED-SET` (medium — R-6 condition 3,
-> owed before any tuning leans on the +1-record margin) · `SURFACE-2026-09-15-STAGING-AREA-FOR-PROMPT-INPUT`
-> (medium — operator feature request; ⚠️ the multi-line-injection question gates it) ·
-> `SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES` (medium — operator request;
-> two hard blockers recorded) · `SURFACE-2026-09-15-WIP-FILES-USE-PROSE-HEADERS-NOT-YAML-FRONTMATTER`
-> (low — cross-repo, mccc) · `SURFACE-2026-09-14-DOCSLINKHANDLING-FLAKE-EXITS-NONZERO-WITH-ZERO-FAILURES`
-> (medium) · `SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE` (**high**).
->
-> **Nothing escalated.** Open total at close: **52 items — 4 high, 3 medium-high, 20 medium, 3
-> low-medium, 19 low.** ⚠️ **Advisory:** the standing code-quality/refactor batch has now rolled
-> forward across several cycles — `/util-backlog-paydown` is the instrument for it, and this is a
-> between-milestone boundary.
 
 ## SURFACE-2026-09-21-UNCHUNKED-BASE64-ENCODER-OVERFLOWS-ON-LARGE-INPUT
 
@@ -289,7 +257,8 @@ an argument for sequencing, not a decision.
   test case for the dogfooding pass. Scheduled as QoL work immediately AFTER the WP0 hotfix ships
   (operator, 2026-09-17).
 - **Priority:** medium
-- **Status:** open
+- **Update 2026-09-23 — the upstream fix has LANDED; what remains is MEASUREMENT.** mccc shipped the prose fix (`07ff3ba`, *"disambiguate the F10b edge into verify-human"*) and the tooling to measure it (`f25a509`, `--since/--until` on `measure-f10b`). No work is owed here. The open question is whether the stop still recurs in dogfooding after the fix date.
+- **Status:** pending — measurement only (dogfooding)
 
 ## SURFACE-2026-09-17-OBSERVABLE-OUTCOME-WRITTEN-FOR-A-SURFACE-A-LATER-PHASE-BUILDS
 - **Source:** feature:verify-self (M14 WP0 Phase 1)
@@ -394,7 +363,7 @@ an argument for sequencing, not a decision.
   NOT closed**, for two independent reasons, and the entry is deliberately not deleted:
   (a) the seven hands-on checks below are `DEFERRED-TO-DOGFOODING`, so the fix is *built and
   unobserved* — "does it actually stop interrupting the operator" has never been witnessed; and
-  (b) ⚠️ **no release has been cut** (task 0.7 open; latest tag `v0.5.0`), so the operator's own
+  (b) ⚠️ **no release has been cut** (task 0.7 open; latest tag `v0.5.0`) — *⚠️ **stale as of 2026-09-23:** WP0 shipped in `v0.5.1` and `v0.6.0` is out, so blocker (b) has CLEARED; what remains is the operator running the installed build*, so the operator's own
   Claudesk is **still running the UNFIXED supervisor** — which is itself what blocks (a).
   ⚠️ **Item 2's FIRE-POLICY question also remains open and is NOT what WP0 answered.** WP0
   implements the narrower "suppress when unsent input is present" candidate; the probe-Q2 question
@@ -522,6 +491,7 @@ an argument for sequencing, not a decision.
   `verdictReplay.test.ts` (34/36 on the non-circular set), `verdict.test.ts`'s negative arm
   including the **verify-human GATE** (added at WP5 Phase 2), and the recycle conditions.
   **What remains is exactly and only the live behavior.**
+- **Update 2026-09-23:** `v0.5.1` … `v0.6.0` have shipped since; every check below is satisfiable on the operator's installed build (via the in-app updater, never `brew upgrade`). Nothing else changed: the six checks still wait on real dogfooding.
 - **Update 2026-09-15 (b) — ⭐ THE STRUCTURAL BLOCKER IS CLEARED: `v0.5.0` IS CUT.** The installed
   app was `v0.4.0` (2026-09-06) and predated every line of the supervisor, which made all six
   checks *unsatisfiable* — the same trap M13.5 WP1 hit. `v0.5.0` (2026-09-15, 22 commits, the whole
@@ -642,6 +612,8 @@ as owed rather than silently dropped**, per the operator's approval at WP5 Phase
 corpus, and `wp1-break-fixture.json` (2,284 records) is checked in — so re-labelling a larger set
 does not start from zero.
 
+**Absorbed 2026-09-23 from the deleted `SURFACE-2026-09-11-Q2-SEPARABILITY-IS-MODEL-CONDITIONAL`** (conditions 1 and 2 of which shipped). Three facts that entry held and this one did not: (i) the verdict is **bar-sensitive both ways**: a 0.85 bar fails both arms and a 0.75 bar passes both, so "confirm the bar" means measure where it should sit, not re-check 0.80. (ii) The adjudicator costs **~3s per fire candidate on the critical path**. (iii) Routing must cover **every** fire candidate, because the narrow verify-human-adjacent router missed 10 of 32 awaiting-turns. The per-model table (haiku 23/29 NOT_SEPARABLE, sonnet 25/29 SEPARABLE) is in `workflow-system/product/archive/milestone-15-workflow-supervisor/wp1-probe-report.md`.
+
 **Suggested action:** re-mine and label a larger set, re-score `sonnet` against it, and either
 confirm the 0.80/0.80 bar or move it to a measured value. ⚠️ **Do this BEFORE any tuning that
 leans on the current margin** — that is the trigger R-6 named, and it has not fired yet.
@@ -750,33 +722,6 @@ and work on the spec well."
   check it early in the spec.
 - **Status:** pending
 
-## SURFACE-2026-09-13-GIT-CHECKOUT-SILENTLY-NO-OPS-ON-AN-UNTRACKED-FILE
-
-- **Priority:** high
-- **Surfaced by:** M15 WP3 Phase 5 (feature:build, mutation testing)
-- **Target:** verification method (`docs/lessons/source-text-guards.md`)
-- **Type:** gap
-
-⚠️ **`git checkout -- <path>` on an UNTRACKED file does nothing and reports success.** Used to
-restore a mutation probe in `src/state/supervisor/fanOut.ts` (a new, untracked module); the
-command exited 0, printed nothing, and **left the mutated file in place**. Caught only because
-the restore was verified by `shasum` against a pre-mutation baseline rather than by trusting
-the command.
-
-⚠️ **The failure mode is a MUTATED FILE SHIPPING**, and it is silent in both directions: the
-mutant stays, and the "restore" looks done. `git status` would show the file as `??` either
-way, so it is not a tell.
-
-**The rule:** for any mutation probe, capture `shasum` BEFORE and verify it AFTER. ⚠️ For an
-untracked file `git diff`/`git checkout` are not merely weak evidence — they are **inapplicable**,
-and a `git diff --stat` that shows "no change" is vacuously true. (A subagent independently
-flagged the `git diff --stat` half of this at Phase 4 verify-self; this is the `checkout` half,
-which actually bit.)
-
-**Suggested action:** fold into `docs/lessons/source-text-guards.md` as a mutation-testing
-precondition — `cp` the file aside, or capture the SHA, before mutating.
-- **Status:** pending
-
 ## SURFACE-2026-09-13-AGENT-LAUNCHED-CC-CANNOT-PRODUCE-A-REAL-HOOK-EVENT
 
 - **Priority:** high
@@ -822,7 +767,7 @@ script under `tooling/` so each phase does not re-derive it.
 - **Target level:** mccc (`transitions.md`) — a cross-repo question, NOT a Claudesk fix
 - **Type:** gap
 
-⚠️ **Two transitions in `transitions.md` have no governing pause-policy row**, found by exhaustively resolving all 111 edges against all 58 policy rows:
+⚠️ **The survey found two transitions in `transitions.md` with no governing pause-policy row; only ONE (`I2`) is a gap** (see the NARROWED note above: `P13` is terminal). Found by exhaustively resolving all 111 edges against all 58 policy rows:
 
 | Edge | From → To | Why it has no row | Dispatchable? |
 |---|---|---|---|
@@ -837,6 +782,8 @@ script under `tooling/` so each phase does not re-derive it.
 
 ⚠️ **Found by a TEST, not by the survey that preceded it.** The pre-implementation survey classified the unmapped edges but only eyeballed the **dispatchable** ones, so it reported one gap (`I2`) and missed `P13`. The exhaustive assertion caught the second. *A survey that filters before counting reports the filter, not the population.*
 
+- **Status:** pending — upstream (mccc); consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` (paydown-2026-09-23 WP2)
+
 ## SURFACE-2026-09-12-THE-TWO-UPSTREAM-COPIES-OF-THE-FEATURE-GRAPH-DISAGREE
 
 - **Priority:** medium *(was high — Claudesk's exposure is closed; what remains is upstream hygiene)*
@@ -849,56 +796,7 @@ script under `tooling/` so each phase does not re-derive it.
 
 ⚠️ **WHAT REMAINS IS UPSTREAM'S:** the four `AGENTS.md` copies are still wrong, and mccc's `check-structure.sh` Phase 9 — which exists to keep them in sync — is **not catching it**. The hand-off note (`HANDOFF-to-mccc-m15-wp2.md`) asks for Phase 9's deletion and carries the evidence. **Blocked on a session rooted in the mccc repo** (editing from Claudesk would silently dirty a different git repository).
 
-## SURFACE-2026-09-11-EVERY-INSTALLED-SKILL-IS-A-SYMLINK-INTO-THE-MCCC-SOURCE-REPO
-
-- **Priority:** high
-- **Surfaced by:** M15 WP1 probe, Phase 4 Q3 (feature:build)
-- **Target:** M15 WP2 (any frontmatter/skill-file coupling work) + any future skill edit
-
-⚠️ **Every skill under `~/.claude/skills/` is a SYMLINK into `my-claude-code-customization/skills/`.** Editing an installed skill file therefore writes into a **different git repository** — silently dirtying the mccc source tree from inside a Claudesk session.
-
-**Verified:** `ls -l ~/.claude/skills/` shows every entry as a symlink (e.g. `feature-plan -> /Users/stayman/Personal/projects/my-claude-code-customization/skills/feature-plan`). `~/.claude/skills` itself is a real directory, so the hazard is per-skill and easy to miss.
-
-**The safe pattern, used by this probe:** copy with **`cp -RL`** to dereference the link, work only on the copy in gitignored scratch, and **verify the source repo's `git status` stays clean** before and after. A plain `cp -R` copies the symlink, not the content, and a subsequent write goes straight through to the source.
-
-**Why it matters beyond Q3:** WP2 considers coupling the typed graph to skill frontmatter. Any experiment that "just adds a key to a skill to see what happens" would mutate the companion repo. ⚠️ The failure is silent — nothing in the Claudesk session reports it, and it surfaces later as unexplained dirt in a different project.
-
-**Also recorded (the compatibility answer itself):** extra frontmatter keys ARE inert — **6 of 48 shipped skills already carry `allowed-tools`** beyond the standard three keys, so the harness tolerates extra keys in production today. The open question was never compatibility; it is whether the enumerator is worth building at all (probe says no — see the WP1 WIP, Q3b).
-
-## SURFACE-2026-09-11-Q2-SEPARABILITY-IS-MODEL-CONDITIONAL
-
-- **Priority:** high
-- **Surfaced by:** M15 WP1 probe, Phase 3 (feature-build)
-- **Target:** M15 WP3 task 3.7 (the adjudicator) + the fire policy
-
-⚠️ **The Q2 gate opens ONLY with a sufficiently strong adjudicator model.** Measured over the 96-turn FIRE population against operator-behavior ground truth (96 `claude -p` calls per arm, zero errors):
-
-| Model | Wrong-fire recall | Real breaks preserved | Verdict @ 0.80/0.80 |
-|---|---|---|---|
-| `haiku` | 0.793 (23/29) | 0.878 (36/41) | **NOT_SEPARABLE** |
-| `sonnet` | 0.862 (25/29) | 0.854 (35/41) | **SEPARABLE** |
-
-⚠️ **AND THE MARGIN IS ONE RECORD.** `sonnet` clears the 0.80 recall bar by exactly **+1 record** (25/29; it needs ≥24). `haiku` misses by **−1** (23/29). The entire SEPARABLE/NOT_SEPARABLE split between the two models rests on a **2-record difference on a 29-record denominator**, and only **70 of 96** records are scorable at all (26 have no recorded operator response). ⚠️ **The 0.80/0.80 threshold is a judgment call, not a measured constant** — a 0.85 bar fails both arms, a 0.75 bar passes both.
-
-**Consequence:** WP3's GO is not *"the hybrid works"* — it is *"the hybrid works with a strong enough adjudicator, on a thin margin."* Treat it as **GO-WITH-CONDITIONS**: pin the model, **re-measure on a larger labelled set before relying on the margin**, and keep the fire policy biased toward withholding (the safe direction). ⚠️ **A silent model downgrade moves the supervisor from SEPARABLE to NOT_SEPARABLE with no code change and no signal.** The adjudicator model must be **pinned explicitly**, and changing it is a **behavioral change that requires re-measurement**, not a config tweak.
-
-✅ **The failure direction is the safe one.** The stronger arm's 6 false positives all *withhold* a fire on a turn that was a real break, so the supervisor stays silent and the operator nudges — today's status quo, and recoverable. The dangerous direction (firing into a turn awaiting an answer) is caught at 0.86.
-
-⚠️ **Cost on the critical path:** ~3s per call, one call per fire candidate before firing. Routing must cover **every** candidate, not just the verify-human-adjacent class — the narrow router misses 10 of 32 awaiting-turns (see the routing entry in the WP1 WIP).
-
-## SURFACE-2026-09-11-A-DETECTOR-SCORED-AGAINST-ITS-OWN-POLICY-TABLE-IS-CIRCULAR
-
-- **Priority:** high
-- **Surfaced by:** M15 WP1 probe, Phase 2 (feature-build)
-- **Target:** M15 WP3 task 3.4 (the verdict) + any future detector tuning
-
-⚠️ **A detector scored against a fixture that its OWN policy table produced is measuring itself, and will report a perfect score no matter how wrong both are.** The probe's `detect.py` and `mine.py` both called the same `lookup()` with the same branch order on the same inputs, yielding **precision 1.000 / recall 1.000** — arithmetic identity, not evidence. It would have read 1.000 even if `policy.py`'s 95 hand-transcribed edges were entirely wrong.
-
-**How it was caught:** by treating a perfect score as a *symptom* rather than a success. Nothing in the run flagged it; the numbers looked like the best possible outcome.
-
-**The only non-circular truth in this corpus is the operator prod** — a short, content-free nudge (`"so?"`, `"next"`, `"chain"`, `"autopilot it! why returning control?"`) typed immediately after a verdict. It is derived from **operator behavior**, not from the policy table, so scoring against it actually tests whether the policy lookup models reality. Measured that way: **36/36 ground-truth breaks caught.**
-
-**Consequence for WP3:** when the real detector is tuned, its acceptance measurement must come from a signal the detector does not itself produce. Re-deriving labels from the same typed graph the detector consults is not a test — it is a tautology with a percentage attached.
+- **Status:** pending — upstream (mccc); Claudesk's half is done. Consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` (paydown-2026-09-23 WP2)
 
 ## SURFACE-2026-08-25-PROBE-CHECK-EXEMPTS-ALREADY-INSTALLED-DEPENDENCIES
 - **Source:** feature:verify-human (M13.5 WP3, 2026-08-25) — cost **three failed live test rounds** and a full WP escalation.
@@ -929,36 +827,6 @@ script under `tooling/` so each phase does not re-derive it.
 - **Suggested action:** add a rule to the verification-method lessons (and consider `feature-verify-human` / `feature-research` prose): **before a refutation is allowed to close, escalate, or delete work, at least one RUNTIME observation must contradict the working hypothesis.** Reading a type, a doc comment, or a spec is *evidence for* a refutation, never sufficient *on its own*. Cheap mechanical form: *"which single value, if I read it live, would prove this refutation wrong? Go read it."* For WP3 that value was one property access. ⚠️ Pair with the existing `[[verify-the-mutation-landed]]` / `[[invalid-probe-and-real-hole-look-identical]]` family — same shape: **a green/negative result is under-determined until you prove the instrument could have said otherwise.**
 - **Priority:** medium-high (cheap prose fix; the failure mode silently destroys correct work and is self-concealing — nothing re-tests a closed item).
 - **Status:** pending — cross-repo (`my-claude-code-customization`); fold into the handoff already owed to mccc, alongside its sibling.
-
-## SURFACE-2026-08-22-STOP-BACKGROUND-TASKS-IS-AN-UNDOCUMENTED-SEAM
-- **Source:** feature:build (M13.5 WP2 Phase 3 — the field the fourth status state is built on)
-- **Target level:** product:arch (a named stale-able dependency, not a defect)
-- **Type:** trap (a load-bearing upstream field with no public contract)
-- **Summary:** `WorkspaceState::BackgroundWork` — the purple dot — is derived entirely from a field CC's **public hooks reference does not document**: the `Stop` payload's `background_tasks` array (`[{id, type, status, description, command}]`, empty when nothing is outstanding). ⚠️ **Claudesk consumes only its LENGTH, as `background_task_count`** — the hook forwards the count and never the tasks, because `command`/`description` are arbitrary user shell text (prompt-class privacy). Say *count* when describing our side and *array* only when describing CC's payload; four other records said "array" for our signal and were corrected at the M13.5 close. It was found by live raw-payload capture, not from the docs, and the docs pass that confirmed the completion-signal absence **also confirmed this field is unlisted**. So CC can rename, reshape or drop it in any release with no deprecation signal.
-- **Context:** ⚠️ **Already mitigated by construction, which is why this is a note and not work.** The Perl hook maps a missing or non-array value to a count of `0`, and the Rust mapping treats `None` and `Some(0)` identically — so a CC-side change degrades to the **pre-M13.5 `Stop → Idle` behaviour** (an honest grey dot) rather than erroring or turning every turn-end purple. Three tests pin exactly that: `stop_background_task_count_degrades_to_zero_on_every_bad_shape` (empty / absent / string / object), `stop_with_zero_or_absent_background_count_still_maps_to_idle`, and `background_task_count_is_emitted_only_on_stop`. ⚠️ Also deliberate: the hook forwards a **count, never the tasks** — `command`/`description` are arbitrary user shell text, the same privacy class as the raw prompt, and a test asserts a secret in the command never reaches the wire. ⚠️ **The failure mode if it does break is SILENT** — the feature stops working and the dot goes back to grey, which looks exactly like "no background job ran". Nothing alerts.
-- **Suggested action:** None standing. If the purple dot ever stops appearing, check this field **first** (`RAWCAP`-style capture on `Stop`) before suspecting the mapping or the surfaces. Same class as M15's model→window map — a named stale-able seam whose breakage is invisible.
-- **Priority:** low (no live defect; the degradation path is built and tested — this exists so the silent-failure mode is diagnosable rather than mysterious)
-- **Status:** pending
-
-## SURFACE-2026-08-22-A-CC-SESSION-EXIT-KILLS-ITS-BACKGROUND-JOBS
-- **Source:** feature:build (M13.5 WP2 Phase 2/3 — probed while evaluating the operator's PID-polling proposal)
-- **Target level:** method / any future design touching background-job lifetime
-- **Type:** fact (a measured platform behavior that retires a whole design branch)
-- **Summary:** **When a CC session exits, its backgrounded shell jobs are killed with it.** Probed directly: CC launched a 90s job, ended its turn and exited ~85s early; the job shell died with the session, the job **never completed**, and no orphan was reparented to launchd. ⚠️ **This is the fact that dissolved the fourth state's hardest design question** — the feared "the dot sticks forever because the job outlived the session" case **does not exist**. The work is *cancelled*, not orphaned, so there is nothing left to report and the self-healing clear on the next turn-end is sufficient rather than a compromise.
-- **Context:** ⚠️ **Two consequences worth not re-deriving.** (1) **Do not build a PID-polling watchdog.** The operator proposed it and it was probed properly: no PID is in the hook payload (`id` is a CC-internal handle), but the process tree *does* expose it — Claudesk owns the PTY, so it already knows the `claude` PID, and a job appears as a `/bin/zsh -c` child running `eval '<command>'`, matchable against `background_tasks[].command`. A naive child-count would be wrong (the CC child list holds `caffeinate` and two long-lived MCP servers); the working discriminator is that **only job shells source `~/.claude/shell-snapshots/snapshot-zsh-*.sh`** (measured: 1 job shell caught, 3 infrastructure processes excluded, zero false positives). **It works — and it buys coverage for a case that does not exist**, while depending on an undocumented internal path. (2) The close/quit guard **must** treat background work as active (it does): closing the workspace kills the session, which kills the job, so that dialog is what stands between one click and silently discarded work.
-- **Suggested action:** None standing. ⚠️ **Re-check this if CC ever changes to let background jobs survive session exit** — at that point the residual gap becomes real, and Findings above are the ready-made mechanism (the `shell-snapshots` discriminator is the non-obvious part). Until then, treat "session gone → work gone" as the model.
-- **Priority:** low (a fact, not work — recorded so a future session does not re-litigate the expiry rule or rebuild the watchdog)
-- **Status:** pending
-
-## SURFACE-2026-08-21-SUBAGENT-PAIRING-CLAIM-IS-REFUTED-BY-PRODUCTION-DATA
-- **Source:** feature:build (M13.5 WP2 Phase 1 — found while root-causing the stale-blue dot)
-- **Target level:** product:arch (time-analytics accuracy) — **not** a status defect
-- **Type:** gap (analytics computed from a minority of the available events)
-- **Summary:** M9's subagent-duration analytics are computed from **~31% of the `SubagentStop` events**, and its per-agent-type breakdown does not exist in practice. Two measured facts, both across the prod + dev corpora (~108MB of `time-analytics.sqlite`): (1) **`agent_type` is NULL on 100% of 3,977 subagent events** — CC does not send `subagent_type`, so `reclassify::subagent_intervals`' FIFO keying collapses everything into one `<unknown>` bucket; (2) **`SubagentStop` outnumbers `SubagentStart` 3,031:946** (3.2:1; per-session imbalances like 0:19, 5:50, 0:13), so most stops find no open start and are **silently discarded**.
-- **Context:** ⚠️ **Nothing is broken and nothing panics** — the `unwrap_or("<unknown>")` fallback is what keeps this correct-but-coarse, which is exactly why it went unnoticed: subagent durations are *narrower* than the code reads, not wrong. ⚠️ **The doc claims were the real hazard and are now corrected in 5 live sites** (`hook_install/mod.rs`, `reclassify/mod.rs` header + `subagent_intervals` fn doc, `claudesk-hook.pl`, `arch/status-channel-and-surfaces.md`, `tests/hook_pl_output.rs`) — all previously asserted pairing "by `agent_type`" as fact. ⚠️ The test `subagent_start_maps_subagent_type_to_agent_type` **passes and is correct** (it pins the hook's transformation on a *synthetic* payload) but its comment asserted CC sends the field; comment fixed, test untouched. ⚠️ **The properly-paired subagent signal already exists and is already flowing:** `PreToolUse`/`PostToolUse` with `tool_name == "Agent"` balance **exactly** per session (493 pre vs 486 post + 7 failures = 493) and carry `tool_use_id`. Note `SubagentStart` (946) != `PreToolUse[Agent]` (493), so `SubagentStart` is not the spawn signal either.
-- **Suggested action:** Decide whether M9's subagent segmentation should re-key onto the `Agent`-tool pairing (accurate, `tool_use_id`-keyed, no label) or stay on `SubagentStart`/`Stop` (labeled in principle, unreliable in practice). ⚠️ **Do NOT "fix" the label handling alone — the stop surplus is the larger half of the error.** Quantify the duration delta on real data before changing anything; the current numbers are conservative (under-counting), so this is an accuracy improvement, not a bug fix.
-- **Priority:** low-medium (no correctness/data-loss impact; it under-reports one segment kind in a dashboard the operator reads, and the misleading docs — now fixed — were the part that could have caused a wrong build)
-- **Status:** pending
 
 ## SURFACE-2026-08-21-STATUS-PATH-KEYS-ON-CWD-ALONE-COLLAPSING-SESSIONS
 - **Source:** feature:build (M13.5 WP2 Phase 1 — a rejected root-cause hypothesis that turned out to be a real, separate defect)
@@ -1122,26 +990,6 @@ script under `tooling/` so each phase does not re-derive it.
 - **Priority:** low (no defect; prevents a wrong conclusion from a plausible-looking grep)
 - **Status:** deferred — carry to next cycle (M13 close 2026-08-18); no action standing — a method note for the next person who measures skill usage. ⚠️ Applies to every renamed skill, not just this one
 
-## SURFACE-2026-08-14-SKILL-SCAN-COLLAPSES-TWO-FRONTMATTER-ERRORS
-- **Source:** feature:build (M13 WP1 Phase 1, P1.3 — synthetic fixture)
-- **Target level:** product:wbs (M13 WP2, task 2.1 — a scanner design detail, not a defect)
-- **Type:** gap
-- **Summary:** The probe classifier collapses two distinct authoring errors into one class: a `SKILL.md` with **no** `---` fenced block and a `SKILL.md` whose block is **opened but never terminated** both classify as `no-frontmatter`. The real skill dir has neither case (all 50 valid entries parse), so this only surfaced against the synthetic fixture.
-- **Context:** Matters for WP2's Q2 verdict on diagnostics: if the scanner surfaces a dirty-entry count to the operator, "unterminated frontmatter" is an actionable authoring bug in a skill the operator owns, whereas "no frontmatter" more often means "this directory is not a skill." Reporting them identically costs the operator the distinction.
-- **Suggested action:** Decide in WP2 task 2.1 whether the diagnostic vocabulary separates them. Cheap either way — it is one branch in the parser. Not worth its own work package.
-- **Priority:** low
-- **Status:** **deferred — DORMANT** (M13 close 2026-08-18); ⚠️ **MOOT as of 2026-08-14**: WP2 task 2.1 chose option (i) (**no scanner**, §4c: the command name is the only sanctioned coupling), so this item's only target no longer exists and **no scanner will be built**. ⚠️ **Deliberately NOT deleted as resolved** — nothing fixed the classifier; the finding is real about the probe instrument (M13 confirmed at close: no scanner exists in `src/` or `src-tauri/src/`) and becomes live again only if future work reintroduces skill-frontmatter parsing. ⚠️ Do **not** treat this as a reason to build the scanner.
-
-## SURFACE-2026-08-10-NO-GUARD-COUPLES-A-CSS-CLASS-TO-ITS-EMITTING-COMPONENT
-- **Source:** M12 WP4c code review; scope NARROWED at the 2026-08-12 paydown sweep (WP7)
-- **Target level:** product:arch (repo-wide verification hygiene)
-- **Type:** gap
-- **Summary:** Every CSS-related guard in this repo reads exactly ONE side of the CSS↔component contract, so a class can be **styled-but-never-emitted** (dead CSS still carrying real behavior) or **emitted-but-never-styled** with both sides individually green. ✅ **The MODIFIER selectors are now covered** (`cssModifierAudit.test.ts`, added 2026-08-12): all 13 `.block.is-*` / `.block.has-*` selectors are asserted emitted, mutation-proven against the original `is-editing` regression. What REMAINS open is the **base-class** direction across `App.css`'s other ~298 top-level class blocks.
-- **Context:** ⚠️ **The 13-selector audit found ZERO orphans, and that is the honest result** — but it found two *false* positives first, which is the transferable part. `.diff-line.is-add` and `.diff-line.is-remove` are emitted as `` `diff-line is-${line.origin}` ``, so those strings appear NOWHERE in source; a literal search flags them as dead CSS on correct code. ⚠️ And the first predicate used `includes(modifier)`, which a mutation proved vacuous: renaming the emitted `is-editing` to `is-editingRENAMED` left the audit green, since the longer string still contains the shorter — the same prefix-shadowing hole `hasRule` exists to avoid, reproduced on the component side. Boundary matching fixed it. ⚠️ Base classes are a **different risk profile** from modifiers and that is why the split is defensible rather than lazy: a base class is visible on screen the moment it is wrong, while a modifier fires only mid-interaction — which is exactly how the `is-editing` regression shipped.
-- **Suggested action:** Extend `cssModifierAudit.test.ts` from modifiers to all `^\.[a-z-]+` blocks. ⚠️ Two traps, both already paid for once: defining *emitted* is the hard part (interpolation above; also `data-testid`s share the class naming convention, so proximity to `className` is the only honest signal), and **comments must be stripped first** (a design-prior slug ending `-is-chosen` demanded CSS for a class existing only in prose). Budget for false positives on ~298 classes, not 13.
-- **Priority:** low *(was medium — the behavioral half is now guarded; the remainder is largely cosmetic-risk classes)*
-- **Status:** deferred — scope narrowed to the base-class direction at the 2026-08-12 paydown sweep
-
 ## SURFACE-2026-08-06-SESSION-RESTORE-CONTRADICTS-ITSELF-ON-THE-DEFAULT-DRIVE-MODE
 - **Source:** feature:build (M12 WP4a Phase 2)
 - **Target level:** external — the **companion workflow-system repo** (`my-claude-code-customization`), not Claudesk code
@@ -1163,33 +1011,19 @@ script under `tooling/` so each phase does not re-derive it.
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: **deferred by operator decision 2026-08-06** (*"session-start can be a later item in the backlog. much lower priority than session-restore, but not nothing"*)
 
 ## Code-quality findings — m13-wp3-recycle-session (2026-08-18)
-- **Pointer:** **2 MAJOR + 3 MINOR remaining** (grouped), auto-backlogged per `drive_mode: autopilot`.
-  ⚠️ **REWRITTEN 2026-08-19 — one MAJOR is RESOLVED and removed from this pointer:** *Recycle is
-  uncancellable across unmount* closed with the abort-signal work (see the `**Backlog resolved:**`
-  entry in `CHANGELOG.md` for 2026-08-19); the ordering question it asked to be decided explicitly
-  is now decided (**on abort after a successful handoff but before the respawn, the clean mark
-  STAYS**) and mutation-pinned against reversal.
-  **Still open:** (1) `awaitCompletion`'s late-subscription disposal branch (`settled ? un()`) —
-  ⚠️ **its `Status:` reads `pending` but a test for it EXISTS** (`recycleSession.test.ts`, *"disposes
-  a LATE-arriving subscription"*, labelled paydown WP4). Not closed here because verifying that the
-  test fully satisfies the finding was outside this task's scope — **re-read the code before
-  re-scoring it**, per the standing lesson that a filing is true only as-of its filing date;
-  (2) the documentary MAJOR: **52–71% comment
-  density with the same rationale in five files** — ⚠️ the *latency-figure* half closed at M13 WP4,
-  the *"Recycle is not a skill-button member"* half and the raw density are untouched; plus 3 MINOR.
-  Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md)
-  under `# m13-wp3-recycle-session — 2026-08-18`.
+- **Pointer:** **2 MAJOR + 1 MINOR remaining.** The uncancellable-across-unmount MAJOR was resolved 2026-08-19. Two of the three MINORs were resolved at the 2026-08-18 paydown. ⚠️ **(1) The late-subscription disposal MAJOR is HALF-closed, not closed** (re-read 2026-09-23): the test added at paydown WP4 covers the **`fs-change`** arm only, and the **`WORKSPACE_STATUS`** arm is still unreachable because its mock resolves synchronously. (2) The documentary MAJOR: **52–71% comment density, with the "Recycle is not a skill-button member" rationale in five files.** (3) One MINOR: `showRecycleButton`'s corrected doc cites a stale `:489`. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m13-wp3-recycle-session — 2026-08-18`.
+- **Priority:** medium (1) / low (2, 3)
+- **Status:** pending — routed to paydown-2026-09-23 WP6 (1) / WP4 (3) + the comment-convention pass (2)
+
 ## Code-quality findings — m12-wp4b-drive-mode-signal (2026-08-07)
-- **Pointer:** 3 MAJOR + 4 MINOR (grouped as 4 entries), auto-backlogged per `drive_mode: autopilot`. The headline MAJOR is a **stated-scope gap, CONFIRMED EMPIRICALLY at review rather than accepted on assertion**: `CLAUDESK_DRIVE_MODE` inherits down the **entire descendant chain** (no `env_clear` anywhere), so a `claude` launched from inside a Claudesk-spawned CC fires the hook with the **parent workspace's** mode — while the WP's stated containment story is only CC-yes / login-shell-no. The other two: `shell_spawn_env`'s test asserts the primitive it extracted rather than the caller it was extracted to prove (the same gap the WP closes at `cc_spawn`), and incident-narrative comments are triple-recorded in code + WIP + backlog. Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp4b-drive-mode-signal — 2026-08-07`.
-- **Priority:** medium (2 MAJOR) + low-medium (1 MAJOR readability) + low (4 MINOR)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
-- **Pickup shape:** the descendant-inheritance item is a **decision first, edit second** — decide whether a nested CC *should* inherit the workspace's mode (arguably yes), then state it at `cc_spawn_env`. ⚠️ **Do NOT reach for `env_clear()`**: it would strip PATH/LANG/TERM and break both the M10.5 mojibake fix and the GUI-PATH spawn fix. The `shell_spawn_env` item is best resolved by **deleting** the seam unless a real caller assertion is wanted — the current middle position pays indirection cost without buying the property.
+- **Pointer:** **2 MINOR remaining** (rewritten 2026-09-23). The descendant-inheritance MAJOR was resolved at the 2026-08-18 paydown: `cc_spawn_env` now states the inheritance is intended. ⚠️ Still **do NOT reach for `env_clear()`**, which strips PATH/LANG/TERM. The `shell_spawn_env` MAJOR (a test asserting the primitive, not the caller) is resolved: the test now asserts the `spawn_shell` call site passes `&shell_spawn_env(), "exit"`. The readability MAJOR (incident narrative recorded three times) is comment density and goes to the T1/T2 convention pass. Remaining: `%KNOWN` rebuilt per call in `claudesk-hook.pl`, and a silently dropped can't-happen serde failure in `cc_spawn_env`. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp4b-drive-mode-signal — 2026-08-07`.
+- **Priority:** low
+- **Status:** pending — routed to paydown-2026-09-23 WP8
 
 ## Code-quality findings — m12-wp3-autofire-and-announce (2026-08-05)
-- **Pointer:** ~~3 MAJOR~~ **2 MAJOR** + 3 MINOR remaining (grouped as 3 entries), auto-backlogged per `drive_mode: autopilot`. **The headline MAJOR — the inject arm re-firing on Re-launch — was RESOLVED 2026-08-05** (task `fix-inject-arm-refires-on-relaunch`, commit `051d707`; see `CHANGELOG.md`). Remaining: 3 stale doc comments still asserting the pre-Phase-3.5 whole-feature gate at the module's most-read entry points, one consumer bypassing the `actionFromAnnounced` wire seam, and 3 MINOR polish items. Full findings in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp3-autofire-and-announce — 2026-08-05`.
-- **Priority:** medium (2 MAJOR) + low (3 MINOR)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12); **partially resolved** — the relaunch re-fire is closed, the rest is open
-- **Pickup shape:** the five remaining findings are mechanical single-line edits. ⚠️ **Note the resolved item did NOT take the fix its own entry preferred:** it asked for the two arms' consume-once guarantees to be made *symmetric*, and symmetry was rejected on evidence — clearing `pending_action` on the record needs a child→parent callback that StrictMode's discarded first mount would fire, suppressing the injection entirely. The asymmetry is now documented at the field rather than removed. A future reader "restoring symmetry" would re-break the feature.
+- **Pointer:** **1 MINOR remaining** (rewritten 2026-09-23). The inject-arm re-fire MAJOR was resolved 2026-08-05 (`051d707`). ⚠️ The asymmetry it left is documented at the field: a future reader who "restores symmetry" re-breaks the feature. The 3 stale "whole-feature gate" doc comments are resolved: the only surviving mentions (`announce/mod.rs`, `announce/commands.rs`) describe the change *from* that gate. The `actionFromAnnounced` bypass is resolved: `Workspace.tsx` maps through the seam. Two of the three MINORs were resolved at the 2026-08-18 paydown. Remaining: the `XtermPane.tsx` spawn effect's `exhaustive-deps` exclusion list omits `pendingAction`/`openIntent`. Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp3-autofire-and-announce — 2026-08-05`.
+- **Priority:** low
+- **Status:** pending — routed to paydown-2026-09-23 WP4
 
 ## SURFACE-2026-08-04-CC-READY-NAME-INVITES-MISREADING-AS-CC-READINESS
 - **Source:** feature:spec (M12 WP3 reconciliation)
@@ -1212,29 +1046,9 @@ script under `tooling/` so each phase does not re-derive it.
 - **Status:** deferred — carry to next cycle (M12 close 2026-08-12)
 
 ## Code-quality findings — m12-wp1-probe-flag-store-and-announce (2026-08-03)
-- **Pointer:** 5 open items of 8 findings (0 CRITICAL / 3 MAJOR / 5 MINOR — **2 MAJORs and 1 MINOR
-  fixed in place at review**). The two fixed MAJORs were both *guard-calibration overclaims* in a
-  header written in the same commit: the field-access negatives were variable-name- and
-  syntax-form-bound (a `for (const p of projects)` consumer and any renamed binding passed them),
-  and `stripComments` ignored trailing `//`. Both are now name-agnostic/form-agnostic with the
-  previously-missed mutants added to the calibration block as real inputs, and the header narrowed
-  to what is actually asserted. The carried MAJOR (measurement scripts not in the repo) was
-  **mitigated** — figures relabelled as one-shot observations with method inline — leaving only a
-  convention question. Full body:
-  [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) →
-  `# m12-wp1-probe-flag-store-and-announce — 2026-08-03`.
-- **Priority:** low (all five)
-- **Status:** deferred — carry to next cycle (M12 close 2026-08-12); prior note: auto-backlogged per `drive_mode=autopilot`.
-- **Pickup shape:** three are one-touch cleanups to fold into the next WP that edits the same file
-  (brace-count the interface slice in `listProjectsConsumers.test.ts`; qualify the ambiguous
-  `Verdict (b)` comment at `App.tsx:306-308`; trim one redundant paragraph on the Rust hazard test's
-  doc comment — ⚠️ **not** its ⚠️ reopening-condition paragraph, which is what stops a future reader
-  deleting the test when it correctly fails). The other two are conventions worth deciding once
-  rather than per-instance: whether probe-grade perf spikes get a durable home under `tooling/`, and
-  whether a phase observable must be amended when a verdict *reverses* the assumption it encoded.
-  ⚠️ The comment-density item here is mild ("not the DocsPanel pattern" per the reviewer) but it is
-  the **fifth consecutive review** to raise density in this repo — treat it as further evidence for
-  the standing *budget* ask on the M11 blocks below, not as another isolated trim.
+- **Pointer:** **3 open items** (rewritten 2026-09-23). The two-live-`Verdict (b)` MINOR is resolved: `App.tsx` now names each milestone's verdict. The measurement-scripts convention question was Buried 2026-09-23. Remaining: (1) whether a phase observable must be amended when a verdict *reverses* the assumption it encoded (a workflow-system convention → the mccc handoff); (2) ⚠️ the lazy `interface RecentProject[\s\S]*?default_model\?` regex in `listProjectsConsumers.test.ts` can match past the interface's closing brace, so it wants a brace-counted slice; (3) one redundant paragraph on the Rust hazard test's doc comment (⚠️ **not** its reopening-condition paragraph). Bodies for (1): [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m12-wp1-probe-flag-store-and-announce — 2026-08-03`; (2) and (3) live only here.
+- **Priority:** low
+- **Status:** pending — (1) → `HANDOFF-to-mccc-2026-09-23-paydown.md`; (2) → paydown-2026-09-23 WP6; (3) → the comment-convention pass
 
 ## Code-quality findings — m11-wp4-docs-live-reload (2026-08-02)
 - **Pointer:** **1 MAJOR + 4 MINOR** remaining (was 1 CRITICAL + 4 MAJOR + 4 MINOR) from
@@ -1266,62 +1080,19 @@ script under `tooling/` so each phase does not re-derive it.
   concluded per-WP trimming is not converging (it wants a density *budget*, not another sweep).
 
 ## Code-quality findings — m11-wp3-docs-render-and-navigation (2026-08-02)
-- **Pointer:** **2 MINOR** remaining (was 3; 0 CRITICAL, 0 MAJOR) from `code-quality-reviewer` against ship baseline `6f6df23`. ⚠️ **`SELECTED-RECOMPUTED-FEEDS-EFFECT` was RESOLVED by M11 WP4** (2026-08-02) — the WP it named as the point it "becomes live" — and deleted per delete-on-resolve; see CHANGELOG. **All 4 MAJOR were FIXED IN PLACE, not backlogged** — three were verified by reproducing the reviewer's mutations first, and one of them (folding an empty-href bail into the anchor guard) **passed the full 1645-test suite while re-opening the `[click]()` webview-hijack hole this WP had just fixed**. The root cause the reviewer named — *"the remedy is not more `?raw` arms but mutation-probing the component rather than the copy of it"* — was acted on: the click handler was extracted to `handleDocLinkClick.ts` so the behavioral test **imports the real code**, and the source-order guard was deleted rather than re-patched (that shape had failed twice). Also fixed: `resolveDocLink`'s `fragment` was computed, documented, and discarded by its only caller, so `wbs.md#section` links landed at the top of the doc while the comment said otherwise. The 2 remaining MINOR: comment density past useful (⚠️ flagged by the *previous* WP's review too, and it grew — **and flagged a THIRD time at WP4**, where the reviewer judged it to have crossed from stylistic to functional and named specific offenders; see the WP4 findings entry), and `headingSlug` lacking GitHub's collision suffix. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m11-wp3-docs-render-and-navigation — 2026-08-02`.
-- **Priority:** low (all)
-- **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Held for a future `/feature-refactor` **by design**, not cycle-resolved — part of the standing code-quality batch. ⚠️ The comment-density finding is the pick across all four M11 blocks: it is ONE finding at four points in time (WP2 → WP3 → WP4 → WP5) and WP5's reviewer concluded per-WP trimming **is not converging** — it wants a density *budget*, not another sweep.
-- **Pickup shape:** All three are polish that should ride a future touch of these files. The comment-density one is the pick — it has now been flagged twice, and the reviewer supplied a usable discriminator (*does the sentence survive once the WIP is archived?*). ⚠️ Do NOT strip the ⚠️-marked invariant comments while doing it; those are the ones that stopped real regressions. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## SURFACE-2026-08-02-SET-A-CSP-AS-SECOND-LINE-OF-DEFENSE
-- **Source:** feature:verify-human (M11 WP3 Phase 3)
-- **Target level:** product:arch
-- **Type:** new-work (security hardening)
-- **Summary:** Set a real Content-Security-Policy on the webview. `tauri.conf.json` ships `"csp": null`; the operator agreed at WP3 verify-human that a CSP **should** exist as a second line of defense behind the renderer's raw-HTML escaping.
-- **Context:** WP3 recorded the *posture* decision in `arch.md` ("raw HTML is BLOCKED", pinned three ways) but deliberately did NOT set the CSP, on two grounds. (1) It needs **`style-src 'unsafe-inline'`** — 14 files use inline `style={{…}}` and CodeMirror/xterm inject stylesheets at runtime — so it does **not** close the CSS vector class and is a partial backstop, not a replacement for the escaping. (2) It is **app-wide**: terminal, editor, diff, PiP NSPanel, dashboard and updater all render under it. A too-strict CSP fails **silently** (blank panel, unpainted terminal), so it needs a full-surface live verification pass that a docs-viewer WP had no reason to run.
-- **Suggested action:** Proposed starting policy — `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost`. ⚠️ Verify **live** on every webview surface before shipping: xterm terminal (render + input), CodeMirror editor + diff, the **PiP NSPanel** (separate webview — easy to forget), the analytics dashboard, and the updater banner. Confirm the updater's `github.com` endpoint still resolves (it is a Rust-side fetch, so it should be unaffected — verify rather than assume). Note `img-src data:` is needed if any surface renders inline data-URI images.
-- **Priority:** medium (no live exposure — raw HTML is structurally blocked and mutation-proven; this is defense-in-depth for when that first line is removed by someone who did not know it was load-bearing)
-- **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Deliberately NOT folded into M11: app-wide in scope, needs `style-src 'unsafe-inline'`, fails SILENTLY, and wants its own verification pass — folding it into a docs-panel WP would have shipped it unverified. Recorded in `arch/security-posture.md` → read-only-is-the-panel-not-the-webview.
+- **Pointer:** **1 item remaining, and it lives only here** (rewritten 2026-09-23): the comment-density finding. It is the same finding seen at four points across M11 (WP2 → WP5), and the reviewer's discriminator is *does the sentence survive once the WIP is archived?* ⚠️ Do NOT strip the ⚠️-marked invariant comments; those stopped real regressions. The `headingSlug` collision-suffix finding was Buried 2026-09-23: it is parked by design, with revisit triggers recorded in `classifyHref.ts`. `SELECTED-RECOMPUTED-FEEDS-EFFECT` was resolved by M11 WP4.
+- **Priority:** low
+- **Status:** pending — routed to `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED` (do not trim per-WP)
 
 ## Code-quality findings — m11-wp2-docs-panel-plumbing (2026-08-01)
 - **Pointer:** **2 MINOR** remaining (was 2 MAJOR + 4 MINOR). ⚠️ **Both MAJORs were RESOLVED by M11 WP3** (2026-08-02) and deleted per delete-on-resolve — the fetch-latch entanglement became an explicit state machine (`fetchLatch.ts`) before WP4's reload could turn it into a loop, and the missing wiring test landed as `docsPanelWiring.test.ts`. ⚠️ **2 of the 4 MINORs were resolved by paydown WP1** (2026-08-18) — the `validate_frontend_root` copy (now `pub(crate)` + imported, and the dedup is compile-enforced) and the `DocsPanel.tsx` `selected` item (resolved by WP3+ shipping; no edit needed). **The 2 survivors are comment-DENSITY items and belong to the deferred T1/T2 convention pass, not a sweep WP** — per-WP trimming was measured as not converging. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m11-wp2-docs-panel-plumbing — 2026-08-01`.
 - **Priority:** low
 - **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. Held for a future `/feature-refactor` **by design**, not cycle-resolved — part of the standing code-quality batch. ⚠️ The comment-density finding is the pick across all four M11 blocks: it is ONE finding at four points in time (WP2 → WP3 → WP4 → WP5) and WP5's reviewer concluded per-WP trimming **is not converging** — it wants a density *budget*, not another sweep.
 - **Pickup shape:** Sweep in a refactor pass or dismiss individually. Dismiss via the WIP's `## Code-Quality Review` section.
-## SURFACE-2026-08-01-DOMPURIFY-DEFAULTS-LEAVE-DATA-SVG-AND-STYLE
-- **Source:** feature:build (M11 WP1 Phase 2)
-- **Target level:** product:wbs (M11 WP3 build-time constraint — only if Option A is chosen)
-- **Type:** gap (security-config finding)
-- **Summary:** **DOMPurify's default configuration is NOT sufficient for this app's threat model.** Measured against a hostile fixture: `DOMPurify.sanitize(marked.parse(src))` leaves **two live vectors** — a live `<style>` tag, and `<img src="data:image/svg+xml;base64,…">` whose payload decodes to `<svg onload="alert(1)"></svg>`. **Neither `FORBID_TAGS` nor the strictest `ALLOWED_URI_REGEXP` removes the `data:` URI** (three configs probed; all three left it intact) — DOMPurify treats `data:` on `<img>` as an allowed-data-URI tag and bypasses the URI regexp for it.
-- **Context:** Only bites if M11 WP1's verdict picks **Option A** (`marked` + DOMPurify). Option B (`react-markdown`) escapes raw HTML by default and measured 0 live vectors with no extra work. Matters because the app has **no CSP** (see `SURFACE-2026-08-01-APP-SHIPS-WITH-CSP-NULL-…`), so the sanitizer is the only line of defense and the failure mode is silent — the output *looks* sanitized.
-- **Suggested action:** If Option A is chosen, the shipping config must include `FORBID_TAGS: ["style"]` **and** an `afterSanitizeAttributes` hook stripping `data:` from `src`. Verified to reach 0 live vectors while preserving a benign `./local.png` and all cross-doc/anchor/external hrefs. Pin it with a hostile-fixture test asserting the **live DOM** (not source text). If Option B is chosen, this item is moot — close it.
-- **Priority:** low (conditional on the WP1 verdict; fully characterized with a proven fix in hand)
-- **Status:** **deferred — MOOT under the WP1 verdict** *(2026-08-01)*. WP1 chose Option B (`react-markdown`), so DOMPurify does not ship and this gap is not live. Kept rather than deleted because the mutation table below is the evidence for *why* Option A was not chosen — **revive only if Option A is ever reconsidered**. Nothing resolved it; the verdict routed around it, so delete-on-resolve does not apply.
-- **⚠️ UPDATED 2026-08-01 (verify-self) — the gap is WIDER than first measured, and the first measurement was wrong.** The original predicate had no `style`-**attribute** probe, so it scored a surviving `<div style="background:url(javascript:alert(1))">` as clean. DOMPurify's default `ALLOWED_ATTR` includes `style` and it does not parse CSS. Corrected numbers: **`A-sanitized` (defaults) = 4 live vectors**, not 2. The full Option-A recipe is therefore **three individually-necessary options** — `FORBID_TAGS:["style"]` + `FORBID_ATTR:["style"]` + the `afterSanitizeAttributes` data-URI hook — each **mutation-proven load-bearing** (dropping any one scores 1, 2, or 1 respectively; dropping all scores 4). **If Option A is chosen, all three ship together and the pinning test must assert the live DOM including a style-attribute probe** — the failure mode of omitting one is silent. Two further latent gaps (`img[srcset]`, `track[src]`) survive even the full recipe: outbound network/beacon references rather than script execution, low priority, but unblocked only by the absent CSP.
-
-## SURFACE-2026-08-01-PNPM-SPIKE-IN-TMP-MUTATES-REPO-LOCKFILE
-- **Source:** feature:build (M11 WP1 Phase 1, P1.1)
-- **Target level:** product:arch (convention note — belongs with the "Setup & Ecosystem Gotchas" family in `CLAUDE.md`)
-- **Type:** tech-debt (tooling footgun / verification-hygiene)
-- **Summary:** Running `pnpm add` inside the repo's **gitignored** `tmp/` directory still **mutates the tracked `pnpm-lock.yaml`** at the repo root. pnpm resolves upward to the workspace root and does not honor gitignore for that resolution (the tell is `../..` appearing in its progress output). Crucially, **`package.json` is left untouched**, so the common "did I add a dep?" check — grepping `package.json` — reports clean while the lockfile is dirty.
-- **Context:** Hit while spiking two markdown renderers for M11 WP1. The WP plan explicitly said "spiking may install into a throwaway dir under `tmp/`, which is gitignored" — that instruction was wrong, and following it dirtied the tree. Caught by `git status` before any commit and reverted with `git checkout pnpm-lock.yaml`; the spike was relocated outside the repo entirely (the session scratchpad). Generalizes beyond this WP: **any** future dependency spike, renderer/library bake-off, or "just try it in a sandbox dir" inside this repo has the same failure, and it is silent in the check most people run.
-- **Suggested action:** Record the rule in `CLAUDE.md` → "Setup & Ecosystem Gotchas": *a dependency spike must live outside the repo tree (use the session scratchpad), because `tmp/` being gitignored does not isolate a pnpm install; and when verifying no-footprint, check `pnpm-lock.yaml` explicitly, not just `package.json`.* One short bullet — no code change.
-- **Priority:** low (one-line doc fix; the failure is reversible and was caught immediately — but it is silent, recurring, and cheap to prevent)
-- **Status:** deferred — carry to next cycle *(M11 cycle-close sweep 2026-08-03)*. One-line doc fix, already captured as a Setup-Gotcha in the root `CLAUDE.md`; the remaining work is the preventive guard.
-
 ## Code-quality findings — time-tracking-offline-local-only-copy (2026-08-01)
-- **Pointer:** **2 MINOR** (0 CRITICAL, 0 MAJOR remaining) from `feature-review-quality` against ship baseline `0f5a8c7^..7a1a185`. **Both MAJORs and one MINOR were FIXED IN PLACE, not backlogged** — the two MAJORs were reflow-fragile `?raw` assertions in this WP's own new copy guards (prose inside JSX wraps at Prettier's default 80 cols; two assertions sat 3–6 chars from the boundary and passed only by luck about where the words fell), fixed by normalizing the haystack in both guard files and **validated in both directions**: a pure reflow with identical words now passes where it previously failed, while dropping a claim / dropping the scope disclosure / renaming the advertised label each still fail. The deviation from autopilot's auto-backlog default was deliberate — one line per file, the guards protect a **privacy disclosure**, and they had been written in the same session, so backlogging a guard already known to misfire would have shipped known-broken verification. The 2 remaining MINOR: the Analytics hint still ~2.5× its longest sibling hint (content correct, length an explicit call), and ~55 lines of test commentary triplicating prose that also lives in the WIP/WBS/commit. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# time-tracking-offline-local-only-copy — 2026-08-01`.
-- **Priority:** low (all).
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*.
-- **Pickup shape:** Both are polish that should ride a future touch of these files, not a standalone pass. ⚠️ **Neither should be "fixed" by weakening a claim or a guard:** the hint's length is four *distinct* load-bearing facts (the machine-wide scope clause especially — removing it makes the copy misleading by omission), and the whitespace-normalization comment in the guards is what stops someone simplifying the haystack back to raw and silently re-breaking them. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## SURFACE-2026-08-01-EDITOR-DISK-RELOAD-WAITS-FOR-REAL-WINDOW-FOCUS
-- **Source:** feature:build (M11.5 WP2 Phase 1 reproduction run, 2026-08-01)
-- **Target level:** product:wbs
-- **Type:** bug
-- **Summary:** ⚠️ **LOW-CONFIDENCE — re-test from scratch before acting.** Observed that an external change to an open file did not reload the editor's document text while the Claudesk window lacked real OS focus. **The observation is partly confounded by tester error:** the shell cwd had reset, so one of the disk writes landed in the repo root instead of the watched scratch dir — the app was correctly watching a file that had stopped changing. The effect may be wholly explained by that. Recorded because it was noticed, not because it is established.
-- **Context:** Found incidentally while trying to reproduce the minimap staleness bug — it is **not** that bug (the minimap faithfully matched its own buffer in every recipe, and `SURFACE-2026-07-31-EDITOR-MINIMAP-STALE-ON-FILE-UPDATE` explicitly states the text updates correctly). Deliberately **not** pursued in WP2: the roadmap clears the `checkDisk` → `diskDecision` → `reloadFromDisk` path as not-suspect, and it is shared machinery the WP was instructed not to touch without a reproduction implicating it. Whether this is even a defect is a judgment call — reloading only on focus is a defensible design (it is when the user can actually see the change), and it may well be the intended behavior.
-- **Suggested action:** First decide whether it is a bug at all. If yes, the question is whether the CC-edits-a-file case (the common Claudesk case, where the user *is* watching the panel while CC works, possibly with the window focused but the editor pane merely unfocused) is covered by the current trigger. Worth pairing with any future work on the disk-reload path rather than picking up alone.
+- **Pointer:** **1 item remaining, and it lives only here** (rewritten 2026-09-23): about 55 lines of test commentary that triplicate prose. ⚠️ Keep the whitespace-normalization comment in the copy guards; it is what stops someone simplifying the haystack back to raw and silently re-breaking them. The Analytics-hint length MINOR was Buried 2026-09-23: its fix is a new element, and each of its four facts is load-bearing.
 - **Priority:** low
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)*
+- **Status:** pending — routed to `SURFACE-2026-08-19-COMMENT-CONVENTION-PASS-T1-T2-DEFERRED`
 
 ## SURFACE-2026-07-31-MODEL-ALIAS-HINTS-COULD-BE-DYNAMIC
 - **Source:** operator question at M11.5 WP1 Phase 3 verify-human ("Then can this list be dynamic?")
@@ -1360,34 +1131,25 @@ script under `tooling/` so each phase does not re-derive it.
 - **Status:** **DEFERRED to backlog 2026-08-01 (operator decision) — REMOVED from Milestone 11.5.** Was M11.5 WP2; re-scoped out after the attempt above proved it is feature-sized rather than papercut-sized, and the bucket's stated value is that it stays tight. **M11.5 continues at WP3.** Revive as its own feature item when the `drawLine` rewrite is worth funding.
 
 ## Code-quality findings — m10.9-wp3-invite-settings-substrate (2026-07-29)
-- **Pointer:** **1 MAJOR + 4 MINOR** (0 CRITICAL) *(was 5 MINOR — `WP3-OPERATOR-SPECIFIC-CLONE-PATH` was RESOLVED by WP3.5a on 2026-07-29 and deleted per delete-on-resolve; see CHANGELOG)* from `feature-review-quality` against ship baseline `6193615^..5bc88f3`. **A 2nd MAJOR is NOT listed — it was a live defect and was FIXED at review time, not backlogged:** `App.tsx` read the gate via the raw `getWorkflowFeaturesEnabled()` wrapper, bypassing WP2's seam contract, and a one-shot read **never re-syncs** on `WORKFLOW_FEATURES_ENABLED_EVENT` — so enabling the gate mid-session left the value stale for the process lifetime (masked only by an unrelated `dismissedThisSession` term). Fixed by consuming `useWorkflowFeaturesEnabled()`, **and the OFF-invariant guard's blind spot that hid it was closed in the same pass** (its bypass scan matched only raw command strings, so a wrapper import was invisible; the new arm strips comments and is proven to bite on the exact shipped violation). The remaining MAJOR: **`WP3-POSITIONAL-RAW-SLICING`** (two wiring guards use positional `?raw` slicing — one line-bounded, one a fixed `at + 90` window, which is the pattern that already produced a false positive *in this same feature*; they guard the highest-value assertions in the file, `[Later]`-writes-nothing and Esc-means-Later). The 5 MINOR: a detached comment block in `SettingsPanel.tsx`; a hardcoded highlight tint in `settingsHighlight.test.ts`; the operator-specific `~/Personal/projects/…` clone path shown to secondary users (**coordinate with WP3.5's location picker**); an untestable "kebab-case" claim with only single-word variants; and the stale `..._other_seven_fields` sibling test name. Reviewer verdict: "high-quality, unusually disciplined work… the debt it accrues is a seam-discipline exception that should be made explicit rather than left implicit" — which is what the in-place fix did. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.9-wp3-invite-settings-substrate — 2026-07-29`.
-- **Priority:** medium (1 MAJOR) + low (5 MINOR).
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** **`WP3-POSITIONAL-RAW-SLICING` belongs with the open `SURFACE-2026-07-28-QUALITY-WP2-RAW-GUARDS-STILL-LOAD-BEARING`** — same idiom, same root cause, and a single pass could extract the Esc decision as a pure function (the `escDismissTarget` precedent) while stripping the fragment-matching greps. Likewise the two test-naming items (`WP3-KEBAB-CASE-CLAIM-UNTESTABLE`, `WP3-STALE-SIBLING-TEST-NAME`) pair with `SURFACE-2026-07-29-SETTINGS-PRESERVES-OTHER-FIELDS-TEST-NAME-OVERSTATES-ASSERTION` — all three are in `settings.rs` and all three are the overstated-assertion class this feature hit repeatedly. ~~`WP3-OPERATOR-SPECIFIC-CLONE-PATH` should be settled BEFORE WP3.5 builds its location picker~~ — **RESOLVED at WP3.5a.** The outcome inverted the original suggestion: the two paths deliberately **disagree** (neutral `~/dev/…` for hand-run, `~/.claudesk/vendor/` for the wizard), because pointing manual instructions at the managed dir would create unrecorded clones that read as `developer` while looking managed. Dismiss via the WIP's `## Code-Quality Review` section.
+- **Pointer:** **1 MINOR remaining** (rewritten 2026-09-23): the substrate comment in `SettingsPanel.tsx` is detached from the `substratePresent` code it describes. Every other item this stub listed is resolved and in CHANGELOG: `WP3-POSITIONAL-RAW-SLICING`, `WP3-STALE-SIBLING-TEST-NAME`, `SETTINGS-PRESERVES-OTHER-FIELDS-TEST-NAME-OVERSTATES-ASSERTION`, the clone path, and (2026-09-23) `WP3-KEBAB-CASE-CLAIM-UNTESTABLE`, which is documented at the `WorkflowInvite` serde attribute. The hardcoded-tint MINOR was deleted 2026-09-23 (the test is colour-agnostic). Body: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m10.9-wp3-invite-settings-substrate — 2026-07-29`.
+- **Priority:** low
+- **Status:** pending — routed to paydown-2026-09-23 WP4
 
 ## Code-quality findings — m10.9-wp2-workflow-features-gate (2026-07-28)
-- **Pointer:** **2 MAJOR + 4 MINOR** remaining (0 CRITICAL) from `feature-review-quality` on the WP2 ship commit `467593f`. **⚠️ `WP2-CHORD-ARM-MISSES-PANELHOST` was RESOLVED 2026-08-01 by M11.5 WP4 (`0bac2c6`) and its body is deleted from the findings file** — the chord arm now selects by exported identifier, `panelHost.ts` is in scope, and the probe that passed 10/10 against it fails. **A 4th MAJOR is NOT listed — it was a live defect and was FIXED at review time, not backlogged:** `useSettingControl` called `persist()` inside a `setValue` updater, and StrictMode's dev double-invoke made **every settings toggle fire two IPC writes**; fixed via a `valueRef` read outside the updater, confirmed empirically (2 writes → 1) and pinned by a shape guard proven to bite. The 2 still-open MAJOR: **`WP2-RAW-GUARDS-STILL-LOAD-BEARING`** (~10 `?raw` greps in `settingsPanelWiring.test.ts` match formatted multi-line fragments — the exact shape that broke twice during this feature; the behavior is already covered in `escDismiss.test.ts`); **`WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL`** (migrated controls kept `picker-*` testids inside the Settings panel — WBS-permitted, but a durable lie in the selector namespace; ~8-site mechanical rename). The 4 MINOR: missing `return` after the Esc branch in `App.tsx`; the milestone rationale restated in ~6 places; the tautological `ALLOWED_SAMPLE` half of the allowlist test; `SettingsPanel.tsx` near the doing-too-much line before M14 extends it. Reviewer verdict: "well-built work that clears the bar the milestone set… the debt is concentrated in two places." No refactor auto-invoked (0 CRITICAL). See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.9-wp2-workflow-features-gate — 2026-07-28`.
-- **Priority:** medium (3 MAJOR) + low (4 MINOR).
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** **⚠️ Re-scoped 2026-08-01 — the chord-arm half of this entry is DONE.** The original advice was to pay the two MAJOR test-quality items *together* (both being about the `?raw` idiom's limits); that pairing is now moot — `WP2-CHORD-ARM-MISSES-PANELHOST` shipped in M11.5 WP4 and is deleted from the findings file. What remains: **`WP2-RAW-GUARDS-STILL-LOAD-BEARING`** (~10 `?raw` greps matching formatted multi-line fragments; best paid alongside `WP3-POSITIONAL-RAW-SLICING`, and **corroborated a third time** by the 2026-08-01 `format:check` sweep, where two such guards broke as false negatives on a pure reflow) and **`WP2-PICKER-PREFIXED-TESTIDS-IN-SETTINGS-PANEL`** (~8-site mechanical rename, wants its own commit to stay reviewable). The 4 MINOR are low and unchanged. Dismiss via the WIP's `## Code-Quality Review` section.
+- **Pointer:** **1 MAJOR + 1 MINOR + 1 density item remaining** (rewritten 2026-09-23). Resolved and recorded: `WP2-CHORD-ARM-MISSES-PANELHOST` (M11.5 WP4), `WP2-RAW-GUARDS-STILL-LOAD-BEARING`, the Escape-branch `return`, and (2026-09-23) the `ALLOWED_SAMPLE` duplicate, since `offInvariantGuard.test.ts` no longer builds its own copy. Remaining: MAJOR, the `picker-*` data-testids used inside the Settings panel; MINOR, `SettingsPanel.tsx` near doing too much (its own trigger fired when M14 extended it); and the milestone rationale restated in about 6 places. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# m10.9-wp2-workflow-features-gate — 2026-07-28`.
+- **Priority:** medium (the MAJOR) / low
+- **Status:** pending — testids → paydown-2026-09-23 WP5; the size MINOR → deferred to the next Settings feature; the rationale restatement → the comment-convention pass
 
 ## Code-quality findings — editor-fs-backend-hardening (2026-07-20)
-- **Pointer:** 4 MINOR (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on the backlog-paydown **WP7** `editor_fs` hardening (working-tree diff, HEAD `6f514d0`). The four: **`WP7-VALIDATE-ROOT-PER-CALL-COST`** (every read/write/stat/delete/trash/create re-reads `projects.json` + canonicalizes every known root — memoize behind config-store state); **`WP7-UNKNOWN-ROOT-ERROR-VARIANT`** (a distinct `UnknownRoot` variant would read cleaner than reusing `OutsideWorkspace { root: "<no known project>" }`); **`WP7-STALE-COMPILE-GAP-TEST-COMMENT`** (trim the superseded RED-phase comment in the gap-2 test block); **`WP7-RESOLVE-WITHIN-TOCTOU-NOTE`** (documentation-of-non-issue: the `exists()`→`canonicalize()` window is re-validated). Reviewer verdict: "well-built, disciplined hardening pass… none rise to a finding." No refactor auto-invoked (0 CRITICAL/MAJOR). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# editor-fs-backend-hardening — 2026-07-20`.
-- **Priority:** low (all 4 MINOR).
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** all four ride any future `editor_fs` touch — the per-call cost + `UnknownRoot` variant are the two with any substance (both small); the other two are a comment trim + a non-issue note. Dismiss via the WIP's `## Code-Quality Review` section.
+- **Pointer:** **2 MINOR remaining** (rewritten 2026-09-23): a distinct `UnknownRoot` error variant in place of `OutsideWorkspace { root: "<no known project>" }`, and a one-line non-issue note on `resolve_within`'s `exists()` → `canonicalize()`. `WP7-STALE-COMPILE-GAP-TEST-COMMENT` is resolved (in CHANGELOG). The per-call `projects.json` re-read MINOR was Buried 2026-09-23 as an efficiency nit. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) under `# editor-fs-backend-hardening — 2026-07-20`.
+- **Priority:** low
+- **Status:** pending — routed to paydown-2026-09-23 WP8
 
 ## Code-quality findings — m10.5-wp3-cc-terminal-clean-kill (2026-07-19)
-- **Pointer:** 1 MINOR remaining (originally 0 CRITICAL / 0 MAJOR / 3 MINOR; the "3s" `kill_all` doc-drift MINOR and the `None`-pgid fallback comment MINOR both RESOLVED) from `feature-review-quality` on the WP3 SIGHUP-first process-group kill (`cc_session/mod.rs`). The remaining MINOR — **`WP3-REAPLEADER-SILENT-NONREAP`**: `ReapLeader` discards `poll_reaped()`'s result (`let _ =`) → a residual non-reap (AC-4 wedged-workspace case) degrades silently; add a debug log / distinct signal on `Ok(false)`. Reviewer verdict: "a well-built, unusually disciplined bug fix… No refactor is warranted." No refactor auto-invoked (0 CRITICAL). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.5-wp3-cc-terminal-clean-kill — 2026-07-19`.
+- **Pointer:** 1 MINOR remaining (originally 0 CRITICAL / 0 MAJOR / 3 MINOR; the "3s" `kill_all` doc-drift MINOR and the `None`-pgid fallback comment MINOR both RESOLVED) from `feature-review-quality` on the WP3 SIGHUP-first process-group kill (`cc_session/mod.rs`). The remaining MINOR — **`WP3-REAPLEADER-SILENT-NONREAP`**: `ReapLeader` discards `poll_reaped()`'s result (`let _ =`) → a residual non-reap (AC-4 wedged-workspace case) degrades silently; add a debug log / distinct signal on `Ok(false)`. Reviewer verdict: "a well-built, unusually disciplined bug fix… No refactor is warranted." No refactor auto-invoked (0 CRITICAL). See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10.5-wp3-cc-terminal-clean-kill — 2026-07-19`.
 - **Priority:** low (1 MINOR).
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** a one-line `cc_session/mod.rs` observability touch-up (a `log`/return on the `ReapLeader` `Ok(false)` branch) — rides any future kill-path touch. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m10-wp4-updater-user-control-ux (2026-07-17)
-- **Pointer:** 1 MINOR surviving (originally 1 MAJOR + 3 MINOR; **3 RESOLVED by M10 WP6 Phase 1** — the MAJOR `ERROR-STATE-UNCONSUMED` [now consumed by `UpdaterStatusRow`], MINOR `MENU-CHECK-DISCARDS-OUTCOME` [manual-check feedback wired via `statusNoteForOutcome`], and MINOR `FALLBACK-VS-ERROR-RACE` [reconciled under the single-post-install-surface invariant] — all closed 2026-07-18 at `/product-finalize`, see CHANGELOG). Remaining: **`on_download_finish` emit zeroes the final `downloaded` byte count** (`src-tauri/src/updater/commands.rs` ~L184-193; harmless — `progressPercent` short-circuits to 100 on `done` — cosmetic). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m10-wp4-updater-user-control-ux — 2026-07-17`.
-- **Priority:** low.
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** the one surviving MINOR is a one-line fix — carry the final `downloaded` through on the finish emit (or a one-line comment) — rides any future `updater/commands.rs` touch. Dismiss via the WIP's `## Code-Quality Review` section.
 
 ## SURFACE-2026-08-28-SUPERSEDED-TEXT-IN-DURABLE-DOCS-HAS-NO-CONVENTION
 - **Source:** cross-project global learning, ported 2026-08-28 from `knowledge_base` (CMC ad-ops).
@@ -1460,71 +1222,8 @@ script under `tooling/` so each phase does not re-derive it.
   both instances.
 - **Priority:** medium (cheap prose fix + a cheap guard; the failure silently contradicts a shipped
   record and nothing re-reads a closed item).
+- **Evidence 2026-09-23 (paydown-2026-09-23 WP1) — the class at SCALE:** 22 of 100 code-quality finding bodies were resolved-but-undeleted, most by the 2026-08-18/19 paydown, whose CHANGELOG lines claimed them while the bodies stayed. So were 10 of 34 pointer stubs, whose counts no longer matched their bodies, and one claimed closure was only HALF true (`SURFACE-2026-08-18-QUALITY-WP3-LATE-SUBSCRIPTION-DISPOSAL-UNTESTED`: one arm of two). A sweep that resolves SUB-ITEMS of a grouped entry is where this happens, because no heading disappears, so nothing prompts the delete.
 - **Status:** pending
-
-## SURFACE-2026-07-14-TURN-OUTPUT-REORIENTATION
-<!-- Heading RESTORED at the M10.9 cycle-close sweep (2026-07-31). This item had lost its `## ` heading
-     and was orphaned under SURFACE-2026-07-20-TIME-TRACKING-OFFLINE-LOCAL-ONLY-MESSAGING, making it
-     unfindable by ID and making that item appear twice in a heading scan. Pre-existing defect, not
-     introduced by this cycle. -->
-- **Source:** operator (raised mid-M9, 2026-07-14)
-- **⚠️ PARTIALLY RESOLVED 2026-08-25 by M13.5 WP3 — REWRITTEN to the remaining open work, not deleted.**
-  Solution direction 1 of 4 shipped: **turn-boundary markers + a bidirectional jump affordance**
-  (`↑ N/N ↓` in the terminal chrome, stepping through turn starts over the existing scrollback).
-  See `CHANGELOG.md` 2026-08-25 and `workflow-system/state/archive/turn-output-reorientation.md`.
-  ⚠️ **The original problem is NOT fully solved** — a jump control helps you *navigate* to a turn
-  start; it does not stop an inline answer being **buried** by continued task output, which is the
-  half the operator actually reported ("can't find that answer anymore").
-- **Target level:** product:roadmap — the remaining directions are a further capability, not a bug.
-- **Type:** new-work (UX / attention feature).
-- **Summary (remaining):** With heavy cross-workspace switching, the operator asks a *question layered
-  on top of a workflow instruction*, the LLM **answers first and then proceeds without pausing**, and
-  by the time the operator switches back the answer is buried mid-scroll. Navigation to turn starts
-  now exists; **surfacing or preserving the answer itself does not.**
-- **Context:** Squarely in Claudesk's thesis — *attention is the scarce resource*
-  ([[claudesk-philosophy]]). Real-time status surfaces say *that* a workspace changed state; WP3 now
-  helps you re-orient to *where a turn began*. Neither helps you find **the answer inside it**.
-  Adjacent-but-distinct from the M11 docs-viewer ([[m7-docs-viewer-intent]]).
-- **Remaining solution directions (3 of the original 4 — all still undecided):**
-  - ~~**Turn-boundary markers in the terminal**~~ — ✅ **SHIPPED M13.5 WP3** (2026-08-25).
-  - **Per-turn "answer/notable" capture:** detect when CC emitted a direct answer to an operator
-    question (vs. pure task output) and surface it in a persistent, non-scrolling side rail or a
-    "last answer" chip that survives the turn.
-  - **A turn digest / re-orientation panel** opened on returning to a workspace: "since you left:
-    turn ended, here's the answer to your question + what got done."
-  - **Behavior-side:** make the orchestrator pause (or visibly flag) after answering an inline
-    question layered on an AUTO task, so the answer isn't immediately buried. ⚠️ This one is a
-    **workflow-system** change, not a Claudesk one — it belongs in the owed cross-repo handoff.
-- **⚠️ WHEN ADDRESSED — REQUIRED FIRST STEP, STILL NOT DONE:** **scan the recent session logs /
-  transcripts for concrete real examples** of the pattern (question layered on a workflow instruction
-  → LLM answered-then-proceeded → answer buried in a long turn). Ground the spec in captured
-  instances, not a hypothetical — the operator explicitly asked for this. ⚠️ **M13.5 WP3 did NOT do
-  this** (it was scoped to the navigation half, whose design was settled by probe data instead), so
-  the requirement carries forward intact. Likely sources: harness session logs under
-  `~/.claude/projects/<slug>/`, long-turn transcripts. Extract 2–3 concrete examples (the question,
-  where the answer landed, how far it scrolled).
-- **Priority:** medium (the navigation half is shipped, which lowers the felt friction; the
-  answer-burial half remains real and recurring).
-- **Update 2026-09-15 — ⛔ DROPPED from Group F by the operator.** Briefly carried as **F-c** in
-  `roadmap.md`'s Group F (opened the same day) and **removed on operator review** of the three
-  operator-requested capabilities. ⚠️ **Dropped from the scheduled group, NOT deleted and NOT
-  resolved** — the entry stays because half of it genuinely shipped (M13.5 WP3's turn-boundary
-  markers + `↑ N/N ↓` jump) and the remaining answer-burial half is a real, articulated problem
-  with its history intact here. It is simply **not scheduled work**. ⚠️ **Do NOT re-promote it by
-  citing the product thesis** — it reads as a strong fit for *attention is the scarce resource*,
-  which is exactly why it keeps resurfacing; the operator has now weighed it against F-a/F-b and
-  chosen not to carry it. **Re-open only on a fresh operator ask.**
-- **Status:** pending — recorded, not scheduled (dropped from Group F 2026-09-15)
-
-## SURFACE-2026-07-14-M9-CUSTOM-RANGE-NEEDS-MULTIDAY-TIMELINE
-- **Source:** feature:build (M9 WP6b-2 Phase 3 build-entry — the Custom-range render surfaced a `DayTimeline` constraint).
-- **Target level:** product:wbs — a new WP (forked as **WP6b-4** at the operator's direction, 2026-07-14).
-- **Type:** gap (missing render capability that blocks a planned surface).
-- **Summary:** WP6a/WP6b-1 shipped `DayTimeline` as **single-day only** — it hardcodes `dayOffset 0` (seg coordinate = minute-of-day, 0–1440) and dropped the source's multi-day tick labels + NOW marker (`DayTimeline.tsx` L16-18). So a multi-day `RangePayload` (what a Custom range >1 day returns) cannot render on the day timeline — every day's segments collapse onto the same 0–1440 axis and overlap. The standalone `claude-time` timeline HAD multi-day `dayOffset` support; reviving it is the fix.
-- **Context:** Blocks WP6b-2 Phase 3's Custom-range *render* (the picker + fetch are fine; the correct multi-day surface isn't). Operator chose (2026-07-14) the **full multi-day timeline port** and, because it touches the WP6b-1 interactive-viewport/Minimap subsystem (a multi-day viewport spans `day_count × 1440` minutes, not 1440 — the zoom/pan + Minimap coordinate math must cooperate), agreed to **fork it to a separate WP** rather than balloon WP6b-2. A 1-day custom range renders fine today (the Month drill-down proves it) — only multi-day is blocked.
-- **Suggested action:** WP6b-4 (see wbs.md): revive `dayOffset` (per-session `day_iso` → day-index offset into `day_count × 1440`); multi-day ruler (day-separator ticks + per-day labels + NOW-on-current-day); reconcile with the WP6b-1 `ViewportContext` + Minimap (the crux — spec-first likely); wire Custom (+ optionally WP6b-3's past-week) through it. Size M–L.
-- **Priority:** medium (blocks only the multi-day Custom render; Week/Month/SidePanel + 1-day drill all ship without it; sequenced after WP6b-2/6b-3, before WP6c — or whenever the multi-day view is wanted). Depends on WP6b-1 (viewport) + WP6b-2 (picker/fetch).
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)* (WP6b-4 added to WBS 2026-07-14; not yet started). WP6b-2 Phase 3 re-planned to ship picker+fetch only. — **deferred, carry to next cycle** *(M10.9 close, 2026-07-31)*
 
 ## SURFACE-2026-07-13-M9-WP6B1-KEYBOARD-PAN-ZOOM-DEFERRED
 - **Source:** feature:plan (M9 WP6b-1, Q4 resolution)
@@ -1534,79 +1233,11 @@ script under `tooling/` so each phase does not re-derive it.
 - **Priority:** low (post-WP6b-1 nicety; add if a real need surfaces)
 - **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)* (deferred at plan) — **deferred, carry to next cycle** *(M10.9 close, 2026-07-31)*
 
-## SURFACE-2026-07-08-M9-WP6.5-CLOSE-MARKER-MISSES-FORCE-QUIT
-- **Source:** feature:verify-human (M9 WP6.5 Phase 3)
-- **Target level:** product:wbs (future enhancement) — NOT blocking WP6.5
-- **Type:** tech-debt / known-limitation
-- **Summary:** The explicit `WorkspaceClose` session-end marker (signal 1) fires only from `on_window_event(CloseRequested)` (+ the pre-existing WP7 `kill_all` reaping). A **force-quit** (SIGKILL/SIGTERM) bypasses the Tauri window event entirely, so no marker is written (operator force-quit with cc-1+cc-2 busy → 0 markers; no orphans, since parent-kill reaped the PTY children). A graceful per-workspace close DOES write the marker (verify-self LIVE-confirmed). Whether a graceful app-level ⌘Q reaches `CloseRequested` is unconfirmed (single-window Tauri usually fires it on last-window-close, but ⌘Q app-termination may route differently).
-- **Context:** Operator-ACCEPTED as expected (2026-07-08): a force-quit is indistinguishable from a crash — CC emits no `SessionEnd` on a hard kill either (research 2026-07-08). The dangling session self-heals via **Phase 4 startup reconciliation** + **Phase 1 read-time cap**, so the dashboard numbers stay correct. This makes Phase 4's reconciliation LOAD-BEARING for the force-quit/⌘Q case, not just crash/power-loss.
-- **Suggested action (future, optional):** add a `RunEvent::ExitRequested` / app-termination hook so a GRACEFUL ⌘Q also writes markers before exit (a true force-kill still can't be caught by any code). Low value given 2/4 cover it.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M11.5 close, 2026-08-01)* (accepted limitation; Phase 4 reconciliation is the safety net) — **deferred, carry to next cycle** *(M10.9 close, 2026-07-31)*
-
-> **M13 (Skill orchestration) cycle-close — backlog sweep 2026-08-18 (`/product-finalize`).** M13 complete — all 4 WPs shipped, **and GROUP C CLOSED with it: all six vision success metrics are met** (WP1 probe `578ac4d`/`cbe4874` → WP2 skill buttons + the 5th guard arm `bd67758`/`e45cca8` → WP3 Recycle as a callable operation `be29dea` → WP4 milestone exit verify `1dba27b`/`ca0c973`/`22a58a9`, finalize `4d1d923`; WBS archived to `workflow-system/product/archive/milestone-13-skill-orchestration/`). Both exit criteria were verified **LIVE against the running app**, not inferred from code. **Sweep disposition: ZERO newly-resolvable items, and that is the honest result** — M13's two substantive resolutions were recorded incrementally at WP4's `feature-finalize` and are already absent from this file: `SURFACE-2026-08-18-RECYCLE-SUCCESS-PATH-NOT-PROVEN-END-TO-END-LIVE` (RESOLVED, **deleted** per delete-on-resolve) and the WP3 comment-density MAJOR (**partially** resolved — its latency-figure half is closed and now guard-enforced, so the entry was **rewritten** to its remaining scope rather than deleted). Nothing else in the standing pile is addressed by a skill-orchestration milestone. **All 10 previously-`pending` items moved to `deferred`**, each with its reason inline. Two deserve a forward pointer because **M15 is their likely first exposure**: the WP3 pointer's **two BEHAVIORAL MAJORs** (an unreachable disposal branch that would leak one `fs-change` listener per Recycle; an **uncancellable** in-flight Recycle that can clear the flag for a session that never respawned) — ⚠️ **pay these BEFORE M15 wires the context-pressure caller, which fires with no human watching** — and `SURFACE-2026-08-18-GUARD-VOCABULARY-MISSES-RECYCLE-AND-SESSION`, whose `WORKFLOW_TERMS` blind spot a Recycle **menu item** would land in exactly; decide (a)-widen vs (b)-own-arm before building, standing precedent is (b). ⚠️ `SURFACE-2026-08-18-DEV-PROFILE-PERMISSION-MODE-BLOCKS-SKILL-WRITES` is **only half-applied** — dev is now `bypassPermissions` (verified at this close; prod untouched), but the durable half (seed-from-prod, or record the check-this-first in `docs/lessons/verify-self-tiers.md`) is open, and it is the half that prevents the misdiagnosis recurring. ⚠️ `SURFACE-2026-08-14-SKILL-SCAN-COLLAPSES-TWO-FRONTMATTER-ERRORS` is marked **DORMANT, deliberately NOT deleted** — WP2 chose option (i) so no scanner exists (confirmed by grep at this close), but nothing *fixed* the classifier, so delete-on-resolve does not apply. **Nothing escalated.** ⚠️ Two record-keeping notes for the next sweep: **M12 left no cycle-close blockquote here** (its sweep did run — items carry inline `M12 close 2026-08-12` statuses — only this summary note is missing; not reconstructed retroactively), and this sweep corrected a **live falsehood in `roadmap.md`**, which still stated the Recycle success path as an open accepted gap with the *refuted* "fixture-blocked" diagnosis. **Standing advisory: 34 open items (+20 code-quality pointers) with a large `deferred` code-quality tail — `/util-backlog-paydown` fits a between-cycle moment, and this is one.** Next execution milestone: **M14 (polish + OSS release)** or **M15 (workflow supervisor)** — ⚠️ **the order is a deliberately open operator call**, recorded as undecided in `roadmap.md`; the standing argument favors M14 first (M15 is a dogfooding win whose value to a stranger is unproven).
-
-> **M11 (Workflow-docs markdown viewer) cycle-close — backlog sweep 2026-08-03 (`/product-finalize`).** M11 complete — all 5 WPs shipped, **exit verdict GO** (WP1 renderer probe `d467877`/`e971d22` → WP2 panel + discovery `6632f59` → WP3 render + auto-select + links `6f6df23` → WP4 scroll-preserving live reload `480052e`/`966dca5` → WP5 exit verify `0951d2d`/`8cda041`/`3c0eb8d`; WBS archived to `workflow-system/product/archive/milestone-11-workflow-docs-viewer/`). **Sweep disposition: ZERO newly-resolvable items at this sweep** — and that is the honest result, not an oversight. M11's one substantive resolution, **`SURFACE-2026-07-07-DOCS-VIEWER-RELOAD-PRESERVE-SCROLL`**, was recorded incrementally at WP4's `feature-finalize` and **deleted there** per delete-on-resolve, so it is already absent from this file; likewise WP5 resolved 1 MAJOR code-quality finding (deleted, its coupled pointer **rewritten** to the remaining 4 MINOR — a *partial* resolution, so the entry survives slimmer rather than being deleted). Nothing else in the standing pile is addressed by a docs-panel milestone. **All 8 previously-`pending` items moved to `deferred — carry to next cycle`**, each with its own reason recorded inline: `…BROWSER-SUPPLIES-THE-ANSWER…` (low) and `…JSDOM-CLIENTHEIGHT-IS-ZERO…` (medium) were **filed BY this cycle** as method/test-infra lessons rather than being work it could close; `…RAF-DOES-NOT-TICK-IN-MCP-BRIDGE-EVAL-CONTEXT` (medium) is candidate bridge caveat **(h)** and belongs with the next bridge-driven verify-self session; `…SET-A-CSP-AS-SECOND-LINE-OF-DEFENSE` (medium) was **deliberately not folded in** — app-wide, needs `style-src 'unsafe-inline'`, and fails **silently**, so folding it into a docs-panel WP would have shipped it unverified; `…CSS-CLASS-GUARDS-MAY-USE-SUBSTRING…` (medium, 8 unaudited sibling files), `…OFF-INVARIANT-CHORD-ARM-PREDICATE-IS-MODULE-LEVEL…` (low, **no live gap** — M11 landed a gated surface with the guard passing 14/14, and the arm was *extended* to assert the computed `availablePanels(false)`, never narrowed), `…PNPM-SPIKE-IN-TMP-MUTATES-REPO-LOCKFILE` (low, doc fix already in root `CLAUDE.md`), and `…PROJECT-MEMORY-SYMLINK-NOT-IN-PLACE…` (medium, env hygiene). `SURFACE-2026-08-01-DOMPURIFY-DEFAULTS-LEAVE-DATA-SVG-AND-STYLE` stays **deferred-as-MOOT** rather than deleted — WP1 chose Option B so the gap is not live, and its mutation table is the *evidence for why Option A was rejected*; nothing resolved it, the verdict routed around it, so delete-on-resolve does not apply. **Nothing escalated.** ⚠️ Two things a future reader should not have to re-derive: the **`settled` precedence tier WP5 shipped is NOT live-verified** (informed operator decision — 1734 tests + 7 mutants; operator dogfooding exercises the trigger on every `/session-restore`), and **two WP4 evidence claims were RETRACTED** across four durable records because WebKit supplies both behaviors unaided (no code defect; both pure modules stay mutation-proven). **Standing advisory:** ~57 open items with a large `deferred` code-quality tail — **`/util-backlog-paydown` fits a between-cycle moment, and this is one.** Next execution milestone: **M12 (smart auto-resume + drive mode)**; M11.5 already ran before M11 by design, so there is no numbering catch-up.
-
-> **M8 (Demo assets — filmstrip & PiP value showcase) cycle-close — backlog sweep 2026-06-29 (`/product-finalize`).** M8 complete — all 5 WPs shipped (WP1 probe→synthesized-GIF/Playwright/ffmpeg pipeline; WP2 shared harness `cbe2922`+`9cff1b1`; WP3 filmstrip GIF `a42ba61`; WP4 PiP GIF `5625658`; WP5 embed+README-restructure+push `f7b1310`/`157242d`/`c34925a`, finalize `f5cc431`; WBS archived to `docs/product/archive/milestone-8-demo-assets/`). Sweep disposition: this cycle's one newly-resolvable item is the milestone-level **`SURFACE-2026-06-29-DEMO-ASSETS-FILMSTRIP-AND-PIP`** (RESOLVED — both demos shipped as looping GIFs + embedded + operator-approved on the github.com render). M8 added **2 MINOR code-quality findings** (`Code-quality findings — m8-wp5-embed-place`: test-name over-claims "animated"; stale README Status block now prominent) — **DEFERRED** to a future `/feature-refactor` (by design), the stale-Status one a natural fold into a README-freshen task. M8 was a pure docs/marketing-asset cycle (no app code, no new dep, dev-only `tooling/demo/`), so it resolved none of the standing carry-forward items, all still **DEFERRED → carry forward** (anchors intact): the **code-quality `/feature-refactor` batch** (now incl. m8-wp2/wp3/wp4/wp5 MINOR batches — all dev-only `tooling/demo/` polish + the README-freshen); forward-look SURFACEs — `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` (→ **M9, the next execution milestone**), `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` (→ **M10** docs-viewer, re-anchored off the cut M7 popover), `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (→ M9 startup-trim), `SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE` (unblocked post-v0.2.2, keep-or-demote decision pending), `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP` (→ test-infra), `SURFACE-2026-06-27-ESLINT-WALKS-GITIGNORED-SCRATCH-FIXTURE` (→ one-line eslint-ignore at next refactor), `SURFACE-2026-06-25-FILMSTRIP-MIRROR-BANNER-OCCLUDED-AT-SESSION-START` (cosmetic). Also note: M7's **OC.1–OC.4 DEFERRED-TO-RELEASE** checklist (`workflow/archive/m7-menu-bar-status-item.md`) is still pending its next `/release` gate — M8 shipped no installed-`.app` change, so it didn't touch that. **Nothing escalated.** Each item keeps its own `Status:` detail; this note records the en-masse disposition. Next execution milestone: **M9 (Time-analytics panel — absorb claude-time).**
-
-> **M7 (Menu-bar status item) cycle-close — backlog sweep 2026-06-29 (`/product-finalize`).** M7 complete — all 3 WPs shipped in commit `3888dd6` (WP1 tray icon + ambient alarm, WP2 actuator menu, WP3 milestone-exit verify; WBS archived to `docs/product/archive/milestone-7-menu-bar-status-item/`). Sweep disposition: this cycle's only newly-resolvable items were the 2 M7 arch-doc-name SURFACEs — **`SURFACE-2026-06-29-M7-TRAY-ATOMIC-ICON-METHOD-NAME`** (RESOLVED — `set_icon_with_as_template` is the real method; corrected across wbs/roadmap/arch/CLAUDE.md) and **`SURFACE-2026-06-29-M7-TRAY-NO-CONFIG-BLOCK`** (RESOLVED — glyphs embedded via `include_bytes!`, no `trayIcon` config block; corrected likewise). M7 added 3 MINOR code-quality findings (`Code-quality findings — m7-menu-bar-status-item`) — **DEFERRED** to a future `/feature-refactor` (by design, not cycle-resolved). M7 also carries the **OC.1–OC.4 DEFERRED-TO-RELEASE operator-carry checklist** (in `workflow/archive/m7-menu-bar-status-item.md`) — native glyph badge-transition + out-of-focus/cross-Space + installed-`.app` parity, to verify at the next `/release` gate. M7 was net-new tray work, so it resolved none of the standing carry-forward items: the **code-quality `/feature-refactor` batch** + forward-look SURFACEs (`SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE` now unblocked post-v0.2.2; `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` → M9; `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` → M9; `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` → M8, the now-current docs-viewer milestone; the various PANETABS/eslint/cosmetic carries) all remain **DEFERRED**, anchors intact. **Nothing escalated.** Next execution milestone: **M8 (workflow-docs markdown viewer)**.
-
-> **v0.2.2 release-gate verification PASS — 2026-06-28 (`/release`).** v0.2.2 cut + published (GitHub release `v0.2.2`, Homebrew tap `c532ba7`, sha256 `579f7d8…`), installed-build smoke-tested by the operator: **all DEFERRED-TO-RELEASE checks pass on the real installed `.app`.** This RESOLVES the M6 operator-carry checklist **OC.1–OC.6** (`workflow/archive/m6-wp8-milestone-exit-verification.md`) — WP1 telemetry survival, WP2 stuck-dot subdir-cwd flip→Idle, WP7 no-yolo next-spawn, WP11 `term_spawn` PATH parity + reap, WP9 blur-driven empty-PiP suppression, WP4/WP10 real-keyboard zoom routing — and the **/release-gate cluster**: `SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE` (RESOLVED — installed out-of-focus visibility confirmed), `SURFACE-2026-06-24-HOMEBREW-DISTRIBUTION-VIA-UNSIGNED-PERSONAL-TAP` (RESOLVED — tap install path verified), `SURFACE-2026-06-26-MCP-BRIDGE-RELEASE-ACL-STRINGS` (RESOLVED — release build launched + ran clean). Remaining pending = the standing code-quality `/feature-refactor` batch + forward-look SURFACEs anchored to M7+/M9 (incl. `SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE` — now that WP2's fix is prod-confirmed, the keep-or-demote decision is unblocked). origin/main in sync at `028fa33`; tag `v0.2.2`.
-
-> **M6 (Friend-requested QoL polish) cycle-close — backlog sweep 2026-06-28 (`/product-finalize`).** M6 complete — all 12 WPs shipped (WP1/1b/2/3/4/5/6/7/8/9/10/11; WBS archived to `docs/product/archive/milestone-6-friend-qol/`). Sweep disposition: M6's substantive resolutions were recorded incrementally at each WP's `feature-finalize` — `SURFACE-2026-06-25-STATUS-STUCK-RUNNING-AFTER-CLEAN-TURN-END` (the LEAD; RESOLVED at WP2, `bafee80`), `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1` (RESOLVED — all 3 sub-requests via WP3/4/5), `SURFACE-2026-06-27-RIGHT-PANEL-TERMINAL-ZOOM-AND-MULTIPLE` (RESOLVED via WP10/WP11), `SURFACE-2026-06-26-FILETREE-EXCLUDES-GITIGNORED-EDITABLE-FILES` (RESOLVED via WP6), `SURFACE-2026-06-27-PIP-SUMMONS-EMPTY-WITH-NO-WORKSPACE-OPEN` (RESOLVED via WP9). This sweep additionally closed **`SURFACE-2026-06-26-M6-SETTING-NO-YOLO-DEFAULT`** (was still `pending`; shipped WP7 `4db7b82`). WP8 (milestone-exit verify) was verification-only and resolved nothing new but **carries one batch forward**: the **DEFERRED-TO-RELEASE operator-carry checklist OC.1–OC.6** (in `workflow/archive/m6-wp8-milestone-exit-verification.md`) — installed-`.app` + backend-lifecycle outcomes (stuck-dot subdir-cwd flip, no-yolo next-spawn, `term_spawn` PATH parity, blur-driven empty-PiP, real-keyboard zoom, telemetry survival) verified at the v0.2.2 `/release` gate. Still-pending otherwise (all **DEFERRED → carry forward**, anchors intact): (a) the standing **code-quality MINOR/MAJOR findings** batch (held for a future `/feature-refactor` — by design, not cycle-resolved; +2 from WP8's review, +others from M6 WPs); (b) forward-look SURFACEs — `SURFACE-2026-06-27-WP1-STATUS-LOG-KEEP-OR-DEMOTE` (→ keep through v0.2.2 then decide; it's the channel that self-confirms the WP2 fix in prod), `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` (→ M9), `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (→ M9), `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP` (→ test-infra), `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` (→ M7/M8 docs-viewer-adjacent), `SURFACE-2026-06-27-ESLINT-WALKS-GITIGNORED-SCRATCH-FIXTURE` (→ one-line eslint-ignore at next refactor), `SURFACE-2026-06-25-FILMSTRIP-MIRROR-BANNER-OCCLUDED-AT-SESSION-START` (cosmetic carry-forward), and the **/release-gate cluster** (`SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE` **high**, `SURFACE-2026-06-24-HOMEBREW-DISTRIBUTION-VIA-UNSIGNED-PERSONAL-TAP`, `SURFACE-2026-06-26-MCP-BRIDGE-RELEASE-ACL-STRINGS`) — all resolve when v0.2.2 is cut + verified before the Homebrew bump. **Nothing escalated.** Each item keeps its own `Status:` detail; this note records the en-masse disposition. Next execution milestone: **M7 (menu-bar status item)**.
-
-> **M5 (Picture-in-picture) cycle-close — backlog sweep 2026-06-27 (`/product-finalize`).** M5 complete (WP1–WP6 all shipped; WBS archived to `docs/product/archive/milestone-5-picture-in-picture/`). Sweep disposition: M5's per-WP resolutions were recorded incrementally at each WP's `feature-finalize` (`SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI` RESOLVED at WP2; WP3-quality items at their finalizes), so this sweep found **no newly-resolvable items**. WP6 was verification-only and resolved nothing new but **surfaced one carry-forward**: `SURFACE-2026-06-27-M5-INSTALLED-BUILD-VERIFY-DEFERRED-TO-RELEASE` (**high**, pending) — the M5 exit criterion (installed-`.app` out-of-focus visibility) + native menu glyph + ⌘Tab-away auto-summon + dev/prod isolation + tauri#5566 caveat are operator-deferred to the `/release` gate; resolves when the release is verified before the Homebrew bump. Still-pending otherwise: (a) the standing **code-quality MINOR/MAJOR findings** batch (held for a future `/feature-refactor` — by design, not cycle-resolved); (b) forward-look SURFACEs with intact anchors — `SURFACE-2026-06-26-FRIEND-QOL-BATCH-1` + `SURFACE-2026-06-25-STATUS-STUCK-RUNNING-AFTER-CLEAN-TURN-END` (→ **M6**, the latter is M6's LEAD item), `SURFACE-2026-06-26-ABSORB-CLAUDE-TIME-INTO-CLAUDESK` (→ M8), `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (→ M9), `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP` (→ test-infra), `SURFACE-2026-06-25-FILMSTRIP-MIRROR-BANNER-OCCLUDED-AT-SESSION-START` (DEFERRED — the M5 PiP-fold-in opportunity passed without a fix; the shared `serializeAsHTML()` occlusion remains a cosmetic carry-forward), editor-polish + workflow-doc-watcher items unchanged. **Nothing escalated.** Each item keeps its own `Status:` detail; this note records the en-masse disposition.
-
-> **QoL/lifecycle sweep finalize — backlog sweep 2026-06-25 (`/product-finalize`, operator-requested between-milestone run).** The QoL scratch sweep (WP0–WP8, not a roadmap milestone) is complete; `qol-wbs.md` retired. Sweep disposition: **all of this cycle's resolutions were already recorded incrementally at each WP's own `feature-finalize`** — every `SURFACE-2026-06-24-*` item is RESOLVED (WP1–WP7) and `SURFACE-2026-06-20-WP4-DIFF-VIEWER-POLISH-FOLLOWUPS` was closed at WP8 finalize — so this sweep found **no newly-resolvable items**. The ~37 still-`pending` entries are: (a) ~32 **code-quality MINOR/MAJOR findings** held for a future `/feature-refactor` batch (standing by design — not cycle-resolved), and (b) the substantive forward-look SURFACEs, all **DEFERRED → carry forward** with existing anchors intact: `SURFACE-2026-06-23-VERIFY-SELF-DRIVER-FOR-WORKSPACE-UI` (→ M5 planning), `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP` (→ test-infra investment), `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD` (→ M9 startup-trim), `SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET` + independent-pane (→ later editor-polish), `SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY` (→ M6). `SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE` was already RESOLVED 2026-06-21. **Nothing escalated; nothing blocks M5 (PiP).** Each item keeps its own `Status:` detail; this note records the en-masse disposition. Next `/product-wbs` should re-triage the forward-look SURFACEs against M5's scope.
-
-## Code-quality findings — m9-wp6b-2-week-month-sidepanel-range (Phase 4) (2026-07-14)
-- **Pointer:** 0 CRITICAL / 0 MAJOR / 2 MINOR findings from `feature-review-quality` on the WP6b-2 Phase-4 working-tree change (SidePanel + click-to-select seam; uncommitted per commit-only-when-asked; the M9 tree local carry), Mode-3 autopilot auto-backlogged. Both MINOR (low): (1) the `dashboardWiring` "clears selection 3 ways" pin uses a bare whole-file `setSelectedSegId(null)` substring, so a regression dropping the clear from ONE of `changeView`/`changeDay` would still pass — tighten by asserting within each handler's slice; (2) `SidePanel.wallTime` uses minute-quantized endpoints (positioning basis) while `sumActive` is true-`dur_ms` — faithful + intentional (positions must stay on the minute grid to align with the main timeline), recorded only so a future reader doesn't "fix" the mini-timeline to `dur_ms` and break the wall-relative layout (likely won't-fix). Reviewer: clean, well-disciplined render-surface port — small new code, pure logic cleanly extracted into `sidePanelMath.ts` + 14 unit pins, `?raw` wiring pins per the no-render-infra posture, every source deviation deliberate + documented, correctly inherits the `dur_ms` duration-summation contract. No refactor warranted. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m9-wp6b-2-week-month-sidepanel-range (Phase 4) — 2026-07-14`.
-- **Priority:** low (both MINOR)
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** rides along the standing WP-refactor batch — finding (1) is a one-test tightening; finding (2) is doc/awareness (likely no-op). Dismiss either via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — m9-wp4-segment-model-query-layer (2026-07-08)
-- **Pointer:** **2 MINOR remaining** (0 CRITICAL / 0 MAJOR; the dup tz-math helpers MINOR RESOLVED by backlog-paydown sweep WP3, and the `ai_busy_intervals`-computed-twice MINOR RESOLVED) from `feature-review-quality` on ship commit `d8b308e`. The 2 open findings: (1) **`WP4-DAYPAYLOAD-EMPTY-NOT-ON-IPC-SURFACE`** — `DayPayload.empty` never reaches WP6 (RangePayload/FE have no `empty`); a WP6-facing decision (surface it or document inference from `projects.is_empty()`); (2) **`WP4-CUSTOM-WINDOW-MIDNIGHT-EXTRA-DAY`** — a custom window ending on midnight emits one extra empty trailing day (cosmetic boundary edge). See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# m9-wp4-segment-model-query-layer — 2026-07-08`.
-- **Priority:** low (both remaining)
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** (1) is a WP6-facing contract decision best made when the docs-viewer/day-view work is touched; (2) rides along or defers. Dismiss any via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — mirror-fill-from-bottom (2026-07-06)
-- **Pointer:** 1 MINOR remaining (0 CRITICAL / 0 MAJOR) from `feature-review-quality` on ship commit `99aca94`. The remaining MINOR — **`MIRRORTRIM-FIXTURE-REALISM`**: test fixtures use the simple unstyled `<div><span>text</span></div>` row shape while real styled CC output produces intra-row multi-span rows the regex must survive (correct, but fixtures under-represent it). Reviewer: well-built, tightly-scoped single-seam fix; correctness verified against the vendored xterm source. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# mirror-fill-from-bottom — 2026-07-06`.
-- **Priority:** low (1 MINOR)
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** add one styled-multi-span test fixture — rides any future `mirrorTrim.ts` touch. Dismiss via the WIP's `## Code-Quality Review` section.
-
-## Code-quality findings — cc-permission-mode-dropdown (2026-07-02)
-- **Pointer:** 1 MINOR remaining (originally 3 MINOR / 0 CRITICAL / 0 MAJOR; the `<select>`-a11y-name MINOR and the bare-enum-doc-comments MINOR both RESOLVED) from `feature-review-quality` on ship commit `1624e2e`. The remaining MINOR — **`CCMODE-DEFAULT-ARGV-NOOP-UNTESTED`**: `Default` now emits an explicit `--permission-mode default`, the "harmless no-op" claim untested behaviorally (doc-hardening; live spawn verify-human-passed). Reviewer: well-built, wire contract + legacy-cc_yolo migration are the standouts. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# cc-permission-mode-dropdown — 2026-07-02`.
-- **Priority:** low (1 MINOR)
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-- **Pickup shape:** a behavioral test (or doc-hardening) for the `--permission-mode default` no-op — rides any future spawn-path touch. Dismiss via the WIP's `## Code-Quality Review` section.
-
 ## Code-quality findings — qol-wp1-close-workspace (2026-06-25)
-- **Pointer:** 1 MINOR remaining (originally 3 MINOR / 0 CRITICAL / 0 MAJOR; the filmstrip-× over-narrating comment MINOR and the forward-referencing `docsRef` comment MINOR both RESOLVED) from `feature-review-quality` on ship commit `c01a3f9`. The remaining MINOR — **`WP1-APP-WIRING-UNTESTED`**: the App-level close wiring (`requestClose`/`resolveClose`/dirty-probe registry) + the × routing are untested by automation (accepted per the manual-host-UI convention + live 9/9 verification). Reviewer: well-built, idiomatic, closes a latent WP7 lifecycle gap. See [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp1-close-workspace — 2026-06-25`.
+- **Pointer:** 1 MINOR remaining (originally 3 MINOR / 0 CRITICAL / 0 MAJOR; the filmstrip-× over-narrating comment MINOR and the forward-referencing `docsRef` comment MINOR both RESOLVED) from `feature-review-quality` on ship commit `c01a3f9`. The remaining MINOR — **`WP1-APP-WIRING-UNTESTED`**: the App-level close wiring (`requestClose`/`resolveClose`/dirty-probe registry) + the × routing are untested by automation (accepted per the manual-host-UI convention + live 9/9 verification). Reviewer: well-built, idiomatic, closes a latent WP7 lifecycle gap. See [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# qol-wp1-close-workspace — 2026-06-25`.
 - **Priority:** low (1 MINOR)
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 - **Pickup shape:** a test-harness gap that only matters once the project adopts RTL/E2E (deferred per Phase-1 convention). Dismiss via the WIP's `## Code-Quality Review` section.
-
-## SURFACE-2026-06-22-WP5-DROPPED-WATCH-WORKFLOW-DOC-HIERARCHY
-- **What:** M3 WP5 (specced as a `workflow/.session.md` file-watcher → broadcaster) is **DROPPED**. The WBS framed `.session.md` as a real-time second workflow-state signal — but it isn't: `.session.md` is a *manual handoff bookmark* created **only** by `/session-pause` and deleted by `/session-resume` (verified against `~/.claude/skills/session-pause` + `session-resume` SKILL.md). It is absent during all active work, present only in the parked gap between sessions, binary, and known to the user before any watcher could report it. Watching it yields a near-constant, trivially-derivable signal — no live workflow state to detect.
-- **Consequence for M3:** M3's goal (CC idle/running/awaiting from the official hook channel, never PTY scraping) is **fully met by WP1–WP4 + WP6**. With WP5 dropped, **Milestone 3 is COMPLETE** → `/product-finalize`.
-- **New WP idea (operator-defined 2026-06-22, deferred to a later milestone — NOT M3):** instead of `.session.md`, watch the **workflow document hierarchy** to surface where a project actually is in the workflow: `roadmap.md → wbs.md → workflow/wip/*.md` (possibly multiple WIP files — tasks can fork mid-feature) → `backlog.md`. This is the genuine live workflow state (the WIP Work Tree / Current Node mutates continuously as skills run; roadmap/wbs give the milestone context). Reuses the `notify` watcher seam that `SURFACE-2026-06-21-EDITOR-FILE-WATCHER` also wants.
-- **Hard part (acknowledged, NOT a blocker):** visually representing the whole tree (roadmap→wbs→wip(s)→backlog) in the UI is the design challenge. **Good-to-have, not must-have.**
-- **Anchored to Milestone 6 (menu-bar status item)** (operator decision 2026-06-22): the M6 popover is a one-row-per-workspace LIST (project name + status), which fits a workflow-position line (e.g. `acme-api · WBS M2/WP3 · building`) far better than a thumbnail tile — and by M6 the operator will have dogfooded M4+M5 and will know what workflow-position info is worth surfacing (resolves the "unsolved visualization" risk by deferring the design until there's real usage signal). NOT folded into M4/M5 (those are pure CC-state status-surface rendering; adding a workflow axis + tree viz mid-build is the wrong place). If it outgrows a popover line into a real tree view, promote to a standalone feature after M6. The `notify` watcher seam (shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER`) gets built whenever the first consumer needs it — likely M6.
-- **Priority:** medium (the new WP idea); the drop itself is a clean WBS correction, no work owed.
-- **RE-ANCHORED M7 → M8 (2026-06-29), reinforced by the M7 shrink.** Initially (at the M7 `/product-wbs`) this was re-anchored to M8 over M7 because the workflow-position line is value-unproven and drags in tree-visualization surface. **Then the M7 spec debate SHRUNK the menu-bar item to an ambient alarm + actuator and CUT the popover entirely** (design-prior [[new-surface-must-earn-its-place-against-existing-ones]] — a popover list was a PiP subset). So the watcher's intended form factor (a workflow-position line *in the popover*) no longer exists in M7 at all — its home is firmly **M8 (workflow-docs markdown viewer)**, the rendering counterpart ("where does each project sit" as a status line is adjacent to "render the docs themselves"; the `notify` watcher seam — shared with `SURFACE-2026-06-21-EDITOR-FILE-WATCHER` — can be built there). Decide at M8's JIT decomposition whether it feeds the M8 doc panel, promotes to a standalone tree view, or is dropped.
-- **RENUMBERED M8 → M10 (2026-06-29b), no semantic change.** The watcher's home is still the **workflow-docs markdown viewer** — that milestone was renumbered M8 → **M10** by the 2026-06-29b roadmap reorder (a new demo-assets milestone took M8; time-analytics ↔ docs-viewer swapped). Same milestone, same decision; only the number moved. Decide at the docs-viewer's JIT decomposition whether it feeds that doc panel, promotes to a standalone tree view, or is dropped.
-- **DECIDED at the M11 (docs-viewer) JIT decomposition — NOT folded into M11 (2026-07-20).** The milestone is now **M11** (further renumbered by the 2026-07-06 auto-updater + 2026-07-16 M10.5 inserts). At M11's `/product-wbs`, the watcher idea was **held out of M11**: M11 is the **single-workspace, read-SIDE** renderer — it renders *the focused project's* docs (`vision→roadmap→wbs→wip→backlog→.session.md`) as formatted markdown in the right panel. The doc-**hierarchy watcher** here is a distinct, **cross-project** capability — surfacing *where each project sits* across the open set (a status-line/tree axis over many workspaces), which overlaps the filmstrip/PiP/menu-bar status-surface family, not the per-workspace render. That is its own future feature (a standalone cross-project workflow-position view), to be triaged at a later roadmap boundary — it does not belong inside M11's per-workspace viewer. The shared `notify` watcher seam it wanted **already exists** (QoL-WP0 `fs_watch`), so no infra is owed; M11 reuses that seam for its own live-reload.
-- **Status:** WP5 dropped (recorded in M3 wbs.md, archived); the cross-project workflow-position **watcher/tree** idea remains **deferred → NOT in M11** (decided 2026-07-20 at M11 JIT decomposition; see line above). Re-triage as a standalone cross-project view at a future roadmap boundary. (Anchor history: M6 → M7 → M8 → M10 → M11; M7's popover form-factor was cut at the 2026-06-29 spec-debate shrink.)
-
-> **Scaffold-debt refactor pass — DONE 2026-06-17.** The 4 code-quality finding blocks below (6 MAJOR + 15 MINOR across wp1/wp2/wp3/wp4) were cleared via `/feature-refactor` before WP5. 20 findings fixed, 1 dismissed with rationale (WP2 `ReaderSink` enum — see that WIP's Code-Quality Review). Detail file: [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md).
-
-> **Phase 1 cycle-close backlog sweep — 2026-06-19 (`/product-finalize`).** Phase 1 (Bare Shell + Tab Substrate PoC) closed; all 9 WPs shipped. Sweep disposition of the items still pending at close: **all DEFERRED → carry to the Phase 2 cycle** (none escalated, none newly resolved by the close itself). Carried forward: wp5/wp6/wp7/wp8/wp9 code-quality findings (the **wp6 picker IPC error-surfacing MAJORs are the most load-bearing** — they pair with Phase 2's multi-workspace picker work, WP13/WP16) + `SURFACE-2026-06-18-MEMORY-MD-PRETTIER-NITS` (housekeeping). These remain in this file (not archived) so the next cycle inherits them.
-
-> **Milestone 2 cycle-close backlog sweep — 2026-06-22 (`/product-finalize`).** M2 (Lite Editor + Diff Viewer) closed; all WPs shipped + the terminal blank-cursor P1 incident resolved. Sweep disposition: the WP11 git-status **MAJOR** was RESOLVED during the cycle (task `m2-wp11-git-status-path-keying`); **all remaining pending items DEFERRED → carry to the next cycle** (operator decision — none escalated, none else newly resolved by the close). The deferred set is ~20 items, almost entirely cosmetic code-quality MINORs (wp5/6/7/8/9 + m2-wp2/3a/3c/4/4-polish/5/6/9/11/13 findings) plus forward-look SURFACEs that pair with future milestones: `SURFACE-2026-06-21-WP9-N-EDITORS-COST-AT-MULTIWORKSPACE` (→ multi-workspace milestone), `SURFACE-2026-06-21-EDITOR-FILE-WATCHER`, `SURFACE-2026-06-21-IPC-DTO-FIELD-CASE-TESTS-MISS-SERDE-SHAPE`, `SURFACE-2026-06-19-CM6-BUNDLE-SIZE-LAZY-LOAD`, `SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE`, `SURFACE-2026-06-20-WP10-ARROW-KEY-TREE-NAV`, `SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET`, `SURFACE-2026-06-20-WP4-COMMIT-LOG-SCOPE-EXPANSION` (an arch-resync follow-up — largely reconciled in arch.md at this close), `SURFACE-2026-06-20-WP4-DIFF-VIEWER-POLISH-FOLLOWUPS`, `SURFACE-2026-06-22-PANETABS-COMPONENT-TEST-GAP`. Each item keeps its own `Status:` detail; this note records the en-masse deferral. **NOTE — roadmap rearrange pending:** the operator is reshaping the post-M2 roadmap right after this close, so the next `/product-wbs` should re-triage these against the revised milestone order (esp. the forward-look SURFACEs, whose target milestones may move).
 
 ## SURFACE-2026-06-21-WP7-PER-RESULT-PER-FILE-REPLACE
 - **Source:** feature:build (WP7 Phase 3 relevance gate — operator decision 2026-06-21)
@@ -1618,34 +1249,13 @@ script under `tooling/` so each phase does not re-derive it.
 - **Priority:** medium
 - **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
 
-## SURFACE-2026-06-20-WP3C-SHARED-DOC-CURSOR-RESET
-- **Source:** feature:build (WP3c Phase 1)
-- **Target level:** product:wbs
-- **Type:** tech-debt
-- **Summary:** Split-pane editor uses shared-document with N independent `<CodeMirror>` (`@uiw`) instances bound to one `value`/`onChange`. Typing in one pane fires `setDoc` → all panes re-render with the new `value`, which can reset the OTHER pane's cursor/selection on each keystroke.
-- **Context:** Acceptable for v1 — panes are viewports (the high-value gesture is *viewing* two regions of a long file; edits typically happen in one pane). A true fix is a single shared CM6 `EditorState` across views (dropping the `@uiw/react-codemirror` wrapper for raw `EditorView`s), which is a larger refactor that would also touch WP2/3a/3b wiring.
-- **Suggested action:** Observe at WP3c verify-self/verify-human and during WP9 dogfooding. If the cursor-reset is annoying in practice, schedule a raw-`EditorView` shared-state refactor (post-M2, or fold into a later editor-polish WP). Otherwise dismiss.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-
-## SURFACE-2026-06-26-MCP-BRIDGE-RELEASE-ACL-STRINGS
-- **Source:** feature:build (M5 WP2 probe, P2.3 release-exclusion check)
-- **Target level:** product:wbs
-- **Type:** tech-debt
-- **Summary:** The dev-only `tauri-plugin-mcp-bridge` is correctly compiled OUT of release *code* (`#[cfg(debug_assertions)]` — `nm` finds zero bridge command-handler symbols; bridge port `9223` literal absent), BUT its **permission-manifest name strings** (`mcp-bridge`, `allow-execute-js`, `list_windows`, `ipc_monitor`, …) are still embedded inert in the release binary's ACL blob (`gen/schemas/acl-manifests.json`), because the crate is a plain `[dependencies]` entry and Tauri's build-time permission codegen emits its manifest regardless of the runtime `cfg` gate.
-- **Context:** NOT a security or bundle-size concern — these are a few hundred bytes of permission-vocabulary strings, NOT code, and NOT a granted capability (the `mcp-bridge:default` permission is never referenced by any compiled-in capability; `mcp-bridge-dev` lives only in `tauri.dev.json`, which release builds don't load — `strings | grep mcp-bridge-dev` on the release binary = empty). So nothing can invoke the bridge in release. The ADOPT verdict's "release-safe" claim holds. This is a fidelity footnote: a *fully* clean release ACL would also exclude the dep from the manifest.
-- **Suggested action:** Optional. If a fully-clean release ACL is wanted, move `tauri-plugin-mcp-bridge` from `[dependencies]` to a dev-only dependency surface that the build-time permission codegen also skips (e.g. a `[target.'cfg(debug_assertions)'.dependencies]` entry or a feature-gated optional dep), and re-confirm `pnpm tauri:dev` still gets the bridge. Verify with `strings target/release/claudesk | grep -i mcp-bridge` → empty. Low value; the current state is functionally release-safe.
-- **Priority:** low
-- **Status:** deferred — carry to next cycle *(M10.9 close, 2026-07-31)*
-
 ## Code-quality findings — file-op-error-surface (2026-06-30)
-- **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
+- **Pointer:** 1 DEFERRED finding (net-new UX) in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# file-op-error-surface`. The 3 silent file-op-failure findings (delete/trash/create-collision) collapsed into one anchored Defer — needs a toast/inline-error surface in RightPanelHost that doesn't exist yet (net-new UX, not debt).
 
 ## Code-quality findings — supervisor-hotfix (2026-09-17)
-- **Pointer:** **6 remaining** findings (2 MAJOR / 4 MINOR) in [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-hotfix — 2026-09-17`. ⚠️ **One MAJOR was RESOLVED 2026-09-18 at M14 WP4** — the stale "8 subjects" OFF-invariant arm count (corrected to 9 at five live sites, citations moved to the symbol); it is deleted from the findings file and recorded in `CHANGELOG.md`. The two remaining MAJOR: the **toggle is read on reveal only while the supervisor fires in unfocused workspaces** (a design call, not a reflex fix — D-4's no-broadcast is settled and the default degrades safely to ON); and **`UnsentInputWatermark.clear()` has no production caller** while its doc comment describes one.
-- **Priority:** medium (3) / low (4)
-- **Status:** pending
-- **Pickup shape:** the arm-count finding is a **documentation correction** and the cheapest real win — ⚠️ grep the retracted claim repo-wide rather than trusting the two named sites (`doc-correction-scope-list-is-a-floor`). The reveal-only finding wants an operator decision between accept-and-document / re-read-on-turn-end / reverse D-4. The rest are `/feature-refactor` material.
+- **Pointer:** **5 remaining** (2 MAJOR / 3 MINOR). The stale "8 subjects" arm-count MAJOR was resolved at M14 WP4 (2026-09-18). The "no IPC argument-name contract test" MINOR was deleted 2026-09-23 as never real: `supervisorToggleAction.test.ts` has pinned `{path}` / `{path, enabled}` since the ship commit. Remaining: (1) MAJOR: the **toggle is re-read on reveal only**, and the header over-promises "per turn". Sweep-time reading (2026-09-23): the **only writer is the workspace's own toggle**, so the value cannot go stale today; option (a), narrowing the doc, is swept, and (b)/(c) are deferred to F-b. (2) MAJOR: **`UnsentInputWatermark.clear()` has no production caller**, and its doc says "used at a turn boundary". It is unwired by design (the watermark deliberately does not clear, and dogfooding measures that), so the doc gets restated; do NOT wire a clear during dogfooding. (3) a merged Rust doc block that lost its owner, (4) `CLASSES` pinning only its own length, (5) the "do not merge" defence, now at 2 sites. Bodies: [`workflow-system/state/backlog-quality-findings.md`](backlog-quality-findings.md) → `# supervisor-hotfix — 2026-09-17`.
+- **Priority:** medium (the two MAJORs, documentary) / low (the rest)
+- **Status:** pending — routed to paydown-2026-09-23 WP4 (1, 2, 3) / WP6 (4) + the comment-convention pass (5)
 
 ## SURFACE-2026-09-17-STALE-WORKFLOW-PATHS-SURVIVE-THE-LAYOUT-MIGRATION
 - **Target level:** task
@@ -1655,11 +1265,6 @@ script under `tooling/` so each phase does not re-derive it.
 - **Suggested action:** Fix the 5 `.claude/memory/` files on the next touch of any of them; not worth a standalone commit. ⚠️ Separate string-matches from claim-assertions first — a path inside a quoted historical note is correct as-is.
 - **Priority:** low
 - **Status:** pending (remaining scope only)
-
-## Buried
-*Items moved out of active — low-impact + not worth carrying forward as active work. Not resolved (no CHANGELOG entry); revive only if the anchoring condition fires.*
-- **SURFACE-2026-06-24-QUALITY-APPMENU-LISTENER-NOT-EXTRACTED** (buried 2026-07-20, backlog-paydown sweep §Completion) — the `src/App.tsx` `menu` listener isn't extracted to a pure testable `dispatchMenuAction(action, effects)` seam. LOW-impact + med-effort + low-risk; explicitly "defer unless the listener grows"; consistent with the repo's "runtime-bound listeners aren't unit-tested" posture (the higher-value `menuBridge` mapping IS fully tested). **Revive only if** the App.tsx menu listener grows new branches. (Was: `# app-menu-bar` finding, now removed from `backlog-quality-findings.md`.)
-
 
 ## SURFACE-2026-08-25-OBSERVABLE-OUTCOME-ASSERTED-A-GREEN-GATE-ITS-OWN-PHASE-BREAKS
 - **Source:** feature:verify-self (M13.5 WP3 Phase 1)
@@ -1785,7 +1390,6 @@ script under `tooling/` so each phase does not re-derive it.
 - **Priority:** medium (3 MAJOR) / low (3 MINOR)
 - **Status:** pending
 - **Pickup shape:** a single `/feature-refactor` pass closes all six cheaply — MAJOR-2 and MAJOR-3 are each ~1–5 lines of test, MAJOR-1 is a CSS rule or a comment. ⚠️ MAJOR-2's fix must **resolve the spread** (import `searchKeymap` and enumerate its keys); widening the regex to match `...searchKeymap` textually would prove the spread is present, not which bindings it contributes — a guard that looks fixed and is not.
-
 
 ## Code-quality findings — m14-wp2-sign-notarize-delete-quarantine (2026-09-18)
 - **Pointer:** **1 MINOR** remaining (0 CRITICAL, 0 MAJOR) from `feature-review-quality` on ship

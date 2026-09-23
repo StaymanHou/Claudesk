@@ -14,6 +14,6 @@ M15 WP1: `detect.py`'s predicate and `mine.py`'s `label()` both called the same 
 
 **The fix is a signal the detector does not itself produce.** In this corpus that is **operator behavior**: a short, content-free nudge (`"so?"`, `"next"`, `"chain"`, `"why returning control?"`) typed right after a verdict is structural evidence of a wrongful stop, independent of the policy table. Scored that way the predicate got **36/36**.
 
-⚠️ **Binds M15 WP3**, which will tune the real detector against this same fixture — its acceptance measurement must not be re-derived from the typed graph the detector consults. Evidence: `workflow-system/product/archive/milestone-15-workflow-supervisor/wp1-probe-report.md` → Q1; `backlog.md` → `SURFACE-2026-09-11-A-DETECTOR-SCORED-AGAINST-ITS-OWN-POLICY-TABLE-IS-CIRCULAR`.
+⚠️ **Binds M15 WP3**, which will tune the real detector against this same fixture — its acceptance measurement must not be re-derived from the typed graph the detector consults. Evidence: `workflow-system/product/archive/milestone-15-workflow-supervisor/wp1-probe-report.md` → Q1; `SURFACE-2026-09-11-A-DETECTOR-SCORED-AGAINST-ITS-OWN-POLICY-TABLE-IS-CIRCULAR` — deleted from `backlog.md` 2026-09-23 as captured by THIS memory (see `CHANGELOG.md` 2026-09-23; full text in git history).
 
 Related: [[verify-the-mutation-landed]], [[invalid-probe-and-real-hole-look-identical]], [[guard-predicate-completeness-vs-mutation-landing]].
