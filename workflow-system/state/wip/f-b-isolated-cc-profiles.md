@@ -481,7 +481,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [x] P4.3 **Settings "Profiles" group:** list, Remove (for every non-default profile), and
     "Add existing config dir…" (suggestions plus a folder picker via `tauri-plugin-dialog`). Delete
     and New arrive in Phase 5. ⚠️ **Per the 2026-09-23 ruling, the app-global permission-mode setting does NOT apply to profile workspaces** — the Settings permission control must say so (a one-line hint), or it reads as broken.  <!-- status: done — ✅ `ProfilesSettings.tsx` in a new `profiles` group directly after `claude-code` (group-order pin updated with triage; titles five → six); built-in default listed without a Remove; Remove per listed profile; suggestions from new `profile_adoption_suggestions` (`~/.config/claude-*` not yet listed) + 'Choose folder…' (dialog). Live-mount test drives the real clicks → `profile_remove {name}` / `profile_adopt {configDir}` by value. Permission-mode hint under the Claude Code control (`settings-permission-mode-profile-note`). -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: done — EXIT=0 (44s; 3042 FE / 967 Rust) on the code committed as 7132586 (the run preceded the commit; nothing but the WIP changed between). Two in-build lint findings fixed first: React Compiler `set-state-in-effect` in ProfilesSettings (reload → version counter + inline effect) -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
     - [ ] Operator adopts `claude-original-dev` (the dev profile — NOT a daily-use profile; see `.claude/memory/dev-profile-for-f-b-verification.md`) through the Settings UI, sets it on a row, opens it, logs in once, and judges the widened picker layout. **Includes the deferred P3.verify-human.1:** the dot tracks idle → running → awaiting-input → idle across a real turn.  <!-- status: NOT-STARTED -->
@@ -543,8 +543,8 @@ Evidence: the test asserts the exact ordered id list, and P4.3 inserts `profiles
 Action: inserted `"profiles"` into the exact ordered list (kept exact, per the test's own instruction that a new group is a one-line deliberate edit); renamed the describe/it titles "five" → "six" (grep found no other reference to the old titles)
 
 ## Current Node
-- **Path:** F-b > Phase 4 > verify-auto
-- **Active scope:** Phase 4 verify-auto
+- **Path:** F-b > Phase 4 > verify-self
+- **Active scope:** Phase 4 verify-self (live: picker cell on every row, widened picker without truncation, gate-OFF shape, persisted selection, missing-profile refusal, Settings Profiles group)
 - **Blocked:** none
 - **Unvisited:** Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
