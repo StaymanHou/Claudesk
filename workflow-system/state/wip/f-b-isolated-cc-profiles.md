@@ -436,7 +436,15 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     `transcript/commands.rs` and the supervisor's callers. The default path must stay
     byte-identical.  <!-- status: done — ✅ Signature landed in Phase 1; `transcript_tail` now resolves the root via `config_root_for_project` (default → `~/.claude`, listed → its dir, unlisted/unreadable → None → empty tail, never a guess at `~/.claude`). Default path byte-identical (`transcript_dir_is_under_dot_claude_projects`). -->
   - [x] verify-auto  <!-- status: done — EXIT=0 (50s; 3020 FE / 965 Rust), first run -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [x] verify-self  <!-- status: done — live, orchestrator-driven (the bridge does not reach subagents); scratch profile fixture = neo-shaped (deny fence, allow-list, statusline, a FOREIGN Stop hook) -->
+    - [x] P3.vs.1 Registration (after adopt): exactly 1 Claudesk entry for each of the 10 events; `del(.hooks)` IDENTICAL to pre; the foreign group IDENTICAL  <!-- status: PASS -->
+    - [x] P3.vs.2 Self-heal: hand-deleted all our entries → launch 2 restored all 10  <!-- status: PASS -->
+    - [x] P3.vs.3 Idempotent: launch 3 left the file byte-identical to launch 2 (`a26d8a8d…`)  <!-- status: PASS -->
+    - [x] P3.vs.4 `profile_remove`: 0 entries left, foreign kept, file == pre-registration (parsed), dir kept, list empty  <!-- status: PASS -->
+    - [x] P3.vs.5 `~/.claude/settings.json` hash unchanged across the adopt toggle AND the remove toggle (`46571fbf…`)  <!-- status: PASS -->
+    - [x] P3.vs.6 In-app profile session (scratch-c, child `claude --model opus`, no --permission-mode): SessionStart → ws-4; injected prompt → UserPromptSubmit mapped=running emitted → the scratch-c filmstrip tile read "Running". `cc_session_profile` reported "scratch" for both profile sessions. (Needed `hasCompletedOnboarding` + trust seeded in the scratch profile's `.claude.json`; the profile is not logged in, so no real turn — the channel, not the model, is what is under test.)  <!-- status: PASS -->
+    - [x] P3.vs.7 Bare-terminal `CLAUDE_CONFIG_DIR=<profile> claude -p` in scratch-b → SessionStart / UserPromptSubmit (running, emitted) / SessionEnd, all resolved to ws-1. NEGATIVE CONTROL after `profile_remove`: the same command → 0 events. ⚠️ Time-analytics capture N/A in dev (`time_tracking_enabled: false`).  <!-- status: PASS -->
+    - [x] P3.vs.8 `cargo test transcript` (verify-auto run)  <!-- status: PASS -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
     - [ ] Operator opens a workspace under a real adopted profile (e.g. `claude-original`) and
       confirms the dot tracks idle / running / awaiting-input.  <!-- status: NOT-STARTED -->
@@ -519,8 +527,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 3 > verify-self
-- **Active scope:** Phase 3 verify-self (live: launch registers into a scratch profile; ~/.claude untouched around toggles; profile session lights the dot; bare-terminal profile session reaches the status log)
+- **Path:** F-b > Phase 3 > verify-human
+- **Active scope:** Phase 3 verify-human (planned leaf: operator opens a workspace under a REAL adopted profile and confirms the dot)
 - **Blocked:** none
 - **Unvisited:** Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
