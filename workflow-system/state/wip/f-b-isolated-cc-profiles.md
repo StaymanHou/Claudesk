@@ -393,7 +393,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [x] verify-self  <!-- status: done — 2/2 PASS (P2.verify-self.2 after one F9b) -->
     - [x] P2.verify-self.1 Browser (gate ON, both opened via the app's own `__seedWorkspace` open path): attributed PER WORKSPACE — scratch-b (profile `scratch`) has NO skill row / drive-mode readout / supervisor readout; scratch-a (default, same stored `autopilot`) has all three (positive control)  <!-- status: PASS -->
     - [x] P2.verify-self.2 CLI `ps eww` of the profile workspace's CC child → no `CLAUDESK_DRIVE_MODE`  <!-- status: PASS after F9b (2026-09-24) — first run FAILED on an INHERITED var (pre-existing leak, see SURFACE-2026-09-24-SPAWNED-CC-INHERITS-A-PARENT-CLAUDESK-DRIVE-MODE). Fix: `CC_SPAWN_ENV_REMOVE` (CLAUDE_CONFIG_DIR + CLAUDESK_DRIVE_MODE) and `SHELL_SPAWN_ENV_REMOVE` (CLAUDESK_DRIVE_MODE), value-tested + mutation-proven 2/2. Re-verify, app launched with the parent var still inherited (`ps eww` of app PID shows it): profile child → none; default child → `autopilot` (now necessarily Claudesk's OWN gated value — the positive control the first run could not give) -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
+  - [x] verify-human  <!-- status: done — boundary (Workspace header, picker cells, cc_spawn env); capture = verify-self's live `ps eww` + per-workspace DOM attribution -->
+    - [x] P2.verify-human.1 Operator ruling: keep the pre-existing inherited-`CLAUDESK_DRIVE_MODE` fix (`decde09`) inside F-b, or split it into its own task → **KEEP (operator 2026-09-24)**; named as a separate item in the ship summary  <!-- status: done -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [ ] Phase 3: Per-profile hook registration + config-dir-aware transcript reader  <!-- status: NOT-STARTED; depends on Phase 1 -->
@@ -512,8 +513,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 2 > verify-human
-- **Active scope:** Phase 2 verify-human (post-F9b verify-auto EXIT=0 37s, 3018 FE / 952 Rust; verify-self 2/2 — `git diff 5061bbf decde09 -- src` empty, so the DOM leaf's pre-fix observation still describes the code)
+- **Path:** F-b > Phase 2 > verify-codify
+- **Active scope:** Phase 2 verify-codify
 - **Blocked:** none
 - **Unvisited:** Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
