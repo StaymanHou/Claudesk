@@ -445,9 +445,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [x] P3.vs.6 In-app profile session (scratch-c, child `claude --model opus`, no --permission-mode): SessionStart → ws-4; injected prompt → UserPromptSubmit mapped=running emitted → the scratch-c filmstrip tile read "Running". `cc_session_profile` reported "scratch" for both profile sessions. (Needed `hasCompletedOnboarding` + trust seeded in the scratch profile's `.claude.json`; the profile is not logged in, so no real turn — the channel, not the model, is what is under test.)  <!-- status: PASS -->
     - [x] P3.vs.7 Bare-terminal `CLAUDE_CONFIG_DIR=<profile> claude -p` in scratch-b → SessionStart / UserPromptSubmit (running, emitted) / SessionEnd, all resolved to ws-1. NEGATIVE CONTROL after `profile_remove`: the same command → 0 events. ⚠️ Time-analytics capture N/A in dev (`time_tracking_enabled: false`).  <!-- status: PASS -->
     - [x] P3.vs.8 `cargo test transcript` (verify-auto run)  <!-- status: PASS -->
-  - [ ] verify-human  <!-- status: NOT-STARTED -->
-    - [ ] Operator opens a workspace under a real adopted profile (e.g. `claude-original`) and
-      confirms the dot tracks idle / running / awaiting-input.  <!-- status: NOT-STARTED -->
+  - [x] verify-human  <!-- status: done — boundary (launch hook install, transcript_tail); capture = verify-self's jq/shasum/status-log evidence; the one agent-unreachable check deferred to Phase 4 -->
+    - [ ] P3.verify-human.1 Operator opens a workspace under a real (logged-in) adopted profile and confirms the dot tracks idle → running → awaiting-input → idle across a real turn. [UNVERIFIED by agent — the scratch profile is not logged in, so only `running` was reachable.] **DEFERRED by operator 2026-09-24 to Phase 4 verify-human**, run against `~/.config/claude-original-dev` (created 2026-09-24 at the operator's request — a CONFIG-ONLY copy of `claude-original`; needs one `/login`).  <!-- status: done (deferred) -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [ ] Phase 4: Picker profile cell + Settings "Profiles" group (adopt / remove / missing state)  <!-- status: NOT-STARTED; depends on Phases 2, 3 -->
@@ -479,8 +478,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
-    - [ ] Operator adopts 2+ real profiles, sets them on rows, opens them, and judges the widened
-      picker layout.  <!-- status: NOT-STARTED -->
+    - [ ] Operator adopts `claude-original-dev` (the dev profile — NOT a daily-use profile; see `.claude/memory/dev-profile-for-f-b-verification.md`) through the Settings UI, sets it on a row, opens it, logs in once, and judges the widened picker layout. **Includes the deferred P3.verify-human.1:** the dot tracks idle → running → awaiting-input → idle across a real turn.  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 - [ ] Phase 5: New-profile wizard + Delete-to-Trash  <!-- status: NOT-STARTED; depends on Phase 4 -->
@@ -527,8 +525,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 3 > verify-human
-- **Active scope:** Phase 3 verify-human (planned leaf: operator opens a workspace under a REAL adopted profile and confirms the dot)
+- **Path:** F-b > Phase 3 > verify-codify
+- **Active scope:** Phase 3 verify-codify
 - **Blocked:** none
 - **Unvisited:** Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
