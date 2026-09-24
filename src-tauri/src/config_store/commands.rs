@@ -351,7 +351,25 @@ pub fn profile_adopt(
     name: Option<String>,
 ) -> Result<super::profiles::Profile, String> {
     let dir = resolve_data_dir(&app)?;
-    super::profiles::adopt(&dir, Path::new(&config_dir), name.as_deref()).map_err(|e| e.to_string())
+    let command = crate::hook_install::commands::this_builds_hook_command(&app)?;
+    adopt_registered(&dir, Path::new(&config_dir), name.as_deref(), &command)
+}
+
+/// The testable body of [`profile_adopt`]. F-b C.12 — a listed profile is a REGISTERED profile:
+/// if registration fails, the adoption is rolled back, because a profile Claudesk lists but
+/// cannot see the status of is worse than none.
+pub(crate) fn adopt_registered(
+    data_dir: &Path,
+    config_dir: &Path,
+    name: Option<&str>,
+    command: &str,
+) -> Result<super::profiles::Profile, String> {
+    let profile = super::profiles::adopt(data_dir, config_dir, name).map_err(|e| e.to_string())?;
+    if let Err(e) = crate::hook_install::commands::register_profile(&profile.config_dir, command) {
+        let _ = super::profiles::remove_entry(data_dir, &profile.name);
+        return Err(e);
+    }
+    Ok(profile)
 }
 
 /// One project's STORED profile reference (`None` = default, or no record). The workspace's
@@ -365,11 +383,31 @@ pub fn project_get_profile(app: AppHandle, path: String) -> Result<Option<String
 
 /// Remove a profile from the list, leaving its directory untouched ("remove from Claudesk").
 /// Rows that reference it degrade to the missing-profile state (spawn refused, A.6).
-/// ⚠️ Phase 3 adds the hook UNREGISTER from the dir's `settings.json` here, before the drop.
+///
+/// ⚠️ **Unregister FIRST, drop second** (F-b D.23). If the unregister fails the entry stays
+/// listed and the error is returned — dropping it anyway would leave a registration no list
+/// tracks, which nothing would ever clean up. A directory that is already gone has nothing to
+/// unregister, so the drop proceeds.
 #[tauri::command]
 pub fn profile_remove(app: AppHandle, name: String) -> Result<(), String> {
     let dir = resolve_data_dir(&app)?;
-    super::profiles::remove_entry(&dir, &name)
+    let command = crate::hook_install::commands::this_builds_hook_command(&app)?;
+    remove_unregistered(&dir, &name, &command)
+}
+
+/// The testable body of [`profile_remove`]: unregister first, drop only on success.
+pub(crate) fn remove_unregistered(
+    data_dir: &Path,
+    name: &str,
+    command: &str,
+) -> Result<(), String> {
+    let profile = super::profiles::read_profiles(data_dir)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|p| p.name == name)
+        .ok_or_else(|| format!("no profile named \"{name}\""))?;
+    crate::hook_install::commands::unregister_profile(&profile.config_dir, command)?;
+    super::profiles::remove_entry(data_dir, name)
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
@@ -418,6 +456,92 @@ pub(crate) fn apply_project_profile(
 
 #[cfg(test)]
 mod tests {
+
+    const CMD: &str = "CLAUDESK_HOOK_SOCK='/d/hook.sock' /usr/bin/perl '/d/claudesk-hook.pl'";
+
+    #[test]
+    fn profile_adopt_registers_the_hook_into_the_dir() {
+        let data = tempfile::TempDir::new().unwrap();
+        let cfg = tempfile::TempDir::new().unwrap();
+        let prof = cfg.path().join("claude-neo");
+        std::fs::create_dir(&prof).unwrap();
+        let p = adopt_registered(data.path(), &prof, None, CMD).unwrap();
+        assert_eq!(p.name, "neo");
+        let settings = std::fs::read_to_string(prof.join("settings.json")).unwrap();
+        assert!(settings.contains("claudesk-hook.pl"), "{settings}");
+    }
+
+    #[test]
+    fn profile_adopt_rolls_back_when_registration_fails() {
+        let data = tempfile::TempDir::new().unwrap();
+        let cfg = tempfile::TempDir::new().unwrap();
+        let prof = cfg.path().join("claude-neo");
+        std::fs::create_dir(&prof).unwrap();
+        // A settings.json we refuse to overwrite (unparseable) makes registration fail.
+        std::fs::write(prof.join("settings.json"), b"{ not json").unwrap();
+        assert!(adopt_registered(data.path(), &prof, None, CMD).is_err());
+        assert_eq!(
+            crate::config_store::profiles::read_profiles(data.path()).unwrap(),
+            Vec::new(),
+            "a profile that could not be registered stayed listed"
+        );
+        assert_eq!(
+            std::fs::read(prof.join("settings.json")).unwrap(),
+            b"{ not json",
+            "the operator's file was touched"
+        );
+    }
+
+    #[test]
+    fn profile_remove_unregisters_then_drops() {
+        let data = tempfile::TempDir::new().unwrap();
+        let cfg = tempfile::TempDir::new().unwrap();
+        let prof = cfg.path().join("claude-neo");
+        std::fs::create_dir(&prof).unwrap();
+        adopt_registered(data.path(), &prof, None, CMD).unwrap();
+        remove_unregistered(data.path(), "neo", CMD).unwrap();
+        let settings = std::fs::read_to_string(prof.join("settings.json")).unwrap();
+        assert!(!settings.contains("claudesk-hook.pl"), "{settings}");
+        assert!(prof.is_dir(), "remove must keep the directory");
+        assert_eq!(
+            crate::config_store::profiles::read_profiles(data.path()).unwrap(),
+            Vec::new()
+        );
+    }
+
+    #[test]
+    fn profile_remove_keeps_the_entry_when_unregister_fails() {
+        let data = tempfile::TempDir::new().unwrap();
+        let cfg = tempfile::TempDir::new().unwrap();
+        let prof = cfg.path().join("claude-neo");
+        std::fs::create_dir(&prof).unwrap();
+        adopt_registered(data.path(), &prof, None, CMD).unwrap();
+        std::fs::write(prof.join("settings.json"), b"{ corrupted later").unwrap();
+        assert!(remove_unregistered(data.path(), "neo", CMD).is_err());
+        assert_eq!(
+            crate::config_store::profiles::read_profiles(data.path())
+                .unwrap()
+                .len(),
+            1,
+            "dropped the entry while its registration could not be removed"
+        );
+    }
+
+    #[test]
+    fn profile_remove_of_a_deleted_dir_still_drops_the_entry() {
+        let data = tempfile::TempDir::new().unwrap();
+        let cfg = tempfile::TempDir::new().unwrap();
+        let prof = cfg.path().join("claude-neo");
+        std::fs::create_dir(&prof).unwrap();
+        adopt_registered(data.path(), &prof, None, CMD).unwrap();
+        std::fs::remove_dir_all(&prof).unwrap();
+        remove_unregistered(data.path(), "neo", CMD).unwrap();
+        assert!(!prof.exists(), "remove recreated a deleted dir");
+        assert_eq!(
+            crate::config_store::profiles::read_profiles(data.path()).unwrap(),
+            Vec::new()
+        );
+    }
 
     #[test]
     fn profile_apply_refuses_unlisted_and_clears_the_flag_only_on_change() {

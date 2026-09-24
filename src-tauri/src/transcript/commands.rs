@@ -7,7 +7,7 @@
 //! funnel already lives.
 
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 /// One transcript read: the lines, plus which file they came from.
@@ -29,6 +29,35 @@ pub struct TranscriptTail {
 /// home is honored consistently with the rest of the app.
 fn home_dir(app: &AppHandle) -> Option<PathBuf> {
     app.path().home_dir().ok()
+}
+
+/// F-b F.29 — the config root a project's transcripts live under: `<home>/.claude` for the
+/// default profile, the profile's own dir for a listed one. `None` for a row naming a profile
+/// that is not listed (or an unreadable list): there is no root to read, and guessing
+/// `~/.claude` would read ANOTHER profile's transcripts for the same directory — the 4 dual-use
+/// dirs make that a real collision, not a theoretical one.
+///
+/// Reads the row's STORED reference. The supervisor (this command's only caller) is off for
+/// non-default profiles (ruling 4), so for its live path this resolves `~/.claude`; the
+/// profile arm keeps the reader correct for any future caller.
+pub(crate) fn config_root_for_project(
+    home: &Path,
+    reference: Result<Option<String>, crate::config_store::ConfigError>,
+    list: impl FnOnce() -> Result<
+        Vec<crate::config_store::profiles::Profile>,
+        crate::config_store::ConfigError,
+    >,
+) -> Option<PathBuf> {
+    use crate::config_store::profiles::{is_default_reference, resolve, ResolvedProfile};
+    let reference = reference.ok()?;
+    if is_default_reference(reference.as_deref()) {
+        return Some(super::default_config_root(home));
+    }
+    match resolve(&list().ok()?, reference.as_deref()) {
+        ResolvedProfile::Default => Some(super::default_config_root(home)),
+        ResolvedProfile::Listed(p) => Some(p.config_dir),
+        ResolvedProfile::Missing(_) => None,
+    }
 }
 
 /// Choose which transcript file to read: the named session, else newest-modified.
@@ -76,10 +105,20 @@ pub fn transcript_tail(
     let Some(home) = home_dir(&app) else {
         return empty;
     };
-    let dir = super::transcript_dir_for(
-        &super::default_config_root(&home),
-        std::path::Path::new(&project_path),
-    );
+    let data_dir = app.path().app_data_dir().ok();
+    let root = match data_dir.as_deref() {
+        Some(d) => config_root_for_project(
+            &home,
+            crate::config_store::read_project_profile(d, Path::new(&project_path)),
+            || crate::config_store::profiles::read_profiles(d),
+        ),
+        // No app-data dir → no profile can be named; the default root is the only answer.
+        None => Some(super::default_config_root(&home)),
+    };
+    let Some(root) = root else {
+        return empty;
+    };
+    let dir = super::transcript_dir_for(&root, Path::new(&project_path));
     let Some(target) = select_transcript(&dir, session_id.as_deref()) else {
         return empty;
     };
@@ -97,6 +136,43 @@ pub fn transcript_tail(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn profile(name: &str, dir: &str) -> crate::config_store::profiles::Profile {
+        crate::config_store::profiles::Profile {
+            name: name.to_string(),
+            config_dir: PathBuf::from(dir),
+            provenance: crate::config_store::profiles::Provenance::Adopted,
+        }
+    }
+
+    #[test]
+    fn profile_config_root_default_is_home_dot_claude_and_never_reads_the_list() {
+        let root = config_root_for_project(Path::new("/h"), Ok(None), || {
+            panic!("a default row must not read the profile list")
+        });
+        assert_eq!(root, Some(PathBuf::from("/h/.claude")));
+    }
+
+    #[test]
+    fn profile_config_root_follows_a_listed_profile() {
+        let root = config_root_for_project(Path::new("/h"), Ok(Some("neo".into())), || {
+            Ok(vec![profile("neo", "/u/.config/claude-neo")])
+        });
+        assert_eq!(root, Some(PathBuf::from("/u/.config/claude-neo")));
+    }
+
+    #[test]
+    fn profile_config_root_is_none_for_unlisted_or_unreadable_never_home() {
+        let unlisted =
+            config_root_for_project(Path::new("/h"), Ok(Some("gone".into())), || Ok(vec![]));
+        assert_eq!(unlisted, None);
+        let unreadable = config_root_for_project(Path::new("/h"), Ok(Some("neo".into())), || {
+            Err(crate::config_store::ConfigError::Io(std::io::Error::other(
+                "bad",
+            )))
+        });
+        assert_eq!(unreadable, None);
+    }
     use std::path::Path;
 
     fn tmpdir(name: &str) -> PathBuf {

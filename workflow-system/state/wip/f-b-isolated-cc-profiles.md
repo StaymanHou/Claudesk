@@ -424,17 +424,17 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     time-analytics row exists for that session (C.15).
   - CLI: `cargo test transcript` → exit 0. With config dir `None`, `transcript_dir_for` resolves
     the path byte-identical to today's; with `Some(dir)` it resolves `dir/projects/<slug>` (F.29).
-  - [ ] P3.1 **Generalize `hook_install`.** Replace `user_settings_path()` with a list of targets
+  - [x] P3.1 **Generalize `hook_install`.** Replace `user_settings_path()` with a list of targets
     (`~/.claude/settings.json` plus each profile's `settings.json`). `install_on_launch` iterates
     them. A failure on one profile is reported and does **not** abort the others or the
     `~/.claude` install. ⚠️ **Provenance:** remove only Claudesk's marker, never a foreign hook.
-    Keep the drift fixture.  <!-- status: NOT-STARTED -->
-  - [ ] P3.2 **`profile_adopt` registers; `profile_remove` unregisters, then drops the entry.** If
-    the dir is gone, remove still drops the entry and just logs the skipped unregister.  <!-- status: NOT-STARTED -->
-  - [ ] P3.3 **`transcript_dir_for(config_root, project_path)`.** The root is `~/.claude` for
+    Keep the drift fixture.  <!-- status: done — ✅ `install_on_launch` keeps the `~/.claude` install as its RESULT, then `install_into_profiles(&listed_profiles(app), …)` (per-profile failures emitted as `hook-install-error`, never abort the rest, never mask the default). A missing profile dir is skipped, never recreated. Tests: additive + every foreign key preserved (neo-shaped fixture), idempotent + self-healing, missing dir, dev/prod independence. ⚠️ The `is_dir` guards in install/unregister are EQUIVALENT mutants (the write fails on a missing parent; uninstall returns Ok on a missing file) — kept for the message, not load-bearing. -->
+  - [x] P3.2 **`profile_adopt` registers; `profile_remove` unregisters, then drops the entry.** If
+    the dir is gone, remove still drops the entry and just logs the skipped unregister.  <!-- status: done — ✅ Extracted `adopt_registered` (rollback on registration failure) + `remove_unregistered` (unregister first; entry KEPT if it fails; a deleted dir still drops). Mutation-proven 2/2 (no rollback / drop-before-unregister). -->
+  - [x] P3.3 **`transcript_dir_for(config_root, project_path)`.** The root is `~/.claude` for
     default and the profile dir otherwise. Thread the workspace's profile through
     `transcript/commands.rs` and the supervisor's callers. The default path must stay
-    byte-identical.  <!-- status: NOT-STARTED -->
+    byte-identical.  <!-- status: done — ✅ Signature landed in Phase 1; `transcript_tail` now resolves the root via `config_root_for_project` (default → `~/.claude`, listed → its dir, unlisted/unreadable → None → empty tail, never a guess at `~/.claude`). Default path byte-identical (`transcript_dir_is_under_dot_claude_projects`). -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
@@ -519,8 +519,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 3 > P3.1
-- **Active scope:** P3.1 (generalize `hook_install` to every listed profile's `settings.json`)
+- **Path:** F-b > Phase 3 > verify-auto
+- **Active scope:** Phase 3 verify-auto
 - **Blocked:** none
 - **Unvisited:** Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)

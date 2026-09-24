@@ -143,9 +143,100 @@ pub fn install_on_launch(app: &AppHandle) -> Result<(), String> {
     deploy_hook_script(app, &script)?;
     let command = hook_command(&script, &socket);
     let settings = user_settings_path()?;
-    install(&settings, &command).map_err(|e| {
+    // ⚠️ The `~/.claude` install is UNCHANGED (F-b C.16) and is still this function's result.
+    let default = install(&settings, &command).map_err(|e| {
         format!(
             "couldn't register the Claudesk hook in {}: {e}",
+            settings.display()
+        )
+    });
+    // F-b C.12 — then every listed profile. Self-healing: a profile whose entry was hand-deleted
+    // gets it back here. A failure on one profile is reported and does NOT stop the others, and
+    // never masks the `~/.claude` result above.
+    for failure in install_into_profiles(&listed_profiles(app), &command) {
+        eprintln!("[claudesk] hook install: {failure}");
+        let _ = tauri::Emitter::emit(app, "hook-install-error", failure);
+    }
+    default
+}
+
+/// The profile list for THIS identity, or empty on an unreadable list (logged — a bad
+/// `profiles.json` must not block the `~/.claude` install that every session depends on).
+fn listed_profiles(app: &AppHandle) -> Vec<crate::config_store::profiles::Profile> {
+    let Ok(dir) = app.path().app_data_dir() else {
+        return Vec::new();
+    };
+    crate::config_store::profiles::read_profiles(&dir).unwrap_or_else(|e| {
+        eprintln!("[claudesk] hook install: profile list unreadable, skipping profiles: {e}");
+        Vec::new()
+    })
+}
+
+/// A profile's settings file — where CC, run with `CLAUDE_CONFIG_DIR=<dir>`, reads hooks.
+pub(crate) fn profile_settings_path(config_dir: &Path) -> PathBuf {
+    config_dir.join("settings.json")
+}
+
+/// Register `command` into each profile's `settings.json` via the same additive, marker-scoped
+/// merge as `~/.claude` (F-b C.12/C.13). Returns one message per profile that FAILED. A profile
+/// whose directory is gone is skipped with a message — ⚠️ never recreated: writing a
+/// `settings.json` would mint a directory the operator deleted.
+pub(crate) fn install_into_profiles(
+    profiles: &[crate::config_store::profiles::Profile],
+    command: &str,
+) -> Vec<String> {
+    profiles
+        .iter()
+        .filter_map(|p| {
+            if !p.config_dir.is_dir() {
+                return Some(format!(
+                    "profile \"{}\": {} no longer exists; not registered",
+                    p.name,
+                    p.config_dir.display()
+                ));
+            }
+            let settings = profile_settings_path(&p.config_dir);
+            install(&settings, command).err().map(|e| {
+                format!(
+                    "profile \"{}\": couldn't register the Claudesk hook in {}: {e}",
+                    p.name,
+                    settings.display()
+                )
+            })
+        })
+        .collect()
+}
+
+/// This build's hook command (deploying the script first, as launch does). For the profile
+/// adopt / remove paths, which need the exact marker this identity registers with.
+pub(crate) fn this_builds_hook_command(app: &AppHandle) -> Result<String, String> {
+    let (script, socket) = resolve_paths(app)?;
+    deploy_hook_script(app, &script)?;
+    Ok(hook_command(&script, &socket))
+}
+
+/// Register this build's hook into one profile dir (adopt / create).
+pub(crate) fn register_profile(config_dir: &Path, command: &str) -> Result<(), String> {
+    let settings = profile_settings_path(config_dir);
+    install(&settings, command).map_err(|e| {
+        format!(
+            "couldn't register the Claudesk hook in {}: {e}",
+            settings.display()
+        )
+    })
+}
+
+/// Remove ONLY this build's hook entries from one profile dir ("remove from Claudesk, keep the
+/// dir" — F-b D.23). A foreign hook, or another identity's entry, is left untouched. A missing
+/// directory is not an error: there is nothing left to unregister.
+pub(crate) fn unregister_profile(config_dir: &Path, command: &str) -> Result<(), String> {
+    if !config_dir.is_dir() {
+        return Ok(());
+    }
+    let settings = profile_settings_path(config_dir);
+    uninstall(&settings, command).map_err(|e| {
+        format!(
+            "couldn't unregister the Claudesk hook from {}: {e}",
             settings.display()
         )
     })
@@ -170,6 +261,147 @@ pub fn hook_uninstall(app: AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── F-b Phase 3: per-profile registration ──────────────────────────────────────────────
+
+    const PROD: &str = "CLAUDESK_HOOK_SOCK='/d/hook.sock' /usr/bin/perl '/d/claudesk-hook.pl'";
+    const DEV: &str = "CLAUDESK_HOOK_SOCK='/dd/hook.sock' /usr/bin/perl '/dd/claudesk-hook-dev.pl'";
+
+    /// A `neo`-shaped settings.json: a deny fence, an allow-list, a statusline, and a FOREIGN
+    /// hook that is not ours.
+    fn neo_settings() -> serde_json::Value {
+        serde_json::json!({
+            "cleanupPeriodDays": 99999,
+            "permissions": {
+                "defaultMode": "auto",
+                "allow": ["Bash(git status:*)"],
+                "deny": ["Read(//Users/me/.local/state/neo/**)", "Bash(sqlite3:*)"]
+            },
+            "statusLine": { "type": "command", "command": "bash statusline.sh" },
+            "hooks": {
+                "Stop": [ { "matcher": "", "hooks": [ { "type": "command", "command": "notify.sh" } ] } ]
+            }
+        })
+    }
+
+    fn profile_at(dir: &Path, name: &str) -> crate::config_store::profiles::Profile {
+        crate::config_store::profiles::Profile {
+            name: name.to_string(),
+            config_dir: dir.to_path_buf(),
+            provenance: crate::config_store::profiles::Provenance::Adopted,
+        }
+    }
+
+    fn read_json(p: &Path) -> serde_json::Value {
+        serde_json::from_slice(&std::fs::read(p).unwrap()).unwrap()
+    }
+
+    /// Everything except the `hooks` key, plus the foreign hook groups — i.e. what must survive.
+    fn without_ours(mut v: serde_json::Value, ours: &str) -> serde_json::Value {
+        if let Some(hooks) = v.get_mut("hooks").and_then(|h| h.as_object_mut()) {
+            for groups in hooks.values_mut() {
+                if let Some(arr) = groups.as_array_mut() {
+                    arr.retain(|g| !g.to_string().contains(ours));
+                }
+            }
+            hooks.retain(|_, g| g.as_array().is_some_and(|a| !a.is_empty()));
+        }
+        v
+    }
+
+    #[test]
+    fn profile_registration_is_additive_and_preserves_every_foreign_key() {
+        let d = tempfile::TempDir::new().unwrap();
+        let settings = profile_settings_path(d.path());
+        std::fs::write(
+            &settings,
+            serde_json::to_vec_pretty(&neo_settings()).unwrap(),
+        )
+        .unwrap();
+        assert!(install_into_profiles(&[profile_at(d.path(), "neo")], PROD).is_empty());
+        let after = read_json(&settings);
+        // Ours is there, for every M3 event.
+        let text = after.to_string();
+        assert!(text.contains("claudesk-hook.pl"), "{text}");
+        // Everything else is untouched: deny fence, allow-list, statusline, the foreign hook.
+        assert_eq!(without_ours(after, "claudesk-hook.pl"), neo_settings());
+    }
+
+    #[test]
+    fn profile_registration_is_idempotent_and_self_heals() {
+        let d = tempfile::TempDir::new().unwrap();
+        let settings = profile_settings_path(d.path());
+        std::fs::write(
+            &settings,
+            serde_json::to_vec_pretty(&neo_settings()).unwrap(),
+        )
+        .unwrap();
+        let profiles = [profile_at(d.path(), "neo")];
+        install_into_profiles(&profiles, PROD);
+        let once = std::fs::read(&settings).unwrap();
+        install_into_profiles(&profiles, PROD);
+        assert_eq!(
+            std::fs::read(&settings).unwrap(),
+            once,
+            "second launch rewrote the file"
+        );
+        // Hand-delete our entry → the next launch restores it.
+        std::fs::write(
+            &settings,
+            serde_json::to_vec_pretty(&neo_settings()).unwrap(),
+        )
+        .unwrap();
+        install_into_profiles(&profiles, PROD);
+        assert_eq!(std::fs::read(&settings).unwrap(), once);
+    }
+
+    #[test]
+    fn profile_registration_skips_a_missing_dir_and_never_recreates_it() {
+        let d = tempfile::TempDir::new().unwrap();
+        let gone = d.path().join("claude-gone");
+        let good = d.path().join("claude-ok");
+        std::fs::create_dir(&good).unwrap();
+        let failures =
+            install_into_profiles(&[profile_at(&gone, "gone"), profile_at(&good, "ok")], PROD);
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0].contains("\"gone\""), "{failures:?}");
+        assert!(!gone.exists(), "a deleted profile dir was recreated");
+        // The failure on one profile did not stop the next.
+        assert!(profile_settings_path(&good).is_file());
+    }
+
+    #[test]
+    fn profile_unregister_removes_only_this_builds_entry() {
+        let d = tempfile::TempDir::new().unwrap();
+        let settings = profile_settings_path(d.path());
+        std::fs::write(
+            &settings,
+            serde_json::to_vec_pretty(&neo_settings()).unwrap(),
+        )
+        .unwrap();
+        register_profile(d.path(), PROD).unwrap();
+        register_profile(d.path(), DEV).unwrap();
+        unregister_profile(d.path(), PROD).unwrap();
+        let after = read_json(&settings);
+        let text = after.to_string();
+        assert!(
+            !text.contains("'/d/claudesk-hook.pl'"),
+            "prod entry survived: {text}"
+        );
+        assert!(
+            text.contains("claudesk-hook-dev.pl"),
+            "dev entry was removed: {text}"
+        );
+        assert_eq!(without_ours(after, "claudesk-hook-dev.pl"), neo_settings());
+    }
+
+    #[test]
+    fn profile_unregister_of_a_missing_dir_is_ok_and_creates_nothing() {
+        let d = tempfile::TempDir::new().unwrap();
+        let gone = d.path().join("claude-gone");
+        unregister_profile(&gone, PROD).unwrap();
+        assert!(!gone.exists());
+    }
 
     #[test]
     fn hook_command_embeds_socket_env_and_script_path() {
