@@ -471,16 +471,16 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     with a Remove button, plus "Add existing config dir…". The add dialog suggests the
     `~/.config/claude-*` dirs not yet listed.
   - CLI: `jq` shows the profile list in the app-data settings file updated after an add or remove.
-  - [ ] P4.1 **`ProjectProfileCell`.** A closed-set native `<select>`, per the drive-mode
+  - [x] P4.1 **`ProjectProfileCell`.** A closed-set native `<select>`, per the drive-mode
     precedent (not the open-string model cell). Commit through `commitCellValue`. Widen the picker
     container. ⚠️ **No `var(--token)`** — there is no token layer; copy the hex values from the
     sibling cells. ⚠️ CSS↔component coupling is guarded in both directions for picker cells; extend
-    it to this cell.  <!-- status: NOT-STARTED -->
-  - [ ] P4.2 **Missing-profile row state + open refusal** (frontend reflects the Phase 1 backend
-    error).  <!-- status: NOT-STARTED -->
-  - [ ] P4.3 **Settings "Profiles" group:** list, Remove (for every non-default profile), and
+    it to this cell.  <!-- status: done — ✅ New `profile` cell after `model` in `PICKER_ROW_CELLS` (exact-order pins updated with triage); closed-set native `<select>` via `commitCellValue`; missing → `is-failed` + a disabled '(missing)' option so the select never silently shows default; ungated (module never reads the gate — asserted). Picker widened 640 → 760px (both rules). CSS↔component guard both directions in `projectProfileCellRender.test.tsx`. Profiles read ONCE per picker + re-read on `profiles-changed` (new backend event from adopt/remove). -->
+  - [x] P4.2 **Missing-profile row state + open refusal** (frontend reflects the Phase 1 backend
+    error).  <!-- status: done — ✅ `missingProfileRefusal` (pure, tested) runs in `handleOpenRecent` BEFORE `record_open` / `onOpen` — ordering pinned + mutation-proven (refusal moved after onOpen → fails). No workspace is minted. -->
+  - [x] P4.3 **Settings "Profiles" group:** list, Remove (for every non-default profile), and
     "Add existing config dir…" (suggestions plus a folder picker via `tauri-plugin-dialog`). Delete
-    and New arrive in Phase 5. ⚠️ **Per the 2026-09-23 ruling, the app-global permission-mode setting does NOT apply to profile workspaces** — the Settings permission control must say so (a one-line hint), or it reads as broken.  <!-- status: NOT-STARTED -->
+    and New arrive in Phase 5. ⚠️ **Per the 2026-09-23 ruling, the app-global permission-mode setting does NOT apply to profile workspaces** — the Settings permission control must say so (a one-line hint), or it reads as broken.  <!-- status: done — ✅ `ProfilesSettings.tsx` in a new `profiles` group directly after `claude-code` (group-order pin updated with triage; titles five → six); built-in default listed without a Remove; Remove per listed profile; suggestions from new `profile_adoption_suggestions` (`~/.config/claude-*` not yet listed) + 'Choose folder…' (dialog). Live-mount test drives the real clicks → `profile_remove {name}` / `profile_adopt {configDir}` by value. Permission-mode hint under the Claude Code control (`settings-permission-mode-profile-note`). -->
   - [ ] verify-auto  <!-- status: NOT-STARTED -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
@@ -530,9 +530,21 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
       `/release` gate** per the operator's standing preference (G.30).  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
+## Test Triage — `announceRow.test.ts` "the declared cell order is back to the M11.5 three" + `projectModelCell.test.ts` "emits the committed cell order as a VALUE"
+Classification: Obsolete test — the new feature (F-b P4.1's per-row profile cell) intentionally extends the row the tests pin
+Confidence: high
+Evidence: both assert `PICKER_ROW_CELLS` equals `["open","model","remove"]` exactly, and P4.1 adds `"profile"` after `"model"` by design
+Action: updated both to the new exact value `["open","model","profile","remove"]` — kept as EXACT-value assertions (the M12 WP3 precedent in the same test: never weaken to `toContain`); renamed the announceRow title, which named a count
+
+## Test Triage — `settingsPanelWiring.test.ts` "declares exactly the five groups the panel is specified to have, in order"
+Classification: Obsolete test — F-b P4.3 intentionally adds a sixth Settings group
+Confidence: high
+Evidence: the test asserts the exact ordered id list, and P4.3 inserts `profiles` after `claude-code` by design
+Action: inserted `"profiles"` into the exact ordered list (kept exact, per the test's own instruction that a new group is a one-line deliberate edit); renamed the describe/it titles "five" → "six" (grep found no other reference to the old titles)
+
 ## Current Node
-- **Path:** F-b > Phase 4 > P4.1
-- **Active scope:** P4.1 (ProjectProfileCell on the picker row)
+- **Path:** F-b > Phase 4 > verify-auto
+- **Active scope:** Phase 4 verify-auto
 - **Blocked:** none
 - **Unvisited:** Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)

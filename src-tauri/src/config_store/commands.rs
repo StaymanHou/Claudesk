@@ -333,6 +333,10 @@ pub fn project_get_supervisor_enabled(app: AppHandle, path: String) -> bool {
 // F-b — profiles (named `CLAUDE_CONFIG_DIR`s)
 // ---------------------------------------------------------------------------
 
+/// F-b — broadcast after a profile is adopted or removed, so the picker re-reads the list.
+/// ⚠️ Mirrors `PROFILES_CHANGED_EVENT` in `src/state/profiles.ts`.
+pub const PROFILES_CHANGED_EVENT: &str = "profiles-changed";
+
 /// The listed profiles, in list order. The built-in `"default"` is never included — the
 /// frontend renders it itself. A malformed `profiles.json` is an error (never read as empty,
 /// which would let the next write wipe it).
@@ -352,7 +356,9 @@ pub fn profile_adopt(
 ) -> Result<super::profiles::Profile, String> {
     let dir = resolve_data_dir(&app)?;
     let command = crate::hook_install::commands::this_builds_hook_command(&app)?;
-    adopt_registered(&dir, Path::new(&config_dir), name.as_deref(), &command)
+    let profile = adopt_registered(&dir, Path::new(&config_dir), name.as_deref(), &command)?;
+    let _ = app.emit(PROFILES_CHANGED_EVENT, ());
+    Ok(profile)
 }
 
 /// The testable body of [`profile_adopt`]. F-b C.12 — a listed profile is a REGISTERED profile:
@@ -381,6 +387,23 @@ pub fn project_get_profile(app: AppHandle, path: String) -> Result<Option<String
     super::read_project_profile(&dir, Path::new(&path)).map_err(|e| e.to_string())
 }
 
+/// F-b D.22 — `~/.config/claude-*` directories not yet listed, for "Add existing config dir…".
+#[tauri::command]
+pub fn profile_adoption_suggestions(app: AppHandle) -> Result<Vec<String>, String> {
+    let dir = resolve_data_dir(&app)?;
+    let listed = super::profiles::read_profiles(&dir).map_err(|e| e.to_string())?;
+    let home = app
+        .path()
+        .home_dir()
+        .map_err(|e| format!("could not resolve home: {e}"))?;
+    Ok(
+        super::profiles::adoption_suggestions(&home.join(".config"), &listed)
+            .into_iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect(),
+    )
+}
+
 /// Remove a profile from the list, leaving its directory untouched ("remove from Claudesk").
 /// Rows that reference it degrade to the missing-profile state (spawn refused, A.6).
 ///
@@ -392,7 +415,9 @@ pub fn project_get_profile(app: AppHandle, path: String) -> Result<Option<String
 pub fn profile_remove(app: AppHandle, name: String) -> Result<(), String> {
     let dir = resolve_data_dir(&app)?;
     let command = crate::hook_install::commands::this_builds_hook_command(&app)?;
-    remove_unregistered(&dir, &name, &command)
+    remove_unregistered(&dir, &name, &command)?;
+    let _ = app.emit(PROFILES_CHANGED_EVENT, ());
+    Ok(())
 }
 
 /// The testable body of [`profile_remove`]: unregister first, drop only on success.

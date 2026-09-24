@@ -164,8 +164,13 @@ describe("the row structure (⏵ nests INSIDE the open button — operator spec 
   // stopPropagation are fine; `TileActionButton.tsx` uses exactly that for the same
   // problem in the filmstrip, and its header cites this very rule.
 
-  it("the declared cell order is back to the M11.5 three", () => {
-    expect([...PICKER_ROW_CELLS]).toEqual(["open", "model", "remove"]);
+  it("the declared cell order is open, model, profile, remove (F-b P4.1 added profile)", () => {
+    expect([...PICKER_ROW_CELLS]).toEqual([
+      "open",
+      "model",
+      "profile",
+      "remove",
+    ]);
   });
 
   it("the declared row is a flat sequence with exactly one open cell", () => {

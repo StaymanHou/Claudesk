@@ -53,7 +53,12 @@ function ruleBody(selector: string): string {
  * out with BOTH declarations — that pair is the entire fix, and dropping either one reproduces the
  * bug.
  */
-const WIDE_FLEX_CHILDREN = [".substrate-info", ".install-wizard"];
+// F-b P4.3 added `.profiles-settings` (a column of long config-dir paths).
+const WIDE_FLEX_CHILDREN = [
+  ".substrate-info",
+  ".install-wizard",
+  ".profiles-settings",
+];
 
 describe("Settings panel — the horizontal-overflow guard WP3 paid for", () => {
   it("keeps the parent's flex-start, so the constraint below stays necessary", () => {

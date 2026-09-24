@@ -480,6 +480,7 @@ pub fn run() {
             config_store::commands::profiles_list,
             config_store::commands::profile_adopt,
             config_store::commands::profile_remove,
+            config_store::commands::profile_adoption_suggestions,
             config_store::commands::set_project_profile,
             config_store::commands::project_get_profile,
             // M12 WP2: clear the unclean-exit flag on a CLEAN close. There is deliberately

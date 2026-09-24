@@ -257,6 +257,30 @@ pub fn adopt(
     })
 }
 
+/// F-b D.22 — suggestions for "Add existing config dir…": every `<config_root>/claude-*`
+/// DIRECTORY not already listed (compared through `canonicalize`), sorted by name. `config_root`
+/// is injected (`~/.config` in production) so this is testable without the operator's home.
+/// A missing or unreadable root yields no suggestions. ⚠️ Suggestions only — nothing is
+/// auto-imported (`m7-sandbox` is a harness artifact that must stay opt-in).
+pub fn adoption_suggestions(config_root: &Path, listed: &[Profile]) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(config_root) else {
+        return Vec::new();
+    };
+    let mut out: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("claude-"))
+        })
+        .filter(|p| !listed.iter().any(|l| same_dir(&l.config_dir, p)))
+        .collect();
+    out.sort();
+    out
+}
+
 /// Drop a profile from the list, returning the removed entry. Does not touch its directory.
 pub fn remove_entry(data_dir: &Path, name: &str) -> Result<Profile, ConfigError> {
     update_profiles(data_dir, |profiles| {
@@ -328,6 +352,28 @@ mod tests {
                 "{gate} {reference:?}"
             );
         }
+    }
+
+    #[test]
+    fn profile_suggestions_list_unlisted_claude_dirs_only() {
+        let root = TempDir::new().unwrap();
+        for d in ["claude-neo", "claude-eos", "other", "claude-listed"] {
+            std::fs::create_dir(root.path().join(d)).unwrap();
+        }
+        std::fs::write(root.path().join("claude-file"), b"not a dir").unwrap();
+        let listed = vec![listed(
+            "x",
+            root.path().join("claude-listed").to_str().unwrap(),
+        )];
+        let got: Vec<String> = adoption_suggestions(root.path(), &listed)
+            .into_iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            got,
+            vec!["claude-eos".to_string(), "claude-neo".to_string()]
+        );
+        assert!(adoption_suggestions(&root.path().join("absent"), &[]).is_empty());
     }
 
     #[test]

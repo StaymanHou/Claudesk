@@ -52,6 +52,7 @@ import {
   type InstallProvenance,
 } from "./WorkflowSubstrateInfo";
 import { WorkflowInstallWizard } from "./WorkflowInstallWizard";
+import { ProfilesSettings } from "./ProfilesSettings";
 import {
   WorkflowUninstallDialog,
   type UninstallFinished,
@@ -461,6 +462,25 @@ export default function SettingsPanel({
               ))}
             </select>
           </label>
+          {/* F-b (operator ruling 2026-09-23): a non-default profile's OWN
+              permissions.defaultMode governs its sessions — Claudesk passes no
+              --permission-mode for it. Said here, or this control reads as broken. */}
+          <p
+            className="settings-row-help"
+            data-testid="settings-permission-mode-profile-note"
+          >
+            Applies to the <code>default</code> profile. A project on another
+            profile uses that profile&apos;s own{" "}
+            <code>permissions.defaultMode</code>.
+          </p>
+        </SettingsGroup>
+
+        <SettingsGroup
+          id="profiles"
+          title="Profiles"
+          hint="Claude Code profiles — each a separate CLAUDE_CONFIG_DIR with its own CLAUDE.md, skills, settings and history. Pick one per project in the project picker."
+        >
+          <ProfilesSettings onError={onError} />
         </SettingsGroup>
 
         <SettingsGroup

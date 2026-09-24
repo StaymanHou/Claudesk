@@ -333,7 +333,7 @@ export function ProjectModelCell({
  * button ambiguity, and keeping both lines the same element type means the two hit regions
  * are symmetrical by construction rather than by review.
  */
-function CellValueLine({
+export function CellValueLine({
   testId,
   className,
   label,

@@ -151,13 +151,13 @@ describe("the picker offers a visible Settings entry point (discovery parity)", 
   });
 });
 
-describe("the panel shell renders its five labelled groups", () => {
+describe("the panel shell renders its six labelled groups", () => {
   it("has a stable testid for live verify-self", () => {
     expect(panelSrc).toContain('data-testid="settings-panel"');
     expect(panelSrc).toContain('data-testid="settings-panel-close"');
   });
 
-  it("declares exactly the five groups the panel is specified to have, in order", () => {
+  it("declares exactly the six groups the panel is specified to have, in order", () => {
     // Order is part of the verdict (Claude Code · Workflow features · Analytics ·
     // Updates); a reshuffle should be a deliberate edit, not an accident.
     //
@@ -167,11 +167,15 @@ describe("the panel shell renders its five labelled groups", () => {
     // below them. This assertion stays an exact ORDERED equality rather than being relaxed to
     // a `toContain` or a length check — the exactness is the whole guard. Adding a sixth group
     // should likewise be a one-line deliberate edit here.
+    //
+    // ⚠️ `profiles` was inserted by F-b P4.3 (2026-09-24, triage in the F-b WIP) — directly
+    // AFTER `claude-code`, because both configure how Claude Code sessions start. Still exact.
     const ids = [...panelSrc.matchAll(/^\s+id="([a-z-]+)"$/gm)].map(
       (m) => m[1],
     );
     expect(ids).toEqual([
       "claude-code",
+      "profiles",
       "workflow-features",
       "analytics",
       "updates",

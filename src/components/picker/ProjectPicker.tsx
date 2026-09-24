@@ -23,8 +23,16 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { pruneToastMessage } from "./pruneToast";
 import { mapIpcError } from "./ipcError";
 import { ProjectModelCell, ProjectModelHints } from "./ProjectModelCell";
+import { ProjectProfileCell } from "./ProjectProfileCell";
+import {
+  listProfiles,
+  PROFILES_CHANGED_EVENT,
+  missingProfileRefusal,
+  type Profile,
+} from "../../state/profiles";
 import {
   applyCommittedDriveMode,
+  applyCommittedProfile,
   applyCommittedModel,
 } from "./applyCommittedModel";
 import type { DriveMode } from "../../cc/driveMode";
@@ -163,6 +171,27 @@ export function ProjectPicker({
   // scope-list-is-a-floor rule, earning its keep again.
   // (`SURFACE-2026-08-05-QUALITY-WP3-STALE-WHOLE-FEATURE-GATE-DOCS`.)
   const [announceMap, setAnnounceMap] = useState<AnnounceMap>({});
+  // F-b — the listed profiles, read ONCE for the whole picker (never per row) and re-read on
+  // `profiles-changed` (adopt / remove in Settings), so a removed profile's rows turn "missing"
+  // without reopening the picker.
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      listProfiles()
+        .then((list) => {
+          if (!cancelled) setProfiles(list);
+        })
+        .catch((e) => {
+          console.warn("[claudesk] profiles_list failed:", e);
+        });
+    void load();
+    const un = listen(PROFILES_CHANGED_EVENT, () => void load());
+    return () => {
+      cancelled = true;
+      void un.then((f) => f());
+    };
+  }, []);
   // The M10.9 gate seam. Read the HOOK — never the underlying Tauri command ad hoc and
   // never the raw getter wrapper (a one-shot read never re-syncs on the broadcast). Both
   // bypass shapes are scanned by the OFF-invariant guard, whose scan is a plain substring
@@ -249,13 +278,18 @@ export function ProjectPicker({
   ) {
     // Re-derive, do not read the label. `rowAffordances` is the same function the row
     // rendered with, called fresh — so a signal that changed since render is reflected.
+    const row = recents.find((r) => r.project_path === projectPath);
+    // F-b A.6 — a row naming an unlisted profile opens NOTHING. The backend would refuse the
+    // spawn anyway; refusing here means no empty workspace is minted for it.
+    const refusal = missingProfileRefusal(row?.profile, profiles);
+    if (refusal !== null) {
+      setToast({ kind: "error", message: refusal });
+      return;
+    }
     const { action } = rowAffordances(
       projectPath,
       announceMap,
-      isWorkflowApplicable(
-        gateOn,
-        recents.find((r) => r.project_path === projectPath)?.profile ?? null,
-      ),
+      isWorkflowApplicable(gateOn, row?.profile ?? null),
     );
     // Stamp recency before handing off so the next list_projects reflects it. A
     // rejection surfaces as an error toast (P4.2) — never dropped as an unhandled
@@ -326,6 +360,13 @@ export function ProjectPicker({
   );
 
   // Same contract, same purity requirement, for the drive mode (M12 WP4c).
+  const handleProfileCommitted = useCallback(
+    (projectPath: string, profile: string | null) => {
+      setRecents((rs) => applyCommittedProfile(rs, projectPath, profile));
+    },
+    [],
+  );
+
   const handleDriveModeCommitted = useCallback(
     (projectPath: string, mode: DriveMode | null) => {
       setRecents((rs) => applyCommittedDriveMode(rs, projectPath, mode));
@@ -623,6 +664,17 @@ export function ProjectPicker({
                       profile={r.profile ?? null}
                       onCommitted={handleModelCommitted}
                       onDriveModeCommitted={handleDriveModeCommitted}
+                    />
+                  );
+                case "profile":
+                  return (
+                    <ProjectProfileCell
+                      key={cell}
+                      projectPath={r.project_path}
+                      projectLabel={labelFor(r)}
+                      seedProfile={r.profile ?? null}
+                      profiles={profiles}
+                      onCommitted={handleProfileCommitted}
                     />
                   );
                 case "remove":

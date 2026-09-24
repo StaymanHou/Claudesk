@@ -83,3 +83,18 @@ export function applyCommittedDriveMode(
     r.project_path === projectPath ? { ...r, default_drive_mode: mode } : r,
   );
 }
+
+/**
+ * F-b — fold a committed profile change into `recents`. Same contract and the same purity
+ * requirement as the model / drive-mode reducers (StrictMode runs state updaters twice). `null`
+ * is stored as absent, matching how `list_projects` serializes the default profile.
+ */
+export function applyCommittedProfile(
+  recents: readonly RecentProject[],
+  projectPath: string,
+  profile: string | null,
+): RecentProject[] {
+  return recents.map((r) =>
+    r.project_path === projectPath ? { ...r, profile } : r,
+  );
+}
