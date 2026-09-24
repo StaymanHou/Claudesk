@@ -435,7 +435,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     default and the profile dir otherwise. Thread the workspace's profile through
     `transcript/commands.rs` and the supervisor's callers. The default path must stay
     byte-identical.  <!-- status: done — ✅ Signature landed in Phase 1; `transcript_tail` now resolves the root via `config_root_for_project` (default → `~/.claude`, listed → its dir, unlisted/unreadable → None → empty tail, never a guess at `~/.claude`). Default path byte-identical (`transcript_dir_is_under_dot_claude_projects`). -->
-  - [ ] verify-auto  <!-- status: NOT-STARTED -->
+  - [x] verify-auto  <!-- status: done — EXIT=0 (50s; 3020 FE / 965 Rust), first run -->
   - [ ] verify-self  <!-- status: NOT-STARTED -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
     - [ ] Operator opens a workspace under a real adopted profile (e.g. `claude-original`) and
@@ -519,8 +519,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 3 > verify-auto
-- **Active scope:** Phase 3 verify-auto
+- **Path:** F-b > Phase 3 > verify-self
+- **Active scope:** Phase 3 verify-self (live: launch registers into a scratch profile; ~/.claude untouched around toggles; profile session lights the dot; bare-terminal profile session reaches the status log)
 - **Blocked:** none
 - **Unvisited:** Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
