@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: F-b — Isolated CC profiles as Claudesk workspaces
 
 **Workflow:** feature
-**State:** verify-codify (all phases complete)
+**State:** ship (complete) — 2026-09-24 at `60b5ec2`; NOT pushed (36 commits ahead of upstream; pushing is the operator's call)
 **Created:** 2026-09-23
 **Entry:** spec (complex feature)
 **Source:** `roadmap.md` → Group F → F-b + "F-b decisions — `/util-grill-me`, 2026-09-23" (4 rulings,
@@ -580,10 +580,10 @@ Action: (1) the two exact cell-order pins reverted to `["open","model","remove"]
 (4) `projectModelCellStructure.test.ts` "routes BOTH lines through the single writer" counted 2 commitCellValue calls; the profile line is a third ROUTED line (the invariant holds), so it now asserts by IDENTITY that the three writers — model, drive mode, profile — are each reached from a commitCellValue call, and that there are exactly three
 
 ## Current Node
-- **Path:** F-b > ship
-- **Active scope:** ship (all 5 phases complete through verify-codify)
+- **Path:** F-b > review-quality
+- **Active scope:** review-quality against ship commit `60b5ec2` (F-b range `380bd97^..60b5ec2`)
 - **Blocked:** none
-- **Unvisited:** review-quality → finalize
+- **Unvisited:** finalize
 - **Open discoveries:** none (Phase 5 build defaults (a)–(f) accepted at verify-human)
 
 ## Discoveries
