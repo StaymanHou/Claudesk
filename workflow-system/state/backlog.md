@@ -1127,3 +1127,14 @@ and work on the spec well."
 - **Suggested action:** Operator ruling. Recommended: omit `--permission-mode` for non-default profiles so the profile's `settings.json` governs; keep the app-global flag for the default profile only.
 - **Priority:** medium
 - **Status:** resolved in F-b Phase 1 (ruled 2026-09-23, built 2026-09-24 `fc156ad`) — delete with its `**Backlog resolved:**` CHANGELOG line at `feature-finalize`
+
+## SURFACE-2026-09-24-SPAWNED-CC-INHERITS-A-PARENT-CLAUDESK-DRIVE-MODE
+- **Source:** feature:verify-self (F-b Phase 2)
+- **Target level:** feature (F-b Phase 2 back-loop; pre-existing since M12 WP4b)
+- **Type:** bug
+- **Summary:** Claudesk's CC and login-shell spawns inherit `CLAUDESK_DRIVE_MODE` from Claudesk's own process env, so a dev build launched from inside a Claudesk CC session passes the PARENT's drive mode to every child — regardless of the gate, the project's stored mode, or (F-b) the profile.
+- **Context:** `cc_spawn_env` only ADDS the var; `CommandBuilder::new` starts from the full inherited env, and nothing removes it. The documented dev-inside-prod dogfooding setup hits it. Observed live 2026-09-24: a non-default-profile workspace's child carried `CLAUDESK_DRIVE_MODE=autopilot` while `cc_spawn_env` set nothing.
+- **Suggested action:** add `CLAUDESK_DRIVE_MODE` to the env_remove list of both spawns (F-b Phase 2 F9b).
+- **Priority:** medium
+- **Status:** pending — being fixed in F-b Phase 2
+

@@ -388,7 +388,9 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     the consumer list derived from source (a reverse guard — lesson entry 13: a one-directional
     guard cannot see an omission).  <!-- status: done — ✅ `workflowApplicableGuard.test.ts` (forward: direct-wrap shape at every call; row-scoped binding; REVERSE: allowlist entries exist and still call). Mutation-proven 4/4 individually (unwrap 2nd call / unwrap 1st call [also fails the live test] / bare picker read / stale allowlist). -->
   - [x] verify-auto  <!-- status: done — EXIT=0 (40s; 3018 FE / 951 Rust; OFF-invariant guard still 6 arms / 9 subjects). Two first-run failures fixed in place: (1) React Compiler `preserve-manual-memoization` on ProjectModelCell — passing a prop into the opaque `isWorkflowApplicable(...)` call widened its hand-memoized callbacks' inferred deps (bisected: inline `gateOn && profile === null` lints clean, the call does not); fixed with `useMemo`, and the guard generalized to the BOUND form (`const x = useWorkflowFeaturesEnabled()`, every read routed, `useMemo` deps array accepted) — re-mutation-proven 5/5. (2) clippy doc-lazy-continuation: `SpawnProfile` had been inserted between `resolve_spawn_profile`'s doc and its fn -->
-  - [ ] verify-self  <!-- status: NOT-STARTED -->
+  - [ ] verify-self  <!-- status: FAILED — back-loop F9b, scoped to P2.verify-self.2 -->
+    - [x] P2.verify-self.1 Browser (gate ON, both opened via the app's own `__seedWorkspace` open path): attributed PER WORKSPACE — scratch-b (profile `scratch`) has NO skill row / drive-mode readout / supervisor readout; scratch-a (default, same stored `autopilot`) has all three (positive control)  <!-- status: PASS -->
+    - [ ] P2.verify-self.2 CLI `ps eww` of the profile workspace's CC child → no `CLAUDESK_DRIVE_MODE`  <!-- status: FAILED — the child HAS `CLAUDESK_DRIVE_MODE=autopilot`, but NOT from `cc_spawn_env` (which correctly sets nothing for a profile): the dev app INHERITED it from the shell (prod Claudesk → this CC session → shell → `pnpm tauri:dev`), and `CommandBuilder`'s base env carries it to every child. A real defect, and PRE-DATES F-b: Claudesk's drive-mode signal must be its OWN value, never an inherited one — a gate-OFF dev build launched this way leaks the parent's mode into every child, including the login-shell pane, which "must never receive" it (constraint 5). Fix: strip `CLAUDESK_DRIVE_MODE` in the env_remove list for BOTH the CC and the shell spawn (CC then re-adds its own value when applicable). -->
   - [ ] verify-human  <!-- status: NOT-STARTED -->
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
@@ -508,8 +510,8 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 2 > verify-self
-- **Active scope:** Phase 2 verify-self (live: gate ON; profile workspace vs default workspace — skill row / drive-mode readout absent; CC child has no CLAUDESK_DRIVE_MODE; announce map drops the restore arm)
+- **Path:** F-b > Phase 2 > build (F9b back-loop)
+- **Active scope:** P2.verify-self.2 — strip an inherited `CLAUDESK_DRIVE_MODE` from CC + shell spawns
 - **Blocked:** none
 - **Unvisited:** Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
