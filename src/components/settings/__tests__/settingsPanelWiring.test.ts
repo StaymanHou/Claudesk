@@ -151,6 +151,21 @@ describe("the picker offers a visible Settings entry point (discovery parity)", 
   });
 });
 
+describe("F-b — the permission-mode control says it does not govern profiles", () => {
+  it("carries the note inside the claude-code group, before the profiles group", () => {
+    // Operator ruling 2026-09-23: a non-default profile's own permissions.defaultMode governs,
+    // so without this note the app-global control reads as broken for profile workspaces.
+    const cc = panelSrc.indexOf('id="claude-code"');
+    const note = panelSrc.indexOf(
+      'data-testid="settings-permission-mode-profile-note"',
+    );
+    const profiles = panelSrc.indexOf('id="profiles"');
+    expect(cc).toBeGreaterThan(-1);
+    expect(note).toBeGreaterThan(cc);
+    expect(note).toBeLessThan(profiles);
+  });
+});
+
 describe("the panel shell renders its six labelled groups", () => {
   it("has a stable testid for live verify-self", () => {
     expect(panelSrc).toContain('data-testid="settings-panel"');

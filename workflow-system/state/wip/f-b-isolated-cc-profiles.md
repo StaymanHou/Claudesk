@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: F-b — Isolated CC profiles as Claudesk workspaces
 
 **Workflow:** feature
-**State:** verify-codify (phase 3 complete)
+**State:** verify-codify (phase 4 complete)
 **Created:** 2026-09-23
 **Entry:** spec (complex feature)
 **Source:** `roadmap.md` → Group F → F-b + "F-b decisions — `/util-grill-me`, 2026-09-23" (4 rulings,
@@ -449,7 +449,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [ ] P3.verify-human.1 Operator opens a workspace under a real (logged-in) adopted profile and confirms the dot tracks idle → running → awaiting-input → idle across a real turn. [UNVERIFIED by agent — the scratch profile is not logged in, so only `running` was reachable.] **DEFERRED by operator 2026-09-24 to Phase 4 verify-human**, run against `~/.config/claude-original-dev` (created 2026-09-24 at the operator's request — a CONFIG-ONLY copy of `claude-original`; needs one `/login`).  <!-- status: done (deferred) -->
   - [x] verify-codify  <!-- status: done — boundary = `install_on_launch` + the `profile_adopt` / `profile_remove` / `transcript_tail` commands. Bodies already unit-tested at build (additive/foreign-preserving, idempotent, self-heal, missing dir, dev/prod independence, adopt rollback, unregister-first, config root). Added `profile_callers_route_through_the_tested_bodies`: pins the four AppHandle CALLERS (the ~/.claude install is still made AND is the returned result; the profile loop runs; adopt/remove route through the tested bodies; transcript_tail resolves the config root). Mutation-proven 4/4 individually — one first-draft mutant (M4) did not compile and was rewritten until it did. ⚠️ A snapshot-name collision (three `commands.rs`) destroyed the uncommitted test mid-mutation; recovered via `git show HEAD` + re-add, and banked in `.claude/memory/git-checkout-no-ops-on-untracked-file.md`. verify:auto EXIT=0 (46s; 3020 FE / 966 Rust) -->
 
-- [ ] Phase 4: Picker profile cell + Settings "Profiles" group (adopt / remove / missing state)  <!-- status: NOT-STARTED; depends on Phases 2, 3 -->
+- [x] Phase 4: Picker profile cell + Settings "Profiles" group (adopt / remove / missing state)  <!-- status: done 2026-09-24 -->
   **Relevance check (before Phase 4):**
   - Requester still needs this: yes. It is the first operator-visible surface for everything Phases 1–3 built.
   - Requirements unchanged: yes, plus two recorded additions. The Settings permission control needs a one-line hint (the 2026-09-23 ruling). Verify-human now also carries the deferred P3.verify-human.1, run on `claude-original-dev`.
@@ -494,9 +494,15 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
     - [x] P4.verify-human.1 Judge the picker layout  <!-- status: PASS on re-judgment (operator 2026-09-24: "good"). First pass FAILED → rework: the profile is the FIRST LINE of the model cell's stack (`Profile: …`, always present, ungated), the separate column deleted, picker back to 640px, model column 12em. Second operator ruling at re-judgment: "yes, always prefix" → the model line now ALWAYS reads `Model: <value>` (gate on/off, set/unset; drive-mode line unchanged) — triaged tests updated; verify:auto EXIT=0 (38s); live: scratch-a `Profile: original-dev` / `Model: Default`, no truncation -->
     - [x] P4.verify-human.2 Adopt `claude-original-dev` via ⌘, → Profiles → its suggestion button (the dev profile — NOT a daily-use one)  <!-- status: PASS (operator 2026-09-24) -->
     - [ ] P4.verify-human.3 Set it on the scratch-a row, open, `/login` once, send a prompt: the scratch-a tile dot goes Running then back to Idle (**the deferred P3.verify-human.1** — real logged-in turn)  <!-- status: PASS (operator 2026-09-24); agent confirmed in the status log: SessionStart → UserPromptSubmit (running, emitted) → Stop (idle, emitted) for scratch-a/ws-1, via claude-original-dev's 10 dev hook entries -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-codify  <!-- status: done — boundary = the picker page + the Settings panel. Already covering: `projectModelCellProfileLine.test.tsx` (the line: first, three states, missing never default, ungated, refusal-ordering pin), `profilesSettingsLive.test.tsx` (the group's clicks → IPC by value), the triaged exact-order / identity pins. Added `projectPickerProfileLive.test.tsx` — a LIVE mount of the real ProjectPicker: list read once + RE-read on a real `profiles-changed` event (missing → listed with no reopen); a missing row → toast, no `record_open`, no `onOpen` (positive control: a default row opens); the select sends `set_project_profile {path, profile}`. Mutation-proven 2/2 (listener removed / refusal after onOpen). Plus a pin that the permission-mode note sits in the claude-code group. verify:auto EXIT=0 (31s; 3045 FE / 967 Rust) -->
 
 - [ ] Phase 5: New-profile wizard + Delete-to-Trash  <!-- status: NOT-STARTED; depends on Phase 4 -->
+  **Relevance check (before Phase 5):**
+  - Requester still needs this: yes. Creation was the operator's scope expansion (2026-09-15).
+  - Requirements changed, recorded not reopened: the profile UI is now a LINE in the model cell (P4 vh1), so "New profile…" belongs as an option in THAT line's select, not in a column cell. The wizard's permission-mode step now takes effect inside Claudesk (P1 ruling). The deferred checks land here: P1.verify-human.2 (login read-back) and B.10 (footer shows the profile's mode).
+  - Solution still feasible: yes. `trash` is an existing dependency; probe (1) settled where each value lives (theme → settings.json, copyOnSelect → .claude.json, mouse → env).
+  - No superior alternative discovered: yes.
+  **Verdict:** proceed
   **Observable outcomes:**
   - Browser: "New profile…" (from the picker cell AND from Settings) opens the wizard.
     - Steps in order: name → dir (pre-filled `~/.config/claude-<name>`) → permission mode (the
@@ -558,10 +564,10 @@ Evidence: vh1 (2026-09-24) "make it as a new row above the model selector and th
 Action: (1) the two exact cell-order pins reverted to `["open","model","remove"]` (still exact); (2) `projectProfileCellRender.test.tsx` DELETED with its component and replaced by `projectModelCellProfileLine.test.tsx` (same properties, on the real model cell: first line, three states, missing never default, ungated, plus the moved refusal-ordering pin); (3) `projectModelCellRender.test.tsx` gate-OFF "exactly ONE line" updated — the profile line is now always present, so gate OFF renders profile + model (the mode line is still absent, which is the property the test exists for)
 (4) `projectModelCellStructure.test.ts` "routes BOTH lines through the single writer" counted 2 commitCellValue calls; the profile line is a third ROUTED line (the invariant holds), so it now asserts by IDENTITY that the three writers — model, drive mode, profile — are each reached from a commitCellValue call, and that there are exactly three
 
-- **Path:** F-b > Phase 4 > verify-codify
-- **Active scope:** Phase 4 verify-codify (dev build PID 64837 still running for the operator)
+- **Path:** F-b > Phase 5 > P5.1
+- **Active scope:** P5.1 (New-profile wizard)
 - **Blocked:** none
-- **Unvisited:** Phase 5 → ship → review-quality → finalize
+- **Unvisited:** ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
 
 ## Discoveries
