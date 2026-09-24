@@ -615,6 +615,32 @@ fn resolve_profile_spawn_env(
     resolved
 }
 
+/// Apply argv, cwd and env to a `CommandBuilder` that already carries the inherited base env.
+///
+/// ⚠️ **Removal runs BEFORE `env` is applied** — F-b A.8: a CC spawn strips an inherited
+/// `CLAUDE_CONFIG_DIR`, and a profile's explicit value (in `env`) must then win. Extracted from
+/// `spawn_argv` so a test can assert the resulting child env as a VALUE (`get_env`), which a
+/// source-text guard cannot express.
+fn compose_command(
+    mut cmd: CommandBuilder,
+    args: &[String],
+    cwd: &str,
+    env: &[(&str, &str)],
+    env_remove: &[&str],
+) -> CommandBuilder {
+    for arg in args {
+        cmd.arg(arg);
+    }
+    cmd.cwd(cwd);
+    for k in env_remove {
+        cmd.env_remove(k);
+    }
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    cmd
+}
+
 /// F-b — the `--permission-mode` a spawn passes: Claudesk's app-global mode for the default
 /// profile, **none** for a listed profile, whose own `settings.json` `permissions.defaultMode`
 /// then governs (operator ruling 2026-09-23). ⚠️ Passing the flag to a profile would silently
@@ -1111,17 +1137,7 @@ impl PtyCcSession {
             })
             .map_err(|e| CcError::Spawn(e.to_string()))?;
 
-        let mut cmd = CommandBuilder::new(program);
-        for arg in args {
-            cmd.arg(arg);
-        }
-        cmd.cwd(cwd);
-        for k in env_remove {
-            cmd.env_remove(k);
-        }
-        for (k, v) in env {
-            cmd.env(k, v);
-        }
+        let cmd = compose_command(CommandBuilder::new(program), args, cwd, env, env_remove);
 
         let child = pair
             .slave
@@ -2404,7 +2420,77 @@ mod tests {
         );
         assert!(flat.contains("&[crate::config_store::profiles::CONFIG_DIR_ENV])"));
         assert!(flat.contains("&shell_spawn_env(), \"exit\", &[])"));
-        assert!(flat.contains("for k in env_remove { cmd.env_remove(k); }"));
+        // The removal loop itself is asserted as a VALUE in
+        // `profile_compose_strips_an_inherited_config_dir_and_lets_a_profile_win`.
+        assert!(flat
+            .contains("compose_command(CommandBuilder::new(program), args, cwd, env, env_remove)"));
+    }
+
+    fn env_of(cmd: &CommandBuilder, key: &str) -> Option<String> {
+        cmd.get_env(key).map(|v| v.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn profile_compose_strips_an_inherited_config_dir_and_lets_a_profile_win() {
+        let key = crate::config_store::profiles::CONFIG_DIR_ENV;
+        let inherited = || {
+            let mut c = CommandBuilder::new("claude");
+            c.env(key, "/inherited/from/the/app");
+            c.env("KEEP_ME", "1");
+            c
+        };
+        // Default profile: removal list, no explicit value → gone; unrelated env untouched.
+        let default = compose_command(inherited(), &[], "/p", &[], &[key]);
+        assert_eq!(env_of(&default, key), None);
+        assert_eq!(env_of(&default, "KEEP_ME").as_deref(), Some("1"));
+        // Profile: removal list AND an explicit value → the explicit value wins.
+        let profile = compose_command(inherited(), &[], "/p", &[(key, "/u/claude-neo")], &[key]);
+        assert_eq!(env_of(&profile, key).as_deref(), Some("/u/claude-neo"));
+        // Shell: no removal list → the inherited value is left alone (the shell is not CC).
+        let shell = compose_command(inherited(), &[], "/p", &[], &[]);
+        assert_eq!(
+            env_of(&shell, key).as_deref(),
+            Some("/inherited/from/the/app")
+        );
+    }
+
+    /// The pure decisions above prove the MACHINE; this pins the CALLER (the recurring defect
+    /// shape: a correct mechanism behind a caller that does not honor it). In
+    /// `SessionRegistry::spawn`, comment-stripped:
+    /// - the profile is resolved BEFORE the unclean flag is consumed (a refused spawn must not
+    ///   spend the crash signal), and before any PTY spawn;
+    /// - the `--continue` guard runs AFTER the resume arm is resolved and BEFORE the spawn;
+    /// - the spawn receives `spawn_permission_mode(…)`, never the raw app mode.
+    #[test]
+    fn profile_spawn_caller_orders_its_profile_decisions() {
+        let src = include_str!("mod.rs");
+        let production = src.split("mod tests").next().unwrap_or(src);
+        let start = production
+            .find("    pub fn spawn(\n        &mut self,")
+            .expect("SessionRegistry::spawn moved; re-scope this guard");
+        let body = &production[start..];
+        let body = &body[..body
+            .find("\n    pub fn spawn_shell(")
+            .expect("spawn_shell follows spawn")];
+        let code: String = body
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let at = |needle: &str| {
+            code.find(needle)
+                .unwrap_or_else(|| panic!("`{needle}` is not in SessionRegistry::spawn"))
+        };
+        assert!(at("resolve_spawn_profile(") < at("consume_and_persist("));
+        assert!(at("resolve_spawn_profile(") < at("PtyCcSession::spawn("));
+        assert!(at("resolve_resume_arm(") < at("guard_continue_against_transcripts("));
+        assert!(at("guard_continue_against_transcripts(") < at("PtyCcSession::spawn("));
+        let call = &code[at("PtyCcSession::spawn(")..];
+        let call = &call[..call.find(");").unwrap()];
+        assert!(
+            call.contains("spawn_permission_mode(mode, profile_dir.as_deref())"),
+            "the spawn must pass the profile-aware permission mode: {call}"
+        );
     }
 
     // --- build_cc_argv: permission-mode mapping (pure) ---

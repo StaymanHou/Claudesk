@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: F-b — Isolated CC profiles as Claudesk workspaces
 
 **Workflow:** feature
-**State:** plan (complete)
+**State:** verify-codify (phase 1 complete)
 **Created:** 2026-09-23
 **Entry:** spec (complex feature)
 **Source:** `roadmap.md` → Group F → F-b + "F-b decisions — `/util-grill-me`, 2026-09-23" (4 rulings,
@@ -293,7 +293,7 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
 
 ## Work Tree
 
-- [ ] Phase 1: Profile store + spawn under a profile (backend) + first-run probes  <!-- status: NOT-STARTED -->
+- [x] Phase 1: Profile store + spawn under a profile (backend) + first-run probes  <!-- status: done 2026-09-24 -->
   **Observable outcomes:**
   - CLI: `cargo test --manifest-path src-tauri/Cargo.toml profile` → exit 0. The tests cover:
     - a `projects.json` with no `profile` key round-trips byte-identical
@@ -346,9 +346,15 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [x] verify-human  <!-- status: done — boundary: modifies the existing `cc_spawn` path; capture = verify-self's live `ps eww` evidence + the 2026-09-24 argv re-check -->
     - [x] P1.verify-human.1 Operator ruling: `--permission-mode` argv vs a profile's `defaultMode` → **RULED 2026-09-23: omit `--permission-mode` for non-default profiles; the profile's `settings.json` governs. Default profile keeps the app-global flag.** ✅ **Built 2026-09-24 (`fc156ad`)**: `spawn_permission_mode` + `build_cc_argv(Option<…>)`, unit-tested + mutation-proven (a profile getting `Some(app_mode)` fails the test, landed). **Caller proven live**: default row → `claude --permission-mode bypassPermissions`, profile row → bare `claude` + `CLAUDE_CONFIG_DIR`. ⚠️ B.10's *footer* read was not done (the pane is not mounted on an IPC spawn) — folded into Phase 5 verify-human.  <!-- status: done -->
     - [ ] P1.verify-human.2 Operator logs in once under a scratch profile; agent reads back `.claude.json` / `settings.json` (probe (1) post-login half). **DEFERRED by operator 2026-09-23 to Phase 5 verify-human** (end-to-end create + login).  <!-- status: done (deferred) -->
-  - [ ] verify-codify  <!-- status: NOT-STARTED -->
+  - [x] verify-codify  <!-- status: done — boundary = `SessionRegistry::spawn` (the `cc_spawn` path). Added: `compose_command` extracted so the child env is asserted as a VALUE (`get_env`: inherited CLAUDE_CONFIG_DIR stripped for default, profile value wins, shell untouched); `profile_spawn_caller_orders_its_profile_decisions` pins the CALLER (profile resolved before the flag consume and the PTY spawn; --continue guard after the arm, before the spawn; spawn gets `spawn_permission_mode(…)`). Each mutation-proven individually, all 3 compiled + landed + failed. verify:auto EXIT=0 (39s; 3000 FE / 947 Rust) -->
 
 - [ ] Phase 2: Workflow-layer applicability funnel — ALWAYS off for non-default profiles  <!-- status: NOT-STARTED; depends on Phase 1 -->
+  **Relevance check (before Phase 2):**
+  - Requester still needs this: yes — the operator ruled "always off" at spec review.
+  - Requirements unchanged: yes. Phase 1's ruling (no `--permission-mode` for profiles) touches the spawn argv only; ruling 4 is as written.
+  - Solution still feasible: yes. `resolve_profile_spawn_env` already receives `profile_dir`, so the backend half is a one-input change.
+  - No superior alternative discovered: yes.
+  **Verdict:** proceed
   **Observable outcomes:**
   - CLI: `pnpm vitest run workflowApplicable` → exit 0. The test drives each consumer (supervisor,
     skill row, `/session-restore` inject arm, drive-mode cell, drive-mode readout) with a
@@ -502,10 +508,10 @@ Small and build-time. None of these gates the spec; each is a Phase-1 probe task
   - [ ] verify-codify  <!-- status: NOT-STARTED -->
 
 ## Current Node
-- **Path:** F-b > Phase 1 > verify-codify
-- **Active scope:** Phase 1 verify-codify
+- **Path:** F-b > Phase 2 > P2.1
+- **Active scope:** P2.1 (the one workflow-applicability predicate, both sides)
 - **Blocked:** none
-- **Unvisited:** Phase 2 → Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
+- **Unvisited:** Phase 3 → Phase 4 → Phase 5 → ship → review-quality → finalize
 - **Open discoveries:** none (permission-mode finding ruled + built)
 
 ## Discoveries
