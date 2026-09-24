@@ -358,12 +358,22 @@ pub fn resolve_shell_argv(env_shell: Option<String>) -> Vec<String> {
 /// A blank/whitespace value is treated as unset (defense in depth — `set_default_model`
 /// already normalizes on the way in, but a hand-edited or older-build `projects.json`
 /// could still carry one, and it must never become an argv token CC would reject).
-fn build_cc_argv(mode: CcPermissionMode, model: Option<&str>, resume: ResumeArm) -> Vec<String> {
-    let mut argv = vec![
-        CC_CMD.to_string(),
-        CC_ARG_PERMISSION_MODE.to_string(),
-        mode.as_flag_value().to_string(),
-    ];
+///
+/// ⚠️ **F-b — `mode: None` omits `--permission-mode` entirely**, and that is how a
+/// non-default PROFILE spawns (operator ruling 2026-09-23, Phase 1 verify-human): the flag
+/// overrides the profile's own `settings.json` `permissions.defaultMode`, and choosing that
+/// posture is part of what a profile *is*. The "uniform" note above holds for the DEFAULT
+/// profile only. See [`spawn_permission_mode`].
+fn build_cc_argv(
+    mode: Option<CcPermissionMode>,
+    model: Option<&str>,
+    resume: ResumeArm,
+) -> Vec<String> {
+    let mut argv = vec![CC_CMD.to_string()];
+    if let Some(mode) = mode {
+        argv.push(CC_ARG_PERMISSION_MODE.to_string());
+        argv.push(mode.as_flag_value().to_string());
+    }
     if let Some(model) = model.map(str::trim).filter(|m| !m.is_empty()) {
         argv.push(CC_ARG_MODEL.to_string());
         argv.push(model.to_string());
@@ -603,6 +613,21 @@ fn resolve_profile_spawn_env(
         ));
     }
     resolved
+}
+
+/// F-b — the `--permission-mode` a spawn passes: Claudesk's app-global mode for the default
+/// profile, **none** for a listed profile, whose own `settings.json` `permissions.defaultMode`
+/// then governs (operator ruling 2026-09-23). ⚠️ Passing the flag to a profile would silently
+/// override the posture the profile was created with — observed live: a `defaultMode: "plan"`
+/// profile spawned as `bypassPermissions`.
+fn spawn_permission_mode(
+    app_mode: CcPermissionMode,
+    profile_dir: Option<&Path>,
+) -> Option<CcPermissionMode> {
+    match profile_dir {
+        Some(_) => None,
+        None => Some(app_mode),
+    }
 }
 
 /// F-b probe P1.1 (2) — `claude --continue` in a config dir holding no conversation for the cwd
@@ -1005,7 +1030,7 @@ impl PtyCcSession {
         app: AppHandle,
         id: String,
         project_path: &str,
-        mode: CcPermissionMode,
+        mode: Option<CcPermissionMode>,
         model: Option<&str>,
         resume: ResumeArm,
         env: &[(String, String)],
@@ -1480,7 +1505,7 @@ impl SessionRegistry {
             app,
             id.clone(),
             project_path,
-            mode,
+            spawn_permission_mode(mode, profile_dir.as_deref()),
             model.as_deref(),
             resume,
             &cc_env,
@@ -2308,6 +2333,41 @@ mod tests {
     }
 
     #[test]
+    fn profile_spawn_passes_no_permission_mode_for_a_profile() {
+        // Ruling 2026-09-23: a profile's own `permissions.defaultMode` governs.
+        let dir = Path::new("/u/.config/claude-neo");
+        assert_eq!(
+            spawn_permission_mode(CcPermissionMode::BypassPermissions, Some(dir)),
+            None
+        );
+        let argv = build_cc_argv(
+            spawn_permission_mode(CcPermissionMode::BypassPermissions, Some(dir)),
+            None,
+            ResumeArm::Fresh,
+        );
+        assert_eq!(argv, vec!["claude".to_string()]);
+        assert!(!argv.iter().any(|a| a == CC_ARG_PERMISSION_MODE));
+    }
+
+    #[test]
+    fn profile_default_spawn_keeps_the_app_global_permission_mode() {
+        for mode in [
+            CcPermissionMode::Default,
+            CcPermissionMode::BypassPermissions,
+        ] {
+            assert_eq!(spawn_permission_mode(mode, None), Some(mode));
+            let argv = build_cc_argv(spawn_permission_mode(mode, None), None, ResumeArm::Fresh);
+            assert_eq!(
+                &argv[1..3],
+                &[
+                    CC_ARG_PERMISSION_MODE.to_string(),
+                    mode.as_flag_value().to_string()
+                ]
+            );
+        }
+    }
+
+    #[test]
     fn profile_spawn_continue_degrades_to_fresh_without_a_transcript() {
         assert_eq!(
             guard_continue_against_transcripts(ResumeArm::Continue, || false),
@@ -2361,7 +2421,7 @@ mod tests {
             (CcPermissionMode::DontAsk, "dontAsk"),
             (CcPermissionMode::BypassPermissions, "bypassPermissions"),
         ] {
-            let argv = build_cc_argv(mode, None, ResumeArm::Fresh);
+            let argv = build_cc_argv(Some(mode), None, ResumeArm::Fresh);
             assert_eq!(
                 argv,
                 vec![
@@ -2382,7 +2442,7 @@ mod tests {
 
     #[test]
     fn cc_argv_omits_model_entirely_when_unset() {
-        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Fresh);
+        let argv = build_cc_argv(Some(CcPermissionMode::Default), None, ResumeArm::Fresh);
         assert!(
             !argv.iter().any(|a| a == CC_ARG_MODEL),
             "unset must emit no --model token (not `--model default`, not an empty value), got {argv:?}"
@@ -2394,7 +2454,7 @@ mod tests {
         // Guards the asymmetry from being "tidied up" in either direction: the model's
         // omit-when-unset rule must not be generalized onto --permission-mode, which is
         // uniform on purpose.
-        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Fresh);
+        let argv = build_cc_argv(Some(CcPermissionMode::Default), None, ResumeArm::Fresh);
         assert_eq!(
             argv,
             vec![
@@ -2454,7 +2514,7 @@ mod tests {
 
     #[test]
     fn the_continue_flag_is_absent_on_a_fresh_spawn() {
-        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Fresh);
+        let argv = build_cc_argv(Some(CcPermissionMode::Default), None, ResumeArm::Fresh);
         assert!(
             !argv.iter().any(|a| a == "--continue"),
             "a fresh spawn must not resume: {argv:?}"
@@ -2463,7 +2523,7 @@ mod tests {
 
     #[test]
     fn the_continue_flag_is_present_on_a_resuming_spawn() {
-        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Continue);
+        let argv = build_cc_argv(Some(CcPermissionMode::Default), None, ResumeArm::Continue);
         assert!(
             argv.iter().any(|a| a == "--continue"),
             "the resume arm must pass --continue: {argv:?}"
@@ -2476,7 +2536,7 @@ mod tests {
         // session picker rather than resuming, and there is no `/continue` slash command at
         // all. This arm must stay a CLI flag. If someone "unifies" the two arms into one
         // injected string, this fails.
-        let argv = build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Continue);
+        let argv = build_cc_argv(Some(CcPermissionMode::Default), None, ResumeArm::Continue);
         for arg in &argv {
             assert!(
                 !arg.starts_with('/'),
@@ -2491,8 +2551,12 @@ mod tests {
         // The resume flag is appended LAST so permission mode + model are byte-identical
         // whether or not this open resumes. Without this, a regression that inserted the
         // flag mid-argv could shift `--model`'s value into the wrong position.
-        let fresh = build_cc_argv(CcPermissionMode::Auto, Some("opus"), ResumeArm::Fresh);
-        let resuming = build_cc_argv(CcPermissionMode::Auto, Some("opus"), ResumeArm::Continue);
+        let fresh = build_cc_argv(Some(CcPermissionMode::Auto), Some("opus"), ResumeArm::Fresh);
+        let resuming = build_cc_argv(
+            Some(CcPermissionMode::Auto),
+            Some("opus"),
+            ResumeArm::Continue,
+        );
         assert_eq!(
             resuming[..fresh.len()],
             fresh[..],
@@ -2722,7 +2786,11 @@ mod tests {
 
     #[test]
     fn cc_argv_passes_exactly_one_model_pair_when_set() {
-        let argv = build_cc_argv(CcPermissionMode::Default, Some("opus"), ResumeArm::Fresh);
+        let argv = build_cc_argv(
+            Some(CcPermissionMode::Default),
+            Some("opus"),
+            ResumeArm::Fresh,
+        );
         assert_eq!(
             argv,
             vec![
@@ -2744,7 +2812,7 @@ mod tests {
     fn cc_argv_accepts_an_alias_or_a_full_model_id_verbatim() {
         // The probe established an open value set; Claudesk forwards, CC adjudicates.
         for value in ["fable", "opus", "sonnet", "claude-fable-5"] {
-            let argv = build_cc_argv(CcPermissionMode::Auto, Some(value), ResumeArm::Fresh);
+            let argv = build_cc_argv(Some(CcPermissionMode::Auto), Some(value), ResumeArm::Fresh);
             let idx = argv.iter().position(|a| a == CC_ARG_MODEL).unwrap();
             assert_eq!(argv[idx + 1], value, "value must be forwarded unaltered");
         }
@@ -2756,7 +2824,11 @@ mod tests {
         // hand-edited or older-build projects.json could still carry whitespace, and it
         // must never reach CC as an argv token.
         for blank in ["", "   ", "\t", "\n"] {
-            let argv = build_cc_argv(CcPermissionMode::Default, Some(blank), ResumeArm::Fresh);
+            let argv = build_cc_argv(
+                Some(CcPermissionMode::Default),
+                Some(blank),
+                ResumeArm::Fresh,
+            );
             assert!(
                 !argv.iter().any(|a| a == CC_ARG_MODEL),
                 "{blank:?} must be treated as unset, got {argv:?}"
@@ -2767,7 +2839,7 @@ mod tests {
     #[test]
     fn cc_argv_trims_a_padded_model_value() {
         let argv = build_cc_argv(
-            CcPermissionMode::Default,
+            Some(CcPermissionMode::Default),
             Some("  opus  "),
             ResumeArm::Fresh,
         );
@@ -2786,7 +2858,7 @@ mod tests {
             CcPermissionMode::DontAsk,
             CcPermissionMode::BypassPermissions,
         ] {
-            let argv = build_cc_argv(mode, Some("opus"), ResumeArm::Fresh);
+            let argv = build_cc_argv(Some(mode), Some("opus"), ResumeArm::Fresh);
             assert_eq!(argv[0], CC_CMD);
             assert_eq!(argv[1], CC_ARG_PERMISSION_MODE);
             assert_eq!(argv[2], mode.as_flag_value());
@@ -2820,19 +2892,23 @@ mod tests {
     fn cc_argv_composes_the_exact_shapes_the_real_cli_accepted_at_verify_human() {
         // Arm 1 — alias override.
         assert_eq!(
-            build_cc_argv(CcPermissionMode::Default, Some("opus"), ResumeArm::Fresh),
+            build_cc_argv(
+                Some(CcPermissionMode::Default),
+                Some("opus"),
+                ResumeArm::Fresh
+            ),
             vec!["claude", "--permission-mode", "default", "--model", "opus"]
         );
         // Arm 2 — the inherit path. The load-bearing arm: proves omit-when-unset yields a
         // shape the CLI genuinely accepts, not merely one our tests agree on.
         assert_eq!(
-            build_cc_argv(CcPermissionMode::Default, None, ResumeArm::Fresh),
+            build_cc_argv(Some(CcPermissionMode::Default), None, ResumeArm::Fresh),
             vec!["claude", "--permission-mode", "default"]
         );
         // Arm 3 — full model ID.
         assert_eq!(
             build_cc_argv(
-                CcPermissionMode::Default,
+                Some(CcPermissionMode::Default),
                 Some("claude-fable-5"),
                 ResumeArm::Fresh
             ),
