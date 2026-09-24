@@ -513,80 +513,6 @@ WIP-file convention lives in this project. Fixing it in one repo alone will not 
 (`HANDOFF-to-mccc-m15-wp2.md`, `HANDOFF-to-mccc-m15-wp4.md`).
 - **Status:** pending — upstream (mccc) — consolidated into `HANDOFF-to-mccc-2026-09-23-paydown.md` §D.8; stays OPEN until mccc applies it
 
-## SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES
-
-- **Priority:** medium
-- **Surfaced by:** operator request (session detour, 2026-09-14)
-- **Target:** product:roadmap (a milestone-sized capability, not a task)
-- **Type:** new-work
-
-⚠️ **DETAILS DELIBERATELY NOT SPECIFIED — the operator's explicit instruction was that the design
-is to be discussed when the work actually starts.** This entry records the ASK, the two hard
-blockers found while sizing it, and the one seam that already exists. It is **not** a design.
-
-**The ask.** The operator now runs several **isolated Claude Code environments** created by
-`~/Personal/projects/claude-code-wrapper-agent-boilerplate` — each a separate profile with its own
-`CLAUDE.md`, skills, subagents, MCP servers, memory, projects, history and state, rooted at
-`~/.config/claude-<name>/` via **`CLAUDE_CONFIG_DIR`**. These would ideally be managed by Claudesk
-and benefit from what is already built (picker, workspaces, PTY terminal, status surfaces,
-editor/diff, time analytics, the M15 supervisor).
-
-⚠️ **BLOCKER 1 — the profiles are SHELL FUNCTIONS, not binaries.** `create-env.sh` appends a
-block-delimited `claude-<name>()` function to `~/.zshrc` that sets `CLAUDE_CONFIG_DIR` and execs
-`claude`. Claudesk spawns a hardcoded `const CC_CMD: &str = "claude"`
-(`src-tauri/src/cc_session/mod.rs:42`) — so **a `claude-<name>` profile cannot be spawned by
-Claudesk at all today**, and it is not on `PATH` either (a zsh function is invisible to a direct
-exec). ⚠️ Note this interacts with the GUI-PATH work already done in `env_path/`: capturing the
-login-shell `PATH` does **not** capture shell *functions*.
-
-⚠️ **BLOCKER 2 — the status channel is single-rooted and would go DARK.** Claudesk registers its
-hook into `~/.claude/settings.json` only (`hook_install/`). An isolated profile reads
-`~/.config/claude-<name>/settings.json` instead, so a profile session would emit **no hook events**
-— no idle/running/awaiting-input dot in the filmstrip, PiP, or menu bar. ⚠️ **That is the product's
-core value proposition, not a nice-to-have**, so "just spawn it and see" is not a viable first
-step: it would look like it worked while silently losing the thing the app is for.
-
-✅ **The seam that already exists.** `cc_spawn_env()` (`cc_session/mod.rs:599`) already builds the
-PTY's environment and already carries the drive-mode + gate signals, so `CLAUDE_CONFIG_DIR` has an
-obvious insertion point. Spawning `claude` directly **with `CLAUDE_CONFIG_DIR` set** — rather than
-going through the shell wrapper — is the likely shape and would sidestep blocker 1 entirely;
-blocker 2 still needs a real answer (per-config-dir hook registration).
-
-**Open questions for the design discussion (NOT answered here):** is a profile a property of a
-*project* or a separate workspace kind? · does `projects.json` gain a `config_dir` field? · does
-hook installation become per-profile, and who owns teardown? · how does the M10.9 workflow gate
-interact with a profile whose skills live elsewhere? · does the time-analytics capture (already
-machine-global) need to distinguish profiles? · does the M15 supervisor's transcript reader follow
-`CLAUDE_CONFIG_DIR` for its slug computation (it currently assumes `~/.claude/projects/<slug>/`)?
-
-**Suggested action:** size as a **roadmap milestone** at the next `/product-finalize` or roadmap
-pass — after M15 closes and M14's remainder. Start the design discussion then, with the operator.
-⚠️ **Open with a `/util-grill-me` pass** (booked by the operator 2026-09-15), and expect a real
-**spec** pass rather than a plan pass — the operator's words were "we will need to think it through
-and work on the spec well."
-- **Update 2026-09-15 — ⭐ SCOPE EXPANDED: absorb the boilerplate, do not just consume its output.**
-  Operator direction. Claudesk should own **profile creation**, folding in what
-  `~/Personal/projects/claude-code-wrapper-agent-boilerplate` does today, so provisioning a profile
-  is a Claudesk operation rather than a shell script run beforehand. ⚠️ **This changes the shape,
-  not just the size:** `create-env.sh`'s appending of a `claude-<name>()` function to `~/.zshrc` is
-  precisely the mechanism behind **blocker 1**, so owning creation lets Claudesk **stop generating
-  the shell-function indirection entirely** and spawn `claude` directly with `CLAUDE_CONFIG_DIR`
-  set. ⚠️ **Blocker 2 is NOT dissolved and gets HARDER** — owning creation means owning
-  **per-config-dir hook registration** as part of provisioning, plus teardown on profile deletion.
-  *A profile Claudesk created but cannot see the status of is worse than one it never created.*
-  ⭐ **And the boilerplate itself must be representable as a profile** — a self-hosting property and
-  a **design constraint, not a nice-to-have**: if the thing that creates profiles cannot itself be
-  one, the model has a special case at its center. Cheap to design for, expensive to retrofit —
-  check it early in the spec.
-- **Update 2026-09-23 — GRILLED; the open questions above are ANSWERED.** Four rulings in
-  `roadmap.md` → "F-b decisions — `/util-grill-me`, 2026-09-23": profile = a `CLAUDE_CONFIG_DIR`
-  chosen by a picker-row cell · creation is a native wizard and **the boilerplate repo is OUT OF
-  SCOPE** (it becomes an ordinary row — the self-hosting constraint above is satisfied trivially) ·
-  hook registration is **persistent per profile** with register-on-launch + unregister-on-remove ·
-  the **workflow layer is always OFF for non-default profiles**. Next: `/feature-spec` (single
-  spec, not a WBS).
-- **Status:** pending
-
 ## SURFACE-2026-09-12-ONE-TRANSITION-HAS-NO-PAUSE-POLICY-ROW-UPSTREAM
 
 ⚠️ **NARROWED 2026-09-12 at code-quality review — was "TWO TRANSITIONS".** `P13` (product-finalize → EXIT) is **terminal**, so no pause-policy row is owed and its absence was never a gap. The over-broad claim came from a gap classifier that keyed on an edge's *workflow* rather than its *target*; fixed, and the report now names exactly the dispatchable edge that is genuinely missing a row. **`I2` alone stands.**
@@ -655,7 +581,7 @@ and work on the spec well."
 - **Context:** ⚠️ **This was investigated as the cause of the stale-blue defect (`SURFACE-2026-08-06-AWAITING-INPUT-DOT-NEVER-CLEARS-FOR-A-BACKGROUND-AGENT` — since RESOLVED and deleted from this file; see CHANGELOG 2026-08-22) and REJECTED** — that defect was `agent_completed` falling through the notification-type fallback (fixed M13.5 WP2). Filed separately so the rejection is not mistaken for "not real": it **is** real, just not that. ⚠️ **Measured as rare: only 1 of 1,673** post-`Stop` notifications is cross-session, which is why it was deliberately NOT fixed inside a one-line classification fix. Affects any second CC session on the same repo — a bare terminal, a `bg` job, or two Claudesk workspaces on one project. ⚠️ Note it is *not* obviously a pure win to fix: per-session attribution needs a fold decision ("any session awaiting -> blue" keeps a stale blue if a session dies silently; "newest wins" can hide a genuine prompt) and a bound on the per-session map, since a session that dies without `SessionEnd` would leak an entry forever.
 - **Suggested action:** Only if the frequency rises. If taken: attribute per `(cwd, session_id)`, fold explicitly (present both folds to the operator — this is a product decision, not a mechanical one), expire on `SessionEnd` (already registered; 51 events in the corpus), and bound the map for sessions that never emit one. ⚠️ Per `[[workspace-status-map-collapses-consecutive-events]]` this needs the **raw event stream**, not the status map. ⚠️ Also re-check `tray::aggregate_alarm` and PiP ordering — both fold the same broadcast, so changing one workspace's input set changes their shape.
 - **Priority:** low (1 observed instance in the entire corpus; no data impact — it degrades the ambient dot, the same surface M7 exists for. **Re-raise if the operator starts routinely running two sessions per repo.**)
-- **Status:** pending — deferred to **F-b** (isolated CC profiles as workspaces), the first work that could put two workspaces on one tree. It travels with options (b)/(c) of the supervisor-hotfix "per turn" toggle-freshness finding, which is harmless for the same 1:1 reason (paydown-2026-09-23 fold-back).
+- **Status:** pending — was deferred to **F-b**, which shipped 2026-09-24 WITHOUT putting two workspaces on one tree ("the same directory under two profiles" is F-b Out of Scope; `WorkspaceRegistry` stays path-keyed and a row is one dir + one profile). So the trigger has not happened; still re-raise on the first real two-sessions-per-repo use. It travels with options (b)/(c) of the supervisor-hotfix "per turn" toggle-freshness finding, which is harmless for the same 1:1 reason (paydown-2026-09-23 fold-back).
 
 ## SURFACE-2026-08-21-NOTIFICATION-TYPE-FALLBACK-IS-WRONG-FOR-COMPLETION-TYPES
 - **Source:** feature:build (M13.5 WP2 Phase 1 — the generalization of the defect just fixed)
@@ -703,7 +629,7 @@ and work on the spec well."
 - **Roster carried out of the 2026-09-23 paydown (fold-back).** That sweep's ruling R2 kept this pass separate and sequenced it **immediately after the sweep, guard first**. It routed these items here, and none were trimmed per-WP:
   - Bodies in `backlog-quality-findings.md`: `SURFACE-2026-09-17-QUALITY-RATIONALE-STATED-THREE-TIMES`, `SURFACE-2026-09-17-QUALITY-DO-NOT-MERGE-DEFENCE-REPEATED-FOUR-TIMES`, `SURFACE-2026-09-14-QUALITY-LASTINDEX-COMMENT-IS-THE-HEAVIEST-RATIO-IN-THE-DIFF`, `SURFACE-2026-09-13-QUALITY-COMMENT-DUPLICATION-ACROSS-SUPERVISOR-MODULES`, `SURFACE-2026-09-12-QUALITY-COMMENT-DENSITY-IS-A-THIRD-COPY-OF-THE-WIP`, `SURFACE-2026-08-25-QUALITY-WP3-COMMENT-DENSITY-58-PERCENT`, `SURFACE-2026-08-21-QUALITY-WP1-COMMENT-DENSITY-117-LINES-FOR-14`, `SURFACE-2026-08-21-QUALITY-WP1-PIP-RATIONALE-AT-FOUR-SITES`, `SURFACE-2026-08-18-QUALITY-WP4-ARCH-DOC-MIRRORS-TEST-FILE-HEADER`, `SURFACE-2026-08-18-QUALITY-WP3-COMMENT-DENSITY-AND-RATIONALE-DUPLICATION`, `SURFACE-2026-08-01-QUALITY-WP2-MINOR-BATCH`, `SURFACE-2026-08-02-QUALITY-WP4-MINOR-BATCH`, `SURFACE-2026-09-22-QUALITY-WP4-COMMENT-DUPLICATION-ACROSS-PROMPT-MODULES`, `SURFACE-2026-09-23-QUALITY-VITEST-UNDEFINED-RATIONALE-DUPLICATED-8X`, `SURFACE-2026-09-23-QUALITY-WP9-COMMENTS-CARRY-WIP-PROVENANCE-LABELS`, and item 1 of `SURFACE-2026-09-23-QUALITY-WP9-MINOR-BATCH`.
   - Stub-only (they live only in `backlog.md`): the density items of the `m11-wp3-docs-render-and-navigation`, `time-tracking-offline-local-only-copy` and `m10.9-wp2-workflow-features-gate` stubs, and item (2) of the `m12-wp1-probe-flag-store-and-announce` stub.
-- **Status:** open — deferred by decision, shape recorded. **No fixed slot.** F-b is next per the roadmap (operator, 2026-09-23). The paydown's R2 "immediately after this sweep" sequenced this pass relative to other cleanup, not ahead of roadmap work: the same WBS stated that it "changes no execution order (F-b is still next)".
+- **Status:** open — deferred by decision, shape recorded. **No fixed slot.** F-b, which the roadmap had next, shipped 2026-09-24, so nothing on the roadmap is sequenced ahead of this pass any longer. The paydown's R2 "immediately after this sweep" sequenced this pass relative to other cleanup, not ahead of roadmap work: the same WBS stated that it "changes no execution order (F-b is still next)".
 
 ## Code-quality findings — m13-wp4-milestone-exit-verify (2026-08-18)
 - **Pointer:** **1 MINOR remains** (documentary only) from WP4's code-quality review:
@@ -1128,24 +1054,4 @@ and work on the spec well."
 - **Suggested action:** The operator reads the three lists and either ratifies them (delete this entry with a CHANGELOG line) or names the one to overturn, which becomes its own task.
 - **Priority:** low (the WP10 item alone is low-medium)
 - **Status:** pending — operator's call
-
-## SURFACE-2026-09-23-F-B-PERMISSION-MODE-ARGV-OVERRIDES-PROFILE-DEFAULTMODE
-- **Source:** feature:verify-self (F-b Phase 1)
-- **Target level:** feature (F-b spec B.10 / D.18)
-- **Type:** gap
-- **Summary:** Claudesk always spawns `claude --permission-mode <app-global cc_permission_mode>`, which overrides a profile's own `permissions.defaultMode`, so the profile's chosen posture never applies inside Claudesk.
-- **Context:** Spec B.10 expects the pane footer to show the profile's mode, and the wizard makes the permission-mode step mandatory (the boilerplate's "silence is not a gate"). Both are dead as built. Observed live 2026-09-23: a `defaultMode: "plan"` profile spawned with `--permission-mode bypassPermissions`.
-- **Suggested action:** Operator ruling. Recommended: omit `--permission-mode` for non-default profiles so the profile's `settings.json` governs; keep the app-global flag for the default profile only.
-- **Priority:** medium
-- **Status:** resolved in F-b Phase 1 (ruled 2026-09-23, built 2026-09-24 `fc156ad`) — delete with its `**Backlog resolved:**` CHANGELOG line at `feature-finalize`
-
-## SURFACE-2026-09-24-SPAWNED-CC-INHERITS-A-PARENT-CLAUDESK-DRIVE-MODE
-- **Source:** feature:verify-self (F-b Phase 2)
-- **Target level:** feature (F-b Phase 2 back-loop; pre-existing since M12 WP4b)
-- **Type:** bug
-- **Summary:** Claudesk's CC and login-shell spawns inherit `CLAUDESK_DRIVE_MODE` from Claudesk's own process env, so a dev build launched from inside a Claudesk CC session passes the PARENT's drive mode to every child — regardless of the gate, the project's stored mode, or (F-b) the profile.
-- **Context:** `cc_spawn_env` only ADDS the var; `CommandBuilder::new` starts from the full inherited env, and nothing removes it. The documented dev-inside-prod dogfooding setup hits it. Observed live 2026-09-24: a non-default-profile workspace's child carried `CLAUDESK_DRIVE_MODE=autopilot` while `cc_spawn_env` set nothing.
-- **Suggested action:** add `CLAUDESK_DRIVE_MODE` to the env_remove list of both spawns (F-b Phase 2 F9b).
-- **Priority:** medium
-- **Status:** pending — being fixed in F-b Phase 2
 

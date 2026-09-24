@@ -1,7 +1,7 @@
 ---
 stage: roadmap
 state: complete
-updated: 2026-09-22
+updated: 2026-09-24
 ---
 
 # Roadmap
@@ -743,6 +743,8 @@ express. **Simpler than M15's**, whose WP1 gated *every* downstream decision; F-
 own `label`**, not a second path to `cc_input`.
 
 ### F-b: Isolated CC profiles as Claudesk workspaces *(`SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES`, medium)*
+
+✅ **SHIPPED 2026-09-24** as the single feature `f-b-isolated-cc-profiles` (5 phases). The as-built is `arch/profiles.md`; the spec and per-phase record are in `workflow-system/state/archive/f-b-isolated-cc-profiles.md`. Deferred to the `/release` gate: an installed-`.app` profile spawn plus dot, and whether `trash::delete` needs a Finder Automation grant. Two MAJOR code-quality findings are backlogged (transcript root stored-vs-live; `create`'s missing already-listed-dir check).
 
 Manage the operator's isolated Claude Code environments (`CLAUDE_CONFIG_DIR`-rooted profiles, each
 with its own `CLAUDE.md`, skills, subagents, MCP servers, memory and history) as first-class

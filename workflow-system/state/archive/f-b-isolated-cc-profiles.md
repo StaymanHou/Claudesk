@@ -5,7 +5,7 @@ drive_mode: autopilot
 # Feature: F-b — Isolated CC profiles as Claudesk workspaces
 
 **Workflow:** feature
-**State:** ship (complete) — 2026-09-24 at `60b5ec2`; NOT pushed (36 commits ahead of upstream; pushing is the operator's call)
+**State:** Completed 2026-09-24 (shipped at `60b5ec2`; review-quality `cb974d1`; finalized). NOT pushed — pushing is the operator's call
 **Created:** 2026-09-23
 **Entry:** spec (complex feature)
 **Source:** `roadmap.md` → Group F → F-b + "F-b decisions — `/util-grill-me`, 2026-09-23" (4 rulings,
@@ -618,6 +618,23 @@ The implementation is well built and leaves the codebase better than it found it
 
 ### If you disagree
 Dismiss any finding by editing this section and marking the line `[DISMISSED]` before `feature-finalize` archives the WIP.
+
+## Retrospect
+- **What changed in our understanding:**
+  - Claudesk's always-on `--permission-mode <app-global>` argv silently overrode every profile's `permissions.defaultMode`. That made spec B.10 and the wizard's permission step dead as written, and it was found only by a live Phase 1 spawn. The ruling (no `--permission-mode` for non-default profiles) was built the next day.
+  - CC stores `theme` in `settings.json` (a `.claude.json` theme is stripped at startup). Seeding `hasCompletedOnboarding` also skips login. `claude --continue` with no conversation EXITS instead of starting fresh. All three came from probes, not docs.
+  - A pre-existing leak: every Claudesk spawn inherited the parent process's `CLAUDESK_DRIVE_MODE`, so dev-inside-prod dogfooding passed the parent's mode to every child. Found in Phase 2 verify-self and fixed in-feature.
+- **Assumptions that held:** `CLAUDE_CONFIG_DIR` plus per-dir `settings.json` hooks is enough to light a profile session's dot (probed at CC 2.1.280, re-proven live). `cwd` routing needed no change. One `workflow_applicable` funnel shared by both sides was enough for ruling 4. The existing `trash = "5"` dependency covered Delete. The feature fit a single spec, with no WBS needed.
+- **Assumptions that were wrong:**
+  - The profile UI as a picker-row COLUMN: the operator rejected it at P4 verify-human, and it became a `Profile:` line in the model cell's stack.
+  - A dialog's React `onKeyDown` can own Esc over Settings: App's overlay handler is a document capture listener, so it cannot, and `useEscCapture` (window capture) was needed.
+  - The pure-model filename: `newProfileWizard.ts` collided case-insensitively with `NewProfileWizard.tsx` on macOS. That trap was already in memory and still bit.
+- **Approach delta:** five phases as planned, plus one operator ruling (permission argv), one F9b back-loop (the drive-mode leak), and one F12 rework (column → line). Phase 5 added two things the plan did not name: a repo-wide `invoke`-vs-`generate_handler!` guard (codify), and the `useEscCapture` hook. Code-quality review then found two MAJORs, both backlogged: the transcript root is resolved from the stored profile rather than the live one, and `create` misses the already-listed-dir check.
+
+## Closure
+> **Feature complete:** F-b (isolated Claude Code profiles as Claudesk workspaces) has shipped. Each picker row can now run its Claude Code session under a named `CLAUDE_CONFIG_DIR` profile, with its own `CLAUDE.md`, settings, memory and history. Profiles can be created in a native wizard, adopted from `~/.config/claude-*`, removed, or (if Claudesk made them) moved to the Trash, and their sessions keep the status dot. To see it, click a row's `Profile:` line → New profile…, or open ⌘, → Profiles.
+
+Requester = operator — closure notice for self-record.
 
 ## Discoveries
 [SURFACED-2026-09-24] Phase 5 > build — defaults taken without asking (correct at verify-human): (a) the wizard's permission mode is pre-selected from `~/.claude/settings.json` `permissions.defaultMode` (the "snapshot the default profile" rule the theme and status line follow), falling back to CC's `default`, NOT from Claudesk's app-global mode; (b) `skipDangerousModePermissionPrompt` is NOT seeded, so a profile created with `bypassPermissions` shows CC's own warning once ("silence is not a gate"); (c) theme is a closed `<select>` of CC 2.1.281's seven values (`auto` + six), not free text; (d) a profile created from a picker row is committed to that row; (e) an existing EMPTY dir is accepted (only a non-empty one is refused); (f) the seeded CLAUDE.md is the eos/tube boilerplate guard section verbatim with the dir substituted.

@@ -52,6 +52,7 @@
 - [installed-build-verify-deferred-to-release.md](installed-build-verify-deferred-to-release.md) — The operator defers installed-`.app` / native-window manual verification to the `/release` gate, not per-feature verify-human.
 - [verify-human-agent-runs-cli-captures.md](verify-human-agent-runs-cli-captures.md) — At verify-human, RUN the boundary-required CLI/curl capture yourself and show the output; ask the operator only for judgment calls or what the agent can't observe.
 - [macos-tcc-permissions-granted.md](macos-tcc-permissions-granted.md) — Terminal.app has Accessibility + Screen Recording; the agent can screenshot native windows and run osascript GUI queries.
+- [verify-trash-via-finder-not-ls.md](verify-trash-via-finder-not-ls.md) — `~/.Trash` is TCC-blocked for the agent's shell; verify a Trash move with a read-only `osascript` Finder query (`get name of every item of trash`), never `ls`, and never `activate`.
 - [wp4-macos-perf-measurement.md](wp4-macos-perf-measurement.md) — How to measure CPU/RAM/frame-time of the Tauri WKWebView on macOS.
 
 ## MCP tauri bridge (caveat chain)

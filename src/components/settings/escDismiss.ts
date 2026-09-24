@@ -19,6 +19,10 @@
 //
 // A third overlay added later belongs HERE, in the union and the table below — not as
 // another `if` in the keydown handler.
+//
+// A dialog stacked INSIDE one of these overlays (F-b's New-profile wizard, the profile Delete
+// confirm) is not an app-level overlay: it owns Esc via `useEscCapture` (a window capture
+// listener, which runs before App's document one) instead of an entry here.
 
 /** Which overlays are currently mounted. */
 export interface OverlayState {

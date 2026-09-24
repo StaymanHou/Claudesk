@@ -1,7 +1,7 @@
 ---
 stage: arch
 state: complete
-updated: 2026-09-18  # M14-remainder cycle closed (6/6 WPs). arch/workflow-gate.md resynced: the README tier guard + the gate-aware Keyboard-shortcuts Settings group.
+updated: 2026-09-24  # F-b shipped: new arch/profiles.md (Claude Code profiles as named CLAUDE_CONFIG_DIRs).
 shape: index
 archive-root: workflow-system/product/archive/
 ---
@@ -27,6 +27,7 @@ subsystem you need.
 | [Build, update & release](arch/build-update-release.md) | artifacts, self-update, signing, the release pipeline |
 | [Native app menu](arch/app-menu.md) | the menu bar, and why it carries no accelerators |
 | [Time analytics](arch/time-analytics.md) | the SQLite exception and its load-bearing rules |
+| [Claude Code profiles (F-b)](arch/profiles.md) | named `CLAUDE_CONFIG_DIR`s: store, fail-closed resolution, spawn env/argv, workflow-off funnel, per-profile hooks, the create wizard, Delete-to-Trash |
 | [Workflow supervisor](arch/workflow-supervisor.md) | the typed policy graph, turn-end detection, the `claude -p` adjudicator, context-pressure recycle, the mccc ownership boundary |
 
 **Writing here:** add to the **subsystem** file — never a new milestone section; that append habit is
@@ -46,6 +47,7 @@ Each line is a *pointer*; the full reasoning stays at the anchor.
 - **Never classify a docs reload on `FsChange.kind`** — the backend folds a mixed 200 ms batch to `Other`. Diff the re-listed set. → [right-panel](arch/right-panel-surfaces.md)
 - **Never call a PiP/NSPanel or tray window op off the main thread** — AppKit aborts the process with **no Rust panic**; presents as a clean launch that silently dies. Marshal via `run_on_main_thread`. → [status](arch/status-channel-and-surfaces.md) §B.3
 - **Never `git checkout -- <file>` to revert while work is uncommitted** — an agent did this and reverted uncommitted shipped work. Use `cp` from a snapshot.
+- **Never fall back to the default profile for a row whose profile is missing** — refuse the spawn and the open, and say which profile. A silent fallback runs the wrong `CLAUDE.md`, permissions and memory. → [profiles](arch/profiles.md)
 - **Never delete a hook you did not install**, and keep the drift fixture — it is the proof, not dead code. → [status](arch/status-channel-and-surfaces.md)
 - **Never write into `workflow-system/` from Claudesk.** It reads that world; the WIP-frontmatter mirror was REJECTED. → [session-resumption](arch/session-resumption.md)
 - **Never generalize `modelOverride.ts`'s "do NOT validate" rule to the drive mode** — closed value set, and a bad string fails serde on read and takes the whole project list down. → [session-resumption](arch/session-resumption.md)

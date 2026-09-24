@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-24
+
+- **Feature shipped:** F-b: isolated Claude Code profiles as Claudesk workspaces. Each picker row can spawn its session under a named `CLAUDE_CONFIG_DIR` profile. A missing profile refuses to spawn, and the workflow layer is always off for non-default profiles. Claudesk registers its hook into every profile, so the status dot works. Profiles are created in a native wizard, adopted, removed, or moved to the Trash from ⌘, Settings.
+- **Backlog resolved:** SURFACE-2026-09-14-MANAGE-ISOLATED-CC-PROFILES-AS-CLAUDESK-WORKSPACES — closed by F-b: profiles spawn `claude` directly with `CLAUDE_CONFIG_DIR` (no shell-function indirection), and each profile gets its own persistent hook registration.
+- **Backlog resolved:** SURFACE-2026-09-23-F-B-PERMISSION-MODE-ARGV-OVERRIDES-PROFILE-DEFAULTMODE — non-default profiles now spawn without `--permission-mode`, so the profile's own `permissions.defaultMode` governs (operator ruling, built in F-b Phase 1).
+- **Backlog resolved:** SURFACE-2026-09-24-SPAWNED-CC-INHERITS-A-PARENT-CLAUDESK-DRIVE-MODE — Claudesk's CC and login-shell spawns now strip an inherited `CLAUDESK_DRIVE_MODE` before setting their own (F-b Phase 2).
+
 ## 2026-09-23
 
 - **Task closed:** Backlog-paydown 2026-09-23 WP1, backlog bookkeeping. The standing backlog now reads as open work only: 22 resolved-but-undeleted finding bodies, 4 fully-resolved finding groups and 8 stale SURFACEs were verified against live code and deleted; 10 pointer stubs were rewritten to what their bodies actually hold; 16 dormant items moved to `backlog-archived.md`; the entries misfiled below `## Buried` rejoined the list; and the historical cycle-close notes moved verbatim to `workflow-system/state/archive/backlog-cycle-close-notes.md` (backlog.md 98 → 73 sections).
